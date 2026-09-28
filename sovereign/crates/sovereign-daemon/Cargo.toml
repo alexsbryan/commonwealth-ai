@@ -37,14 +37,12 @@ sovereign-mesh = { workspace = true }
 # The daemon-to-daemon wire bodies the ring-sync route receives and the loops
 # send; a leaf both may name (domains dm-daemon-api-edge (a)).
 sovereign-peer-wire = { workspace = true }
-sovereign-code = { workspace = true }
 sovereign-contracts = { workspace = true }
 # The data-root lock (`daemon_cmd/boot.rs`).
 host-kit = { workspace = true, features = ["shell", "http"] }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }
 sovereign-serving-host = { path = "../sovereign-serving-host" }
-sovereign-work-atlas = { workspace = true }
 sovereign-core = { workspace = true }
 sovereign-time = { workspace = true }
 # The bearer-token compare (client_auth.rs, client_tokens.rs). Already in the
@@ -79,13 +77,11 @@ dirs = "5"
 # The composition half of `sovereign-cli-daemon`'s `daemon_cmd` (domains
 # `dm-daemon-cli-composition`, DAEMON_CORE.md §4.1 row 4) reaches these
 # directly now: the solve surface (`sovereign-tdd`), the compute-child
-# supervisor (`sovereign-compute`), the watched-folder lint/test stores
-# (`corpus-engine-watchers`) and the watched-folder workflow runtime (`sovereign-workflow`,
+# supervisor (`sovereign-compute`) and the watched-folder workflow runtime (`sovereign-workflow`,
 # `sovereign-workflow-host`). All at `capabilities`/`runtime`/`knowledge`,
 # below this crate's `mesh-api`.
 sovereign-tdd = { workspace = true }
 sovereign-compute = { workspace = true }
-corpus-engine-watchers = { workspace = true }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 # The run path (`daemon_cmd`) commissions the ONE Runtime through the
@@ -130,14 +126,12 @@ libc = "0.2"
 
 [features]
 default = []
-# Enables `project_http` — the SCIP-graph route shell, which reads
-# `corpus_engine_watchers::reindexer` and therefore that crate's `treesitter`.
-# Off by default so binaries that never serve the project surface don't drag
-# in `corpus-engine`'s 5 tree-sitter grammar crates.
+# Gates `bootstrap` and `tool_registry`, and forwards to the crates whose
+# tree-sitter surfaces they reach. (It enabled `project_http`, the SCIP-graph
+# route shell, until that left with the code program at pb-code-daemon-exit.)
 treesitter = [
     "sovereign-mesh/treesitter",
     "sovereign-tools/treesitter",
-    "corpus-engine-watchers/treesitter",
 ]
 # The headless OCR installer. The cfg gate moved here with the composition
 # half (domains `dm-daemon-cli-composition`); the binary's features forward
@@ -147,11 +141,7 @@ ocr = ["sovereign-tools/paddle-ocr"]
 iroh-experimental = ["sovereign-mesh/iroh-experimental"]
 
 [dev-dependencies]
-# `e2e_code_intel` synthesizes a Parquet knowledge fixture and backdates file mtimes.
-arrow = { workspace = true }
-parquet = { workspace = true }
-filetime = "0.2"
-# `project_http`'s test module builds a `Reindexer` over a real `ScipGraph`.
+# `next_edit_symbol_lane_e2e` builds a real `ScipGraph`.
 arc-swap = { workspace = true }
 corpus-engine-scip = { workspace = true }
 # `solve_http`'s route test drives the router with `tower::ServiceExt`.

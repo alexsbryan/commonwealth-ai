@@ -37,6 +37,10 @@ pub mod briefing_tool;
 #[cfg(feature = "treesitter")]
 pub mod bundle;
 pub mod code_search;
+/// Code's face: the one composition `svrn code mcp` serves and the stock
+/// binary mounts on svrn's `/mcp` (pb-code-daemon-exit).
+#[cfg(feature = "treesitter")]
+pub mod face;
 pub mod recent_changes;
 pub mod session_state;
 pub mod working_set;

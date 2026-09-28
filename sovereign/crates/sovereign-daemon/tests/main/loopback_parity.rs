@@ -2,10 +2,9 @@
 #![cfg(feature = "treesitter")]
 //! Cross-router loopback parity test.
 //!
-//! This test exercises both the mesh's loopback-only routers AND the
-//! `project_http` / `reindexer` SCIP-graph routers; the latter live
-//! behind the `treesitter` feature, so the entire test is gated to
-//! match. `cargo test -p sovereign-mesh --features treesitter` runs
+//! This test exercises the daemon's loopback-only routers. It is gated on
+//! `treesitter`, as it was when it also covered the `project_http`
+//! SCIP-graph router (now the code program's, pb-code-daemon-exit). `cargo test -p sovereign-mesh --features treesitter` runs
 //! it; the default `cargo test -p sovereign-mesh` skips it.
 //!
 //! Every loopback-only router in this crate layers the same

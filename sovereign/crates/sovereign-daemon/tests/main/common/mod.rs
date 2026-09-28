@@ -659,6 +659,7 @@ impl DesktopParts {
             tools,
             notes,
             session_id: "test-fixture".into(),
+            code: None,
         });
         self
     }

@@ -156,8 +156,6 @@ mod node_id_persistence;
 mod openai_finish_reason;
 #[path = "main/openai_wire_fidelity.rs"]
 mod openai_wire_fidelity;
-#[path = "main/pattern_observation_e2e.rs"]
-mod pattern_observation_e2e;
 #[path = "main/peer_preference_manifest.rs"]
 mod peer_preference_manifest;
 #[path = "main/peer_tally_status_e2e.rs"]

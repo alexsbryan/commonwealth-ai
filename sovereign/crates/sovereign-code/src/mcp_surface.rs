@@ -4,10 +4,10 @@
 //! (phase-b pb-code-freshness: tool exposure as manifest data, FIVE_PROGRAMS
 //! §2c; moved from `sovereign_tools::mcp_surface`, which keeps svrn's ids).
 //!
-//! `svrn code mcp` filters with [`is_mcp_exposed`] and renders spec-gated.
-//! The svrn daemon, which still mounts code's tools until
-//! pb-code-daemon-exit, filters with the union of svrn's list and this one
-//! and renders ungated ([`render_tools_list_gated_by`] with `None`).
+//! Code's tool host (`crate::face`) filters with [`is_mcp_exposed`] and
+//! renders spec-gated, alone under `svrn code mcp` and mounted on the stock
+//! binary's `:9741/mcp`; svrn's daemon filters its own tools with svrn's
+//! list (pb-code-daemon-exit).
 //!
 //! The gate's cache is invalidated eagerly by [`crate::spec_watcher`].
 

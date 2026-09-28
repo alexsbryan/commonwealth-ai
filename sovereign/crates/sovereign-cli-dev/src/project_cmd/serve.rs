@@ -233,7 +233,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         };
 
     // ── Code, composed: result stores, Reindexer, watchers, work atlas,
-    // code's bundles and its MCP dispatch (`crate::code_face`, the one the
+    // code's bundles and its MCP dispatch (`sovereign_code::face`, the one the
     // stock binary composes too). The docs indexer is this server's own.
     let docs_watchers = docs_store
         .iter()
@@ -244,7 +244,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             )) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>
         })
         .collect();
-    let face = match crate::code_face::compose(crate::code_face::CodeParts {
+    let face = match sovereign_code::face::compose(sovereign_code::face::CodeParts {
         indexes_dir: data_dir.clone(),
         stores_dir: data_dir.clone(),
         notes: Arc::clone(&notes_store),

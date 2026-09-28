@@ -5,11 +5,10 @@
 //! in order. Behaviour-preserving — these are code moves, not rewrites.
 
 use std::path::Path;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::discovery_policy;
-use crate::startup::{daemon_pid_path, warn_orphaned_indexes};
+use crate::startup::daemon_pid_path;
 use crate::EmbeddedDaemon;
 use corpus_engine::CorpusEngine;
 use corpus_engine_notes::{NodeRoster, NotePropagationEvent, NoteStore, RosterEntry};
@@ -1924,61 +1923,30 @@ pub async fn advertise_embed_model(
 /// host could omit. The first four are now built by the daemon itself or
 /// declared on the headless variant; only the tool mount is genuinely
 /// host-specific, because only the host knows which tools it registered.
-pub fn build_mcp_surface(tools: ToolRegistry, notes_store: Arc<NoteStore>) -> crate::McpSurface {
+pub fn build_mcp_surface(
+    tools: ToolRegistry,
+    notes_store: Arc<NoteStore>,
+    code: Option<Arc<dyn host_kit::mcp::McpMountedTools>>,
+) -> crate::McpSurface {
     let session_id = format!("daemon-{}", uuid::Uuid::new_v4());
     crate::McpSurface::Mounted(crate::McpMount {
         tools: Arc::new(tools),
         notes: notes_store,
         session_id,
+        code,
     })
 }
 
-/// Build the project-freshness reindexer (commit harvester + project/knowledge-view
-/// HTTP routers), resume persisted projects, and return the reindexer handle to
-/// hold for the daemon's life.
-/// Returns the reindexer handle to hold for the daemon's life, plus the two
-/// routers it owns — `/v1/projects/*` and
-/// `POST /v1/knowledge/landscape_digest`. Both used to be installed onto the
-/// daemon from in here; they are now returned so the caller can name them in
-/// the daemon's variant, which is what makes "the daemon serves a knowledge
-/// digest" a fact of the type rather than of whether this function ran.
-pub async fn start_freshness_pipeline(
+/// Build `POST /v1/knowledge/landscape_digest`, returned so the caller names
+/// it in the daemon's variant, which is what makes "the daemon serves a
+/// knowledge digest" a fact of the type rather than of whether this function
+/// ran. The project-freshness Reindexer and `/v1/projects/*` built beside it
+/// until pb-code-daemon-exit are the code program's.
+pub async fn build_knowledge_view_http(
     data_dir: &Path,
-    notes_store: Arc<NoteStore>,
     engine: Arc<CorpusEngine>,
     provider: Arc<dyn InferenceProvider>,
-    // The merged SCIP graph the MCP tools also hold. Shared (not rebuilt here)
-    // so the reindexer's overlay + full-rebuild updates are live to `symbols()`.
-    merged_handle: corpus_engine_watchers::reindexer::ScipGraphHandle,
-) -> (
-    Arc<corpus_engine_watchers::reindexer::Reindexer>,
-    axum::Router,
-    axum::Router,
-) {
-    // ── Project freshness pipeline ────────────────────────────────
-    //
-    // The Reindexer owns per-project FS watchers, git-HEAD pollers,
-    // and the coalescing rebuild queue. Each registered project
-    // gets one `ProjectHandle`; the daemon shells out to this
-    // subsystem from HTTP (`/v1/projects/*`) rather than invoking
-    // exporters synchronously. Persisted projects (loaded from
-    // `~/.svrnmesh/projects.json`) are re-registered at startup
-    // so a daemon restart resumes watching everything without a
-    // user action.
-    let freshness_indexes_dir = data_dir.join("indexes");
-    // `merged_handle` is the SAME graph the tool registry holds (passed in by
-    // the caller), so every rebuild/overlay update the reindexer makes is
-    // immediately visible to `symbols`/`callers`/`blast`. The construction,
-    // the commit harvester and the registry resume are the code program's
-    // (phase-b pb-code-freshness), the one `svrn code mcp` runs.
-    let (reindexer, registry) = sovereign_code::freshness::start_reindexer(
-        freshness_indexes_dir.clone(),
-        &sovereign_code::LazyScipGraph::from(Arc::clone(&merged_handle)),
-        Arc::clone(&notes_store),
-    )
-    .await;
-    let project_http = crate::project_http::project_router(Arc::clone(&reindexer));
-
+) -> axum::Router {
     // Knowledge-view HTTP surface — POST /v1/knowledge/landscape_digest.
     //
     // Built read-only at this stage: the daemon holds a
@@ -2009,13 +1977,7 @@ pub async fn start_freshness_pipeline(
         )
         .await,
     );
-    let knowledge_view_http =
-        crate::landscape_digest_http::landscape_digest_router(Arc::clone(&knowledge_view_manager));
-
-    // Previously-registered projects were resumed by `start_reindexer`
-    // above, before the routers were built.
-    warn_orphaned_indexes(&freshness_indexes_dir, &registry);
-    (reindexer, project_http, knowledge_view_http)
+    crate::landscape_digest_http::landscape_digest_router(Arc::clone(&knowledge_view_manager))
 }
 
 /// Build the watched-folder reconciliation subsystem (LocalCorpusManager +
@@ -2329,27 +2291,12 @@ pub async fn build_mesh_provider(
     (daemon, mesh_provider, in_flight_gauge)
 }
 
-/// Spawn the work-atlas TTL GC, so expired claims and idle sessions are
-/// reaped on a 60s cadence; returns the GC task handle to hold.
-///
-/// No broadcaster is swapped in: the `DeferredBroadcaster` stays unset, a
-/// no-op. A claim written through the one `RailsKv` reaches its journal on
-/// cw-rails' 2 s pump tick and a peer on the next ring round (five-programs
-/// fp-83, decision five-programs-59).
-pub fn finalize_work_atlas(
-    work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
-    work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,
-) -> tokio::task::JoinHandle<()> {
-    sovereign_work_atlas::gc::WorkAtlasGc::new(Arc::clone(&work_atlas_store), work_atlas_cfg)
-        .spawn()
-}
-
-/// Install the AppState foreground-yield hook on the lint/test watchers so their
-/// cargo subprocesses back off under chat-slot memory pressure.
+/// Install the AppState foreground-yield hook on the code program's lint/test
+/// watchers, through its setter, so their cargo subprocesses back off under
+/// chat-slot memory pressure. `None`: no code program in this process.
 pub fn install_foreground_yield_hook(
     daemon: Arc<EmbeddedDaemon>,
-    lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>>,
-    test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>>,
+    yield_to: Option<Box<dyn Fn(Arc<dyn corpus_engine::YieldHook>) + Send + Sync>>,
 ) {
     // ── Foreground back-pressure for lint/test watchers ─────────────
     //
@@ -2361,27 +2308,20 @@ pub fn install_foreground_yield_hook(
     //
     // Install `AppStateYieldHook` on each watcher so its subprocess
     // runner waits until `should_yield()` returns false before
-    // spawning cargo. Late-bind: daemon_cmd builds the watchers
-    // earlier in this function (before EmbeddedDaemon exists);
-    // `daemon.app_state()` returns Some only after start_daemon
-    // completes. Poll with the same deadline pattern as the
-    // work-atlas broadcaster wire-up above.
-    if lint_watcher.is_some() || test_watcher.is_some() {
+    // spawning cargo. Late-bind: the code program's watchers are built
+    // before EmbeddedDaemon exists; `daemon.app_state()` returns Some only
+    // after start_daemon completes. Poll with a deadline.
+    let Some(yield_to) = yield_to else {
+        tracing::debug!("foreground-yield: no code program here, so no watcher to hook");
+        return;
+    };
+    {
         let daemon_for_hook = Arc::clone(&daemon);
-        let lint_for_hook = lint_watcher.clone();
-        let test_for_hook = test_watcher.clone();
         tokio::spawn(async move {
             let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
             loop {
                 if let Some(hook) = daemon_for_hook.build_yield_hook().await {
-                    if let Some(w) = lint_for_hook.as_ref() {
-                        w.set_yield_hook(Arc::clone(&hook));
-                        tracing::info!("foreground-yield: hook installed on lint watcher");
-                    }
-                    if let Some(w) = test_for_hook.as_ref() {
-                        w.set_yield_hook(Arc::clone(&hook));
-                        tracing::info!("foreground-yield: hook installed on test watcher");
-                    }
+                    yield_to(hook);
                     return;
                 }
                 if tokio::time::Instant::now() >= deadline {
@@ -2429,251 +2369,6 @@ pub fn write_pidfile() -> (std::path::PathBuf, u32) {
         );
     }
     (pid_path, self_pid)
-}
-
-/// Bundle of every handle the workspace watchers + Phase-2 work-atlas setup
-/// produces. Destructured at the call site back into locals, so the rest of the
-/// bootstrap reads unchanged.
-pub struct WatcherAtlasSetup {
-    pub watcher_heartbeat: Arc<corpus_engine_watchers::WatcherHeartbeat>,
-    pub lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>>,
-    pub test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>>,
-    pub watched_lint_scope: Option<String>,
-    pub watched_test_scope: Option<String>,
-    pub watcher_monitor: Option<tokio::task::JoinHandle<()>>,
-    pub work_atlas_mesh_store: Arc<dyn ReplicatedKv>,
-    pub work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
-    pub work_atlas_broadcaster: Arc<sovereign_work_atlas::tools::DeferredBroadcaster>,
-    pub work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,
-    pub work_atlas_repo_root: Option<PathBuf>,
-    pub work_atlas_repo_id: Option<String>,
-    pub work_atlas_branch: Option<String>,
-}
-
-/// Resolve the workspace-driven lint/test watchers and the Phase-2 work-atlas
-/// store/observer/supervisor. Returns every handle the rest of the bootstrap
-/// needs as a [`WatcherAtlasSetup`] bundle.
-pub fn setup_watchers_and_work_atlas(
-    workspace_dir: &Option<PathBuf>,
-    data_dir: &Path,
-    lint_store: Arc<corpus_engine_watchers::LintResultStore>,
-    test_store: Arc<corpus_engine_watchers::TestResultStore>,
-    rails_base: String,
-) -> WatcherAtlasSetup {
-    // Shared liveness beacon: the coordinator loop stamps it, the
-    // status tools read it. Replaces the old one-shot `watcher_active`
-    // bool, which could not detect a watcher that died after starting.
-    // Mirrors to a sidecar file so the separate `sovereign` CLI process
-    // (which reads the same SQLite stores) sees the same liveness — the
-    // daemon's in-memory atomic alone is invisible cross-process.
-    let watcher_heartbeat =
-        corpus_engine_watchers::WatcherHeartbeat::with_sidecar(data_dir.join("watcher-heartbeat"));
-    let mut lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>> = None;
-    let mut test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>> = None;
-    let mut watched_lint_scope: Option<String> = None;
-    let mut watched_test_scope: Option<String> = None;
-    // Held for the lifetime of `start_daemon`. This is the
-    // `WatcherSupervisor`'s monitor task: dropping it aborts the
-    // monitor, which in turn drops the live coordinator handle and
-    // shuts the watcher down. Underscored because we never read it back;
-    // the value is the side effect of holding the task alive.
-    let mut _watcher_monitor: Option<tokio::task::JoinHandle<()>> = None;
-
-    // ── Work atlas wiring (Phase 2) ────────────────────────────────────
-    // The daemon's ONE `RailsKv` (five-programs fp-88): handed to the
-    // `WorkAtlasStore` here, to the notes sink and poller, and on
-    // `HeadlessRails` to `AppState`'s KV port, so every one of them writes
-    // the store cw-rails holds and pumps onto the ring. Construction checks
-    // no presence; a cw-rails that is down surfaces on the first call.
-    let work_atlas_mesh_store: Arc<dyn ReplicatedKv> =
-        Arc::new(crate::rails_client::kv::RailsKv::new(rails_base));
-    // Node identity — same resolution order EmbeddedDaemon uses when
-    // it starts (file-on-disk → mesh.json → generate). Resolved early
-    // so `WorkAtlasStore::node_id` matches the daemon's `self_id`.
-    let work_atlas_node_id = resolve_self_node_id(data_dir);
-    let work_atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&work_atlas_mesh_store),
-        work_atlas_node_id,
-    ));
-    // Deferred broadcaster — the MCP tools and the AtlasObserver hold
-    // this handle. Nothing swaps a real one in (fp-83): it stays unset, a
-    // no-op, and a claim travels on cw-rails' pump tick plus the ring round.
-    let work_atlas_broadcaster = Arc::new(sovereign_work_atlas::tools::DeferredBroadcaster::new());
-    let work_atlas_cfg = {
-        let path = sovereign_core::rebrand::work_atlas_toml();
-        sovereign_work_atlas::WorkAtlasConfig::load_or_default(&path).unwrap_or_else(|e| {
-            tracing::warn!(
-                error = %e,
-                path = %path.display(),
-                "work_atlas: config load failed, using defaults"
-            );
-            sovereign_work_atlas::WorkAtlasConfig::defaults()
-        })
-    };
-    // Resolved later if the workspace has an `origin` remote.
-    let mut work_atlas_observer: Option<Arc<sovereign_work_atlas::AtlasObserver>> = None;
-    let mut work_atlas_repo_root: Option<std::path::PathBuf> = None;
-    let mut work_atlas_repo_id: Option<String> = None;
-    let mut work_atlas_branch: Option<String> = None;
-
-    if let Some(ref ws) = workspace_dir {
-        let sov_cfg =
-            sovereign_contracts::config::SovereignConfig::load_or_default(&ws.join(".sovereign"));
-        // Single-permit semaphore shared by the lint + test watchers so
-        // their cargo subprocesses serialize instead of compounding
-        // memory pressure. Without this, both fire concurrent cargo
-        // check / cargo test invocations on every debounced edit
-        // flush, doubling RSS and inviting macOS to SIGTERM the daemon
-        // under pressure.
-        let run_slot = Arc::new(tokio::sync::Semaphore::new(1));
-
-        if let Some(ref cfg) = sov_cfg.lint_runner {
-            let working_dir = cfg.working_dir.as_ref().map(|d| {
-                let p = PathBuf::from(d);
-                if p.is_absolute() {
-                    p
-                } else {
-                    ws.join(p)
-                }
-            });
-            watched_lint_scope = Some(cfg.command.clone());
-            lint_watcher = Some(Arc::new(
-                corpus_engine_watchers::LintWatcher::new(
-                    &cfg.command,
-                    working_dir,
-                    cfg.timeout_secs.unwrap_or(120),
-                    Arc::clone(&lint_store),
-                )
-                .with_run_slot(Arc::clone(&run_slot)),
-            ));
-            tracing::info!(
-                command = %cfg.command,
-                workspace = %ws.display(),
-                "lint watcher configured (shared run slot)"
-            );
-        }
-        if let Some(ref cfg) = sov_cfg.test_runner {
-            let working_dir = cfg.working_dir.as_ref().map(|d| {
-                let p = PathBuf::from(d);
-                if p.is_absolute() {
-                    p
-                } else {
-                    ws.join(p)
-                }
-            });
-            watched_test_scope = Some(cfg.command.clone());
-            test_watcher = Some(Arc::new(
-                corpus_engine_watchers::TestWatcher::new(
-                    &cfg.command,
-                    working_dir,
-                    cfg.timeout_secs.unwrap_or(300),
-                    Arc::clone(&test_store),
-                )
-                .with_run_slot(Arc::clone(&run_slot)),
-            ));
-            tracing::info!(
-                command = %cfg.command,
-                workspace = %ws.display(),
-                "test watcher configured (shared run slot)"
-            );
-        }
-
-        // Work-atlas observer (Phase 2). Needs a `repo_id` to scope
-        // observations to. An `origin` remote yields the cross-node id;
-        // without one the workspace gets a machine-local id instead of being
-        // dropped, so a housemate's own project still gets an atlas — the
-        // observations simply do not travel, which is the truth about a repo
-        // no peer can name. Only "not a git repo at all" leaves the observer
-        // unwired.
-        match sovereign_work_atlas::resolve_repo_id_allowing_local(ws) {
-            Ok((repo_root, repo_id, _source)) => {
-                let branch = sovereign_contracts::git::current_branch(&repo_root);
-                let observer = Arc::new(sovereign_work_atlas::AtlasObserver::new(
-                    Arc::clone(&work_atlas_store),
-                    work_atlas_cfg.clone(),
-                    Arc::clone(&work_atlas_broadcaster)
-                        as Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster>,
-                    repo_root.clone(),
-                    repo_id.clone(),
-                    branch.clone(),
-                ));
-                work_atlas_observer = Some(Arc::clone(&observer));
-                work_atlas_repo_root = Some(repo_root);
-                work_atlas_repo_id = Some(repo_id);
-                work_atlas_branch = branch;
-                eprintln!("svrn daemon: work-atlas observer wired on {}", ws.display());
-            }
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    workspace = %ws.display(),
-                    "work_atlas:repo_id_missing — atlas observer disabled (no origin remote)"
-                );
-            }
-        }
-
-        if lint_watcher.is_some() || test_watcher.is_some() || work_atlas_observer.is_some() {
-            let debounce_ms = sov_cfg
-                .lint_runner
-                .as_ref()
-                .and_then(|c| c.debounce_ms)
-                .or_else(|| sov_cfg.test_runner.as_ref().and_then(|c| c.debounce_ms))
-                .unwrap_or(800);
-
-            // Collect the registered watchers once; the supervisor holds
-            // them so it can rebuild the coordinator on restart without
-            // re-deriving anything.
-            let mut watchers: Vec<Arc<dyn corpus_engine_watchers::BackgroundWatcher>> = Vec::new();
-            if let Some(ref w) = lint_watcher {
-                watchers.push(Arc::clone(w) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
-            }
-            if let Some(ref w) = test_watcher {
-                watchers.push(Arc::clone(w) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
-            }
-            if let Some(ref obs) = work_atlas_observer {
-                watchers
-                    .push(Arc::clone(obs) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
-            }
-
-            // The supervisor performs the initial start AND self-heals:
-            // if the coordinator loop dies or its heartbeat freezes, it
-            // rebuilds and restarts (bounded backoff). Holding the monitor
-            // task handle keeps the watcher alive for the daemon's life.
-            let supervisor = crate::watcher_supervisor::WatcherSupervisor::new(
-                watchers,
-                vec![ws.clone()],
-                debounce_ms,
-                Arc::clone(&watcher_heartbeat),
-            );
-            _watcher_monitor = supervisor.spawn();
-            if _watcher_monitor.is_some() {
-                eprintln!(
-                    "svrn daemon: watcher supervisor live on {} (self-healing)",
-                    ws.display()
-                );
-            }
-        }
-    } else {
-        tracing::debug!(
-            "no workspace resolved (set SOVEREIGN_WORKSPACE_DIR or write \
-             ~/.svrnmesh/workspace) — lint/test watcher disabled"
-        );
-    }
-    WatcherAtlasSetup {
-        watcher_heartbeat,
-        lint_watcher,
-        test_watcher,
-        watched_lint_scope,
-        watched_test_scope,
-        watcher_monitor: _watcher_monitor,
-        work_atlas_mesh_store,
-        work_atlas_store,
-        work_atlas_broadcaster,
-        work_atlas_cfg,
-        work_atlas_repo_root,
-        work_atlas_repo_id,
-        work_atlas_branch,
-    }
 }
 
 // Moved to a sibling file: inline, these put this file past its arch-gate

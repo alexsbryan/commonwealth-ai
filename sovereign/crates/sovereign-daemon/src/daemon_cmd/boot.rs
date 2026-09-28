@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use corpus_engine::CorpusEngine;
 use corpus_engine_notes::NoteStore;
-use corpus_engine_watchers::{LintResultStore, TestResultStore};
 use sovereign_contracts::launch::Launch;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
@@ -19,7 +18,6 @@ use super::sovereign_root;
 
 use crate::bootstrap;
 use crate::solve_http;
-use crate::tool_registry;
 use crate::tool_registry::build_tool_registry;
 use crate::workspace::resolve_workspace_dir;
 
@@ -27,6 +25,7 @@ pub(super) async fn run_daemon(
     launch: &Launch,
     args: &[String],
     hosted: Option<crate::serve_client::HostedServe>,
+    code: Option<crate::hosted_code::HostedCode>,
 ) -> i32 {
     #[cfg(unix)]
     rlimit::raise_open_file_limit();
@@ -291,58 +290,7 @@ pub(super) async fn run_daemon(
     // `set_embed_fn`, and `set_propagation_sink` to find the
     // wiring sites.
 
-    // ── Lint / test result stores ─────────────────────────────────
-    // Always opened so the agent-facing `lint_status` / `test_status`
-    // tools have a backing store to read from. When no watcher is
-    // configured (no workspace resolved, or sovereign.toml has no
-    // [lint_runner]/[test_runner]), the tools report `never_run` —
-    // accurate and unambiguous.
-    let lint_store: Arc<LintResultStore> =
-        match LintResultStore::open(&data_dir.join("lint_results.db")) {
-            Ok(s) => Arc::new(s),
-            Err(e) => {
-                eprintln!(
-                    "error: cannot open lint results db {}: {e}",
-                    data_dir.join("lint_results.db").display()
-                );
-                return 1;
-            }
-        };
-    let test_store: Arc<TestResultStore> =
-        match TestResultStore::open(&data_dir.join("test_results.db")) {
-            Ok(s) => Arc::new(s),
-            Err(e) => {
-                eprintln!(
-                    "error: cannot open test results db {}: {e}",
-                    data_dir.join("test_results.db").display()
-                );
-                return 1;
-            }
-        };
-
-    // Wipe orphan rows left by a previous daemon process that was
-    // SIGKILLed mid-run. Without this, `lint_status` / `test_status`
-    // can return `running` indefinitely against a row whose owning
-    // process is long dead. Best-effort — cleanup failure shouldn't
-    // block daemon startup.
-    if let Ok(n) = lint_store.clear_orphan_runs().await {
-        if n > 0 {
-            tracing::info!(
-                purged = n,
-                "lint_results: cleared orphan rows from prior daemon process"
-            );
-        }
-    }
-    if let Ok(n) = test_store.clear_orphan_runs().await {
-        if n > 0 {
-            tracing::info!(
-                purged = n,
-                "test_results: cleared orphan rows from prior daemon process"
-            );
-        }
-    }
-
-    // ── Workspace-driven watchers (optional) ──────────────────────
+    // ── Workspace (for the code program's watchers, when composed) ──
     // The daemon has no inherent project. When the user wants the
     // background lint/test watcher running, they point us at a
     // workspace via either:
@@ -366,27 +314,14 @@ pub(super) async fn run_daemon(
         rails_base,
         "boot: cw-rails is dialed, never brought up; absent, rail surfaces name `svrn mesh up`"
     );
-    let bootstrap::WatcherAtlasSetup {
-        watcher_heartbeat,
-        lint_watcher,
-        test_watcher,
-        watched_lint_scope,
-        watched_test_scope,
-        watcher_monitor: _watcher_monitor,
-        work_atlas_mesh_store,
-        work_atlas_store,
-        work_atlas_broadcaster,
-        work_atlas_cfg,
-        work_atlas_repo_root,
-        work_atlas_repo_id,
-        work_atlas_branch,
-    } = bootstrap::setup_watchers_and_work_atlas(
-        &workspace_dir,
-        &data_dir,
-        Arc::clone(&lint_store),
-        Arc::clone(&test_store),
-        rails_base,
-    );
+    // The daemon's ONE `RailsKv` (five-programs fp-88): handed to the notes
+    // sink and poller, and on `HeadlessRails` to `AppState`'s KV port, so
+    // every one of them writes the store cw-rails holds and pumps onto the
+    // ring. Construction checks no presence; a cw-rails that is down surfaces
+    // on the first call. The work atlas that also wrote here is the code
+    // program's since pb-code-daemon-exit, dialing the same store.
+    let work_atlas_mesh_store: Arc<dyn sovereign_contracts::peer::ReplicatedKv> =
+        Arc::new(crate::rails_client::kv::RailsKv::new(rails_base));
 
     // ── CorpusEngine ──────────────────────────────────────────────
     // Single shared instance: powers both the `/mcp` tool registry
@@ -535,44 +470,49 @@ pub(super) async fn run_daemon(
     // loopback.
     let solve_jobs = Arc::new(solve_http::SolveJobs::new(config.daemon.client_port));
 
-    // ── Shared merged SCIP graph ──────────────────────────────────
-    // Built ONCE here and handed to BOTH the tool registry (below) and the
-    // project reindexer (`start_freshness_pipeline`), so the reindexer's live
-    // updates — the tree-sitter overlay on every save and the periodic full
-    // rebuild — are visible to `symbols`/`callers`/`blast` immediately, with no
-    // daemon restart. Previously each side built its own snapshot and the
-    // reindexer's graph had no readers, so the tool surface was frozen at
-    // startup — the deepest cause of "the watcher is always stale."
-    let merged_scip_handle: corpus_engine_watchers::reindexer::ScipGraphHandle =
-        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
-            tool_registry::build_merged_scip_graph(&data_dir.join("indexes")).await,
-        ));
+    // ── Tool registry (svrn's) ────────────────────────────────────
+    // svrn's own `/mcp` tools. Code's tools are code's (pb-code-daemon-exit):
+    // they mount beside these when a distribution composes the code program
+    // into this process, and svrn alone names `svrn code mcp` for them.
+    let tools = build_tool_registry(Arc::clone(&engine), Arc::clone(&solve_jobs)).await;
 
-    // ── Tool registry (code intelligence + notes) ─────────────────
-    // The embedded daemon serves /mcp for all locally-indexed corpora
-    // under data_dir/indexes/. Tools return helpful errors when no
-    // index is installed yet (first boot after setup, pre-project-init).
-    let tools = build_tool_registry(
-        &data_dir,
-        Arc::clone(&engine),
-        Arc::clone(&notes_store),
-        Arc::clone(&lint_store),
-        Arc::clone(&test_store),
-        test_watcher.clone(),
-        watched_lint_scope.clone(),
-        watched_test_scope.clone(),
-        Arc::clone(&watcher_heartbeat),
-        workspace_dir.clone(),
-        Arc::clone(&work_atlas_store),
-        work_atlas_cfg.clone(),
-        Arc::clone(&work_atlas_broadcaster),
-        work_atlas_repo_root.clone(),
-        work_atlas_repo_id.clone(),
-        work_atlas_branch.clone(),
-        Arc::clone(&solve_jobs),
-        Arc::clone(&merged_scip_handle),
-    )
-    .await;
+    // ── The code program, when the distribution composes it ───────
+    // The stock binary hands code's composition in (F2 (a), phase-b-30):
+    // code's tools on the one `/mcp`, `/v1/projects/*` and its Reindexer,
+    // its watchers and work atlas, over this root's `indexes/` and
+    // `notes.db`. A composition that fails refuses boot by name.
+    let code_mount = match code {
+        Some(code) => match code
+            .compose(crate::hosted_code::CodeHost {
+                data_dir: data_dir.clone(),
+                workspace: workspace_dir.clone(),
+                notes: Arc::clone(&notes_store),
+                index: Arc::clone(&engine) as Arc<dyn corpus_index::source::IndexSource>,
+            })
+            .await
+        {
+            Ok(mount) => {
+                tracing::info!("daemon: the code program is composed in this process");
+                Some(mount)
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "daemon: the code program could not be composed");
+                eprintln!("error: the code program could not be composed in this process: {e}");
+                return 1;
+            }
+        },
+        None => {
+            tracing::info!(
+                code_server = crate::hosted_code::CODE_SERVER,
+                "daemon: no code program in this process; /mcp names the code server for code tools"
+            );
+            None
+        }
+    };
+    let (code_tools, project_http, code_yield, _code_runtime) = match code_mount {
+        Some(m) => (Some(m.tools), m.routes, Some(m.yield_to), Some(m.hold)),
+        None => (None, crate::hosted_code::projects_absent_router(), None, None),
+    };
 
     // ── Assemble the daemon's services, THEN commission the daemon ────
     //
@@ -628,18 +568,11 @@ pub(super) async fn run_daemon(
         engine.set_expected_embedding_dimensions(info.dimensions);
     }
 
-    // Keep the reindexer alive for the lifetime of the daemon.
-    // The variable binding is load-bearing — dropping the Arc
-    // stops every supervised watcher.
-    let (_reindexer_handle, project_http, knowledge_view_http) =
-        bootstrap::start_freshness_pipeline(
-            &data_dir,
-            Arc::clone(&notes_store),
-            Arc::clone(&engine),
-            Arc::clone(&provider),
-            Arc::clone(&merged_scip_handle),
-        )
-        .await;
+    // The landscape-digest surface. The Reindexer and `/v1/projects/*` that
+    // were built beside it are the code program's (`code_mount` above).
+    let knowledge_view_http =
+        bootstrap::build_knowledge_view_http(&data_dir, Arc::clone(&engine), Arc::clone(&provider))
+            .await;
 
     super::corpus_registry::reconcile_corpus_registry(&engine, state_store.as_ref()).await;
 
@@ -927,7 +860,7 @@ pub(super) async fn run_daemon(
                     features: features_store,
                 },
                 capability: crate::ServingCapability {
-                    mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store)),
+                    mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store), code_tools),
                     project_http,
                     corpus_watch_http: crate::corpus_watch_http::corpus_watch_router(),
                     // sv-surface rung 5: workflow execution is a daemon job
@@ -1065,19 +998,12 @@ pub(super) async fn run_daemon(
         })
     };
 
-    let _work_atlas_gc_handle =
-        bootstrap::finalize_work_atlas(Arc::clone(&work_atlas_store), work_atlas_cfg.clone());
-
     // Measurement history onto the ring journal: a migration for records filed
     // before the namespace moved to the rail, and the closure loop for a run
     // taken before this node was in a mesh. Deferred — it needs `app_state`.
     bootstrap::reconcile_local_measurements(Arc::clone(&daemon));
 
-    bootstrap::install_foreground_yield_hook(
-        Arc::clone(&daemon),
-        lint_watcher.clone(),
-        test_watcher.clone(),
-    );
+    bootstrap::install_foreground_yield_hook(Arc::clone(&daemon), code_yield);
 
     eprintln!(
         "svrn daemon running — http://localhost:{}/v1 + /mcp",

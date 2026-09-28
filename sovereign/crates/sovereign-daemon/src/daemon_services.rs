@@ -105,6 +105,10 @@ pub struct McpMount {
     /// Groups this process's tool calls in `NoteStore::log_tool_call`
     /// (e.g. `daemon-<uuid>`, `desktop-<uuid>`).
     pub session_id: String,
+    /// The code program's tools, when a distribution composed code into
+    /// this process: listed and called on the same `/mcp`, logged by code.
+    /// `None`: this `/mcp` names `svrn code mcp` for a code tool.
+    pub code: Option<Arc<dyn host_kit::mcp::McpMountedTools>>,
 }
 
 /// Whether `/mcp` is mounted, and — when it is not — *why*.

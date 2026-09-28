@@ -3769,13 +3769,6 @@ impl EmbeddedDaemon {
         let serve_handle = tokio::spawn(async move {
             let mut client_router = crate::server::client_router(app_state_clone.clone());
             if let Some(m) = mcp_mount {
-                // Phase 5: daemon path leaves the spec-presence gate
-                // off (`FeatureRoot::new(None)`) so `tools/list`
-                // continues to advertise every exposed tool. Per-
-                // request gating via the registered project root is a
-                // follow-up — the embedded daemon serves many projects
-                // and we don't yet plumb per-request feature_root.
-                //
                 // Phase 5b: a fresh `McpNotifier` with no producer is
                 // fine — the daemon doesn't drive list-changed
                 // notifications today (that's the per-project
@@ -3785,7 +3778,7 @@ impl EmbeddedDaemon {
                     m.tools,
                     m.notes,
                     m.session_id,
-                    mcp_router::FeatureRoot::new(None),
+                    m.code,
                     mcp_router::McpNotifier::new(),
                 ));
             }

@@ -19,6 +19,14 @@ corpus-engine-scip = { workspace = true }
 corpus-engine-notes = { workspace = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-watchers = { workspace = true }
+# Code's face (`face`, pb-code-daemon-exit): the lint/test watchers' yield
+# signal, the work atlas it composes, the atlas store's dialer and the
+# atlas identity, and the call log's session id.
+corpus-engine-yield = { workspace = true }
+sovereign-work-atlas = { workspace = true }
+sovereign-turn-client = { workspace = true }
+kernel-types = { workspace = true }
+uuid = { workspace = true }
 code-facts = { workspace = true, features = ["treesitter", "stores"] }
 arch-layers = { workspace = true }
 
@@ -38,7 +46,7 @@ tracing = { workspace = true }
 # The freshness path's HTTP surface, `/v1/projects/*` (project_http.rs,
 # phase-b pb-code-freshness): axum routes behind the host kit's loopback guard.
 axum = { workspace = true, optional = true }
-host-kit = { workspace = true, features = ["shell"], optional = true }
+host-kit = { workspace = true, features = ["shell", "mcp"], optional = true }
 # SpecWatcher (spec_watcher.rs, moved from sovereign-tools with the spec gate
 # it invalidates, phase-b pb-code-freshness). Same major as the reindexer's.
 notify = "8"
@@ -55,6 +63,9 @@ dev-tools = ["dep:corpus-engine-archaeology"]
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# The pattern matcher's live-wire e2e (face/pattern_observation_tests.rs)
+# serves code's dispatcher behind the kit's HTTP framing.
+host-kit = { workspace = true, features = ["http"] }
 # project_http.rs's route tests.
 reqwest = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

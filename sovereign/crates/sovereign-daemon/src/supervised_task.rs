@@ -8,7 +8,7 @@
 //! 1. Runs the watcher body on its own tokio task with
 //!    [`catch_unwind`](futures::FutureExt::catch_unwind) so a panic
 //!    cannot propagate into the caller.
-//! 2. Records the outcome in a [`ProjectState`] so MCP tools / HTTP
+//! 2. Records the outcome in a [`TaskStatus`] so MCP tools / HTTP
 //!    endpoints can surface it ("watcher crashed 3 times, last
 //!    reason: …").
 //! 3. Restarts crashed watchers with exponential backoff, up to
@@ -32,8 +32,37 @@ use futures::FutureExt;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-use corpus_engine_watchers::projects::ProjectState;
 use sovereign_contracts::watcher_projects::{WatcherKind, WatcherStatus};
+
+/// The status cell a supervised task records into: one status per watcher
+/// kind, `Pending` until the first write. svrn's own (pb-code-daemon-exit);
+/// until then this was the code program's per-project `ProjectState`.
+#[derive(Default)]
+pub struct TaskStatus {
+    watchers: tokio::sync::RwLock<std::collections::HashMap<WatcherKind, WatcherStatus>>,
+}
+
+impl TaskStatus {
+    /// An empty cell: every kind reads `Pending`.
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    /// Record `kind`'s status.
+    pub async fn set(&self, kind: WatcherKind, status: WatcherStatus) {
+        self.watchers.write().await.insert(kind, status);
+    }
+
+    /// `kind`'s last recorded status, `Pending` if none.
+    pub async fn status(&self, kind: WatcherKind) -> WatcherStatus {
+        self.watchers
+            .read()
+            .await
+            .get(&kind)
+            .cloned()
+            .unwrap_or(WatcherStatus::Pending)
+    }
+}
 
 /// Crash count past which the supervisor stops auto-restarting.
 /// Five gives room for the typical "I just changed my script and
@@ -92,7 +121,7 @@ impl SupervisedTask {
 ///   supervisor exits. This is how config-reload swaps work: the
 ///   old watcher returns cleanly after receiving a signal, new one
 ///   is supervised fresh.
-pub fn supervise<F, Fut>(kind: WatcherKind, state: Arc<ProjectState>, build: F) -> SupervisedTask
+pub fn supervise<F, Fut>(kind: WatcherKind, state: Arc<TaskStatus>, build: F) -> SupervisedTask
 where
     F: Fn() -> Fut + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
@@ -105,7 +134,7 @@ where
 /// [`supervise`] so the behaviour is consistent.
 pub fn supervise_with_backoff<F, Fut>(
     kind: WatcherKind,
-    state: Arc<ProjectState>,
+    state: Arc<TaskStatus>,
     build: F,
     initial_backoff: Duration,
     max_backoff: Duration,
@@ -239,7 +268,7 @@ mod tests {
     /// state to `Idle`.
     #[tokio::test]
     async fn panic_once_then_recover() {
-        let state = ProjectState::new("test");
+        let state = TaskStatus::new();
         let attempts = Arc::new(AtomicUsize::new(0));
         let attempts_clone = Arc::clone(&attempts);
 
@@ -264,7 +293,7 @@ mod tests {
     /// mesh / inference subsystems should never see this case.
     #[tokio::test]
     async fn repeated_crashes_trip_auto_disable() {
-        let state = ProjectState::new("test");
+        let state = TaskStatus::new();
         let attempts = Arc::new(AtomicUsize::new(0));
         let attempts_clone = Arc::clone(&attempts);
 
@@ -299,7 +328,7 @@ mod tests {
     /// tools don't falsely blame the user's script.
     #[tokio::test]
     async fn abort_records_aborted_not_crashed() {
-        let state = ProjectState::new("test");
+        let state = TaskStatus::new();
         let task = supervise(WatcherKind::Lint, Arc::clone(&state), || async {
             // Run forever until aborted.
             futures::future::pending::<()>().await;
@@ -334,7 +363,7 @@ mod tests {
     /// sees a shutdown signal, returns cleanly, supervisor exits.
     #[tokio::test]
     async fn clean_exit_leaves_idle() {
-        let state = ProjectState::new("test");
+        let state = TaskStatus::new();
         let task = supervise(
             WatcherKind::Config,
             Arc::clone(&state),

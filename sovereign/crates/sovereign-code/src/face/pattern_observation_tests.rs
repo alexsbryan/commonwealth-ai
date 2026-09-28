@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! End-to-end test for Phase 7.1 ToolPatternMatcher wired through
-//! `mcp_router::handle_tool_call`.
+//! End-to-end test for Phase 7.1 ToolPatternMatcher wired through code's
+//! call log (`CodeCallLog`), which is where the matcher lives since
+//! pb-code-daemon-exit (it moved with code's tools out of the daemon's
+//! `mcp_router`).
 //!
-//! Spawns a real `mcp_router` over an ephemeral localhost port,
+//! Spawns code's MCP dispatcher behind the kit's HTTP framing over an
+//! ephemeral localhost port,
 //! POSTs two `tools/call` invocations (`blast` then `build`), and
 //! confirms that:
 //!
@@ -24,7 +27,8 @@ use sovereign_contracts::types::{
     Effect, Idempotency, Latency, Scope, StepOutput, ToolContext, ToolDescriptor,
 };
 use sovereign_contracts::Tool;
-use sovereign_daemon::mcp_router::{mcp_router, FeatureRoot, McpNotifier};
+
+use super::{CodeCallLog, CodeTools};
 
 /// Stub tool — we only care that the registry resolves the id and
 /// the dispatch fires; the body is a single-line text response.
@@ -96,14 +100,25 @@ async fn blast_then_build_writes_observed_note_via_live_mcp_wire() {
     registry.register(stub("build"));
     let registry = Arc::new(registry);
 
-    let notifier = McpNotifier::new();
-    let feature_root = dir.path().to_path_buf();
-    let app = mcp_router(
-        registry,
-        Arc::clone(&notes),
-        "obs-test-session".into(),
-        FeatureRoot::new(Some(feature_root)),
-        notifier,
+    let dispatcher = host_kit::mcp::McpDispatcher::new(
+        "sovereign-code",
+        "test",
+        CodeTools {
+            tools: registry,
+            session_id: "obs-test-session".into(),
+            feature_root: Some(dir.path().to_path_buf()),
+        },
+        CodeCallLog {
+            notes: Arc::clone(&notes),
+            session_id: Arc::new("obs-test-session".into()),
+            matcher: Arc::new(
+                corpus_engine_notes::mining::patterns::ToolPatternMatcher::new(Arc::clone(&notes)),
+            ),
+        },
+    );
+    let app = host_kit::mcp::http::routes(
+        Arc::new(dispatcher),
+        host_kit::mcp::http::McpNotifier::new(),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! The code program, composed into this process by a distribution (phase-b
+//! pb-code-daemon-exit; F2 (a), phase-b-30; phase-b-33). svrn names no type
+//! of code's: the distribution builds code through code's face and hands
+//! back what svrn mounts — code's tools on the one `/mcp`, code's routes on
+//! the client surface, and a handle that keeps code's runtime alive. svrn
+//! alone (no [`HostedCode`]) serves no code tool; its `/mcp` points a caller
+//! at `svrn code mcp` and `/v1/projects/*` answers the same absence.
+
+use std::any::Any;
+use std::future::Future;
+use std::path::PathBuf;
+use std::pin::Pin;
+use std::sync::Arc;
+
+use corpus_engine_notes::NoteStore;
+
+/// What svrn hands code's composition: its data root, the workspace it was
+/// told to watch, and the two handles it already holds for that root.
+pub struct CodeHost {
+    /// svrn's data root; the distribution places code's data under it.
+    pub data_dir: PathBuf,
+    /// The workspace svrn resolved (`SOVEREIGN_WORKSPACE_DIR`, then
+    /// `~/.svrnmesh/workspace`), `None` when there is none.
+    pub workspace: Option<PathBuf>,
+    /// The root's `notes.db`, already open: one writer per data root.
+    pub notes: Arc<NoteStore>,
+    /// The root's chunk indexes, read through the engine svrn holds.
+    pub index: Arc<dyn corpus_index::source::IndexSource>,
+}
+
+/// Code, composed, as svrn mounts it.
+pub struct CodeMount {
+    /// Code's tools, listed and called on svrn's `/mcp` beside svrn's own.
+    pub tools: Arc<dyn host_kit::mcp::McpMountedTools>,
+    /// Code's client routes (`/v1/projects/*`).
+    pub routes: axum::Router,
+    /// Hands code's lint/test watchers svrn's foreground signal.
+    pub yield_to: Box<dyn Fn(Arc<dyn corpus_engine::YieldHook>) + Send + Sync>,
+    /// Keeps code's runtime (Reindexer, watchers, atlas GC) alive for the
+    /// process's life.
+    pub hold: Box<dyn Any + Send + Sync>,
+}
+
+type Compose = Box<
+    dyn FnOnce(CodeHost) -> Pin<Box<dyn Future<Output = Result<CodeMount, String>> + Send>> + Send,
+>;
+
+/// The distribution's composition of code, run once at boot.
+pub struct HostedCode {
+    compose: Compose,
+}
+
+impl HostedCode {
+    /// `compose` builds code for `CodeHost`; an `Err` names why, and refuses
+    /// boot.
+    pub fn new<F, Fut>(compose: F) -> Self
+    where
+        F: FnOnce(CodeHost) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<CodeMount, String>> + Send + 'static,
+    {
+        Self {
+            compose: Box::new(move |host| Box::pin(compose(host))),
+        }
+    }
+
+    /// Run the composition.
+    pub async fn compose(self, host: CodeHost) -> Result<CodeMount, String> {
+        (self.compose)(host).await
+    }
+}
+
+/// Where svrn alone points a caller that asked for code: the one server
+/// that serves code's tools and `/v1/projects/*`.
+pub const CODE_SERVER: &str = "svrn code mcp";
+
+/// `/v1/projects/*` on svrn alone: a 503 naming the code program, never a
+/// 404 that reads as "no such route" (FIVE_PROGRAMS §4 rule 3).
+pub fn projects_absent_router() -> axum::Router {
+    async fn absent(uri: axum::http::Uri) -> axum::response::Response {
+        use axum::response::IntoResponse;
+        tracing::debug!(path = %uri.path(), "project routes: no code program in this process");
+        (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(serde_json::json!({
+                "error": format!(
+                    "{} is served by the code program, which this svrn does not host: \
+                     run `{CODE_SERVER}`",
+                    uri.path()
+                ),
+            })),
+        )
+            .into_response()
+    }
+    axum::Router::new()
+        .route("/v1/projects", axum::routing::any(absent))
+        .route("/v1/projects/{*rest}", axum::routing::any(absent))
+}

@@ -51,16 +51,14 @@ pub mod auto_resume;
 /// (DAEMON_CORE.md §4.1 row 4), moved whole at domains
 /// `dm-daemon-cli-composition` (2026-09-17): the bootstrap phases, the
 /// build/preflight pair (preflight since moved on to sovereign-compute), the
-/// tool registry, the solve surface, the work-atlas wiring and the
-/// runtime-support leaves. `run_daemon` followed at the
-/// `dm-daemon-assembled-bin` cut (2026-09-21) — it
-/// lives in [`daemon_cmd`] now, beside the leaves it owns (log
+/// tool registry, the solve surface and the runtime-support leaves (the
+/// work-atlas wiring left for the code program at pb-code-daemon-exit).
+/// `run_daemon` followed at the `dm-daemon-assembled-bin` cut (2026-09-21) —
+/// it lives in [`daemon_cmd`] now, beside the leaves it owns (log
 /// rotation, the memory watchdog, the process exit code).
 ///
-/// `bootstrap` and `tool_registry` are gated on `treesitter`: the bootstrap
-/// mounts `project_http` and the registry registers `sovereign-tools`' code
-/// tools, both of which are behind that feature. The daemon binary enables it
-/// unconditionally.
+/// `bootstrap` and `tool_registry` are gated on `treesitter`, which the
+/// daemon binary enables unconditionally.
 #[cfg(feature = "treesitter")]
 pub mod bootstrap;
 pub mod build;
@@ -87,6 +85,9 @@ pub mod features_http;
 pub mod foreground_post;
 pub mod governance_http;
 pub mod guest_door;
+/// The code program as a distribution composes it into this process
+/// (pb-code-daemon-exit): what svrn mounts, and its absence when alone.
+pub mod hosted_code;
 pub mod http_response;
 pub mod ingest_executor;
 /// The daemon's insight surface (sv-surface rung 6): clip/list/search/delete
@@ -116,8 +117,6 @@ pub mod origin_fanout;
 pub mod principal;
 #[cfg(feature = "treesitter")]
 pub mod process;
-#[cfg(feature = "treesitter")]
-pub mod project_http;
 pub mod provider;
 pub mod publish_http;
 pub mod rails_client;
@@ -139,8 +138,8 @@ pub mod supervise;
 /// The panic-boundary supervisor every long-running watcher runs under
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod supervised_task;
-/// The `/mcp` tool registry. Gated with `bootstrap`: it registers
-/// `sovereign-tools`' code-intel tools, which are behind `treesitter`.
+/// svrn's `/mcp` tool registry; code's tools mount beside it from
+/// [`hosted_code`]. Gated with `bootstrap`.
 #[cfg(feature = "treesitter")]
 pub mod tool_registry;
 pub mod turn_extras_http;
@@ -151,7 +150,6 @@ pub mod venue_host;
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
-pub mod watcher_supervisor;
 /// The `ingest:v1` execute origin cw-rails' donor forwards units to — the
 /// daemon's half of the work plane since the donor moved to cw-rails
 /// (pb-work-donor; DAEMON_CORE.md §3.2, `jobs`).

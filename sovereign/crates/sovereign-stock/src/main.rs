@@ -2,14 +2,16 @@
 //! `sovereign-stock` — the stock install as ONE process (FIVE_PROGRAMS §2c;
 //! phase-b-29 Q1, Q2, Q4). What `svrn daemon run` execs.
 //!
-//! It composes two programs through their faces and owns nothing else:
+//! It composes three programs through their faces and owns nothing else:
 //! serve's assembly is built in this process and its router bound on serve's
 //! port, so cw-rails, code's FIM and cli-llm still dial serve there, and svrn
 //! gets the SAME provider cell through the `InferenceProvider` port. svrn
 //! decides whether serve is hosted here (`ServingPath::decide`); this binary
-//! only hands it the composition. boundary-gate holds the face items: every
-//! `sovereign_serve::` and `sovereign_daemon::` path below is on the
-//! `[[distribution]] stock` row, spelled in full.
+//! only hands it the composition. Code is composed over svrn's data root and
+//! mounted on svrn's one `:9741/mcp` and client surface (pb-code-daemon-exit;
+//! F2 (a), phase-b-30; phase-b-33). boundary-gate holds the face items: every
+//! `sovereign_serve::`, `sovereign_daemon::` and `sovereign_code::` path
+//! below is on the `[[distribution]] stock` row, spelled in full.
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -50,5 +52,33 @@ fn main() {
             Ok(assembly.cell)
         },
     );
-    std::process::exit(sovereign_daemon::process::run(&args, Some(hosted)));
+    // Placement is this binary's (FIVE_PROGRAMS §2c): code's indexes and
+    // result stores are svrn's root's, as they were when svrn hosted them.
+    let code = sovereign_daemon::process::HostedCode::new(|host| async move {
+        let face = sovereign_code::face::compose(sovereign_code::face::CodeParts {
+            indexes_dir: host.data_dir.join("indexes"),
+            stores_dir: host.data_dir.clone(),
+            notes: host.notes,
+            index: host.index,
+            workspace: host.workspace,
+            sovereign_dir: None,
+            session_prefix: "daemon",
+            extra_watchers: Vec::new(),
+        })
+        .await?;
+        for line in &face.banner {
+            tracing::info!(target: "code", "{line}");
+        }
+        Ok(sovereign_daemon::process::CodeMount {
+            tools: std::sync::Arc::new(face.mcp),
+            routes: face.routes,
+            yield_to: face.runtime.yield_setter(),
+            hold: Box::new(face.runtime),
+        })
+    });
+    std::process::exit(sovereign_daemon::process::run(
+        &args,
+        Some(hosted),
+        Some(code),
+    ));
 }

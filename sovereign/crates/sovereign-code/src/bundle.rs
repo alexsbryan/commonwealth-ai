@@ -8,7 +8,6 @@
 //! (FIVE_PROGRAMS §4 rule 6).
 
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -235,8 +234,8 @@ impl ToolBundle for NotesTools {
 pub struct WatcherTools {
     test_store: Arc<corpus_engine_watchers::TestResultStore>,
     lint_store: Arc<corpus_engine_watchers::LintResultStore>,
-    watcher_active: Arc<AtomicBool>,
-    workspace_root: PathBuf,
+    heartbeat: Arc<corpus_engine_watchers::WatcherHeartbeat>,
+    workspace_root: Option<PathBuf>,
     test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>>,
     test_scope: Option<String>,
     lint_scope: Option<String>,
@@ -244,22 +243,28 @@ pub struct WatcherTools {
 
 #[cfg(feature = "treesitter")]
 impl WatcherTools {
-    /// `watcher_active` is the flag the host sets once its FS watcher runs.
+    /// `heartbeat` is the watcher coordinator's liveness beacon: the status
+    /// tools report a watcher dead once it stops advancing.
     pub fn new(
         test_store: Arc<corpus_engine_watchers::TestResultStore>,
         lint_store: Arc<corpus_engine_watchers::LintResultStore>,
-        watcher_active: Arc<AtomicBool>,
-        workspace_root: PathBuf,
+        heartbeat: Arc<corpus_engine_watchers::WatcherHeartbeat>,
     ) -> Self {
         Self {
             test_store,
             lint_store,
-            watcher_active,
-            workspace_root,
+            heartbeat,
+            workspace_root: None,
             test_watcher: None,
             test_scope: None,
             lint_scope: None,
         }
+    }
+
+    /// The workspace `lint_status` filters results by paths against.
+    pub fn with_workspace_root(mut self, root: PathBuf) -> Self {
+        self.workspace_root = Some(root);
+        self
     }
 
     /// The test watcher `run_tests` drives.
@@ -286,18 +291,20 @@ impl ToolBundle for WatcherTools {
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
         let mut test_status = crate::TestStatusTool::new(Arc::clone(&self.test_store))
-            .with_watcher_active(Arc::clone(&self.watcher_active));
+            .with_heartbeat(Arc::clone(&self.heartbeat));
         if let Some(scope) = &self.test_scope {
             test_status = test_status.with_watched_scope(scope.clone());
         }
         let mut lint_status = crate::LintStatusTool::new(Arc::clone(&self.lint_store))
-            .with_watcher_active(Arc::clone(&self.watcher_active))
-            .with_workspace_root(self.workspace_root.clone());
+            .with_heartbeat(Arc::clone(&self.heartbeat));
+        if let Some(root) = &self.workspace_root {
+            lint_status = lint_status.with_workspace_root(root.clone());
+        }
         if let Some(scope) = &self.lint_scope {
             lint_status = lint_status.with_watched_scope(scope.clone());
         }
         let mut build = crate::BuildTool::new(Arc::clone(&self.lint_store))
-            .with_watcher_active(Arc::clone(&self.watcher_active));
+            .with_heartbeat(Arc::clone(&self.heartbeat));
         if let Some(scope) = &self.lint_scope {
             build = build.with_watched_scope(scope.clone());
         }
@@ -324,13 +331,14 @@ impl ToolBundle for WatcherTools {
 /// The architecture and drift reports a project's quality gates write.
 #[cfg(feature = "treesitter")]
 pub struct ArchTools {
-    workspace_root: PathBuf,
+    workspace_root: Option<PathBuf>,
 }
 
 #[cfg(feature = "treesitter")]
 impl ArchTools {
-    /// Over the reports under `workspace_root`.
-    pub fn new(workspace_root: PathBuf) -> Self {
+    /// Over the reports under `workspace_root`; with none, `drift_posture`
+    /// finds the workspace as its tool does alone.
+    pub fn new(workspace_root: Option<PathBuf>) -> Self {
         Self { workspace_root }
     }
 }
@@ -343,16 +351,14 @@ impl ToolBundle for ArchTools {
     }
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
+        let mut drift_posture = crate::DriftPostureTool::new();
+        if let Some(root) = &self.workspace_root {
+            drift_posture = drift_posture.with_workspace_root(root.clone());
+        }
         BundleReport::new(self.name())
             .record(reg.register_reporting(Box::new(crate::ArchReportTool::new().declared())))
             .record(reg.register_reporting(Box::new(crate::ArchPostureTool::new().declared())))
-            .record(
-                reg.register_reporting(Box::new(
-                    crate::DriftPostureTool::new()
-                        .with_workspace_root(self.workspace_root.clone())
-                        .declared(),
-                )),
-            )
+            .record(reg.register_reporting(Box::new(drift_posture.declared())))
             .record(reg.register_reporting(Box::new(crate::DriftFindingsTool::new().declared())))
     }
 }

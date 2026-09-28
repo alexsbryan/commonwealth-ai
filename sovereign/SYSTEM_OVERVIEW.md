@@ -728,8 +728,10 @@ a `snapshot` read does not.
 
 **Code intelligence** is served over MCP by `svrn code mcp` (also spelled
 `svrn serve` and `svrn project serve`: no model, no daemon, no mesh; its tool
-set is `sovereign-code`'s bundles behind the host kit's dispatcher) or the
-daemon. The tools live in their own crate, `sovereign-code` — 18,431 lines
+set is `sovereign-code`'s bundles behind the host kit's dispatcher) or, on
+the stock install, mounted on the daemon's one `:9741/mcp` through code's
+face (`sovereign_code::face`, pb-code-daemon-exit); a svrn daemon alone serves
+no code tool and names `svrn code mcp`. The tools live in their own crate, `sovereign-code` — 18,431 lines
 lifted out of `sovereign-tools` on 2026-09-21 (822681564), so that `svrn code`
 is a program with a boundary a gate can read rather than a module inside the
 knowledge server (docs/FIVE_PROGRAMS.md §2). Tools under
@@ -740,7 +742,7 @@ knowledge server (docs/FIVE_PROGRAMS.md §2). Tools under
 drift, capability docs, project context, session reflection, and work-atlas
 coordination (`declare_scope`, `release_scope`, `work_in_flight`).
 
-The daemon's tool graph and the reindexer share ONE merged `ScipGraph` handle,
+Code's tool graph and the Reindexer share ONE merged `ScipGraph` handle,
 so updates are visible to `symbols`/`callers`/`blast` live. Each debounced
 save runs an embed-free tree-sitter overlay; the heavy rust-analyzer export is
 demoted (spawned, rate-limited, quiescence-gated, `nice +10`) and is
@@ -1434,7 +1436,7 @@ every accessor above it moves together. Env overrides are declared in
 **Repo-local `.sovereign/`:** `project.toml` + `project.json`, `sovereign.toml`
 (per-repo daemon/watcher posture — watchers deliberately off in this repo),
 `notes.db`, `features.db`, `SOVEREIGN.md`. (No `mesh.db` since five-programs
-fp-33: the work-atlas store is the daemon's, dialed over `/v1/mesh/kv`.)
+fp-33: the work-atlas store is cw-rails', dialed by the code program.)
 
 **Per-user root `~/.svrnmesh`:** `config.toml` (`SetupConfig` — THE per-user
 config), `work-atlas.toml`, `projects.json`, the indexes / drift / arch /

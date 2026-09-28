@@ -8,14 +8,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use arc_swap::ArcSwap;
 use axum::extract::{ConnectInfo, Request};
 use axum::middleware::Next;
 use axum::response::Response;
 use axum::Router;
 use reqwest::Method;
 
-use corpus_engine_watchers::reindexer::{Reindexer, ScipGraph};
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::admin_http::admin_router;
 use sovereign_daemon::atlas_http::atlas_router;
@@ -29,7 +27,6 @@ use sovereign_daemon::mcp_config_http::mcp_config_router;
 use sovereign_daemon::mesh_http::mesh_router;
 use sovereign_daemon::meshapp_http::meshapp_router;
 use sovereign_daemon::notes_http::notes_router;
-use sovereign_daemon::project_http::project_router;
 use sovereign_daemon::reading_http::reading_router;
 use sovereign_daemon::recipe_project_http::recipe_project_router;
 use sovereign_daemon::turn_http::turn_router;
@@ -77,16 +74,6 @@ fn fresh_daemon() -> (tempfile::TempDir, Arc<EmbeddedDaemon>) {
     (tmp, daemon)
 }
 
-fn fresh_reindexer() -> (tempfile::TempDir, Arc<Reindexer>) {
-    let tmp = tempfile::tempdir().unwrap();
-    let indexes = tmp.path().join("indexes");
-    std::fs::create_dir_all(&indexes).unwrap();
-    let merged = Arc::new(ArcSwap::from_pointee(
-        ScipGraph::open_in_memory("merged").unwrap(),
-    ));
-    (tmp, Reindexer::new(indexes, merged))
-}
-
 // ── Per-router rejection tests ───────────────────────────────────
 //
 // One test per loopback-only router. Each picks a route that's
@@ -99,10 +86,12 @@ fn fresh_reindexer() -> (tempfile::TempDir, Arc<Reindexer>) {
 ///
 /// `exposes` is the half of the message that is NOT mechanical — what a
 /// leak on THIS router would hand a LAN caller — and the reason the
-/// fifteen callers below stay fifteen NAMED tests rather than one loop
-/// over a table: a red still names the router that broke. The fifteen
-/// used to spell the spawn, the knock and the assert themselves, 269
-/// lines of it, which is fifteen chances for one to drift (ARCH §10.6).
+/// fourteen callers below stay fourteen NAMED tests rather than one loop
+/// over a table: a red still names the router that broke. They used to
+/// spell the spawn, the knock and the assert themselves, 269 lines of it,
+/// which is that many chances for one to drift (ARCH §10.6). The
+/// fifteenth, `project_http`'s, moved with the router to the code program
+/// (pb-code-daemon-exit; sovereign-code tests/project_http_guard.rs).
 ///
 /// A `POST` carries an empty JSON body because that is what the handler
 /// behind it expects — though on the path this asserts, the layer
@@ -142,18 +131,6 @@ async fn admin_http_rejects_non_loopback_via_admin_reload() {
         Method::POST,
         "/v1/admin/reload",
         "these routes reload the owner's config",
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn project_http_rejects_non_loopback_via_list_projects() {
-    let (_tmp, rex) = fresh_reindexer();
-    refused(
-        project_router(rex),
-        Method::GET,
-        "/v1/projects",
-        "the SCIP graph names this host's source trees",
     )
     .await;
 }
@@ -398,9 +375,6 @@ async fn every_router_fails_closed_when_connect_info_absent() {
         resp.status()
     );
 
-    let (_t3, rex) = fresh_reindexer();
-    assert_500_on_bare_serve(project_router(rex), "/v1/projects").await;
-
     let (_t4, d4) = fresh_daemon();
     assert_500_on_bare_serve(reading_router(d4), "/internal/corpus/wikipedia/chunks/0").await;
 
@@ -531,10 +505,6 @@ async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
 
     let (_t2, d2) = fresh_daemon();
     assert_the_guard_owns_the_method_fallback("admin_http", admin_router(d2), "/v1/admin/reload")
-        .await;
-
-    let (_t3, rex) = fresh_reindexer();
-    assert_the_guard_owns_the_method_fallback("project_http", project_router(rex), "/v1/projects")
         .await;
 
     let (_t4, d4) = fresh_daemon();

@@ -8,8 +8,11 @@
 //! `localhost:9741` serves both the OpenAI-compatible `/v1` surface
 //! and the tool-use MCP surface on a single port.
 //!
-//! This module was previously inlined in `sovereign-cli/src/project_cmd.rs`.
-//! It lives here so the embedded daemon can mount it directly.
+//! `:9741/mcp` is the one MCP address (phase-b-33). It serves svrn's own
+//! tools and, when a distribution composed the code program into this
+//! process, code's tools beside them, each program's calls running and
+//! logging through its own host (pb-code-daemon-exit). svrn alone answers a
+//! code tool with a pointer to `svrn code mcp`.
 
 use std::future::Future;
 use std::net::SocketAddr;
@@ -22,7 +25,7 @@ use axum::extract::{ConnectInfo, Extension};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{Json, Router};
-use host_kit::mcp::{McpRequestContext, McpRequestHandler};
+use host_kit::mcp::{McpMountedTools, McpRequestContext, McpRequestHandler};
 use serde_json::Value;
 use tower_http::cors::CorsLayer;
 
@@ -41,53 +44,22 @@ use sovereign_core::registry::ToolRegistry;
 use sovereign_core::oicp::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 use sovereign_core::oicp::mcp::McpMethod;
 
-// Each program owns its MCP exposure list (phase-b pb-code-freshness):
-// svrn's in `sovereign_tools::mcp_surface`, code's (with the aliases and
-// the spec gate) in `sovereign_code::mcp_surface`. The daemon mounts both
-// programs' tools until pb-code-daemon-exit, so it exposes the union.
-use sovereign_code::mcp_surface::{render_tools_list_gated_by, resolve_alias};
-use sovereign_tools::mcp_surface::negotiate_mcp_protocol_version;
-
-/// The daemon's exposure filter: svrn's ids or code's.
-fn is_mcp_exposed(canonical_name: &str) -> bool {
-    sovereign_tools::mcp_surface::is_mcp_exposed(canonical_name)
-        || sovereign_code::mcp_surface::is_mcp_exposed(canonical_name)
-}
-
-/// Phase 5 feature-root extension. When set, `tools/list` calls
-/// [`render_tools_list_gated_by`] with this path so spec-gated tools
-/// (`spec`, `drift`) only appear when `.sovereign/features/*/spec.md`
-/// or `ARCHITECTURE.md` exists. `None` (the daemon's default) means
-/// the gate is off and every exposed tool ships unconditionally —
-/// preserving Phase 4 behaviour while we work out per-request gate
-/// resolution for the embedded daemon path.
-#[derive(Clone)]
-pub struct FeatureRoot(pub Option<std::sync::Arc<std::path::PathBuf>>);
-
-impl FeatureRoot {
-    /// Construct from an optional path. The double-Arc layer lets us
-    /// stuff this into an axum Extension cheaply (one shared Arc,
-    /// not a new allocation per request).
-    pub fn new(path: Option<std::path::PathBuf>) -> Self {
-        Self(path.map(std::sync::Arc::new))
-    }
-}
+// svrn's exposure list; code's is code's (phase-b pb-code-freshness) and
+// applies inside code's mounted host.
+use sovereign_tools::mcp_surface::{is_mcp_exposed, negotiate_mcp_protocol_version};
 
 /// The notifier behind `GET /mcp`. It moved to the host kit with the HTTP+SSE
-/// framing (phase-b pb-code-server); this path is its historical one. The
-/// watcher in `sovereign_code::spec_watcher` calls
-/// [`McpNotifier::notify_tools_list_changed`] from its `on_change` callback.
+/// framing (phase-b pb-code-server); this path is its historical one.
 pub use host_kit::mcp::http::McpNotifier;
 
-/// The daemon's own method dispatch behind the kit's HTTP framing: its tool
-/// registry, call log, pattern matcher and surface filter.
+/// The daemon's own method dispatch behind the kit's HTTP framing: svrn's
+/// registry, call log and surface filter, and code's mounted tools.
 struct DaemonMcp {
     tools: Arc<ToolRegistry>,
     logger: Arc<NoteStore>,
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
-    feature_root: FeatureRoot,
-    pattern_matcher: Arc<corpus_engine_notes::mining::patterns::ToolPatternMatcher>,
+    code: Option<Arc<dyn McpMountedTools>>,
 }
 
 impl McpRequestHandler for DaemonMcp {
@@ -106,56 +78,37 @@ impl McpRequestHandler for DaemonMcp {
             Arc::clone(&self.logger),
             Arc::clone(&self.session_id),
             Arc::clone(&self.call_counter),
-            self.feature_root.clone(),
-            Arc::clone(&self.pattern_matcher),
+            self.code.clone(),
             agent_session_token,
+            ctx.clone(),
         )
     }
 }
 
 /// Build the MCP router. Mounts `/mcp`, `/mcp/message`, and `/mcp/stats`
-/// with shared per-session state (tool registry, note store, session id,
-/// call counter, feature_root, notifier).
-///
-/// Phase 5: callers pass `feature_root = Some(dir)` to enable the
-/// spec-presence gate. The standalone `sovereign serve` does this
-/// with the cwd it was launched from. The embedded daemon currently
-/// passes `None` so its `tools/list` matches Phase 4 behaviour; a
-/// per-request gate via the project registry can wire in later.
+/// with shared per-session state (svrn's tool registry, note store, session
+/// id, call counter, notifier) and code's mounted tools, if any.
 ///
 /// Phase 5b: `notifier` is the broadcast surface for server-pushed
 /// notifications (currently just `notifications/tools/list_changed`).
-/// SSE handlers subscribe to it; producers (the spec watcher) push
-/// to it. The router builder accepts an [`McpNotifier`] handle by
-/// value so the caller can keep its own clone for triggering events.
-/// If the caller has no producer, `McpNotifier::new()` is fine — the
-/// channel is lazy and stays idle until something publishes.
+/// SSE handlers subscribe to it; producers push to it. If the caller has no
+/// producer, `McpNotifier::new()` is fine — the channel is lazy and stays
+/// idle until something publishes.
 pub fn mcp_router(
     tools: Arc<ToolRegistry>,
     logger: Arc<NoteStore>,
     session_id: String,
-    feature_root: FeatureRoot,
+    code: Option<Arc<dyn McpMountedTools>>,
     notifier: McpNotifier,
 ) -> Router {
-    // Shared per-session call counter. Every REFLECT_HINT_INTERVAL tool
-    // calls we append a brief reminder to write a session_reflection.
+    // Shared per-session call counter.
     let call_counter: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
-    // Phase 7.1: ToolPatternMatcher observes recent tool calls and
-    // writes `source='observed'` notes for recognised patterns
-    // (e.g. blast→build = "investigated impact, then acted"). One
-    // instance per router so per-session cooldown state persists
-    // across requests on the same session id. Fire-and-forget after
-    // every successful tool dispatch.
-    let pattern_matcher = Arc::new(
-        corpus_engine_notes::mining::patterns::ToolPatternMatcher::new(Arc::clone(&logger)),
-    );
     let handler = Arc::new(DaemonMcp {
         tools: Arc::clone(&tools),
         logger,
         session_id: Arc::new(session_id),
         call_counter,
-        feature_root,
-        pattern_matcher,
+        code,
     });
     // `/mcp` and `/mcp/message` are the kit's framing over this daemon's
     // dispatch; `/mcp/stats` is the daemon's own.
@@ -174,7 +127,7 @@ fn is_localhost(addr: &SocketAddr) -> bool {
     addr.ip().is_loopback()
 }
 
-/// GET /mcp/stats — tool call counts since server start.
+/// GET /mcp/stats — svrn's tool call counts since server start.
 async fn mcp_stats(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(tools): Extension<Arc<ToolRegistry>>,
@@ -197,15 +150,16 @@ async fn mcp_stats(
 ///
 /// Returns `Some(JsonRpcResponse)` for calls (requests with an id) and
 /// `None` for notifications (no id, no reply per JSON-RPC spec).
+#[allow(clippy::too_many_arguments)]
 async fn dispatch(
     req: JsonRpcRequest,
     tools: Arc<ToolRegistry>,
     logger: Arc<NoteStore>,
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
-    feature_root: FeatureRoot,
-    pattern_matcher: Arc<corpus_engine_notes::mining::patterns::ToolPatternMatcher>,
+    code: Option<Arc<dyn McpMountedTools>>,
     agent_session_token: String,
+    ctx: McpRequestContext,
 ) -> Option<JsonRpcResponse> {
     // Notifications: no id → no response. We still want to accept the
     // method (e.g. `notifications/initialized`) so the client doesn't see
@@ -219,9 +173,8 @@ async fn dispatch(
         Some(McpMethod::Initialize) => {
             // Phase 5b: advertise `tools.listChanged: true` so MCP
             // clients (Claude Code, Cursor, opencode) subscribe to
-            // the SSE channel and refetch `tools/list` on the
-            // server-pushed notification we now emit on spec
-            // create/modify/remove.
+            // the SSE channel and refetch `tools/list` on a
+            // server-pushed notification.
             let result = serde_json::json!({
                 "protocolVersion": negotiate_mcp_protocol_version(req.params.as_ref()),
                 "capabilities": {
@@ -235,15 +188,18 @@ async fn dispatch(
             JsonRpcResponse::result(id, result)
         }
         Some(McpMethod::ToolsList) => {
-            let descriptors = tools.descriptors();
-            // Phase 5: feature_root.0 is `Some(Arc<PathBuf>)` for
-            // spec-gated callers (standalone serve), `None` for the
-            // daemon's pass-through. The cache amortises stat-storms.
-            let tool_list = render_tools_list_gated_by(
-                &descriptors,
-                feature_root.0.as_deref().map(|p| p.as_path()),
+            let mut tool_list = sovereign_contracts::mcp_host::render_tool_entries(
+                &tools.descriptors(),
                 is_mcp_exposed,
             );
+            match &code {
+                Some(code) => {
+                    if let Value::Array(entries) = code.list() {
+                        tool_list.extend(entries);
+                    }
+                }
+                None => tracing::debug!("mcp: tools/list is svrn's alone; no code program here"),
+            }
             JsonRpcResponse::result(id, serde_json::json!({ "tools": tool_list }))
         }
         Some(McpMethod::ToolsCall) => {
@@ -254,8 +210,9 @@ async fn dispatch(
                 logger,
                 session_id,
                 call_counter,
-                pattern_matcher,
+                code,
                 agent_session_token,
+                &ctx,
             )
             .await
         }
@@ -266,14 +223,15 @@ async fn dispatch(
     Some(response)
 }
 
-/// Execute a `tools/call` request. Logs the call to the tool_call_log
-/// ring buffer for pattern analysis by `sovereign reflect`. Log
-/// failures are silently ignored — they must never affect tool call
-/// outcomes.
+/// Execute a `tools/call` request: svrn's tool through svrn's registry and
+/// call log, else code's through code's mounted host (which logs its own
+/// calls), else a -32601 that, with no code program here, names the server
+/// that has code's tools. Log failures never affect a call's outcome.
 ///
 /// As of Phase 2 the tool response carries no trailing reminder text.
 /// Stateful tools advertise their salient state through `Tool::signal`,
 /// which the Runtime's ReasonWithTools preamble polls every turn.
+#[allow(clippy::too_many_arguments)]
 async fn handle_tool_call(
     id: Value,
     params: Option<Value>,
@@ -281,21 +239,16 @@ async fn handle_tool_call(
     logger: Arc<NoteStore>,
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
-    pattern_matcher: Arc<corpus_engine_notes::mining::patterns::ToolPatternMatcher>,
+    code: Option<Arc<dyn McpMountedTools>>,
     agent_session_token: String,
+    ctx: &McpRequestContext,
 ) -> JsonRpcResponse {
     let Some(params) = params else {
         return JsonRpcResponse::error(id, -32602, "missing params");
     };
-    let Some(raw_name) = params.get("name").and_then(|v| v.as_str()) else {
+    let Some(name) = params.get("name").and_then(|v| v.as_str()) else {
         return JsonRpcResponse::error(id, -32602, "missing 'name'");
     };
-    // Alias rewrite: a client that cached the old MCP name (e.g.
-    // `find_callers`) hits the same canonical handler as the new
-    // name (`callers`). Telemetry (`record_call`) is keyed off the
-    // canonical name so call counts aggregate across both spellings.
-    let canonical = resolve_alias(raw_name).to_string();
-    let name = canonical;
     let arguments = params
         .get("arguments")
         .cloned()
@@ -303,11 +256,10 @@ async fn handle_tool_call(
 
     // The ToolRegistry half (validate, write audit, ToolContext, execute,
     // StepOutput mapping) is sovereign-contracts' `mcp_host`, which the code
-    // server runs too; the log, the pattern matcher and the counter are
-    // this daemon's.
+    // server runs too; the log and the counter are this daemon's.
     let Some(outcome) = sovereign_contracts::mcp_host::call_registry_tool(
         &tools,
-        &name,
+        name,
         &arguments,
         &session_id,
         agent_session_token,
@@ -315,35 +267,42 @@ async fn handle_tool_call(
     )
     .await
     else {
-        return JsonRpcResponse::error(id, -32601, format!("tool not found: {raw_name}"));
+        return match code {
+            Some(code) => match code.call(name, &arguments, ctx).await {
+                Some(outcome) => {
+                    tracing::debug!(tool = name, "mcp: code's tool ran");
+                    JsonRpcResponse::result(id, outcome.into_call_result())
+                }
+                None => {
+                    tracing::debug!(tool = name, "mcp: neither svrn nor code has this tool");
+                    JsonRpcResponse::error(id, -32601, format!("tool not found: {name}"))
+                }
+            },
+            None => {
+                tracing::debug!(
+                    tool = name,
+                    "mcp: not svrn's tool, and no code program here"
+                );
+                JsonRpcResponse::error(
+                    id,
+                    -32601,
+                    format!(
+                        "tool not found: {name} — svrn serves no code tool; code intelligence, \
+                         notes and the work atlas are served by `{}`",
+                        crate::hosted_code::CODE_SERVER
+                    ),
+                )
+            }
+        };
     };
 
     // Log outcome to ring buffer. Fire-and-forget — a logging failure must
     // never affect the tool call result. A call that executed no tool (not
     // registered, arguments refused) is not logged.
     if let Some(tag) = sovereign_contracts::mcp_host::call_log_tag(&outcome) {
-        let _ = logger.log_tool_call(&session_id, &name, tag).await;
-
-        // Phase 7.1: run the pattern matcher against the freshly-logged
-        // call. Fire-and-forget on a tokio task so a slow DB write
-        // (writing an `observed`-source note) doesn't lengthen the tool
-        // response. The matcher's per-session state lives on the Arc'd
-        // matcher; cooldowns persist across requests on the same
-        // session id.
-        let matcher_for_task = Arc::clone(&pattern_matcher);
-        let session_for_task = Arc::clone(&session_id);
-        tokio::spawn(async move {
-            matcher_for_task
-                .observe_and_record(session_for_task.as_str(), None)
-                .await;
-        });
-
+        let _ = logger.log_tool_call(&session_id, name, tag).await;
         // The session call counter is kept for telemetry / rate-limit
-        // decisions even though the periodic reflection nudge was removed
-        // in Phase 2. Tools now surface their salient state via
-        // `Tool::signal()` which the ReasonWithTools preamble polls every
-        // turn — the 10-call text nudge ("Consider calling
-        // session_reflection…") is obsolete.
+        // decisions.
         let _ = call_counter.fetch_add(1, Ordering::Relaxed);
     }
 
