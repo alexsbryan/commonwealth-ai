@@ -100,16 +100,17 @@ pub(crate) async fn run_reflect_view(args: &[String]) -> i32 {
     }
 
     // ── Find notes.db ────────────────────────────────────────────────────────
-    let notes_db = match find_notes_db(data_dir.as_deref()) {
-        Some(p) => p,
-        None => {
-            eprintln!(
-                "error: could not find notes.db — run `svrn project serve` at least once, \
+    let notes_db =
+        match Some(crate::notes_db::find_notes_db(data_dir.as_deref())).filter(|p| p.exists()) {
+            Some(p) => p,
+            None => {
+                eprintln!(
+                    "error: could not find notes.db — run `svrn project serve` at least once, \
                  or pass --data-dir <path> to the directory containing notes.db"
-            );
-            return 1;
-        }
-    };
+                );
+                return 1;
+            }
+        };
 
     let store = match NoteStore::open(&notes_db) {
         Ok(s) => s,
@@ -538,90 +539,6 @@ async fn run_retire(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/// Locate notes.db. Looks for `<data_dir>/*/notes.db` (one level of project
-/// subdirectory) or `<data_dir>/notes.db` directly. Returns the most recently
-/// modified one, or accepts an explicit path.
-pub(crate) fn find_notes_db(data_dir: Option<&Path>) -> Option<PathBuf> {
-    // If caller passed --data-dir, treat that directory as the base and look
-    // for notes.db directly inside it (or one subdirectory deep).
-    if let Some(base) = data_dir {
-        let direct = base.join("notes.db");
-        if direct.exists() {
-            return Some(direct);
-        }
-        // One subdirectory level: <data-dir>/<project>/notes.db
-        return find_in_subdirs(base);
-    }
-
-    let sovereign_home = sovereign_contracts::rebrand::svrnmesh_root();
-
-    // Priority 1: Active pointer written by `project serve` at startup.
-    // This is the canonical source of truth — it always points at the database
-    // the running (or most recently run) server was using, regardless of
-    // working directory.
-    let pointer = sovereign_home.join("active_notes_db");
-    if let Ok(contents) = std::fs::read_to_string(&pointer) {
-        let path = PathBuf::from(contents.trim());
-        if path.exists() {
-            return Some(path);
-        }
-    }
-
-    // Priority 2: Walk up from cwd — mirrors find_sovereign_dir() in
-    // project_cmd.rs. Works when reflect is run from inside the same project
-    // tree that was served.
-    if let Ok(cwd) = std::env::current_dir() {
-        let mut current = cwd;
-        loop {
-            let candidate = current.join(".sovereign").join("notes.db");
-            if candidate.exists() {
-                return Some(candidate);
-            }
-            match current.parent() {
-                Some(p) => current = p.to_path_buf(),
-                None => break,
-            }
-        }
-    }
-
-    // Priority 3: ~/.svrnmesh/notes.db  (global fallback)
-    let home_direct = sovereign_home.join("notes.db");
-    if home_direct.exists() {
-        return Some(home_direct);
-    }
-
-    // Priority 4: ~/.svrnmesh/<subdir>/notes.db  (multi-project layout)
-    if let Some(p) = find_in_subdirs(&sovereign_home) {
-        return Some(p);
-    }
-
-    // Priority 5: ~/.svrnmesh/indexes/*/notes.db  (legacy layout)
-    find_in_subdirs(&sovereign_home.join("indexes"))
-}
-
-/// Search one directory level deep for notes.db, returning the most recently
-/// modified file found (or None if no candidates exist).
-fn find_in_subdirs(base: &Path) -> Option<PathBuf> {
-    let mut candidates: Vec<(PathBuf, std::time::SystemTime)> = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(base) {
-        for entry in entries.flatten() {
-            if !entry.path().is_dir() {
-                continue;
-            }
-            let candidate = entry.path().join("notes.db");
-            if candidate.exists() {
-                let mtime = candidate
-                    .metadata()
-                    .and_then(|m| m.modified())
-                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-                candidates.push((candidate, mtime));
-            }
-        }
-    }
-    candidates.sort_by(|a, b| b.1.cmp(&a.1));
-    candidates.into_iter().next().map(|(p, _)| p)
-}
 
 /// Parse "7d" / "24h" / "30" into a number of days.
 fn parse_duration(s: &str) -> Option<u64> {

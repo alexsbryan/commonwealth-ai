@@ -54,7 +54,7 @@ pub(crate) async fn cmd_audit(args: &[String]) -> i32 {
     // failures skip cleanly without affecting the surrounding
     // audit. Output goes to stderr so the markdown report on
     // stdout isn't polluted.
-    let notes_db = sov.join("notes.db");
+    let notes_db = crate::notes_db::find_notes_db(None);
     if notes_db.exists() {
         if let Ok(store) = corpus_engine_notes::NoteStore::open(&notes_db) {
             let summary = crate::audit_extract::run_with_default_backend(&repo_root, &store).await;
@@ -189,7 +189,7 @@ async fn build_audit_report(
     //   ## Observed patterns — source=observed (any kind).
     //   ## Notes by kind   — kept for backward compatibility with
     //                        readers used to the old layout.
-    let notes_db = sov.join("notes.db");
+    let notes_db = crate::notes_db::find_notes_db(None);
     let audit_notes: AuditNotes = if notes_db.exists() {
         match corpus_engine_notes::NoteStore::open(&notes_db) {
             Ok(store) => gather_audit_notes(&store).await,

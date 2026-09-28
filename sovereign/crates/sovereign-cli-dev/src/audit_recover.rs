@@ -99,7 +99,7 @@ const MAX_RECOVER_CONVERSATIONS: usize = 200;
 const MAX_INFERRED_PER_CONVERSATION: usize = 20;
 
 pub async fn cmd_audit_recover() -> i32 {
-    let Some(notes_db) = locate_notes_db() else {
+    let Some(notes_db) = Some(crate::notes_db::find_notes_db(None)).filter(|p| p.exists()) else {
         eprintln!(
             "  sovereign audit --recover: could not locate notes.db. \
              Run from inside an initialised sovereign repo, or run \
@@ -412,25 +412,6 @@ async fn persist_inferred(
         .await
         .map(|_| ())
         .map_err(|e| e.to_string())
-}
-
-/// Walk the standard search path for `notes.db`:
-///
-/// 1. `<repo>/.sovereign/notes.db` (project-scoped)
-/// 2. `~/.svrnmesh/notes.db` (user-scoped fallback for sessions
-///    that ran outside a repo)
-fn locate_notes_db() -> Option<PathBuf> {
-    if let Some(repo_root) = crate::project_cmd::find_repo_root() {
-        let p = repo_root.join(".sovereign").join("notes.db");
-        if p.exists() {
-            return Some(p);
-        }
-    }
-    let p = sovereign_cli_base::dirs::sovereign_root().join("notes.db");
-    if p.exists() {
-        return Some(p);
-    }
-    None
 }
 
 /// Read the bodies of every active observed-source note for a

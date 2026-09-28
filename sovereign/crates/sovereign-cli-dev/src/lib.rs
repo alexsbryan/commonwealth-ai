@@ -52,6 +52,7 @@ mod backlog_cmd;
 mod claim_cmd;
 mod converge_baseline;
 mod converge_cmd;
+mod notes_db;
 mod repo;
 mod solve_cmd;
 

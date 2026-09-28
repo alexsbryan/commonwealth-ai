@@ -675,7 +675,7 @@ async fn cmd_reflect(args: &[String]) -> i32 {
     };
 
     // ── Open NoteStore + write ───────────────────────────────
-    let notes_path = sovereign_root().join("notes.db");
+    let notes_path = crate::notes_db::find_notes_db(None);
     let notes = match corpus_engine_notes::NoteStore::open(&notes_path) {
         Ok(n) => n,
         Err(e) => {
@@ -930,7 +930,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
     };
 
     // ── Notes store ───────────────────────────────────────────
-    let notes_path = sovereign_root().join("notes.db");
+    let notes_path = crate::notes_db::find_notes_db(None);
     let notes = match corpus_engine_notes::NoteStore::open(&notes_path) {
         Ok(n) => n,
         Err(e) => {

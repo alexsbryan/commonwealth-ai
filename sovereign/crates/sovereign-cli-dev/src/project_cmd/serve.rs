@@ -154,19 +154,10 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Notes store ─────────────────────────────────────────────
 
-    let notes_db_path = sovereign_dir.join("notes.db");
+    let notes_db_path = crate::notes_db::find_notes_db(None);
     let notes_store = match corpus_engine_notes::NoteStore::open(&notes_db_path) {
         Ok(s) => {
             eprintln!("  notes.db         ✓");
-            // Write a pointer file so `svrn reflect` can find this
-            // database from any working directory, regardless of where the
-            // user invokes it from.
-            let pointer_dir = sovereign_cli_base::dirs::sovereign_root();
-            let _ = std::fs::create_dir_all(&pointer_dir);
-            let _ = std::fs::write(
-                pointer_dir.join("active_notes_db"),
-                notes_db_path.to_string_lossy().as_bytes(),
-            );
             Arc::new(s)
         }
         Err(e) => {

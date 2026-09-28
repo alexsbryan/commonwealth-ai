@@ -286,9 +286,7 @@ async fn cmd_list(args: &[String]) -> i32 {
     // no id route and never returns retired rows, so `--id` /
     // `--include-retired` (and the explicit `--data-dir` override) stay
     // on the repo-local path — named below, never silent.
-    let daemon_eligible = id_prefix.is_none()
-        && !include_retired
-        && data_dir.is_none();
+    let daemon_eligible = id_prefix.is_none() && !include_retired && data_dir.is_none();
     if daemon_eligible {
         let mut args = serde_json::Map::new();
         if let Some(q) = query.as_deref() {
@@ -355,7 +353,9 @@ async fn cmd_list(args: &[String]) -> i32 {
                     // call. The daemon surface has no id route — retry as a
                     // LOCAL id lookup, named (never silent).
                     if let Some(q) = query.as_deref().filter(|q| looks_like_note_id(q)) {
-                        if let Some(db) = crate::reflect_cmd::find_notes_db(None) {
+                        if let Some(db) =
+                            Some(crate::notes_db::find_notes_db(None)).filter(|p| p.exists())
+                        {
                             if let Ok(store) = NoteStore::open(&db) {
                                 if let Ok(all) = store.scan_all(true).await {
                                     let hits: Vec<RenderedRow> = all
@@ -406,7 +406,9 @@ async fn cmd_list(args: &[String]) -> i32 {
     }
 
     // ── Local path (daemon fallback, or the local-only flags above) ──
-    let Some(notes_db) = crate::reflect_cmd::find_notes_db(data_dir.as_deref()) else {
+    let Some(notes_db) =
+        Some(crate::notes_db::find_notes_db(data_dir.as_deref())).filter(|p| p.exists())
+    else {
         eprintln!(
             "notes list: could not locate notes.db. Run `svrn init` in this \
              repo (or pass --data-dir <path>)."
@@ -668,7 +670,9 @@ async fn cmd_add(args: &[String]) -> i32 {
         );
     }
 
-    let Some(notes_db) = crate::reflect_cmd::find_notes_db(data_dir.as_deref()) else {
+    let Some(notes_db) =
+        Some(crate::notes_db::find_notes_db(data_dir.as_deref())).filter(|p| p.exists())
+    else {
         eprintln!(
             "notes add: could not locate notes.db. Run `svrn init` in this \
              repo (or pass --data-dir <path>)."
@@ -766,8 +770,7 @@ async fn cmd_migrate_from(args: &[String]) -> i32 {
         eprintln!("notes migrate-from: {} does not exist", source.display());
         return 1;
     }
-    let canonical_root = sovereign_cli_base::dirs::sovereign_root();
-    let target = target.unwrap_or_else(|| canonical_root.join("notes.db"));
+    let target = target.unwrap_or_else(|| crate::notes_db::find_notes_db(None));
     if source == target {
         eprintln!(
             "notes migrate-from: source and target are the same path ({})",
@@ -982,7 +985,9 @@ async fn cmd_gc(args: &[String]) -> i32 {
         i += 1;
     }
 
-    let Some(notes_db) = crate::reflect_cmd::find_notes_db(data_dir.as_deref()) else {
+    let Some(notes_db) =
+        Some(crate::notes_db::find_notes_db(data_dir.as_deref())).filter(|p| p.exists())
+    else {
         eprintln!("notes gc: could not locate notes.db (pass --data-dir <path>).");
         return 1;
     };
@@ -1146,7 +1151,9 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
         i += 1;
     }
 
-    let Some(notes_db) = crate::reflect_cmd::find_notes_db(data_dir.as_deref()) else {
+    let Some(notes_db) =
+        Some(crate::notes_db::find_notes_db(data_dir.as_deref())).filter(|p| p.exists())
+    else {
         eprintln!(
             "notes rationalize: could not locate notes.db. Run `svrn init` in this \
              repo (or pass --data-dir <path>)."

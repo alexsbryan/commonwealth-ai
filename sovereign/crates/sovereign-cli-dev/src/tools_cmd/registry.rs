@@ -112,19 +112,11 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
             .or_else(|_| LintResultStore::open(std::path::Path::new(":memory:")))
             .map_err(|e| format!("lint results store: {e}"))?,
     );
-    // NoteStore lives at `~/.svrnmesh/notes.db` — the same path
-    // the daemon writes to, NOT the project-local `<repo>/.sovereign/`.
-    // Notes are agent-global working memory, not
-    // per-repo state. Two physical DBs split the corpus + leave
-    // the CLI reading 15-note fragments while the daemon's
-    // canonical store holds the full 298+ history. Other CLI
-    // surfaces (audit_recover.rs, code_cmd.rs, reflect_cmd.rs)
-    // already use `sovereign_cli_base::dirs::sovereign_root().join("notes.db")`;
-    // registry.rs was the lone outlier. Aligning here unifies
-    // both CLI tool invocations + the daemon-side MCP path on a
-    // single physical SQLite file (WAL-mode concurrent-safe).
+    // NoteStore lives at code's data root, NOT the project-local
+    // `<repo>/.sovereign/`: notes are agent-global working memory, and two
+    // physical DBs split the corpus. The path is `notes_db`'s one decider.
     let notes_store = {
-        let inner = NoteStore::open(&flat_stores_dir.join("notes.db"))
+        let inner = NoteStore::open(&crate::notes_db::find_notes_db(None))
             .or_else(|_| NoteStore::open(std::path::Path::new(":memory:")))
             .map_err(|e| format!("notes store: {e}"))?;
         let inner = match notes_embed {

@@ -39,7 +39,7 @@ const HELP: Help = Help {
             ("--key <id>", "Producer identity. A repeat filing under the same key UPDATES that item instead of filing a duplicate."),
             ("--producer <name>", "What filed it. Defaults to `svrn backlog add`."),
             ("--no-score", "File it unscored for later triage. No model call, no daemon needed."),
-            ("--db <path>", "The notes store. Defaults to $CO_BACKLOG_NOTES_DB, else $SOVEREIGN_DATA_DIR/notes.db, else ~/.sovereign/notes.db — never discovered from the working directory."),
+            ("--db <path>", "The notes store. Defaults to $CO_BACKLOG_NOTES_DB, else code's notes store (<data root>/notes.db) — never discovered from the working directory."),
             ("--ruler <path>", "The value ruler. Defaults to $CO_BACKLOG_RULER, else quality/backlog-ruler.toml from the repo."),
             ("--create", "Create the store if it does not exist. Off by default: a fresh store at a wrong path looks exactly like a working one."),
             ("--daemon <url>", "The daemon to score against. Defaults to the configured client port."),

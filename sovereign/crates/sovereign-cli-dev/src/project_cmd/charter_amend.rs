@@ -334,7 +334,7 @@ pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
             // Decision-kind note mirrors the amendment log entry so
             // `read_notes --kind decision` surfaces it without
             // parsing CHARTER.md.
-            let notes_path = sovereign_dir.join("notes.db");
+            let notes_path = crate::notes_db::find_notes_db(None);
             if let Ok(note_store) = corpus_engine_notes::NoteStore::open(&notes_path) {
                 let body = crate::amend::render_amendment_note_body(&entry);
                 let session_id = format!("amend-v{}", entry.version);

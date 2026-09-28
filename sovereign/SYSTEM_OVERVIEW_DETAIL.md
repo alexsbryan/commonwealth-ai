@@ -8291,8 +8291,8 @@ comparing the two. The precedence is now pinned once, in
 **Repo-local `.sovereign/` (per-checkout):** `project.toml` + `project.json`
 (project identity — triplicated with the per-user `projects.json`; on the
 CLEANUP ledger), `sovereign.toml` (per-repo daemon/watcher posture — watchers
-deliberately off in this repo), `notes.db` (gossiped working notes; dual-homed
-with the per-user root via the `active_notes_db` pointer — CLEANUP),
+deliberately off in this repo), `notes.db` (a legacy per-repo notes store; code's
+one store is the per-user root's, and `--data-dir` is the only way to name this one),
 `mesh.db` (CLI work-atlas claims — **split-brain**: the daemon keeps its
 atlas store in memory, so CLI claims never gossip; CLEANUP), `features.db`
 (ATOS), `SOVEREIGN.md` (the repo charter agents read).
@@ -8370,7 +8370,8 @@ chunks, `scip_graph.db`, atlas), `~/.svrnmesh/drift/` (drift-report mirror),
 `~/.svrnmesh/arch/` + `~/.svrnmesh/capabilities/` (posture artifacts),
 `~/.svrnmesh/sessions/` (session-continuity frames), plus the models /
 corpora / recipes / logs trees, `workspace`, `daemon.pid`,
-`worker_owner_key.bin`, and the `active_notes_db` pointer.
+`worker_owner_key.bin`, and `notes.db` (code's one notes store; the
+`active_notes_db` pointer that once chose between stores is gone, pb-notes-verbs).
 
 **Platform data dir** — `~/.local/share/svrnmesh` (legacy `sovereign` name
 still common on migrated hosts; resolve via `rebrand::mesh_data_dir`) — the

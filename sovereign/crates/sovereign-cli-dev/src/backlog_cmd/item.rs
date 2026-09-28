@@ -17,16 +17,15 @@ use super::score::Score;
 /// The test override, spelled exactly as `scripts/co-backlog.py` spells
 /// it (`notes_db_path()`). One name for one path, across two languages.
 pub const DB_ENV: &str = "CO_BACKLOG_NOTES_DB";
-/// The registered per-user data root (`quality/env-flags.toml`).
-pub const DATA_DIR_ENV: &str = "SOVEREIGN_DATA_DIR";
 
 /// The store, NEVER discovered from cwd (invariant 0f8abed1).
 ///
 /// A cwd-sensitive resolver answers confidently from the wrong store:
 /// measured on this host, the same query from the repo root and from
 /// `$HOME` hit different databases — 68 notes versus 6811 — and exited 0
-/// both times. So the path is named, in the same precedence
-/// `co-backlog.py` uses, and the verb prints what it resolved.
+/// both times. So the path is named: `--db`, then `co-backlog.py`'s test
+/// override, then code's one notes store (`notes_db`), and the verb prints
+/// what it resolved.
 pub fn notes_db_path(explicit: Option<&Path>) -> PathBuf {
     if let Some(p) = explicit {
         return p.to_path_buf();
@@ -36,13 +35,7 @@ pub fn notes_db_path(explicit: Option<&Path>) -> PathBuf {
             return PathBuf::from(v);
         }
     }
-    if let Ok(v) = std::env::var(DATA_DIR_ENV) {
-        if !v.is_empty() {
-            return PathBuf::from(v).join("notes.db");
-        }
-    }
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    home.join(".sovereign").join("notes.db")
+    crate::notes_db::find_notes_db(None)
 }
 
 /// Everything a producer supplies. Filling this in is the whole job of
