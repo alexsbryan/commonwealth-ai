@@ -43,25 +43,19 @@ kernel-types = { workspace = true, features = ["quality-registry"] }
 sovereign-cli-shared = { workspace = true }
 # ── The work plane (cw-lift 5e) ──────────────────────────────────────
 # `svrn quality check --distribute` submits this venue's instrument rows as
-# `process:v1` units on the `work` ring and merges the verdicts back. All four
-# are OPTIONAL and pulled by `dev-tools` ONLY: `quality` is a dev-gated verb,
-# so the shipped end-user dispatcher links none of them.
+# `process:v1` units on the `work` ring and merges the verdicts back. OPTIONAL
+# and pulled by `dev-tools` ONLY: `quality` is a dev-gated verb, so the
+# shipped end-user dispatcher links none of it.
 #
-#   commonwealth-work   the vocabulary: Submission, the fold, may_take, and
-#                       ProcessPayload (feature `process`). NOT a second work
-#                       model — the same crate the daemon's donor loop and
-#                       `svrn job` use, so the three cannot disagree about who
-#                       holds a lease (ARCH §10.6).
-#   (no commonwealth-core edge: `HandoffId` comes through commonwealth-work's
-#    re-export, so one constructor does not buy a dep on the god crate.)
-#   oicp-types          `JobKind` / `JobRequirements` / `JobUnit`, the job
-#                       vocabulary the seal takes.
+#   oicp-types          the job vocabulary (`JobKind` / `JobRequirements` /
+#                       `JobUnit`) and, since pb-work-doors, the work
+#                       vocabulary in `oicp_types::work` — the acts' types,
+#                       the folded queue, the refusal set, `ProcessPayload`.
 #
-# The HTTP half is not here: `sovereign-cli-shared/rail-client` is the one
-# operator-side rail client in the workspace and this verb is its third
-# caller. A second client against those two routes is the §10.6 violation this
-# rung must not commit.
-commonwealth-work = { workspace = true, features = ["process"], optional = true }
+# NO commonwealth-work (pb-work-doors): sealing, the signed Submit, `may_take`
+# and the attribution method are decisions over the rail, and cw-rails runs
+# the one implementation of each behind its `/v1/work/*` doors. The HTTP half
+# is `sovereign-cli-shared/rail-client`, the one operator-side rail client.
 oicp-types = { workspace = true, optional = true }
 # Flag surfaces are declared as structs (`#[derive(clap::Parser)]`), not
 # hand-rolled `while i < args.len()` loops: the dispatcher's own `--help` /
@@ -152,9 +146,8 @@ default = [
 # `sovereign-cli-dev` sibling at runtime; `deep-research` runs in-process
 # and pulls oicp-client (a pure reqwest leaf — no llama.cpp).
 dev-tools = [
-    # `svrn quality check --distribute` (cw-lift 5e). See the dep block above
-    # for why each of the four is here; `rail-client` is the ONE rail client.
-    "dep:commonwealth-work",
+    # `svrn quality check --distribute` (cw-lift 5e). See the dep block above;
+    # `rail-client` is the ONE rail client.
     "dep:oicp-types",
     "sovereign-cli-shared/rail-client",
     "deep-research",

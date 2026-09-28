@@ -12219,7 +12219,6 @@ version = "0.8.0"
 dependencies = [
  "chrono",
  "clap",
- "commonwealth-work",
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",

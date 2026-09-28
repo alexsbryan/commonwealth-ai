@@ -183,6 +183,59 @@ pub async fn rail_append_record(
     rail_append(namespace, &RailAct::Record { payload }).await
 }
 
+/// cw-rails' `work` doors (pb-work-doors), spelled once for every caller: the
+/// folded queue, and the four a submitter that links no `commonwealth-work`
+/// seals, submits, surveys and attributes through.
+pub const WORK_PROJECTION_PATH: &str = "/v1/work/projection";
+/// See [`WORK_PROJECTION_PATH`].
+pub const WORK_SEAL_PATH: &str = "/v1/work/seal";
+/// See [`WORK_PROJECTION_PATH`].
+pub const WORK_SUBMIT_PATH: &str = "/v1/work/submit";
+/// See [`WORK_PROJECTION_PATH`].
+pub const WORK_REFUSALS_PATH: &str = "/v1/work/refusals";
+/// See [`WORK_PROJECTION_PATH`].
+pub const WORK_ATTRIBUTION_PATH: &str = "/v1/work/attribution";
+
+/// GET one of cw-rails' doors at `base` — the caller resolves the base
+/// (`sovereign_turn_client::rails_kv::resolve_rails_base`, the one reader of
+/// `[daemon] rails_base`). A refusal is cw-rails' own sentence.
+pub async fn rails_get(
+    base: &str,
+    path: &str,
+    query: &[(&str, &str)],
+) -> Result<serde_json::Value, String> {
+    let url = format!("{}{path}", base.trim_end_matches('/'));
+    let resp = client()?
+        .get(&url)
+        .query(query)
+        .send()
+        .await
+        .map_err(|e| format!("cannot reach cw-rails at {url}: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(error_text(resp).await);
+    }
+    resp.json().await.map_err(|e| format!("bad response: {e}"))
+}
+
+/// POST a JSON body to one of cw-rails' doors at `base`. See [`rails_get`].
+pub async fn rails_post(
+    base: &str,
+    path: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let url = format!("{}{path}", base.trim_end_matches('/'));
+    let resp = client()?
+        .post(&url)
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| format!("cannot reach cw-rails at {url}: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(error_text(resp).await);
+    }
+    resp.json().await.map_err(|e| format!("bad response: {e}"))
+}
+
 /// Rebuild the [`Admission`] the daemon already computed, so a caller's fold
 /// is the SAME function the donor loop runs.
 ///
