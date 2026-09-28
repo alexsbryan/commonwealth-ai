@@ -130,9 +130,7 @@ pub enum OriginRefusal {
          `cwth/app/0` is the app registry's (`/v1/mesh/publish`)"
     )]
     BadAlpn(String),
-    #[error(
-        "`{0}` is not a registrable prefix — an absolute path of `[A-Za-z0-9_-]` segments"
-    )]
+    #[error("`{0}` is not a registrable prefix — an absolute path of `[A-Za-z0-9_-]` segments")]
     BadPrefix(String),
     #[error(
         "only `cwth/http/0` takes prefixes, and it takes at least one with `any` or `members` \
@@ -546,7 +544,13 @@ impl OriginRegistry {
         };
         match (e.framing, forward) {
             (Framing::Bytes, _) => Some(Forward::Splice(e.addr)),
-            (Framing::Http, Forward::Http { origin, mut headers }) => {
+            (
+                Framing::Http,
+                Forward::Http {
+                    origin,
+                    mut headers,
+                },
+            ) => {
                 headers.extend(e.tie.map(|t| (ORIGIN_TIE_HEADER.to_string(), t)));
                 Some(Forward::Http { origin, headers })
             }
@@ -643,7 +647,10 @@ impl OriginRegistry {
                 .state
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
-            state.entries().map(|e| e.alpn.as_bytes().to_vec()).collect()
+            state
+                .entries()
+                .map(|e| e.alpn.as_bytes().to_vec())
+                .collect()
         };
         if self.apps.is_serving() {
             alpns.push(APP_ALPN.to_vec());

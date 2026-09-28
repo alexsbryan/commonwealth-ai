@@ -3,7 +3,8 @@
 //!
 //! `GET /v1/mesh/status` · `GET /v1/mesh/media[?peer=]` ·
 //! `GET /v1/mesh/app[?peer=]` · `POST /v1/mesh/fanout` (and its media
-//! spelling) · the four `/v1/mesh/publish` routes · the two roster verbs ·
+//! spelling) · the four `/v1/mesh/publish` routes · the four
+//! `/v1/mesh/origins` routes, in [`crate::origins`] · the two roster verbs ·
 //! the ring rail's doors, `/v1/rail/{append,log,live}`, in [`crate::rail`] ·
 //! the mesh store's `/v1/mesh/kv/*`, in [`crate::kv`]. Every answer is
 //! `commonwealth_media`'s — the same functions the inference daemon's
@@ -83,6 +84,21 @@ fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
             axum::routing::delete(unpublish_app),
         )
         .route("/v1/mesh/publish/{claim_id}/renew", post(renew_app))
+        // Any program's loopback origin, served to members by ALPN or by
+        // `cwth/http/0` prefix (pb-rails-origins); the app doors above are
+        // this registry's app entry.
+        .route(
+            "/v1/mesh/origins",
+            get(crate::origins::listing).post(crate::origins::register),
+        )
+        .route(
+            "/v1/mesh/origins/{claim_id}",
+            axum::routing::delete(crate::origins::release),
+        )
+        .route(
+            "/v1/mesh/origins/{claim_id}/renew",
+            post(crate::origins::renew),
+        )
         // The roster verbs (FIVE_PROGRAMS fp-6 / §12 decision 2): retiring a
         // member row and the ring-roster membership test are the MESH's to
         // answer — the inference daemon dials these instead of mutating its
@@ -503,7 +519,7 @@ pub struct RenewRequest {
     pub ttl_secs: Option<u64>,
 }
 
-fn ttl_of(secs: Option<u64>) -> std::time::Duration {
+pub(crate) fn ttl_of(secs: Option<u64>) -> std::time::Duration {
     secs.map(std::time::Duration::from_secs)
         .unwrap_or(commonwealth_media::apps::DEFAULT_CLAIM_TTL)
 }

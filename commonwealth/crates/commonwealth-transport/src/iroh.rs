@@ -1151,7 +1151,12 @@ impl IrohAcceptor {
                             Arc<Vec<(String, String)>>,
                         ),
                         ByPrefix(
-                            Arc<std::collections::BTreeMap<String, crate::iroh_routed_forward::PrefixRoute>>,
+                            Arc<
+                                std::collections::BTreeMap<
+                                    String,
+                                    crate::iroh_routed_forward::PrefixRoute,
+                                >,
+                            >,
                             Arc<Vec<(String, String)>>,
                         ),
                     }

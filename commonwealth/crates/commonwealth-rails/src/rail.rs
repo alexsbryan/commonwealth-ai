@@ -111,17 +111,17 @@ pub fn derive_roster(mesh: &Mesh, self_id: NodeId, self_pubkey: Option<NodePubke
 /// outlives the membership it derives from has nothing true to say — it
 /// reports that, rather than an empty ring.
 pub struct MembershipRosterSource {
-    mesh: Weak<RwLock<Mesh>>,
-    self_id: NodeId,
-    self_pubkey: Option<NodePubkey>,
+    pub(crate) mesh: Weak<RwLock<Mesh>>,
+    pub(crate) self_id: NodeId,
+    pub(crate) self_pubkey: Option<NodePubkey>,
 }
 
 impl MembershipRosterSource {
     /// Install membership as `rail`'s DEFAULT roster — every ring nobody
     /// narrowed admits everyone in the mesh. Rails registers no namespace of
-    /// its own: the daemon's own rings are the daemon's
-    /// (`sovereign_mesh::ring_roster::REGISTERED_NAMESPACES`), and a file
-    /// `roster.json` still narrows any ring here, as the rail intends.
+    /// its own; a registered origin's namespaces are held by
+    /// `crate::origins` (pb-rails-origins), and a file `roster.json` still
+    /// narrows any other ring here, as the rail intends.
     pub fn install(
         rail: &RingRail,
         mesh: &Arc<RwLock<Mesh>>,

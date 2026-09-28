@@ -331,7 +331,10 @@ fn declarations_are_read_from_live_registrations() {
     let c = r.register(serve).unwrap();
     let declared = r.declared_claims();
     assert_eq!(declared.len(), 1);
-    assert_eq!(serde_json::to_value(&declared[0]).unwrap(), serde_json::to_value(&caps).unwrap());
+    assert_eq!(
+        serde_json::to_value(&declared[0]).unwrap(),
+        serde_json::to_value(&caps).unwrap()
+    );
     assert_eq!(r.namespaces(), vec!["mesh-measurements".to_string()]);
     r.release(&c.claim_id).unwrap();
     assert!(r.declared_claims().is_empty());

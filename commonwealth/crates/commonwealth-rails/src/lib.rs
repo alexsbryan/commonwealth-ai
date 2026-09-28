@@ -81,6 +81,7 @@ pub mod join;
 pub mod kv;
 pub mod lan;
 pub mod ledger;
+pub mod origins;
 pub mod presence;
 pub mod rail;
 pub mod work;
@@ -286,6 +287,11 @@ pub struct RailsDaemon {
     /// one (see `acceptor`), so everything here arrived through the loopback
     /// publish API and goes away with the process that took it.
     pub published_apps: commonwealth_media::PublishedApps,
+    /// Every origin this endpoint serves to members — its own, the app entry
+    /// (`published_apps`), and each program's registration. The acceptor
+    /// table, the advertised ALPNs and the gossiped claims are read from it
+    /// (see [`origins`]).
+    pub origins: commonwealth_media::origins::OriginRegistry,
     /// The ring rail: journals under THIS process's data root (`rings/`),
     /// signed with the node key, membership as every ring's default roster.
     /// The doors over it are [`rail`]. Constructed in `start`, so it lives
@@ -359,11 +365,13 @@ impl RailsDaemon {
         .await?;
 
         let join_key = identity::load_join_key(&node.data_dir)?;
-        let published_apps = commonwealth_media::PublishedApps::default();
-        let acceptor = acceptor::spawn(
-            node.endpoint.clone(),
+        let origins = commonwealth_media::origins::OriginRegistry::new(
+            commonwealth_media::PublishedApps::default(),
+        );
+        let published_apps = origins.apps().clone();
+        origins::stand_own(
+            &origins,
             internal_addr,
-            mesh.clone(),
             node.config.media.origin,
             node.config.media.allow.clone(),
             // Read once, here, from the same data dir that holds the node key.
@@ -371,8 +379,9 @@ impl RailsDaemon {
             // so a new key there would make an UN-upgraded daemon refuse to
             // boot rather than ignore it -- see `commonwealth_media::declared`.
             commonwealth_media::read_declared_in(&commonwealth_media::dir_under(&node.data_dir)),
-            published_apps.clone(),
-        );
+        )
+        .expect("an empty registry holds the endpoint's own origins");
+        let acceptor = acceptor::spawn(node.endpoint.clone(), mesh.clone(), origins.clone());
 
         Ok(Self {
             node,
@@ -381,6 +390,7 @@ impl RailsDaemon {
             contacts,
             gauge: Arc::new(AtomicUsize::new(0)),
             published_apps,
+            origins,
             rail,
             rail_live: rail::LiveBuffer::default(),
             kv,
