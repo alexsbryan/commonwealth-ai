@@ -132,3 +132,14 @@ pub fn call_log_tag(outcome: &ToolOutcome) -> Option<&'static str> {
         (false, false, Effect::Read) => "success",
     })
 }
+
+/// The `GET /mcp/stats` body: tool call counts since the registry was built.
+pub fn call_stats(tools: &ToolRegistry) -> Value {
+    let counts = tools.call_counts();
+    let total: u64 = counts.iter().map(|(_, n)| n).sum();
+    let tools_json: Vec<Value> = counts
+        .into_iter()
+        .map(|(name, count)| serde_json::json!({ "tool": name, "calls": count }))
+        .collect();
+    serde_json::json!({ "total_calls": total, "tools": tools_json })
+}

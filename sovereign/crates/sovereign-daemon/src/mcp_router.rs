@@ -188,15 +188,9 @@ async fn mcp_stats(
         )
             .into_response();
     }
-    let counts = tools.call_counts();
-    let total: u64 = counts.iter().map(|(_, n)| n).sum();
-    let tools_json: Vec<serde_json::Value> = counts
-        .into_iter()
-        .map(|(name, count)| serde_json::json!({ "tool": name, "calls": count }))
-        .collect();
     (
         StatusCode::OK,
-        Json(serde_json::json!({ "total_calls": total, "tools": tools_json })),
+        Json(sovereign_contracts::mcp_host::call_stats(&tools)),
     )
         .into_response()
 }
