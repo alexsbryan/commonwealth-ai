@@ -75,7 +75,7 @@ fn act() -> RailAct {
 }
 
 fn in_an_hour() -> i64 {
-    commonwealth_core::clock::unix_now_secs() as i64 + 3_600
+    sovereign_time::unix_now_u64() as i64 + 3_600
 }
 
 #[tokio::test]
@@ -96,7 +96,7 @@ async fn a_stamped_append_reaches_rails_with_an_attestation_that_verifies() {
     let body = seen.lock().unwrap().pop().expect("the door saw the append");
     let wire: GuestAttestation = serde_json::from_value(body["attestation"].clone()).unwrap();
     assert_eq!(wire, signed);
-    let now = commonwealth_core::clock::unix_now_secs() as i64;
+    let now = sovereign_time::unix_now_u64() as i64;
     assert_eq!(wire.verify(&roster, NS, now), Ok(()));
 }
 

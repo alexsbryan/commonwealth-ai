@@ -72,7 +72,7 @@ pub async fn enrichment_status(
             // died mid-run (leaving e.g. a `Starting` stamp) reads as a
             // live build indefinitely. Mirrors the enrich-once idempotency
             // guard, which supersedes the same stale state on retry.
-            let now = commonwealth_core::clock::unix_now_secs() as i64;
+            let now = sovereign_time::unix_now_u64() as i64;
             let stalled = matches!(s.phase, EnrichmentPhase::Stalled) || s.is_stale(now);
             let frac = if stalled { 0.0 } else { derive_fraction(s) };
             (s.phase.is_terminal() || stalled, stalled, frac)

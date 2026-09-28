@@ -264,7 +264,7 @@ pub async fn client_auth_layer(
         // returns only the non-secret fingerprint, not the grant itself.
         Principal::Guest { .. } => {
             if let Some(p) = presented {
-                let now = commonwealth_core::clock::unix_now_millis();
+                let now = sovereign_time::unix_millis();
                 match state.inner.node.guest_grants.live(p, now) {
                     Some(grant) if grant.permits_path(request.uri().path()) => {
                         // Debug, not info: the ring page drains its live lane

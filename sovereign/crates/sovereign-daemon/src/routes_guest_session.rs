@@ -171,7 +171,7 @@ pub async fn claim_name(
             );
         }
     };
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     match state
         .inner
         .node

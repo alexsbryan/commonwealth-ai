@@ -177,7 +177,7 @@ impl AppState {
         //    simply not a grant (`GuestGrantStore::live`).
         let presented = bearer(headers);
         if let Some(token) = presented {
-            let now = commonwealth_core::clock::unix_now_millis();
+            let now = sovereign_time::unix_millis();
             if self.inner.node.guest_grants.live(token, now).is_some() {
                 return Principal::Guest {
                     grant: fingerprint(token),
@@ -435,7 +435,7 @@ mod tests {
         // The fifth arm: a bearer that is a live guest grant is a Guest, not a
         // remote client. The grant token itself must never appear in the key.
         let s = state();
-        let now = commonwealth_core::clock::unix_now_millis();
+        let now = sovereign_time::unix_millis();
         s.inner
             .node
             .guest_grants
@@ -472,7 +472,7 @@ mod tests {
         // lapsed grant falls back to the credential bucket rather than
         // admitting a stale identity.
         let s = state();
-        let now = commonwealth_core::clock::unix_now_millis();
+        let now = sovereign_time::unix_millis();
         s.inner.node.guest_grants.issue(
             "stale-token",
             Vec::new(),

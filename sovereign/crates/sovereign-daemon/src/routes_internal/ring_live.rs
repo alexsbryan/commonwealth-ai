@@ -77,7 +77,7 @@ pub async fn ring_live(State(state): State<AppState>, body: axum::body::Bytes) -
             ),
         );
     }
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     let granted = state
         .inner
         .node

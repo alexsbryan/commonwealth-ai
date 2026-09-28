@@ -86,7 +86,7 @@ pub async fn ring_checkpoint(
         &namespace,
         &roster,
         &ops,
-        commonwealth_core::clock::unix_now_secs(),
+        sovereign_time::unix_now_u64(),
     ) {
         Ok(d) => d,
         Err(e) => {

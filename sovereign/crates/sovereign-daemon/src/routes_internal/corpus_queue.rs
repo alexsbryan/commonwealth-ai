@@ -883,7 +883,7 @@ pub async fn corpus_collaborate_status(
         })
         .collect();
 
-    let now_ms = commonwealth_core::clock::unix_now_millis();
+    let now_ms = sovereign_time::unix_millis();
     let grant = state.inner.ingest.grant_store.live(&snap.corpus_id, now_ms);
     let grant_dto = grant.as_ref().map(|g| GrantStatusDto {
         expires_at_ms: g.expires_at_ms,

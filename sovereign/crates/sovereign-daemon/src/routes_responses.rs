@@ -1551,7 +1551,7 @@ fn sse_event(event_name: &'static str, payload: &serde_json::Value) -> Event {
 // ─── Generic helpers ────────────────────────────────────────────────
 
 fn mk_response_id() -> String {
-    format!("resp_{}", commonwealth_core::clock::unix_now_millis())
+    format!("resp_{}", sovereign_time::unix_millis())
 }
 
 use sovereign_time::unix_now_u64 as now_unix_secs;

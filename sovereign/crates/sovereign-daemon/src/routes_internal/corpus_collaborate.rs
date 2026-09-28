@@ -93,7 +93,7 @@ pub async fn corpus_collaborate(
         // Local-only corpus. Require a live grant that authorizes exactly
         // the requested peer set. `grantable = false` (structural
         // KnowledgeView) can never pass — even a stray grant is refused.
-        let now_ms = commonwealth_core::clock::unix_now_millis();
+        let now_ms = sovereign_time::unix_millis();
         let requested = req.allowed_peers.clone().unwrap_or_default();
         let authorized = recipe_privacy.corpus.grantable
             && state

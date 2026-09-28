@@ -444,7 +444,7 @@ pub async fn serve(
 /// Poll until the live rail-grant count satisfies `done`; return the count.
 async fn wait_for(store: &GuestGrantStore, done: impl Fn(usize) -> bool) -> usize {
     loop {
-        let n = live_rail_grants(store, commonwealth_core::clock::unix_now_millis());
+        let n = live_rail_grants(store, sovereign_time::unix_millis());
         if done(n) {
             return n;
         }
@@ -453,7 +453,7 @@ async fn wait_for(store: &GuestGrantStore, done: impl Fn(usize) -> bool) -> usiz
 }
 
 async fn page_index(State(st): State<PageState>) -> Response {
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     let granted = |ns: &str| namespace_is_granted(&st.grants, &st.pages, ns, now);
     match route_page(&st.pages, &granted, "") {
         PageRoute::Proxy { addr, .. } => proxy_get(&addr).await,
@@ -466,7 +466,7 @@ async fn page_file(
     AxPath(rel): AxPath<String>,
     request: axum::extract::Request,
 ) -> Response {
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     let granted = |ns: &str| namespace_is_granted(&st.grants, &st.pages, ns, now);
     match route_page(&st.pages, &granted, &rel) {
         PageRoute::Proxy {
@@ -485,7 +485,7 @@ async fn page_file(
 /// With one live app that is unambiguous; with several there is one root and
 /// many apps, and the root names the choice rather than guessing one.
 async fn root_proxy(State(st): State<PageState>, request: axum::extract::Request) -> Response {
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     let live: Vec<(String, String)> = st
         .pages
         .reachable_names()

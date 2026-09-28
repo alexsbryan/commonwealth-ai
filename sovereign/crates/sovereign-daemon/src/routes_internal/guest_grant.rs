@@ -225,7 +225,7 @@ pub async fn guest_grant_issue(
     })?;
 
     let ttl_secs = req.ttl_secs.unwrap_or(DEFAULT_GUEST_TTL_SECS);
-    let now_ms = commonwealth_core::clock::unix_now_millis();
+    let now_ms = sovereign_time::unix_millis();
     let grant = state
         .inner
         .node
@@ -308,7 +308,7 @@ pub struct GuestGrantRow {
 /// the question this surface exists to answer, and a list that silently omits
 /// them cannot.
 pub async fn guest_grant_list(State(state): State<AppState>) -> Json<Vec<GuestGrantRow>> {
-    let now_ms = commonwealth_core::clock::unix_now_millis();
+    let now_ms = sovereign_time::unix_millis();
     Json(
         state
             .inner
