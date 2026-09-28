@@ -92,35 +92,17 @@ async fn cmd_finalize(args: &[String]) -> i32 {
         );
         return if args.is_empty() { 1 } else { 0 };
     }
-    let corpus_id = args[0].clone();
-    let root = sovereign_root();
-    let data_dir = root.join("indexes");
-    let recipes_dir = root.join("recipes");
-
-    // `finalise_solo_ingest` only inspects the filesystem — no embed
-    // calls. A noop EmbedFn keeps the engine constructable without
-    // booting the daemon.
-    let noop_embed: corpus_index::types::EmbedFn =
-        Arc::new(|_text: &str| Box::pin(async move { Ok(vec![0.0_f32; 1]) }));
-    let engine = corpus_engine::CorpusEngine::new(recipes_dir, data_dir, noop_embed);
-    match engine.finalise_solo_ingest(&corpus_id) {
-        Ok(true) => {
-            eprintln!("Promoted {corpus_id}-partition-local/ → {corpus_id}/");
-            0
-        }
-        Ok(false) => {
-            eprintln!(
-                "Nothing to do for '{corpus_id}': either no partition-local dir, \
-                 a peer partition is present (use `coordinate_merge`), or canonical \
-                 Lance is already finalized."
-            );
-            0
-        }
-        Err(e) => {
-            eprintln!("finalize failed: {e}");
-            1
-        }
-    }
+    // The promotion is an ingest act: ingest's CLI runs it (code F1 (a)).
+    let data_dir = sovereign_root().join("indexes");
+    crate::code_index::exec_ingest(
+        "finalize",
+        &[
+            args[0].clone(),
+            "--index-dir".to_string(),
+            data_dir.display().to_string(),
+        ],
+    )
+    .await
 }
 
 // ─── facts ────────────────────────────────────────────────────
@@ -1529,70 +1511,28 @@ async fn cmd_watch(args: &[String]) -> i32 {
         );
         return 1;
     }
-    drop(index); // Watcher owns its own CorpusIndex handle via the engine.
+    drop(index);
 
-    // The watcher WRITES: every debounced file event runs `reindex_file`,
-    // which embeds the changed chunks and inserts them. So it needs the real
-    // embedder, exactly as `code index` does.
-    //
-    // This used to install a stub `EmbedFn` returning `vec![0.0; DEFAULT_EMBED_DIM]`.
-    // That silently poisoned the corpus: cosine similarity against a zero
-    // vector is meaningless, so semantic search quietly died for precisely the
-    // files being actively edited — the ones most likely to be searched. There
-    // was no error and no warning; the corpus just got worse the longer the
-    // watcher ran. `rebuild_code_corpus` already refuses to run rather than
-    // fall back to zero vectors; this path now holds the same line.
-    let (embed, embed_model_name) = match crate::code_index::node_embedder().await {
-        Ok(v) => v,
+    // The watcher WRITES (every debounced file event embeds and inserts the
+    // changed chunks), and writing is ingest's: ingest's CLI runs the
+    // watcher with the embedder `code index` gets, and refuses rather than
+    // fall back to zero vectors (code F1 (a)).
+    let mut ingest_args = vec![
+        "--index-dir".to_string(),
+        data_dir.display().to_string(),
+        "--corpus".to_string(),
+        corpus_id,
+        "--root".to_string(),
+        root.display().to_string(),
+    ];
+    match crate::code_index::embedder_args(false) {
+        Ok(more) => ingest_args.extend(more),
         Err(e) => {
             eprintln!("error: {e}");
-            eprintln!(
-                "\n`svrn code watch` embeds every changed chunk with the node's embed model so \
-                 the watcher's writes land in the same embedding space as the rest of the \
-                 corpus. Start an embeddings endpoint (e.g. `svrn daemon run`) and re-run — the \
-                 watcher will not run with a stub embedder, because that would silently \
-                 degrade the index it is meant to keep current."
-            );
             return 1;
-        }
-    };
-    let recipes_dir = data_dir.clone(); // unused placeholder — engine requires one
-    let engine = Arc::new(
-        corpus_engine::CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
-            .with_embedding_model(&embed_model_name),
-    );
-
-    eprintln!("Watching {} for corpus '{corpus_id}'", root.display());
-    eprintln!("Embedding with {embed_model_name}.");
-    eprintln!("Press Ctrl-C to stop.");
-
-    let watcher = corpus_engine::update::watch::CodeWatcher::new(
-        Arc::clone(&engine),
-        corpus_id.clone(),
-        root.clone(),
-    );
-
-    let handle = match watcher.start().await {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("error: failed to start watcher: {e}");
-            return 1;
-        }
-    };
-
-    // Keep the process alive until Ctrl-C. The watcher handle aborts
-    // its background task on drop.
-    match tokio::signal::ctrl_c().await {
-        Ok(()) => {
-            eprintln!("\nShutting down watcher...");
-            handle.abort();
-            0
-        }
-        Err(e) => {
-            eprintln!("error: failed to install ctrl-c handler: {e}");
-            1
         }
     }
+    crate::code_index::exec_ingest("watch", &ingest_args).await
 }
 
 // ─── mcp-status (P4) ──────────────────────────────────────────

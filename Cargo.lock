@@ -12333,7 +12333,6 @@ dependencies = [
  "axum",
  "chrono",
  "code-facts",
- "corpus-engine",
  "corpus-engine-archaeology",
  "corpus-engine-notes",
  "corpus-engine-scip",

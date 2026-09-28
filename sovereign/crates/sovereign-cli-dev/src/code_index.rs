@@ -503,7 +503,7 @@ const INGEST_BIN: &str = "svrn-ingest";
 /// decider (`corpus_index::host`) asked for this node's configured embed model
 /// when svrn's config names one, so code lands in the space knowledge corpora
 /// use; with none named, the decider takes what the endpoint lists.
-fn embedder_args(fts_only: bool) -> Result<Vec<String>, String> {
+pub(crate) fn embedder_args(fts_only: bool) -> Result<Vec<String>, String> {
     if fts_only {
         return Ok(vec!["--fts-only".to_string()]);
     }
@@ -526,20 +526,52 @@ fn node_embed_model() -> Result<Option<String>, String> {
     Ok(SetupConfig::load()?.local_embed_model_id())
 }
 
+/// Where ingest's CLI is, or the refusal naming `what` needed it.
+fn ingest_bin(what: &str) -> Result<PathBuf, String> {
+    sovereign_turn_client::reach::locate_sibling(INGEST_BIN, "SOVEREIGN_INGEST_BIN").ok_or_else(
+        || {
+            format!(
+                "{what} needs ingest's CLI, `{INGEST_BIN}`, which was not found beside this \
+                 binary or on PATH. Build it with `cargo build -p sovereign-pipeline`, or set \
+                 SOVEREIGN_INGEST_BIN to its path. (`symbols` and `callers` need only the SCIP \
+                 graph, not this.)"
+            )
+        },
+    )
+}
+
+/// Run `svrn-ingest <verb> <args>` with every stream the person's, and
+/// return its exit code (`code finalize` and `code watch`, code F1 (a)).
+pub(crate) async fn exec_ingest(verb: &str, args: &[String]) -> i32 {
+    let bin = match ingest_bin(&format!("`code {verb}`")) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
+    tracing::debug!(bin = %bin.display(), verb, ?args, "code: exec svrn-ingest");
+    let status = tokio::process::Command::new(&bin)
+        .arg(verb)
+        .args(args)
+        .status()
+        .await;
+    tracing::debug!(verb, ?status, "code: svrn-ingest returned");
+    match status {
+        Ok(s) => s.code().unwrap_or(1),
+        Err(e) => {
+            eprintln!("error: cannot run {}: {e}", bin.display());
+            1
+        }
+    }
+}
+
 /// Run `svrn-ingest index <args>`. Its stderr is the person's and passes
 /// straight through; its last stdout line is the JSON result. Returns the exit
 /// status with that result, because a file-list run that failed some files
 /// still reports its counts.
 async fn ingest_index(args: &[String]) -> Result<(bool, serde_json::Value), String> {
-    let bin = sovereign_turn_client::reach::locate_sibling(INGEST_BIN, "SOVEREIGN_INGEST_BIN")
-        .ok_or_else(|| {
-            format!(
-                "building a code index needs ingest's CLI, `{INGEST_BIN}`, which was not found \
-                 beside this binary or on PATH. Build it with `cargo build -p \
-                 sovereign-pipeline`, or set SOVEREIGN_INGEST_BIN to its path. (`symbols` and \
-                 `callers` need only the SCIP graph, not this.)"
-            )
-        })?;
+    let bin = ingest_bin("building a code index")?;
     tracing::debug!(bin = %bin.display(), ?args, "code index: exec svrn-ingest index");
     // `spawn` + `wait_with_output`, not `output()`: tokio's `output()` pipes
     // stderr unconditionally, which swallowed ingest's reasons (watched).

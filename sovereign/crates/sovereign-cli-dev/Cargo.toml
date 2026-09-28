@@ -39,7 +39,7 @@ required-features = ["workbench"]
 # (no features) and small third-party crates the dispatcher already carries.
 # `InProcessCodeVerb` and everything it reaches must live inside that budget.
 #
-# WORKBENCH (default) is everything else — `corpus-engine` drags the
+# WORKBENCH (default) is everything else — `sovereign-code` drags the
 # tree-sitter grammars. (`sovereign-tools`, which dragged arrow + parquet +
 # the enrichment catalog, left with pb-code-freshness.) Linking those into
 # a dispatcher to move a metric is the failure this split refuses.
@@ -87,14 +87,14 @@ sovereign-work-atlas = { workspace = true, optional = true }
 # The work atlas's store: `mesh_kv_client` dials cw-rails' KV doors through
 # the one sync client, `rails_kv::RailsKv` (pb-atlas-kv).
 sovereign-turn-client = { workspace = true, optional = true }
-corpus-engine = { workspace = true, features = ["treesitter"], optional = true }
 # Read-port leaf (`EmbedFn`, `Error`, `DEFAULT_EMBED_DIM`, `CorpusIndex`) —
-# same workbench gate as corpus-engine.
+# workbench-gated. The engine itself is ingest's: `code index`, `code finalize`
+# and `code watch` exec `svrn-ingest` (pb-code-index, pb-code-clean).
 corpus-index = { workspace = true, optional = true }
 # The code-intel package's fact base (`facts`/`facts_check`/`facts_store`),
 # moved out of corpus-engine at domains REVIEW-build-code-facts. `code_cmd`
-# names `code_facts::*` directly; the `treesitter`/`stores` features arrive
-# through corpus-engine's feature of the same name.
+# names `code_facts::*` directly and requests its `treesitter`/`stores`
+# features here.
 code-facts = { workspace = true, optional = true, features = ["treesitter", "stores"] }
 corpus-engine-notes = { workspace = true, optional = true }
 # The atlas atom schema and reader `git-archaeology` reads (a shared leaf).
@@ -157,7 +157,6 @@ workbench = [
     "dep:host-kit",
     "dep:sovereign-work-atlas",
     "dep:sovereign-turn-client",
-    "dep:corpus-engine",
     "dep:corpus-index",
     "dep:oicp-client",
     "dep:code-facts",

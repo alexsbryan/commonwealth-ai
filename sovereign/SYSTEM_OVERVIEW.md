@@ -791,7 +791,9 @@ Verbs by sibling: `sovereign-cli` holds the light delegators (`notes`,
 `serve`);
 `sovereign-cli-daemon` holds `daemon`, `setup`, `install-service`, `doctor`;
 `sovereign-cli-dev` holds `tools`, every `code` subcommand (`code index`
-included), `refresh` and the `project` lifecycle subcommands; `sovereign-cli-llm` holds everything that
+included), `refresh` and the `project` lifecycle subcommands, and links no
+corpus-engine: `code index`, `code finalize` and `code watch` exec ingest's
+`svrn-ingest`; `sovereign-cli-llm` holds everything that
 talks to a model or does heavy retrieval; `sovereign-cli-mesh`, lifted out of
 `-llm` on 2026-09-21, holds `mesh` (guest grants and media among its
 subcommands), `meshapp`, `ring`, `job`, `publish`, `unpublish` and `run`. `code converge` is the one verb
