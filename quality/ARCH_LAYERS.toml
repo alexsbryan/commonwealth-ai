@@ -236,6 +236,15 @@ crates = [
     # crates exist is a dependency property.
     "commonwealth-rail-core",
     "commonwealth-rail",
+    # The daemon-to-daemon wire types both ends of an internal exchange must
+    # spell the same way (domains dm-daemon-api-edge (a)): the receiving route
+    # lives in `sovereign-daemon` and the sending loop in `sovereign-mesh`, so
+    # the shared body sits in a leaf neither makes the other's dependency.
+    # Moved here from `mesh-api` beside its one dep (rail-core) when the ring
+    # round moved into `commonwealth-rails` (phase-b pb-rails-parity): a
+    # mesh-foundation crate names it, and a leaf above its speakers is an
+    # upward edge.
+    "sovereign-peer-wire",
     # The work plane (cw-lift 5c, 2026-09-09). Sits here for the same reason
     # the rail does: it is mesh vocabulary, not a neutral kernel. Its in-repo
     # dependency surface is `commonwealth-core` + `commonwealth-rail-core`
@@ -366,11 +375,6 @@ crates = [
     # shells, the edge and the adapters. A stub until the host modules move in;
     # the two [[forbid]] rows below land with it.
     "sovereign-daemon",
-    # The daemon-to-daemon wire types both ends of an internal exchange must
-    # spell the same way (domains dm-daemon-api-edge (a)): the receiving route
-    # lives in `sovereign-daemon` and the sending loop in `sovereign-mesh`, so
-    # the shared body sits in a leaf neither makes the other's dependency.
-    "sovereign-peer-wire",
     "sovereign-mesh-test-harness",
     "sovereign-mesh",
 ]
@@ -691,7 +695,8 @@ reason = "the media decisions are the rails' own; commonwealth-{api,knowledge,in
 [[forbid]]
 from = "commonwealth-rails"
 to = "sovereign-*"
-reason = "this binary is BUILT AND RUN outside the monorepo by scripts/cw-rails-lift.sh; a sovereign-* edge is the one thing that makes that impossible, and it would be acquired in a commit nothing else here goes red on"
+except = ["sovereign-peer-wire"]
+reason = "this binary is BUILT AND RUN outside the monorepo by scripts/cw-rails-lift.sh; a sovereign-* edge is the one thing that makes that impossible, and it would be acquired in a commit nothing else here goes red on. `sovereign-peer-wire` is the one except (phase-b pb-rails-parity, principle 11): the ring round moved here speaks its `/internal/ring/sync` bodies, and it is a [[package_leaf]] of serde and rail-core, both already in this closure, so the lift gains one crate and no third-party one"
 
 [[forbid]]
 from = "commonwealth-rails"

@@ -86,6 +86,7 @@ pub mod membership;
 pub mod origins;
 pub mod presence;
 pub mod rail;
+pub mod ring_sync;
 pub mod work;
 
 pub use config::Config;

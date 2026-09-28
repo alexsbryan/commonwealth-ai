@@ -183,6 +183,7 @@ pub const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      sovereign_inference=info,\
      corpus_engine=info,\
      commonwealth_discovery=info,\
+     commonwealth_rails=info,\
      sovereign_daemon=info,\
      host_kit=info,\
      commonwealth_core=info,\

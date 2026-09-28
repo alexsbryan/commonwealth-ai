@@ -39,7 +39,7 @@ const REPLICATION_SENDERS: &[(&str, &str, usize)] = &[
     // the unit of convergence.
     (
         "/internal/ring/sync",
-        "sovereign/crates/sovereign-mesh/src/ring_sync.rs",
+        "commonwealth/crates/commonwealth-rails/src/ring_sync.rs",
         1,
     ),
 ];

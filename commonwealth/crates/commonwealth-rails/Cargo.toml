@@ -31,6 +31,10 @@ commonwealth-discovery = { workspace = true }
 # over the two `cargo tree --edges normal` closures); the forbid row for this
 # daemon carries the exception with the same commit.
 commonwealth-rail = { workspace = true }
+# The ring round's wire (`/internal/ring/sync` bodies; pb-rails-parity moved
+# the round here). A shared leaf of serde and rail-core, both already in this
+# closure; the forbid row's except names it.
+sovereign-peer-wire = { workspace = true }
 # The `work` fold (fp-45): `/v1/work/projection` folds the journal this
 # daemon owns. `process` since pb-work-doors: the attribution door runs
 # `attribution::of_sandbox` over `Sandbox::probe`, both behind it; the

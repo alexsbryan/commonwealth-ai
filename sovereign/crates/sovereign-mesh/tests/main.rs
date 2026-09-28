@@ -38,8 +38,6 @@ mod mesh_sim_ring_room;
 mod mesh_sim_scoreboard;
 #[path = "main/rail_kv_pump_namespaces.rs"]
 mod rail_kv_pump_namespaces;
-#[path = "main/replication_sender_census.rs"]
-mod replication_sender_census;
 #[path = "main/scheduler_replay_agreement.rs"]
 mod scheduler_replay_agreement;
 #[path = "main/work_atlas_store.rs"]
