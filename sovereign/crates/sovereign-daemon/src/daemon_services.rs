@@ -89,7 +89,7 @@ use std::sync::Arc;
 use corpus_engine::CorpusEngine;
 use corpus_engine_notes::NoteStore;
 
-use commonwealth_core::oicp::EmbedModelInfo;
+use oicp_types::EmbedModelInfo;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 

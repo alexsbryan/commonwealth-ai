@@ -34,8 +34,8 @@ use axum::extract::{ConnectInfo, Extension, Query};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use commonwealth_core::capabilities::OriginKind;
 use kernel_types::NodeId;
+use oicp_types::OriginKind;
 use serde::Deserialize;
 
 use crate::daemon::EmbeddedDaemon;

@@ -1290,10 +1290,7 @@ impl AppState {
     /// This node's embed model, as published at bootstrap.
     pub async fn local_embed_model(
         &self,
-    ) -> Result<
-        Option<commonwealth_core::oicp::EmbedModelInfo>,
-        sovereign_mesh::ledger_port::LedgerAbsent,
-    > {
+    ) -> Result<Option<oicp_types::EmbedModelInfo>, sovereign_mesh::ledger_port::LedgerAbsent> {
         self.inner
             .store
             .inference_store
@@ -1304,7 +1301,7 @@ impl AppState {
     /// Publish this node's embed model.
     pub async fn set_local_embed_model(
         &self,
-        info: &commonwealth_core::oicp::EmbedModelInfo,
+        info: &oicp_types::EmbedModelInfo,
     ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
         self.inner
             .store
