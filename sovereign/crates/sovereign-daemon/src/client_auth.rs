@@ -80,11 +80,11 @@
 //! `CLIENT_ALPN` → the trusting listener, which is what lets their federated
 //! inference (which carries no `Authorization` at all) keep working.
 
-use commonwealth_core::ct::constant_time_eq;
 use sovereign_grants::{GuestGrant, GuestSession};
 use sovereign_serving_host::admission::Principal;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 
 use axum::extract::{ConnectInfo, Request, State};
 use axum::http::StatusCode;
@@ -348,7 +348,7 @@ pub async fn client_auth_layer(
                     return next.run(request).await;
                 }
                 if let Some(expected) = configured.as_ref() {
-                    if constant_time_eq(p.as_bytes(), expected.as_bytes()) {
+                    if bool::from(p.as_bytes().ct_eq(expected.as_bytes())) {
                         if state.inner.node.client_tokens.admits_shared_token() {
                             return next.run(request).await;
                         }

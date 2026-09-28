@@ -48,6 +48,10 @@ sovereign-serving-host = { path = "../sovereign-serving-host" }
 sovereign-work-atlas = { workspace = true }
 sovereign-core = { workspace = true }
 sovereign-time = { workspace = true }
+# The bearer-token compare (client_auth.rs, client_tokens.rs). Already in the
+# lock through the TLS stack; named here so svrn does not reach into
+# commonwealth-core for a security primitive (pb-mesh-exit-core).
+subtle = "2.6"
 sovereign-inference = { workspace = true }
 sovereign-tools = { workspace = true }
 sovereign-meshapp = { workspace = true }

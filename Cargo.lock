@@ -12666,6 +12666,7 @@ dependencies = [
  "sovereign-work-atlas",
  "sovereign-workflow",
  "sovereign-workflow-host",
+ "subtle",
  "tar",
  "tempfile",
  "thiserror 2.0.18",

@@ -51,7 +51,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use commonwealth_core::ct::constant_time_eq;
+use subtle::ConstantTimeEq;
 
 use crate::client_principal::fingerprint;
 
@@ -233,7 +233,7 @@ impl ClientTokenStore {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let named = guard.get(&fingerprint(presented))?;
-        constant_time_eq(presented.as_bytes(), named.token.as_bytes()).then(|| named.label.clone())
+        bool::from(presented.as_bytes().ct_eq(named.token.as_bytes())).then(|| named.label.clone())
     }
 
     /// Record `token` under `label`, writing it to disk and admitting it from
