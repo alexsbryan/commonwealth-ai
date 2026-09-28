@@ -17,9 +17,14 @@ A corpus-engine MCP host that needs nothing but an OpenAI-compatible endpoint.
 You have a folder of documents, an MCP-capable chat app, and a machine that
 runs Ollama or llama-server. That is the whole prerequisite list.
 
+The first two lines are ingest's (`svrn ingest` execs ingest's own binary,
+`svrn-ingest`, from `sovereign-pipeline`; `corpus-mcp recipe` and `corpus-mcp
+ingest` moved there at pb-ingest-cli and now print a pointer). The third is
+this binary's.
+
 ```sh
-corpus-mcp recipe new --ontology numismatics --id my-coins   # writes my-coins.toml
-corpus-mcp ingest my-coins.toml                              # acquire → chunk → embed → enrich → index
+svrn recipe new --ontology numismatics --id my-coins --out my-coins.toml
+svrn ingest my-coins.toml                                    # acquire → chunk → embed → enrich → index
 corpus-mcp serve --corpus my-coins                           # the MCP host, on stdio
 ```
 
@@ -45,14 +50,14 @@ Name the endpoint yourself when you want to:
 
 ```sh
 # One host serving both chat and embeddings (Ollama, vLLM, our own daemon).
-corpus-mcp ingest my-coins.toml --base-url http://localhost:11434/v1
+svrn ingest my-coins.toml --base-url http://localhost:11434/v1
 
 # llama-server loads ONE model per process, so chat and embeddings are two of
 # them and discovery cannot tell which port is which. Name them.
 llama-server -m Qwen3-Embedding-0.6B-Q8_0.gguf --embeddings --port 8089 &
 llama-server -m <an-instruct-model>.gguf --port 8090 &
-corpus-mcp ingest my-coins.toml --chat-url  http://localhost:8090/v1 \
-                                --embed-url http://localhost:8089/v1
+svrn ingest my-coins.toml --chat-url  http://localhost:8090/v1 \
+                          --embed-url http://localhost:8089/v1
 ```
 
 ### Ollama
@@ -114,7 +119,7 @@ corpus-mcp serve --corpus sep     # ~875 MB from HuggingFace on a cold machine
 `serve` installs a corpus you named but do not have, when its recipe declares
 a prebuilt snapshot: the archive carries the chunk index AND the atlas, so
 what you get is the enriched corpus, not a re-embed. A corpus whose recipe
-declares no snapshot is **not** pulled — building it is `corpus-mcp ingest`'s
+declares no snapshot is **not** pulled — building it is `svrn ingest`'s
 job. Either way you are told which.
 
 **A shipped snapshot will very likely be REJECTED, and this is measured, not
@@ -220,7 +225,7 @@ So on a bare endpoint against one of the two stale snapshots, expect this:
 That refusal is deliberate — `serve` will not silently spend hours rebuilding
 a corpus you asked it to fetch. Your options:
 
-1. **Build the corpus yourself** — `corpus-mcp ingest <recipe.toml>`. The
+1. **Build the corpus yourself** — `svrn ingest <recipe.toml>`. The
    vectors are then yours and match your endpoint by construction. This is the
    honest path for the two stale snapshots, and it is what the three-command
    experience above is for.

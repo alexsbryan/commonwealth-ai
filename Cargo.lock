@@ -2549,7 +2549,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sovereign-contracts",
- "sovereign-enrichment-build",
  "tempfile",
  "tokio",
  "tracing",

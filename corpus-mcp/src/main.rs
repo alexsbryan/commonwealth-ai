@@ -6,7 +6,7 @@
 //! technical, is one recipe and three commands:
 //!
 //! ```sh
-//! corpus recipe new --ontology numismatics --id my-coins   # writes my-coins.toml
+//! svrn recipe new --ontology numismatics --out my-coins.toml # the scaffold
 //! svrn ingest my-coins.toml                                # ingest's own CLI (svrn-ingest)
 //! corpus serve --corpus my-coins                           # the MCP host
 //! ```
@@ -38,7 +38,6 @@
 mod ask;
 use corpus_index::host;
 mod mcp;
-mod recipe;
 mod serve;
 mod tools;
 
@@ -63,9 +62,12 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Scaffold a recipe from a built-in ontology template.
-    #[command(subcommand)]
-    Recipe(recipe::RecipeCommand),
+    /// Scaffolding a recipe is `svrn recipe new`'s. Prints that and exits 2.
+    #[command(disable_help_flag = true)]
+    Recipe {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        rest: Vec<String>,
+    },
 
     /// Moved to ingest's own CLI: `svrn ingest <recipe.toml>`. Prints that
     /// and exits 2.
@@ -93,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
     match args.command {
-        Some(Command::Recipe(cmd)) => recipe::run(cmd),
+        Some(Command::Recipe { .. }) => moved("recipe", "svrn recipe new --ontology <name>"),
         Some(Command::Ingest { .. }) => moved("ingest", "svrn ingest <recipe.toml>"),
         Some(Command::Serve(a)) => serve::run(a).await,
         None => serve::run(args.serve).await,

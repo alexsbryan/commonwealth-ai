@@ -2,7 +2,8 @@
 //! The closure rule that makes this binary the proof it claims to be: no
 //! llama.cpp, no ort, no iroh, no mesh transport, no local inference crate.
 //! boundary-gate governs the IN-REPO closure (`quality/ARCH_LAYERS.toml`
-//! `[[package]] corpus-mcp`); this pins the third-party half against
+//! `[[package]] svrn` for corpus-mcp, `[[package]] ingest` for svrn-ingest's
+//! sovereign-pipeline); this pins the third-party half against
 //! `cargo tree`, which is the artifact a reader would check by hand.
 
 use std::process::Command;
@@ -63,15 +64,22 @@ fn assert_no_inference_stack(package: &str, must_contain: &[&str]) {
 fn the_dep_tree_carries_no_inference_stack() {
     assert_no_inference_stack(
         "corpus-mcp",
+        &["corpus-engine", "understanding-vocab", "lancedb", "tantivy"],
+    );
+}
+
+/// The ingest half of the same promise, re-pinned when `ingest` left
+/// corpus-mcp for svrn-ingest (pb-ingest-cli): the binary that builds a
+/// corpus links the atlas build orchestrator, so its closure is INSIDE this
+/// assertion rather than beside it — the whole §4 path, acquire through
+/// atlas, with no inference stack.
+#[test]
+fn the_ingest_cli_carries_no_inference_stack() {
+    assert_no_inference_stack(
+        "sovereign-pipeline",
         &[
             "corpus-engine",
-            "understanding-vocab",
-            "lancedb",
-            "tantivy",
-            // `corpus ingest <recipe.toml>` (ei-5b-build-verb): the host now
-            // links the atlas build orchestrator, so its closure is INSIDE
-            // this assertion rather than beside it. That is EI6 = 1.0 — the
-            // whole §4 path, acquire through atlas, with no inference stack.
+            "corpus-index",
             "sovereign-enrichment-build",
             "sovereign-enrichment-catalog",
         ],
@@ -81,7 +89,7 @@ fn the_dep_tree_carries_no_inference_stack() {
 /// The atlas build orchestrator is the WRITER half of the same promise: what
 /// `corpus-mcp` reads, `svrn enrich build` produced. It sat on `sovereign-core`,
 /// `sovereign-tools` and `sovereign-inference` until order ei-5a-build-cut took
-/// all three out (closure 695 → 590 crates), and it is in the `corpus-mcp`
+/// all three out (closure 695 → 590 crates), and it is in the `ingest`
 /// `[[package]]` in `quality/ARCH_LAYERS.toml` so boundary-gate refuses an
 /// in-repo edge back. This pins the third-party half the same way, because the
 /// gate cannot see llama.cpp arriving through a transitive crates.io dep.

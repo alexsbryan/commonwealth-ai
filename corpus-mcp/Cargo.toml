@@ -29,17 +29,11 @@ understanding-vocab = { workspace = true, features = ["read"] }
 # The retrieval read-port leaf (domains REVIEW-build-index-read-port): the
 # `CorpusIndex` / `ScoredChunk` / `EmbedFn` surface `serve`, `ask`, `host` and
 # the `corpus_search` tool read through, so the host no longer reaches those
-# read-only types through `corpus-engine`. `corpus-engine` stays for the
-# `ingest` verb and the atlas reads, which genuinely are the engine's.
+# read-only types through `corpus-engine`. `corpus-engine` stays for
+# `serve`'s pull and the atlas reads (pb-corpus-mcp-reads'); the `ingest` verb
+# and the enrichment orchestrator it drove moved to svrn-ingest
+# (sovereign-pipeline) at pb-ingest-cli.
 corpus-index = { workspace = true }
-# The atlas enrichment orchestrator — `corpus ingest`'s second half, and the
-# WRITER of everything the tools here read. It joined this `[[package]]` in
-# `quality/ARCH_LAYERS.toml` at ei-5a-build-cut, when the seven import sites
-# that dragged `sovereign-core` / `sovereign-tools` / `sovereign-inference`
-# through it were cut (closure 695 -> 590 crates). This dep is what that cut
-# was FOR: without it a person needs our daemon to build a corpus, and the
-# binary's whole claim is that they do not.
-sovereign-enrichment-build = { workspace = true }
 # The one MCP dispatcher (phase-b pb-mcp): the stdio loop and the JSON-RPC
 # envelope are the kit's, and `Server` is its tool-host port.
 host-kit = { workspace = true, features = ["mcp"] }
