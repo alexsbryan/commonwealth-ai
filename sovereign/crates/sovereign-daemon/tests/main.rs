@@ -30,14 +30,14 @@ mod canonical_pull_e2e;
 mod capabilities_published;
 #[path = "main/chat_completion_e2e.rs"]
 mod chat_completion_e2e;
-#[path = "main/code_server_via_mcp_client.rs"]
-mod code_server_via_mcp_client;
 #[path = "main/client_auth.rs"]
 mod client_auth;
 #[path = "main/client_exposure.rs"]
 mod client_exposure;
 #[path = "main/client_tokens_e2e.rs"]
 mod client_tokens_e2e;
+#[path = "main/code_server_via_mcp_client.rs"]
+mod code_server_via_mcp_client;
 #[path = "main/common/mod.rs"]
 mod common;
 #[path = "main/compute_child_e2e.rs"]

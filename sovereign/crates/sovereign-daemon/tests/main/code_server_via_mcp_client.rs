@@ -18,9 +18,9 @@ use std::time::{Duration, Instant};
 
 use corpus_engine_scip::scip_graph::{ScipGraph, ScipSymbolRecord};
 use serde_json::json;
+use sovereign_contracts::mcp_config::{McpServerConfig, McpTransportConfig};
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_contracts::types::{StepOutput, ToolContext};
-use sovereign_contracts::mcp_config::{McpServerConfig, McpTransportConfig};
 use sovereign_tools::mcp::McpServerManager;
 
 /// Nothing listens on loopback ports 1 or 2: a dial is refused at once.
@@ -63,8 +63,12 @@ async fn a_turn_registry_reaches_codes_symbols_through_the_mcp_client() {
     );
     std::fs::create_dir_all(repo.join(".sovereign")).unwrap();
     std::fs::create_dir_all(repo.join("src")).unwrap();
-    std::fs::write(repo.join("src/lib.rs"), "pub fn fixture_target() {}
-").unwrap();
+    std::fs::write(
+        repo.join("src/lib.rs"),
+        "pub fn fixture_target() {}
+",
+    )
+    .unwrap();
     std::fs::create_dir_all(indexes.join("fixture")).unwrap();
     let mut config = SetupConfig::unconfigured();
     config.node.entry = Some(DEAD_DAEMON.to_string());

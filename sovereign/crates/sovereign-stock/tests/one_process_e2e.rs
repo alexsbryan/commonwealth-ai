@@ -316,7 +316,9 @@ fn the_stock_install_serves_both_ports_from_one_process_and_one_engine() {
 fn mcp(port: u16, id: u64, method: &str, params: Value) -> Value {
     client()
         .post(format!("http://127.0.0.1:{port}/mcp"))
-        .json(&serde_json::json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
+        .json(
+            &serde_json::json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }),
+        )
         .send()
         .unwrap_or_else(|e| panic!("/mcp on :{port} did not answer: {e}"))
         .json()
@@ -360,15 +362,20 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
             .spawn()
             .expect("spawn sovereign-stock"),
     );
-    wait_until("svrn's /status answered", Duration::from_secs(120), &log, || {
-        assert!(
-            stock.0.try_wait().expect("try_wait").is_none(),
-            "the stock process exited during boot:
+    wait_until(
+        "svrn's /status answered",
+        Duration::from_secs(120),
+        &log,
+        || {
+            assert!(
+                stock.0.try_wait().expect("try_wait").is_none(),
+                "the stock process exited during boot:
 {}",
-            log_tail(&log)
-        );
-        get_json(&format!("http://127.0.0.1:{svrn}/status")).is_some()
-    });
+                log_tail(&log)
+            );
+            get_json(&format!("http://127.0.0.1:{svrn}/status")).is_some()
+        },
+    );
 
     let list = mcp(svrn, 1, "tools/list", serde_json::json!({}));
     let names: Vec<String> = list["result"]["tools"]
@@ -380,7 +387,11 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
     let mut unique = names.clone();
     unique.sort();
     unique.dedup();
-    assert_eq!(unique.len(), names.len(), "a tool is listed twice: {names:?}");
+    assert_eq!(
+        unique.len(),
+        names.len(),
+        "a tool is listed twice: {names:?}"
+    );
     assert_eq!(
         names.iter().filter(|n| *n == "symbols").count(),
         1,
@@ -398,14 +409,27 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
         "tools/call",
         serde_json::json!({ "name": "symbols", "arguments": { "name": "main" } }),
     );
-    assert!(call.get("error").is_none(), "code's symbols did not answer: {call}");
-    let text = call["result"]["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(
+        call.get("error").is_none(),
+        "code's symbols did not answer: {call}"
+    );
+    let text = call["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
     assert!(
         !text.is_empty() && !text.contains("svrn serves no code tool"),
         "symbols answered with svrn's pointer, not code's tool: {call}"
     );
-    let atlas = mcp(svrn, 3, "tools/call", serde_json::json!({ "name": "work_in_flight", "arguments": {} }));
-    assert!(atlas.get("error").is_none(), "work_in_flight did not answer: {atlas}");
+    let atlas = mcp(
+        svrn,
+        3,
+        "tools/call",
+        serde_json::json!({ "name": "work_in_flight", "arguments": {} }),
+    );
+    assert!(
+        atlas.get("error").is_none(),
+        "work_in_flight did not answer: {atlas}"
+    );
 
     let projects = client()
         .get(format!("http://127.0.0.1:{svrn}/v1/projects"))
