@@ -24,6 +24,8 @@ mod conversation_skill_tests;
 mod delegate_firewall;
 #[path = "main/memory_notes_tests.rs"]
 mod memory_notes_tests;
+#[path = "main/notes_db_migration_tests.rs"]
+mod notes_db_migration_tests;
 #[path = "main/observer_tests.rs"]
 mod observer_tests;
 #[path = "main/step_execution_replay.rs"]
