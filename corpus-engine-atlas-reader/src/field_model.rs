@@ -258,3 +258,28 @@ pub fn load_field_model(
 /// index accessor cannot disagree about which file they mean — corpus-engine's
 /// `index::field_skeleton::FIELD_SKELETON_FILENAME` re-exports it.
 pub const LEGACY_ARTIFACT: &str = "field_skeleton.json";
+
+/// Load the field skeleton JSON artifact if it exists.
+///
+/// Readers: the KnowledgeView manager and its cross-view digest, the
+/// desktop budget probe, `sovereign-tools::epistemic`, the one-shot
+/// `enrich field-atoms` migration, and corpus-engine's `load_field_checkpoint`
+/// fallback. For an `AtlasAtoms` domain this file is a pre-ei-7b leftover
+/// and the live field model is in the atlas.
+pub fn load_field_skeleton(
+    dir: &std::path::Path,
+) -> corpus_index::Result<Option<FieldSkeleton>> {
+    read_skeleton_json(&dir.join(LEGACY_ARTIFACT))
+}
+
+/// Read one skeleton JSON file; `None` when it does not exist.
+pub fn read_skeleton_json(path: &std::path::Path) -> corpus_index::Result<Option<FieldSkeleton>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(path)?;
+    let skeleton = serde_json::from_str(&raw).map_err(|e| {
+        corpus_index::Error::Serialization(format!("Bad field skeleton at {}: {e}", path.display()))
+    })?;
+    Ok(Some(skeleton))
+}
