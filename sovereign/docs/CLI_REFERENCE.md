@@ -474,6 +474,10 @@ Session continuity (spec: `docs/specs/SESSION_CONTINUITY.md`). `session list` sh
 Beyond `list` and `distill`: `session frames` prints the index of live session frames (one pointer line each — what the boot hook injects), `session frames <id>` dereferences one whole, `session attach <id>` re-points the current terminal at that lineage, `session lineage` shows predecessor chains, and `session grade <id>` grades a frame against `quality/session-frame.golden.md` (exit 0 pass / 1 fail). The workflow they serve: [ground your agent — session continuity](../../docs/GROUND_YOUR_AGENT.md#session-continuity).
 | `--stdout` | Print the frame as well as writing it |
 
+### `svrn ingest`
+
+Build a corpus from a recipe against any OpenAI-compatible endpoint: acquire, extract, chunk, embed, index, then the atlas enrichment the recipe declares. `svrn ingest <recipe.toml>` execs ingest's own binary, `svrn-ingest` (crate `sovereign-pipeline`; override its path with `SOVEREIGN_INGEST_BIN`), so ingest in CI needs that binary and no svrn crate. Flags: `--base-url <url>` (one host for chat and embeddings), or `--chat-url` with `--embed-url` (two llama-server processes); with none, the Ollama → llama-server → OICP-daemon ladder runs. `--no-enrich` indexes only. `svrn-ingest ingest --help` lists the rest.
+
 ### `svrn recipe`
 
 Run and curate corpus ingestion recipes.

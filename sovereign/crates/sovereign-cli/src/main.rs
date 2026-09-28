@@ -58,6 +58,7 @@ mod daemon_bin;
 mod deep_research_cmd;
 mod dev_bin;
 mod drift_cmd;
+mod ingest_bin;
 mod init;
 mod journal_cmd;
 mod llm_bin;
@@ -218,6 +219,10 @@ const HELP: Help = Help {
                 "path",
                 "Print where per-user data lives (root / data / mesh-data / config)",
             ),
+            (
+                "ingest",
+                "Build a corpus from a recipe (ingest's own CLI, svrn-ingest)",
+            ),
             ("recipe", "Run a corpus ingestion recipe"),
             (
                 "workflow",
@@ -361,6 +366,7 @@ const ALL_VERBS: &[&str] = &[
     "eval",
     "git-archaeology",
     "govern",
+    "ingest",
     "init",
     "install-service",
     "job",
@@ -874,6 +880,11 @@ async fn async_main() {
             "mobile" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe" | "pipeline"
             | "recipe-agent" | "maintainer" | "meshapp" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // ingest's own CLI (phase-b pb-ingest-cli).
+            "ingest" => {
+                let code = ingest_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
             // cmnwlth's verbs — the mesh sibling (FIVE_PROGRAMS §9).

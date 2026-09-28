@@ -1193,6 +1193,13 @@ status = "shipped"
 purpose = "Path override for sovereign-serve, which the dispatcher execs for `svrn mesh warm-cache`, `svrn mesh fetch-model` (phase-b-22) and `svrn mesh fetch-ner` (pb-cli-llm). The svrn daemon no longer brings serve up (pb-stock-binary): the stock install hosts serve in its own process, and a standalone serve is started by whoever runs it."
 
 [[flag]]
+name = "SOVEREIGN_INGEST_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for svrn-ingest, ingest's own CLI (sovereign-pipeline), which the dispatcher execs for `svrn ingest` (pb-ingest-cli). The one locator of that binary: corpus-mcp serve's pull (pb-corpus-mcp-reads) and cli-llm's ingest verbs (pb-cli-llm-ingest-move) reuse it."
+
+[[flag]]
 name = "SOVEREIGN_SERVE_PORT"
 cluster = "daemon-lifecycle"
 default = "9748 (sovereign_contracts::venue::DEFAULT_SERVE_PORT)"

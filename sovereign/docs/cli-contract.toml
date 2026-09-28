@@ -873,6 +873,15 @@ probe = "no-args"  # rejects `--help` as an unknown flag (exit 2). Verified 2026
 binary = "llm"
 classification = "daemon"
 
+# ingest — ingest's own CLI (phase-b pb-ingest-cli): the dispatcher execs
+# `svrn-ingest` (sovereign-pipeline) with the verb as its first argument.
+# `binary` is a closed enum of the four sovereign-cli siblings; like `mesh
+# warm-cache` (sovereign-serve) this verb's sibling is none of them, so it is
+# filed under llm, the cluster that held ingest's verbs before.
+[[command]]
+path = "ingest"
+binary = "llm"
+
 # recipe — internal corpus-ingestion authoring, default build.
 [[command]]
 path = "recipe list"
@@ -2553,6 +2562,15 @@ stays on stderr, so `✓ Validation passed` on stdout means exactly one thing.""
 [journey.step.expect]
 exit = 0
 stdout_contains = "Validation passed"
+[[journey.step]]
+run = "ingest {recipe} --chat-url http://127.0.0.1:1/v1"
+note = """proves `svrn ingest` reaches ingest's own binary, svrn-ingest \
+(pb-ingest-cli), by its first refusal: a chat endpoint with no embeddings \
+endpoint is refused by name before any disk or network is touched. The build \
+itself needs an endpoint; it is LIFT(ingest)'s RUN smoke (pb-ingest)."""
+[journey.step.expect]
+exit = 1
+stdout_contains = "--chat-url given without --embed-url"
 [[journey.step]]
 run = "recipe test {recipe} --sample-size 50"
 [journey.step.expect]
