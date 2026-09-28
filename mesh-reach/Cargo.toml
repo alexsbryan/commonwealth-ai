@@ -22,6 +22,13 @@ fanout = ["dep:tokio", "dep:serde"]
 wire = ["dep:serde"]
 # `RailsTransport`: `PeerTransport::endpoints` over cw-rails' reach door.
 rails = ["wire", "dep:reqwest"]
+# The guest dialer and the one iroh HTTP bridge (`guest`), moved from
+# commonwealth-transport iroh.rs (pb-reach-guest, phase-b-35). iroh's two
+# features must equal commonwealth-transport's, or cargo-hakari lists iroh in
+# workspace-hack (see that crate's `[features]` comment).
+guest = ["dep:iroh", "dep:tokio", "dep:rustls", "dep:hex", "dep:rand", "iroh/unstable-custom-transports", "iroh/test-utils"]
+# Bench-only relay-pinned posture; commonwealth-transport's feature forwards here.
+iroh-relay-only = ["guest"]
 
 [dependencies]
 kernel-types = { workspace = true }
@@ -30,6 +37,10 @@ tracing = { workspace = true }
 tokio = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
+iroh = { workspace = true, optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true }
+hex = { version = "0.4", optional = true }
+rand = { version = "0.9", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
@@ -37,6 +48,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 reqwest = { workspace = true }
 axum = { workspace = true }
+iroh = { workspace = true, features = ["unstable-custom-transports", "test-utils"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+hex = "0.4"
+rand = "0.9"
 
 [lints]
 workspace = true

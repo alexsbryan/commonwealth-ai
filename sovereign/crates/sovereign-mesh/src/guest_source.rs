@@ -65,9 +65,15 @@ impl GuestLinkReader for GuestLinkFileReader {
 #[derive(Debug, Default)]
 pub struct MeshTunnelOpener;
 
-impl GuestTunnelHandle for crate::guest_tunnel::GuestTunnel {
+/// `GuestTunnel` lives in mesh-reach and the handle trait in
+/// sovereign-serving-host, so the orphan rule wants a local type between them
+/// (pb-reach-guest).
+#[derive(Debug)]
+struct OpenGuestTunnel(crate::guest_tunnel::GuestTunnel);
+
+impl GuestTunnelHandle for OpenGuestTunnel {
     fn base_url(&self) -> &str {
-        crate::guest_tunnel::GuestTunnel::base_url(self)
+        self.0.base_url()
     }
 }
 
@@ -81,7 +87,7 @@ impl GuestTunnelOpener for MeshTunnelOpener {
     ) -> Result<Arc<dyn GuestTunnelHandle>, String> {
         let tunnel =
             crate::guest_tunnel::GuestTunnel::open(dial, relay_urls, discovery.as_deref()).await?;
-        Ok(Arc::new(tunnel))
+        Ok(Arc::new(OpenGuestTunnel(tunnel)))
     }
 }
 

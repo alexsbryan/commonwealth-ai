@@ -27,6 +27,11 @@ pub mod door;
 // cw-rails.
 #[cfg(any(feature = "rails", test))]
 pub mod rails;
+// A non-member's dial into a lender's mesh, over iroh, and the one HTTP
+// bridge (pb-reach-guest). Only the guest dial's callers enable it; compiled
+// for this crate's own tests too, whose dev-deps carry iroh.
+#[cfg(any(feature = "guest", test))]
+pub mod guest;
 
 use std::net::SocketAddr;
 
