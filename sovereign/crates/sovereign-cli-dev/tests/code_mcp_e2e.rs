@@ -325,7 +325,8 @@ async fn a_second_binder_refuses_naming_the_port() {
 #[tokio::test]
 async fn an_unopenable_notes_store_is_refused_by_path() {
     let fx = Fixture::new().await;
-    let notes = fx.path("repo/.sovereign/notes.db");
+    // Code's one notes store is the data root's (pb-notes-verbs), not the repo's.
+    let notes = fx.path("root/notes.db");
     std::fs::create_dir_all(&notes).expect("a directory where notes.db goes");
     let out = fx.command(free_port()).output().expect("run code mcp");
     assert!(!out.status.success(), "refused: {}", text(&out));
