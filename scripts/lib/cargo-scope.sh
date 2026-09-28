@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task"
         return 0
     fi
 
@@ -225,6 +225,10 @@ if "host-kit" in seen:
     # `shell` gates the server shell (phase-b pb-shell), for the same reason:
     # the daemon and cw-rails turn it on, a solo run would compile it to nothing.
     want.append("host-kit/shell")
+    # `task` gates the task supervisor (phase-b pb-notes-memory), for the same
+    # reason: the daemon and the code program turn it on, a solo run would
+    # compile it and its two restart tests to nothing.
+    want.append("host-kit/task")
 legal = [f for f in want if f.split("/", 1)[0] in nameable]
 dropped = [f for f in want if f not in legal]
 if dropped:
