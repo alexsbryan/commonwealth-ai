@@ -44,6 +44,9 @@ members = [
     # itself, starting with its data-root lock. Neutrally named so
     # commonwealth-rails can take it; every path comes from the caller.
     "host-kit",
+    # How a program reaches a mesh peer (phase-b pb-rails-reach): the dial
+    # vocabulary commonwealth-transport re-exports, and RailsTransport.
+    "mesh-reach",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
     "corpus-engine",
@@ -347,6 +350,7 @@ serving-policy-core = { path = "serving-policy-core" }
 oplog = { path = "oplog" }
 mesh-join-vocab = { path = "mesh-join-vocab" }
 host-kit = { path = "host-kit" }
+mesh-reach = { path = "mesh-reach" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atlas-reader = { path = "corpus-engine-atlas-reader" }

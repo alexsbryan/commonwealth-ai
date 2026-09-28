@@ -164,6 +164,11 @@ crates = [
     # commonwealth-rails can take it. The one leaf that does fs work; every
     # path comes from the caller.
     "host-kit",
+    # How a program reaches a mesh peer (phase-b pb-rails-reach, decision
+    # phase-b-30 Group 3): the dial vocabulary commonwealth-transport
+    # re-exports, the peer fan-out, and RailsTransport over cw-rails' reach
+    # door. Neutrally named for the mesh-join-vocab reason.
+    "mesh-reach",
 ]
 
 # The knowledge layer: corpus-engine + its carve-outs. "Self-contained by
@@ -1114,6 +1119,22 @@ allow = ["oicp-types", "workspace-hack"]
 max_code_lines = 2500
 
 [[package_leaf]]
+name = "mesh-reach"
+# How a program reaches a mesh peer: `TrafficClass`, `PeerContact`,
+# `PeerEndpoint` and the `PeerTransport` port (moved from commonwealth-transport,
+# which re-exports them at their historical paths), the peer fan-out (feature
+# `fanout`), and `RailsTransport` (feature `rails`), which resolves a peer's
+# registered origin through cw-rails' reach door. Admitted 2026-09-27 (phase-b
+# pb-rails-reach, decision phase-b-30 Group 3, F-Q3 (a)): svrn and serve dial
+# peers through cw-rails and must share cmnwlth's dial vocabulary without
+# linking commonwealth-transport. This is in TENSION with §12 3a rung 2 ("a
+# port trait is never a leaf"), and the falsifier is phase-b-33's: a workspace
+# dependency beyond kernel-types and workspace-hack means the leaf holds a
+# mechanism, not vocabulary, and is wrong. Third-party deps come as the
+# contents need them, each behind its feature. Leaf count 22 → 23.
+allow = ["kernel-types", "workspace-hack"]
+
+[[package_leaf]]
 name = "sovereign-cli-base"
 # The thin half of `sovereign-cli-shared` — help, dirs, dispatcher, guest_link,
 # urls, and rail (feature `rail-client`). Admitted 2026-09-24 under operator
@@ -1548,6 +1569,9 @@ may_reach = [
     "sovereign-time",
     "workspace-hack",
     "sovereign-tools-base",
+    # The dial vocabulary, contract layer since pb-rails-reach; the phone
+    # reaches it through commonwealth-transport's re-export.
+    "mesh-reach",
 ]
 doc = "quality/campaigns/sv-surface.toml §sv-no-daemon-management"
 

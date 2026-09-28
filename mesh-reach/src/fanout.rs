@@ -29,7 +29,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use serde::Serialize;
 
 use crate::{PeerContact, PeerEndpoint, PeerTransport, TrafficClass};

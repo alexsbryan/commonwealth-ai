@@ -2067,8 +2067,8 @@ dependencies = [
  "getrandom 0.3.4",
  "hex",
  "iroh",
+ "mesh-reach",
  "rustls",
- "serde",
  "serde_json",
  "tempfile",
  "tokio",
@@ -7974,6 +7974,20 @@ version = "0.8.0"
 dependencies = [
  "blake3",
  "hex",
+]
+
+[[package]]
+name = "mesh-reach"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "kernel-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
