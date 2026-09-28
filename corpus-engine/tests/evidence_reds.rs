@@ -51,7 +51,9 @@ fn evidence_has_exactly_one_door() {
     // Fully populated, still refused — a struct literal is a door, and the
     // fields are private, so there is no "but I filled everything in" path.
     t.compile_fail("tests/ui/evidence_by_struct_literal.rs");
-    // No public constructor of any spelling.
+    // No public `new`. `acquired`'s privacy is proven in corpus-index, where
+    // it is defined, so its recorded stderr names no path of this monorepo's
+    // layout (pb-ingest: the lift sandbox lays crates out flat).
     t.compile_fail("tests/ui/evidence_has_no_public_constructor.rs");
     // Not a mutable accumulator: `ScoredChunk`'s score is reassigned at
     // twelve production sites in sovereign; an `Evidence`'s cannot be.

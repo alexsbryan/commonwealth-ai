@@ -60,6 +60,8 @@ sha2 = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = { workspace = true }
+# tests/evidence_reds.rs: `Evidence::acquired` stays crate-private.
+trybuild = "1"
 
 [lints]
 workspace = true
