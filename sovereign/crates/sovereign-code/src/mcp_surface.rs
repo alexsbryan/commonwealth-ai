@@ -257,20 +257,9 @@ pub fn render_tools_list_gated_by(
         // of disk state.
         None => true,
     };
-    let mut out = Vec::new();
-    for desc in descriptors {
-        if !exposed(&desc.id) {
-            continue;
-        }
-        if !spec_visible && MCP_TOOLS_SPEC_GATED.contains(&desc.id.as_str()) {
-            continue;
-        }
-        out.push(serde_json::json!({
-            "name": desc.id,
-            "description": desc.description,
-            "inputSchema": desc.parameters,
-        }));
-    }
+    let out = sovereign_contracts::mcp_host::render_tool_entries(descriptors, |id| {
+        exposed(id) && (spec_visible || !MCP_TOOLS_SPEC_GATED.contains(&id))
+    });
     // No alias mirrors. See [`MCP_TOOL_ALIASES`]: aliases are accepted
     // on `tools/call`, never advertised here. The spec gate that used
     // to be duplicated for mirrors is therefore unreachable by

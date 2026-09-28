@@ -90,8 +90,13 @@ pub(crate) async fn build_fixture_index(data_dir: &Path, name: &str, backdate: O
         };
         chunks.push((insert, vec![0.0; dims]));
     }
-    index.insert_batch(&chunks).await.expect("insert fixture rows");
-    index.mark_ingestion_complete().expect("mark ingestion complete");
+    index
+        .insert_batch(&chunks)
+        .await
+        .expect("insert fixture rows");
+    index
+        .mark_ingestion_complete()
+        .expect("mark ingestion complete");
     index
         .build_indexes(true, true, None)
         .await

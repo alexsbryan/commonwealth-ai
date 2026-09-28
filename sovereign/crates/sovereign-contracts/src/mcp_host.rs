@@ -141,6 +141,26 @@ pub fn call_log_tag(outcome: &ToolOutcome) -> Option<&'static str> {
     })
 }
 
+/// The `tools/list` entries for the `descriptors` that `keep` admits, as they
+/// go on the wire. Each program decides what it keeps (its exposure list, a
+/// spec gate); this is the one shape of an entry.
+pub fn render_tool_entries(
+    descriptors: &[crate::types::ToolDescriptor],
+    keep: impl Fn(&str) -> bool,
+) -> Vec<Value> {
+    descriptors
+        .iter()
+        .filter(|desc| keep(&desc.id))
+        .map(|desc| {
+            serde_json::json!({
+                "name": desc.id,
+                "description": desc.description,
+                "inputSchema": desc.parameters,
+            })
+        })
+        .collect()
+}
+
 /// The `GET /mcp/stats` body: tool call counts since the registry was built.
 pub fn call_stats(tools: &ToolRegistry) -> Value {
     let counts = tools.call_counts();
