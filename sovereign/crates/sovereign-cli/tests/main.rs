@@ -30,6 +30,9 @@ mod cli_contract_flags;
 mod cli_contract_journeys;
 #[path = "main/cli_journey_dispatch.rs"]
 mod cli_journey_dispatch;
+#[cfg(all(feature = "code-intel", feature = "dev-tools"))]
+#[path = "main/code_index_e2e.rs"]
+mod code_index_e2e;
 #[path = "main/default_build_gate.rs"]
 mod default_build_gate;
 // The work doors' end to end (pb-work-doors); `quality` and the work
