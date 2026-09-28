@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The folded `work` queue's types — what `cw-rails`' `GET
-//! /v1/work/projection` serves and a submitter or donor reads. The fold
-//! itself (`commonwealth_work::projection::fold`) and the handoff's phase
-//! (`commonwealth_work::projection::phase_at`, which names
-//! `commonwealth-core`'s `HandoffPhase`) stay with the rail (pb-work-doors).
+//! /v1/work/projection` serves and a submitter or donor reads, and the
+//! handoff's phase ([`WorkHandoff::phase_at`], pb-work-donor). The fold
+//! itself (`commonwealth_work::projection::fold`) stays with the rail
+//! (pb-work-doors).
 
 use std::collections::BTreeMap;
 
@@ -13,6 +13,7 @@ use serde_json::Value;
 use super::act::UnitRef;
 use super::wire;
 use super::MAX_UNIT_ATTEMPTS;
+use crate::work_queue::HandoffPhase;
 use crate::{JobKind, JobUnit, WorkOffer};
 
 /// Whether a lease taken to `expires_at_ms` is still live at `now_ms`.
@@ -205,6 +206,47 @@ impl WorkHandoff {
         match &self.allowed {
             None => true,
             Some(list) => list.contains(actor),
+        }
+    }
+
+    /// The handoff's phase at `now_ms`, derived from its units.
+    ///
+    /// **`Merging` is never produced here.** That state means "the leader is
+    /// merging peer partitions into one corpus", which is an ingest step: for
+    /// a `process:v1` unit there is nothing to merge, the results are already
+    /// on the journal as `Complete` acts. It is not pruned from the enum
+    /// because pruning it would fork the vocabulary ingest still uses.
+    pub fn phase_at(&self, now_ms: u64) -> HandoffPhase {
+        if let Some(reason) = &self.revoked {
+            return HandoffPhase::Failed {
+                reason: reason.clone(),
+            };
+        }
+        let mut queued = 0usize;
+        let mut leased = 0usize;
+        for unit in self.units.values() {
+            match unit.status_at(now_ms) {
+                WorkUnitStatus::Queued { .. } => queued += 1,
+                WorkUnitStatus::Leased { .. } => leased += 1,
+                _ => {}
+            }
+        }
+        if queued == 0 && leased == 0 {
+            return HandoffPhase::Complete;
+        }
+        if now_ms >= self.expires_at_ms {
+            return HandoffPhase::Failed {
+                reason: format!(
+                    "the handoff's ttl elapsed at {}ms with {queued} unit(s) unclaimed and \
+                     {leased} still leased",
+                    self.expires_at_ms
+                ),
+            };
+        }
+        if queued > 0 {
+            HandoffPhase::Open
+        } else {
+            HandoffPhase::Draining
         }
     }
 }

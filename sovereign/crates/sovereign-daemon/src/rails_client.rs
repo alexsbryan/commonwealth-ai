@@ -650,7 +650,7 @@ impl RingRailPort for RailsRingRail {
         })
     }
 
-    fn work_projection(&self) -> RailFut<'_, commonwealth_work::projection::WorkProjection> {
+    fn work_projection(&self) -> RailFut<'_, sovereign_contracts::oicp::work::projection::WorkProjection> {
         let base = self.base.clone();
         Box::pin(async move { dial_json(&base, "/v1/work/projection").await })
     }

@@ -120,48 +120,11 @@ fn ms_of(ts_unix: i64) -> u64 {
     ts_unix.saturating_mul(1_000).max(0) as u64
 }
 
-/// The handoff's phase at `now_ms`, derived from its units.
-///
-/// [`HandoffPhase`] is taken whole from `commonwealth_core::knowledge` and
-/// **`Merging` is never produced here**. That state means "the leader is
-/// merging peer partitions into one corpus", which is an ingest step: for
-/// a `process:v1` unit there is nothing to merge, the results are already
-/// on the journal as `Complete` acts. It is not pruned from the enum
-/// because pruning it would fork the vocabulary ingest still uses, and
-/// cw-lift 5g brings ingest onto this fold, at which point an
-/// `IngestExecutor` is what will produce it.
+/// The handoff's phase at `now_ms` — [`WorkHandoff::phase_at`], whose body
+/// moved into `oicp-types` with the type (pb-work-donor). Kept at its
+/// historical path as a delegate: one body, every caller unchanged.
 pub fn phase_at(handoff: &WorkHandoff, now_ms: u64) -> HandoffPhase {
-    if let Some(reason) = &handoff.revoked {
-        return HandoffPhase::Failed {
-            reason: reason.clone(),
-        };
-    }
-    let mut queued = 0usize;
-    let mut leased = 0usize;
-    for unit in handoff.units.values() {
-        match unit.status_at(now_ms) {
-            WorkUnitStatus::Queued { .. } => queued += 1,
-            WorkUnitStatus::Leased { .. } => leased += 1,
-            _ => {}
-        }
-    }
-    if queued == 0 && leased == 0 {
-        return HandoffPhase::Complete;
-    }
-    if now_ms >= handoff.expires_at_ms {
-        return HandoffPhase::Failed {
-            reason: format!(
-                "the handoff's ttl elapsed at {}ms with {queued} unit(s) unclaimed and \
-                 {leased} still leased",
-                handoff.expires_at_ms
-            ),
-        };
-    }
-    if queued > 0 {
-        HandoffPhase::Open
-    } else {
-        HandoffPhase::Draining
-    }
+    handoff.phase_at(now_ms)
 }
 
 /// The pure half of "do I still hold this lease": given a fold, an actor and a

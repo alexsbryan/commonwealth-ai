@@ -124,7 +124,7 @@ pub trait RingRailPort: Send + Sync {
     ) -> RailFut<'_, (Vec<Op<SignedOp>>, bool)>;
     /// The `work` namespace folded where its journal lives (fp-45): the
     /// donor receives the queue and never admits the journal itself.
-    fn work_projection(&self) -> RailFut<'_, commonwealth_work::projection::WorkProjection>;
+    fn work_projection(&self) -> RailFut<'_, oicp_types::work::projection::WorkProjection>;
 
     /// The local journal surface, when this port IS the local
     /// implementation. Tests use it to place a roster file or read a

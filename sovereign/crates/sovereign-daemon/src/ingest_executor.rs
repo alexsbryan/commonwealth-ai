@@ -80,17 +80,17 @@ use std::time::Duration;
 use std::collections::BTreeSet;
 
 use commonwealth_core::knowledge::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
-use commonwealth_work::actor::ActorKey;
 use commonwealth_work::executor::{subject_of, ExecuteFuture, JobContext, JobError, JobExecutor};
-use commonwealth_work::projection::{WorkHandoff, WorkProjection, WorkUnitStatus};
-use commonwealth_work::refusal::WorkRefusal;
 use corpus_engine::{CorpusEngine, IngestProgress, ProgressCallback};
 use kernel_types::quality::VerdictSource;
+use kernel_types::ActorKey;
 use kernel_types::HandoffId;
 use kernel_types::{Judgement, Reason};
 use kernel_types::{NodeId, Server};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sovereign_contracts::oicp::work::projection::{WorkHandoff, WorkProjection, WorkUnitStatus};
+use sovereign_contracts::oicp::work::refusal::WorkRefusal;
 // Through `sovereign_contracts`' re-export, not a direct dep on `oicp-types`
 // (ARCH §8.3) — the rule `work_donor` already follows for the same types.
 use sovereign_contracts::oicp::{
@@ -113,7 +113,7 @@ pub const INGEST_KIND: &str = "ingest:v1";
 /// debugging "why did this ingest unit not run" turns on ONE filter
 /// (`RUST_LOG=commonwealth_work=debug`) and sees the fold's refusals and this
 /// executor's in the same stream (ARCH §9.1).
-pub const TRACE_TARGET: &str = commonwealth_work::TRACE_TARGET;
+pub const TRACE_TARGET: &str = "commonwealth_work";
 
 /// How often the running unit is asked whether the donor has cancelled it.
 ///
@@ -678,10 +678,7 @@ pub fn fold_coverage_for(
             );
             continue;
         }
-        if !matches!(
-            commonwealth_work::projection::phase_at(handoff, now_ms),
-            HandoffPhase::Complete
-        ) {
+        if !matches!(handoff.phase_at(now_ms), HandoffPhase::Complete) {
             continue;
         }
         if corpus_of(handoff).as_deref() != Some(corpus_id) {
