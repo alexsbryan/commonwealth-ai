@@ -213,7 +213,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // detector is a change to every row's number and belongs to whoever
     // re-baselines the whole file, not to a row being added.
     ("sovereign/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 4),
-    ("sovereign/crates/sovereign-daemon/src/project_http.rs", Class::Mesh, 4),
+    // Re-keyed at REVIEW-audit-pb-auto-7: the file moved to sovereign-code
+    // at pb-code-freshness (c173a8042). Same four sites, same class.
+    ("sovereign/crates/sovereign-code/src/project_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 5),
     // Moved from sovereign-daemon/src/loopback_guard.rs with the guard itself
     // (pb-shell, da819e9e2): the same three test-module clients, a relocation.

@@ -28,6 +28,13 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // never sends through, and the shell's own test module.
     ("sovereign/crates/sovereign-cli-mesh/src/ring_cmd/show.rs", Class::TestOnly, 1),
     ("host-kit/src/shell/tests.rs", Class::TestOnly, 1),
+    // pb-code-server (20fd4954e): the host kit's MCP framing test posts to
+    // its own loopback listener.
+    ("host-kit/src/mcp/http_tests.rs", Class::TestOnly, 1),
+    // pb-code-daemon-exit (c25b16fb7) moved the daemon's
+    // tests/main/pattern_observation_e2e.rs into src/, where the census
+    // scans; its one loopback POST is not a new site.
+    ("sovereign/crates/sovereign-code/src/face/pattern_observation_tests.rs", Class::TestOnly, 1),
     // pb-work-donor (6ecad5596): the execute origin's `#[cfg(test)]` module
     // (work_origin.rs:276-278) dials its own loopback port, as cw-rails'
     // donor does.
@@ -90,7 +97,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // program, sovereign-cli-dev.
 
     // ---- sovereign-cli-shared (LocalDaemon: daemon MCP proxy + project-local) ----
-    ("sovereign/crates/sovereign-cli-shared/src/mcp_client.rs", Class::LocalDaemon, 3),
+    // Re-keyed at REVIEW-audit-pb-auto-7: pb-code-cli-base (ef8ed7700) moved
+    // the file to the leaf sovereign-cli-base, re-exported at its old path.
+    ("sovereign/crates/sovereign-cli-base/src/mcp_client.rs", Class::LocalDaemon, 3),
     // code_index.rs has no row since pb-code-index: `build_daemon_embed_fn`
     // and its /v1/models probe are gone; the verb execs `svrn-ingest`, whose
     // embedder is corpus_index::host (its own row).
