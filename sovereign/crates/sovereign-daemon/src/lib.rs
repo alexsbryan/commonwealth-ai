@@ -217,7 +217,6 @@ pub use commonwealth_transport::fanout;
 pub use oicp_types::openai_types;
 pub use oicp_types::responses_types;
 pub use sovereign_core::answering::turn_fidelity;
-pub use sovereign_grants::auto_recover;
 
 // Re-exports the moved modules reached through the mesh crate root, so their
 // own `crate::` paths keep resolving here (the leaves live in the serving host
