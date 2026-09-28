@@ -48,9 +48,9 @@ pub trait CorpusReadPort: IndexSource {
     /// sec_facts tool reads).
     fn recipes_dir(&self) -> &Path;
 
-    /// `corpus_id`'s recipe `[catalog]` block; `None` when the recipe has
-    /// none or does not resolve.
-    async fn catalog_config(&self, corpus_id: &str) -> Option<CatalogConfig>;
+    /// `corpus_id`'s recipe `[catalog]` block; `Ok(None)` when the recipe
+    /// has none, `Err` when it does not resolve.
+    async fn catalog_config(&self, corpus_id: &str) -> Result<Option<CatalogConfig>>;
 
     /// Installed corpora that carry field-model tables — what the
     /// epistemic tools consult.

@@ -6,15 +6,15 @@
 //!
 //! 1. **Resolve.** Open the catalog corpus index and FTS-look-up the
 //!    work id; pull title/url/metadata off the matched chunk.
-//! 2. **Compose override.** Fetch the content recipe (e.g.
-//!    `gutenberg-work`) from the registry, patch its `corpus.id`
-//!    (`<catalog>-<work_id>`), `corpus.parent_corpus_id`, and the
-//!    acquire URL (substituting `{id}` in the catalog template).
-//! 3. **Ingest.** Hand the mutated recipe to
-//!    [`corpus_engine::CorpusEngine::ingest`] via
-//!    [`corpus_engine::CorpusSpec::Inline`]. The on-demand guard in
-//!    `ingest()` requires this exact entry point — a direct
+//! 2. **Ingest, through ingest's port.** [`CatalogIngestPort`] fetches
+//!    the content recipe (e.g. `gutenberg-work`) from the registry,
+//!    patches its `corpus.id` (`<catalog>-<work_id>`),
+//!    `corpus.parent_corpus_id`, and the acquire URL (substituting `{id}`
+//!    in the catalog template), and ingests it inline. The on-demand
+//!    guard in `ingest()` requires that entry point — a direct
 //!    `Builtin("gutenberg-work")` ingest is refused.
+//! 3. **Fold.** With a shared `target_corpus_id` the port appends the
+//!    staging corpus into it and removes the staging dir.
 //! 4. **Enrich (optional).** If [`CatalogIngestRequest::enrich`] is
 //!    set, fire `sovereign-cli enrich build <new_corpus_id>` via
 //!    [`crate::enrich::run_enrich_build`] and stream its
@@ -35,12 +35,12 @@
 
 use std::sync::Arc;
 
-use corpus_engine::progress::IngestProgress;
-use corpus_engine::recipe::Recipe;
-use corpus_engine::types::CorpusSpec;
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::{
+    CatalogIngestPort, CatalogWork, CatalogWorkError, ProgressCallback,
+};
 use corpus_index::types::CorpusKind;
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::daemon_wire::IngestProgress;
 use understanding_vocab::atoms::{AtomEnvelope, AtomType};
 use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges};
 use understanding_vocab::taxonomy::EntityType;
@@ -197,7 +197,7 @@ pub type CatalogIngestResult<T> = std::result::Result<T, CatalogIngestError>;
 /// Drive the on-demand single-work catalog ingest. Returns the
 /// per-work corpus id on success.
 pub async fn run_catalog_ingest(
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn CatalogIngestPort>,
     request: CatalogIngestRequest,
 ) -> CatalogIngestResult<String> {
     let CatalogIngestRequest {
@@ -236,21 +236,16 @@ pub async fn run_catalog_ingest(
     }
 
     // ── Step 2: load the catalog recipe + its [catalog] block. ──
-    let catalog_recipe = engine
-        .registry()
-        .fetch_recipe(&catalog_corpus_id)
+    let catalog_cfg = engine
+        .catalog_config(&catalog_corpus_id)
         .await
         .map_err(|source| CatalogIngestError::ContentRecipeLoad {
             content_recipe: catalog_corpus_id.clone(),
             source,
+        })?
+        .ok_or_else(|| CatalogIngestError::MissingCatalogConfig {
+            catalog_corpus_id: catalog_corpus_id.clone(),
         })?;
-    let catalog_cfg =
-        catalog_recipe
-            .catalog
-            .clone()
-            .ok_or_else(|| CatalogIngestError::MissingCatalogConfig {
-                catalog_corpus_id: catalog_corpus_id.clone(),
-            })?;
 
     // ── Step 3: FTS-lookup the work in the catalog index. ──────
     //
@@ -259,7 +254,7 @@ pub async fn run_catalog_ingest(
     // chunk content as `Gutenberg ID: <id>`. Fall back to a plain
     // text search if FTS isn't built (small catalogs use a flat
     // scan).
-    let title_for_event = lookup_work_title(&engine, catalog_info, &work_id)
+    let title_for_event = lookup_work_title(engine.as_ref(), catalog_info, &work_id)
         .await
         .ok_or_else(|| CatalogIngestError::WorkNotFound {
             catalog_corpus_id: catalog_corpus_id.clone(),
@@ -295,136 +290,36 @@ pub async fn run_catalog_ingest(
         new_corpus_id: final_corpus_id.clone(),
     });
 
-    // ── Step 4: load + patch the content recipe. ────────
-    let mut content_recipe = engine
-        .registry()
-        .fetch_recipe(&catalog_cfg.content_recipe)
-        .await
-        .map_err(|source| CatalogIngestError::ContentRecipeLoad {
-            content_recipe: catalog_cfg.content_recipe.clone(),
-            source,
-        })?;
-    patch_content_recipe(
-        &mut content_recipe,
-        &staging_corpus_id,
-        &catalog_corpus_id,
-        &download_url,
-    );
-
-    // ── Step 5: ingest. ─────────────────────────────────
-    let ingest_progress: Option<corpus_engine::progress::ProgressCallback> =
-        progress
-            .as_ref()
-            .map(|outer| -> corpus_engine::progress::ProgressCallback {
-                let outer = outer.clone();
-                Box::new(move |ev: IngestProgress| {
-                    outer(CatalogIngestEvent::Ingest(ev));
-                })
-            });
-    // Respect a content recipe's explicit retrieval-only opt-out
-    // (`[enrichment] enabled = false`): skip the structural-atlas hook below.
-    // Computed before `content_recipe` is moved into the CorpusSpec.
-    let catalog_content_opts_out_of_auto_enrichment = content_recipe.opts_out_of_auto_enrichment();
-    let mut ingest_result = engine
-        .ingest(
-            &CorpusSpec::Inline(Box::new(content_recipe)),
-            ingest_progress,
-        )
-        .await
-        .map_err(|source| CatalogIngestError::Ingest { source })?;
-
-    // ── Step 5a: shared-target append. ──────────────────
+    // ── Steps 4-5a: ingest the work through ingest's port. ─────
     //
-    // When `[catalog].target_corpus_id` is set, fold the staging
-    // corpus into the shared canonical (e.g. fetched articles all
-    // land in `wikipedia-fetched`). This keeps installed_indexes()
-    // bounded — one shared corpus instead of one per fetched
-    // article — and lets a future structural-atlas / mesh-share
-    // pass operate on the union, not N tiny per-work corpora.
-    if use_shared_target {
-        let indexes_dir = engine.index_dir().to_path_buf();
-        let staging_path = indexes_dir.join(&staging_corpus_id);
-        let canonical_path = indexes_dir.join(&final_corpus_id);
-        // Resolve embedding model + dim from the staging corpus
-        // we just wrote — those are the only authoritative source.
-        let staging_index = engine
-            .open_index(&staging_path)
-            .await
-            .map_err(|source| CatalogIngestError::Ingest { source })?;
-        let staging_info = staging_index
-            .info()
-            .await
-            .map_err(|source| CatalogIngestError::Ingest { source })?;
-        drop(staging_index); // release the lance handle before mutating the dir
-        let report = corpus_engine::append_partition_to_canonical(
-            &staging_path,
-            &canonical_path,
-            &final_corpus_id,
-            &staging_info.corpus_name,
-            &staging_info.embedding_model,
-            staging_info.embedding_dimensions,
-            staging_info.mesh_sharing,
-        )
+    // The port loads and patches the content recipe, ingests it, and
+    // — when `[catalog].target_corpus_id` is set — folds the staging
+    // corpus into the shared canonical and removes it.
+    let ingest_progress: Option<ProgressCallback> =
+        progress.as_ref().map(|outer| -> ProgressCallback {
+            let outer = outer.clone();
+            Box::new(move |ev: IngestProgress| {
+                outer(CatalogIngestEvent::Ingest(ev));
+            })
+        });
+    let work = CatalogWork {
+        content_recipe: catalog_cfg.content_recipe.clone(),
+        catalog_corpus_id: catalog_corpus_id.clone(),
+        download_url: download_url.clone(),
+        staging_corpus_id: staging_corpus_id.clone(),
+        shared_target: use_shared_target.then(|| final_corpus_id.clone()),
+    };
+    let ingested = engine
+        .ingest_catalog_work(&work, ingest_progress)
         .await
-        .map_err(|source| CatalogIngestError::Ingest { source })?;
-        tracing::info!(
-            staging = %staging_corpus_id,
-            canonical = %final_corpus_id,
-            inserted = report.chunks_inserted,
-            deduped = report.chunks_deduped,
-            canonical_after = report.canonical_chunks_after,
-            "catalog_ingest: appended staging into shared canonical"
-        );
-        // Finalise the canonical so retrieval treats it like any
-        // other installed corpus:
-        //   - stamp kind=Knowledge + parent_corpus_id (catalog hint),
-        //   - rebuild vector + FTS so the freshly-appended chunks
-        //     are searchable across both retrieval paths,
-        //   - mark ingestion complete so installed_indexes() lists it.
-        // Without these, `chat inspect` / OICP retrieval skip the
-        // dir as "in-progress" and the corpus is invisible.
-        if let Ok(canon) = corpus_index::index::CorpusIndex::open(&canonical_path).await {
-            // Inherit the parent_corpus_id from the patched content
-            // recipe (e.g. wikipedia-article sets parent="wikipedia"
-            // so fetched articles surface alongside the curated L5).
-            let parent = catalog_corpus_id.clone();
-            if let Err(e) = canon.set_kind_and_parent(
-                Some(corpus_index::types::CorpusKind::Knowledge),
-                Some(&parent),
-            ) {
-                tracing::warn!(
-                    canonical = %final_corpus_id,
-                    error = %e,
-                    "catalog_ingest: set_kind_and_parent failed (non-fatal)"
-                );
-            }
-            if let Err(e) = canon.build_indexes(true, true, None).await {
-                tracing::warn!(
-                    canonical = %final_corpus_id,
-                    error = %e,
-                    "catalog_ingest: build_indexes after append failed (non-fatal)"
-                );
-            }
-            if let Err(e) = canon.mark_ingestion_complete() {
-                tracing::warn!(
-                    canonical = %final_corpus_id,
-                    error = %e,
-                    "catalog_ingest: mark_ingestion_complete failed (non-fatal)"
-                );
-            }
-        }
-        // Delete the staging corpus dir — it's served its purpose.
-        if let Err(e) = std::fs::remove_dir_all(&staging_path) {
-            tracing::warn!(
-                staging = %staging_corpus_id,
-                error = %e,
-                "catalog_ingest: staging cleanup failed (non-fatal)"
-            );
-        }
-        // Surface the post-append count to the caller as the
-        // chunks_created result (more useful than the staging count).
-        ingest_result.chunks_created = report.chunks_inserted;
-    }
+        .map_err(|e| match e {
+            CatalogWorkError::ContentRecipeLoad(source) => CatalogIngestError::ContentRecipeLoad {
+                content_recipe: catalog_cfg.content_recipe.clone(),
+                source,
+            },
+            CatalogWorkError::Ingest(source) => CatalogIngestError::Ingest { source },
+        })?;
+    let catalog_content_opts_out_of_auto_enrichment = ingested.opts_out_of_auto_enrichment;
 
     // Cooperative cancellation between ingest and enrich:
     // if the caller flipped the flag during ingest, skip
@@ -519,7 +414,7 @@ pub async fn run_catalog_ingest(
         }
         // Best-effort summary read. Tolerate a missing atoms.json
         // (e.g. enrichment skipped phases that produce atoms).
-        atlas_summary = read_atlas_summary(&engine, &final_corpus_id).await;
+        atlas_summary = read_atlas_summary(engine.as_ref(), &final_corpus_id).await;
     }
 
     // ── Step 7: one-hop "minesweeper" expansion. ─────────
@@ -540,20 +435,24 @@ pub async fn run_catalog_ingest(
     // The recursive expansion call sets `expand_links = false` so
     // we never run more than one hop deep automatically.
     if expand_links && catalog_cfg.expansion_enabled && catalog_cfg.target_corpus_id.is_some() {
-        let neighbours =
-            match collect_expansion_neighbours(&engine, &catalog_cfg, &final_corpus_id, &work_id)
-                .await
-            {
-                Ok(list) => list,
-                Err(e) => {
-                    tracing::warn!(
-                        primary = %work_id,
-                        error = %e,
-                        "catalog_ingest: link-expansion enumeration failed (non-fatal)"
-                    );
-                    Vec::new()
-                }
-            };
+        let neighbours = match collect_expansion_neighbours(
+            engine.as_ref(),
+            &catalog_cfg,
+            &final_corpus_id,
+            &work_id,
+        )
+        .await
+        {
+            Ok(list) => list,
+            Err(e) => {
+                tracing::warn!(
+                    primary = %work_id,
+                    error = %e,
+                    "catalog_ingest: link-expansion enumeration failed (non-fatal)"
+                );
+                Vec::new()
+            }
+        };
         if !neighbours.is_empty() {
             tracing::info!(
                 primary = %work_id,
@@ -566,7 +465,7 @@ pub async fn run_catalog_ingest(
 
     emit(CatalogIngestEvent::Complete {
         new_corpus_id: final_corpus_id.clone(),
-        chunks_created: ingest_result.chunks_created,
+        chunks_created: ingested.chunks_created,
         atlas_summary,
     });
 
@@ -580,8 +479,8 @@ pub async fn run_catalog_ingest(
 /// response is the authoritative `outgoing_links` source — the
 /// extractor's chunk metadata is downstream of it.
 async fn collect_expansion_neighbours(
-    engine: &CorpusEngine,
-    catalog_cfg: &corpus_engine::recipe::CatalogConfig,
+    engine: &dyn CatalogIngestPort,
+    catalog_cfg: &corpus_index::recipe::CatalogConfig,
     target_corpus_id: &str,
     work_id: &str,
 ) -> Result<Vec<String>, String> {
@@ -698,7 +597,7 @@ async fn collect_expansion_neighbours(
 /// hammer the Action API. Each inner call sets `expand_links =
 /// false` so the expansion never recurses past one hop.
 fn spawn_minesweeper_queue(
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn CatalogIngestPort>,
     catalog_corpus_id: String,
     neighbours: Vec<String>,
 ) {
@@ -743,48 +642,11 @@ fn spawn_minesweeper_queue(
     });
 }
 
-/// Patch a content recipe in place with the on-demand override
-/// fields. Pure for testability — no IO, no engine calls.
-///
-/// `parent_corpus_id` is the catalog corpus by default. The recipe
-/// itself may pre-declare a different parent (e.g. `wikipedia-article`
-/// sets `parent_corpus_id = "wikipedia"` so fetched Wikipedia
-/// articles surface under the user's existing Wikipedia corpus
-/// rather than under `wikipedia-catalog`); when the recipe has a
-/// non-empty `parent_corpus_id` we keep it.
-pub(crate) fn patch_content_recipe(
-    recipe: &mut Recipe,
-    new_corpus_id: &str,
-    parent_corpus_id: &str,
-    download_url: &str,
-) {
-    recipe.corpus.id = new_corpus_id.to_string();
-    if recipe
-        .corpus
-        .parent_corpus_id
-        .as_deref()
-        .unwrap_or("")
-        .is_empty()
-    {
-        recipe.corpus.parent_corpus_id = Some(parent_corpus_id.to_string());
-    }
-    // The on-demand guard in `ingest()` only relaxes when the recipe
-    // is handed via CorpusSpec::Inline — leave `on_demand` set so a
-    // future direct ingest of the *patched* recipe (saved to disk)
-    // would still be refused.
-    if let corpus_engine::recipe::AcquirerConfig::BulkDownload { url, urls, .. } =
-        &mut recipe.acquire
-    {
-        *url = Some(download_url.to_string());
-        *urls = None;
-    }
-}
-
 /// Look up a work's title in the catalog index by FTS matching the
 /// `Gutenberg ID: <id>` line we stamped at extraction time. Returns
 /// the matched chunk's title, or `None` if the work isn't present.
 async fn lookup_work_title(
-    engine: &CorpusEngine,
+    engine: &dyn CatalogIngestPort,
     catalog_info: &corpus_index::types::IndexInfo,
     work_id: &str,
 ) -> Option<String> {
@@ -807,7 +669,10 @@ async fn lookup_work_title(
 /// Best-effort atlas summary read. Returns `None` if the atlas
 /// directory isn't there yet (legitimate when enrichment was
 /// skipped) or if the JSON files don't deserialize cleanly.
-async fn read_atlas_summary(engine: &CorpusEngine, corpus_id: &str) -> Option<AtlasSummary> {
+async fn read_atlas_summary(
+    engine: &dyn CatalogIngestPort,
+    corpus_id: &str,
+) -> Option<AtlasSummary> {
     let info = engine
         .installed_indexes()
         .await
@@ -849,98 +714,6 @@ async fn read_atlas_summary(engine: &CorpusEngine, corpus_id: &str) -> Option<At
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::recipe::{
-        AcquirerConfig, ChunkerConfig, CorpusMeta, ExtractorConfig, IndexConfig,
-    };
-
-    fn fake_content_recipe() -> Recipe {
-        Recipe {
-            corpus: CorpusMeta {
-                id: "gutenberg-work".into(),
-                name: "Gutenberg Work".into(),
-                description: String::new(),
-                license: "Public Domain".into(),
-                mesh_sharing: true,
-                scope: None,
-                query_sharing: None,
-                grantable: false,
-                size_compressed_gb: 0.0,
-                size_indexed_gb: 0.0,
-                schema_version: 1,
-                kind: corpus_index::types::CorpusKind::Knowledge,
-                on_demand: true,
-                parent_corpus_id: None,
-                mutable_merge: None,
-            },
-            acquire: AcquirerConfig::BulkDownload {
-                url: Some("https://example.com/PLACEHOLDER".into()),
-                urls: None,
-                resume: true,
-            },
-            extract: ExtractorConfig::Plaintext {
-                title_pattern: None,
-                strip_boilerplate: None,
-            },
-            chunk: ChunkerConfig::Sentence { max_chars: 2048 },
-            index: IndexConfig::default(),
-            authority: None,
-            enrichment: None,
-            update: None,
-            prebuilt: None,
-            catalog: None,
-            filters: Vec::new(),
-            filter_mode: Default::default(),
-            parameters: Default::default(),
-            resolved_parameters: Default::default(),
-            display: None,
-            retrieval: Default::default(),
-        }
-    }
-
-    #[test]
-    fn patch_content_recipe_overrides_id_url_and_parent() {
-        let mut r = fake_content_recipe();
-        patch_content_recipe(
-            &mut r,
-            "gutenberg-2701",
-            "gutenberg",
-            "https://www.gutenberg.org/cache/epub/2701/pg2701.txt",
-        );
-        assert_eq!(r.corpus.id, "gutenberg-2701");
-        assert_eq!(r.corpus.parent_corpus_id.as_deref(), Some("gutenberg"));
-        assert!(r.corpus.on_demand, "on_demand stays true so a future direct ingest of this patched recipe would still be refused");
-        match r.acquire {
-            AcquirerConfig::BulkDownload { url, urls, .. } => {
-                assert_eq!(
-                    url.as_deref(),
-                    Some("https://www.gutenberg.org/cache/epub/2701/pg2701.txt")
-                );
-                assert!(urls.is_none());
-            }
-            other => panic!("expected BulkDownload, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn patch_respects_recipe_declared_parent() {
-        // The wikipedia-article recipe pre-declares
-        // `parent_corpus_id = "wikipedia"` so fetched articles
-        // surface under the user's existing Wikipedia corpus
-        // rather than the catalog id (`wikipedia-catalog`).
-        let mut r = fake_content_recipe();
-        r.corpus.parent_corpus_id = Some("wikipedia".into());
-        patch_content_recipe(
-            &mut r,
-            "wikipedia-catalog-Roman_Empire",
-            "wikipedia-catalog", // catalog id — would be the default
-            "https://en.wikipedia.org/w/api.php?action=parse&page=Roman_Empire&redirects=1",
-        );
-        assert_eq!(
-            r.corpus.parent_corpus_id.as_deref(),
-            Some("wikipedia"),
-            "recipe-declared parent should win over the catalog default"
-        );
-    }
 
     #[test]
     fn per_work_corpus_id_is_stable() {

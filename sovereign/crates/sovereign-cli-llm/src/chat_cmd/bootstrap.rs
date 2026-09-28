@@ -332,7 +332,7 @@ async fn build_session_scoped(
                     },
                 );
                 b.push(Box::new(sovereign_tools::bundles::WikipediaTools::new(
-                    Arc::clone(&corpus_engine),
+                    Arc::clone(&corpus_engine) as _,
                 )));
                 b.push(Box::new(sovereign_tools::bundles::ShellTools));
                 b

@@ -106,7 +106,7 @@ impl KnowledgeTool {
                 let mut catalog_configs: HashMap<String, CatalogConfig> = HashMap::new();
                 for info in &indexes {
                     if info.kind == CorpusKind::Catalog {
-                        if let Some(cat) = engine.catalog_config(&info.corpus_id).await {
+                        if let Ok(Some(cat)) = engine.catalog_config(&info.corpus_id).await {
                             catalog_configs.insert(info.corpus_id.clone(), cat);
                         }
                     }

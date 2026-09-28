@@ -624,8 +624,7 @@ pub(super) async fn run_daemon(
     //     2026-09-18, and no daemon-served turn fanned out to a peer.
     // The turn path and the baseline bundles name the PORT, not the store's
     // crate — one coercion here is the whole seam.
-    let notes_port: Arc<dyn sovereign_contracts::notes::AgentNotes> =
-        state_store_concrete.clone();
+    let notes_port: Arc<dyn sovereign_contracts::notes::AgentNotes> = state_store_concrete.clone();
     let common = sovereign_runtime_recipe::common_parts(
         sovereign_runtime_recipe::RecipeInputs {
             inference: Arc::clone(&routed_provider),
@@ -675,7 +674,7 @@ pub(super) async fn run_daemon(
                     },
                 );
                 b.push(Box::new(sovereign_tools::bundles::WikipediaTools::new(
-                    Arc::clone(&engine),
+                    Arc::clone(&engine) as _,
                 )));
                 // Recipe-authoring, the desktop's twin (rung 6 commit B): the
                 // same bundle the desktop's bootstrap pushes, wired with the

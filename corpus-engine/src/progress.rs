@@ -127,8 +127,6 @@ pub enum ReconstructionMethod {
 /// `corpus_engine::IngestProgress` path is unchanged.
 pub use sovereign_contracts::daemon_wire::IngestProgress;
 
-/// Thread-safe progress callback. Must be `Sync` because the engine's
-/// async pipeline holds an `&Option<ProgressCallback>` across `.await`
-/// points, which requires the callback itself to be safe to share by
-/// reference between tasks.
-pub type ProgressCallback = Box<dyn Fn(IngestProgress) + Send + Sync>;
+/// Thread-safe progress callback, defined beside ingest's ports in the
+/// `corpus-index` leaf so a caller that holds only a port can build one.
+pub use corpus_index::ingest_port::ProgressCallback; // shim: moved by pb-ingest-dial-tools

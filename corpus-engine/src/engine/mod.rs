@@ -4,6 +4,7 @@
 
 pub mod article_stats;
 mod cancel;
+mod catalog_work;
 mod expand;
 mod ingest;
 mod ingest_factories;
@@ -3707,13 +3708,10 @@ impl corpus_index::source::CorpusReadPort for CorpusEngine {
         CorpusEngine::recipes_dir(self)
     }
 
-    async fn catalog_config(&self, corpus_id: &str) -> Option<crate::recipe::CatalogConfig> {
-        match self.registry().fetch_recipe(corpus_id).await {
-            Ok(recipe) => recipe.catalog,
-            Err(e) => {
-                tracing::debug!(corpus_id, error = %e, "catalog_config: recipe did not resolve");
-                None
-            }
-        }
+    async fn catalog_config(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<crate::recipe::CatalogConfig>> {
+        Ok(self.registry().fetch_recipe(corpus_id).await?.catalog)
     }
 }

@@ -181,7 +181,7 @@ async fn cmd_simulate(args: &[String]) -> i32 {
         // the user sees a single deterministic ingest.
         expand_links: false,
     };
-    match run_catalog_ingest(engine, req).await {
+    match run_catalog_ingest(engine as _, req).await {
         Ok(corpus_id) => {
             println!();
             println!("✓ Ingested → corpus_id = {corpus_id}");

@@ -217,15 +217,15 @@ impl ToolBundle for WebTools {
 /// articles out of that corpus and has no reason to fetch them over the
 /// network, while still wanting `web_fetch` for urls a user pastes.
 ///
-/// The corpus engine backs the local cache lookup this makes before it reaches
+/// Ingest's catalog port backs the catalog lookup this makes before it reaches
 /// the network.
 pub struct WikipediaTools {
-    corpus_engine: Arc<corpus_engine::CorpusEngine>,
+    corpus_engine: Arc<dyn corpus_index::ingest_port::CatalogIngestPort>,
 }
 
 impl WikipediaTools {
-    /// Build the family.
-    pub fn new(corpus_engine: Arc<corpus_engine::CorpusEngine>) -> Self {
+    /// Build the family over ingest's catalog port.
+    pub fn new(corpus_engine: Arc<dyn corpus_index::ingest_port::CatalogIngestPort>) -> Self {
         Self { corpus_engine }
     }
 }

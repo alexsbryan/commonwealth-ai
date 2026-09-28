@@ -27,7 +27,8 @@ pub async fn build_tool_registry(
     // (e.g. sf-assessor-roll) — pre-cited figures for the "no
     // confabulated numbers" demo. Read-only; safe on the MCP surface.
     tools.register(Box::new(
-        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&engine) as _).declared(),
+        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&engine) as _)
+            .declared(),
     ));
     // Typed SEC-filing figures with basis + accession, or first-class
     // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
@@ -42,7 +43,7 @@ pub async fn build_tool_registry(
     // wikipedia_fetch --title=…` and the MCP /mcp surface can drive
     // catalog-hit → fetch end-to-end without a live chat session.
     tools.register(Box::new(
-        sovereign_tools::WikipediaFetchTool::new(Arc::clone(&engine)).declared(),
+        sovereign_tools::WikipediaFetchTool::new(Arc::clone(&engine) as _).declared(),
     ));
 
     // B:P9d — the corpus/atlas plane (corpus_store, corpus_search, atlas_gaps,
