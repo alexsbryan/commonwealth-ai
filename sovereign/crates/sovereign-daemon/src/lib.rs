@@ -134,7 +134,9 @@ pub mod slot_manifest;
 pub mod solve_http;
 pub mod solve_tools;
 pub mod startup;
-pub mod supervise;
+/// Moved whole to the host kit (phase-b pb-notes-memory): the code program's
+/// notes rail runs under it too. Reachable at its historical path.
+pub use host_kit::supervise;
 /// The panic-boundary supervisor every long-running watcher runs under
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod supervised_task;

@@ -23,6 +23,10 @@ shell = ["dep:axum", "dep:serde_json", "dep:tokio", "dep:tower-http", "dep:traci
 # MCP's HTTP+SSE framing and the notifier behind `GET /mcp` (phase-b
 # pb-code-server): the dispatcher's second framing, beside stdio.
 http = ["mcp", "dep:axum", "dep:futures", "dep:tokio-stream"]
+# Panic-restart supervision of a program's own background tasks (phase-b
+# pb-notes-memory): moved whole from sovereign-daemon, whose notes rail moved
+# to the code program and runs under the same supervisor there.
+task = ["dep:tokio", "dep:tracing"]
 
 [dependencies]
 axum = { workspace = true, optional = true }
@@ -39,6 +43,7 @@ if-addrs = "0.13"
 reqwest = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "macros"] }
 
 [lints]
 workspace = true
