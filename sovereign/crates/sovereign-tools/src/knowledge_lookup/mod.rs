@@ -123,6 +123,11 @@ pub struct KnowledgeLookupResponse {
     pub query: String,
     pub evidence: Vec<Evidence>,
     pub by_kind_counts: KindCounts,
+    /// Channels that could not be read this call, each with why — so a
+    /// failed read is not mistaken for a channel that had nothing
+    /// (principle 6). Absent when every channel answered.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unavailable: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -164,6 +169,10 @@ pub const TOOL_DESCRIPTION: &str = include_str!("assets/tool_description.md");
 const CORPUS_LIMIT_DEFAULT: usize = 8;
 const MEMORY_LIMIT_DEFAULT: usize = 4;
 const NOTE_LIMIT_DEFAULT: usize = 4;
+/// The note kinds that are evidence about the user's world: what they said
+/// they would do. Lessons are standing instructions and `tool_decision` rows
+/// are the dossier's telemetry; neither answers a question (pb-notes-memory).
+const NOTE_EVIDENCE_KINDS: [&str; 2] = ["commitment", "todo"];
 /// Hard cap on the returned envelope size. Big-K calls bloat the
 /// model's context and rarely improve answer quality — the model
 /// uses the top 3-5 rows in practice.
@@ -291,15 +300,25 @@ impl KnowledgeLookupTool {
             .collect()
     }
 
-    async fn note_evidence(&self, query: &str, limit: usize) -> Vec<Evidence> {
+    /// `Err` names why the notes channel could not be read.
+    async fn note_evidence(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> std::result::Result<Vec<Evidence>, String> {
         let Some(notes) = &self.notes else {
-            return Vec::new();
+            return Ok(Vec::new());
         };
+        let kinds: Vec<String> = NOTE_EVIDENCE_KINDS.iter().map(|k| k.to_string()).collect();
         let rows = notes
-            .read_notes(Some(query), &[], &[], &[], limit, false)
+            .read_notes(Some(query), &[], &[], &kinds, limit, false)
             .await
-            .unwrap_or_default();
-        rows.into_iter()
+            .map_err(|e| {
+                tracing::warn!(error = %e, "knowledge_lookup: the notes channel could not be read");
+                format!("note: the notes store could not be read ({e})")
+            })?;
+        Ok(rows
+            .into_iter()
             .map(|row| {
                 let title = format!("{} note", row.kind);
                 Evidence {
@@ -316,7 +335,7 @@ impl KnowledgeLookupTool {
                     retrieval_context: format!("note (kind={})", row.kind),
                 }
             })
-            .collect()
+            .collect())
     }
 
     /// Tier 3 web-escalation helper. Called from `execute()` when
@@ -472,10 +491,14 @@ impl KnowledgeLookupTool {
                 if want_note {
                     self.note_evidence(&query, NOTE_LIMIT_DEFAULT).await
                 } else {
-                    Vec::new()
+                    Ok(Vec::new())
                 }
             }
         );
+        let (note_rows, unavailable) = match note_rows {
+            Ok(rows) => (rows, Vec::new()),
+            Err(why) => (Vec::new(), vec![why]),
+        };
 
         // Capture channel counts before consuming the vecs into
         // the merge — needed for the `KindCounts` aggregate below
@@ -554,6 +577,7 @@ impl KnowledgeLookupTool {
             query,
             evidence: merged,
             by_kind_counts: counts,
+            unavailable,
         };
 
         let value = serde_json::to_value(&response)
@@ -754,5 +778,82 @@ mod tests {
         assert_eq!(parsed.by_kind_counts.corpus, 0);
         assert_eq!(parsed.by_kind_counts.memory, 0);
         assert_eq!(parsed.by_kind_counts.note, 0);
+    }
+
+    fn ctx() -> sovereign_core::types::ToolContext {
+        sovereign_core::types::ToolContext {
+            conversation_id: "test".into(),
+            ..Default::default()
+        }
+    }
+
+    async fn lookup(tool: &KnowledgeLookupTool, query: &str) -> KnowledgeLookupResponse {
+        let out = tool
+            .run(&serde_json::json!({ "query": query, "kinds": ["note"] }), &ctx())
+            .await
+            .unwrap();
+        let StepOutput::Json(value) = out else {
+            panic!("expected JSON output, got {out:?}");
+        };
+        serde_json::from_value(value).unwrap()
+    }
+
+    /// svrn's store holds lessons and the tool_decision dossier beside the
+    /// commitments; only what the user said they would do is evidence
+    /// (pb-notes-memory).
+    #[tokio::test]
+    async fn only_commitments_and_todos_are_note_evidence() {
+        use sovereign_core::recipe::notes::{NoteScope, NoteSource, RecipeNotes};
+        let dir = tempfile::tempdir().unwrap();
+        let notes = Arc::new(
+            sovereign_store::sqlite::SqliteStateStore::open(&dir.path().join("sovereign.db"))
+                .unwrap(),
+        );
+        for kind in ["lesson", "tool_decision", "commitment", "todo"] {
+            notes
+                .write_note_full(
+                    kind,
+                    &format!("the quarterly budget review ({kind})"),
+                    vec![],
+                    vec![],
+                    "s",
+                    NoteScope::Session,
+                    None,
+                    None,
+                    NoteSource::Agent,
+                    None,
+                    None,
+                )
+                .await
+                .unwrap();
+        }
+        let tool = mock_tool().with_notes(notes);
+        let got = lookup(&tool, "quarterly budget review").await;
+        let mut kinds: Vec<String> = got
+            .evidence
+            .iter()
+            .map(|e| e.retrieval_context.clone())
+            .collect();
+        kinds.sort();
+        assert_eq!(kinds, ["note (kind=commitment)", "note (kind=todo)"]);
+        assert!(got.unavailable.is_empty());
+    }
+
+    /// A notes channel that cannot be read is named in the envelope, not
+    /// returned as "no notes".
+    #[tokio::test]
+    async fn an_unreadable_notes_channel_is_named_not_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sovereign.db");
+        let notes = Arc::new(sovereign_store::sqlite::SqliteStateStore::open(&path).unwrap());
+        rusqlite::Connection::open(&path)
+            .unwrap()
+            .execute_batch("DROP TABLE memory_notes;")
+            .unwrap();
+        let tool = mock_tool().with_notes(notes);
+        let got = lookup(&tool, "quarterly budget review").await;
+        assert_eq!(got.by_kind_counts.note, 0);
+        assert_eq!(got.unavailable.len(), 1, "{:?}", got.unavailable);
+        assert!(got.unavailable[0].starts_with("note:"), "{:?}", got.unavailable);
     }
 }
