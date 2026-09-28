@@ -1066,6 +1066,7 @@ impl AppState {
                     // default 60) before AppState is shared.
                     yield_window_secs: std::sync::atomic::AtomicU64::new(0),
                     foreground_inflight: std::sync::atomic::AtomicUsize::new(0),
+                    foreground_changed: tokio::sync::Notify::new(),
                     // 0 = unlimited (no clamp). The desktop overwrites
                     // this at boot with either the persisted user choice
                     // or a computed default; CLI/standalone daemons leave
@@ -1474,6 +1475,7 @@ impl AppState {
             .node
             .foreground_inflight
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.inner.node.foreground_changed.notify_one();
     }
 
     /// A turn ended; the yield window counts from here.
@@ -1484,6 +1486,7 @@ impl AppState {
             |n| Some(n.saturating_sub(1)),
         );
         self.bump_foreground_active();
+        self.inner.node.foreground_changed.notify_one();
     }
 
     pub fn foreground_inflight(&self) -> usize {

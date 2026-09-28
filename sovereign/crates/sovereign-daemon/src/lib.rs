@@ -82,11 +82,12 @@ pub mod discovery_policy;
 pub mod documents_http;
 pub mod enrich_http;
 pub mod features_http;
+/// The `ingest:v1` `JobExecutor` — one corpus partition per unit
+/// (DAEMON_CORE.md §3.2, `jobs`).
+pub mod foreground_post;
 pub mod governance_http;
 pub mod guest_door;
 pub mod http_response;
-/// The `ingest:v1` `JobExecutor` — one corpus partition per unit
-/// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod ingest_executor;
 /// The daemon's insight surface (sv-surface rung 6): clip/list/search/delete
 /// over the `InsightService` the commissioning host built.

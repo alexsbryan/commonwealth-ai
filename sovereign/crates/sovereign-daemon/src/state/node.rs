@@ -233,6 +233,9 @@ pub struct NodePart {
     /// the entire turn regardless of the window; the window only governs
     /// the quiet after the last turn ends.
     pub foreground_inflight: std::sync::atomic::AtomicUsize,
+    /// Fired when a turn begins or ends, so the foreground deadline reaches
+    /// cw-rails' donor at once (`crate::foreground_post`, pb-work-donor).
+    pub foreground_changed: tokio::sync::Notify,
     /// User-set ceiling on how much disk Sovereign is allowed to use
     /// for corpus storage (sum of `~/.svrnmesh/indexes/*`). Encoded
     /// as bytes; `0` is the sentinel for "no budget — use whatever

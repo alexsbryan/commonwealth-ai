@@ -190,6 +190,18 @@ pub async fn renew_origin(base: &str, claim_id: &str, ttl_secs: u64) -> Result<(
     Ok(())
 }
 
+/// Publish this daemon's foreground deadline to cw-rails' donor
+/// (`POST /v1/work/yield`, pb-work-donor).
+pub async fn post_work_yield(base: &str, until_ms: u64) -> Result<(), RailsDial> {
+    let _: serde_json::Value = post_answer(
+        base,
+        "/v1/work/yield",
+        &serde_json::json!({ "until_ms": until_ms }),
+    )
+    .await?;
+    Ok(())
+}
+
 /// Retire one member row, on the process that owns the roster.
 pub async fn forget_member(
     base: &str,

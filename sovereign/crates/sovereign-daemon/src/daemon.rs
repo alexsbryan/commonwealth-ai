@@ -388,6 +388,8 @@ enum DaemonState {
         /// cw-rails on Drop (pb-work-donor). `None` on a local-only daemon and
         /// on a node with no corpus engine.
         _work_origin_handle: Option<crate::work_origin::WorkOriginHandle>,
+        /// Stops posting the foreground deadline to cw-rails on Drop.
+        _foreground_post_handle: crate::foreground_post::ForegroundPostHandle,
         /// The network posture this boot resolved, and what it produced.
         /// Read by [`EmbeddedDaemon::running_services`] — the boot
         /// assertion's instrument (ARCH §18.1).
@@ -3354,6 +3356,12 @@ impl EmbeddedDaemon {
             ));
             info!("foreground-yield: turn lease installed on corpus engine");
         }
+        // The same window, published to cw-rails' donor, which yields to it
+        // (pb-work-donor). With the window 0 nothing is posted.
+        let foreground_post_handle = crate::foreground_post::spawn(
+            app_state.clone(),
+            crate::rails_client::resolve_rails_base(&self.setup_config.read().await.daemon),
+        );
 
         // Bound peer-inference admission for headless contributors. The desktop
         // sets this from the GPU-share consent; a CLI daemon would otherwise
@@ -4635,6 +4643,7 @@ impl EmbeddedDaemon {
             _rail_kv_pump_handle: rail_kv_pump_handle,
             _work_donor_handle: work_donor_handle,
             _work_origin_handle: work_origin_handle,
+            _foreground_post_handle: foreground_post_handle,
             local_only,
             running_services,
             _shutdown_tx: shutdown_tx,
