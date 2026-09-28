@@ -501,10 +501,16 @@ mod tests {
                 "Cargo.toml",
                 "[workspace]\nmembers = [\"kernel-types\", \"corpus-engine\"]\n",
             ),
-            ("kernel-types/Cargo.toml", "[package]\nname = \"kernel-types\"\n"),
+            (
+                "kernel-types/Cargo.toml",
+                "[package]\nname = \"kernel-types\"\n",
+            ),
             ("kernel-types/src/lib.rs", "pub mod judgement;\n"),
             ("kernel-types/src/judgement.rs", "pub enum Verdict {}\n"),
-            ("corpus-engine/Cargo.toml", "[package]\nname = \"corpus-engine\"\n"),
+            (
+                "corpus-engine/Cargo.toml",
+                "[package]\nname = \"corpus-engine\"\n",
+            ),
             (
                 "corpus-engine/src/lib.rs",
                 "pub use corpus_index::index::{\n    Evidence,\n};\n",
