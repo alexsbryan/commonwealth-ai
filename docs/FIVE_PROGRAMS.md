@@ -1377,8 +1377,10 @@ VOCABULARY or a thin reader with a one-or-two-crate in-repo budget, never a
 store a program owns on disk. That is why `corpus-engine-notes` was NOT
 promoted even though one row would have closed eight edges. The operator
 admitted `mesh-reach` on 2026-09-27 (phase-b-30) after every existing home
-refused the peer-dial vocabulary; its falsifier is any dependency beyond
-`kernel-types`, iroh and `workspace-hack`.
+refused the peer-dial vocabulary; its falsifier is any WORKSPACE dependency
+beyond `kernel-types` and `workspace-hack` (phase-b-33). Third-party crates
+come behind the feature that needs them, and the guest dialer's iroh endpoint
+machinery is one such feature, `guest` (phase-b-35).
 
 ### Done is three conditions, not one
 
