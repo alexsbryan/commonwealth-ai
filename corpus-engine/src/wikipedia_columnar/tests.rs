@@ -16,7 +16,6 @@ use arrow_array::{RecordBatch, StringArray};
 
 use crate::enrichment::atlas::atoms::AtomType;
 use crate::enrichment::atlas::edges::{EdgeProvenance, EdgeType};
-use crate::enrichment::atlas::evidence_site::EvidenceSite;
 use crate::enrichment::atlas::provider::AtlasProvider;
 use crate::enrichment::atlas::wiki_store::ARTICLES_TABLE;
 

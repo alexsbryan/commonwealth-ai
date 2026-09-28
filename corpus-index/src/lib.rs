@@ -37,6 +37,7 @@ pub mod corpus;
 pub mod embed_fn;
 pub mod embed_http;
 pub mod error;
+pub mod fs_source;
 pub mod filters;
 pub mod host;
 pub mod index;

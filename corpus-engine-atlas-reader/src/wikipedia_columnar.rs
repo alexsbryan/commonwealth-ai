@@ -29,14 +29,14 @@ use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
 use crate::ann_store::AnnSeedTable;
-use understanding_vocab::atoms::{AtomType, ChunkRef};
 use crate::context::{AtomView, EdgeView, EvidenceRef};
-use understanding_vocab::edges::{EdgeProvenance, EdgeType};
 use crate::evidence_site::EvidenceSite;
 use crate::inventory::AtlasInventory;
 use crate::projection::AtomRecord;
 use crate::provider::AtlasProvider;
 use crate::wiki_store::{WikiArticleRow, ARTICLES_TABLE, EDGES_TABLE};
+use understanding_vocab::atoms::{AtomType, ChunkRef};
+use understanding_vocab::edges::{EdgeProvenance, EdgeType};
 use understanding_vocab::ontology::OntologyPolicies;
 
 // The wiki link-graph query surface lives in the reader leaf (fp-62, FIVE_PROGRAMS
@@ -725,8 +725,7 @@ impl WikiAtlasProvider {
         let mut inn: Vec<(u32, u32)> = out.iter().map(|&(s, t)| (t, s)).collect();
         inn.sort_unstable();
 
-        let ontology =
-            crate::raw::read_atlas_ontology(atlas_dir).map(|f| f.policies);
+        let ontology = crate::raw::read_atlas_ontology(atlas_dir).map(|f| f.policies);
         tracing::info!(
             corpus = atlas_corpus_id,
             atoms = atoms.len(),
