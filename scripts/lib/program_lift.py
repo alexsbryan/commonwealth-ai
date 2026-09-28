@@ -392,6 +392,16 @@ class Smoke:
     def do_spawn(self, s):
         self.procs[s["id"]] = self._popen(s, s.get("log", s["id"] + ".log"))
 
+    def do_kill(self, s):
+        """SIGKILL a spawned process's group: a peer lost, not a peer that
+        said goodbye (pb-rails-parity's self-heal proof)."""
+        p = self.procs.get(s["id"])
+        if p is None or p.poll() is not None:
+            self.stop(s, "fail")
+        os.killpg(p.pid, 9)
+        p.wait(timeout=10)
+        say(f"{s['id']}: killed (rc={p.returncode})")
+
     def do_exec(self, s):
         rc = self._popen(s, s["log"]).wait()
         say(f"{' '.join(self.sub(s['argv']))[:90]}: rc={rc}")

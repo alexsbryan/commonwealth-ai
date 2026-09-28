@@ -117,7 +117,7 @@ binary = "debug/cw-rails"
 # relay, no n0 DNS, the two reach each other on direct addresses. It is two
 # processes, so it is not the mesh of one that could pass by having nobody to
 # disagree with.
-pass = "founded '${MESH}', joined it by the founder's invite, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, a GET through ${URL} answered HTTP ${THROUGH}, an act the joiner signed reached the founder through cw-rails' round, relay candidates answered (${RELAY_KIND} recommended); after a rotate the old invite answered ${OLD_JOIN} and the new one admitted a third node to '${JOINED}', which created, switched back to '${SWITCHED}', forgot '${FORGOT}' and left '${LEFT}'"
+pass = "founded '${MESH}', joined it by the founder's invite, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, a GET through ${URL} answered HTTP ${THROUGH}, an act the joiner signed reached the founder through cw-rails' round, relay candidates answered (${RELAY_KIND} recommended); after a rotate the old invite answered ${OLD_JOIN} and the new one admitted a third node to '${JOINED}', which created, switched back to '${SWITCHED}', forgot '${FORGOT}' and left '${LEFT}'; after the joiner was killed the founder rebuilt its endpoint (${REBUILDS} rebuild(s))"
 steps = [
   { do = "input", var = "MESH", value = "cw-rails-lift-mesh" },
   { do = "ports", vars = ["ORIGIN_PORT", "FOUNDER_PORT", "LISTEN_PORT"] },
@@ -128,7 +128,9 @@ steps = [
   { do = "spawn", id = "origin", argv = ["python3", "-m", "http.server", "${ORIGIN_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/library"], log = "origin.log" },
   { do = "write", path = "${SANDBOX}/founder/rails.toml", text = "name = \"cw-rails-founder\"\nlisten = ${FOUNDER_PORT}\n\n[media]\norigin = \"127.0.0.1:${ORIGIN_PORT}\"\n" },
   { do = "exec", argv = ["${BIN}", "found", "${MESH}", "--data-dir", "${SANDBOX}/founder"], log = "found.log", fail = "the lifted binary could not found a mesh (see ${SANDBOX}/found.log)" },
-  { do = "spawn", id = "founder", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/founder"], log = "founder.log", env = { RUST_LOG = "info,commonwealth_rails::ring_sync=debug" } },
+  # The founder's watchdog polls every second with a one-second grace and no
+  # rebuild cooldown, so the self-heal step at the end is seconds past the loss.
+  { do = "spawn", id = "founder", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/founder"], log = "founder.log", env = { RUST_LOG = "info,commonwealth_rails::ring_sync=debug", SOVEREIGN_MESH_WATCHDOG_POLL_SECS = "1", SOVEREIGN_MESH_WATCHDOG_GRACE_SECS = "1", SOVEREIGN_MESH_WATCHDOG_COOLDOWN_SECS = "0" } },
   # The invite is served once the founder's endpoint has an address to name.
   { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/status", path = "join_link", var = "INVITE", doc = "founder", timeout = 60, alive = "founder", fail = "the founder served no join_link within 60s (see ${SANDBOX}/founder.log)" },
   { do = "require", value = "${INVITE}", match = "iroh=", fail = "the founder's invite carries no iroh dial string: ${INVITE}" },
@@ -176,6 +178,18 @@ steps = [
   { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/switch", json = { mesh = "${MESH}" }, path = "switched_to", var = "SWITCHED", fail = "POST /v1/mesh/switch did not resume '${MESH}': ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/forget", json = { mesh = "cw-rails-lift-second" }, path = "forgot", var = "FORGOT", fail = "POST /v1/mesh/forget did not drop the parked mesh: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/leave", json = {}, path = "left", var = "LEFT", fail = "POST /v1/mesh/leave did not leave: ${BODY}" },
+  # The endpoint's self-heal (pb-rails-parity): the joiner is lost, and the
+  # founder's watchdog, having held a path to it, rebuilds its endpoint. iroh
+  # drops a lost peer's path record after its remote actor idles for 60s
+  # (iroh 1.0.2 remote_state.rs:73), which is when the loss is visible; 150s
+  # covers that and the escalation after it.
+  { do = "kill", id = "daemon", fail = "the joiner was not running, so there was no peer to lose" },
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/status", path = "self_reachability.last_recovery[action=endpoint_rebuild].ok", var = "HEALED", timeout = 150, alive = "founder", fail = "the founder's watchdog did not attempt an endpoint rebuild within 150s of losing the joiner (see ${SANDBOX}/founder.log)" },
+  { do = "require", value = "${HEALED}", match = "^True$", fail = "the founder's endpoint rebuild failed (ok=${HEALED}; see ${SANDBOX}/founder.log)" },
+  # The count is published on the watchdog's next poll, healthy again once the
+  # fresh endpoint re-armed the peer-path term.
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/status", path = "self_reachability[degraded=false].rebuilds", var = "REBUILDS", timeout = 10, alive = "founder", fail = "the founder stayed degraded after its rebuild (see ${SANDBOX}/founder.log)" },
+  { do = "require", value = "${REBUILDS}", match = "^[1-9]", fail = "the founder recovered with ${REBUILDS} rebuilds on record" },
 ]
 
 # ── cw-work — cmnwlth's work peer, a package-only donor ─────────────────────
