@@ -7,7 +7,7 @@
 //! goes to stderr, or a client's parser breaks on the first log line.
 
 use anyhow::Result;
-use host_kit::mcp::{McpDispatcher, McpToolHost, ToolOutcome};
+use host_kit::mcp::{McpDispatcher, McpRequestContext, McpToolHost, ToolOutcome};
 use serde_json::Value;
 
 use crate::tools::Server;
@@ -21,7 +21,7 @@ impl McpToolHost for Server {
         self.tool_list()
     }
 
-    async fn call(&self, name: &str, args: &Value) -> Option<ToolOutcome> {
+    async fn call(&self, name: &str, args: &Value, _ctx: &McpRequestContext) -> Option<ToolOutcome> {
         Server::call(self, name, args).await
     }
 }

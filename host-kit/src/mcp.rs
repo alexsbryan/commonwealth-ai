@@ -17,10 +17,35 @@ use oicp_types::mcp::{negotiate_mcp_protocol_version, McpMethod};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 
+/// What one request carries besides its JSON-RPC body: the transport's view
+/// of who asked. Stdio has none of it, so there it is the default.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct McpRequestContext {
+    /// The `X-Agent-Session` header the agent sent, if it sent one.
+    pub agent_session: Option<String>,
+}
+
+/// What an executed tool may change, as its host declares it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolEffect {
+    Read,
+    Write,
+    ReadWrite,
+}
+
+/// What the call log is told about a call that executed a tool. It never goes
+/// on the wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CallAudit {
+    pub effect: ToolEffect,
+    /// The tool succeeded with a null or empty JSON result.
+    pub empty_result: bool,
+}
+
 /// What one tool run produced. A tool that ran and failed is an outcome with
 /// `is_error` set, which the agent reads and can recover from; it is never a
 /// JSON-RPC error, which a client treats as a broken transport.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ToolOutcome {
     /// The text the agent reads.
     pub text: String,
@@ -28,9 +53,29 @@ pub struct ToolOutcome {
     pub is_error: bool,
     /// Optional machine-readable result (`structuredContent`).
     pub structured: Option<Value>,
+    /// `None` when no tool executed: the host refused the call before one ran.
+    pub audit: Option<CallAudit>,
 }
 
 impl ToolOutcome {
+    /// A tool answered.
+    pub fn answer(text: impl Into<String>, structured: Option<Value>) -> Self {
+        Self {
+            text: text.into(),
+            structured,
+            ..Self::default()
+        }
+    }
+
+    /// A tool said no.
+    pub fn refusal(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            is_error: true,
+            ..Self::default()
+        }
+    }
+
     /// The MCP `CallToolResult` this outcome is on the wire.
     pub fn into_call_result(self) -> Value {
         let mut result = json!({
@@ -53,18 +98,76 @@ pub trait McpToolHost {
     fn list(&self) -> Value;
     /// Run one tool. `None` means no tool has that name (-32601); a tool that
     /// ran and failed is `Some` with `is_error` set.
-    fn call(&self, name: &str, args: &Value) -> impl Future<Output = Option<ToolOutcome>>;
+    fn call(
+        &self,
+        name: &str,
+        args: &Value,
+        ctx: &McpRequestContext,
+    ) -> impl Future<Output = Option<ToolOutcome>> + Send;
 }
 
 /// The call-log port: told about every call that reached a tool. `()` records
 /// nothing.
 pub trait McpCallLog {
     /// Record one finished call.
-    fn record(&self, tool: &str, outcome: &ToolOutcome);
+    fn record(&self, tool: &str, outcome: &ToolOutcome, ctx: &McpRequestContext);
 }
 
 impl McpCallLog for () {
-    fn record(&self, _tool: &str, _outcome: &ToolOutcome) {}
+    fn record(&self, _tool: &str, _outcome: &ToolOutcome, _ctx: &McpRequestContext) {}
+}
+
+/// Answers one JSON-RPC request. [`McpDispatcher`] is the kit's; a host with
+/// its own method dispatch implements this to reuse the batch handling
+/// ([`dispatch_body`]) and the framings.
+pub trait McpRequestHandler: Send + Sync {
+    /// `None` for a notification, which gets no reply.
+    fn handle(
+        &self,
+        req: JsonRpcRequest,
+        ctx: &McpRequestContext,
+    ) -> impl Future<Output = Option<JsonRpcResponse>> + Send;
+}
+
+/// Answer one JSON-RPC body: a single request or a batch. `None` when
+/// nothing needs a reply (a notification, or a batch of them). An empty
+/// batch and an entry that is not a request are -32600.
+pub async fn dispatch_body<H: McpRequestHandler + ?Sized>(
+    handler: &H,
+    body: Value,
+    ctx: &McpRequestContext,
+) -> Option<Value> {
+    match body {
+        Value::Array(items) => {
+            if items.is_empty() {
+                return Some(json!(JsonRpcResponse::error(
+                    Value::Null,
+                    -32600,
+                    "empty batch"
+                )));
+            }
+            let mut responses = Vec::new();
+            for item in items {
+                match serde_json::from_value::<JsonRpcRequest>(item) {
+                    Ok(req) => responses.extend(handler.handle(req, ctx).await),
+                    Err(_) => responses.push(JsonRpcResponse::error(
+                        Value::Null,
+                        -32600,
+                        "invalid request",
+                    )),
+                }
+            }
+            (!responses.is_empty()).then(|| json!(responses))
+        }
+        single => match serde_json::from_value::<JsonRpcRequest>(single) {
+            Ok(req) => handler.handle(req, ctx).await.map(|r| json!(r)),
+            Err(_) => Some(json!(JsonRpcResponse::error(
+                Value::Null,
+                -32600,
+                "invalid request"
+            ))),
+        },
+    }
 }
 
 /// One MCP server: a tool host and a call log behind the protocol.
@@ -73,6 +176,7 @@ pub struct McpDispatcher<H, L = ()> {
     server_version: String,
     host: H,
     log: L,
+    list_changed: bool,
 }
 
 impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
@@ -89,13 +193,26 @@ impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
             server_version: server_version.into(),
             host,
             log,
+            list_changed: false,
         }
+    }
+
+    /// Advertise `tools.listChanged`: the host pushes
+    /// `notifications/tools/list_changed` when its list changes (the HTTP
+    /// framing's notifier carries it).
+    pub fn list_changed(mut self, yes: bool) -> Self {
+        self.list_changed = yes;
+        self
     }
 
     /// Answer one request. `None` for a notification (a request without an
     /// id, whatever its method), which gets no reply by contract (JSON-RPC
     /// 2.0 §4.1).
-    pub async fn dispatch(&self, req: JsonRpcRequest) -> Option<JsonRpcResponse> {
+    pub async fn dispatch(
+        &self,
+        req: JsonRpcRequest,
+        ctx: &McpRequestContext,
+    ) -> Option<JsonRpcResponse> {
         let Some(id) = req.id else {
             tracing::debug!(method = %req.method, "mcp: notification received");
             return None;
@@ -105,7 +222,7 @@ impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
             Some(McpMethod::Initialize) => {
                 let mut result = json!({
                     "protocolVersion": negotiate_mcp_protocol_version(Some(&params)),
-                    "capabilities": { "tools": { "listChanged": false } },
+                    "capabilities": { "tools": { "listChanged": self.list_changed } },
                     "serverInfo": { "name": self.server_name, "version": self.server_version },
                 });
                 if let Some(instructions) = self.host.instructions() {
@@ -120,10 +237,10 @@ impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
             Some(McpMethod::ToolsCall) => {
                 let name = params["name"].as_str().unwrap_or("");
                 let args = params.get("arguments").cloned().unwrap_or(json!({}));
-                match self.host.call(name, &args).await {
+                match self.host.call(name, &args, ctx).await {
                     Some(outcome) => {
                         tracing::debug!(tool = name, is_error = outcome.is_error, "mcp: tool ran");
-                        self.log.record(name, &outcome);
+                        self.log.record(name, &outcome, ctx);
                         JsonRpcResponse::result(id, outcome.into_call_result())
                     }
                     None => {
@@ -140,41 +257,13 @@ impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
         Some(response)
     }
 
-    /// Answer one JSON-RPC body: a single request or a batch. `None` when
-    /// nothing needs a reply (a notification, or a batch of them). An empty
-    /// batch and an entry that is not a request are -32600.
-    pub async fn dispatch_body(&self, body: Value) -> Option<Value> {
-        match body {
-            Value::Array(items) => {
-                if items.is_empty() {
-                    return Some(json!(JsonRpcResponse::error(
-                        Value::Null,
-                        -32600,
-                        "empty batch"
-                    )));
-                }
-                let mut responses = Vec::new();
-                for item in items {
-                    match serde_json::from_value::<JsonRpcRequest>(item) {
-                        Ok(req) => responses.extend(self.dispatch(req).await),
-                        Err(_) => responses.push(JsonRpcResponse::error(
-                            Value::Null,
-                            -32600,
-                            "invalid request",
-                        )),
-                    }
-                }
-                (!responses.is_empty()).then(|| json!(responses))
-            }
-            single => match serde_json::from_value::<JsonRpcRequest>(single) {
-                Ok(req) => self.dispatch(req).await.map(|r| json!(r)),
-                Err(_) => Some(json!(JsonRpcResponse::error(
-                    Value::Null,
-                    -32600,
-                    "invalid request"
-                ))),
-            },
-        }
+    /// Answer one JSON-RPC body through [`dispatch_body`].
+    pub async fn dispatch_body(&self, body: Value, ctx: &McpRequestContext) -> Option<Value>
+    where
+        H: Send + Sync,
+        L: Send + Sync,
+    {
+        dispatch_body(self, body, ctx).await
     }
 
     /// Serve newline-delimited JSON-RPC 2.0 over stdio until stdin closes.
@@ -202,7 +291,7 @@ impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
                 continue;
             }
             let response = match serde_json::from_str::<JsonRpcRequest>(&line) {
-                Ok(req) => match self.dispatch(req).await {
+                Ok(req) => match self.dispatch(req, &McpRequestContext::default()).await {
                     Some(r) => r,
                     None => continue,
                 },
@@ -215,6 +304,20 @@ impl<H: McpToolHost, L: McpCallLog> McpDispatcher<H, L> {
             writer.flush().await?;
         }
         Ok(())
+    }
+}
+
+impl<H, L> McpRequestHandler for McpDispatcher<H, L>
+where
+    H: McpToolHost + Send + Sync,
+    L: McpCallLog + Send + Sync,
+{
+    fn handle(
+        &self,
+        req: JsonRpcRequest,
+        ctx: &McpRequestContext,
+    ) -> impl Future<Output = Option<JsonRpcResponse>> + Send {
+        self.dispatch(req, ctx)
     }
 }
 
@@ -234,17 +337,24 @@ mod tests {
         fn list(&self) -> Value {
             json!([{ "name": "echo" }, { "name": "refuse" }])
         }
-        async fn call(&self, name: &str, args: &Value) -> Option<ToolOutcome> {
+        async fn call(
+            &self,
+            name: &str,
+            args: &Value,
+            _ctx: &McpRequestContext,
+        ) -> Option<ToolOutcome> {
             match name {
                 "echo" => Some(ToolOutcome {
                     text: args["text"].as_str().unwrap_or("").to_string(),
                     is_error: false,
                     structured: Some(json!({ "echoed": true })),
+                    audit: None,
                 }),
                 "refuse" => Some(ToolOutcome {
                     text: "no".into(),
                     is_error: true,
                     structured: None,
+                    audit: None,
                 }),
                 _ => None,
             }
@@ -255,7 +365,7 @@ mod tests {
     struct RecordingLog(Mutex<Vec<(String, bool)>>);
 
     impl McpCallLog for &RecordingLog {
-        fn record(&self, tool: &str, outcome: &ToolOutcome) {
+        fn record(&self, tool: &str, outcome: &ToolOutcome, _ctx: &McpRequestContext) {
             self.0
                 .lock()
                 .unwrap()
@@ -341,26 +451,27 @@ mod tests {
     #[tokio::test]
     async fn dispatch_body_handles_batches_and_single_bodies() {
         let dispatcher = McpDispatcher::new("fake", "0", FakeHost, ());
+        let ctx = McpRequestContext::default();
         let batch = json!([
             { "jsonrpc": "2.0", "id": 1, "method": "ping" },
             { "jsonrpc": "2.0", "method": "notifications/initialized" },
             { "no": "method" },
         ]);
-        let replies = dispatcher.dispatch_body(batch).await.unwrap();
+        let replies = dispatcher.dispatch_body(batch, &ctx).await.unwrap();
         let replies = replies.as_array().unwrap();
         assert_eq!(replies.len(), 2);
         assert_eq!(replies[0]["id"], 1);
         assert_eq!(replies[0]["result"], json!({}));
         assert_eq!(replies[1]["error"]["code"], -32600);
 
-        let empty = dispatcher.dispatch_body(json!([])).await.unwrap();
+        let empty = dispatcher.dispatch_body(json!([]), &ctx).await.unwrap();
         assert_eq!(empty["error"]["message"], "empty batch");
 
         let quiet = json!([{ "jsonrpc": "2.0", "method": "notifications/initialized" }]);
-        assert_eq!(dispatcher.dispatch_body(quiet).await, None);
+        assert_eq!(dispatcher.dispatch_body(quiet, &ctx).await, None);
 
         let single = json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/list" });
-        let reply = dispatcher.dispatch_body(single).await.unwrap();
+        let reply = dispatcher.dispatch_body(single, &ctx).await.unwrap();
         assert_eq!(reply["id"], 9);
         assert_eq!(reply["result"]["tools"][0]["name"], "echo");
     }

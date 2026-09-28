@@ -269,11 +269,7 @@ impl Server {
         };
         Some(ran.unwrap_or_else(|e| {
             tracing::warn!(tool = name, error = %e, "corpus-mcp: tool failed");
-            ToolOutcome {
-                text: format!("Tool `{name}` failed: {e}"),
-                is_error: true,
-                structured: None,
-            }
+            ToolOutcome::refusal(format!("Tool `{name}` failed: {e}"))
         }))
     }
 
@@ -363,10 +359,9 @@ impl Server {
                     .join("\n")
             )
         };
-        ToolOutcome {
-            text: format!("{text}{family_text}{probe_text}"),
-            is_error: false,
-            structured: Some(json!({
+        ToolOutcome::answer(
+            format!("{text}{family_text}{probe_text}"),
+            Some(json!({
                 "corpora": rows,
                 "endpoint": {
                     "base_url": self.profile.base_url,
@@ -383,7 +378,7 @@ impl Server {
                     "discovery": probes,
                 }
             })),
-        }
+        )
     }
 
     /// `ask` — the composed default (`EPISTEMIC_INDEX.md` §4).
@@ -559,11 +554,10 @@ impl Server {
             hits.truncate(limit);
         }
         if hits.is_empty() {
-            return Ok(ToolOutcome {
-                text: format!("No chunks matched `{query}`."),
-                is_error: false,
-                structured: Some(json!({ "results": [] })),
-            });
+            return Ok(ToolOutcome::answer(
+                format!("No chunks matched `{query}`."),
+                Some(json!({ "results": [] })),
+            ));
         }
 
         let mut text = String::new();
@@ -589,11 +583,10 @@ impl Server {
                 "content": h.content,
             }));
         }
-        Ok(ToolOutcome {
-            text: text.trim_end().to_string(),
-            is_error: false,
-            structured: Some(json!({ "query": query, "results": rows })),
-        })
+        Ok(ToolOutcome::answer(
+            text.trim_end(),
+            Some(json!({ "query": query, "results": rows })),
+        ))
     }
 
     fn atlas_dir(&self, corpus: &str) -> PathBuf {
@@ -669,11 +662,10 @@ impl Server {
             }
             t
         };
-        ToolOutcome {
-            text: text.trim_end().to_string(),
-            is_error: false,
-            structured: Some(json!({ "corpus": corpus, "total_atoms": total, "atoms": rows })),
-        }
+        ToolOutcome::answer(
+            text.trim_end(),
+            Some(json!({ "corpus": corpus, "total_atoms": total, "atoms": rows })),
+        )
     }
 
     fn corpus_ontology(&self, args: &Value) -> ToolOutcome {
@@ -874,11 +866,7 @@ fn ontology_outcome(corpus: &str, atlas_dir: &Path) -> ToolOutcome {
     // The on-disk envelope, verbatim: a caller that wants the policies takes
     // `.policies`, and the versions travel with them.
     let structured = serde_json::to_value(&file).ok();
-    ToolOutcome {
-        text: text.trim_end().to_string(),
-        is_error: false,
-        structured,
-    }
+    ToolOutcome::answer(text.trim_end(), structured)
 }
 
 /// The on-disk spelling of a closed-set tag, read back through serde so the
@@ -905,11 +893,7 @@ fn atom_text(a: &AtomEnvelope) -> &str {
 }
 
 fn refuse(msg: &str) -> ToolOutcome {
-    ToolOutcome {
-        text: msg.to_string(),
-        is_error: true,
-        structured: None,
-    }
+    ToolOutcome::refusal(msg)
 }
 
 fn truncate(s: &str, max: usize) -> String {

@@ -296,10 +296,9 @@ pub fn render(
         }
     }
 
-    ToolOutcome {
-        text: text.trim_end().to_string(),
-        is_error: false,
-        structured: Some(json!({
+    ToolOutcome::answer(
+        text.trim_end(),
+        Some(json!({
             "question": question,
             "passages": passages,
             "map": {
@@ -329,7 +328,7 @@ pub fn render(
             },
             "degradations": degradations,
         })),
-    }
+    )
 }
 
 fn push_passage(text: &mut String, rows: &mut Vec<Value>, rank: usize, p: &AskPassage) {
