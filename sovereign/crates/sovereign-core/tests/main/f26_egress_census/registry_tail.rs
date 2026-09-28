@@ -87,42 +87,21 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli/src/project_init/mod.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli/src/notes_cmd.rs", Class::LocalDaemon, 1),
     // code_index_cmd.rs is gone (pb-code-index): `svrn code` execs the code
-    // program, sovereign-cli-dev, whose code_index.rs row is below.
+    // program, sovereign-cli-dev.
 
     // ---- sovereign-cli-shared (LocalDaemon: daemon MCP proxy + project-local) ----
     ("sovereign/crates/sovereign-cli-shared/src/mcp_client.rs", Class::LocalDaemon, 3),
-    // code_index.rs (2026-08-20): `svrn code index` was two copies, one per
-    // binary, and one of them carried a live `--help` defect; converging it put
-    // `build_daemon_embed_fn` here. CLASSIFIED FRESH, not carried across, since
-    // a client constructor moving from a leaf binary into a SHARED library is a
-    // different reachability story on its face. Three checks, and all three say
-    // LocalDaemon is still right:
-    //   - Destination is pinned, not passed. The one site builds a 2s-timeout
-    //     probe for `format!("http://localhost:{port}/v1")/models`, where only
-    //     the PORT comes from config. No parameter of the function names a
-    //     host, so no caller can aim it off-box. The classes in this registry
-    //     are about where the bytes go, and these go to loopback.
-    //   - It carries nothing out. The site is a bare GET liveness probe; no
-    //     estate content, not even a query, is in the request.
-    //   - Reachability did not actually widen. `code_index` is behind the
-    //     `code-index` feature, enabled by exactly `sovereign-cli` (via
-    //     `code-intel`) and `sovereign-cli-dev` — the same two binaries that
-    //     held the code before. The other two crates depending on this one
-    //     (sovereign-cli-daemon, sovereign-cli-llm) leave the feature off, so
-    //     the module is not compiled into them at all.
-    // What this row does NOT guarantee: if someone later gives
-    // `build_daemon_embed_fn` an endpoint parameter, the count stays 1 and this
-    // census stays green. The pinned-localhost literal is the invariant; a
-    // change to it is the review moment, not a change to the count.
-    // Moved with the verb into the code program, sovereign-cli-dev (pb-code-index).
-    ("sovereign/crates/sovereign-cli-dev/src/code_index.rs", Class::LocalDaemon, 1),
+    // code_index.rs has no row since pb-code-index: `build_daemon_embed_fn`
+    // and its /v1/models probe are gone; the verb execs `svrn-ingest`, whose
+    // embedder is corpus_index::host (its own row).
 
     // rail.rs (2026-09-09): the one rail append/read client moved out of
     // sovereign-cli-llm into the crate every CLI links (ded2e10b0), so that
     // `svrn quality check --distribute` could submit a handoff without linking
     // the LLM dispatcher. CLASSIFIED FRESH for the same reason `code_index`
-    // above was — a client constructor moving from a leaf binary into a SHARED
-    // library is a different reachability story on its face. The three checks:
+    // (sovereign-cli-shared, 2026-08-20 to pb-code-index) was — a client
+    // constructor moving from a leaf binary into a SHARED library is a
+    // different reachability story on its face. The three checks:
     //   - Destination is the operator's own daemon, and unlike `code_index` it
     //     is NOT a pinned localhost literal. `urls::daemon_base_url` delegates
     //     to `setup_config::client_daemon_base`, which honours

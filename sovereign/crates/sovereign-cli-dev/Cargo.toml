@@ -55,9 +55,8 @@ corpus-engine-scip = { workspace = true }
 sovereign-cli-shared = { workspace = true }
 
 # ── Workbench-only workspace crates ──
-# oicp-client: `RemoteApiProvider` in `code_index::build_daemon_embed_fn`,
-# which came back here with `svrn code index` (pb-code-index).
-oicp-client = { workspace = true, optional = true }
+# oicp-client is NOT a dependency: `svrn code index` execs `svrn-ingest`,
+# whose embedder is `corpus_index::host` (pb-code-index).
 #
 # The measurement that put it here is still worth knowing: taking the HTTP
 # client directly rather than through `sovereign-inference` (which merely
@@ -162,8 +161,6 @@ workbench = [
     "dep:kernel-types",
     "dep:axum",
     "dep:tower-http",
-    # `code_index`'s daemon embed client (pb-code-index moved the verb here).
-    "dep:oicp-client",
     "sovereign-cli-shared/scip",
     "sovereign-cli-shared/mcp-client",
     # `observation` + `project_toml` live here since 2026-08-07; `found`,

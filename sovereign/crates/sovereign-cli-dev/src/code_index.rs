@@ -3,7 +3,7 @@
 //!
 //! # One implementation, two binaries
 //!
-//! This verb ships in `sovereign-cli` (the dispatcher) AND runs in
+//! This verb shipped in `sovereign-cli` (the dispatcher) AND ran in
 //! `sovereign-cli-dev` (the workbench). From the 2026-08-06 port until
 //! 2026-08-20 each binary carried its own copy of the whole thing — `cmd_index`,
 //! `run_incremental`, `rebuild_code_corpus`, `stamp_index_state`, the two
@@ -23,24 +23,24 @@
 //! `sovereign-cli-shared` until pb-code-index moved it here, into the code
 //! program; the dispatcher now execs this binary for `svrn code index`.
 //!
-//! # This does not run a model
+//! # This writes no index itself
 //!
-//! Embeddings come from the daemon over loopback HTTP: `build_daemon_embed_fn`
-//! probes `/v1/models` and refuses up front if nothing answers, then talks to
-//! `/embeddings` through `oicp-client` — a pure `reqwest` client with no
-//! llama.cpp. The daemon owns the one inference stack in the system and this
-//! module must never acquire a second one.
+//! Code decides WHAT to index — the recipe, the changed files, the stamp — and
+//! execs ingest's CLI, `svrn-ingest index`, to write it (phase-b-30 Group 4).
+//! Its embedder is the one decider, `corpus_index::host`: the endpoint the
+//! discovery ladder finds, asked for this node's configured embed model when
+//! one is named. `--fts-only` builds a keyword-only index and needs no
+//! endpoint at all. Nothing here needs a daemon, and `symbols` / `callers`
+//! need neither this nor ingest.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::process::Stdio;
 
-use corpus_engine::{CorpusEngine, CorpusSpec};
 use corpus_index::{
     corpus::{Corpus, CORPUS_META_FILENAME},
+    host,
     types::EmbedFn,
 };
-use oicp_client::RemoteApiProvider;
-use sovereign_contracts::traits::InferenceProvider;
 
 use sovereign_cli_shared::code_index::tempfile_dir;
 use sovereign_cli_shared::dirs::default_data_dir;
@@ -55,7 +55,8 @@ pub const HELP: Help = Help {
     sections: &[HelpSection::Usage(
         "svrn code index <path> [--corpus-id <id>] [--data-dir <dir>]\n\
          svrn code index <path> --full          (re-embed everything)\n\
-         svrn code index <path> --incremental   (force the changed-files path)",
+         svrn code index <path> --incremental   (force the changed-files path)\n\
+         svrn code index <path> --fts-only      (keyword-only: no embedder, no vectors)",
     )],
 };
 
@@ -75,11 +76,13 @@ pub async fn cmd_index(args: &[String]) -> i32 {
     let mut data_dir: Option<PathBuf> = None;
     let mut force_full = false;
     let mut force_incremental = false;
+    let mut fts_only = false;
 
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--full" => force_full = true,
+            "--fts-only" => fts_only = true,
             "--incremental" => force_incremental = true,
             "--corpus-id" => {
                 i += 1;
@@ -185,14 +188,18 @@ pub async fn cmd_index(args: &[String]) -> i32 {
                 files.len(),
             );
             run_incremental(
-                &abs_path, &corpus_id, &data_dir, &files, &head_now, &dirty_now,
+                &abs_path, &corpus_id, &data_dir, &files, &head_now, &dirty_now, fts_only,
             )
             .await
         }
         inc::Plan::Full { reason } => {
             eprintln!("Full rebuild of '{corpus_id}' — {reason}.");
-            eprintln!("Every chunk will be re-embedded; this is the slow path.");
-            match rebuild_code_corpus(&abs_path, &corpus_id, &data_dir).await {
+            if fts_only {
+                eprintln!("Keyword-only (FTS) index (--fts-only): no embedder, no vectors.");
+            } else {
+                eprintln!("Every chunk will be re-embedded; this is the slow path.");
+            }
+            match rebuild_code_corpus(&abs_path, &corpus_id, &data_dir, fts_only).await {
                 Ok(stats) => {
                     eprintln!();
                     eprintln!(
@@ -241,13 +248,14 @@ fn stamp_index_state(index_dir: &Path, root: &Path, head: &Option<String>, dirty
     .save(index_dir);
 }
 
-/// Drive `CorpusEngine::reindex_file` over the changed set.
+/// Re-index the changed set through `svrn-ingest index --files-from`.
 ///
-/// Embeds through the daemon exactly as `rebuild_code_corpus` does — NOT the
-/// zero-vector `EmbedFn` that `cmd_watch` installs. Writing zero vectors into a
-/// vector-searchable corpus silently destroys semantic search for those chunks
-/// (cosine similarity against a zero vector is meaningless), so this path
-/// refuses to run rather than fall back to it.
+/// The embedder is the one a full build gets (`embedder_args`) — NOT the
+/// zero-vector `EmbedFn` that `cmd_watch` used to install. Writing zero
+/// vectors into a vector-searchable corpus silently destroys semantic search
+/// for those chunks (cosine similarity against a zero vector is meaningless),
+/// so ingest refuses a file-list run whose `--fts-only` disagrees with the
+/// index's stamp rather than mixing the two.
 async fn run_incremental(
     root: &Path,
     corpus_id: &str,
@@ -255,54 +263,67 @@ async fn run_incremental(
     files: &[String],
     head: &Option<String>,
     dirty: &[String],
+    fts_only: bool,
 ) -> i32 {
-    let (embed, embed_model_name) = match build_daemon_embed_fn().await {
-        Ok(v) => v,
+    let started = std::time::Instant::now();
+    let list = match tempfile_dir() {
+        Ok(d) => d.join(format!("{corpus_id}.changed")),
         Err(e) => {
-            eprintln!("✗ {e}");
-            eprintln!(
-                "\nIncremental indexing embeds through the daemon so the changed chunks land in \
-                 the same embedding space as the rest of the corpus. Start it with \
-                 `svrn daemon run` and re-run."
-            );
+            eprintln!("✗ cannot create temp dir: {e}");
             return 1;
         }
     };
-    let engine = CorpusEngine::new(data_dir.to_path_buf(), data_dir.to_path_buf(), embed)
-        .with_embedding_model(&embed_model_name);
-
-    let started = std::time::Instant::now();
-    let (mut updated, mut unchanged, mut deleted, mut skipped, mut failed) = (0, 0, 0, 0, 0);
-    let mut chunks_written = 0usize;
-
-    for (n, rel) in files.iter().enumerate() {
-        let abs = root.join(rel);
-        match engine.reindex_file(corpus_id, &abs, root).await {
-            Ok(corpus_engine::engine::reindex::ReindexResult::Updated {
-                chunks_written: w,
-                ..
-            }) => {
-                // `reindex_file` reports 0 written when every chunk hash-matched
-                // a committed row — the whole point of the delta path. Counting
-                // that as "updated" would overstate the work done.
-                if w == 0 {
-                    unchanged += 1;
-                } else {
-                    updated += 1;
-                    chunks_written += w;
-                }
-            }
-            Ok(corpus_engine::engine::reindex::ReindexResult::Deleted { .. }) => deleted += 1,
-            Ok(corpus_engine::engine::reindex::ReindexResult::Skipped) => skipped += 1,
-            Err(e) => {
-                failed += 1;
-                eprintln!("  ! {rel}: {e}");
-            }
-        }
-        if files.len() > 20 && (n + 1) % 20 == 0 {
-            eprintln!("  … {}/{} files", n + 1, files.len());
+    if let Err(e) = std::fs::write(&list, files.join("\n")) {
+        eprintln!(
+            "✗ cannot write the changed-file list {}: {e}",
+            list.display()
+        );
+        return 1;
+    }
+    let mut args = vec![
+        "--index-dir".to_string(),
+        data_dir.display().to_string(),
+        "--files-from".to_string(),
+        list.display().to_string(),
+        "--corpus".to_string(),
+        corpus_id.to_string(),
+        "--root".to_string(),
+        root.display().to_string(),
+    ];
+    match embedder_args(fts_only) {
+        Ok(more) => args.extend(more),
+        Err(e) => {
+            eprintln!("✗ {e}");
+            return 1;
         }
     }
+    let counts = match ingest_index(&args).await {
+        Ok((_, counts)) => counts,
+        Err(e) => {
+            eprintln!("✗ {e}");
+            return 1;
+        }
+    };
+    let count = |k: &str| counts[k].as_u64();
+    let (
+        Some(updated),
+        Some(unchanged),
+        Some(deleted),
+        Some(skipped),
+        Some(failed),
+        Some(chunks_written),
+    ) = (
+        count("updated"),
+        count("unchanged"),
+        count("deleted"),
+        count("skipped"),
+        count("failed"),
+        count("chunks_written"),
+    )
+    else {
+        eprintln!("✗ svrn-ingest index returned counts this verb cannot read: {counts}");
+        return 1;
+    };
 
     eprintln!();
     if failed > 0 {
@@ -343,17 +364,16 @@ async fn run_incremental(
 /// Full rebuild of a code corpus's LanceDB index. Shared between
 /// `svrn code index` and `svrn project refresh` so both
 /// surfaces write exactly the same thing: an ephemeral code-extract
-/// recipe, embedded through the running daemon, ingested to
-/// `<data_dir>/<corpus_id>/`.
+/// recipe, built by `svrn-ingest index` into `<data_dir>/<corpus_id>/`.
 ///
-/// Bails early (error, never zero-vector fallback) when the daemon
-/// is unreachable — see the `build_daemon_embed_fn` docstring for
-/// rationale.
+/// Bails early (error, never zero-vector fallback) when no embedder
+/// answers, unless `fts_only` asks for a keyword-only index.
 pub async fn rebuild_code_corpus(
     root: &std::path::Path,
     corpus_id: &str,
     data_dir: &std::path::Path,
-) -> std::result::Result<corpus_engine::IngestResult, String> {
+    fts_only: bool,
+) -> std::result::Result<IndexBuilt, String> {
     std::fs::create_dir_all(data_dir)
         .map_err(|e| format!("cannot create data dir {}: {e}", data_dir.display()))?;
 
@@ -436,10 +456,11 @@ type = "passthrough"
 
 [index]
 fts = true
-vector = true
+vector = {vector}
 "#,
         corpus_id = corpus_id,
         path = root.display(),
+        vector = !fts_only,
     );
 
     let tempdir = tempfile_dir().map_err(|e| format!("cannot create temp dir: {e}"))?;
@@ -447,29 +468,113 @@ vector = true
     std::fs::write(&recipe_path, recipe_toml)
         .map_err(|e| format!("cannot write ephemeral recipe: {e}"))?;
 
-    let (embed, embed_model_name) = build_daemon_embed_fn().await.map_err(|e| {
-        format!(
-            "{e}\n\n`svrn code index` / `svrn project refresh` now embed via the daemon \
-             so code corpora share the standard embedding model. Start the daemon with \
-             `svrn daemon run` and re-run this command."
-        )
-    })?;
-    // Pass the embed model stem through so `_corpus_meta.json`
-    // records exactly what produced the vectors (not the engine's
-    // legacy default). See `corpus-engine::with_embedding_model`
-    // rationale.
-    let engine = CorpusEngine::new(tempdir.clone(), data_dir.to_path_buf(), embed)
-        .with_embedding_model(&embed_model_name);
-
     eprintln!("Indexing {} as corpus '{corpus_id}'", root.display());
     eprintln!("Index directory: {}", data_dir.display());
     eprintln!();
 
-    let spec = CorpusSpec::RecipePath(recipe_path);
-    engine
-        .ingest(&spec, None)
+    let mut args = vec![
+        "--recipe".to_string(),
+        recipe_path.display().to_string(),
+        "--index-dir".to_string(),
+        data_dir.display().to_string(),
+    ];
+    args.extend(embedder_args(fts_only)?);
+    match ingest_index(&args).await? {
+        (true, result) => serde_json::from_value(result)
+            .map_err(|e| format!("svrn-ingest index: unreadable result: {e}")),
+        (false, _) => Err("svrn-ingest index failed (its reason is above)".to_string()),
+    }
+}
+
+/// What `svrn-ingest index` reports for a full build: the fields of its JSON
+/// result line this verb renders.
+#[derive(Debug, serde::Deserialize)]
+pub struct IndexBuilt {
+    pub corpus_id: String,
+    pub chunks_created: u64,
+    pub index_size_bytes: u64,
+    pub duration_secs: u64,
+}
+
+/// Ingest's CLI, which writes every code index (phase-b-30 Group 4).
+const INGEST_BIN: &str = "svrn-ingest";
+
+/// The embedder flags `svrn-ingest index` gets. Keyword-only, or the one
+/// decider (`corpus_index::host`) asked for this node's configured embed model
+/// when svrn's config names one, so code lands in the space knowledge corpora
+/// use; with none named, the decider takes what the endpoint lists.
+fn embedder_args(fts_only: bool) -> Result<Vec<String>, String> {
+    if fts_only {
+        return Ok(vec!["--fts-only".to_string()]);
+    }
+    Ok(match node_embed_model()? {
+        Some(model) => vec!["--embed-model".to_string(), model],
+        None => Vec::new(),
+    })
+}
+
+/// This node's configured embed model id, if svrn's config names one. No
+/// config file is `None` (a code-only developer); a config that exists and
+/// does not load is refused, never read as "no model": that would put the
+/// corpus in whatever space the endpoint lists first.
+fn node_embed_model() -> Result<Option<String>, String> {
+    use sovereign_contracts::setup_config::SetupConfig;
+    if !SetupConfig::exists() {
+        tracing::debug!("code index: no svrn config; the decider picks the embed model");
+        return Ok(None);
+    }
+    Ok(SetupConfig::load()?.local_embed_model_id())
+}
+
+/// Run `svrn-ingest index <args>`. Its stderr is the person's and passes
+/// straight through; its last stdout line is the JSON result. Returns the exit
+/// status with that result, because a file-list run that failed some files
+/// still reports its counts.
+async fn ingest_index(args: &[String]) -> Result<(bool, serde_json::Value), String> {
+    let bin = sovereign_turn_client::reach::locate_sibling(INGEST_BIN, "SOVEREIGN_INGEST_BIN")
+        .ok_or_else(|| {
+            format!(
+                "building a code index needs ingest's CLI, `{INGEST_BIN}`, which was not found \
+                 beside this binary or on PATH. Build it with `cargo build -p \
+                 sovereign-pipeline`, or set SOVEREIGN_INGEST_BIN to its path. (`symbols` and \
+                 `callers` need only the SCIP graph, not this.)"
+            )
+        })?;
+    tracing::debug!(bin = %bin.display(), ?args, "code index: exec svrn-ingest index");
+    // `spawn` + `wait_with_output`, not `output()`: tokio's `output()` pipes
+    // stderr unconditionally, which swallowed ingest's reasons (watched).
+    let out = tokio::process::Command::new(&bin)
+        .arg("index")
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("cannot run {}: {e}", bin.display()))?
+        .wait_with_output()
         .await
-        .map_err(|e| format!("ingest failed: {e}"))
+        .map_err(|e| format!("waiting on {}: {e}", bin.display()))?;
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let result = stdout
+        .lines()
+        .last()
+        .and_then(|l| serde_json::from_str::<serde_json::Value>(l).ok());
+    tracing::debug!(
+        status = ?out.status,
+        has_result = result.is_some(),
+        "code index: svrn-ingest index returned"
+    );
+    match result {
+        Some(v) => Ok((out.status.success(), v)),
+        None if out.status.success() => Err(format!(
+            "{} index exited 0 but printed no JSON result",
+            bin.display()
+        )),
+        None => Err(format!(
+            "{} index failed (its reason is above)",
+            bin.display()
+        )),
+    }
 }
 
 /// The entries a code-corpus ingest creates. Everything else in a corpus
@@ -608,72 +713,15 @@ pub(crate) fn clear_partitions_for(
     Ok(all)
 }
 
-/// Build an `EmbedFn` that POSTs to the running daemon's
-/// `/v1/embeddings` endpoint with the daemon's configured embed
-/// model. Returns `(EmbedFn, embed_model_stem)` — the stem is the
-/// filename of the GGUF without the `.gguf` suffix, matching what
-/// the daemon advertises on `/v1/models`.
-///
-/// Returns `Err(message)` when the daemon is unreachable or the
-/// embed model can't be resolved.
-///
-/// Using the daemon (rather than loading a model in-process) keeps
-/// `svrn code index` lightweight — no GPU/RAM for llama.cpp
-/// — and guarantees code corpora land in the same embedding space
-/// as knowledge corpora.
-pub async fn build_daemon_embed_fn() -> std::result::Result<(EmbedFn, String), String> {
-    let cfg = sovereign_contracts::setup_config::SetupConfig::load()
-        .map_err(|e| format!("read ~/.svrnmesh/config.toml: {e}"))?;
-    let port = cfg.daemon.client_port;
-    let endpoint = format!("http://localhost:{port}/v1");
-    // The embedding happens on the DAEMON at `endpoint`, over loopback — so
-    // the question is not "does this process hold a GGUF" but "can the daemon
-    // this is about to call name the space its vectors land in". A terminal's
-    // daemon can: it forwards to its entry node, and `local_embed_model_id()`
-    // is that node's recorded id. Gating on `models()` instead made `svrn code
-    // index` refuse on a terminal for a capability the node actually has.
-    //
-    // Still no default. This name decides which vector space the corpus lands
-    // in, so a space that cannot be named is a refusal, never a fallback —
-    // that is the split `sovereign-cli-shared::models` documents, and this is
-    // the side that refuses (§18.3).
-    let embed_model = cfg.local_embed_model_id().ok_or_else(|| {
-        "this node cannot name its embedding model — a holder needs \
-         `[models] embed` in ~/.svrnmesh/config.toml, and a terminal needs its \
-         entry node to declare an embed slot (re-run `svrn setup --terminal \
-         <entry>` once it has one). Indexing under an unnamed space would \
-         produce a corpus that cannot be searched back."
-            .to_string()
-    })?;
-
-    // Probe before we return — a daemon-down failure 40 minutes
-    // into a 10k-file reindex is much worse than an up-front bail.
-    let probe = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(2))
-        .build()
-        .map_err(|e| format!("http client build: {e}"))?;
-    let probe_url = format!("{endpoint}/models");
-    match probe.get(&probe_url).send().await {
-        Ok(r) if r.status().is_success() => {}
-        Ok(r) => {
-            return Err(format!(
-                "daemon at :{port} returned {} from /v1/models",
-                r.status()
-            ));
-        }
-        Err(_) => {
-            return Err(format!("daemon unreachable at localhost:{port}"));
-        }
-    }
-
-    // `RemoteApiProvider` is constructed with the embed model as
-    // its single `model_id`. Its `InferenceProvider::embed` sends
-    // `{"model": "<embed_model>", "input": "<text>"}` to
-    // `/embeddings`, which is the exact contract we want.
-    let provider: Arc<dyn InferenceProvider> =
-        Arc::new(RemoteApiProvider::new(&endpoint, None, &embed_model, 8192));
-    let f = corpus_index::embed_fn::inference_to_embed_fn(provider);
-    Ok((f, embed_model))
+/// The in-process embedder `code watch` and `check-spec` use: the one
+/// decider, `corpus_index::host` (the discovery ladder, then a probe
+/// embedding), asked for this node's configured embed model. `build_daemon_
+/// embed_fn`, which probed only the daemon, went with pb-code-index.
+pub async fn node_embedder() -> std::result::Result<(EmbedFn, String), String> {
+    let profile = host::discover_and_probe(None, node_embed_model()?)
+        .await
+        .map_err(|e| format!("{e:#}"))?;
+    Ok((profile.embed_document_fn(), profile.embed_model))
 }
 
 #[cfg(test)]

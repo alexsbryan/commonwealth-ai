@@ -518,7 +518,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
     };
     let port = cfg.daemon.client_port;
     let chat_model = cfg.primary_model_stem().unwrap_or_default().to_string();
-    let (embed, _) = match crate::code_index::build_daemon_embed_fn().await {
+    let (embed, _) = match crate::code_index::node_embedder().await {
         Ok(e) => e,
         Err(e) => {
             eprintln!("check-spec: {e}");
@@ -1542,16 +1542,16 @@ async fn cmd_watch(args: &[String]) -> i32 {
     // was no error and no warning; the corpus just got worse the longer the
     // watcher ran. `rebuild_code_corpus` already refuses to run rather than
     // fall back to zero vectors; this path now holds the same line.
-    let (embed, embed_model_name) = match crate::code_index::build_daemon_embed_fn().await {
+    let (embed, embed_model_name) = match crate::code_index::node_embedder().await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("error: {e}");
             eprintln!(
-                "\n`svrn code watch` embeds every changed chunk through the daemon so the \
-                 watcher's writes land in the same embedding space as the rest of the corpus. \
-                 Start it with `svrn daemon run` and re-run — the watcher will not run with a \
-                 stub embedder, because that would silently degrade the index it is meant to \
-                 keep current."
+                "\n`svrn code watch` embeds every changed chunk with the node's embed model so \
+                 the watcher's writes land in the same embedding space as the rest of the \
+                 corpus. Start an embeddings endpoint (e.g. `svrn daemon run`) and re-run — the \
+                 watcher will not run with a stub embedder, because that would silently \
+                 degrade the index it is meant to keep current."
             );
             return 1;
         }
@@ -1563,7 +1563,7 @@ async fn cmd_watch(args: &[String]) -> i32 {
     );
 
     eprintln!("Watching {} for corpus '{corpus_id}'", root.display());
-    eprintln!("Embedding via the daemon ({embed_model_name}).");
+    eprintln!("Embedding with {embed_model_name}.");
     eprintln!("Press Ctrl-C to stop.");
 
     let watcher = corpus_engine::update::watch::CodeWatcher::new(
