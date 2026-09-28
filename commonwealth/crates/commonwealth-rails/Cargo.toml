@@ -66,6 +66,8 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# The reach proof dials through RailsTransport, as svrn and serve will.
+mesh-reach = { workspace = true, features = ["rails"] }
 
 [lints]
 workspace = true

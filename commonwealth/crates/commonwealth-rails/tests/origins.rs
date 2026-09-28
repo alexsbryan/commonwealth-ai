@@ -7,6 +7,10 @@
 //! authenticates nothing and echoes the request head it was sent, so the test
 //! reads exactly what the origin was told. Hermetic like `found_and_join.rs`:
 //! direct addresses only, no relay, no packet leaves this machine.
+//!
+//! The outbound half (pb-rails-reach) rides the same mesh of two: a local
+//! caller on the joiner reaches the founder's registered origin through
+//! cw-rails' reach door alone, with `mesh_reach::rails::RailsTransport`.
 
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
@@ -340,6 +344,284 @@ async fn a_registered_origin_is_reached_by_a_member_with_its_verified_identity()
                     "the declared capability never reached the joiner's roster"
                 );
                 tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+        };
+        tokio::select! {
+            exit = daemon_b.run() => panic!("the joiner stopped serving: {exit:?}"),
+            () = joiner_side => {}
+        }
+    };
+    tokio::select! {
+        exit = daemon_a.run() => panic!("the founder stopped serving: {exit:?}"),
+        () = test => {}
+    }
+}
+
+/// A fixture origin that streams a response in 32 chunked writes, the shape
+/// of a streaming completion.
+async fn streaming_origin() -> SocketAddr {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut sock, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 16 * 1024];
+                let _ = sock.read(&mut buf).await;
+                let _ = sock
+                    .write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+                    .await;
+                for i in 0..32 {
+                    let data = format!("data: {i}\n\n");
+                    let _ = sock
+                        .write_all(format!("{:x}\r\n{data}\r\n", data.len()).as_bytes())
+                        .await;
+                    tokio::time::sleep(Duration::from_millis(2)).await;
+                }
+                let _ = sock.write_all(b"0\r\n\r\n").await;
+            });
+        }
+    });
+    addr
+}
+
+/// A fixture media origin honouring `Range: bytes=a-b` over a 4 MiB body.
+async fn range_origin() -> SocketAddr {
+    const LEN: usize = 4 << 20;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut sock, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 16 * 1024];
+                let n = sock.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).to_string();
+                let (a, b) = header(&head, "Range")
+                    .first()
+                    .and_then(|r| r.strip_prefix("bytes="))
+                    .and_then(|r| r.split_once('-'))
+                    .and_then(|(a, b)| Some((a.parse::<usize>().ok()?, b.parse::<usize>().ok()?)))
+                    .unwrap_or((0, LEN - 1));
+                let body = vec![b'm'; b + 1 - a];
+                let _ = sock
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {a}-{b}/{LEN}\r\n\
+                             Content-Length: {}\r\nConnection: close\r\n\r\n",
+                            body.len()
+                        )
+                        .as_bytes(),
+                    )
+                    .await;
+                let _ = sock.write_all(&body).await;
+            });
+        }
+    });
+    addr
+}
+
+/// One raw GET timed: (first byte, whole reply, reply bytes).
+async fn timed(base_url: &str, path: &str, extra: &str) -> (Duration, Duration, usize) {
+    let authority = base_url.strip_prefix("http://").unwrap_or(base_url);
+    let started = Instant::now();
+    let mut sock = tokio::net::TcpStream::connect(authority).await.unwrap();
+    sock.write_all(
+        format!("GET {path} HTTP/1.1\r\nHost: local\r\n{extra}Connection: close\r\n\r\n")
+            .as_bytes(),
+    )
+    .await
+    .unwrap();
+    let mut first = [0u8; 1];
+    sock.read_exact(&mut first).await.unwrap();
+    let ttfb = started.elapsed();
+    let mut rest = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_secs(20), sock.read_to_end(&mut rest)).await;
+    (ttfb, started.elapsed(), rest.len() + 1)
+}
+
+fn median(mut xs: Vec<Duration>) -> Duration {
+    xs.sort();
+    xs[xs.len() / 2]
+}
+
+/// **THE PROOF (outbound).** On the lift's mesh of two, the joiner's
+/// `RailsTransport` resolves the founder's registered origin through cw-rails'
+/// reach door, and a request through the bridge it returns answers with the
+/// joiner's verified identity. For EVERY traffic class it returns exactly what
+/// cw-rails' own transport yields — the class → ALPN map is cw-rails' table,
+/// never a second copy in the client.
+///
+/// It also takes the hop reading the row asks for (it gates nothing; no bar
+/// was pre-registered): a streamed completion and a Range media read, n = 5
+/// each, through the joiner's own transport ("before", the daemon's way) and
+/// through RailsTransport ("after": cold = with the door's resolve, warm =
+/// cached).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rails_transport_reaches_a_peers_registered_origin_through_cw_rails() {
+    use commonwealth_transport::{PeerTransport, TrafficClass};
+    use mesh_reach::rails::RailsTransport;
+
+    let founder_dir = tempfile::tempdir().unwrap();
+    let joiner_dir = tempfile::tempdir().unwrap();
+    found::found(founder_dir.path(), "Lab", "founder").expect("an empty root founds");
+    let port_a = free_port();
+    let node_a = RailsNode::bind(
+        founder_dir.path().to_path_buf(),
+        hermetic("founder", port_a),
+    )
+    .await
+    .expect("the founder binds");
+    let a_id = node_a.self_id;
+    let daemon_a = RailsDaemon::start_from_disk(node_a)
+        .await
+        .expect("the founder starts");
+    let echo = echo_origin().await;
+    let stream = streaming_origin().await;
+    let media = range_origin().await;
+
+    let test = async {
+        let api = format!("http://127.0.0.1:{port_a}/v1/mesh/origins");
+        let http = reqwest::Client::new();
+        let invite = poll_join_link(port_a).await;
+        for reg in [
+            serde_json::json!({"alpn": "cwth/http/0", "prefixes": ["/internal/fixture"],
+                               "port": echo.port(), "admit": {"members": []}}),
+            serde_json::json!({"alpn": "cwth/client/0", "port": stream.port(),
+                               "admit": {"members": []}}),
+            serde_json::json!({"alpn": "cwth/media/0", "port": media.port(),
+                               "admit": {"members": []}}),
+        ] {
+            let r = http.post(&api).json(&reg).send().await.unwrap();
+            assert!(
+                r.status().is_success(),
+                "{reg}: {}",
+                r.text().await.unwrap()
+            );
+        }
+
+        let port_b = free_port();
+        let node_b = RailsNode::bind(joiner_dir.path().to_path_buf(), hermetic("joiner", port_b))
+            .await
+            .expect("the joiner binds");
+        join::join_and_persist(&node_b, &invite, joiner_dir.path())
+            .await
+            .expect("the founder admits the joiner");
+        let b_hex = hex::encode(node_b.pubkey().0);
+        let daemon_b = RailsDaemon::start_from_disk(node_b)
+            .await
+            .expect("the joiner starts");
+        let own = daemon_b.transport.clone();
+        let roster_b = daemon_b.mesh.clone();
+
+        let joiner_side = async {
+            let rails = RailsTransport::new(format!("http://127.0.0.1:{port_b}"));
+            // The founder as the joiner's roster has it, once it is live and
+            // gossips an iroh path.
+            let started = Instant::now();
+            let contact = loop {
+                let found = {
+                    let mesh = roster_b.read().await;
+                    commonwealth_media::roster_of(&mesh)
+                        .into_iter()
+                        .find(|(c, p)| {
+                            c.node_id == a_id
+                                && c.active
+                                && (p.relay_url.is_some() || !p.iroh_direct_addrs.is_empty())
+                        })
+                        .map(|(_, p)| p)
+                };
+                if let Some(p) = found {
+                    if !rails
+                        .endpoints(&p, TrafficClass::ControlPlane)
+                        .await
+                        .is_empty()
+                    {
+                        break p;
+                    }
+                }
+                assert!(
+                    started.elapsed() < BUDGET,
+                    "the joiner's reach door never resolved the founder"
+                );
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            };
+
+            // Every class: the client's answer IS cw-rails' answer.
+            for class in TrafficClass::ALL {
+                let direct = own.endpoints(&contact, class).await;
+                let through = rails.endpoints(&contact, class).await;
+                assert_eq!(
+                    through, direct,
+                    "{class:?}: RailsTransport and cw-rails' own transport disagree"
+                );
+            }
+
+            // A request through the resolved bridge answers, with the
+            // joiner's verified identity.
+            let ep = &rails.endpoints(&contact, TrafficClass::ControlPlane).await[0];
+            let bridge: SocketAddr = ep
+                .base_url
+                .strip_prefix("http://")
+                .unwrap()
+                .parse()
+                .unwrap();
+            let (status, head) = get(bridge, "/internal/fixture/x", "").await.unwrap();
+            assert_eq!(status, 200, "{head}");
+            assert_eq!(
+                header(&head, "X-Mesh-Pubkey"),
+                vec![b_hex.as_str()],
+                "{head}"
+            );
+
+            // The hop reading. Five runs each; medians reported.
+            let range = "Range: bytes=0-1048575\r\n";
+            let mut rows = Vec::new();
+            for (what, class, path, extra) in [
+                (
+                    "stream",
+                    TrafficClass::Inference,
+                    "/v1/chat/completions",
+                    "",
+                ),
+                ("range", TrafficClass::Media, "/video.mkv", range),
+            ] {
+                let mut before = (Vec::new(), Vec::new());
+                let mut cold = (Vec::new(), Vec::new());
+                let mut warm = (Vec::new(), Vec::new());
+                for _ in 0..5 {
+                    let base = own.endpoints(&contact, class).await[0].base_url.clone();
+                    let (f, t, n) = timed(&base, path, extra).await;
+                    assert!(n > 1, "{what}: nothing came back");
+                    before.0.push(f);
+                    before.1.push(t);
+
+                    let fresh = RailsTransport::new(format!("http://127.0.0.1:{port_b}"));
+                    let started = Instant::now();
+                    let base = fresh.endpoints(&contact, class).await[0].base_url.clone();
+                    let resolve = started.elapsed();
+                    let (f, t, _) = timed(&base, path, extra).await;
+                    cold.0.push(resolve + f);
+                    cold.1.push(resolve + t);
+
+                    let started = Instant::now();
+                    let base = fresh.endpoints(&contact, class).await[0].base_url.clone();
+                    let lookup = started.elapsed();
+                    let (f, t, _) = timed(&base, path, extra).await;
+                    warm.0.push(lookup + f);
+                    warm.1.push(lookup + t);
+                }
+                rows.push(format!(
+                    "{what}: first byte before {:?} / after cold {:?} / after warm {:?}; \
+                     whole reply before {:?} / after cold {:?} / after warm {:?}",
+                    median(before.0),
+                    median(cold.0),
+                    median(warm.0),
+                    median(before.1),
+                    median(cold.1),
+                    median(warm.1),
+                ));
+            }
+            for row in rows {
+                println!("reach hops (n=5, medians): {row}");
             }
         };
         tokio::select! {
