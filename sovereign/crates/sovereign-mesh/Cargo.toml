@@ -185,13 +185,6 @@ rand = "0.9"
 # pipeline. `io-util` exposes SyncIoBridge; `io` brings ReaderStream /
 # StreamReader.
 tokio-util = { version = "0.7", features = ["io", "io-util"] }
-# Enumerate ALL local network interfaces so a node on both WiFi
-# and Tailscale (the usual Commonwealth LAN-+-VPN topology) can
-# advertise both addresses in its `MemberRecord.addresses`. The
-# old UDP-connect trick only returned the default outbound IP,
-# which on an AP-isolated WiFi was unreachable from peers who
-# could only route via Tailscale.
-if-addrs = "0.13"
 # Project registry (~/.svrnmesh/projects.json) timestamps and
 # default_path resolution.
 chrono = { workspace = true }

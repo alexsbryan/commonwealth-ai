@@ -71,11 +71,14 @@
 //! over `commonwealth-transport`, using `commonwealth-core`'s merge rule. The
 //! gossip, latency-probe and TLS modules that used to live here are gone —
 //! the crate is three modules now, and its `Cargo.toml` description was
-//! updated to match on 2026-09-04.
+//! updated to match on 2026-09-04. A fourth, `mesh_discovery`, joined from
+//! sovereign-mesh (phase-b pb-rails-parity): the addresses this host can be
+//! reached at, which is finding a host too.
 
 pub use mesh_join_vocab::deep_link;
 pub mod hardware;
 pub mod mdns;
 pub mod membership;
+pub mod mesh_discovery;
 
 pub use commonwealth_core::{Error, Result};
