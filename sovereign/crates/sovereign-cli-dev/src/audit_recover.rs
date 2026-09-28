@@ -62,7 +62,6 @@
 //! already recorded") is success.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine_notes::mining::patterns::{ObservedPattern, PatternRule, ToolPatternMatcher};

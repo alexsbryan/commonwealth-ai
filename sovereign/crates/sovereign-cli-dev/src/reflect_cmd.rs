@@ -26,7 +26,7 @@
 
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use corpus_engine_notes::{Note, NoteStore, ToolCallLogRow};
 
