@@ -146,11 +146,11 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
             direct_addrs,
         }
     };
-    let origins = if daemon.node.config.media.origin.is_some() {
-        vec![OriginKind::Media]
-    } else {
-        Vec::new()
-    };
+    // Exactly the origin kinds whose ALPN a registration serves (media from
+    // `rails.toml`, apps while published, any program's offer), and what
+    // every live registration declares — never a guess of cw-rails' own.
+    let origins = daemon.origins.advertised_kinds();
+    let declared = daemon.origins.declared_claims();
 
     // Step 1 + 2 + 3's selection, in ONE write-lock window. Nothing awaits a
     // network inside it. The presence reading is read here (never inside the
@@ -170,6 +170,18 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
             &daemon.node.key,
             media_available,
         );
+        // Absent self is already warned by `self_stamp`.
+        if let Some(me) = mesh.members.get_mut(&self_id) {
+            crate::origins::merge_declared(&mut me.capabilities, &declared);
+            tracing::debug!(
+                target: "gossip",
+                round,
+                origins = ?me.capabilities.origins,
+                declarations = declared.len(),
+                inference_capable = me.capabilities.inference_capable,
+                "gossip: stamped what the registered origins declare"
+            );
+        }
         decay(
             &mut mesh,
             self_id,
