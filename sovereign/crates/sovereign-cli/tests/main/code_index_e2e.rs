@@ -229,12 +229,14 @@ fn init_writes_the_project_model_through_the_code_program() {
         "init nudged a founded project toward `project design`:\n{out}"
     );
 
-    let written: toml::Value = toml::from_str(
-        &std::fs::read_to_string(&project_toml).expect("project.toml was written"),
-    )
-    .expect("project.toml is TOML");
+    let written: toml::Value =
+        toml::from_str(&std::fs::read_to_string(&project_toml).expect("project.toml was written"))
+            .expect("project.toml is TOML");
     assert_eq!(written["lifecycle"]["founded"].as_bool(), Some(true));
-    assert_eq!(written["lifecycle"]["charter_version"].as_integer(), Some(3));
+    assert_eq!(
+        written["lifecycle"]["charter_version"].as_integer(),
+        Some(3)
+    );
     assert_eq!(written["observation"]["has_git"].as_bool(), Some(true));
     let languages = written["observation"]["language"]
         .as_array()

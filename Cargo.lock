@@ -12350,6 +12350,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-cli-base",
  "sovereign-cli-shared",
  "sovereign-code",
  "sovereign-contracts",
