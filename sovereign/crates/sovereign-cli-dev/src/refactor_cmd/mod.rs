@@ -24,7 +24,7 @@
 mod affinity;
 mod census;
 mod classify;
-mod destination;
+pub(crate) mod destination;
 mod detector;
 mod discover;
 mod gate;

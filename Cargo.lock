@@ -17087,6 +17087,7 @@ dependencies = [
  "quote",
  "regex",
  "serde_json",
+ "sovereign-cli-dev",
  "syn 2.0.118",
  "toml 0.8.2",
  "workspace-hack",

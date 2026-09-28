@@ -490,9 +490,33 @@ fn index_declarations(root: &Path) -> BTreeMap<String, Vec<String>> {
 mod tests {
     use super::*;
 
-    fn workspace() -> Workspace {
-        let root = super::super::census::repo_root().expect("repo root");
-        Workspace::scan(&root).expect("workspace scan")
+    /// A two-crate workspace in a TempDir: the resolver's mechanism on a
+    /// tree the test builds, so it holds wherever the crate is built. The
+    /// checks on THIS repo's register live in the monorepo
+    /// (corpus-engine/xtask/tests/refactor_register.rs).
+    fn workspace() -> (tempfile::TempDir, Workspace) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        for (rel, text) in [
+            (
+                "Cargo.toml",
+                "[workspace]\nmembers = [\"kernel-types\", \"corpus-engine\"]\n",
+            ),
+            ("kernel-types/Cargo.toml", "[package]\nname = \"kernel-types\"\n"),
+            ("kernel-types/src/lib.rs", "pub mod judgement;\n"),
+            ("kernel-types/src/judgement.rs", "pub enum Verdict {}\n"),
+            ("corpus-engine/Cargo.toml", "[package]\nname = \"corpus-engine\"\n"),
+            (
+                "corpus-engine/src/lib.rs",
+                "pub use corpus_index::index::{\n    Evidence,\n};\n",
+            ),
+            ("sovereign/docs/cli-contract.toml", ""),
+        ] {
+            let path = tmp.path().join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        let ws = Workspace::scan(tmp.path()).expect("fixture workspace scan");
+        (tmp, ws)
     }
 
     #[test]
@@ -510,28 +534,10 @@ mod tests {
         assert_eq!(definition_name("pub fn origin() {}"), None);
     }
 
-    /// A destination a worker can `use` today reads as usable.
-    #[test]
-    fn the_repaired_evidence_chain_canonicals_resolve() {
-        let ws = workspace();
-        for canonical in [
-            "kernel_types::judgement::Verdict",
-            "kernel_types::judgement::Judgement",
-            "kernel_types::origin::Origin",
-            "kernel_types::custody::Custody",
-            "kernel_types::attribution::Attribution",
-            "kernel_types::answer::Answer",
-            "corpus_index::index::EvidenceSet",
-        ] {
-            let r = ws.resolve(canonical);
-            assert!(r.exists(), "{canonical}: {}", r.render());
-        }
-    }
-
     /// Re-exports are the load-bearing case a definition index would miss.
     #[test]
     fn a_re_exported_destination_resolves() {
-        let ws = workspace();
+        let (_tmp, ws) = workspace();
         let r = ws.resolve("corpus_engine::Evidence");
         assert!(
             matches!(r, Resolution::ReExported { .. }),
@@ -540,30 +546,11 @@ mod tests {
         );
     }
 
-    /// THE NEGATIVE CONTROL (ARCH §18.1). A check with no failing input you can
-    /// name is not a check, so this pins the exact stale path the register
-    /// carried until 2026-08-24: `sovereign-contracts` has no `verdict` module
-    /// and never will — the type lives in the kernel, and `judgement.rs` says
-    /// why. If this ever reads `usable`, the resolver has gone blind and every
-    /// health line it prints is a false green.
-    #[test]
-    fn the_stale_canonical_this_check_was_built_for_is_refused() {
-        let ws = workspace();
-        let r = ws.resolve("sovereign_contracts::verdict::Verdict");
-        assert!(!r.exists(), "the control must not resolve: {}", r.render());
-        assert!(
-            matches!(r, Resolution::Elsewhere { .. }),
-            "Verdict is declared elsewhere in this workspace, so the verdict must \
-             be Elsewhere and not Unbuilt — the two carry different diagnoses: {}",
-            r.render()
-        );
-    }
-
     /// A home nobody has built is UNBUILT, not `Elsewhere` — honest future work
     /// rather than a lost move. Distinguishing them is the module's whole job.
     #[test]
     fn a_name_declared_nowhere_is_unbuilt_not_elsewhere() {
-        let ws = workspace();
+        let (_tmp, ws) = workspace();
         assert_eq!(
             ws.resolve("kernel_types::judgement::NoSuchNounExistsHere"),
             Resolution::Unbuilt
@@ -574,7 +561,7 @@ mod tests {
     /// reported as such, never counted as failures.
     #[test]
     fn a_non_type_canonical_is_named_rather_than_failed() {
-        let ws = workspace();
+        let (_tmp, ws) = workspace();
         assert!(matches!(
             ws.resolve("sovereign/docs/cli-contract.toml"),
             Resolution::NotATypePath { .. }
@@ -583,41 +570,6 @@ mod tests {
             ws.resolve("sovereign_wire"),
             Resolution::NotATypePath { .. }
         ));
-    }
-
-    /// THE RATCHET, and it runs in both directions.
-    ///
-    /// Every row declares `home`; the tree is the arbiter. A `minted` row whose
-    /// canonical stops resolving fails — that is the direction any check would
-    /// have caught. A `planned` row whose canonical has quietly acquired a home
-    /// fails too, and THAT is the direction that actually broke this register:
-    /// seven nouns were minted in kernel-types across three rungs while their
-    /// rows went on naming `sovereign_contracts::…` paths that never existed.
-    ///
-    /// There is no exception list. An earlier draft carried one as a const here,
-    /// which is a second decider for a question `quality/CONCEPTS.toml` already
-    /// answers (ARCH §10.6) — and being a test-local const, it could only ever
-    /// encode the one direction its author thought of.
-    #[test]
-    fn every_register_home_matches_the_working_tree() {
-        let root = super::super::census::repo_root().expect("repo root");
-        let health = RegisterHealth::survey(&root).expect("survey");
-        let bad = health.disagreements();
-        assert!(
-            bad.is_empty(),
-            "the register and the tree disagree on {} row(s):\n{}",
-            bad.len(),
-            bad.iter()
-                .map(|r| format!(
-                    "  {} -> {}\n    tree says: {}\n    {}",
-                    r.name,
-                    r.canonical,
-                    r.found.render(),
-                    r.remedy()
-                ))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
     }
 
     /// Both directions of the ratchet, exercised on constructed rows rather
@@ -677,7 +629,7 @@ mod tests {
     /// rather than a category the check declines to judge.
     #[test]
     fn a_non_type_home_still_answers_whether_it_exists() {
-        let ws = workspace();
+        let (_tmp, ws) = workspace();
         let present = ws.resolve("sovereign/docs/cli-contract.toml");
         assert!(present.exists(), "{}", present.render());
         assert!(matches!(present, Resolution::NotATypePath { .. }));

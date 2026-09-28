@@ -47,6 +47,10 @@ quote = "1"
 # `tests/mcp_method_census.rs` reads the MCP method set from its one home
 # (phase-b pb-mcp) to scan the workspace for string matches on it.
 oicp-types = { workspace = true }
+# `tests/refactor_register.rs` checks THIS repo's concept register and wire
+# spec with the refactor factory's resolver (pb-code-clean-lift): monorepo
+# data a lifted code program does not carry.
+sovereign-cli-dev = { path = "../../sovereign/crates/sovereign-cli-dev" }
 
 [lints]
 workspace = true
