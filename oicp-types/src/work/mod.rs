@@ -22,7 +22,11 @@ pub use act::{
     Completion, Failure, Revocation, Submission, UnitRef, WorkAct, WorkActKind, DEFAULT_TTL_SECS,
     MAX_TTL_SECS, MIN_TTL_SECS,
 };
-pub use exec::{subject_of, JobContext, JobError, ProgressSink};
+pub use exec::{
+    exec_slot, exec_slot_kind, subject_of, ExecCancel, ExecDescription, ExecEvent, ExecRun,
+    JobContext, JobError, ProgressSink, EXEC_CANCEL_PATH, EXEC_DESCRIBE_PATH, EXEC_RUN_PATH,
+    EXEC_SLOT_PREFIX, EXEC_VALIDATE_PATH,
+};
 pub use process::{ProcessPayload, ResultSource, PROCESS_KIND};
 pub use projection::{
     LeaseState, LostLease, ProjectedUnit, ReapStats, WorkHandoff, WorkProjection, WorkUnitStatus,

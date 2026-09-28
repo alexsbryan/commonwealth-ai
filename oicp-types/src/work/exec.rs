@@ -272,3 +272,80 @@ impl JobError {
 pub fn subject_of(unit: &JobUnit) -> String {
     format!("{} {}", unit.kind, unit.unit_hash)
 }
+
+// -----------------------------------------------------------------
+// The execute origin's wire (pb-work-donor)
+// -----------------------------------------------------------------
+//
+// A program that runs a kind in its own process (the svrn daemon's
+// `ingest:v1`) serves these four doors on a loopback port and registers
+// that port in cw-rails' origin table under `Admit::Local` and the slot
+// [`exec_slot`] names. cw-rails' donor, the one job-execution drive, finds
+// it by the listing and forwards each unit it leases: describe once,
+// validate before the lease, run with progress, cancel when the lease is
+// lost.
+
+/// The slot prefix an execute origin registers under; the kind follows it.
+pub const EXEC_SLOT_PREFIX: &str = "cwth/work/";
+/// `GET` — the origin's [`ExecDescription`].
+pub const EXEC_DESCRIBE_PATH: &str = "/v1/work/exec/describe";
+/// `POST` a [`JobUnit`] — `Result<(), WorkRefusal>`, the executor's pure check.
+pub const EXEC_VALIDATE_PATH: &str = "/v1/work/exec/validate";
+/// `POST` an [`ExecRun`] — newline-delimited [`ExecEvent`]s, the last a
+/// [`ExecEvent::Done`].
+pub const EXEC_RUN_PATH: &str = "/v1/work/exec/run";
+/// `POST` an [`ExecCancel`] — sets the running unit's cancellation flag.
+pub const EXEC_CANCEL_PATH: &str = "/v1/work/exec/cancel";
+
+/// The origin slot for `kind`: one spelling for the registrant and the donor.
+pub fn exec_slot(kind: &JobKind) -> String {
+    format!("{EXEC_SLOT_PREFIX}{kind}")
+}
+
+/// The kind an execute-origin slot names, or `None` for any other slot.
+pub fn exec_slot_kind(slot: &str) -> Option<JobKind> {
+    JobKind::parse(slot.strip_prefix(EXEC_SLOT_PREFIX)?).ok()
+}
+
+/// What an execute origin says about itself.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecDescription {
+    /// The executor's own descriptor: kind, isolation, lease interval.
+    pub descriptor: crate::JobExecutorDescriptor,
+    /// The roster identity a unit it ran is credited to — the registrant
+    /// node's (phase-b-39 fork 1). `None` credits the donor's own id.
+    #[serde(default)]
+    pub credit_node: Option<kernel_types::NodeId>,
+}
+
+/// One unit to run, and the workdir the donor resolved for it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecRun {
+    /// The leased unit.
+    pub unit: JobUnit,
+    /// Where its relative paths resolve.
+    pub workdir: PathBuf,
+}
+
+/// Stop the named unit: the donor lost its lease.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecCancel {
+    /// The unit to cancel.
+    pub unit_hash: String,
+}
+
+/// One line of the run door's answer.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum ExecEvent {
+    /// `JobContext::progress`, as the running unit reported it.
+    Progress {
+        /// The note.
+        note: String,
+    },
+    /// What `execute` returned: the verdict and its result, or why none.
+    Done {
+        /// The executor's answer, whole.
+        outcome: Result<(Judgement, serde_json::Value), JobError>,
+    },
+}

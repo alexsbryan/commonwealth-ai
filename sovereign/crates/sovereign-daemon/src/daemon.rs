@@ -384,6 +384,10 @@ enum DaemonState {
         /// local-only daemon AND on a node whose `[compute.work_offer]` names
         /// no kind; `running_services` is what tells those two apart.
         _work_donor_handle: Option<crate::work_donor::WorkDonorHandle>,
+        /// Stops the `ingest:v1` execute origin and its registration with
+        /// cw-rails on Drop (pb-work-donor). `None` on a local-only daemon and
+        /// on a node with no corpus engine.
+        _work_origin_handle: Option<crate::work_origin::WorkOriginHandle>,
         /// The network posture this boot resolved, and what it produced.
         /// Read by [`EmbeddedDaemon::running_services`] — the boot
         /// assertion's instrument (ARCH §18.1).
@@ -3045,6 +3049,7 @@ impl EmbeddedDaemon {
         // than a fifth tuple element so the gate stays the SAME `if` the four
         // loops already sit in without re-indenting sixty lines of it.
         let mut work_donor_handle: Option<crate::work_donor::WorkDonorHandle> = None;
+        let mut work_origin_handle: Option<crate::work_origin::WorkOriginHandle> = None;
         // What this boot actually spawns, recorded at each spawn site and
         // stored on the Running variant. The profile's claim is about this
         // list, and a list is falsifiable where a config value is not
@@ -4086,6 +4091,33 @@ impl EmbeddedDaemon {
                     handle
                 });
 
+                // The `ingest:v1` execute origin (pb-work-donor): served and
+                // registered with cw-rails on the SAME networked branch, so a
+                // local-only daemon donates no ingest work, as before. A node
+                // with no corpus engine serves none, as its registry had no
+                // ingest executor.
+                if let Some(engine) = corpus_engine.clone() {
+                    let origin = std::sync::Arc::new(crate::work_origin::WorkOrigin::new(
+                        crate::ingest_executor::IngestExecutor::new(engine),
+                        app_state.self_node_id(),
+                    ));
+                    let rails_base = crate::rails_client::resolve_rails_base(
+                        &self.setup_config.read().await.daemon,
+                    );
+                    match crate::work_origin::spawn(origin, rails_base).await {
+                        Ok(handle) => {
+                            running_services.record(crate::local_only::MeshService::WorkOrigin);
+                            work_origin_handle = Some(handle);
+                        }
+                        Err(e) => tracing::warn!(
+                            target: crate::ingest_executor::TRACE_TARGET,
+                            error = %e,
+                            "work origin: no loopback port to serve it on, so no donor on this \
+                             node forwards ingest work"
+                        ),
+                    }
+                }
+
                 (
                     Some(gossip_handle),
                     Some(collaborate_handle),
@@ -4602,6 +4634,7 @@ impl EmbeddedDaemon {
             _ring_sync_handle: ring_sync_handle,
             _rail_kv_pump_handle: rail_kv_pump_handle,
             _work_donor_handle: work_donor_handle,
+            _work_origin_handle: work_origin_handle,
             local_only,
             running_services,
             _shutdown_tx: shutdown_tx,

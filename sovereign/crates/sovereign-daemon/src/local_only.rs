@@ -75,6 +75,10 @@ pub enum MeshService {
     /// kind, so its ABSENCE from the census is two different facts (local-only,
     /// or an inert offer) and the boot trace names which.
     WorkDonor,
+    /// The `ingest:v1` execute origin (`crate::work_origin`), served on
+    /// loopback and registered with cw-rails, whose donor forwards units to
+    /// it. Spawned only on a node with a corpus engine.
+    WorkOrigin,
     /// The iroh endpoint + acceptor.
     IrohEndpoint,
     /// The founder reachability watchdog (only ever with the endpoint).
@@ -92,6 +96,7 @@ impl MeshService {
             MeshService::RingSync => "ring_sync",
             MeshService::RailKvPump => "rail_kv_pump",
             MeshService::WorkDonor => "work_donor",
+            MeshService::WorkOrigin => "work_origin",
             MeshService::IrohEndpoint => "iroh_endpoint",
             MeshService::IrohWatchdog => "iroh_watchdog",
         }
@@ -107,6 +112,7 @@ impl MeshService {
         MeshService::RingSync,
         MeshService::RailKvPump,
         MeshService::WorkDonor,
+        MeshService::WorkOrigin,
         MeshService::IrohEndpoint,
         MeshService::IrohWatchdog,
     ];

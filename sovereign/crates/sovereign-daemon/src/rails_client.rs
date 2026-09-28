@@ -166,6 +166,30 @@ pub async fn media_presence(base: &str) -> Result<Option<f32>, RailsDial> {
     Ok(answer.media_available)
 }
 
+/// Register one of this daemon's loopback origins in cw-rails' origin table
+/// (`POST /v1/mesh/origins`, pb-rails-origins); the claim holds its id.
+pub async fn register_origin(
+    base: &str,
+    registration: &commonwealth_media::origins::OriginRegistration,
+) -> Result<commonwealth_media::origins::OriginClaim, RailsDial> {
+    let body = serde_json::to_value(registration).map_err(|e| RailsDial::Unreadable {
+        base: base.to_string(),
+        detail: e.to_string(),
+    })?;
+    post_answer(base, "/v1/mesh/origins", &body).await
+}
+
+/// Push a registered origin's deadline out by `ttl_secs`.
+pub async fn renew_origin(base: &str, claim_id: &str, ttl_secs: u64) -> Result<(), RailsDial> {
+    let _: serde_json::Value = post_answer(
+        base,
+        &format!("/v1/mesh/origins/{claim_id}/renew"),
+        &serde_json::json!({ "ttl_secs": ttl_secs }),
+    )
+    .await?;
+    Ok(())
+}
+
 /// Retire one member row, on the process that owns the roster.
 pub async fn forget_member(
     base: &str,
