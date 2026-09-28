@@ -50,8 +50,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use commonwealth_rail_core::SigningKey;
 use crate::common::work_rails::WORK_NAMESPACE;
+use commonwealth_rail_core::SigningKey;
 use corpus_index::corpus::Corpus;
 use corpus_index::index::CorpusIndex;
 use sovereign_daemon::ingest_executor::fold_coverage_for;
