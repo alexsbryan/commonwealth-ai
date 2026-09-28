@@ -898,7 +898,10 @@ name = "corpus-index"
 # `include_str!`, so all three filesystem rules pass. Since pb-ingest-cli it
 # also holds the ONE embeddings-endpoint decider (`host`: the discovery ladder
 # and probe) and `embed_http`, because corpus-mcp's `serve` and ingest's CLI
-# both need them; neither widened the allow list.
+# both need them; neither widened the allow list. Since pb-corpus-mcp-reads it
+# holds `FsIndexSource` (fs_source.rs): the installed-index listing, its
+# dedupe and the handle cache, which the engine delegates to and corpus-mcp
+# reads through; the allow list did not widen.
 allow = ["kernel-types", "oplog", "corpus-engine-yield", "sovereign-contracts"]
 
 [[package_leaf]]
@@ -1016,7 +1019,11 @@ name = "corpus-engine-atlas-reader"
 # writes the atlas — the write paths stay in corpus-engine, which re-imports
 # these modules at their historical paths. understanding-vocab keeps only the
 # vocabulary door it already had; widening it with the store would drag
-# lancedb under the wire floor (oicp-types depends on it).
+# lancedb under the wire floor (oicp-types depends on it). Since
+# pb-corpus-mcp-reads it also holds the ONE walk opener (`opener`) and the
+# wiki-class provider it composes (`wikipedia_columnar`, with the wiki store's
+# format in `wiki_store`), so a program walks an atlas without the engine; the
+# allow list did not widen.
 allow = ["corpus-index", "kernel-types", "sovereign-contracts", "understanding-atlas",
          "understanding-vocab", "workspace-hack"]
 
