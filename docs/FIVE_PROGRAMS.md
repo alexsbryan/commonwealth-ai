@@ -170,7 +170,9 @@ name are that port's vocabulary, spoken by both programs, and they move to
 the same leaf beside the other ingest ports (`corpus-index`
 `ingest_port/tiered.rs`) with the engine re-exporting them. A type qualifies
 only if it is pure data under the leaf test and a port method names it
-(phase-b-49). A port between two programs is legitimate because the root
+(phase-b-49). "Engine-internal" means spoken only by
+ingest's own code; a type a cross-program port's method names is that
+port's vocabulary, whichever program declared the port (phase-b-51). A port between two programs is legitimate because the root
 that plugs it sits outside every package.
 Distributions are declared as `[[distribution]]` rows in
 `quality/ARCH_LAYERS.toml`, extending `[thin_surfaces]`: the crate may reach
