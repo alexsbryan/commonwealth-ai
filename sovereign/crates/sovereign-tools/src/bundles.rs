@@ -244,10 +244,15 @@ impl ToolBundle for WikipediaTools {
     }
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
-        BundleReport::new(self.name()).record(reg.register_reporting(Box::new(
-            crate::WikipediaFetchTool::new(Arc::clone(&self.corpus_engine), Arc::clone(&self.atlas))
+        BundleReport::new(self.name()).record(
+            reg.register_reporting(Box::new(
+                crate::WikipediaFetchTool::new(
+                    Arc::clone(&self.corpus_engine),
+                    Arc::clone(&self.atlas),
+                )
                 .declared(),
-        )))
+            )),
+        )
     }
 }
 
