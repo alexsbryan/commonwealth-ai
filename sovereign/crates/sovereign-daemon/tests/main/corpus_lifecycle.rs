@@ -3,26 +3,29 @@
 //!
 //! Covers the unified-ingest flow end-to-end at the HTTP boundary:
 //!
-//!  1. `POST /internal/corpus/install` starts an ingest into
-//!     `<index_dir>/<corpus_id>-partition-<self>/`. The task is
+//!  1. `POST /internal/corpus/install` starts an ingest. The task is
 //!     registered in `active_ingests` and writes progress into the
 //!     shared `corpus_progress` map.
 //!  2. `GET /internal/corpus/progress` reflects the current phase.
-//!  3. `POST /internal/corpus/cancel` fires the cancellation flag,
-//!     waits for the ingest loop to exit at its next poll boundary,
-//!     and wipes the canonical directory + every partition-*/ sibling.
+//!  3. `POST /internal/corpus/cancel` fires the cancellation, waits for
+//!     the ingest to exit, and asks ingest to wipe the corpus.
 //!  4. A second `POST /internal/corpus/install` for the same corpus
-//!     resumes cleanly from a clean slate and — with no peers
-//!     involved — promotes the partition-of-self directory to the
-//!     canonical index via the `sharding::promote_single_shard` fast
-//!     path.
+//!     starts cleanly.
 //!
-//! Uses a local JSONL fixture + a mock embed fn so the pipeline can be
-//! exercised without LLM weights or external network.
+//! Split at the port (pb-ingest-dial-daemon-tests, phase-b-52): the ingest
+//! is ingest's, reached through `IngestPort`, so the node holds
+//! `IngestPortDouble` programmed by [`Ingests`] — a registry install whose
+//! run is held open until cancelled, completes, or fails, and the on-disk
+//! status the runs leave. These readings assert the daemon's own
+//! bookkeeping and the port calls it makes. What ingest does with the same
+//! asks — the partition promoted to a finalised canonical, a pause that
+//! keeps the partition and resumes from it, the wipe, the refusal of an
+//! unknown recipe, a failed ingest leaving no canonical, the article
+//! sampler's estimate and sidecar — is corpus-engine's
+//! install_lifecycle_port_parity, over this file's former fixtures.
 
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::body::{to_bytes, Body};
@@ -30,178 +33,177 @@ use axum::http::{Request, StatusCode};
 use axum::Router;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use corpus_engine::{CorpusEngine, IngestProgress};
-use corpus_index::corpus::Corpus;
+use corpus_index::ingest_port::daemon::{
+    ArticleStats, CorpusDiskStatus, IngestResult, InstallRefusal, PreparedInstall,
+};
+use corpus_index::ingest_port::double::IngestPortDouble;
+use sovereign_contracts::daemon_wire::IngestProgress;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::{fabric, node, serving, AppState};
-use tempfile::TempDir;
+use tokio::sync::Notify;
 use tower::ServiceExt;
 
 use crate::common::ledger_double::RecordingLedger;
 
-/// Deterministic 8-dim vector derived from the input text. Non-zero
-/// and reasonably well-spread across inputs so LanceDB's IVF-PQ
-/// training sees a non-degenerate vector distribution (it otherwise
-/// refuses with "KMeans cannot train K centroids with 0 vectors").
-fn mock_embedding(text: &str) -> Vec<f32> {
-    let mut bytes = [0u8; 32];
-    for (i, b) in text.as_bytes().iter().enumerate() {
-        bytes[i % 32] ^= *b;
-    }
-    let mut v = vec![0.0_f32; 8];
-    for i in 0..8 {
-        // Split the 32-byte hash across 8 dims; map each 4-byte
-        // chunk into [-1.0, 1.0] so vectors live on a sensible
-        // magnitude scale.
-        let chunk = &bytes[i * 4..(i + 1) * 4];
-        let as_u32 = u32::from_le_bytes(chunk.try_into().unwrap());
-        v[i] = (as_u32 as f32) / (u32::MAX as f32) * 2.0 - 1.0;
-    }
-    v
+/// What the double's registry install does when the daemon runs it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Run {
+    /// Report progress, hold a partition in progress, and return only when
+    /// the port's cancel reaches it.
+    HeldUntilCancelled,
+    /// Report progress and finish with a ready canonical.
+    Completes,
+    /// Fail the way a mid-install embed failure does.
+    Fails,
 }
 
-/// Slow mock embed that sleeps briefly per call so the ingest takes
-/// long enough to observe mid-flight cancellation reliably on fast
-/// hardware. 2 ms per embed × ~500 chunks ≈ 1 s of embedding — plenty
-/// of margin between "install returns 202" and "canonical exists" for
-/// the cancel path to land in the middle.
-fn slow_mock_embed_fn() -> corpus_index::types::EmbedFn {
-    Arc::new(|text: &str| {
-        let v = mock_embedding(text);
-        Box::pin(async move {
-            tokio::time::sleep(Duration::from_millis(2)).await;
-            Ok(v)
+/// The registry install the node's port double runs, and the on-disk
+/// status those runs leave, shared across the fresh states a test builds
+/// (the reinstall and the resume each build one, as before the split).
+struct Ingests {
+    known: HashSet<String>,
+    run: Mutex<Run>,
+    disk: Mutex<HashMap<String, CorpusDiskStatus>>,
+    held: Mutex<HashMap<String, Arc<Notify>>>,
+}
+
+fn absent(corpus_id: &str) -> CorpusDiskStatus {
+    CorpusDiskStatus {
+        corpus_id: corpus_id.to_string(),
+        canonical_present: false,
+        partition_present: false,
+        canonical_in_progress: false,
+        partition_in_progress: false,
+        committed_iter_pos: 0,
+        shards_completed: Vec::new(),
+        shards_total: 0,
+    }
+}
+
+impl Ingests {
+    /// Installs of `known` resolve; any other id is not in the registry.
+    fn new(known: &[&str], run: Run) -> Arc<Self> {
+        Arc::new(Self {
+            known: known.iter().map(|s| s.to_string()).collect(),
+            run: Mutex::new(run),
+            disk: Mutex::default(),
+            held: Mutex::default(),
         })
-    })
-}
+    }
 
-/// A fast mock embed for the reinstall phase where we want the
-/// ingest to finish promptly for the canonical-index assertion.
-fn fast_mock_embed_fn() -> corpus_index::types::EmbedFn {
-    Arc::new(|text: &str| {
-        let v = mock_embedding(text);
-        Box::pin(async move { Ok(v) })
-    })
-}
+    fn set_run(&self, run: Run) {
+        *self.run.lock().unwrap() = run;
+    }
 
-/// A mock embed whose failure is switchable at runtime via `fail`.
-///
-/// When armed, every embed call returns `Err`, so the ingest gets all
-/// the way past recipe resolution and task spawn and *then* dies —
-/// which is the shape of every real mid-install failure (a gated
-/// snapshot download, a checksum mismatch, a full disk). Disarming it
-/// lets the same engine succeed on a retry, so one test can exercise
-/// fail → retry → complete without swapping engines.
-fn switchable_failing_embed_fn(
-    fail: Arc<std::sync::atomic::AtomicBool>,
-) -> corpus_index::types::EmbedFn {
-    Arc::new(move |text: &str| {
-        let fail = Arc::clone(&fail);
-        let v = mock_embedding(text);
-        Box::pin(async move {
-            if fail.load(std::sync::atomic::Ordering::SeqCst) {
-                Err(corpus_index::Error::Embed(
-                    "simulated mid-install embed failure".into(),
-                ))
-            } else {
-                Ok(v)
+    fn mark(&self, corpus_id: &str, edit: impl FnOnce(&mut CorpusDiskStatus)) {
+        let mut disk = self.disk.lock().unwrap();
+        edit(
+            disk.entry(corpus_id.to_string())
+                .or_insert_with(|| absent(corpus_id)),
+        );
+    }
+
+    fn prepare(self: &Arc<Self>, corpus_id: &str) -> Result<PreparedInstall, InstallRefusal> {
+        if !self.known.contains(corpus_id) {
+            return Err(InstallRefusal::RecipeNotFound(format!(
+                "No registry entry for corpus {corpus_id}"
+            )));
+        }
+        let (me, id, run) = (
+            Arc::clone(self),
+            corpus_id.to_string(),
+            *self.run.lock().unwrap(),
+        );
+        Ok(PreparedInstall {
+            // The post-install atlas pass is not these tests' subject.
+            opts_out_of_auto_enrichment: true,
+            run: Box::new(move |progress| {
+                Box::pin(async move {
+                    if run == Run::Fails {
+                        return Err(corpus_index::Error::Embed(
+                            "simulated mid-install embed failure".into(),
+                        ));
+                    }
+                    me.mark(&id, |d| {
+                        d.partition_present = true;
+                        d.partition_in_progress = true;
+                    });
+                    if let Some(progress) = &progress {
+                        progress(IngestProgress::Embedding {
+                            chunks_embedded: 1,
+                            total: 600,
+                            docs_processed: 1,
+                            chunks_per_sec: 1.0,
+                            expected_docs: None,
+                        });
+                    }
+                    if run == Run::HeldUntilCancelled {
+                        let held = Arc::new(Notify::new());
+                        me.held
+                            .lock()
+                            .unwrap()
+                            .insert(id.clone(), Arc::clone(&held));
+                        held.notified().await;
+                        return Err(corpus_index::Error::Cancelled(id));
+                    }
+                    me.mark(&id, |d| {
+                        d.partition_present = false;
+                        d.partition_in_progress = false;
+                        d.canonical_present = true;
+                    });
+                    Ok(IngestResult {
+                        corpus_id: id,
+                        chunks_created: 600,
+                        index_size_bytes: 0,
+                        duration_secs: 0,
+                        docs_skipped: 0,
+                    })
+                })
+            }),
+        })
+    }
+
+    /// The port's cancel: signals a held run, and says whether there was one.
+    fn cancel(&self, corpus_id: &str) -> bool {
+        match self.held.lock().unwrap().remove(corpus_id) {
+            Some(held) => {
+                held.notify_one();
+                true
             }
-        })
-    })
-}
-
-/// Write a minimal recipe.toml + a JSONL source file in `dir` and
-/// return the recipe dir + source path. The recipe uses the `jsonl`
-/// extractor + `paragraph` chunker so 500 docs produce ≈ 500 chunks
-/// at a small `max_chars`.
-///
-/// `mesh_sharing` controls whether the recipe opts into distributed
-/// share-the-index gossip. License-restricted corpora (Stanford
-/// Encyclopedia of Philosophy, etc.) ship with `false`; default
-/// builtin corpora ship with `true`. The lifecycle install/pause/
-/// cancel paths don't branch on this flag (they go through
-/// `spawn_corpus_install` → `engine.ingest`, which is mesh-agnostic),
-/// so existing tests work for both values; carrying the param makes
-/// future tests of `corpus_collaborate` peer-filtering and the
-/// auto-ingest gossip path possible without forking the fixture.
-fn seed_fixture(
-    dir: &std::path::Path,
-    corpus_id: &str,
-    doc_count: usize,
-    mesh_sharing: bool,
-) -> (PathBuf, PathBuf) {
-    let recipes_dir = dir.join("recipes");
-    std::fs::create_dir_all(&recipes_dir).unwrap();
-
-    let source_path = dir.join(format!("{corpus_id}.jsonl"));
-    let mut source_body = String::new();
-    for i in 0..doc_count {
-        // Keep text long enough to not fall below chunking thresholds.
-        let line = serde_json::json!({
-            "title": format!("Article {i}"),
-            "text": format!(
-                "This is a paragraph of test content for article {i}. \
-                 It is long enough to be kept by the chunker rather than \
-                 filtered out as noise, and it carries a handful of stop \
-                 words so the full-text index isn't trivially empty. \
-                 Padding padding padding padding padding."
-            ),
-        });
-        source_body.push_str(&line.to_string());
-        source_body.push('\n');
+            None => false,
+        }
     }
-    std::fs::write(&source_path, source_body).unwrap();
 
-    let recipe_toml = format!(
-        r#"[corpus]
-id = "{corpus_id}"
-name = "Test Corpus"
-description = "Integration-test fixture"
-license = "MIT"
-mesh_sharing = {mesh_sharing}
-size_compressed_gb = 0.0
-size_indexed_gb = 0.0
-
-[acquire]
-type = "local_file"
-path = "{}"
-
-[extract]
-type = "jsonl"
-content_field = "text"
-title_field = "title"
-
-[chunk]
-type = "paragraph"
-max_chars = 400
-overlap_chars = 40
-
-[index]
-fts = true
-vector = true
-embedding_model = "mock-8d"
-embedding_dimensions = 8
-"#,
-        source_path.display()
-    );
-    std::fs::write(recipes_dir.join(format!("{corpus_id}.toml")), recipe_toml).unwrap();
-    (recipes_dir, source_path)
+    fn double(self: &Arc<Self>) -> IngestPortDouble {
+        let (prepare, cancel, wipe, disk) = (
+            Arc::clone(self),
+            Arc::clone(self),
+            Arc::clone(self),
+            Arc::clone(self),
+        );
+        IngestPortDouble::new()
+            .on_prepare_registry_install(move |id| prepare.prepare(id))
+            .on_cancel_corpus_ingest(move |id| cancel.cancel(id))
+            .on_remove_corpus_everything(move |id| {
+                wipe.disk.lock().unwrap().remove(id);
+                Ok(())
+            })
+            .on_corpus_disk_status(move |id| {
+                disk.disk
+                    .lock()
+                    .unwrap()
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_else(|| absent(id))
+            })
+            .with_in_progress_ingestions(Vec::new())
+            .on_cached_article_stats(|_| None)
+            .on_compute_article_stats(|_| None)
+    }
 }
 
-/// Build an `AppState` whose corpus engine is rooted in `tmp` and
-/// reports its node id as `node-test` so partition directories land
-/// at a predictable path.
-fn test_state(tmp: &TempDir, embed_fn: corpus_index::types::EmbedFn) -> AppState {
-    let index_dir = tmp.path().join("indexes");
-    std::fs::create_dir_all(&index_dir).unwrap();
-    let recipes_dir = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes_dir).unwrap();
-
-    let engine = CorpusEngine::new(recipes_dir, index_dir, embed_fn)
-        .with_embedding_model("mock-8d")
-        .with_self_node_id("node-test");
-
-    let mesh = Mesh {
+fn test_mesh() -> Mesh {
+    Mesh {
         mesh_secret: [0u8; 32],
         invite_expires_at: None,
         id: MeshId::from_u128(1),
@@ -211,18 +213,23 @@ fn test_state(tmp: &TempDir, embed_fn: corpus_index::types::EmbedFn) -> AppState
         require_encryption: false,
         members: HashMap::new(),
         peers: vec![],
-    };
+    }
+}
 
-    state_over_double(mesh, engine)
+/// An `AppState` whose corpus handle is `engine`, and the handle itself so
+/// a test reads the port calls it made.
+fn test_state(engine: IngestPortDouble) -> (AppState, Arc<IngestPortDouble>) {
+    let engine = Arc::new(engine);
+    (state_over_double(test_mesh(), Arc::clone(&engine)), engine)
 }
 
 /// An AppState over the store-free recording double (five-programs fp-85).
-fn state_over_double(mesh: Mesh, engine: CorpusEngine) -> AppState {
+fn state_over_double(mesh: Mesh, engine: Arc<IngestPortDouble>) -> AppState {
     let self_id = NodeId::from_u128(1);
     AppState::new_with_seeds(
         self_id,
         mesh,
-        Some(Arc::new(engine)),
+        Some(engine),
         None,
         fabric::FabricSeed::default(),
         serving::ServingSeed::default(),
@@ -355,41 +362,51 @@ where
     }
 }
 
-/// Poll on-disk state until `predicate` holds or timeout. Lets us
-/// assert the daemon finished the wipe / finalise without sprinkling
-/// raw sleeps through the test.
-async fn wait_until_filesystem<F>(check: F, timeout: Duration, label: &str)
-where
-    F: Fn() -> bool,
-{
-    let deadline = tokio::time::Instant::now() + timeout;
-    while !check() {
+/// Poll until the daemon's task for `corpus_id` has left `active_ingests`.
+async fn wait_until_idle(state: &AppState, corpus_id: &str, label: &str) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while state
+        .inner
+        .ingest
+        .active_ingests
+        .read()
+        .await
+        .contains(corpus_id)
+    {
         if tokio::time::Instant::now() >= deadline {
-            panic!("wait_until_filesystem timed out at '{label}'");
+            panic!("wait_until_idle timed out at '{label}'");
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn install_cancel_reinstall_lifecycle() {
-    let tmp = TempDir::new().unwrap();
-    let corpus_id = "testcorpus";
+/// The calls among `names` the port saw, in order.
+fn calls_among(engine: &IngestPortDouble, names: &[&str]) -> Vec<&'static str> {
+    engine
+        .calls()
+        .into_iter()
+        .filter(|c| names.contains(c))
+        .collect()
+}
 
-    seed_fixture(tmp.path(), corpus_id, 600, true);
-
-    // ── Phase 1: install with slow embed so cancel has room to land ──
-    let state = test_state(&tmp, slow_mock_embed_fn());
-    let corpus = Corpus::named(tmp.path().join("indexes"), corpus_id).expect("non-empty corpus id");
-    let partition_dir = corpus.partition("node-test");
-    let canonical_dir = corpus.root();
-
-    let (status, body) = post_json(
+async fn install(state: &AppState, corpus_id: &str) -> (StatusCode, Vec<u8>) {
+    post_json(
         internal_router(state.clone()),
         "/internal/corpus/install",
         &serde_json::json!({ "corpus_id": corpus_id }),
     )
-    .await;
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn install_cancel_reinstall_lifecycle() {
+    let corpus_id = "testcorpus";
+    let ingests = Ingests::new(&[corpus_id], Run::HeldUntilCancelled);
+
+    // ── Phase 1: install, held open so cancel has room to land ──────
+    let (state, engine) = test_state(ingests.double());
+
+    let (status, body) = install(&state, corpus_id).await;
     assert_eq!(
         status,
         StatusCode::OK,
@@ -404,16 +421,16 @@ async fn install_cancel_reinstall_lifecycle() {
     assert_eq!(install_resp.corpus_id, corpus_id);
 
     // A second install immediately afterwards must be idempotent.
-    let (_, body) = post_json(
-        internal_router(state.clone()),
-        "/internal/corpus/install",
-        &serde_json::json!({ "corpus_id": corpus_id }),
-    )
-    .await;
+    let (_, body) = install(&state, corpus_id).await;
     let dup_resp: InstallResp = serde_json::from_slice(&body).unwrap();
     assert!(
         !dup_resp.spawned,
         "second install must not spawn a duplicate task"
+    );
+    assert_eq!(
+        calls_among(&engine, &["prepare_registry_install"]).len(),
+        1,
+        "the idempotent second install never reaches ingest"
     );
 
     // Progress eventually reports the corpus, confirming the ingest
@@ -425,10 +442,6 @@ async fn install_cancel_reinstall_lifecycle() {
         "ingest progress visible",
     )
     .await;
-    assert!(
-        partition_dir.exists(),
-        "partition-of-self directory should exist while ingest is running"
-    );
 
     // Status endpoint should expose the same corpus with a fused
     // on-disk + progress view. This is the data path the Desktop
@@ -448,7 +461,7 @@ async fn install_cancel_reinstall_lifecycle() {
     );
     assert!(
         entry.partition_in_progress,
-        "entry should report partition_in_progress while the ingest writes to the partition dir"
+        "entry should carry ingest's on-disk reading of the partition in progress"
     );
     assert!(
         entry.progress.is_some(),
@@ -471,6 +484,14 @@ async fn install_cancel_reinstall_lifecycle() {
         StatusCode::BAD_REQUEST,
         "cancel without confirm_wipe must be rejected"
     );
+    assert!(
+        calls_among(
+            &engine,
+            &["cancel_corpus_ingest", "remove_corpus_everything"]
+        )
+        .is_empty(),
+        "a refused cancel must not reach ingest"
+    );
 
     // ── Phase 2b: cancel + wipe (with explicit confirm) ─────────────
     let (status, body) = post_json(
@@ -487,17 +508,14 @@ async fn install_cancel_reinstall_lifecycle() {
     );
     let cancel_resp: CancelResp = serde_json::from_slice(&body).unwrap();
     assert!(cancel_resp.wiped, "cancel should report the wipe completed");
-    // `cancel_signalled` is racy: if the ingest finished before cancel
-    // arrived, no flag was flipped and it's reported false. Either
-    // outcome is acceptable — what we care about is that the wipe
-    // cleared on-disk state.
-
-    wait_until_filesystem(
-        || !partition_dir.exists() && !canonical_dir.exists(),
-        Duration::from_secs(5),
-        "canonical and partition dirs wiped",
-    )
-    .await;
+    assert_eq!(
+        calls_among(
+            &engine,
+            &["cancel_corpus_ingest", "remove_corpus_everything"]
+        ),
+        vec!["cancel_corpus_ingest", "remove_corpus_everything"],
+        "cancel stops the ingest, THEN asks ingest to wipe the corpus"
+    );
     assert!(
         state
             .inner
@@ -521,16 +539,10 @@ async fn install_cancel_reinstall_lifecycle() {
         "corpus_progress entry should have been cleared"
     );
 
-    // ── Phase 3: reinstall with fast embed → end-to-end completion ──
-    // A fresh engine with the fast embed lets the ingest finish in
-    // sub-second so we can assert the canonical directory materialised.
-    let state = test_state(&tmp, fast_mock_embed_fn());
-    let (status, body) = post_json(
-        internal_router(state.clone()),
-        "/internal/corpus/install",
-        &serde_json::json!({ "corpus_id": corpus_id }),
-    )
-    .await;
+    // ── Phase 3: reinstall on a fresh state → end-to-end completion ──
+    ingests.set_run(Run::Completes);
+    let (state, engine) = test_state(ingests.double());
+    let (status, body) = install(&state, corpus_id).await;
     assert_eq!(
         status,
         StatusCode::OK,
@@ -539,66 +551,37 @@ async fn install_cancel_reinstall_lifecycle() {
     );
     let resp: InstallResp = serde_json::from_slice(&body).unwrap();
     assert!(resp.spawned, "reinstall should spawn a fresh task");
-
-    // Wait for the partition → canonical promotion to complete.
-    wait_until_filesystem(
-        || Corpus::meta_in(&canonical_dir).exists() && !partition_dir.exists(),
-        Duration::from_secs(30),
-        "solo finalise promoted partition to canonical",
-    )
-    .await;
-
-    // _corpus_meta.json should carry the post-finalise shape.
-    let meta: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(Corpus::meta_in(&canonical_dir)).unwrap())
-            .unwrap();
+    wait_until_idle(&state, corpus_id, "reinstall ran to completion").await;
     assert_eq!(
-        meta["ingestion_in_progress"],
-        serde_json::Value::Bool(false),
-        "canonical meta must not be left in-progress"
+        calls_among(&engine, &["prepare_registry_install"]),
+        vec!["prepare_registry_install"],
     );
-    assert_eq!(
-        meta["is_shard"],
-        serde_json::Value::Bool(false),
-        "canonical meta must not claim is_shard"
-    );
-    assert!(
-        meta["processed_shards"]
-            .as_array()
-            .map(|arr| arr.is_empty())
-            .unwrap_or(false),
-        "canonical meta should have no processed_shards entries"
-    );
+    let (_, body) = get(internal_router(state.clone()), "/internal/corpus/status").await;
+    let statuses: StatusResponse = serde_json::from_slice(&body).unwrap();
+    let entry = statuses
+        .entries
+        .iter()
+        .find(|e| e.corpus_id == corpus_id)
+        .expect("the completed install is still reported");
+    assert!(!entry.active, "the finished task no longer claims to run");
 }
 
 /// Companion to [`install_cancel_reinstall_lifecycle`] — verifies the
 /// non-destructive `/internal/corpus/pause` route stops an in-flight
-/// ingest cleanly while leaving on-disk state intact, and that a
-/// subsequent `/internal/corpus/install` resumes rather than starting
-/// over.
+/// ingest cleanly while never asking ingest to wipe, and that a
+/// subsequent `/internal/corpus/install` starts again.
 ///
 /// This is the regression guard for the accidental-wipe incident:
 /// before pause existed, the only way to stop an ingest was a route
 /// that destroyed every committed chunk on the way out.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn install_pause_resume_lifecycle() {
-    let tmp = TempDir::new().unwrap();
     let corpus_id = "pausetest";
+    let ingests = Ingests::new(&[corpus_id], Run::HeldUntilCancelled);
 
-    seed_fixture(tmp.path(), corpus_id, 600, true);
-
-    // ── Phase 1: install with slow embed so pause has room to land ──
-    let state = test_state(&tmp, slow_mock_embed_fn());
-    let corpus = Corpus::named(tmp.path().join("indexes"), corpus_id).expect("non-empty corpus id");
-    let partition_dir = corpus.partition("node-test");
-    let canonical_dir = corpus.root();
-
-    let (status, _body) = post_json(
-        internal_router(state.clone()),
-        "/internal/corpus/install",
-        &serde_json::json!({ "corpus_id": corpus_id }),
-    )
-    .await;
+    // ── Phase 1: install, held open so pause has room to land ───────
+    let (state, engine) = test_state(ingests.double());
+    let (status, _body) = install(&state, corpus_id).await;
     assert_eq!(status, StatusCode::OK, "install returned non-OK");
 
     wait_until_progress(
@@ -608,10 +591,6 @@ async fn install_pause_resume_lifecycle() {
         "ingest progress visible",
     )
     .await;
-    assert!(
-        partition_dir.exists(),
-        "partition dir should exist while ingest is running"
-    );
 
     // ── Phase 2: pause — must NOT wipe ──────────────────────────────
     let (status, body) = post_json(
@@ -626,20 +605,23 @@ async fn install_pause_resume_lifecycle() {
         "pause returned non-OK: {:?}",
         String::from_utf8_lossy(&body)
     );
-    let _pause_resp: PauseResp = serde_json::from_slice(&body).unwrap();
+    let pause_resp: PauseResp = serde_json::from_slice(&body).unwrap();
+    assert!(
+        pause_resp.cancel_signalled,
+        "the held ingest was in flight, so the cancel reached it"
+    );
 
-    // /pause synchronously waits up to 5 s for the ingest task to clear
-    // out of `active_ingests` before returning, so by the time we're
-    // here the task has exited (or hit that ceiling and logged a warn).
     // The whole point of pause: data must survive.
-    assert!(
-        partition_dir.exists(),
-        "pause must NOT wipe the partition dir — that's the regression we're guarding"
+    assert_eq!(
+        calls_among(
+            &engine,
+            &["cancel_corpus_ingest", "remove_corpus_everything"]
+        ),
+        vec!["cancel_corpus_ingest"],
+        "pause must NOT ask ingest to wipe — that's the regression we're guarding"
     );
-    assert!(
-        Corpus::meta_in(&partition_dir).exists(),
-        "pause must preserve _corpus_meta.json so resume works"
-    );
+    // /pause synchronously waits up to 5 s for the ingest task to clear
+    // out of `active_ingests` before returning.
     assert!(
         state
             .inner
@@ -663,117 +645,60 @@ async fn install_pause_resume_lifecycle() {
         "corpus_progress should be cleared after pause"
     );
 
-    // ── Phase 3: resume by re-installing with a fast embed ──────────
-    // A fresh state with the fast embed lets the resumed ingest finish
-    // promptly. The committed_iter_pos written before pause means the
-    // loop skips past already-committed docs rather than re-embedding
-    // from zero.
-    let state = test_state(&tmp, fast_mock_embed_fn());
-    let (status, _body) = post_json(
-        internal_router(state.clone()),
-        "/internal/corpus/install",
-        &serde_json::json!({ "corpus_id": corpus_id }),
-    )
-    .await;
+    // ── Phase 3: resume by re-installing on a fresh state ───────────
+    ingests.set_run(Run::Completes);
+    let (state, _engine) = test_state(ingests.double());
+    let (status, body) = install(&state, corpus_id).await;
     assert_eq!(status, StatusCode::OK, "resume install returned non-OK");
-
-    wait_until_filesystem(
-        || Corpus::meta_in(&canonical_dir).exists() && !partition_dir.exists(),
-        Duration::from_secs(30),
-        "resumed ingest finalised to canonical",
-    )
-    .await;
-
-    let meta: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(Corpus::meta_in(&canonical_dir)).unwrap())
-            .unwrap();
-    assert_eq!(
-        meta["ingestion_in_progress"],
-        serde_json::Value::Bool(false),
-        "canonical meta must not be left in-progress after resume"
-    );
+    let resp: InstallResp = serde_json::from_slice(&body).unwrap();
+    assert!(resp.spawned, "the paused corpus installs again");
+    wait_until_idle(&state, corpus_id, "resumed ingest ran to completion").await;
 }
 
-/// Exercises the "daemon resumed a legacy canonical ingest after the
-/// Desktop session closed" scenario — no active ingest, no recent
-/// `IngestProgress` event, just on-disk state and an `extracted.jsonl`
-/// next to the corpus. The sampler should fire on first `/status`
-/// poll and publish a section-based `estimated_fraction` on the next.
+/// The "daemon resumed a legacy canonical ingest after the Desktop
+/// session closed" scenario — no active ingest, no recent
+/// `IngestProgress` event, just ingest's on-disk reading. The first
+/// `/status` poll finds no sampled stats and asks ingest to compute
+/// them; a later poll publishes the section-based `estimated_fraction`
+/// the daemon derives from them.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn status_sampler_publishes_estimated_fraction_on_resume() {
-    let tmp = TempDir::new().unwrap();
     let corpus_id = "testcorpus";
-
-    // We don't need a full ingest pipeline for this test — just the
-    // disk fingerprint the status handler reads: canonical index dir
-    // with committed_iter_pos and ingestion_in_progress, plus the
-    // extractor's merged JSONL file the sampler consumes.
-    let index_dir = tmp.path().join("indexes");
-    let downloads = index_dir.join("_downloads");
-    std::fs::create_dir_all(&downloads).unwrap();
-    let canonical = index_dir.join(corpus_id);
-    std::fs::create_dir_all(&canonical).unwrap();
-    std::fs::write(
-        Corpus::meta_in(&canonical),
-        serde_json::json!({
-            "corpus_id": corpus_id,
-            "ingestion_in_progress": true,
-            "committed_iter_pos": 30u64,
-            "processed_shards": [],
-        })
-        .to_string(),
-    )
-    .unwrap();
-
-    // 50 articles × 2 sections each → sampler estimates
-    // total_sections ≈ 50 × (2 + 1 lead) = 150. With committed=30 we
-    // expect fraction ≈ 0.20. We allow a generous ±20 % window so
-    // the assertion isn't brittle against the sampler's exact
-    // bookkeeping (lead-counting etc.).
-    let extracted = downloads.join(format!("{corpus_id}.extracted.jsonl"));
-    let mut jsonl = String::new();
-    for i in 0..50 {
-        let line = serde_json::json!({
-            "name": format!("Article {i}"),
-            "identifier": i,
-            "abstract": "Stub abstract with enough padding to clear the extractor minimums.",
-            "url": format!("https://en.wikipedia.org/wiki/A{i}"),
-            "sections": [
-                { "name": "A", "type": "section", "has_parts": [] },
-                { "name": "B", "type": "section", "has_parts": [] }
-            ]
-        });
-        jsonl.push_str(&line.to_string());
-        jsonl.push('\n');
-    }
-    std::fs::write(&extracted, jsonl).unwrap();
-
-    // Build an AppState against this pre-seeded disk layout. No
-    // ingest is spawned — the status handler does all the work on
-    // its own by consulting the engine's on-disk helpers.
-    let engine = CorpusEngine::new(
-        tmp.path().join("recipes"),
-        index_dir.clone(),
-        fast_mock_embed_fn(),
-    )
-    .with_embedding_model("mock-8d")
-    .with_self_node_id("node-test");
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "Test Mesh".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
+    // What ingest reads off the fixture this test wrote until the split:
+    // a canonical in progress at committed_iter_pos 30, and 50 articles of
+    // 3 sections each once sampled.
+    let sampled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (cached, computed) = (Arc::clone(&sampled), Arc::clone(&sampled));
+    let stats = ArticleStats {
+        total_articles: 50,
+        mean_sections_per_article: 3.0,
+        total_sections_estimate: 150,
+        source_mtime_secs: 0,
+        source_size_bytes: 0,
+        sampled_at_secs: 0,
     };
-    let state = state_over_double(mesh, engine);
+    let stats_for_cache = stats.clone();
+    let engine = IngestPortDouble::new()
+        .with_in_progress_ingestions(vec![corpus_id.to_string()])
+        .on_corpus_disk_status(|id| CorpusDiskStatus {
+            canonical_present: true,
+            canonical_in_progress: true,
+            committed_iter_pos: 30,
+            ..absent(id)
+        })
+        .on_cached_article_stats(move |_| {
+            cached
+                .load(std::sync::atomic::Ordering::SeqCst)
+                .then(|| stats_for_cache.clone())
+        })
+        .on_compute_article_stats(move |_| {
+            computed.store(true, std::sync::atomic::Ordering::SeqCst);
+            Some(stats.clone())
+        });
+    let (state, engine) = test_state(engine);
 
-    // First poll: sampler hasn't run yet, so sidecar is absent and
-    // we should see None for estimated_total_sections. The handler
-    // kicks off the sampler in a spawn_blocking task.
+    // First poll: nothing sampled yet. The handler kicks off the sampler
+    // in a spawn_blocking task.
     let (status, body) = get(internal_router(state.clone()), "/internal/corpus/status").await;
     assert_eq!(status, StatusCode::OK);
     let resp: StatusResponse = serde_json::from_slice(&body).unwrap();
@@ -784,14 +709,7 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
         .expect("status must include legacy-resume corpus");
     assert!(first.canonical_in_progress);
     assert_eq!(first.committed_iter_pos, 30);
-    // First poll: may or may not have the sidecar depending on how
-    // fast the spawn_blocking task lands. Don't assert — just ensure
-    // the overall shape is sensible.
-    let _ = first.estimated_total_sections;
 
-    // Give the sampler a beat to finish. The fixture is ~5 KB so the
-    // full sample runs in microseconds; a 500 ms budget is ample and
-    // keeps the test fast locally.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
     let entry = loop {
         let (_, body) = get(internal_router(state.clone()), "/internal/corpus/status").await;
@@ -813,26 +731,18 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     };
 
-    let total = entry
-        .estimated_total_sections
-        .expect("sampler should have published a total");
+    assert!(
+        engine.calls().contains(&"compute_article_stats"),
+        "an unsampled corpus with committed work asks ingest to sample it"
+    );
+    assert_eq!(entry.estimated_total_sections, Some(150));
+    assert_eq!(entry.estimated_total_articles, Some(50));
+    // committed 30 of 150 sampled sections: the daemon's own division.
     let fraction = entry.estimated_fraction.unwrap();
-    assert!(total > 0, "sampler must publish a non-zero total");
-    // Truth is 30 committed / (50 × 3) = 0.20; allow ±30 % for the
-    // lead-counting heuristic and sample extrapolation.
     assert!(
-        (fraction - 0.20).abs() < 0.30,
-        "expected fraction near 0.20, got {fraction} (total={total})"
+        (fraction - 0.20).abs() < 1e-6,
+        "expected 30/150, got {fraction}"
     );
-    assert!(
-        entry.estimated_total_articles.unwrap_or(0) > 0,
-        "articles estimate should accompany sections estimate"
-    );
-
-    // Sidecar file should have landed on disk so the next daemon
-    // session reads it without resampling.
-    let sidecar = downloads.join(format!("{corpus_id}.extracted.jsonl.count"));
-    assert!(sidecar.exists(), "sidecar file should be written");
 }
 
 /// Installing a corpus whose recipe cannot be resolved (no local
@@ -843,18 +753,10 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
 /// success while the daemon logged `No registry entry for corpus`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn install_unresolvable_recipe_is_404_not_silent_success() {
-    let tmp = TempDir::new().unwrap();
-    // `test_state` gives an engine rooted in an empty temp recipes dir,
-    // so this id has no override to resolve and isn't in the bundled
-    // snapshot.
-    let state = test_state(&tmp, fast_mock_embed_fn());
+    let ingests = Ingests::new(&[], Run::Completes);
+    let (state, _engine) = test_state(ingests.double());
 
-    let (status, body) = post_json(
-        internal_router(state.clone()),
-        "/internal/corpus/install",
-        &serde_json::json!({ "corpus_id": "no-such-corpus-xyz" }),
-    )
-    .await;
+    let (status, body) = install(&state, "no-such-corpus-xyz").await;
 
     assert_eq!(
         status,
@@ -867,6 +769,10 @@ async fn install_unresolvable_recipe_is_404_not_silent_success() {
     assert!(
         msg.contains("no-such-corpus-xyz"),
         "error body should name the corpus, got: {msg}"
+    );
+    assert!(
+        state.inner.ingest.active_ingests.read().await.is_empty(),
+        "a refused install must not leave a slot in active_ingests"
     );
 }
 
@@ -889,18 +795,11 @@ async fn install_unresolvable_recipe_is_404_not_silent_success() {
 ///      absence is precisely what the poller mistranslates.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn failed_ingest_reports_failed_and_stays_visible() {
-    let tmp = TempDir::new().unwrap();
     let corpus_id = "failcorpus";
-    let (_recipes_dir, _source) = seed_fixture(tmp.path(), corpus_id, 20, true);
-    let fail = Arc::new(std::sync::atomic::AtomicBool::new(true));
-    let state = test_state(&tmp, switchable_failing_embed_fn(Arc::clone(&fail)));
+    let ingests = Ingests::new(&[corpus_id], Run::Fails);
+    let (state, _engine) = test_state(ingests.double());
 
-    let (status, body) = post_json(
-        internal_router(state.clone()),
-        "/internal/corpus/install",
-        &serde_json::json!({ "corpus_id": corpus_id }),
-    )
-    .await;
+    let (status, body) = install(&state, corpus_id).await;
     assert_eq!(
         status,
         StatusCode::OK,
@@ -928,8 +827,8 @@ async fn failed_ingest_reports_failed_and_stays_visible() {
         panic!("expected a Failed record, got {snapshot:?}");
     };
     assert!(
-        !message.trim().is_empty(),
-        "the failure message is shown to the user verbatim, so it must not be blank"
+        message.contains("simulated mid-install embed failure"),
+        "the failure message is shown to the user verbatim, so it must be ingest's: {message}"
     );
 
     // (2) The corpus must not have disappeared from /status.
@@ -957,10 +856,6 @@ async fn failed_ingest_reports_failed_and_stays_visible() {
         !entry.active,
         "the task is over — it must not still claim to be active"
     );
-    assert!(
-        !entry.canonical_present,
-        "a failed ingest must not leave a canonical index behind"
-    );
 }
 
 /// Retrying after a failure must retire the stale failure record, so a
@@ -970,19 +865,12 @@ async fn failed_ingest_reports_failed_and_stays_visible() {
 /// path responsible for clearing it.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn retry_after_failure_clears_the_stale_failure_record() {
-    let tmp = TempDir::new().unwrap();
     let corpus_id = "retrycorpus";
-    let (_recipes_dir, _source) = seed_fixture(tmp.path(), corpus_id, 20, true);
-    let fail = Arc::new(std::sync::atomic::AtomicBool::new(true));
-    let state = test_state(&tmp, switchable_failing_embed_fn(Arc::clone(&fail)));
+    let ingests = Ingests::new(&[corpus_id], Run::Fails);
+    let (state, _engine) = test_state(ingests.double());
 
     // First attempt: armed to fail.
-    let (status, _) = post_json(
-        internal_router(state.clone()),
-        "/internal/corpus/install",
-        &serde_json::json!({ "corpus_id": corpus_id }),
-    )
-    .await;
+    let (status, _) = install(&state, corpus_id).await;
     assert_eq!(status, StatusCode::OK);
     wait_until_progress(
         &state,
@@ -997,14 +885,9 @@ async fn retry_after_failure_clears_the_stale_failure_record() {
     )
     .await;
 
-    // Disarm, then retry the same corpus on the same engine.
-    fail.store(false, std::sync::atomic::Ordering::SeqCst);
-    let (status, body) = post_json(
-        internal_router(state.clone()),
-        "/internal/corpus/install",
-        &serde_json::json!({ "corpus_id": corpus_id }),
-    )
-    .await;
+    // Disarm, then retry the same corpus on the same state.
+    ingests.set_run(Run::Completes);
+    let (status, body) = install(&state, corpus_id).await;
     assert_eq!(
         status,
         StatusCode::OK,
@@ -1040,30 +923,19 @@ async fn retry_after_failure_clears_the_stale_failure_record() {
 /// between "already active" (fine) and "recipe not found" (error).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn second_install_while_active_is_200_spawned_false() {
-    let tmp = TempDir::new().unwrap();
     let corpus_id = "dualpath";
-    // A slow embed keeps the first ingest in `active_ingests` long
-    // enough for the second POST to observe it.
-    let (_recipes_dir, _source) = seed_fixture(tmp.path(), corpus_id, 40, true);
-    let state = test_state(&tmp, slow_mock_embed_fn());
+    // A held ingest keeps the first task in `active_ingests` for the
+    // second POST to observe.
+    let ingests = Ingests::new(&[corpus_id], Run::HeldUntilCancelled);
+    let (state, _engine) = test_state(ingests.double());
 
-    let (status1, body1) = post_json(
-        internal_router(state.clone()),
-        "/internal/corpus/install",
-        &serde_json::json!({ "corpus_id": corpus_id }),
-    )
-    .await;
+    let (status1, body1) = install(&state, corpus_id).await;
     assert_eq!(status1, StatusCode::OK, "first install should be 200");
     let first: InstallResp = serde_json::from_slice(&body1).unwrap();
     assert!(first.spawned, "first install should spawn a task");
 
     // Second install while the first is still running: benign no-op.
-    let (status2, body2) = post_json(
-        internal_router(state.clone()),
-        "/internal/corpus/install",
-        &serde_json::json!({ "corpus_id": corpus_id }),
-    )
-    .await;
+    let (status2, body2) = install(&state, corpus_id).await;
     assert_eq!(
         status2,
         StatusCode::OK,
