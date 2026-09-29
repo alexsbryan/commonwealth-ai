@@ -32,6 +32,8 @@ mod enrichment_health_e2e;
 mod knowledge_view_e2e;
 #[path = "main/local_corpus_e2e.rs"]
 mod local_corpus_e2e;
+#[path = "main/local_corpus_port_double.rs"]
+mod local_corpus_port_double;
 #[path = "main/obsidian_live_sync_e2e.rs"]
 mod obsidian_live_sync_e2e;
 #[path = "main/playwright_actuator.rs"]

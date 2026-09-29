@@ -6,18 +6,15 @@
 #![allow(clippy::await_holding_lock)]
 //! End-to-end tests for the `KnowledgeView` pipeline.
 //!
-//! Covers the full round-trip:
+//! Covers svrn's half of the round-trip:
 //!
 //!   SqliteStateStore ← memories/conversations  (write path)
 //!        │
 //!        ▼
-//!   SqliteAcquirer → rows.jsonl  (ingest)
+//!   view recipes → LocalCorpusPort::ingest_recipe_path  (the double)
 //!        │
 //!        ▼
-//!   Jsonl extractor → Passthrough chunker → LanceDB  (index)
-//!        │
-//!        ▼
-//!   FieldSkeleton planted on disk  (skips inference stub)
+//!   FieldSkeleton planted on disk
 //!        │
 //!        ▼
 //!   KnowledgeViewManager::splice_into  (assemble digest)
@@ -25,21 +22,19 @@
 //!        ▼
 //!   ConversationContext.knowledge_view_digests  (consumed by prompt)
 //!
-//! Inference is stubbed so enrichment prompts return deterministic
-//! canned JSON when the tests exercise the enrichment path. Embedding
-//! is a fixed-size zero vector — LanceDB stores it as opaque bytes,
-//! and the splice path doesn't re-embed.
+//! The ingest runs on the `LocalCorpusPort` double
+//! (`local_corpus_port_double`), which gives each view an empty leaf
+//! index to hold its skeleton. Ingest's half (a registered custom
+//! acquirer feeding a view recipe, and its skeleton writer agreeing with
+//! the leaf reader the splice uses) is corpus-engine's
+//! `local_corpus_port_parity`.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::clustering::FieldModelStats;
-use corpus_engine::enrichment::pipeline::ChatPrompt;
-use corpus_engine::enrichment::skeleton::{
-    CanonicalQuestion, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
-};
-use corpus_engine::recipe::AcquirerConfig;
-use corpus_engine::CorpusEngine;
+use crate::local_corpus_port_double::leaf_backed_double;
+use corpus_index::ingest_port::double::IngestPortDouble;
+use corpus_index::source::CorpusReadPort;
 use corpus_index::types::EmbedFn;
 use sovereign_core::observer::SharedStateStoreObserver;
 use sovereign_core::time::unix_now;
@@ -50,6 +45,10 @@ use sovereign_tools::knowledge_view::{
     conversation_history_recipe, KnowledgeViewManager, VIEW_PERSONAL_KNOWLEDGE,
 };
 use tempfile::TempDir;
+use understanding_vocab::skeleton::{
+    CanonicalQuestion, FieldModelStats, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion,
+    SkeletonPosition,
+};
 
 /// Test-file-local mutex serialising the ingest-heavy tests in this
 /// file. LanceDB's table writer exhibits intermittent errors when
@@ -77,34 +76,6 @@ const EMBED_DIMS: usize = corpus_index::types::DEFAULT_EMBED_DIM;
 /// Adequate for the splice path, which never re-embeds.
 fn stub_embed() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0f32; EMBED_DIMS]) }))
-}
-
-/// Canned inference stub: inspects the prompt and returns JSON matching
-/// the expected shape for each enrichment phase. Kept minimal — each
-/// prompt method in `PersonalDomain` / `ConversationalDomain` has a
-/// distinctive marker phrase.
-fn stub_inference() -> corpus_engine::InferenceFn {
-    Arc::new(|prompt: &ChatPrompt, _max_tokens: Option<u32>| {
-        let p = prompt.user.clone();
-        Box::pin(async move {
-            if p.contains("semantically similar") || p.contains("cluster together") {
-                Ok(r#"{"topic":"meaningful work","position_name":"Purpose-driven","is_argumentative":true,"is_objection":false,"is_open_question":false,"is_coherent":true}"#
-                    .to_string())
-            } else if p.contains("in tension") || p.contains("in dialogue") {
-                Ok(r#"{"crux":"stability vs. autonomy","confidence":0.8,"resolution_condition":"lived clarity"}"#
-                    .to_string())
-            } else if p.contains("unresolved inquiry") || p.contains("returning to") {
-                Ok(r#"{"question":"what kind of life do I want","why_unresolved":"value tensions"}"#
-                    .to_string())
-            } else if p.contains("[Memory 1]") || p.contains("[Conversation 1") {
-                // Skeleton extraction — array of passage records.
-                Ok(r#"[{"passage_index":0,"canonical_question":"what does meaningful work look like","question_type":"normative","positions":[{"name":"Purpose-driven","claim":"meaningful work serves others","status":"held","proponents":[]}]}]"#
-                    .to_string())
-            } else {
-                Ok("{}".to_string())
-            }
-        })
-    })
 }
 
 fn mem(id: &str, content: &str, conv_id: Option<&str>) -> Memory {
@@ -152,29 +123,35 @@ fn empty_context(conv_id: &str) -> ConversationContext {
     }
 }
 
-/// Build a (CorpusEngine, temp dir, SQLite db path) suitable for
-/// driving a full ingest pipeline with zero side effects on $HOME.
-async fn boot_engine() -> (Arc<CorpusEngine>, TempDir, PathBuf) {
+/// Build a (port double, temp dir, SQLite db path) with zero side
+/// effects on $HOME.
+async fn boot_engine() -> (Arc<IngestPortDouble>, TempDir, PathBuf) {
     let tmp = TempDir::new().expect("tempdir");
     let indexes_dir = tmp.path().join("indexes");
-    let recipes_dir = tmp.path().join("recipes");
     let db_path = tmp.path().join("sovereign.db");
     std::fs::create_dir_all(&indexes_dir).unwrap();
-    std::fs::create_dir_all(&recipes_dir).unwrap();
 
-    let engine = Arc::new(
-        CorpusEngine::new(recipes_dir, indexes_dir, stub_embed())
-            .with_embedding_model("test-mock")
-            .with_inference_fn(stub_inference()),
-    );
+    let engine = Arc::new(leaf_backed_double(indexes_dir, stub_embed()));
     (engine, tmp, db_path)
+}
+
+/// Write `skeleton` where the splice reads it: the leaf's field-skeleton
+/// artifact in `dir`, as JSON. That ingest's writer produces the same file
+/// is corpus-engine's `local_corpus_port_parity`.
+fn write_skeleton(dir: &std::path::Path, skeleton: &FieldSkeleton) {
+    let json = serde_json::to_string_pretty(skeleton).expect("skeleton serialises");
+    std::fs::write(
+        dir.join(corpus_engine_atlas_reader::field_model::LEGACY_ARTIFACT),
+        json,
+    )
+    .expect("write skeleton");
 }
 
 /// Plant a canned FieldSkeleton on disk so `splice_into` can read it
 /// without running the full 5-phase enrichment. The enrichment pipeline
 /// has been verified separately in corpus-engine's own tests; here we
 /// test the *splice* path specifically.
-fn plant_skeleton(engine: &CorpusEngine, view_id: &str, domain_id: &str) -> FieldSkeleton {
+fn plant_skeleton(engine: &IngestPortDouble, view_id: &str, domain_id: &str) -> FieldSkeleton {
     let skeleton = FieldSkeleton {
         schema_version: 1,
         corpus_id: view_id.to_string(),
@@ -234,11 +211,7 @@ fn plant_skeleton(engine: &CorpusEngine, view_id: &str, domain_id: &str) -> Fiel
                 .open_index_for_corpus(&view)
                 .await
                 .expect("open index after ingest");
-            corpus_engine::index::field_skeleton::write_field_skeleton(
-                &index.path(),
-                &skeleton_clone,
-            )
-            .expect("write skeleton");
+            write_skeleton(&index.path(), &skeleton_clone);
         });
     });
     skeleton
@@ -294,6 +267,12 @@ async fn personal_view_ingest_plus_planted_skeleton_splices_into_context() {
         report.failure_for(VIEW_PERSONAL_KNOWLEDGE),
         None,
         "the view this test plants a skeleton into must ingest"
+    );
+    // The views' acquirer is svrn's, registered with ingest by kind.
+    assert!(
+        engine.registered_acquirers().iter().any(|k| k == "sqlite"),
+        "the sqlite acquirer the view recipes name is registered: {:?}",
+        engine.registered_acquirers()
     );
 
     // Plant a skeleton directly on disk so the splice path has
@@ -397,16 +376,14 @@ async fn conversational_view_excludes_local_only_skill_conversations() {
     // the query `SqliteAcquirer` will run at ingest time — testing
     // it in isolation pins the filter's behaviour regardless of
     // the pipeline around it.
-    let recipe: corpus_engine::recipe::Recipe =
-        serde_json::from_value(conversation_history_recipe(&db_path, &["inner-work"]))
-            .expect("view recipe document parses as a Recipe");
-    let query = match recipe.acquire {
-        AcquirerConfig::Custom { ref params, .. } => params["query"]
-            .as_str()
-            .expect("recipe query is a string")
-            .to_string(),
-        _ => panic!("recipe unexpectedly not a Custom acquirer"),
-    };
+    // That ingest parses a view recipe of this shape as a custom acquirer
+    // is corpus-engine's `svrn_recipe_shapes::a_knowledge_view_recipe_parses`.
+    let recipe = conversation_history_recipe(&db_path, &["inner-work"]);
+    assert_eq!(recipe["acquire"]["type"], "custom", "recipe: {recipe}");
+    let query = recipe["acquire"]["params"]["query"]
+        .as_str()
+        .expect("recipe query is a string")
+        .to_string();
 
     let mut rows_contents: Vec<String> = Vec::new();
     {
@@ -486,45 +463,18 @@ fn semantic_embed_stub() -> EmbedFn {
     })
 }
 
-/// Plant a field_skeleton.json for `view_id`. Resilient to
-/// partition-vs-canonical layout: the CorpusEngine's solo-ingest
-/// finalise typically promotes `<view>-partition-local` to
-/// `<view>`, but if another corpus is promoting concurrently the
-/// finalise may defer and leave the partition path in place.
-/// Plant into whichever directory actually holds committed data.
-fn plant_skeleton_into(engine: &CorpusEngine, view_id: &str, skeleton: &FieldSkeleton) {
-    let canonical = engine.index_dir().join(view_id);
-    let partition = engine.partition_path(view_id);
-    let target = if canonical.exists() {
-        canonical
-    } else if partition.exists() {
-        partition
-    } else {
-        panic!(
-            "no index directory for view '{view_id}' — canonical={} partition={}",
-            engine.index_dir().join(view_id).display(),
-            engine.partition_path(view_id).display()
-        );
-    };
-    let view = view_id.to_string();
-    let target = target.clone();
-    let skeleton_clone = skeleton.clone();
-    tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(async move {
-            let index = engine
-                .open_index(&target)
-                .await
-                .unwrap_or_else(|e| panic!("open index at {}: {e}", target.display()));
-            corpus_engine::index::field_skeleton::write_field_skeleton(
-                &index.path(),
-                &skeleton_clone,
-            )
-            .unwrap_or_else(|e| panic!("write skeleton for {view}: {e}"));
-        });
-    });
+/// Plant a field_skeleton.json for `view_id` in its index dir.
+fn plant_skeleton_into(engine: &IngestPortDouble, view_id: &str, skeleton: &FieldSkeleton) {
+    let target = engine.index_dir().join(view_id);
+    assert!(
+        target.exists(),
+        "no index directory for view '{view_id}' at {}",
+        target.display()
+    );
+    write_skeleton(&target, skeleton);
 }
 
-fn plant_personal_skeleton(engine: &CorpusEngine) {
+fn plant_personal_skeleton(engine: &IngestPortDouble) {
     let skeleton = FieldSkeleton {
         schema_version: 1,
         corpus_id: VIEW_PERSONAL_KNOWLEDGE.into(),
@@ -558,7 +508,7 @@ fn plant_personal_skeleton(engine: &CorpusEngine) {
     plant_skeleton_into(engine, VIEW_PERSONAL_KNOWLEDGE, &skeleton);
 }
 
-fn plant_conversation_skeleton(engine: &CorpusEngine) {
+fn plant_conversation_skeleton(engine: &IngestPortDouble) {
     let skeleton = FieldSkeleton {
         schema_version: 1,
         corpus_id: "conversation-history".into(),
@@ -600,21 +550,15 @@ async fn cross_view_digest_surfaces_resonance_across_personal_and_conversational
     // framing.
     let tmp = TempDir::new().unwrap();
     let indexes_dir = tmp.path().join("indexes");
-    let recipes_dir = tmp.path().join("recipes");
     let db_path = tmp.path().join("sovereign.db");
     let notes_path = tmp.path().join("notes.db");
     std::fs::create_dir_all(&indexes_dir).unwrap();
-    std::fs::create_dir_all(&recipes_dir).unwrap();
     // Touch the notes DB so institutional ingest doesn't error on
     // startup — it'll still produce no results and be skipped from
     // the cross-view computation.
     let _ = std::fs::File::create(&notes_path).unwrap();
 
-    let engine = Arc::new(
-        CorpusEngine::new(recipes_dir, indexes_dir, semantic_embed_stub())
-            .with_embedding_model("test-mock")
-            .with_inference_fn(stub_inference()),
-    );
+    let engine = Arc::new(leaf_backed_double(indexes_dir, semantic_embed_stub()));
 
     // Seed memories + a conversation so personal + conversational
     // both ingest non-empty content.
@@ -710,19 +654,13 @@ async fn cross_view_digest_suppressed_under_local_only_skill() {
     // match against → the cross-view digest must not appear at all.
     let tmp = TempDir::new().unwrap();
     let indexes_dir = tmp.path().join("indexes");
-    let recipes_dir = tmp.path().join("recipes");
     let db_path = tmp.path().join("sovereign.db");
     let notes_path = tmp.path().join("notes.db");
     std::fs::create_dir_all(&indexes_dir).unwrap();
-    std::fs::create_dir_all(&recipes_dir).unwrap();
     let _ = std::fs::File::create(&db_path).unwrap();
     let _ = std::fs::File::create(&notes_path).unwrap();
 
-    let engine = Arc::new(
-        CorpusEngine::new(recipes_dir, indexes_dir, semantic_embed_stub())
-            .with_embedding_model("test-mock")
-            .with_inference_fn(stub_inference()),
-    );
+    let engine = Arc::new(leaf_backed_double(indexes_dir, semantic_embed_stub()));
     let manager = Arc::new(
         KnowledgeViewManager::new_with_notes_path(
             engine,

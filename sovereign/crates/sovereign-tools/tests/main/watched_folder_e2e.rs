@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end tests for the `WatchedFolder` reconciliation pipeline.
 //!
-//! Drives the full register → initial-ingest → run_once flow against
-//! a real `CorpusEngine` + `LocalCorpusManager`, with a zero-vector
-//! embed (LanceDB stores it as opaque bytes — adequate for our
-//! diff-and-apply assertions which never re-search).
+//! Drives the full register → initial-ingest → run_once flow through
+//! `LocalCorpusManager` over the `LocalCorpusPort` double
+//! (`local_corpus_port_double`), with a zero-vector embed. What ingest
+//! does with the same recipes and updates is corpus-engine's
+//! `local_corpus_port_parity`.
 //!
 //! What's exercised:
 //!   - `LocalCorpusConfig::watched_folder` factory + persistence
@@ -17,7 +18,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
+use crate::local_corpus_port_double::leaf_backed_double;
+use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
 use sovereign_core::traits::{SensitiveCorpusOracle, StateStore};
 use sovereign_store::memory::InMemoryStateStore;
@@ -46,7 +48,7 @@ struct Fixture {
     _tmp: TempDir,
     data_dir: PathBuf,
     folder: PathBuf,
-    engine: Arc<CorpusEngine>,
+    engine: Arc<IngestPortDouble>,
     manager: Arc<LocalCorpusManager>,
     registry: Arc<WatchedFolderRegistry>,
     worker: Arc<Worker>,
@@ -56,23 +58,16 @@ async fn boot() -> Fixture {
     let tmp = TempDir::new().expect("tempdir");
     let data_dir = tmp.path().join("data");
     let indexes_dir = data_dir.join("indexes");
-    // Point the engine's recipe-overrides directory at the same path
-    // `LocalCorpusManager::ingest` writes recipe TOMLs to. Without
-    // this, `engine.load_recipe(corpus_id)` (called by
-    // `CorpusUpdater::apply_update`) returns
-    // "No registry entry for corpus 'watched-…'" and every sweep
-    // after the first errors. The production daemon is configured
-    // the same way (data_dir.join("indexes") for both indexes and
-    // recipe overrides — see daemon_cmd.rs:401).
+    // Where `LocalCorpusManager::ingest` writes recipe TOMLs. That the
+    // engine's watched update finds a recipe written there is
+    // corpus-engine's `local_corpus_port_parity`.
     let recipes_dir = data_dir.join("local-corpus-recipes");
     let folder = tmp.path().join("watched");
     std::fs::create_dir_all(&indexes_dir).unwrap();
     std::fs::create_dir_all(&recipes_dir).unwrap();
     std::fs::create_dir_all(&folder).unwrap();
 
-    let engine = Arc::new(
-        CorpusEngine::new(recipes_dir, indexes_dir, stub_embed()).with_embedding_model("test-mock"),
-    );
+    let engine = Arc::new(leaf_backed_double(indexes_dir, stub_embed()));
     let store: Arc<dyn StateStore> = Arc::new(InMemoryStateStore::new());
     let manager = Arc::new(
         LocalCorpusManager::init(
