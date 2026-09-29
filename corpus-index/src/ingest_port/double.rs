@@ -38,7 +38,7 @@ use crate::{Error, Result};
 use sovereign_contracts::daemon_wire::RecipeParameterSchema;
 
 mod daemon;
-pub use daemon::RecipeHarnessDouble;
+pub use daemon::{RecipeHarnessDouble, SliceIngest};
 
 fn unprogrammed(method: &str) -> String {
     format!("IngestPortDouble::{method}: not programmed by this test")
@@ -59,6 +59,9 @@ type RecipeVocabularyFn =
     dyn Fn(&Path) -> Result<Option<super::daemon::RecipeVocabulary>> + Send + Sync;
 type MergePartitionsFn =
     dyn Fn(Vec<PathBuf>, PathBuf) -> BoxFuture<Result<IndexInfo>> + Send + Sync;
+type CatalogWorkFn = dyn Fn(CatalogWork) -> BoxFuture<std::result::Result<CatalogWorkIngested, CatalogWorkError>>
+    + Send
+    + Sync;
 type MergeIntoCanonicalFn =
     dyn Fn(PathBuf, String) -> BoxFuture<Result<PartitionMergeReport>> + Send + Sync;
 
@@ -89,6 +92,8 @@ pub struct IngestPortDouble {
     atlas_teardown_ok: bool,
     installed_indexes: Option<Vec<IndexInfo>>,
     listing: Option<FsIndexSource>,
+    builtin_corpora: Option<Vec<BuiltinCorpus>>,
+    registry_listings: Option<Vec<(String, super::daemon::RegistryListing)>>,
     incomplete_ingests: Option<Vec<IncompleteIngest>>,
     foreground_signal: Option<Arc<dyn corpus_engine_yield::ForegroundSignal>>,
     yield_hooks_ok: bool,
@@ -102,6 +107,11 @@ pub struct IngestPortDouble {
     in_progress_ingestions: Option<Vec<String>>,
     stranded_partitions: Option<Vec<String>>,
     pack_canonical: Option<Box<daemon::PackCanonicalFn>>,
+    catalog_configs: Option<Vec<(String, CatalogConfig)>>,
+    ingest_catalog_work: Option<Box<CatalogWorkFn>>,
+    partition_path: Option<Box<CorpusFn<PathBuf>>>,
+    cancel_registry: Option<super::cancel::CancellationRegistry>,
+    ingest_with_overrides: Option<Box<daemon::SliceIngestFn>>,
 }
 
 impl IngestPortDouble {
@@ -167,11 +177,12 @@ impl IngestPortDouble {
         self
     }
 
-    /// Program [`CorpusReadPort::installed_indexes`] and
-    /// [`IndexSource::usable_indexes`] to list `<index_dir>` with the leaf's
-    /// own [`FsIndexSource`], the reader ingest's engine delegates both to,
-    /// and the daemon port's `canonical_path` to name `<index_dir>/<id>`
-    /// with the leaf's `Corpus::root`, as the engine's does.
+    /// Program [`CorpusReadPort::installed_indexes`],
+    /// [`IndexSource::usable_indexes`] and [`IndexSource::open_index`] to
+    /// read `<index_dir>` with the leaf's own [`FsIndexSource`], the reader
+    /// ingest's engine delegates all three to, and the daemon port's
+    /// `canonical_path` to name `<index_dir>/<id>` with the leaf's
+    /// `Corpus::root`, as the engine's does.
     /// Needs [`Self::with_index_dir`] first.
     pub fn listing_indexes_under_index_dir(mut self) -> Self {
         let dir = self
@@ -273,6 +284,43 @@ impl IngestPortDouble {
     /// Program [`CorpusReadPort::installed_indexes`] to list `indexes`.
     pub fn with_installed_indexes(mut self, indexes: Vec<IndexInfo>) -> Self {
         self.installed_indexes = Some(indexes);
+        self
+    }
+
+    /// Program [`CorpusReadPort::builtin_corpora`] to list `corpora`, as the
+    /// engine lists its registry snapshot's catalogue.
+    pub fn with_builtin_corpora(mut self, corpora: Vec<BuiltinCorpus>) -> Self {
+        self.builtin_corpora = Some(corpora);
+        self
+    }
+
+    /// Program the daemon port's `registry_listing` to answer `listings`
+    /// (by id) and `None` for any other id.
+    pub fn with_registry_listings(
+        mut self,
+        listings: Vec<(String, super::daemon::RegistryListing)>,
+    ) -> Self {
+        self.registry_listings = Some(listings);
+        self
+    }
+
+    /// Program [`CorpusReadPort::catalog_config`] to answer `configs` (by
+    /// catalog corpus id) and `Ok(None)` for any other corpus.
+    pub fn with_catalog_configs(mut self, configs: Vec<(String, CatalogConfig)>) -> Self {
+        self.catalog_configs = Some(configs);
+        self
+    }
+
+    /// Program [`CatalogIngestPort::ingest_catalog_work`]; `f` gets the
+    /// work (progress is not replayed).
+    pub fn on_ingest_catalog_work(
+        mut self,
+        f: impl Fn(CatalogWork) -> BoxFuture<std::result::Result<CatalogWorkIngested, CatalogWorkError>>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        self.ingest_catalog_work = Some(Box::new(f));
         self
     }
 
@@ -440,9 +488,12 @@ impl IndexSource for IngestPortDouble {
         }
     }
 
-    async fn open_index(&self, _path: &Path) -> Result<CorpusIndex> {
+    async fn open_index(&self, path: &Path) -> Result<CorpusIndex> {
         self.record("open_index");
-        Err(refuse("open_index"))
+        match &self.listing {
+            Some(source) => IndexSource::open_index(source, path).await,
+            None => Err(refuse("open_index")),
+        }
     }
 }
 
@@ -493,7 +544,11 @@ impl CorpusReadPort for IngestPortDouble {
     }
 
     fn builtin_corpora(&self) -> Vec<BuiltinCorpus> {
-        panic!("{}", unprogrammed("builtin_corpora"))
+        self.record("builtin_corpora");
+        match &self.builtin_corpora {
+            Some(corpora) => corpora.clone(),
+            None => panic!("{}", unprogrammed("builtin_corpora")),
+        }
     }
 
     fn incomplete_ingests(&self) -> Vec<IncompleteIngest> {
@@ -508,9 +563,16 @@ impl CorpusReadPort for IngestPortDouble {
         panic!("{}", unprogrammed("declared_authority_tool"))
     }
 
-    async fn catalog_config(&self, _corpus_id: &str) -> Result<Option<CatalogConfig>> {
+    async fn catalog_config(&self, corpus_id: &str) -> Result<Option<CatalogConfig>> {
         self.record("catalog_config");
-        Err(refuse("catalog_config"))
+        let configs = self
+            .catalog_configs
+            .as_ref()
+            .ok_or_else(|| refuse("catalog_config"))?;
+        Ok(configs
+            .iter()
+            .find(|(id, _)| id == corpus_id)
+            .map(|(_, config)| config.clone()))
     }
 
     async fn enriched_corpus_ids(&self) -> Result<Vec<String>> {
@@ -541,11 +603,14 @@ impl IngestPluginPort for IngestPortDouble {
 impl CatalogIngestPort for IngestPortDouble {
     async fn ingest_catalog_work(
         &self,
-        _work: &CatalogWork,
+        work: &CatalogWork,
         _progress: Option<ProgressCallback>,
     ) -> std::result::Result<CatalogWorkIngested, CatalogWorkError> {
         self.record("ingest_catalog_work");
-        Err(CatalogWorkError::Ingest(refuse("ingest_catalog_work")))
+        match &self.ingest_catalog_work {
+            Some(f) => f(work.clone()).await,
+            None => Err(CatalogWorkError::Ingest(refuse("ingest_catalog_work"))),
+        }
     }
 }
 

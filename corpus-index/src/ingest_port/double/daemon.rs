@@ -33,6 +33,23 @@ pub(super) type RecipeTextFn<T> = dyn Fn(&str) -> Result<T> + Send + Sync;
 pub(super) type DryRunFn = dyn Fn(&Path, usize, bool) -> Result<RecipeDryRunReport> + Send + Sync;
 pub(super) type PackCanonicalFn =
     dyn Fn(&Path, Box<dyn std::io::Write + Send>, i32) -> Result<u64> + Send + Sync;
+pub(super) type SliceIngestFn =
+    dyn Fn(SliceIngest) -> super::BoxFuture<Result<IngestResult>> + Send + Sync;
+
+/// What the daemon asked of `ingest_with_overrides`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SliceIngest {
+    /// The recipe to ingest.
+    pub recipe_id: String,
+    /// The source files of the slice, when it names files.
+    pub file_indices: Option<Vec<usize>>,
+    /// The article range of the slice, when it names one.
+    pub article_range: Option<(u64, u64)>,
+    /// Where the slice's partition is written.
+    pub output_path: PathBuf,
+    /// The slice's unit id.
+    pub unit_id: Option<u32>,
+}
 
 /// Programming for the daemon port's own methods.
 impl IngestPortDouble {
@@ -100,6 +117,32 @@ impl IngestPortDouble {
         self.pack_canonical = Some(Box::new(f));
         self
     }
+
+    /// Program `partition_path`; `f` gets the corpus id.
+    pub fn on_partition_path(
+        mut self,
+        f: impl Fn(&str) -> PathBuf + Send + Sync + 'static,
+    ) -> Self {
+        self.partition_path = Some(Box::new(f));
+        self
+    }
+
+    /// Program `cancel_registry` to hand out clones of `registry`, as the
+    /// engine hands out clones of its own.
+    pub fn with_cancel_registry(mut self, registry: CancellationRegistry) -> Self {
+        self.cancel_registry = Some(registry);
+        self
+    }
+
+    /// Program `ingest_with_overrides`; `f` gets what the caller asked
+    /// (progress is not replayed).
+    pub fn on_ingest_with_overrides(
+        mut self,
+        f: impl Fn(SliceIngest) -> super::BoxFuture<Result<IngestResult>> + Send + Sync + 'static,
+    ) -> Self {
+        self.ingest_with_overrides = Some(Box::new(f));
+        self
+    }
 }
 
 #[async_trait]
@@ -112,8 +155,12 @@ impl IngestPort for IngestPortDouble {
         }
     }
 
-    fn partition_path(&self, _corpus_id: &str) -> PathBuf {
-        panic!("{}", unprogrammed("partition_path"))
+    fn partition_path(&self, corpus_id: &str) -> PathBuf {
+        self.record("partition_path");
+        match &self.partition_path {
+            Some(f) => f(corpus_id),
+            None => panic!("{}", unprogrammed("partition_path")),
+        }
     }
 
     fn canonical_path(&self, corpus_id: &str) -> PathBuf {
@@ -146,7 +193,11 @@ impl IngestPort for IngestPortDouble {
     }
 
     fn cancel_registry(&self) -> CancellationRegistry {
-        panic!("{}", unprogrammed("cancel_registry"))
+        self.record("cancel_registry");
+        match &self.cancel_registry {
+            Some(registry) => registry.clone(),
+            None => panic!("{}", unprogrammed("cancel_registry")),
+        }
     }
 
     fn has_source_manifest(&self, _corpus_id: &str) -> bool {
@@ -249,15 +300,27 @@ impl IngestPort for IngestPortDouble {
 
     async fn ingest_with_overrides(
         &self,
-        _recipe_id: &str,
-        _file_indices: Option<Vec<usize>>,
-        _article_range: Option<(u64, u64)>,
-        _output_path: &Path,
+        recipe_id: &str,
+        file_indices: Option<Vec<usize>>,
+        article_range: Option<(u64, u64)>,
+        output_path: &Path,
         _progress: Option<ProgressCallback>,
-        _unit_id: Option<u32>,
+        unit_id: Option<u32>,
     ) -> Result<IngestResult> {
         self.record("ingest_with_overrides");
-        Err(refuse("ingest_with_overrides"))
+        match &self.ingest_with_overrides {
+            Some(f) => {
+                f(SliceIngest {
+                    recipe_id: recipe_id.to_string(),
+                    file_indices,
+                    article_range,
+                    output_path: output_path.to_path_buf(),
+                    unit_id,
+                })
+                .await
+            }
+            None => Err(refuse("ingest_with_overrides")),
+        }
     }
 
     async fn expand_corpus_to_full(
@@ -292,8 +355,15 @@ impl IngestPort for IngestPortDouble {
         Err(refuse("recipe_sharing"))
     }
 
-    fn registry_listing(&self, _id: &str) -> Option<RegistryListing> {
-        panic!("{}", unprogrammed("registry_listing"))
+    fn registry_listing(&self, id: &str) -> Option<RegistryListing> {
+        self.record("registry_listing");
+        match &self.registry_listings {
+            Some(listings) => listings
+                .iter()
+                .find(|(listed, _)| listed == id)
+                .map(|(_, listing)| listing.clone()),
+            None => panic!("{}", unprogrammed("registry_listing")),
+        }
     }
 
     fn recipe_corpus_id(&self, toml_text: &str) -> Result<String> {
