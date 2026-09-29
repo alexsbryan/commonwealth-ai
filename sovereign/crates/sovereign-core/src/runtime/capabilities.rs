@@ -84,6 +84,13 @@ pub(crate) fn current_sampling() -> Option<SamplingOverrides> {
     TURN_SAMPLING.try_with(Clone::clone).ok()
 }
 
+/// The ambient pin no `InferenceConfig` field can carry, by name — `top_p`,
+/// which [`super::Runtime::turn_inference_config`] has nowhere to lay.
+/// `None` when every pin applies.
+pub(crate) fn unapplied_sampling_pin() -> Option<&'static str> {
+    current_sampling()?.top_p.map(|_| "top_p")
+}
+
 /// Run `fut` as a turn whose consent questions go to `approval`.
 ///
 /// `None` runs `fut` unchanged, so a caller with nobody to ask does not have

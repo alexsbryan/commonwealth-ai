@@ -4126,6 +4126,7 @@ impl TurnSender {
             content: content.to_string(),
             mode,
             intent,
+            sampling: None,
         })
     }
 

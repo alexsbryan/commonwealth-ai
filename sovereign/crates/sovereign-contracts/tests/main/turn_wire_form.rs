@@ -25,8 +25,8 @@ use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSou
 use sovereign_contracts::types::{
     ActionPreview, ClarificationOption, ClarificationRequest, InformationRequest,
     InterpretationProposed, LessonProposedPayload, MessageRefinedPayload, NarrationPhase,
-    ProposedAlternative, SearchedSourceEntry, StepStatus, TurnAnswer, TurnFrame, TurnMode,
-    TurnNotice, TurnPrompt, TurnRequest,
+    ProposedAlternative, SamplingOverrides, SearchedSourceEntry, StepStatus, TurnAnswer, TurnFrame,
+    TurnMode, TurnNotice, TurnPrompt, TurnRequest,
 };
 
 /// Serialise, compare against the bytes a client actually reads, then parse
@@ -500,6 +500,7 @@ fn turn_request_wire_form() {
                 content: "hello".into(),
                 mode: TurnMode::Grounded,
                 intent: None,
+                sampling: None,
             },
         ),
         (
@@ -511,6 +512,24 @@ fn turn_request_wire_form() {
                 content: "hello".into(),
                 mode: TurnMode::Naked,
                 intent: None,
+                sampling: None,
+            },
+        ),
+        (
+            // A turn's own sampling pins (pb-bench-dials-wire): a dialed
+            // bench lane pins temperature 0 for its turn alone. Absent (the
+            // two cases above) is omitted when writing; an unset pin inside
+            // it is omitted too.
+            r#"{"type":"message","data":{"content":"hello","sampling":{"temperature":0.0,"max_tokens":256}}}"#,
+            TurnRequest::Message {
+                content: "hello".into(),
+                mode: TurnMode::Grounded,
+                intent: None,
+                sampling: Some(SamplingOverrides {
+                    temperature: Some(0.0),
+                    top_p: None,
+                    max_tokens: Some(256),
+                }),
             },
         ),
         (

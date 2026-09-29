@@ -115,6 +115,7 @@ pub(crate) async fn turn_parked_on_a_question(timers: SocketTimers) -> ParkedTur
             content: "search for the adoption figure".to_string(),
             mode: TurnMode::Grounded,
             intent: Some(sovereign_contracts::types::Intent::ComplexTask),
+            sampling: None,
         })
         .unwrap()
         .into(),
@@ -366,6 +367,7 @@ async fn a_search_built_information_answer_folds_its_sources_into_the_conversati
             content: "what is the adoption rate?".to_string(),
             mode: TurnMode::Grounded,
             intent: Some(sovereign_contracts::types::Intent::ComplexTask),
+            sampling: None,
         })
         .unwrap()
         .into(),

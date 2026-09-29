@@ -466,6 +466,15 @@ pub enum TurnRequest {
         /// never sent.
         #[serde(default, skip_serializing_if = "TurnMode::is_default")]
         mode: TurnMode,
+        /// Sampling pins for THIS turn only; a concurrent turn without them
+        /// runs at the host's own config. In-process a bench lane pinned
+        /// temperature 0 on its `Runtime`'s session-wide `InferenceConfig`;
+        /// a turn asked over the wire had no way to, so every dialed eval
+        /// would have run at the daemon's temperature. Absent is omitted
+        /// when writing, like `intent`, so existing clients' bytes are
+        /// unchanged. A host refuses a pin it cannot apply by name.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sampling: Option<SamplingOverrides>,
     },
     /// Answer a parked [`TurnFrame::Prompt`] — the reply carrying the
     /// same `id` the question arrived with.
@@ -613,10 +622,13 @@ pub fn is_degenerate_message(message: &str) -> bool {
 /// fields fall back to the caller's inference config.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SamplingOverrides {
+    /// Generation temperature.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
+    /// Nucleus-sampling cutoff.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f32>,
+    /// Maximum tokens to generate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
 }

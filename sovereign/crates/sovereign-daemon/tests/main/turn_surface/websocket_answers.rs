@@ -144,6 +144,7 @@ async fn a_socket_still_reads_while_its_turn_is_running() {
                 content: text.to_string(),
                 mode: TurnMode::Grounded,
                 intent: None,
+                sampling: None,
             })
             .unwrap()
             .into(),

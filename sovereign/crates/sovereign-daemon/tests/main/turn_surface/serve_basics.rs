@@ -40,6 +40,7 @@ async fn a_daemon_streams_a_turn_to_a_websocket_client() {
             content: "who answered?".to_string(),
             mode: TurnMode::Grounded,
             intent: None,
+            sampling: None,
         })
         .unwrap()
         .into(),

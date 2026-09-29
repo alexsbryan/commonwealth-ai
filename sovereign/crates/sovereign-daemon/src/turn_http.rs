@@ -1307,6 +1307,7 @@ async fn handle_ws(
                 content,
                 mode,
                 intent,
+                sampling,
             } => {
                 if refuse_second_turn(&in_flight, &out_tx) {
                     continue;
@@ -1325,7 +1326,7 @@ async fn handle_ws(
                     sovereign_core::runtime::capabilities::scope_turn(
                         turn_approval,
                         Some(routing),
-                        async {
+                        sovereign_core::runtime::capabilities::scope_sampling(sampling, async {
                             serve_turn(
                                 &rt,
                                 st.as_ref(),
@@ -1341,7 +1342,7 @@ async fn handle_ws(
                                 &tx,
                             )
                             .await;
-                        },
+                        }),
                     )
                     .await;
                 }));

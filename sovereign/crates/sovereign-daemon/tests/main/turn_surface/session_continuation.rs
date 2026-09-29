@@ -82,6 +82,7 @@ async fn turn_leaving_a_session(
             content: "which one did you mean?".to_string(),
             mode: TurnMode::Grounded,
             intent: None,
+            sampling: None,
         },
     )
     .await;

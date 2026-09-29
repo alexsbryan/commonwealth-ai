@@ -87,6 +87,7 @@ async fn a_settled_turn_is_said_and_the_daemon_closes_the_socket_nobody_reused()
             content: "one question".to_string(),
             mode: TurnMode::Grounded,
             intent: None,
+            sampling: None,
         },
     )
     .await;
@@ -169,6 +170,7 @@ async fn a_second_turn_on_a_settled_socket_runs_normally() {
                 content: turn.to_string(),
                 mode: TurnMode::Grounded,
                 intent: None,
+                sampling: None,
             },
         )
         .await;

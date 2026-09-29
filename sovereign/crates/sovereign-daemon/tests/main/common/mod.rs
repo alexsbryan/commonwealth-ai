@@ -290,6 +290,9 @@ pub struct TestProvider {
     /// Fires while a generation is genuinely in flight. See
     /// [`TestProvider::with_on_complete`].
     on_complete: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Every request `complete` / `complete_stream` received. See
+    /// [`TestProvider::with_request_log`].
+    request_log: Option<Arc<std::sync::Mutex<Vec<CompletionRequest>>>>,
     /// Capabilities reported to manifest synthesis. The test rarely
     /// inspects this beyond a sanity check; defaults are conservative.
     capabilities: ProviderCapabilities,
@@ -306,6 +309,7 @@ impl TestProvider {
             embed_fn: None,
             typed_frames: None,
             on_complete: None,
+            request_log: None,
             capabilities: ProviderCapabilities {
                 max_context_tokens: 4_096,
                 supports_structured_output: false,
@@ -390,7 +394,17 @@ impl TestProvider {
         self
     }
 
-    fn fire_on_complete(&self) {
+    /// Append every request `complete` / `complete_stream` receives to `log`,
+    /// so a test asserts on what actually reached the model call.
+    pub fn with_request_log(mut self, log: Arc<std::sync::Mutex<Vec<CompletionRequest>>>) -> Self {
+        self.request_log = Some(log);
+        self
+    }
+
+    fn fire_on_complete(&self, req: &CompletionRequest) {
+        if let Some(log) = self.request_log.as_ref() {
+            log.lock().unwrap().push(req.clone());
+        }
         if let Some(f) = self.on_complete.as_ref() {
             f();
         }
@@ -405,8 +419,8 @@ impl Default for TestProvider {
 
 #[async_trait]
 impl InferenceProvider for TestProvider {
-    async fn complete(&self, _req: &CompletionRequest) -> SovResult<CompletionResponse> {
-        self.fire_on_complete();
+    async fn complete(&self, req: &CompletionRequest) -> SovResult<CompletionResponse> {
+        self.fire_on_complete(req);
         match self.complete_text.as_ref() {
             Some(t) => Ok(CompletionResponse {
                 text: t.clone(),
@@ -428,9 +442,9 @@ impl InferenceProvider for TestProvider {
 
     async fn complete_stream(
         &self,
-        _req: &CompletionRequest,
+        req: &CompletionRequest,
     ) -> SovResult<Pin<Box<dyn Stream<Item = SovResult<String>> + Send>>> {
-        self.fire_on_complete();
+        self.fire_on_complete(req);
         match self.stream_chunks.as_ref() {
             Some(chunks) => {
                 let delay = self.stream_delay;
