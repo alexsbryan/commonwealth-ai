@@ -61,12 +61,12 @@
 //! the operator hint a refusal prints is the caller's to add for the same
 //! reason.
 
+#[cfg(feature = "jobs")]
+pub mod jobs;
 #[cfg(feature = "mcp")]
 pub mod mcp;
 #[cfg(feature = "shell")]
 pub mod shell;
-#[cfg(feature = "jobs")]
-pub mod jobs;
 #[cfg(feature = "task")]
 pub mod supervise;
 
