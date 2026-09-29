@@ -25,6 +25,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_index::enrichment_state::{EnrichmentPhase, EnrichmentStateFile};
+use corpus_index::ingest_port::enrich_config::EnrichConfigPort;
 use sovereign_contracts::daemon_wire::enrich_progress::EnrichProgress;
 use sovereign_core::error::{Error, Result};
 
@@ -79,7 +80,7 @@ impl LocalCorpusManager {
     /// (§18.3). Progress lands in the corpus's `_enrichment_state.json`, the
     /// file `lc_enrichment_status` already reads.
     async fn start_atlas_build(&self, corpus_id: &str) -> Result<String> {
-        match sovereign_enrichment_catalog::config::EnrichConfig::load(corpus_id) {
+        match sovereign_enrichment_catalog::port::CatalogEnrichConfig.load(corpus_id) {
             Ok(Some(_)) => {}
             Ok(None) => {
                 return Err(Error::Execution(format!(

@@ -12773,6 +12773,7 @@ dependencies = [
 name = "sovereign-enrichment-catalog"
 version = "0.8.0"
 dependencies = [
+ "chrono",
  "corpus-engine",
  "corpus-index",
  "serde",

@@ -28,6 +28,7 @@
 
 use corpus_engine_atlas_reader::context_filter::AtlasContextFilter;
 use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::enrich_config::EnrichConfigPort;
 use sovereign_core::atlas_context::{AtlasContext, AtlasContextProvider};
 use sovereign_core::traits::InferenceProvider;
 use std::collections::HashMap;
@@ -58,10 +59,11 @@ fn attach_pipeline_map(
     if graph.navigation().is_some() {
         return graph;
     }
-    let Ok(Some(cfg)) = sovereign_enrichment_catalog::config::EnrichConfig::load(corpus_id) else {
+    let Ok(Some(cfg)) = sovereign_enrichment_catalog::port::CatalogEnrichConfig.load(corpus_id)
+    else {
         return graph;
     };
-    if cfg.ontology.is_some() {
+    if cfg.declares_ontology {
         return graph;
     }
     match atlas.pipeline_navigation(&cfg.pipeline_id) {

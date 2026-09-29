@@ -27,6 +27,7 @@
 pub mod catalog;
 pub mod config;
 pub mod paths;
+pub mod port;
 
 pub use catalog::{enriched_corpus_ids, list_enriched_corpora, EnrichedCorpusSummary};
 pub use config::{EnrichConfig, PhaseOverride, TocMarkers, CONFIG_SCHEMA_VERSION};
