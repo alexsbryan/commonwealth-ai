@@ -4278,32 +4278,19 @@ async fn register_local_model_slots(
         }
     }
 
-    // Install the servable-model-files allowlist so peers can
-    // pull these GGUFs via `/internal/v1/models/list` +
-    // `/internal/v1/models/file/:name`. Dedup by canonical path
-    // — `primary_pool` slots all point at the same file as the
-    // primary slot, and there's no point advertising it three
-    // times. See `commonwealth-api::routes_internal::model_files`.
-    //
-    // A slot path that names one shard of a SPLIT GGUF is expanded to the
-    // whole shard set. Config names only `…-00001-of-0000N.gguf`, so without
-    // this the host advertises (and `serve_model_file` will serve) shard 1
-    // alone and 404s the rest — which strands any worker that does not
-    // already hold every shard on disk. Both warm paths die there: the
-    // default whole-GGUF fetch on `NotAdvertised`, the byte-range fetch on
-    // "range GET failed on all sources". The failure is never-wedge safe
-    // (warm falls back to local-only), so it presents not as an error but as
-    // a big model mysteriously refusing to distribute. Found 2026-07-31
-    // sizing a 5-shard 155 GB DeepSeek-V4-Flash split; every earlier
-    // acceptance masked it by having all shards on every node.
+    // Publish the configured slot paths for `/internal/rpc-warm`'s local
+    // lookup: a warm request names a file this node may already hold, and the
+    // route resolves it against these paths and their directories, where every
+    // shard of a split lives beside its first. The files peers FETCH are
+    // serve's (model transfer, pb-serve-distributes), each shard expanded
+    // there (`sovereign_compute::model_transfer::servable_for`).
     let paths: Vec<std::path::PathBuf> = slots.iter().map(|(_, p)| p.to_path_buf()).collect();
-    let servable = sovereign_compute::model_transfer::servable_model_files(&paths);
-    if !servable.is_empty() {
+    if !paths.is_empty() {
         info!(
-            files = servable.len(),
-            "publishing servable model files allowlist for peer fetch"
+            files = paths.len(),
+            "publishing configured model paths for the rpc-warm local lookup"
         );
-        app_state.servable_model_files_reader().publish(servable);
+        app_state.servable_model_files_reader().publish(paths);
     }
     slot_aliases
 }

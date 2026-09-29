@@ -441,7 +441,10 @@ pub fn servable_for(
 /// (`…-00001-of-0000N.gguf`); `shard_files` turns that into the whole set when
 /// — and only when — every sibling is actually on disk, so we never advertise
 /// a file we cannot serve. Dedup matters because `primary_pool` slots all
-/// point at the same GGUF.
+/// point at the same GGUF. Without the expansion a host serves shard 1 alone
+/// and 404s the rest, which strands any worker not holding every shard: both
+/// warm paths die, never-wedge safe, so it presents as a big model refusing to
+/// distribute (found 2026-07-31 sizing a 5-shard 155 GB split).
 pub fn servable_model_files(slot_paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
     let mut out: Vec<std::path::PathBuf> = Vec::new();
     let mut seen: std::collections::HashSet<std::path::PathBuf> = std::collections::HashSet::new();
