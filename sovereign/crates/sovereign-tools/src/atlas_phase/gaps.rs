@@ -9,20 +9,25 @@
 //! function the bespoke `enrich atlas-gaps` runs. Effect is `Write` (it writes
 //! `gaps.json`); idempotent (same atoms → same gaps → same ids).
 
-use corpus_engine::enrichment::atlas::{
-    analysis::gaps::{detect_deterministic_gaps, GapDetectionInput, GapsOutput},
-    read_atlas_atoms, read_atlas_edges, write_atlas_gaps, AtomEnvelope,
-};
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges};
 
 use crate::atlas_phase::atlas_dir_for;
 use sovereign_core::tool_manifest::DeclaredTool;
 use std::sync::Arc;
 
-pub struct AtlasGapsTool;
+pub struct AtlasGapsTool {
+    atlas: Arc<dyn AtlasPort>,
+}
 
 impl AtlasGapsTool {
+    /// The tool over ingest's atlas port.
+    pub fn new(atlas: Arc<dyn AtlasPort>) -> Self {
+        Self { atlas }
+    }
+
     /// Bind this tool's state to its `atlas_gaps` manifest row.
     ///
     /// The declared half — id, schema, permissions, retry — is the row in
@@ -56,28 +61,9 @@ impl AtlasGapsTool {
             ))
         })?;
 
-        // Partition atoms by kind — only Claim / State / Question drive the
-        // deterministic detectors; the rest pass through untouched.
-        let mut claims = Vec::new();
-        let mut states = Vec::new();
-        let mut questions = Vec::new();
-        for a in atoms.atoms().to_vec() {
-            match a {
-                AtomEnvelope::Claim(c) => claims.push(c),
-                AtomEnvelope::State(s) => states.push(s),
-                AtomEnvelope::Question(q) => questions.push(q),
-                _ => {}
-            }
-        }
-
-        let gaps = detect_deterministic_gaps(GapDetectionInput {
-            claims: &claims,
-            states: &states,
-            questions: &questions,
-            edges: &edges.edges,
-        });
-        let n = gaps.len();
-        let path = write_atlas_gaps(&atlas_dir, &GapsOutput::new(gaps))
+        let (n, path) = self
+            .atlas
+            .write_deterministic_gaps(&atlas_dir, atoms.atoms(), &edges.edges)
             .map_err(|e| Error::Execution(format!("atlas_gaps: write gaps.json: {e}")))?;
 
         Ok(StepOutput::Text(format!(
@@ -116,7 +102,7 @@ mod tests {
             "corpus": "c1",
             "index_dir": dir.path().to_string_lossy()
         });
-        let out = AtlasGapsTool
+        let out = AtlasGapsTool::new(Arc::new(corpus_engine::IngestAtlas))
             .run(&params, &ToolContext::default())
             .await
             .unwrap();
@@ -135,7 +121,7 @@ mod tests {
         // A missing atlas is a loud error (points the operator at resolve).
         let bad =
             serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
-        assert!(AtlasGapsTool
+        assert!(AtlasGapsTool::new(Arc::new(corpus_engine::IngestAtlas))
             .run(&bad, &ToolContext::default())
             .await
             .is_err());

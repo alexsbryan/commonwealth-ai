@@ -42,6 +42,6 @@ pub async fn atlas_status(
         .parent()
         .map(|p| p.join("enrichment"))
         .unwrap_or_else(|| std::path::PathBuf::from("./enrichment"));
-    let corpora = compute_atlas_status(&indexes_dir, &enrichment_dir);
+    let corpora = compute_atlas_status(&corpus_engine::IngestAtlas, &indexes_dir, &enrichment_dir);
     Ok(Json(AtlasStatusResponse { corpora }))
 }

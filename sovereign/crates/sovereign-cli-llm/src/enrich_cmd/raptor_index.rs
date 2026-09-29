@@ -56,7 +56,8 @@ pub async fn cmd_raptor_index(args: &[String]) -> i32 {
     };
 
     println!("Building RAPTOR summary-node ANN index for '{corpus_id}'…");
-    let outcome = build_corpus_raptor_index(&store, &index_path, &corpus_id).await;
+    let outcome =
+        build_corpus_raptor_index(&corpus_engine::IngestAtlas, &store, &index_path, &corpus_id).await;
     println!("  {outcome}");
 
     match outcome {

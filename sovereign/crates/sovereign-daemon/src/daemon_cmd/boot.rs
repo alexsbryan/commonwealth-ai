@@ -841,7 +841,11 @@ pub(super) async fn run_daemon(
                     // registry omits.
                     workflow_http: sovereign_workflow_host::workflow_http_router(
                         format!("http://127.0.0.1:{}", config.daemon.client_port),
-                        std::sync::Arc::new(sovereign_tools::workflow_corpus_tools),
+                        std::sync::Arc::new(|| {
+                            sovereign_tools::workflow_corpus_tools(std::sync::Arc::new(
+                                corpus_engine::IngestAtlas,
+                            ))
+                        }),
                     ),
                 },
                 advertise_embed,

@@ -163,7 +163,7 @@ async fn run_trigger(
     // B:P9a: the embed-slot query-instruction prefix + chat context window are
     // now sourced by the runner from the daemon's own OICP manifest (loopback,
     // same box), so no `DEFAULT_MANIFEST` closure is threaded through here.
-    let extra = sovereign_tools::workflow_corpus_tools();
+    let extra = sovereign_tools::workflow_corpus_tools(std::sync::Arc::new(corpus_engine::IngestAtlas));
     match run_workflow_in_process(&wf, daemon_url, concurrency, false, params, extra, None).await {
         Ok(report) => tracing::info!(
             corpus,

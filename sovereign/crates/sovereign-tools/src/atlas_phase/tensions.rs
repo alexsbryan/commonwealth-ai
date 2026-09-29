@@ -12,23 +12,25 @@
 //! deterministic leaf.) The LLM classification pass that promotes candidates to
 //! real `Tension` edges is a separate `model:` step.
 
-use corpus_engine::enrichment::atlas::{
-    analysis::tensions::{
-        drop_same_named_speaker_pairs, select_candidates, CandidateSelectionInput,
-        TensionCandidatesOutput,
-    },
-    read_atlas_atoms, write_tension_candidates, AtomEnvelope,
-};
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
+use understanding_vocab::read::read_atlas_atoms;
 
 use crate::atlas_phase::atlas_dir_for;
 use sovereign_core::tool_manifest::DeclaredTool;
 use std::sync::Arc;
 
-pub struct AtlasTensionsTool;
+pub struct AtlasTensionsTool {
+    atlas: Arc<dyn AtlasPort>,
+}
 
 impl AtlasTensionsTool {
+    /// The tool over ingest's atlas port.
+    pub fn new(atlas: Arc<dyn AtlasPort>) -> Self {
+        Self { atlas }
+    }
+
     /// Bind this tool's state to its `atlas_tensions` manifest row.
     ///
     /// The declared half — id, schema, permissions, retry — is the row in
@@ -56,38 +58,14 @@ impl AtlasTensionsTool {
             ))
         })?;
 
-        // Claim + State drive the entity-overlap signal; Entity atoms feed the
-        // cross-position concept-overlap signal.
-        let mut claims = Vec::new();
-        let mut states = Vec::new();
-        let mut entities = Vec::new();
-        for a in atoms.atoms().to_vec() {
-            match a {
-                AtomEnvelope::Claim(c) => claims.push(c),
-                AtomEnvelope::State(s) => states.push(s),
-                AtomEnvelope::Entity(e) => entities.push(e),
-                _ => {}
-            }
-        }
-
-        let mut candidates = select_candidates(CandidateSelectionInput {
-            claims: &claims,
-            states: &states,
-            // Intra-cluster candidates aren't wired in the deterministic path
-            // (same as the bespoke command — pending a stable sketch→atom map).
-            claim_clusters: &[],
-            entities: &entities,
-        });
-        // De-noise: drop pairs where both claims share a named speaker.
-        drop_same_named_speaker_pairs(&mut candidates, &claims, &entities);
-
-        let out = TensionCandidatesOutput::new(candidates);
-        let n = out.candidates.len();
-        let path = write_tension_candidates(&atlas_dir, &out).map_err(|e| {
-            Error::Execution(format!(
-                "atlas_tensions: write tension_candidates.json: {e}"
-            ))
-        })?;
+        let (n, path) = self
+            .atlas
+            .write_tension_candidates(&atlas_dir, atoms.atoms())
+            .map_err(|e| {
+                Error::Execution(format!(
+                    "atlas_tensions: write tension_candidates.json: {e}"
+                ))
+            })?;
 
         Ok(StepOutput::Text(format!(
             "atlas_tensions: wrote {n} candidate pair(s) to {}",
@@ -120,7 +98,7 @@ mod tests {
             "corpus": "c1",
             "index_dir": dir.path().to_string_lossy()
         });
-        let out = AtlasTensionsTool
+        let out = AtlasTensionsTool::new(Arc::new(corpus_engine::IngestAtlas))
             .run(&params, &ToolContext::default())
             .await
             .unwrap();
@@ -140,7 +118,7 @@ mod tests {
         // A missing atlas is a loud error.
         let bad =
             serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
-        assert!(AtlasTensionsTool
+        assert!(AtlasTensionsTool::new(Arc::new(corpus_engine::IngestAtlas))
             .run(&bad, &ToolContext::default())
             .await
             .is_err());

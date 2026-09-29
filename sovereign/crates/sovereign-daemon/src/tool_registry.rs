@@ -56,7 +56,7 @@ pub async fn build_tool_registry(
     // handle is threaded in. `extract` resolves its `path` on THIS host's
     // filesystem — correct for a loopback client, a clean "file not found" for a
     // remote one (see `sovereign_tools::mcp_surface::MCP_TOOLS_ALWAYS`).
-    for tool in sovereign_tools::workflow_corpus_tools() {
+    for tool in sovereign_tools::workflow_corpus_tools(Arc::new(corpus_engine::IngestAtlas)) {
         tools.register(tool);
     }
 

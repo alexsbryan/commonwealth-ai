@@ -348,7 +348,10 @@ fn build_reader() -> Result<FileAtlasReader, i32> {
             return Err(1);
         }
     };
-    Ok(FileAtlasReader::new(indexes_dir))
+    Ok(FileAtlasReader::new(
+        indexes_dir,
+        std::sync::Arc::new(corpus_engine::IngestAtlas),
+    ))
 }
 
 /// Resolve the indexes directory the same way other CLI commands do

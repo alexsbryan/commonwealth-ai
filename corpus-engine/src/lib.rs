@@ -125,7 +125,7 @@ pub use corpus_engine_yield::{
     MAX_FOREGROUND_DEFERRAL,
 };
 pub use engine::{
-    CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn,
+    CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn, IngestAtlas,
     CustomExtractorFn,
 };
 pub use enrichment::atlas::atlas_teardown;

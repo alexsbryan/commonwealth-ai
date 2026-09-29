@@ -784,6 +784,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // (nothing to index); `enrich raptor-index` rebuilds it standalone.
     if built > 0 || resumed > 0 {
         let outcome = sovereign_tools::raptor_index::build_corpus_raptor_index(
+            &corpus_engine::IngestAtlas,
             &verify_store,
             &index_path,
             &parsed.corpus_id,

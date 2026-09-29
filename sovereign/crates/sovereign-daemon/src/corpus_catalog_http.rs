@@ -552,7 +552,10 @@ async fn notebooks(
     // counting that as explorable shipped the Explore tab straight
     // into "No atoms match the current filter" with nothing to match.
     let mut explorable: HashSet<String> = HashSet::new();
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
+    let reader = FileAtlasReader::new(
+        engine.index_dir().to_path_buf(),
+        Arc::new(corpus_engine::IngestAtlas),
+    );
     if let Ok(atom_corpora) = reader.list_corpora().await {
         let notebook_ids: HashSet<&str> = installed
             .iter()

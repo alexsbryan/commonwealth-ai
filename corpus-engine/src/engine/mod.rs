@@ -3,6 +3,7 @@
 //! embedding, and indexing of corpus data.
 
 pub mod article_stats;
+mod atlas_port;
 mod cancel;
 mod expand;
 mod ingest;
@@ -17,6 +18,7 @@ pub mod reindex;
 pub mod status;
 
 pub use article_stats::ArticleStats;
+pub use atlas_port::IngestAtlas;
 pub use cancel::{CancellationFlag, CancellationRegistry};
 pub(crate) use ingest_helpers::chunk_doc;
 pub use status::{

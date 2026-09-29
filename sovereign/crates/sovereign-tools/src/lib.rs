@@ -131,13 +131,16 @@ pub use wikipedia_fetch::WikipediaFetchTool;
 /// order is irrelevant: the registry keys on tool id and these ids are distinct
 /// from the base set, so injecting them via `extra_tools` reproduces exactly the
 /// pre-extraction registry.
-pub fn workflow_corpus_tools() -> Vec<Box<dyn sovereign_core::traits::Tool>> {
+pub fn workflow_corpus_tools(
+    atlas: std::sync::Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
+) -> Vec<Box<dyn sovereign_core::traits::Tool>> {
+    use std::sync::Arc;
     vec![
         Box::new(extract::ExtractTool.declared()),
         Box::new(corpus_store::CorpusStoreTool.declared()),
         Box::new(corpus_search::CorpusSearchTool.declared()),
-        Box::new(atlas_phase::gaps::AtlasGapsTool.declared()),
-        Box::new(atlas_phase::tensions::AtlasTensionsTool.declared()),
+        Box::new(atlas_phase::gaps::AtlasGapsTool::new(Arc::clone(&atlas)).declared()),
+        Box::new(atlas_phase::tensions::AtlasTensionsTool::new(atlas).declared()),
         Box::new(rag::section::SectionTool),
     ]
 }

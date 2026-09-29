@@ -10,6 +10,7 @@
 
 use std::path::PathBuf;
 
+use corpus_engine::IngestAtlas;
 use sovereign_tools::atlas_status::{compute_atlas_status, status_for_corpus};
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -69,14 +70,14 @@ pub async fn run(args: &[String]) -> i32 {
     let enrichment_dir = data_dir.join("enrichment");
 
     let rows = match parsed.corpus_id.as_deref() {
-        Some(cid) => match status_for_corpus(&indexes_dir, &enrichment_dir, cid) {
+        Some(cid) => match status_for_corpus(&IngestAtlas, &indexes_dir, &enrichment_dir, cid) {
             Some(row) => vec![row],
             None => {
                 eprintln!("no corpus '{cid}' under {}", indexes_dir.display());
                 return 1;
             }
         },
-        None => compute_atlas_status(&indexes_dir, &enrichment_dir),
+        None => compute_atlas_status(&IngestAtlas, &indexes_dir, &enrichment_dir),
     };
 
     if parsed.json {

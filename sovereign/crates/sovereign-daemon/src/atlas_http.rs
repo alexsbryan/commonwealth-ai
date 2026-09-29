@@ -254,7 +254,10 @@ async fn atom_detail(
         Some(e) => Arc::clone(e),
         None => return service_unavailable("corpus engine not initialised"),
     };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
+    let reader = FileAtlasReader::new(
+        engine.index_dir().to_path_buf(),
+        Arc::new(corpus_engine::IngestAtlas),
+    );
     let mut detail = match reader.get_atom_detail(&corpus, &atom_id).await {
         Ok(Some(d)) => d,
         Ok(None) => return not_found("atom not found"),
@@ -773,7 +776,12 @@ fn summarize_entities(nodes: &[ConvRaptorNodeRow], top_n: usize) -> (Vec<String>
 fn reader_for(daemon: &Arc<EmbeddedDaemon>) -> Result<FileAtlasReader, Absence> {
     daemon
         .corpus_engine()
-        .map(|engine| FileAtlasReader::new(engine.index_dir().to_path_buf()))
+        .map(|engine| {
+            FileAtlasReader::new(
+                engine.index_dir().to_path_buf(),
+                Arc::new(corpus_engine::IngestAtlas),
+            )
+        })
         .ok_or_else(|| Absence::unavailable("corpus engine not initialised"))
 }
 
