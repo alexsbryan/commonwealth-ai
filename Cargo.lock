@@ -2408,6 +2408,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "understanding-atlas",
  "understanding-vocab",
  "workspace-hack",

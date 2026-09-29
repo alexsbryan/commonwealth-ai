@@ -43,3 +43,5 @@ workspace = true
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
+# The sec_facts tests capture its `sec_facts`-target trace (moved from corpus-engine).
+tracing-subscriber = { workspace = true }

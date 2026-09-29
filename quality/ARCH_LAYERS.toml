@@ -1027,7 +1027,11 @@ name = "corpus-engine-atlas-reader"
 # pb-corpus-mcp-reads it also holds the ONE walk opener (`opener`) and the
 # wiki-class provider it composes (`wikipedia_columnar`, with the wiki store's
 # format in `wiki_store`), so a program walks an atlas without the engine; the
-# allow list did not widen.
+# allow list did not widen. Since pb-ingest-dial-tools it also holds the
+# field-skeleton reader (`field_model::load_field_skeleton`) and the SEC
+# typed-fact store (`sec_facts`: lookup, derivations, coverage, and discovery
+# with the recipe lookup passed in), so svrn's turn tools read them without
+# the engine; the allow list did not widen.
 allow = ["corpus-index", "kernel-types", "sovereign-contracts", "understanding-atlas",
          "understanding-vocab", "workspace-hack"]
 

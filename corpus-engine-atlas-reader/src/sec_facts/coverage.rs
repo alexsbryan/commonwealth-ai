@@ -190,8 +190,8 @@ fn fy_span(years: &[i32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::atlas::analysis::sec_facts::fixtures::{other_store, store};
-    use crate::enrichment::atlas::analysis::sec_facts::lookup;
+    use crate::sec_facts::fixtures::{other_store, store};
+    use crate::sec_facts::lookup;
 
     #[test]
     fn coverage_summary_names_limits_and_freshness() {
