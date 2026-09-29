@@ -272,7 +272,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // `/v1/models` is still the only construction site.
     ("sovereign/crates/sovereign-serving-host/src/guest_lender.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/join.rs", Class::Mesh, 2),
-    ("sovereign/crates/sovereign-daemon/src/daemon.rs", Class::Mesh, 2),
+    // 2 -> 1 at d413b052b: the newsworthy watcher's MediaWiki client moved
+    // into corpus-engine's daemon port (registered there, InboundOnly).
+    ("sovereign/crates/sovereign-daemon/src/daemon.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-daemon/src/auto_ingest.rs", Class::Mesh, 2),
     // Re-keyed 2026-09-16: the two knowledge-surface clients moved to the
     // client family, `sovereign-turn-client` (domains

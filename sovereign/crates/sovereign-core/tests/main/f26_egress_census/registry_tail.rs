@@ -243,6 +243,10 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("corpus-engine/src/acquirers/huggingface.rs", Class::InboundOnly, 1),
     ("corpus-engine/src/acquirers/http_api/mod.rs", Class::InboundOnly, 1),
     ("corpus-engine/src/acquirers/bulk_download.rs", Class::InboundOnly, 1),
+    // The newsworthy watcher's MediaWiki recent-changes poll, moved here
+    // from sovereign-daemon/src/daemon.rs by d413b052b: it fetches
+    // Wikipedia content in, the acquirers' reading.
+    ("corpus-engine/src/engine/daemon_port.rs", Class::InboundOnly, 1),
 
     // ---- studio/sovereign-tools-base ----
     // orchestrator: constructions are `#[cfg(test)]` (TestOnly).
