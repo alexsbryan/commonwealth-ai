@@ -21,6 +21,10 @@ pub(super) struct ServingBoot {
     pub reload: crate::provider::ReloadSource,
     pub deferred_daemon: Arc<crate::DeferredDaemon>,
     pub path: crate::serve_client::ServingPath,
+    /// This process's NER handle (pb-serve-distributes): serve's `RemoteNer`
+    /// on the dialing path, the distribution's in-process kind hosted or on a
+    /// terminal, `None` where neither holds a model.
+    pub ner: Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
 }
 
 /// `Err(code)` is the exit code `run_daemon` returns.
@@ -125,6 +129,10 @@ pub(super) async fn boot_serving(
             Ok(p) => p,
             Err(()) => return Err(1),
         };
+    // A terminal's own ingest and retrieval run NER in this process, through
+    // the distribution's in-process kind; svrn alone has none to load.
+    let ner = hosted.as_ref().and_then(|h| h.ner_handle());
+    tracing::info!(target: "serving_path", distribution = hosted.is_some(), installed = ner.is_some(), "boot: a terminal's NER handle");
     Ok(ServingBoot {
         provider,
         resolved_embed_family: ModelFamily::Unknown,
@@ -133,6 +141,7 @@ pub(super) async fn boot_serving(
         reload: crate::provider::ReloadSource::Terminal,
         deferred_daemon,
         path,
+        ner,
     })
 }
 
@@ -161,10 +170,24 @@ async fn dial_serve(
             return Err(1);
         }
     };
-    if let Err(e) = crate::serve_client::install_serve_ner(&serve.base).await {
-        eprintln!("error: {e}");
-        return Err(1);
-    }
+    // This daemon's NER handle is serve's: a `RemoteNer` on serve's `/v1/ner`,
+    // so the NoteStore hook, the tiered chunk adapter and the turn's retrieval
+    // dial it. A serve without the NER model hands none, as a node without it
+    // loads none. A route that does not answer within the bring-up's bound
+    // refuses boot by name, as a serve that does not report itself does: "did
+    // not answer" is not "has no model" (principle 6).
+    let ner = match crate::serve_client::resolve_serve_ner(
+        &serve.base,
+        crate::serve_client::SERVE_BRING_UP_WINDOW,
+    )
+    .await
+    {
+        Ok(ner) => ner,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return Err(1);
+        }
+    };
     let config_context = config.effective_context_size();
     let resolved_embed_family = served.embed_family.clone();
     // One cell every reader shares, so a reload's rebuilt provider is seen by
@@ -192,6 +215,7 @@ async fn dial_serve(
         },
         deferred_daemon,
         path,
+        ner,
     })
 }
 
@@ -200,17 +224,17 @@ async fn dial_serve(
 /// svrn holds the SAME cell serve's routes answer from, so one engine answers
 /// both ports; the distribution over its engine comes back for svrn to start
 /// with its mesh ports (pb-serve-distributes). Nothing is brought up, no self-report is read, no loopback
-/// provider is built, and no NER handle is installed: that handle is one
-/// process-global (`sovereign_compute::ner`) which serve's own `/v1/ner`
-/// reads, so a `RemoteNer` here would dial itself. The first reader loads
-/// through the kind registry serve's `bundles` registered.
+/// provider is built, and the NER handle is the distribution's in-process
+/// kind (`HostedServe::ner`), the one process-global serve's own `/v1/ner`
+/// reads, so a `RemoteNer` here would dial itself.
 async fn host_serve(
     config: &SetupConfig,
     config_path: &std::path::Path,
-    hosted: crate::serve_client::HostedServe,
+    mut hosted: crate::serve_client::HostedServe,
     deferred_daemon: Arc<crate::DeferredDaemon>,
     path: crate::serve_client::ServingPath,
 ) -> Result<ServingBoot, i32> {
+    let ner_source = hosted.take_ner();
     let crate::serve_client::HostedParts { cell, distribute } = match hosted
         .compose(config.data.dir.clone(), config_path.to_path_buf())
         .await
@@ -229,6 +253,9 @@ async fn host_serve(
         serve_base = %crate::serve_client::default_serve_base(),
         "boot: serving is serve's, hosted in this process; one engine answers both ports"
     );
+    // The handle serve's own `/v1/ner` reads: one load in this process.
+    let ner = ner_source.and_then(|handle| handle());
+    tracing::info!(target: "serving_path", installed = ner.is_some(), "boot: the hosted serve's NER handle");
     Ok(ServingBoot {
         provider,
         resolved_embed_family,
@@ -236,5 +263,6 @@ async fn host_serve(
         reload: crate::provider::ReloadSource::Hosted { cell },
         deferred_daemon,
         path,
+        ner,
     })
 }

@@ -401,3 +401,54 @@ fn the_env_contract_is_the_distributions_to_hand_in() {
     let bare = HostedServe::new(String::new(), compose);
     assert!(!bare.apply_env_contract(&args, &shared));
 }
+
+/// The NER handle a distribution hands boot is the one svrn's ingest and
+/// retrieval get (pb-serve-distributes); with none handed there is none.
+/// Failing input: have `ner_handle` ignore the source, and the first
+/// assertion reads `None`.
+#[test]
+fn the_ner_handle_is_the_distributions_in_process_kind() {
+    struct Named;
+    impl sovereign_contracts::ner::LabeledEntityExtractor for Named {
+        fn model_id(&self) -> &str {
+            "handed-ner"
+        }
+        fn labels(&self) -> Vec<String> {
+            Vec::new()
+        }
+        fn threshold(&self) -> f32 {
+            0.5
+        }
+        fn generation(&self) -> sovereign_contracts::ner::GlinerGeneration {
+            sovereign_contracts::ner::GlinerGeneration::V2
+        }
+        fn extract_mentions(
+            &self,
+            _: &str,
+        ) -> sovereign_contracts::error::Result<Vec<sovereign_contracts::ner::EntityMention>>
+        {
+            Ok(Vec::new())
+        }
+    }
+    let compose = |_: std::path::PathBuf, _: std::path::PathBuf| async {
+        Err::<HostedParts, String>("not composed here".to_string())
+    };
+    let handed = HostedServe::new(String::new(), compose).ner(|| {
+        Some(std::sync::Arc::new(Named)
+            as std::sync::Arc<
+                dyn sovereign_contracts::ner::LabeledEntityExtractor,
+            >)
+    });
+    assert_eq!(
+        handed
+            .ner_handle()
+            .map(|h| h.model_id().to_string())
+            .as_deref(),
+        Some("handed-ner")
+    );
+    let mut taken = handed;
+    assert!(taken.take_ner().is_some() && taken.ner_handle().is_none());
+    assert!(HostedServe::new(String::new(), compose)
+        .ner_handle()
+        .is_none());
+}

@@ -123,7 +123,16 @@ pub struct HostedServe {
     filter: String,
     compose: Compose,
     env_contract: Option<EnvContract>,
+    ner: Option<NerSource>,
 }
+
+/// The distribution's in-process NER kind: the one handle per process, loaded
+/// on first ask (`sovereign_compute::ner::served_ner`).
+pub type NerSource = Box<
+    dyn Fn() -> Option<std::sync::Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>
+        + Send
+        + Sync,
+>;
 
 /// The loader's RPC env contract: the `--rpc-worker` flag and the
 /// `[shared_model]` role, translated into the env its consumers read
@@ -147,7 +156,36 @@ impl HostedServe {
                 Box::pin(compose(data_dir, config_path))
             }),
             env_contract: None,
+            ner: None,
         }
+    }
+
+    /// The distribution's in-process NER kind, which svrn's boot takes its
+    /// handle from wherever this process loads for itself: the hosted path,
+    /// where serve's `/v1/ner` reads the same handle, and a terminal.
+    pub fn ner<F>(mut self, handle: F) -> Self
+    where
+        F: Fn() -> Option<std::sync::Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.ner = Some(Box::new(handle));
+        self
+    }
+
+    /// The in-process NER kind, taken before `compose` consumes this value, so
+    /// the hosted path asks it after serve is assembled.
+    pub fn take_ner(&mut self) -> Option<NerSource> {
+        self.ner.take()
+    }
+
+    /// The in-process NER handle, `None` when this distribution handed no
+    /// kind or the kind has no model installed.
+    pub fn ner_handle(
+        &self,
+    ) -> Option<std::sync::Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>> {
+        self.ner.as_ref().and_then(|handle| handle())
     }
 
     /// How the loader translates this invocation's `--rpc-worker` flag and
@@ -357,20 +395,6 @@ pub fn served_slot_aliases(
                 .map(move |key| (key, slot.model_id.clone()))
         })
         .collect()
-}
-
-/// On the dialing path this daemon's NER handle is serve's: a
-/// [`RemoteNer`](oicp_client::RemoteNer) on serve's `/v1/ner`,
-/// installed before any reader asks (`sovereign_compute::ner::install_ner`),
-/// so the NoteStore hook, the tiered chunk adapter and the turn's retrieval
-/// dial it where they loaded the model in process. A serve without the NER
-/// model installs none, as a node without it loads none. A route that does
-/// not answer within the bring-up's bound refuses boot by name, as a serve
-/// that does not report itself does (`dial_serve`): "did not answer" is not
-/// "has no model" (principle 6).
-pub async fn install_serve_ner(base: &str) -> Result<(), String> {
-    let handle = resolve_serve_ner(base, SERVE_BRING_UP_WINDOW).await?;
-    sovereign_compute::ner::install_ner(handle)
 }
 
 /// How long [`resolve_serve_ner`] waits between probes that erred.

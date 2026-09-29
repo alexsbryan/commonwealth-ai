@@ -93,6 +93,11 @@ pub use sovereign_compute::distributed_role::{
     apply_rpc_worker_flag, apply_shared_model_role_to_env,
 };
 
+/// The NER kind's one handle per process, loaded on first ask: what a process
+/// hosting serve's assembly hands svrn for its own ingest and retrieval
+/// (pb-serve-distributes), the same handle serve's `/v1/ner` reads.
+pub use sovereign_compute::ner::served_ner;
+
 /// The run lock's name inside the data root (`host_kit::RunLock`): one
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
 pub const RUN_LOCK: &str = "serve";

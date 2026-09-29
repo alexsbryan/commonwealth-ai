@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! NER loads once per daemon process, through the served NER kind
-//! (`sovereign_compute::ner::served_ner`), and the daemon links no
-//! sovereign-gliner (phase-b pb-serving-ner). The recipe it hands the handle
+//! NER loads once per daemon process, through the served NER kind — the
+//! handle boot takes from serve or the distribution (`ServingBoot::ner`,
+//! pb-serve-distributes) — and the daemon links no sovereign-gliner (phase-b
+//! pb-serving-ner). The recipe it hands the handle
 //! to holds the same line about itself (sovereign-runtime-recipe
 //! tests/recipe_loads_no_ner.rs).
 //!
@@ -82,8 +83,8 @@ fn the_daemon_links_no_gliner_and_loads_ner_only_through_the_kind() {
     assert!(
         found.is_empty(),
         "GLiNER is linked or loaded outside the NER served kind; a daemon turn would hold a \
-         second model. Take the handle from `sovereign_compute::ner::served_ner` (the daemon) \
-         or `RecipeInputs::ner` (the recipe):\n  {}",
+         second model. Take the handle boot took (`ServingBoot::ner`: serve's `RemoteNer` or \
+         the distribution's in-process kind) or `RecipeInputs::ner` (the recipe):\n  {}",
         found.join("\n  ")
     );
 }

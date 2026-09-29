@@ -74,8 +74,9 @@ pub fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRo
 }
 
 /// The process's NER handle and the per-chunk adapter over it. The handle is
-/// the NER served kind's (`sovereign_compute::ner::served_ner`, loaded once per
-/// process); it feeds the NoteStore T2 `GlinerFn` adapter. The adapter
+/// the one boot took (`ServingBoot::ner`: serve's `RemoteNer`, or the
+/// distribution's in-process kind, loaded once per process); it feeds the
+/// NoteStore T2 `GlinerFn` adapter. The adapter
 /// (corpus-engine's `GlinerChunkExtractor`) feeds the engine's tiered runner
 /// and the folder driver. Both `None` when the model isn't installed — tiered
 /// ingest then falls back to RAPTOR-derived entities.
@@ -85,13 +86,14 @@ pub fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRo
 /// call knows or needs to know which backend it got.
 pub fn load_gliner_extractor(
     store: Arc<dyn sovereign_core::daemon_wire::conv_tiered::ChunkEntityStore>,
+    ner: Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
 ) -> (
     Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
     Option<Arc<dyn corpus_index::ingest_port::tiered::ChunkEntityExtractor>>,
 ) {
     // The store is opened once by `run_daemon` and passed in, so the adapter
-    // opens no second handle.
-    let ner = sovereign_compute::ner::served_ner();
+    // opens no second handle. The extractor is the handle boot took from where
+    // this process's NER is served (pb-serve-distributes).
     let chunk = ner.as_ref().map(|extractor| {
         corpus_engine::enrichment::chunk_ner::GlinerChunkExtractor::new(
             store,

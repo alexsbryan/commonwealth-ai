@@ -225,6 +225,7 @@ pub(super) async fn run_daemon(
         reload,
         deferred_daemon,
         path: serving_path,
+        ner,
     } = match super::serving_boot::boot_serving(&config, args, &config_override, hosted).await {
         Ok(s) => s,
         Err(code) => return code,
@@ -390,7 +391,8 @@ pub(super) async fn run_daemon(
     // model. The store opened above is the adapter's port (no second handle).
     let chunk_entity_store: Arc<dyn sovereign_core::daemon_wire::conv_tiered::ChunkEntityStore> =
         state_store_concrete.clone();
-    let (gliner_raw, chunk_entity_extractor) = bootstrap::load_gliner_extractor(chunk_entity_store);
+    let (gliner_raw, chunk_entity_extractor) =
+        bootstrap::load_gliner_extractor(chunk_entity_store, ner);
 
     let (notes_embed, notes_gliner) = bootstrap::notes_tier_fns(&provider, &gliner_raw);
     let (engine, embed_model_id): (Arc<CorpusEngine>, String) = bootstrap::build_corpus_engine(
