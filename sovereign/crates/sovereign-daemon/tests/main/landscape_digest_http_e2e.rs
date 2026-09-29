@@ -51,11 +51,10 @@ async fn bare_manager() -> Arc<KnowledgeViewManager> {
     let _ = std::fs::File::create(&db_path).unwrap();
     let embed: corpus_index::types::EmbedFn =
         Arc::new(|_| Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) }));
-    let infer: corpus_engine::InferenceFn = Arc::new(|_, _: Option<u32>| {
-        Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
-    });
     let engine = Arc::new(
-        corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed).with_inference_fn(infer),
+        corpus_index::ingest_port::double::IngestPortDouble::new()
+            .with_index_dir(indexes_dir)
+            .with_embed_fn(embed),
     );
     // Leak the TempDir intentionally — it lives for the test process
     // duration anyway, and Drop ordering across spawn boundaries is

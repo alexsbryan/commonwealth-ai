@@ -35,11 +35,11 @@ async fn insight_fixture() -> (
         // TestProvider refuses with NotImplemented and the clip 500s.
         Arc::new(TestProvider::new().with_embed_marker(|_| vec![0.5_f32; 4])),
     ));
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(
-        tmp.path().join("recipes"),
-        tmp.path().join("indexes"),
-        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
-    ));
+    let engine = Arc::new(
+        corpus_index::ingest_port::double::IngestPortDouble::new()
+            .with_index_dir(tmp.path().join("indexes"))
+            .with_embed_fn(Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) }))),
+    );
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),
@@ -131,11 +131,11 @@ async fn insight_sink_status_names_each_sink_and_its_reachability() {
         Arc::new(sinks),
         Arc::new(TestProvider::new()),
     ));
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(
-        tmp.path().join("recipes"),
-        tmp.path().join("indexes"),
-        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
-    ));
+    let engine = Arc::new(
+        corpus_index::ingest_port::double::IngestPortDouble::new()
+            .with_index_dir(tmp.path().join("indexes"))
+            .with_embed_fn(Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) }))),
+    );
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),
@@ -184,11 +184,11 @@ async fn insight_sink_status_names_each_sink_and_its_reachability() {
 #[tokio::test]
 async fn insight_sink_status_without_a_service_is_the_named_503() {
     let tmp = tempfile::tempdir().unwrap();
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(
-        tmp.path().join("recipes"),
-        tmp.path().join("indexes"),
-        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
-    ));
+    let engine = Arc::new(
+        corpus_index::ingest_port::double::IngestPortDouble::new()
+            .with_index_dir(tmp.path().join("indexes"))
+            .with_embed_fn(Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) }))),
+    );
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),
@@ -357,11 +357,11 @@ async fn insight_routes_clip_list_search_delete() {
 #[tokio::test]
 async fn insight_routes_without_a_service_answer_the_named_503() {
     let tmp = tempfile::tempdir().unwrap();
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(
-        tmp.path().join("recipes"),
-        tmp.path().join("indexes"),
-        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
-    ));
+    let engine = Arc::new(
+        corpus_index::ingest_port::double::IngestPortDouble::new()
+            .with_index_dir(tmp.path().join("indexes"))
+            .with_embed_fn(Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) }))),
+    );
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),

@@ -24,7 +24,7 @@ use axum::Router;
 use host_kit::mcp::{McpMountedTools, McpRequestContext, ToolOutcome};
 use serde_json::{json, Value};
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::double::IngestPortDouble;
 use sovereign_daemon::mcp_router::{mcp_router, McpNotifier};
 use sovereign_store::sqlite::SqliteStateStore;
 
@@ -76,11 +76,11 @@ async fn svrn_registry(dir: &std::path::Path) -> sovereign_contracts::ToolRegist
             Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; corpus_index::types::DEFAULT_EMBED_DIM])
         })
     });
-    let engine = Arc::new(CorpusEngine::new(
-        dir.join("recipes"),
-        dir.join("indexes"),
-        embed,
-    ));
+    let engine = Arc::new(
+        IngestPortDouble::new()
+            .with_index_dir(dir.join("indexes"))
+            .with_embed_fn(embed),
+    );
     let solve_jobs = Arc::new(sovereign_daemon::solve_http::SolveJobs::new(1));
     sovereign_daemon::tool_registry::build_tool_registry(engine, solve_jobs).await
 }

@@ -36,6 +36,9 @@ use sovereign_contracts::types::{
 };
 
 #[path = "ledger_double.rs"]
+use corpus_index::ingest_port::daemon::{IngestPort, RecipeHarnessPort};
+use corpus_index::ingest_port::double::{IngestPortDouble, RecipeHarnessDouble};
+
 pub mod ledger_double;
 pub mod work_rails;
 
@@ -553,22 +556,26 @@ impl InferenceProvider for TestProvider {
 /// crate's e2e tests uses. One number, one name.
 pub const FIXTURE_EMBED_DIM: usize = 8;
 
-/// A real `CorpusEngine` over a tempdir, with `indexes/` and `recipes/`
-/// already made and a mock embed fn.
+/// The daemon's corpus handle over a tempdir, with `indexes/` and
+/// `recipes/` already made and a mock embed fn: ingest's port double, so a
+/// test that only slots a handle builds no engine
+/// (pb-ingest-dial-daemon-tests-slot). A route that reads through it gets
+/// the double's refusal, naming the method.
 ///
 /// `ServingCore.corpus_engine` is not an `Option`, so every serving
-/// fixture needs one whether or not its routes read it. Three surface
-/// e2e files spelled this out identically before it landed here.
-pub fn engine_at(tmp: &tempfile::TempDir) -> Arc<corpus_engine::CorpusEngine> {
+/// fixture needs one whether or not its routes read it.
+pub fn engine_at(tmp: &tempfile::TempDir) -> Arc<IngestPortDouble> {
     let indexes = tmp.path().join("indexes");
     let recipes = tmp.path().join("recipes");
     std::fs::create_dir_all(&indexes).expect("fixture indexes dir");
     std::fs::create_dir_all(&recipes).expect("fixture recipes dir");
-    Arc::new(corpus_engine::CorpusEngine::new(
-        recipes,
-        indexes,
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; FIXTURE_EMBED_DIM]) })),
-    ))
+    Arc::new(
+        IngestPortDouble::new()
+            .with_index_dir(indexes)
+            .with_embed_fn(Arc::new(|_t: &str| {
+                Box::pin(async { Ok(vec![0.0_f32; FIXTURE_EMBED_DIM]) })
+            })),
+    )
 }
 
 /// A fresh mesh-shared index under `indexes/<corpus_id>`, on the
@@ -607,7 +614,7 @@ pub async fn fixture_index(
 /// one any host builds, and offering it would put back a configuration nobody
 /// serves.
 pub fn desktop_services_with_engine(
-    engine: Arc<corpus_engine::CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
 ) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts::new(engine))
 }
@@ -622,7 +629,8 @@ pub fn desktop_services_with_engine(
 /// drift, and the fields that differ were buried in thirty identical
 /// lines each (ARCH §10.6). They are named here instead.
 pub struct DesktopParts {
-    pub engine: Arc<corpus_engine::CorpusEngine>,
+    pub engine: Arc<dyn IngestPort>,
+    pub recipe_harness: Arc<dyn RecipeHarnessPort>,
     pub provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
     pub store: Arc<dyn sovereign_contracts::traits::StateStore>,
     pub runtime: Arc<sovereign_core::runtime::Runtime>,
@@ -634,9 +642,10 @@ pub struct DesktopParts {
 
 impl DesktopParts {
     /// The smallest serving desktop that still carries a corpus engine.
-    pub fn new(engine: Arc<corpus_engine::CorpusEngine>) -> Self {
+    pub fn new(engine: Arc<dyn IngestPort>) -> Self {
         Self {
             engine,
+            recipe_harness: Arc::new(RecipeHarnessDouble),
             provider: Arc::new(TestProvider::new()),
             store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
             runtime: stub_runtime(Arc::new(TestProvider::new()), None),
@@ -679,9 +688,7 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_daemon::DaemonServices
             headless: None,
             serving: sovereign_daemon::ServingProfile {
                 core: sovereign_daemon::ServingCore {
-                    recipe_harness: Some(std::sync::Arc::new(
-                        sovereign_authoring_harness::EngineHarness::new(parts.engine.clone()),
-                    )),
+                    recipe_harness: Some(parts.recipe_harness),
                     corpus_engine: parts.engine,
                     inference_provider: parts.provider,
                     in_flight_gauge: None,
@@ -715,7 +722,7 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_daemon::DaemonServices
 /// (Falsifier 3): a fixture that composed a variant directly would be
 /// the one place able to build a shape no launch can produce.
 pub fn desktop_services_with_runtime(
-    engine: Arc<corpus_engine::CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
     runtime: Arc<sovereign_core::runtime::Runtime>,
 ) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts {
@@ -755,7 +762,7 @@ pub fn stub_runtime_with_skills(
 /// fixture that composed a variant directly would be the one place able
 /// to build a shape no launch can produce (Falsifier 3).
 pub fn desktop_services_with_note_and_feature_stores(
-    engine: Arc<corpus_engine::CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
     notes: Arc<sovereign_store::sqlite::SqliteStateStore>,
     features: Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
 ) -> sovereign_daemon::DaemonServices {
@@ -777,7 +784,7 @@ pub fn desktop_services_with_note_and_feature_stores(
 ///
 /// Assembled through THE assembler like every production site.
 pub fn desktop_services_with_tool_registry(
-    engine: Arc<corpus_engine::CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
     notes: Arc<sovereign_store::sqlite::SqliteStateStore>,
     features: Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
     tools: Arc<sovereign_contracts::ToolRegistry>,
@@ -811,10 +818,10 @@ pub fn stub_runtime(
 pub fn stub_runtime_with_engine(
     provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
     store: Option<Arc<dyn sovereign_contracts::traits::StateStore>>,
-    engine: Arc<corpus_engine::CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
 ) -> Arc<sovereign_core::runtime::Runtime> {
     let mut runtime = stub_runtime_parts(provider, store);
-    runtime.corpus_engine = Some(engine);
+    runtime.corpus_engine = Some(engine as Arc<dyn corpus_index::source::CorpusReadPort>);
     Arc::new(runtime)
 }
 
@@ -857,7 +864,7 @@ fn stub_runtime_parts_with_lanes(
 /// the reader instead would prove the projections and nothing about
 /// the path the handler takes to reach them.
 pub fn desktop_services_with_conv_reader(
-    engine: Arc<corpus_engine::CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
     store: Arc<dyn sovereign_contracts::traits::StateStore>,
     conv: Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>,
 ) -> sovereign_daemon::DaemonServices {
@@ -884,7 +891,7 @@ pub fn desktop_services_with_conv_reader(
 /// carried one, so a create with `enabled_corpora` was refused as "no corpus
 /// index installed" against a daemon that had two.)
 pub fn desktop_services_with_store(
-    engine: Arc<corpus_engine::CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
     store: Arc<dyn sovereign_contracts::traits::StateStore>,
     provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
 ) -> sovereign_daemon::DaemonServices {
@@ -898,7 +905,7 @@ pub fn desktop_services_with_store(
 /// real turn that pauses on an approval over the wire). Everything else
 /// stays the stub shape — the point is the seam, not the planner.
 pub fn desktop_services_with_planner(
-    engine: Arc<corpus_engine::CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
     store: Arc<dyn sovereign_contracts::traits::StateStore>,
     provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
     planner: Box<dyn sovereign_contracts::traits::Planner>,
@@ -920,7 +927,7 @@ pub fn desktop_services_with_planner(
 /// them, assembled through THE assembler like every production site.
 #[allow(clippy::too_many_arguments)]
 pub fn desktop_services_with_insights(
-    engine: Arc<corpus_engine::CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
     store: Arc<dyn sovereign_contracts::traits::StateStore>,
     provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
     insights: Option<Arc<sovereign_core::insight::InsightService>>,

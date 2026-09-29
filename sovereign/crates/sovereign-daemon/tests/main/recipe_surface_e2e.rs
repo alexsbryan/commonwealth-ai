@@ -79,7 +79,12 @@ async fn build_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir, std::path::P
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),
-        common::desktop_services_with_engine(engine),
+        common::desktop_services(common::DesktopParts {
+            recipe_harness: Arc::new(sovereign_authoring_harness::EngineHarness::new(Arc::clone(
+                &engine,
+            ))),
+            ..common::DesktopParts::new(engine)
+        }),
     );
     (daemon, tmp, recipes)
 }

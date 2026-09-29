@@ -64,12 +64,15 @@ use sovereign_contracts::traits::StateStore;
 use sovereign_contracts::types::TurnRequest;
 use sovereign_daemon::EmbeddedDaemon;
 
-pub(crate) fn engine(dir: &std::path::Path) -> Arc<corpus_engine::CorpusEngine> {
-    Arc::new(corpus_engine::CorpusEngine::new(
-        dir.join("recipes"),
-        dir.join("indexes"),
-        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
-    ))
+use corpus_index::ingest_port::double::IngestPortDouble;
+
+pub(crate) fn engine(dir: &std::path::Path) -> Arc<IngestPortDouble> {
+    Arc::new(
+        IngestPortDouble::new()
+            .with_index_dir(dir.join("indexes"))
+            .with_embed_fn(Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })))
+            .without_foreground_signal(),
+    )
 }
 
 /// A serving daemon over a store the test also holds, so an assertion can read

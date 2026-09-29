@@ -159,6 +159,9 @@ http-body-util = "0.1"
 tracing-subscriber = { workspace = true }
 # Moved with turn_surface.rs from sovereign-mesh's test tree.
 tokio-tungstenite = "0.29"
+# The tests that only slot a corpus handle hold `IngestPortDouble`
+# (pb-ingest-dial-daemon-tests-slot).
+corpus-index = { workspace = true, features = ["test-doubles"] }
 
 [lints]
 workspace = true

@@ -80,7 +80,20 @@ use crate::common::spawn_router;
 #[allow(clippy::unwrap_used)]
 mod fixture {
     use super::*;
-    pub use crate::common::engine_at;
+
+    /// A real engine over `tmp`: this file reads through it
+    /// (pb-ingest-dial-daemon-tests-reads repoints it to the double).
+    pub fn engine_at(tmp: &tempfile::TempDir) -> Arc<CorpusEngine> {
+        let indexes = tmp.path().join("indexes");
+        let recipes = tmp.path().join("recipes");
+        std::fs::create_dir_all(&indexes).unwrap();
+        std::fs::create_dir_all(&recipes).unwrap();
+        Arc::new(CorpusEngine::new(
+            recipes,
+            indexes,
+            Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; common::FIXTURE_EMBED_DIM]) })),
+        ))
+    }
 
     pub const CORPUS: &str = "house-rules";
 
@@ -105,7 +118,7 @@ mod fixture {
             tmp.path().to_path_buf(),
             SetupConfig::unconfigured(),
             common::desktop_services_with_note_and_feature_stores(
-                Arc::clone(&engine),
+                Arc::clone(&engine) as Arc<dyn corpus_index::ingest_port::daemon::IngestPort>,
                 notes,
                 features,
             ),

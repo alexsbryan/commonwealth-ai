@@ -12,7 +12,32 @@ use std::sync::Arc;
 use sovereign_contracts::traits::StateStore;
 use sovereign_daemon::turn_http::turn_router;
 
-use super::serving_daemon;
+/// [`super::serving_daemon`] over a real engine: these tests read the
+/// installed-index listing through it (pb-ingest-dial-daemon-tests-reads
+/// repoints them to the double's listing mode).
+fn serving_daemon(
+    provider: TestProvider,
+) -> (
+    tempfile::TempDir,
+    Arc<sovereign_daemon::EmbeddedDaemon>,
+    Arc<dyn StateStore>,
+) {
+    let tmp = tempfile::tempdir().unwrap();
+    let store: Arc<dyn StateStore> = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+    let engine = Arc::new(corpus_engine::CorpusEngine::new(
+        tmp.path().join("recipes"),
+        tmp.path().join("indexes"),
+        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
+    ));
+    let services =
+        crate::common::desktop_services_with_store(engine, Arc::clone(&store), Arc::new(provider));
+    let daemon = sovereign_daemon::EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        sovereign_contracts::setup_config::SetupConfig::unconfigured(),
+        services,
+    );
+    (tmp, daemon, store)
+}
 
 /// Install a corpus at `<indexes>/<id>` with one chunk, marked complete so
 /// the engine's `installed_indexes()` reports it — the same fixture

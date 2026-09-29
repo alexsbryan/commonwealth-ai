@@ -162,11 +162,12 @@ pub(crate) async fn conversation_fixture(
 ) -> (tempfile::TempDir, Arc<EmbeddedDaemon>, Arc<dyn StateStore>) {
     let tmp = tempfile::tempdir().unwrap();
     let store: Arc<dyn StateStore> = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(
-        tmp.path().join("recipes"),
-        tmp.path().join("indexes"),
-        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
-    ));
+    let engine = Arc::new(
+        corpus_index::ingest_port::double::IngestPortDouble::new()
+            .with_index_dir(tmp.path().join("indexes"))
+            .with_embed_fn(Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })))
+            .without_foreground_signal(),
+    );
     let services =
         crate::common::desktop_services_with_store(engine, Arc::clone(&store), Arc::new(provider));
     let daemon = EmbeddedDaemon::new(

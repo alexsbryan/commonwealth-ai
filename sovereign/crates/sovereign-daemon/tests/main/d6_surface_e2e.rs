@@ -38,7 +38,7 @@
 
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::double::IngestPortDouble;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::features_http::features_router;
@@ -65,11 +65,13 @@ async fn build_store_daemon(
     let recipes = tmp.path().join("recipes");
     std::fs::create_dir_all(&indexes).unwrap();
     std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(CorpusEngine::new(
-        recipes,
-        indexes,
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) })),
-    ));
+    let engine = Arc::new(
+        IngestPortDouble::new()
+            .with_index_dir(indexes)
+            .with_embed_fn(Arc::new(|_t: &str| {
+                Box::pin(async { Ok(vec![0.0_f32; 8]) })
+            })),
+    );
 
     let notes = Arc::new(SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap());
     let features = with_features

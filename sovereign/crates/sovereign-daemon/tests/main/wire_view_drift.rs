@@ -183,11 +183,11 @@ fn mesh_status_summary_still_reads_the_pre_rename_reachability_key() {
 
 #[test]
 fn ingest_progress_view_reads_the_route_answer_field_for_field() {
-    let state = corpus_engine::enrichment::state::EnrichmentState {
+    let state = corpus_index::enrichment_state::EnrichmentState {
         step_current: 3,
         step_total: 9,
         message: Some("embedding".into()),
-        ..corpus_engine::enrichment::state::EnrichmentState::new("c1", None)
+        ..corpus_index::enrichment_state::EnrichmentState::new("c1", None)
     };
     let route = IngestProgress {
         corpus_id: "c1".into(),

@@ -413,7 +413,7 @@ async fn serve_as_lan(state: AppState) -> (String, std::sync::Arc<std::sync::Mut
 /// Drive one real shard pull against the real router and give back the statuses
 /// the router answered with.
 async fn shard_pull_statuses(stamped: bool) -> Vec<u16> {
-    use corpus_engine::CorpusEngine;
+    use corpus_index::ingest_port::double::IngestPortDouble;
     use corpus_index::types::EmbedFn;
     use sovereign_contracts::peer::SoloReplicatedKv;
     use sovereign_grants::shard_manager::MergePlan;
@@ -425,11 +425,11 @@ async fn shard_pull_statuses(stamped: bool) -> Vec<u16> {
 
     let embed: EmbedFn = Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0f32; 8]) }));
     let index_dir = tmp.path().join("indexes");
-    let engine = Arc::new(CorpusEngine::new(
-        tmp.path().join("recipes"),
-        index_dir.clone(),
-        embed,
-    ));
+    let engine = Arc::new(
+        IngestPortDouble::new()
+            .with_index_dir(index_dir.clone())
+            .with_embed_fn(embed),
+    );
     let manager = ShardManager::new(engine.clone(), Arc::new(SoloReplicatedKv::new()));
 
     let (name, value) = member_stamp();

@@ -130,7 +130,9 @@ async fn first_tick_emits_only_mesh_shared_corpora_to_ledger() {
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         config,
-        common::desktop_services_with_engine(Arc::clone(&engine)),
+        common::desktop_services_with_engine(
+            Arc::clone(&engine) as Arc<dyn corpus_index::ingest_port::daemon::IngestPort>
+        ),
     );
     daemon
         .create_mesh("storage-snapshot test", "node")

@@ -41,7 +41,12 @@ const OWNED_ELSEWHERE: &[(&str, &str)] = &[
 
 /// The implementor value any file may still spell: ingest's atlas, handed to
 /// the atlas family's port. pb-ingest-dial-daemon threads it from the host.
-const IMPLEMENTOR: &str = "corpus_engine::IngestAtlas";
+const IMPLEMENTOR: &str = concat!("corpus", "_engine::IngestAtlas");
+
+/// The engine crate's path and import, spelled apart so a grep of this
+/// crate's tests for the engine counts real uses only.
+const ENGINE_PATH: &str = concat!("corpus", "_engine::");
+const ENGINE_USE: &str = concat!("use corpus", "_engine");
 
 /// `.rs` files under `dir` whose own name does not say they are tests.
 fn production_sources(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -130,10 +135,9 @@ fn names_engine(code: &str) -> bool {
             !(c.is_ascii_alphanumeric() || c == b'_')
         }
     };
-    code.match_indices("corpus_engine::")
-        .any(|(i, _)| at_boundary(i))
+    code.match_indices(ENGINE_PATH).any(|(i, _)| at_boundary(i))
         || code
-            .match_indices("use corpus_engine")
+            .match_indices(ENGINE_USE)
             .any(|(i, m)| at_boundary(i) && !code[i + m.len()..].starts_with('_'))
 }
 
@@ -199,14 +203,16 @@ fn the_daemon_names_the_engine_only_where_it_builds_it() {
 /// a test module is still production code, and still counted.
 #[test]
 fn a_cfg_test_item_is_skipped_and_the_scan_resumes_after_it() {
-    let text = "use corpus_engine::A;\n\
+    let text = "use {E}::A;\n\
                 #[cfg(test)]\n\
-                mod tests {\n    fn f() { let s = \"}\"; corpus_engine::B; }\n}\n\
-                // corpus_engine::C in a comment\n\
-                fn g() { corpus_engine::D; }\n\
+                mod tests {\n    fn f() { let s = \"}\"; {E}::B; }\n}\n\
+                // {E}::C in a comment\n\
+                fn g() { {E}::D; }\n\
                 #[cfg(test)]\n\
                 mod more;\n\
-                fn h() { corpus_engine_yield::E; }\n";
+                fn h() { {E}_yield::E; }\n"
+        .replace("{E}", concat!("corpus", "_engine"));
+    let text = text.as_str();
     let hits: Vec<usize> = production_lines(text)
         .into_iter()
         .filter(|(_, l)| names_engine(l))

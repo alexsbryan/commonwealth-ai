@@ -115,7 +115,7 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
     gauge.set(5);
 
     let caps = build_local_capabilities(
-        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>, // no CorpusEngine — irrelevant for this assertion
+        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>, // no corpus handle — irrelevant for this assertion
         100,                                                    // reported_at
         &state,
     )
