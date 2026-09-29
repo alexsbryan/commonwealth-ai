@@ -19,12 +19,12 @@ pub mod status;
 
 pub use article_stats::ArticleStats;
 pub use atlas_port::IngestAtlas;
-pub use tool_ports::FolderTiered;
 pub use cancel::{CancellationFlag, CancellationRegistry};
 pub(crate) use ingest_helpers::chunk_doc;
 pub use status::{
     corpus_chunk_count, corpus_readiness, scan_corpus_rows, CorpusReadiness, CorpusStatusRow,
 };
+pub use tool_ports::FolderTiered;
 
 /// Consolidated on-disk state for a single corpus — what
 /// [`CorpusEngine::corpus_disk_status`] reports.

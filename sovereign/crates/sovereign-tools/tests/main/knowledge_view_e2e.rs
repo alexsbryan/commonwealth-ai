@@ -276,12 +276,7 @@ async fn personal_view_ingest_plus_planted_skeleton_splices_into_context() {
     // its recipes. `inner-work` is excluded from the conversational
     // view but doesn't affect this personal-knowledge test.
     let manager = Arc::new(
-        KnowledgeViewManager::new(
-            engine.clone(),
-            db_path.clone(),
-            vec!["inner-work".into()],
-        )
-        .await,
+        KnowledgeViewManager::new(engine.clone(), db_path.clone(), vec!["inner-work".into()]).await,
     );
     // Wire the manager as the store's observer for parity with
     // production; we don't actually need debounced enrichment here.
@@ -448,10 +443,8 @@ async fn splice_without_any_enrichment_still_sets_some_empty_vec() {
     // against the silent "unrouted context" privacy bug the plan
     // called out as the biggest risk.
     let (engine, _tmp, db_path) = boot_engine().await;
-    let manager = Arc::new(
-        KnowledgeViewManager::new(engine, db_path, vec!["inner-work".into()])
-            .await,
-    );
+    let manager =
+        Arc::new(KnowledgeViewManager::new(engine, db_path, vec!["inner-work".into()]).await);
     // Deliberately skip init() — no ingest, no enrichment, no
     // skeleton. splice_into must still produce `Some(_)`.
     let mut ctx = empty_context("c1");
