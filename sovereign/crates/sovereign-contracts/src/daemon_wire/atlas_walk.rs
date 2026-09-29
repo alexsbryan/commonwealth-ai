@@ -18,6 +18,7 @@ pub struct AtlasWalkNodeEcho {
     /// carry no atom id records that a walk happened and nothing about where
     /// it went.
     pub atom_id: String,
+    /// The atom's name.
     pub name: String,
     /// `AtomType::label()` — "entity", "claim", "summary", …
     pub kind: String,

@@ -622,7 +622,7 @@ async fn cmd_fit(args: &[String]) -> i32 {
     let drift = if opts.no_drift {
         None
     } else {
-        match crate::bench_cmd::baselines::read_latest_at::<FitSnapshot>(&dir) {
+        match sovereign_contracts::baselines::read_latest_at::<FitSnapshot>(&dir) {
             Ok(Some(mut base)) => {
                 // An `--axis` run measured a subset. Diffing it whole
                 // would report every axis it did not ask for as
@@ -644,7 +644,7 @@ async fn cmd_fit(args: &[String]) -> i32 {
     // Written AFTER the comparison, so `--save-baseline` on a drifting
     // run still shows you the drift it is about to overwrite.
     let saved = if opts.save_baseline {
-        match crate::bench_cmd::baselines::write_dated_and_update_latest_at(&dir, &snapshot) {
+        match sovereign_contracts::baselines::write_dated_and_update_latest_at(&dir, &snapshot) {
             Ok(p) => Some(p),
             Err(e) => {
                 eprintln!("router fit: write baseline into {}: {e}", dir.display());
@@ -723,7 +723,7 @@ fn baseline_dir_for_bank(root: &Path, bank_path: &Path) -> PathBuf {
     }
     .and_then(|s| s.to_str())
     .unwrap_or("calibration");
-    crate::bench_cmd::baselines::baseline_dir(
+    sovereign_contracts::baselines::baseline_dir(
         &root.join("sovereign").join("bench"),
         "routing",
         &format!("{stem}-fit"),
@@ -1038,7 +1038,7 @@ fn print_human(
 /// the point — but the header says plainly which of the two this is,
 /// and only an attributable run is allowed to say "REGRESSED".
 fn print_drift(d: &DriftReport, dir: &Path) {
-    let when = match crate::bench_cmd::baselines::baseline_age(dir) {
+    let when = match sovereign_contracts::baselines::baseline_age(dir) {
         Some((date, days)) => format!("{date} ({days}d ago)"),
         None => "an undated baseline".to_string(),
     };
