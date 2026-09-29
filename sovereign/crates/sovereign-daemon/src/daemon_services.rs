@@ -196,6 +196,10 @@ pub struct ServingCore {
     /// `None` when the provider is not a router (fixtures, a `NullProvider`);
     /// the absence is what gossip publishes as `current_in_flight: None`.
     pub in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
+    /// The worker-side auto-warm hook (`POST /internal/rpc-warm`): the
+    /// loader's, handed in by the distribution (pb-serve-distributes). `None`
+    /// where none was, and the route answers that this node is no warmer.
+    pub rpc_shard_warmer: Option<Arc<dyn crate::state::RpcShardWarmer>>,
     /// The thing that ANSWERS — routing, retrieval, tools, synthesis.
     ///
     /// CORE, and the field `quality/TOPOLOGY.md` §3.5 turns on: "DAEMON — the
@@ -777,6 +781,7 @@ pub(crate) mod fixtures {
                 recipe_harness: None,
                 inference_provider,
                 in_flight_gauge: None,
+                rpc_shard_warmer: None,
                 state_store,
                 runtime: runtime(),
                 insights: None,

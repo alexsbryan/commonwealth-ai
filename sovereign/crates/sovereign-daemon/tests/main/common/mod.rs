@@ -722,6 +722,7 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_daemon::DaemonServices
                     corpus_engine: parts.engine,
                     inference_provider: parts.provider,
                     in_flight_gauge: None,
+                    rpc_shard_warmer: None,
                     state_store: parts.store,
                     runtime: parts.runtime,
                     insights: parts.insights,

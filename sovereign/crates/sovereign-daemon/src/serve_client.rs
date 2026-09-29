@@ -124,6 +124,7 @@ pub struct HostedServe {
     compose: Compose,
     env_contract: Option<EnvContract>,
     ner: Option<NerSource>,
+    rpc_warmer: Option<std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer>>,
 }
 
 /// The distribution's in-process NER kind: the one handle per process, loaded
@@ -157,7 +158,26 @@ impl HostedServe {
             }),
             env_contract: None,
             ner: None,
+            rpc_warmer: None,
         }
+    }
+
+    /// The loader's worker-side warmer, which svrn's `/internal/rpc-warm`
+    /// hands each warm request (with the reach it resolves from its mesh)
+    /// until the flip gives the route to serve.
+    pub fn rpc_warmer(
+        mut self,
+        warmer: std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer>,
+    ) -> Self {
+        self.rpc_warmer = Some(warmer);
+        self
+    }
+
+    /// The warmer this distribution handed, if any.
+    pub fn warmer(
+        &self,
+    ) -> Option<std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer>> {
+        self.rpc_warmer.clone()
     }
 
     /// The distribution's in-process NER kind, which svrn's boot takes its

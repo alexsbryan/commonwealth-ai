@@ -2703,12 +2703,16 @@ impl EmbeddedDaemon {
                 // Worker side of distributed-inference auto-warm: this node can
                 // seed its RPC tensor cache with a shard on request
                 // (`POST /internal/rpc-warm`). A node that can serve chat can
-                // serve as an RPC worker. See `rpc_warm_http`.
-                let warmer: Arc<dyn crate::state::RpcShardWarmer> =
-                    Arc::new(crate::rpc_warm_http::MeshRpcShardWarmer::new());
+                // serve as an RPC worker, with the warmer the distribution
+                // handed (the loader's, pb-serve-distributes).
+                let warmer = self
+                    .services
+                    .serving()
+                    .and_then(|s| s.core.rpc_shard_warmer.clone());
+                info!(installed = warmer.is_some(), "rpc-warm: the worker-side warmer");
                 crate::state::ServingSeed {
                     local_inference: Some(adapter),
-                    rpc_shard_warmer: Some(warmer),
+                    rpc_shard_warmer: warmer,
                 }
             }
             None => crate::state::ServingSeed::default(),

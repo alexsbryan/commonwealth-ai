@@ -452,3 +452,33 @@ fn the_ner_handle_is_the_distributions_in_process_kind() {
         .ner_handle()
         .is_none());
 }
+
+/// The worker-side warmer svrn's `/internal/rpc-warm` hands requests to is
+/// the one the distribution handed (pb-serve-distributes); none when none
+/// was. Failing input: have `warmer` answer `None`, and the first assertion
+/// goes red.
+#[test]
+fn the_rpc_warmer_is_the_distributions() {
+    struct Warm;
+    #[async_trait::async_trait]
+    impl sovereign_contracts::rpc_warm::RpcShardWarmer for Warm {
+        async fn warm_shard(
+            &self,
+            _: serde_json::Value,
+            _: Option<std::path::PathBuf>,
+            _: sovereign_contracts::rpc_warm::WarmReach,
+        ) -> Result<serde_json::Value, String> {
+            Ok(serde_json::json!({ "warmed": true }))
+        }
+    }
+    let compose = |_: std::path::PathBuf, _: std::path::PathBuf| async {
+        Err::<HostedParts, String>("not composed here".to_string())
+    };
+    let handed: std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer> =
+        std::sync::Arc::new(Warm);
+    let hosted = HostedServe::new(String::new(), compose).rpc_warmer(std::sync::Arc::clone(&handed));
+    assert!(hosted
+        .warmer()
+        .is_some_and(|w| std::sync::Arc::ptr_eq(&w, &handed)));
+    assert!(HostedServe::new(String::new(), compose).warmer().is_none());
+}

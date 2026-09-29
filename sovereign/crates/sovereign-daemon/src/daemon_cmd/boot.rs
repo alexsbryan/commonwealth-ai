@@ -218,6 +218,9 @@ pub(super) async fn run_daemon(
         }
     };
 
+    // The loader's worker-side warmer, read before `boot_serving` consumes the
+    // distribution's composition (pb-serve-distributes).
+    let rpc_warmer = hosted.as_ref().and_then(|h| h.warmer());
     let super::serving_boot::ServingBoot {
         provider,
         resolved_embed_family,
@@ -836,6 +839,9 @@ pub(super) async fn run_daemon(
                     // (`quality/DAEMON_CORE.md` §4.2 "Where an install slot
                     // breaks a cycle").
                     in_flight_gauge: Some(in_flight_gauge),
+                    // The loader's worker-side warmer, if the distribution
+                    // handed one (`HostedServe::rpc_warmer`).
+                    rpc_shard_warmer: rpc_warmer,
                     // Phase 3: the headless daemon's own `sovereign.db`,
                     // opened at the top of this function. `reading_http` now
                     // resolves conversation titles on this variant too.

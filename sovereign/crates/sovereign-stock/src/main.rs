@@ -69,7 +69,11 @@ fn main() {
     })
     // The NER kind svrn's ingest and retrieval take their handle from, where
     // this process loads for itself (hosted, or a terminal).
-    .ner(sovereign_serve::served_ner);
+    .ner(sovereign_serve::served_ner)
+    // The worker-side warmer svrn's `/internal/rpc-warm` hands each request.
+    .rpc_warmer(std::sync::Arc::new(
+        sovereign_serve::MeshRpcShardWarmer::new(),
+    ));
     // Placement is this binary's (FIVE_PROGRAMS §2c): code's indexes and
     // result stores are svrn's root's, as they were when svrn hosted them.
     let code = sovereign_daemon::process::HostedCode::new(|host| async move {
