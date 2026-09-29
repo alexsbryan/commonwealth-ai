@@ -6,14 +6,16 @@
 //! implementor is a unit value: a composition root, or a test, holds
 //! `Arc::new(IngestAtlas)` without assembling an engine.
 
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_engine_atlas_reader::citation::SourceCitation;
+use corpus_engine_atlas_reader::ports::{ArgumentativeResponse, AtlasPort};
 use corpus_engine_atlas_reader::raptor_read::RaptorSummaryRow;
 use corpus_engine_atlas_reader::summary::AtlasSummary;
-use understanding_vocab::atoms::{AtomEnvelope, AtomsFile};
+use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity};
 use understanding_vocab::edges::{Edge, EdgesFile};
 
 use crate::enrichment::atlas::analysis::gaps::{
@@ -189,5 +191,48 @@ impl AtlasPort for IngestAtlas {
 
     fn normalize_title(&self, title: &str) -> String {
         crate::filters::normalize_title(title)
+    }
+
+    fn argumentative_system(&self) -> &'static str {
+        crate::enrichment::pipeline::typed_schemas::argumentative::PHASE1_ARGUMENTATIVE_SYSTEM
+    }
+
+    fn argumentative_schema(&self) -> serde_json::Value {
+        crate::enrichment::pipeline::typed_schemas::argumentative::phase1_argumentative_schema()
+    }
+
+    fn render_source_recovery_block(&self, excerpts: &[&str]) -> String {
+        crate::enrichment::pipeline::typed_schemas::render_source_recovery_block(excerpts)
+    }
+
+    fn argumentative_atom_count(
+        &self,
+        response_text: &str,
+        cross_leaf_only: bool,
+    ) -> Result<usize, String> {
+        crate::enrichment::atlas::typed_extension::parse_argumentative(
+            response_text,
+            cross_leaf_only,
+        )
+        .map(|e| e.atom_count())
+    }
+
+    fn write_typed_extension(
+        &self,
+        corpus_id: &str,
+        atlas_dir: &Path,
+        responses: &[ArgumentativeResponse],
+        person_seeds: Vec<Entity>,
+        citations: &HashMap<String, SourceCitation>,
+        embed_query: corpus_index::types::EmbedFn,
+    ) -> corpus_index::Result<HashMap<String, u32>> {
+        crate::enrichment::atlas::typed_extension::write_typed_extension(
+            corpus_id,
+            atlas_dir,
+            responses,
+            person_seeds,
+            citations,
+            embed_query,
+        )
     }
 }

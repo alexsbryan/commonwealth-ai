@@ -8,13 +8,16 @@
 //! holds an `Arc<dyn AtlasPort>` handed to it by whoever composed ingest,
 //! beside the ports in `corpus_index::ingest_port` (FIVE_PROGRAMS §2c).
 
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use understanding_vocab::atoms::{AtomEnvelope, AtomsFile};
+use corpus_index::types::EmbedFn;
+use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity};
 use understanding_vocab::edges::{Edge, EdgesFile};
 
+use crate::citation::SourceCitation;
 use crate::raptor_read::RaptorSummaryRow;
 use crate::summary::AtlasSummary;
 
@@ -92,4 +95,48 @@ pub trait AtlasPort: Send + Sync {
 
     /// The title key ingest normalizes article titles to.
     fn normalize_title(&self, title: &str) -> String;
+
+    /// The system prompt of the argumentative typed-extension call.
+    fn argumentative_system(&self) -> &'static str;
+
+    /// The JSON schema the argumentative call's structured output obeys.
+    fn argumentative_schema(&self) -> serde_json::Value;
+
+    /// The verbatim-source block a typed-extension prompt carries.
+    fn render_source_recovery_block(&self, excerpts: &[&str]) -> String;
+
+    /// Parse one argumentative response (Pass B keeps only oppositions and
+    /// concessions: `cross_leaf_only`) and count its atoms. `Err` is the
+    /// parse error, for the call's retry.
+    fn argumentative_atom_count(
+        &self,
+        response_text: &str,
+        cross_leaf_only: bool,
+    ) -> Result<usize, String>;
+
+    /// Resolve the responses against `person_seeds`, rewrite ids to content
+    /// hashes, fill passage previews from `citations` (keyed by section id)
+    /// and write the atlas with its seed table, embedding through
+    /// `embed_query`. Returns the atom count per kind.
+    fn write_typed_extension(
+        &self,
+        corpus_id: &str,
+        atlas_dir: &Path,
+        responses: &[ArgumentativeResponse],
+        person_seeds: Vec<Entity>,
+        citations: &HashMap<String, SourceCitation>,
+        embed_query: EmbedFn,
+    ) -> corpus_index::Result<HashMap<String, u32>>;
+}
+
+/// One typed-extension LLM response, carried to ingest as the model wrote
+/// it; ingest parses it into its own section type at the write.
+#[derive(Debug, Clone)]
+pub struct ArgumentativeResponse {
+    /// The section id the citation lookup is keyed on.
+    pub section_id: String,
+    /// The response the call accepted (it parsed).
+    pub response_text: String,
+    /// Pass B: keep only oppositions and concessions.
+    pub cross_leaf_only: bool,
 }

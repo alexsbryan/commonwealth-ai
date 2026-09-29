@@ -385,10 +385,11 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
             }
         }
     };
-    let mut provider = FolderTieredProvider::new(store, inference)
-        .with_index_dir_resolver(resolver)
-        .with_doc_type(parsed.doc_type.clone())
-        .with_summary_mode(parsed.summary_mode);
+    let mut provider =
+        FolderTieredProvider::new(store, inference, Arc::new(corpus_engine::IngestAtlas))
+            .with_index_dir_resolver(resolver)
+            .with_doc_type(parsed.doc_type.clone())
+            .with_summary_mode(parsed.summary_mode);
     if let Some(policy) = verify_policy {
         provider = provider.with_verify_policy(policy);
     }

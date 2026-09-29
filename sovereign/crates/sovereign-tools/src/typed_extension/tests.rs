@@ -233,9 +233,15 @@ async fn end_to_end_writes_atoms_and_manifest() {
     let tmp = tempfile::tempdir().unwrap();
     let atlas_dir = tmp.path().join("atlas");
 
-    let report = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
-        .await
-        .expect("typed extension should succeed end-to-end");
+    let report = run_typed_extension(
+        &corpus_engine::IngestAtlas,
+        corpus_id,
+        &store,
+        &inference,
+        &atlas_dir,
+    )
+    .await
+    .expect("typed extension should succeed end-to-end");
     assert_eq!(report.status, ExtractionStatus::Wrote);
     assert_eq!(report.pass_a_calls, 2, "two leaves → two Pass A calls");
     assert_eq!(report.pass_b_calls, 2, "two themes → two Pass B calls");
@@ -291,16 +297,28 @@ async fn rerun_with_no_changes_skips_via_manifest() {
     let tmp = tempfile::tempdir().unwrap();
     let atlas_dir = tmp.path().join("atlas");
 
-    let first = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
-        .await
-        .unwrap();
+    let first = run_typed_extension(
+        &corpus_engine::IngestAtlas,
+        corpus_id,
+        &store,
+        &inference,
+        &atlas_dir,
+    )
+    .await
+    .unwrap();
     assert_eq!(first.status, ExtractionStatus::Wrote);
     let calls_after_first = call_counter.load(Ordering::SeqCst);
     assert_eq!(calls_after_first, 4);
 
-    let second = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
-        .await
-        .unwrap();
+    let second = run_typed_extension(
+        &corpus_engine::IngestAtlas,
+        corpus_id,
+        &store,
+        &inference,
+        &atlas_dir,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         second.status,
         ExtractionStatus::SkippedManifestMatch,
@@ -322,9 +340,15 @@ async fn editing_a_leaf_invalidates_manifest_and_forces_rerun() {
     let tmp = tempfile::tempdir().unwrap();
     let atlas_dir = tmp.path().join("atlas");
 
-    run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
-        .await
-        .unwrap();
+    run_typed_extension(
+        &corpus_engine::IngestAtlas,
+        corpus_id,
+        &store,
+        &inference,
+        &atlas_dir,
+    )
+    .await
+    .unwrap();
     let calls_after_first = call_counter.load(Ordering::SeqCst);
     assert_eq!(calls_after_first, 4);
 
@@ -340,9 +364,15 @@ async fn editing_a_leaf_invalidates_manifest_and_forces_rerun() {
         .await
         .unwrap();
 
-    let second = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
-        .await
-        .unwrap();
+    let second = run_typed_extension(
+        &corpus_engine::IngestAtlas,
+        corpus_id,
+        &store,
+        &inference,
+        &atlas_dir,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         second.status,
         ExtractionStatus::Wrote,
@@ -365,9 +395,15 @@ async fn empty_inputs_short_circuit_without_writes() {
     let tmp = tempfile::tempdir().unwrap();
     let atlas_dir = tmp.path().join("atlas");
 
-    let report = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
-        .await
-        .unwrap();
+    let report = run_typed_extension(
+        &corpus_engine::IngestAtlas,
+        corpus_id,
+        &store,
+        &inference,
+        &atlas_dir,
+    )
+    .await
+    .unwrap();
     assert_eq!(report.status, ExtractionStatus::SkippedNoInputs);
     assert_eq!(
         call_counter.load(Ordering::SeqCst),
@@ -437,9 +473,15 @@ async fn atoms_carry_primary_source_citations_when_quote_spans_present() {
     let tmp = tempfile::tempdir().unwrap();
     let atlas_dir = tmp.path().join("atlas");
 
-    let report = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
-        .await
-        .expect("typed extension should succeed end-to-end");
+    let report = run_typed_extension(
+        &corpus_engine::IngestAtlas,
+        corpus_id,
+        &store,
+        &inference,
+        &atlas_dir,
+    )
+    .await
+    .expect("typed extension should succeed end-to-end");
     assert_eq!(report.status, ExtractionStatus::Wrote);
 
     let raw = std::fs::read_to_string(atlas_dir.join("atoms.json")).unwrap();

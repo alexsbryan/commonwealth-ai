@@ -253,6 +253,9 @@ fn mean_vector(vectors: &[Vec<f32>]) -> Vec<f32> {
 pub struct FolderTieredProvider {
     store: Arc<SqliteStateStore>,
     inference: Arc<dyn InferenceProvider>,
+    /// Ingest's atlas port: the deferred typed-extension pass writes the
+    /// atlas through it.
+    atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
     /// Resolves the index directory for a given corpus id. Required
     /// for the generic `_enrichment_state.json` sink so the daemon
     /// (and any restart's stall sweeper) can see progress without the
@@ -303,10 +306,15 @@ impl IndexDirResolver for StaticIndexDirResolver {
 }
 
 impl FolderTieredProvider {
-    pub fn new(store: Arc<SqliteStateStore>, inference: Arc<dyn InferenceProvider>) -> Self {
+    pub fn new(
+        store: Arc<SqliteStateStore>,
+        inference: Arc<dyn InferenceProvider>,
+        atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
+    ) -> Self {
         Self {
             store,
             inference,
+            atlas,
             index_dir_resolver: None,
             doc_type: DocumentTypeTag::Unknown,
             summary_mode: crate::raptor_atlas::SummaryMode::Abstractive,
@@ -1110,11 +1118,12 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
         };
         let store = self.store.clone();
         let inference = self.inference.clone();
+        let atlas = Arc::clone(&self.atlas);
         let corpus = corpus_id.to_string();
         tokio::spawn(async move {
             let atlas_dir = index_dir.join("atlas");
             match crate::typed_extension::run_typed_extension(
-                &corpus, &store, &inference, &atlas_dir,
+                &*atlas, &corpus, &store, &inference, &atlas_dir,
             )
             .await
             {

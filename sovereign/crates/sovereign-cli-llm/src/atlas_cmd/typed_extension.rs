@@ -142,7 +142,15 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     let started = std::time::Instant::now();
-    let report = match run_typed_extension(&corpus_id, &store, &inference, &atlas_dir).await {
+    let report = match run_typed_extension(
+        &corpus_engine::IngestAtlas,
+        &corpus_id,
+        &store,
+        &inference,
+        &atlas_dir,
+    )
+    .await
+    {
         Ok(r) => r,
         Err(e) => {
             eprintln!("error: typed extension failed: {e}");

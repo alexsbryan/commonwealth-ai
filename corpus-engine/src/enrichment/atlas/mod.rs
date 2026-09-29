@@ -57,6 +57,7 @@ pub use understanding_vocab::stable_key;
 pub mod store;
 pub mod strategies;
 pub mod summary;
+pub(crate) mod typed_extension;
 pub mod vital_tier;
 pub mod wiki_store;
 pub mod writer;

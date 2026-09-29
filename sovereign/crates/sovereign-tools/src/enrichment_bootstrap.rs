@@ -29,6 +29,7 @@ use std::sync::Arc;
 use sovereign_core::traits::InferenceProvider;
 
 use corpus_engine::enrichment::tiered::{ChunkEntityExtractor, TieredEnrichmentProvider};
+use corpus_engine_atlas_reader::ports::AtlasPort;
 
 use crate::conv_tiered_provider::{FolderTieredProvider, IndexDirResolver, StaticIndexDirResolver};
 use crate::local_corpus::watched::enrich::TieredDeps;
@@ -49,6 +50,7 @@ use crate::local_corpus::watched::enrich::TieredDeps;
 pub fn build_folder_tiered_provider(
     data_dir: &Path,
     provider: Arc<dyn InferenceProvider>,
+    atlas: Arc<dyn AtlasPort>,
 ) -> Option<Arc<dyn TieredEnrichmentProvider>> {
     let db_path = data_dir.join("sovereign.db");
     match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
@@ -67,7 +69,7 @@ pub fn build_folder_tiered_provider(
             // 0.0000 (runs/prodAB, 2026-07-31). Attached documents keep
             // abstractive (fluency is the product there) — their path pins
             // the mode explicitly in `document_asset`.
-            let prov = FolderTieredProvider::new(store_arc, provider)
+            let prov = FolderTieredProvider::new(store_arc, provider, atlas)
                 .with_index_dir_resolver(resolver)
                 .with_summary_mode(crate::raptor_atlas::SummaryMode::Extractive);
             Some(Arc::new(prov) as Arc<dyn TieredEnrichmentProvider>)
@@ -93,8 +95,9 @@ pub fn build_folder_tiered_deps(
     data_dir: &Path,
     provider: Arc<dyn InferenceProvider>,
     chunk_entity_extractor: Option<Arc<dyn ChunkEntityExtractor>>,
+    atlas: Arc<dyn AtlasPort>,
 ) -> Option<TieredDeps> {
-    let tiered_provider = build_folder_tiered_provider(data_dir, provider)?;
+    let tiered_provider = build_folder_tiered_provider(data_dir, provider, atlas)?;
     tracing::info!(
         "enrichment_bootstrap: folder tiered deps constructed — FolderTieredProvider wired"
     );

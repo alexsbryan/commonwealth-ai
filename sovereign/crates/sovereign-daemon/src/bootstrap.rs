@@ -152,9 +152,7 @@ pub fn notes_tier_fns(
                             .collect::<Vec<_>>()
                     })
                     .map_err(|e| {
-                        corpus_index::Error::Io(std::io::Error::other(format!(
-                            "notes gliner: {e}"
-                        )))
+                        corpus_index::Error::Io(std::io::Error::other(format!("notes gliner: {e}")))
                     })
             })
         });
@@ -253,6 +251,7 @@ pub fn build_corpus_engine(
         let tiered_provider = sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
             data_dir,
             Arc::clone(&provider),
+            Arc::new(corpus_engine::IngestAtlas),
         );
         // GliNER per-chunk entity extractor loaded once in the outer scope
         // (above) so the engine and the folder driver share the same
@@ -305,6 +304,7 @@ pub fn build_folder_tiered_deps(
         data_dir,
         provider,
         chunk_entity_extractor,
+        Arc::new(corpus_engine::IngestAtlas),
     )
 }
 
