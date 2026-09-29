@@ -277,7 +277,9 @@ and gated by the `recipe_schema` test. Outside the catalog: `codebase`,
 
 ### Bench harnesses
 
-Fixtures under `sovereign/bench/`; orchestrators in `bench_cmd/`; pure scorers
+Fixtures under `sovereign/bench/`; orchestrators in `bench_cmd/`, whose turn lanes ask
+svrn over its turn route (`bench_cmd/subject.rs`; the census test
+`bench_group_drives_no_turn_in_process` lists the lanes still in-process); pure scorers
 in `sovereign-eval/`.
 
 `scripts/sovereign-ci-bench.sh` is the full nightly (~2-4h) and **the primary

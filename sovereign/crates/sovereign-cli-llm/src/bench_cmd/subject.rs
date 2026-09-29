@@ -169,3 +169,7 @@ impl SubjectDial {
             .map(|c| c.content)
     }
 }
+
+#[cfg(test)]
+#[path = "subject_tests.rs"]
+mod tests;

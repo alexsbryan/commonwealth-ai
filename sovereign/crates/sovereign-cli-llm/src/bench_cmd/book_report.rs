@@ -30,7 +30,7 @@ use sovereign_core::types::{
 use sovereign_tools::document_asset::{DocumentAssetManager, IngestProgress};
 
 use crate::bench_cmd::resource_meter::{MeteredInference, ResourceLedger, ResourceReport};
-use crate::chat_cmd::bootstrap::{build_session, SplitInferenceProvider};
+use crate::chat_cmd::bootstrap::{build_inference, build_session, SplitInferenceProvider};
 use crate::chat_cmd::config::default_globals_for_voice_eval;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -872,10 +872,10 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
     bridge.healthz().await?;
 
     // Optional judge provider: Tier 2-5 judging runs in THIS process.
-    let judge_session = match build_session(&default_globals_for_voice_eval()).await {
-        Ok(s) => {
+    let judge_session = match build_inference(&default_globals_for_voice_eval()).await {
+        Ok((inference, _, _)) => {
             eprintln!("      judge: daemon reachable — LLM-judge enabled for Tier 2-5");
-            Some(s)
+            Some(inference)
         }
         Err(e) => {
             eprintln!("      judge: no daemon ({e}); Tier 2-5 rows will carry judge_error");
@@ -1043,10 +1043,10 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
         };
         let (judge_score, judge_rationale) = if q.tier >= 2 && !response.is_empty() {
             match &judge_session {
-                Some(session) => {
+                Some(judge) => {
                     let resolved = resolve_reference_passages(&q.reference_passages, &source_text);
                     match run_llm_judge(
-                        session.inference.as_ref(),
+                        judge.as_ref(),
                         q,
                         &response,
                         &resolved,
@@ -1110,13 +1110,9 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
         started_at_unix: started_at.timestamp() as u64,
         source,
         asset_id,
-        chat_model: judge_session
-            .as_ref()
-            .map(|s| s.inference.model_id_for(Speed::Slow)),
+        chat_model: judge_session.as_ref().map(|j| j.model_id_for(Speed::Slow)),
         enrich_model: None,
-        judge_model: judge_session
-            .as_ref()
-            .map(|s| s.inference.model_id_for(Speed::Slow)),
+        judge_model: judge_session.as_ref().map(|j| j.model_id_for(Speed::Slow)),
         attach_ms,
         time_to_rag_ready_ms: None,
         time_to_ready_ms: None,

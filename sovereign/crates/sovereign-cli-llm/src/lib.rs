@@ -299,10 +299,71 @@ mod eval_dispatch {
             ".search_with_rerank(",
             ".lane_sources",
         ];
+        let (scanned, offenders) = bench_group_hits(&["eval_cmd", "bench_cmd"], &needles);
+        assert!(scanned > 40, "only {scanned} files scanned");
+        assert!(
+            offenders.is_empty(),
+            "a white-box stage runs in bench's own process; exec `svrn __probe` \
+             instead: {offenders:?}"
+        );
+    }
+
+    /// bench asks svrn a question as any client does and never drives a turn
+    /// in its own process (pb-bench-dials-turns). A file still owed to a
+    /// later row is listed with that row; a file off the list that matches
+    /// is red, and so is a listed file that no longer matches (its row
+    /// landed: drop it from the list).
+    #[test]
+    fn bench_group_drives_no_turn_in_process() {
+        let needles = [
+            "sovereign_core::runtime::Runtime",
+            "collect_turn(",
+            "build_session(",
+            "build_session_sealed(",
+            "build_session_with_skills(",
+            "set_var(\"SOVEREIGN_RERANK",
+        ];
+        const OWED: [(&str, &str); 5] = [
+            ("bench_cmd/promote.rs", "pb-bench-dials-rerank"),
+            ("bench_cmd/scaffolding_param.rs", "pb-bench-dials-rerank"),
+            ("bench_cmd/book_report.rs", "pb-bench-dials-docs"),
+            ("bench_cmd/chaos_monkey.rs", "pb-bench-dials-docs"),
+            ("bench_cmd/vault_report.rs", "pb-bench-dials-docs"),
+        ];
+        let dirs = [
+            "bench_cmd",
+            "eval_cmd",
+            "search_gym_cmd",
+            "knowledge_gym_cmd",
+            "gym_judge",
+            "quality_lane_cmd",
+        ];
+        let (scanned, hits) = bench_group_hits(&dirs, &needles);
+        assert!(scanned > 60, "only {scanned} files scanned");
+        let owed = |hit: &str| OWED.iter().any(|(f, _)| hit.contains(f));
+        let unowed: Vec<&String> = hits.iter().filter(|h| !owed(h)).collect();
+        assert!(
+            unowed.is_empty(),
+            "a bench lane drives a turn in its own process; ask svrn through \
+             bench_cmd::subject::SubjectDial instead: {unowed:?}"
+        );
+        let paid: Vec<_> = OWED
+            .iter()
+            .filter(|(f, _)| !hits.iter().any(|h| h.contains(f)))
+            .collect();
+        assert!(
+            paid.is_empty(),
+            "no longer drives a turn in-process; drop from OWED: {paid:?}"
+        );
+    }
+
+    /// Every `(file, needle)` hit under `dirs`, comments dropped and
+    /// whitespace squeezed out, plus the count of files scanned.
+    fn bench_group_hits(dirs: &[&str], needles: &[&str]) -> (usize, Vec<String>) {
         let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut offenders = Vec::new();
         let mut scanned = 0usize;
-        let mut stack = vec![src.join("eval_cmd"), src.join("bench_cmd")];
+        let mut stack: Vec<_> = dirs.iter().map(|d| src.join(d)).collect();
         while let Some(dir) = stack.pop() {
             for entry in std::fs::read_dir(&dir).expect("read src dir").flatten() {
                 let path = entry.path();
@@ -328,12 +389,7 @@ mod eval_dispatch {
                 }
             }
         }
-        assert!(scanned > 40, "only {scanned} files scanned");
-        assert!(
-            offenders.is_empty(),
-            "a white-box stage runs in bench's own process; exec `svrn __probe` \
-             instead: {offenders:?}"
-        );
+        (scanned, offenders)
     }
 }
 

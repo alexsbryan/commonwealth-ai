@@ -686,7 +686,14 @@ async fn e2e_once(client: &TurnClient, question: &str) -> Result<(u64, usize), S
     let t0 = Instant::now();
     let mut observer = TurnObserver::default();
     let outcome = client
-        .run_turn(&convo.id, question, TurnMode::Grounded, None, None, &mut observer)
+        .run_turn(
+            &convo.id,
+            question,
+            TurnMode::Grounded,
+            None,
+            None,
+            &mut observer,
+        )
         .await
         .map_err(|e| format!("run_turn: {e}"))?;
     let wall = t0.elapsed().as_millis() as u64;

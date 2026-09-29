@@ -273,7 +273,14 @@ async fn ask_once(client: &TurnClient, corpus: &str, question: &str) -> Result<L
     let t0 = Instant::now();
     let mut observer = TurnObserver::default();
     let outcome = client
-        .run_turn(&convo.id, question, TurnMode::Grounded, None, None, &mut observer)
+        .run_turn(
+            &convo.id,
+            question,
+            TurnMode::Grounded,
+            None,
+            None,
+            &mut observer,
+        )
         .await
         .map_err(|e| format!("run_turn: {e}"))?;
     let wall_ms = t0.elapsed().as_millis() as u64;
