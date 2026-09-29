@@ -1720,20 +1720,6 @@ tracking = "five-programs fp-9"
 [[exception]]
 package = "svrn"
 from = "sovereign-daemon"
-to = "sovereign-inference"
-reason = "since pb-svrn-dials-serve the daemon dials serve, except on a config that opts into mesh-distributed inference (serve_client::ServingPath::InProcess: SOVEREIGN_RPC_SERVE, SOVEREIGN_RPC_DISCOVER, SOVEREIGN_RPC_WORKERS or [compute] distributed_primary). That interim in-process path holds this edge: the engine it builds (build/inference.rs), RPC-worker discovery and the distributed-primary respawn (bootstrap.rs), the auto-warm orchestrator (rpc_warm_http.rs), the rpc-worker role (bin/sovereign-daemon.rs Launch::RpcWorker), llama's log route and fast_exit_skip_destructors, the served-kind routes (routes_kinds.rs), and the hardware and setup-planner reads for the setup UI (assets_http.rs:39-40), as the row's census lists them. pb-serve-distributes moves distributed inference into serve and retires this row (phase-b-24)."
-tracking = "five-programs fp-10"
-
-[[exception]]
-package = "svrn"
-from = "sovereign-daemon"
-to = "sovereign-compute"
-reason = "since pb-svrn-dials-serve the daemon dials serve, except on a config that opts into mesh-distributed inference (serve_client::ServingPath::InProcess). That interim path holds this edge: the one serving assembly and its reload factory (sovereign_compute::assembly, build/inference.rs, provider.rs), the compute child it re-execs (bin/sovereign-daemon.rs Launch::ComputeChild), containment, the VRAM preflight (sovereign_compute::preflight) and the in-process NER kind and GLiNER download (sovereign_compute::ner, from bootstrap.rs and assets_http.rs). pb-serve-distributes moves distributed inference into serve and retires this row (phase-b-24)."
-tracking = "five-programs fp-10"
-
-[[exception]]
-package = "svrn"
-from = "sovereign-daemon"
 to = "sovereign-serving-host"
 reason = "not in-process serving (that is serve's since pb-svrn-dials-serve) but the daemon's own mesh routing: peer_inference::InferenceRouter over DeferredDaemon, whose local venue is now the loopback terminal arm (bootstrap.rs, provider.rs), the admission middleware that also gates the daemon's knowledge and ring routes (admission.rs), and entry_endpoint inside the terminal arm (build/inference.rs). pb-serve-ranks gives ranking to serve and retires this row (phase-b-23)."
 tracking = "five-programs fp-68"

@@ -53,7 +53,6 @@ sovereign-time = { workspace = true }
 # lock through the TLS stack; named here so svrn does not reach into
 # commonwealth-core for a security primitive (pb-mesh-exit-core).
 subtle = "2.6"
-sovereign-inference = { workspace = true }
 sovereign-tools = { workspace = true }
 sovereign-meshapp = { workspace = true }
 sovereign-store = { workspace = true }
@@ -82,12 +81,10 @@ tokio-util = { version = "0.7", features = ["io", "io-util"] }
 dirs = "5"
 # The composition half of `sovereign-cli-daemon`'s `daemon_cmd` (domains
 # `dm-daemon-cli-composition`, DAEMON_CORE.md §4.1 row 4) reaches these
-# directly now: the solve surface (`sovereign-tdd`), the compute-child
-# supervisor (`sovereign-compute`) and the watched-folder workflow runtime (`sovereign-workflow`,
-# `sovereign-workflow-host`). All at `capabilities`/`runtime`/`knowledge`,
-# below this crate's `mesh-api`.
+# directly now: the solve surface (`sovereign-tdd`) and the watched-folder
+# workflow runtime (`sovereign-workflow`, `sovereign-workflow-host`). All at
+# `capabilities`/`runtime`/`knowledge`, below this crate's `mesh-api`.
 sovereign-tdd = { workspace = true }
-sovereign-compute = { workspace = true }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 # The run path (`daemon_cmd`) commissions the ONE Runtime through the

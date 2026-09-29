@@ -1,24 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Distributed-inference auto-warm orchestration — the HTTP layer.
-//!
-//! When a host decides to distribute a large primary across the mesh, it must
-//! NOT stream each worker its weight share at load time (the host-side `send()`
-//! deadlock above ~800 MB). Instead every worker pre-seeds its RPC tensor cache
-//! with its shard, so the host's `-ot` load is all `SET_TENSOR_HASH` cache hits
-//! and sends zero bulk weight bytes. This module is both ends of that handshake:
-//!
-//! - **Worker side** ([`MeshRpcShardWarmer`], the `POST /internal/rpc-warm`
-//!   backend): given the host's plan + this node's `device_index`, warm exactly
-//!   this node's shard — from the whole GGUF the node already holds / fetches
-//!   (`#5a`), or by range-fetching only its tensors (`#5b`, [`warm_cache_from_ranges`]).
-//! - **Host side** ([`install_rpc_warm_orchestrator`]): the seam
-//!   `sovereign-inference` calls during a distributing load. It fans the warm
-//!   request out to every worker and blocks until all report warm — then the load
-//!   proceeds with overrides. This replaces the manual `SOVEREIGN_RPC_ASSUME_WARMED`.
-//!
-//! The host computes the plan ONCE (`sovereign-inference::plan_distribution`) and
-//! ships it whole, so warm-time placement and load-time placement derive from the
-//! identical assignment and cannot diverge — the plan-agreement invariant.
+//! Distributed-inference auto-warm — the daemon's half: the worker's reach
+//! into this daemon's mesh for one `POST /internal/rpc-warm`. Both ends of the
+//! warm handshake (the host-side orchestrator, the worker's warmer and the
+//! wire types) are the loader's, `sovereign_compute::distributed_warm`
+//! (pb-serve-distributes); the daemon links no loader crate.
 
 use crate::state::AppState;
 use sovereign_contracts::rpc_warm::WarmReach;
@@ -74,11 +59,3 @@ async fn host_transport_bases(state: &AppState, host_node_id: Option<&str>) -> V
         .map(|e| e.base_url)
         .collect()
 }
-
-// The host-side orchestrator, the worker and the wire types are the loader's
-// (`sovereign_compute::distributed_warm`, pb-serve-distributes); re-exported
-// at their historical paths.
-pub use sovereign_compute::distributed_warm::{
-    install_rpc_warm_orchestrator, warm_cache_from_ranges, MeshRpcShardWarmer, RpcWarmShardRequest,
-    RpcWarmShardResponse, RpcWarmSource, TensorRange, WarmRangeStats,
-};
