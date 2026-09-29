@@ -13,6 +13,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::traits::CorpusUnavailable;
 
+mod resources;
+
+pub use resources::{CallRecord, PhaseBucket, PhaseResources, ResourceReport};
+
 /// Which internal stage a probe runs. A closed set: the spelling on the
 /// command line is [`ProbeMode::as_str`] on both sides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
