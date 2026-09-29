@@ -1365,6 +1365,17 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   - Principle 6 answers fork 2. Every black-box lane pins temperature 0 by default, so dialing without a wire form moves every eval number. Principle 11 picks the form: `SamplingOverrides` (sovereign-core role.rs:104) already has the shape, and the phase-b-51 precedent covers additive optional turn fields.
   - Boundary gate: 20 violations, EXIT=1 at 237639e4b (`cargo xtask boundary-gate`, corpus-engine/). This commit changes no Rust.
 
+**phase-b-55 · 2026-09-29 · pb-bench-dials-wire, -whitebox, pb-cli-llm-bench-move · seat** — this commit
+- Needed: the seat checked phase-b-54 against the tree and found two things its rows did not carry.
+- Chose:
+  1. A correction: phase-b-54 says "nothing in bench_cmd, eval_cmd or quality_lane_cmd names inner_chaos or voice_eval". But eval_cmd/mod.rs:162 dispatches `"inner-chaos" => crate::inner_chaos::run_inner_chaos`. `svrn eval inner-chaos` keeps its spelling by routing at the top-level dispatcher to cli-llm's svrn remainder, so the eval_cmd that pb-cli-llm-bench-move moves names no svrn-side module. `default_globals_for_voice_eval` (bench_cmd/book_report.rs:34, vault_report.rs:92) is chat_cmd::config's and only shares the name.
+  2. `SamplingOverrides` exists twice with identical fields: sovereign-core role.rs:104 ("lifted from the agent-tools shape") and sovereign-agent-tools role/profile.rs:29. The copy -wire moves to contracts becomes the only definition, and both old paths re-export it.
+- Because:
+  - Principle 4: a claim in a decision binds like one in a commit body.
+  - Principle 12: a bench crate that dispatches into svrn's module holds svrn's code.
+  - Principle 8: one schema, one definition.
+  - Boundary gate: 20 at 1660a37fd. This commit changes no Rust.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -12131,5 +12142,15 @@ What would falsify this:
 - A white-box file turns out to be needed by code that moves: a bench_cmd or eval_cmd item calls into inner_chaos, voice_eval or a probe mode in a way the dispatch arm does not cover. Then the dependency needs a ladder placement, or the lane dials after all.
 - The per-turn sampling override cannot be applied without changing the daemon's shared inference config for concurrent turns. Then the wire row goes NEEDS_HUMAN with the design.
 - A record type both sides need (`RoutingMetrics`, `EvalRun`) has no rung on the §12 3a ladder. The whitebox row stops on it by name.
+
+</details>
+
+## phase-b-55 · 2026-09-29 — seat corrections to phase-b-54
+
+<details><summary>evidence</summary>
+
+- `git grep -n 'inner_chaos\|voice_eval' -- sovereign-cli-llm/src/{bench_cmd,eval_cmd,quality_lane_cmd}`, code lines only: eval_cmd/mod.rs:162 (the dispatch arm), and book_report.rs:34,563,875 and vault_report.rs:92,810 (`default_globals_for_voice_eval`, which comes from chat_cmd::config).
+- `sovereign_eval` per module: bench_cmd 14 files, every other bench-group module 0. That part of phase-b-54 holds.
+- sovereign-agent-tools/Cargo.toml names no sovereign-contracts today. If re-exporting at the agent-tools path would open an edge LAYER refuses, -wire says so and names the alternative, rather than keeping the twin.
 
 </details>
