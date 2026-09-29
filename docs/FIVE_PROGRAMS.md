@@ -917,6 +917,18 @@ from `[dependencies]` to `[dev-dependencies]` makes the line re-read as DEV
 rather than closing it. It is still worth doing: it removes the edge from the
 shipped closure, which is what liftability actually means.
 
+**Where a cross-program test lives (phase-b-47).** Because the dev edge counts,
+a test that drives a svrn crate AND ingest's real implementor has no home in
+either package. It splits at the port. The svrn side drives one test double
+per port, kept beside the port's trait in its leaf behind a dependency-free
+`test-doubles` feature (one double per port, reused by every svrn crate). The
+engine side re-asserts the same behaviour on the implementor, in the
+implementor's crate, over the same fixtures. The composed path is proven on
+the stock binary. A no-package test crate or a gate that exempts test targets
+would also work, but both are operator decisions and neither is needed. The
+pattern is pb-grants-merge's, and pb-ingest-dial-tools-doubles adopts it for
+sovereign-tools (65 test-module sites, 10 test files, 5,143 lines at 451cc7ee2).
+
 ### Seams with prerequisite chains — MEASURED 2026-09-21 (87 at 1c307943c)
 
 Each of these was probed this session and REFUSED rather than forced; the
