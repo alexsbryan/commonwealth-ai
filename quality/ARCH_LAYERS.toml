@@ -1030,8 +1030,11 @@ name = "corpus-engine-atlas-reader"
 # allow list did not widen. Since pb-ingest-dial-tools it also holds the
 # field-skeleton reader (`field_model::load_field_skeleton`) and the SEC
 # typed-fact store (`sec_facts`: lookup, derivations, coverage, and discovery
-# with the recipe lookup passed in), so svrn's turn tools read them without
-# the engine; the allow list did not widen.
+# with the recipe lookup passed in), the schema-validation report's types
+# with their typed door (`schema_report`) and the cross-corpus edge records
+# with theirs (`cross_corpus`), so svrn's turn tools and atlas view read them
+# without the engine; the builders stay in corpus-engine. The allow list did
+# not widen.
 allow = ["corpus-index", "kernel-types", "sovereign-contracts", "understanding-atlas",
          "understanding-vocab", "workspace-hack"]
 

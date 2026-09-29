@@ -21,13 +21,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Instant;
 
-use corpus_engine::enrichment::atlas::cross_corpus::CrossCorpusEdge;
-use corpus_engine::enrichment::atlas::{
-    read_atlas_cross_corpus_edges, read_atlas_edges, StableAtomKey,
-};
+use corpus_engine_atlas_reader::cross_corpus::{read_atlas_cross_corpus_edges, CrossCorpusEdge};
 use serde::{Deserialize, Serialize};
 use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomType};
 use understanding_vocab::edges::{Edge, EdgeType};
+use understanding_vocab::read::read_atlas_edges;
+use understanding_vocab::stable_key::StableAtomKey;
 
 use super::atom_browse::{cached_atoms, AtomQueryError};
 use super::reader::{CurationStatus, FileAtlasReader};
@@ -523,7 +522,7 @@ fn build_evidence(atom: &AtomEnvelope) -> Vec<EvidenceExcerpt> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::cross_corpus::{
+    use corpus_engine_atlas_reader::cross_corpus::{
         CrossCorpusAtomRef, CrossCorpusEdge, CrossCorpusEdgesFile, MatchTrace,
     };
     use std::path::PathBuf;

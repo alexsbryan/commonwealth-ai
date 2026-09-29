@@ -394,36 +394,9 @@ pub fn write_atlas_ontology(
 // without linking the engine. Re-exported at the historical path.
 pub use corpus_engine_atlas_reader::raw::read_atlas_ontology;
 
-/// Read the stored `atlas/schema_validation.json` as the typed report, or
-/// `None` when the report step has not run or the file cannot be parsed.
-///
-/// The report is what the LAST build found — it is not recomputed here, so a
-/// caller showing it to a user is showing a build's verdict, not a live one.
-/// That is the point: it is the artefact `svrn enrich schema-report` writes,
-/// and re-deriving it would mean re-reading every atom.
-///
-/// The one typed door to this file. Two callers poke individual keys out of it
-/// as untyped JSON (`read_code_walk_visibility`, and the source-corpus lookup
-/// in `atlas_patch_code`) because they predate the report being deserializable
-/// as a whole; they are not folded in here, but nothing NEW should open this
-/// file by name (§10.6).
-pub fn read_schema_validation_report(
-    atlas_dir: &Path,
-) -> Option<super::schema_validation::SchemaValidationReport> {
-    let raw = fs::read(atlas_dir.join("schema_validation.json")).ok()?;
-    match serde_json::from_slice(&raw) {
-        Ok(parsed) => Some(parsed),
-        Err(e) => {
-            tracing::warn!(
-                atlas_dir = %atlas_dir.display(),
-                error = %e,
-                "atlas report: schema_validation.json present but unreadable; \
-                 treating as not-yet-reported"
-            );
-            None
-        }
-    }
-}
+// The one typed door to `schema_validation.json` is the atlas reader's
+// (pb-ingest-dial-tools).
+pub use corpus_engine_atlas_reader::schema_report::read_schema_validation_report; // shim: moved by pb-ingest-dial-tools
 
 /// Write a deterministic gaps file (Phase 7) to
 /// `atlas/gaps.json`. Atomic sibling-tmp + rename, same contract as
@@ -497,20 +470,8 @@ pub fn write_atlas_cross_corpus_edges(
     Ok(path)
 }
 
-/// Read the cross-corpus edges file back from disk. Used by
-/// traversal + operator inspection paths.
-pub fn read_atlas_cross_corpus_edges(
-    atlas_dir: &Path,
-) -> io::Result<super::cross_corpus::CrossCorpusEdgesFile> {
-    let path = atlas_dir.join("cross_corpus_edges.json");
-    let data = fs::read(&path)?;
-    serde_json::from_slice(&data).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("parse cross_corpus_edges.json: {e}"),
-        )
-    })
-}
+// The cross-corpus edges reader is the atlas reader's (pb-ingest-dial-tools).
+pub use corpus_engine_atlas_reader::cross_corpus::read_atlas_cross_corpus_edges; // shim: moved by pb-ingest-dial-tools
 
 /// Write Phase 8 configurations to `atlas/configurations.json`.
 /// Called even when the pipeline returns zero configurations so an

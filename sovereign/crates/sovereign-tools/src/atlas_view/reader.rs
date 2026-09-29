@@ -113,7 +113,7 @@ pub struct AtlasBuildReport {
     /// rate. Reused whole rather than re-flattened — the card wants exactly
     /// what the CLI report prints (§19).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ontology: Option<corpus_engine::enrichment::atlas::ontology_coverage::OntologyCoverage>,
+    pub ontology: Option<corpus_engine_atlas_reader::schema_report::OntologyCoverage>,
     /// Whether the atom-level ANN table exists AND is newer than `atoms.json`.
     /// `false` with `grounding_present` true means a rebuild left it stale, so
     /// the card can say "re-run backfill" rather than "not grounded".
@@ -231,7 +231,8 @@ impl FileAtlasReader {
         let Some(atlas_dir) = self.atlas_dir(corpus_id) else {
             return Err(AtlasViewError::CorpusNotFound(corpus_id.to_string()));
         };
-        let report = corpus_engine::enrichment::atlas::read_schema_validation_report(&atlas_dir);
+        let report =
+            corpus_engine_atlas_reader::schema_report::read_schema_validation_report(&atlas_dir);
         Ok(AtlasBuildReport {
             corpus_id: corpus_id.to_string(),
             reported: report.is_some(),
