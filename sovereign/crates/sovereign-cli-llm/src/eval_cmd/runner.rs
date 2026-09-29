@@ -331,7 +331,7 @@ pub struct RoutingRun {
 fn lookup_section_markdown(article_slug: &str, chunk_id: &str) -> Option<String> {
     let corpora_dir = std::env::var_os("SOVEREIGN_CORPORA_DIR")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| sovereign_cli_shared::dirs::sovereign_root().join("corpora"));
+        .unwrap_or_else(|| sovereign_cli_base::dirs::sovereign_root().join("corpora"));
     let path = corpora_dir
         .join("sep")
         .join("articles")

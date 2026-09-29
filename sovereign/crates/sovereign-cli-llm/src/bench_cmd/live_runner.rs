@@ -16,8 +16,8 @@
 
 use futures::StreamExt as _;
 use sovereign_contracts::probe::AttachedTurn;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 
 use super::subject::SubjectDial;
 
@@ -170,7 +170,7 @@ pub async fn run_live_pinned(
 /// answer, a failed question embed to the unranked head.
 pub fn attached_answer(
     row: &AttachedTurn,
-    doc_chunks: &[sovereign_core::types::DocumentChunk],
+    doc_chunks: &[sovereign_contracts::types::DocumentChunk],
 ) -> LiveAnswer {
     const JUDGE_CHUNKS: usize = 12;
     let doc_chunk_texts: Vec<String> = {

@@ -24,8 +24,8 @@ use sovereign_contracts::probe::{
     AttachedEvidence, AttachedProbe, AttachedSource, ProbeEvidence, ProbeMode, ProbeQuestion,
     ProbeRequest,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::Intent;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::Intent;
 use sovereign_eval::chaos_monkey::{
     score, AgentAction, ChaosBank, ChaosQuestion, GateVerdict, Gates, PressureKind, ResultRow,
 };
@@ -56,7 +56,7 @@ use crate::bench_cmd::live_runner::{
 };
 use crate::bench_cmd::subject::SubjectDial;
 use crate::chat_cmd::config::parse_globals;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench chaos-monkey",
@@ -210,7 +210,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             .preferred_tier
             .model_stem()
             .to_string();
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut manifest = None;
     let mut out = PathBuf::from("target/chaos-monkey/results.jsonl");
     let mut transcripts: Option<PathBuf> = None;
@@ -1231,7 +1231,7 @@ async fn rescore(rest: &[String]) -> i32 {
             .preferred_tier
             .model_stem()
             .to_string();
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut manifest: Option<PathBuf> = None;
     let mut out = PathBuf::from("target/chaos-monkey/rescored.jsonl");
     let mut grounding_verify = false;
@@ -1475,7 +1475,7 @@ async fn score_answer(rest: &[String]) -> i32 {
             .preferred_tier
             .model_stem()
             .to_string();
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
 
     let mut i = 0;
     macro_rules! val {
@@ -1795,7 +1795,7 @@ async fn fidelity(rest: &[String]) -> i32 {
                 answer.chars().take(2000).collect::<String>(),
                 claim.chars().take(400).collect::<String>(),
             );
-            let mut req = sovereign_core::types::CompletionRequest::default();
+            let mut req = sovereign_contracts::types::CompletionRequest::default();
             req.prompt = prompt;
             req.system_message =
                 Some("You audit answer/claim correspondence precisely. JSON only.".into());

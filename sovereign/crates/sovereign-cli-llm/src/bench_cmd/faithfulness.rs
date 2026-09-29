@@ -33,12 +33,12 @@ use std::sync::Arc;
 use oicp_client::RemoteApiProvider;
 use serde::Serialize;
 use sovereign_contracts::probe::{ProbeEvidence, ProbeMode, ProbeRequest};
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{claim_chunk_support, extract_claim_list};
-use sovereign_core::traits::InferenceProvider;
 use sovereign_eval::faithfulness::{plan_judge_sample, score, ClaimRecord, NodeMeta, SampleMode};
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const PROVIDER_CTX: u32 = 8192;
 /// Production parity: the gate checks at most 12 chunks per claim
@@ -150,7 +150,7 @@ async fn run(rest: &[String]) -> i32 {
         .model_stem()
         .to_string();
     // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut max_claims: usize = 4;
     let mut rate: f64 = 0.12;
     let mut full_threshold: usize = 1500;
@@ -228,7 +228,7 @@ async fn run(rest: &[String]) -> i32 {
     };
 
     // Resolve corpus + open stores (same path derivation as enrich raptor).
-    let indexes_dir = sovereign_cli_shared::dirs::sovereign_indexes();
+    let indexes_dir = sovereign_cli_base::dirs::sovereign_indexes();
     let corpus_id = match crate::corpus_resolve::resolve_corpus_id(&indexes_dir, &corpus_arg) {
         Ok(id) => id,
         Err(e) => {

@@ -58,9 +58,9 @@ use std::time::Instant;
 
 use kernel_types::Judgement;
 use oicp_client::RemoteApiProvider;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::projection::TurnMetadata;
 use sovereign_contracts::types::{JudgeFailure, JudgeFailureReason, StageId, TurnMode};
-use sovereign_core::traits::InferenceProvider;
 use sovereign_turn_client::{TurnClient, TurnObserver};
 
 use super::{reason, LaneCtx, LaneReport};
@@ -558,7 +558,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     };
 
     let corpus = format!("{}-{}", bank.corpus_prefix, ctx.stem());
-    let base = sovereign_cli_shared::urls::daemon_base_url();
+    let base = sovereign_cli_base::urls::daemon_base_url();
 
     // ── Row: ingest ────────────────────────────────────────────────
     // This IS the document-ingest lane. It runs first because every row

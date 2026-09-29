@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
 use serde::{Deserialize, Serialize};
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_eval::chaos_monkey::{
     score, AgentAction, CalibrationReport, ChaosBank, PressureKind,
 };
@@ -42,7 +42,7 @@ use super::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_l
 use super::scaffolding_param::{decide, PromoteDecision};
 use super::subject::SubjectDial;
 use crate::chat_cmd::config::parse_globals;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench flywheel redteam",
@@ -87,7 +87,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut captures_dir = PathBuf::from("target/flywheel/redteam");
     let mut replay = false;
     let mut judge_model = "fast".to_string();
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
 
     let mut i = 0;
     macro_rules! val {

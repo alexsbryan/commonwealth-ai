@@ -52,7 +52,7 @@ use super::subject::SubjectDial;
 use crate::bench_cmd::desktop_bridge::{run_bridge_live, BridgeClient, DEFAULT_BRIDGE_URL};
 use crate::bench_cmd::live_runner::run_live_pinned;
 use crate::chat_cmd::config::parse_globals;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench parity-compare",

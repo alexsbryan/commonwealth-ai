@@ -54,7 +54,7 @@ use crate::bench_cmd::subject::SubjectDial;
 use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::parse_globals;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn eval",
@@ -678,7 +678,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             bank.threads.len(),
             bank.bank.corpus,
         );
-        sovereign_cli_shared::tracing_init::init_tracing(
+        sovereign_cli_base::tracing_init::init_tracing(
             "sovereign_cli=info,sovereign_tools::atlas_context_manager=info,\
              sovereign_tools::knowledge_view=warn",
         );
@@ -783,12 +783,12 @@ async fn cmd_run(args: &[String]) -> i32 {
     // background-init logs surface to stderr. Default filter is
     // chatty enough to see the atlas-context lifecycle without
     // drowning in lance-internal trace.
-    sovereign_cli_shared::tracing_init::init_tracing(
+    sovereign_cli_base::tracing_init::init_tracing(
         "sovereign_cli=info,sovereign_tools::atlas_context_manager=info,\
          sovereign_tools::knowledge_view=warn",
     );
 
-    let started_at_unix = sovereign_core::time::unix_now();
+    let started_at_unix = sovereign_time::unix_now();
     // The white-box modes ask svrn's probe (`svrn __probe`) for raw evidence
     // and score it here; the bank, the expectations and the verdict never
     // leave this module (phase-b-58).

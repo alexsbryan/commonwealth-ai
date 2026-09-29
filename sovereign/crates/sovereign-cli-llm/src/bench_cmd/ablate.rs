@@ -36,7 +36,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 /// Identify a bank in the results map and in run-artifact filenames.
 ///
@@ -343,7 +343,7 @@ fn daemon_lock_path() -> PathBuf {
 /// dispatcher. Handing `daemon run` to our own exe fails with
 /// "unknown subcommand 'daemon'" (observed 2026-08-03). Look for the
 /// dispatcher beside us first, then the deployed symlink.
-use sovereign_cli_shared::dispatcher::dispatcher_exe;
+use sovereign_cli_base::dispatcher::dispatcher_exe;
 fn dirs_home() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)

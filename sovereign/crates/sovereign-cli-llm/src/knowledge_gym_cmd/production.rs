@@ -45,9 +45,9 @@ use std::sync::Mutex;
 
 use serde_json::Value;
 
+use sovereign_contracts::traits::{InferenceProvider, StateStore};
+use sovereign_contracts::types::{Plan, Speed, Step, StepKind, StepOutput, Task, TaskStatus};
 use sovereign_core::executor::{AutoApprovalChannel, Executor, TaskContext};
-use sovereign_core::traits::{InferenceProvider, StateStore};
-use sovereign_core::types::{Plan, Speed, Step, StepKind, StepOutput, Task, TaskStatus};
 use sovereign_core::{SkillRegistry, ToolRegistry};
 
 use super::ledger::{ToolLedgerEntry, TurnLedger};

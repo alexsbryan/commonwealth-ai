@@ -23,14 +23,14 @@ use sovereign_contracts::probe::{
     AttachedEvidence, AttachedProbe, AttachedSource, AttachedTurn, ProbeEvidence, ProbeMode,
     ProbeQuestion, ProbeRequest,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, DocumentAsset, NarrationEvent, Speed};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, DocumentAsset, NarrationEvent, Speed};
 
 use crate::bench_cmd::resource_meter::ResourceReport;
 use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::default_globals_for_voice_eval;
 pub(crate) use crate::probe_cmd::provider_for_model;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 /// Bench configuration baked in at compile time. Changing the questions
 /// requires rebuilding the CLI; that's intentional — the bench is
@@ -1557,7 +1557,7 @@ fn skipped(q: &Question, reason: &str) -> QuestionResult {
 /// struct variants (serialised as `{"tool_invocation_start": {...}}`)
 /// return the one key. Used for terse one-line tool-chip rendering
 /// without dragging the full payload into the stdout chip.
-fn narration_phase_tag(phase: &sovereign_core::types::NarrationPhase) -> String {
+fn narration_phase_tag(phase: &sovereign_contracts::types::NarrationPhase) -> String {
     let v = serde_json::to_value(phase).unwrap_or(serde_json::Value::Null);
     match v {
         serde_json::Value::String(s) => s,
@@ -2080,7 +2080,7 @@ fn print_summary(r: &BookReportRun) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::types::NarrationPhase;
+    use sovereign_contracts::types::NarrationPhase;
 
     fn evt(phase: NarrationPhase) -> NarrationEvent {
         NarrationEvent {

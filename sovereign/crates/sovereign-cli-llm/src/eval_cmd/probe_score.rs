@@ -15,7 +15,7 @@ use corpus_index::types::ScoredChunk;
 use sovereign_contracts::probe::{
     PoolChunk, PoolEvidence, ProbeEvidence, ProbeQuestion, ProbeRequest, RoutingEvidence,
 };
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::traits::InferenceProvider;
 
 use super::attribution;
 use super::bank::{EvalBank, ExpectedIntent, Question};
@@ -55,7 +55,7 @@ pub(crate) fn run_probe(
     std::fs::write(&request_path, bytes).map_err(|e| format!("write request: {e}"))?;
 
     let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
-    let svrn = sovereign_cli_shared::dispatcher::dispatcher_exe(&exe)?;
+    let svrn = sovereign_cli_base::dispatcher::dispatcher_exe(&exe)?;
     let mut argv = vec!["__probe".to_string()];
     argv.extend(globals.to_argv());
     argv.extend([

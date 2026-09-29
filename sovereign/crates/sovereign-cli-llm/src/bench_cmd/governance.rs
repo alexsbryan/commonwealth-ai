@@ -31,7 +31,7 @@ use corpus_engine::enrichment::atlas::{
     edges::EdgeType, read_atlas_atoms, read_atlas_edges, AtomEnvelope, ATLAS_DIRNAME,
 };
 use serde::Deserialize;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 use sovereign_eval::governance_bench::{
     score_detector, DetectorReport, GovernanceTruth, PairKey, SectionKey, Split, ALL_SPLITS,
 };

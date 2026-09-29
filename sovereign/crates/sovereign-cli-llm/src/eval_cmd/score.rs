@@ -251,7 +251,7 @@ pub struct JudgeFactDetail {
 pub async fn score_facts_judge(
     expected: &[String],
     answer: &str,
-    inference: &dyn sovereign_core::traits::InferenceProvider,
+    inference: &dyn sovereign_contracts::traits::InferenceProvider,
 ) -> (FactScore, Vec<JudgeFactDetail>) {
     let mut matched = Vec::new();
     let mut missing = Vec::new();
@@ -290,7 +290,7 @@ pub async fn score_facts_judge(
              Respond with JSON only."
         );
 
-        let request = sovereign_core::types::CompletionRequest {
+        let request = sovereign_contracts::types::CompletionRequest {
             admission: None,
             prompt,
             system_message: Some(
@@ -303,7 +303,7 @@ pub async fn score_facts_judge(
             // primary). It runs Fast today; P5-5b measures Fast-vs-primary
             // judge agreement on a fixture before flipping. SOVEREIGN_JUDGE_MODEL
             // (below) already forces primary when set.
-            preferred_speed: sovereign_core::types::Speed::Fast,
+            preferred_speed: sovereign_contracts::types::Speed::Fast,
             max_tokens: Some(200),
             temperature: Some(0.0),
             structured_output: Some(schema.clone()),
@@ -522,7 +522,7 @@ pub async fn score_sources_loose(
     question: &str,
     rigid: &SourceScore,
     retrieved: &[ScoredChunk],
-    inference: &dyn sovereign_core::traits::InferenceProvider,
+    inference: &dyn sovereign_contracts::traits::InferenceProvider,
 ) -> (SourceScore, Vec<JudgeSourceDetail>) {
     // Nothing to judge — every expected_source already matched.
     if rigid.missing.is_empty() {
@@ -597,7 +597,7 @@ pub async fn score_sources_loose(
         "required": ["loose_credit", "rationale"],
     });
 
-    let request = sovereign_core::types::CompletionRequest {
+    let request = sovereign_contracts::types::CompletionRequest {
         admission: None,
         prompt,
         system_message: Some(
@@ -610,7 +610,7 @@ pub async fn score_sources_loose(
         // policy class Judge (Normal/primary). Runs Fast today; P5-5b
         // gates the flip on measured judge agreement. SOVEREIGN_JUDGE_MODEL
         // forces primary when set.
-        preferred_speed: sovereign_core::types::Speed::Fast,
+        preferred_speed: sovereign_contracts::types::Speed::Fast,
         max_tokens: Some(800),
         temperature: Some(0.0),
         structured_output: Some(schema),
@@ -795,7 +795,7 @@ pub async fn score_essay_readiness(
     // does that via retrieval reordering (see runner.rs), not by
     // appearing as parallel content here.
     _atlas_navigation: &[ScoredChunk],
-    inference: &dyn sovereign_core::traits::InferenceProvider,
+    inference: &dyn sovereign_contracts::traits::InferenceProvider,
 ) -> Option<EssayReadinessScore> {
     if retrieved.is_empty() {
         return Some(EssayReadinessScore {
@@ -923,11 +923,11 @@ pub async fn score_essay_readiness(
         .ok()
         .filter(|s| !s.trim().is_empty());
     let preferred_speed = if judge_model_override.is_some() {
-        sovereign_core::types::Speed::Slow
+        sovereign_contracts::types::Speed::Slow
     } else {
-        sovereign_core::types::Speed::Fast
+        sovereign_contracts::types::Speed::Fast
     };
-    let request = sovereign_core::types::CompletionRequest {
+    let request = sovereign_contracts::types::CompletionRequest {
         admission: None,
         prompt,
         system_message: Some(

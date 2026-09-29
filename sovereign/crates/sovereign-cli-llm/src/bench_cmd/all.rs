@@ -31,7 +31,7 @@ use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use crate::enrich_cmd::eval::{score_corpus, EvalReport, PhaseFilter, PhaseScore};
 use crate::enrich_cmd::eval_median::AggregatedReport;
 use crate::eval_cmd::runner::EvalRun;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 use super::baselines::{read_latest, write_dated_and_update_latest};
 use super::discover::{discover_benches, BenchSurface, DiscoveredBench};
@@ -234,7 +234,7 @@ pub struct RetrievalOutcome {
 /// (ARCH §10.6).
 ///
 /// `disable_help_flag` because `--help` is served by [`HELP`] through
-/// `sovereign_cli_shared::help::print`, which is unchanged.
+/// `sovereign_cli_base::help::print`, which is unchanged.
 #[derive(clap::Parser, Debug, Clone)]
 #[command(
     // The `Usage:` line inside a parse error says what the user TYPED. Taken

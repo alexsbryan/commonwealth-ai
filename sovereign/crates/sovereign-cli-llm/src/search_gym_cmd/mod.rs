@@ -31,7 +31,7 @@ mod score;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn search-gym",
@@ -581,7 +581,7 @@ async fn execute_calibrate(opts: CalibrateOpts) -> i32 {
 /// The checkout the gym's fixtures, mock corpus and calibration cases live in,
 /// resolved from the INVOCATION so the gym works from any subdirectory.
 fn workspace_root() -> Result<PathBuf, String> {
-    sovereign_cli_shared::repo::find_checkout_root().ok_or_else(|| {
+    sovereign_cli_base::repo::find_checkout_root().ok_or_else(|| {
         "search-gym: the CWD is not inside a sovereign checkout, and the gym's fixtures, \
          mock corpus and judge-calibration cases all live in the tree. Run it from the \
          checkout."

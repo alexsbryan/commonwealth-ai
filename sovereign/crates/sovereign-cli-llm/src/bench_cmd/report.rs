@@ -39,7 +39,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use sovereign_core::models_manifest::{ModelAttribution, DEFAULT_MANIFEST};
+use sovereign_contracts::models_manifest::{ModelAttribution, DEFAULT_MANIFEST};
 
 use super::lane_baseline::{is_alias_marker, Direction, LaneBaseline};
 
@@ -725,7 +725,7 @@ pub fn cmd_report(args: &[String]) -> i32 {
 mod tests {
     use super::*;
     use crate::bench_cmd::lane_baseline::LaneMetric;
-    use sovereign_core::models_manifest::ModelAttribution;
+    use sovereign_contracts::models_manifest::ModelAttribution;
 
     fn chaos_baseline(
         stem: &str,

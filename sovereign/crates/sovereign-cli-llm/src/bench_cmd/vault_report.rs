@@ -78,7 +78,7 @@ use sovereign_contracts::probe::{
 
 use crate::bench_cmd::resource_meter::ResourceReport;
 use crate::chat_cmd::config::default_globals_for_voice_eval;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench vault-report",
@@ -267,7 +267,7 @@ impl Mode {
 /// this costs no new dependency.
 ///
 /// `disable_help_flag` because `--help` is served by [`HELP`] through
-/// `sovereign_cli_shared::help::print`, which is unchanged.
+/// `sovereign_cli_base::help::print`, which is unchanged.
 #[derive(clap::Parser, Debug, Default)]
 #[command(
     // The `Usage:` line inside a parse error says what the user TYPED. Taken
@@ -422,7 +422,7 @@ fn report(b: VaultBuildEvidence, mode: &Mode) -> VaultReportRun {
     VaultReportRun {
         schema: "vault-report/v1".to_string(),
         bench_id: run_id(),
-        started_at_unix: sovereign_core::time::unix_now_u64(),
+        started_at_unix: sovereign_time::unix_now_u64(),
         corpus_id: b.corpus_id,
         root_path: b.root_path,
         mode: mode.label().to_string(),
@@ -685,7 +685,7 @@ fn persist_report(
 }
 
 fn run_id() -> String {
-    format!("{}", sovereign_core::time::unix_now_u64())
+    format!("{}", sovereign_time::unix_now_u64())
 }
 
 #[cfg(test)]

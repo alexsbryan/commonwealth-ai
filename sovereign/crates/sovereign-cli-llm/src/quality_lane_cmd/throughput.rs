@@ -255,7 +255,7 @@ fn run_probe(
     let staged = match &arm.prompt {
         ArmPrompt::Default => None,
         ArmPrompt::Long { chars, .. } => {
-            let salt = u128::from(sovereign_core::time::unix_millis());
+            let salt = u128::from(sovereign_time::unix_millis());
             let dir = tempfile::tempdir().map_err(|e| format!("cannot stage the prompt: {e}"))?;
             let path = dir.path().join("long.txt");
             std::fs::write(&path, long_prompt(bank, *chars, salt))
@@ -515,7 +515,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         }
     };
 
-    let base = sovereign_cli_shared::urls::daemon_base_url();
+    let base = sovereign_cli_base::urls::daemon_base_url();
     let mut metrics: Vec<(String, LaneMetric)> = Vec::new();
     let mut fidelity: Vec<(String, bool)> = Vec::new();
 

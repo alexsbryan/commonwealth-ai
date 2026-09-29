@@ -15,13 +15,13 @@ use std::sync::Arc;
 
 use corpus_index::index::CorpusIndex;
 use oicp_client::RemoteApiProvider;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{extract_claim_list, value_present_in_chunks};
-use sovereign_core::traits::InferenceProvider;
 use sovereign_eval::flywheel::det_checks::contains_ci;
 use sovereign_eval::flywheel::generators::adversarial as adv;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench verifier",
@@ -78,7 +78,7 @@ async fn extract_claims(rest: &[String]) -> i32 {
         .preferred_tier
         .model_stem()
         .to_string();
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut max_claims: usize = 10;
 
     let mut i = 0;
@@ -194,7 +194,7 @@ async fn harvest(rest: &[String]) -> i32 {
         .preferred_tier
         .model_stem()
         .to_string();
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut max_claims: usize = 8;
     let mut window: usize = 2;
     let mut limit: usize = 0;
@@ -277,7 +277,7 @@ async fn harvest(rest: &[String]) -> i32 {
     // Open the corpus by id under the canonical index dir (the corpus-search
     // idiom) and pull every chunk — the windows are consecutive chunks in
     // chunk-id order, the same adjacency retrieval windows have.
-    let index_dir = sovereign_core::setup_config::SetupConfig::default_path()
+    let index_dir = sovereign_contracts::setup_config::SetupConfig::default_path()
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_default()

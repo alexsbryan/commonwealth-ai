@@ -33,7 +33,7 @@ use sovereign_eval::disposition_taxonomy::{era_mask, era_mask_union, year_of};
 
 use corpus_engine::enrichment::pipeline::types::ChatPrompt;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench uap",
@@ -66,7 +66,7 @@ const BENCH_ID: &str = "uap-disposition";
 /// move it and a session pointed at a second daemon silently missed this
 /// verb (§10.6).
 fn default_base_url() -> String {
-    sovereign_core::setup_config::client_daemon_base()
+    sovereign_contracts::setup_config::client_daemon_base()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,7 +218,7 @@ fn default_bench_dir() -> PathBuf {
     PathBuf::from("sovereign/bench/uap")
 }
 
-use sovereign_core::time::unix_now as now_secs;
+use sovereign_time::unix_now as now_secs;
 
 // ── outcome record ───────────────────────────────────────────────────
 
@@ -442,7 +442,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         let mut budget = PeekBudget::load(&budget_path).map_err(|e| format!("peek budget: {e}"))?;
         let n = budget.burn(
             "--unseal-holdout from `svrn bench uap run`",
-            sovereign_cli_shared::repo::head_short_in(&parsed.bench_dir),
+            sovereign_cli_base::repo::head_short_in(&parsed.bench_dir),
         );
         budget
             .save(&budget_path)

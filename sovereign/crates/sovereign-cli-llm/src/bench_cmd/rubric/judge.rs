@@ -25,8 +25,8 @@
 //! labeled set and re-runs this gate (SITUATED_FLYWHEEL.md P2).
 
 use serde::{Deserialize, Serialize};
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 
 /// Minimum sensitivity (expected-yes items judged yes) and
 /// specificity (expected-no items judged no) the judge must clear on

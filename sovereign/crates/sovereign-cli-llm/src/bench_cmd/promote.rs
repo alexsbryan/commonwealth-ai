@@ -26,7 +26,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, PressureKind};
 use sovereign_eval::entity_resolution_bench::PeekBudget;
 use sovereign_eval::flywheel::generators::corpus::{AbsentSource, CorpusGenerator};
@@ -41,7 +41,7 @@ use super::scaffolding_param::{
 };
 use super::subject::SubjectDial;
 use crate::chat_cmd::config::parse_globals;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench promote",
@@ -96,7 +96,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut bench_root = PathBuf::from("sovereign/bench");
     let mut candidate_config = None;
     let mut judge_model = "fast".to_string();
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut apply = false;
     let mut unseal_test = false;
     let mut reason = None;
@@ -340,7 +340,7 @@ async fn run(args_in: &[String]) -> i32 {
             };
             let n = budget.burn(
                 reason,
-                sovereign_cli_shared::repo::head_short_in(&args.bench_root),
+                sovereign_cli_base::repo::head_short_in(&args.bench_root),
             );
             if let Err(e) = budget.save(&peek_path) {
                 eprintln!("error: could not persist peek budget: {e}");

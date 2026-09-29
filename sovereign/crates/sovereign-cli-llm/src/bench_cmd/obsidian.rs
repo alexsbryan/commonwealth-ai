@@ -53,7 +53,7 @@
 
 use std::path::PathBuf;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 /// Default corpus id when `--corpus` is not supplied. Matches the
 /// `enrich init` example in the module doc-comment.

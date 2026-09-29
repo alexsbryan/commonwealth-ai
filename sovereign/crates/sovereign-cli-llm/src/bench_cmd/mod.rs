@@ -70,7 +70,7 @@ mod uap;
 mod vault_report;
 mod verifier;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench",

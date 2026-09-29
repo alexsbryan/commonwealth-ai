@@ -432,7 +432,7 @@ async fn score_thread_coverage(
         "required": ["facts"]
     });
 
-    let request = sovereign_core::types::CompletionRequest {
+    let request = sovereign_contracts::types::CompletionRequest {
         admission: None,
         prompt,
         system_message: Some(
@@ -440,7 +440,7 @@ async fn score_thread_coverage(
              fact. Be generous: mention-in-context counts. Respond with JSON only."
                 .into(),
         ),
-        preferred_speed: sovereign_core::types::Speed::Slow,
+        preferred_speed: sovereign_contracts::types::Speed::Slow,
         max_tokens: Some(2048 + facts.len() * 80),
         temperature: Some(0.0),
         structured_output: Some(schema),

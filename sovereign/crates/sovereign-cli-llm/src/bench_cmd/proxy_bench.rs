@@ -23,7 +23,7 @@
 //! paired hard `bench gate proxy-qa` re-scores the artifact and fails only
 //! on regression vs the committed baseline.
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench proxy",

@@ -38,15 +38,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{
     chunk_judge_prompt, claim_chunk_support, replay_claim_violation_joint,
     replay_claims_support_batched, replay_judge_system_turn, replay_render_batched_claims_prompt,
     replay_render_claim_prompt, replay_scan_unsupported_specifics, CHUNK_JUDGE_SYSTEM,
 };
-use sovereign_core::traits::InferenceProvider;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 /// Wide enough for the recorded windows: per-claim prompts run ~29-34k chars
 /// (~8-9k tokens) and scan prompts up to ~45k chars. The daemon clamps to the
@@ -106,7 +106,7 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
     }
     let mut cases_path: Option<PathBuf> = None;
     let mut out: Option<PathBuf> = None;
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut model = "primary".to_string();
     let mut register_filter: Option<String> = None;
     let mut case_filter: Option<String> = None;

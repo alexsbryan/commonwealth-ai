@@ -21,9 +21,9 @@ use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
 use serde::Serialize;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::traits::InferenceProvider;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 use crate::enrich_cmd::eval::{collect_unmatched_atoms, load_golden_and_snapshot, UnmatchedAtom};
 
@@ -151,7 +151,7 @@ async fn run(rest: &[String]) -> i32 {
     let mut sample: usize = 25;
     let mut seed: u64 = 17;
     let mut model = "primary".to_string();
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut output: Option<PathBuf> = None;
 
     let mut i = 0;

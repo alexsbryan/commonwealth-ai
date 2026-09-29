@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use sovereign_eval::entity_resolution_bench::{BenchGroundTruth, PeekBudget, Split};
 use sovereign_eval::entity_resolution_score::{score, Clustering, EntityResolutionReport};
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench enron",
@@ -355,7 +355,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
                 parsed.corpus,
                 parsed.policy.as_str()
             ),
-            sovereign_cli_shared::repo::head_short_in(&parsed.bench_dir),
+            sovereign_cli_base::repo::head_short_in(&parsed.bench_dir),
         );
         budget
             .save(&budget_path)
@@ -749,7 +749,7 @@ fn default_private_holdout_path() -> PathBuf {
     sovereign_contracts::rebrand::svrnmesh_root().join("bench/enron/holdout.jsonl")
 }
 
-use sovereign_core::time::unix_now as now_secs;
+use sovereign_time::unix_now as now_secs;
 
 fn sample_first_n(v: &[String], n: usize) -> String {
     v.iter().take(n).cloned().collect::<Vec<_>>().join(", ")

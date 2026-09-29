@@ -27,7 +27,7 @@
 use std::time::Duration;
 
 use serde_json::Value;
-use sovereign_core::models_manifest::{ModelAttribution, DEFAULT_MANIFEST};
+use sovereign_contracts::models_manifest::{ModelAttribution, DEFAULT_MANIFEST};
 
 use super::lane_baseline::is_alias_marker;
 

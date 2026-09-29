@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, Gates, PressureKind};
 use sovereign_eval::flywheel::generators::corpus::{AbsentSource, CorpusGenerator};
 use sovereign_eval::flywheel::{
@@ -31,7 +31,7 @@ use sovereign_eval::flywheel::{
 use super::subject::SubjectDial;
 use crate::bench_cmd::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
 use crate::chat_cmd::config::parse_globals;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench flywheel",
@@ -92,7 +92,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut n = 12usize;
     let mut seed = 0u64;
     let mut judge_model = "fast".to_string();
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut out = PathBuf::from("target/flywheel/results.jsonl");
     let mut regressions: Option<PathBuf> = None;
     let mut capture = true;

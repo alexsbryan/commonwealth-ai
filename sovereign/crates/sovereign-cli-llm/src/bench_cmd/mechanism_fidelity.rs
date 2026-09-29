@@ -42,15 +42,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use oicp_client::RemoteApiProvider;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_eval::entity_resolution_bench::PeekBudget;
 use sovereign_eval::mechanism_fidelity::{
     by_id, class_ids, decide_at, grade_class, score, Bands, BoundedMean, FidelityCard,
     GradeThresholds, Pool, RenderedProbe, ResultRow, Scores, Side, StoppingConfig, Verdict,
 };
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench mechanism-fidelity",
@@ -134,7 +134,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut n_cases: usize = 200;
     let mut seed: u64 = 0;
     let mut concurrency: usize = 8;
-    let mut base_url = sovereign_core::setup_config::client_daemon_base();
+    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut api_key_env: Option<String> = None;
     let mut manifest = PathBuf::from("sovereign/bench/mechanism_fidelity/manifest.toml");
     let mut out: Option<PathBuf> = None;
@@ -326,7 +326,7 @@ async fn run(args: Args) -> i32 {
                 return 1;
             }
         };
-        let n = budget.burn(reason, sovereign_cli_shared::repo::head_short_in(&peek_dir));
+        let n = budget.burn(reason, sovereign_cli_base::repo::head_short_in(&peek_dir));
         if let Err(e) = budget.save(&peek_path) {
             eprintln!("error: could not persist peek budget: {e}");
             return 1;

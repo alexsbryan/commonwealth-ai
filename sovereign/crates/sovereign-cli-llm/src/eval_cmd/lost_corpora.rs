@@ -31,7 +31,7 @@
 //! from. `--isolate` narrows the in-scope set to the bank\'s own corpus, so
 //! the CI lane is unaffected unless the corpus it targets is genuinely lost.
 
-use sovereign_core::traits::CorpusUnavailable;
+use sovereign_contracts::traits::CorpusUnavailable;
 
 /// Whether this question may be scored at all, given what retrieval lost.
 ///
@@ -66,7 +66,7 @@ pub(crate) fn refusal_for_lost_corpora(lost: &[CorpusUnavailable]) -> Option<Str
 #[cfg(test)]
 mod lost_corpora_refusal_tests {
     use super::refusal_for_lost_corpora;
-    use sovereign_core::traits::{CorpusUnavailable, UnavailabilityReason};
+    use sovereign_contracts::traits::{CorpusUnavailable, UnavailabilityReason};
 
     /// The no-regression bar. A turn that lost nothing must still be SCORED —
     /// a refusal that fires on the happy path would turn every green lane into

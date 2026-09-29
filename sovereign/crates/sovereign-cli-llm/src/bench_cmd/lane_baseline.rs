@@ -110,7 +110,7 @@ pub struct LaneBaseline {
     /// legacy baselines and when slot resolution failed at capture
     /// time — the report rollup buckets those as "unattributed".
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model_attribution: Option<sovereign_core::models_manifest::ModelAttribution>,
+    pub model_attribution: Option<sovereign_contracts::models_manifest::ModelAttribution>,
     /// Prompt-contract version active at capture (e.g. the enrichment
     /// pipeline's `prompt_version`), caller-stated via
     /// `--prompt-version`. `None` when the lane has no prompt contract
@@ -189,7 +189,7 @@ impl LaneBaseline {
         };
         self.model = Some(stem.to_string());
         self.model_attribution =
-            Some(sovereign_core::models_manifest::DEFAULT_MANIFEST.attribution_for_file(stem));
+            Some(sovereign_contracts::models_manifest::DEFAULT_MANIFEST.attribution_for_file(stem));
     }
     pub fn with(mut self, name: impl Into<String>, metric: LaneMetric) -> Self {
         self.metrics.insert(name.into(), metric);

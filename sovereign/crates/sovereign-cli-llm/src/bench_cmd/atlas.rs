@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::enrich_cmd::config::EnrichConfig;
 use crate::enrich_cmd::corpus_io::rebuild_corpus_state;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn bench atlas",
@@ -819,6 +819,6 @@ fn mean(iter: impl Iterator<Item = f64>) -> f64 {
 fn chrono_format_now() -> String {
     // No chrono dep in this crate; format manually so the JSON is
     // self-describing without pulling another crate.
-    let secs = sovereign_core::time::unix_now_u64();
+    let secs = sovereign_time::unix_now_u64();
     format!("unix-{secs}")
 }
