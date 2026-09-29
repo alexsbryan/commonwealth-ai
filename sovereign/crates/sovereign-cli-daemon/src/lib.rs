@@ -45,9 +45,10 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
     // FOURTH list that disagreed with this one on ordering.
     let launch = Launch::parse(&raw_args, Launch::Bare);
 
-    // `--compute-child` and `--rpc-worker` are owned by the `sovereign-daemon`
-    // [[bin]], not this crate: both are `current_exe()` re-execs of the serving
-    // process, and `daemon run` here execs that binary (five-programs fp-10/fp-25).
+    // `--compute-child` and `--rpc-worker` are serve's (`child_launch`), not
+    // this crate's: both are `current_exe()` re-execs of the loading process,
+    // and `daemon run` here execs the stock binary, which routes them first
+    // (five-programs fp-10/fp-25, pb-serve-distributes).
     // An `--rpc-worker` argv that reaches this binary anyway (a hand-typed
     // `svrn daemon --rpc-worker`) is handed to the owner unchanged, before the
     // migration and runtime below, so it lands where it always did.
@@ -164,7 +165,7 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
         },
         Launch::RpcWorker { .. } => unreachable!("rpc-worker is exec'd in run_with_args"),
         Launch::Worker { .. } => unreachable!("worker mode is exec'd in run_with_args"),
-        // Other binaries' launches, incl. the compute-child the sovereign-daemon [[bin]] owns.
+        // Other binaries' launches, incl. the compute-child serve's `child_launch` owns.
         // Named explicitly so that adding a variant forces a decision here instead of a `_` arm.
         Launch::ComputeChild { .. }
         | Launch::AdminJoin { .. }

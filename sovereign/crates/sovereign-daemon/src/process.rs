@@ -36,23 +36,23 @@ pub fn run(
     // ONE decision about what this process becomes (ARCH §2.1, §10.6),
     // made by the same parser the old dispatcher used. The verb is
     // re-prepended because the shim (and a unit file) passes only what
-    // FOLLOWED it — and because `Launch::parse` finds the child re-exec
-    // flags at any argv position, the `--compute-child` / `--rpc-worker`
-    // re-execs of this very binary land in their arms either way.
+    // FOLLOWED it.
     let mut full_args = vec!["daemon".to_string()];
     full_args.extend_from_slice(raw_args);
     let launch = Launch::parse(&full_args, Launch::Bare);
 
-    // Compute-child re-exec: a distinct inference process with its OWN
-    // runtime; it must skip the rebrand migration / panic hook / 8 MiB
-    // runtime below (it inherits the stack env vars set above).
-    if let Launch::ComputeChild { args } = &launch {
-        return sovereign_compute::child_main::run(args);
-    }
-
-    // RPC-worker re-exec: same rule — owns no data root, needs no tokio.
-    if let Launch::RpcWorker { args } = &launch {
-        return sovereign_inference::rpc_worker_main::run(args);
+    // The compute child and the RPC worker are the loader's re-execs, routed
+    // by serve's `child_launch` in the binaries that load (sovereign-serve,
+    // and sovereign-stock before it calls this entry). svrn loads nothing
+    // (pb-serve-distributes), so one reaching svrn alone is refused by name,
+    // never booted as a daemon.
+    if let Launch::ComputeChild { .. } | Launch::RpcWorker { .. } = &launch {
+        eprintln!(
+            "error: `--compute-child` and `--rpc-worker` are serve's re-execs; this binary \
+             loads no model. Run them through sovereign-serve, or `svrn daemon` (the stock \
+             binary hosts serve)."
+        );
+        return 2;
     }
 
     // The setup wizard's join child: the admin assembly, never the full
@@ -283,6 +283,19 @@ pub fn llama_debug_requested() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A loader re-exec reaching svrn alone is refused by name before
+    /// anything else runs (pb-serve-distributes): svrn loads no model.
+    #[test]
+    fn a_loader_reexec_is_refused_by_name() {
+        for argv in [
+            vec!["--compute-child", "--role", "mock"],
+            vec!["--rpc-worker"],
+        ] {
+            let argv: Vec<String> = argv.into_iter().map(str::to_string).collect();
+            assert_eq!(run(&argv, None, None, None), 2, "{argv:?}");
+        }
+    }
 
     /// The daemon tracing filter is an allowlist with NO default level, so
     /// every custom-target observability event must be listed by name or it
