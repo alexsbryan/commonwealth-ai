@@ -68,7 +68,7 @@ status-level = "fail"
 path = "junit.xml"
 
 [[profile.sabotage.overrides]]
-filter = "binary(evidence_reds) + binary(judgement_reds) + binary(answer_reds)"
+filter = "binary(/_reds$/)"
 slow-timeout = { period = "300s", terminate-after = 4 }
 
 # ── Quick profile ──────────────────────────────────────────────────────────
@@ -108,12 +108,19 @@ status-level = "pass"
 # (80.7s / 154.5s cold in the same run). Covering all three by binary, not just
 # the one that happened to cross first, is the point: the cost of this ceiling
 # is zero whenever the tree is warm.
+#
+# The filter is the naming convention, not a list: every top-level `*_reds`
+# test binary is a trybuild suite (2026-09-29: evidence_reds x2, answer_reds,
+# judgement_reds, atoms_reds). atoms_reds was missed by the old three-name list
+# and timed out at 180s in REVIEW-audit-pb-auto-8's TESTALL (8s alone). The
+# sovereign-core `*_reds.rs` files live inside the `main` binary, so the
+# pattern does not touch them.
 [[profile.default.overrides]]
-filter = "binary(evidence_reds) + binary(judgement_reds) + binary(answer_reds)"
+filter = "binary(/_reds$/)"
 slow-timeout = { period = "300s", terminate-after = 4 }
 
 [[profile.ci.overrides]]
-filter = "binary(evidence_reds) + binary(judgement_reds) + binary(answer_reds)"
+filter = "binary(/_reds$/)"
 slow-timeout = { period = "300s", terminate-after = 4 }
 
 # THE DST SOAK — `dst_scenarios::seeded_chaos_soak`. A genuine soak (3 seeds ×
