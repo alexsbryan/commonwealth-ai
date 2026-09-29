@@ -111,8 +111,7 @@ async fn forward_or(
     path: &str,
     in_process: impl std::future::Future<Output = Response>,
 ) -> Response {
-    if !crate::serve_client::ServingPath::decided().is_some()
-    {
+    if !crate::serve_client::ServingPath::decided().is_some() {
         return in_process.await;
     }
     let base = daemon.configured_serve_base().await.base;
