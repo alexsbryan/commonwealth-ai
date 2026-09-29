@@ -16,6 +16,7 @@ use async_trait::async_trait;
 use corpus_index::types::EmbedFn;
 use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity};
 use understanding_vocab::edges::{Edge, EdgesFile};
+use understanding_vocab::ontology::NavigationPolicy;
 
 use crate::citation::SourceCitation;
 use crate::raptor_read::RaptorSummaryRow;
@@ -95,6 +96,10 @@ pub trait AtlasPort: Send + Sync {
 
     /// The title key ingest normalizes article titles to.
     fn normalize_title(&self, title: &str) -> String;
+
+    /// The id and declared navigation map of a built-in pipeline, or `None`
+    /// when no built-in pipeline has that id.
+    fn pipeline_navigation(&self, pipeline_id: &str) -> Option<(String, NavigationPolicy)>;
 
     /// The system prompt of the argumentative typed-extension call.
     fn argumentative_system(&self) -> &'static str;

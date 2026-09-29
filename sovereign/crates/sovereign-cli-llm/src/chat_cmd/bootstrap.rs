@@ -292,6 +292,7 @@ async fn build_session_scoped(
             // impls `ConvTieredReader` (spec CONV_TIERED_PORT.md).
             conv_tiered: Some(Arc::clone(&store_concrete) as Arc<dyn ConvTieredReader>),
             corpus_engine: Arc::clone(&corpus_engine) as _,
+            atlas: Arc::new(corpus_engine::IngestAtlas),
             // Cloned: `tool_bundles` below borrows the same handle for
             // `knowledge_lookup`'s notes channel. One store, two readers.
             note_store: note_store.clone(),

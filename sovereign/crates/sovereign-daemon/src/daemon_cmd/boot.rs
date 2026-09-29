@@ -632,6 +632,7 @@ pub(super) async fn run_daemon(
             conv_tiered: Some(Arc::clone(&state_store_concrete)
                 as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>),
             corpus_engine: Arc::clone(&engine) as _,
+            atlas: Arc::new(corpus_engine::IngestAtlas),
             note_store: Some(Arc::clone(&notes_port)),
             // The same compiled-in skill set the desktop ships (rung 6
             // commit B) — built just above from the ONE shared home, so a

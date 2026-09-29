@@ -193,6 +193,15 @@ impl AtlasPort for IngestAtlas {
         crate::filters::normalize_title(title)
     }
 
+    fn pipeline_navigation(
+        &self,
+        pipeline_id: &str,
+    ) -> Option<(String, understanding_vocab::ontology::NavigationPolicy)> {
+        crate::enrichment::pipeline::PipelineRegistry::builtin()
+            .get(pipeline_id)
+            .map(|p| (p.id().to_string(), p.declared_ontology().navigation))
+    }
+
     fn argumentative_system(&self) -> &'static str {
         crate::enrichment::pipeline::typed_schemas::argumentative::PHASE1_ARGUMENTATIVE_SYSTEM
     }

@@ -26,6 +26,8 @@
 //! entities run hundreds-to-thousands of chars. Operators tuning
 //! the filter can override via `AtlasContextManager::with_filter`.
 
+use corpus_engine_atlas_reader::context_filter::AtlasContextFilter;
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use sovereign_core::atlas_context::{AtlasContext, AtlasContextProvider};
 use sovereign_core::traits::InferenceProvider;
 use std::collections::HashMap;
@@ -45,9 +47,11 @@ use understanding_vocab::read::ATLAS_DIRNAME;
 /// alone: its map is the author's, written by the build.
 ///
 /// This host can read the config (`sovereign-enrichment-catalog`) and the
-/// registry (`corpus-engine`); it cannot reach the build crate's resolver,
+/// pipeline registry (ingest's, through the atlas port); it cannot reach the
+/// build crate's resolver,
 /// which is why the custom path is excluded rather than resolved here.
 fn attach_pipeline_map(
+    atlas: &dyn AtlasPort,
     graph: sovereign_core::atlas_context::AtlasGraph,
     corpus_id: &str,
 ) -> sovereign_core::atlas_context::AtlasGraph {
@@ -60,39 +64,19 @@ fn attach_pipeline_map(
     if cfg.ontology.is_some() {
         return graph;
     }
-    match corpus_engine::enrichment::pipeline::PipelineRegistry::builtin().get(&cfg.pipeline_id) {
-        Some(p) => {
+    match atlas.pipeline_navigation(&cfg.pipeline_id) {
+        Some((pipeline, navigation)) => {
             tracing::debug!(
                 corpus = corpus_id,
-                pipeline = p.id(),
+                pipeline = pipeline.as_str(),
                 "atlas-graph: no ontology.json; walking under the pipeline's declared map \
                  (run `svrn atlas migrate-all` to write it beside the atoms)"
             );
-            graph.with_pipeline_map(p.id(), p.declared_ontology().navigation)
+            graph.with_pipeline_map(&pipeline, navigation)
         }
         None => graph,
     }
 }
-
-/// The ONE `atoms.json` → embedded-bag loader and the filter that governs it.
-/// Both moved DOWN to `corpus_engine::enrichment::atlas::context_loader`
-/// (order ei-5a-build-cut): every type they touch was already corpus-engine's,
-/// and the loader's only inference need is `embed_query`, which is
-/// `corpus_index::types::EmbedFn`. Keeping the write in the inference stack bought
-/// nothing and cost every atlas writer a llama.cpp link.
-///
-/// Re-exported at the historical path — NOT copied (ARCH §10.6) — so
-/// `atlas_context_manager::{load_atlas_context, backfill_ann,
-/// AtlasContextFilter, …}` is still the one name every caller uses.
-///
-/// The one signature that changed: `backfill_ann` and `load_atlas_context`
-/// take `&EmbedFn` where they took `&dyn InferenceProvider`. Callers holding a
-/// provider adapt with the existing `sovereign_core::embed_fn::
-/// inference_to_embed_fn` — the adapter that was already there for exactly
-/// this (ARCH §19).
-pub use corpus_engine::enrichment::atlas::context_loader::{
-    backfill_ann, load_atlas_context, AtlasContextFilter, BackfillOutcome, LoadAtlasError,
-};
 
 /// Filename of the per-corpus query-bump map. Lives alongside
 /// `atoms.json` so it travels with the atlas (mesh transfer brings
@@ -103,6 +87,9 @@ pub const TRIAGE_BUMPS_FILE: &str = "triage_bumps.json";
 /// Daemon-side lifecycle for atlas-grounded retrieval.
 pub struct AtlasContextManager {
     indexes_dir: PathBuf,
+    /// Ingest's atlas port: the seed-table freshness check and the
+    /// pipeline map go through it.
+    atlas: Arc<dyn AtlasPort>,
     inference: Arc<dyn InferenceProvider>,
     embed_model: String,
     filter: AtlasContextFilter,
@@ -138,7 +125,7 @@ pub struct AtlasContextManager {
     /// backend lands here with no change to this field.
     non_atom_providers: Arc<
         std::sync::RwLock<
-            HashMap<String, Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>>,
+            HashMap<String, Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider>>,
         >,
     >,
     /// Per-corpus query-bump map, in-memory mirror of each atlas's
@@ -167,9 +154,11 @@ impl AtlasContextManager {
         indexes_dir: PathBuf,
         inference: Arc<dyn InferenceProvider>,
         embed_model: String,
+        atlas: Arc<dyn AtlasPort>,
     ) -> Self {
         Self {
             indexes_dir,
+            atlas,
             inference,
             embed_model,
             filter: AtlasContextFilter::default(),
@@ -313,8 +302,8 @@ impl AtlasContextManager {
         // atom store is present (so the corpus COULD ground) and the table is
         // missing or older than `atoms.json`. Never embed here: `init()` walks
         // every installed atlas (1,770 SEP articles) at boot.
-        use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ann_table_present};
-        use corpus_engine::enrichment::atlas::store::ATOMS_LANCE_DIRNAME;
+        use corpus_engine_atlas_reader::ann_store::ann_table_present;
+        use corpus_engine_atlas_reader::store::ATOMS_LANCE_DIRNAME;
         if !ann_table_present(atlas_dir) {
             if atlas_dir.join(ATOMS_LANCE_DIRNAME).is_dir() {
                 tracing::warn!(
@@ -331,7 +320,7 @@ impl AtlasContextManager {
             }
             return false;
         }
-        if !ann_table_is_fresh(atlas_dir) {
+        if !self.atlas.ann_table_is_fresh(atlas_dir) {
             tracing::warn!(
                 corpus = corpus_id,
                 atlas = %atlas_dir.display(),
@@ -345,9 +334,9 @@ impl AtlasContextManager {
         let graph = match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
             corpus_id,
             atlas_dir,
-            corpus_engine::enrichment::atlas::context::read_section_rows(atlas_dir),
+            corpus_engine_atlas_reader::context::read_section_rows(atlas_dir),
         ) {
-            Ok(g) => attach_pipeline_map(g, corpus_id),
+            Ok(g) => attach_pipeline_map(&*self.atlas, g, corpus_id),
             Err(e) => {
                 tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
                 return false;
@@ -594,9 +583,9 @@ impl AtlasContextProvider for AtlasContextManager {
     fn walk_provider(
         &self,
         atlas_corpus_id: &str,
-    ) -> Option<Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>> {
+    ) -> Option<Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider>> {
         if let Some(g) = self.graph(atlas_corpus_id) {
-            return Some(g as Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>);
+            return Some(g as Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider>);
         }
         if let Some(p) = self
             .non_atom_providers
@@ -611,7 +600,7 @@ impl AtlasContextProvider for AtlasContextManager {
         // and corpus-mcp cannot disagree about what a corpus is (ARCH §10.6).
         // Sync open through the atlas module's ONE async bridge; lifecycle
         // time, on the first query that reaches this corpus.
-        match corpus_engine::enrichment::atlas::open_walk_provider_blocking(
+        match corpus_engine_atlas_reader::opener::open_walk_provider_blocking(
             &self.indexes_dir,
             atlas_corpus_id,
         ) {
@@ -677,11 +666,11 @@ impl AtlasContextProvider for AtlasContextManager {
         match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
             atlas_corpus_id,
             &atlas_dir,
-            corpus_engine::enrichment::atlas::context::read_section_rows(&atlas_dir),
+            corpus_engine_atlas_reader::context::read_section_rows(&atlas_dir),
         ) {
             Ok(graph) => {
                 let load_ms = load_started.elapsed().as_millis();
-                let graph = Arc::new(attach_pipeline_map(graph, atlas_corpus_id));
+                let graph = Arc::new(attach_pipeline_map(&*self.atlas, graph, atlas_corpus_id));
                 tracing::info!(
                     corpus = atlas_corpus_id,
                     atoms = graph.atom_count(),
@@ -903,6 +892,7 @@ mod tests {
             indexes.to_path_buf(),
             Arc::new(PanicInference),
             "test-embed".into(),
+            Arc::new(corpus_engine::IngestAtlas),
         )
     }
 

@@ -23,7 +23,9 @@ use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::parse_globals;
 use crate::enrich_cmd::paths;
-use sovereign_tools::atlas_context_manager::{backfill_ann, AtlasContextFilter, BackfillOutcome};
+use corpus_engine::enrichment::atlas::context_loader::{
+    backfill_ann, AtlasContextFilter, BackfillOutcome,
+};
 
 pub async fn run(args: &[String]) -> i32 {
     let (globals, rest) = match parse_globals(args) {
@@ -188,7 +190,7 @@ pub async fn run(args: &[String]) -> i32 {
     let mut failed = 0usize;
     // One writer for every surface that seeds a corpus — this verb, the
     // `enrich build` Backfill step, and the daemon's post-write hook all call
-    // `sovereign_tools::atlas_context_manager::backfill_ann` (ontology-v1 P0).
+    // `corpus_engine::enrichment::atlas::context_loader::backfill_ann` (ontology-v1 P0).
     for corpus_id in &corpora {
         let atlas_dir = paths::index_root(corpus_id).join(ATLAS_DIRNAME);
         match backfill_ann(&embed, &atlas_dir, corpus_id, &filter).await {

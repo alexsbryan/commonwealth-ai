@@ -12,9 +12,8 @@
 //! carrying both.
 //!
 //! Re-exported from [`super::context_loader`], so
-//! `context_loader::AtlasContextFilter` and the historical
-//! `sovereign_tools::atlas_context_manager::AtlasContextFilter` both resolve
-//! to this ONE definition (§10.6).
+//! `context_loader::AtlasContextFilter` resolves to this ONE definition
+//! (§10.6).
 
 use std::collections::BTreeSet;
 

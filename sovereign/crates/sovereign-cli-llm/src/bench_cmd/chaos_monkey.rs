@@ -460,7 +460,7 @@ async fn run(rest: &[String]) -> i32 {
     // env-configured; we echo it so the measurement stays glassbox.
     if args.warm_atlas {
         if let Some(s) = session.as_ref() {
-            let f = sovereign_tools::atlas_context_manager::AtlasContextFilter::default();
+            let f = corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter::default();
             let n = s.atlas_mgr.warm_one(&corpus).await;
             eprintln!(
                 "[chaos] atlas-warm: {n} context entr{} loaded for `{corpus}` (min_description_chars={}, include_claims={})",

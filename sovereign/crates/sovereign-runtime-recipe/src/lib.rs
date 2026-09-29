@@ -245,6 +245,9 @@ pub struct RecipeInputs {
     pub conv_tiered: Option<Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>>,
     /// The corpus engine this process retrieves through.
     pub corpus_engine: Arc<dyn corpus_index::source::CorpusReadPort>,
+    /// Ingest's atlas port: the atlas context manager's write-or-derive
+    /// reads (the seed-table freshness check) go through it.
+    pub atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
     /// Backing store for the per-conversation `tool_decision` write hook.
     pub note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     /// The skill registry the router and planner classify against.
@@ -378,6 +381,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         store,
         conv_tiered,
         corpus_engine,
+        atlas,
         note_store,
         skills,
         approval,
@@ -401,6 +405,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
     let (lane, atlas_context) = build_lane(
         conv_tiered,
         &corpus_engine,
+        atlas,
         &inference,
         &indexes_dir,
         &embed_model,
@@ -632,6 +637,7 @@ async fn build_router_and_planner(
 async fn build_lane(
     conv_tiered: Option<Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>>,
     corpus_engine: &Arc<dyn corpus_index::source::CorpusReadPort>,
+    atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
     inference: &Arc<dyn InferenceProvider>,
     indexes_dir: &Path,
     embed_model: &str,
@@ -682,6 +688,7 @@ async fn build_lane(
         indexes_dir.to_path_buf(),
         Arc::clone(inference),
         embed_model.to_string(),
+        atlas,
     ));
     lane.atlas_context =
         Some(Arc::clone(&atlas_mgr)

@@ -585,10 +585,10 @@ pub use sovereign_core::atlas_context::AtlasGraph;
 /// §10.6, one decider one name; §10, structural not remembered). Surfaced by
 /// nc-22c shape matching — a name-keyed census cannot see a fork that was
 /// renamed on copy.
-pub use sovereign_tools::atlas_context_manager::AtlasContextFilter;
+pub use corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter;
 
 /// Load an atlas corpus's embedded context bag through the ONE loader,
-/// `sovereign_tools::atlas_context_manager::load_atlas_context` (ontology-v1
+/// `corpus_engine::enrichment::atlas::context_loader::load_atlas_context` (ontology-v1
 /// P0.2 moved the body there so the daemon can seed a fresh atlas
 /// in-process). This wrapper supplies only what the CLI has and the library
 /// must not assume: the session's inference provider and the atlas dir under
@@ -601,7 +601,7 @@ pub async fn load_atlas_context(
 ) -> Result<AtlasContext, String> {
     let atlas_dir = paths::index_root(atlas_corpus_id).join(ATLAS_DIRNAME);
     let embed = sovereign_core::embed_fn::inference_to_embed_query_fn(session.inference.clone());
-    sovereign_tools::atlas_context_manager::load_atlas_context(
+    corpus_engine::enrichment::atlas::context_loader::load_atlas_context(
         &embed,
         &atlas_dir,
         atlas_corpus_id,

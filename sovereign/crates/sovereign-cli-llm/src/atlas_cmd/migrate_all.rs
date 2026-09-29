@@ -20,7 +20,7 @@
 //! Idempotent: skips a store/columnar already current vs its source, and an ANN
 //! table that already exists for an unchanged store. Re-runnable and safe to
 //! interrupt. The ANN step goes through the ONE seed-table writer,
-//! `atlas_context_manager::backfill_ann` — the same call `svrn atlas
+//! `context_loader::backfill_ann` — the same call `svrn atlas
 //! backfill-ann`, the `enrich build` Backfill step and the atlas writer make —
 //! so the table's POPULATION is the corpus's own navigation map
 //! (`seed_population`) and its marker is stamped with it. It only touches
@@ -49,7 +49,7 @@ use sovereign_enrichment_build::pipeline_map::{ensure_pipeline_map, MapConversio
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
 use crate::eval_cmd::runner::AtlasContextFilter;
-use sovereign_tools::atlas_context_manager::{backfill_ann, BackfillOutcome};
+use corpus_engine::enrichment::atlas::context_loader::{backfill_ann, BackfillOutcome};
 
 pub async fn run(args: &[String]) -> i32 {
     let (globals, rest) = match parse_globals(args) {
