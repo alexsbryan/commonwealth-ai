@@ -17,6 +17,7 @@ use mesh_reach::{PeerContact, PeerTransport, TrafficClass};
 use sovereign_contracts::daemon_wire::mesh::MemberStatus;
 use sovereign_contracts::membership::MembershipReader;
 
+mod endpoint;
 #[cfg(test)]
 mod tests;
 
@@ -240,45 +241,6 @@ impl RpcWorkerDiscovery {
         transport: &Arc<dyn PeerTransport>,
         self_id: NodeId,
     ) -> crate::worker_eligibility::DiscoveryOutcome {
-        // The raw-TCP rpc-server needs the peer's DIRECT IP. The `/status` probe
-        // URL host is unreliable for this: when `status_probe` is routed over iroh,
-        // the probe authority is a loopback proxy (`127.0.0.1:<ephemeral>`), which
-        // is NOT where the peer's rpc-server listens. Derive the endpoint from the
-        // member's advertised IPs instead — prefer private-LAN (lowest latency for
-        // per-layer activation traffic), then CGNAT/Tailscale, then anything else —
-        // and reachability-probe each so we only return an openable socket.
-        async fn reachable_rpc_endpoint(addresses: &[SocketAddr], rpc_port: u16) -> Option<String> {
-            fn rank(ip: &std::net::IpAddr) -> u8 {
-                match ip {
-                    std::net::IpAddr::V4(v) if v.is_private() => 0,
-                    std::net::IpAddr::V4(v)
-                        if v.octets()[0] == 100 && (v.octets()[1] & 0xC0) == 0x40 =>
-                    {
-                        1
-                    }
-                    std::net::IpAddr::V4(_) => 2,
-                    std::net::IpAddr::V6(_) => 3,
-                }
-            }
-            let mut cands: Vec<std::net::IpAddr> = addresses.iter().map(|a| a.ip()).collect();
-            cands.sort_by_key(rank);
-            cands.dedup();
-            for ip in cands {
-                let ep = SocketAddr::new(ip, rpc_port);
-                if tokio::time::timeout(
-                    std::time::Duration::from_millis(600),
-                    tokio::net::TcpStream::connect(ep),
-                )
-                .await
-                .ok()
-                .and_then(|r| r.ok())
-                .is_some()
-                {
-                    return Some(ep.to_string());
-                }
-            }
-            None
-        }
         let members: Vec<_> = {
             roster
                 .members()
@@ -418,29 +380,14 @@ impl RpcWorkerDiscovery {
                         .and_then(|w| w.get("iroh"))
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
-                    let mode = rpc_tunnel_mode();
-                    let allow_bridge = iroh_advertised && mode != RpcTunnelMode::Never;
-
-                    // Choose the endpoint ggml will dial. Direct raw TCP to a member
-                    // IP is the LAN fast path; the iroh bridge is the cross-network
-                    // path; the parsed probe host is the last resort. `SOVEREIGN_RPC_TUNNEL`
-                    // = `always` prefers the bridge; `never` opts out of bridging.
-                    let mut sel: Option<(String, String)> = None;
-                    if allow_bridge && mode == RpcTunnelMode::Always {
-                        sel = bridge_rpc_endpoint(&transport, &m.dial).await;
-                    }
-                    if sel.is_none() {
-                        sel = reachable_rpc_endpoint(&m.dial.addresses, rpc_port)
-                            .await
-                            .map(|d| (d, "direct-ip".to_string()));
-                    }
-                    if sel.is_none() && allow_bridge {
-                        sel = bridge_rpc_endpoint(&transport, &m.dial).await;
-                    }
-                    if sel.is_none() {
-                        sel = Some((format!("{host}:{rpc_port}"), "probe-host".to_string()));
-                    }
-                    fresh = sel;
+                    fresh = endpoint::select_rpc_endpoint(
+                        transport,
+                        &m.dial,
+                        rpc_port,
+                        iroh_advertised,
+                        &host,
+                    )
+                    .await;
                     break; // one reachable address per peer suffices
                 }
             }
