@@ -76,6 +76,18 @@ impl IngestPortDouble {
         self.dry_run_recipe = Some(Box::new(f));
         self
     }
+
+    /// Program `in_progress_ingestions` to answer `ids`.
+    pub fn with_in_progress_ingestions(mut self, ids: Vec<String>) -> Self {
+        self.in_progress_ingestions = Some(ids);
+        self
+    }
+
+    /// Program `corpora_with_stranded_partitions` to answer `ids`.
+    pub fn with_stranded_partitions(mut self, ids: Vec<String>) -> Self {
+        self.stranded_partitions = Some(ids);
+        self
+    }
 }
 
 #[async_trait]
@@ -106,11 +118,19 @@ impl IngestPort for IngestPortDouble {
     }
 
     fn in_progress_ingestions(&self) -> Vec<String> {
-        panic!("{}", unprogrammed("in_progress_ingestions"))
+        self.record("in_progress_ingestions");
+        match &self.in_progress_ingestions {
+            Some(ids) => ids.clone(),
+            None => panic!("{}", unprogrammed("in_progress_ingestions")),
+        }
     }
 
     fn corpora_with_stranded_partitions(&self) -> Vec<String> {
-        panic!("{}", unprogrammed("corpora_with_stranded_partitions"))
+        self.record("corpora_with_stranded_partitions");
+        match &self.stranded_partitions {
+            Some(ids) => ids.clone(),
+            None => panic!("{}", unprogrammed("corpora_with_stranded_partitions")),
+        }
     }
 
     fn cancel_registry(&self) -> CancellationRegistry {

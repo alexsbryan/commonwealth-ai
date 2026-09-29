@@ -99,6 +99,8 @@ pub struct IngestPortDouble {
     merge_partitions: Option<Box<MergePartitionsFn>>,
     finalize_canonical: Option<Box<CorpusFn<Result<()>>>>,
     merge_into_canonical: Option<Box<MergeIntoCanonicalFn>>,
+    in_progress_ingestions: Option<Vec<String>>,
+    stranded_partitions: Option<Vec<String>>,
 }
 
 impl IngestPortDouble {
