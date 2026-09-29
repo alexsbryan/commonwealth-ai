@@ -588,6 +588,7 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         isolate: false,
         atlas: None,
         attached: Some(attached(source)),
+        vault: None,
     };
 
     // ── --list-assets exits here ───────────────────────────────

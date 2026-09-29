@@ -72,7 +72,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use sovereign_contracts::probe::{VaultBuildEvidence, VaultBuildProbe, VaultSource};
+use sovereign_contracts::probe::{
+    ProbeEvidence, ProbeMode, ProbeRequest, VaultBuildEvidence, VaultBuildProbe, VaultSource,
+};
 
 use crate::bench_cmd::resource_meter::ResourceReport;
 use crate::chat_cmd::config::default_globals_for_voice_eval;
@@ -137,7 +139,7 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Notes(
-            "The harness runs the real folder pipeline in-process — LocalCorpusManager::ingest \
+            "svrn's probe (`svrn __probe`, vault-build mode) runs the real folder pipeline — LocalCorpusManager::ingest \
              for tier 1, run_folder_tiered_enrichment for tiers 2/3 — with the inference \
              provider, entity extractor and tiered provider each wrapped in a metering \
              decorator. No production code is instrumented; every number comes from a seam \
@@ -388,9 +390,24 @@ async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
         no_gliner: opts.no_gliner,
         allow_watcher: opts.allow_watcher,
     };
+    let request = ProbeRequest {
+        mode: ProbeMode::VaultBuild,
+        questions: Vec::new(),
+        corpus: String::new(),
+        limit: 0,
+        isolate: false,
+        atlas: None,
+        attached: None,
+        vault: Some(spec),
+    };
     let globals = default_globals_for_voice_eval();
-    let build = crate::probe_cmd::vault_build::build(&globals, &spec).await?;
-    Ok(report(build, &mode))
+    match crate::eval_cmd::run_probe(&globals, &request)? {
+        ProbeEvidence::VaultBuild(build) => Ok(report(*build, &mode)),
+        other => Err(format!(
+            "`svrn __probe` answered a vault build with {} evidence",
+            other.mode().as_str()
+        )),
+    }
 }
 
 /// The run's report: the build as observed, plus bench's rollups over its

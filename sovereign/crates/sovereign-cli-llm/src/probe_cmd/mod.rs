@@ -5,9 +5,11 @@
 //! Hidden from `svrn --help`: it is the wire between svrn and bench's
 //! `svrn eval run --routing-only | --prod-pipeline | <raw-index>` and the
 //! attached-document lanes (`bench book-report`, `bench chaos-monkey
-//! --attached`), which exec it and score what it writes. It runs ONE
-//! internal stage per question — the router's classifier, the production
-//! retrieval pipeline, a raw index search, or an attached-document turn —
+//! --attached`), `bench vault-report` and `bench faithfulness`, which exec it
+//! and score what it writes. It runs ONE internal stage per question — the
+//! router's classifier, the production retrieval pipeline, a raw index
+//! search, or an attached-document turn — or once per run: a metered
+//! folder-vault build, or a read of a corpus's RAPTOR tree —
 //! and writes a `sovereign_contracts::probe::ProbeEvidence`: raw
 //! classifications and pools, no bank, no expectation, no verdict. svrn's
 //! global flags (`--daemon`, `--data-dir`, models, `--temperature`) build the
@@ -15,10 +17,11 @@
 
 mod attached;
 mod prod;
+mod raptor_nodes;
 pub(crate) mod resource_meter;
 mod retrieve;
 mod routing;
-pub(crate) mod vault_build;
+mod vault_build;
 
 use std::path::PathBuf;
 
@@ -110,15 +113,23 @@ pub async fn run(args: &[String]) -> i32 {
         corpus = %request.corpus,
         "probe request"
     );
-    let session = match build_session_for_bank(&globals, &request.corpus).await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("bootstrap failed: {e}");
-            return 1;
+    // The once-per-run modes own their bootstrap: the vault build dials the
+    // session it meters, and a RAPTOR read needs none.
+    let evidence = match request.mode {
+        ProbeMode::VaultBuild => vault_build::probe(&globals, &request).await,
+        ProbeMode::RaptorNodes => raptor_nodes::probe(&request).await,
+        _ => {
+            let session = match build_session_for_bank(&globals, &request.corpus).await {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("bootstrap failed: {e}");
+                    return 1;
+                }
+            };
+            probe(&session, &globals.daemon_base, &request).await
         }
     };
-
-    let evidence = match probe(&session, &globals.daemon_base, &request).await {
+    let evidence = match evidence {
         Ok(ev) => ev,
         Err(e) => {
             eprintln!("error: {e}");
@@ -198,6 +209,12 @@ async fn probe(
                     spec,
                 )
                 .await?,
+            ))
+        }
+        ProbeMode::VaultBuild | ProbeMode::RaptorNodes => {
+            return Err(format!(
+                "the {} probe runs once per run, not over a bank's session",
+                request.mode.as_str()
             ))
         }
     })

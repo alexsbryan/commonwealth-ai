@@ -3,8 +3,9 @@
 //! bench to judge.
 //!
 //! `svrn __probe` runs ONE internal stage (the router's classifier,
-//! the production retrieval pipeline, a raw index search, or an
-//! attached-document turn) over plain question text and writes a
+//! the production retrieval pipeline, a raw index search, an
+//! attached-document turn, a metered folder-vault build, or a read of a
+//! corpus's RAPTOR tree) over plain question text and writes a
 //! [`ProbeEvidence`]. It carries no bank, no
 //! expectation and no score: svrn describes itself, bench owns banks and
 //! verdicts (ARCH principle 12; phase-b-58). Both sides name this one type, so
@@ -15,12 +16,14 @@ use serde::{Deserialize, Serialize};
 use crate::traits::CorpusUnavailable;
 
 mod attached;
+mod raptor_nodes;
 mod resources;
 mod vault;
 
 pub use attached::{
     AttachedEvidence, AttachedProbe, AttachedSource, AttachedTurn, StateTransition,
 };
+pub use raptor_nodes::{RaptorNodeEvidence, RaptorNodesEvidence};
 pub use resources::{CallRecord, PhaseBucket, PhaseResources, ResourceReport};
 pub use vault::{
     ColdReset, IngestTransition, NoteRecord, PhaseSpan, VaultBuildEvidence, VaultBuildProbe,
@@ -42,15 +45,22 @@ pub enum ProbeMode {
     /// A full attached-document turn per question, through a minted
     /// `DocumentSession`, over an asset the probe ingests or reuses.
     Attached,
+    /// A folder corpus built with every seam metered: ingest, NER,
+    /// per-note RAPTOR, vault synthesis, and the ledger.
+    VaultBuild,
+    /// A corpus's stored RAPTOR tree, every level.
+    RaptorNodes,
 }
 
 impl ProbeMode {
     /// Every mode, in command-line order.
-    pub const ALL: [ProbeMode; 4] = [
+    pub const ALL: [ProbeMode; 6] = [
         ProbeMode::Routing,
         ProbeMode::Prod,
         ProbeMode::Retrieve,
         ProbeMode::Attached,
+        ProbeMode::VaultBuild,
+        ProbeMode::RaptorNodes,
     ];
 
     /// The command-line spelling.
@@ -60,6 +70,8 @@ impl ProbeMode {
             ProbeMode::Prod => "prod",
             ProbeMode::Retrieve => "retrieve",
             ProbeMode::Attached => "attached",
+            ProbeMode::VaultBuild => "vault-build",
+            ProbeMode::RaptorNodes => "raptor-nodes",
         }
     }
 
@@ -92,6 +104,10 @@ pub struct ProbeRequest {
     /// ignored in the others.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attached: Option<AttachedProbe>,
+    /// Vault build: the folder corpus and how to build it. Required in that
+    /// mode, ignored in the others.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vault: Option<VaultBuildProbe>,
 }
 
 /// The atlases a probe loads, and how it filters and seeds them.
@@ -160,6 +176,10 @@ pub enum ProbeEvidence {
     },
     /// [`ProbeMode::Attached`].
     Attached(Box<AttachedEvidence>),
+    /// [`ProbeMode::VaultBuild`].
+    VaultBuild(Box<VaultBuildEvidence>),
+    /// [`ProbeMode::RaptorNodes`].
+    RaptorNodes(RaptorNodesEvidence),
 }
 
 impl ProbeEvidence {
@@ -170,6 +190,8 @@ impl ProbeEvidence {
             ProbeEvidence::Prod { .. } => ProbeMode::Prod,
             ProbeEvidence::Retrieve { .. } => ProbeMode::Retrieve,
             ProbeEvidence::Attached(_) => ProbeMode::Attached,
+            ProbeEvidence::VaultBuild(_) => ProbeMode::VaultBuild,
+            ProbeEvidence::RaptorNodes(_) => ProbeMode::RaptorNodes,
         }
     }
 }
@@ -275,6 +297,50 @@ mod tests {
         ));
     }
 
+    /// The vault-build request names its folder corpus by kind; the
+    /// raptor-nodes evidence carries the store it read.
+    #[test]
+    fn vault_request_and_raptor_evidence_round_trip() {
+        let req = ProbeRequest {
+            mode: ProbeMode::VaultBuild,
+            questions: vec![],
+            corpus: String::new(),
+            limit: 0,
+            isolate: false,
+            atlas: None,
+            attached: None,
+            vault: Some(VaultBuildProbe {
+                source: VaultSource::Folder { path: "/v".into() },
+                cold: true,
+                enrich_model: None,
+                no_gliner: true,
+                allow_watcher: false,
+            }),
+        };
+        let v = serde_json::to_value(&req).unwrap();
+        assert_eq!(v["mode"], "vault_build");
+        assert_eq!(v["vault"]["source"]["kind"], "folder");
+        let back: ProbeRequest = serde_json::from_value(v).unwrap();
+        assert!(back.vault.unwrap().cold);
+
+        let ev = ProbeEvidence::RaptorNodes(RaptorNodesEvidence {
+            db_path: "/d/svrnmesh.db".into(),
+            nodes: vec![RaptorNodeEvidence {
+                node_id: "n1".into(),
+                level: 1,
+                summary: "s".into(),
+                primary_entities_json: "[]".into(),
+                cluster_coherence: 0.5,
+                direct_member_chunk_ids_json: None,
+                evidence_chunk_ids_json: "[3]".into(),
+            }],
+        });
+        let v = serde_json::to_value(&ev).unwrap();
+        assert_eq!(v["mode"], "raptor_nodes");
+        let back: ProbeEvidence = serde_json::from_value(v).unwrap();
+        assert_eq!(back.mode(), ProbeMode::RaptorNodes);
+    }
+
     /// The attached mode's request names its asset source by kind, and its
     /// evidence carries the build and the turns under `mode: attached`.
     #[test]
@@ -300,6 +366,7 @@ mod tests {
                 warm_atlas: false,
                 lane: "bench book-report".into(),
             }),
+            vault: None,
         };
         let v = serde_json::to_value(&req).unwrap();
         assert_eq!(v["mode"], "attached");

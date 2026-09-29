@@ -18,8 +18,8 @@ use corpus_engine::enrichment::tiered::{
 use corpus_index::index::EnrichmentChunkRow;
 use corpus_index::Result as EngineResult;
 use sovereign_contracts::probe::{
-    ColdReset, IngestTransition, NoteRecord, PhaseSpan, VaultBuildEvidence, VaultBuildProbe,
-    VaultSource,
+    ColdReset, IngestTransition, NoteRecord, PhaseSpan, ProbeEvidence, ProbeRequest,
+    VaultBuildEvidence, VaultBuildProbe, VaultSource,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
@@ -34,6 +34,20 @@ use crate::chat_cmd::config::ChatGlobals;
 #[cfg(test)]
 #[path = "vault_build_tests.rs"]
 mod tests;
+
+/// The mode: build the folder corpus the request's `vault` names.
+pub(super) async fn probe(
+    globals: &ChatGlobals,
+    request: &ProbeRequest,
+) -> Result<ProbeEvidence, String> {
+    let spec = request
+        .vault
+        .as_ref()
+        .ok_or("a vault-build probe names its folder corpus (`vault` is missing)")?;
+    Ok(ProbeEvidence::VaultBuild(Box::new(
+        build(globals, spec).await?,
+    )))
+}
 
 // ─────────────────────────────────────────────────────────────────────
 // Observer — the shared ledger the decorators write into
@@ -385,7 +399,7 @@ fn data_dir() -> PathBuf {
 }
 
 /// Build the folder corpus `spec` names, metered, and report what was observed.
-pub(crate) async fn build(
+async fn build(
     globals: &ChatGlobals,
     spec: &VaultBuildProbe,
 ) -> std::result::Result<VaultBuildEvidence, String> {

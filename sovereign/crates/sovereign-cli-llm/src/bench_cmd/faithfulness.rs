@@ -32,6 +32,7 @@ use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
 use serde::Serialize;
+use sovereign_contracts::probe::{ProbeEvidence, ProbeMode, ProbeRequest};
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{claim_chunk_support, extract_claim_list};
 use sovereign_core::traits::InferenceProvider;
@@ -235,27 +236,36 @@ async fn run(rest: &[String]) -> i32 {
             return 2;
         }
     };
-    let data_dir = sovereign_contracts::rebrand::data_dir();
-    let db_path = sovereign_contracts::rebrand::state_db_path(&data_dir);
-    let store = match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: open {}: {e}", db_path.display());
+    // svrn reads its own store (`svrn __probe`, raptor-nodes mode).
+    let request = ProbeRequest {
+        mode: ProbeMode::RaptorNodes,
+        questions: Vec::new(),
+        corpus: corpus_id.clone(),
+        limit: 0,
+        isolate: false,
+        atlas: None,
+        attached: None,
+        vault: None,
+    };
+    let globals = crate::chat_cmd::config::default_globals_for_voice_eval();
+    let (db_path, nodes) = match crate::eval_cmd::run_probe(&globals, &request) {
+        Ok(ProbeEvidence::RaptorNodes(ev)) => (ev.db_path, ev.nodes),
+        Ok(other) => {
+            eprintln!(
+                "error: `svrn __probe` answered a RAPTOR read with {} evidence",
+                other.mode().as_str()
+            );
             return 1;
         }
-    };
-    let nodes = match store.list_corpus_raptor_nodes(&corpus_id, 0).await {
-        Ok(n) => n,
         Err(e) => {
-            eprintln!("error: list raptor nodes for {corpus_id}: {e}");
+            eprintln!("error: {e}");
             return 1;
         }
     };
     if nodes.is_empty() {
         eprintln!(
-            "error: corpus `{corpus_id}` has no RAPTOR nodes in {} — build the tier first \
-             (`svrn enrich raptor`); an empty walk verifies nothing and is not a pass",
-            db_path.display()
+            "error: corpus `{corpus_id}` has no RAPTOR nodes in {db_path} — build the tier first \
+             (`svrn enrich raptor`); an empty walk verifies nothing and is not a pass"
         );
         return 4;
     }

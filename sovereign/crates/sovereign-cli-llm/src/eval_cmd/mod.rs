@@ -803,6 +803,7 @@ async fn cmd_run(args: &[String]) -> i32 {
         isolate: a.isolate,
         atlas,
         attached: None,
+        vault: None,
     };
 
     if a.routing_only {

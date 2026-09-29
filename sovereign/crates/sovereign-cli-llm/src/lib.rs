@@ -325,8 +325,14 @@ mod eval_dispatch {
             // An attached document is built and answered in svrn's probe
             // (`svrn __probe`, attached mode; pb-bench-dials-docs).
             "DocumentAssetManager::new(",
+            // svrn's state store is read in svrn's probe (`svrn __probe`,
+            // vault-build and raptor-nodes modes; pb-bench-dials-vault).
+            "SqliteStateStore::open(",
         ];
-        const OWED: [(&str, &str); 1] = [("bench_cmd/vault_report.rs", "pb-bench-dials-vault")];
+        // Every row that owed a file here has landed (pb-bench-dials-vault
+        // was the last); pb-cli-llm-bench-move needs it empty.
+        const OWED: [(&str, &str); 0] = [];
+        assert!(OWED.is_empty(), "the bench group owes no in-process svrn");
         let dirs = [
             "bench_cmd",
             "eval_cmd",

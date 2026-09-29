@@ -643,6 +643,7 @@ async fn run(rest: &[String]) -> i32 {
                 warm_atlas: args.warm_atlas,
                 lane: "bench chaos".to_string(),
             }),
+            vault: None,
         };
         let ev = match crate::eval_cmd::run_probe(&globals, &request) {
             Ok(ProbeEvidence::Attached(ev)) => *ev,
