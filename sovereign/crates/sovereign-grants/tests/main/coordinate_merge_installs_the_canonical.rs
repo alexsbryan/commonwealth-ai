@@ -22,19 +22,19 @@
 //! and the merge had no executable claim on it at all, which is the reason the
 //! gap `2dc1bf160` found on one caller could sit unnoticed on the other.
 //!
-//! # The altitude is the bar
+//! # Split at the port (pb-grants-merge, phase-b-47)
 //!
-//! The reading is taken through `CorpusEngine::installed_indexes()`,
-//! `usable_indexes()` and `open_index_for_corpus()` + a search — never through
-//! `CorpusIndex::open` on the canonical path, which bypasses both gates and is
-//! exactly what made B2's first reading wrong (`df2ffecb8`). The
-//! `CorpusIndex::open` probe is kept BESIDE it, not instead of it, because
-//! "the peer's chunks never arrived" and "the chunks arrived and nothing can
-//! route to them" are different defects that one reading conflates.
-//!
-//! An unasked question is reported as `None`, never as `false` (ARCH §18.3):
-//! when the corpus is missing from `usable_indexes()` the search never runs,
-//! and that is a different fact from a search that ran and missed.
+//! B8 has two halves, and since the merge is ingest's they live in two
+//! crates. This file holds grants' half: queue-mode `coordinate_merge`
+//! resolves both donors, pulls the peer's partition, and hands ingest's
+//! `PartitionMergePort` both partitions and THEN the finalize, so the
+//! post-condition is structural at the caller that used to skip it. The
+//! other half — a merge plus that finalize yields a corpus in
+//! `installed_indexes()` and `usable_indexes()` that answers a search for a
+//! term only the peer contributed, taken at that altitude and never through
+//! `CorpusIndex::open` alone (`df2ffecb8`) — runs on
+//! `impl PartitionMergePort for CorpusEngine` over the same two partitions,
+//! in corpus-engine's `partition_merge_port_parity`.
 //!
 //! # What this file drives for real
 //!
@@ -67,19 +67,13 @@
 
 use std::sync::Arc;
 
-use corpus_index::{corpus::Corpus, index::CorpusIndex};
 use kernel_types::HandoffId;
 use oicp_types::work_queue::{CompleteOutcome, HandoffPhase, IngestionHandoff, WorkUnit};
 use oicp_types::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_grants::{ShardManager, WorkQueueManager};
 
-use super::merge_participants_coverage::{embedding, fixture, Fixture, CORPUS};
-
-/// The row written into the local donor's partition dir by the fixture.
-const LOCAL_ONLY_TERM: &str = "alpha";
-/// The row that exists ONLY inside the tarball the peer serves.
-const PEER_ONLY_TERM: &str = "bravo";
+use super::merge_participants_coverage::{fixture, Fixture, CORPUS};
 
 /// Both ends of a collaborative ingest must agree on this exactly; the value
 /// itself is inert here because nothing embeds.
@@ -177,123 +171,22 @@ async fn queue_mode_handoff(f: &Fixture) -> (HandoffId, ShardManager) {
         "the peer donor must be in the participant set the merge reads",
     );
 
-    let manager =
-        ShardManager::new(f.engine.clone(), f.mesh_store.clone()).with_work_queue(queue);
+    let manager = ShardManager::new(f.port.clone(), f.mesh_store.clone()).with_work_queue(queue);
 
     (handoff_id, manager)
 }
 
-/// What a USER — or a peer reading `hosted_corpora` — can see.
+/// **B8, grants' half.** A queue-mode merge, driven through
+/// `coordinate_merge`, hands ingest both donors' partitions — the local one
+/// from disk, the peer's as it arrived over the wire — into the canonical,
+/// and then asks ingest to finalize it. The finalize is what
+/// `installed_indexes()`, `usable_indexes()` and `hosted_corpora` gossip gate
+/// on; that the pair lands a reachable corpus is the engine half.
 ///
-/// * `installed` is `installed_indexes()`, the list
-///   `sovereign_mesh::capabilities` hands to `build_hosted_corpora`. A corpus
-///   missing from it is advertised to nobody.
-/// * `usable` is `usable_indexes()`, corpus-engine's own single decider for
-///   "can I search it".
-/// * The two `Option<bool>`s are `None` when the corpus never reached
-///   `usable_indexes()` and the search therefore never ran.
-#[derive(Debug)]
-struct InstalledProbe {
-    installed: Vec<String>,
-    usable: Vec<String>,
-    dirs_on_disk: Vec<String>,
-    local_term_reachable: Option<bool>,
-    peer_term_reachable: Option<bool>,
-}
-
-async fn probe_installed(f: &Fixture) -> InstalledProbe {
-    let ids = |rows: Vec<corpus_index::types::IndexInfo>| -> Vec<String> {
-        rows.into_iter().map(|i| i.corpus_id).collect()
-    };
-    let installed = ids(f
-        .engine
-        .installed_indexes()
-        .await
-        .expect("installed_indexes must not fail on a temp dir this test owns"));
-    let usable = ids(f
-        .engine
-        .usable_indexes()
-        .await
-        .expect("usable_indexes must not fail on a temp dir this test owns"));
-
-    let mut dirs_on_disk: Vec<String> = std::fs::read_dir(&f.index_dir)
-        .expect("index dir")
-        .flatten()
-        .filter(|e| Corpus::meta_in(e.path()).exists())
-        .filter_map(|e| e.file_name().to_str().map(str::to_string))
-        .collect();
-    dirs_on_disk.sort();
-
-    let (local_term_reachable, peer_term_reachable) = if usable.iter().any(|c| c == CORPUS) {
-        let index = f
-            .engine
-            .open_index_for_corpus(CORPUS)
-            .await
-            .expect("a corpus usable_indexes() listed must open");
-        (
-            Some(term_reachable(&index, LOCAL_ONLY_TERM).await),
-            Some(term_reachable(&index, PEER_ONLY_TERM).await),
-        )
-    } else {
-        (None, None)
-    };
-
-    InstalledProbe {
-        installed,
-        usable,
-        dirs_on_disk,
-        local_term_reachable,
-        peer_term_reachable,
-    }
-}
-
-/// One spelling of "reachable", so it cannot come to mean two different things
-/// at the two altitudes below.
-async fn term_reachable(index: &CorpusIndex, term: &str) -> bool {
-    index
-        .search(&embedding(1.0), term, 10)
-        .await
-        .map(|hits| hits.iter().any(|h| h.content.contains(term)))
-        .unwrap_or(false)
-}
-
-/// The CORROBORATING reading: what the canonical directory holds, opened by
-/// path. It deliberately answers a different question from [`InstalledProbe`]
-/// — "are the bytes there" rather than "can anyone reach them" — and printing
-/// both is what tells a missing pull apart from a missing finalize.
-#[derive(Debug)]
-struct CanonicalProbe {
-    exists: bool,
-    chunk_count: u64,
-    local_term_on_disk: bool,
-    peer_term_on_disk: bool,
-}
-
-async fn probe_canonical(f: &Fixture) -> CanonicalProbe {
-    let path = Corpus::named(&f.index_dir, CORPUS)
-        .expect("non-empty corpus id")
-        .root();
-    let Ok(index) = CorpusIndex::open(&path).await else {
-        return CanonicalProbe {
-            exists: false,
-            chunk_count: 0,
-            local_term_on_disk: false,
-            peer_term_on_disk: false,
-        };
-    };
-    CanonicalProbe {
-        exists: true,
-        chunk_count: index.info().await.expect("canonical info").chunk_count,
-        local_term_on_disk: term_reachable(&index, LOCAL_ONLY_TERM).await,
-        peer_term_on_disk: term_reachable(&index, PEER_ONLY_TERM).await,
-    }
-}
-
-/// **B8.** A queue-mode merge, driven through `coordinate_merge`, yields a
-/// corpus in `installed_indexes()` and `usable_indexes()` that answers a query
-/// for a term only the remote donor contributed.
+/// Failing input, named: drop the finalize from `merge_participants` (the
+/// state before cw-lift 5g B8) and `port_acts` stops at `merge_partitions`.
 #[tokio::test]
-async fn a_queue_mode_merge_lands_a_corpus_a_user_can_reach() {
+async fn a_queue_mode_merge_hands_ingest_both_partitions_then_the_finalize() {
     let f = fixture().await;
     let (handoff_id, manager) = queue_mode_handoff(&f).await;
 
@@ -304,83 +197,33 @@ async fn a_queue_mode_merge_lands_a_corpus_a_user_can_reach() {
     // Fixture check first, so a broken harness cannot be misread as the bar
     // failing. `Ok(None)` here would mean "not the merge leader" or "no
     // resolvable participants" — neither is the subject.
-    let merged = outcome
+    outcome
         .as_ref()
         .expect("the queue-mode merge itself must not error")
         .as_ref()
         .expect("this node IS the merge leader for the seeded handoff");
 
-    let seen = probe_installed(&f).await;
-    let disk = probe_canonical(&f).await;
-
+    let merges = f.merges();
+    assert_eq!(merges.len(), 1, "one merge for the handoff: {merges:?}");
+    let mut inputs = merges[0].inputs.clone();
+    inputs.sort();
+    let mut want = vec![
+        (f.partition_of(f.local), 1),
+        (f.partition_of(f.reachable_peer), 1),
+    ];
+    want.sort();
     assert_eq!(
-        seen.peer_term_reachable,
-        Some(true),
-        "a queue-mode merge did not produce a corpus a user can reach.\n\
-         \n\
-         `peer-only term (installed)` is `None` when the corpus never reached \
-         `usable_indexes()` — the search was never asked, because nothing \
-         routes to a canonical that `installed_indexes()` skips on \
-         `is_ingestion_complete`. That is also the list `hosted_corpora` \
-         gossip is built from, so such a corpus is advertised to no peer \
-         either. The disk rows below say whether the bytes are there.\n\
-         \n\
-         merge returned              : chunks={} corpus={}\n\
-         installed_indexes()         : {:?}\n\
-         usable_indexes()            : {:?}\n\
-         canonical dirs on disk      : {:?}\n\
-         local-only term (installed) : {:?}\n\
-         peer-only term (installed)  : {:?}\n\
-         --- through CorpusIndex::open, which bypasses both gates ---\n\
-         canonical exists            : {}\n\
-         canonical chunk_count       : {} (expected 2: 1 local + 1 peer)\n\
-         local-only term (on disk)   : {}\n\
-         peer-only term (on disk)    : {}\n\
-         \n\
-         See `quality/campaigns/cw-lift-5g-part2-prereg.md` B8.",
-        merged.chunk_count,
-        merged.corpus_id,
-        seen.installed,
-        seen.usable,
-        seen.dirs_on_disk,
-        seen.local_term_reachable,
-        seen.peer_term_reachable,
-        disk.exists,
-        disk.chunk_count,
-        disk.local_term_on_disk,
-        disk.peer_term_on_disk,
+        inputs, want,
+        "both donors' partitions, one row each: `alpha` from this node's \
+         disk, `bravo` from the peer's tarball. The participant set came from \
+         the live queue, not from gossip.",
     );
+    assert_eq!(merges[0].output, f.canonical());
     assert_eq!(
-        seen.local_term_reachable,
-        Some(true),
-        "the LOCAL donor's chunk is unreachable through `usable_indexes()`, \
-         which is a different and worse defect than the one this bar is \
-         about. installed: {:?} | usable: {:?}",
-        seen.installed,
-        seen.usable,
+        f.port_acts(),
+        vec!["merge_partitions", "finalize_canonical"],
+        "a queue-mode merge must end in the finalize, or it writes chunks \
+         that no surface can see — the gap `coordinate_merge` had until B8",
     );
-    assert!(
-        seen.installed.iter().any(|c| c == CORPUS),
-        "the canonical is absent from `installed_indexes()`, so \
-         `build_hosted_corpora` advertises it to no peer on the mesh. \
-         installed: {:?} | dirs on disk: {:?}",
-        seen.installed,
-        seen.dirs_on_disk,
-    );
-    assert!(
-        seen.usable.iter().any(|c| c == CORPUS),
-        "the canonical is absent from `usable_indexes()`, so no local query \
-         routes to it. usable: {:?} | installed: {:?}",
-        seen.usable,
-        seen.installed,
-    );
-    assert_eq!(
-        disk.chunk_count, 2,
-        "both donors' rows must land: 1 each. A reachable peer term with the \
-         wrong count is a partial merge wearing a passing search.",
-    );
-    assert_eq!(
-        merged.chunk_count, 2,
-        "the merge must report the canonical it actually built",
-    );
+    assert_eq!(f.finalized(), vec![CORPUS.to_string()]);
 }

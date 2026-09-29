@@ -12839,7 +12839,6 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "bytes",
- "corpus-engine",
  "corpus-engine-yield",
  "corpus-index",
  "dirs 5.0.1",

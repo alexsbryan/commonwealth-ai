@@ -18,8 +18,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use corpus_engine::CorpusEngine;
-use corpus_index::types::EmbedFn;
+use corpus_index::ingest_port::double::IngestPortDouble;
 use kernel_types::{HandoffId, NodeId};
 use sovereign_contracts::peer::SoloReplicatedKv;
 use sovereign_grants::shard_manager::MergePlan;
@@ -74,14 +73,10 @@ async fn spawn_recorder() -> (String, Heads) {
 async fn pull_once(mesh_proof: Option<(&str, &str)>) -> String {
     let tmp = tempfile::tempdir().unwrap();
     let (url, heads) = spawn_recorder().await;
-    let embed: EmbedFn = Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0f32; 8]) }));
-    let index_dir = tmp.path().join("indexes");
-    let engine = Arc::new(CorpusEngine::new(
-        tmp.path().join("recipes"),
-        index_dir.clone(),
-        embed,
-    ));
-    let manager = ShardManager::new(engine.clone(), Arc::new(SoloReplicatedKv::new()));
+    // Ingest's port with only its index dir: the pull fails before any merge
+    // (the recorder answers 404), and an unprogrammed merge would say so.
+    let port = Arc::new(IngestPortDouble::new().with_index_dir(tmp.path().join("indexes")));
+    let manager = ShardManager::new(port, Arc::new(SoloReplicatedKv::new()));
 
     let local = NodeId::from_u128(1);
     let peer = NodeId::from_u128(2);

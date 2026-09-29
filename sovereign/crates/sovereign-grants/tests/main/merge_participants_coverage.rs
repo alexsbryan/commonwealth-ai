@@ -24,13 +24,24 @@
 //! is the guard; `merges_the_same_two_shards_when_no_bar_is_set` is its
 //! negative control, because a guard test over a harness that never
 //! merges anything passes for the wrong reason.
+//!
+//! # Split at the port (pb-grants-merge, phase-b-47)
+//!
+//! Grants decides who participates and pulls the peers' partitions; the
+//! merge and the finalize are ingest's, reached through
+//! `PartitionMergePort`. So the manager here drives `IngestPortDouble`, and
+//! these tests assert what grants HANDS the port: which partition dirs,
+//! holding what, into which canonical, then the finalize. What ingest does
+//! with those two partitions (one canonical, two rows, reachable) is proven
+//! on `impl PartitionMergePort for CorpusEngine` over the same fixtures, in
+//! corpus-engine's `partition_merge_port_parity`.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{InsertChunk, InsertCodeMeta};
-use corpus_index::{corpus::Corpus, index::CorpusIndex, types::EmbedFn};
+use corpus_index::ingest_port::double::IngestPortDouble;
+use corpus_index::{corpus::Corpus, index::CorpusIndex};
 use kernel_types::{HandoffId, NodeId};
 use sovereign_contracts::peer::SoloReplicatedKv;
 use sovereign_grants::shard_manager::MergePlan;
@@ -39,12 +50,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub(crate) const EMBED_DIM: usize = 8;
 pub(crate) const CORPUS: &str = "coverage";
-
-/// Never called: `merge_participants` merges vectors that already exist.
-/// Present only because `CorpusEngine::new` requires one.
-pub(crate) fn unused_embed_fn() -> EmbedFn {
-    Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0f32; EMBED_DIM]) }))
-}
 
 pub(crate) fn embedding(seed: f32) -> Vec<f32> {
     (0..EMBED_DIM).map(|i| seed + i as f32 * 0.1).collect()
@@ -143,14 +148,90 @@ pub(crate) async fn serve_tarball(tar: Vec<u8>) -> String {
     format!("http://{addr}")
 }
 
+/// One `merge_partitions` call the port received: each input dir with the
+/// chunk count it held AT CALL TIME (the manager deletes merged shard dirs
+/// afterwards), and the output dir.
+#[derive(Debug, Clone)]
+pub(crate) struct MergeCall {
+    pub(crate) inputs: Vec<(PathBuf, u64)>,
+    pub(crate) output: PathBuf,
+}
+
+/// What grants handed ingest's port, in order.
+#[derive(Default)]
+pub(crate) struct PortLog {
+    pub(crate) merges: Mutex<Vec<MergeCall>>,
+    pub(crate) finalized: Mutex<Vec<String>>,
+}
+
+/// Ingest's merge port as a double, rooted at `index_dir`.
+///
+/// Its merge records what each input held, then creates the canonical at
+/// the output with the leaf's own `CorpusIndex::create`, empty, because
+/// `merge_participants` opens it before the finalize. It merges no rows:
+/// what ingest writes is proven on the engine. With `fail_from_merge =
+/// Some(n)`, call `n` and every later one answer the error ingest gives for
+/// a canonical whose table already exists.
+pub(crate) fn merge_port(
+    index_dir: &Path,
+    log: Arc<PortLog>,
+    fail_from_merge: Option<usize>,
+) -> IngestPortDouble {
+    let merges = Arc::clone(&log);
+    let finalized = log;
+    IngestPortDouble::new()
+        .with_index_dir(index_dir)
+        .on_merge_partitions(move |inputs, output| {
+            let log = Arc::clone(&merges);
+            Box::pin(async move {
+                let mut seen = Vec::new();
+                for dir in &inputs {
+                    let rows = CorpusIndex::open(dir).await?.info().await?.chunk_count;
+                    seen.push((dir.clone(), rows));
+                }
+                let nth = {
+                    let mut calls = log.merges.lock().expect("merges lock");
+                    calls.push(MergeCall {
+                        inputs: seen,
+                        output: output.clone(),
+                    });
+                    calls.len()
+                };
+                if fail_from_merge.is_some_and(|n| nth >= n) {
+                    return Err(corpus_index::Error::Database(
+                        "Table 'chunks' already exists".into(),
+                    ));
+                }
+                let canonical = CorpusIndex::create(
+                    &output,
+                    CORPUS,
+                    "Coverage Corpus",
+                    "test-model",
+                    EMBED_DIM,
+                    true,
+                    "MIT",
+                )
+                .await?;
+                canonical.info().await
+            })
+        })
+        .on_finalize_canonical(move |corpus_id| {
+            finalized
+                .finalized
+                .lock()
+                .expect("finalized lock")
+                .push(corpus_id.to_string());
+            Ok(())
+        })
+}
+
 pub(crate) struct Fixture {
     _tmp: tempfile::TempDir,
     pub(crate) index_dir: PathBuf,
-    /// The engine the manager writes through. Exposed so a reader can ask the
-    /// USER-ALTITUDE questions — `installed_indexes()`, `usable_indexes()`,
-    /// `open_index_for_corpus()` — of the same engine that did the merge,
-    /// rather than a second one built over the same directory.
-    pub(crate) engine: Arc<CorpusEngine>,
+    /// Everything the manager handed ingest's port.
+    pub(crate) log: Arc<PortLog>,
+    /// The double the manager holds, for its call order.
+    pub(crate) port: Arc<IngestPortDouble>,
     /// The gossip store the manager loads handoffs from. Exposed so a caller
     /// can seed a handoff blob and drive `coordinate_merge`.
     pub(crate) mesh_store: Arc<SoloReplicatedKv>,
@@ -161,6 +242,40 @@ pub(crate) struct Fixture {
     pub(crate) peer_urls: Vec<(NodeId, String)>,
 }
 
+impl Fixture {
+    /// Where `node`'s partition dir sits: this node's own on disk, a peer's
+    /// once the pull lands it.
+    pub(crate) fn partition_of(&self, node: NodeId) -> PathBuf {
+        Corpus::named(&self.index_dir, CORPUS)
+            .expect("non-empty corpus id")
+            .partition(&node.to_string())
+    }
+
+    pub(crate) fn canonical(&self) -> PathBuf {
+        Corpus::named(&self.index_dir, CORPUS)
+            .expect("non-empty corpus id")
+            .root()
+    }
+
+    pub(crate) fn merges(&self) -> Vec<MergeCall> {
+        self.log.merges.lock().expect("merges lock").clone()
+    }
+
+    pub(crate) fn finalized(&self) -> Vec<String> {
+        self.log.finalized.lock().expect("finalized lock").clone()
+    }
+
+    /// The port's merge-family calls, in order (its `index_dir` reads left
+    /// out: they are paths, not acts).
+    pub(crate) fn port_acts(&self) -> Vec<&'static str> {
+        self.port
+            .calls()
+            .into_iter()
+            .filter(|c| *c != "index_dir")
+            .collect()
+    }
+}
+
 /// Three participants, two of whom can be resolved:
 ///
 /// * `local` — its partition dir is on disk.
@@ -168,6 +283,11 @@ pub(crate) struct Fixture {
 /// * `silent_peer` — no entry in `peer_shard_base_urls`, so it is
 ///   skipped exactly as an unaddressable peer is in production.
 pub(crate) async fn fixture() -> Fixture {
+    fixture_failing_from(None).await
+}
+
+/// [`fixture`], with the port's merge failing from call `n` on.
+pub(crate) async fn fixture_failing_from(n: Option<usize>) -> Fixture {
     let tmp = tempfile::tempdir().expect("tempdir");
     let index_dir = tmp.path().join("indexes");
     std::fs::create_dir_all(&index_dir).expect("mkdir index_dir");
@@ -191,18 +311,16 @@ pub(crate) async fn fixture() -> Fixture {
     let tar = tar_contents_of(&staging, &tmp.path().join("peer.tar"));
     let url = serve_tarball(tar).await;
 
-    let engine = Arc::new(CorpusEngine::new(
-        tmp.path().join("recipes"),
-        index_dir.clone(),
-        unused_embed_fn(),
-    ));
+    let log = Arc::new(PortLog::default());
+    let port = Arc::new(merge_port(&index_dir, Arc::clone(&log), n));
     let mesh_store = Arc::new(SoloReplicatedKv::new());
-    let manager = ShardManager::new(engine.clone(), mesh_store.clone());
+    let manager = ShardManager::new(port.clone(), mesh_store.clone());
 
     Fixture {
         _tmp: tmp,
         index_dir,
-        engine,
+        log,
+        port,
         mesh_store,
         manager,
         local,
@@ -253,13 +371,22 @@ async fn refuses_when_coverage_falls_short_of_the_bar() {
         other => panic!("expected IncompleteCoverage; got {other:?}"),
     }
 
-    // The load-bearing half: nothing that looks complete was produced.
+    // The load-bearing half: nothing was handed to ingest to merge, so
+    // nothing that looks complete can have been produced.
     assert!(
-        !Corpus::named(&f.index_dir, CORPUS)
-            .expect("non-empty corpus id")
-            .is_installed(),
+        f.port_acts().is_empty(),
+        "a refused merge must reach neither the merge nor the finalize; \
+         the port saw {:?}",
+        f.port_acts(),
+    );
+    assert!(
+        !f.canonical().exists(),
         "a refused merge must leave no canonical behind",
     );
+    // The resolved shards stay where they are: the refusal returns before
+    // the cleanup that follows a merge.
+    assert!(f.partition_of(f.local).exists());
+    assert!(f.partition_of(f.reachable_peer).exists());
 }
 
 #[tokio::test]
@@ -271,29 +398,33 @@ async fn merges_the_same_two_shards_when_no_bar_is_set() {
     let f = fixture().await;
     let participants = [f.local, f.reachable_peer, f.silent_peer];
 
-    let info = f
-        .manager
+    f.manager
         .merge_participants(plan(&f, &participants, None))
         .await
         .expect("unbarred merge must succeed")
         .expect("merge_participants returns the merged index");
 
+    let merges = f.merges();
+    assert_eq!(merges.len(), 1, "one merge per plan: {merges:?}");
     assert_eq!(
-        info.chunk_count, 2,
-        "alpha from local + bravo from the peer"
+        merges[0].inputs,
+        vec![
+            (f.partition_of(f.local), 1),
+            (f.partition_of(f.reachable_peer), 1),
+        ],
+        "alpha's partition from disk + bravo's, pulled over the wire into \
+         its partition dir, one row each",
     );
-    assert!(
-        Corpus::named(&f.index_dir, CORPUS)
-            .expect("non-empty corpus id")
-            .is_installed(),
-        "the canonical must exist after an unbarred merge",
+    assert_eq!(merges[0].output, f.canonical());
+    assert_eq!(
+        f.port_acts(),
+        vec!["merge_partitions", "finalize_canonical"],
+        "the merge ends in the finalize that makes the canonical reachable",
     );
+    assert_eq!(f.finalized(), vec![CORPUS.to_string()]);
     // Shard-dir cleanup is part of what moved out of `coordinate_merge`.
     assert!(
-        !Corpus::named(&f.index_dir, CORPUS)
-            .expect("non-empty corpus id")
-            .partition(&f.local.to_string())
-            .exists(),
+        !f.partition_of(f.local).exists() && !f.partition_of(f.reachable_peer).exists(),
         "merged shard dirs are cleaned up",
     );
 }

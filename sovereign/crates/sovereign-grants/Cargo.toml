@@ -8,7 +8,6 @@ license.workspace = true
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }
 corpus-engine-yield = { workspace = true }
-corpus-engine = { workspace = true }
 corpus-index = { workspace = true }
 # `ReplicatedKv` for the handoff/processed-shards KV and `ShardTransferLedger`
 # for the one ledger write — the store seam (five-programs fp-94, -53).
