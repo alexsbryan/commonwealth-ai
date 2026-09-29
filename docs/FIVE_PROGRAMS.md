@@ -946,6 +946,12 @@ leaf's openers), the artifact becomes a checked-in fixture. It lives in the
 leaf that reads its format, behind the same `test-doubles` accessor, and has
 one writer: an engine test regenerates it and asserts the fresh store and
 the checked-in one read the same.
+Phase-b-52 adds a third. Where the implementor's read is itself a delegation
+to the leaf's reader (`CorpusEngine` lists indexes through
+`corpus_index::FsIndexSource`), the double delegates to that same reader
+over the test's fixture dir rather than re-implementing it, so the double
+holds no second copy of the decider. The engine side then re-asserts only
+the behaviour the engine adds past the delegation.
 
 ### Seams with prerequisite chains — MEASURED 2026-09-21 (87 at 1c307943c)
 
