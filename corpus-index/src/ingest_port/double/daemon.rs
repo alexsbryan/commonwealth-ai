@@ -342,9 +342,8 @@ impl IngestPort for IngestPortDouble {
     }
 }
 
-type HarnessRunFn = dyn Fn(&Path, &Path, bool) -> std::result::Result<HarnessRunCardView, String>
-    + Send
-    + Sync;
+type HarnessRunFn =
+    dyn Fn(&Path, &Path, bool) -> std::result::Result<HarnessRunCardView, String> + Send + Sync;
 
 /// The recipe harness's double: an unprogrammed run refuses, naming itself.
 /// A daemon test that only slots a harness holds this; one that drives a
@@ -382,7 +381,9 @@ impl RecipeHarnessPort for RecipeHarnessDouble {
     ) -> std::result::Result<HarnessRunCardView, String> {
         match &self.run {
             Some(f) => f(harness_root, index_dir, enrich),
-            None => Err("RecipeHarnessDouble::run_recipe_harness: not programmed by this test".into()),
+            None => {
+                Err("RecipeHarnessDouble::run_recipe_harness: not programmed by this test".into())
+            }
         }
     }
 }

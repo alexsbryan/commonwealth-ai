@@ -30,12 +30,12 @@ use super::{
     SourceFileProgress, WatchedUpdate, WatchedUpdateProgressFn,
 };
 use crate::fs_source::FsIndexSource;
-use sovereign_contracts::daemon_wire::RecipeParameterSchema;
 use crate::index::CorpusIndex;
 use crate::recipe::CatalogConfig;
 use crate::source::{CorpusReadPort, IndexSource};
 use crate::types::{BuiltinCorpus, EmbedFn, IncompleteIngest, IndexInfo};
 use crate::{Error, Result};
+use sovereign_contracts::daemon_wire::RecipeParameterSchema;
 
 mod daemon;
 pub use daemon::RecipeHarnessDouble;
