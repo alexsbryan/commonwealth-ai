@@ -238,7 +238,7 @@ pub fn build_corpus_engine(
         // no atlas/atoms.json. Same provider already drives embed +
         // batch_embed above.
         let inference_fn =
-            sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
+            corpus_engine::enrichment::provider_inference::inference_to_inference_fn(Arc::clone(&provider));
         // Conv-tiered enrichment provider — spec
         // `sovereign/docs/specs/CONV_TIERED_PORT.md`. Constructed by the
         // shared builder (same `FolderTieredProvider` the desktop's embedded

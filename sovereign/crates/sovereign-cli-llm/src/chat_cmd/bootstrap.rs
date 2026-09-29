@@ -239,7 +239,7 @@ async fn build_session_scoped(
     };
     eprintln!("Indexes:     {}", indexes_dir.display());
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
-    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
+    let inference_fn = corpus_engine::enrichment::provider_inference::inference_to_inference_fn(Arc::clone(&inference));
     // The engine's `expected_embedding_model` flows into
     // `_corpus_meta.json` at ingest time and into shard-consistency
     // checks. The CLI doesn't ingest during chat, but if any tool

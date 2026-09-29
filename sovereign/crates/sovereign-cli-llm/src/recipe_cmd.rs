@@ -348,7 +348,7 @@ async fn run_enrich_and_verify(
             sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(&embed_model),
         ));
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&provider));
-    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
+    let inference_fn = corpus_engine::enrichment::provider_inference::inference_to_inference_fn(Arc::clone(&provider));
 
     // Reconstruct the frozen source (I3 — no network) and point an inline recipe
     // at it, so `ingest` runs over exactly the frozen bytes.

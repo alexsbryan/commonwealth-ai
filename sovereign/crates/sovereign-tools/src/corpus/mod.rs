@@ -210,8 +210,6 @@ pub fn inference_to_batch_embed_fn(
     })
 }
 
-pub use corpus_engine::enrichment::provider_inference::inference_to_inference_fn;
-
 /// A parser that converts a raw corpus source (file or directory) into
 /// a streaming iterator of DocumentChunks.
 ///
