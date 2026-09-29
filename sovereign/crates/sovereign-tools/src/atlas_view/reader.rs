@@ -12,10 +12,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use corpus_engine_atlas_reader::ports::AtlasPort;
-use understanding_vocab::read::ATLAS_DIRNAME;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use understanding_vocab::atoms::AtomType;
+use understanding_vocab::read::ATLAS_DIRNAME;
 
 /// One row in the corpus picker.
 ///
@@ -660,13 +660,19 @@ mod tests {
 
     fn make_reader() -> (TempDir, FileAtlasReader) {
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         (tmp, reader)
     }
 
     #[tokio::test]
     async fn list_corpora_returns_empty_when_indexes_dir_missing() {
-        let reader = FileAtlasReader::new(PathBuf::from("/this/path/does/not/exist/xyz"), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            PathBuf::from("/this/path/does/not/exist/xyz"),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         let summaries = reader.list_corpora().await.unwrap();
         assert!(summaries.is_empty());
     }
@@ -921,7 +927,10 @@ mod tests {
     #[tokio::test]
     async fn build_report_separates_unbuilt_from_undeclared() {
         let tmp = TempDir::new().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
 
         // No atlas dir at all is the one error case.
         assert!(reader.build_report("nothing-here").await.is_err());
@@ -1096,7 +1105,10 @@ mod tests {
 
     #[tokio::test]
     async fn list_members_returns_empty_when_indexes_dir_missing() {
-        let reader = FileAtlasReader::new(PathBuf::from("/this/path/does/not/exist/xyz"), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            PathBuf::from("/this/path/does/not/exist/xyz"),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         assert!(reader.list_members("sep").await.unwrap().is_empty());
     }
 
@@ -1158,7 +1170,10 @@ mod tests {
                 .unwrap_or_else(|e| panic!("copying {f}: {e}"));
         }
 
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         let rows = reader.list_corpora().await.expect("list_corpora succeeds");
         let row = rows
             .iter()

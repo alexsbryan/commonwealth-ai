@@ -95,7 +95,8 @@ pub async fn build_corpus_raptor_index(
 
     match atlas
         .build_raptor_index(corpus_dir, &rows, source_version)
-        .await {
+        .await
+    {
         Ok(0) => RaptorIndexOutcome::Empty,
         Ok(rows_written) => RaptorIndexOutcome::Built { rows: rows_written },
         Err(e) => RaptorIndexOutcome::Failed {

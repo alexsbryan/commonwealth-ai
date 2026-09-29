@@ -618,7 +618,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("wiki").join("atlas");
         write_atoms(&atlas_dir, atoms);
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         (tmp, reader, atlas_dir)
     }
 
@@ -746,7 +749,10 @@ mod tests {
                 },
             ],
         );
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
             .await
@@ -799,7 +805,10 @@ mod tests {
                 provenance: EdgeProvenance::LlmExtraction,
             }],
         );
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
             .await
@@ -877,7 +886,10 @@ mod tests {
             e.participants.clear();
         }
         write_atoms(&atlas_dir, vec![hume.clone(), claim_with_attribution]);
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         let detail = reader
             .get_atom_detail("wiki", "claim-0001")
             .await
@@ -918,7 +930,10 @@ mod tests {
             evidence_kind: None,
         });
         write_atoms(&atlas_dir, vec![dangling_claim]);
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         let detail = reader
             .get_atom_detail("wiki", "claim-0001")
             .await
@@ -961,7 +976,10 @@ mod tests {
                 },
             }],
         );
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
             .await

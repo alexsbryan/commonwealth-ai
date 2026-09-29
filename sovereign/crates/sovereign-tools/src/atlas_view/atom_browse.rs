@@ -460,7 +460,10 @@ mod tests {
 
     fn make_atlas() -> (TempDir, FileAtlasReader) {
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         write_atoms(
             &tmp.path().join("wiki").join("atlas"),
             vec![
@@ -517,7 +520,10 @@ mod tests {
     #[tokio::test]
     async fn list_atoms_filters_by_declared_subtype() {
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         let typed = |id: usize, name: &str, t: &str| match entity(id, name, 0.5) {
             AtomEnvelope::Entity(mut e) => {
                 e.entity_type = EntityType::Other(t.into());
@@ -727,7 +733,10 @@ mod tests {
     #[tokio::test]
     async fn list_atoms_truncates_long_content_in_display_name() {
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         let long = "x".repeat(200);
         write_atoms(&tmp.path().join("c").join("atlas"), vec![claim(1, &long)]);
         let page = reader
@@ -847,7 +856,10 @@ mod tests {
     #[tokio::test]
     async fn list_atoms_sorts_fresh_docs_first() {
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         let corpus_dir = tmp.path().join("news");
         // Insertion order: Alpha, Beta, Gamma.
         write_atoms(
@@ -888,7 +900,10 @@ mod tests {
         // No `_doc_freshness.json` → empty map → no reordering, no
         // updated_at. Proves the feature is inert for baseline corpora.
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf(), std::sync::Arc::new(corpus_engine::IngestAtlas));
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(corpus_engine::IngestAtlas),
+        );
         write_atoms(
             &tmp.path().join("c").join("atlas"),
             vec![
