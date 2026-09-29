@@ -751,3 +751,20 @@ pub const fn latency_to_speed(class: LatencyClass) -> Speed {
         LatencyClass::Normal | LatencyClass::Extended => Speed::Slow,
     }
 }
+
+/// Sampling pins a caller sets on one turn or one role: svrn's turn wire
+/// (`TurnRequest::Message::sampling`) and agent-tools' role profiles share
+/// this one definition (phase-b-56, principle 8). `None` fields fall back to
+/// the caller's inference config.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SamplingOverrides {
+    /// Generation temperature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+    /// Nucleus-sampling cutoff.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+    /// Maximum tokens to generate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+}

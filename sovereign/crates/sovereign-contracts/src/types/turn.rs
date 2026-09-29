@@ -618,17 +618,8 @@ pub fn is_degenerate_message(message: &str) -> bool {
     !message.chars().any(|c| c.is_alphanumeric())
 }
 
-/// Per-role sampling overrides — lifted from the agent-tools shape. `None`
-/// fields fall back to the caller's inference config.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct SamplingOverrides {
-    /// Generation temperature.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f32>,
-    /// Nucleus-sampling cutoff.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f32>,
-    /// Maximum tokens to generate.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_tokens: Option<u32>,
-}
+/// Per-turn and per-role sampling pins. Defined in `oicp-types` beside
+/// `CompletionRequest`, the wire that carries the same three knobs, so the
+/// bench package's agent-tools names it without linking this crate
+/// (decision phase-b-56).
+pub use oicp_types::completion::SamplingOverrides;

@@ -12221,6 +12221,7 @@ name = "sovereign-agent-tools"
 version = "0.8.0"
 dependencies = [
  "async-trait",
+ "oicp-types",
  "proc-macro2",
  "serde",
  "serde_json",
