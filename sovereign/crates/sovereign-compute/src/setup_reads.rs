@@ -34,7 +34,7 @@ pub fn bundle() -> RouteBundle {
 /// `{"error": "<message>"}`, the daemon's refusal shape
 /// (sovereign-daemon http_response::json_error), so a read answers alike
 /// from either process.
-fn json_error(status: StatusCode, message: &str) -> Response {
+pub(crate) fn json_error(status: StatusCode, message: &str) -> Response {
     (status, Json(serde_json::json!({ "error": message }))).into_response()
 }
 

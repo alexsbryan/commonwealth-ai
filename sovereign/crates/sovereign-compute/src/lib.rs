@@ -30,6 +30,7 @@
 //!   serving process installs out; [`containment`] is its admission guard.
 
 pub mod assembly;
+pub mod assets;
 pub mod child;
 pub mod child_main;
 pub mod client;

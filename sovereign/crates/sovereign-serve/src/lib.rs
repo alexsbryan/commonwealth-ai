@@ -360,6 +360,8 @@ pub async fn assemble(
     ));
     let mut routes = bundles(Arc::clone(&cell) as Arc<dyn InferenceProvider>);
     routes.push(self_report::bundle(Arc::clone(&cell)));
+    // serve's weights: the NER read and the download job, into this root.
+    routes.push(sovereign_compute::assets::bundle(data_dir.join("models")));
     routes.push(reload::bundle(
         Arc::clone(&cell),
         parts.reload_factory,
