@@ -1418,6 +1418,21 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   - Nothing a user sees changes: no verb, flag or output moves, and the probe is hidden.
   - Boundary gate: 20 at 6f905904b. This commit changes no Rust.
 
+**phase-b-59 · 2026-09-29 · pb-bench-dials-whitebox · director** — this commit
+- Needed: the worker built everything on the row except one bullet. That bullet said promote's rerank ablation arms become probe flags. The worker found the premise false and stopped with NEEDS_HUMAN.
+- Chose: the package's option (i), with one correction.
+  - The row closes at 17135b45c without the bullet, and its census test keeps four needles.
+  - The bullet's outcome moves to pb-bench-dials: no `SOVEREIGN_RERANK_*` is set in bench's process. The fifth needle, `set_var("SOVEREIGN_RERANK`, moves into that row's PROOF.
+  - The correction: pb-bench-dials does NOT pre-decide that `--param rerank.*` is refused. Its census prices a wire form for the two knobs on the `sampling` precedent. If that does not fit, it writes NEEDS_HUMAN.
+- Because:
+  - The premise is false, reproduced here. `run_arm` (promote.rs:395-404) calls `set_env` and then `build_session`, and runs full answer turns through `run_live`. It then judges abstention from the visible answer. No probe stage produces an answer.
+  - The env's only reader is `build_session`, and pb-bench-dials removes it. A row owns an outcome when it owns the thing that makes it true.
+  - Rejected: (ii), a fourth answer-turn stage on the probe. It would be a second turn driver beside pb-bench-dials' HTTP dial (principle 8).
+  - Not decided here: (iii), a per-turn rerank wire field. It is a new svrn contract field that this session cannot trial (the charter's census rule), so pb-bench-dials' census prices it.
+  - The package said refusing the flag was "already stated" on pb-bench-dials. It was not. That row names only chaos_monkey's `--warm-atlas`. `rerank.*` are promote's only supported `--param`s, so refusing them would make `svrn bench promote` a verb that no longer works. The charter reserves that for the operator.
+  - Boundary gate: EXIT=1, 20 violations (delta 0). This commit changes no Rust.
+- REVIEW-AFTER: pb-bench-dials' census. It is falsified if promote's arms turn out to reach svrn some other way than `build_session`'s env read.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -12247,5 +12262,24 @@ REVIEW-AFTER: the operator's answer on the parked package.
 <details><summary>evidence</summary>
 
 The parked package, with the worker's census and the director's options (a) to (e), is archived at target/ralph/phase-b/parked-pb-bench-dials-whitebox.phase-b-57.md. Both precedents were read in this session: all.rs:570-592 spawns `eval run --routing-only` and parses `RoutingRun` loosely as `serde_json::Value`; the dispatcher comment at main.rs:1254 routes "the hidden introspection verbs" on `rest[0]`. The LIFT of ~1,300 is phase-b-57's (d) price, which is unmeasured beyond that census. The census may split the row into -probe and -score by proof.
+
+</details>
+
+## phase-b-59 · 2026-09-29 — promote's rerank arms are pb-bench-dials', not the probe's
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced in this session:
+
+- promote.rs:395-404: `run_arm` calls `settings.set_env(&args.corpus)`, then `build_session(globals)`. promote.rs:447: `run_live(session, corpus, &probe.query)`.
+- scaffolding_param.rs:77-89: `set_env` sets the three `SOVEREIGN_RERANK_*` vars. Its only caller is promote.rs:403 (grep over cli-llm src).
+- promote's HELP (promote.rs:53): the only supported `--param`s are `rerank.enabled` and `rerank.candidates_k`.
+- The census needles at cli-llm lib.rs:296-301 are `.router.classify(`, `.retrieve_evidence(`, `.search_with_rerank(` and `.lane_sources`.
+- The same-verdict comparator was re-run on the saved outputs in target/ralph/phase-b/whitebox-proof/:
+  - routing: IDENTICAL, 0 diffs.
+  - raw: IDENTICAL, 0 diffs.
+  - prod: 7 diffs, and every one is in the pre-registered noise classes. The worker's figure matches.
+
+The package is the worker's NEEDS_HUMAN at 17135b45c. It is removed in this commit, and its content is recorded here and in the rewritten rows.
 
 </details>
