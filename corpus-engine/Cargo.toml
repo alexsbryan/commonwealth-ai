@@ -68,6 +68,9 @@ understanding-atlas = { workspace = true }
 # and a dependency carried entirely by free functions and consts is invisible to
 # it. Recorded in quality/ARCH_LAYERS.toml rather than left implicit.
 sovereign-contracts = { workspace = true }
+# The protocol recipe-test report the daemon port projects onto
+# (engine/daemon_port.rs, pb-ingest-dial-daemon-ports).
+oicp-types = { workspace = true }
 
 # YieldHook contract (Tier-0 leaf, zero deps). Extracted from
 # corpus-engine/src/yield_hook.rs during the watchers carve-out so the

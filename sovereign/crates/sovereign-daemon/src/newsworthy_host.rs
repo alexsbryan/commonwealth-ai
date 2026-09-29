@@ -383,7 +383,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
         let work = incremental_work;
         tokio::spawn(async move {
             for c in &work {
-                let outcome = apply_incremental(
+                let outcome = corpus_engine::engine::daemon_port::apply_incremental(
                     engine.clone(),
                     indexes_dir.clone(),
                     c.corpus_id.clone(),
@@ -424,7 +424,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
                         // logged; no further fallback for portal
                         // because the legacy path is structurally
                         // wrong for this corpus shape.
-                        let retry = apply_incremental(
+                        let retry = corpus_engine::engine::daemon_port::apply_incremental(
                             engine.clone(),
                             indexes_dir.clone(),
                             c.corpus_id.clone(),
@@ -491,138 +491,6 @@ impl NewsworthyHost for MeshNewsworthyHost {
             }
         });
     }
-}
-
-/// Move 6 P5.a.1 incremental computation. Returns `Err(reason)` if
-/// the caller should fall back to a full rebuild; `Ok(())` on
-/// success (or on no-op when the delta carried no doc_ids).
-async fn apply_incremental(
-    engine: std::sync::Arc<corpus_engine::engine::CorpusEngine>,
-    indexes_dir: std::path::PathBuf,
-    corpus_id: String,
-    role: &'static str,
-    doc_ids: Vec<String>,
-) -> Result<(), String> {
-    use corpus_engine::enrichment::atlas::atoms_delta::apply_atom_delta;
-    use corpus_engine::enrichment::atlas::strategies::newsworthy_events::extract_atoms_for_portal_chunks;
-    use corpus_engine::enrichment::atlas::strategies::structure_first::{
-        aggregate_articles_from_chunks, extract_atoms_for_articles, StructureFirstConfig,
-    };
-    use corpus_engine::meta_atlas::rebuild_for_corpus;
-    use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
-
-    if doc_ids.is_empty() {
-        return Ok(());
-    }
-
-    let started = std::time::Instant::now();
-    let atlas_dir = indexes_dir.join(&corpus_id).join(ATLAS_DIRNAME);
-
-    // Pre-flight: only run the incremental path against an atlas
-    // that's already migrated to content-hash ids. Sequential-id
-    // atlases mix with content-hash atoms badly (apply_atom_delta
-    // would leave the legacy atoms orphaned).
-    let atoms_file = match read_atlas_atoms(&atlas_dir) {
-        Ok(a) => a,
-        Err(e) => return Err(format!("read atoms.json at {}: {e}", atlas_dir.display())),
-    };
-    if !atoms_file.atoms().is_empty()
-        && !atoms_file
-            .atoms()
-            .iter()
-            .all(|env| env.id().is_content_hash())
-    {
-        return Err(
-            "atoms.json contains sequential-id atoms; run `sovereign atlas migrate-ids` first"
-                .to_string(),
-        );
-    }
-    let atoms_before = atoms_file.atoms().len();
-    drop(atoms_file);
-
-    // Query LanceDB for the tick's chunks.
-    let index = engine
-        .open_index_for_corpus(&corpus_id)
-        .await
-        .map_err(|e| format!("open_index_for_corpus({corpus_id}): {e}"))?;
-    let chunks = index
-        .chunks_by_source_doc_ids(&doc_ids)
-        .await
-        .map_err(|e| format!("chunks_by_source_doc_ids({} ids): {e}", doc_ids.len()))?;
-    let chunk_count = chunks.len();
-
-    // Strategy dispatch keyed off the watcher-supplied role.
-    //
-    // `portal` → wikipedia-newsworthy daily Portal:Current_events pages.
-    //   Each chunk IS a single event bullet — extract per-bullet Event
-    //   atoms + wikilink Entity placeholders via `newsworthy_events`.
-    //
-    // `refresh` → the parent `wikipedia` corpus's tracked-window
-    //   articles. Each chunk is a section of a real article — keep the
-    //   structure_first one-Entity-per-article shape.
-    //
-    // Any future role falls back to structure_first; new roles should
-    // add their dispatch branch here together with the extractor that
-    // matches the corpus's chunk shape.
-    let (delta_atoms, delta_edges, articles_count) = if role == "portal" {
-        let delta = extract_atoms_for_portal_chunks(&chunks, &corpus_id);
-        let event_count = delta
-            .atoms_delta
-            .upserted_docs
-            .iter()
-            .filter(|(d, _)| d != "_placeholders")
-            .map(|(_, atoms)| atoms.len())
-            .sum::<usize>();
-        (delta.atoms_delta, delta.edges, event_count)
-    } else {
-        let agg = aggregate_articles_from_chunks(&chunks);
-        let cfg = StructureFirstConfig {
-            source_corpus_id: corpus_id.clone(),
-            ..Default::default()
-        };
-        let delta = extract_atoms_for_articles(&agg.articles, &corpus_id, &cfg);
-        (delta.atoms_delta, delta.edges, agg.articles.len())
-    };
-    // edges already live inside delta_atoms.added_edges; drop the
-    // separate handle to silence dead-code warnings on the `portal`
-    // branch where we don't apply edges twice.
-    let _ = delta_edges;
-
-    // Apply.
-    let summary = apply_atom_delta(&atlas_dir, delta_atoms)
-        .map_err(|e| format!("apply_atom_delta({}): {e}", atlas_dir.display()))?;
-
-    // Meta-atlas: refresh anchors for this corpus only.
-    let meta_outcome = match rebuild_for_corpus(&indexes_dir, &corpus_id, None) {
-        Ok(_) => "ok",
-        Err(e) => {
-            tracing::warn!(
-                corpus_id = %corpus_id,
-                role = %role,
-                error = %e,
-                "newsworthy.atlas_meta_partial_rebuild_failed — meta-atlas anchors may lag until next full build"
-            );
-            "failed"
-        }
-    };
-
-    tracing::info!(
-        corpus_id = %corpus_id,
-        role = %role,
-        doc_count = doc_ids.len(),
-        chunk_count,
-        articles_aggregated = articles_count,
-        atoms_before = summary.atoms_before,
-        atoms_after = summary.atoms_after,
-        atoms_added = summary.atoms_added,
-        atoms_removed = summary.atoms_removed,
-        docs_upserted = summary.docs_upserted,
-        meta_atlas = meta_outcome,
-        wall_ms = started.elapsed().as_millis() as u64,
-        atoms_before_query = atoms_before,
-        "newsworthy.atlas_incremental_complete"
-    );
-    Ok(())
 }
 
 /// Delete every file inside the corpus's atlas dir, leaving the

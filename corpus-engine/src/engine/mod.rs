@@ -15,6 +15,7 @@ mod tool_ports;
 pub(crate) mod yield_gate;
 
 pub mod reindex;
+pub mod daemon_port;
 pub mod status;
 
 pub use article_stats::ArticleStats;

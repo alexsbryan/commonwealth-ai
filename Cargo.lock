@@ -2330,6 +2330,7 @@ dependencies = [
  "mailparse",
  "memmap2",
  "notify",
+ "oicp-types",
  "oplog",
  "parquet",
  "petgraph 0.6.5",

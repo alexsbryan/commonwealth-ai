@@ -19,7 +19,7 @@ use axum::Json;
 
 use oicp_types::{
     CorpusIngestProgress, CorpusInstallRequest, CorpusInstallResponse, CorpusProgressResponse,
-    IngestPhase, RecipeStageReport, RecipeTestReport, RecipeTestRequest,
+    IngestPhase, RecipeTestReport, RecipeTestRequest,
 };
 
 use crate::routes_internal::{progress_fraction, spawn_corpus_install_with_parameters, ErrorBody};
@@ -131,7 +131,9 @@ pub async fn recipe_test(
                 }),
             )
         })?;
-    Ok(Json(map_test_report(&report)))
+    Ok(Json(corpus_engine::engine::daemon_port::map_test_report(
+        &report,
+    )))
 }
 
 /// Project one internal `IngestProgress` onto the coarse protocol phase.
@@ -171,82 +173,6 @@ fn map_progress(p: &sovereign_contracts::daemon_wire::IngestProgress) -> CorpusI
         fraction: progress_fraction(p),
         detail,
     }
-}
-
-/// Project the engine's rich `TestReport` onto the protocol per-stage
-/// report. A stage appears only if it ran (acquisition / extraction /
-/// chunking are each `Option`), mirroring the state the engine reached.
-fn map_test_report(r: &corpus_engine::testing::TestReport) -> RecipeTestReport {
-    let mut stages = vec![RecipeStageReport {
-        name: "validate".into(),
-        docs_in: 0,
-        docs_out: 0,
-        misses: r.validation.errors.clone(),
-        // Advisory warnings aren't "misses"; surface them where the author
-        // will still see them rather than dropping them on the wire.
-        sample: r.validation.warnings.clone(),
-    }];
-
-    if let Some(acq) = &r.acquisition {
-        stages.push(RecipeStageReport {
-            name: "acquire".into(),
-            docs_in: 0,
-            docs_out: acq.records_fetched as u32,
-            misses: Vec::new(),
-            sample: vec![format!(
-                "{} records, {} bytes from {}",
-                acq.records_fetched, acq.bytes_downloaded, acq.source_url
-            )],
-        });
-    }
-
-    if let Some(ext) = &r.extraction {
-        stages.push(RecipeStageReport {
-            name: "extract".into(),
-            docs_in: ext.records_attempted as u32,
-            docs_out: ext.records_succeeded as u32,
-            misses: ext
-                .failed_examples
-                .iter()
-                .map(|f| format!("record {}: {}", f.index, f.reason))
-                .collect(),
-            sample: Vec::new(),
-        });
-    }
-
-    if let Some(ch) = &r.chunking {
-        let mut misses: Vec<String> = r
-            .section_misses
-            .iter()
-            .map(|m| format!("{} / {}: {}", m.file, m.section, m.description))
-            .collect();
-        // Chunks over the recipe's configured `max_chars` are a soft miss
-        // the author will want to tune the chunker for.
-        if ch.chunks_over_limit > 0 {
-            misses.push(format!(
-                "{} chunk(s) exceed max_chars={}",
-                ch.chunks_over_limit, ch.recipe_max_chars
-            ));
-        }
-        stages.push(RecipeStageReport {
-            name: "chunk".into(),
-            docs_in: r
-                .extraction
-                .as_ref()
-                .map(|e| e.records_succeeded as u32)
-                .unwrap_or(0),
-            docs_out: ch.total_chunks as u32,
-            misses,
-            sample: r.sample_chunks.iter().map(|s| s.preview.clone()).collect(),
-        });
-    }
-
-    // A recipe is "ok" iff it validated clean and produced chunks — the
-    // end-to-end signal an author cares about.
-    let ok =
-        r.validation.errors.is_empty() && r.chunking.as_ref().is_some_and(|c| c.total_chunks > 0);
-
-    RecipeTestReport { stages, ok }
 }
 
 #[cfg(test)]

@@ -30,8 +30,6 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use serde::{Deserialize, Serialize};
-
 use crate::error::{Error, Result};
 
 /// Approximate size of the byte prefix we read + parse to estimate

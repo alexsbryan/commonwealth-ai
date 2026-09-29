@@ -21,8 +21,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 
+use corpus_engine::engine::daemon_port::dry_run_report;
 use corpus_engine::harness::verify_atoms_at;
-use corpus_engine::testing::TestReport;
 use corpus_engine::{CorpusEngine, ParameterKind, Recipe, TestOptions};
 use sovereign_authoring_harness::{Declaration, HarnessRun};
 use sovereign_contracts::daemon_wire::{
@@ -257,43 +257,6 @@ fn stage_recipe(
     std::fs::write(&staging, toml_text)
         .map_err(|e| Absence::internal(format!("stage recipe for the dry run: {e}")))?;
     Ok(staging)
-}
-
-/// THE projection from the engine's `TestReport` onto the wire. Both arms
-/// of the route answer through this one function, so a sampled run and a
-/// validation-only run cannot disagree about what a field means
-/// (ARCH principle 8).
-fn dry_run_report(report: &TestReport) -> RecipeDryRunReport {
-    // `extraction`/`chunking` are `None` when the stage did not run — the
-    // validation-only case. They collapse to zero here because that is the
-    // wire contract the panel already reads (`RecipeTestResult` in types.ts
-    // types both as plain numbers), and the field that says WHICH case it is
-    // is `records_attempted == 0`, documented on the DTO. Widening these to
-    // `Option` is a frontend change, not this commit's.
-    let (records_attempted, records_succeeded, extraction_rate) = report
-        .extraction
-        .as_ref()
-        .map(|e| (e.records_attempted, e.records_succeeded, e.extraction_rate))
-        .unwrap_or((0, 0, 0.0));
-    let (total_chunks, avg_chars) = report
-        .chunking
-        .as_ref()
-        .map(|c| (c.total_chunks, c.avg_chars))
-        .unwrap_or((0, 0.0));
-    RecipeDryRunReport {
-        passed: report.passed(),
-        errors: report.validation.errors.clone(),
-        warnings: report.warnings(),
-        recipe_id: report.recipe_id.clone(),
-        recipe_name: report.recipe_name.clone(),
-        source_reachable: report.validation.source_reachable,
-        records_attempted,
-        records_succeeded,
-        extraction_rate,
-        total_chunks,
-        avg_chars,
-        report_markdown: report.to_markdown(),
-    }
 }
 
 /// POST `/internal/corpus/recipes/test` `{toml_text, sample_size, offline}` —
