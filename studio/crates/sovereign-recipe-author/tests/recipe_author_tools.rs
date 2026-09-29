@@ -8,8 +8,8 @@
 //! against an in-memory stub. The cases that assert on the *tester's* real
 //! validation output (schema + placeholder cross-reference + regex compile, all
 //! offline via the validation-only path) need the concrete adapter — so they live
-//! here, in `sovereign-tools`, which links corpus-engine and re-exports the tools
-//! at their old paths.
+//! in this test target, which takes corpus-engine as a dev-dependency (both are
+//! package ingest, phase-b-48).
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,9 +17,9 @@ use std::sync::Arc;
 use corpus_engine::recipe_tester::CorpusEngineRecipeTester;
 use serde_json::json;
 use sovereign_contracts::recipe::testing::RecipeTester;
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
-use sovereign_tools::{RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool};
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::{ConversationId, StepOutput, ToolContext};
+use sovereign_recipe_author::{RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool};
 
 fn tester() -> Arc<dyn RecipeTester> {
     Arc::new(CorpusEngineRecipeTester::new())
