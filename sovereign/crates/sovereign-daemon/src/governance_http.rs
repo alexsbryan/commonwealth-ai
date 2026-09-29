@@ -268,13 +268,14 @@ async fn get_view(
     let root = index_root(engine.as_ref(), &corpus);
     let recipes = engine.recipes_dir().to_path_buf();
     let cid = corpus.clone();
+    let port = Arc::clone(&engine);
 
     let blocking = tokio::task::spawn_blocking(move || {
         require_atlas(&dir)?;
         let view = GovernanceView::from_atlas_dir(&dir).map_err(|e| absent_or_internal(&dir, e))?;
         let titles = section_titles(&root);
         let scopes = scope_names(&dir);
-        let vocab = read_vocabulary(&recipes, &cid);
+        let vocab = read_vocabulary(port.as_ref(), &recipes, &cid);
         let decisions: HashMap<String, DecisionMeta> = Oplog::<GovernanceOpKind>::new(&dir)
             .read_all()
             .unwrap_or_default()
@@ -449,8 +450,9 @@ async fn post_build_seed(
     let dir = atlas_dir(engine.as_ref(), &corpus);
     let recipes = engine.recipes_dir().to_path_buf();
     let cid = corpus.clone();
+    let port = Arc::clone(&engine);
     let out = tokio::task::spawn_blocking(move || {
-        if !is_governance_corpus(&recipes, &cid) {
+        if !is_governance_corpus(port.as_ref(), &recipes, &cid) {
             return Ok(0);
         }
         post_build_at(&dir, &cid)
@@ -481,8 +483,15 @@ async fn write_recipe(
     let engine = engine_for(&daemon)?;
     let recipes = engine.recipes_dir().to_path_buf();
     let cid = corpus.clone();
+    let port = Arc::clone(&engine);
     let out = tokio::task::spawn_blocking(move || {
-        write_recipe_sync(&recipes, &cid, &body.display_name, &body.source_path)
+        write_recipe_sync(
+            port.as_ref(),
+            &recipes,
+            &cid,
+            &body.display_name,
+            &body.source_path,
+        )
     })
     .await;
     Ok(match out {
@@ -842,11 +851,16 @@ fn recipe_path(recipes_dir: &Path, corpus_id: &str) -> PathBuf {
     recipes_dir.join(corpus_id).join("recipe.toml")
 }
 
-fn read_vocabulary(recipes_dir: &Path, corpus_id: &str) -> Option<VocabularyPayload> {
-    let recipe = corpus_engine::Recipe::from_file(&recipe_path(recipes_dir, corpus_id)).ok()?;
+fn read_vocabulary(
+    engine: &dyn IngestPort,
+    recipes_dir: &Path,
+    corpus_id: &str,
+) -> Option<VocabularyPayload> {
     // Terms come from the parsed policies, whatever the block's version —
     // version 0 `vocabulary` or version 1 `label`s land in the same place.
-    let vocab = recipe.custom_ontology()?.prose.terms;
+    let vocab = engine
+        .recipe_vocabulary(&recipe_path(recipes_dir, corpus_id))
+        .ok()??;
     Some(VocabularyPayload {
         position_term: vocab.position_term,
         tension_term: vocab.tension_term,
@@ -857,11 +871,9 @@ fn read_vocabulary(recipes_dir: &Path, corpus_id: &str) -> Option<VocabularyPayl
 
 /// Whether a corpus's recipe declares it governance-managed
 /// (`[enrichment] domain = "governance"`).
-fn is_governance_corpus(recipes_dir: &Path, corpus_id: &str) -> bool {
-    corpus_engine::Recipe::from_file(&recipe_path(recipes_dir, corpus_id))
-        .ok()
-        .and_then(|r| r.enrichment)
-        .and_then(|e| e.domain)
+fn is_governance_corpus(engine: &dyn IngestPort, recipes_dir: &Path, corpus_id: &str) -> bool {
+    engine
+        .recipe_enrichment_domain(&recipe_path(recipes_dir, corpus_id))
         .is_some_and(|d| d.eq_ignore_ascii_case("governance"))
 }
 
@@ -884,6 +896,7 @@ fn docs_changed_since_build(index_root: &Path) -> bool {
 // ─── Recipe template ───────────────────────────────────────────
 
 fn write_recipe_sync(
+    engine: &dyn IngestPort,
     recipes_dir: &Path,
     corpus_id: &str,
     display_name: &str,
@@ -898,9 +911,9 @@ fn write_recipe_sync(
         .map_err(|e| GovError::Internal(format!("writing recipe.toml: {e}")))?;
     // Validate: it must parse AND resolve to the custom-ontology path, or
     // enrichment would silently fall back to the literary pipeline.
-    match corpus_engine::Recipe::from_file(&path) {
-        Ok(r) if r.custom_ontology().is_some() => Ok(path.display().to_string()),
-        Ok(_) => Err(GovError::Internal(
+    match engine.recipe_vocabulary(&path) {
+        Ok(Some(_)) => Ok(path.display().to_string()),
+        Ok(None) => Err(GovError::Internal(
             "governance recipe wrote but has no custom ontology — template bug".into(),
         )),
         Err(e) => Err(GovError::Internal(format!(

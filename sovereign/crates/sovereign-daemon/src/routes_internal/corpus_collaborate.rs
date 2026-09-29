@@ -811,7 +811,7 @@ pub async fn corpus_collaborate(
 
         // grants' planner reads the manifest as data: indices by status, the
         // count left and its bytes (pb-grants-merge).
-        use corpus_engine::SourceFileStatus;
+        use corpus_index::ingest_port::daemon::SourceFileStatus;
         let indices = |keep: fn(&SourceFileStatus) -> bool| -> Vec<usize> {
             remaining
                 .iter()

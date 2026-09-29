@@ -82,9 +82,12 @@ async fn gather_peer_atlas_advice(
     // Local view: atom counts come from the cached summary; embed
     // model from our own member record (populated by gossip).
     let atlas_dir = indexes_dir.join(corpus_id).join("atlas");
-    let local_summary = corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
-        .ok()
-        .flatten();
+    let local_summary = corpus_engine_atlas_reader::ports::AtlasPort::atlas_summary(
+        &corpus_engine::IngestAtlas,
+        &atlas_dir,
+    )
+    .ok()
+    .flatten();
     let local_tier2_count = local_summary.as_ref().map(|s| s.tier2_count).unwrap_or(0);
     let local_fingerprint = local_summary.as_ref().map(|s| s.fingerprint.as_str());
 
@@ -318,12 +321,13 @@ pub async fn corpus_canonical_stream(
     let (async_writer, async_reader) = tokio::io::duplex(64 * 1024);
     let sync_writer = tokio_util::io::SyncIoBridge::new(async_writer);
 
+    let engine_for_pack = engine.clone();
     tokio::task::spawn_blocking(move || {
         // Compression level 1 — fast on the sender, ~10% larger than
         // default (3) in our benchmarks. We're network-bound on the
         // common LAN/WAN case; the receiver wins more from sooner-
         // available bytes than from smaller transfer.
-        match corpus_engine::canonical_sync::pack_canonical(&path_for_pack, sync_writer, 1) {
+        match engine_for_pack.pack_canonical(&path_for_pack, Box::new(sync_writer), 1) {
             Ok(bytes_in) => {
                 tracing::info!(
                     corpus = path_for_pack

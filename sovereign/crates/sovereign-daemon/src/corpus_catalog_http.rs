@@ -763,11 +763,14 @@ async fn coverage_card(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
 ) -> Result<Response, Absence> {
-    use corpus_engine::enrichment::atlas::analysis::sec_facts::authoritative_store;
-    use corpus_engine_atlas_reader::sec_facts::coverage_card as derive_card;
+    use corpus_engine_atlas_reader::sec_facts::{
+        authoritative_store_by, coverage_card as derive_card,
+    };
     let engine = engine_for(&daemon)?;
-    let card = authoritative_store(engine.index_dir(), engine.recipes_dir(), &corpus)
-        .map(|store| derive_card(&store));
+    let card = authoritative_store_by(engine.index_dir(), &corpus, &|id| {
+        engine.declared_authority_tool(id)
+    })
+    .map(|store| derive_card(&store));
     tracing::debug!(
         target: "sec_facts",
         %corpus,
@@ -804,7 +807,7 @@ async fn retry_enrichment(
             ))
         }
     };
-    Ok(match corpus_engine::reprocess_skeleton_failures(&index) {
+    Ok(match engine.reprocess_skeleton_failures(&index) {
         Ok((salvaged, still_failed)) => {
             tracing::info!(
                 %corpus,

@@ -9,7 +9,7 @@ use crate::types::MemberStatus;
 use commonwealth_core::knowledge::{
     CompleteOutcome, HandoffPhase, IngestionHandoff, LeasedUnit, UnitId, WorkUnit,
 };
-use corpus_engine::CancellationFlag;
+use corpus_index::ingest_port::cancel::CancellationFlag;
 use kernel_types::HandoffId;
 use kernel_types::NodeId;
 use sovereign_time::unix_millis as now_ms;

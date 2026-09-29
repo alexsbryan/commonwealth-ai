@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use crate::types::MemberStatus;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
 use commonwealth_core::partition;
-use corpus_engine::update::newsworthy_watcher::{
+use corpus_index::ingest_port::newsworthy::{
     TickStatusSnapshot, APP_ID_STATUS, STATUS_KEY_LAST_TICK,
 };
 use kernel_types::NodeId;

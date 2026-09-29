@@ -383,7 +383,7 @@ async fn get_corpus_status(
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
     };
-    match corpus_engine::engine::status::scan_corpus_rows(engine.index_dir()) {
+    match engine.corpus_status_rows() {
         Ok(rows) => (StatusCode::OK, Json(rows)).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
