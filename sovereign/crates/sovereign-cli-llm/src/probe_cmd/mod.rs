@@ -18,6 +18,7 @@ mod prod;
 pub(crate) mod resource_meter;
 mod retrieve;
 mod routing;
+pub(crate) mod vault_build;
 
 use std::path::PathBuf;
 

@@ -16,11 +16,16 @@ use crate::traits::CorpusUnavailable;
 
 mod attached;
 mod resources;
+mod vault;
 
 pub use attached::{
     AttachedEvidence, AttachedProbe, AttachedSource, AttachedTurn, StateTransition,
 };
 pub use resources::{CallRecord, PhaseBucket, PhaseResources, ResourceReport};
+pub use vault::{
+    ColdReset, IngestTransition, NoteRecord, PhaseSpan, VaultBuildEvidence, VaultBuildProbe,
+    VaultSource,
+};
 
 /// Which internal stage a probe runs. A closed set: the spelling on the
 /// command line is [`ProbeMode::as_str`] on both sides.
