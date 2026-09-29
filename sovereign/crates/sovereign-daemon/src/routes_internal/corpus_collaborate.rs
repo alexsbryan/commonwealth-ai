@@ -369,7 +369,7 @@ pub async fn corpus_collaborate(
                         }),
                     )
                 })?;
-            build_work_units_hf(&remaining)
+            build_work_units_hf(&remaining.iter().map(|f| f.file_index).collect::<Vec<_>>())
         };
 
         if units.is_empty() {
@@ -813,10 +813,23 @@ pub async fn corpus_collaborate(
             ));
         }
 
+        // grants' planner reads the manifest as data: indices by status, the
+        // count left and its bytes (pb-grants-merge).
+        use corpus_engine::SourceFileStatus;
+        let indices = |keep: fn(&SourceFileStatus) -> bool| -> Vec<usize> {
+            remaining
+                .iter()
+                .filter(|f| keep(&f.status))
+                .map(|f| f.file_index)
+                .collect()
+        };
         plan_collaborative_ingestion(
             req.corpus_id.as_str(),
             recipe_id,
-            &remaining,
+            &indices(|s| matches!(s, SourceFileStatus::InProgress { .. })),
+            &indices(|s| matches!(s, SourceFileStatus::Pending)),
+            remaining.len(),
+            remaining.iter().map(|f| f.size_bytes).sum(),
             &local_member,
             &candidates,
             &local_embed_model,

@@ -180,7 +180,6 @@ async fn budget_unset_returns_no_remaining() {
 // node.
 
 use commonwealth_core::oicp::EmbedModelInfo;
-use corpus_engine::{SourceFileRecord, SourceFileStatus};
 use sovereign_contracts::membership::MembershipEntry;
 use sovereign_grants::knowledge_assignment::plan_collaborative_ingestion;
 
@@ -233,15 +232,12 @@ fn planner_member(id: u128, free_storage_gb: u32) -> MembershipEntry<()> {
     }
 }
 
-fn pending_files(n: usize) -> Vec<SourceFileRecord> {
-    (0..n)
-        .map(|i| SourceFileRecord {
-            file_index: i,
-            filename: format!("part-{i}.jsonl"),
-            size_bytes: 1_000_000,
-            status: SourceFileStatus::Pending,
-        })
-        .collect()
+/// Each pending file's size.
+const FILE_BYTES: u64 = 1_000_000;
+
+/// `n` pending files' indices.
+fn pending_files(n: usize) -> Vec<usize> {
+    (0..n).collect()
 }
 
 #[test]
@@ -254,7 +250,10 @@ fn planner_skips_node_whose_free_storage_was_clamped_to_zero() {
     let handoff = plan_collaborative_ingestion(
         "wiki",
         "wikipedia-en",
+        &[],
         &pending_files(10),
+        10,
+        10 * FILE_BYTES,
         &alice,
         std::slice::from_ref(&bob),
         &embed(),
@@ -284,7 +283,10 @@ fn planner_skips_only_clamped_nodes_when_others_have_room() {
     let handoff = plan_collaborative_ingestion(
         "openalex",
         "openalex-works",
+        &[],
         &pending_files(40),
+        40,
+        40 * FILE_BYTES,
         &alice,
         &[bob.clone(), carol.clone()],
         &embed(),
