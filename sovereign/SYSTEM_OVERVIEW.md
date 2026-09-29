@@ -1116,7 +1116,9 @@ for the turn's whole life.
 `ShardManager` (sovereign-grants) decides who takes part in a collaborative
 merge and pulls the peers' partitions; the merge and its finalize are
 ingest's, reached through `corpus_index::ingest_port::merge::PartitionMergePort`
-(pb-grants-merge). `merge_participants` is the ONE merge implementation, and it
+(pb-grants-merge). The daemon holds ingest as one `Arc<dyn
+corpus_index::ingest_port::daemon::IngestPort>` and hands each consumer the
+narrower port it names (pb-ingest-dial-daemon-ports). `merge_participants` is the ONE merge implementation, and it
 finishes the job: a merge that stops at written chunks produces a corpus
 `installed_indexes()` skips and gossip advertises nothing for, so
 `finalize_canonical` is the last step of the merge itself. When the merge

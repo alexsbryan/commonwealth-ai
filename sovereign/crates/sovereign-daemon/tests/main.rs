@@ -72,6 +72,8 @@ mod distributed_primary_respawn_e2e;
 mod embeddings_e2e;
 #[path = "main/emitter_origin_concurrency.rs"]
 mod emitter_origin_concurrency;
+#[path = "main/engine_census.rs"]
+mod engine_census;
 #[path = "main/enrich_surface_e2e.rs"]
 mod enrich_surface_e2e;
 #[path = "main/finish_reason_streaming.rs"]
