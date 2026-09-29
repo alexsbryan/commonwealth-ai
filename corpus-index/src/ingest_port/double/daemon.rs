@@ -29,6 +29,55 @@ fn io_refuse(method: &str) -> std::io::Error {
     std::io::Error::other(unprogrammed(method))
 }
 
+pub(super) type RecipeTextFn<T> = dyn Fn(&str) -> Result<T> + Send + Sync;
+pub(super) type DryRunFn = dyn Fn(&Path, usize, bool) -> Result<RecipeDryRunReport> + Send + Sync;
+
+/// Programming for the daemon port's own methods.
+impl IngestPortDouble {
+    /// Program `corpus_status_rows` to answer `rows`.
+    pub fn with_corpus_status_rows(mut self, rows: serde_json::Value) -> Self {
+        self.corpus_status_rows = Some(rows);
+        self
+    }
+
+    /// Program `recipe_corpus_id`; `f` gets the recipe's TOML text.
+    pub fn on_recipe_corpus_id(
+        mut self,
+        f: impl Fn(&str) -> Result<String> + Send + Sync + 'static,
+    ) -> Self {
+        self.recipe_corpus_id = Some(Box::new(f));
+        self
+    }
+
+    /// Program `install_local_recipe`; `f` gets the recipe's TOML text.
+    pub fn on_install_local_recipe(
+        mut self,
+        f: impl Fn(&str) -> Result<PathBuf> + Send + Sync + 'static,
+    ) -> Self {
+        self.install_local_recipe = Some(Box::new(f));
+        self
+    }
+
+    /// Program `recipe_parameter_schema`; `f` gets the corpus id.
+    pub fn on_recipe_parameter_schema(
+        mut self,
+        f: impl Fn(&str) -> Result<RecipeParameterSchema> + Send + Sync + 'static,
+    ) -> Self {
+        self.recipe_parameter_schema = Some(Box::new(f));
+        self
+    }
+
+    /// Program `dry_run_recipe`; `f` gets the staged recipe path, the
+    /// sample size and the offline flag.
+    pub fn on_dry_run_recipe(
+        mut self,
+        f: impl Fn(&Path, usize, bool) -> Result<RecipeDryRunReport> + Send + Sync + 'static,
+    ) -> Self {
+        self.dry_run_recipe = Some(Box::new(f));
+        self
+    }
+}
+
 #[async_trait]
 impl IngestPort for IngestPortDouble {
     fn recipes_dir(&self) -> &Path {
@@ -119,7 +168,10 @@ impl IngestPort for IngestPortDouble {
 
     fn corpus_status_rows(&self) -> std::io::Result<serde_json::Value> {
         self.record("corpus_status_rows");
-        Err(io_refuse("corpus_status_rows"))
+        match &self.corpus_status_rows {
+            Some(rows) => Ok(rows.clone()),
+            None => Err(io_refuse("corpus_status_rows")),
+        }
     }
 
     async fn open_index_transient(&self, _path: &Path) -> Result<CorpusIndex> {
@@ -209,29 +261,41 @@ impl IngestPort for IngestPortDouble {
         panic!("{}", unprogrammed("registry_listing"))
     }
 
-    fn recipe_corpus_id(&self, _toml_text: &str) -> Result<String> {
+    fn recipe_corpus_id(&self, toml_text: &str) -> Result<String> {
         self.record("recipe_corpus_id");
-        Err(refuse("recipe_corpus_id"))
+        match &self.recipe_corpus_id {
+            Some(f) => f(toml_text),
+            None => Err(refuse("recipe_corpus_id")),
+        }
     }
 
-    fn install_local_recipe(&self, _toml_text: &str) -> Result<PathBuf> {
+    fn install_local_recipe(&self, toml_text: &str) -> Result<PathBuf> {
         self.record("install_local_recipe");
-        Err(refuse("install_local_recipe"))
+        match &self.install_local_recipe {
+            Some(f) => f(toml_text),
+            None => Err(refuse("install_local_recipe")),
+        }
     }
 
-    async fn recipe_parameter_schema(&self, _corpus_id: &str) -> Result<RecipeParameterSchema> {
+    async fn recipe_parameter_schema(&self, corpus_id: &str) -> Result<RecipeParameterSchema> {
         self.record("recipe_parameter_schema");
-        Err(refuse("recipe_parameter_schema"))
+        match &self.recipe_parameter_schema {
+            Some(f) => f(corpus_id),
+            None => Err(refuse("recipe_parameter_schema")),
+        }
     }
 
     async fn dry_run_recipe(
         &self,
-        _recipe_path: &Path,
-        _sample_size: usize,
-        _offline: bool,
+        recipe_path: &Path,
+        sample_size: usize,
+        offline: bool,
     ) -> Result<RecipeDryRunReport> {
         self.record("dry_run_recipe");
-        Err(refuse("dry_run_recipe"))
+        match &self.dry_run_recipe {
+            Some(f) => f(recipe_path, sample_size, offline),
+            None => Err(refuse("dry_run_recipe")),
+        }
     }
 
     async fn test_recipe_report(
@@ -278,23 +342,47 @@ impl IngestPort for IngestPortDouble {
     }
 }
 
-/// The recipe harness's double: every run refuses, naming itself. A daemon
-/// test that only slots a harness holds this; one that drives a run proves
-/// the run on the harness's own implementor.
+type HarnessRunFn = dyn Fn(&Path, &Path, bool) -> std::result::Result<HarnessRunCardView, String>
+    + Send
+    + Sync;
+
+/// The recipe harness's double: an unprogrammed run refuses, naming itself.
+/// A daemon test that only slots a harness holds this; one that drives a
+/// run programs [`Self::answering`] and proves the run on the harness's own
+/// implementor.
 #[derive(Default)]
-pub struct RecipeHarnessDouble;
+pub struct RecipeHarnessDouble {
+    run: Option<Box<HarnessRunFn>>,
+}
+
+impl RecipeHarnessDouble {
+    /// A run answers `f(harness_root, index_dir, enrich)`.
+    pub fn answering(
+        f: impl Fn(&Path, &Path, bool) -> std::result::Result<HarnessRunCardView, String>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        Self {
+            run: Some(Box::new(f)),
+        }
+    }
+}
 
 #[async_trait]
 impl RecipeHarnessPort for RecipeHarnessDouble {
     async fn run_recipe_harness(
         &self,
         _recipe_toml: &str,
-        _harness_root: &Path,
+        harness_root: &Path,
         _sample_size: usize,
-        _enrich: bool,
-        _index_dir: &Path,
+        enrich: bool,
+        index_dir: &Path,
         _notice: &(dyn for<'s> Fn(&'s str) + Sync),
     ) -> std::result::Result<HarnessRunCardView, String> {
-        Err("RecipeHarnessDouble::run_recipe_harness: not programmed by this test".into())
+        match &self.run {
+            Some(f) => f(harness_root, index_dir, enrich),
+            None => Err("RecipeHarnessDouble::run_recipe_harness: not programmed by this test".into()),
+        }
     }
 }

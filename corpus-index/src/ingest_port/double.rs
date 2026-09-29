@@ -30,6 +30,7 @@ use super::{
     SourceFileProgress, WatchedUpdate, WatchedUpdateProgressFn,
 };
 use crate::fs_source::FsIndexSource;
+use sovereign_contracts::daemon_wire::RecipeParameterSchema;
 use crate::index::CorpusIndex;
 use crate::recipe::CatalogConfig;
 use crate::source::{CorpusReadPort, IndexSource};
@@ -53,6 +54,7 @@ type RecipePathFn<T> = dyn Fn(PathBuf) -> BoxFuture<Result<T>> + Send + Sync;
 type WatchedUpdateFn = dyn Fn(WatchedUpdate, DocFetchFn) -> BoxFuture<Result<()>> + Send + Sync;
 type CorpusFn<T> = dyn Fn(&str) -> T + Send + Sync;
 type ReindexFn = dyn Fn(&str, &[String]) + Send + Sync;
+type SourceFileProgressFn = dyn Fn(&Path) -> Option<SourceFileProgress> + Send + Sync;
 type RecipeVocabularyFn =
     dyn Fn(&Path) -> Result<Option<super::daemon::RecipeVocabulary>> + Send + Sync;
 type MergePartitionsFn =
@@ -69,6 +71,11 @@ pub struct IngestPortDouble {
     index_dir: Option<PathBuf>,
     recipes_dir: Option<PathBuf>,
     recipe_vocabulary: Option<Box<RecipeVocabularyFn>>,
+    corpus_status_rows: Option<serde_json::Value>,
+    recipe_corpus_id: Option<Box<daemon::RecipeTextFn<String>>>,
+    install_local_recipe: Option<Box<daemon::RecipeTextFn<PathBuf>>>,
+    recipe_parameter_schema: Option<Box<daemon::RecipeTextFn<RecipeParameterSchema>>>,
+    dry_run_recipe: Option<Box<daemon::DryRunFn>>,
     open_index_for_corpus: Option<Box<OpenIndexFn>>,
     embed_fn: Option<EmbedFn>,
     ingest_recipe_path: Option<Box<RecipePathFn<RecipeIngested>>>,
@@ -78,6 +85,7 @@ pub struct IngestPortDouble {
     ingest_in_flight: Option<Box<CorpusFn<bool>>>,
     cancel_corpus_ingest: Option<Box<CorpusFn<bool>>>,
     reindex_changed_sources_tiered: Option<Box<ReindexFn>>,
+    source_file_progress: Option<Box<SourceFileProgressFn>>,
     atlas_teardown_ok: bool,
     installed_indexes: Option<Vec<IndexInfo>>,
     listing: Option<FsIndexSource>,
@@ -239,6 +247,16 @@ impl IngestPortDouble {
         f: impl Fn(&str, &[String]) + Send + Sync + 'static,
     ) -> Self {
         self.reindex_changed_sources_tiered = Some(Box::new(f));
+        self
+    }
+
+    /// Program [`LocalCorpusPort::source_file_progress`]; `f` gets the
+    /// corpus dir.
+    pub fn on_source_file_progress(
+        mut self,
+        f: impl Fn(&Path) -> Option<SourceFileProgress> + Send + Sync + 'static,
+    ) -> Self {
+        self.source_file_progress = Some(Box::new(f));
         self
     }
 
@@ -582,8 +600,12 @@ impl LocalCorpusPort for IngestPortDouble {
         Err(std::io::Error::other(unprogrammed("atlas_teardown")))
     }
 
-    fn source_file_progress(&self, _corpus_dir: &Path) -> Option<SourceFileProgress> {
-        panic!("{}", unprogrammed("source_file_progress"))
+    fn source_file_progress(&self, corpus_dir: &Path) -> Option<SourceFileProgress> {
+        self.record("source_file_progress");
+        match &self.source_file_progress {
+            Some(f) => f(corpus_dir),
+            None => panic!("{}", unprogrammed("source_file_progress")),
+        }
     }
 
     async fn reindex_changed_sources_tiered(&self, corpus_id: &str, source_doc_ids: &[String]) {
