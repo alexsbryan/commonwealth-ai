@@ -522,10 +522,10 @@ fn build_evidence(atom: &AtomEnvelope) -> Vec<EvidenceExcerpt> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
     use corpus_engine_atlas_reader::cross_corpus::{
         CrossCorpusAtomRef, CrossCorpusEdge, CrossCorpusEdgesFile, MatchTrace,
     };
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
     use std::path::PathBuf;
     use tempfile::TempDir;
     use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity};

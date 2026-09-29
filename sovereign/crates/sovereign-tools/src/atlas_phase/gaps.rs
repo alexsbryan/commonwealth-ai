@@ -73,7 +73,6 @@ impl AtlasGapsTool {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,7 +117,10 @@ mod tests {
         match out {
             StepOutput::Text(t) => {
                 assert!(t.contains("0 gap"), "{t}");
-                assert!(t.contains(&atlas.join("gaps.json").display().to_string()), "{t}");
+                assert!(
+                    t.contains(&atlas.join("gaps.json").display().to_string()),
+                    "{t}"
+                );
             }
             o => panic!("unexpected output: {o:?}"),
         }

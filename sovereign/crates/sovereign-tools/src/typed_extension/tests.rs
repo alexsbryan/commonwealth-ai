@@ -251,15 +251,9 @@ async fn end_to_end_writes_atoms_and_manifest() {
     let written: Arc<Mutex<Written>> = Arc::default();
     let atlas = port(Arc::clone(&written));
 
-    let report = run_typed_extension(
-        &atlas,
-        corpus_id,
-        &store,
-        &inference,
-        &atlas_dir,
-    )
-    .await
-    .expect("typed extension should succeed end-to-end");
+    let report = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
+        .await
+        .expect("typed extension should succeed end-to-end");
     assert_eq!(report.status, ExtractionStatus::Wrote);
     assert_eq!(report.pass_a_calls, 2, "two leaves → two Pass A calls");
     assert_eq!(report.pass_b_calls, 2, "two themes → two Pass B calls");
@@ -304,28 +298,16 @@ async fn rerun_with_no_changes_skips_via_manifest() {
     let written: Arc<Mutex<Written>> = Arc::default();
     let atlas = port(Arc::clone(&written));
 
-    let first = run_typed_extension(
-        &atlas,
-        corpus_id,
-        &store,
-        &inference,
-        &atlas_dir,
-    )
-    .await
-    .unwrap();
+    let first = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
+        .await
+        .unwrap();
     assert_eq!(first.status, ExtractionStatus::Wrote);
     let calls_after_first = call_counter.load(Ordering::SeqCst);
     assert_eq!(calls_after_first, 4);
 
-    let second = run_typed_extension(
-        &atlas,
-        corpus_id,
-        &store,
-        &inference,
-        &atlas_dir,
-    )
-    .await
-    .unwrap();
+    let second = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
+        .await
+        .unwrap();
     assert_eq!(
         second.status,
         ExtractionStatus::SkippedManifestMatch,
@@ -349,15 +331,9 @@ async fn editing_a_leaf_invalidates_manifest_and_forces_rerun() {
     let written: Arc<Mutex<Written>> = Arc::default();
     let atlas = port(Arc::clone(&written));
 
-    run_typed_extension(
-        &atlas,
-        corpus_id,
-        &store,
-        &inference,
-        &atlas_dir,
-    )
-    .await
-    .unwrap();
+    run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
+        .await
+        .unwrap();
     let calls_after_first = call_counter.load(Ordering::SeqCst);
     assert_eq!(calls_after_first, 4);
 
@@ -373,15 +349,9 @@ async fn editing_a_leaf_invalidates_manifest_and_forces_rerun() {
         .await
         .unwrap();
 
-    let second = run_typed_extension(
-        &atlas,
-        corpus_id,
-        &store,
-        &inference,
-        &atlas_dir,
-    )
-    .await
-    .unwrap();
+    let second = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
+        .await
+        .unwrap();
     assert_eq!(
         second.status,
         ExtractionStatus::Wrote,
@@ -406,22 +376,19 @@ async fn empty_inputs_short_circuit_without_writes() {
     let written: Arc<Mutex<Written>> = Arc::default();
     let atlas = port(Arc::clone(&written));
 
-    let report = run_typed_extension(
-        &atlas,
-        corpus_id,
-        &store,
-        &inference,
-        &atlas_dir,
-    )
-    .await
-    .unwrap();
+    let report = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
+        .await
+        .unwrap();
     assert_eq!(report.status, ExtractionStatus::SkippedNoInputs);
     assert_eq!(
         call_counter.load(Ordering::SeqCst),
         0,
         "no inputs → no LLM traffic"
     );
-    assert!(atlas.calls().is_empty(), "no inputs → the port is never asked");
+    assert!(
+        atlas.calls().is_empty(),
+        "no inputs → the port is never asked"
+    );
     assert!(!atlas_dir.join(MANIFEST_FILENAME).exists());
 }
 
@@ -486,15 +453,9 @@ async fn atoms_carry_primary_source_citations_when_quote_spans_present() {
     let written: Arc<Mutex<Written>> = Arc::default();
     let atlas = port(Arc::clone(&written));
 
-    let report = run_typed_extension(
-        &atlas,
-        corpus_id,
-        &store,
-        &inference,
-        &atlas_dir,
-    )
-    .await
-    .expect("typed extension should succeed end-to-end");
+    let report = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
+        .await
+        .expect("typed extension should succeed end-to-end");
     assert_eq!(report.status, ExtractionStatus::Wrote);
 
     // The response is keyed on the primary quote_span's source chunk, and

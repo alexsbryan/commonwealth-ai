@@ -283,9 +283,13 @@ async fn a_tree_less_projection_is_repaired_when_the_tree_arrives() {
 async fn a_corpus_with_no_summary_table_is_named_not_zeroed() {
     let root = tempdir().unwrap();
     std::fs::create_dir_all(root.path().join("bare")).unwrap();
-    let report = write_summary_atoms(&AtlasPortDouble::new().on_scan_raptor_summaries(|_| Ok(Vec::new())), root.path(), "bare")
-        .await
-        .unwrap();
+    let report = write_summary_atoms(
+        &AtlasPortDouble::new().on_scan_raptor_summaries(|_| Ok(Vec::new())),
+        root.path(),
+        "bare",
+    )
+    .await
+    .unwrap();
     assert_eq!(report.rows_read, 0);
     assert!(report
         .degradations
