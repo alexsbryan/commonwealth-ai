@@ -12,9 +12,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
-use corpus_engine::enrichment::atlas::{read_atlas_atoms, StableAtomKey};
 use serde::{Deserialize, Serialize};
 use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomType, AtomsFile};
+use understanding_vocab::read::read_atlas_atoms;
+use understanding_vocab::stable_key::StableAtomKey;
 use understanding_vocab::taxonomy::EnrichmentDepth;
 
 use super::reader::{CurationStatus, FileAtlasReader};
@@ -394,13 +395,13 @@ fn atom_freshness(atom: &AtomEnvelope, freshness: &HashMap<String, i64>) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::pipeline::atlas::{
-        ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
-        StateType,
-    };
     use tempfile::TempDir;
     use understanding_vocab::atoms::{
         AtomId, AtomsFile, ChunkRef, Claim, Entity, SectionPosition, SectionRange, State,
+    };
+    use understanding_vocab::taxonomy::{
+        ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
+        StateType,
     };
 
     fn entity(id: usize, name: &str, salience: f32) -> AtomEnvelope {

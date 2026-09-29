@@ -21,9 +21,9 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
 use understanding_vocab::atoms::{AtomEnvelope, Entity};
 use understanding_vocab::edges::{Edge, EdgeType};
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
 use understanding_vocab::taxonomy::EntityType;
 
 // ── Public types ────────────────────────────────────────────────
@@ -226,9 +226,9 @@ pub fn interactions_within(timeline: &InteractionTimeline, since: i64, now: i64)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
     use understanding_vocab::atoms::{AtomId, ChunkRef};
     use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+    use understanding_vocab::taxonomy::{EnrichmentDepth, EntityType};
 
     fn person(idx: usize, name: &str, affiliation: Option<&str>, role: Option<&str>) -> Entity {
         Entity {

@@ -207,8 +207,8 @@ mod tests {
 
     #[test]
     fn records_atlas_summary_when_present() {
-        use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
         use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity};
+        use understanding_vocab::taxonomy::{EnrichmentDepth, EntityType};
 
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("wikipedia").join("atlas");

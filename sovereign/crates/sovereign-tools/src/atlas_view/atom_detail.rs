@@ -526,13 +526,13 @@ mod tests {
     use corpus_engine::enrichment::atlas::cross_corpus::{
         CrossCorpusAtomRef, CrossCorpusEdge, CrossCorpusEdgesFile, MatchTrace,
     };
-    use corpus_engine::enrichment::pipeline::atlas::{
-        ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus,
-    };
     use std::path::PathBuf;
     use tempfile::TempDir;
     use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity};
     use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
+    use understanding_vocab::taxonomy::{
+        ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus,
+    };
 
     fn entity(id: usize, name: &str, salience: f32) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {

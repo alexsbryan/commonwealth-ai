@@ -1169,11 +1169,11 @@ fn write_atomic_json(path: &Path, value: &serde_json::Value) -> std::io::Result<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::{
+    use understanding_vocab::taxonomy::{EnrichmentDepth, EntityType};
+    use understanding_vocab::{
         atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity},
         edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile},
     };
-    use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
     /// Build a synthetic structural atlas under `<dir>/<corpus>/atlas/`
     /// containing one L1 entity (low centrality) and a flotilla of

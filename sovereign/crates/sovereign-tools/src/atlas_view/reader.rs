@@ -586,11 +586,11 @@ fn read_display_meta(atlas_dir: &Path) -> (Option<String>, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::pipeline::atlas::{
-        ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus,
-    };
     use tempfile::TempDir;
     use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity};
+    use understanding_vocab::taxonomy::{
+        ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus,
+    };
 
     fn write_atoms(atlas_dir: &Path, atoms: Vec<AtomEnvelope>) {
         std::fs::create_dir_all(atlas_dir).unwrap();

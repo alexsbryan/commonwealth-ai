@@ -749,8 +749,8 @@ impl KnowledgeViewManager {
     /// the decay path in that case to fall back to uniform decay.
     #[cfg(feature = "treesitter")]
     pub fn entity_inventory_from_atlases(&self) -> sovereign_core::memory::EntityInventory {
-        use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
         use understanding_vocab::atoms::AtomEnvelope;
+        use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
 
         let mut names: Vec<String> = Vec::new();
         for kind in [ViewKind::Personal, ViewKind::Conversational] {
@@ -1241,10 +1241,10 @@ mod tests {
 
     #[cfg(feature = "treesitter")]
     fn seed_personal_atlas_with_entities(indexes_dir: &std::path::Path) {
-        use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
         use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity};
         use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
         use understanding_vocab::read::ATLAS_DIRNAME;
+        use understanding_vocab::taxonomy::{EnrichmentDepth, EntityType};
 
         let atlas_dir = indexes_dir.join("personal-knowledge").join(ATLAS_DIRNAME);
         std::fs::create_dir_all(&atlas_dir).unwrap();
