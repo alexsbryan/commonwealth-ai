@@ -33,7 +33,8 @@
 
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, CorpusIndex};
+use corpus_index::index::CorpusIndex;
+use corpus_index::source::CorpusReadPort;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::health::{
     Component, HealthCheckable, HealthIssue, HealthReport, RepairKind, RepairOutcome,
@@ -42,11 +43,11 @@ use sovereign_core::health::{
 // ─── EnrichmentChecker ───────────────────────────────────────────────────────
 
 pub struct EnrichmentChecker {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn CorpusReadPort>,
 }
 
 impl EnrichmentChecker {
-    pub fn new(engine: Arc<CorpusEngine>) -> Self {
+    pub fn new(engine: Arc<dyn CorpusReadPort>) -> Self {
         Self { engine }
     }
 }

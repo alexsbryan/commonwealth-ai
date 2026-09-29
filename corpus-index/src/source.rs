@@ -7,7 +7,7 @@ use async_trait::async_trait;
 
 use crate::index::CorpusIndex;
 use crate::recipe::CatalogConfig;
-use crate::types::{BuiltinCorpus, IndexInfo};
+use crate::types::{BuiltinCorpus, IncompleteIngest, IndexInfo};
 use crate::Result;
 
 /// Read access to the indexes installed on this machine.
@@ -43,6 +43,10 @@ pub trait CorpusReadPort: IndexSource {
 
     /// The registry catalog, one row per entry.
     fn builtin_corpora(&self) -> Vec<BuiltinCorpus>;
+
+    /// Ingests interrupted before they finished, from their on-disk state
+    /// (what the enrichment health check reports).
+    fn incomplete_ingests(&self) -> Vec<IncompleteIngest>;
 
     /// The `[authority] tool` `corpus_id`'s recipe declares, if any (what the
     /// sec_facts tool's discovery keys on).

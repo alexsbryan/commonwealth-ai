@@ -4,13 +4,13 @@
 
 pub mod article_stats;
 mod cancel;
-mod tool_ports;
 mod expand;
 mod ingest;
 mod ingest_factories;
 mod ingest_helpers;
 pub(crate) mod ingest_prebuilt;
 pub mod pass;
+mod tool_ports;
 pub(crate) mod yield_gate;
 
 pub mod reindex;
@@ -3669,6 +3669,10 @@ impl corpus_index::source::CorpusReadPort for CorpusEngine {
 
     fn builtin_corpora(&self) -> Vec<crate::types::BuiltinCorpus> {
         CorpusEngine::builtin_corpora(self)
+    }
+
+    fn incomplete_ingests(&self) -> Vec<IncompleteIngest> {
+        CorpusEngine::incomplete_ingests(self)
     }
 
     fn declared_authority_tool(&self, corpus_id: &str) -> Option<String> {
