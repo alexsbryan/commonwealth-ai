@@ -13269,6 +13269,7 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-atlas-reader",
  "corpus-engine-sections",
+ "corpus-engine-yield",
  "corpus-index",
  "docx-lite",
  "ego-tree",
