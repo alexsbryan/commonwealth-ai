@@ -99,6 +99,8 @@ mod snapshot_restore_e2e;
 mod chunk_ner_bounded_seam;
 #[path = "main/corpus_read_port_parity.rs"]
 mod corpus_read_port_parity;
+#[path = "main/daemon_port_parity.rs"]
+mod daemon_port_parity;
 #[path = "main/local_corpus_port_parity.rs"]
 mod local_corpus_port_parity;
 #[path = "main/source_tree.rs"]

@@ -19,5 +19,10 @@ serde_json.workspace = true
 sha2.workspace = true
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
+[dev-dependencies]
+# port.rs's tests: the daemon's recipe_surface harness case, on the implementor.
+tempfile.workspace = true
+tokio.workspace = true
+
 [lints]
 workspace = true
