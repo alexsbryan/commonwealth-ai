@@ -2709,7 +2709,10 @@ impl EmbeddedDaemon {
                     .services
                     .serving()
                     .and_then(|s| s.core.rpc_shard_warmer.clone());
-                info!(installed = warmer.is_some(), "rpc-warm: the worker-side warmer");
+                info!(
+                    installed = warmer.is_some(),
+                    "rpc-warm: the worker-side warmer"
+                );
                 crate::state::ServingSeed {
                     local_inference: Some(adapter),
                     rpc_shard_warmer: warmer,

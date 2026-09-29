@@ -476,7 +476,8 @@ fn the_rpc_warmer_is_the_distributions() {
     };
     let handed: std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer> =
         std::sync::Arc::new(Warm);
-    let hosted = HostedServe::new(String::new(), compose).rpc_warmer(std::sync::Arc::clone(&handed));
+    let hosted =
+        HostedServe::new(String::new(), compose).rpc_warmer(std::sync::Arc::clone(&handed));
     assert!(hosted
         .warmer()
         .is_some_and(|w| std::sync::Arc::ptr_eq(&w, &handed)));
