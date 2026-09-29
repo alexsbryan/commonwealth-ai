@@ -13209,16 +13209,20 @@ dependencies = [
 name = "sovereign-stock"
 version = "0.8.0"
 dependencies = [
+ "futures",
  "host-kit",
  "reqwest 0.12.28",
  "serde_json",
  "sovereign-code",
+ "sovereign-contracts",
  "sovereign-daemon",
  "sovereign-enrichment-catalog",
  "sovereign-serve",
+ "sovereign-turn-client",
  "tempfile",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "workspace-hack",
 ]
 

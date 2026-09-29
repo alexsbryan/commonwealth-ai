@@ -7,15 +7,19 @@
 //! - first-token latency p50: loopback at most 10% slower;
 //! - embedding throughput at batch 32: loopback at least 90% of in-process.
 //!
-//! In process is the one serving assembly the daemon runs today
-//! (`assemble_serving`); loopback is the daemon's terminal arm in its loopback
-//! mode (`serve_client::loopback_provider`) dialing a `sovereign-serve` on a
-//! free port, over the same config file. Ignored in the suite: it loads real
-//! GGUFs. Run by hand, in the toolbox, with the serve binary built:
+//! In process is serve's assembly as the stock process hosts it
+//! (`sovereign_serve::assemble`, the one serving assembly since
+//! pb-serve-distributes); loopback is the daemon's terminal arm in its
+//! loopback mode (`serve_client::loopback_provider`) dialing a
+//! `sovereign-serve` on a free port, over the same config file. Moved here
+//! from sovereign-daemon's tests by pb-serve-distributes, assertions
+//! unchanged: the stock distribution is the one crate that links both halves
+//! the bar compares. Ignored in the suite: it loads real GGUFs. Run by hand,
+//! in the toolbox, with the serve binary built:
 //!
 //!   SOVEREIGN_MODELS_DIR=$PWD/sovereign/models \
-//!   SOVEREIGN_SERVE_BIN=target/debug/sovereign-serve cargo test -p sovereign-daemon \
-//!     --test main serve_latency_bars -- --ignored --nocapture
+//!   SOVEREIGN_SERVE_BIN=target/debug/sovereign-serve cargo test -p sovereign-stock \
+//!     --test serve_latency_bars -- --ignored --nocapture
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -91,7 +95,7 @@ fn p50<T: Copy + PartialOrd>(mut v: Vec<T>) -> T {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "measurement: loads real GGUFs; run by hand before the switch (pb-svrn-dials-serve)"]
+#[ignore = "measurement: loads real GGUFs; run by hand (pb-svrn-dials-serve's bars)"]
 async fn serve_latency_bars() {
     // The loopback client's `serve_latency` laps (RUST_LOG=serve_latency=debug);
     // serve inherits RUST_LOG, and its laps are echoed from its log below.
@@ -122,16 +126,13 @@ async fn serve_latency_bars() {
     .unwrap();
     let config = sovereign_contracts::setup_config::SetupConfig::load_from(&config_path).unwrap();
 
-    // In process: the assembly the daemon runs today.
+    // In process: serve's assembly, as the stock process hosts it. Dropped
+    // (its run lock with it) before serve starts on the same root.
     let (in_ttft, in_tput) = {
-        let config = config.clone();
-        let parts = tokio::task::spawn_blocking(move || {
-            sovereign_compute::assembly::assemble_serving(&config)
-        })
-        .await
-        .unwrap()
-        .expect("in-process assembly");
-        let provider: Arc<dyn InferenceProvider> = parts.provider;
+        let assembly = sovereign_serve::assemble(root.path(), &config_path)
+            .await
+            .expect("in-process assembly");
+        let provider: Arc<dyn InferenceProvider> = assembly.cell;
         measure(provider.as_ref()).await
     };
 

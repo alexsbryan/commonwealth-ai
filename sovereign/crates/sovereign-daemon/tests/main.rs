@@ -198,8 +198,6 @@ mod ring_sync_loop_tests;
 mod rotate_pre_split_guard;
 #[path = "main/scheduler_decision_records.rs"]
 mod scheduler_decision_records;
-#[path = "main/serve_latency_bars.rs"]
-mod serve_latency_bars;
 #[path = "main/status_answers_from_serve.rs"]
 mod status_answers_from_serve;
 #[path = "main/storage_budget_route.rs"]
