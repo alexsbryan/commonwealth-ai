@@ -609,10 +609,7 @@ pub async fn forward_stream(
     for name in RELAYED {
         if let Some(value) = resp.headers().get(name) {
             if let Ok(value) = axum::http::HeaderValue::from_bytes(value.as_bytes()) {
-                headers.insert(
-                    axum::http::HeaderName::from_static(name),
-                    value,
-                );
+                headers.insert(axum::http::HeaderName::from_static(name), value);
             }
         }
     }
