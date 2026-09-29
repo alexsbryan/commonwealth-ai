@@ -479,7 +479,12 @@ pub async fn run_one_round<E: CorpusReadPort + ?Sized>(
     // implementation: the yield-to-local-user half is time-derived and has no
     // transition event to hook, so a node refusing every peer request would
     // otherwise gossip a stale `1.0` (note 3234d770).
-    let fresh_caps = build_local_capabilities(engine, now, claims).await;
+    let mut fresh_caps = build_local_capabilities(engine, now, claims).await;
+    // The same truth `/status`'s `rpc_worker.iroh` reads, so a host's
+    // discovery can take it from the roster.
+    if let Some(anchor) = fresh_caps.anchor.as_mut() {
+        anchor.rpc_iroh = fabric.rpc_iroh_accept();
+    }
     // Step 1: touch self + decay stale peers. One write-lock window.
     // Compare current vs. fresh hosted_corpora so we can log at
     // info only when the advertised set changed (new corpus

@@ -160,18 +160,21 @@ pub async fn build_local_capabilities<E: CorpusReadPort + ?Sized>(
     // lock-step with what the RPC serve path actually does, without threading
     // `[shared_model]` config across the mesh boundary. Consumers (no serve
     // bind) advertise `None`. VRAM is the sum of detected device VRAM.
-    let anchor = sovereign_contracts::launch::RpcServe::from_env()
-        .is_serving()
-        .then(|| AnchorProfile {
-            can_anchor: true,
-            vram_gb: hardware.gpus.iter().map(|g| g.vram_gb).sum(),
-            // One reading of the fleet, shared with the status surface and the
-            // inference provider — the three used to parse it independently and
-            // disagreed about whitespace (see `SharedModelFleet`).
-            model_resident: sovereign_contracts::launch::SharedModelFleet::from_env()
-                .model_id()
-                .map(str::to_string),
-        });
+    let rpc_serve = sovereign_contracts::launch::RpcServe::from_env();
+    let anchor = rpc_serve.is_serving().then(|| AnchorProfile {
+        can_anchor: true,
+        vram_gb: hardware.gpus.iter().map(|g| g.vram_gb).sum(),
+        // One reading of the fleet, shared with the status surface and the
+        // inference provider — the three used to parse it independently and
+        // disagreed about whitespace (see `SharedModelFleet`).
+        model_resident: sovereign_contracts::launch::SharedModelFleet::from_env()
+            .model_id()
+            .map(str::to_string),
+        // The bind this node's worker takes, the port `/status` names; the
+        // gossip round stamps `rpc_iroh` from Fabric's accept flag.
+        rpc_port: rpc_serve.port(),
+        rpc_iroh: false,
+    });
 
     NodeCapabilities {
         hardware,

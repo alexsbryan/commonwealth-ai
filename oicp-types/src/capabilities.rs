@@ -186,6 +186,16 @@ pub struct AnchorProfile {
     /// The shared-model id this anchor is configured to hold, when known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_resident: Option<String>,
+    /// The port this anchor's ggml RPC worker listens on, which a host's
+    /// discovery dials at the member's direct addresses. `None` for an older
+    /// peer, which advertised it only on its daemon's `/status`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rpc_port: Option<u16>,
+    /// The worker also accepts ggml RPC over iroh, so a host may bridge to it
+    /// when no direct address answers. Skipped when false, so an older
+    /// anchor's record re-encodes to the bytes it gossiped.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rpc_iroh: bool,
 }
 
 fn default_inference_availability() -> f32 {
@@ -546,11 +556,21 @@ mod tests {
             can_anchor: true,
             vram_gb: 128,
             model_resident: Some("glm-5.2".to_string()),
+            rpc_port: Some(50052),
+            rpc_iroh: true,
         });
         let json = serde_json::to_string(&caps).unwrap();
         let back: NodeCapabilities = serde_json::from_str(&json).unwrap();
         assert_eq!(back.anchor, caps.anchor, "anchor profile must survive JSON");
         assert_eq!(back.anchor.unwrap().vram_gb, 128);
+    }
+
+    #[test]
+    fn an_older_anchor_has_no_rpc_port_and_no_iroh() {
+        let anchor: AnchorProfile =
+            serde_json::from_str(r#"{"can_anchor": true, "vram_gb": 64}"#).unwrap();
+        assert_eq!(anchor.rpc_port, None);
+        assert!(!anchor.rpc_iroh);
     }
 
     #[test]

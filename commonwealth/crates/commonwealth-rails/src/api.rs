@@ -213,6 +213,14 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
                     "offers": commonwealth_media::candidate_of(m).origins,
                     "last_seen": m.last_seen,
                     "is_self": m.node_id == daemon.node.self_id,
+                    // What the member advertises and how it is dialled, from
+                    // the gossiped record, for a program's discovery to read
+                    // (phase-b pb-serve-distributes; additive, phase-b-50).
+                    "capabilities": m.capabilities,
+                    "dial": {
+                        "relay_url": m.relay_url,
+                        "iroh_direct_addrs": m.iroh_direct_addrs,
+                    },
                 })
             })
             .collect()

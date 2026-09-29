@@ -136,7 +136,8 @@ fn declared_claims() -> serde_json::Value {
                       "gpu_utilization": 0.0, "cpu_utilization": 0.0,
                       "available_for_mesh": true},
         "hosted_corpora": [], "reported_at": 0,
-        "inference_capable": true, "loaded_models": ["fixture-model"]
+        "inference_capable": true, "loaded_models": ["fixture-model"],
+        "anchor": {"can_anchor": true, "vram_gb": 0, "rpc_port": 50052, "rpc_iroh": true}
     })
 }
 
@@ -229,12 +230,10 @@ async fn a_registered_origin_is_reached_by_a_member_with_its_verified_identity()
         );
 
         // The joiner joins by invite and runs.
-        let node_b = RailsNode::bind(
-            joiner_dir.path().to_path_buf(),
-            hermetic("joiner", free_port()),
-        )
-        .await
-        .expect("the joiner binds");
+        let port_b = free_port();
+        let node_b = RailsNode::bind(joiner_dir.path().to_path_buf(), hermetic("joiner", port_b))
+            .await
+            .expect("the joiner binds");
         join::join_and_persist(&node_b, &invite, joiner_dir.path())
             .await
             .expect("the founder admits the joiner");
@@ -343,6 +342,41 @@ async fn a_registered_origin_is_reached_by_a_member_with_its_verified_identity()
                 assert!(
                     started.elapsed() < BUDGET,
                     "the declared capability never reached the joiner's roster"
+                );
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+            // And the joiner's HTTP roster carries it, with the founder's dial
+            // data, for a program's discovery to read (pb-serve-distributes).
+            let status = format!("http://127.0.0.1:{port_b}/v1/mesh/status");
+            let started = Instant::now();
+            loop {
+                let doc: serde_json::Value = http
+                    .get(&status)
+                    .send()
+                    .await
+                    .unwrap()
+                    .json()
+                    .await
+                    .unwrap();
+                let row = doc["members"]
+                    .as_array()
+                    .and_then(|ms| ms.iter().find(|m| m["name"] == "founder"))
+                    .cloned();
+                let anchor = row
+                    .as_ref()
+                    .map(|r| r["capabilities"]["anchor"].clone())
+                    .unwrap_or_default();
+                let direct = row
+                    .as_ref()
+                    .and_then(|r| r["dial"]["iroh_direct_addrs"].as_array().cloned())
+                    .unwrap_or_default();
+                if anchor["rpc_port"] == 50052 && !direct.is_empty() {
+                    assert_eq!(anchor["rpc_iroh"], true);
+                    break;
+                }
+                assert!(
+                    started.elapsed() < BUDGET,
+                    "the joiner's /v1/mesh/status never carried the founder's anchor and direct addresses: {row:?}"
                 );
                 tokio::time::sleep(Duration::from_millis(200)).await;
             }
