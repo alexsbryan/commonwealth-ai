@@ -6,8 +6,9 @@
 //! corpus-engine's tests.
 //!
 //! One struct serves [`LocalCorpusPort`], [`CatalogIngestPort`],
-//! [`EnrichConfigPort`], [`PartitionMergePort`] and their shared supertraits, so `CorpusReadPort` has one set of handlers rather
-//! than one per port. A method a test can program has an `on_*`; every
+//! [`EnrichConfigPort`], [`PartitionMergePort`], the daemon's
+//! [`IngestPort`](super::daemon::IngestPort) and their shared supertraits,
+//! so `CorpusReadPort` has one set of handlers rather than one per port. A method a test can program has an `on_*`; every
 //! other method, and a programmable one left unprogrammed, never answers
 //! success-shaped (principle 6): a `Result` method returns an `Err` naming
 //! itself, any other panics naming itself. A later row that drives another
@@ -33,6 +34,9 @@ use crate::recipe::CatalogConfig;
 use crate::source::{CorpusReadPort, IndexSource};
 use crate::types::{BuiltinCorpus, EmbedFn, IncompleteIngest, IndexInfo};
 use crate::{Error, Result};
+
+mod daemon;
+pub use daemon::RecipeHarnessDouble;
 
 fn unprogrammed(method: &str) -> String {
     format!("IngestPortDouble::{method}: not programmed by this test")
@@ -73,6 +77,7 @@ pub struct IngestPortDouble {
     installed_indexes: Option<Vec<IndexInfo>>,
     incomplete_ingests: Option<Vec<IncompleteIngest>>,
     foreground_signal: Option<Arc<dyn corpus_engine_yield::ForegroundSignal>>,
+    no_foreground_signal: bool,
     enrich_configs: Option<Vec<(String, EnrichConfigSummary)>>,
     watched_config_root: Option<PathBuf>,
     watched_writes: Mutex<Vec<(String, String, PathBuf)>>,
@@ -225,6 +230,13 @@ impl IngestPortDouble {
         signal: Arc<dyn corpus_engine_yield::ForegroundSignal>,
     ) -> Self {
         self.foreground_signal = Some(signal);
+        self
+    }
+
+    /// Program [`CorpusReadPort::foreground_lease`] to hand out none, as the
+    /// engine does before the daemon installs a signal.
+    pub fn without_foreground_signal(mut self) -> Self {
+        self.no_foreground_signal = true;
         self
     }
 
@@ -403,6 +415,7 @@ impl CorpusReadPort for IngestPortDouble {
             Some(signal) => Some(corpus_engine_yield::ForegroundLease::acquire(Arc::clone(
                 signal,
             ))),
+            None if self.no_foreground_signal => None,
             None => panic!("{}", unprogrammed("foreground_lease")),
         }
     }
@@ -609,6 +622,25 @@ mod tests {
     #[should_panic(expected = "IngestPortDouble::index_dir: not programmed")]
     fn an_unprogrammed_plain_method_panics_naming_itself() {
         IngestPortDouble::new().index_dir();
+    }
+
+    #[test]
+    fn without_a_foreground_signal_no_lease_is_handed_out() {
+        let d = IngestPortDouble::new().without_foreground_signal();
+        assert!(d.foreground_lease().is_none());
+        assert_eq!(d.calls(), vec!["foreground_lease"]);
+    }
+
+    #[tokio::test]
+    async fn an_unprogrammed_daemon_port_method_errs_naming_itself() {
+        use super::super::daemon::IngestPort;
+        let Err(err) = IngestPortDouble::new().recipe_sharing("c").await else {
+            panic!("an unprogrammed recipe_sharing answered Ok");
+        };
+        assert!(
+            err.to_string().contains("IngestPortDouble::recipe_sharing"),
+            "{err}"
+        );
     }
 
     #[test]
