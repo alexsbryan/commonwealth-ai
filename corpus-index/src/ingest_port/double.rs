@@ -40,9 +40,12 @@ fn refuse(method: &str) -> Error {
     Error::Io(std::io::Error::other(unprogrammed(method)))
 }
 
-type OpenIndexFn = dyn Fn(&str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<CorpusIndex>> + Send>>
-    + Send
-    + Sync;
+type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send>>;
+type OpenIndexFn = dyn Fn(&str) -> BoxFuture<Result<CorpusIndex>> + Send + Sync;
+type RecipePathFn<T> = dyn Fn(PathBuf) -> BoxFuture<Result<T>> + Send + Sync;
+type WatchedUpdateFn = dyn Fn(WatchedUpdate, DocFetchFn) -> BoxFuture<Result<()>> + Send + Sync;
+type CorpusFn<T> = dyn Fn(&str) -> T + Send + Sync;
+type ReindexFn = dyn Fn(&str, &[String]) + Send + Sync;
 
 /// The ingest ports' double a svrn test programs.
 #[derive(Default)]
@@ -52,6 +55,15 @@ pub struct IngestPortDouble {
     extractors: Mutex<Vec<String>>,
     index_dir: Option<PathBuf>,
     open_index_for_corpus: Option<Box<OpenIndexFn>>,
+    embed_fn: Option<EmbedFn>,
+    ingest_recipe_path: Option<Box<RecipePathFn<RecipeIngested>>>,
+    ensure_empty_index: Option<Box<RecipePathFn<()>>>,
+    apply_watched_update: Option<Box<WatchedUpdateFn>>,
+    remove_corpus_everything: Option<Box<CorpusFn<Result<()>>>>,
+    ingest_in_flight: Option<Box<CorpusFn<bool>>>,
+    cancel_corpus_ingest: Option<Box<CorpusFn<bool>>>,
+    reindex_changed_sources_tiered: Option<Box<ReindexFn>>,
+    atlas_teardown_ok: bool,
 }
 
 impl IngestPortDouble {
@@ -100,6 +112,84 @@ impl IngestPortDouble {
         }));
         self
     }
+
+    /// Program [`CorpusReadPort::embed`] and [`LocalCorpusPort::embed_fn`]
+    /// with `embed`.
+    pub fn with_embed_fn(mut self, embed: EmbedFn) -> Self {
+        self.embed_fn = Some(embed);
+        self
+    }
+
+    /// Program [`LocalCorpusPort::ingest_recipe_path`]; `f` gets the
+    /// recipe's path.
+    pub fn on_ingest_recipe_path(
+        mut self,
+        f: impl Fn(PathBuf) -> BoxFuture<Result<RecipeIngested>> + Send + Sync + 'static,
+    ) -> Self {
+        self.ingest_recipe_path = Some(Box::new(f));
+        self
+    }
+
+    /// Program [`LocalCorpusPort::ensure_empty_index`]; `f` gets the
+    /// recipe's path.
+    pub fn on_ensure_empty_index(
+        mut self,
+        f: impl Fn(PathBuf) -> BoxFuture<Result<()>> + Send + Sync + 'static,
+    ) -> Self {
+        self.ensure_empty_index = Some(Box::new(f));
+        self
+    }
+
+    /// Program [`LocalCorpusPort::apply_watched_update`]; `f` gets the
+    /// update and the caller's document fetch.
+    pub fn on_apply_watched_update(
+        mut self,
+        f: impl Fn(WatchedUpdate, DocFetchFn) -> BoxFuture<Result<()>> + Send + Sync + 'static,
+    ) -> Self {
+        self.apply_watched_update = Some(Box::new(f));
+        self
+    }
+
+    /// Program [`LocalCorpusPort::remove_corpus_everything`].
+    pub fn on_remove_corpus_everything(
+        mut self,
+        f: impl Fn(&str) -> Result<()> + Send + Sync + 'static,
+    ) -> Self {
+        self.remove_corpus_everything = Some(Box::new(f));
+        self
+    }
+
+    /// Program [`LocalCorpusPort::ingest_in_flight`] and
+    /// [`LocalCorpusPort::cancel_corpus_ingest`] from one answer: an ingest
+    /// is registered for a corpus when `in_flight` says so, and a cancel
+    /// reports that same answer.
+    pub fn on_ingest_in_flight(
+        mut self,
+        in_flight: impl Fn(&str) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        let in_flight = Arc::new(in_flight);
+        let cancel = Arc::clone(&in_flight);
+        self.ingest_in_flight = Some(Box::new(move |id| in_flight(id)));
+        self.cancel_corpus_ingest = Some(Box::new(move |id| cancel(id)));
+        self
+    }
+
+    /// Program [`LocalCorpusPort::reindex_changed_sources_tiered`]; `f` gets
+    /// the corpus and the changed sources.
+    pub fn on_reindex_changed_sources_tiered(
+        mut self,
+        f: impl Fn(&str, &[String]) + Send + Sync + 'static,
+    ) -> Self {
+        self.reindex_changed_sources_tiered = Some(Box::new(f));
+        self
+    }
+
+    /// Program [`LocalCorpusPort::atlas_teardown`] to succeed, as the
+    /// engine's does on a corpus with no atlas dir.
+    pub fn tearing_down_absent_atlases(mut self) -> Self {
+        self.atlas_teardown_ok = true;
+        self
+    }
 }
 
 #[async_trait]
@@ -117,9 +207,12 @@ impl IndexSource for IngestPortDouble {
 
 #[async_trait]
 impl CorpusReadPort for IngestPortDouble {
-    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         self.record("embed");
-        Err(refuse("embed"))
+        match &self.embed_fn {
+            Some(embed) => embed(text).await,
+            None => Err(refuse("embed")),
+        }
     }
 
     async fn installed_indexes(&self) -> Result<Vec<IndexInfo>> {
@@ -204,33 +297,53 @@ impl CatalogIngestPort for IngestPortDouble {
 impl LocalCorpusPort for IngestPortDouble {
     async fn ingest_recipe_path(
         &self,
-        _recipe_path: &Path,
+        recipe_path: &Path,
         _progress: Option<ProgressCallback>,
     ) -> Result<RecipeIngested> {
         self.record("ingest_recipe_path");
-        Err(refuse("ingest_recipe_path"))
+        match &self.ingest_recipe_path {
+            Some(f) => f(recipe_path.to_path_buf()).await,
+            None => Err(refuse("ingest_recipe_path")),
+        }
     }
 
-    async fn ensure_empty_index(&self, _recipe_path: &Path) -> Result<()> {
+    async fn ensure_empty_index(&self, recipe_path: &Path) -> Result<()> {
         self.record("ensure_empty_index");
-        Err(refuse("ensure_empty_index"))
+        match &self.ensure_empty_index {
+            Some(f) => f(recipe_path.to_path_buf()).await,
+            None => Err(refuse("ensure_empty_index")),
+        }
     }
 
-    fn cancel_corpus_ingest(&self, _corpus_id: &str) -> bool {
-        panic!("{}", unprogrammed("cancel_corpus_ingest"))
+    fn cancel_corpus_ingest(&self, corpus_id: &str) -> bool {
+        self.record("cancel_corpus_ingest");
+        match &self.cancel_corpus_ingest {
+            Some(f) => f(corpus_id),
+            None => panic!("{}", unprogrammed("cancel_corpus_ingest")),
+        }
     }
 
-    fn ingest_in_flight(&self, _corpus_id: &str) -> bool {
-        panic!("{}", unprogrammed("ingest_in_flight"))
+    fn ingest_in_flight(&self, corpus_id: &str) -> bool {
+        self.record("ingest_in_flight");
+        match &self.ingest_in_flight {
+            Some(f) => f(corpus_id),
+            None => panic!("{}", unprogrammed("ingest_in_flight")),
+        }
     }
 
-    fn remove_corpus_everything(&self, _corpus_id: &str) -> Result<()> {
+    fn remove_corpus_everything(&self, corpus_id: &str) -> Result<()> {
         self.record("remove_corpus_everything");
-        Err(refuse("remove_corpus_everything"))
+        match &self.remove_corpus_everything {
+            Some(f) => f(corpus_id),
+            None => Err(refuse("remove_corpus_everything")),
+        }
     }
 
     fn atlas_teardown(&self, _index_dir: &Path, _corpus_id: &str) -> std::io::Result<()> {
         self.record("atlas_teardown");
+        if self.atlas_teardown_ok {
+            return Ok(());
+        }
         Err(std::io::Error::other(unprogrammed("atlas_teardown")))
     }
 
@@ -238,18 +351,25 @@ impl LocalCorpusPort for IngestPortDouble {
         panic!("{}", unprogrammed("source_file_progress"))
     }
 
-    async fn reindex_changed_sources_tiered(&self, _corpus_id: &str, _source_doc_ids: &[String]) {
-        panic!("{}", unprogrammed("reindex_changed_sources_tiered"))
+    async fn reindex_changed_sources_tiered(&self, corpus_id: &str, source_doc_ids: &[String]) {
+        self.record("reindex_changed_sources_tiered");
+        match &self.reindex_changed_sources_tiered {
+            Some(f) => f(corpus_id, source_doc_ids),
+            None => panic!("{}", unprogrammed("reindex_changed_sources_tiered")),
+        }
     }
 
     async fn apply_watched_update(
         self: Arc<Self>,
-        _update: &WatchedUpdate,
-        _fetch: DocFetchFn,
+        update: &WatchedUpdate,
+        fetch: DocFetchFn,
         _progress: WatchedUpdateProgressFn,
     ) -> Result<()> {
         self.record("apply_watched_update");
-        Err(refuse("apply_watched_update"))
+        match &self.apply_watched_update {
+            Some(f) => f(update.clone(), fetch).await,
+            None => Err(refuse("apply_watched_update")),
+        }
     }
 
     async fn recipe_enrichment_type(&self, _corpus_id: &str) -> Result<Option<String>> {
@@ -279,7 +399,11 @@ impl LocalCorpusPort for IngestPortDouble {
     }
 
     fn embed_fn(&self) -> EmbedFn {
-        panic!("{}", unprogrammed("embed_fn"))
+        self.record("embed_fn");
+        match &self.embed_fn {
+            Some(embed) => Arc::clone(embed),
+            None => panic!("{}", unprogrammed("embed_fn")),
+        }
     }
 
     async fn enrich_field_model(
