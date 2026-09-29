@@ -13191,6 +13191,7 @@ dependencies = [
  "serde_json",
  "sovereign-code",
  "sovereign-daemon",
+ "sovereign-enrichment-catalog",
  "sovereign-serve",
  "tempfile",
  "tokio",

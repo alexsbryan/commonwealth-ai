@@ -7,6 +7,7 @@
 
 use crate::daemon_cmd;
 pub use crate::hosted_code::{CodeHost, CodeMount, HostedCode};
+pub use crate::hosted_ingest::HostedIngest;
 pub use crate::serve_client::HostedServe;
 use sovereign_contracts::launch::Launch;
 
@@ -17,7 +18,14 @@ use sovereign_contracts::launch::Launch;
 /// too (the stock binary); `None` for svrn alone, which dials a configured
 /// serve (phase-b-29 Q1, Q2). `code` is its composition of the code program
 /// (pb-code-daemon-exit; F2 (a), phase-b-30): `None` serves no code tool.
-pub fn run(raw_args: &[String], hosted: Option<HostedServe>, code: Option<HostedCode>) -> i32 {
+/// `ingest` is its composition of ingest's ports (pb-ingest-dial-tools-close):
+/// `None` reports ingest absent by name where svrn needs it.
+pub fn run(
+    raw_args: &[String],
+    hosted: Option<HostedServe>,
+    code: Option<HostedCode>,
+    ingest: Option<HostedIngest>,
+) -> i32 {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "full");
     }
@@ -108,7 +116,7 @@ pub fn run(raw_args: &[String], hosted: Option<HostedServe>, code: Option<Hosted
         .thread_name("sovereign-daemon-rt")
         .build()
         .expect("failed to build tokio runtime");
-    runtime.block_on(daemon_cmd::run(&launch, args, hosted, code))
+    runtime.block_on(daemon_cmd::run(&launch, args, hosted, code, ingest))
 }
 
 /// The subscriber over [`compose_filter`], on stderr so machine-readable

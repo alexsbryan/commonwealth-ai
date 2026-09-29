@@ -248,6 +248,11 @@ pub struct RecipeInputs {
     /// Ingest's atlas port: the atlas context manager's write-or-derive
     /// reads (the seed-table freshness check) go through it.
     pub atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
+    /// Ingest's enrichment-config port, when this host composes ingest: the
+    /// atlas manager's pipeline-map fallback reads through it. `None` (a svrn
+    /// with no ingest program) walks an unconverted atlas without the map
+    /// and logs why (pb-ingest-dial-tools-close).
+    pub enrich_config: Option<Arc<dyn corpus_index::ingest_port::enrich_config::EnrichConfigPort>>,
     /// Backing store for the per-conversation `tool_decision` write hook.
     pub note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     /// The skill registry the router and planner classify against.
@@ -382,6 +387,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         conv_tiered,
         corpus_engine,
         atlas,
+        enrich_config,
         note_store,
         skills,
         approval,
@@ -406,6 +412,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         conv_tiered,
         &corpus_engine,
         atlas,
+        enrich_config,
         &inference,
         &indexes_dir,
         &embed_model,
@@ -638,6 +645,7 @@ async fn build_lane(
     conv_tiered: Option<Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>>,
     corpus_engine: &Arc<dyn corpus_index::source::CorpusReadPort>,
     atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
+    enrich_config: Option<Arc<dyn corpus_index::ingest_port::enrich_config::EnrichConfigPort>>,
     inference: &Arc<dyn InferenceProvider>,
     indexes_dir: &Path,
     embed_model: &str,
@@ -684,12 +692,15 @@ async fn build_lane(
     // cached on disk; cold-start embed work is deliberately NOT done here (it
     // belongs in the post-install hook, so the first user query has a
     // deterministic latency rather than waiting on a wiki-scale embed pass).
-    let atlas_mgr = Arc::new(AtlasContextManager::new(
-        indexes_dir.to_path_buf(),
-        Arc::clone(inference),
-        embed_model.to_string(),
-        atlas,
-    ));
+    let atlas_mgr = Arc::new(
+        AtlasContextManager::new(
+            indexes_dir.to_path_buf(),
+            Arc::clone(inference),
+            embed_model.to_string(),
+            atlas,
+        )
+        .with_enrich_config(enrich_config),
+    );
     lane.atlas_context =
         Some(Arc::clone(&atlas_mgr)
             as Arc<

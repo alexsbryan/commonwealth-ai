@@ -384,6 +384,16 @@ impl LocalCorpusManager {
         self.enrichment_driver.set_atlas_builder(builder).await;
     }
 
+    /// Install ingest's enrichment-config port (pb-ingest-dial-tools-close).
+    /// Passthrough to the driver; without it the config sites report ingest
+    /// absent by name.
+    pub async fn set_enrich_config(
+        &self,
+        port: Arc<dyn corpus_index::ingest_port::enrich_config::EnrichConfigPort>,
+    ) {
+        self.enrichment_driver.set_enrich_config(port).await;
+    }
+
     /// Install in-process tiered-enrichment deps (FolderTieredProvider
     /// + optional GliNER extractor). Once set, `enable_enrichment`
     /// routes through `start_tiered_build` instead of the legacy

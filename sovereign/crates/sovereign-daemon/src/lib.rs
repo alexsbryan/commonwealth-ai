@@ -88,6 +88,9 @@ pub mod guest_door;
 /// The code program as a distribution composes it into this process
 /// (pb-code-daemon-exit): what svrn mounts, and its absence when alone.
 pub mod hosted_code;
+/// Ingest's ports as a distribution composes them into this process
+/// (pb-ingest-dial-tools-close), and their named absence when alone.
+pub mod hosted_ingest;
 pub mod http_response;
 pub mod ingest_executor;
 /// The daemon's insight surface (sv-surface rung 6): clip/list/search/delete

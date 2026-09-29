@@ -1658,6 +1658,7 @@ pub async fn setup_watched_folders(
     data_dir: &Path,
     config: &SetupConfig,
     folder_tiered_deps: Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps>,
+    enrich_config: Option<Arc<dyn corpus_index::ingest_port::enrich_config::EnrichConfigPort>>,
 ) -> Option<crate::watched_folder_setup::WatchedSubsystem> {
     // ── Watched-folder reconciliation scheduler ─────────────────
     //
@@ -1731,6 +1732,11 @@ pub async fn setup_watched_folders(
                          per-folder enrichment will return an error \
                          until models are picked"
                 );
+            }
+            // Ingest's enrichment-config port, when the distribution composed
+            // ingest; without it the config sites report ingest absent.
+            if let Some(port) = enrich_config {
+                manager.set_enrich_config(port).await;
             }
             if let Some(deps) = folder_tiered_deps.clone() {
                 manager.set_tiered_deps(deps).await;

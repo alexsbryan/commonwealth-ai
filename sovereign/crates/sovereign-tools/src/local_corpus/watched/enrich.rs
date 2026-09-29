@@ -70,6 +70,16 @@ pub struct EnrichmentDefaults {
     pub cli_path: Option<PathBuf>,
 }
 
+/// What a svrn that composes no ingest program answers where it needs ingest's
+/// enrichment config (pb-ingest-dial-tools-close): a named absence, never a
+/// silent default (FIVE_PROGRAMS §4 rule 3). `what` names the act refused.
+pub fn ingest_absent(what: &str) -> String {
+    format!(
+        "{what}: the enrichment config is the ingest program's, and this svrn \
+         does not host it (the stock install, `svrn daemon start`, composes it)"
+    )
+}
+
 /// Write the watched folder's config through ingest's port and return where
 /// it landed: the path the subprocess spawned on the next line reads. The
 /// schema and the watched-folder policy are the implementor's.
@@ -210,6 +220,10 @@ pub struct EnrichmentDriver {
     /// the subprocess path (`run_enrich_build`) — a dev box with the CLI on
     /// PATH still works; a shipped bundle installs this.
     atlas_builder: RwLock<Option<Arc<dyn AtlasBuildRunner>>>,
+    /// Ingest's enrichment-config port, installed by a host that composes
+    /// ingest (`set_enrich_config`). `None` = the config sites answer
+    /// [`ingest_absent`].
+    enrich_config: RwLock<Option<Arc<dyn EnrichConfigPort>>>,
 }
 
 impl EnrichmentDriver {
@@ -220,7 +234,20 @@ impl EnrichmentDriver {
             permits: Arc::new(Semaphore::new(1)),
             tiered_deps: RwLock::new(None),
             atlas_builder: RwLock::new(None),
+            enrich_config: RwLock::new(None),
         }
+    }
+
+    /// Install ingest's enrichment-config port. Idempotent: a second call
+    /// replaces the first.
+    pub async fn set_enrich_config(&self, port: Arc<dyn EnrichConfigPort>) {
+        *self.enrich_config.write().await = Some(port);
+    }
+
+    /// The installed enrichment-config port, `None` when this process
+    /// composes no ingest program.
+    pub async fn enrich_config(&self) -> Option<Arc<dyn EnrichConfigPort>> {
+        self.enrich_config.read().await.clone()
     }
 
     /// Install the host's in-process atlas build (see [`AtlasBuildRunner`]).
@@ -361,8 +388,17 @@ impl EnrichmentDriver {
 
         // Write the enrich config. The build reads from this exact path on
         // the very next line.
+        let Some(port) = self.enrich_config().await else {
+            tracing::info!(
+                corpus_id,
+                "watched_folder:enrich_config_absent — no ingest program in this process"
+            );
+            return Err(Error::Execution(ingest_absent(&format!(
+                "write enrich config for corpus '{corpus_id}'"
+            ))));
+        };
         save_watched_config(
-            &sovereign_enrichment_catalog::port::CatalogEnrichConfig,
+            port.as_ref(),
             &WatchedEnrichConfig {
                 corpus_id,
                 pipeline_id,
@@ -894,6 +930,58 @@ mod tests {
         );
     }
 
+    /// The write goes through the installed port with the folder's inputs,
+    /// and the build is accepted. Fails if the driver writes the config any
+    /// other way (the double is the only writer) or drops an input.
+    #[tokio::test]
+    async fn start_build_writes_the_watched_config_through_the_installed_port() {
+        let driver = EnrichmentDriver::new();
+        let mut d = defaults();
+        d.cli_path = Some(PathBuf::from("/bin/true"));
+        driver.set_defaults(d).await;
+        let port = Arc::new(
+            corpus_index::ingest_port::double::IngestPortDouble::new()
+                .writing_watched_configs_under("/enrichment"),
+        );
+        driver.set_enrich_config(port.clone()).await;
+        let progress: crate::enrich::EnrichProgressFn = Arc::new(|_| {});
+        driver
+            .start_build("c1", Path::new("/tmp/notes"), "philosophy_atlas", progress)
+            .await
+            .expect("build accepted");
+        assert_eq!(
+            port.watched_writes(),
+            vec![(
+                "c1".to_string(),
+                "philosophy_atlas".to_string(),
+                PathBuf::from("/tmp/notes")
+            )]
+        );
+        driver.cancel("c1").await;
+        driver.forget("c1").await;
+    }
+
+    /// A svrn that composes no ingest program refuses the write by name and
+    /// starts no build. Fails if the driver writes through a default or
+    /// reports success.
+    #[tokio::test]
+    async fn a_driver_with_no_ingest_reports_it_absent_by_name() {
+        let driver = EnrichmentDriver::new();
+        driver.set_defaults(defaults()).await;
+        let progress: crate::enrich::EnrichProgressFn = Arc::new(|_| {});
+        let err = driver
+            .start_build("c1", Path::new("/tmp/notes"), "philosophy_atlas", progress)
+            .await
+            .expect_err("no ingest program: the write is refused");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("write enrich config for corpus 'c1'")
+                && msg.contains("the ingest program's"),
+            "absence not named: {msg}"
+        );
+        assert!(!driver.is_running("c1").await, "a build started anyway");
+    }
+
     #[tokio::test]
     async fn driver_rejects_concurrent_start_for_same_corpus() {
         let _guard = data_dir_test_lock();
@@ -910,6 +998,12 @@ mod tests {
         let mut d = defaults();
         d.cli_path = Some(PathBuf::from("/bin/true"));
         driver.set_defaults(d).await;
+        driver
+            .set_enrich_config(Arc::new(
+                corpus_index::ingest_port::double::IngestPortDouble::new()
+                    .writing_watched_configs_under(dir.path()),
+            ))
+            .await;
         let progress: crate::enrich::EnrichProgressFn = Arc::new(|_| {});
 
         let _job_id = driver

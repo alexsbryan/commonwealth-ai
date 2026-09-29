@@ -25,6 +25,7 @@ pub(super) async fn run_daemon(
     args: &[String],
     hosted: Option<crate::serve_client::HostedServe>,
     code: Option<crate::hosted_code::HostedCode>,
+    ingest: Option<crate::hosted_ingest::HostedIngest>,
 ) -> i32 {
     #[cfg(unix)]
     rlimit::raise_open_file_limit();
@@ -488,6 +489,23 @@ pub(super) async fn run_daemon(
             None
         }
     };
+    // ── Ingest's ports, when the distribution composes ingest ────
+    // The stock binary hands in the implementors svrn cannot build (it links
+    // no ingest catalog, pb-ingest-dial-tools-close). Without them the
+    // enrichment-config sites report ingest absent by name.
+    let enrich_config = match ingest {
+        Some(ingest) => {
+            tracing::info!("daemon: ingest's enrichment-config port is composed in this process");
+            Some(ingest.enrich_config())
+        }
+        None => {
+            tracing::info!(
+                "daemon: no ingest program in this process; enrichment-config reads and \
+                 writes report it absent"
+            );
+            None
+        }
+    };
     let (code_tools, project_http, code_yield, _code_runtime) = match code_mount {
         Some(m) => (Some(m.tools), m.routes, Some(m.yield_to), Some(m.hold)),
         None => (
@@ -550,6 +568,7 @@ pub(super) async fn run_daemon(
         &data_dir,
         &config,
         folder_tiered_deps,
+        enrich_config.clone(),
     )
     .await;
 
@@ -632,6 +651,7 @@ pub(super) async fn run_daemon(
                 as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>),
             corpus_engine: Arc::clone(&engine) as _,
             atlas: Arc::new(corpus_engine::IngestAtlas),
+            enrich_config,
             note_store: Some(Arc::clone(&notes_port)),
             // The same compiled-in skill set the desktop ships (rung 6
             // commit B) — built just above from the ONE shared home, so a

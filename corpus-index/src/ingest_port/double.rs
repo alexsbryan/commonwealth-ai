@@ -5,8 +5,8 @@
 //! (`impl LocalCorpusPort` / `CatalogIngestPort for CorpusEngine`), in
 //! corpus-engine's tests.
 //!
-//! One struct serves [`LocalCorpusPort`], [`CatalogIngestPort`] and their
-//! shared supertraits, so `CorpusReadPort` has one set of handlers rather
+//! One struct serves [`LocalCorpusPort`], [`CatalogIngestPort`],
+//! [`EnrichConfigPort`] and their shared supertraits, so `CorpusReadPort` has one set of handlers rather
 //! than one per port. A method a test can program has an `on_*`; every
 //! other method, and a programmable one left unprogrammed, never answers
 //! success-shaped (principle 6): a `Result` method returns an `Err` naming
@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 
+use super::enrich_config::{EnrichConfigPort, EnrichConfigSummary, WatchedEnrichConfig};
 use super::{
     CatalogIngestPort, CatalogWork, CatalogWorkError, CatalogWorkIngested, CustomAcquirerFn,
     CustomExtractorFn, DocFetchFn, EmbeddingClusters, EnrichmentPassRoute, FieldModelError,
@@ -67,6 +68,9 @@ pub struct IngestPortDouble {
     installed_indexes: Option<Vec<IndexInfo>>,
     incomplete_ingests: Option<Vec<IncompleteIngest>>,
     foreground_signal: Option<Arc<dyn corpus_engine_yield::ForegroundSignal>>,
+    enrich_configs: Option<Vec<(String, EnrichConfigSummary)>>,
+    watched_config_root: Option<PathBuf>,
+    watched_writes: Mutex<Vec<(String, String, PathBuf)>>,
 }
 
 impl IngestPortDouble {
@@ -214,6 +218,57 @@ impl IngestPortDouble {
     ) -> Self {
         self.foreground_signal = Some(signal);
         self
+    }
+
+    /// Program [`EnrichConfigPort::load`] to answer `configs` (by corpus id)
+    /// and `Ok(None)` for any other corpus.
+    pub fn with_enrich_configs(mut self, configs: Vec<(String, EnrichConfigSummary)>) -> Self {
+        self.enrich_configs = Some(configs);
+        self
+    }
+
+    /// Program [`EnrichConfigPort::write_watched`] to record each write and
+    /// answer `<root>/<corpus_id>/config.json`, touching no disk.
+    pub fn writing_watched_configs_under(mut self, root: impl Into<PathBuf>) -> Self {
+        self.watched_config_root = Some(root.into());
+        self
+    }
+
+    /// Each [`EnrichConfigPort::write_watched`] so far: corpus id, pipeline
+    /// id, source path.
+    pub fn watched_writes(&self) -> Vec<(String, String, PathBuf)> {
+        self.watched_writes.lock().expect("watched writes lock").clone()
+    }
+}
+
+impl EnrichConfigPort for IngestPortDouble {
+    fn load(&self, corpus_id: &str) -> Result<Option<EnrichConfigSummary>> {
+        self.record("enrich_config_load");
+        let configs = self
+            .enrich_configs
+            .as_ref()
+            .ok_or_else(|| refuse("enrich_config_load"))?;
+        Ok(configs
+            .iter()
+            .find(|(id, _)| id == corpus_id)
+            .map(|(_, summary)| summary.clone()))
+    }
+
+    fn write_watched(&self, config: &WatchedEnrichConfig<'_>) -> Result<PathBuf> {
+        self.record("write_watched");
+        let root = self
+            .watched_config_root
+            .as_ref()
+            .ok_or_else(|| refuse("write_watched"))?;
+        self.watched_writes
+            .lock()
+            .expect("watched writes lock")
+            .push((
+                config.corpus_id.to_string(),
+                config.pipeline_id.to_string(),
+                config.source_path.to_path_buf(),
+            ));
+        Ok(root.join(config.corpus_id).join("config.json"))
     }
 }
 

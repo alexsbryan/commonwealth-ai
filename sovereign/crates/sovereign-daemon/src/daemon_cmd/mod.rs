@@ -62,19 +62,21 @@ use lifecycle::wait_for_shutdown;
 /// - `vram-plan` → the sizing query.
 ///
 /// `hosted`: the distribution's composition of serve, when this process
-/// hosts it (`process::run`); `code`: its composition of the code program.
+/// hosts it (`process::run`); `code`: its composition of the code program;
+/// `ingest`: its composition of ingest's ports.
 pub async fn run(
     launch: &Launch,
     args: &[String],
     hosted: Option<crate::serve_client::HostedServe>,
     code: Option<crate::hosted_code::HostedCode>,
+    ingest: Option<crate::hosted_ingest::HostedIngest>,
 ) -> i32 {
     if help::wants_help(args) {
         help::print(&HELP);
         return 0;
     }
     match args.first().map(String::as_str) {
-        Some("run") => run_daemon(launch, &args[1..], hosted, code).await,
+        Some("run") => run_daemon(launch, &args[1..], hosted, code, ingest).await,
         // Sizing, not lifecycle: what VRAM would a loadout need, and which
         // card holds it. Lives under `daemon` because it answers the same
         // question the serving boot's preflight asks (`sovereign_compute::preflight`),
@@ -95,7 +97,7 @@ pub async fn run(
             // Bare flags like `--config <path>` route straight to
             // run_daemon — the caller means "start the daemon with
             // these flags."
-            run_daemon(launch, args, hosted, code).await
+            run_daemon(launch, args, hosted, code, ingest).await
         }
         Some(other) => {
             eprintln!("error: unknown daemon subcommand '{other}'");
@@ -106,7 +108,7 @@ pub async fn run(
             // Bare invocation — same destination as `run`. launchd
             // and systemd unit files keep using `daemon run`
             // explicitly; both paths land in the same place.
-            run_daemon(launch, &[], hosted, code).await
+            run_daemon(launch, &[], hosted, code, ingest).await
         }
     }
 }

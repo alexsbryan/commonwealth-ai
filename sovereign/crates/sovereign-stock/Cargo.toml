@@ -7,7 +7,7 @@ license.workspace = true
 
 # The stock distribution (docs/FIVE_PROGRAMS.md §2c; phase-b-29 Q1, Q2, Q4):
 # ONE process that runs svrn with serve and code hosted in it. A composition
-# root in no package, held to its three faces by boundary-gate (`[[distribution]] stock` in
+# root in no package, held to its faces by boundary-gate (`[[distribution]] stock` in
 # quality/ARCH_LAYERS.toml): svrn's process entry and serve's assembly. It
 # names no sovereign-contracts, so it never raises that crate's fan-in.
 
@@ -22,6 +22,10 @@ sovereign-serve = { workspace = true }
 # Code's face (`face::compose`), mounted on svrn's one `/mcp`
 # (pb-code-daemon-exit).
 sovereign-code = { workspace = true }
+# Ingest's enrichment-config port, whose implementor is the catalog's
+# (`port::CatalogEnrichConfig`); svrn links no catalog
+# (pb-ingest-dial-tools-close).
+sovereign-enrichment-catalog = { workspace = true }
 host-kit = { workspace = true, features = ["shell"] }
 tokio = { workspace = true }
 tracing = { workspace = true }

@@ -9,9 +9,12 @@
 //! decides whether serve is hosted here (`ServingPath::decide`); this binary
 //! only hands it the composition. Code is composed over svrn's data root and
 //! mounted on svrn's one `:9741/mcp` and client surface (pb-code-daemon-exit;
-//! F2 (a), phase-b-30; phase-b-33). boundary-gate holds the face items: every
-//! `sovereign_serve::`, `sovereign_daemon::` and `sovereign_code::` path
-//! below is on the `[[distribution]] stock` row, spelled in full.
+//! F2 (a), phase-b-30; phase-b-33). Ingest's enrichment-config port is built
+//! from ingest's catalog and handed to svrn, which links no catalog
+//! (pb-ingest-dial-tools-close). boundary-gate holds the face items: every
+//! `sovereign_serve::`, `sovereign_daemon::`, `sovereign_code::` and
+//! `sovereign_enrichment_catalog::` path below is on the
+//! `[[distribution]] stock` row, spelled in full.
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -84,9 +87,13 @@ fn main() {
             hold: Box::new(face.runtime),
         })
     });
+    let ingest = sovereign_daemon::process::HostedIngest::new(std::sync::Arc::new(
+        sovereign_enrichment_catalog::port::CatalogEnrichConfig,
+    ));
     std::process::exit(sovereign_daemon::process::run(
         &args,
         Some(hosted),
         Some(code),
+        Some(ingest),
     ));
 }

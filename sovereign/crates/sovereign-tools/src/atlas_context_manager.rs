@@ -47,20 +47,29 @@ use understanding_vocab::read::ATLAS_DIRNAME;
 /// no-op then), and a recipe-declared config (`ontology` present) is left
 /// alone: its map is the author's, written by the build.
 ///
-/// This host can read the config (`sovereign-enrichment-catalog`) and the
-/// pipeline registry (ingest's, through the atlas port); it cannot reach the
-/// build crate's resolver,
-/// which is why the custom path is excluded rather than resolved here.
+/// This host reads the config and the pipeline registry through ingest's
+/// ports (enrichment config, atlas); it cannot reach the build crate's
+/// resolver, which is why the custom path is excluded rather than resolved
+/// here. With no ingest program in the process (`enrich_config` is `None`)
+/// there is no config to read, and the graph walks without the map.
 fn attach_pipeline_map(
     atlas: &dyn AtlasPort,
+    enrich_config: Option<&dyn EnrichConfigPort>,
     graph: sovereign_core::atlas_context::AtlasGraph,
     corpus_id: &str,
 ) -> sovereign_core::atlas_context::AtlasGraph {
     if graph.navigation().is_some() {
         return graph;
     }
-    let Ok(Some(cfg)) = sovereign_enrichment_catalog::port::CatalogEnrichConfig.load(corpus_id)
-    else {
+    let Some(enrich_config) = enrich_config else {
+        tracing::debug!(
+            corpus = corpus_id,
+            "atlas-graph: no ontology.json and no ingest program in this process; \
+             the pipeline map is not attached"
+        );
+        return graph;
+    };
+    let Ok(Some(cfg)) = enrich_config.load(corpus_id) else {
         return graph;
     };
     if cfg.declares_ontology {
@@ -92,6 +101,9 @@ pub struct AtlasContextManager {
     /// Ingest's atlas port: the seed-table freshness check and the
     /// pipeline map go through it.
     atlas: Arc<dyn AtlasPort>,
+    /// Ingest's enrichment-config port, when this process composes ingest
+    /// (`with_enrich_config`): the pipeline-map fallback reads through it.
+    enrich_config: Option<Arc<dyn EnrichConfigPort>>,
     inference: Arc<dyn InferenceProvider>,
     embed_model: String,
     filter: AtlasContextFilter,
@@ -161,6 +173,7 @@ impl AtlasContextManager {
         Self {
             indexes_dir,
             atlas,
+            enrich_config: None,
             inference,
             embed_model,
             filter: AtlasContextFilter::default(),
@@ -170,6 +183,13 @@ impl AtlasContextManager {
             non_atom_providers: Arc::new(std::sync::RwLock::new(HashMap::new())),
             bumps: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Hand the manager ingest's enrichment-config port; `None` keeps it
+    /// absent (a svrn with no ingest program).
+    pub fn with_enrich_config(mut self, port: Option<Arc<dyn EnrichConfigPort>>) -> Self {
+        self.enrich_config = port;
+        self
     }
 
     /// Override the load filter (test surface; production uses defaults).
@@ -338,7 +358,7 @@ impl AtlasContextManager {
             atlas_dir,
             corpus_engine_atlas_reader::context::read_section_rows(atlas_dir),
         ) {
-            Ok(g) => attach_pipeline_map(&*self.atlas, g, corpus_id),
+            Ok(g) => attach_pipeline_map(&*self.atlas, self.enrich_config.as_deref(), g, corpus_id),
             Err(e) => {
                 tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
                 return false;
@@ -672,7 +692,12 @@ impl AtlasContextProvider for AtlasContextManager {
         ) {
             Ok(graph) => {
                 let load_ms = load_started.elapsed().as_millis();
-                let graph = Arc::new(attach_pipeline_map(&*self.atlas, graph, atlas_corpus_id));
+                let graph = Arc::new(attach_pipeline_map(
+                    &*self.atlas,
+                    self.enrich_config.as_deref(),
+                    graph,
+                    atlas_corpus_id,
+                ));
                 tracing::info!(
                     corpus = atlas_corpus_id,
                     atoms = graph.atom_count(),

@@ -1515,7 +1515,7 @@ max_code_lines = 300
 [[distribution.face]]
 package = "svrn"
 krate = "sovereign-daemon"
-items = ["process::run", "process::HostedServe", "process::HostedCode", "process::CodeMount"]
+items = ["process::run", "process::HostedServe", "process::HostedCode", "process::CodeMount", "process::HostedIngest"]
 [[distribution.face]]
 package = "cmnwlth"
 krate = "sovereign-serve"
@@ -1529,6 +1529,14 @@ items = ["bundles", "assemble", "child_launch", "DEFAULT_FILTER"]
 package = "code"
 krate = "sovereign-code"
 items = ["face::compose", "face::CodeParts", "face::NotesRail"]
+# Ingest's face (pb-ingest-dial-tools-close): the enrichment-config port's
+# implementor, in the schema's owner, handed to svrn through
+# `process::HostedIngest`. The daemon links no catalog, so only a distribution
+# can build it.
+[[distribution.face]]
+package = "ingest"
+krate = "sovereign-enrichment-catalog"
+items = ["port::CatalogEnrichConfig"]
 
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #
