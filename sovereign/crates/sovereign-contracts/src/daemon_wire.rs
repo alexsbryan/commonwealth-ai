@@ -41,6 +41,7 @@ pub mod chat_activity;
 pub mod documents;
 pub mod enrich;
 pub mod enrich_catalog;
+pub mod enrich_progress;
 pub mod ingest;
 pub mod local_corpus;
 pub mod mesh;
