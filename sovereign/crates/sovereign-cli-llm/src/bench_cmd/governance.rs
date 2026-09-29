@@ -27,14 +27,14 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use corpus_engine::enrichment::atlas::{
-    edges::EdgeType, read_atlas_atoms, read_atlas_edges, AtomEnvelope, ATLAS_DIRNAME,
-};
 use serde::Deserialize;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 use sovereign_eval::governance_bench::{
     score_detector, DetectorReport, GovernanceTruth, PairKey, SectionKey, Split, ALL_SPLITS,
 };
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::edges::EdgeType;
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
 
 const HELP: Help = Help {
     command: "svrn bench governance",

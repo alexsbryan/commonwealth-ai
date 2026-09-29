@@ -15,8 +15,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use understanding_vocab::axis_catalog::{all_axes, AxisAtomShape, TypedAxis};
 use understanding_vocab::atoms::{AtomEnvelope, Entity, Event, Opposition, Position, Question};
+use understanding_vocab::axis_catalog::{all_axes, AxisAtomShape, TypedAxis};
 use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
 
 use crate::enrich_cmd::paths::index_root;
@@ -195,7 +195,7 @@ fn scaffold_draft(corpus_id: &str, atoms: &[AtomEnvelope], per_axis: usize) -> D
         |e| {
             matches!(
                 e.entity_type,
-                corpus_engine::enrichment::pipeline::atlas::EntityType::Person
+                understanding_vocab::taxonomy::EntityType::Person
             )
         },
         per_axis,
@@ -207,7 +207,7 @@ fn scaffold_draft(corpus_id: &str, atoms: &[AtomEnvelope], per_axis: usize) -> D
             // their axis lane. Keep base / unqualified concepts here.
             matches!(
                 e.entity_type,
-                corpus_engine::enrichment::pipeline::atlas::EntityType::Concept
+                understanding_vocab::taxonomy::EntityType::Concept
             ) && e.concept_kind.is_none()
         },
         per_axis,
@@ -217,7 +217,7 @@ fn scaffold_draft(corpus_id: &str, atoms: &[AtomEnvelope], per_axis: usize) -> D
         |e| {
             matches!(
                 e.entity_type,
-                corpus_engine::enrichment::pipeline::atlas::EntityType::Work
+                understanding_vocab::taxonomy::EntityType::Work
             )
         },
         per_axis,

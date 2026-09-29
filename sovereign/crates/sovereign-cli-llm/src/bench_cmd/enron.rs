@@ -25,11 +25,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, Entity};
 use corpus_engine::enrichment::reconciliation::{reconcile, ReconciliationPolicy};
 use serde::{Deserialize, Serialize};
 use sovereign_eval::entity_resolution_bench::{BenchGroundTruth, PeekBudget, Split};
 use sovereign_eval::entity_resolution_score::{score, Clustering, EntityResolutionReport};
+use understanding_vocab::atoms::{AtomEnvelope, Entity};
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
@@ -384,7 +384,7 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
         );
         return Ok(2);
     }
-    let atoms_file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+    let atoms_file = understanding_vocab::read::read_atlas_atoms(&atlas_dir)
         .map_err(|e| format!("read atoms.json ({}): {e}", atoms_path.display()))?;
 
     let entities: Vec<Entity> = atoms_file
@@ -604,7 +604,7 @@ async fn cmd_diagnose(args: &[String]) -> Result<i32, String> {
         eprintln!("error: no atoms.json at {}", atoms_path.display());
         return Ok(2);
     }
-    let atoms_file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+    let atoms_file = understanding_vocab::read::read_atlas_atoms(&atlas_dir)
         .map_err(|e| format!("read atoms.json ({}): {e}", atoms_path.display()))?;
     let entities: Vec<Entity> = atoms_file
         .atoms()

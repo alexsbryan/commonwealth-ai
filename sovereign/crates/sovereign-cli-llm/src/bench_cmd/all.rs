@@ -26,7 +26,7 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
+use understanding_vocab::read::ATLAS_DIRNAME;
 
 use crate::enrich_cmd::eval::{score_corpus, EvalReport, PhaseFilter, PhaseScore};
 use crate::enrich_cmd::eval_median::AggregatedReport;
