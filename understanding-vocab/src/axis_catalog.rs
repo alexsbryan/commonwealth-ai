@@ -21,7 +21,7 @@
 //! lyric / reflective axes land when their `resolve_type_extensions`
 //! arms land.
 
-use understanding_vocab::taxonomy::DiscourseMode;
+use crate::taxonomy::DiscourseMode;
 
 /// One row in the catalog. All fields are compile-time constants;
 /// the catalog is a flat `&'static [TypedAxis]`, not a runtime

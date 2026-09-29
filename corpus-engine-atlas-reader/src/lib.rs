@@ -21,7 +21,7 @@ pub use understanding_vocab::{atoms, edges};
 // The shared journal, at the `crate::oplog` path the governance modules name.
 pub use understanding_atlas::oplog;
 
-pub mod axis_catalog;
+pub use understanding_vocab::axis_catalog;
 pub mod chapter_manifest;
 pub mod citation;
 pub mod context;

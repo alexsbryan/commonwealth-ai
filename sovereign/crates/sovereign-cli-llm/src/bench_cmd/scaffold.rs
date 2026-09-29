@@ -15,7 +15,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, AxisAtomShape, TypedAxis};
+use understanding_vocab::axis_catalog::{all_axes, AxisAtomShape, TypedAxis};
 use understanding_vocab::atoms::{AtomEnvelope, Entity, Event, Opposition, Position, Question};
 use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
 

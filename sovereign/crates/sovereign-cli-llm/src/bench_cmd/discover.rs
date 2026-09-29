@@ -21,7 +21,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, TypedAxis};
+use understanding_vocab::axis_catalog::{all_axes, TypedAxis};
 use sovereign_contracts::index_layout::{inspect_corpus_index_state, CorpusIndexState};
 
 /// Which scoring surface a discovered bench belongs to.
