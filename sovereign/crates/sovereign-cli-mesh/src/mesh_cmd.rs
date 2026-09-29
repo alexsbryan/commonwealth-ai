@@ -65,7 +65,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
             2
         }
         "plan" => cmd_plan(&args[1..]).await,
-        "bench" => crate::mesh_bench::cmd_bench(&args[1..]).await,
+        "bench" => sovereign_serve::mesh_bench::cmd_bench(&args[1..]).await,
         "check-invariants" => cmd_check_invariants(&args[1..]).await,
         "soak-gate" => cmd_soak_gate(&args[1..]).await,
         other => {

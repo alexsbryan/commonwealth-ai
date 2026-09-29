@@ -5,7 +5,6 @@ pub mod guest_route;
 pub mod job_cmd;
 pub mod kv_export;
 pub mod mesh_app;
-pub mod mesh_bench;
 pub mod mesh_cmd;
 pub mod mesh_guest;
 pub mod mesh_guest_link;

@@ -34,6 +34,8 @@ kernel-types = { workspace = true }
 sovereign-turn-client = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
+# bench's record stamp (the wall-clock leaf).
+sovereign-time = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }

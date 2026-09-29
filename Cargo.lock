@@ -13149,6 +13149,7 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-inference",
  "sovereign-serving-host",
+ "sovereign-time",
  "sovereign-turn-client",
  "tempfile",
  "tokio",

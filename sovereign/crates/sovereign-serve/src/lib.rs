@@ -62,6 +62,9 @@ mod fetch_ner;
 /// The measurement codec on cw-rails' `mesh-measurements` journal, and the
 /// reconcile loop that keeps the local file on it (pb-serve-placement).
 pub mod measurements_rail;
+/// `svrn mesh bench`: measure a placement's decode rate under the probe's
+/// validity guards and file the record (pb-serve-placement).
+pub mod mesh_bench;
 /// Placement measurements: what a placement was observed to do, keyed by
 /// model fingerprint × placement digest × machine witness (phase-b-22).
 pub mod mesh_measurements;
