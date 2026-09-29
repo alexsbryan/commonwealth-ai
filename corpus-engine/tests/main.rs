@@ -95,6 +95,8 @@ mod snapshot_restore_e2e;
 // Not a test file: the two source-tree deciders the gates below share.
 #[path = "main/chunk_ner_bounded_seam.rs"]
 mod chunk_ner_bounded_seam;
+#[path = "main/local_corpus_port_parity.rs"]
+mod local_corpus_port_parity;
 #[path = "main/source_tree.rs"]
 mod source_tree;
 #[path = "main/svrn_recipe_shapes.rs"]
