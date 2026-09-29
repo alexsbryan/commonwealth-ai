@@ -44,6 +44,8 @@ mod enrichment_requested_flag;
 mod enrichment_type_deciders_census;
 #[path = "main/filter_pipeline.rs"]
 mod filter_pipeline;
+#[path = "main/fold_merge_port_parity.rs"]
+mod fold_merge_port_parity;
 #[path = "main/http_api_pagination_e2e.rs"]
 mod http_api_pagination_e2e;
 #[path = "main/index_cache_residency.rs"]
