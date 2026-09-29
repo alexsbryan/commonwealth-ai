@@ -1258,6 +1258,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: accept the substitute proof. `run_typed_extension` and `write_summary_atoms` write through `AtlasPort` via `IngestAtlas`, and the next read sees the write (entry-point tests), plus the per-family grep PLANT. The row is rewritten with the false premise named and marked `[x]`. The run-time absence half moves to pb-ingest-dial-tools-close, whose PROOF now also requires `FolderTieredProvider::post_finalize_corpus`, the one svrn run-time caller of `run_typed_extension`, to report ingest absent on the standalone svrn.
 - Because: charter "a false row premise" (the worker's census is the input). The absence half belongs to the row that builds the standalone composition, since -close's OUTCOME already says "a standalone svrn reports ingest absent by name". Folding it there keeps one proof per outcome and adds no row. Boundary gate: EXIT=1, 23 violations (`cargo xtask boundary-gate` from corpus-engine/, this session), matching the row's "expect 23". This commit touches no Rust.
 
+**phase-b-45 · 2026-09-28 · pb-ingest-dial-tools-local → the catalog edge folds into -close; -local is the corpus-engine half (BOUNDARY 23) · director** — this commit
+- Needed: the worker stopped at census with no code edited. The row's −1 (`sovereign-tools → sovereign-enrichment-catalog`) cannot close here. The three `EnrichConfig` sites need an implementor that links sovereign-enrichment-catalog, and that crate depends on corpus-engine, so corpus-engine cannot implement the port. The daemon links neither catalog nor enrichment-build, so building it there opens a new red edge. The stock process has no ingest face to supply it, and building that face is -close's OUTCOME.
+- Chose: package option (a). -local keeps the 42 corpus-engine sites behind `impl LocalCorpusPort for CorpusEngine`, expects BOUNDARY 23 unchanged, and is proven at its library entry points or the existing watched-folder and knowledge_view e2e tests, with a per-family grep PLANT. -close takes the catalog edge (its three sites, its port, an [ingest]-side implementor) and the standalone-svrn absence half for this family, and expects BOUNDARY −2.
+- Because: charter "a false row premise" and "fold rows that touch the same files". Both halves that cannot run now depend on the stock ingest face, which -close already owns. This is the phase-b-44 precedent. Option (b) moves -close's LIFT into -local, and option (c) opens a red edge the prompt forbids. Boundary gate: EXIT=1, 23 violations (`cargo xtask boundary-gate` from corpus-engine/, this session). This commit touches no Rust.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -11823,5 +11828,24 @@ Reproduced this session at 936838db2:
 - The worker's lint and the full-crate test runs (sovereign-tools 725, cli-llm 866, atlas-reader 181) were not re-run here. They are the worker's reported numbers.
 
 What would falsify this: -close cannot make `post_finalize_corpus` (or any atlas entry point) answer "ingest absent" at run time without re-introducing a corpus-engine name into the atlas family, which the famgrep would show. That would mean the port is not the whole seam. A second falsifier is a real tool-registry surface for these pipelines turning up (an MCP or tool id that calls them). Then the registry proof was runnable after all, and the -atlas row owes it.
+
+</details>
+
+## phase-b-45 · 2026-09-28 — pb-ingest-dial-tools-local's catalog half folds into -close
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced this session at 8fe678058:
+- `grep -rn sovereign_enrichment_catalog sovereign/crates/sovereign-tools/src | grep -v '//'` finds atlas_context_manager.rs:61, local_corpus/atlas_dispatch.rs:83 and local_corpus/watched/enrich.rs:50,108. -atlas did not remove the atlas_context_manager read, so the row's proviso failed.
+- sovereign-enrichment-catalog/Cargo.toml:26 is `corpus-engine = { workspace = true }`. Its src/config.rs:131 names `corpus_engine::enrichment::pipeline::CustomAtlasSpec` and :297 names `PhaseCache`. The implementor therefore cannot live in corpus-engine.
+- `grep -n enrichment sovereign/crates/sovereign-daemon/Cargo.toml` is empty. The daemon constructs `LocalCorpusManager::init_with_recipes_dir` at bootstrap.rs:1684.
+- sovereign-stock/src/main.rs:87 calls `sovereign_daemon::process::run` with the served and code faces only. There is no ingest face.
+- boundary-gate: 23 violations, EXIT=1. sovereign-tools holds three of them (→ enrichment-catalog, → recipe-author, → corpus-engine).
+- The row's trial (6c956fe13, removing both deps gives 23 → 21) already covers the full move. This rewrite reassigns which row closes which edge. It does not change any symbol, so no new trial was owed. -close's finish now names both edges and the trial's 21.
+- FIVE_PROGRAMS is not edited. The design (ports, ingest face on the stock distribution, §12 3a placement) is unchanged; only the row split moved.
+
+What would falsify this:
+- -local's corpus-engine half turns out to need a catalog type in the port's signature (for example the watched config write needs `EnrichConfig` to cross). Then the halves are not separable, and -local should be folded into -close whole.
+- -close finds a home for the catalog implementor that needs no stock face (some svrn crate already linking an [ingest] crate legitimately). Then the fold was unnecessary, and -local could have taken the −1.
 
 </details>
