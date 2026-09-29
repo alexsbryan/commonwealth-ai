@@ -113,9 +113,8 @@ pub struct HostedServe {
 /// The loader's RPC env contract: the `--rpc-worker` flag and the
 /// `[shared_model]` role, translated into the env its consumers read
 /// (`sovereign_compute::distributed_role`, pb-serve-distributes).
-type EnvContract = Box<
-    dyn Fn(&[String], &sovereign_contracts::setup_config::SharedModelSection) + Send + Sync,
->;
+type EnvContract =
+    Box<dyn Fn(&[String], &sovereign_contracts::setup_config::SharedModelSection) + Send + Sync>;
 
 impl HostedServe {
     /// `filter` is serve's tracing allowlist, unioned with svrn's. `compose`
