@@ -4039,3 +4039,97 @@ The range's added production lines introduce no collapsed `Err`. Of the hits,
 `memory_notes.rs:220` treats an absent query as a recency listing, which is
 the right meaning. `memory_notes_migration.rs:89` sets `busy_timeout` the way
 `sqlite.rs:77` already does.
+
+## REVIEW-audit-pb-auto-9 (2026-09-29, range 045f51824..2b82eaf4b, since REVIEW-audit-pb-auto-8)
+
+81 commits. Product code comes from pb-ingest-dial-daemon-ports and its four
+-tests rows (-tests, -merge, -reads, -slot), and from the pb-bench-dials rows
+(-whitebox, -whitebox-dispatch, -wire, -rerank, -turns, -vault, -docs). All
+checks ran in the sovereign-vulkan toolbox.
+
+TESTALL at 2b82eaf4b exited 100: 13,771 passed, 2 failed. Both were drift
+from moves and were repaired in a3f6f41d8.
+`turn_execution_happens_where_the_runtime_lives` named
+`probe_cmd/attached.rs` as a new turn host. b79e7d126 had collapsed the
+document-session drives of `bench_cmd/book_report.rs` and
+`bench_cmd/live_runner.rs` into that file, so the two entries became one
+(TURN_EXECUTION_SITES 7 -> 6 files). `conformance_tags_are_fresh` failed on
+two ST-8 line shifts in `corpus-engine/src/engine/mod.rs`. PREPUSH at
+a3f6f41d8 blocked on boundary-gate, layout-gate and clock-gate. After
+ebbd0c6d4 it blocks on boundary-gate alone, at 20 violations, the declared
+burn-down (20 at auto-8).
+
+### (1) Per-unit net-line ledger, `.rs/.py/.sh/.mjs/.ts` outside `ralph/`; tests = a `tests/` segment or a `*tests.rs`/`test.rs` file
+
+| unit | src net (+/−) | tests net |
+|---|---|---|
+| pb-bench-dials-whitebox | +892 (+2171/−1279) | +0 |
+| pb-ingest-dial-daemon-ports | +830 (+2113/−1283) | +242 |
+| pb-bench-dials-docs | +373 (+1438/−1065) | +0 |
+| pb-ingest-dial-daemon-tests-slot | +313 (+315/−2) | +63 |
+| pb-ingest-dial-daemon-tests-reads | +276 (+313/−37) | +315 |
+| pb-bench-dials-turns | +254 (+557/−303) | +211 |
+| pb-bench-dials-vault | +212 (+1387/−1175) | +162 |
+| pb-ingest-dial-daemon-tests | +204 (+238/−34) | +608 |
+| pb-bench-dials-wire | +105 (+182/−77) | +171 |
+| pb-bench-dials-whitebox-dispatch | +56 (+58/−2) | +0 |
+| pb-ingest-dial-daemon-tests-merge | +38 (+44/−6) | +303 |
+| pb-bench-dials-rerank | +29 (+224/−195) | +246 |
+| TOTAL | +3582 | +2321 |
+
+The bench-dials src growth is mostly wire types in
+`sovereign-contracts/src/probe/` (ProbeRequest, the *Evidence structs) that
+svrn and bench both read. It is the price of phase-b-58's
+describe-versus-judge split, and each probe file replaces an in-process drive
+of the same length in bench.
+
+### (2) dry-report over the 13 touched crate dirs
+
+Each clone member is keyed by (fn name, file) against the 471 `fn` sites the
+range added. Two exact groups match, and neither is a new copy. `truncate` at
+`probe_cmd/retrieve.rs:22` ~ `chat_cmd/inspect.rs:332` is
+`eval_cmd/runner.rs:1556`'s copy, moved by 803f6ecb7. The crate held four
+copies before and holds four after. `engine_for` at `enrich_http.rs:97` ~
+`recipe_http.rs:572` is a pre-existing pair that d413b052b retyped to
+`Arc<dyn IngestPort>`. No near-clone cluster has an added member.
+
+### (3) converge noun over the 39 nouns the range added (and did not remove)
+
+31 have one production definition. Seven have none because they are
+test-only: Fx, Ingests, NodePort, PortLog, Run, Seen and Slice. `Fixture`
+shows 2, the pre-existing sovereign-cli-llm gym pair. The range's `Fixture`
+is test code in `corpus-engine/tests/main/install_lifecycle_port_parity.rs`,
+as auto-8 found for its own. `Node`'s one production definition is the
+pre-existing `sovereign-cli-dev/src/code_capability_graph.rs:98`; the range's
+`Node` is a test struct in `corpus-engine/tests/main/fold_merge_port_parity.rs`.
+No new noun copies another.
+
+### Findings
+
+- **ARCH 5 / 8, fixed in a3f6f41d8** · the turn-execution census still
+  listed `bench_cmd/book_report.rs` and `bench_cmd/live_runner.rs`, neither of
+  which calls a turn entry point after b79e7d126, and did not list
+  `probe_cmd/attached.rs:557`, which does. The census follows the move and
+  keeps its reason.
+- **ARCH 4, fixed in a3f6f41d8** · `quality/conformance/corpus-engine.toml`
+  ST-8 claims at `engine/mod.rs` 2690/2724, now 2643/2677.
+- **ARCH 8, fixed in ebbd0c6d4** · `probe_cmd/prod.rs:37` (803f6ecb7) and
+  `eval_cmd/mod.rs:791` (0f618fe29) wrote out `sovereign_time::unix_now`'s
+  body (`sovereign-time/src/lib.rs:24`) instead of calling it.
+  `sovereign-daemon/tests/main/ingest_origin_e2e.rs:67` (508723c57) retyped
+  `{id}-partition-local` instead of `common::corpus_at(..).partition(..)`
+  (`tests/main/common/mod.rs:51`). clock-gate and layout-gate were red on
+  these three sites and are green now.
+- **ARCH 6, reviewed, no change** · `has_source_manifest`
+  (`corpus-engine/src/engine/daemon_port.rs:388`) collapses an unreadable
+  manifest into "none". That is the collapse `auto_ingest.rs:533` and
+  `corpus_collaborate.rs:246` already made at 045f51824, now behind the
+  port with its behaviour kept. It belongs to the owner of the port
+  (corpus-index `IngestPort`, `ingest_port/daemon.rs:279`), not to an audit.
+  `recipe_vocabulary(..).ok()??` (`governance_http.rs:863`) keeps the old
+  `Recipe::from_file(..).ok()?` meaning. `runner_threads.rs:193` records ""
+  for a conversation svrn refused, and every one of its turns fails by name.
+- **advisory lanes, recorded** · `hakari-verify` and `deletion-manifest
+  --verify` still fail, as they did at auto-8 (p0-root-junk has grown).
+  `size-gate` reports 73 keys grown. All three are advisory and outside this
+  queue.
