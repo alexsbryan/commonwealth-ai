@@ -91,7 +91,7 @@ impl RecipeHead {
 
 async fn open_or_create(dir: &Path, embed: &EmbedFn, head: &RecipeHead) -> Result<CorpusIndex> {
     let path = dir.join(&head.corpus_id);
-    if path.join("_corpus_meta.json").is_file() {
+    if corpus_index::corpus::Corpus::meta_in(&path).is_file() {
         return CorpusIndex::open(&path).await;
     }
     let dim = embed("dimension probe").await?.len();

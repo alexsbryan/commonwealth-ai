@@ -39,7 +39,9 @@ pub async fn run(args: FinalizeArgs) -> Result<()> {
     );
     match outcome {
         Ok(true) => {
-            eprintln!("Promoted {corpus_id}-partition-local/ → {corpus_id}/");
+            let from = engine.partition_path(corpus_id);
+            let from = from.file_name().unwrap_or_default().to_string_lossy();
+            eprintln!("Promoted {from}/ → {corpus_id}/");
             Ok(())
         }
         Ok(false) => {

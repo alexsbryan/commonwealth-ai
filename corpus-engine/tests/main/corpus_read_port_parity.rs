@@ -170,7 +170,7 @@ fn unpromote(dir: &Path, mid_ingest: bool) -> PathBuf {
     let partition = indexes_dir.join("health_corpus-partition-node-aaaa");
     std::fs::rename(indexes_dir.join("health_corpus"), &partition).unwrap();
     if mid_ingest {
-        let meta_path = partition.join("_corpus_meta.json");
+        let meta_path = corpus_engine::Corpus::meta_in(&partition);
         let mut meta: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&meta_path).unwrap()).unwrap();
         meta.as_object_mut().unwrap().insert(
