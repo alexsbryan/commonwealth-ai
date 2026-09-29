@@ -29,6 +29,7 @@ pub mod ontology;
 pub mod open_questions;
 pub mod pass;
 pub mod pipeline;
+pub mod provider_inference;
 pub mod reconciliation;
 pub mod sep;
 pub use understanding_vocab::skeleton; // shim: moved by domains REVIEW-build-field-skeleton-vocab
