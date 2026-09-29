@@ -802,7 +802,7 @@ pub async fn spawn_corpus_install_outcome(
     // declared schema. JSON arrays of strings become TOML arrays;
     // JSON strings stay strings. We don't try to be clever: the
     // CLI / desktop already shaped the input.
-    let toml_params = match json_params_to_toml(&parameters) {
+    let toml_params = match corpus_engine::engine::daemon_port::json_params_to_toml(&parameters) {
         Ok(m) => m,
         Err(e) => {
             tracing::warn!(
@@ -1262,57 +1262,6 @@ pub struct InstallRequest {
     /// be a string, integer, or string array.
     #[serde(default)]
     pub parameters: std::collections::BTreeMap<String, serde_json::Value>,
-}
-
-/// Convert a JSON parameter map (the API's wire format) into a TOML
-/// parameter map, which is what
-/// [`Recipe::resolve_parameters`](corpus_engine::Recipe::resolve_parameters)
-/// expects. JSON strings → TOML strings, JSON integers → TOML ints,
-/// JSON arrays of strings → TOML arrays. Anything else fails with a
-/// helpful error.
-fn json_params_to_toml(
-    params: &std::collections::BTreeMap<String, serde_json::Value>,
-) -> std::result::Result<std::collections::BTreeMap<String, toml::Value>, String> {
-    let mut out = std::collections::BTreeMap::new();
-    for (k, v) in params {
-        let toml_value = match v {
-            serde_json::Value::String(s) => toml::Value::String(s.clone()),
-            serde_json::Value::Number(n) => {
-                if let Some(i) = n.as_i64() {
-                    toml::Value::Integer(i)
-                } else if let Some(f) = n.as_f64() {
-                    toml::Value::Float(f)
-                } else {
-                    return Err(format!("parameter `{k}` is a non-finite number"));
-                }
-            }
-            serde_json::Value::Bool(b) => toml::Value::Boolean(*b),
-            serde_json::Value::Array(arr) => {
-                let mut items = Vec::with_capacity(arr.len());
-                for item in arr {
-                    match item {
-                        serde_json::Value::String(s) => items.push(toml::Value::String(s.clone())),
-                        other => {
-                            return Err(format!(
-                                "parameter `{k}` array entries must be strings, \
-                                 got: {other:?}"
-                            ))
-                        }
-                    }
-                }
-                toml::Value::Array(items)
-            }
-            serde_json::Value::Null => continue,
-            serde_json::Value::Object(_) => {
-                return Err(format!(
-                    "parameter `{k}` is a JSON object — only string, int, \
-                     bool, and string array values are supported"
-                ));
-            }
-        };
-        out.insert(k.clone(), toml_value);
-    }
-    Ok(out)
 }
 
 #[derive(Debug, Serialize)]

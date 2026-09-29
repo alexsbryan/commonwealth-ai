@@ -8,6 +8,7 @@ use oicp_types::{RecipeStageReport, RecipeTestReport};
 use sovereign_contracts::daemon_wire::RecipeDryRunReport;
 
 use crate::engine::CorpusEngine;
+use crate::recipe::ParameterKind;
 use crate::testing::TestReport;
 
 /// THE projection from the engine's `TestReport` onto the wire. Both arms
@@ -253,4 +254,105 @@ pub async fn apply_incremental(
         "newsworthy.atlas_incremental_complete"
     );
     Ok(())
+}
+/// Convert a JSON parameter map (the API's wire format) into a TOML
+/// parameter map, which is what
+/// [`Recipe::resolve_parameters`](crate::Recipe::resolve_parameters)
+/// expects. JSON strings → TOML strings, JSON integers → TOML ints,
+/// JSON arrays of strings → TOML arrays. Anything else fails with a
+/// helpful error.
+pub fn json_params_to_toml(
+    params: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> std::result::Result<std::collections::BTreeMap<String, toml::Value>, String> {
+    let mut out = std::collections::BTreeMap::new();
+    for (k, v) in params {
+        let toml_value = match v {
+            serde_json::Value::String(s) => toml::Value::String(s.clone()),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    toml::Value::Integer(i)
+                } else if let Some(f) = n.as_f64() {
+                    toml::Value::Float(f)
+                } else {
+                    return Err(format!("parameter `{k}` is a non-finite number"));
+                }
+            }
+            serde_json::Value::Bool(b) => toml::Value::Boolean(*b),
+            serde_json::Value::Array(arr) => {
+                let mut items = Vec::with_capacity(arr.len());
+                for item in arr {
+                    match item {
+                        serde_json::Value::String(s) => items.push(toml::Value::String(s.clone())),
+                        other => {
+                            return Err(format!(
+                                "parameter `{k}` array entries must be strings, \
+                                 got: {other:?}"
+                            ))
+                        }
+                    }
+                }
+                toml::Value::Array(items)
+            }
+            serde_json::Value::Null => continue,
+            serde_json::Value::Object(_) => {
+                return Err(format!(
+                    "parameter `{k}` is a JSON object — only string, int, \
+                     bool, and string array values are supported"
+                ));
+            }
+        };
+        out.insert(k.clone(), toml_value);
+    }
+    Ok(out)
+}
+
+/// The recipe's `type` label for a parameter, as the form keys on it.
+pub fn parameter_kind_label(k: &ParameterKind) -> &'static str {
+    match k {
+        ParameterKind::String => "string",
+        ParameterKind::Int => "int",
+        ParameterKind::Date => "date",
+        ParameterKind::List => "list",
+    }
+}
+
+/// A TOML default rendered as JSON for the form.
+pub fn toml_to_json(v: &toml::Value) -> serde_json::Value {
+    match v {
+        toml::Value::String(s) => serde_json::Value::String(s.clone()),
+        toml::Value::Integer(i) => serde_json::json!(*i),
+        toml::Value::Float(f) => serde_json::json!(*f),
+        toml::Value::Boolean(b) => serde_json::Value::Bool(*b),
+        toml::Value::Array(arr) => serde_json::Value::Array(arr.iter().map(toml_to_json).collect()),
+        toml::Value::Table(table) => {
+            let mut map = serde_json::Map::new();
+            for (k, vv) in table {
+                map.insert(k.clone(), toml_to_json(vv));
+            }
+            serde_json::Value::Object(map)
+        }
+        toml::Value::Datetime(d) => serde_json::Value::String(d.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parameter_kind_labels_round_trip() {
+        assert_eq!(parameter_kind_label(&ParameterKind::String), "string");
+        assert_eq!(parameter_kind_label(&ParameterKind::Int), "int");
+        assert_eq!(parameter_kind_label(&ParameterKind::Date), "date");
+        assert_eq!(parameter_kind_label(&ParameterKind::List), "list");
+    }
+
+    #[test]
+    fn toml_to_json_handles_arrays_and_strings() {
+        let v = toml::Value::Array(vec![
+            toml::Value::String("NVDA".into()),
+            toml::Value::String("MSFT".into()),
+        ]);
+        assert_eq!(toml_to_json(&v), serde_json::json!(["NVDA", "MSFT"]));
+    }
 }

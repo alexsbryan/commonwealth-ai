@@ -21,9 +21,9 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 
-use corpus_engine::engine::daemon_port::dry_run_report;
+use corpus_engine::engine::daemon_port::{dry_run_report, parameter_kind_label, toml_to_json};
 use corpus_engine::harness::verify_atoms_at;
-use corpus_engine::{CorpusEngine, ParameterKind, Recipe, TestOptions};
+use corpus_engine::{CorpusEngine, Recipe, TestOptions};
 use sovereign_authoring_harness::{Declaration, HarnessRun};
 use sovereign_contracts::daemon_wire::{
     HarnessRunCardView, ImportRecipeRequest, ImportRecipeResult, IngestJobAck,
@@ -654,55 +654,4 @@ fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<CorpusEngine>, Absenc
     daemon
         .corpus_engine()
         .ok_or_else(|| Absence::unavailable("corpus engine not initialised"))
-}
-
-/// The recipe's `type` label for a parameter, as the form keys on it.
-pub fn parameter_kind_label(k: &ParameterKind) -> &'static str {
-    match k {
-        ParameterKind::String => "string",
-        ParameterKind::Int => "int",
-        ParameterKind::Date => "date",
-        ParameterKind::List => "list",
-    }
-}
-
-/// A TOML default rendered as JSON for the form.
-pub fn toml_to_json(v: &toml::Value) -> serde_json::Value {
-    match v {
-        toml::Value::String(s) => serde_json::Value::String(s.clone()),
-        toml::Value::Integer(i) => serde_json::json!(*i),
-        toml::Value::Float(f) => serde_json::json!(*f),
-        toml::Value::Boolean(b) => serde_json::Value::Bool(*b),
-        toml::Value::Array(arr) => serde_json::Value::Array(arr.iter().map(toml_to_json).collect()),
-        toml::Value::Table(table) => {
-            let mut map = serde_json::Map::new();
-            for (k, vv) in table {
-                map.insert(k.clone(), toml_to_json(vv));
-            }
-            serde_json::Value::Object(map)
-        }
-        toml::Value::Datetime(d) => serde_json::Value::String(d.to_string()),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parameter_kind_labels_round_trip() {
-        assert_eq!(parameter_kind_label(&ParameterKind::String), "string");
-        assert_eq!(parameter_kind_label(&ParameterKind::Int), "int");
-        assert_eq!(parameter_kind_label(&ParameterKind::Date), "date");
-        assert_eq!(parameter_kind_label(&ParameterKind::List), "list");
-    }
-
-    #[test]
-    fn toml_to_json_handles_arrays_and_strings() {
-        let v = toml::Value::Array(vec![
-            toml::Value::String("NVDA".into()),
-            toml::Value::String("MSFT".into()),
-        ]);
-        assert_eq!(toml_to_json(&v), serde_json::json!(["NVDA", "MSFT"]));
-    }
 }
