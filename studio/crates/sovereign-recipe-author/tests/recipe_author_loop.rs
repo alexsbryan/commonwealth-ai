@@ -245,4 +245,3 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
         );
     }
 }
-
