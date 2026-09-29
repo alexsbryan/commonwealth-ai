@@ -6,8 +6,8 @@
 //! Moved from the svrn daemon's `rpc_warm_http` (pb-serve-distributes): it
 //! reaches workers through the loader's `MeshPorts` (the roster, the
 //! transport, where this node serves model files, its mesh proof), so the
-//! process that loads the distributed primary runs it. The worker side (the
-//! route's `RpcShardWarmer`) stays in the daemon until its own move.
+//! process that loads the distributed primary runs it. The worker side is
+//! [`worker`], behind the contracts port `RpcShardWarmer`.
 
 use kernel_types::NodeId;
 use mesh_reach::{PeerEndpoint, TrafficClass};
@@ -17,6 +17,9 @@ use sovereign_serving_host::rpc_discovery::MeshPorts;
 
 #[cfg(test)]
 mod tests;
+
+mod worker;
+pub use worker::{warm_cache_from_ranges, MeshRpcShardWarmer, WarmRangeStats};
 
 /// Ordered dial candidates for `node`'s internal HTTP surface under the
 /// `ModelTransfer` traffic class (rpc-warm pushes, GGUF/shard pulls) — the

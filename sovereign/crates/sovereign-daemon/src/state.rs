@@ -177,35 +177,11 @@ impl From<oicp_types::ComputeChildStatus> for ComputeChildStatus {
     }
 }
 
-/// Worker side of the distributed-inference auto-warm orchestration. When a host
-/// distributes a large primary across the mesh, it asks each worker (this node)
-/// to seed its RPC tensor cache with ITS shard of the model — so the host's
-/// subsequent `-ot` load is all `SET_TENSOR_HASH` cache hits and never streams a
-/// large weight share (the upload deadlock). The impl (sovereign-mesh) holds an
-/// HTTP client so it can fetch the GGUF — or, for the byte-range path, only its
-/// shard's tensors — and the warm primitives from sovereign-inference. Injected
-/// by the daemon; `None` on a node with no local inference.
-///
-/// Defined as an OPAQUE-JSON seam (`request`/return are the wire bodies, an
-/// `RpcWarmShardRequest`/`RpcWarmShardResponse` defined in sovereign-mesh) so
-/// commonwealth-api needn't depend on sovereign-inference's plan types — the same
-/// decoupling [`LocalInferenceService`] gives the chat path. The route handler
-/// resolves `model_id` → `local_model_path` against the servable allowlist (which
-/// lives here) and passes it in, so the warmer can warm a model the node already
-/// holds without re-fetching. Route: `POST /internal/rpc-warm`.
-#[async_trait]
-pub trait RpcShardWarmer: Send + Sync {
-    /// `state` is this worker node's own `AppState`: the warmer resolves the
-    /// HOST's fetch bases through this node's `PeerTransport` (the request may
-    /// carry a `host_node_id`), so a cross-network host is reached over the
-    /// mesh transport (iroh bridge) instead of a raw IP it may not route to.
-    async fn warm_shard(
-        &self,
-        request: serde_json::Value,
-        local_model_path: Option<std::path::PathBuf>,
-        state: AppState,
-    ) -> Result<serde_json::Value, String>;
-}
+/// The worker side of distributed-inference auto-warm, the contracts port
+/// (`sovereign_contracts::rpc_warm`, pb-serve-distributes): the route resolves
+/// the reach from this daemon's mesh (`rpc_warm_http::warm_reach`) and hands it
+/// in as data, so the warmer — the loader's — names no `AppState`.
+pub use sovereign_contracts::rpc_warm::RpcShardWarmer;
 
 /// Callback the route handlers fire whenever they mutate `Mesh` —
 /// `/internal/join` (accepting a new member), `/internal/gossip`

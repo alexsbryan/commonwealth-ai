@@ -152,6 +152,7 @@ pub mod recipe;
 pub mod registry;
 pub mod reloadable_provider;
 pub mod rerank_kind;
+pub mod rpc_warm;
 pub mod run_identity;
 /// What this node claims about itself — the port Fabric publishes from. A
 /// consumer in `sovereign-mesh` (Fabric) and an implementation in

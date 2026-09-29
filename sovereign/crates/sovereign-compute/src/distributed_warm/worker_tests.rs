@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Tests for the warm-RPC HTTP surface — see `rpc_warm_http.rs`.
-//!
-//! Their own file because keeping them inline put that file past its
-//! arch-gate slack (ARCH §3.1). `#[path]`, so the names are unchanged.
+//! Tests for the worker side of auto-warm — see `worker.rs` (moved from the
+//! svrn daemon's `rpc_warm_http` tests with the worker, pb-serve-distributes).
 
 use super::*;
 use axum::routing::get;
