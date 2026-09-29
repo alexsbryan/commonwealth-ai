@@ -1,13 +1,28 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The daemon family's port vocabulary: what svrn's daemon reads back from
-//! ingest's partition, collaborate and status calls. Moved from corpus-engine,
+//! The daemon family's port, [`IngestPort`], and its vocabulary: what svrn's
+//! daemon asks ingest to do and reads back from its partition, collaborate,
+//! recipe and status calls. The types above the port moved from corpus-engine,
 //! which re-exports each at its historical path (pb-ingest-dial-daemon-ports).
 
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::future::Future;
+use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::sync::Arc;
 use std::time::SystemTime;
 
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use corpus_engine_yield::{ForegroundSignal, YieldHook};
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::daemon_wire::{RecipeDryRunReport, RecipeParameterSchema};
+
+use super::cancel::CancellationRegistry;
+use super::merge::PartitionMergePort;
+use super::newsworthy::NewsworthyHost;
+use super::{CatalogIngestPort, LocalCorpusPort, ProgressCallback};
+use crate::index::CorpusIndex;
+use crate::Result;
 
 // ─── Ingest Result ──────────────────────────────────────
 
@@ -146,4 +161,222 @@ pub enum SourceFileStatus {
     Failed {
         reason: String,
     },
+}
+
+// ─── The daemon's port ──────────────────────────────────
+
+/// A recipe's mesh-privacy posture, read from the recipe itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RecipeSharing {
+    /// `[corpus] mesh_sharing`.
+    pub mesh_sharing: bool,
+    /// `[corpus] grantable`.
+    pub grantable: bool,
+}
+
+/// What the corpus catalog shows of a registry entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegistryListing {
+    /// The entry declares enrichment.
+    pub enrichment_enabled: bool,
+    /// Where the entry's recipe TOML is fetched from.
+    pub toml_url: String,
+}
+
+/// The prose terms a recipe's custom ontology declares.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RecipeVocabulary {
+    /// What the corpus calls a position.
+    pub position_term: Option<String>,
+    /// What it calls a tension.
+    pub tension_term: Option<String>,
+    /// What it calls a concern.
+    pub concern_term: Option<String>,
+    /// What it calls evidence.
+    pub evidence_term: Option<String>,
+}
+
+/// Why a registry install could not start.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstallRefusal {
+    /// The registry could not resolve the recipe.
+    RecipeNotFound(String),
+    /// The parameters did not coerce or did not validate against the recipe.
+    InvalidParameters(String),
+}
+
+/// One registry ingest, started by [`PreparedInstall::run`].
+pub type InstallRun = Box<
+    dyn FnOnce(
+            Option<ProgressCallback>,
+        ) -> Pin<Box<dyn Future<Output = Result<IngestResult>> + Send>>
+        + Send,
+>;
+
+/// A registry recipe resolved and parameterised, ready to ingest.
+pub struct PreparedInstall {
+    /// The recipe declares `[enrichment] enabled = false`.
+    pub opts_out_of_auto_enrichment: bool,
+    /// Ingest the resolved recipe.
+    pub run: InstallRun,
+}
+
+/// Builds the daemon's newsworthy host for the watcher's corpus id.
+pub type NewsworthyHostFactory = Box<dyn FnOnce(String) -> Arc<dyn NewsworthyHost> + Send>;
+
+/// Everything svrn's daemon asks of ingest beyond the tool families' ports.
+/// The daemon holds one of these as its corpus handle and hands each tool
+/// family and grants the narrower port it names.
+#[async_trait]
+pub trait IngestPort: LocalCorpusPort + CatalogIngestPort + PartitionMergePort {
+    // ── Layout ──
+    /// The directory the registry's local recipes live under.
+    fn recipes_dir(&self) -> &Path;
+    /// This node's partition directory for `corpus_id`.
+    fn partition_path(&self, corpus_id: &str) -> PathBuf;
+    /// The canonical index directory for `corpus_id`.
+    fn canonical_path(&self, corpus_id: &str) -> PathBuf;
+    /// `corpus_id`'s canonical index is installed.
+    fn corpus_is_installed(&self, corpus_id: &str) -> bool;
+
+    // ── Ingest state on disk ──
+    /// Corpora whose meta says an ingest is in progress.
+    fn in_progress_ingestions(&self) -> Vec<String>;
+    /// Corpora with a finished partition that was never promoted.
+    fn corpora_with_stranded_partitions(&self) -> Vec<String>;
+    /// The registry every running ingest's cancel flag is kept in.
+    fn cancel_registry(&self) -> CancellationRegistry;
+    /// A source-file manifest loads for `corpus_id` (an unreadable one reads
+    /// as absent, as every caller treated it).
+    fn has_source_manifest(&self, corpus_id: &str) -> bool;
+    /// The manifest's files not yet complete.
+    fn remaining_source_files(&self, corpus_id: &str) -> Result<Vec<SourceFileRecord>>;
+    /// Articles in `corpus_id`'s extracted JSONL download.
+    fn count_jsonl_articles(&self, corpus_id: &str) -> Result<u64>;
+    /// JSONL shards inside `corpus_id`'s source ZIP.
+    fn jsonl_source_shard_count(&self, corpus_id: &str) -> Result<usize>;
+    /// The article a committed iteration position has reached, sampled.
+    fn estimate_article_pos(
+        &self,
+        corpus_id: &str,
+        committed_iter_pos: u64,
+        sample_size: usize,
+    ) -> Result<Option<u64>>;
+    /// ZIP shards committed across the canonical and every partition.
+    fn corpus_processed_shards(&self, corpus_id: &str) -> Vec<usize>;
+    /// The canonical meta's `committed_iter_pos`, `0` when unreadable.
+    fn corpus_committed_iter_pos(&self, corpus_id: &str) -> u64;
+    /// `corpus_id`'s consolidated on-disk state.
+    fn corpus_disk_status(&self, corpus_id: &str) -> CorpusDiskStatus;
+    /// The article-stats sidecar, when it still matches its source.
+    fn cached_article_stats(&self, corpus_id: &str) -> Option<ArticleStats>;
+    /// Sample the extracted JSONL and write the article-stats sidecar.
+    fn compute_article_stats(&self, corpus_id: &str) -> Option<ArticleStats>;
+    /// The on-disk status rows `/internal/corpus/status` serves, as their
+    /// wire JSON.
+    fn corpus_status_rows(&self) -> std::io::Result<serde_json::Value>;
+    /// Open `path` without the handle cache.
+    async fn open_index_transient(&self, path: &Path) -> Result<CorpusIndex>;
+    /// A human-readable report on every index directory.
+    async fn diagnose_indexes(&self) -> String;
+    /// Retry `index`'s recorded field-skeleton failures: `(retried, fixed)`.
+    fn reprocess_skeleton_failures(&self, index: &CorpusIndex) -> Result<(usize, usize)>;
+    /// Stream `canonical_path` as a zstd tar at `compression_level`; the
+    /// bytes read.
+    fn pack_canonical(
+        &self,
+        canonical_path: &Path,
+        writer: Box<dyn std::io::Write + Send>,
+        compression_level: i32,
+    ) -> Result<u64>;
+
+    // ── Foreground ──
+    /// Install the hook ingest yields to between batches.
+    fn set_yield_hook(&self, hook: Arc<dyn YieldHook>);
+    /// Install the "a person is waiting" signal.
+    fn set_foreground_signal(&self, signal: Arc<dyn ForegroundSignal>);
+
+    // ── Ingest ──
+    /// Ingest registry recipe `recipe_id` into `output_path`, restricted to
+    /// the given files or article range.
+    #[allow(clippy::too_many_arguments)]
+    async fn ingest_with_overrides(
+        &self,
+        recipe_id: &str,
+        file_indices: Option<Vec<usize>>,
+        article_range: Option<(u64, u64)>,
+        output_path: &Path,
+        progress: Option<ProgressCallback>,
+        unit_id: Option<u32>,
+    ) -> Result<IngestResult>;
+    /// Continue a sampled corpus to its full source.
+    async fn expand_corpus_to_full(
+        &self,
+        corpus_id: &str,
+        progress: Option<ProgressCallback>,
+    ) -> Result<IngestResult>;
+    /// Resume conversation enrichment an earlier daemon left unfinished; the
+    /// count resumed.
+    async fn resume_interrupted_conversation_enrichment(&self) -> usize;
+    /// Fetch registry recipe `corpus_id`, coerce and resolve `parameters`
+    /// against it, and hand back the ingest to run.
+    async fn prepare_registry_install(
+        self: Arc<Self>,
+        corpus_id: &str,
+        parameters: &BTreeMap<String, serde_json::Value>,
+    ) -> std::result::Result<PreparedInstall, InstallRefusal>;
+
+    // ── Recipes ──
+    /// `corpus_id`'s recipe's privacy posture.
+    async fn recipe_sharing(&self, corpus_id: &str) -> Result<RecipeSharing>;
+    /// The registry entry `id`, as the catalog lists it.
+    fn registry_listing(&self, id: &str) -> Option<RegistryListing>;
+    /// The `[corpus] id` of a recipe TOML; `Err` when it does not parse.
+    fn recipe_corpus_id(&self, toml_text: &str) -> Result<String>;
+    /// Install a recipe TOML into the local registry; its path.
+    fn install_local_recipe(&self, toml_text: &str) -> Result<PathBuf>;
+    /// Registry recipe `corpus_id`'s declared `[parameters]`.
+    async fn recipe_parameter_schema(&self, corpus_id: &str) -> Result<RecipeParameterSchema>;
+    /// Run the recipe harness on the recipe file at `recipe_path` (no
+    /// embedding), as the dry-run report.
+    async fn dry_run_recipe(
+        &self,
+        recipe_path: &Path,
+        sample_size: usize,
+        offline: bool,
+    ) -> Result<RecipeDryRunReport>;
+    /// The same run, as the protocol's per-stage recipe test report, in its
+    /// wire JSON (this leaf cannot name `oicp-types`).
+    async fn test_recipe_report(
+        &self,
+        recipe_path: &Path,
+        sample_size: usize,
+        offline: bool,
+    ) -> Result<serde_json::Value>;
+    /// The custom-ontology terms of the recipe file at `recipe_path`:
+    /// `Ok(None)` when it declares no custom ontology, `Err` when it does
+    /// not parse.
+    fn recipe_vocabulary(&self, recipe_path: &Path) -> Result<Option<RecipeVocabulary>>;
+    /// `[enrichment] domain` of the recipe file at `recipe_path`; `None`
+    /// when it has none or does not parse.
+    fn recipe_enrichment_domain(&self, recipe_path: &Path) -> Option<String>;
+
+    // ── Newsworthy ──
+    /// Start the newsworthy watcher over the host `host` builds for the
+    /// watcher's corpus id.
+    fn spawn_newsworthy_watcher(
+        self: Arc<Self>,
+        host: NewsworthyHostFactory,
+        shutdown: tokio::sync::watch::Receiver<bool>,
+        force_tick: tokio::sync::mpsc::Receiver<()>,
+    ) -> tokio::task::JoinHandle<()>;
+    /// Apply one newsworthy tick's atom delta to `corpus_id`'s atlas;
+    /// `Err(reason)` asks the caller to rebuild in full.
+    async fn apply_newsworthy_incremental(
+        self: Arc<Self>,
+        indexes_dir: PathBuf,
+        corpus_id: String,
+        role: &'static str,
+        doc_ids: Vec<String>,
+    ) -> std::result::Result<(), String>;
 }

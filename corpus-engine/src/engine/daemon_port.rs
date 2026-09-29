@@ -4,12 +4,30 @@
 //! through the port instead of naming the engine (pb-ingest-dial-daemon-ports,
 //! phase-b-43).
 
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use corpus_engine_yield::{ForegroundSignal, YieldHook};
+use corpus_index::index::CorpusIndex;
+use corpus_index::ingest_port::cancel::CancellationRegistry;
+use corpus_index::ingest_port::daemon::{
+    ArticleStats, CorpusDiskStatus, IngestPort, IngestResult, InstallRefusal,
+    NewsworthyHostFactory, PreparedInstall, RecipeSharing, RecipeVocabulary, RegistryListing,
+    SourceFileRecord,
+};
+use corpus_index::ingest_port::ProgressCallback;
 use oicp_types::{RecipeStageReport, RecipeTestReport};
-use sovereign_contracts::daemon_wire::RecipeDryRunReport;
+use sovereign_contracts::daemon_wire::{
+    RecipeDryRunReport, RecipeParameter, RecipeParameterSchema,
+};
 
 use crate::engine::CorpusEngine;
 use crate::recipe::ParameterKind;
-use crate::testing::TestReport;
+use crate::testing::{TestOptions, TestReport};
+use crate::types::CorpusSpec;
+use crate::Recipe;
 
 /// THE projection from the engine's `TestReport` onto the wire. Both arms
 /// of the route answer through this one function, so a sampled run and a
@@ -332,6 +350,334 @@ pub fn toml_to_json(v: &toml::Value) -> serde_json::Value {
             serde_json::Value::Object(map)
         }
         toml::Value::Datetime(d) => serde_json::Value::String(d.to_string()),
+    }
+}
+
+/// The engine is svrn's daemon port: each method is the engine call the
+/// daemon made directly before pb-ingest-dial-daemon-ports.
+#[async_trait]
+impl IngestPort for CorpusEngine {
+    fn recipes_dir(&self) -> &Path {
+        CorpusEngine::recipes_dir(self)
+    }
+
+    fn partition_path(&self, corpus_id: &str) -> PathBuf {
+        CorpusEngine::partition_path(self, corpus_id)
+    }
+
+    fn canonical_path(&self, corpus_id: &str) -> PathBuf {
+        CorpusEngine::canonical_path(self, corpus_id)
+    }
+
+    fn corpus_is_installed(&self, corpus_id: &str) -> bool {
+        self.corpus(corpus_id).is_installed()
+    }
+
+    fn in_progress_ingestions(&self) -> Vec<String> {
+        CorpusEngine::in_progress_ingestions(self)
+    }
+
+    fn corpora_with_stranded_partitions(&self) -> Vec<String> {
+        CorpusEngine::corpora_with_stranded_partitions(self)
+    }
+
+    fn cancel_registry(&self) -> CancellationRegistry {
+        CorpusEngine::cancel_registry(self)
+    }
+
+    fn has_source_manifest(&self, corpus_id: &str) -> bool {
+        self.source_manifest(corpus_id).ok().flatten().is_some()
+    }
+
+    fn remaining_source_files(&self, corpus_id: &str) -> crate::error::Result<Vec<SourceFileRecord>> {
+        CorpusEngine::remaining_source_files(self, corpus_id)
+    }
+
+    fn count_jsonl_articles(&self, corpus_id: &str) -> crate::error::Result<u64> {
+        CorpusEngine::count_jsonl_articles(self, corpus_id)
+    }
+
+    fn jsonl_source_shard_count(&self, corpus_id: &str) -> crate::error::Result<usize> {
+        CorpusEngine::jsonl_source_shard_count(self, corpus_id)
+    }
+
+    fn estimate_article_pos(
+        &self,
+        corpus_id: &str,
+        committed_iter_pos: u64,
+        sample_size: usize,
+    ) -> crate::error::Result<Option<u64>> {
+        CorpusEngine::estimate_article_pos(self, corpus_id, committed_iter_pos, sample_size)
+    }
+
+    fn corpus_processed_shards(&self, corpus_id: &str) -> Vec<usize> {
+        CorpusEngine::corpus_processed_shards(self, corpus_id)
+    }
+
+    fn corpus_committed_iter_pos(&self, corpus_id: &str) -> u64 {
+        CorpusEngine::corpus_committed_iter_pos(self, corpus_id)
+    }
+
+    fn corpus_disk_status(&self, corpus_id: &str) -> CorpusDiskStatus {
+        CorpusEngine::corpus_disk_status(self, corpus_id)
+    }
+
+    fn cached_article_stats(&self, corpus_id: &str) -> Option<ArticleStats> {
+        CorpusEngine::cached_article_stats(self, corpus_id)
+    }
+
+    fn compute_article_stats(&self, corpus_id: &str) -> Option<ArticleStats> {
+        CorpusEngine::compute_article_stats(self, corpus_id)
+    }
+
+    fn corpus_status_rows(&self) -> std::io::Result<serde_json::Value> {
+        let rows = crate::engine::status::scan_corpus_rows(self.index_dir())?;
+        serde_json::to_value(rows).map_err(std::io::Error::other)
+    }
+
+    async fn open_index_transient(&self, path: &Path) -> crate::error::Result<CorpusIndex> {
+        CorpusEngine::open_index_transient(self, path).await
+    }
+
+    async fn diagnose_indexes(&self) -> String {
+        CorpusEngine::diagnose_indexes(self).await
+    }
+
+    fn reprocess_skeleton_failures(&self, index: &CorpusIndex) -> crate::error::Result<(usize, usize)> {
+        crate::reprocess_skeleton_failures(index)
+    }
+
+    fn pack_canonical(
+        &self,
+        canonical_path: &Path,
+        writer: Box<dyn std::io::Write + Send>,
+        compression_level: i32,
+    ) -> crate::error::Result<u64> {
+        crate::canonical_sync::pack_canonical(canonical_path, writer, compression_level)
+    }
+
+    fn set_yield_hook(&self, hook: Arc<dyn YieldHook>) {
+        CorpusEngine::set_yield_hook(self, hook)
+    }
+
+    fn set_foreground_signal(&self, signal: Arc<dyn ForegroundSignal>) {
+        CorpusEngine::set_foreground_signal(self, signal)
+    }
+
+    async fn ingest_with_overrides(
+        &self,
+        recipe_id: &str,
+        file_indices: Option<Vec<usize>>,
+        article_range: Option<(u64, u64)>,
+        output_path: &Path,
+        progress: Option<ProgressCallback>,
+        unit_id: Option<u32>,
+    ) -> crate::error::Result<IngestResult> {
+        CorpusEngine::ingest_with_overrides(
+            self,
+            recipe_id,
+            file_indices,
+            article_range,
+            output_path,
+            progress,
+            unit_id,
+        )
+        .await
+    }
+
+    async fn expand_corpus_to_full(
+        &self,
+        corpus_id: &str,
+        progress: Option<ProgressCallback>,
+    ) -> crate::error::Result<IngestResult> {
+        CorpusEngine::expand_corpus_to_full(self, corpus_id, progress).await
+    }
+
+    async fn resume_interrupted_conversation_enrichment(&self) -> usize {
+        CorpusEngine::resume_interrupted_conversation_enrichment(self).await
+    }
+
+    async fn prepare_registry_install(
+        self: Arc<Self>,
+        corpus_id: &str,
+        parameters: &BTreeMap<String, serde_json::Value>,
+    ) -> std::result::Result<PreparedInstall, InstallRefusal> {
+        // Fetch, coerce, resolve: the order the install route always refused
+        // in, so a missing recipe is named before a malformed parameter.
+        let recipe = match self.registry().fetch_recipe(corpus_id).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %corpus_id,
+                    error = %e,
+                    "spawn_corpus_install: recipe fetch failed"
+                );
+                return Err(InstallRefusal::RecipeNotFound(e.to_string()));
+            }
+        };
+        let toml_params = match json_params_to_toml(parameters) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %corpus_id,
+                    error = %e,
+                    "spawn_corpus_install: parameter coercion failed"
+                );
+                return Err(InstallRefusal::InvalidParameters(e));
+            }
+        };
+        let resolved = match recipe.resolve_parameters(&toml_params) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %corpus_id,
+                    error = %e,
+                    "spawn_corpus_install: parameter validation failed"
+                );
+                return Err(InstallRefusal::InvalidParameters(e.to_string()));
+            }
+        };
+        let recipe = recipe.with_resolved_parameters(resolved);
+        let opts_out_of_auto_enrichment = recipe.opts_out_of_auto_enrichment();
+        let engine = self;
+        Ok(PreparedInstall {
+            opts_out_of_auto_enrichment,
+            run: Box::new(move |progress| {
+                Box::pin(async move {
+                    let spec = CorpusSpec::Inline(Box::new(recipe));
+                    engine.ingest(&spec, progress).await
+                })
+            }),
+        })
+    }
+
+    async fn recipe_sharing(&self, corpus_id: &str) -> crate::error::Result<RecipeSharing> {
+        let recipe = self.load_recipe(corpus_id).await?;
+        Ok(RecipeSharing {
+            mesh_sharing: recipe.corpus.mesh_sharing,
+            grantable: recipe.corpus.grantable,
+        })
+    }
+
+    fn registry_listing(&self, id: &str) -> Option<RegistryListing> {
+        self.registry().find_entry(id).map(|e| RegistryListing {
+            enrichment_enabled: e.enrichment_enabled,
+            toml_url: e.toml_url.clone(),
+        })
+    }
+
+    fn recipe_corpus_id(&self, toml_text: &str) -> crate::error::Result<String> {
+        Recipe::from_toml(toml_text).map(|r| r.corpus.id)
+    }
+
+    fn install_local_recipe(&self, toml_text: &str) -> crate::error::Result<PathBuf> {
+        let recipe = Recipe::from_toml(toml_text)?;
+        self.registry().install_local_recipe(&recipe, toml_text)
+    }
+
+    async fn recipe_parameter_schema(&self, corpus_id: &str) -> crate::error::Result<RecipeParameterSchema> {
+        let recipe = self.registry().fetch_recipe(corpus_id).await?;
+        let parameters: Vec<RecipeParameter> = recipe
+            .parameters
+            .iter()
+            .map(|(name, spec)| RecipeParameter {
+                name: name.clone(),
+                kind: parameter_kind_label(&spec.kind).to_string(),
+                description: spec.description.clone(),
+                required: spec.required,
+                default: spec.default.as_ref().map(toml_to_json),
+            })
+            .collect();
+        Ok(RecipeParameterSchema {
+            corpus_id: recipe.corpus.id,
+            parameters,
+        })
+    }
+
+    async fn dry_run_recipe(
+        &self,
+        recipe_path: &Path,
+        sample_size: usize,
+        offline: bool,
+    ) -> crate::error::Result<RecipeDryRunReport> {
+        let options = TestOptions {
+            sample_size,
+            embed: false,
+            offline,
+            ..Default::default()
+        };
+        self.test_recipe(recipe_path, &options)
+            .await
+            .map(|r| dry_run_report(&r))
+    }
+
+    async fn test_recipe_report(
+        &self,
+        recipe_path: &Path,
+        sample_size: usize,
+        offline: bool,
+    ) -> crate::error::Result<serde_json::Value> {
+        let options = TestOptions {
+            sample_size,
+            embed: false,
+            offline,
+            ..Default::default()
+        };
+        let report = self.test_recipe(recipe_path, &options).await?;
+        serde_json::to_value(map_test_report(&report))
+            .map_err(|e| crate::error::Error::Serialization(e.to_string()))
+    }
+
+    fn recipe_vocabulary(&self, recipe_path: &Path) -> crate::error::Result<Option<RecipeVocabulary>> {
+        let recipe = Recipe::from_file(recipe_path)?;
+        Ok(recipe.custom_ontology().map(|policies| {
+            let terms = policies.prose.terms;
+            RecipeVocabulary {
+                position_term: terms.position_term,
+                tension_term: terms.tension_term,
+                concern_term: terms.concern_term,
+                evidence_term: terms.evidence_term,
+            }
+        }))
+    }
+
+    fn recipe_enrichment_domain(&self, recipe_path: &Path) -> Option<String> {
+        Recipe::from_file(recipe_path)
+            .ok()
+            .and_then(|r| r.enrichment)
+            .and_then(|e| e.domain)
+    }
+
+    fn spawn_newsworthy_watcher(
+        self: Arc<Self>,
+        host: NewsworthyHostFactory,
+        shutdown: tokio::sync::watch::Receiver<bool>,
+        force_tick: tokio::sync::mpsc::Receiver<()>,
+    ) -> tokio::task::JoinHandle<()> {
+        use crate::update::newsworthy_watcher::{
+            HttpMediaWikiClient, MediaWikiClient, NewsworthyConfig, WikipediaNewsworthyWatcher,
+        };
+        let config = NewsworthyConfig::default();
+        let host = host(config.corpus_id.clone());
+        let media_wiki: Arc<dyn MediaWikiClient> = Arc::new(HttpMediaWikiClient {
+            base_url: "https://en.wikipedia.org/w/api.php".to_string(),
+            user_agent: "commonwealth-ai/0.1 (newsworthy)".to_string(),
+            http: reqwest::Client::new(),
+        });
+        Arc::new(WikipediaNewsworthyWatcher::new(
+            host, self, media_wiki, config,
+        ))
+        .spawn(shutdown, force_tick)
+    }
+
+    async fn apply_newsworthy_incremental(
+        self: Arc<Self>,
+        indexes_dir: PathBuf,
+        corpus_id: String,
+        role: &'static str,
+        doc_ids: Vec<String>,
+    ) -> std::result::Result<(), String> {
+        apply_incremental(self, indexes_dir, corpus_id, role, doc_ids).await
     }
 }
 
