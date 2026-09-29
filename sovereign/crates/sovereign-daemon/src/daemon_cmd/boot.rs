@@ -826,6 +826,9 @@ pub(super) async fn run_daemon(
                     // The engine the auto_ingest loop and the
                     // /internal/corpus/* surface both read.
                     corpus_engine: Arc::clone(&engine),
+                    recipe_harness: Some(Arc::new(
+                        sovereign_authoring_harness::EngineHarness::new(Arc::clone(&engine)),
+                    )),
                     inference_provider: Arc::clone(&routed_provider),
                     // The gauge the router above was built with, so AppState
                     // holds the same counter the provider's guards write

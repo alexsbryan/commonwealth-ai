@@ -740,6 +740,16 @@ impl EmbeddedDaemon {
         self.services.serving().map(|s| &s.core.corpus_engine)
     }
 
+    /// Borrow the recipe harness this host composed beside its engine, if
+    /// any. `recipe_http`'s harness route calls this and names the absence.
+    pub fn recipe_harness(
+        &self,
+    ) -> Option<&Arc<dyn corpus_index::ingest_port::daemon::RecipeHarnessPort>> {
+        self.services
+            .serving()
+            .and_then(|s| s.core.recipe_harness.as_ref())
+    }
+
     /// Borrow the `StateStore` the reading surface uses to resolve
     /// `conversation-history` chunks back to their conversation. `None` only
     /// on [`DaemonServices::MeshAdmin`], which serves nothing — since

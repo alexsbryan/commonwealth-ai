@@ -12236,10 +12236,13 @@ dependencies = [
 name = "sovereign-authoring-harness"
 version = "0.8.0"
 dependencies = [
+ "async-trait",
  "corpus-engine",
+ "corpus-index",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-time",
  "workspace-hack",
 ]
 

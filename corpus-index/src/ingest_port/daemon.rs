@@ -221,6 +221,30 @@ pub struct PreparedInstall {
     pub run: InstallRun,
 }
 
+/// The harness port's card, named here so its implementor depends on the
+/// port's crate rather than on `sovereign-contracts` directly.
+pub use sovereign_contracts::daemon_wire::HarnessRunCardView;
+
+/// The recipe authoring harness over a frozen sample, as the daemon's harness
+/// route drives it. Implemented beside the harness, which judges in ingest's
+/// config language, and composed where the engine is built.
+#[async_trait]
+pub trait RecipeHarnessPort: Send + Sync {
+    /// Capture a frozen sample under `harness_root` if there is none, run
+    /// rungs 1-5 of `recipe_toml` over it and, with `enrich`, verify the atoms
+    /// already written under `index_dir`. `notice` hears the networked step.
+    /// Errors name the step they failed in.
+    async fn run_recipe_harness(
+        &self,
+        recipe_toml: &str,
+        harness_root: &Path,
+        sample_size: usize,
+        enrich: bool,
+        index_dir: &Path,
+        notice: &(dyn for<'s> Fn(&'s str) + Sync),
+    ) -> std::result::Result<HarnessRunCardView, String>;
+}
+
 /// Builds the daemon's newsworthy host for the watcher's corpus id.
 pub type NewsworthyHostFactory = Box<dyn FnOnce(String) -> Arc<dyn NewsworthyHost> + Send>;
 

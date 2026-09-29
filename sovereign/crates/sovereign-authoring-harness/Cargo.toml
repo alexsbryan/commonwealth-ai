@@ -9,7 +9,11 @@ description = "Authoring-harness verdict policy + render — Pass/Fail ladder ov
 path = "src/lib.rs"
 
 [dependencies]
+async-trait.workspace = true
 corpus-engine.workspace = true
+# The daemon's harness port (src/port.rs, pb-ingest-dial-daemon-ports).
+corpus-index.workspace = true
+sovereign-time.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

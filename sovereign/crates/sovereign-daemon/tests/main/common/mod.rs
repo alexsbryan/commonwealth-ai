@@ -679,6 +679,9 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_daemon::DaemonServices
             headless: None,
             serving: sovereign_daemon::ServingProfile {
                 core: sovereign_daemon::ServingCore {
+                    recipe_harness: Some(std::sync::Arc::new(
+                        sovereign_authoring_harness::EngineHarness::new(parts.engine.clone()),
+                    )),
                     corpus_engine: parts.engine,
                     inference_provider: parts.provider,
                     in_flight_gauge: None,

@@ -22,9 +22,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 
 use corpus_engine::engine::daemon_port::{dry_run_report, parameter_kind_label, toml_to_json};
-use corpus_engine::harness::verify_atoms_at;
 use corpus_engine::{CorpusEngine, Recipe, TestOptions};
-use sovereign_authoring_harness::{Declaration, HarnessRun};
 use sovereign_contracts::daemon_wire::{
     HarnessRunCardView, ImportRecipeRequest, ImportRecipeResult, IngestJobAck,
     RecipeDryRunProgress, RecipeDryRunReport, RecipeDryRunRequest, RecipeHarnessProgress,
@@ -438,8 +436,9 @@ async fn dry_run_progress(
 
 // ─── The authoring harness ─────────────────────────────────────
 
-/// The card this daemon serialises: the view at the concrete `HarnessRun`.
-type HarnessCard = HarnessRunCardView<HarnessRun>;
+/// The card this daemon serialises: the harness port hands the run over as
+/// its JSON (the bytes the concrete `HarnessRun` serialises to).
+type HarnessCard = HarnessRunCardView;
 
 /// One harness run's live state, keyed by JOB id in [`HARNESS_RUNS`].
 struct HarnessJob {
@@ -488,6 +487,10 @@ async fn harness(
     Json(body): Json<RecipeHarnessRequest>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
+    let harness_port = daemon
+        .recipe_harness()
+        .map(Arc::clone)
+        .ok_or_else(|| Absence::unavailable("recipe harness not composed on this daemon"))?;
     let recipe = Recipe::from_toml(&body.toml_text)
         .map_err(|e| Absence::invalid(format!("recipe TOML parse failed: {e}")))?;
     let recipe_id = recipe.corpus.id.clone();
@@ -519,23 +522,24 @@ async fn harness(
         "recipe_http: authoring harness accepted",
     );
 
-    let engine = Arc::clone(engine);
     let sample_size = body.sample_size;
     let enrich = body.enrich;
     let index_dir = engine.index_dir().join(&recipe_id);
+    let recipe_toml = body.toml_text;
     let spawn_recipe = recipe_id.clone();
     let spawn_job = job_id.clone();
     tokio::spawn(async move {
-        let result = run_harness_job(
-            &engine,
-            &recipe,
-            &harness_root,
-            sample_size,
-            enrich,
-            &index_dir,
-            &spawn_job,
-        )
-        .await;
+        let job_id: &str = &spawn_job;
+        let result = harness_port
+            .run_recipe_harness(
+                &recipe_toml,
+                &harness_root,
+                sample_size,
+                enrich,
+                &index_dir,
+                &|m| tracing::info!(job_id, "recipe_http: harness {m}"),
+            )
+            .await;
         match &result {
             Ok(card) => tracing::info!(
                 recipe_id = %spawn_recipe,
@@ -566,50 +570,6 @@ async fn harness(
         }),
     )
         .into_response())
-}
-
-/// The body of the spawned harness job, lifted out so the spawn reads as one
-/// call and the `?` chain is not hand-unrolled (ARCH principle 8 — the drive
-/// itself is shared with the CLI; this is only the daemon's rung 6 around it).
-async fn run_harness_job(
-    engine: &CorpusEngine,
-    recipe: &Recipe,
-    harness_root: &std::path::Path,
-    sample_size: usize,
-    enrich: bool,
-    index_dir: &std::path::Path,
-    job_id: &str,
-) -> Result<HarnessCard, String> {
-    let frozen_run = sovereign_authoring_harness::run_over_frozen_sample(
-        engine,
-        recipe,
-        harness_root,
-        sample_size,
-        false,
-        &|m| tracing::info!(job_id, "recipe_http: harness {m}"),
-    )
-    .await?;
-
-    // Rung 6 (opt-in): verify the atoms the DAEMON's own ingest+enrich
-    // already wrote for this corpus. Not a parallel enrichment pipeline —
-    // the same index every retrieval reads.
-    let enrich_out = if enrich {
-        verify_atoms_at(index_dir)
-            .await
-            .map_err(|e| format!("enrich verify failed: {e}"))?
-    } else {
-        None
-    };
-
-    let run = frozen_run.verdicts(recipe, enrich_out.as_ref(), &Declaration::default());
-    Ok(HarnessRunCardView {
-        green: run.green(),
-        frozen_docs: frozen_run.frozen_docs(),
-        frozen_captured_at: frozen_run.captured_at(),
-        frozen_captured_now: frozen_run.captured_now,
-        ran_at_unix: sovereign_time::unix_now_u64(),
-        run,
-    })
 }
 
 /// GET `/internal/corpus/recipes/harness/{job}/progress` — where one harness run

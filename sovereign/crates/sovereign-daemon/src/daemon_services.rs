@@ -169,6 +169,9 @@ impl EmbedAdvertisement {
 /// this struct or anywhere downstream.
 pub struct ServingCore {
     pub corpus_engine: Arc<CorpusEngine>,
+    /// The recipe authoring harness over that engine. `None` answers the
+    /// harness route with a named 503; every production host composes it.
+    pub recipe_harness: Option<Arc<dyn corpus_index::ingest_port::daemon::RecipeHarnessPort>>,
     /// `sovereign.db` at this daemon's data root — conversations, sessions,
     /// tiered-memory rows. CORE, not an optional extra: the reading surface
     /// resolves `conversation-history` chunks through it, and a turn cannot be
@@ -771,6 +774,7 @@ pub(crate) mod fixtures {
         ServingProfile {
             core: ServingCore {
                 corpus_engine: engine(),
+                recipe_harness: None,
                 inference_provider,
                 in_flight_gauge: None,
                 state_store,
