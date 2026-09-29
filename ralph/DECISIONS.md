@@ -1253,6 +1253,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   3. Split. pb-ingest-dial-tools is `[x]` at 6c956fe13, with its outcome narrowed to families (1), (2), (6) and BOUNDARY 24 → 23. pb-ingest-dial-tools-atlas (family 4, 42 sites) and -local (family 3, 42 sites, BOUNDARY −1) follow, then -close (family 5 folded in at 9 sites, the dependency drop, the stock ingest face, the parent's PROOF and PLANT, BOUNDARY −1). pb-ingest-dial-daemon and pb-cli-llm-ingest-move now depend on -close.
 - Because: principle 12 and §12 3a (a leaf holds vocabulary, and the engine's internal types are ingest's); FIVE_PROGRAMS §2c "extend, never re-own" (the implementation joins the engine that owns the types); the addendum scope guard (over 2× LIFT means stop with the split); and the charter's trial rule (every new row cites a compile trial run at HEAD). Boundary gate: EXIT=1, 23 violations at 6c956fe13 (`scripts/ralph-check.sh boundary`); this commit touches no Rust.
 
+**phase-b-44 · 2026-09-28 · pb-ingest-dial-tools-atlas → closed at 936838db2 on entry-point proof; the absence half moves to -close · director** — this commit
+- Needed: the worker built the outcome (82b4afd0b..70194753a, proof record 936838db2) and stopped because half the PROOF could not run at this tree. The row said typed_extension and summary_atoms were "called through the tool registry", but neither is registered. It also asked for "ingest absent by name on a standalone svrn", and that composition does not exist until -close.
+- Chose: accept the substitute proof. `run_typed_extension` and `write_summary_atoms` write through `AtlasPort` via `IngestAtlas`, and the next read sees the write (entry-point tests), plus the per-family grep PLANT. The row is rewritten with the false premise named and marked `[x]`. The run-time absence half moves to pb-ingest-dial-tools-close, whose PROOF now also requires `FolderTieredProvider::post_finalize_corpus`, the one svrn run-time caller of `run_typed_extension`, to report ingest absent on the standalone svrn.
+- Because: charter "a false row premise" (the worker's census is the input). The absence half belongs to the row that builds the standalone composition, since -close's OUTCOME already says "a standalone svrn reports ingest absent by name". Folding it there keeps one proof per outcome and adds no row. Boundary gate: EXIT=1, 23 violations (`cargo xtask boundary-gate` from corpus-engine/, this session), matching the row's "expect 23". This commit touches no Rust.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -11801,5 +11806,22 @@ Reproduced this session at 6c956fe13:
 Not trialled: the atlas port's exact method list, or which ingest crate (corpus-engine, understanding-host, enrichment-build) receives each moved half. Each row decides those by "whichever crate owns the type", and its worker census names them. The LIFTs extrapolate the parent's measured rate (≈67 changed lines per site). That rate was set by the light families, so it may undercount.
 
 What would falsify this: a family whose port has to name an engine-internal type that no ingest crate can take without an [ingest]→[svrn] edge. Then the seam is wrong for that family, and it goes to the operator as a program-boundary question. A second falsifier is -atlas or -local passing 2× its LIFT; then the per-pipeline split is too fine, and whole-subsystem ownership (for example, knowledge_view as ingest's) needs pricing.
+
+</details>
+
+## phase-b-44 · 2026-09-28 — pb-ingest-dial-tools-atlas proven at its library entry points; run-time absence folds into -close
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced this session at 936838db2:
+- `grep -rn -E 'typed_extension|summary_atoms' sovereign/crates/sovereign-contracts/tool-manifests/` finds nothing. A grep for string ids `"typed_extension…"`/`"summary_atoms…"` across sovereign/crates hits only a bench phase label (bench_cmd/vault_report.rs:613). The only callers are cli-llm atlas_cmd/typed_extension.rs:145, enrich_cmd/summary_atoms.rs:46 and conv_tiered_provider.rs:1125. The registry premise was false.
+- `bash target/ralph/phase-b/famgrep.sh` gives 0. With `fn _plant() { let _ = corpus_engine::enrichment::atlas::write_atlas_gaps; }` inserted at the head of atlas_phase/gaps.rs it gives 1, and 0 again after `git checkout --`. (A plant appended at the end of the file reads 0, because the grep stops at `#[cfg(test)]`. That is the grep's intended scope, not a hole.)
+- `sovereign-test.sh --package sovereign-tools --filter typed_extension`: pass 27, fail 0. `--filter summary_atoms`: pass 5, fail 0.
+- `cargo xtask boundary-gate`: 23 violations, EXIT=1.
+- The port is `corpus_engine_atlas_reader::ports::AtlasPort` (corpus-engine-atlas-reader/src/ports.rs), implemented once by `corpus_engine::IngestAtlas` (corpus-engine/src/engine/atlas_port.rs:31).
+- Size: `git diff --shortstat 44d3beb42..936838db2 -- . ':!ralph'` gives 56 files, +1,355 / −654. That is under the ~2,800 LIFT, so phase-b-43's second falsifier (over 2× LIFT) did not fire.
+- The worker's lint and the full-crate test runs (sovereign-tools 725, cli-llm 866, atlas-reader 181) were not re-run here. They are the worker's reported numbers.
+
+What would falsify this: -close cannot make `post_finalize_corpus` (or any atlas entry point) answer "ingest absent" at run time without re-introducing a corpus-engine name into the atlas family, which the famgrep would show. That would mean the port is not the whole seam. A second falsifier is a real tool-registry surface for these pipelines turning up (an MCP or tool id that calls them). Then the registry proof was runnable after all, and the -atlas row owes it.
 
 </details>
