@@ -1263,6 +1263,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: package option (a). -local keeps the 42 corpus-engine sites behind `impl LocalCorpusPort for CorpusEngine`, expects BOUNDARY 23 unchanged, and is proven at its library entry points or the existing watched-folder and knowledge_view e2e tests, with a per-family grep PLANT. -close takes the catalog edge (its three sites, its port, an [ingest]-side implementor) and the standalone-svrn absence half for this family, and expects BOUNDARY −2.
 - Because: charter "a false row premise" and "fold rows that touch the same files". Both halves that cannot run now depend on the stock ingest face, which -close already owns. This is the phase-b-44 precedent. Option (b) moves -close's LIFT into -local, and option (c) opens a red edge the prompt forbids. Boundary gate: EXIT=1, 23 violations (`cargo xtask boundary-gate` from corpus-engine/, this session). This commit touches no Rust.
 
+**phase-b-46 · 2026-09-28 · pb-ingest-dial-tools-local → the finish marker is repaired; no premise changes · director** — this commit
+- Needed: the loop refused to dispatch -local because its row "lacks '- finish:'". phase-b-45 had rewritten the line as `- finish (rewritten by phase-b-45; …):`, and the dispatch check (`Queue.unmet_requirements`, scripts/ralph.py:562) looks for the literal substring.
+- Chose: move the colon to read `- finish: (rewritten by phase-b-45; the −1 premise was false) retires …`. No other text changes. The census, trial, PROOF and LIFT stand as phase-b-45 wrote them.
+- Because: charter "a false row premise" does not apply, since the premise is intact and only the marker was malformed. The smallest change that lets the campaign flow is the one-character move. Boundary gate: EXIT=1, 23 violations (`cargo xtask boundary-gate` from corpus-engine/, this session). This commit touches no Rust.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -11847,5 +11852,20 @@ Reproduced this session at 8fe678058:
 What would falsify this:
 - -local's corpus-engine half turns out to need a catalog type in the port's signature (for example the watched config write needs `EnrichConfig` to cross). Then the halves are not separable, and -local should be folded into -close whole.
 - -close finds a home for the catalog implementor that needs no stock face (some svrn crate already linking an [ingest] crate legitimately). Then the fold was unnecessary, and -local could have taken the −1.
+
+</details>
+
+## phase-b-46 · 2026-09-28 — pb-ingest-dial-tools-local's finish marker was malformed by phase-b-45
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced this session at f72a2cffb:
+- `Queue(STATE.md).unmet_requirements(<-local>, ("- finish:", "- trial"))` returns `['- finish:']` on the committed tree and `[]` after the edit.
+- The same check, run over every open row, reports no other row missing a marker, so the next dispatch will not halt on the same slip.
+
+What would falsify this:
+- The loop halts on -local again with a dispatch-requires message. That would mean the check reads something other than the row block.
+
+Prevention: a director rewrite that annotates a marker line puts the annotation after the colon (`- finish: (rewritten by …)`), never before it.
 
 </details>
