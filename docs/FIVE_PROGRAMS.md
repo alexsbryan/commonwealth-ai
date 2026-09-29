@@ -163,7 +163,14 @@ methods name: `corpus-index` beside `CorpusReadPort` (`ingest_port.rs`), or
 No engine-internal type moves to a leaf to make a port nameable (§12 3a rung
 2, last bullet). When a svrn pipeline passes one, the code that names it moves
 into ingest's crate as the port's implementation, and svrn keeps the tool
-shell and whatever names `sovereign-core` (phase-b-43). A port between two programs is legitimate because the root
+shell and whatever names `sovereign-core` (phase-b-43). The inbound
+direction is the mirror: where the engine declares a trait that svrn
+implements (the tiered-enrichment hooks), the trait and the values its methods
+name are that port's vocabulary, spoken by both programs, and they move to
+the same leaf beside the other ingest ports (`corpus-index`
+`ingest_port/tiered.rs`) with the engine re-exporting them. A type qualifies
+only if it is pure data under the leaf test and a port method names it
+(phase-b-49). A port between two programs is legitimate because the root
 that plugs it sits outside every package.
 Distributions are declared as `[[distribution]]` rows in
 `quality/ARCH_LAYERS.toml`, extending `[thin_surfaces]`: the crate may reach
