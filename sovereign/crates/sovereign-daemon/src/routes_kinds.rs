@@ -99,7 +99,9 @@ mod tests {
 
     async fn body_text(resp: Response) -> (StatusCode, String) {
         let status = resp.status();
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         (status, String::from_utf8_lossy(&bytes).into_owned())
     }
 
@@ -127,7 +129,8 @@ mod tests {
             body_text(forward_kind_to(Some(None), "/v1/rerank", Bytes::new()).await).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert!(text.contains("terminal"), "{text}");
-        let (status, text) = body_text(forward_kind_to(None, "/v1/rerank", Bytes::new()).await).await;
+        let (status, text) =
+            body_text(forward_kind_to(None, "/v1/rerank", Bytes::new()).await).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert!(text.contains("no serving path was decided"), "{text}");
     }
