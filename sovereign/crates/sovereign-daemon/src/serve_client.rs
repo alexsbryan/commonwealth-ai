@@ -571,6 +571,56 @@ pub async fn forward_get(
     forward(base, axum::http::Method::GET, path, None).await
 }
 
+/// One GET forwarded to serve with its body STREAMED back — a model file can
+/// be tens of GB — and `pass` request headers sent through (a byte range).
+/// serve's status and the response headers a fetcher reads (length, range,
+/// the integrity digest) are relayed. Unbounded by [`FORWARD_WINDOW`]: only the
+/// connect is bounded, since a whole-GGUF body takes as long as it takes. An
+/// unreachable serve is an Err naming it.
+pub async fn forward_stream(
+    base: &str,
+    path: &str,
+    pass: &axum::http::HeaderMap,
+) -> Result<axum::response::Response, String> {
+    use axum::response::IntoResponse;
+    const RELAYED: [&str; 5] = [
+        "content-type",
+        "content-length",
+        "content-range",
+        "accept-ranges",
+        "x-sha256",
+    ];
+    let url = format!("{}{path}", base.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .connect_timeout(FORWARD_WINDOW)
+        .build()
+        .map_err(|e| format!("cannot build a client to reach serve: {e}"))?;
+    let mut request = client.get(&url);
+    if let Some(range) = pass.get(axum::http::header::RANGE) {
+        request = request.header(reqwest::header::RANGE, range.as_bytes());
+    }
+    let resp = request
+        .send()
+        .await
+        .map_err(|e| format!("serve at {base} is not reachable for {path}: {e}"))?;
+    let status = axum::http::StatusCode::from_u16(resp.status().as_u16())
+        .unwrap_or(axum::http::StatusCode::BAD_GATEWAY);
+    let mut headers = axum::http::HeaderMap::new();
+    for name in RELAYED {
+        if let Some(value) = resp.headers().get(name) {
+            if let Ok(value) = axum::http::HeaderValue::from_bytes(value.as_bytes()) {
+                headers.insert(
+                    axum::http::HeaderName::from_static(name),
+                    value,
+                );
+            }
+        }
+    }
+    tracing::debug!(target: "serving_path", serve_base = base, path, status = status.as_u16(), "streamed request forwarded to serve");
+    let body = axum::body::Body::from_stream(resp.bytes_stream());
+    Ok((status, headers, body).into_response())
+}
+
 /// One request forwarded to serve, its status and body relayed; `body` goes
 /// as JSON when present. An unreachable serve, one past [`FORWARD_WINDOW`],
 /// or an unreadable body is an Err naming which, never a success-shaped

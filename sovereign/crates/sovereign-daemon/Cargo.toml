@@ -118,7 +118,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 hex = "0.4"
 hostname = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 if-addrs = "0.13"
 chrono = { workspace = true }

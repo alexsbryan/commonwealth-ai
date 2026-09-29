@@ -357,31 +357,15 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/model/transfer",
             post(routes_internal::model_transfer),
         )
-        // Peer-to-peer GGUF distribution (`sovereign_compute::model_transfer`),
-        // over this daemon's servable allowlist.
+        // Peer-to-peer GGUF distribution: serve's, forwarded (see
+        // routes_internal::model_files).
         .route(
             oicp_types::model_transfer::MODELS_LIST_PATH,
-            get(
-                |axum::extract::State(state): axum::extract::State<AppState>| {
-                    routes_internal::list_model_files(axum::extract::State(
-                        state.servable_model_files_reader(),
-                    ))
-                },
-            ),
+            get(routes_internal::list_model_files),
         )
         .route(
             oicp_types::model_transfer::MODEL_FILE_ROUTE,
-            get(
-                |axum::extract::State(state): axum::extract::State<AppState>,
-                 name: axum::extract::Path<String>,
-                 headers: axum::http::HeaderMap| {
-                    routes_internal::serve_model_file(
-                        axum::extract::State(state.servable_model_files_reader()),
-                        name,
-                        headers,
-                    )
-                },
-            ),
+            get(routes_internal::serve_model_file),
         )
         // Distributed-inference auto-warm: a host asks this worker to seed its
         // RPC tensor cache with its shard before a distributed load. The worker
