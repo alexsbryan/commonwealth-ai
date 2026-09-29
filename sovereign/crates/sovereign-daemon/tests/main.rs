@@ -216,6 +216,8 @@ mod try_resume_first_gossip;
 mod turn_reshape_fidelity;
 #[path = "main/turn_surface.rs"]
 mod turn_surface;
+#[path = "main/wikipedia_fetch_e2e.rs"]
+mod wikipedia_fetch_e2e;
 #[path = "main/wire_view_drift.rs"]
 mod wire_view_drift;
 #[path = "main/work_drive_census.rs"]

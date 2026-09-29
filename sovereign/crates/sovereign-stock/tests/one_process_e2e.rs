@@ -330,7 +330,8 @@ fn mcp(port: u16, id: u64, method: &str, params: Value) -> Value {
 /// `symbols` is listed exactly once, beside svrn's own `wikipedia_fetch`, no
 /// name is listed twice, code's `symbols` answers (not svrn's pointer to
 /// `svrn code mcp`), `work_in_flight` is code's and answers, and
-/// `/v1/projects` is code's router.
+/// `/v1/projects` is code's router. Its boot log says ingest's
+/// enrichment-config port was composed (pb-ingest-dial-tools-close).
 #[test]
 fn the_stock_install_serves_code_on_its_one_mcp() {
     let root = tempfile::tempdir().expect("tempdir");
@@ -375,6 +376,15 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
             );
             get_json(&format!("http://127.0.0.1:{svrn}/status")).is_some()
         },
+    );
+
+    // Ingest's enrichment-config port is handed to svrn in this process
+    // (pb-ingest-dial-tools-close); the bare daemon logs its absence instead.
+    let boot = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        boot.contains("ingest's enrichment-config port is composed in this process"),
+        "the stock process did not compose ingest's port:\n{}",
+        log_tail(&log)
     );
 
     let list = mcp(svrn, 1, "tools/list", serde_json::json!({}));
