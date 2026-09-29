@@ -67,10 +67,10 @@ pub fn write_dated_and_update_latest<T: Serialize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use crate::bench_cmd::discover::{BenchSurface, CorpusIdSource, DiscoveredBench};
     use serde::{Deserialize, Serialize};
     use sovereign_contracts::index_layout::CorpusIndexState;
+    use std::fs;
     use tempfile::TempDir;
 
     fn fixture_bench() -> DiscoveredBench {
