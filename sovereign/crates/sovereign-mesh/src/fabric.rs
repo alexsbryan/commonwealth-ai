@@ -621,21 +621,11 @@ impl FabricPart {
     /// Fabric's own roster read, moved here from `EmbeddedDaemon` at domains
     /// `REVIEW-build-daemon-embedded-split` (DC §4.1 "report reach"). The
     /// daemon's `eligible_anchors` delegates so the roster decision has one
-    /// implementation.
+    /// implementation: `sovereign_contracts::membership::eligible_anchors`
+    /// over this part's membership reader, the one serve's discovery loop
+    /// applies to whatever roster it is handed (pb-serve-distributes).
     pub async fn eligible_anchors(&self) -> Vec<NodeId> {
-        let mesh = self.mesh.read().await;
-        mesh.members
-            .values()
-            .filter(|m| {
-                matches!(
-                    m.status,
-                    commonwealth_core::mesh::NodeStatus::Online
-                        | commonwealth_core::mesh::NodeStatus::Busy
-                )
-            })
-            .filter(|m| m.capabilities.anchor.as_ref().is_some_and(|a| a.can_anchor))
-            .map(|m| m.node_id)
-            .collect()
+        sovereign_contracts::membership::eligible_anchors(&self.membership.members().await)
     }
 
     /// The members offering an origin of `kind`, with the live path to each.

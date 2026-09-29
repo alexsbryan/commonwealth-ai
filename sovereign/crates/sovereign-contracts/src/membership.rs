@@ -50,6 +50,19 @@ pub struct MembershipEntry<D> {
     pub dial: D,
 }
 
+/// The members that can hold a shard of the shared model now: present
+/// (Online or Busy) with an anchor record that says they can anchor. THE one
+/// roster decision behind the shared-model host election, read by Fabric's
+/// status and by the discovery loop that elects (pb-serve-distributes).
+pub fn eligible_anchors<D>(members: &[MembershipEntry<D>]) -> Vec<NodeId> {
+    members
+        .iter()
+        .filter(|m| matches!(m.status, MemberStatus::Online | MemberStatus::Busy))
+        .filter(|m| m.capabilities.anchor.as_ref().is_some_and(|a| a.can_anchor))
+        .map(|m| m.node_id)
+        .collect()
+}
+
 /// The one read of mesh membership. See the module docs.
 #[async_trait]
 pub trait MembershipReader: Send + Sync {
@@ -70,5 +83,56 @@ pub trait MembershipReader: Send + Sync {
     /// The member with this id, if the roster holds one.
     async fn member(&self, id: NodeId) -> Option<MembershipEntry<Self::Dial>> {
         self.members().await.into_iter().find(|m| m.node_id == id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn member(id: u128, status: MemberStatus, anchor: serde_json::Value) -> MembershipEntry<()> {
+        let capabilities = serde_json::from_value(serde_json::json!({
+            "hardware": {"gpus": [], "system_ram_gb": 0, "cpu_cores": 0,
+                         "total_storage_gb": 0, "free_storage_gb": 0},
+            "available": {"free_vram_gb": 0.0, "free_ram_gb": 0.0, "free_storage_gb": 0.0,
+                          "gpu_utilization": 0.0, "cpu_utilization": 0.0,
+                          "available_for_mesh": true},
+            "hosted_corpora": [], "reported_at": 0,
+            "anchor": anchor
+        }))
+        .expect("capabilities");
+        MembershipEntry {
+            node_id: NodeId::from_u128(id),
+            name: format!("n{id}"),
+            status,
+            active: true,
+            last_seen: 0,
+            dialable: true,
+            capabilities,
+            dial: (),
+        }
+    }
+
+    /// Present members that say they can anchor, and no one else: an absent
+    /// anchor, a consumer's `can_anchor: false` and an offline anchor are
+    /// each left out. Failing input: drop either filter.
+    #[test]
+    fn eligible_anchors_are_present_members_that_can_anchor() {
+        let yes = serde_json::json!({"can_anchor": true, "vram_gb": 8});
+        let roster = vec![
+            member(1, MemberStatus::Online, yes.clone()),
+            member(2, MemberStatus::Busy, yes.clone()),
+            member(3, MemberStatus::Offline, yes),
+            member(
+                4,
+                MemberStatus::Online,
+                serde_json::json!({"can_anchor": false, "vram_gb": 8}),
+            ),
+            member(5, MemberStatus::Online, serde_json::Value::Null),
+        ];
+        assert_eq!(
+            eligible_anchors(&roster),
+            vec![NodeId::from_u128(1), NodeId::from_u128(2)]
+        );
     }
 }
