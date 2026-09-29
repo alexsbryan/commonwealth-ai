@@ -1483,6 +1483,16 @@ doc = "docs/FIVE_PROGRAMS.md"
 #     and eval links it with `default-features = false`, so the `std::fs`
 #     `read` door (understanding-vocab/src/read.rs) is not in eval's build;
 #     eval reads its own bytes and calls `read::parse_atoms` (fp-58).
+#   - `oicp-client`, `sovereign-turn-client`, `sovereign-cli-base`, `host-kit`,
+#     `corpus-index` — admitted by the operator (phase-b-33) for bench's own
+#     CLI crate (pb-cli-llm-bench-move): the bench group dials svrn and serve
+#     through the two clients, shares the CLI base every program shares, takes
+#     the data-root lock from the host kit, and opens an index read-only. Each
+#     one's `allow` adds only budget leaves plus `commonwealth-rail-core`,
+#     `oplog` and `corpus-engine-yield`, and none is the subject it measures
+#     (the HUMAN-fp58 test). `corpus-engine-atlas-reader` is NOT admitted: its
+#     allow names `understanding-atlas`, an [ingest] member, so bench's atlas
+#     reads go through `understanding_vocab::read`.
 #
 # `sovereign-eval` is here "minus its product links" (§2) — the link is
 # `corpus-engine`, and it is a red line, which is the whole point of the row.
@@ -1495,7 +1505,7 @@ crates = [
     "sovereign-agent-tools",
     "sovereign-tdd",
 ]
-leaf_budget = ["oicp-types", "sovereign-contracts", "kernel-types", "sovereign-time", "workspace-hack", "understanding-vocab"]
+leaf_budget = ["oicp-types", "sovereign-contracts", "kernel-types", "sovereign-time", "workspace-hack", "understanding-vocab", "oicp-client", "sovereign-turn-client", "sovereign-cli-base", "host-kit", "corpus-index"]
 
 # ── DISTRIBUTIONS — the composition roots, outside every package ────────────
 #
