@@ -107,7 +107,15 @@ type Compose = Box<
 pub struct HostedServe {
     filter: String,
     compose: Compose,
+    env_contract: Option<EnvContract>,
 }
+
+/// The loader's RPC env contract: the `--rpc-worker` flag and the
+/// `[shared_model]` role, translated into the env its consumers read
+/// (`sovereign_compute::distributed_role`, pb-serve-distributes).
+type EnvContract = Box<
+    dyn Fn(&[String], &sovereign_contracts::setup_config::SharedModelSection) + Send + Sync,
+>;
 
 impl HostedServe {
     /// `filter` is serve's tracing allowlist, unioned with svrn's. `compose`
@@ -124,6 +132,39 @@ impl HostedServe {
             compose: Box::new(move |data_dir, config_path| {
                 Box::pin(compose(data_dir, config_path))
             }),
+            env_contract: None,
+        }
+    }
+
+    /// How the loader translates this invocation's `--rpc-worker` flag and
+    /// the config's `[shared_model]` role into its env contract. svrn applies
+    /// it once at boot, on every path, before anything reads that env: the
+    /// hosted engine's worker bind and discovery, and svrn's own router and
+    /// `/status` in the same process.
+    pub fn env_contract<F>(mut self, apply: F) -> Self
+    where
+        F: Fn(&[String], &sovereign_contracts::setup_config::SharedModelSection)
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.env_contract = Some(Box::new(apply));
+        self
+    }
+
+    /// Apply the loader's env contract, if this distribution handed one.
+    /// `false` when it did not, so the caller names the absence.
+    pub fn apply_env_contract(
+        &self,
+        args: &[String],
+        shared_model: &sovereign_contracts::setup_config::SharedModelSection,
+    ) -> bool {
+        match &self.env_contract {
+            Some(apply) => {
+                apply(args, shared_model);
+                true
+            }
+            None => false,
         }
     }
 

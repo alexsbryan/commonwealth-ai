@@ -9,8 +9,6 @@ use sovereign_core::model_family::ModelFamily;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 
-use crate::bootstrap;
-
 /// What the serving boot hands the rest of `run_daemon`.
 pub(super) struct ServingBoot {
     pub provider: Arc<dyn InferenceProvider>,
@@ -32,15 +30,22 @@ pub(super) async fn boot_serving(
     config_override: &Option<std::path::PathBuf>,
     hosted: Option<crate::serve_client::HostedServe>,
 ) -> Result<ServingBoot, i32> {
-    // Shared-model cluster role → RPC env contract. The desktop fleet
-    // sets `[shared_model] role` instead of SOVEREIGN_RPC_* by hand;
-    // translate it here, once, before any RPC consumer reads the env
-    // (the inference serve call_once, the discovery loop below, and
-    // commonwealth-api's /status advertise). An explicit env var wins.
-    // `--rpc-worker` first: it is the operator saying it out loud on this
-    // invocation, and the role translation below only fills in what is unset.
-    bootstrap::apply_rpc_worker_flag(args);
-    bootstrap::apply_shared_model_role_to_env(&config.shared_model);
+    // Shared-model cluster role → RPC env contract, applied once, before any
+    // RPC consumer reads the env (the hosted engine's worker bind and
+    // discovery, svrn's router and `/status`). The translation is the
+    // loader's (pb-serve-distributes), so the distribution that hosts it hands
+    // it in; an explicit env var wins, and `--rpc-worker` beats the role. A
+    // svrn alone loads nothing and translates nothing: the serve it dials
+    // applies its own.
+    let applied = hosted
+        .as_ref()
+        .is_some_and(|h| h.apply_env_contract(args, &config.shared_model));
+    tracing::info!(
+        target: "serving_path",
+        applied,
+        role = ?config.shared_model.role,
+        "boot: the loader's RPC env contract (`[shared_model]`, `--rpc-worker`)"
+    );
 
     // Where serving lives, decided once, after the RPC env contract above
     // (`ServingPath::decide` traces it). A distribution that hosts serve here

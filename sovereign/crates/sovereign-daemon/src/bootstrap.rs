@@ -335,11 +335,9 @@ pub fn build_folder_tiered_deps(
 /// has no treesitter dependency.
 pub use crate::startup::rpc_discovery_armed;
 /// The `--rpc-worker` parse and its default bind are the launch contract's
-/// (`sovereign_contracts::launch`), and the role → RPC env translation is the
-/// loader's (`sovereign_compute::distributed_role`), pb-serve-distributes.
-pub use sovereign_compute::distributed_role::{
-    apply_rpc_worker_flag, apply_shared_model_role_to_env,
-};
+/// (`sovereign_contracts::launch`). The role → RPC env translation is the
+/// loader's (`sovereign_compute::distributed_role`), which the distribution
+/// hands svrn through `HostedServe::env_contract` (pb-serve-distributes).
 pub use sovereign_contracts::launch::rpc_worker_flag;
 
 /// This daemon's mesh, as the discovery loop and the warm orchestrator read it

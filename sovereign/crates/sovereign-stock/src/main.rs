@@ -61,7 +61,12 @@ fn main() {
             });
             Ok(parts)
         },
-    );
+    )
+    // The loader's env contract, applied by svrn's boot on every path.
+    .env_contract(|args, shared_model| {
+        sovereign_serve::apply_rpc_worker_flag(args);
+        sovereign_serve::apply_shared_model_role_to_env(shared_model);
+    });
     // Placement is this binary's (FIVE_PROGRAMS §2c): code's indexes and
     // result stores are svrn's root's, as they were when svrn hosted them.
     let code = sovereign_daemon::process::HostedCode::new(|host| async move {

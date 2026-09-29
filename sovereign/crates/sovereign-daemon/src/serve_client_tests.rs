@@ -375,3 +375,29 @@ async fn a_ner_probe_is_retried_until_serve_answers() {
     assert!(handle.is_none(), "serve answered: no model");
     assert_eq!(probes.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
+
+/// The loader's env contract reaches svrn's boot only through the
+/// distribution (pb-serve-distributes): applied with this invocation's args
+/// and the config's `[shared_model]` when handed in, and reported absent
+/// when not. Failing input: drop the call in `apply_env_contract`, and the
+/// first assertion goes red.
+#[test]
+fn the_env_contract_is_the_distributions_to_hand_in() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    let seen = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&seen);
+    let compose = |_: std::path::PathBuf, _: std::path::PathBuf| async {
+        Err::<HostedParts, String>("not composed here".to_string())
+    };
+    let shared = sovereign_contracts::setup_config::SharedModelSection::default();
+    let args = vec!["--rpc-worker=127.0.0.1:1".to_string()];
+    let handed = HostedServe::new(String::new(), compose).env_contract(move |a, _| {
+        assert_eq!(a, ["--rpc-worker=127.0.0.1:1"]);
+        counted.fetch_add(1, Ordering::SeqCst);
+    });
+    assert!(handed.apply_env_contract(&args, &shared));
+    assert_eq!(seen.load(Ordering::SeqCst), 1);
+    let bare = HostedServe::new(String::new(), compose);
+    assert!(!bare.apply_env_contract(&args, &shared));
+}

@@ -85,6 +85,14 @@ mod warm_cache;
 /// (pb-serve-distributes).
 pub use sovereign_inference::fast_exit_skip_destructors;
 
+/// The loader's RPC env contract: `--rpc-worker` and the `[shared_model]`
+/// role, translated into the env the worker bind, discovery and the host's
+/// knobs read. A process hosting serve's assembly applies it before anything
+/// reads that env (pb-serve-distributes).
+pub use sovereign_compute::distributed_role::{
+    apply_rpc_worker_flag, apply_shared_model_role_to_env,
+};
+
 /// The run lock's name inside the data root (`host_kit::RunLock`): one
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
 pub const RUN_LOCK: &str = "serve";
