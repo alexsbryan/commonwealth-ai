@@ -40,8 +40,6 @@ mod client_tokens_e2e;
 mod code_server_via_mcp_client;
 #[path = "main/common/mod.rs"]
 mod common;
-#[path = "main/compute_child_e2e.rs"]
-mod compute_child_e2e;
 #[path = "main/control_plane_not_shed.rs"]
 mod control_plane_not_shed;
 #[path = "main/conv_surface_e2e.rs"]
@@ -66,8 +64,6 @@ mod d9a_documents_e2e;
 mod daemon_variant_census;
 #[path = "main/daemon_wiring.rs"]
 mod daemon_wiring;
-#[path = "main/distributed_primary_respawn_e2e.rs"]
-mod distributed_primary_respawn_e2e;
 #[path = "main/embeddings_e2e.rs"]
 mod embeddings_e2e;
 #[path = "main/emitter_origin_concurrency.rs"]
@@ -154,8 +150,6 @@ mod meshapp_parcels_e2e;
 mod meshapp_surface_e2e;
 #[path = "main/models_http_e2e.rs"]
 mod models_http_e2e;
-#[path = "main/named_model_routes_after_child_serves_e2e.rs"]
-mod named_model_routes_after_child_serves_e2e;
 #[path = "main/ner_one_load_census.rs"]
 mod ner_one_load_census;
 #[path = "main/next_edit_symbol_lane_e2e.rs"]

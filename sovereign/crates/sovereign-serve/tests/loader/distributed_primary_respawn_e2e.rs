@@ -30,8 +30,8 @@ use sovereign_compute::child::ChildLifecycle;
 use sovereign_compute::manager::{DistributedPrimarySpec, DynamicChildSlot};
 use sovereign_contracts::{CompletionRequest, InferenceProvider, StreamFrame};
 
-/// The daemon binary — its `--compute-child` arm runs the mock child.
-const BIN: &str = env!("CARGO_BIN_EXE_sovereign-daemon");
+/// serve's binary — its `--compute-child` arm (`child_launch`) runs the mock child.
+const BIN: &str = env!("CARGO_BIN_EXE_sovereign-serve");
 
 fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("dist-respawn-{tag}-{}", std::process::id()));

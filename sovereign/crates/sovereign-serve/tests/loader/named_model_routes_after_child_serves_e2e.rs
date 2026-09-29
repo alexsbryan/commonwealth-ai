@@ -40,15 +40,15 @@ use sovereign_compute::manager::{
     build_compute_layer_with_distributed, DistributedPrimarySpec, DynamicChildSlot,
 };
 use sovereign_contracts::setup_config::ComputeSection;
+use sovereign_contracts::venue::InferenceVenue;
 use sovereign_contracts::{
     CompletionRequest, CompletionResponse, Depth, InferenceProvider, ProviderCapabilities, Speed,
 };
-use sovereign_core::error::{Error, Result};
-use sovereign_daemon::daemon::InferenceVenue;
+use sovereign_contracts::{Error, Result};
 use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
-/// The daemon binary — its `--compute-child` arm runs the mock child.
-const BIN: &str = env!("CARGO_BIN_EXE_sovereign-daemon");
+/// serve's binary — its `--compute-child` arm (`child_launch`) runs the mock child.
+const BIN: &str = env!("CARGO_BIN_EXE_sovereign-serve");
 
 const SLOT_NAME: &str = "shared-primary";
 const STEM: &str = "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003";
@@ -194,11 +194,11 @@ async fn a_named_request_for_the_distributed_primary_routes_once_the_child_serve
         facade,
         Arc::new(NoVenues),
         Arc::new(NoVenues),
-        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
     ));
 
     // The real wiring under test.
-    sovereign_daemon::bootstrap::spawn_self_manifest_refresh(
+    sovereign_compute::distributed_respawn::spawn_self_manifest_refresh(
         Arc::clone(&mip),
         Some(Arc::clone(&slot)),
     );

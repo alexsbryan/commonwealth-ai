@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Crash-isolation acceptance (DISTRIBUTED_PILOT_READINESS.md P1).
 //!
-//! Spawns a REAL mock compute child via the daemon binary
+//! Spawns a REAL mock compute child via serve's binary
 //! (`--compute-child --role mock`), then `kill`s it mid-stream and asserts:
 //!   1. the stream terminates promptly with a terminal `StreamFrame::Error`
 //!      (the daemon-side is never left hanging on a dead socket);
@@ -21,8 +21,8 @@ use sovereign_compute::child::ChildLifecycle;
 use sovereign_compute::manager::ComputeChildManager;
 use sovereign_contracts::{CompletionRequest, InferenceProvider, StreamFrame};
 
-/// The daemon binary — its `--compute-child` arm runs the mock child.
-const BIN: &str = env!("CARGO_BIN_EXE_sovereign-daemon");
+/// serve's binary — its `--compute-child` arm (`child_launch`) runs the mock child.
+const BIN: &str = env!("CARGO_BIN_EXE_sovereign-serve");
 
 async fn wait_all_serving(mgr: &ComputeChildManager, timeout: Duration) -> bool {
     let start = Instant::now();
