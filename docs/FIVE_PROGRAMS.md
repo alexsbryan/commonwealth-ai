@@ -739,10 +739,17 @@ owns the program's data. The split:
       into it, so they are svrn's white-box tests (ARCH principle 12), and they
       name no `sovereign_eval` and nothing in the bench tree names them. The
       same holds for eval_cmd's probe modes (routing classify,
-      `--prod-pipeline`, rerank config) and scaffolding_param's env arms: they
-      stay in cli-llm's remainder, spelling unchanged
-      (pb-bench-dials-whitebox). Only black-box turn lanes dial svrn, with
-      sampling pins on the wire (pb-bench-dials-wire).
+      `--prod-pipeline`, rerank config): they stay in cli-llm's remainder,
+      spelling unchanged (pb-bench-dials-whitebox). Only black-box turn lanes
+      dial svrn, with sampling pins on the wire (pb-bench-dials-wire).
+      Amended 2026-09-29 (phase-b-59, -60): promote's rerank arms are
+      black-box turns, not probes; they dial with a per-turn rerank override
+      on the wire, after `sampling` (pb-bench-dials-rerank), and the dial is
+      three rows by proof: plain turns, that wire, document turns and stores
+      (pb-bench-dials-turns, -rerank, -docs). svrn's grounding-gate
+      primitives that bench uses as scorers are not turns; the ladder has no
+      rung for them, so their placement is pb-cli-llm-bench-move's census,
+      and a leaf for them is the operator's.
 - [ ] Mechanically: each moving group becomes `[lib] + [[bin]]` (the
       `sovereign-agent-bench` precedent), and the DISPATCHER (sovereign-cli,
       `main.rs:877` and `:1204`) get a sibling exec module (`bench_bin::exec`,
