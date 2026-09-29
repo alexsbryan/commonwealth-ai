@@ -89,26 +89,32 @@ async fn term_reachable(index: &CorpusIndex, term: &str) -> bool {
         .any(|h| h.content.contains(term))
 }
 
-/// Whether `id` is in `installed_indexes()` and in `usable_indexes()`.
-async fn listed(engine: &CorpusEngine, id: &str) -> (bool, bool) {
-    let has = |rows: Vec<corpus_index::types::IndexInfo>| rows.iter().any(|i| i.corpus_id == id);
+/// Whether `id`'s CANONICAL dir is the row `installed_indexes()` and
+/// `usable_indexes()` list for it. The path is checked because the listings
+/// hold one row per corpus id, and a finished partition carries the same id.
+async fn listed(n: &Node, id: &str) -> (bool, bool) {
+    let root = corpus(&n.index_dir, id).root();
+    let has = |rows: Vec<corpus_index::types::IndexInfo>| {
+        rows.iter().any(|i| i.corpus_id == id && i.path == root)
+    };
     (
-        has(engine.installed_indexes().await.expect("installed_indexes")),
-        has(engine.usable_indexes().await.expect("usable_indexes")),
+        has(n
+            .engine
+            .installed_indexes()
+            .await
+            .expect("installed_indexes")),
+        has(n.engine.usable_indexes().await.expect("usable_indexes")),
     )
 }
 
 /// Each term's reachability through the engine's by-id open, the surface a
-/// user reaches; `None` when `usable_indexes()` does not list the corpus.
-async fn reachable_where_a_user_reaches(
-    engine: &CorpusEngine,
-    id: &str,
-    terms: &[&str],
-) -> Option<Vec<bool>> {
-    if !listed(engine, id).await.1 {
+/// user reaches; `None` when `usable_indexes()` does not list the canonical.
+async fn reachable_where_a_user_reaches(n: &Node, id: &str, terms: &[&str]) -> Option<Vec<bool>> {
+    if !listed(n, id).await.1 {
         return None;
     }
-    let index = engine
+    let index = n
+        .engine
         .open_index_for_corpus(id)
         .await
         .expect("a corpus usable_indexes() listed must open");
@@ -146,6 +152,10 @@ fn node() -> Node {
 /// merged then finalized, are a corpus a user reaches with both donors'
 /// terms; merged alone they are rows only a by-path open finds.
 ///
+/// The partitions sit in a staging dir beside the index dir: after its
+/// merge, `merge_participants` deletes the shard dirs it merged, so the
+/// listings the daemon's gossip reads see the canonical alone.
+///
 /// Failing input, named: skip `mark_ingestion_complete` in the engine's
 /// `finalize_canonical` (`sharding.rs`); `installed_indexes()` drops the
 /// canonical and the finalized reading goes red while the by-path one stays
@@ -154,13 +164,18 @@ fn node() -> Node {
 async fn a_fold_merge_then_finalize_lands_both_donors_where_a_user_reaches() {
     const CORPUS: &str = "cw-lift-5g-two-nodes";
     let n = node();
-    donor_partition(&n.index_dir, LEADER, CORPUS, 0, LEADER_ONLY_TERM).await;
-    donor_partition(&n.index_dir, PEER, CORPUS, 1, PEER_ONLY_TERM).await;
+    let staging = n._tmp.path().join("staging");
+    donor_partition(&staging, LEADER, CORPUS, 0, LEADER_ONLY_TERM).await;
+    donor_partition(&staging, PEER, CORPUS, 1, PEER_ONLY_TERM).await;
+    let donors = corpus(&staging, CORPUS);
     let c = corpus(&n.index_dir, CORPUS);
     let port: &dyn PartitionMergePort = &*n.engine;
 
     let info = port
-        .merge_partitions(&[c.partition(LEADER), c.partition(PEER)], &c.root())
+        .merge_partitions(
+            &[donors.partition(LEADER), donors.partition(PEER)],
+            &c.root(),
+        )
         .await
         .expect("the merge");
     assert_eq!(info.chunk_count, 4, "2 chunks from each donor");
@@ -171,11 +186,17 @@ async fn a_fold_merge_then_finalize_lands_both_donors_where_a_user_reaches() {
             && term_reachable(&by_path, PEER_ONLY_TERM).await,
         "control: the merged rows are on disk, which is all a by-path probe sees",
     );
+    let meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(c.meta_path()).expect("canonical meta"))
+            .expect("meta is json");
     assert_eq!(
-        listed(&n.engine, CORPUS).await,
+        listed(&n, CORPUS).await,
         (false, false),
         "control: merged but not finalized, the canonical is in neither list — \
-         the state a by-path probe passed over",
+         the state a by-path probe passed over. meta: ingestion_in_progress={} \
+         indexes_built={}",
+        meta["ingestion_in_progress"],
+        meta["indexes_built"],
     );
 
     port.finalize_canonical(&by_path, CORPUS)
@@ -183,14 +204,13 @@ async fn a_fold_merge_then_finalize_lands_both_donors_where_a_user_reaches() {
         .expect("the finalize");
 
     assert_eq!(
-        listed(&n.engine, CORPUS).await,
+        listed(&n, CORPUS).await,
         (true, true),
         "finalized, the canonical is in `installed_indexes()` (what \
          `hosted_corpora` gossip is built from) and `usable_indexes()`",
     );
     assert_eq!(
-        reachable_where_a_user_reaches(&n.engine, CORPUS, &[LEADER_ONLY_TERM, PEER_ONLY_TERM])
-            .await,
+        reachable_where_a_user_reaches(&n, CORPUS, &[LEADER_ONLY_TERM, PEER_ONLY_TERM]).await,
         Some(vec![true, true]),
         "both donors' terms answer a search through the engine's by-id open",
     );
@@ -221,7 +241,7 @@ async fn the_disk_merge_lands_every_local_partition_and_only_those() {
         "2 chunks from each of the two units"
     );
     assert_eq!(
-        reachable_where_a_user_reaches(&n.engine, WHOLE, &[LEADER_ONLY_TERM, PEER_ONLY_TERM]).await,
+        reachable_where_a_user_reaches(&n, WHOLE, &[LEADER_ONLY_TERM, PEER_ONLY_TERM]).await,
         Some(vec![true, true]),
     );
 
@@ -231,8 +251,7 @@ async fn the_disk_merge_lands_every_local_partition_and_only_those() {
         .expect("the partial merge");
     assert_eq!(partial.chunks_merged, 2, "this node's slice only");
     assert_eq!(
-        reachable_where_a_user_reaches(&n.engine, PARTIAL, &[LEADER_ONLY_TERM, PEER_ONLY_TERM])
-            .await,
+        reachable_where_a_user_reaches(&n, PARTIAL, &[LEADER_ONLY_TERM, PEER_ONLY_TERM]).await,
         Some(vec![true, false]),
         "half the corpus, installed and searchable: the hazard B7 names",
     );
