@@ -216,7 +216,11 @@ pub async fn rail_append_at(
     append_to(url_at(base, RAIL_APPEND_PATH, namespace), act, "cw-rails").await
 }
 
-async fn append_to(url: String, act: &RailAct, who: &str) -> Result<serde_json::Value, RailDoorError> {
+async fn append_to(
+    url: String,
+    act: &RailAct,
+    who: &str,
+) -> Result<serde_json::Value, RailDoorError> {
     let resp = client()
         .map_err(RailDoorError::Unreachable)?
         .post(&url)

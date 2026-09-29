@@ -109,10 +109,9 @@ pub async fn publish(base: &str, record: &mm::MeasurementRecord) -> Result<Strin
     let payload = to_payload(record).map_err(RailDoorError::Refused)?;
     let answer =
         rail_append_at(base, mm::MEASUREMENTS_APP_ID, &RailAct::Record { payload }).await?;
-    let id = answer
-        .get("id")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| RailDoorError::Refused("cw-rails appended but named no op id".to_string()))?;
+    let id = answer.get("id").and_then(|v| v.as_str()).ok_or_else(|| {
+        RailDoorError::Refused("cw-rails appended but named no op id".to_string())
+    })?;
     tracing::info!(
         target: "mesh_measurements",
         id,
