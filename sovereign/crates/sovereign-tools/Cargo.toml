@@ -213,6 +213,8 @@ tracing-subscriber = { workspace = true }
 # on its implementor in corpus-engine (phase-b-47/48).
 corpus-engine-atlas-reader = { workspace = true, features = ["test-doubles"] }
 corpus-index = { workspace = true, features = ["test-doubles"] }
+# The leaf's `ForegroundSignal`, the one trait a turn's lease test needs.
+corpus-engine-yield = { workspace = true }
 
 # Examples that import treesitter-gated symbols (SymbolLookupTool,
 # ScipGraphHandle, etc.) only compile when the matching crate

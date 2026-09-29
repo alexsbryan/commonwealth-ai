@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! A turn holds the corpus engine's foreground lease. Moved from
-//! `sovereign-core/tests/main/core_tests.rs`: it builds a real
-//! `corpus_engine::CorpusEngine`, and tests that build corpus-engine live
-//! beside their owner (FIVE_PROGRAMS §12 D6).
+//! `sovereign-core/tests/main/core_tests.rs`. The subject is the turn, so the
+//! engine is the ingest ports' double handing out leases on the leaf's
+//! `ForegroundSignal` (phase-b-47); the engine's own lease is proven on
+//! `impl CorpusReadPort for CorpusEngine`, corpus-engine's
+//! tests/main/corpus_read_port_parity.rs.
 
 use std::pin::Pin;
 use std::sync::Arc;
@@ -73,7 +75,7 @@ struct CountingForeground {
     begun: std::sync::atomic::AtomicUsize,
     ended: std::sync::atomic::AtomicUsize,
 }
-impl corpus_engine::ForegroundSignal for CountingForeground {
+impl corpus_engine_yield::ForegroundSignal for CountingForeground {
     fn begin(&self) {
         self.begun.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
@@ -92,17 +94,11 @@ impl corpus_engine::ForegroundSignal for CountingForeground {
 #[tokio::test]
 async fn a_turn_holds_the_foreground_lease_until_its_stream_is_dropped() {
     use std::sync::atomic::Ordering::SeqCst;
-    let dir = tempfile::tempdir().unwrap();
-    let recipes = dir.path().join("recipes");
-    let indexes = dir.path().join("indexes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    std::fs::create_dir_all(&indexes).unwrap();
-    let embed: corpus_index::types::EmbedFn =
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(recipes, indexes, embed));
     let signal = Arc::new(CountingForeground::default());
-    let as_signal: Arc<dyn corpus_engine::ForegroundSignal> = signal.clone();
-    engine.set_foreground_signal(as_signal);
+    let as_signal: Arc<dyn corpus_engine_yield::ForegroundSignal> = signal.clone();
+    let engine = Arc::new(
+        corpus_index::ingest_port::double::IngestPortDouble::new().with_foreground_signal(as_signal),
+    );
 
     let store = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
     let runtime = Runtime::new(sovereign_core::RuntimeParts {

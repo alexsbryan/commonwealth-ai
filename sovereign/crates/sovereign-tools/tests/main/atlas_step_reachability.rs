@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Does the atlas step's BODY reach a wiki-class store? (test 3 of the three
 //! in `sovereign-core/src/runtime/retrieval_pipeline/atlas_step_reachability_tests.rs`,
-//! which keeps the two step-LIST tests). Here because the fixture writes a real
-//! corpus-engine wiki store, and tests that write corpus-engine live beside
-//! their owner (FIVE_PROGRAMS §12 D6).
+//! which keeps the two step-LIST tests). The subject is svrn's step over
+//! `AtlasContextManager`, so the store is the leaf's checked-in wiki fixture
+//! (phase-b-48), not one ingest writes here. That ingest writes the same
+//! store, Entity atoms of the wiki type, and the same seed table is proven in
+//! corpus-engine's tests/main/atlas_store_fixtures.rs.
 //!
 //! A ledger is a VALUE the step returns, so no subscriber has to be in the
 //! loop for the answer to be observable: `svrn eval run` emits no
@@ -16,7 +18,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::Stream;
 
-use corpus_engine::enrichment::atlas::context::AtlasContextProvider;
+use corpus_engine_atlas_reader::context::AtlasContextProvider;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::runtime::Runtime;
@@ -86,89 +88,49 @@ fn runtime() -> Runtime {
     ))
 }
 
-/// A wiki-class atlas under `<indexes>/<corpus>/atlas`: `articles.lance` +
-/// `edges.lance` and NO atom store, which is wikipedia's shape. Two
-/// articles, one link, and a seed table borrowed from the same vectors the
-/// query is embedded with — the migrated-table shape, so the walk has
-/// something to seed on (a wiki store carries no atom bag, so name-match
-/// seeding is not available to it).
+/// A wiki-class atlas under `<indexes>/<corpus>/atlas`: the leaf's checked-in
+/// `articles.lance` + `edges.lance` (Alpha links to Beta) and NO atom store,
+/// which is wikipedia's shape. Plus a seed table borrowed from the same
+/// vectors the query is embedded with — the migrated-table shape, so the walk
+/// has something to seed on (a wiki store carries no atom bag, so name-match
+/// seeding is not available to it). The fixture's atom ids carry the corpus
+/// id it was written under, so `corpus` is always `fixtures::WIKI_STORE`.
 async fn write_wiki_atlas(indexes: &Path, corpus: &str) {
-    use corpus_engine::enrichment::atlas::context::{
-        build_persistent_ann_seed_table, AtlasContext, AtlasEntry,
-    };
-    use corpus_engine::enrichment::atlas::wiki_store::{
-        build_wikipedia_columnar_store_from_chunks, wiki_atom_id,
-    };
-    use corpus_engine::extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
-    use corpus_index::index::StoredChunkWithMetadata;
+    use corpus_engine_atlas_reader::ann_store::{ann_table_dir, AnnSeedTable};
+    use corpus_engine_atlas_reader::fixtures;
 
-    let atlas = indexes
-        .join(corpus)
-        .join(corpus_engine::enrichment::atlas::writer::ATLAS_DIRNAME);
-    std::fs::create_dir_all(&atlas).unwrap();
-    let meta = |links: Vec<(&str, &str)>| {
-        serde_json::to_string(&WikipediaChunkMetadata {
-            section_name: "Lead".into(),
-            section_path: vec!["Lead".into()],
-            section_depth: 0,
-            section_type: "lead".into(),
-            citation_needed_count: None,
-            pov_count: None,
-            clarification_needed_count: None,
-            update_count: None,
-            is_flagged_stable: None,
-            outgoing_links: links
-                .into_iter()
-                .map(|(t, l)| WikiLink {
-                    target_title: t.into(),
-                    link_text: l.into(),
-                })
-                .collect(),
-            revision_id: Some(1),
-            wikidata_qid: None,
-            page_id: None,
-        })
-        .unwrap()
-    };
-    let ch = |id: u64, title: &str, m: String| StoredChunkWithMetadata {
-        id,
-        title: Some(title.into()),
-        url: None,
-        metadata_raw: Some(m),
-    };
-    build_wikipedia_columnar_store_from_chunks(
-        &atlas,
-        corpus,
-        vec![
-            ch(1, "Alpha", meta(vec![("Beta", "beta")])),
-            ch(2, "Beta", meta(vec![])),
-        ],
-    )
-    .await
-    .unwrap();
+    assert_eq!(corpus, fixtures::WIKI_STORE);
+    fixtures::copy_store_fixture(fixtures::WIKI_STORE, &indexes.join(corpus)).unwrap();
 
-    // The seed table, through the ONE writer (ARCH §10.6) — no new arm on
-    // `AtlasSeeding`, and the entries carry BORROWED vectors, which is the
-    // shape the wikipedia migration writes.
-    let entries: Vec<AtlasEntry> = ["Alpha", "Beta"]
+    // The seed table, through the table's one builder, one row per article.
+    // Beta's id is read off the store: the target of Alpha's one link.
+    let store = corpus_engine_atlas_reader::opener::open_walk_provider(indexes, corpus)
+        .await
+        .unwrap();
+    let alpha = fixtures::WIKI_ALPHA_ATOM_ID.to_string();
+    let beta = store.edges_from(&alpha)[0].target.to_string();
+    let rows: Vec<(String, Vec<f32>)> = [(alpha, "Alpha"), (beta, "Beta")]
         .into_iter()
-        .map(|t| AtlasEntry {
-            atom_id: wiki_atom_id(t, corpus),
-            canonical_name: t.to_string(),
-            embed_text: t.to_string(),
-            embedding: vec_for(t),
-        })
+        .map(|(id, title)| (id, vec_for(title)))
         .collect();
-    build_persistent_ann_seed_table(
-        &atlas,
-        &AtlasContext {
-            atlas_corpus_id: corpus.to_string(),
-            entries,
-            top_k: 12,
-        },
-    )
-    .await
-    .unwrap();
+    let dir = ann_table_dir(
+        &indexes
+            .join(corpus)
+            .join(understanding_vocab::read::ATLAS_DIRNAME),
+    );
+    std::fs::create_dir_all(&dir).unwrap();
+    AnnSeedTable::build(&dir, &rows).await.unwrap();
+}
+
+/// The fixture's store, opened by the leaf's own reader: what the echo is
+/// checked against, since it is not the subject.
+async fn fixture_store(
+    indexes: &Path,
+    corpus: &str,
+) -> Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider> {
+    corpus_engine_atlas_reader::opener::open_walk_provider(indexes, corpus)
+        .await
+        .unwrap()
 }
 
 /// An `AtlasContextProvider` that can serve ONLY atom-class stores —
@@ -182,10 +144,7 @@ struct AtomClassOnly(Arc<sovereign_tools::atlas_context_manager::AtlasContextMan
 
 #[async_trait]
 impl AtlasContextProvider for AtomClassOnly {
-    fn get(
-        &self,
-        id: &str,
-    ) -> Option<Arc<corpus_engine::enrichment::atlas::context::AtlasContext>> {
+    fn get(&self, id: &str) -> Option<Arc<corpus_engine_atlas_reader::context::AtlasContext>> {
         self.0.get(id)
     }
     fn loaded_corpus_ids(&self) -> Vec<String> {
@@ -203,10 +162,10 @@ impl AtlasContextProvider for AtomClassOnly {
     fn walk_provider(
         &self,
         id: &str,
-    ) -> Option<Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>> {
+    ) -> Option<Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider>> {
         self.0
             .graph(id)
-            .map(|g| g as Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>)
+            .map(|g| g as Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider>)
     }
     async fn ensure_loaded(&self, ids: &[String]) {
         self.0.ensure_loaded(ids).await;
@@ -219,7 +178,7 @@ fn manager(indexes: &Path) -> Arc<sovereign_tools::atlas_context_manager::AtlasC
             indexes.to_path_buf(),
             Arc::new(FixedEmbed),
             "test-embed".into(),
-            Arc::new(corpus_engine::IngestAtlas),
+            Arc::new(corpus_engine_atlas_reader::ports::double::AtlasPortDouble::new()),
         ),
     )
 }
@@ -373,17 +332,22 @@ async fn atlas_walk_echo_carries_atom_ids_and_subtypes() {
     // (ARCH §5: assert on something the subject cannot author). `atom_id`
     // merely being non-empty is satisfied by any literal the echo builder
     // chooses — which is the shape that let the wrong-slot guard pass on
-    // an SSE `model` field the client had supplied. These two ids and
-    // titles come out of the store `write_wiki_atlas` wrote.
+    // an SSE `model` field the client had supplied. These ids, titles and
+    // types come out of the store `write_wiki_atlas` copied, read by the
+    // leaf's own opener.
+    let store = fixture_store(tmp.path(), "wikish").await;
     for n in &walk.nodes {
-        let expected_id =
-            corpus_engine::enrichment::atlas::wiki_store::wiki_atom_id(&n.name, "wikish");
+        let atom = store.atom(&n.atom_id).unwrap_or_else(|| {
+            panic!(
+                "the echoed atom id must be one the fixture's store holds — it \
+                 is the join key a reach study is made of, and an id the echo \
+                 authored joins to nothing. node {n:?}"
+            )
+        });
         assert_eq!(
-            n.atom_id, expected_id,
-            "the echoed atom id must be the one the fixture's store minted \
-             for `{}` — it is the join key a reach study is made of, and an \
-             id the echo authored joins to nothing. node {n:?}",
-            n.name
+            atom.name(),
+            n.name,
+            "the echoed name must be the stored atom's. node {n:?}"
         );
         assert!(
             ["Alpha", "Beta"].contains(&n.name.as_str()),
@@ -397,7 +361,7 @@ async fn atlas_walk_echo_carries_atom_ids_and_subtypes() {
         );
         assert_eq!(
             n.subtype,
-            corpus_engine::enrichment::atlas::wiki_store::WIKI_ENTITY_TYPE,
+            atom.subtype(),
             "the echoed subtype must be the fixture's declared entity type \
              — the field a declared-ontology study groups by. node {n:?}"
         );
