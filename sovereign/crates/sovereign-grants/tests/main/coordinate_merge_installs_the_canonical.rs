@@ -177,11 +177,8 @@ async fn queue_mode_handoff(f: &Fixture) -> (HandoffId, ShardManager) {
         "the peer donor must be in the participant set the merge reads",
     );
 
-    let manager = ShardManager::new(
-        Arc::clone(&f.engine),
-        f.mesh_store.clone(),
-    )
-    .with_work_queue(queue);
+    let manager =
+        ShardManager::new(Arc::clone(&f.engine), f.mesh_store.clone()).with_work_queue(queue);
 
     (handoff_id, manager)
 }

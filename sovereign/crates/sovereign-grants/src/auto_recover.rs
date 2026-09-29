@@ -289,11 +289,8 @@ pub async fn merge_from_fold_coverage(
 
     let peer_urls = &peer_shard_base_urls;
 
-    let shard_mgr = ShardManager::new(
-        Arc::clone(engine),
-        Arc::clone(&mesh_store),
-    )
-    .with_emitter(contribution_emitter);
+    let shard_mgr = ShardManager::new(Arc::clone(engine), Arc::clone(&mesh_store))
+        .with_emitter(contribution_emitter);
 
     let plan = MergePlan {
         handoff_id,

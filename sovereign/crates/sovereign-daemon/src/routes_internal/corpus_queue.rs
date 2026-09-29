@@ -250,11 +250,8 @@ pub async fn corpus_ingest_partition(
                 // leader observes pull completion). The emit is
                 // attributed to the peer that shipped the bytes —
                 // see `aggregate` for the pull-emission convention.
-                let shard_mgr = ShardManager::new(
-                    Arc::clone(&engine),
-                    mesh_store,
-                )
-                .with_emitter(shard_transfer_ledger(&state_clone));
+                let shard_mgr = ShardManager::new(Arc::clone(&engine), mesh_store)
+                    .with_emitter(shard_transfer_ledger(&state_clone));
                 match shard_mgr
                     .coordinate_merge(
                         handoff_id,
@@ -598,12 +595,9 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: kernel_types::HandoffId) {
         let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
         let merge_proof = owned_mesh_proof(&state).await;
 
-        let shard_mgr = ShardManager::new(
-            Arc::clone(&engine),
-            mesh_store,
-        )
-        .with_emitter(shard_transfer_ledger(&state))
-        .with_work_queue(Arc::clone(&state.inner.ingest.work_queue));
+        let shard_mgr = ShardManager::new(Arc::clone(&engine), mesh_store)
+            .with_emitter(shard_transfer_ledger(&state))
+            .with_work_queue(Arc::clone(&state.inner.ingest.work_queue));
 
         match shard_mgr
             .coordinate_merge(
