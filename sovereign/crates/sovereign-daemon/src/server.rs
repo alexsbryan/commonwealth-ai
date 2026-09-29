@@ -361,11 +361,13 @@ pub fn internal_router(state: AppState) -> Router {
         // over this daemon's servable allowlist.
         .route(
             oicp_types::model_transfer::MODELS_LIST_PATH,
-            get(|axum::extract::State(state): axum::extract::State<AppState>| {
-                routes_internal::list_model_files(axum::extract::State(
-                    state.servable_model_files_reader(),
-                ))
-            }),
+            get(
+                |axum::extract::State(state): axum::extract::State<AppState>| {
+                    routes_internal::list_model_files(axum::extract::State(
+                        state.servable_model_files_reader(),
+                    ))
+                },
+            ),
         )
         .route(
             oicp_types::model_transfer::MODEL_FILE_ROUTE,

@@ -109,11 +109,6 @@ pub use mesh_admin::{
     SetStorageBudgetRequest, StorageBudgetState, UnloadModelRequest, UnloadModelResponse,
     WarmupResponse,
 };
-/// Model transfer is serve's (`sovereign_compute::model_transfer`,
-/// pb-serve-distributes), re-exported at the historical path.
-pub use sovereign_compute::model_transfer::{
-    list_model_files, serve_model_file, ModelFileInfo, ModelFileListing,
-};
 pub use newsworthy_status::{
     newsworthy_status, newsworthy_tick, NewsworthyStatusResponse, NewsworthyTickResponse,
 };
@@ -125,6 +120,11 @@ pub use pipeline_pause::{
     pipeline_pause, NodePauseResult, PipelinePauseRequest, PipelinePauseResponse,
 };
 pub use rpc_warm::rpc_warm;
+/// Model transfer is serve's (`sovereign_compute::model_transfer`,
+/// pb-serve-distributes), re-exported at the historical path.
+pub use sovereign_compute::model_transfer::{
+    list_model_files, serve_model_file, ModelFileInfo, ModelFileListing,
+};
 
 // Queue helpers re-exported intra-module so `corpus_collaborate` can keep
 // reaching for `super::find_local_handoff_for_corpus` /
