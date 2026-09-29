@@ -33,7 +33,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use corpus_engine::enrichment::tiered::{ConvBucket, TieredEnrichmentProvider};
+use corpus_index::ingest_port::tiered::{ConvBucket, TieredEnrichmentProvider};
 use corpus_index::error::{Error, Result};
 use corpus_index::index::EnrichmentChunkRow;
 use sovereign_core::traits::InferenceProvider;
@@ -476,8 +476,8 @@ impl FolderTieredProvider {
         corpus_id: &str,
         source_doc_ids: &[String],
     ) -> Result<()> {
-        use corpus_engine::enrichment::tiered::ConvBucket;
-        use corpus_engine::enrichment::tiered::TieredEnrichmentProvider;
+        use corpus_index::ingest_port::tiered::ConvBucket;
+        use corpus_index::ingest_port::tiered::TieredEnrichmentProvider;
         use corpus_index::index::CorpusIndex;
 
         if source_doc_ids.is_empty() {

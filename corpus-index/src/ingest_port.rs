@@ -21,6 +21,8 @@ use crate::{Error, Result};
 #[cfg(any(test, feature = "test-doubles"))]
 pub mod double;
 
+pub mod tiered;
+
 /// Thread-safe ingest progress callback. `Sync` because an ingest holds an
 /// `&Option<ProgressCallback>` across `.await` points.
 pub type ProgressCallback = Box<dyn Fn(IngestProgress) + Send + Sync>;

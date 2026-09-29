@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 use sovereign_core::traits::InferenceProvider;
 
-use corpus_engine::enrichment::tiered::{ChunkEntityExtractor, TieredEnrichmentProvider};
+use corpus_index::ingest_port::tiered::{ChunkEntityExtractor, TieredEnrichmentProvider};
 use corpus_engine_atlas_reader::ports::AtlasPort;
 
 use crate::conv_tiered_provider::{FolderTieredProvider, IndexDirResolver, StaticIndexDirResolver};
