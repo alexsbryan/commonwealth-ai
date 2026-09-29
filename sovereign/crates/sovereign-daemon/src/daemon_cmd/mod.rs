@@ -46,7 +46,6 @@ mod mesh_resume;
 mod panic_hook;
 mod rlimit;
 mod serving_boot;
-mod vram_plan;
 
 use boot::run_daemon;
 use lifecycle::wait_for_shutdown;
@@ -59,7 +58,7 @@ use lifecycle::wait_for_shutdown;
 /// - `run [flags]` → the OS-service entry point;
 /// - `--flag ...` → bare flags route to `run` so launchd unit files
 ///   can pass flags without the explicit `run` token;
-/// - `vram-plan` → the sizing query.
+/// - `vram-plan` → a pointer to `svrn daemon vram-plan`.
 ///
 /// `hosted`: the distribution's composition of serve, when this process
 /// hosts it (`process::run`); `code`: its composition of the code program;
@@ -77,11 +76,13 @@ pub async fn run(
     }
     match args.first().map(String::as_str) {
         Some("run") => run_daemon(launch, &args[1..], hosted, code, ingest).await,
-        // Sizing, not lifecycle: what VRAM would a loadout need, and which
-        // card holds it. Lives under `daemon` because it answers the same
-        // question the serving boot's preflight asks (`sovereign_compute::preflight`),
-        // just ahead of the hardware existing.
-        Some("vram-plan") => vram_plan::run(&args[1..]),
+        // Sizing is svrn's CLI verb (cli-daemon's `vram_plan`, the one body;
+        // this binary's copy went at pb-serve-distributes). Named, so an
+        // operator who reaches this binary directly learns where it is.
+        Some("vram-plan") => {
+            eprintln!("error: `vram-plan` is svrn's — run `svrn daemon vram-plan`");
+            1
+        }
         // The lifecycle verbs are OUT-of-process infrastructure and stay
         // with the `svrn` CLI tree (cli-daemon keeps its own originals).
         // Named apart from the unknown-subcommand error so an operator
@@ -118,7 +119,7 @@ const HELP: help::Help = help::Help {
     summary: "Long-running OICP server with managed inference + MCP tools.",
     sections: &[
         help::HelpSection::Usage(
-            "sovereign-daemon [run] [--config <path>] [--rpc-worker[=<bind>]] | sovereign-daemon vram-plan …",
+            "sovereign-daemon [run] [--config <path>] [--rpc-worker[=<bind>]]",
         ),
         help::HelpSection::Flags(&[
             ("--config <path>", "Override the default `~/.svrnmesh/config.toml` path."),
@@ -127,10 +128,9 @@ const HELP: help::Help = help::Help {
         help::HelpSection::Subcommands(&[
             ("(bare)",     "Run the daemon in the foreground. Requires an existing config (`svrn setup`). Equivalent to `run`."),
             ("run",       "Same as bare — kept for explicit invocation by launchd / systemd unit files."),
-            ("vram-plan", "Size a slot loadout and name the smallest card that holds it."),
         ]),
         help::HelpSection::Notes(
-            "The lifecycle verbs (start/stop/restart/reload/status) and the first-boot wizard live in the `svrn` CLI. Logs: ~/.svrnmesh/logs/daemon.log.",
+            "The lifecycle verbs (start/stop/restart/reload/status), `vram-plan` and the first-boot wizard live in the `svrn` CLI. Logs: ~/.svrnmesh/logs/daemon.log.",
         ),
     ],
 };

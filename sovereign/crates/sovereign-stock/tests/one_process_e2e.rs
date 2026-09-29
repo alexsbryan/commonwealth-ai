@@ -529,3 +529,21 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
         projects.status()
     );
 }
+
+/// The stock binary answers `vram-plan` with a pointer to svrn's one body
+/// (pb-serve-distributes deleted this binary's copy; principle 8, 2 -> 1).
+/// Failing input: restore the daemon's `vram_plan::run` arm, and it sizes a
+/// loadout (or prints its usage) instead of naming `svrn daemon vram-plan`.
+#[test]
+fn vram_plan_on_the_stock_binary_names_svrns_verb() {
+    let out = Command::new(BIN)
+        .arg("vram-plan")
+        .output()
+        .expect("run sovereign-stock vram-plan");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stderr}");
+    assert!(
+        stderr.contains("svrn daemon vram-plan"),
+        "no pointer to svrn's verb: {stderr}"
+    );
+}
