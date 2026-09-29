@@ -16,7 +16,9 @@ use std::sync::Arc;
 use sovereign_contracts::daemon_wire::meshapp::ChunkDto;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::Speed;
-use sovereign_turn_client::{Intent, SamplingOverrides, TurnClient, TurnMode, TurnObserver};
+use sovereign_turn_client::{
+    Intent, RerankOverrides, SamplingOverrides, TurnClient, TurnMode, TurnObserver,
+};
 
 use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::ChatGlobals;
@@ -26,6 +28,7 @@ pub struct SubjectDial {
     client: TurnClient,
     base: String,
     sampling: Option<SamplingOverrides>,
+    rerank: Option<RerankOverrides>,
     /// svrn's own chat and embed models over HTTP — what the judges and the
     /// naked arm call. A completion, not a turn.
     pub inference: Arc<dyn InferenceProvider>,
@@ -90,9 +93,18 @@ impl SubjectDial {
             client: TurnClient::new(&base),
             base,
             sampling,
+            rerank: None,
             inference,
             chat_model,
         })
+    }
+
+    /// Pin every later turn's rerank (`TurnRequest::Message.rerank`): a
+    /// `svrn bench promote` arm's settings, which in-process were env vars
+    /// its own `Runtime` read.
+    pub fn pin_rerank(&mut self, pins: RerankOverrides) {
+        tracing::debug!(?pins, "bench pins svrn's rerank");
+        self.rerank = Some(pins);
     }
 
     /// The base every turn goes to.
@@ -128,6 +140,7 @@ impl SubjectDial {
                 mode,
                 intent,
                 self.sampling.clone(),
+                self.rerank,
                 &mut TurnObserver::default(),
             )
             .await

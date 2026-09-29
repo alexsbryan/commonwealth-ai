@@ -279,6 +279,7 @@ async fn ask_once(client: &TurnClient, corpus: &str, question: &str) -> Result<L
             TurnMode::Grounded,
             None,
             None,
+            None,
             &mut observer,
         )
         .await

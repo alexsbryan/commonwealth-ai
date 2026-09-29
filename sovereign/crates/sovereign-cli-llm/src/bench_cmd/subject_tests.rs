@@ -106,6 +106,7 @@ fn dialed(base: &str, sampling: Option<SamplingOverrides>) -> SubjectDial {
         client: TurnClient::new(base),
         base: base.to_string(),
         sampling,
+        rerank: None,
         inference: Arc::new(oicp_client::SplitInferenceProvider::new_with_bearer(
             &format!("{base}/v1"),
             None,
@@ -184,6 +185,24 @@ async fn eval_synth_scores_the_dialed_turn_as_it_scored_in_process() {
         "--isolate"
     );
     assert!(seen.turns[0]["data"].get("sampling").is_none());
+    assert!(seen.turns[0]["data"].get("rerank").is_none());
+}
+
+/// A promote arm's rerank pins ride every turn the dial asks.
+#[tokio::test]
+async fn a_pinned_rerank_rides_the_turn() {
+    let (base, seen) = stub_svrn().await;
+    let mut dial = dialed(&base, None);
+    dial.pin_rerank(RerankOverrides {
+        enabled: Some(true),
+        candidates_k: Some(80),
+    });
+    run_live(&dial, "geo", "What is the capital of France?").await;
+    let seen = seen.lock().unwrap();
+    assert_eq!(
+        seen.turns[0]["data"]["rerank"],
+        json!({ "enabled": true, "candidates_k": 80 })
+    );
 }
 
 #[tokio::test]

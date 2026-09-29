@@ -231,6 +231,7 @@ async fn run_one(
                 TurnMode::Grounded,
                 None,
                 None,
+                None,
                 &mut observer,
             )
             .await

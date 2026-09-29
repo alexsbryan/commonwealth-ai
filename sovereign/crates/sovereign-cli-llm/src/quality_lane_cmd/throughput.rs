@@ -692,6 +692,7 @@ async fn e2e_once(client: &TurnClient, question: &str) -> Result<(u64, usize), S
             TurnMode::Grounded,
             None,
             None,
+            None,
             &mut observer,
         )
         .await

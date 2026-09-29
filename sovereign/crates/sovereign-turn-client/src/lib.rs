@@ -111,8 +111,8 @@ pub use sovereign_contracts::error::{Error as TurnError, Result as TurnResult};
 pub use sovereign_contracts::types::approval::ResolveOutcome;
 pub use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSource};
 pub use sovereign_contracts::types::{
-    ActionPreview, EpistemicState, Intent, NarrationPhase, SamplingOverrides, TurnAnswer,
-    TurnFrame, TurnMode, TurnNotice, TurnPrompt, TurnRequest,
+    ActionPreview, EpistemicState, Intent, NarrationPhase, RerankOverrides, SamplingOverrides,
+    TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnPrompt, TurnRequest,
 };
 
 /// What one turn did, assembled from the terminal `Complete` frame.
@@ -3597,8 +3597,8 @@ impl TurnClient {
     /// tell a finished turn from a dead one (ARCH §18.3) — and neither can a
     /// caller that got an `Ok` with a half-written answer in it.
     ///
-    /// `sampling` pins this turn only (`TurnRequest::Message::sampling`);
-    /// `None` runs at the host's own config.
+    /// `sampling` and `rerank` pin this turn only (`TurnRequest::Message`'s
+    /// fields of those names); `None` runs at the host's own config.
     pub async fn run_turn(
         &self,
         conversation_id: &str,
@@ -3606,6 +3606,7 @@ impl TurnClient {
         mode: TurnMode,
         intent: Option<Intent>,
         sampling: Option<SamplingOverrides>,
+        rerank: Option<RerankOverrides>,
         observer: &mut TurnObserver<'_>,
     ) -> Result<TurnOutcome> {
         let mut stream = self.connect(conversation_id).await?;
@@ -3614,7 +3615,7 @@ impl TurnClient {
             mode,
             intent,
             sampling,
-            rerank: None,
+            rerank,
         })?;
         stream.drain_turn(observer).await
     }
