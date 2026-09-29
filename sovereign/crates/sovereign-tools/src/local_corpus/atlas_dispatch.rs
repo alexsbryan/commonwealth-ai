@@ -25,8 +25,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::pass;
-use corpus_engine::enrichment::pipeline::EnrichProgress;
-use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
+use corpus_index::enrichment_state::{EnrichmentPhase, EnrichmentStateFile};
+use sovereign_contracts::daemon_wire::enrich_progress::EnrichProgress;
 use sovereign_core::error::{Error, Result};
 
 use super::manager::LocalCorpusManager;
@@ -197,7 +197,7 @@ fn atlas_progress_to_state(
 #[cfg(test)]
 mod atlas_dispatch_tests {
     use super::*;
-    use corpus_engine::enrichment::pipeline::BuildStep;
+    use sovereign_contracts::daemon_wire::enrich_progress::BuildStep;
 
     /// The progress → state mapping the UI reads: a step in flight shows
     /// `<ordinal>/<total>` under a non-terminal phase, `Complete` closes the

@@ -41,7 +41,7 @@ use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 
 use crate::raptor_checkpoint::{CheckpointDecision, LevelClustering, RaptorCheckpointHandle};
-use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentProgressSink};
+use corpus_index::enrichment_state::{EnrichmentPhase, EnrichmentProgressSink};
 
 /// Target average number of input items per leaf cluster. With 1006
 /// Conrad chunks this produces ~50 leaf clusters; with 200 chunks

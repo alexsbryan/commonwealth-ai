@@ -270,6 +270,6 @@ mod tests {
 /// model, and a checker that only looked at the atlas would report 0%
 /// enrichment coverage for every one of them.
 fn has_readable_field_model(index: &CorpusIndex) -> bool {
-    corpus_engine::enrichment::field_atoms::load_field_model(&index.path(), index.corpus_id())
+    corpus_engine_atlas_reader::field_model::load_field_model(&index.path(), index.corpus_id())
         .is_some()
 }

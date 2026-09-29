@@ -26,7 +26,6 @@
 //! entities run hundreds-to-thousands of chars. Operators tuning
 //! the filter can override via `AtlasContextManager::with_filter`.
 
-use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use sovereign_core::atlas_context::{AtlasContext, AtlasContextProvider};
 use sovereign_core::traits::InferenceProvider;
 use std::collections::HashMap;
@@ -34,6 +33,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use understanding_vocab::read::ATLAS_DIRNAME;
 
 /// The walker's fallback for an atlas whose `ontology.json` has not been
 /// converted in yet (map-conversion rung 3): its enrichment config names the

@@ -56,17 +56,15 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::ann_store::{ann_table_dir, AnnSeedTable};
-use corpus_engine::enrichment::atlas::atoms::{
-    AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef, Summary,
-};
-use corpus_engine::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
 use corpus_engine::enrichment::atlas::seed_population::{seed_population, write_population_marker};
 use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, read_atlas_edges, write_atlas_atoms, write_atlas_edges,
 };
-use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
 use corpus_engine::{raptor_article_title, scan_raptor_summaries};
 use sovereign_core::runtime::retrieval::atlas_grounding::candidate_atlas_ids;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef, Summary};
+use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+use understanding_vocab::taxonomy::EnrichmentDepth;
 
 use crate::raptor_checkpoint::RaptorCheckpointHandle;
 

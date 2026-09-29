@@ -7,7 +7,7 @@
 //! `manager.rs` so its output is easy to test in isolation and its
 //! token-budget behaviour stays legible.
 
-use corpus_engine::enrichment::skeleton::FieldSkeleton;
+use understanding_vocab::skeleton::FieldSkeleton;
 
 use super::view_kind::ViewKind;
 use sovereign_contracts::tokens::{estimate_tokens, is_settled_status};

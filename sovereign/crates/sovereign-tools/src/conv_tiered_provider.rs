@@ -359,7 +359,7 @@ impl FolderTieredProvider {
     fn stamp_state(
         &self,
         corpus_id: &str,
-        phase: corpus_engine::enrichment::state::EnrichmentPhase,
+        phase: corpus_index::enrichment_state::EnrichmentPhase,
         step_current: u64,
         step_total: u64,
         message: Option<&str>,
@@ -370,7 +370,7 @@ impl FolderTieredProvider {
         let Some(index_dir) = resolver.resolve(corpus_id) else {
             return;
         };
-        if let Err(e) = corpus_engine::enrichment::state::EnrichmentStateFile::stamp(
+        if let Err(e) = corpus_index::enrichment_state::EnrichmentStateFile::stamp(
             &index_dir,
             corpus_id,
             Some("folder_tiered"),
@@ -408,7 +408,7 @@ impl FolderTieredProvider {
         embeddings: &[Vec<f32>],
     ) -> (
         Option<crate::raptor_checkpoint::RaptorCheckpointHandle>,
-        Option<Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
+        Option<Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink>>,
     ) {
         let Some(resolver) = self.index_dir_resolver.as_ref() else {
             return (None, None);
@@ -438,8 +438,8 @@ impl FolderTieredProvider {
         let checkpoint = crate::raptor_checkpoint::RaptorCheckpointHandle::at_note(
             &index_dir, conv_uuid, input_hash,
         );
-        let sink: Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink> =
-            Arc::new(corpus_engine::enrichment::state::StateFileSink::new(
+        let sink: Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink> =
+            Arc::new(corpus_index::enrichment_state::StateFileSink::new(
                 index_dir,
                 corpus_id.to_string(),
                 Some("folder_tiered".into()),
@@ -562,7 +562,7 @@ impl FolderTieredProvider {
         // Complete now that the touched notes have settled.
         self.stamp_state(
             corpus_id,
-            corpus_engine::enrichment::state::EnrichmentPhase::Complete,
+            corpus_index::enrichment_state::EnrichmentPhase::Complete,
             reenriched as u64,
             (reenriched + skipped_empty) as u64,
             Some(&format!("re-enriched {reenriched} changed notes")),
@@ -680,7 +680,7 @@ impl FolderTieredProvider {
         // progress ("Summarizing sections (17 / 45)").
         self.stamp_state(
             corpus_id,
-            corpus_engine::enrichment::state::EnrichmentPhase::RaptorTree,
+            corpus_index::enrichment_state::EnrichmentPhase::RaptorTree,
             0,
             chunks.len() as u64,
             Some(&format!(
@@ -720,8 +720,8 @@ impl FolderTieredProvider {
                     "__vault_synthesis__",
                     input_hash,
                 );
-                let sink: Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink> =
-                    Arc::new(corpus_engine::enrichment::state::StateFileSink::new(
+                let sink: Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink> =
+                    Arc::new(corpus_index::enrichment_state::StateFileSink::new(
                         index_dir,
                         corpus_id.to_string(),
                         Some("folder_tiered".into()),
@@ -815,7 +815,7 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
         embeddings: Vec<Vec<f32>>,
         bucket: ConvBucket,
     ) -> Result<()> {
-        use corpus_engine::enrichment::state::EnrichmentPhase;
+        use corpus_index::enrichment_state::EnrichmentPhase;
         let chunk_count = chunks.len();
         let updated_at = Utc::now().timestamp();
         // Durable summary-revision loop: consult the correction ledger
@@ -1249,7 +1249,7 @@ async fn build_folder_artifacts(
     verify_policy: Option<crate::summary_verify::VerifyPolicy>,
     updated_at: i64,
     checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
-    progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
+    progress: Option<&Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink>>,
     correction_hint: Option<&str>,
 ) -> std::result::Result<Vec<ConvRaptorNodeRow>, Error> {
     let raptor_chunks: Vec<ChunkInput> = chunks

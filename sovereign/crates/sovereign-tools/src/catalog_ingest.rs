@@ -18,7 +18,7 @@
 //! 4. **Enrich (optional).** If [`CatalogIngestRequest::enrich`] is
 //!    set, fire `sovereign-cli enrich build <new_corpus_id>` via
 //!    [`crate::enrich::run_enrich_build`] and stream its
-//!    [`corpus_engine::enrichment::pipeline::EnrichProgress`]
+//!    [`sovereign_contracts::daemon_wire::enrich_progress::EnrichProgress`]
 //!    events through the same callback.
 //! 5. **Complete.** Emit the new corpus id and a brief atlas summary
 //!    so the desktop's "atlas is ready" surface can show how much
@@ -82,7 +82,7 @@ pub enum CatalogIngestEvent {
     /// Re-emission of an enrichment progress event (only fires when
     /// `request.enrich = true`). Boxed because the variant is
     /// significantly larger than the rest of the enum.
-    Enrich(Box<corpus_engine::enrichment::pipeline::EnrichProgress>),
+    Enrich(Box<sovereign_contracts::daemon_wire::enrich_progress::EnrichProgress>),
     /// Terminal success.
     Complete {
         new_corpus_id: String,

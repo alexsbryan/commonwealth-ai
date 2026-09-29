@@ -10,10 +10,10 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::atlas::atoms::AtomType;
 use corpus_engine::enrichment::atlas::{read_or_compute_atlas_summary, ATLAS_DIRNAME};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use understanding_vocab::atoms::AtomType;
 
 /// One row in the corpus picker.
 ///
@@ -239,9 +239,7 @@ impl FileAtlasReader {
             grounding_fresh: corpus_engine::enrichment::atlas::ann_store::ann_table_is_fresh(
                 &atlas_dir,
             ),
-            grounding_present: corpus_engine::enrichment::atlas::ann_store::ann_table_present(
-                &atlas_dir,
-            ),
+            grounding_present: corpus_engine_atlas_reader::ann_store::ann_table_present(&atlas_dir),
         })
     }
 
@@ -588,13 +586,11 @@ fn read_display_meta(atlas_dir: &Path) -> (Option<String>, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::atoms::{
-        AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity,
-    };
     use corpus_engine::enrichment::pipeline::atlas::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus,
     };
     use tempfile::TempDir;
+    use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity};
 
     fn write_atoms(atlas_dir: &Path, atoms: Vec<AtomEnvelope>) {
         std::fs::create_dir_all(atlas_dir).unwrap();

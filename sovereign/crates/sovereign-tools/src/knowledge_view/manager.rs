@@ -25,7 +25,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use corpus_engine::engine::CorpusEngine;
-use corpus_engine::enrichment::skeleton::FieldSkeleton;
 use corpus_engine::recipe::Recipe;
 use corpus_engine::types::{CorpusSpec, InferenceFn};
 use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
@@ -33,6 +32,7 @@ use sovereign_core::observer::StateStoreObserver;
 use sovereign_core::traits::LandscapeDigestProvider;
 use sovereign_core::types::{ConversationContext, LandscapeDigest};
 use tokio::sync::{mpsc, RwLock};
+use understanding_vocab::skeleton::FieldSkeleton;
 
 use super::acquirers::register_sqlite;
 use super::atlas_digest;
@@ -445,7 +445,7 @@ impl KnowledgeViewManager {
             rendered
         } else {
             let Some(skeleton) =
-                corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())?
+                corpus_engine_atlas_reader::field_model::load_field_skeleton(&index.path())?
             else {
                 let title = ViewKind::from_id(view_id)
                     .map(|k| k.title())
@@ -749,8 +749,8 @@ impl KnowledgeViewManager {
     /// the decay path in that case to fall back to uniform decay.
     #[cfg(feature = "treesitter")]
     pub fn entity_inventory_from_atlases(&self) -> sovereign_core::memory::EntityInventory {
-        use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
         use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
+        use understanding_vocab::atoms::AtomEnvelope;
 
         let mut names: Vec<String> = Vec::new();
         for kind in [ViewKind::Personal, ViewKind::Conversational] {
@@ -789,7 +789,7 @@ impl KnowledgeViewManager {
             let mtime = std::fs::metadata(index.path().join("field_skeleton.json"))
                 .and_then(|m| m.modified())
                 .ok();
-            match corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())? {
+            match corpus_engine_atlas_reader::field_model::load_field_skeleton(&index.path())? {
                 Some(sk) => {
                     skeletons.push((view_id.clone(), sk));
                     if let Some(mt) = mtime {
@@ -963,7 +963,7 @@ mod tests {
 
     use super::*;
     use corpus_engine::enrichment::clustering::FieldModelStats;
-    use corpus_engine::enrichment::skeleton::{
+    use understanding_vocab::skeleton::{
         CanonicalQuestion, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
     };
 
@@ -1241,14 +1241,10 @@ mod tests {
 
     #[cfg(feature = "treesitter")]
     fn seed_personal_atlas_with_entities(indexes_dir: &std::path::Path) {
-        use corpus_engine::enrichment::atlas::atoms::{
-            AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity,
-        };
-        use corpus_engine::enrichment::atlas::edges::{
-            Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile,
-        };
-        use corpus_engine::enrichment::atlas::writer::ATLAS_DIRNAME;
         use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+        use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity};
+        use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
+        use understanding_vocab::read::ATLAS_DIRNAME;
 
         let atlas_dir = indexes_dir.join("personal-knowledge").join(ATLAS_DIRNAME);
         std::fs::create_dir_all(&atlas_dir).unwrap();

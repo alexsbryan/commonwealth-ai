@@ -25,11 +25,11 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
-use sovereign_contracts::notes::AgentNotes;
 use rusqlite::{Connection, OpenFlags};
+use sovereign_contracts::notes::AgentNotes;
 use sovereign_core::memory::EntityInventory;
+use understanding_vocab::atoms::AtomEnvelope;
 
 use crate::knowledge_view::relational::{RelationalNote, RelationalNoteKind};
 use crate::knowledge_view::strategic::StrategicGoal;
@@ -311,8 +311,8 @@ mod tests {
 
     #[test]
     fn build_entity_inventory_lowercases_canonical_names_and_aliases() {
-        use corpus_engine::enrichment::atlas::atoms::{AtomId, AtomsFile, ChunkRef, Entity};
         use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+        use understanding_vocab::atoms::{AtomId, AtomsFile, ChunkRef, Entity};
 
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("personal-knowledge").join("atlas");

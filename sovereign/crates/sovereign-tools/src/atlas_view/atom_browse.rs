@@ -12,10 +12,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, AtomsFile};
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, StableAtomKey};
-use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
 use serde::{Deserialize, Serialize};
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomType, AtomsFile};
+use understanding_vocab::taxonomy::EnrichmentDepth;
 
 use super::reader::{CurationStatus, FileAtlasReader};
 use super::DISPLAY_NAME_TRUNCATION;
@@ -300,7 +300,7 @@ fn filter_and_page(
             }
         }
         if !filter.subtypes.is_empty() {
-            let have = corpus_engine::enrichment::atlas::projection::subtype_of(atom);
+            let have = corpus_engine_atlas_reader::projection::subtype_of(atom);
             if !filter.subtypes.iter().any(|w| *w == have) {
                 continue;
             }
@@ -363,7 +363,7 @@ fn build_summary(
             // Empty means "this atom has no subtype", which is not the same as
             // a subtype spelled "" — the row carries `None` so a viewer can
             // fall back to the kind rather than render a blank chip.
-            let s = corpus_engine::enrichment::atlas::projection::subtype_of(atom);
+            let s = corpus_engine_atlas_reader::projection::subtype_of(atom);
             (!s.is_empty()).then_some(s)
         },
         display_name: atom.display_name(Some(DISPLAY_NAME_TRUNCATION)),
@@ -394,14 +394,14 @@ fn atom_freshness(atom: &AtomEnvelope, freshness: &HashMap<String, i64>) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::atoms::{
-        AtomId, AtomsFile, ChunkRef, Claim, Entity, SectionPosition, SectionRange, State,
-    };
     use corpus_engine::enrichment::pipeline::atlas::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
         StateType,
     };
     use tempfile::TempDir;
+    use understanding_vocab::atoms::{
+        AtomId, AtomsFile, ChunkRef, Claim, Entity, SectionPosition, SectionRange, State,
+    };
 
     fn entity(id: usize, name: &str, salience: f32) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {
@@ -819,7 +819,7 @@ mod tests {
         });
         assert_eq!(s.evidence().len() as u32, 3);
         // Event also has evidence + section_position; pin the shape.
-        let e = AtomEnvelope::Event(corpus_engine::enrichment::atlas::atoms::Event {
+        let e = AtomEnvelope::Event(understanding_vocab::atoms::Event {
             attributes: Default::default(),
             id: AtomId::event(1),
             description: "x".into(),

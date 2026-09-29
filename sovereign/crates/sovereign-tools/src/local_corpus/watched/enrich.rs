@@ -640,7 +640,7 @@ impl EnrichmentDriver {
             // the provider's terminal Complete/Failed stamp has already landed,
             // and the heartbeat never touches a terminal state, so it cannot
             // race that stamp.
-            let _build_heartbeat = corpus_engine::enrichment::state::EnrichmentHeartbeat::spawn(
+            let _build_heartbeat = corpus_index::enrichment_state::EnrichmentHeartbeat::spawn(
                 index_path_owned.clone(),
             );
 
@@ -660,11 +660,11 @@ impl EnrichmentDriver {
                 // ideas" while entities extract. The build heartbeat above keeps
                 // `last_progress_at` fresh across this pass, which emits no
                 // enrichment stamps of its own.
-                if let Err(e) = corpus_engine::enrichment::state::EnrichmentStateFile::stamp(
+                if let Err(e) = corpus_index::enrichment_state::EnrichmentStateFile::stamp(
                     &index_path_owned,
                     &corpus_id_owned,
                     Some("folder_tiered"),
-                    corpus_engine::enrichment::state::EnrichmentPhase::EntityExtraction,
+                    corpus_index::enrichment_state::EnrichmentPhase::EntityExtraction,
                     0,
                     0,
                     Some("Finding people, places, and ideas"),
@@ -739,7 +739,7 @@ impl EnrichmentDriver {
                     // Without it a pre-loop failure would sit non-terminal
                     // until the 10-min stall sweep, reading as "still
                     // building" the whole time.
-                    let _ = corpus_engine::enrichment::state::EnrichmentStateFile::fail(
+                    let _ = corpus_index::enrichment_state::EnrichmentStateFile::fail(
                         &index_path_owned,
                         &corpus_id_owned,
                         &reason,
@@ -819,7 +819,7 @@ mod tests {
     #![allow(clippy::await_holding_lock)]
 
     use super::*;
-    use corpus_engine::enrichment::pipeline::EnrichProgress;
+    use sovereign_contracts::daemon_wire::enrich_progress::EnrichProgress;
     use tempfile::tempdir;
 
     fn defaults() -> EnrichmentDefaults {

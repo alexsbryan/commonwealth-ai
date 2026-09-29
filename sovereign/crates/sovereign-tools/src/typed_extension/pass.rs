@@ -18,7 +18,6 @@
 
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::SourceCitation;
 use corpus_engine::enrichment::pipeline::atlas::{
     ArgumentativeExtension, SectionExtraction, TypeExtension,
 };
@@ -26,6 +25,7 @@ use corpus_engine::enrichment::pipeline::typed_schemas::argumentative::{
     parse_phase1_argumentative, phase1_argumentative_schema, PHASE1_ARGUMENTATIVE_SYSTEM,
 };
 use corpus_engine::enrichment::pipeline::typed_schemas::render_source_recovery_block;
+use corpus_engine_atlas_reader::citation::SourceCitation;
 use serde::Deserialize;
 use sovereign_core::conv_tiered::{ConvRaptorNodeRow, VaultThemeRow};
 use sovereign_core::traits::InferenceProvider;

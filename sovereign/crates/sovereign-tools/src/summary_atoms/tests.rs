@@ -6,9 +6,9 @@
 //! approach band. `#[path]`, so every test name is unchanged.
 
 use super::*;
-use corpus_engine::enrichment::atlas::atoms::AtomsFile;
 use corpus_engine::{build_raptor_index, RaptorSummaryRow};
 use tempfile::tempdir;
+use understanding_vocab::atoms::AtomsFile;
 
 fn emb(i: usize) -> Vec<f32> {
     (0..8usize)

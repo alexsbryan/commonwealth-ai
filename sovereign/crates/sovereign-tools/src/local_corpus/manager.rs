@@ -813,7 +813,7 @@ impl LocalCorpusManager {
             guard.remove(corpus_id);
         }
         let state_path =
-            corpus_engine::enrichment::state::EnrichmentStateFile::path(&index_dir.join(corpus_id));
+            corpus_index::enrichment_state::EnrichmentStateFile::path(&index_dir.join(corpus_id));
         if state_path.exists() {
             if let Err(e) = std::fs::remove_file(&state_path) {
                 tracing::warn!(
@@ -935,7 +935,7 @@ impl LocalCorpusManager {
     /// non-terminal, which is exactly the signal we key off here).
     ///
     /// **Signal.** The corpus's own `_enrichment_state.json`
-    /// ([`corpus_engine::enrichment::state::EnrichmentPhase::is_resumable_interruption`]):
+    /// ([`corpus_index::enrichment_state::EnrichmentPhase::is_resumable_interruption`]):
     /// a finished build
     /// stamps `Complete` (skip); a genuine total failure stamps `Failed`
     /// (skip — the operator retries deliberately, we don't auto-loop);
@@ -951,7 +951,7 @@ impl LocalCorpusManager {
     /// Best-effort + serialized (the driver's single-permit semaphore
     /// runs one build at a time). Returns the number of corpora kicked.
     pub async fn resume_interrupted_enrichment(&self) -> usize {
-        use corpus_engine::enrichment::state::EnrichmentStateFile;
+        use corpus_index::enrichment_state::EnrichmentStateFile;
         let mut kicked = 0usize;
         for cfg in self.list_reconcilable().await {
             let corpus_id = cfg.id.clone();
@@ -1029,7 +1029,7 @@ impl LocalCorpusManager {
 
         // 1. Generic enrichment state file — the surface
         //    `/internal/enrichment/status` reads.
-        let state_path = corpus_engine::enrichment::state::EnrichmentStateFile::path(&index_dir);
+        let state_path = corpus_index::enrichment_state::EnrichmentStateFile::path(&index_dir);
         if state_path.exists() {
             if let Err(e) = std::fs::remove_file(&state_path) {
                 tracing::warn!(
@@ -1473,7 +1473,7 @@ impl LocalCorpusManager {
         // 4. Delegate to engine.
         let engine = Arc::clone(&self.engine);
         let started = std::time::Instant::now();
-        let ingest_cb: Option<corpus_engine::ProgressCallback> = Some({
+        let ingest_cb: Option<corpus_index::ingest_port::ProgressCallback> = Some({
             let progress = progress.clone();
             Box::new(move |p| {
                 progress(ingest_progress_to_local(p));
@@ -2235,8 +2235,10 @@ use sovereign_core::time::unix_now_u64 as now_unix;
 
 // ─── Progress bridge ─────────────────────────────────────────────────
 
-fn ingest_progress_to_local(p: corpus_engine::progress::IngestProgress) -> LocalCorpusProgress {
-    use corpus_engine::progress::IngestProgress::*;
+fn ingest_progress_to_local(
+    p: sovereign_contracts::daemon_wire::IngestProgress,
+) -> LocalCorpusProgress {
+    use sovereign_contracts::daemon_wire::IngestProgress::*;
     match p {
         Downloading {
             bytes_downloaded,

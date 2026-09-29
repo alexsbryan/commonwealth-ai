@@ -15,9 +15,9 @@
 
 use std::collections::HashMap;
 
-use corpus_engine::enrichment::atlas::atoms::{AtomId, Entity};
-use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
 use sovereign_core::conv_tiered::{ConvRaptorNodeRow, VaultThemeRow};
+use understanding_vocab::atoms::{AtomId, Entity};
+use understanding_vocab::taxonomy::EnrichmentDepth;
 
 use super::pass;
 
@@ -66,8 +66,8 @@ const PASS_B_QUOTE_CAP_PER_THEME: usize = 6;
 pub(super) fn build_person_seed_entities(
     rows: &[sovereign_core::conv_tiered::ChunkEntityRow],
 ) -> Vec<Entity> {
-    use corpus_engine::enrichment::atlas::atoms::ChunkRef;
-    use corpus_engine::enrichment::pipeline::atlas::EntityType;
+    use understanding_vocab::atoms::ChunkRef;
+    use understanding_vocab::taxonomy::EntityType;
 
     fn fold(s: &str) -> String {
         s.trim().to_lowercase()

@@ -37,7 +37,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pipeline::{progress::wire, BuildStep, EnrichProgress};
+use sovereign_contracts::daemon_wire::enrich_progress::{wire, BuildStep, EnrichProgress};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
@@ -382,7 +382,7 @@ pub async fn run_enrich_build(
 /// panel silently stops advancing, with no compiler and no test in between.
 /// The events were `Serialize` and tagged from the day they were written; only
 /// the rendering was missing. Now the child encodes and this decodes, through
-/// the one declaration in `corpus_engine::…::progress::wire`.
+/// the one declaration in `sovereign_contracts::daemon_wire::enrich_progress::wire`.
 ///
 /// What remains is state the WIRE cannot carry because it is the reader's, not
 /// the writer's: which step is in flight when a cancel arrives, and whether a

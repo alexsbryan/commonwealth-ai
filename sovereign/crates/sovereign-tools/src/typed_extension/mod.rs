@@ -29,20 +29,20 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use corpus_engine::enrichment::atlas::ann_store::AtlasSeeding;
-use corpus_engine::enrichment::atlas::atoms::{AtomId, Claim, Entity, Opposition, Position};
-use corpus_engine::enrichment::atlas::edges::Edge;
 use corpus_engine::enrichment::atlas::resolution::{
     resolve_type_extensions, TypeExtensionResolveOutput,
 };
 use corpus_engine::enrichment::atlas::writer::write_atlas_full;
-use corpus_engine::enrichment::atlas::SourceCitation;
 use corpus_engine::enrichment::pipeline::atlas::{
     EnrichmentDepth, SectionExtraction, TypeExtension,
 };
+use corpus_engine_atlas_reader::citation::SourceCitation;
 use corpus_index::error::{Error, Result};
 use sovereign_core::conv_tiered::{ConvRaptorNodeRow, ConvTieredReader, VaultThemeRow};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_store::sqlite::SqliteStateStore;
+use understanding_vocab::atoms::{AtomId, Claim, Entity, Opposition, Position};
+use understanding_vocab::edges::Edge;
 
 mod harvest;
 mod manifest;

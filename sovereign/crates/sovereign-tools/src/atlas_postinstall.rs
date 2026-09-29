@@ -28,9 +28,9 @@ use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, read_atlas_edges, vital_tier, AtlasIngestionConfig, AtlasIngestionRegistry,
     AtomEnvelope,
 };
-use corpus_engine::progress::IngestProgress;
 use corpus_engine::{CorpusEngine, ProgressCallback};
 use corpus_index::types::EmbedFn;
+use sovereign_contracts::daemon_wire::IngestProgress;
 
 /// Outcome of a structural-atlas post-install run.
 #[derive(Debug)]
@@ -1003,7 +1003,7 @@ pub async fn launch_tier2_extraction_with_advice(
 /// a failure path).
 fn stamp_tier2_workspace_failed(ws_index_dir: &Path, workspace_id: &str, reason: &str) {
     let _ = std::fs::create_dir_all(ws_index_dir);
-    if let Err(e) = corpus_engine::enrichment::state::EnrichmentStateFile::fail(
+    if let Err(e) = corpus_index::enrichment_state::EnrichmentStateFile::fail(
         ws_index_dir,
         workspace_id,
         reason,
@@ -1108,9 +1108,8 @@ pub async fn resume_inflight_tier2(
         // explicit operator action. Fails OPEN on a missing/corrupt
         // sidecar — most tier-2 sources have none and must still resume.
         let source_index_dir = indexes_dir.join(source_corpus_id);
-        if corpus_engine::enrichment::state::EnrichmentStateFile::declared_dead_at(
-            &source_index_dir,
-        ) {
+        if corpus_index::enrichment_state::EnrichmentStateFile::declared_dead_at(&source_index_dir)
+        {
             tracing::info!(
                 corpus = %source_corpus_id,
                 workspace = %name,
@@ -1346,12 +1345,12 @@ mod tests {
 
         // The failure is machine-readable on the workspace state file.
         let ws_index_dir = indexes_dir.join(format!("{corpus}{TIER2_WORKSPACE_SUFFIX}"));
-        let state = corpus_engine::enrichment::state::EnrichmentStateFile::read(&ws_index_dir)
+        let state = corpus_index::enrichment_state::EnrichmentStateFile::read(&ws_index_dir)
             .unwrap()
             .expect("workspace _enrichment_state.json must exist after a launch failure");
         assert_eq!(
             state.phase,
-            corpus_engine::enrichment::state::EnrichmentPhase::Failed
+            corpus_index::enrichment_state::EnrichmentPhase::Failed
         );
         assert!(state.error.is_some(), "the failure reason must be captured");
     }
