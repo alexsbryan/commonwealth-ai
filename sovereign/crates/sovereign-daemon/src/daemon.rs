@@ -4317,7 +4317,7 @@ async fn register_local_model_slots(
     // sizing a 5-shard 155 GB DeepSeek-V4-Flash split; every earlier
     // acceptance masked it by having all shards on every node.
     let paths: Vec<std::path::PathBuf> = slots.iter().map(|(_, p)| p.to_path_buf()).collect();
-    let servable = servable_model_files(&paths);
+    let servable = sovereign_compute::model_transfer::servable_model_files(&paths);
     if !servable.is_empty() {
         info!(
             files = servable.len(),
@@ -4340,36 +4340,6 @@ pub(crate) fn publish_slot_aliases(
         source, "publishing slot alias map for chat_completions / list_models"
     );
     app_state.slot_aliases_reader().publish(aliases);
-}
-
-/// The set of files peers may fetch, derived from the configured slot paths:
-/// every shard of a split GGUF, canonicalized, deduped, in slot order.
-///
-/// Split expansion is the load-bearing part. Config names one shard
-/// (`…-00001-of-0000N.gguf`); `shard_files` turns that into the whole set when
-/// — and only when — every sibling is actually on disk, so we never advertise
-/// a file we cannot serve. Dedup matters because `primary_pool` slots all
-/// point at the same GGUF.
-fn servable_model_files(slot_paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
-    let mut out: Vec<std::path::PathBuf> = Vec::new();
-    let mut seen: std::collections::HashSet<std::path::PathBuf> = std::collections::HashSet::new();
-    for path in slot_paths {
-        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        let shards = sovereign_inference::embedded::shard_files(&canon);
-        if shards.len() > 1 {
-            info!(
-                shards = shards.len(),
-                model = %canon.display(),
-                "split GGUF: advertising all shards for peer fetch"
-            );
-        }
-        for shard in shards {
-            if seen.insert(shard.clone()) {
-                out.push(shard);
-            }
-        }
-    }
-    out
 }
 
 // Moved to a sibling file: inline, these put this file past its arch-gate
