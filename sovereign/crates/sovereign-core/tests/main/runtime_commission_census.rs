@@ -208,19 +208,18 @@ const TURN_EXECUTION_SITES: &[&str] = &[
     // `bench_cmd/live_runner.rs`) converted for exactly that reason: for them
     // `collect_turn` is instrument-neutral, so it was a deletion of a
     // hand-rolled drain rather than a change to what is measured.
-    "sovereign/crates/sovereign-cli-llm/src/bench_cmd/book_report.rs",
-    // PARTIALLY converted, and on the list because of what is left. Its main
-    // scoring path drove `handle_message_stream` and moved to `collect_turn`
-    // (instrument-neutral). Its DOCUMENT-SESSION path still calls
-    // `handle_turn` directly, and that one is not neutral: the question
+    "sovereign/crates/sovereign-cli-llm/src/probe_cmd/attached.rs",
+    // The DOCUMENT-SESSION drive, once in both `bench_cmd/book_report.rs` and
+    // `bench_cmd/live_runner.rs`, now one drive here (b79e7d126). It calls
+    // `handle_turn` directly, and that is not neutral: the question
     // carries no `[Document attached: ` prefix — the document is attached via
     // a session row — so `serve_turn` would route it through the streaming
     // classifier instead of the document path the bench means to measure.
     //
-    // This test caught that; the file had been removed from this list on the
-    // assumption that converting the main path converted the file. A census
-    // that only counts what you remembered to look at is not one.
-    "sovereign/crates/sovereign-cli-llm/src/bench_cmd/live_runner.rs",
+    // This test caught that once already; book_report.rs had been removed
+    // from this list on the assumption that converting its main path
+    // converted the file. A census that only counts what you remembered to
+    // look at is not one.
     "sovereign/crates/sovereign-cli-llm/src/voice_eval/runner.rs",
     "sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs",
     "sovereign/crates/sovereign-cli-llm/src/inner_chaos/replay.rs",

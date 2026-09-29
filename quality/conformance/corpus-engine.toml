@@ -77,14 +77,14 @@ asserts = 4
 requirement = "ST-8"
 test = "corpus-engine::engine::tests::open_index_allows_model_mismatch_with_warning"
 file = "corpus-engine/src/engine/mod.rs"
-line = 2690
+line = 2643
 asserts = 1
 
 [[claim]]
 requirement = "ST-8"
 test = "corpus-engine::engine::tests::open_index_fails_closed_on_a_geometry_mismatch"
 file = "corpus-engine/src/engine/mod.rs"
-line = 2724
+line = 2677
 asserts = 4
 
 [[claim]]
