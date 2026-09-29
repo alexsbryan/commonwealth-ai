@@ -22,7 +22,7 @@ use crate::rag::chunk::chunk_text;
 // document at its first `</script>` — see the regression test at the bottom of
 // this file. Re-exported at the historical path so `html_crawl`,
 // `stackexchange` and `sec_edgar` call sites are unchanged.
-pub(crate) use corpus_engine::extractors::strip_html;
+pub(crate) use corpus_engine_sections::strip::strip_html;
 
 pub use manager::{CorpusInstallPhase, CorpusManager, CorpusProgress, ProgressCallback};
 pub use registry::{CorpusDefinition, CorpusRegistry, TierDefinition};
