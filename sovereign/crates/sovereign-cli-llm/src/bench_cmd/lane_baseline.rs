@@ -154,7 +154,7 @@ impl LaneBaseline {
             prompt_version: None,
             artifact_mtime: None,
             note: None,
-            host_load_1m: sovereign_cli_shared::host_load::load_average_1m(),
+            host_load_1m: sovereign_cli_base::host_load::load_average_1m(),
             metrics: BTreeMap::new(),
         }
     }

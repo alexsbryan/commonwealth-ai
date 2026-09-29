@@ -23,6 +23,12 @@ reqwest = { workspace = true, optional = true }
 # `prompts` (the home dir under `~` expansion) and `tracing_init`.
 dirs = "5"
 tracing-subscriber = { workspace = true }
+# `flag_surface` renders a derived clap surface's parse errors.
+clap = { workspace = true }
+# `host_load` only: `getloadavg(3)`, the one reader the check runner and
+# the chat-ask lane share so a wall-clock bar is judged against one
+# number (ARCH §10.6).
+libc = "0.2"
 commonwealth-rail-core = { workspace = true, optional = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 

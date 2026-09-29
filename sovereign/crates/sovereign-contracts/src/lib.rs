@@ -87,6 +87,7 @@ pub mod in_flight;
 /// lane) about a tree the `ingest` package writes — see the module doc.
 pub mod index_layout;
 pub mod intent_policy;
+pub mod lane_verdict;
 pub mod launch;
 pub mod lessons;
 pub mod local_inference;

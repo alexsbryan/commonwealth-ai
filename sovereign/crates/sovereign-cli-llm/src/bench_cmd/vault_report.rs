@@ -317,7 +317,7 @@ impl Opts {
 }
 
 fn parse_args(args: &[String]) -> std::result::Result<Opts, String> {
-    let o = sovereign_cli_shared::flag_surface::parse::<Opts>(args)?;
+    let o = sovereign_cli_base::flag_surface::parse::<Opts>(args)?;
     // The ONE rule kept by hand, deliberately. `run_mode` is declared
     // non-required so that this message survives: clap's own "required
     // arguments were not provided" is correct and says nothing about WHY the

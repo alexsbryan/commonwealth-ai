@@ -11,15 +11,6 @@ description = "CLI plumbing shared between the svrn CLI binaries."
 # pb-code-cli-base (the model is the code program's, sovereign-cli-dev).
 
 [dependencies]
-# `host_load` only: `getloadavg(3)`, the one reader the check runner and
-# the chat-ask lane share so a wall-clock bar is judged against one
-# number (ARCH §10.6). Both dependent crates already link libc.
-libc = "0.2"
-# Bottom-layer wall-clock SSOT — `lane_verdict` reads the clock. Depended
-# on directly rather than through `sovereign-core::time`, which re-exports the
-# same function but would drag corpus-engine + tokio + dashmap into a crate
-# every sibling binary links.
-sovereign-time = { workspace = true }
 dirs = "5"
 # The flag-surface derive. Every `sovereign-cli-*` binary that declares its
 # flags as a struct reaches `flag_surface::parse` through here, so the seam has

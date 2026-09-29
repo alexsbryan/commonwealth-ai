@@ -12,13 +12,17 @@
 //!   [`code_index`] (`tempfile_dir`) and [`mcp_client`] (`mcp-client`): moved
 //!   from `sovereign-cli-shared` so the code program's CLI names no svrn CLI
 //!   crate (pb-code-cli-base).
+//! - [`flag_surface`] and [`host_load`]: moved from `sovereign-cli-shared` so
+//!   bench's CLI names no svrn CLI crate (pb-cli-llm-bench-move).
 
 pub mod code_index;
 pub mod deprecation;
 pub mod dirs;
 pub mod dispatcher;
+pub mod flag_surface;
 pub mod guest_link;
 pub mod help;
+pub mod host_load;
 #[cfg(feature = "mcp-client")]
 pub mod mcp_client;
 pub mod models;

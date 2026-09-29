@@ -12288,8 +12288,10 @@ dependencies = [
 name = "sovereign-cli-base"
 version = "0.8.0"
 dependencies = [
+ "clap",
  "commonwealth-rail-core",
  "dirs 5.0.1",
+ "libc",
  "reqwest 0.12.28",
  "serde_json",
  "sovereign-contracts",
@@ -12489,12 +12491,10 @@ dependencies = [
  "clap",
  "dirs 5.0.1",
  "kernel-types",
- "libc",
  "serde",
  "serde_json",
  "sovereign-cli-base",
  "sovereign-contracts",
- "sovereign-time",
  "tokio",
  "toml 0.8.2",
  "tracing",

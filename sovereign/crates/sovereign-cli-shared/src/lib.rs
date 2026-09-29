@@ -30,7 +30,9 @@
 //! `dirs`, `repo`, `help`, `deprecation`, `prompts`, `tracing_init`,
 //! `models`, `mcp_client` and `code_index` live in the leaf
 //! `sovereign-cli-base` and are re-exported here at their historical paths
-//! (pb-code-cli-base). The project model (`observation`, `project_toml`)
+//! (pb-code-cli-base); so do `flag_surface` and `host_load`, and
+//! `lane_verdict` re-exports `sovereign_contracts::lane_verdict`
+//! (pb-cli-llm-bench-move). The project model (`observation`, `project_toml`)
 //! moved to the code program, `sovereign-cli-dev`, whose `project-observe`
 //! arm `project init` execs; the `scip` re-export went with no reader left.
 
@@ -41,10 +43,10 @@ pub use sovereign_cli_base::code_index;
 pub use sovereign_cli_base::deprecation;
 pub use sovereign_cli_base::dirs;
 pub use sovereign_cli_base::dispatcher;
-pub mod flag_surface;
+pub use sovereign_cli_base::flag_surface;
 pub use sovereign_cli_base::guest_link;
 pub use sovereign_cli_base::help;
-pub mod host_load;
+pub use sovereign_cli_base::host_load;
 pub mod lane_verdict;
 #[cfg(feature = "mcp-client")]
 pub use sovereign_cli_base::mcp_client;

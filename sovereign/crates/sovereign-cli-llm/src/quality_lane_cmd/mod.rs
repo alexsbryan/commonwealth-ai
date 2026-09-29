@@ -36,7 +36,7 @@ pub(crate) mod throughput;
 use std::path::PathBuf;
 
 use kernel_types::{honesty_footer, render_rows, Judgement, Reason, Verdict};
-use sovereign_cli_shared::lane_verdict;
+use sovereign_contracts::lane_verdict;
 
 /// What the runner told this lane about the run it belongs to.
 ///

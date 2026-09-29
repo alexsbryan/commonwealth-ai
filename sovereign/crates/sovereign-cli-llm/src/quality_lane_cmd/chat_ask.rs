@@ -1383,7 +1383,7 @@ fn summarise(stages: &[(String, u64)]) -> serde_json::Value {
         // carries the conditions instead of pretending they were nominal.
         // `compare` ignores it: it is provenance a reader needs when a stage
         // moved 40%, not a term in any verdict (ARCH §18.2).
-        "host_load_1m": sovereign_cli_shared::host_load::load_average_1m(),
+        "host_load_1m": sovereign_cli_base::host_load::load_average_1m(),
     })
 }
 

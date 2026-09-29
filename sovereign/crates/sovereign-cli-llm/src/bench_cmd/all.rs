@@ -1362,7 +1362,7 @@ fn exit_code_from(outcomes: &[BenchOutcome]) -> i32 {
 }
 
 fn parse_args(args: &[String]) -> Result<Opts, String> {
-    sovereign_cli_shared::flag_surface::parse::<Opts>(args)
+    sovereign_cli_base::flag_surface::parse::<Opts>(args)
 }
 
 // Silence unused-import false-positive when ATLAS_DIRNAME isn't
