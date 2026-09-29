@@ -50,12 +50,7 @@ pub mod gossip;
 /// bundle-escape guard — one implementation for the daemon's door and the
 /// CLI's dev servers (fp-30's de-embed).
 pub mod guest_pages;
-/// The `/v1/mesh/measurements` answer shapes beside `mesh_measurements`'
-/// policy; the daemon's route re-exports them and the CLI's reader pins
-/// against them (fp-30's de-embed).
-pub mod measurements_wire;
 pub mod membership;
-pub mod mesh_measurements;
 pub use sovereign_serving_host::guest_lender; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
 pub mod guest_source;
 pub mod guest_tunnel;
@@ -67,7 +62,6 @@ pub mod iroh_access;
 pub mod iroh_watchdog;
 pub mod join;
 pub mod ledger_port;
-pub mod measurements_rail;
 pub mod media_route;
 pub mod mesh_discovery;
 pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-serving-move-leaves

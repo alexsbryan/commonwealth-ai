@@ -36,8 +36,8 @@ const DAEMON_OWN_NAMESPACES: &[&str] = &[
 /// silent until something tried to open the directory. The exclusion one is
 /// the split between the six namespaces that reach the ring through the
 /// OUTBOX and the one that does not — `mesh-measurements` is
-/// gossip-excluded, publishes straight onto its journal from
-/// `POST /v1/mesh/measurements`, and would be refused by both the outbox
+/// gossip-excluded, publishes straight onto its journal through serve
+/// (`measurements_rail::publish`), and would be refused by both the outbox
 /// and `apply_projection` if anything tried to route it through the store.
 #[tokio::test]
 async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {

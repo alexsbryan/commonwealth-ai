@@ -59,6 +59,14 @@ use tracing::{debug, error, info, warn};
 
 mod fetch_model;
 mod fetch_ner;
+/// The measurement codec on cw-rails' `mesh-measurements` journal, and the
+/// reconcile loop that keeps the local file on it (pb-serve-placement).
+pub mod measurements_rail;
+/// Placement measurements: what a placement was observed to do, keyed by
+/// model fingerprint × placement digest × machine witness (phase-b-22).
+pub mod mesh_measurements;
+/// The CLI's side of measurement travel: publish a run, read peers' runs.
+pub mod mesh_travel;
 mod reload;
 mod self_report;
 mod warm_cache;
@@ -145,6 +153,9 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
     init_tracing();
+    // serve's placement measurements stay on cw-rails' journal whether or not
+    // this process ever binds (pb-serve-placement).
+    measurements_rail::spawn_reconcile(Some(SetupConfig::path_in(&parsed.data_dir)));
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         // llama.cpp call chains are deep; the daemon and the child use 8 MiB.

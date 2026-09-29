@@ -1343,8 +1343,8 @@ fn a_record(verdict: mm::Verdict) -> mm::MeasurementRecord {
 
 /// A run that reached the mesh. The happy path, so the renderers are exercised
 /// with the line present rather than with the degraded one.
-fn published() -> crate::mesh_travel::Published {
-    crate::mesh_travel::Published::Yes {
+fn published() -> sovereign_serve::mesh_travel::Published {
+    sovereign_serve::mesh_travel::Published::Yes {
         key: "1785000000/aabbccdd11223344".into(),
     }
 }

@@ -1282,64 +1282,6 @@ pub fn spawn_slot_alias_push(
     });
 }
 
-/// Reconcile this node's measurement history onto its ring journal.
-///
-/// This used to load the history into the gossip KV store on every start,
-/// because that store is `in_memory()` — a wire buffer, not storage — so
-/// everything this node had ever published evaporated from the mesh at each
-/// restart, and re-uploading it was the only way the file stayed
-/// authoritative. `mesh-measurements` is on the ring rail now
-/// (`sovereign_mesh::measurements_rail`): the journal is on disk, ordinary
-/// anti-entropy carries it, and nothing needs re-uploading.
-///
-/// What remains is the part the buffer never did, and it runs once per boot
-/// rather than continuously:
-///
-/// - **Migration.** Records filed before the namespace moved reach the ring
-///   the first time this node boots on this build.
-/// - **Closure.** A run taken before this node was in a mesh is refused at
-///   publish time — correctly, since no roster could claim its signer — and
-///   this is what carries it the moment membership exists. Without it the
-///   refusal would be a quiet loss.
-///
-/// Deferred, with the same deadline pattern as the work-atlas broadcaster
-/// wire-up: the roster is derived from live membership, so this cannot run
-/// until `daemon.app_state()` answers.
-pub fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
-    tokio::spawn(async move {
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-        let app_state = loop {
-            if let Some(state) = daemon.app_state().await {
-                break state;
-            }
-            if tokio::time::Instant::now() >= deadline {
-                tracing::warn!(
-                    target = "mesh_measurements",
-                    "mesh-measurements: no mesh state within 30s — local history stays \
-                     on disk until the next start"
-                );
-                return;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        };
-        let Some(rail) = app_state.ring_rail() else {
-            return;
-        };
-        let roster = sovereign_mesh::ring_roster::MeshRoster::from_membership(
-            &app_state.membership().members().await,
-            app_state.self_node_id(),
-            app_state.self_node_pubkey(),
-        );
-        let file = sovereign_mesh::mesh_measurements::load();
-        sovereign_mesh::measurements_rail::republish(
-            rail.as_ref(),
-            roster.roster(),
-            file.records(),
-        )
-        .await;
-    });
-}
-
 /// Spawn the lazy canonical-fingerprint stamper for legacy (pre-fingerprint) ingests.
 pub fn spawn_lazy_stamp_fingerprints(engine: Arc<CorpusEngine>) {
     // Lazy-stamp canonical fingerprints for any installed

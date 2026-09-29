@@ -58,7 +58,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use futures::StreamExt;
-use sovereign_mesh::mesh_measurements as mm;
+use sovereign_serve::mesh_measurements as mm;
 
 // ---------------------------------------------------------------------------
 // The probe
@@ -1753,7 +1753,7 @@ async fn run_bench(args: BenchArgs) -> i32 {
     // is the authoritative copy and the gossip buffer is a wire buffer the daemon
     // rebuilds from this file at every boot. So publishing can fail without
     // anything being lost, and `mesh bench` still works with no daemon at all.
-    let travel = crate::mesh_travel::publish(&record).await;
+    let travel = sovereign_serve::mesh_travel::publish(&record).await;
 
     if args.json {
         println!(
@@ -2033,7 +2033,7 @@ fn show_history(sizes: &[(String, Option<u32>, u64)], n_layer: u32) -> i32 {
 pub(crate) fn render_bench_json(
     r: &mm::MeasurementRecord,
     store_note: &str,
-    travel: &crate::mesh_travel::Published,
+    travel: &sovereign_serve::mesh_travel::Published,
 ) -> serde_json::Value {
     let (verdict, problems) = match &r.verdict {
         mm::Verdict::Valid => ("valid", Vec::new()),
@@ -2093,7 +2093,7 @@ pub(crate) fn render_bench_json(
 pub(crate) fn render_bench_human(
     r: &mm::MeasurementRecord,
     store_note: &str,
-    travel: &crate::mesh_travel::Published,
+    travel: &sovereign_serve::mesh_travel::Published,
 ) -> String {
     use std::fmt::Write;
     let mut o = String::new();

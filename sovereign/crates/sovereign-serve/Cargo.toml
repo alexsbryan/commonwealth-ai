@@ -22,8 +22,18 @@ sovereign-inference = { workspace = true }
 sovereign-compute = { workspace = true }
 sovereign-serving-host = { workspace = true }
 host-kit = { workspace = true, features = ["shell"] }
-# The weight verbs' help and root path (a package leaf every program's CLI shares).
-sovereign-cli-base = { workspace = true }
+# The weight verbs' help and root path (a package leaf every program's CLI shares);
+# `rail-client`: the measurement codec appends and reads on cw-rails' rail doors.
+sovereign-cli-base = { workspace = true, features = ["rail-client"] }
+# The measurement journal's vocabulary (the rail fold, a leaf), its name
+# (oicp-types) and the host fingerprint its key carries (kernel-types).
+commonwealth-rail-core = { workspace = true }
+oicp-types = { workspace = true }
+kernel-types = { workspace = true }
+# cw-rails' base, through its one reader (`rails_kv::resolve_rails_base`).
+sovereign-turn-client = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }
@@ -37,6 +47,8 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# rail-core's signed-op fixtures, for the codec's read-side tests.
+commonwealth-rail-core = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

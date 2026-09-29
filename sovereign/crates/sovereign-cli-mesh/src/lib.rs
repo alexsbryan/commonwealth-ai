@@ -16,7 +16,6 @@ pub mod mesh_pod;
 pub mod mesh_skew;
 pub mod mesh_soak;
 pub mod mesh_token;
-pub mod mesh_travel;
 pub mod publish_cmd;
 pub mod rail_migration;
 pub mod rails_up;

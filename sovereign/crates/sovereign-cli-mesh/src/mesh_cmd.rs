@@ -367,8 +367,8 @@ pub(crate) struct MeshDevice {
     /// `None` means no worker is currently discovered for this peer — the plan
     /// then cannot say how the tensor stream would travel, which is a reason to
     /// report "not measured" rather than to assume the good case. See
-    /// [`sovereign_mesh::mesh_measurements::LinkClass`].
-    pub(crate) link: Option<sovereign_mesh::mesh_measurements::LinkClass>,
+    /// [`sovereign_serve::mesh_measurements::LinkClass`].
+    pub(crate) link: Option<sovereign_serve::mesh_measurements::LinkClass>,
 }
 
 /// Read the live mesh from the running daemon's `/v1/mesh/status` and build the
@@ -505,7 +505,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
                 .get("backend")
                 .and_then(|v| v.as_str())
                 .map(str::to_string),
-            link: endpoint.map(|ep| sovereign_mesh::mesh_measurements::link_class_of_endpoint(ep)),
+            link: endpoint.map(|ep| sovereign_serve::mesh_measurements::link_class_of_endpoint(ep)),
         };
         let online = m.get("status").and_then(|s| s.as_str()) == Some("online");
         let can_anchor = m
@@ -835,7 +835,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // essentially never get a local hit — which makes the peer half the part most
     // likely to answer the question they actually asked. Degrades to empty with
     // no daemon; never fatal.
-    let peers = crate::mesh_travel::peer_history().await;
+    let peers = sovereign_serve::mesh_travel::peer_history().await;
     if let Some(note) = &peers.note {
         eprintln!("mesh plan: peer measurements unavailable — {note}");
     }
@@ -870,7 +870,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
             n_ctx,
             overheads,
         },
-        &sovereign_mesh::mesh_measurements::load(),
+        &sovereign_serve::mesh_measurements::load(),
         &peers.records,
         env!("CARGO_PKG_VERSION"),
     );
@@ -963,13 +963,13 @@ pub(crate) struct PlanInput {
 pub(crate) enum SpeedSection {
     /// A real run against exactly this configuration.
     Measured {
-        summary: Box<sovereign_mesh::mesh_measurements::MeasurementSummary>,
+        summary: Box<sovereign_serve::mesh_measurements::MeasurementSummary>,
     },
     /// This configuration could be measured; nobody has. `near` names
     /// measurements of the same model in *other* configurations — as context
     /// for the operator, never as a number for this one.
     NotMeasured {
-        near: Vec<sovereign_mesh::mesh_measurements::NearMiss>,
+        near: Vec<sovereign_serve::mesh_measurements::NearMiss>,
     },
     /// There is nothing here to have measured.
     NotMeasurable(NotMeasurable),
@@ -1171,7 +1171,7 @@ pub(crate) struct PlanReport {
     pub(crate) speed: SpeedSection,
     /// The measurement key this plan looked up, when it had one. Emitted in
     /// `--json` so a script can correlate a plan with a `mesh bench` record.
-    pub(crate) speed_key: Option<sovereign_mesh::mesh_measurements::MeasurementKey>,
+    pub(crate) speed_key: Option<sovereign_serve::mesh_measurements::MeasurementKey>,
 }
 
 impl PlanReport {
@@ -1201,8 +1201,8 @@ impl PlanReport {
 /// disagree about where a block lands.
 pub(crate) fn build_report(
     input: PlanInput,
-    measurements: &sovereign_mesh::mesh_measurements::MeasurementFile,
-    peers: &[sovereign_mesh::mesh_measurements::ForeignRecord],
+    measurements: &sovereign_serve::mesh_measurements::MeasurementFile,
+    peers: &[sovereign_serve::mesh_measurements::ForeignRecord],
     current_build: &str,
 ) -> PlanReport {
     use sovereign_inference::embedded as inf;
@@ -1477,14 +1477,14 @@ fn resolve_speed(
     n_layer: u32,
     active_nodes: usize,
     n_ctx: u32,
-    measurements: &sovereign_mesh::mesh_measurements::MeasurementFile,
-    peers: &[sovereign_mesh::mesh_measurements::ForeignRecord],
+    measurements: &sovereign_serve::mesh_measurements::MeasurementFile,
+    peers: &[sovereign_serve::mesh_measurements::ForeignRecord],
     current_build: &str,
 ) -> (
     SpeedSection,
-    Option<sovereign_mesh::mesh_measurements::MeasurementKey>,
+    Option<sovereign_serve::mesh_measurements::MeasurementKey>,
 ) {
-    use sovereign_mesh::mesh_measurements as mm;
+    use sovereign_serve::mesh_measurements as mm;
 
     // A hypothetical mesh has no machines to have measured.
     let Some(mesh) = mesh else {
@@ -2187,7 +2187,7 @@ fn render_speed_human(o: &mut String, r: &PlanReport) {
             // for themselves from the rest of the output, so it is named.
             if r.speed_key
                 .as_ref()
-                .is_some_and(|k| k.link == sovereign_mesh::mesh_measurements::LinkClass::Unknown)
+                .is_some_and(|k| k.link == sovereign_serve::mesh_measurements::LinkClass::Unknown)
             {
                 let _ = writeln!(
                     o,
@@ -3497,7 +3497,7 @@ mod plan_tests {
     fn report(i: PlanInput) -> PlanReport {
         build_report(
             i,
-            &sovereign_mesh::mesh_measurements::MeasurementFile::new(),
+            &sovereign_serve::mesh_measurements::MeasurementFile::new(),
             &[],
             "test-build",
         )
@@ -3783,7 +3783,7 @@ mod plan_tests {
 
     // --- the speed section ------------------------------------------------
 
-    use sovereign_mesh::mesh_measurements as mm;
+    use sovereign_serve::mesh_measurements as mm;
 
     fn mesh_devs(names: &[&str], fp: Option<u64>) -> Vec<MeshDevice> {
         mesh_devs_linked(names, fp, Some(mm::LinkClass::Direct))
@@ -4743,7 +4743,7 @@ mod plan_tests {
 
     // -- Travel -------------------------------------------------------------
 
-    /// A peer's record, as `GET /v1/mesh/measurements` would deliver it.
+    /// A peer's record, as serve's peer read (`mesh_travel::peer_history`) delivers it.
     fn peer_record(key: mm::MeasurementKey, tok_s: f64, placement: &str) -> mm::ForeignRecord {
         mm::ForeignRecord {
             origin_node: "b88252e4325bc3771122334455667788".into(),

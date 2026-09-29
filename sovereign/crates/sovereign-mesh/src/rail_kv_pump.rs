@@ -126,7 +126,7 @@ pub async fn seal_once(fabric: &FabricPart) -> PumpOutcome {
 /// The seal checks for the planes that never enter the outbox.
 async fn seal_planes(rail: &dyn RingRailPort, out: &mut PumpOutcome) {
     // `mesh-measurements` never enters the outbox — it is gossip-excluded, and
-    // its acts are published by `POST /v1/mesh/measurements` straight onto the
+    // its acts are published by serve (`measurements_rail::publish`) straight onto the
     // journal. So its journal grows with nothing above draining it, and the
     // seal check has to be reached some other way. Here is that way, and the
     // constant is the same one (ARCH §10.6).
@@ -313,23 +313,17 @@ async fn snapshot(
     // name comparisons that could drift from it.
     match projector_for(namespace) {
         None => {
-            // Measurements. Not KV-shaped, and its live set is not in the
-            // store — it is the local file, which is the authoritative copy.
-            // `republish` is already idempotent by content, so it re-appends
-            // exactly what the seal retired and nothing else. This is the fix
-            // for the seal/republish interaction found 2026-09-08: republish
-            // AT the seal, not at the next boot, or the window between them is
-            // a ring with no measurements in it.
-            let file = crate::mesh_measurements::load();
-            let done = crate::measurements_rail::republish(rail, roster, file.records()).await;
-            info!(
+            // Measurements. Not KV-shaped, and its live set is serve's local
+            // file, which this node does not hold (pb-serve-placement): serve's
+            // reconcile loop (`sovereign_serve::measurements_rail`) watches this
+            // journal's digest and re-appends what the seal retired within one
+            // poll, so the seal/republish interaction found 2026-09-08 stays
+            // closed without the pump opening serve's file.
+            debug!(
                 namespace,
-                appended = done.appended,
-                already_held = done.already_held,
-                withheld = done.withheld,
-                "rail kv pump: snapshotted the local measurement history above the new floor"
+                "rail kv pump: measurements sealed; serve's reconcile loop re-appends its live set"
             );
-            return done.appended;
+            0
         }
         Some(Projector::Work) => snapshot_work(rail, namespace, roster, floor, live_work).await,
         // Refused before the seal, in `seal_if_due`: a store namespace's live

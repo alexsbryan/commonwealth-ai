@@ -77,9 +77,18 @@ pub async fn error_text(resp: reqwest::Response) -> String {
 }
 
 fn url(path: &str, namespace: &str) -> String {
-    let base = crate::urls::daemon_base_url();
+    url_at(&crate::urls::daemon_base_url(), path, namespace)
+}
+
+fn url_at(base: &str, path: &str, namespace: &str) -> String {
     format!("{}{path}?namespace={namespace}", base.trim_end_matches('/'))
 }
+
+/// cw-rails' actor door: the key its journal lines are signed with.
+pub const RAIL_ACTOR_PATH: &str = "/v1/rail/actor";
+/// cw-rails' digest door: a journal's per-actor high-water marks, which move
+/// at every append and every seal.
+pub const RAIL_DIGEST_PATH: &str = "/v1/rail/digest";
 
 /// One operator-side READ of a namespace: the admitted acts, the gaps, and the
 /// roster the DAEMON actually loaded.
@@ -92,16 +101,50 @@ fn url(path: &str, namespace: &str) -> String {
 /// because a refused act and an absent act look identical once the roster is
 /// gone.
 pub async fn rail_log(namespace: &str) -> Result<serde_json::Value, String> {
-    let url = url(RAIL_LOG_PATH, namespace);
-    let resp = client()?
+    log_from(url(RAIL_LOG_PATH, namespace), "the daemon")
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// [`rail_log`] against the rail doors at `base` — cw-rails', whose base the
+/// caller resolves (`sovereign_turn_client::rails_kv::resolve_rails_base`).
+pub async fn rail_log_at(base: &str, namespace: &str) -> Result<serde_json::Value, RailDoorError> {
+    log_from(url_at(base, RAIL_LOG_PATH, namespace), "cw-rails").await
+}
+
+/// Why a dial to a rail door returned no answer: nothing listened, or the door
+/// answered with its own refusal. Typed so a caller that reports the two
+/// differently never matches on the sentence (ARCH principle 9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RailDoorError {
+    /// Nothing answered at the URL.
+    Unreachable(String),
+    /// The door answered and refused, or answered with a body this build
+    /// cannot read — the door's own sentence.
+    Refused(String),
+}
+
+impl std::fmt::Display for RailDoorError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RailDoorError::Unreachable(why) | RailDoorError::Refused(why) => f.write_str(why),
+        }
+    }
+}
+
+async fn log_from(url: String, who: &str) -> Result<serde_json::Value, RailDoorError> {
+    let resp = client()
+        .map_err(RailDoorError::Unreachable)?
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("cannot reach the daemon at {url}: {e}"))?;
+        .map_err(|e| RailDoorError::Unreachable(format!("cannot reach {who} at {url}: {e}")))?;
     if !resp.status().is_success() {
-        return Err(error_text(resp).await);
+        return Err(RailDoorError::Refused(error_text(resp).await));
     }
-    resp.json().await.map_err(|e| format!("bad response: {e}"))
+    resp.json()
+        .await
+        .map_err(|e| RailDoorError::Refused(format!("bad response: {e}")))
 }
 
 /// One namespace's record, frozen — the v1 checkpoint document the daemon
@@ -159,17 +202,34 @@ pub async fn roster_and_admission(namespace: &str) -> Result<(Roster, Admission)
 /// `Serialize` is the wire form the door parses with `RailAct::from_json`, so
 /// a caller cannot spell `{"op": "sealed"}` and learn about it from a 422.
 pub async fn rail_append(namespace: &str, act: &RailAct) -> Result<serde_json::Value, String> {
-    let url = url(RAIL_APPEND_PATH, namespace);
-    let resp = client()?
+    append_to(url(RAIL_APPEND_PATH, namespace), act, "the daemon")
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// [`rail_append`] against the rail doors at `base`. See [`rail_log_at`].
+pub async fn rail_append_at(
+    base: &str,
+    namespace: &str,
+    act: &RailAct,
+) -> Result<serde_json::Value, RailDoorError> {
+    append_to(url_at(base, RAIL_APPEND_PATH, namespace), act, "cw-rails").await
+}
+
+async fn append_to(url: String, act: &RailAct, who: &str) -> Result<serde_json::Value, RailDoorError> {
+    let resp = client()
+        .map_err(RailDoorError::Unreachable)?
         .post(&url)
         .json(act)
         .send()
         .await
-        .map_err(|e| format!("cannot reach the daemon at {url}: {e}"))?;
+        .map_err(|e| RailDoorError::Unreachable(format!("cannot reach {who} at {url}: {e}")))?;
     if !resp.status().is_success() {
-        return Err(error_text(resp).await);
+        return Err(RailDoorError::Refused(error_text(resp).await));
     }
-    resp.json().await.map_err(|e| format!("bad response: {e}"))
+    resp.json()
+        .await
+        .map_err(|e| RailDoorError::Refused(format!("bad response: {e}")))
 }
 
 /// One operator-side `Record` write: wrap `payload` in the act and append it.

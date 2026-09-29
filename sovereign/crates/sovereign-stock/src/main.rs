@@ -23,6 +23,9 @@ fn main() {
     if let Some(code) = sovereign_serve::child_launch(&args) {
         std::process::exit(code);
     }
+    // serve's placement measurements stay on cw-rails' journal on every stock
+    // node, hosted serve or not: `assemble` below runs only when it is hosted.
+    sovereign_serve::measurements_rail::spawn_reconcile(None);
     let hosted = sovereign_daemon::process::HostedServe::new(
         sovereign_serve::DEFAULT_FILTER,
         |data_dir, config_path| async move {

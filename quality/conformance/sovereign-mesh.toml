@@ -16,17 +16,3 @@ test = "sovereign-mesh::persist::tests::save_writes_into_the_meshs_own_directory
 file = "sovereign/crates/sovereign-mesh/src/persist.rs"
 line = 908
 asserts = 3
-
-[[claim]]
-requirement = "FE-90"
-test = "sovereign-mesh::mesh_measurements::tests::a_witness_accounts_for_the_digest_it_was_built_from"
-file = "sovereign/crates/sovereign-mesh/src/mesh_measurements.rs"
-line = 2322
-asserts = 2
-
-[[claim]]
-requirement = "FE-92"
-test = "sovereign-mesh::mesh_measurements::tests::no_co_residents_is_reported_as_a_finding_not_as_silence"
-file = "sovereign/crates/sovereign-mesh/src/mesh_measurements.rs"
-line = 2984
-asserts = 2
