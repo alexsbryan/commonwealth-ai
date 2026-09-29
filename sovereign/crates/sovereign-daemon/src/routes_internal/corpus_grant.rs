@@ -73,7 +73,7 @@ pub async fn corpus_grant_issue(
     // always present at registration). A non-grantable corpus — a structural
     // KnowledgeView corpus — can NEVER be lent to peers, even under a grant.
     let recipe = engine
-        .load_recipe(req.corpus_id.as_str())
+        .recipe_sharing(req.corpus_id.as_str())
         .await
         .map_err(|e| {
             (
@@ -83,7 +83,7 @@ pub async fn corpus_grant_issue(
                 }),
             )
         })?;
-    if !recipe.corpus.grantable {
+    if !recipe.grantable {
         return Err((
             StatusCode::FORBIDDEN,
             Json(ErrorBody {

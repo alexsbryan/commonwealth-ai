@@ -33,7 +33,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_tools::atlas_view::FileAtlasReader;
 use sovereign_tools::local_corpus::config::{LocalCorpusConfig, LocalCorpusSourceType};
 
@@ -407,7 +407,7 @@ async fn catalog(
 
     let mut corpora = Vec::new();
     for b in &builtins {
-        let registry_entry = engine.registry().find_entry(&b.id);
+        let registry_entry = engine.registry_listing(&b.id);
         let info = installed
             .iter()
             .find(|i| i.corpus_id == b.id && !i.is_shard);
@@ -440,6 +440,7 @@ async fn catalog(
             .to_string(),
             chunks_count: info.map(|i| i.chunk_count),
             enrichment_enabled: registry_entry
+                .as_ref()
                 .map(|e| e.enrichment_enabled)
                 .unwrap_or(false),
             indexed_at: info.map(|i| i.created_at),
@@ -447,7 +448,7 @@ async fn catalog(
             embedding_dimensions: info.map(|i| i.embedding_dimensions),
             vector_index_ready,
             needs_rebuild: info.is_some_and(|i| !i.indexes_built),
-            registry_url: registry_entry.map(|e| e.toml_url.clone()),
+            registry_url: registry_entry.as_ref().map(|e| e.toml_url.clone()),
             schema_version: Some(1),
             parent_corpus_id: b.parent_corpus_id.clone(),
             catalog_status: b.catalog_status.clone(),
@@ -864,7 +865,7 @@ fn tiers_for(corpus_id: &str) -> Vec<String> {
 
 /// The daemon's own `CorpusEngine`. One lookup site, so no handler can
 /// read a different index dir than the one an ingest writes to.
-fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<CorpusEngine>, Absence> {
+fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<dyn IngestPort>, Absence> {
     daemon.corpus_engine().map(Arc::clone).ok_or_else(|| {
         Absence::unavailable(
             "this daemon holds no CorpusEngine (it was commissioned to serve nothing)",

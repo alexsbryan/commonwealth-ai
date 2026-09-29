@@ -18,7 +18,7 @@
 //!
 //! Cycle note: storing this hook on the `CorpusEngine` that
 //! `AppStateInner` itself owns creates a reference cycle
-//! (`AppStateInner -> Arc<CorpusEngine> -> Arc<YieldHook> -> Arc<AppStateInner>`).
+//! (`AppStateInner -> Arc<dyn IngestPort> -> Arc<YieldHook> -> Arc<AppStateInner>`).
 //! The cycle is intentional and harmless: the daemon runs for the
 //! process lifetime, so `AppStateInner::drop` never fires. Tests
 //! that don't install the hook pay nothing.

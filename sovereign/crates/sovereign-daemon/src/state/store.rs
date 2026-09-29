@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use commonwealth_core::mesh::Mesh;
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 use kernel_types::NodeId;
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_mesh::ledger_port::{
@@ -93,7 +93,7 @@ impl AppState {
     pub fn new_with_seeds(
         self_node_id: NodeId,
         mesh: Mesh,
-        corpus_engine: Option<Arc<CorpusEngine>>,
+        corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         fabric_seed: fabric::FabricSeed,
         serving_seed: serving::ServingSeed,

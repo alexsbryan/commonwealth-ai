@@ -80,7 +80,7 @@ use std::time::Duration;
 use std::collections::BTreeSet;
 
 use commonwealth_core::knowledge::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 use corpus_index::ingest_port::ProgressCallback;
 use kernel_types::quality::VerdictSource;
 use kernel_types::ActorKey;
@@ -221,7 +221,7 @@ impl IngestPayload {
 /// Runs one corpus slice through this node's own [`CorpusEngine`].
 pub struct IngestExecutor {
     kind: JobKind,
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
 }
 
 impl IngestExecutor {
@@ -233,7 +233,7 @@ impl IngestExecutor {
     // unreachable arm on the boot path instead. Same call, same reason, as
     // `ProcessExecutor::new`.
     #[allow(clippy::expect_used)]
-    pub fn new(engine: Arc<CorpusEngine>) -> IngestExecutor {
+    pub fn new(engine: Arc<dyn IngestPort>) -> IngestExecutor {
         IngestExecutor {
             kind: JobKind::parse(INGEST_KIND)
                 .expect("`ingest:v1` is a valid JobKind by construction"),

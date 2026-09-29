@@ -8,11 +8,11 @@
 
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_core::ToolRegistry;
 
 pub async fn build_tool_registry(
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
     solve_jobs: Arc<super::solve_http::SolveJobs>,
 ) -> ToolRegistry {
     // Tier 4 — shared tool-result cache. This registry serves `/mcp` only;

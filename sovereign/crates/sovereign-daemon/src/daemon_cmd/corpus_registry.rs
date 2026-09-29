@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_contracts::traits::StateStore;
 use sovereign_contracts::types::{CorpusState, CorpusVisibility};
 
@@ -22,7 +22,7 @@ use sovereign_contracts::types::{CorpusState, CorpusVisibility};
 /// nothing: every outcome — rows added, a listing that failed, a save that
 /// failed — is logged at this module's path (under the daemon's
 /// `sovereign_daemon=info` allowlist entry), and none of them stops the boot.
-pub(super) async fn reconcile_corpus_registry(engine: &CorpusEngine, store: &dyn StateStore) {
+pub(super) async fn reconcile_corpus_registry(engine: &dyn IngestPort, store: &dyn StateStore) {
     let indexes = match engine.installed_indexes().await {
         Ok(i) => i,
         Err(e) => {

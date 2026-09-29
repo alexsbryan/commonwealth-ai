@@ -16,7 +16,7 @@ use crate::types::MemberStatus;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 use kernel_types::NodeId;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::{InferenceProvider, StateStore};
@@ -736,7 +736,7 @@ impl EmbeddedDaemon {
     /// Borrow the `CorpusEngine` this host commissioned the daemon with, if
     /// its variant carries one. `reading_http` and the knowledge handlers
     /// call this; `MeshAdmin` answers `None` by construction.
-    pub fn corpus_engine(&self) -> Option<&Arc<CorpusEngine>> {
+    pub fn corpus_engine(&self) -> Option<&Arc<dyn IngestPort>> {
         self.services.serving().map(|s| &s.core.corpus_engine)
     }
 
@@ -4175,31 +4175,13 @@ impl EmbeddedDaemon {
         }
         if freshness_enabled {
             if let Some(engine) = corpus_engine.clone() {
-                let newsworthy_config =
-                    corpus_engine::update::newsworthy_watcher::NewsworthyConfig::default();
-                let host: std::sync::Arc<
-                    dyn corpus_engine::update::newsworthy_watcher::NewsworthyHost,
-                > = std::sync::Arc::new(crate::newsworthy_host::MeshNewsworthyHost::new(
-                    app_state.clone(),
-                    newsworthy_config.corpus_id.clone(),
-                ));
-                let mw_client: std::sync::Arc<
-                    dyn corpus_engine::update::newsworthy_watcher::MediaWikiClient,
-                > = std::sync::Arc::new(
-                    corpus_engine::update::newsworthy_watcher::HttpMediaWikiClient {
-                        base_url: "https://en.wikipedia.org/w/api.php".to_string(),
-                        user_agent: "commonwealth-ai/0.1 (newsworthy)".to_string(),
-                        http: reqwest::Client::new(),
-                    },
-                );
-                let watcher = std::sync::Arc::new(
-                    corpus_engine::update::newsworthy_watcher::WikipediaNewsworthyWatcher::new(
-                        host,
-                        engine,
-                        mw_client,
-                        newsworthy_config,
-                    ),
-                );
+                let host_state = app_state.clone();
+                let host: corpus_index::ingest_port::daemon::NewsworthyHostFactory =
+                    Box::new(move |corpus_id| {
+                        std::sync::Arc::new(crate::newsworthy_host::MeshNewsworthyHost::new(
+                            host_state, corpus_id,
+                        ))
+                    });
                 let (newsworthy_shutdown_tx, newsworthy_shutdown_rx) =
                     tokio::sync::watch::channel(false);
                 // Operator-triggered tick channel. Capacity 4 is plenty —
@@ -4229,7 +4211,11 @@ impl EmbeddedDaemon {
                 // for the daemon's lifetime under normal operation.
                 tokio::spawn(async move {
                     let _hold_shutdown_tx = newsworthy_shutdown_tx;
-                    let handle = watcher.spawn(newsworthy_shutdown_rx, newsworthy_force_tick_rx);
+                    let handle = engine.spawn_newsworthy_watcher(
+                        host,
+                        newsworthy_shutdown_rx,
+                        newsworthy_force_tick_rx,
+                    );
                     let _ = handle.await;
                 });
                 info!("WikipediaNewsworthyWatcher started");

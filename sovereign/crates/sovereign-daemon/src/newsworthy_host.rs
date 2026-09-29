@@ -26,8 +26,8 @@ use crate::types::MemberStatus;
 use bytes::Bytes;
 use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
 use commonwealth_core::partition;
-use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
 use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
+use corpus_index::ingest_port::newsworthy::{CommittedDocs, NewsworthyHost};
 use kernel_types::NodeId;
 use sovereign_contracts::identity::IdentityReader;
 use sovereign_contracts::peer::ReplicatedKv;
@@ -383,14 +383,15 @@ impl NewsworthyHost for MeshNewsworthyHost {
         let work = incremental_work;
         tokio::spawn(async move {
             for c in &work {
-                let outcome = corpus_engine::engine::daemon_port::apply_incremental(
-                    engine.clone(),
-                    indexes_dir.clone(),
-                    c.corpus_id.clone(),
-                    c.role,
-                    c.doc_ids.clone(),
-                )
-                .await;
+                let outcome = engine
+                    .clone()
+                    .apply_newsworthy_incremental(
+                        indexes_dir.clone(),
+                        c.corpus_id.clone(),
+                        c.role,
+                        c.doc_ids.clone(),
+                    )
+                    .await;
                 match outcome {
                     Ok(()) => {}
                     Err(reason) if c.role == "portal" => {
@@ -424,14 +425,15 @@ impl NewsworthyHost for MeshNewsworthyHost {
                         // logged; no further fallback for portal
                         // because the legacy path is structurally
                         // wrong for this corpus shape.
-                        let retry = corpus_engine::engine::daemon_port::apply_incremental(
-                            engine.clone(),
-                            indexes_dir.clone(),
-                            c.corpus_id.clone(),
-                            c.role,
-                            c.doc_ids.clone(),
-                        )
-                        .await;
+                        let retry = engine
+                            .clone()
+                            .apply_newsworthy_incremental(
+                                indexes_dir.clone(),
+                                c.corpus_id.clone(),
+                                c.role,
+                                c.doc_ids.clone(),
+                            )
+                            .await;
                         if let Err(e) = retry {
                             tracing::warn!(
                                 corpus_id = %c.corpus_id,

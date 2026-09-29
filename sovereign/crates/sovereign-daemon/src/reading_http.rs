@@ -15,6 +15,7 @@
 //! Deferred, named rather than dropped: section-bounded reading — neighbours
 //! are id-ordered within `source_doc_id`, never bounded by section.
 
+use corpus_index::ingest_port::daemon::IngestPort;
 use std::sync::Arc;
 
 use axum::extract::{Extension, Path, Query};
@@ -474,7 +475,7 @@ async fn get_chunk(
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
-        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
+        Err(e) => return corpus_open_failure(engine.as_ref(), &corpus, &e),
     };
     let mut rows = match index.chunks_by_ids(&[chunk_id]).await {
         Ok(r) => r,
@@ -502,7 +503,7 @@ async fn get_neighbors(
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
-        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
+        Err(e) => return corpus_open_failure(engine.as_ref(), &corpus, &e),
     };
     let window = match index.neighbors(chunk_id, radius).await {
         Ok(Some(w)) => w,
@@ -591,7 +592,7 @@ async fn get_atom_elsewhere(
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
-        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
+        Err(e) => return corpus_open_failure(engine.as_ref(), &corpus, &e),
     };
     let Some((atlas_dir, _)) = atlas_dir_for_corpus(&engine, &corpus).await else {
         return not_found("corpus not installed or atlas missing");
@@ -657,7 +658,7 @@ async fn get_atom_elsewhere(
 /// "no atom spans" rather than failing the whole reading-surface
 /// fetch.
 async fn load_atlas_atoms(
-    engine: &Arc<corpus_engine::CorpusEngine>,
+    engine: &Arc<dyn IngestPort>,
     corpus_id: &str,
 ) -> Option<Vec<AtomEnvelope>> {
     let (atlas_dir, _) = atlas_dir_for_corpus(engine, corpus_id).await?;
@@ -677,7 +678,7 @@ async fn load_atlas_atoms(
 
 /// Resolve `(atlas_dir, index_dir)` for a corpus, when both exist.
 async fn atlas_dir_for_corpus(
-    engine: &Arc<corpus_engine::CorpusEngine>,
+    engine: &Arc<dyn IngestPort>,
     corpus_id: &str,
 ) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
     let installed = engine.installed_indexes().await.ok()?;
@@ -914,7 +915,7 @@ pub(crate) async fn maybe_resolve_conversation_meta(
 /// 503: it is the difference between "your disk is corrupt" and "finalise never
 /// ran, the data is right there".
 fn corpus_open_failure(
-    engine: &corpus_engine::CorpusEngine,
+    engine: &dyn IngestPort,
     corpus: &str,
     err: &dyn std::fmt::Display,
 ) -> axum::response::Response {
@@ -945,10 +946,7 @@ fn corpus_open_failure(
 
 /// A `<corpus>-partition-*` sibling that carries `_corpus_meta.json` — i.e. a
 /// completed ingest whose promotion to canonical never landed.
-fn stranded_partition(
-    engine: &corpus_engine::CorpusEngine,
-    corpus: &str,
-) -> Option<std::path::PathBuf> {
+fn stranded_partition(engine: &dyn IngestPort, corpus: &str) -> Option<std::path::PathBuf> {
     let prefix = format!("{corpus}-partition-");
     std::fs::read_dir(engine.index_dir())
         .ok()?

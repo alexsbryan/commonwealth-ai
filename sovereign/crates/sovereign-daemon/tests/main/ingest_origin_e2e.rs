@@ -129,7 +129,7 @@ async fn an_ingest_unit_runs_through_cw_rails_donor_inside_this_process() {
     // The daemon's origin registers; the offer follows it.
     let (_dir, engine) = an_engine();
     let origin = Arc::new(WorkOrigin::new(
-        IngestExecutor::new(Arc::clone(&engine)),
+        IngestExecutor::new(engine.clone()),
         daemon_node(),
     ));
     let _origin = spawn(origin, rails.base.clone())

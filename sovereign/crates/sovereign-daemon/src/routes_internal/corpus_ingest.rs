@@ -14,6 +14,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 use commonwealth_core::activity::ActivityEventKind;
+use corpus_index::ingest_port::daemon::{IngestPort, InstallRefusal};
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
@@ -775,15 +776,16 @@ pub async fn spawn_corpus_install_outcome(
 
     // Resolve the recipe + apply parameters BEFORE spawning the
     // background task so a parameter mismatch surfaces as a
-    // synchronous failure instead of a silent crash later.
-    let recipe = match engine.registry().fetch_recipe(&corpus_id).await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!(
-                corpus = %corpus_id,
-                error = %e,
-                "spawn_corpus_install: recipe fetch failed"
-            );
+    // synchronous failure instead of a silent crash later. The port
+    // fetches, coerces and resolves in that order and names which step
+    // refused.
+    let prepared = match engine
+        .clone()
+        .prepare_registry_install(&corpus_id, &parameters)
+        .await
+    {
+        Ok(p) => p,
+        Err(refusal) => {
             // Roll back the active_ingests insert so a subsequent
             // retry isn't blocked.
             state
@@ -793,52 +795,12 @@ pub async fn spawn_corpus_install_outcome(
                 .write()
                 .await
                 .remove(&corpus_id);
-            return InstallOutcome::RecipeNotFound(e.to_string());
+            return match refusal {
+                InstallRefusal::RecipeNotFound(e) => InstallOutcome::RecipeNotFound(e),
+                InstallRefusal::InvalidParameters(e) => InstallOutcome::InvalidParameters(e),
+            };
         }
     };
-
-    // Convert the JSON parameter map into TOML values so the
-    // recipe's resolve_parameters can validate them against the
-    // declared schema. JSON arrays of strings become TOML arrays;
-    // JSON strings stay strings. We don't try to be clever: the
-    // CLI / desktop already shaped the input.
-    let toml_params = match corpus_engine::engine::daemon_port::json_params_to_toml(&parameters) {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::warn!(
-                corpus = %corpus_id,
-                error = %e,
-                "spawn_corpus_install: parameter coercion failed"
-            );
-            state
-                .inner
-                .ingest
-                .active_ingests
-                .write()
-                .await
-                .remove(&corpus_id);
-            return InstallOutcome::InvalidParameters(e);
-        }
-    };
-    let resolved = match recipe.resolve_parameters(&toml_params) {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!(
-                corpus = %corpus_id,
-                error = %e,
-                "spawn_corpus_install: parameter validation failed"
-            );
-            state
-                .inner
-                .ingest
-                .active_ingests
-                .write()
-                .await
-                .remove(&corpus_id);
-            return InstallOutcome::InvalidParameters(e.to_string());
-        }
-    };
-    let recipe = recipe.with_resolved_parameters(resolved);
 
     let state_for_task = state.clone();
     let corpus_id_for_task = corpus_id.clone();
@@ -853,11 +815,9 @@ pub async fn spawn_corpus_install_outcome(
         // `[enrichment] enabled = false` skips the default post-install
         // structural-atlas + Tier-2 RAPTOR pass below, keeping retrieval sealed
         // to its own chunks (e.g. the chaos-monkey bench corpus). A recipe with
-        // NO [enrichment] keeps the default-on hook. Computed here because
-        // `recipe` is moved into the CorpusSpec on the next line.
-        let recipe_opts_out_of_auto_enrichment = recipe.opts_out_of_auto_enrichment();
-        let spec = corpus_engine::CorpusSpec::Inline(Box::new(recipe));
-        let result = engine.ingest(&spec, Some(progress_cb)).await;
+        // NO [enrichment] keeps the default-on hook.
+        let recipe_opts_out_of_auto_enrichment = prepared.opts_out_of_auto_enrichment;
+        let result = (prepared.run)(Some(progress_cb)).await;
 
         state_for_task
             .inner
@@ -1310,11 +1270,7 @@ pub struct ProgressSnapshotResponse {
 /// Returns whether a live task was actually signalled. After this
 /// helper returns the corpus is no longer in `active_ingests` (or the
 /// 5 s ceiling was hit and we've logged a warning).
-async fn stop_in_flight_ingest(
-    state: &AppState,
-    engine: &corpus_engine::CorpusEngine,
-    corpus_id: &str,
-) -> bool {
+async fn stop_in_flight_ingest(state: &AppState, engine: &dyn IngestPort, corpus_id: &str) -> bool {
     let cancelled = engine.cancel_corpus_ingest(corpus_id);
 
     // Bounded poll until the spawn clears from active_ingests. We do
@@ -1391,7 +1347,7 @@ pub async fn corpus_pause(
         )
     })?;
 
-    let cancelled = stop_in_flight_ingest(&state, engine, &req.corpus_id).await;
+    let cancelled = stop_in_flight_ingest(&state, engine.as_ref(), &req.corpus_id).await;
 
     tracing::info!(
         corpus = %req.corpus_id,
@@ -1455,7 +1411,7 @@ pub async fn corpus_cancel(
         )
     })?;
 
-    let cancelled = stop_in_flight_ingest(&state, engine, &req.corpus_id).await;
+    let cancelled = stop_in_flight_ingest(&state, engine.as_ref(), &req.corpus_id).await;
 
     // Wipe canonical + every partition-* sibling for this corpus.
     if let Err(e) = engine.remove_corpus_everything(&req.corpus_id) {

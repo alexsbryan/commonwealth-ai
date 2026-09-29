@@ -21,12 +21,11 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 
-use corpus_engine::engine::daemon_port::{dry_run_report, parameter_kind_label, toml_to_json};
-use corpus_engine::{CorpusEngine, Recipe, TestOptions};
+use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_contracts::daemon_wire::{
     HarnessRunCardView, ImportRecipeRequest, ImportRecipeResult, IngestJobAck,
     RecipeDryRunProgress, RecipeDryRunReport, RecipeDryRunRequest, RecipeHarnessProgress,
-    RecipeHarnessRequest, RecipeJobState, RecipeParameter, RecipeParameterSchema,
+    RecipeHarnessRequest, RecipeJobState,
 };
 
 use crate::daemon::EmbeddedDaemon;
@@ -80,9 +79,9 @@ async fn import(
     Json(body): Json<ImportRecipeRequest>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let recipe = Recipe::from_toml(&body.toml_text)
+    let corpus_id = engine
+        .recipe_corpus_id(&body.toml_text)
         .map_err(|e| Absence::invalid(format!("recipe TOML parse failed: {e}")))?;
-    let corpus_id = recipe.corpus.id.clone();
     if corpus_id.is_empty() {
         return Err(Absence::invalid("recipe `[corpus] id` must not be empty"));
     }
@@ -99,21 +98,15 @@ async fn import(
     }
     std::fs::write(&staging, &body.toml_text)
         .map_err(|e| Absence::internal(format!("stage recipe for validation: {e}")))?;
-    let options = TestOptions {
-        sample_size: 0,
-        embed: false,
-        offline: true,
-        ..Default::default()
-    };
-    let report = engine.test_recipe(&staging, &options).await;
+    let report = engine.dry_run_recipe(&staging, 0, true).await;
     let _ = std::fs::remove_file(&staging);
     let report =
         report.map_err(|e| Absence::internal(format!("validation harness failed: {e}")))?;
 
-    if !report.validation.errors.is_empty() {
+    if !report.errors.is_empty() {
         tracing::debug!(
             corpus_id = %corpus_id,
-            errors = report.validation.errors.len(),
+            errors = report.errors.len(),
             "recipe_http: import refused by validation"
         );
         return Ok((
@@ -122,21 +115,20 @@ async fn import(
                 success: false,
                 corpus_id,
                 recipe_path: String::new(),
-                errors: report.validation.errors.clone(),
-                warnings: report.validation.warnings.clone(),
+                errors: report.errors.clone(),
+                warnings: report.warnings.clone(),
             }),
         )
             .into_response());
     }
 
     let recipe_path = engine
-        .registry()
-        .install_local_recipe(&recipe, &body.toml_text)
+        .install_local_recipe(&body.toml_text)
         .map_err(|e| Absence::internal(format!("install recipe `{corpus_id}`: {e}")))?;
     tracing::info!(
         corpus_id = %corpus_id,
         path = %recipe_path.display(),
-        warnings = report.validation.warnings.len(),
+        warnings = report.warnings.len(),
         "recipe_http: recipe imported into the local registry"
     );
     Ok((
@@ -146,7 +138,7 @@ async fn import(
             corpus_id,
             recipe_path: recipe_path.display().to_string(),
             errors: Vec::new(),
-            warnings: report.validation.warnings.clone(),
+            warnings: report.warnings.clone(),
         }),
     )
         .into_response())
@@ -162,35 +154,16 @@ async fn parameters(
     Path(corpus): Path<String>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let recipe = engine
-        .registry()
-        .fetch_recipe(&corpus)
+    let schema = engine
+        .recipe_parameter_schema(&corpus)
         .await
         .map_err(|e| Absence::missing(format!("recipe `{corpus}`: {e}")))?;
-    let parameters: Vec<RecipeParameter> = recipe
-        .parameters
-        .iter()
-        .map(|(name, spec)| RecipeParameter {
-            name: name.clone(),
-            kind: parameter_kind_label(&spec.kind).to_string(),
-            description: spec.description.clone(),
-            required: spec.required,
-            default: spec.default.as_ref().map(toml_to_json),
-        })
-        .collect();
     tracing::debug!(
         corpus_id = %corpus,
-        parameters = parameters.len(),
+        parameters = schema.parameters.len(),
         "recipe_http: parameter schema served"
     );
-    Ok((
-        StatusCode::OK,
-        Json(RecipeParameterSchema {
-            corpus_id: recipe.corpus.id,
-            parameters,
-        }),
-    )
-        .into_response())
+    Ok((StatusCode::OK, Json(schema)).into_response())
 }
 
 // ─── The recipe dry run ────────────────────────────────────────
@@ -239,7 +212,7 @@ fn live_dry_run_for(recipe_id: &str) -> Option<String> {
 /// clobber each other. One staging helper, one naming rule (ARCH
 /// principle 8).
 fn stage_recipe(
-    engine: &CorpusEngine,
+    engine: &dyn IngestPort,
     recipe_id: &str,
     nonce: &str,
     toml_text: &str,
@@ -281,32 +254,26 @@ async fn dry_run(
     Json(body): Json<RecipeDryRunRequest>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let recipe = Recipe::from_toml(&body.toml_text)
+    let recipe_id = engine
+        .recipe_corpus_id(&body.toml_text)
         .map_err(|e| Absence::invalid(format!("recipe TOML parse failed: {e}")))?;
-    let recipe_id = recipe.corpus.id.clone();
     if recipe_id.is_empty() {
         return Err(Absence::invalid("recipe `[corpus] id` must not be empty"));
     }
 
     if body.sample_size == 0 {
-        let staging = stage_recipe(engine, &recipe_id, "validate", &body.toml_text)?;
-        let options = TestOptions {
-            sample_size: 0,
-            embed: false,
-            offline: body.offline,
-            ..Default::default()
-        };
-        let report = engine.test_recipe(&staging, &options).await;
+        let staging = stage_recipe(engine.as_ref(), &recipe_id, "validate", &body.toml_text)?;
+        let report = engine.dry_run_recipe(&staging, 0, body.offline).await;
         let _ = std::fs::remove_file(&staging);
         let report =
             report.map_err(|e| Absence::internal(format!("validation harness failed: {e}")))?;
         tracing::debug!(
             recipe_id = %recipe_id,
-            errors = report.validation.errors.len(),
+            errors = report.errors.len(),
             offline = body.offline,
             "recipe_http: dry run served inline (validation only)"
         );
-        return Ok((StatusCode::OK, Json(dry_run_report(&report))).into_response());
+        return Ok((StatusCode::OK, Json(report)).into_response());
     }
 
     if let Some(job_id) = live_dry_run_for(&recipe_id) {
@@ -317,7 +284,7 @@ async fn dry_run(
     }
 
     let job_id = format!("recipe-test-{}", uuid::Uuid::new_v4());
-    let staging = stage_recipe(engine, &recipe_id, &job_id, &body.toml_text)?;
+    let staging = stage_recipe(engine.as_ref(), &recipe_id, &job_id, &body.toml_text)?;
     let job = Arc::new(DryRun {
         recipe_id: recipe_id.clone(),
         outcome: Mutex::new(None),
@@ -339,16 +306,9 @@ async fn dry_run(
     let spawn_recipe = recipe_id.clone();
     let spawn_job = job_id.clone();
     tokio::spawn(async move {
-        let options = TestOptions {
-            sample_size,
-            embed: false,
-            offline,
-            ..Default::default()
-        };
         let result = engine
-            .test_recipe(&staging, &options)
+            .dry_run_recipe(&staging, sample_size, offline)
             .await
-            .map(|r| dry_run_report(&r))
             .map_err(|e| format!("recipe harness failed: {e}"));
         let _ = std::fs::remove_file(&staging);
         match &result {
@@ -491,9 +451,9 @@ async fn harness(
         .recipe_harness()
         .map(Arc::clone)
         .ok_or_else(|| Absence::unavailable("recipe harness not composed on this daemon"))?;
-    let recipe = Recipe::from_toml(&body.toml_text)
+    let recipe_id = engine
+        .recipe_corpus_id(&body.toml_text)
         .map_err(|e| Absence::invalid(format!("recipe TOML parse failed: {e}")))?;
-    let recipe_id = recipe.corpus.id.clone();
     if recipe_id.is_empty() {
         return Err(Absence::invalid("recipe `[corpus] id` must not be empty"));
     }
@@ -610,7 +570,7 @@ async fn harness_progress(
     .into_response())
 }
 
-fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<CorpusEngine>, Absence> {
+fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<dyn IngestPort>, Absence> {
     daemon
         .corpus_engine()
         .ok_or_else(|| Absence::unavailable("corpus engine not initialised"))

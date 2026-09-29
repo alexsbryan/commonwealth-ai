@@ -3,6 +3,7 @@
 //! every one names the failing input it exists to catch (ARCH §18.1).
 use super::*;
 
+use corpus_engine::CorpusEngine;
 use sovereign_contracts::oicp::JobRequirements;
 
 fn engine() -> (tempfile::TempDir, Arc<CorpusEngine>) {

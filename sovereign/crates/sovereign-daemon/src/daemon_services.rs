@@ -86,7 +86,7 @@
 
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 
 use oicp_types::EmbedModelInfo;
 use sovereign_core::registry::ToolRegistry;
@@ -168,7 +168,7 @@ impl EmbedAdvertisement {
 /// `/v1/chat/completions` has nothing behind it. Neither is an `Option`, in
 /// this struct or anywhere downstream.
 pub struct ServingCore {
-    pub corpus_engine: Arc<CorpusEngine>,
+    pub corpus_engine: Arc<dyn IngestPort>,
     /// The recipe authoring harness over that engine. `None` answers the
     /// harness route with a named 503; every production host composes it.
     pub recipe_harness: Option<Arc<dyn corpus_index::ingest_port::daemon::RecipeHarnessPort>>,
@@ -708,9 +708,9 @@ pub(crate) mod fixtures {
         }
     }
 
-    pub(crate) fn engine() -> Arc<CorpusEngine> {
+    pub(crate) fn engine() -> Arc<dyn IngestPort> {
         let tmp = std::env::temp_dir().join("sovereign-mesh-services-fixture");
-        Arc::new(CorpusEngine::new(
+        Arc::new(corpus_engine::CorpusEngine::new(
             tmp.join("recipes"),
             tmp.join("indexes"),
             Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),

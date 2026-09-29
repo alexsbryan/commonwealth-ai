@@ -110,18 +110,8 @@ pub async fn recipe_test(
     } else {
         req.options.sample_limit.unwrap_or(DEFAULT_TEST_SAMPLE) as usize
     };
-    let options = corpus_engine::testing::TestOptions {
-        sample_size,
-        embed: false,
-        queries: None,
-        output: None,
-        offline: req.options.offline,
-        verbose: false,
-        parameters: std::collections::BTreeMap::new(),
-    };
-
     let report = engine
-        .test_recipe(&recipe_path, &options)
+        .test_recipe_report(&recipe_path, sample_size, req.options.offline)
         .await
         .map_err(|e| {
             (
@@ -131,9 +121,17 @@ pub async fn recipe_test(
                 }),
             )
         })?;
-    Ok(Json(corpus_engine::engine::daemon_port::map_test_report(
-        &report,
-    )))
+    // The port hands the protocol report over as its wire JSON (its leaf
+    // cannot name oicp-types); this is the same bytes read back.
+    let report: RecipeTestReport = serde_json::from_value(report).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                error: format!("recipe test report did not decode: {e}"),
+            }),
+        )
+    })?;
+    Ok(Json(report))
 }
 
 /// Project one internal `IngestProgress` onto the coarse protocol phase.

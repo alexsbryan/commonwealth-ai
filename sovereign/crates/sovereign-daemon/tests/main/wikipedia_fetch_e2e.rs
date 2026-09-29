@@ -163,7 +163,7 @@ async fn wikipedia_fetch_through_the_registry_ingests_the_article_and_the_next_r
 
     let solve_jobs = Arc::new(sovereign_daemon::solve_http::SolveJobs::new(1));
     let registry =
-        sovereign_daemon::tool_registry::build_tool_registry(Arc::clone(&engine), solve_jobs).await;
+        sovereign_daemon::tool_registry::build_tool_registry(engine.clone(), solve_jobs).await;
     let out = registry
         .get("wikipedia_fetch")
         .expect("wikipedia_fetch is on the daemon's registry")

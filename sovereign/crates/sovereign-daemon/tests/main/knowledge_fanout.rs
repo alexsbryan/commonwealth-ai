@@ -204,7 +204,7 @@ fn make_state(node_id: NodeId, peer: MemberRecord, engine: Option<Arc<CorpusEngi
     AppState::new_with_seeds(
         node_id,
         mesh,
-        engine,
+        engine.map(|e| e as Arc<dyn corpus_index::ingest_port::daemon::IngestPort>),
         None,
         Default::default(),
         Default::default(),

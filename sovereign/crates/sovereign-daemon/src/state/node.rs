@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_grants::{GuestGrantStore, GuestSessionBinding, GuestSessionStore};
 use sovereign_mesh::ledger_port::ActivityLedgerPort;
 
@@ -165,7 +165,7 @@ pub struct NodePart {
     /// The in-process corpus engine, when this daemon hosts one. `None` on a
     /// daemon with no data directory (the knowledge routes then behave as if
     /// this node hosts no corpora).
-    pub corpus_engine: Option<Arc<CorpusEngine>>,
+    pub corpus_engine: Option<Arc<dyn IngestPort>>,
     /// Process start instant — drives `/status`'s `process.uptime_seconds`
     /// (an uptime reset is the cheap witness that a supervised restart
     /// actually produced a fresh process).

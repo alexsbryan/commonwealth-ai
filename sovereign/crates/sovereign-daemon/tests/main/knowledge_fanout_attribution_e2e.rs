@@ -82,7 +82,7 @@ async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
             members: HashMap::new(),
             peers: vec![],
         },
-        Some(Arc::clone(&engine_a)),
+        Some(engine_a.clone()),
         None,
         Default::default(),
         Default::default(),

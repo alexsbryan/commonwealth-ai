@@ -208,7 +208,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     let state_a = AppState::new_with_seeds(
         id_a,
         mesh_a,
-        Some(Arc::clone(&engine_a)),
+        Some(engine_a.clone()),
         None,
         Default::default(),
         Default::default(),

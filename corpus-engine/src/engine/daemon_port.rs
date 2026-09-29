@@ -389,7 +389,10 @@ impl IngestPort for CorpusEngine {
         self.source_manifest(corpus_id).ok().flatten().is_some()
     }
 
-    fn remaining_source_files(&self, corpus_id: &str) -> crate::error::Result<Vec<SourceFileRecord>> {
+    fn remaining_source_files(
+        &self,
+        corpus_id: &str,
+    ) -> crate::error::Result<Vec<SourceFileRecord>> {
         CorpusEngine::remaining_source_files(self, corpus_id)
     }
 
@@ -443,7 +446,10 @@ impl IngestPort for CorpusEngine {
         CorpusEngine::diagnose_indexes(self).await
     }
 
-    fn reprocess_skeleton_failures(&self, index: &CorpusIndex) -> crate::error::Result<(usize, usize)> {
+    fn reprocess_skeleton_failures(
+        &self,
+        index: &CorpusIndex,
+    ) -> crate::error::Result<(usize, usize)> {
         crate::reprocess_skeleton_failures(index)
     }
 
@@ -575,7 +581,10 @@ impl IngestPort for CorpusEngine {
         self.registry().install_local_recipe(&recipe, toml_text)
     }
 
-    async fn recipe_parameter_schema(&self, corpus_id: &str) -> crate::error::Result<RecipeParameterSchema> {
+    async fn recipe_parameter_schema(
+        &self,
+        corpus_id: &str,
+    ) -> crate::error::Result<RecipeParameterSchema> {
         let recipe = self.registry().fetch_recipe(corpus_id).await?;
         let parameters: Vec<RecipeParameter> = recipe
             .parameters
@@ -628,7 +637,10 @@ impl IngestPort for CorpusEngine {
             .map_err(|e| crate::error::Error::Serialization(e.to_string()))
     }
 
-    fn recipe_vocabulary(&self, recipe_path: &Path) -> crate::error::Result<Option<RecipeVocabulary>> {
+    fn recipe_vocabulary(
+        &self,
+        recipe_path: &Path,
+    ) -> crate::error::Result<Option<RecipeVocabulary>> {
         let recipe = Recipe::from_file(recipe_path)?;
         Ok(recipe.custom_ontology().map(|policies| {
             let terms = policies.prose.terms;

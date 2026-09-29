@@ -32,10 +32,10 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use corpus_engine::enrichment::atlas::migrate_ids::migrate_atlas_ids;
-use corpus_engine::CorpusEngine;
 use corpus_engine_atlas_reader::governance::GovernanceOpKind;
 use corpus_engine_atlas_reader::governance_view::section_titles;
 use corpus_engine_atlas_reader::governance_view::{GovernanceView, TensionDisposition};
+use corpus_index::ingest_port::daemon::IngestPort;
 use oplog::{Op, Oplog};
 use sovereign_time::unix_now;
 use understanding_vocab::atoms::{AtomEnvelope, AtomId};
@@ -264,8 +264,8 @@ async fn get_view(
     AxumPath(corpus): AxumPath<String>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let dir = atlas_dir(&engine, &corpus);
-    let root = index_root(&engine, &corpus);
+    let dir = atlas_dir(engine.as_ref(), &corpus);
+    let root = index_root(engine.as_ref(), &corpus);
     let recipes = engine.recipes_dir().to_path_buf();
     let cid = corpus.clone();
 
@@ -392,7 +392,7 @@ async fn undo_tension(
     AxumPath((corpus, tension)): AxumPath<(String, String)>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let dir = atlas_dir(&engine, &corpus);
+    let dir = atlas_dir(engine.as_ref(), &corpus);
     Ok(
         match tokio::task::spawn_blocking(move || undo_at(&dir, &tension)).await {
             Ok(Ok(op_id)) => {
@@ -414,7 +414,7 @@ async fn seed(
     AxumPath(corpus): AxumPath<String>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let dir = atlas_dir(&engine, &corpus);
+    let dir = atlas_dir(engine.as_ref(), &corpus);
     Ok(
         match tokio::task::spawn_blocking(move || seed_at(&dir)).await {
             Ok(Ok(seeded)) => {
@@ -446,7 +446,7 @@ async fn post_build_seed(
     AxumPath(corpus): AxumPath<String>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let dir = atlas_dir(&engine, &corpus);
+    let dir = atlas_dir(engine.as_ref(), &corpus);
     let recipes = engine.recipes_dir().to_path_buf();
     let cid = corpus.clone();
     let out = tokio::task::spawn_blocking(move || {
@@ -509,7 +509,7 @@ where
     F: FnOnce(&Path) -> GovResult<Vec<String>> + Send + 'static,
 {
     let engine = engine_for(&daemon)?;
-    let dir = atlas_dir(&engine, &corpus);
+    let dir = atlas_dir(engine.as_ref(), &corpus);
     Ok(match tokio::task::spawn_blocking(move || act(&dir)).await {
         Ok(Ok(op_ids)) => {
             tracing::info!(%corpus, appended = op_ids.len(), "governance_http: adjudicated");
@@ -997,7 +997,7 @@ evidence_term = "passage"
 
 /// The daemon's own corpus engine. ONE lookup site, so no handler can
 /// reach a different index root than the one the atlas routes serve.
-fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<CorpusEngine>, Absence> {
+fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<dyn IngestPort>, Absence> {
     daemon
         .corpus_engine()
         .map(Arc::clone)
@@ -1006,12 +1006,12 @@ fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<CorpusEngine>, Absence
 
 /// `<index_dir>/<corpus>` — where `chapters.json` lives. The daemon's own,
 /// matching `atlas_http`'s `FileAtlasReader::new(engine.index_dir())`.
-fn index_root(engine: &CorpusEngine, corpus_id: &str) -> PathBuf {
+fn index_root(engine: &dyn IngestPort, corpus_id: &str) -> PathBuf {
     engine.index_dir().join(corpus_id)
 }
 
 /// `<index_root>/atlas` — `atoms.json`, `edges.json`,
 /// `governance_oplog.jsonl`.
-fn atlas_dir(engine: &CorpusEngine, corpus_id: &str) -> PathBuf {
+fn atlas_dir(engine: &dyn IngestPort, corpus_id: &str) -> PathBuf {
     index_root(engine, corpus_id).join("atlas")
 }

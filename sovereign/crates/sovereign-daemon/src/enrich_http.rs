@@ -19,7 +19,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 
 use corpus_engine::enrichment::atlas::analysis::starter_questions::rank_starter_questions;
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 use understanding_vocab::read::read_atlas_atoms;
 
 use crate::daemon::EmbeddedDaemon;
@@ -95,7 +95,7 @@ async fn starter_questions(
     Ok((StatusCode::OK, Json(starters)).into_response())
 }
 
-fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<CorpusEngine>, Absence> {
+fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<dyn IngestPort>, Absence> {
     daemon
         .corpus_engine()
         .ok_or_else(|| Absence::unavailable("corpus engine not initialised"))
@@ -104,7 +104,7 @@ fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<CorpusEngine>, Absenc
 /// The corpus's `atlas/` under the DAEMON's index dir. Two absences named
 /// apart: not installed, and installed with no atlas.
 async fn atlas_dir_for(
-    engine: &Arc<CorpusEngine>,
+    engine: &Arc<dyn IngestPort>,
     corpus_id: &str,
 ) -> Result<std::path::PathBuf, Absence> {
     let installed = engine

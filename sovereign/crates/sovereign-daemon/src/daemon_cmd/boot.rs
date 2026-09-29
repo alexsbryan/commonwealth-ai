@@ -408,7 +408,7 @@ pub(super) async fn run_daemon(
     // search, which is silent, correct, and progressively slower. A desktop
     // user has no way to notice or fix that, so the daemon owns it. See
     // `crate::corpus_maintenance`.
-    crate::corpus_maintenance::spawn(Arc::clone(&engine));
+    crate::corpus_maintenance::spawn(engine.clone());
 
     // ── Folder tiered deps ───────────────────────────────────────
     // Watched-folder corpora reuse the conv-tiered table shape
@@ -440,7 +440,7 @@ pub(super) async fn run_daemon(
     // svrn's own `/mcp` tools. Code's tools are code's (pb-code-daemon-exit):
     // they mount beside these when a distribution composes the code program
     // into this process, and svrn alone names `svrn code mcp` for them.
-    let tools = build_tool_registry(Arc::clone(&engine), Arc::clone(&solve_jobs)).await;
+    let tools = build_tool_registry(engine.clone(), Arc::clone(&solve_jobs)).await;
 
     // Notes-rail convergence recorder (order commons-fluency fix 9):
     // ONE shared instance — named on the daemon's `HeadlessRails` so `/status`
@@ -556,7 +556,7 @@ pub(super) async fn run_daemon(
     )
     .await;
 
-    super::corpus_registry::reconcile_corpus_registry(&engine, state_store.as_ref()).await;
+    super::corpus_registry::reconcile_corpus_registry(engine.as_ref(), state_store.as_ref()).await;
 
     // The watched-folder singleton must be installed before the daemon starts
     // serving, but the ROUTE is now part of the daemon's declared capability
@@ -825,7 +825,7 @@ pub(super) async fn run_daemon(
                 core: crate::ServingCore {
                     // The engine the auto_ingest loop and the
                     // /internal/corpus/* surface both read.
-                    corpus_engine: Arc::clone(&engine),
+                    corpus_engine: engine.clone(),
                     recipe_harness: Some(Arc::new(
                         sovereign_authoring_harness::EngineHarness::new(Arc::clone(&engine)),
                     )),

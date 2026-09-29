@@ -79,7 +79,7 @@ pub async fn corpus_collaborate(
     // stamped index — the post-create `grantable` stamp may not be written
     // yet during a fresh collaborative ingest.
     let recipe_privacy = engine
-        .load_recipe(req.corpus_id.as_str())
+        .recipe_sharing(req.corpus_id.as_str())
         .await
         .map_err(|e| {
             (
@@ -89,13 +89,13 @@ pub async fn corpus_collaborate(
                 }),
             )
         })?;
-    if !recipe_privacy.corpus.mesh_sharing {
+    if !recipe_privacy.mesh_sharing {
         // Local-only corpus. Require a live grant that authorizes exactly
         // the requested peer set. `grantable = false` (structural
         // KnowledgeView) can never pass — even a stray grant is refused.
         let now_ms = sovereign_time::unix_millis();
         let requested = req.allowed_peers.clone().unwrap_or_default();
-        let authorized = recipe_privacy.corpus.grantable
+        let authorized = recipe_privacy.grantable
             && state
                 .inner
                 .ingest
@@ -242,11 +242,7 @@ pub async fn corpus_collaborate(
     //      collaboration *coordinator* — return 422 with a clear explanation so
     //      the caller doesn't interpret "No source manifest" as a data-loss error
     //      or prompt the user to run `reconstruct-manifest` unnecessarily.
-    let has_hf_manifest = engine
-        .source_manifest(req.corpus_id.as_str())
-        .ok()
-        .flatten()
-        .is_some();
+    let has_hf_manifest = engine.has_source_manifest(req.corpus_id.as_str());
     let jsonl_article_count = if !has_hf_manifest {
         engine.count_jsonl_articles(req.corpus_id.as_str()).ok()
     } else {
@@ -391,7 +387,7 @@ pub async fn corpus_collaborate(
             //       the existing handoff blob (still in `mesh_store`
             //       via gossip) and re-fire the merge so the corpus
             //       actually finishes.
-            let canonical_exists = engine.corpus(req.corpus_id.as_str()).is_installed();
+            let canonical_exists = engine.corpus_is_installed(req.corpus_id.as_str());
 
             if !canonical_exists {
                 if let Some(existing) =
@@ -581,7 +577,7 @@ pub async fn corpus_collaborate(
         // `ephemeral` — peers wipe their partition working dir on teardown
         // instead of retaining it. Ordinary shared corpora stay non-ephemeral.
         handoff.allowed_peers = req.allowed_peers.clone();
-        handoff.ephemeral = !recipe_privacy.corpus.mesh_sharing;
+        handoff.ephemeral = !recipe_privacy.mesh_sharing;
 
         state
             .inner
@@ -1045,9 +1041,9 @@ pub async fn corpus_eligible_peers(
     })?;
 
     let grantable = engine
-        .load_recipe(req.corpus_id.as_str())
+        .recipe_sharing(req.corpus_id.as_str())
         .await
-        .map(|r| r.corpus.grantable)
+        .map(|r| r.grantable)
         .unwrap_or(false);
 
     let local_embed_model = state.local_embed_model().await.map_err(|e| {

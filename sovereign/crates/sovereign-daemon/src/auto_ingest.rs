@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+use corpus_index::ingest_port::daemon::IngestPort;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -530,7 +531,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             // nodes that only receive ingest_partition assignments from a
             // coordinator have neither — they must not attempt a local
             // install, and there is nothing to coordinate from here.
-            let has_local_source = engine.source_manifest(corpus_id).ok().flatten().is_some()
+            let has_local_source = engine.has_source_manifest(corpus_id)
                 || engine.count_jsonl_articles(corpus_id).is_ok();
 
             // Peer-only node: no source data means no collaborate role here.
@@ -714,7 +715,7 @@ async fn has_active_queue_handoff(state: &AppState, corpus_id: &str) -> bool {
 
 async fn publish_local_processed_shards(
     state: &AppState,
-    engine: &std::sync::Arc<corpus_engine::CorpusEngine>,
+    engine: &std::sync::Arc<dyn IngestPort>,
     in_progress: &[String],
 ) {
     for corpus_id in in_progress {

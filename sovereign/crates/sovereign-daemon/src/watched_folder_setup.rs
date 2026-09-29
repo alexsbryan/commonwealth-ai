@@ -38,7 +38,7 @@ use sovereign_tools::local_corpus::LocalCorpusManager;
 /// has no effect.
 const OBSIDIAN_DEFAULT_SWEEP_INTERVAL_SECS: u64 = 120;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 
 /// Handle to the spawned scheduler loop. The caller holds it for the
 /// daemon's lifetime; dropping it (or calling `cancel()`) signals the
@@ -63,7 +63,7 @@ impl WatchedSubsystem {
     /// structured tracing events itself, so the sink is purely an
     /// extension point for testing or a future progress drawer.
     pub async fn install(
-        engine: Arc<CorpusEngine>,
+        engine: Arc<dyn IngestPort>,
         manager: Arc<LocalCorpusManager>,
         max_concurrent_sweeps: usize,
         // The living-trigger runtime (a `DaemonWorkflowRuntime` in

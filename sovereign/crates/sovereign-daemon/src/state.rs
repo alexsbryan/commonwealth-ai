@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 
 use async_trait::async_trait;
 use commonwealth_core::mesh::Mesh;
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 use kernel_types::NodeId;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy_core::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
@@ -805,7 +805,7 @@ impl AppState {
     pub fn new_with_platform_and_engine(
         self_node_id: NodeId,
         mesh: Mesh,
-        corpus_engine: Option<Arc<CorpusEngine>>,
+        corpus_engine: Option<Arc<dyn IngestPort>>,
     ) -> Self {
         Self::new_with_platform_and_engine_and_gauge(self_node_id, mesh, corpus_engine, None)
     }
@@ -820,7 +820,7 @@ impl AppState {
     pub fn new_with_platform_and_engine_and_gauge(
         self_node_id: NodeId,
         mesh: Mesh,
-        corpus_engine: Option<Arc<CorpusEngine>>,
+        corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
     ) -> Self {
         Self::new_with_platform_and_engine_and_gauge_and_fabric(
@@ -842,7 +842,7 @@ impl AppState {
     pub fn new_with_platform_and_engine_and_gauge_and_fabric(
         self_node_id: NodeId,
         mesh: Mesh,
-        corpus_engine: Option<Arc<CorpusEngine>>,
+        corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         fabric_seed: fabric::FabricSeed,
     ) -> Self {
@@ -865,7 +865,7 @@ impl AppState {
     pub fn new_with_platform_and_engine_and_serving(
         self_node_id: NodeId,
         mesh: Mesh,
-        corpus_engine: Option<Arc<CorpusEngine>>,
+        corpus_engine: Option<Arc<dyn IngestPort>>,
         serving_seed: serving::ServingSeed,
     ) -> Self {
         Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
@@ -888,7 +888,7 @@ impl AppState {
     pub fn new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
         self_node_id: NodeId,
         mesh: Mesh,
-        corpus_engine: Option<Arc<CorpusEngine>>,
+        corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         fabric_seed: fabric::FabricSeed,
         serving_seed: serving::ServingSeed,
@@ -914,7 +914,7 @@ impl AppState {
     pub fn new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
         self_node_id: NodeId,
         mesh: Mesh,
-        corpus_engine: Option<Arc<CorpusEngine>>,
+        corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         fabric_seed: fabric::FabricSeed,
         serving_seed: serving::ServingSeed,
@@ -950,7 +950,7 @@ impl AppState {
         self_node_id: NodeId,
         fabric: Arc<fabric::FabricPart>,
         kv: Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
-        corpus_engine: Option<Arc<CorpusEngine>>,
+        corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         serving_seed: serving::ServingSeed,
         node_seed: node::NodeSeed,
@@ -974,7 +974,7 @@ impl AppState {
         self_node_id: NodeId,
         fabric: Arc<fabric::FabricPart>,
         store_seed: store::StoreSeed,
-        corpus_engine: Option<Arc<CorpusEngine>>,
+        corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         serving_seed: serving::ServingSeed,
         node_seed: node::NodeSeed,

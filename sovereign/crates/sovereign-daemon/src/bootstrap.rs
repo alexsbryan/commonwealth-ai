@@ -1787,7 +1787,7 @@ pub async fn setup_watched_folders(
             ));
             Some(
                 crate::watched_folder_setup::WatchedSubsystem::install(
-                    Arc::clone(&engine),
+                    engine.clone(),
                     Arc::new(manager),
                     config.watched_folders.max_concurrent_sweeps,
                     trigger_runtime,

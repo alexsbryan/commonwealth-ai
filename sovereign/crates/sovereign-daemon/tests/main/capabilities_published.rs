@@ -136,7 +136,7 @@ async fn gossip_round_publishes_live_hosted_corpora() {
     let state = AppState::new_with_seeds(
         self_id,
         mesh,
-        Some(Arc::clone(&engine)),
+        Some(engine.clone()),
         None,
         fabric::FabricSeed::default(),
         serving::ServingSeed::default(),

@@ -284,7 +284,7 @@ mod section_map {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex, OnceLock};
 
-    use corpus_engine::CorpusEngine;
+    use corpus_index::ingest_port::daemon::IngestPort;
 
     /// Per-corpus state. `Building` is a marker, not a value: it stops
     /// a second click from launching a second full-index scan while
@@ -318,7 +318,7 @@ mod section_map {
     /// off a one-time background build. Never blocks the caller on the
     /// scan — that is the whole policy.
     pub(super) fn resolve_or_build(
-        engine: &Arc<CorpusEngine>,
+        engine: &Arc<dyn IngestPort>,
         corpus_id: &str,
     ) -> Option<Arc<HashMap<String, u64>>> {
         let mut cache = lock_cache();
