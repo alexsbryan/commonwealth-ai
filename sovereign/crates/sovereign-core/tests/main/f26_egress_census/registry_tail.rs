@@ -278,7 +278,8 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("studio/crates/sovereign-recipe-author/src/http_tester.rs", Class::LocalDaemon, 1),
 
     // ---- commonwealth (the estate's own web app + shards; Mesh / LocalDaemon) ----
-    ("sovereign/crates/sovereign-grants/src/shard_manager.rs", Class::Mesh, 3),
+    // 3 -> 2 at 783cf0fcb: the uncalled `stream_index` went with its client.
+    ("sovereign/crates/sovereign-grants/src/shard_manager.rs", Class::Mesh, 2),
     // `http_embed_fn` moved DOWN to corpus-engine 2026-09-03 (enrichment-as-
     // plugin Step 5). What was left behind — the `/v1/models` reconstruction
     // probe, `embed_model_info` — had ZERO callers, so the file went with the

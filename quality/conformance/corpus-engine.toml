@@ -53,20 +53,6 @@ line = 33
 asserts = 10
 
 [[claim]]
-requirement = "GR-35"
-test = "corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::every_period_the_card_advertises_is_answerable_by_the_tool"
-file = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
-line = 325
-asserts = 2
-
-[[claim]]
-requirement = "GR-36"
-test = "corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::card_carries_no_percentage_and_no_tag_ratio"
-file = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
-line = 253
-asserts = 5
-
-[[claim]]
 requirement = "ST-41"
 test = "corpus-engine::main::reindex_stamps_freshness::reindexing_a_document_stamps_its_recency_at_the_shared_convergence_point"
 file = "corpus-engine/tests/main/reindex_stamps_freshness.rs"
@@ -91,19 +77,19 @@ asserts = 4
 requirement = "ST-8"
 test = "corpus-engine::engine::tests::open_index_allows_model_mismatch_with_warning"
 file = "corpus-engine/src/engine/mod.rs"
-line = 2734
+line = 2690
 asserts = 1
 
 [[claim]]
 requirement = "ST-8"
 test = "corpus-engine::engine::tests::open_index_fails_closed_on_a_geometry_mismatch"
 file = "corpus-engine/src/engine/mod.rs"
-line = 2768
+line = 2724
 asserts = 4
 
 [[claim]]
 requirement = "ST-9"
 test = "corpus-engine::sharding::tests::merge_shards_rejects_two_distinct_non_empty_embedding_models"
 file = "corpus-engine/src/sharding.rs"
-line = 1965
+line = 1923
 asserts = 1

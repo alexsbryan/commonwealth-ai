@@ -32,6 +32,20 @@ line = 356
 asserts = 2
 
 [[claim]]
+requirement = "GR-35"
+test = "corpus-engine-atlas-reader::sec_facts::coverage::tests::every_period_the_card_advertises_is_answerable_by_the_tool"
+file = "corpus-engine-atlas-reader/src/sec_facts/coverage.rs"
+line = 325
+asserts = 2
+
+[[claim]]
+requirement = "GR-36"
+test = "corpus-engine-atlas-reader::sec_facts::coverage::tests::card_carries_no_percentage_and_no_tag_ratio"
+file = "corpus-engine-atlas-reader/src/sec_facts/coverage.rs"
+line = 253
+asserts = 5
+
+[[claim]]
 requirement = "ST-25"
 test = "corpus-engine-atlas-reader::governance_view::tests::a_populated_join_is_present_and_silent"
 file = "corpus-engine-atlas-reader/src/governance_view/tests.rs"
