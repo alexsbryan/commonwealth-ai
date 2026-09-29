@@ -487,6 +487,44 @@ pub(crate) fn patch_content_recipe(
     }
 }
 
+/// The merge family's port (sovereign-grants): each method is the engine's
+/// own merge, finalize or projection, unchanged.
+#[async_trait]
+impl corpus_index::ingest_port::merge::PartitionMergePort for CorpusEngine {
+    async fn merge_partitions(
+        &self,
+        partitions: &[std::path::PathBuf],
+        output: &Path,
+    ) -> corpus_index::Result<corpus_index::types::IndexInfo> {
+        CorpusEngine::merge_partitions(self, partitions, output).await
+    }
+
+    async fn finalize_canonical(
+        &self,
+        canonical: &corpus_index::index::CorpusIndex,
+        corpus_id: &str,
+    ) -> corpus_index::Result<()> {
+        crate::sharding::finalize_canonical(canonical, corpus_id, None).await
+    }
+
+    async fn merge_partitions_into_canonical(
+        &self,
+        index_dir: &Path,
+        corpus_id: &str,
+        progress: Option<Arc<dyn Fn(crate::MergePhaseProgress) + Send + Sync>>,
+    ) -> corpus_index::Result<crate::PartitionMergeReport> {
+        crate::sharding::merge_partitions_into_canonical(index_dir, corpus_id, progress).await
+    }
+
+    async fn project_alignment(
+        &self,
+        canonical_path: &Path,
+        home: &Path,
+    ) -> corpus_index::Result<crate::alignment_projector::ProjectReport> {
+        crate::alignment_projector::project(canonical_path, home).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

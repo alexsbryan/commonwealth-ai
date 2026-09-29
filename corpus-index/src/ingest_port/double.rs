@@ -6,7 +6,7 @@
 //! corpus-engine's tests.
 //!
 //! One struct serves [`LocalCorpusPort`], [`CatalogIngestPort`],
-//! [`EnrichConfigPort`] and their shared supertraits, so `CorpusReadPort` has one set of handlers rather
+//! [`EnrichConfigPort`], [`PartitionMergePort`] and their shared supertraits, so `CorpusReadPort` has one set of handlers rather
 //! than one per port. A method a test can program has an `on_*`; every
 //! other method, and a programmable one left unprogrammed, never answers
 //! success-shaped (principle 6): a `Result` method returns an `Err` naming
@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 
 use super::enrich_config::{EnrichConfigPort, EnrichConfigSummary, WatchedEnrichConfig};
+use super::merge::{MergePhaseProgress, PartitionMergePort, PartitionMergeReport, ProjectReport};
 use super::{
     CatalogIngestPort, CatalogWork, CatalogWorkError, CatalogWorkIngested, CustomAcquirerFn,
     CustomExtractorFn, DocFetchFn, EmbeddingClusters, EnrichmentPassRoute, FieldModelError,
@@ -47,6 +48,10 @@ type RecipePathFn<T> = dyn Fn(PathBuf) -> BoxFuture<Result<T>> + Send + Sync;
 type WatchedUpdateFn = dyn Fn(WatchedUpdate, DocFetchFn) -> BoxFuture<Result<()>> + Send + Sync;
 type CorpusFn<T> = dyn Fn(&str) -> T + Send + Sync;
 type ReindexFn = dyn Fn(&str, &[String]) + Send + Sync;
+type MergePartitionsFn =
+    dyn Fn(Vec<PathBuf>, PathBuf) -> BoxFuture<Result<IndexInfo>> + Send + Sync;
+type MergeIntoCanonicalFn =
+    dyn Fn(PathBuf, String) -> BoxFuture<Result<PartitionMergeReport>> + Send + Sync;
 
 /// The ingest ports' double a svrn test programs.
 #[derive(Default)]
@@ -71,6 +76,9 @@ pub struct IngestPortDouble {
     enrich_configs: Option<Vec<(String, EnrichConfigSummary)>>,
     watched_config_root: Option<PathBuf>,
     watched_writes: Mutex<Vec<(String, String, PathBuf)>>,
+    merge_partitions: Option<Box<MergePartitionsFn>>,
+    finalize_canonical: Option<Box<CorpusFn<Result<()>>>>,
+    merge_into_canonical: Option<Box<MergeIntoCanonicalFn>>,
 }
 
 impl IngestPortDouble {
@@ -237,7 +245,77 @@ impl IngestPortDouble {
     /// Each [`EnrichConfigPort::write_watched`] so far: corpus id, pipeline
     /// id, source path.
     pub fn watched_writes(&self) -> Vec<(String, String, PathBuf)> {
-        self.watched_writes.lock().expect("watched writes lock").clone()
+        self.watched_writes
+            .lock()
+            .expect("watched writes lock")
+            .clone()
+    }
+
+    /// Program [`PartitionMergePort::merge_partitions`]; `f` gets the
+    /// partition dirs, in the order the caller passed them, and the output.
+    pub fn on_merge_partitions(
+        mut self,
+        f: impl Fn(Vec<PathBuf>, PathBuf) -> BoxFuture<Result<IndexInfo>> + Send + Sync + 'static,
+    ) -> Self {
+        self.merge_partitions = Some(Box::new(f));
+        self
+    }
+
+    /// Program [`PartitionMergePort::finalize_canonical`]; `f` gets the
+    /// corpus id.
+    pub fn on_finalize_canonical(
+        mut self,
+        f: impl Fn(&str) -> Result<()> + Send + Sync + 'static,
+    ) -> Self {
+        self.finalize_canonical = Some(Box::new(f));
+        self
+    }
+
+    /// Program [`PartitionMergePort::merge_partitions_into_canonical`]; `f`
+    /// gets the index dir and the corpus id (progress is not replayed).
+    pub fn on_merge_partitions_into_canonical(
+        mut self,
+        f: impl Fn(PathBuf, String) -> BoxFuture<Result<PartitionMergeReport>> + Send + Sync + 'static,
+    ) -> Self {
+        self.merge_into_canonical = Some(Box::new(f));
+        self
+    }
+}
+
+#[async_trait]
+impl PartitionMergePort for IngestPortDouble {
+    async fn merge_partitions(&self, partitions: &[PathBuf], output: &Path) -> Result<IndexInfo> {
+        self.record("merge_partitions");
+        match &self.merge_partitions {
+            Some(f) => f(partitions.to_vec(), output.to_path_buf()).await,
+            None => Err(refuse("merge_partitions")),
+        }
+    }
+
+    async fn finalize_canonical(&self, _canonical: &CorpusIndex, corpus_id: &str) -> Result<()> {
+        self.record("finalize_canonical");
+        match &self.finalize_canonical {
+            Some(f) => f(corpus_id),
+            None => Err(refuse("finalize_canonical")),
+        }
+    }
+
+    async fn merge_partitions_into_canonical(
+        &self,
+        index_dir: &Path,
+        corpus_id: &str,
+        _progress: Option<Arc<dyn Fn(MergePhaseProgress) + Send + Sync>>,
+    ) -> Result<PartitionMergeReport> {
+        self.record("merge_partitions_into_canonical");
+        match &self.merge_into_canonical {
+            Some(f) => f(index_dir.to_path_buf(), corpus_id.to_string()).await,
+            None => Err(refuse("merge_partitions_into_canonical")),
+        }
+    }
+
+    async fn project_alignment(&self, _canonical: &Path, _home: &Path) -> Result<ProjectReport> {
+        self.record("project_alignment");
+        Err(refuse("project_alignment"))
     }
 }
 

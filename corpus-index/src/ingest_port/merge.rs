@@ -6,7 +6,46 @@
 //! vocabulary goes with its port). corpus-engine re-exports each type at its
 //! historical path.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use async_trait::async_trait;
+
+use crate::index::CorpusIndex;
+use crate::source::CorpusReadPort;
+use crate::types::IndexInfo;
+use crate::Result;
+
+/// The merge family's port (sovereign-grants' `ShardManager` and
+/// `auto_recover`): the merge, the finalize and the alignment projection a
+/// collaborative ingest triggers. Ingest's engine implements it; every
+/// method is one engine call, so grants decides and ingest merges.
+#[async_trait]
+pub trait PartitionMergePort: CorpusReadPort {
+    /// Merge the partition index directories `partitions` into one index at
+    /// `output`. Writes the chunks and stops: the result is not yet
+    /// finalized.
+    async fn merge_partitions(&self, partitions: &[PathBuf], output: &Path) -> Result<IndexInfo>;
+
+    /// Finish a merged canonical so every surface can see it: build its
+    /// indexes, mark them built, mark the ingest complete, stamp the
+    /// fingerprint.
+    async fn finalize_canonical(&self, canonical: &CorpusIndex, corpus_id: &str) -> Result<()>;
+
+    /// Merge every `<corpus_id>-partition-*` under `index_dir` into the
+    /// finalized canonical `<index_dir>/<corpus_id>`; phases go to
+    /// `progress`.
+    async fn merge_partitions_into_canonical(
+        &self,
+        index_dir: &Path,
+        corpus_id: &str,
+        progress: Option<Arc<dyn Fn(MergePhaseProgress) + Send + Sync>>,
+    ) -> Result<PartitionMergeReport>;
+
+    /// Project the alignment rows of the canonical at `canonical_path` onto
+    /// `<home>/.claude/` (a no-op for a corpus that is not a mutable merge).
+    async fn project_alignment(&self, canonical_path: &Path, home: &Path) -> Result<ProjectReport>;
+}
 
 /// Phase signals emitted by `merge_partitions_into_canonical` for
 /// callers that want to render progress (CLI status lines, daemon
