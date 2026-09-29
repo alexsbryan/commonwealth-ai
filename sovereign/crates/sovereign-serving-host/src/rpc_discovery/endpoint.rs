@@ -30,7 +30,7 @@ pub(super) async fn select_rpc_endpoint(
         sel = bridge_rpc_endpoint(transport, dial).await;
     }
     if sel.is_none() {
-        sel = reachable_rpc_endpoint(&dial.addresses, rpc_port)
+        sel = reachable_rpc_endpoint(direct_candidates(dial), rpc_port)
             .await
             .map(|d| (d, "direct-ip".to_string()));
     }
@@ -41,6 +41,23 @@ pub(super) async fn select_rpc_endpoint(
         sel = Some((format!("{probe_host}:{rpc_port}"), "probe-host".to_string()));
     }
     sel
+}
+
+/// The IPs the direct probe tries: the member's overlay addresses, or, when
+/// the roster carries none, the iroh direct addresses it gossips — the same
+/// LAN and Tailscale IPs, which cw-rails' roster fills and its overlay field
+/// leaves empty (phase-b-36: the bigger-model flow keeps its direct path).
+pub(super) fn direct_candidates(dial: &PeerContact) -> &[SocketAddr] {
+    if dial.addresses.is_empty() {
+        tracing::debug!(
+            node = %dial.node_id,
+            direct = dial.iroh_direct_addrs.len(),
+            "no overlay address on the roster: probing the member's iroh direct addresses"
+        );
+        &dial.iroh_direct_addrs
+    } else {
+        &dial.addresses
+    }
 }
 
 /// The raw-TCP rpc-server needs the peer's DIRECT IP. The `/status` probe
@@ -80,4 +97,63 @@ pub(super) async fn reachable_rpc_endpoint(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kernel_types::NodeId;
+    use mesh_reach::{PeerEndpoint, TrafficClass};
+
+    /// A transport with no path to anyone: no bridge, so only the direct
+    /// probe can choose `direct-ip`.
+    #[derive(Debug)]
+    struct NoBridge;
+
+    #[async_trait::async_trait]
+    impl PeerTransport for NoBridge {
+        fn name(&self) -> &'static str {
+            "none"
+        }
+        async fn endpoints(&self, _: &PeerContact, _: TrafficClass) -> Vec<PeerEndpoint> {
+            Vec::new()
+        }
+    }
+
+    fn contact(addresses: Vec<SocketAddr>, iroh_direct_addrs: Vec<SocketAddr>) -> PeerContact {
+        PeerContact {
+            node_id: NodeId::from_u128(7),
+            addresses,
+            node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs,
+        }
+    }
+
+    /// phase-b-36: cw-rails' roster leaves the overlay addresses empty and
+    /// carries the member's iroh direct addresses, and the bigger-model flow
+    /// must still reach a worker on its LAN IP by raw TCP. A worker listening
+    /// on loopback, named only by an iroh direct address (its UDP port is
+    /// not the worker's), is chosen `direct-ip` at the advertised rpc port.
+    /// Failing input: read only `dial.addresses`, and nothing answers, so the
+    /// choice falls to the probe host.
+    #[tokio::test]
+    async fn a_member_with_no_overlay_address_is_dialled_at_its_iroh_direct_address() {
+        let worker = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let port = worker.local_addr().expect("addr").port();
+        let transport: Arc<dyn PeerTransport> = Arc::new(NoBridge);
+        let roster_only_iroh = contact(Vec::new(), vec!["127.0.0.1:4433".parse().unwrap()]);
+        assert_eq!(
+            select_rpc_endpoint(&transport, &roster_only_iroh, port, false, "probe").await,
+            Some((format!("127.0.0.1:{port}"), "direct-ip".to_string()))
+        );
+        // A member the overlay does name is probed there, as before.
+        let overlay = contact(vec!["127.0.0.1:9742".parse().unwrap()], Vec::new());
+        assert_eq!(
+            select_rpc_endpoint(&transport, &overlay, port, false, "probe").await,
+            Some((format!("127.0.0.1:{port}"), "direct-ip".to_string()))
+        );
+    }
 }
