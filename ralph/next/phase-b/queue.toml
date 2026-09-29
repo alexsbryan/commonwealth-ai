@@ -18,7 +18,9 @@ audit_every = 10
 # Census before code, enforced where rows are dispatched (phase-b-29, -30): a
 # work row without its finish item and its compile trial is refused by name,
 # and the supervisor's director writes the census before any code.
-dispatch_requires = ["- finish:", "- trial"]
+# "- finish" without the colon, like "- trial": a director annotating the bullet
+# ("- finish (rewritten by phase-b-N): ...") broke the literal match twice on 2026-09-28.
+dispatch_requires = ["- finish", "- trial"]
 # The frozen scope (phase-b-32): a row not listed waits on the operator and never
 # dispatches. Audits every 10 units, not 5 (phase-b-32).
 scope_file = "ralph/next/phase-b/scope.txt"
