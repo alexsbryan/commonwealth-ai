@@ -27,7 +27,7 @@ fn main() {
     // node, hosted serve or not: `assemble` below runs only when it is hosted.
     sovereign_serve::measurements_rail::spawn_reconcile(None);
     let hosted = sovereign_daemon::process::HostedServe::new(
-        sovereign_serve::DEFAULT_FILTER,
+        sovereign_serve::tracing_filter(),
         |data_dir, config_path| async move {
             let assembly = match sovereign_serve::assemble(&data_dir, &config_path).await {
                 Ok(a) => a,

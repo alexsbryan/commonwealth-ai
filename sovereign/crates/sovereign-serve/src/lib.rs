@@ -229,18 +229,47 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
     })
 }
 
-/// serve's log filter when `RUST_LOG` is unset: an allowlist of targets.
-/// `llama_cpp` is the target every ggml line rides (sovereign-inference
-/// llama.rs), so a failed GGUF load names its cause (the daemon's filter
-/// carries the same directive).
+/// serve's allowlisted targets, without `llama_cpp`, whose level
+/// [`tracing_filter`] decides; a host takes the whole filter from there.
 pub const DEFAULT_FILTER: &str = "serve=info,sovereign_serve=info,sovereign_compute=info,\
      sovereign_inference=info,sovereign_serving_host=info,host_kit=info,served_kind=info,\
-     engine_factory=info,serving_assembly=info,compute_child=info,llama_cpp=info";
+     engine_factory=info,serving_assembly=info,compute_child=info";
+
+/// serve's log filter when `RUST_LOG` is unset, and the one a distribution
+/// hosting serve unions with its own: an allowlist of targets.
+///
+/// Also carries `llama_cpp`, the LITERAL target every ggml/llama.cpp log line
+/// rides (`sovereign_inference::llama::ggml_log_cb`). Its absence silently
+/// defeated both the model-load-failure surface (a failed load reaching the
+/// operator as a bare "null result from llama cpp") and every
+/// `GGML_RPC_DEBUG=1` investigation (2026-07-27 distributed-inference crash
+/// hunt). [`llama_debug_requested`] cranks it to `debug`; otherwise `info`
+/// keeps routine load chatter out while WARN/ERROR still surface. The loader's
+/// knob, so the loader's filter (pb-serve-distributes; it was svrn's).
+pub fn tracing_filter() -> String {
+    tracing_filter_for(llama_debug_requested())
+}
+
+fn tracing_filter_for(llama_debug: bool) -> String {
+    let llama_lvl = if llama_debug { "debug" } else { "info" };
+    format!("{DEFAULT_FILTER},llama_cpp={llama_lvl}")
+}
+
+/// True when the operator has asked for verbose ggml/llama.cpp output, by
+/// either our own knob (`SOVEREIGN_LLAMA_LOGS=1`) or llama.cpp's own
+/// documented RPC knob (`GGML_RPC_DEBUG`). Honouring the latter here is what
+/// makes `GGML_RPC_DEBUG=1` behave the way its upstream documentation
+/// promises: the var alone gates `LOG_DBG` inside ggml-rpc.cpp, but those
+/// lines are `GGML_LOG_DEBUG` and would still die at our callback and again
+/// at this filter. One env var, all three gates.
+pub fn llama_debug_requested() -> bool {
+    sovereign_inference::llama_logs::LlamaLogs::from_env().is_verbose()
+}
 
 fn init_tracing() {
     use tracing_subscriber::{fmt, EnvFilter};
     let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER));
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(tracing_filter()));
     let _ = fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(filter)
@@ -698,16 +727,33 @@ async fn capabilities(State(adapter): AdapterState) -> Response {
 #[cfg(test)]
 mod tests {
     /// Without `llama_cpp` in the allowlist, the log route serve installs
-    /// before loading delivers nothing and a failed load is a bare error.
+    /// before loading delivers nothing and a failed load is a bare error. It
+    /// must be listed at BOTH postures, and reach `debug` when the operator
+    /// asks for verbose ggml output (moved with the knob from svrn's filter,
+    /// pb-serve-distributes).
     #[test]
     fn serve_filter_carries_llama_cpp_target() {
+        let quiet = super::tracing_filter_for(false);
+        let verbose = super::tracing_filter_for(true);
         assert!(
-            DEFAULT_FILTER.contains("llama_cpp=info"),
-            "llama_cpp must be allowlisted: {DEFAULT_FILTER}"
+            quiet.contains("llama_cpp=info"),
+            "llama_cpp must be allowlisted even when quiet: {quiet}"
+        );
+        assert!(
+            verbose.contains("llama_cpp=debug"),
+            "GGML_RPC_DEBUG / SOVEREIGN_LLAMA_LOGS=1 must lift llama_cpp to debug: {verbose}"
         );
         tracing_subscriber::EnvFilter::builder()
-            .parse(DEFAULT_FILTER)
+            .parse(&quiet)
             .expect("serve's default filter must parse");
+        let rendered = tracing_subscriber::EnvFilter::builder()
+            .parse(&verbose)
+            .expect("verbose serve filter must parse")
+            .to_string();
+        assert!(
+            rendered.contains("llama_cpp=debug"),
+            "llama_cpp=debug did not survive EnvFilter parsing: {rendered}"
+        );
     }
 
     use super::*;

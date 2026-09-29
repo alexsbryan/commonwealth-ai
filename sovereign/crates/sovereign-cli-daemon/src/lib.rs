@@ -126,7 +126,6 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
             let iroh_debug = std::env::var_os("SOVEREIGN_IROH_LOG").is_some();
             init_tracing(&sovereign_daemon::process::daemon_tracing_filter(
                 iroh_debug,
-                sovereign_daemon::process::llama_debug_requested(),
             ));
         }
         Launch::Verb { name, .. } if name == "setup" => {

@@ -1521,7 +1521,7 @@ items = ["process::run", "process::HostedServe", "process::HostedParts", "proces
 [[distribution.face]]
 package = "cmnwlth"
 krate = "sovereign-serve"
-items = ["bundles", "assemble", "child_launch", "DEFAULT_FILTER", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors"]
+items = ["bundles", "assemble", "child_launch", "tracing_filter", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors"]
 # Code's face (pb-code-daemon-exit; F2 (a), phase-b-30; phase-b-33): the one
 # composition `svrn code mcp` serves, mounted on svrn's `:9741/mcp`. In
 # code's library, sovereign-code: sovereign-cli-dev is `backstage` above, and

@@ -104,7 +104,7 @@ pub fn run(
     let iroh_debug = std::env::var_os("SOVEREIGN_IROH_LOG").is_some();
     // One process, two programs' allowlists: svrn's and, when it hosts serve,
     // serve's, each declared once by its program (pb-stock-binary).
-    let svrn_filter = daemon_tracing_filter(iroh_debug, llama_debug_requested());
+    let svrn_filter = daemon_tracing_filter(iroh_debug);
     match &hosted {
         Some(h) => init_tracing(&format!("{svrn_filter},{}", h.filter())),
         None => init_tracing(&svrn_filter),
@@ -234,22 +234,11 @@ pub const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
 /// there is no override ambiguity. A host `RUST_LOG` adds to it
 /// ([`compose_filter`]).
 ///
-/// Also carries `llama_cpp`, the LITERAL target every ggml/llama.cpp log line
-/// rides (`sovereign_inference::llama::ggml_log_cb`). Its absence was the
-/// fourth instance of the allowlist trap above, and the most expensive: it
-/// silently defeated BOTH the model-load-failure surface that
-/// `install_log_tracing_errors_only` exists to provide (a failed load reaching
-/// the operator as a bare "null result from llama cpp") AND every
-/// `GGML_RPC_DEBUG=1` investigation — the documented llama.cpp knob for
-/// debugging an RPC worker emitted `GGML_LOG_DEBUG` lines that this filter
-/// then dropped on the floor, so a worker-side probe returned a null result
-/// from a structurally dead instrument (2026-07-27 distributed-inference
-/// crash hunt). `llama_debug` cranks it to `debug` so `GGML_RPC_DEBUG` /
-/// `SOVEREIGN_LLAMA_LOGS=1` reach the log; otherwise `info` keeps routine
-/// load chatter out while WARN/ERROR still surface.
-pub fn daemon_tracing_filter(iroh_debug: bool, llama_debug: bool) -> String {
+/// `llama_cpp` is not here: it is the loader's target, and serve's filter
+/// carries it with its debug crank (`sovereign_serve::tracing_filter`), which
+/// a distribution hosting serve unions with this one (pb-serve-distributes).
+pub fn daemon_tracing_filter(iroh_debug: bool) -> String {
     let lvl = if iroh_debug { "debug" } else { "warn" };
-    let llama_lvl = if llama_debug { "debug" } else { "info" };
     // `mesh.peer_path`: the watchdog's per-poll peer-path census — one line
     // per peer per 20s saying what the endpoint holds and what membership
     // believes. Its own literal target, and it rides `iroh_debug` because
@@ -265,19 +254,8 @@ pub fn daemon_tracing_filter(iroh_debug: bool, llama_debug: bool) -> String {
     // blind for exactly this reason. P0.5 observability requirement.
     format!(
         "{DAEMON_TRACING_FILTER},commonwealth_transport=info,transport=info,\
-         mesh.peer_path={peer_path_lvl},iroh={lvl},iroh_relay={lvl},llama_cpp={llama_lvl}"
+         mesh.peer_path={peer_path_lvl},iroh={lvl},iroh_relay={lvl}"
     )
-}
-
-/// True when the operator has asked for verbose ggml/llama.cpp output, by
-/// either our own knob (`SOVEREIGN_LLAMA_LOGS=1`) or llama.cpp's own
-/// documented RPC knob (`GGML_RPC_DEBUG`). Honouring the latter here is what
-/// makes `GGML_RPC_DEBUG=1 sovereign daemon run` behave the way its upstream
-/// documentation promises: the var alone gates `LOG_DBG` inside ggml-rpc.cpp,
-/// but those lines are `GGML_LOG_DEBUG` and would still die at our callback
-/// and again at this filter. One env var, all three gates.
-pub fn llama_debug_requested() -> bool {
-    sovereign_inference::llama_logs::LlamaLogs::from_env().is_verbose()
 }
 
 #[cfg(test)]
@@ -416,15 +394,13 @@ mod tests {
     #[test]
     fn daemon_filter_iroh_toggle() {
         for iroh in [false, true] {
-            for llama in [false, true] {
-                let f = daemon_tracing_filter(iroh, llama);
-                tracing_subscriber::EnvFilter::builder()
-                    .parse(&f)
-                    .expect("daemon tracing filter (with iroh layer) must parse");
-            }
+            let f = daemon_tracing_filter(iroh);
+            tracing_subscriber::EnvFilter::builder()
+                .parse(&f)
+                .expect("daemon tracing filter (with iroh layer) must parse");
         }
-        let off = daemon_tracing_filter(false, false);
-        let on = daemon_tracing_filter(true, false);
+        let off = daemon_tracing_filter(false);
+        let on = daemon_tracing_filter(true);
         assert!(off.contains("commonwealth_transport=info"));
         assert!(off.contains("iroh=warn") && off.contains("iroh_relay=warn"));
         assert!(on.contains("iroh=debug") && on.contains("iroh_relay=debug"));
@@ -442,8 +418,8 @@ mod tests {
     /// purpose is diagnosing a reachability wedge.
     #[test]
     fn daemon_filter_carries_the_peer_path_census() {
-        let quiet = super::daemon_tracing_filter(false, false);
-        let verbose = super::daemon_tracing_filter(true, false);
+        let quiet = super::daemon_tracing_filter(false);
+        let verbose = super::daemon_tracing_filter(true);
         assert!(
             quiet.contains("mesh.peer_path=info"),
             "the target must be allowlisted even when quiet, or `peer path LOST` \
@@ -455,7 +431,7 @@ mod tests {
              records only transitions and not the ramp between them: {verbose}"
         );
         // Not spelling — ADMISSION. `contains` (and even a parse + `Display`
-        // round-trip, which is as far as the `llama_cpp` test above goes)
+        // round-trip, which is as far as serve's `llama_cpp` test goes)
         // asserts on a string this function itself produced; it cannot tell a
         // directive that admits an event from one that merely survives
         // parsing. So emit the real thing through a subscriber built from the
@@ -512,31 +488,6 @@ mod tests {
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
         }
-    }
-
-    /// The `llama_cpp` target must be in the filter at BOTH postures, and
-    /// must reach `debug` when the operator asks for verbose ggml output —
-    /// or a failed model load reaches the operator as a bare null result.
-    #[test]
-    fn daemon_filter_carries_llama_cpp_target() {
-        let quiet = daemon_tracing_filter(false, false);
-        let verbose = daemon_tracing_filter(false, true);
-        assert!(
-            quiet.contains("llama_cpp=info"),
-            "llama_cpp must be allowlisted even when quiet: {quiet}"
-        );
-        assert!(
-            verbose.contains("llama_cpp=debug"),
-            "GGML_RPC_DEBUG / SOVEREIGN_LLAMA_LOGS=1 must lift llama_cpp to debug: {verbose}"
-        );
-        let rendered = tracing_subscriber::EnvFilter::builder()
-            .parse(&verbose)
-            .expect("verbose daemon filter must parse")
-            .to_string();
-        assert!(
-            rendered.contains("llama_cpp=debug"),
-            "llama_cpp=debug did not survive EnvFilter parsing: {rendered}"
-        );
     }
 
     /// The verb reconstruction must round-trip the shapes the shim sends:

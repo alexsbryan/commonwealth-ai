@@ -105,7 +105,7 @@ type Compose = Box<
 /// [`ServingPath::decide`] says [`ServingPath::Hosted`]; that path builds no
 /// engine of its own, so the process never holds two.
 pub struct HostedServe {
-    filter: &'static str,
+    filter: String,
     compose: Compose,
 }
 
@@ -114,7 +114,7 @@ impl HostedServe {
     /// gets the data root and the config path svrn booted on, and assembles
     /// serve, binds its router on serve's port and returns its parts; an `Err`
     /// names why, and refuses boot.
-    pub fn new<F, Fut>(filter: &'static str, compose: F) -> Self
+    pub fn new<F, Fut>(filter: String, compose: F) -> Self
     where
         F: FnOnce(std::path::PathBuf, std::path::PathBuf) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = Result<HostedParts, String>> + Send + 'static,
@@ -128,8 +128,8 @@ impl HostedServe {
     }
 
     /// serve's tracing allowlist.
-    pub fn filter(&self) -> &'static str {
-        self.filter
+    pub fn filter(&self) -> &str {
+        &self.filter
     }
 
     /// Run the composition.
