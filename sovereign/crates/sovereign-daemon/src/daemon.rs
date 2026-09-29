@@ -282,7 +282,7 @@ pub struct EmbeddedDaemon {
     /// RPC-worker discovery's memory across ticks (sticky endpoints, the
     /// workers ever confirmed, the endpoint → member directory the warm
     /// orchestrator reads), serving-host's since pb-serve-distributes.
-    rpc_discovery: sovereign_serving_host::rpc_discovery::RpcWorkerDiscovery,
+    rpc_discovery: Arc<sovereign_serving_host::rpc_discovery::RpcWorkerDiscovery>,
 }
 
 /// What became of the API listeners the serve task binds.
@@ -458,21 +458,6 @@ pub struct CreateMeshResult {
     /// `Some` once the daemon is exposed (bound non-loopback); `None`
     /// for a loopback-only daemon (no remote access, no token).
     pub client_token: Option<String>,
-}
-
-/// The shared-model host decision, with the two inputs that produced it.
-///
-/// Returned whole rather than as a bare `bool` so a caller's log line and its
-/// branch cannot come from two different membership snapshots — the anchor
-/// count and the verdict are read once, together.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HostRole {
-    /// Whether THIS node runs the host role right now.
-    pub am_host: bool,
-    /// Eligible anchors the decision saw, self included when self is one.
-    pub eligible_anchors: usize,
-    /// Whether an operator pin was supplied — not whether it won.
-    pub pinned: bool,
 }
 
 /// One peer's live iroh connection path (H2 observability). `path` is
@@ -2483,50 +2468,6 @@ impl EmbeddedDaemon {
     /// role — see `commonwealth_core::partition::should_host`. Pure read of the
     /// gossiped membership, so every anchor computes the same set and converges
     /// on the same host without coordination.
-    /// Whether THIS node runs the shared-model HOST role right now, and what
-    /// the decision saw.
-    ///
-    /// ONE accessor for a question the daemon used to assemble itself from two
-    /// reads of this handle plus a `commonwealth_core::partition` call — which
-    /// is how a binary with no mesh configured still had to link the mesh
-    /// substrate to answer a question about itself (cw-lift 3b). `pin` is the
-    /// operator-designated host (`[shared_model] host_node_id`); it wins only
-    /// while it is actually an eligible anchor, so a pinned host that drops
-    /// out fails over to election instead of stranding the cluster.
-    ///
-    /// **A mesh of one is not a special case.** A roster of one elects its
-    /// only member, so a solo node hosts — the correct answer, reached by the
-    /// same code path a fleet takes. The one `false` that is not an election
-    /// result is an unresolved identity: we cannot be the elected leader of a
-    /// set we are not yet in.
-    pub async fn host_role(&self, pin: Option<NodeId>) -> HostRole {
-        let Some(me) = self.self_node_id().await else {
-            tracing::debug!(
-                pinned = pin.is_some(),
-                "shared-model: identity not resolved yet — not hosting"
-            );
-            return HostRole {
-                am_host: false,
-                eligible_anchors: 0,
-                pinned: pin.is_some(),
-            };
-        };
-        let anchors = self.eligible_anchors().await;
-        let am_host = commonwealth_core::partition::should_host(me, pin, &anchors);
-        tracing::debug!(
-            am_host,
-            me = %me.to_hex(),
-            eligible_anchors = anchors.len(),
-            pinned = pin.is_some(),
-            "shared-model: host-role decided"
-        );
-        HostRole {
-            am_host,
-            eligible_anchors: anchors.len(),
-            pinned: pin.is_some(),
-        }
-    }
-
     pub async fn eligible_anchors(&self) -> Vec<kernel_types::NodeId> {
         let app_state = {
             let state = self.state.read().await;
@@ -2540,24 +2481,10 @@ impl EmbeddedDaemon {
         app_state.inner.fabric.eligible_anchors().await
     }
 
-    /// One RPC-worker discovery tick over this daemon's roster and transport
-    /// (serving-host's `RpcWorkerDiscovery`, pb-serve-distributes). A stopped
-    /// daemon did not scan at all: `scanned: false` says the tick is evidence
-    /// about NOTHING, rather than silently reading as "every worker is gone".
-    pub async fn discover_rpc_workers(&self) -> crate::worker_eligibility::DiscoveryOutcome {
-        let app_state = {
-            let state = self.state.read().await;
-            match &*state {
-                DaemonState::Running { app_state, .. } => app_state.clone(),
-                DaemonState::Stopped => {
-                    return crate::worker_eligibility::DiscoveryOutcome::default()
-                }
-            }
-        };
-        let self_id = app_state.inner.fabric.identity.current();
-        self.rpc_discovery
-            .discover(app_state.membership(), &app_state.peer_transport(), self_id)
-            .await
+    /// RPC-worker discovery's memory, shared with the discovery loop through
+    /// its mesh ports (`bootstrap::mesh_ports`, pb-serve-distributes).
+    pub fn rpc_discovery(&self) -> Arc<sovereign_serving_host::rpc_discovery::RpcWorkerDiscovery> {
+        Arc::clone(&self.rpc_discovery)
     }
 
     /// Which mesh member owns `endpoint`, if discovery recorded one

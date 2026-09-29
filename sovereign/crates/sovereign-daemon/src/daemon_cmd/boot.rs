@@ -936,8 +936,8 @@ pub(super) async fn run_daemon(
     );
 
     if loads_here {
-        bootstrap::spawn_rpc_worker_discovery(
-            Arc::clone(&daemon),
+        sovereign_compute::distributed_discovery::spawn_rpc_worker_discovery(
+            bootstrap::mesh_ports(&daemon),
             engine_handle,
             distributed_primary_slot,
         );

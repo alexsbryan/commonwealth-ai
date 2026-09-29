@@ -31,6 +31,13 @@ sovereign-gliner = { workspace = true }
 # `RemoteNer`, the NER kind's client, re-exported at `ner::RemoteNer`
 # (pb-cli-llm moved it beside rerank; a shared leaf).
 oicp-client = { workspace = true }
+# The mesh RPC-worker discovery loop (pb-serve-distributes): discovery and
+# the eligibility gate it feeds, the mesh ports it reads (serving-host), the
+# shared-model host election (commonwealth-core `partition::should_host`),
+# node ids (kernel-types).
+sovereign-serving-host = { workspace = true }
+commonwealth-core = { workspace = true }
+kernel-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

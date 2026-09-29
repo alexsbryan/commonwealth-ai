@@ -12547,8 +12547,10 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
+ "commonwealth-core",
  "futures",
  "host-kit",
+ "kernel-types",
  "libc",
  "oicp-client",
  "reqwest 0.12.28",
@@ -12557,6 +12559,7 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-gliner",
  "sovereign-inference",
+ "sovereign-serving-host",
  "tempfile",
  "tokio",
  "tracing",

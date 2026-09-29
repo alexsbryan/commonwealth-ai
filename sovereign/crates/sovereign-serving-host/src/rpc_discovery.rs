@@ -540,3 +540,49 @@ pub struct RpcWorkerDiscovery {
     /// inert. `std::sync` lock — never held across an await.
     rpc_endpoint_nodes: std::sync::RwLock<std::collections::HashMap<String, NodeId>>,
 }
+
+/// The mesh as one tick finds it: the roster, the transport to dial
+/// through, and this node's id.
+pub struct MeshNow {
+    pub roster: Arc<dyn MembershipReader<Dial = PeerContact>>,
+    pub transport: Arc<dyn PeerTransport>,
+    pub self_id: NodeId,
+}
+
+/// Reads the mesh per tick: `None` while this node's mesh is not up (a
+/// daemon's comes up after its engine, and a transport can be swapped under
+/// a running one).
+pub type MeshReader =
+    Arc<dyn Fn() -> futures::future::BoxFuture<'static, Option<MeshNow>> + Send + Sync>;
+
+/// What the process that loads a distributed primary hands its discovery
+/// loop (pb-serve-distributes): how to read the mesh, where to publish the
+/// host role, and discovery's memory, which the warm orchestrator resolves
+/// endpoints through. Until the flip, the svrn daemon hands its own mesh
+/// (phase-b-33).
+#[derive(Clone)]
+pub struct MeshPorts {
+    pub mesh: MeshReader,
+    /// Told on every host-role transition (`/v1/mesh/status` reports it).
+    pub on_host_role: Arc<dyn Fn(bool) + Send + Sync>,
+    pub discovery: Arc<RpcWorkerDiscovery>,
+}
+
+impl MeshPorts {
+    /// One discovery tick. A mesh that is not up was not scanned at all:
+    /// `scanned: false` says the tick is evidence about NOTHING, rather than
+    /// silently reading as "every worker is gone".
+    pub async fn discover(&self) -> crate::worker_eligibility::DiscoveryOutcome {
+        match (self.mesh)().await {
+            Some(now) => {
+                self.discovery
+                    .discover(now.roster.as_ref(), &now.transport, now.self_id)
+                    .await
+            }
+            None => {
+                tracing::debug!("rpc-discovery: the mesh is not up — this tick scanned nothing");
+                crate::worker_eligibility::DiscoveryOutcome::default()
+            }
+        }
+    }
+}
