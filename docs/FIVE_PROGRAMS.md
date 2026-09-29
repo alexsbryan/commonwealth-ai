@@ -734,6 +734,15 @@ owns the program's data. The split:
       workflow_cmd, worker_pod_provider, alignment_cmd), **svrn 16,975**
       (chat_cmd, awareness_cmd, mcp_cmd, mcp_demo_server, govern_cmd, turn_sink,
       newsworthy, mobile, reading_diag, proxy, portfolio, router_*, lib/main).
+- [ ] Amended 2026-09-29 (phase-b-54): inner_chaos and voice_eval are svrn's,
+      not bench's. They give each thread a fresh svrn store and plant memories
+      into it, so they are svrn's white-box tests (ARCH principle 12), and they
+      name no `sovereign_eval` and nothing in the bench tree names them. The
+      same holds for eval_cmd's probe modes (routing classify,
+      `--prod-pipeline`, rerank config) and scaffolding_param's env arms: they
+      stay in cli-llm's remainder, spelling unchanged
+      (pb-bench-dials-whitebox). Only black-box turn lanes dial svrn, with
+      sampling pins on the wire (pb-bench-dials-wire).
 - [ ] Mechanically: each moving group becomes `[lib] + [[bin]]` (the
       `sovereign-agent-bench` precedent), and the DISPATCHER (sovereign-cli,
       `main.rs:877` and `:1204`) get a sibling exec module (`bench_bin::exec`,
