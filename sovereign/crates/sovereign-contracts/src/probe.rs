@@ -3,8 +3,9 @@
 //! bench to judge.
 //!
 //! `svrn __probe` runs ONE internal stage (the router's classifier,
-//! the production retrieval pipeline, or a raw index search) over plain
-//! question text and writes a [`ProbeEvidence`]. It carries no bank, no
+//! the production retrieval pipeline, a raw index search, or an
+//! attached-document turn) over plain question text and writes a
+//! [`ProbeEvidence`]. It carries no bank, no
 //! expectation and no score: svrn describes itself, bench owns banks and
 //! verdicts (ARCH principle 12; phase-b-58). Both sides name this one type, so
 //! the file between them has one shape (principle 8).
@@ -13,8 +14,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::traits::CorpusUnavailable;
 
+mod attached;
 mod resources;
 
+pub use attached::{
+    AttachedEvidence, AttachedProbe, AttachedSource, AttachedTurn, StateTransition,
+};
 pub use resources::{CallRecord, PhaseBucket, PhaseResources, ResourceReport};
 
 /// Which internal stage a probe runs. A closed set: the spelling on the
@@ -29,11 +34,19 @@ pub enum ProbeMode {
     /// A raw hybrid search of the named corpus's indexes, reranked as the
     /// runtime is configured, optionally widened by an atlas walk.
     Retrieve,
+    /// A full attached-document turn per question, through a minted
+    /// `DocumentSession`, over an asset the probe ingests or reuses.
+    Attached,
 }
 
 impl ProbeMode {
     /// Every mode, in command-line order.
-    pub const ALL: [ProbeMode; 3] = [ProbeMode::Routing, ProbeMode::Prod, ProbeMode::Retrieve];
+    pub const ALL: [ProbeMode; 4] = [
+        ProbeMode::Routing,
+        ProbeMode::Prod,
+        ProbeMode::Retrieve,
+        ProbeMode::Attached,
+    ];
 
     /// The command-line spelling.
     pub fn as_str(self) -> &'static str {
@@ -41,6 +54,7 @@ impl ProbeMode {
             ProbeMode::Routing => "routing",
             ProbeMode::Prod => "prod",
             ProbeMode::Retrieve => "retrieve",
+            ProbeMode::Attached => "attached",
         }
     }
 
@@ -69,6 +83,10 @@ pub struct ProbeRequest {
     /// Atlases to load (prod, retrieve); the retrieve probe walks them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub atlas: Option<AtlasProbe>,
+    /// Attached: the asset and how to build it. Required in that mode,
+    /// ignored in the others.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attached: Option<AttachedProbe>,
 }
 
 /// The atlases a probe loads, and how it filters and seeds them.
@@ -135,6 +153,8 @@ pub enum ProbeEvidence {
         /// One evidence pool per question.
         rows: Vec<PoolEvidence>,
     },
+    /// [`ProbeMode::Attached`].
+    Attached(Box<AttachedEvidence>),
 }
 
 impl ProbeEvidence {
@@ -144,6 +164,7 @@ impl ProbeEvidence {
             ProbeEvidence::Routing { .. } => ProbeMode::Routing,
             ProbeEvidence::Prod { .. } => ProbeMode::Prod,
             ProbeEvidence::Retrieve { .. } => ProbeMode::Retrieve,
+            ProbeEvidence::Attached(_) => ProbeMode::Attached,
         }
     }
 }
@@ -247,5 +268,79 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    /// The attached mode's request names its asset source by kind, and its
+    /// evidence carries the build and the turns under `mode: attached`.
+    #[test]
+    fn attached_request_and_evidence_round_trip() {
+        let req = ProbeRequest {
+            mode: ProbeMode::Attached,
+            questions: vec![ProbeQuestion {
+                id: "q1".into(),
+                question: "Who is Verloc?".into(),
+            }],
+            corpus: String::new(),
+            limit: 0,
+            isolate: false,
+            atlas: None,
+            attached: Some(AttachedProbe {
+                source: AttachedSource::Reuse {
+                    asset_id: "a1".into(),
+                },
+                enrich_model: None,
+                no_gliner: true,
+                rebuild_skeleton: false,
+                rebuild_raptor: true,
+                warm_atlas: false,
+                lane: "bench book-report".into(),
+            }),
+        };
+        let v = serde_json::to_value(&req).unwrap();
+        assert_eq!(v["mode"], "attached");
+        assert_eq!(v["attached"]["source"]["kind"], "reuse");
+        assert_eq!(v["attached"]["source"]["asset_id"], "a1");
+        let back: ProbeRequest = serde_json::from_value(v).unwrap();
+        assert!(back.attached.unwrap().rebuild_raptor);
+
+        let ev = ProbeEvidence::Attached(Box::new(AttachedEvidence {
+            assets: vec![],
+            asset: None,
+            chat_model: "m".into(),
+            enrich_model: "m".into(),
+            attach_ms: 7,
+            transitions: vec![StateTransition {
+                ms_since_attach: 7,
+                phase: "failed".into(),
+                detail: serde_json::json!({ "error": "boom" }),
+            }],
+            terminal_phase: "failed".into(),
+            chunks: vec![],
+            rows: vec![AttachedTurn {
+                id: "q1".into(),
+                error: Some("runtime: down".into()),
+                answer: String::new(),
+                metadata: None,
+                narration: vec![],
+                latency_ms: 3,
+                question_embedding: vec![0.5],
+            }],
+            resources: ResourceReport {
+                phases: vec![],
+                totals: PhaseBucket::default(),
+                models_seen: vec![],
+                calls: vec![],
+            },
+        }));
+        let v = serde_json::to_value(&ev).unwrap();
+        assert_eq!(v["mode"], "attached");
+        assert_eq!(v["transitions"][0]["detail"]["error"], "boom");
+        let back: ProbeEvidence = serde_json::from_value(v).unwrap();
+        assert_eq!(back.mode(), ProbeMode::Attached);
+        let ProbeEvidence::Attached(back) = back else {
+            unreachable!()
+        };
+        assert_eq!(back.rows[0].error.as_deref(), Some("runtime: down"));
+        assert_eq!(back.rows[0].question_embedding, vec![0.5]);
     }
 }

@@ -3,10 +3,12 @@
 //! internals for a bench to judge (phase-b-58; ARCH principle 12).
 //!
 //! Hidden from `svrn --help`: it is the wire between svrn and bench's
-//! `svrn eval run --routing-only | --prod-pipeline | <raw-index>`, which exec
-//! it and score what it writes. It runs ONE internal stage per question —
-//! the router's classifier, the production retrieval pipeline, or a raw index
-//! search — and writes a `sovereign_contracts::probe::ProbeEvidence`: raw
+//! `svrn eval run --routing-only | --prod-pipeline | <raw-index>` and the
+//! attached-document lanes (`bench book-report`, `bench chaos-monkey
+//! --attached`), which exec it and score what it writes. It runs ONE
+//! internal stage per question — the router's classifier, the production
+//! retrieval pipeline, a raw index search, or an attached-document turn —
+//! and writes a `sovereign_contracts::probe::ProbeEvidence`: raw
 //! classifications and pools, no bank, no expectation, no verdict. svrn's
 //! global flags (`--daemon`, `--data-dir`, models, `--temperature`) build the
 //! session exactly as they do for any other verb.
@@ -115,7 +117,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
 
-    let evidence = match probe(&session, &request).await {
+    let evidence = match probe(&session, &globals.daemon_base, &request).await {
         Ok(ev) => ev,
         Err(e) => {
             eprintln!("error: {e}");
@@ -133,7 +135,11 @@ pub async fn run(args: &[String]) -> i32 {
 }
 
 /// Run the request's stage over its questions.
-async fn probe(session: &ChatSession, request: &ProbeRequest) -> Result<ProbeEvidence, String> {
+async fn probe(
+    session: &ChatSession,
+    daemon_base: &str,
+    request: &ProbeRequest,
+) -> Result<ProbeEvidence, String> {
     // Atlases load in the two pool modes, and a bag that will not load fails
     // the run in both, as it did when these modes lived in `eval run`. Only
     // the retrieve probe walks them.
@@ -177,6 +183,22 @@ async fn probe(session: &ChatSession, request: &ProbeRequest) -> Result<ProbeEvi
             )
             .await?,
         },
+        ProbeMode::Attached => {
+            let spec = request
+                .attached
+                .as_ref()
+                .ok_or("an attached probe names its asset (`attached` is missing)")?;
+            ProbeEvidence::Attached(Box::new(
+                attached::probe(
+                    session,
+                    daemon_base,
+                    &request.corpus,
+                    &request.questions,
+                    spec,
+                )
+                .await?,
+            ))
+        }
     })
 }
 

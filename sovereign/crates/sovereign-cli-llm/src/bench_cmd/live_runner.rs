@@ -15,13 +15,11 @@
 //! objective single-letter classifications the chaos bench already gates on.
 
 use futures::StreamExt as _;
+use sovereign_contracts::probe::AttachedTurn;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
-    CompletionRequest, DocumentAsset, DocumentSession, Message, Role, Speed,
-};
+use sovereign_core::types::{CompletionRequest, Speed};
 
 use super::subject::SubjectDial;
-use crate::chat_cmd::bootstrap::ChatSession;
 
 /// What the live path produced for one probe.
 ///
@@ -158,44 +156,42 @@ pub async fn run_live_pinned(
     }
 }
 
-/// Drive the ATTACHED-DOCUMENT surface: fresh conversation + minted
-/// `DocumentSession` so the runtime routes through
-/// `handle_attached_doc_turn` (same dispatch the book-report bench
-/// uses). The judging evidence is the asset's own chunks,
-/// cosine-ranked PER QUESTION (top-12) — for a calibration bank the
-/// question is "does the document support this claim", not "did this
-/// turn's retrieval surface it" (the production gate owns the
-/// latter); ranking matters because the bench critic judges only the
-/// first 12 chunks it's given. Consequence: `provenance_trap`
-/// questions are not meaningful on this lane — a bank for this
-/// surface shouldn't include them. Best-effort like `run_live`:
-/// failures degrade to an empty answer / unranked head.
-pub async fn run_attached(
-    session: &ChatSession,
-    asset: &DocumentAsset,
-    question: &str,
+/// The ATTACHED-DOCUMENT surface's answer, from the turn svrn's attached
+/// probe ran (fresh conversation + minted `DocumentSession`, so the
+/// runtime routed through `handle_attached_doc_turn`; the same drive the
+/// book-report bench uses). The judging evidence is the asset's own
+/// chunks, cosine-ranked PER QUESTION (top-12) — for a calibration bank
+/// the question is "does the document support this claim", not "did this
+/// turn's retrieval surface it" (the production gate owns the latter);
+/// ranking matters because the bench critic judges only the first 12
+/// chunks it's given. Consequence: `provenance_trap` questions are not
+/// meaningful on this lane — a bank for this surface shouldn't include
+/// them. Best-effort like `run_live`: a failed turn degrades to an empty
+/// answer, a failed question embed to the unranked head.
+pub fn attached_answer(
+    row: &AttachedTurn,
     doc_chunks: &[sovereign_core::types::DocumentChunk],
 ) -> LiveAnswer {
     const JUDGE_CHUNKS: usize = 12;
     let doc_chunk_texts: Vec<String> = {
-        let ranked = match session.inference.embed(question).await {
-            Ok(q_emb) if !q_emb.is_empty() => {
-                let mut scored: Vec<(f32, &str)> = doc_chunks
-                    .iter()
-                    .filter_map(|c| {
-                        c.embedding
-                            .as_ref()
-                            .map(|e| (cosine_for_rank(&q_emb, e), c.content.as_str()))
-                    })
-                    .collect();
-                scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-                scored
-                    .into_iter()
-                    .take(JUDGE_CHUNKS)
-                    .map(|(_, c)| c.to_string())
-                    .collect::<Vec<_>>()
-            }
-            _ => Vec::new(),
+        let q_emb = &row.question_embedding;
+        let ranked = if q_emb.is_empty() {
+            Vec::new()
+        } else {
+            let mut scored: Vec<(f32, &str)> = doc_chunks
+                .iter()
+                .filter_map(|c| {
+                    c.embedding
+                        .as_ref()
+                        .map(|e| (cosine_for_rank(q_emb, e), c.content.as_str()))
+                })
+                .collect();
+            scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+            scored
+                .into_iter()
+                .take(JUDGE_CHUNKS)
+                .map(|(_, c)| c.to_string())
+                .collect::<Vec<_>>()
         };
         if ranked.is_empty() {
             doc_chunks
@@ -207,62 +203,10 @@ pub async fn run_attached(
             ranked
         }
     };
-    let conversation_id = uuid::Uuid::new_v4().to_string();
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    let user_msg = Message {
-        id: uuid::Uuid::new_v4().to_string(),
-        conversation_id: conversation_id.clone(),
-        role: Role::User,
-        content: question.to_string(),
-        created_at: now,
-        metadata: None,
-        version: 0,
-    };
-    if let Err(e) = session.store.save_message(&user_msg).await {
-        eprintln!("    [attached] save user msg failed: {e}");
-        return LiveAnswer {
-            visible: String::new(),
-            retrieved_chunk_texts: doc_chunk_texts.clone(),
-            gate_action: None,
-            draft: None,
-            metadata: serde_json::Value::Null,
-        };
-    }
-    let doc_session = DocumentSession {
-        id: uuid::Uuid::new_v4().to_string(),
-        conversation_id: conversation_id.clone(),
-        filename: asset.title.clone(),
-        source: asset.id.clone(),
-        word_count: 0,
-        chunk_count: 0,
-        created_at: now,
-        operation: String::new(),
-        map_prompt: String::new(),
-        reduce_prompt: String::new(),
-        last_output: None,
-        history: Vec::new(),
-    };
-    if let Err(e) = session.store.create_document_session(&doc_session).await {
-        eprintln!("    [attached] create document session failed: {e}");
-        return LiveAnswer {
-            visible: String::new(),
-            retrieved_chunk_texts: doc_chunk_texts.clone(),
-            gate_action: None,
-            draft: None,
-            metadata: serde_json::Value::Null,
-        };
-    }
-    let visible = match session
-        .runtime
-        .handle_turn(question, &conversation_id)
-        .await
-    {
-        Ok(resp) => strip_think(&resp.message.content),
-        Err(e) => {
-            eprintln!("    [attached] turn failed: {e}");
+    let visible = match &row.error {
+        None => strip_think(&row.answer),
+        Some(e) => {
+            eprintln!("    [attached] {e}");
             String::new()
         }
     };

@@ -322,12 +322,11 @@ mod eval_dispatch {
             "build_session_sealed(",
             "build_session_with_skills(",
             "set_var(\"SOVEREIGN_RERANK",
+            // An attached document is built and answered in svrn's probe
+            // (`svrn __probe`, attached mode; pb-bench-dials-docs).
+            "DocumentAssetManager::new(",
         ];
-        const OWED: [(&str, &str); 3] = [
-            ("bench_cmd/book_report.rs", "pb-bench-dials-docs"),
-            ("bench_cmd/chaos_monkey.rs", "pb-bench-dials-docs"),
-            ("bench_cmd/vault_report.rs", "pb-bench-dials-docs"),
-        ];
+        const OWED: [(&str, &str); 1] = [("bench_cmd/vault_report.rs", "pb-bench-dials-vault")];
         let dirs = [
             "bench_cmd",
             "eval_cmd",

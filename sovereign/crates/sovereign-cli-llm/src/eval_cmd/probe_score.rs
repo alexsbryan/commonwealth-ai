@@ -44,7 +44,7 @@ pub(super) fn probe_questions(bank: &EvalBank) -> Vec<ProbeQuestion> {
 /// Exec `svrn __probe` with this invocation's globals and `request`, and read
 /// back what it wrote. The child's stdout goes to our stderr, so `eval run
 /// --format json` keeps a clean stdout.
-pub(super) fn run_probe(
+pub(crate) fn run_probe(
     globals: &ChatGlobals,
     request: &ProbeRequest,
 ) -> Result<ProbeEvidence, String> {

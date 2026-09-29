@@ -35,6 +35,7 @@ pub mod bank;
 pub mod gate_meta;
 pub mod lost_corpora;
 mod probe_score;
+pub(crate) use probe_score::run_probe;
 pub mod report;
 pub mod retrieved_chunk;
 pub mod routed_intent;
@@ -801,6 +802,7 @@ async fn cmd_run(args: &[String]) -> i32 {
         limit: a.limit,
         isolate: a.isolate,
         atlas,
+        attached: None,
     };
 
     if a.routing_only {

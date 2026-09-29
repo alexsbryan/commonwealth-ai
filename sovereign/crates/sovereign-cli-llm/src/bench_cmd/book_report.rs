@@ -7,30 +7,27 @@
 //! attach it via `DocumentAssetManager::ingest()`, record per-phase
 //! state-transition timings. Question dispatch + scoring land in v1.1.
 //!
-//! Direct mode (default) builds a Runtime in the bench process using
-//! the same `chat_cmd::bootstrap::build_session` path the chat REPL
-//! uses — `SplitInferenceProvider` delegates inference to the running
-//! daemon over HTTP, but `DocumentAssetManager` runs in-process here
-//! so we measure the ingest pipeline without OICP wire overhead on
-//! the orchestration calls. The model itself is whichever primary the
-//! daemon was started with.
+//! Direct mode (default) execs svrn's attached probe (`svrn __probe`,
+//! pb-bench-dials-docs): svrn ingests or reuses the asset with
+//! `DocumentAssetManager`, meters the build, and answers each question
+//! through a minted `DocumentSession` turn. This process fetches the
+//! source, judges the answers and writes the report. The model itself
+//! is whichever primary the daemon was started with.
 
-use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
-use futures::FutureExt;
 use serde::{Deserialize, Serialize};
-use sovereign_core::runtime::Runtime;
-use sovereign_core::traits::{InferenceProvider, StateStore};
-use sovereign_core::types::{
-    CompletionRequest, DocumentAsset, DocumentSession, Message, NarrationEvent, Role, Speed,
+use sovereign_contracts::probe::{
+    AttachedEvidence, AttachedProbe, AttachedSource, AttachedTurn, ProbeEvidence, ProbeMode,
+    ProbeQuestion, ProbeRequest,
 };
-use sovereign_tools::document_asset::{DocumentAssetManager, IngestProgress};
+use sovereign_core::traits::InferenceProvider;
+use sovereign_core::types::{CompletionRequest, DocumentAsset, NarrationEvent, Speed};
 
-use crate::bench_cmd::resource_meter::{MeteredInference, ResourceLedger, ResourceReport};
-use crate::chat_cmd::bootstrap::{build_inference, build_session};
+use crate::bench_cmd::resource_meter::ResourceReport;
+use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::default_globals_for_voice_eval;
 pub(crate) use crate::probe_cmd::provider_for_model;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -58,8 +55,8 @@ const HELP: Help = Help {
         HelpSection::Flags(&[
             (
                 "--transport <direct|desktop-bridge>",
-                "Answer source. `direct` (default): in-process Runtime + daemon inference — the \
-                 historical bench path. `desktop-bridge`: dispatch every question through a REAL \
+                "Answer source. `direct` (default): svrn's attached probe (`svrn __probe`) ingests and \
+                 answers — the historical bench path. `desktop-bridge`: dispatch every question through a REAL \
                  running sovereign-desktop's command surface (upload_document_asset / ask_document \
                  over the :9745 command bridge) — same bank, same scorers, so a score delta vs a \
                  direct-transport baseline isolates the desktop layer.",
@@ -127,27 +124,14 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Notes(
-            "Requires a running daemon at the configured client port. The bench process builds its \
-             own Runtime that delegates inference to the daemon but runs DocumentAssetManager \
-             in-process — same code path the desktop's Attach mode uses, without the wire overhead \
-             on orchestration calls. Wire mode (--wire) is not yet implemented.",
+            "Requires a running daemon at the configured client port. svrn's hidden probe \
+             (`svrn __probe`) runs DocumentAssetManager and the attached-document turns — same \
+             code path the desktop's Attach mode uses — and this process judges what it writes. \
+             Wire mode (--wire) is not yet implemented.",
         ),
     ],
 };
-
-/// One recorded state transition. The bench renders these as a timeline
-/// in the report so the team can see "ingest got to PartiallyReady at
-/// 4.2s, BuildingSkeleton at 18s, Ready at 47s" at a glance.
-#[derive(Debug, Clone, Serialize)]
-pub struct StateTransition {
-    /// Milliseconds since `attach_at`.
-    pub ms_since_attach: u64,
-    /// One of: started, indexing, chunk_indexed, partially_ready,
-    /// skeleton_building, skeleton_chunk_processed, ready, failed.
-    pub phase: String,
-    /// Free-form per-phase detail (chunk counts, durations, etc.).
-    pub detail: serde_json::Value,
-}
+pub use sovereign_contracts::probe::StateTransition;
 
 /// Bench output. v1.1 adds Tier-1 question results + mechanical scores.
 /// LLM-judge for Tier 2-5 lands in v1.3.
@@ -366,7 +350,7 @@ struct Opts {
     /// RAPTOR pipeline shipped (~2-3 min vs ~20 min for full
     /// re-ingest).
     rebuild_raptor: bool,
-    /// Answer source: in-process Runtime (direct) or a live desktop's
+    /// Answer source: svrn's attached probe (direct) or a live desktop's
     /// command bridge.
     transport: Transport,
     bridge_url: String,
@@ -558,8 +542,11 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
     let source_text = std::fs::read_to_string(&source.local_path)
         .map_err(|e| format!("read source {}: {e}", source.local_path.display()))?;
 
-    // ── Bootstrap: build the Runtime that talks to the daemon ──
-    eprintln!("[2/3] bootstrap — connecting to daemon, building DocumentAssetManager");
+    // ── Bootstrap: the judge talks to the daemon from this process;
+    // svrn's probe builds the DocumentAssetManager and answers. ──
+    eprintln!(
+        "[2/3] bootstrap — connecting to daemon; `svrn __probe` builds the DocumentAssetManager"
+    );
     let globals = {
         let mut g = default_globals_for_voice_eval();
         // --answer-model swaps the session's chat model — the model that
@@ -569,71 +556,44 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         }
         g
     };
-    let session = build_session(&globals)
+    let (session_inference, _, embed_model) = build_inference(&globals)
         .await
         .map_err(|e| format!("daemon bootstrap failed: {e}. Is the daemon running?"))?;
-
-    // Enrichment provider: same as the session's unless --enrich-model
-    // splits it, then wrapped in the metering decorator so every
-    // skeleton/RAPTOR/embed call lands in the per-phase resource ledger.
-    let ledger = Arc::new(ResourceLedger::new());
-    let enrich_base: Arc<dyn InferenceProvider> = match &opts.enrich_model {
-        Some(model) => {
-            eprintln!("      enrich model override: {model}");
-            provider_for_model(&globals.daemon_base, model, &session.embed_model).await
-        }
-        None => Arc::clone(&session.inference),
-    };
-    let enrich_inference: Arc<dyn InferenceProvider> =
-        Arc::new(MeteredInference::new(enrich_base, Arc::clone(&ledger)));
-    // T2 entity pass: prefer serve's NER model over the LLM when serve
-    // holds one. Asked up front because the bench must measure the NER
-    // path, not race it — an extractor that isn't there yet would make a
-    // GLiNER run look like a no-op.
-    // `--no-gliner` forces the LLM path for A/B comparison.
-    let entity_extractor: Option<Arc<dyn sovereign_core::traits::EntityExtractor>> =
-        if opts.no_gliner {
-            eprintln!("      T2 entity pass: LLM (--no-gliner)");
-            None
-        } else {
-            match crate::serve_dial::serve_ner("bench book-report").await {
-                Ok(Some(g)) => {
-                    eprintln!("      T2 entity pass: GLiNER ({}, serve's)", g.model_id());
-                    Some(Arc::new(sovereign_contracts::ner::NerEntities(g))
-                        as Arc<dyn sovereign_core::traits::EntityExtractor>)
-                }
-                Ok(None) => {
-                    eprintln!("      T2 entity pass: LLM (serve has no NER model)");
-                    None
-                }
-                Err(e) => {
-                    eprintln!("      T2 entity pass: LLM ({e})");
-                    None
-                }
-            }
-        };
-    let mut manager =
-        DocumentAssetManager::new(Arc::clone(&enrich_inference), Arc::clone(&session.store));
-    if let Some(g) = entity_extractor {
-        manager = manager.with_entity_extractor(g);
-    }
-    let chat_model = Some(session.inference.model_id_for(Speed::Slow));
-    let enrich_model = Some(enrich_inference.model_id_for(Speed::Slow));
 
     // Tier 2-5 judge: pinned via --judge-model so quality scores stay
     // comparable when the answer/enrich model varies underneath.
     let judge_inference: Arc<dyn InferenceProvider> = match &opts.judge_model {
         Some(model) => {
             eprintln!("      judge model pinned: {model}");
-            provider_for_model(&globals.daemon_base, model, &session.embed_model).await
+            provider_for_model(&globals.daemon_base, model, &embed_model).await
         }
-        None => Arc::clone(&session.inference),
+        None => session_inference,
     };
     let judge_model = Some(judge_inference.model_id_for(Speed::Slow));
 
+    let attached = |source: AttachedSource| AttachedProbe {
+        source,
+        enrich_model: opts.enrich_model.clone(),
+        no_gliner: opts.no_gliner,
+        rebuild_skeleton: opts.rebuild_skeleton,
+        rebuild_raptor: opts.rebuild_raptor,
+        warm_atlas: false,
+        lane: "bench book-report".to_string(),
+    };
+    let request = |source: AttachedSource, questions: Vec<ProbeQuestion>| ProbeRequest {
+        mode: ProbeMode::Attached,
+        questions,
+        corpus: String::new(),
+        limit: 0,
+        isolate: false,
+        atlas: None,
+        attached: Some(attached(source)),
+    };
+
     // ── --list-assets exits here ───────────────────────────────
     if opts.list_assets {
-        list_assets(session.store.as_ref()).await?;
+        let ev = attached_evidence(&globals, &request(AttachedSource::List, Vec::new()))?;
+        list_assets(&ev.assets);
         // Return a stub report so the caller's pattern still works.
         // The CLI treats list-assets as a success diagnostic, not a
         // bench run, so persistence is skipped.
@@ -641,114 +601,11 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
             bench_id,
             started_at.timestamp() as u64,
             source,
-            chat_model,
+            Some(ev.chat_model),
         ));
     }
 
-    // ── Stage 3: attach OR reuse ───────────────────────────────
-    let (asset, attach_ms, transitions_vec, terminal_phase) = if let Some(reuse_id) =
-        &opts.reuse_asset
-    {
-        eprintln!("[3/3] reuse — looking up existing asset {reuse_id}");
-        match session.store.get_document_asset(reuse_id).await {
-            Ok(Some(found)) => {
-                eprintln!(
-                    "      found: title=\"{}\" state={:?}",
-                    found.title, found.state
-                );
-                let asset_to_use = if opts.rebuild_skeleton {
-                    eprintln!("      --rebuild-skeleton: re-running skeleton extraction (uses current build_skeleton speed)");
-                    ledger.set_phase("rebuild_skeleton");
-                    let rebuild_start = std::time::Instant::now();
-                    match manager.rebuild_skeleton(reuse_id).await {
-                        Ok(new_skeleton) => {
-                            let secs = rebuild_start.elapsed().as_secs();
-                            eprintln!(
-                                "      rebuild ok in {secs}s: {} entities, {} moments, {} actions",
-                                new_skeleton.main_entities.len(),
-                                new_skeleton.structural_moments.len(),
-                                new_skeleton.actions.len(),
-                            );
-                            // Reload the asset to pick up the new skeleton.
-                            match session.store.get_document_asset(reuse_id).await {
-                                Ok(Some(refreshed)) => refreshed,
-                                _ => found,
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!(
-                                "      rebuild_skeleton failed: {e}; using existing skeleton"
-                            );
-                            found
-                        }
-                    }
-                } else {
-                    found
-                };
-                if opts.rebuild_raptor {
-                    eprintln!("      --rebuild-raptor: populating RAPTOR atlas + motif index on the existing asset");
-                    ledger.set_phase("rebuild_raptor");
-                    let raptor_start = std::time::Instant::now();
-                    match manager.rebuild_raptor_atlas(reuse_id).await {
-                        Ok(()) => {
-                            let secs = raptor_start.elapsed().as_secs();
-                            let node_count = session
-                                .store
-                                .list_raptor_nodes(reuse_id)
-                                .await
-                                .map(|v| v.len())
-                                .unwrap_or(0);
-                            let motif_count = session
-                                .store
-                                .list_asset_motifs(reuse_id)
-                                .await
-                                .map(|v| v.iter().filter(|m| m.is_distinctive).count())
-                                .unwrap_or(0);
-                            eprintln!(
-                                    "      raptor rebuild ok in {secs}s: {node_count} nodes, {motif_count} distinctive motifs"
-                                );
-                        }
-                        Err(e) => {
-                            eprintln!("      rebuild_raptor_atlas failed: {e}; continuing without RAPTOR data");
-                        }
-                    }
-                }
-                (
-                    Some(asset_to_use),
-                    0u64,
-                    vec![StateTransition {
-                        ms_since_attach: 0,
-                        phase: "reused".to_string(),
-                        detail: serde_json::json!({ "asset_id": reuse_id }),
-                    }],
-                    "reused".to_string(),
-                )
-            }
-            Ok(None) => {
-                return Err(format!(
-                    "no asset with id {reuse_id} in the daemon's store. Try --list-assets."
-                ))
-            }
-            Err(e) => return Err(format!("lookup asset {reuse_id}: {e}")),
-        }
-    } else {
-        attach_and_stream(&manager, &source, &ledger).await
-    };
-    let asset_id = asset.as_ref().map(|a| a.id.clone()).unwrap_or_default();
-    // Any enrich-provider calls after ingest (none expected) get their
-    // own bucket rather than polluting the last pipeline phase.
-    ledger.set_phase("post_ingest");
-
-    let time_to_rag_ready_ms = transitions_vec
-        .iter()
-        .find(|t| t.phase == "rag_available")
-        .map(|t| t.ms_since_attach);
-    let time_to_ready_ms = transitions_vec
-        .iter()
-        .find(|t| t.phase == "ready")
-        .map(|t| t.ms_since_attach);
-
-    // ── Stage 4-5: parse bench.toml, fire questions, score ────
+    // ── Stage 3-5: attach OR reuse, fire questions (svrn), score ──
     let bench_cfg: BenchConfig =
         toml::from_str(BENCH_TOML).map_err(|e| format!("parse embedded bench.toml: {e}"))?;
     let filtered_questions = filter_questions(
@@ -761,17 +618,45 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         bench_cfg.questions.len(),
         filtered_questions.len(),
     );
+    let asset_source = match &opts.reuse_asset {
+        Some(id) => AttachedSource::Reuse {
+            asset_id: id.clone(),
+        },
+        None => AttachedSource::Ingest {
+            path: source.local_path.clone(),
+        },
+    };
+    let questions: Vec<ProbeQuestion> = filtered_questions
+        .iter()
+        .map(|q| ProbeQuestion {
+            id: q.id.clone(),
+            question: q.prompt.clone(),
+        })
+        .collect();
+    let ev = attached_evidence(&globals, &request(asset_source, questions))?;
+    let asset_id = ev.asset.as_ref().map(|a| a.id.clone()).unwrap_or_default();
+
+    let time_to_rag_ready_ms = ev
+        .transitions
+        .iter()
+        .find(|t| t.phase == "rag_available")
+        .map(|t| t.ms_since_attach);
+    let time_to_ready_ms = ev
+        .transitions
+        .iter()
+        .find(|t| t.phase == "ready")
+        .map(|t| t.ms_since_attach);
+
     let (questions, tier_summary) = run_questions(
-        Arc::clone(&session.runtime),
-        Arc::clone(&session.store),
         Arc::clone(&judge_inference),
-        asset.as_ref(),
+        ev.asset.is_some(),
+        &ev.rows,
         &source_text,
         &filtered_questions,
     )
     .await;
 
-    let resources = ledger.snapshot();
+    let resources = ev.resources;
     eprintln!();
     eprintln!("      enrichment resource ledger:");
     for line in resources.render_table().lines() {
@@ -791,14 +676,14 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         started_at_unix: started_at.timestamp() as u64,
         source,
         asset_id,
-        chat_model,
-        enrich_model,
+        chat_model: Some(ev.chat_model),
+        enrich_model: Some(ev.enrich_model),
         judge_model,
-        attach_ms,
+        attach_ms: ev.attach_ms,
         time_to_rag_ready_ms,
         time_to_ready_ms,
-        transitions: transitions_vec,
-        terminated_at_phase: terminal_phase,
+        transitions: ev.transitions,
+        terminated_at_phase: ev.terminal_phase,
         questions,
         tier_summary,
         resources: Some(resources),
@@ -808,9 +693,23 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
     Ok(report)
 }
 
+/// Exec svrn's attached probe and read back its evidence.
+fn attached_evidence(
+    globals: &crate::chat_cmd::config::ChatGlobals,
+    request: &ProbeRequest,
+) -> Result<AttachedEvidence, String> {
+    match crate::eval_cmd::run_probe(globals, request)? {
+        ProbeEvidence::Attached(ev) => Ok(*ev),
+        other => Err(format!(
+            "probe answered `{}`, not `attached`",
+            other.mode().as_str()
+        )),
+    }
+}
+
 /// `--transport desktop-bridge`: dispatch the bank through a REAL
-/// running sovereign-desktop's command surface instead of an
-/// in-process Runtime. Same bank, same `score_question`, same
+/// running sovereign-desktop's command surface instead of svrn's
+/// attached probe. Same bank, same `score_question`, same
 /// hallucination detector, same report shape — so a delta against a
 /// direct-transport baseline isolates the desktop layer (command glue,
 /// desktop Runtime wiring, embedded inference).
@@ -1228,10 +1127,9 @@ fn print_delta(report: &BookReportRun, baseline_path: &Path) -> Result<(), Strin
 ///   against the cached source text. Mismatches surface in the
 ///   report as `hallucinated_quotes`.
 async fn run_questions(
-    runtime: Arc<Runtime>,
-    store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
-    asset: Option<&DocumentAsset>,
+    has_asset: bool,
+    rows: &[AttachedTurn],
     source_text: &str,
     questions: &[Question],
 ) -> (Vec<QuestionResult>, Vec<TierSummary>) {
@@ -1253,40 +1151,42 @@ async fn run_questions(
     );
 
     for q in questions {
-        let asset_ref = match asset {
-            Some(a) => a,
-            None => {
-                results.push(skipped(q, "ingest_failed"));
-                continue;
-            }
-        };
+        if !has_asset {
+            results.push(skipped(q, "ingest_failed"));
+            continue;
+        }
 
         eprintln!("      [{}] T{} {}", q.id, q.tier, truncate(&q.prompt, 60));
-        let q_start = Instant::now();
-        // catch_unwind so a panic in the runtime doesn't lose every
-        // prior question's data. AssertUnwindSafe is justified because
-        // the future only holds Arc<dyn> refs + borrowed args — no
-        // shared interior mutability that could observe a
-        // half-poisoned state. On panic we record a dispatch_err and
-        // continue with the next question.
-        let dispatch_future =
-            AssertUnwindSafe(dispatch_question(&runtime, &store, asset_ref, &q.prompt));
-        let dispatch = match dispatch_future.catch_unwind().await {
-            Ok(r) => r,
-            Err(payload) => {
-                let msg = panic_payload_to_string(&payload);
-                eprintln!("        → panic during dispatch: {msg}");
-                Err(format!("panic: {msg}"))
-            }
+        // svrn answered every question in its probe; a row that is not
+        // there is refused, never scored against another question.
+        let dispatch = match rows.iter().find(|r| r.id == q.id) {
+            None => Err("the probe answered no row for this question".to_string()),
+            Some(r) => match &r.error {
+                Some(e) => Err(e.clone()),
+                None => Ok(r),
+            },
         };
-        let dispatch_ms = q_start.elapsed().as_millis() as u64;
+        let dispatch_ms = rows
+            .iter()
+            .find(|r| r.id == q.id)
+            .map_or(0, |r| r.latency_ms);
 
         let (response, operation, sources_count, narration_log, dispatch_err) = match dispatch {
             Ok(ans) => (
-                ans.text,
-                ans.operation,
-                ans.sources_count,
-                ans.narration_log,
+                ans.answer.clone(),
+                // Operation label = the unique set of tool IDs the runtime
+                // actually invoked, derived from narration. Empty => "Runtime"
+                // (handler did its own retrieval without going through a Tool).
+                derive_operation_label(&ans.narration),
+                // Retrieved-chunks count is stamped on assistant-message
+                // metadata for KQ/SQ/DQ paths. Absent => 0.
+                ans.metadata
+                    .as_ref()
+                    .and_then(|m| m.get("retrieved_chunks"))
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0),
+                ans.narration.clone(),
                 None,
             ),
             Err(e) => {
@@ -1583,131 +1483,6 @@ fn parse_line_range(spec: &str) -> (usize, usize) {
     }
 }
 
-/// One successful question dispatch. `operation` summarises the
-/// tools the runtime invoked during the turn (e.g.
-/// `attached_doc_search`, `attached_doc_search, knowledge_lookup`),
-/// or `Runtime` when no tools fired and the answer came from the
-/// retrieval-shaped synthesis path. `narration_log` carries the
-/// per-phase events the runtime emitted — the load-bearing
-/// diagnostic for whether the model chose to consult the attached
-/// document.
-struct DispatchedAnswer {
-    text: String,
-    operation: String,
-    sources_count: usize,
-    narration_log: Vec<NarrationEvent>,
-}
-
-/// Dispatch a single question through the runtime's normal turn
-/// pipeline. Fresh `conversation_id` per question so context doesn't
-/// leak between bench items; a fresh `DocumentSession` pinned to that
-/// conversation tells the runtime an attachment is in scope so it
-/// dispatches through `handle_attached_doc_turn` instead of the
-/// general-purpose intent handlers.
-///
-/// **What this used to be.** Before 2026-05-20 this function mirrored
-/// the desktop's pre-tool-era `ask_document` flow: call
-/// `DocumentAssetManager::route()` first, fall back to
-/// `runtime.handle_turn` only on `OffTopic`, otherwise dispatch
-/// through `manager.ask()`. The book-report bench exposed that the
-/// parallel router mis-routed factual questions about the attached
-/// novel as `OffTopic` — sending them to the general corpus when
-/// the answer was in the attached text — and that even when it did
-/// route correctly, `manager.ask` ran a parallel one-shot map-reduce
-/// with no gap-check, no iterative retrieval, and no narration. See
-/// sovereign decision `7693f16b`.
-///
-/// **What it is now.** A thin shim that creates a `DocumentSession`
-/// pointing at the Ready asset, then drives the runtime's turn
-/// pipeline. `Runtime::handle_turn` detects the session and routes
-/// through `handle_attached_doc_turn` — a `ReasonWithTools`-style loop
-/// over `[attached_doc_search, knowledge_lookup, web_fetch]` where the
-/// model picks tools.
-async fn dispatch_question(
-    runtime: &Arc<Runtime>,
-    store: &Arc<dyn StateStore>,
-    asset: &DocumentAsset,
-    prompt: &str,
-) -> Result<DispatchedAnswer, String> {
-    let conversation_id = uuid::Uuid::new_v4().to_string();
-    let user_msg = Message {
-        id: uuid::Uuid::new_v4().to_string(),
-        conversation_id: conversation_id.clone(),
-        role: Role::User,
-        content: prompt.to_string(),
-        created_at: chrono::Utc::now().timestamp(),
-        metadata: None,
-        version: 0,
-    };
-    store
-        .save_message(&user_msg)
-        .await
-        .map_err(|e| format!("save user msg: {e}"))?;
-
-    // Mint a DocumentSession so the runtime detects the attachment
-    // and routes through `handle_attached_doc_turn`. The session is
-    // intentionally minimal — `operation` / `map_prompt` /
-    // `reduce_prompt` are the legacy map-reduce path's fields and
-    // aren't consulted by the new tool-loop handler. We leave them as
-    // empty strings rather than inventing values.
-    let session = DocumentSession {
-        id: uuid::Uuid::new_v4().to_string(),
-        conversation_id: conversation_id.clone(),
-        filename: asset.title.clone(),
-        source: asset.id.clone(),
-        word_count: 0,
-        chunk_count: 0,
-        created_at: chrono::Utc::now().timestamp(),
-        operation: String::new(),
-        map_prompt: String::new(),
-        reduce_prompt: String::new(),
-        last_output: None,
-        history: Vec::new(),
-    };
-    store
-        .create_document_session(&session)
-        .await
-        .map_err(|e| format!("create document session: {e}"))?;
-
-    let response = runtime
-        .handle_turn(prompt, &conversation_id)
-        .await
-        .map_err(|e| format!("runtime: {e}"))?;
-
-    // Retrieved-chunks count is stamped on assistant-message metadata
-    // for KQ/SQ/DQ paths. Absent => 0.
-    let sources_count = response
-        .message
-        .metadata
-        .as_ref()
-        .and_then(|m| m.get("retrieved_chunks"))
-        .and_then(|v| v.as_array())
-        .map(|a| a.len())
-        .unwrap_or(0);
-
-    // Capture the runtime's narration for this question. The
-    // SessionStore retains the latest QuerySession per conversation
-    // for 30s after completion, so this read is race-free as long
-    // as the bench doesn't churn through questions faster than that.
-    let narration_log = runtime
-        .sessions
-        .latest_for_conversation(&conversation_id)
-        .map(|s| s.narration.clone())
-        .unwrap_or_default();
-
-    // Operation label = the unique set of tool IDs the runtime
-    // actually invoked, derived from narration. Empty => "Runtime"
-    // (handler did its own retrieval without going through a Tool).
-    let operation = derive_operation_label(&narration_log);
-
-    Ok(DispatchedAnswer {
-        text: response.message.content,
-        operation,
-        sources_count,
-        narration_log,
-    })
-}
-
 /// Pull tool IDs out of `tool_invocation_start` narration phases and
 /// return a stable, comma-joined summary. This is what the operator
 /// reads at-a-glance to know whether the model picked
@@ -1862,21 +1637,6 @@ fn summarize_tiers(results: &[QuestionResult]) -> Vec<TierSummary> {
         .collect()
 }
 
-/// Best-effort string view of a panic payload — `panic!("foo")` boxes
-/// a `&'static str`; `panic!("{}", x)` boxes a `String`; anything else
-/// falls back to `<non-string panic>`. Used to surface upstream panics
-/// in the bench's per-question error column without losing the rest of
-/// the run.
-fn panic_payload_to_string(payload: &Box<dyn std::any::Any + Send>) -> String {
-    if let Some(s) = payload.downcast_ref::<&'static str>() {
-        return (*s).to_string();
-    }
-    if let Some(s) = payload.downcast_ref::<String>() {
-        return s.clone();
-    }
-    "<non-string panic>".to_string()
-}
-
 fn truncate(s: &str, max: usize) -> String {
     let trimmed = s.trim();
     if trimmed.chars().count() <= max {
@@ -1887,88 +1647,26 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
-/// Drive `DocumentAssetManager::ingest()` end-to-end while recording
-/// every `IngestProgress` transition with elapsed-ms timestamps.
-/// Returns the completed asset (or `None` on ingest failure), the
-/// total attach duration, the transition log, and the terminal phase
-/// label.
-async fn attach_and_stream(
-    manager: &DocumentAssetManager,
-    source: &SourceInfo,
-    ledger: &Arc<ResourceLedger>,
-) -> (Option<DocumentAsset>, u64, Vec<StateTransition>, String) {
-    let attach_at = Instant::now();
-    let transitions: Arc<Mutex<Vec<StateTransition>>> = Arc::new(Mutex::new(Vec::new()));
-    let callback_transitions = Arc::clone(&transitions);
-    let callback_attach_at = attach_at;
-    let callback_ledger = Arc::clone(ledger);
-
-    eprintln!("[3/3] attach — DocumentAssetManager::ingest()");
-    eprintln!("      transitions stream below; rag_available unblocks Tier-1+2 questions");
-    ledger.set_phase("attach_ingest");
-
-    let ingest_result = manager
-        .ingest(source.local_path.as_path(), move |progress| {
-            let elapsed = callback_attach_at.elapsed().as_millis() as u64;
-            let (phase, detail) = render_progress(&progress);
-            // The pipeline is sequential; the live progress phase is
-            // the correct attribution bucket for resource accounting.
-            callback_ledger.set_phase(phase);
-            eprintln!("      t+{:>6}ms  {}", elapsed, phase);
-            if let Ok(mut log) = callback_transitions.lock() {
-                log.push(StateTransition {
-                    ms_since_attach: elapsed,
-                    phase: phase.to_string(),
-                    detail,
-                });
-            }
-        })
-        .await;
-
-    let attach_ms = attach_at.elapsed().as_millis() as u64;
-    let (asset, terminal_phase) = match ingest_result {
-        Ok(a) => (Some(a), "ready".to_string()),
-        Err(e) => {
-            eprintln!("      ingest failed after t+{attach_ms}ms: {e}");
-            if let Ok(mut log) = transitions.lock() {
-                log.push(StateTransition {
-                    ms_since_attach: attach_ms,
-                    phase: "failed".to_string(),
-                    detail: serde_json::json!({ "error": e.to_string() }),
-                });
-            }
-            (None, "failed".to_string())
-        }
-    };
-    let transitions_vec = transitions.lock().map(|g| g.clone()).unwrap_or_default();
-    (asset, attach_ms, transitions_vec, terminal_phase)
-}
-
 /// Print every DocumentAsset in the daemon's store. Used by
 /// `--list-assets` so the operator can pick an id to pass to
 /// `--reuse-asset`. Output is intentionally terse — id + state + title
 /// is enough to identify a candidate.
-async fn list_assets(store: &dyn StateStore) -> Result<(), String> {
-    let assets = store
-        .list_document_assets()
-        .await
-        .map_err(|e| format!("list_document_assets: {e}"))?;
+fn list_assets(assets: &[DocumentAsset]) {
     if assets.is_empty() {
         eprintln!("(no document assets in the daemon's store)");
-        return Ok(());
+        return;
     }
     // The listing IS what `--list-assets` was asked for, so it goes to
     // stdout and stays greppable/redirectable; only the follow-up hint
     // below is narration.
     println!("{:<38}  {:<24}  state", "asset_id", "title");
     println!("{}", "─".repeat(80));
-    for a in &assets {
+    for a in assets {
         let title = truncate(&a.title, 22);
         println!("{:<38}  {:<24}  {:?}", a.id, title, a.state);
     }
     eprintln!();
     eprintln!("Reuse one with:  svrn bench book-report --reuse-asset <asset_id>");
-    Ok(())
 }
 
 /// Stub report returned when `--list-assets` short-circuits. No
@@ -2008,58 +1706,6 @@ fn filter_questions(all: &[Question], tier: Option<u8>, ids: Option<&[String]>) 
         .filter(|q| ids.is_none_or(|ids| ids.iter().any(|target| target == &q.id)))
         .cloned()
         .collect()
-}
-
-/// Map an `IngestProgress` event onto the bench's phase taxonomy. We
-/// keep our own labels rather than re-exporting the tool's enum so the
-/// JSON schema is stable across `sovereign-tools` refactors. The
-/// `rag_available` label is what the bench measures as
-/// `time_to_rag_ready_ms` — Tier 1+2 questions are answerable from
-/// here on, even though the skeleton may still be building.
-fn render_progress(p: &IngestProgress) -> (&'static str, serde_json::Value) {
-    match p {
-        IngestProgress::Started {
-            word_count,
-            chunk_count,
-            filename,
-            ..
-        } => (
-            "started",
-            serde_json::json!({
-                "word_count": word_count,
-                "chunk_count": chunk_count,
-                "filename": filename,
-            }),
-        ),
-        IngestProgress::Indexing { done, total } => (
-            "indexing",
-            serde_json::json!({ "done": done, "total": total }),
-        ),
-        IngestProgress::RagAvailable { asset_id } => {
-            ("rag_available", serde_json::json!({ "asset_id": asset_id }))
-        }
-        IngestProgress::BuildingSkeleton { done, total } => (
-            "building_skeleton",
-            serde_json::json!({ "done": done, "total": total }),
-        ),
-        IngestProgress::MultiHopReady { asset_id } => (
-            "multi_hop_ready",
-            serde_json::json!({ "asset_id": asset_id }),
-        ),
-        IngestProgress::Ready {
-            asset_id,
-            main_entities,
-            structural_moments,
-        } => (
-            "ready",
-            serde_json::json!({
-                "asset_id": asset_id,
-                "main_entities": main_entities,
-                "structural_moments": structural_moments,
-            }),
-        ),
-        IngestProgress::Failed { reason } => ("failed", serde_json::json!({ "reason": reason })),
-    }
 }
 
 async fn fetch_source(cache_dir: &Path, force_refresh: bool) -> Result<SourceInfo, String> {

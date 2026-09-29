@@ -20,6 +20,10 @@
 
 use std::path::{Path, PathBuf};
 
+use sovereign_contracts::probe::{
+    AttachedEvidence, AttachedProbe, AttachedSource, ProbeEvidence, ProbeMode, ProbeQuestion,
+    ProbeRequest,
+};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Intent;
 use sovereign_eval::chaos_monkey::{
@@ -51,7 +55,6 @@ use crate::bench_cmd::live_runner::{
     extraction_scorer_enabled, judge_correctness, run_live_pinned, run_naked, verify_grounding,
 };
 use crate::bench_cmd::subject::SubjectDial;
-use crate::chat_cmd::bootstrap::build_session_sealed;
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -158,9 +161,10 @@ struct Args {
     /// judge still runs against the daemon in both modes.
     bridge: bool,
     bridge_url: String,
-    /// Attached-document surface: ingest this file as a DocumentAsset
-    /// (or reuse one via --attached-asset) and dispatch every question
-    /// through a minted DocumentSession → `handle_attached_doc_turn`.
+    /// Attached-document surface: svrn's probe ingests this file as a
+    /// DocumentAsset (or reuses one via --attached-asset) and dispatches
+    /// every question through a minted DocumentSession →
+    /// `handle_attached_doc_turn`.
     /// Judging evidence = the asset's full chunk set (truth-vs-document;
     /// `provenance_trap` questions are not meaningful on this lane).
     /// Direct transport only.
@@ -423,9 +427,10 @@ async fn run(rest: &[String]) -> i32 {
 
     // Direct transport asks svrn over its turn route; bridge transport
     // dispatches through a live desktop instead (the judge below talks to
-    // the daemon directly). The attached-document lane alone still builds a
-    // sealed in-process session: OWED to pb-bench-dials-docs.
-    let (session, subject, bridge_client) = if args.bridge {
+    // the daemon directly). The attached-document lane execs svrn's probe
+    // below, once the question list is final.
+    let attached_lane = args.attached.is_some() || args.attached_asset.is_some();
+    let (subject, bridge_client) = if args.bridge {
         let client = super::desktop_bridge::BridgeClient::new(&args.bridge_url);
         if let Err(e) = client.healthz().await {
             eprintln!("error: {e}");
@@ -441,15 +446,9 @@ async fn run(rest: &[String]) -> i32 {
             return 1;
         }
         eprintln!("[chaos] transport=desktop-bridge ({})", args.bridge_url);
-        (None, None, Some(client))
-    } else if args.attached.is_some() || args.attached_asset.is_some() {
-        match build_session_sealed(&globals, &corpus).await {
-            Ok(s) => (Some(s), None, None),
-            Err(e) => {
-                eprintln!("error: could not build chat session: {e}");
-                return 1;
-            }
-        }
+        (None, Some(client))
+    } else if attached_lane {
+        (None, None)
     } else {
         if args.warm_atlas {
             eprintln!(
@@ -460,7 +459,7 @@ async fn run(rest: &[String]) -> i32 {
             return 2;
         }
         match SubjectDial::dial(&globals).await {
-            Ok(s) => (None, Some(s), None),
+            Ok(s) => (Some(s), None),
             Err(e) => {
                 eprintln!("error: {e}");
                 return 1;
@@ -468,133 +467,15 @@ async fn run(rest: &[String]) -> i32 {
         }
     };
 
-    // Atlas grounding (opt-in via --warm-atlas): the bench seals to ONE
-    // corpus, so warm THAT corpus's enrichment atlas into the in-process
-    // manager (the same Arc the Runtime queries) before any turn. Without
-    // it the manager is cache-only (build_session) and a freshly-enriched
-    // corpus with no embed cache contributes 0 atlas contexts — the run
-    // would silently measure base chunk retrieval, masking any atlas
-    // difference. The filter (min-description-chars, include-claims) is
-    // env-configured; we echo it so the measurement stays glassbox.
-    if args.warm_atlas {
-        if let Some(s) = session.as_ref() {
-            let f = corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter::default();
-            let n = s.atlas_mgr.warm_one(&corpus).await;
-            eprintln!(
-                "[chaos] atlas-warm: {n} context entr{} loaded for `{corpus}` (min_description_chars={}, include_claims={})",
-                if n == 1 { "y" } else { "ies" },
-                f.min_description_chars,
-                f.include_claims,
-            );
-            if n == 0 {
-                eprintln!(
-                    "[chaos] WARN: atlas warm loaded 0 entries — this run measures BASE retrieval, NOT the atlas. \
-                     Relax the filter (SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS=0 SOVEREIGN_ATLAS_INCLUDE_CLAIMS=1) and confirm an atlas exists for `{corpus}`."
-                );
-            }
-        } else {
-            eprintln!(
-                "[chaos] --warm-atlas ignored: no in-process session (naked or desktop-bridge transport)"
-            );
-        }
+    // Atlas grounding (opt-in via --warm-atlas) warms the session that
+    // answers, so it rides into svrn's attached probe; the desktop bridge
+    // has no session to warm.
+    if args.warm_atlas && !attached_lane {
+        eprintln!(
+            "[chaos] --warm-atlas ignored: no in-process session (naked or desktop-bridge transport)"
+        );
     }
 
-    // Attached-document lane: resolve (or ingest) the asset once; every
-    // question dispatches through a minted DocumentSession against it.
-    // Judging evidence = the asset's full chunk set (truth-vs-document).
-    let attached_setup: Option<(
-        sovereign_core::types::DocumentAsset,
-        Vec<sovereign_core::types::DocumentChunk>,
-    )> = if args.attached.is_some() || args.attached_asset.is_some() {
-        let session = session
-            .as_ref()
-            .expect("attached lane is direct-transport only (validated in parse_args)");
-        let asset = if let Some(id) = &args.attached_asset {
-            match session.store.get_document_asset(id).await {
-                Ok(Some(a)) => a,
-                _ => {
-                    eprintln!("error: --attached-asset {id}: asset not found");
-                    return 1;
-                }
-            }
-        } else {
-            let path = args.attached.as_ref().unwrap();
-            // Enrichment provider: session default unless --enrich-model splits
-            // the skeleton/RAPTOR/atom calls onto a named model. The prime
-            // quality lever — GLiNER freed the token budget, so the atlas-
-            // building calls can go back onto the 35B primary while the answer
-            // path stays on the session's chat model.
-            let enrich_inference: std::sync::Arc<dyn InferenceProvider> = match &args.enrich_model {
-                Some(model) => {
-                    eprintln!("[chaos] enrich model override: {model}");
-                    super::book_report::provider_for_model(
-                        &globals.daemon_base,
-                        model,
-                        &session.embed_model,
-                    )
-                    .await
-                }
-                None => std::sync::Arc::clone(&session.inference),
-            };
-            // T2 entity pass: prefer serve's NER model over the LLM when
-            // serve holds one, so the holdout measures the SHIPPED stack
-            // (GLiNER). Asked up front so we measure the NER path, not race
-            // it. `--no-gliner` forces the LLM path for A/B.
-            let entity_extractor: Option<
-                std::sync::Arc<dyn sovereign_core::traits::EntityExtractor>,
-            > = if args.no_gliner {
-                eprintln!("[chaos] T2 entity pass: LLM (--no-gliner)");
-                None
-            } else {
-                match crate::serve_dial::serve_ner("bench chaos").await {
-                    Ok(Some(g)) => {
-                        eprintln!("[chaos] T2 entity pass: GLiNER ({}, serve's)", g.model_id());
-                        Some(
-                            std::sync::Arc::new(sovereign_contracts::ner::NerEntities(g))
-                                as std::sync::Arc<dyn sovereign_core::traits::EntityExtractor>,
-                        )
-                    }
-                    Ok(None) => {
-                        eprintln!("[chaos] T2 entity pass: LLM (serve has no NER model)");
-                        None
-                    }
-                    Err(e) => {
-                        eprintln!("[chaos] T2 entity pass: LLM ({e})");
-                        None
-                    }
-                }
-            };
-            let mut manager = sovereign_tools::document_asset::DocumentAssetManager::new(
-                enrich_inference,
-                std::sync::Arc::clone(&session.store),
-            );
-            if let Some(g) = entity_extractor {
-                manager = manager.with_entity_extractor(g);
-            }
-            match manager.ingest(path.as_path(), |_| {}).await {
-                Ok(a) => a,
-                Err(e) => {
-                    eprintln!("error: attached ingest failed: {e}");
-                    return 1;
-                }
-            }
-        };
-        let doc_chunks = session
-            .store
-            .get_chunks_by_source(&asset.source_key())
-            .await
-            .unwrap_or_default();
-        eprintln!(
-                "[chaos] transport=attached-doc asset=\"{}\" id={} ({} chunks) — reuse with --attached-asset {}",
-                asset.title,
-                asset.id,
-                doc_chunks.len(),
-                asset.id
-            );
-        Some((asset, doc_chunks))
-    } else {
-        None
-    };
     let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
     let judge: std::sync::Arc<dyn InferenceProvider> = std::sync::Arc::new(RemoteApiProvider::new(
         &v1,
@@ -725,6 +606,79 @@ async fn run(rest: &[String]) -> i32 {
     }
 
     let take = args.limit.unwrap_or(bank.questions.len());
+
+    // Attached-document lane: svrn's probe resolves (or ingests) the asset
+    // once and answers every question through a minted DocumentSession
+    // (pb-bench-dials-docs). Judging evidence = the asset's full chunk set
+    // (truth-vs-document), ranked per question in the loop.
+    let attached: Option<AttachedEvidence> = if attached_lane {
+        let source = match (&args.attached_asset, &args.attached) {
+            (Some(id), _) => AttachedSource::Reuse {
+                asset_id: id.clone(),
+            },
+            (None, Some(path)) => AttachedSource::Ingest { path: path.clone() },
+            (None, None) => unreachable!("attached_lane names one of the two"),
+        };
+        let request = ProbeRequest {
+            mode: ProbeMode::Attached,
+            questions: bank
+                .questions
+                .iter()
+                .take(take)
+                .map(|q| ProbeQuestion {
+                    id: q.id.clone(),
+                    question: q.question.clone(),
+                })
+                .collect(),
+            corpus: corpus.clone(),
+            limit: 0,
+            isolate: false,
+            atlas: None,
+            attached: Some(AttachedProbe {
+                source,
+                enrich_model: args.enrich_model.clone(),
+                no_gliner: args.no_gliner,
+                rebuild_skeleton: false,
+                rebuild_raptor: false,
+                warm_atlas: args.warm_atlas,
+                lane: "bench chaos".to_string(),
+            }),
+        };
+        let ev = match crate::eval_cmd::run_probe(&globals, &request) {
+            Ok(ProbeEvidence::Attached(ev)) => *ev,
+            Ok(other) => {
+                eprintln!(
+                    "error: probe answered `{}`, not `attached`",
+                    other.mode().as_str()
+                );
+                return 1;
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        };
+        let Some(asset) = ev.asset.as_ref() else {
+            let why = ev
+                .transitions
+                .last()
+                .and_then(|t| t.detail.get("error"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("no asset");
+            eprintln!("error: attached ingest failed: {why}");
+            return 1;
+        };
+        eprintln!(
+                "[chaos] transport=attached-doc asset=\"{}\" id={} ({} chunks) — reuse with --attached-asset {}",
+                asset.title,
+                asset.id,
+                ev.chunks.len(),
+                asset.id
+            );
+        Some(ev)
+    } else {
+        None
+    };
     let mut rows = Vec::new();
     for (qi, q) in bank.questions.iter().take(take).enumerate() {
         // Concrete model stem resolved once above, stamped on every row
@@ -748,9 +702,31 @@ async fn run(rest: &[String]) -> i32 {
         // same host and read as a distribution (p50/p95), never as a
         // single-run delta (ARCH §18.5).
         let turn_started = std::time::Instant::now();
-        let live = if let (Some((asset, doc_chunks)), Some(session)) = (&attached_setup, &session) {
-            crate::bench_cmd::live_runner::run_attached(session, asset, &q.question, doc_chunks)
-                .await
+        // The attached lane's turn ran in svrn's probe; its wall clock is
+        // the probe's.
+        let mut probe_turn_ms = None;
+        let live = if let Some(ev) = &attached {
+            match ev.rows.get(qi).filter(|r| r.id == q.id) {
+                Some(row) => {
+                    probe_turn_ms = Some(row.latency_ms);
+                    crate::bench_cmd::live_runner::attached_answer(row, &ev.chunks)
+                }
+                None => {
+                    eprintln!(
+                        "  [{:>2}/{}] the probe answered no row for {}",
+                        qi + 1,
+                        take,
+                        q.id
+                    );
+                    crate::bench_cmd::live_runner::LiveAnswer {
+                        visible: String::new(),
+                        retrieved_chunk_texts: Vec::new(),
+                        gate_action: None,
+                        draft: None,
+                        metadata: serde_json::Value::Null,
+                    }
+                }
+            }
         } else {
             match (naked_provider.as_deref(), &bridge_client, &subject) {
                 (Some(p), _, _) => run_naked(p, &model_id, &q.question, naked_max).await,
@@ -782,7 +758,7 @@ async fn run(rest: &[String]) -> i32 {
                 (None, None, None) => unreachable!("one of subject/bridge is always built"),
             }
         };
-        let turn_ms = turn_started.elapsed().as_millis() as u64;
+        let turn_ms = probe_turn_ms.unwrap_or(turn_started.elapsed().as_millis() as u64);
         let answer_full = live.visible.clone();
         let chunks_full = live.retrieved_chunk_texts.clone();
         // Clone the gate signals before `live` is consumed, so the transcript
