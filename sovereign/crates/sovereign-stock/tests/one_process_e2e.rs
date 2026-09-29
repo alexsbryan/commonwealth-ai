@@ -312,6 +312,84 @@ fn the_stock_install_serves_both_ports_from_one_process_and_one_engine() {
     }
 }
 
+/// A config that opts into mesh-distributed inference is hosted too
+/// (pb-serve-distributes): serve's assembly builds the one engine, and the
+/// engine's mesh subsystems start beside it. Failing input: keep
+/// `ServingPath::InProcess` out of `with_hosting`, and `/status` names
+/// `in-process (SOVEREIGN_RPC_WORKERS)`.
+#[test]
+fn a_distributed_config_is_hosted_and_starts_its_mesh_subsystems() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let (home, rails_dir) = (root.path().join("home"), root.path().join("rails"));
+    for d in [&home, &rails_dir, &root.path().join("data")] {
+        std::fs::create_dir_all(d).expect("dir");
+    }
+    let (svrn, internal, serve, dead_rails) = (free_port(), free_port(), free_port(), free_port());
+    let config = root.path().join("config.toml");
+    std::fs::write(
+        &config,
+        config_text(root.path(), svrn, internal, dead_rails, "mock.gguf"),
+    )
+    .expect("config");
+    let log = root.path().join("stock.stderr.log");
+    let mut stock = Killed(
+        Command::new(BIN)
+            .args(["run", "--config"])
+            .arg(&config)
+            .env("HOME", &home)
+            .env("SVRNMESH_DATA_DIR", root.path().join("svrnmesh"))
+            .env("CW_RAILS_DIR", &rails_dir)
+            .env("CW_RAILS_BIN", root.path().join("no-cw-rails"))
+            .env("SOVEREIGN_SERVE_PORT", serve.to_string())
+            // A distributed opt-in the decider reads (phase-b-24): a manual
+            // worker list. Discovery would need `[compute] distributed_primary`
+            // past the containment guard, which the mock engine has no child for.
+            .env("SOVEREIGN_RPC_WORKERS", "127.0.0.1:1")
+            .env_remove("RUST_LOG")
+            .stdout(Stdio::null())
+            .stderr(Stdio::from(std::fs::File::create(&log).expect("log")))
+            .spawn()
+            .expect("spawn sovereign-stock"),
+    );
+    let mut serving = String::new();
+    wait_until(
+        "svrn's /status named its serving path",
+        Duration::from_secs(120),
+        &log,
+        || {
+            assert!(
+                stock.0.try_wait().expect("try_wait").is_none(),
+                "the stock process exited during boot:\n{}",
+                log_tail(&log)
+            );
+            match get_json(&format!("http://127.0.0.1:{svrn}/status")) {
+                Some(v) => {
+                    serving = v["serving"].as_str().unwrap_or_default().to_string();
+                    !serving.is_empty()
+                }
+                None => false,
+            }
+        },
+    );
+    assert_eq!(serving, "serve (this process)", "{}", log_tail(&log));
+    let text = std::fs::read_to_string(&log).expect("log");
+    assert!(
+        text.contains("auto-warm orchestrator installed"),
+        "the engine's mesh subsystems were not started beside the hosted engine:\n{}",
+        log_tail(&log)
+    );
+    assert_eq!(
+        text.matches(ENGINE_BUILT).count(),
+        1,
+        "boot built one engine:\n{}",
+        log_tail(&log)
+    );
+    for port in [svrn, serve] {
+        let answer = chat(port).unwrap_or_else(|e| panic!("{e}\n{}", log_tail(&log)));
+        assert!(!answer.is_empty(), "an empty turn on :{port}");
+    }
+}
+
 /// One JSON-RPC call on svrn's `/mcp`.
 fn mcp(port: u16, id: u64, method: &str, params: Value) -> Value {
     client()

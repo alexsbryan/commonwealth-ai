@@ -20,8 +20,8 @@ pub(super) struct ServingBoot {
     pub distributed_primary_slot: Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
     pub reload: crate::provider::ReloadSource,
     pub deferred_daemon: Arc<crate::DeferredDaemon>,
-    /// Where serving lives: boot starts the in-process engine's subsystems
-    /// (RPC discovery, the warm orchestrator) only on `InProcess`.
+    /// Where serving lives: boot starts the engine's mesh subsystems
+    /// (RPC discovery, the warm orchestrator) where this process loads it.
     pub path: crate::serve_client::ServingPath,
 }
 
@@ -225,7 +225,8 @@ async fn dial_serve(
 /// The hosted path (pb-stock-binary, phase-b-29 Q1): the distribution
 /// assembles serve in this process and binds its router on serve's port, and
 /// svrn holds the SAME cell serve's routes answer from, so one engine answers
-/// both ports. Nothing is brought up, no self-report is read, no loopback
+/// both ports; its engine and slot come back for the discovery svrn still
+/// runs (pb-serve-distributes). Nothing is brought up, no self-report is read, no loopback
 /// provider is built, and no NER handle is installed: that handle is one
 /// process-global (`sovereign_compute::ner`) which serve's own `/v1/ner`
 /// reads, so a `RemoteNer` here would dial itself. The first reader loads
@@ -237,11 +238,15 @@ async fn host_serve(
     deferred_daemon: Arc<crate::DeferredDaemon>,
     path: crate::serve_client::ServingPath,
 ) -> Result<ServingBoot, i32> {
-    let cell = match hosted
+    let crate::serve_client::HostedParts {
+        cell,
+        engine,
+        distributed_primary,
+    } = match hosted
         .compose(config.data.dir.clone(), config_path.to_path_buf())
         .await
     {
-        Ok(cell) => cell,
+        Ok(parts) => parts,
         Err(e) => {
             tracing::error!(target: "serving_path", error = %e, "boot: serve could not be hosted in this process");
             eprintln!("error: serve could not be hosted in this process: {e}");
@@ -250,12 +255,18 @@ async fn host_serve(
     };
     let resolved_embed_family = cell.embed_family();
     let provider: Arc<dyn InferenceProvider> = Arc::clone(&cell) as Arc<_>;
-    tracing::info!(target: "serving_path", serve_base = %crate::serve_client::default_serve_base(), "boot: serving is serve's, hosted in this process; one engine answers both ports");
+    tracing::info!(
+        target: "serving_path",
+        serve_base = %crate::serve_client::default_serve_base(),
+        engine = engine.is_some(),
+        distributed_primary = distributed_primary.is_some(),
+        "boot: serving is serve's, hosted in this process; one engine answers both ports"
+    );
     Ok(ServingBoot {
         provider,
-        engine_handle: None,
+        engine_handle: engine,
         resolved_embed_family,
-        distributed_primary_slot: None,
+        distributed_primary_slot: distributed_primary,
         reload: crate::provider::ReloadSource::Hosted { cell },
         deferred_daemon,
         path,

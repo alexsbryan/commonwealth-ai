@@ -911,10 +911,18 @@ pub(super) async fn run_daemon(
     // manual `SOVEREIGN_RPC_ASSUME_WARMED` for the common case. Installed
     // unconditionally (harmless on a node that never distributes) so both
     // auto-discovered and manual (`SOVEREIGN_RPC_WORKERS`) hosts auto-warm.
-    // The in-process path only: on the dialing path no engine loads here, so
-    // there is nothing to warm and no worker to discover (pb-svrn-dials-serve).
-    let in_process = !serving_path.serve_serves();
-    if in_process {
+    // Where this process loads the engine: the in-process path, or serve
+    // hosted here (whose assembly handed its engine and slot back). On the
+    // dialing path no engine loads here, so there is nothing to warm and no
+    // worker to discover (pb-svrn-dials-serve, pb-serve-distributes).
+    let loads_here = !matches!(serving_path, crate::serve_client::ServingPath::DialsServe);
+    tracing::info!(
+        target: "serving_path",
+        loads_here,
+        serving = %serving_path.status_line(),
+        "boot: the engine's mesh subsystems (warm orchestrator, RPC-worker discovery) run where the engine loads"
+    );
+    if loads_here {
         crate::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
     }
 
@@ -927,7 +935,7 @@ pub(super) async fn run_daemon(
         distributed_primary_slot.clone(),
     );
 
-    if in_process {
+    if loads_here {
         bootstrap::spawn_rpc_worker_discovery(
             Arc::clone(&daemon),
             engine_handle,

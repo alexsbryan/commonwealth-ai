@@ -256,6 +256,12 @@ pub struct ServeAssembly {
     pub listen: SocketAddr,
     /// serve's hold on the data root; drop it only when serve stops.
     pub run_lock: host_kit::RunLock,
+    /// The assembly's llama engine and distributed-primary slot, for the
+    /// mesh-distribution subsystems that still run beside svrn in a hosting
+    /// process until they move here (pb-serve-distributes). A standalone
+    /// serve drops them, as it did before.
+    pub engine: Option<Arc<sovereign_inference::embedded::EmbeddedLlamaCpp>>,
+    pub distributed_primary: Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
 }
 
 /// serve's assembly, from its data root's lock to its last route: the lock,
@@ -330,6 +336,8 @@ pub async fn assemble(
         routes,
         listen: (DEFAULT_LISTEN.0, sovereign_contracts::venue::serve_port()).into(),
         run_lock,
+        engine: parts.llama,
+        distributed_primary: parts.distributed_primary,
     })
 }
 

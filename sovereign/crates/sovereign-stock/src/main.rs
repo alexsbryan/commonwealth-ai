@@ -45,6 +45,11 @@ fn main() {
                 }
             };
             tracing::info!(target: "serve", listen = %assembly.listen, "hosted serve bound in the stock process");
+            let parts = sovereign_daemon::process::HostedParts {
+                cell: assembly.cell,
+                engine: assembly.engine,
+                distributed_primary: assembly.distributed_primary,
+            };
             let (routes, run_lock) = (assembly.routes, assembly.run_lock);
             tokio::spawn(async move {
                 // serve's hold on the data root lives as long as its listener.
@@ -55,7 +60,7 @@ fn main() {
                     tracing::error!(target: "serve", error = %e, "the hosted serve's listener stopped");
                 }
             });
-            Ok(assembly.cell)
+            Ok(parts)
         },
     );
     // Placement is this binary's (FIVE_PROGRAMS §2c): code's indexes and

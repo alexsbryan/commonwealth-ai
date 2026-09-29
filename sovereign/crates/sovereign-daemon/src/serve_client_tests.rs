@@ -95,12 +95,24 @@ fn hosting_turns_only_this_hosts_dialing_path_hosted() {
         ServingPath::DialsServe.with_hosting(true, &terminal),
         ServingPath::DialsServe
     );
-    // The interim's in-process path is never hosted: one engine per process.
-    let kept = ServingPath::InProcess {
+    // A distributed config is hosted too: serve's assembly is the one the
+    // in-process path built, so the process still holds one engine
+    // (pb-serve-distributes). Without a host, or with a named serve or a
+    // terminal, it keeps its in-process path.
+    let distributed = ServingPath::InProcess {
         chosen_by: "SOVEREIGN_RPC_DISCOVER",
     };
-    assert_eq!(kept.clone().with_hosting(true, &plain), kept);
-    assert!(!kept.serve_serves());
+    assert_eq!(
+        distributed.clone().with_hosting(true, &plain),
+        ServingPath::Hosted
+    );
+    assert_eq!(distributed.clone().with_hosting(false, &plain), distributed);
+    assert_eq!(distributed.clone().with_hosting(true, &named), distributed);
+    assert_eq!(
+        distributed.clone().with_hosting(true, &terminal),
+        distributed
+    );
+    assert!(!distributed.serve_serves());
 }
 
 /// A stub serve on a free loopback port whose engine-state route waits

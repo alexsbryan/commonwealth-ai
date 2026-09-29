@@ -1517,7 +1517,7 @@ max_code_lines = 300
 [[distribution.face]]
 package = "svrn"
 krate = "sovereign-daemon"
-items = ["process::run", "process::HostedServe", "process::HostedCode", "process::CodeMount", "process::HostedIngest"]
+items = ["process::run", "process::HostedServe", "process::HostedParts", "process::HostedCode", "process::CodeMount", "process::HostedIngest"]
 [[distribution.face]]
 package = "cmnwlth"
 krate = "sovereign-serve"
