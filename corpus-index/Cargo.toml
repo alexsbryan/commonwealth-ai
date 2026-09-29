@@ -57,6 +57,11 @@ chrono = { workspace = true }
 blake3 = "1"
 sha2 = { workspace = true }
 
+[features]
+# `ingest_port::double::IngestPortDouble`, for the svrn crates' tests
+# (phase-b-47). Adds no dependency.
+test-doubles = []
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = { workspace = true }

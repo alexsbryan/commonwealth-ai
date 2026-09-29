@@ -347,9 +347,9 @@ pub(crate) async fn build_cross_view_digest(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::clustering::FieldModelStats;
     use understanding_vocab::skeleton::{
-        CanonicalQuestion, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
+        CanonicalQuestion, FieldModelStats, SkeletonFaultLine, SkeletonOpenQuestion,
+        SkeletonPosition,
     };
 
     fn fixture_skeleton(corpus_id: &str, domain_id: &str) -> FieldSkeleton {

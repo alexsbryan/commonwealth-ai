@@ -580,4 +580,50 @@ mod tests {
             "recipe-declared parent should win over the catalog default"
         );
     }
+
+    fn engine_at(dir: &std::path::Path) -> crate::CorpusEngine {
+        let embed: corpus_index::types::EmbedFn =
+            std::sync::Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0f32; 8]) }));
+        crate::CorpusEngine::new(dir.join("recipes"), dir.join("idx"), embed)
+    }
+
+    /// sovereign-tools' sec_edgar `registering_makes_the_kind_resolvable_by_the_engine`,
+    /// the engine half (phase-b-47): an acquirer registered through the plugin
+    /// port is the one the `Custom { kind }` dispatch resolves.
+    #[test]
+    fn an_acquirer_registered_through_the_plugin_port_resolves_by_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = engine_at(dir.path());
+        assert!(engine.custom_acquirer("sec_edgar").is_none());
+        let acquirer: corpus_index::ingest_port::CustomAcquirerFn =
+            std::sync::Arc::new(|_, d| Box::pin(async move { Ok(d) }));
+        corpus_index::ingest_port::IngestPluginPort::register_acquirer(
+            &engine,
+            "sec_edgar",
+            acquirer,
+        );
+        assert!(engine.custom_acquirer("sec_edgar").is_some());
+    }
+
+    /// sovereign-tools' knowledge_view manager tests, the engine half
+    /// (phase-b-47): `open_index_for_corpus` opens `<index_dir>/<corpus_id>`,
+    /// the index the double opens there with the leaf's `CorpusIndex::open`.
+    #[tokio::test]
+    async fn open_index_for_corpus_opens_the_corpus_dir_under_index_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = engine_at(dir.path());
+        let via_engine = corpus_index::source::CorpusReadPort::open_index_for_corpus(
+            &engine,
+            "personal-knowledge",
+        )
+        .await;
+        let via_leaf = corpus_index::index::CorpusIndex::open(
+            &dir.path().join("idx").join("personal-knowledge"),
+        )
+        .await;
+        assert_eq!(via_engine.is_ok(), via_leaf.is_ok());
+        if let (Ok(a), Ok(b)) = (via_engine, via_leaf) {
+            assert_eq!(a.path(), b.path());
+        }
+    }
 }

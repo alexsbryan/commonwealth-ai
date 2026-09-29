@@ -212,6 +212,7 @@ tracing-subscriber = { workspace = true }
 # tests drive its own code against them, and each port's behaviour is proven
 # on its implementor in corpus-engine (phase-b-47/48).
 corpus-engine-atlas-reader = { workspace = true, features = ["test-doubles"] }
+corpus-index = { workspace = true, features = ["test-doubles"] }
 
 # Examples that import treesitter-gated symbols (SymbolLookupTool,
 # ScipGraphHandle, etc.) only compile when the matching crate

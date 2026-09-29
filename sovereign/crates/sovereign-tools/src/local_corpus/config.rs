@@ -201,6 +201,12 @@ fn escape_toml(s: &str) -> String {
 mod tests {
     use super::*;
 
+    /// The generated recipe as TOML: its keys and tables, not ingest's
+    /// `Recipe` (whose parse of this shape is proven in corpus-engine).
+    fn recipe_value(toml: &str) -> toml::Value {
+        toml::from_str(toml).expect("generated recipe TOML must parse as TOML")
+    }
+
     #[test]
     fn folder_default_has_no_writeback() {
         let cfg = LocalCorpusConfig::document_folder(
@@ -458,20 +464,25 @@ mod tests {
 
     #[test]
     fn recipe_toml_parses_as_valid_recipe() {
-        // The round-trip test: our generated TOML must parse cleanly
-        // via corpus_engine::Recipe::from_toml. Catches any drift
-        // between field names / defaults across crate versions.
+        // The generated TOML has the recipe's shape: the keys and tables
+        // ingest reads. That a recipe of this shape parses as ingest's
+        // `Recipe` is corpus-engine's `a_local_corpus_recipe_parses`
+        // (phase-b-48); the composed path is pb-ingest-dial-daemon's PROOF.
         let cfg = LocalCorpusConfig::document_folder(
             PathBuf::from("/tmp/docs"),
             "City council 2024".into(),
         );
         let jsonl = PathBuf::from("/tmp/staged.jsonl");
         let toml = recipe_toml(&cfg, &jsonl);
-        let recipe =
-            corpus_engine::Recipe::from_toml(&toml).expect("generated recipe TOML must parse");
-        assert_eq!(recipe.corpus.id, cfg.id);
-        assert_eq!(recipe.corpus.scope.as_deref(), Some("local"));
-        assert!(!recipe.corpus.mesh_sharing);
+        let recipe = recipe_value(&toml);
+        assert_eq!(recipe["corpus"]["id"].as_str(), Some(cfg.id.as_str()));
+        assert_eq!(recipe["corpus"]["scope"].as_str(), Some("local"));
+        assert_eq!(recipe["corpus"]["mesh_sharing"].as_bool(), Some(false));
+        for table in ["acquire", "extract", "chunk", "index", "retrieval"] {
+            assert!(recipe[table].is_table(), "[{table}] missing");
+        }
+        assert_eq!(recipe["acquire"]["type"].as_str(), Some("local_file"));
+        assert_eq!(recipe["extract"]["type"].as_str(), Some("jsonl"));
     }
 
     #[test]
@@ -518,15 +529,14 @@ mod tests {
         );
         let jsonl = PathBuf::from("/tmp/staged.jsonl");
         let toml = recipe_toml(&cfg, &jsonl);
-        let recipe =
-            corpus_engine::Recipe::from_toml(&toml).expect("watched-folder recipe TOML must parse");
-        assert_eq!(recipe.corpus.scope.as_deref(), Some("local"));
-        assert!(!recipe.corpus.mesh_sharing);
+        let recipe = recipe_value(&toml);
+        assert_eq!(recipe["corpus"]["scope"].as_str(), Some("local"));
+        assert_eq!(recipe["corpus"]["mesh_sharing"].as_bool(), Some(false));
         // 2026-06-10 obsidian audit: local corpora are the user's own
         // files — the recipe must declare `[retrieval] personal_scope`
         // so personal-scope retrieval retains them (the old prefix-only
         // filter silently dropped `watched-<hash>` corpus ids).
-        assert!(recipe.retrieval.personal_scope);
+        assert_eq!(recipe["retrieval"]["personal_scope"].as_bool(), Some(true));
     }
 
     #[test]
@@ -540,15 +550,11 @@ mod tests {
             PathBuf::from("/tmp/vault"),
             PathBuf::from("/tmp/snapshots"),
         );
-        let vault_recipe = corpus_engine::Recipe::from_toml(&recipe_toml(&vault, &jsonl))
-            .expect("vault recipe parses");
+        let vault_recipe = recipe_value(&recipe_toml(&vault, &jsonl));
         let vault_meta = display_meta(&vault.source_type).expect("vault has display");
         assert_eq!(
-            vault_recipe
-                .display
-                .as_ref()
-                .and_then(|d| d.category.clone()),
-            vault_meta.category
+            vault_recipe["display"]["category"].as_str(),
+            vault_meta.category.as_deref()
         );
         assert_eq!(vault_meta.category.as_deref(), Some("vault"));
 
@@ -557,15 +563,11 @@ mod tests {
             "Research notes".into(),
             WatchedFolderConfig::default(),
         );
-        let watched_recipe = corpus_engine::Recipe::from_toml(&recipe_toml(&watched, &jsonl))
-            .expect("watched recipe parses");
+        let watched_recipe = recipe_value(&recipe_toml(&watched, &jsonl));
         let watched_meta = display_meta(&watched.source_type).expect("watched folder has display");
         assert_eq!(
-            watched_recipe
-                .display
-                .as_ref()
-                .and_then(|d| d.category.clone()),
-            watched_meta.category
+            watched_recipe["display"]["category"].as_str(),
+            watched_meta.category.as_deref()
         );
         assert_eq!(watched_meta.category.as_deref(), Some("watched_folder"));
     }
@@ -677,9 +679,8 @@ mod tests {
         );
         let jsonl = PathBuf::from("/tmp/staged.jsonl");
         let toml = recipe_toml(&cfg, &jsonl);
-        let recipe =
-            corpus_engine::Recipe::from_toml(&toml).expect("escaped TOML must still parse");
+        let recipe = recipe_value(&toml);
         // Display name round-trips byte-for-byte.
-        assert_eq!(recipe.corpus.name, r#"Alex's "Notes""#);
+        assert_eq!(recipe["corpus"]["name"].as_str(), Some(r#"Alex's "Notes""#));
     }
 }

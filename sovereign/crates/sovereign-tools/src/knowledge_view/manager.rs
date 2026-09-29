@@ -953,9 +953,10 @@ mod tests {
     //! their implementation (`digest.rs`, `tokens.rs`, `debouncer.rs`).
 
     use super::*;
-    use corpus_engine::enrichment::clustering::FieldModelStats;
+    use corpus_index::ingest_port::double::IngestPortDouble;
     use understanding_vocab::skeleton::{
-        CanonicalQuestion, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
+        CanonicalQuestion, FieldModelStats, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion,
+        SkeletonPosition,
     };
 
     /// Guards the fix for the cross-process recipe clobber: the materialised
@@ -1035,6 +1036,10 @@ mod tests {
         }
     }
 
+    /// Every manager here runs over the ingest ports' double: views open
+    /// under the index dir with the leaf's `CorpusIndex::open`, and plugin
+    /// registrations are kept. The engine's own open and registration are
+    /// proven on `CorpusEngine` (corpus-engine's `engine::tool_ports` tests).
     async fn bare_manager_with_local_only(local_only: Vec<String>) -> KnowledgeViewManager {
         let tmp = tempfile::TempDir::new().unwrap();
         let indexes_dir = tmp.path().join("indexes");
@@ -1043,15 +1048,10 @@ mod tests {
         std::fs::create_dir_all(&indexes_dir).unwrap();
         std::fs::create_dir_all(&recipes_dir).unwrap();
         let _ = std::fs::File::create(&db_path).unwrap();
-        let embed: corpus_index::types::EmbedFn = std::sync::Arc::new(|_| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) })
-        });
-        let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
-            Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
-        });
         let engine = std::sync::Arc::new(
-            corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed)
-                .with_inference_fn(infer),
+            IngestPortDouble::new()
+                .with_index_dir(indexes_dir)
+                .opening_indexes_under_index_dir(),
         );
         KnowledgeViewManager::new(engine, db_path, local_only).await
     }
@@ -1347,15 +1347,10 @@ mod tests {
         seed_memories_table(&db_path);
         seed_personal_atlas_with_entities(&indexes_dir);
 
-        let embed: corpus_index::types::EmbedFn = std::sync::Arc::new(|_| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) })
-        });
-        let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
-            Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
-        });
         let engine = std::sync::Arc::new(
-            corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir.clone(), embed)
-                .with_inference_fn(infer),
+            IngestPortDouble::new()
+                .with_index_dir(indexes_dir.clone())
+                .opening_indexes_under_index_dir(),
         );
         let mgr = KnowledgeViewManager::new(engine, db_path, vec!["inner-work".into()]).await;
 
@@ -1399,15 +1394,10 @@ mod tests {
         seed_memories_table(&db_path);
         seed_personal_atlas_with_entities(&indexes_dir);
 
-        let embed: corpus_index::types::EmbedFn = std::sync::Arc::new(|_| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) })
-        });
-        let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
-            Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
-        });
         let engine = std::sync::Arc::new(
-            corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed)
-                .with_inference_fn(infer),
+            IngestPortDouble::new()
+                .with_index_dir(indexes_dir)
+                .opening_indexes_under_index_dir(),
         );
         let mgr = KnowledgeViewManager::new(engine, db_path, vec!["inner-work".into()]).await;
 

@@ -1335,20 +1335,15 @@ mod tests {
         );
     }
 
+    /// `register` hands the plugin port an acquirer under `KIND`. That a
+    /// registered kind then resolves in the engine's dispatch (instead of
+    /// "No custom acquirer registered for kind 'sec_edgar'") is proven on
+    /// `CorpusEngine` (corpus-engine's `engine::tool_ports` tests).
     #[test]
     fn registering_makes_the_kind_resolvable_by_the_engine() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let embed: corpus_index::types::EmbedFn =
-            Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0f32; 8]) }));
-        let engine = corpus_engine::CorpusEngine::new(
-            dir.path().join("recipes"),
-            dir.path().join("idx"),
-            embed,
-        );
-        register(&engine);
-        // The dispatch arm in ingest_factories.rs errors with
-        // "No custom acquirer registered for kind 'sec_edgar'" when this
-        // registration is missing; a recipe naming KIND now resolves.
+        let port = corpus_index::ingest_port::double::IngestPortDouble::new();
+        register(&port);
         assert_eq!(KIND, "sec_edgar");
+        assert_eq!(port.registered_acquirers(), vec![KIND.to_string()]);
     }
 }

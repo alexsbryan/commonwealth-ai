@@ -97,6 +97,8 @@ mod snapshot_restore_e2e;
 mod chunk_ner_bounded_seam;
 #[path = "main/source_tree.rs"]
 mod source_tree;
+#[path = "main/svrn_recipe_shapes.rs"]
+mod svrn_recipe_shapes;
 #[path = "main/tiered_entity_extractor_seam.rs"]
 mod tiered_entity_extractor_seam;
 #[path = "main/watcher_e2e.rs"]
