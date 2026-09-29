@@ -13,7 +13,7 @@ use corpus_engine_yield::{ForegroundSignal, YieldHook};
 use corpus_index::index::CorpusIndex;
 use corpus_index::ingest_port::cancel::CancellationRegistry;
 use corpus_index::ingest_port::daemon::{
-    ArticleStats, CorpusDiskStatus, IngestPort, IngestResult, InstallRefusal,
+    ArticleStats, CorpusDiskStatus, IndexOpener, IngestPort, IngestResult, InstallRefusal,
     NewsworthyHostFactory, PreparedInstall, RecipeSharing, RecipeVocabulary, RegistryListing,
     SourceFileRecord,
 };
@@ -146,7 +146,7 @@ pub fn map_test_report(r: &TestReport) -> RecipeTestReport {
 /// the caller should fall back to a full rebuild; `Ok(())` on
 /// success (or on no-op when the delta carried no doc_ids).
 pub async fn apply_incremental(
-    engine: std::sync::Arc<CorpusEngine>,
+    open: IndexOpener,
     indexes_dir: std::path::PathBuf,
     corpus_id: String,
     role: &'static str,
@@ -190,8 +190,7 @@ pub async fn apply_incremental(
     drop(atoms_file);
 
     // Query LanceDB for the tick's chunks.
-    let index = engine
-        .open_index_for_corpus(&corpus_id)
+    let index = open(corpus_id.clone())
         .await
         .map_err(|e| format!("open_index_for_corpus({corpus_id}): {e}"))?;
     let chunks = index
@@ -683,13 +682,14 @@ impl IngestPort for CorpusEngine {
     }
 
     async fn apply_newsworthy_incremental(
-        self: Arc<Self>,
+        &self,
+        open: IndexOpener,
         indexes_dir: PathBuf,
         corpus_id: String,
         role: &'static str,
         doc_ids: Vec<String>,
     ) -> std::result::Result<(), String> {
-        apply_incremental(self, indexes_dir, corpus_id, role, doc_ids).await
+        apply_incremental(open, indexes_dir, corpus_id, role, doc_ids).await
     }
 }
 

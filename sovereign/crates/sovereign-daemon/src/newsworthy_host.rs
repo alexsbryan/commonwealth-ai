@@ -384,8 +384,8 @@ impl NewsworthyHost for MeshNewsworthyHost {
         tokio::spawn(async move {
             for c in &work {
                 let outcome = engine
-                    .clone()
                     .apply_newsworthy_incremental(
+                        caching_opener(&engine),
                         indexes_dir.clone(),
                         c.corpus_id.clone(),
                         c.role,
@@ -426,8 +426,8 @@ impl NewsworthyHost for MeshNewsworthyHost {
                         // because the legacy path is structurally
                         // wrong for this corpus shape.
                         let retry = engine
-                            .clone()
                             .apply_newsworthy_incremental(
+                                caching_opener(&engine),
                                 indexes_dir.clone(),
                                 c.corpus_id.clone(),
                                 c.role,
@@ -493,6 +493,17 @@ impl NewsworthyHost for MeshNewsworthyHost {
             }
         });
     }
+}
+
+/// The open the delta used when it lived here: the handle's caching read, so
+/// the served newsworthy corpus keeps its cached handle.
+fn caching_opener(
+    engine: &Arc<dyn corpus_index::ingest_port::daemon::IngestPort>,
+) -> corpus_index::ingest_port::daemon::IndexOpener {
+    let engine = Arc::clone(engine);
+    Box::new(move |corpus_id| {
+        Box::pin(async move { engine.open_index_for_corpus(&corpus_id).await })
+    })
 }
 
 /// Delete every file inside the corpus's atlas dir, leaving the

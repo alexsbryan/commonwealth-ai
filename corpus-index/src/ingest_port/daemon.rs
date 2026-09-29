@@ -245,6 +245,10 @@ pub trait RecipeHarnessPort: Send + Sync {
     ) -> std::result::Result<HarnessRunCardView, String>;
 }
 
+/// Opens a corpus by id, the caller's choice of open.
+pub type IndexOpener =
+    Box<dyn FnOnce(String) -> Pin<Box<dyn Future<Output = Result<CorpusIndex>> + Send>> + Send>;
+
 /// Builds the daemon's newsworthy host for the watcher's corpus id.
 pub type NewsworthyHostFactory = Box<dyn FnOnce(String) -> Arc<dyn NewsworthyHost> + Send>;
 
@@ -395,9 +399,13 @@ pub trait IngestPort: LocalCorpusPort + CatalogIngestPort + PartitionMergePort {
         force_tick: tokio::sync::mpsc::Receiver<()>,
     ) -> tokio::task::JoinHandle<()>;
     /// Apply one newsworthy tick's atom delta to `corpus_id`'s atlas;
-    /// `Err(reason)` asks the caller to rebuild in full.
+    /// `Err(reason)` asks the caller to rebuild in full. The index is opened
+    /// through `open`, the caller's choice: the daemon's is its caching read
+    /// of a served corpus, a choice corpus-engine's residency census
+    /// (tests/main/index_cache_residency.rs) forbids the engine to make.
     async fn apply_newsworthy_incremental(
-        self: Arc<Self>,
+        &self,
+        open: IndexOpener,
         indexes_dir: PathBuf,
         corpus_id: String,
         role: &'static str,
