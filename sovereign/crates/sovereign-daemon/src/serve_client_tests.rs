@@ -331,7 +331,7 @@ async fn ner_route(
     use axum::routing::post;
     use std::sync::atomic::Ordering;
     stub(axum::Router::new().route(
-        sovereign_compute::ner::NER_PATH,
+        sovereign_contracts::ner::NER_PATH,
         post(move || {
             let probes = std::sync::Arc::clone(&probes);
             async move {

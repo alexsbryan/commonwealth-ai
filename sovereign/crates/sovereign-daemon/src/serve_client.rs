@@ -305,7 +305,7 @@ pub fn served_slot_aliases(
 }
 
 /// On the dialing path this daemon's NER handle is serve's: a
-/// [`RemoteNer`](sovereign_compute::ner::RemoteNer) on serve's `/v1/ner`,
+/// [`RemoteNer`](oicp_client::RemoteNer) on serve's `/v1/ner`,
 /// installed before any reader asks (`sovereign_compute::ner::install_ner`),
 /// so the NoteStore hook, the tiered chunk adapter and the turn's retrieval
 /// dial it where they loaded the model in process. A serve without the NER
@@ -328,7 +328,7 @@ pub async fn resolve_serve_ner(
     base: &str,
     window: std::time::Duration,
 ) -> Result<Option<std::sync::Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>, String> {
-    use sovereign_compute::ner::RemoteNer;
+    use oicp_client::RemoteNer;
     let deadline = std::time::Instant::now() + window;
     let mut attempts = 0u32;
     loop {
