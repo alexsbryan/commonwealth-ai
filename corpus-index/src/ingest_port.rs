@@ -314,6 +314,9 @@ pub trait FolderTieredPort: Send + Sync {
     /// Re-enrich the named sources of `corpus_id`.
     async fn reenrich_sources(&self, corpus_id: &str, source_doc_ids: &[String]) -> Result<()>;
 
+    /// An entity extractor is composed.
+    fn has_entity_extractor(&self) -> bool;
+
     /// Extract the corpus's entity delta; `None` when no entity extractor is
     /// composed.
     async fn extract_entity_delta(

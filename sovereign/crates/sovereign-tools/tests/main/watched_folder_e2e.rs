@@ -76,7 +76,7 @@ async fn boot() -> Fixture {
     let store: Arc<dyn StateStore> = Arc::new(InMemoryStateStore::new());
     let manager = Arc::new(
         LocalCorpusManager::init(
-            Arc::clone(&engine),
+            engine.clone(),
             store,
             None,
             data_dir.clone(),
@@ -87,7 +87,7 @@ async fn boot() -> Fixture {
     );
     let registry = Arc::new(WatchedFolderRegistry::new());
     let worker = Arc::new(Worker::new(
-        Arc::clone(&engine),
+        engine.clone(),
         Arc::clone(&manager),
         Arc::clone(&registry),
         noop_sink(),
@@ -182,7 +182,7 @@ async fn run_on_changes_dispatches_on_changed_sweep_only() {
     // A worker wired with the recording runtime (the daemon wires a real one).
     let worker = Arc::new(
         Worker::new(
-            Arc::clone(&fx.engine),
+            fx.engine.clone(),
             Arc::clone(&fx.manager),
             Arc::clone(&fx.registry),
             noop_sink(),

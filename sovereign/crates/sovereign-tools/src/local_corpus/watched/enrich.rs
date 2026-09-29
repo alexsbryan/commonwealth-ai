@@ -210,20 +210,19 @@ struct JobHandle {
 /// `start_tiered_build` returns an error and `enable_enrichment`
 /// falls back to the legacy `start_build` (subprocess) path.
 ///
-/// `tiered_provider` is shared with `CorpusEngine::with_tiered_provider`
-/// for conversation corpora; folder corpora reuse the same shape
-/// (`FolderTieredProvider` in `conv_tiered_provider.rs`) so a single
-/// daemon-side instance can serve both paths. The driver doesn't
-/// distinguish — it routes `corpus_id` + `index_path` into
-/// `run_folder_tiered_enrichment` which iterates the index's
-/// per-`source_doc_id` groups and fires the provider once per doc
+/// `tiered` is ingest's `FolderTieredPort` over the tiered provider
+/// shared with `CorpusEngine::with_tiered_provider` for conversation
+/// corpora (`FolderTieredProvider` in `conv_tiered_provider.rs`) and the
+/// optional GLiNER extractor, so a single daemon-side instance serves both
+/// paths. The driver doesn't distinguish — it routes `corpus_id` +
+/// `index_path` into `run_folder_tiered_enrichment`, which iterates the
+/// index's per-`source_doc_id` groups and fires the provider once per doc
 /// with `conv_uuid = source_doc_id`. Each document becomes its own
 /// RAPTOR tree + signpost set; the folder is no longer collapsed
 /// into a single bag.
 #[derive(Clone)]
 pub struct TieredDeps {
-    pub tiered_provider: Arc<dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider>,
-    pub gliner_extractor: Option<Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>>,
+    pub tiered: Arc<dyn corpus_index::ingest_port::FolderTieredPort>,
 }
 
 /// Folder-ingest v1 §3.3 driver. One per daemon instance. Holds
@@ -361,7 +360,7 @@ impl EnrichmentDriver {
             )
         })?;
 
-        deps.tiered_provider
+        deps.tiered
             .reenrich_sources(corpus_id, &[source_doc_id.to_string()])
             .await
             .map_err(|e| Error::Execution(format!("re-enrich note '{source_doc_id}': {e}")))
@@ -654,7 +653,7 @@ impl EnrichmentDriver {
             // failure logs + the build proceeds with RAPTOR-only
             // entities (the conv_entity_graph builder degrades
             // gracefully when chunk_entities is empty).
-            if let Some(extractor) = deps.gliner_extractor.as_ref() {
+            if deps.tiered.has_entity_extractor() {
                 // Honest phase label for the CPU-bound NER pass so the UI moves
                 // off "Scanning documents" to "Finding people, places, and
                 // ideas" while entities extract. The build heartbeat above keeps
@@ -675,31 +674,25 @@ impl EnrichmentDriver {
                         "tiered_driver: could not stamp EntityExtraction phase"
                     );
                 }
-                match extractor
-                    .extract_delta_for_corpus(&corpus_id_owned, &index_path_owned)
+                // A refused-over-cap count is reported inside the port,
+                // where the operator already looks (ARCH 6).
+                match deps
+                    .tiered
+                    .extract_entity_delta(&corpus_id_owned, &index_path_owned)
                     .await
                 {
-                    Ok(o) => {
-                        // A refusal is not a failure, but it is not
-                        // nothing either — record it where the operator
-                        // already looks (ARCH 6).
-                        corpus_engine::enrichment::tiered::report_refused_over_cap(
-                            &index_path_owned,
-                            &corpus_id_owned,
-                            o.refused_over_cap as u64,
-                        );
-                        tracing::info!(
-                            corpus_id = %corpus_id_owned,
-                            mentions = o.mentions,
-                            refused_over_cap = o.refused_over_cap,
-                            "tiered_driver: GliNER delta complete"
-                        )
-                    }
-                    Err(e) => tracing::warn!(
+                    Some(Ok(o)) => tracing::info!(
+                        corpus_id = %corpus_id_owned,
+                        mentions = o.mentions,
+                        refused_over_cap = o.refused_over_cap,
+                        "tiered_driver: GliNER delta complete"
+                    ),
+                    Some(Err(e)) => tracing::warn!(
                         corpus_id = %corpus_id_owned,
                         error = %e,
                         "tiered_driver: GliNER delta failed; continuing with RAPTOR-only entities"
                     ),
+                    None => {}
                 }
             }
             on_state(AssetState::MultiHopReady);
@@ -712,15 +705,12 @@ impl EnrichmentDriver {
             // file rather than a single mixed-topic bag. Pass
             // `None` for the entity_extractor because we already
             // ran the delta above.
-            match corpus_engine::enrichment::tiered::run_folder_tiered_enrichment(
-                &corpus_id_owned,
-                &index_path_owned,
-                Some(&deps.tiered_provider),
-                None,
-            )
-            .await
+            match deps
+                .tiered
+                .run_folder_tiered_enrichment(&corpus_id_owned, &index_path_owned)
+                .await
             {
-                Ok(_plan) => {
+                Ok(()) => {
                     on_state(AssetState::Ready);
                     tracing::info!(
                         corpus_id = %corpus_id_owned,

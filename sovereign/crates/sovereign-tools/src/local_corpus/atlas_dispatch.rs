@@ -24,7 +24,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pass;
 use corpus_index::enrichment_state::{EnrichmentPhase, EnrichmentStateFile};
 use sovereign_contracts::daemon_wire::enrich_progress::EnrichProgress;
 use sovereign_core::error::{Error, Result};
@@ -44,8 +43,8 @@ impl LocalCorpusManager {
         // today's path; `atlas` runs the CLI's `enrich build` orchestrator
         // in-process, so a shipped desktop (no CLI on PATH) can build a
         // recipe-driven / custom-ontology atlas at all.
-        let recipe_type = match self.engine.load_recipe(corpus_id).await {
-            Ok(r) => r.enrichment.map(|e| e.enrichment_type),
+        let recipe_type = match self.engine.recipe_enrichment_type(corpus_id).await {
+            Ok(t) => t,
             Err(e) => {
                 tracing::debug!(
                     corpus_id = %corpus_id,
@@ -57,12 +56,12 @@ impl LocalCorpusManager {
         };
         let pass = recipe_type
             .as_deref()
-            .and_then(|t| self.engine.enrichment_passes().get(t));
-        let is_atlas = pass.as_ref().is_some_and(|p| p.id() == pass::ATLAS);
+            .and_then(|t| self.engine.enrichment_pass_route(t));
+        let is_atlas = pass.as_ref().is_some_and(|p| p.is_atlas);
         tracing::info!(
             corpus_id = %corpus_id,
             recipe_type = recipe_type.as_deref().unwrap_or("<none>"),
-            pass = pass.as_ref().map(|p| p.id()).unwrap_or("<none>"),
+            pass = pass.as_ref().map(|p| p.pass_id.as_str()).unwrap_or("<none>"),
             route = if is_atlas { "atlas" } else { "tiered" },
             "enrich_now: route decided"
         );

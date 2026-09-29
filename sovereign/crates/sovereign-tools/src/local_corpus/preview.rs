@@ -18,7 +18,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::LocalCorpusPort;
 use serde::{Deserialize, Serialize};
 use sovereign_core::error::{Error, Result};
 
@@ -60,7 +60,7 @@ const MIN_CHARS_TO_CLUSTER: usize = 80;
 /// `_sovereign-index/<tag>.md` Map-of-Content note render duplicate
 /// rows for every multi-chunk note — confusing and noisy.
 pub async fn build_preview(
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn LocalCorpusPort>,
     corpus_id: &str,
     config: &ClusterConfig,
     result: &LabeledClusterResult,

@@ -849,7 +849,7 @@ async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
     let lc_store: Arc<dyn sovereign_core::traits::StateStore> =
         Arc::new(sovereign_store::memory::InMemoryStateStore::new());
     let manager = LocalCorpusManager::init_with_recipes_dir(
-        Arc::clone(&engine),
+        engine.clone(),
         lc_store,
         None,
         data_dir.clone(),

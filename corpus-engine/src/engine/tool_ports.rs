@@ -405,6 +405,10 @@ impl FolderTieredPort for FolderTiered {
             .await
     }
 
+    fn has_entity_extractor(&self) -> bool {
+        self.entity_extractor.is_some()
+    }
+
     async fn extract_entity_delta(
         &self,
         corpus_id: &str,

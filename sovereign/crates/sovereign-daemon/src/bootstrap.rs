@@ -1682,7 +1682,7 @@ pub async fn setup_watched_folders(
     // errors `No registry entry for corpus '<id>'`.
     let lc_recipes_dir = data_dir.join("recipes");
     match sovereign_tools::local_corpus::LocalCorpusManager::init_with_recipes_dir(
-        Arc::clone(&engine),
+        engine.clone(),
         state_store,
         None,
         data_dir.to_path_buf(),

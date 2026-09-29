@@ -102,7 +102,9 @@ pub fn build_folder_tiered_deps(
         "enrichment_bootstrap: folder tiered deps constructed — FolderTieredProvider wired"
     );
     Some(TieredDeps {
-        tiered_provider,
-        gliner_extractor: chunk_entity_extractor,
+        tiered: Arc::new(corpus_engine::FolderTiered::new(
+            tiered_provider,
+            chunk_entity_extractor,
+        )),
     })
 }

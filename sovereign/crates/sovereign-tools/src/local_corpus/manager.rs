@@ -23,7 +23,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, SensitiveCorpusOracle, StateStore};
 use tokio::sync::RwLock;
 
-use corpus_engine::{CorpusEngine, CorpusSpec};
+use corpus_index::ingest_port::LocalCorpusPort;
 use corpus_index::types::ScoredChunk;
 
 use super::config::{recipe_toml, LocalCorpusConfig};
@@ -108,7 +108,7 @@ pub(crate) fn should_fire_auto_rebuild(
 pub struct LocalCorpusManager {
     /// `pub(super)` for `atlas_dispatch`, which carries the `enrich_now`
     /// half of this impl; private otherwise.
-    pub(super) engine: Arc<CorpusEngine>,
+    pub(super) engine: Arc<dyn LocalCorpusPort>,
     store: Arc<dyn StateStore>,
     #[allow(dead_code)]
     inference: Option<Arc<dyn InferenceProvider>>,
@@ -242,7 +242,7 @@ impl LocalCorpusManager {
     /// the same path the engine reads from — otherwise sweeps error
     /// with `No registry entry for corpus '…'`.
     pub async fn init(
-        engine: Arc<CorpusEngine>,
+        engine: Arc<dyn LocalCorpusPort>,
         store: Arc<dyn StateStore>,
         inference: Option<Arc<dyn InferenceProvider>>,
         data_dir: PathBuf,
@@ -270,7 +270,7 @@ impl LocalCorpusManager {
     /// keep the two in sync without colocating production-layout
     /// constants in two crates.
     pub async fn init_with_recipes_dir(
-        engine: Arc<CorpusEngine>,
+        engine: Arc<dyn LocalCorpusPort>,
         store: Arc<dyn StateStore>,
         inference: Option<Arc<dyn InferenceProvider>>,
         data_dir: PathBuf,
@@ -755,7 +755,7 @@ impl LocalCorpusManager {
         // `~/.svrnmesh/indexes/<corpus>/atlas/` directory. Idempotent
         // on missing dirs, so disable-after-failed-build is safe.
         let index_dir = self.engine_index_dir();
-        if let Err(e) = corpus_engine::atlas_teardown(&index_dir, corpus_id) {
+        if let Err(e) = self.engine.atlas_teardown(&index_dir, corpus_id) {
             tracing::warn!(
                 corpus_id = %corpus_id,
                 "disable_enrichment: atlas_teardown failed: {e}"
@@ -1204,7 +1204,7 @@ impl LocalCorpusManager {
                 .read()
                 .expect("active_ingests poisoned")
                 .contains_key(id);
-            let engine_busy = self.engine.cancel_registry().get(id).is_some();
+            let engine_busy = self.engine.ingest_in_flight(id);
             if !manager_busy && !engine_busy {
                 break;
             }
@@ -1290,7 +1290,7 @@ impl LocalCorpusManager {
         std::fs::write(&recipe_path, &recipe)
             .map_err(|e| Error::Execution(format!("write recipe: {e}")))?;
         self.engine
-            .ensure_empty_index(&CorpusSpec::RecipePath(recipe_path))
+            .ensure_empty_index(&recipe_path)
             .await
             .map_err(|e| Error::Execution(format!("ensure empty index: {e}")))?;
         Ok(())
@@ -1480,7 +1480,7 @@ impl LocalCorpusManager {
             })
         });
         let ingest_result = engine
-            .ingest(&CorpusSpec::RecipePath(recipe_path.clone()), ingest_cb)
+            .ingest_recipe_path(&recipe_path, ingest_cb)
             .await
             .map_err(|e| Error::Execution(format!("engine ingest: {e}")))?;
 
@@ -1544,8 +1544,8 @@ impl LocalCorpusManager {
                 "clustering requires an inference provider; none is configured".to_string(),
             )
         })?;
-        let inference_fn = crate::corpus::inference_to_inference_fn(inference);
-        let clusterer = super::clusterer::Clusterer::new(Arc::clone(&self.engine), inference_fn);
+        let prompt_fn = self.engine.prompt_fn(inference);
+        let clusterer = super::clusterer::Clusterer::new(Arc::clone(&self.engine), prompt_fn);
         let result = clusterer.run(id, config, on_progress).await?;
         // Cache for subsequent `get_preview` calls so the UI doesn't
         // have to hand the whole result blob back through Tauri.
@@ -1768,33 +1768,19 @@ impl LocalCorpusManager {
     /// non-`Complete` entries — surfaced on relaunch via the
     /// ResumePrompt.
     pub async fn incomplete_jobs(&self) -> Vec<IncompleteJob> {
-        use corpus_engine::progress::SourceFileManifest;
         let mut out = Vec::new();
         for config in self.corpora.read().await.values() {
-            let status = self.engine.corpus_disk_status(&config.id);
             // Paths the engine writes manifests to: canonical, or the
-            // partition-of-self. `corpus_disk_status` doesn't expose
-            // the manifest directly, so re-read from the expected
-            // locations.
+            // partition-of-self.
             for candidate in [
                 self.engine_index_dir().join(&config.id),
                 self.engine_index_dir()
                     .join(format!("{}-partition-local", config.id)),
             ] {
-                let Ok(Some(manifest)) = SourceFileManifest::load(&candidate) else {
+                let Some(progress) = self.engine.source_file_progress(&candidate) else {
                     continue;
                 };
-                let total = manifest.files.len();
-                let done = manifest
-                    .files
-                    .iter()
-                    .filter(|f| {
-                        matches!(
-                            f.status,
-                            corpus_engine::progress::SourceFileStatus::Complete { .. }
-                        )
-                    })
-                    .count();
+                let (done, total) = (progress.done, progress.total);
                 if total > 0 && done < total {
                     out.push(IncompleteJob {
                         corpus_id: config.id.clone(),
@@ -1803,7 +1789,6 @@ impl LocalCorpusManager {
                         files_total: total,
                     });
                 }
-                let _ = status.canonical_in_progress; // quiet "unused" until we surface.
                 break; // One manifest per corpus is enough.
             }
         }

@@ -189,7 +189,7 @@ impl WatchedSubsystem {
 
         let worker = Arc::new(
             Worker::new(
-                Arc::clone(&engine),
+                engine.clone(),
                 Arc::clone(&manager),
                 Arc::clone(&registry),
                 sink,
