@@ -11167,6 +11167,12 @@ lines = 297
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-compute/src/distributed_respawn.rs"
+context = "serving"
+lines = 183
+note = ""
+
+[[module]]
 path = "sovereign/crates/sovereign-compute/src/lib.rs"
 context = "serving"
 lines = 36
@@ -13035,7 +13041,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-enrichment-build/src/build/mod.rs"
 context = "unknown"
-lines = 186
+lines = 183
 note = ""
 
 [[module]]
