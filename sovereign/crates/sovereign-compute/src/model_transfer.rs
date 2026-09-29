@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Peer-to-peer model file distribution over the mesh's internal
-//! port. The friend-onboarding workstream (WS5) wants new peers to
+//! port — serve's (phase-b-19), moved from the svrn daemon's
+//! `routes_internal::model_files` by pb-serve-distributes. The routes read the
+//! servable allowlist the host publishes (`ServableModelFilesReader`, the
+//! handler's state), so whichever process mounts them serves one list. The friend-onboarding workstream (WS5) wants new peers to
 //! pull GGUFs from an existing mesh member instead of needing R2 /
 //! S3 credentials of their own. The same primitive also lets a
 //! fresh cloud pod skip the R2 sync step entirely — the laptop
@@ -11,9 +14,9 @@
 //!
 //!   GET  /internal/v1/models/list
 //!     → 200  { "files": [{ "name", "size_bytes", "sha256" }, …] }
-//!         lists only the files the daemon published through
-//!         `AppState::servable_model_files_reader` — i.e. the
-//!         GGUFs this daemon is configured to load. Not a
+//!         lists only the files the host published through its
+//!         `ServableModelFilesReader` — i.e. the GGUFs it is
+//!         configured to load. Not a
 //!         directory browser; arbitrary files under the same
 //!         folder are NOT exposed.
 //!
@@ -50,7 +53,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tokio_util::io::ReaderStream;
 
-use crate::state::AppState;
+use sovereign_serving_host::state::ServableModelFilesReader;
 
 // The wire vocabulary lives in `commonwealth_core::model` — both ends of
 // this protocol must agree on it, and that is the lowest crate both reach.
@@ -127,8 +130,10 @@ fn cached_or_compute_sha(path: &Path, size: u64, mtime: i64) -> std::io::Result<
 
 /// GET /internal/v1/models/list — enumerate this daemon's
 /// servable GGUF files with verification metadata.
-pub async fn list_model_files(State(state): State<AppState>) -> Json<ModelFileListing> {
-    let allowlist = state.inner.serving.servable_model_files.current();
+pub async fn list_model_files(
+    State(servable): State<ServableModelFilesReader>,
+) -> Json<ModelFileListing> {
+    let allowlist = servable.current();
     let mut files = Vec::with_capacity(allowlist.len());
     for path in allowlist.iter() {
         let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
@@ -231,11 +236,11 @@ fn parse_single_byte_range(header: &str, size: u64) -> Option<(u64, u64)> {
 /// lets a distributed worker fetch ONLY its shard's tensors (the `#5b` byte-range
 /// warm path) instead of the whole GGUF, keeping it at O(model/N) on disk.
 pub async fn serve_model_file(
-    State(state): State<AppState>,
+    State(servable): State<ServableModelFilesReader>,
     AxumPath(name): AxumPath<String>,
     headers_in: HeaderMap,
 ) -> Result<Response, (StatusCode, Json<ErrorBody>)> {
-    let allowlist = state.inner.serving.servable_model_files.current();
+    let allowlist = servable.current();
     if allowlist.is_empty() {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
@@ -256,7 +261,7 @@ pub async fn serve_model_file(
         return Err((
             StatusCode::NOT_FOUND,
             Json(ErrorBody {
-                error: format!("'{name}' is not on this daemon's servable model list"),
+                error: format!("'{name}' is not on this node's servable model list"),
             }),
         ));
     };
@@ -397,14 +402,10 @@ pub async fn serve_model_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::AppState;
     use axum::body::to_bytes;
     use axum::http::Request;
     use axum::routing::get;
     use axum::Router;
-    use commonwealth_core::ids::MeshId;
-    use commonwealth_core::mesh::Mesh;
-    use kernel_types::NodeId;
     use std::io::Write;
     use tower::util::ServiceExt;
 
@@ -443,24 +444,13 @@ mod tests {
         assert_eq!(parse_single_byte_range("bytes=0-0", 0), None); // empty file
     }
 
-    fn fixture_state(files: Vec<PathBuf>) -> AppState {
-        let mesh = Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::generate(),
-            name: "test".into(),
-            invite_key_hash: [0u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: Default::default(),
-            peers: vec![],
-        };
-        let state = AppState::new(NodeId::generate(), mesh);
-        state.servable_model_files_reader().publish(files);
-        state
+    fn fixture_state(files: Vec<PathBuf>) -> ServableModelFilesReader {
+        let servable = ServableModelFilesReader::default();
+        servable.publish(files);
+        servable
     }
 
-    fn router(state: AppState) -> Router {
+    fn router(state: ServableModelFilesReader) -> Router {
         Router::new()
             .route(
                 oicp_types::model_transfer::MODELS_LIST_PATH,

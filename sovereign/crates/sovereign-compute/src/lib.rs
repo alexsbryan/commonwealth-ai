@@ -43,6 +43,7 @@ pub mod distributed_warm;
 pub mod distribution;
 pub mod manager;
 pub mod mock;
+pub mod model_transfer;
 pub mod ner;
 pub mod preflight;
 pub mod server;
