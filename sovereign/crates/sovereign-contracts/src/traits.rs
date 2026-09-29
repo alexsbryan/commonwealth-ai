@@ -1603,7 +1603,7 @@ pub struct MeshScoredChunk {
 /// daemon's own `corpora_unavailable`). Both families are the same defect —
 /// the signal exists at the point of loss and used to die before the answer
 /// surface (`MESH_SCALE_100_USERS_1000_CORPORA.md` §9.6, note 89d5f75a).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum UnavailabilityReason {
     /// The index build never finished (ingest stalled / sync paused).
     NotBuilt,
@@ -1691,7 +1691,11 @@ impl UnavailabilityReason {
 /// THE one unavailability record. Every loss site writes this type and
 /// nothing else; the answer surface renders from it. ARCH §18.3 — absence is
 /// reported, never defaulted.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serde because svrn's retrieval probe (`crate::probe::PoolEvidence`)
+/// carries it to the bench that judges the pool, which refuses to score one
+/// that lost a corpus.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CorpusUnavailable {
     /// Corpus id as the request named it.
     pub corpus_id: String,

@@ -143,6 +143,9 @@ pub mod planner_schema;
 /// rather than the daemon's, because Serving's package and Answering both key
 /// on it and neither may name the daemon (`quality/DAEMON_CORE.md` §3.3).
 pub mod principal;
+/// svrn's retrieval probe: the evidence file `svrn __probe` writes and a bench
+/// judges.
+pub mod probe;
 pub mod rebrand;
 pub mod recipe;
 pub mod registry;
