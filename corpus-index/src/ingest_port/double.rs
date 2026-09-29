@@ -29,6 +29,7 @@ use super::{
     IngestPluginPort, LocalCorpusPort, ProgressCallback, PromptFn, RecipeIngested,
     SourceFileProgress, WatchedUpdate, WatchedUpdateProgressFn,
 };
+use crate::fs_source::FsIndexSource;
 use crate::index::CorpusIndex;
 use crate::recipe::CatalogConfig;
 use crate::source::{CorpusReadPort, IndexSource};
@@ -52,6 +53,8 @@ type RecipePathFn<T> = dyn Fn(PathBuf) -> BoxFuture<Result<T>> + Send + Sync;
 type WatchedUpdateFn = dyn Fn(WatchedUpdate, DocFetchFn) -> BoxFuture<Result<()>> + Send + Sync;
 type CorpusFn<T> = dyn Fn(&str) -> T + Send + Sync;
 type ReindexFn = dyn Fn(&str, &[String]) + Send + Sync;
+type RecipeVocabularyFn =
+    dyn Fn(&Path) -> Result<Option<super::daemon::RecipeVocabulary>> + Send + Sync;
 type MergePartitionsFn =
     dyn Fn(Vec<PathBuf>, PathBuf) -> BoxFuture<Result<IndexInfo>> + Send + Sync;
 type MergeIntoCanonicalFn =
@@ -64,6 +67,8 @@ pub struct IngestPortDouble {
     acquirers: Mutex<Vec<String>>,
     extractors: Mutex<Vec<String>>,
     index_dir: Option<PathBuf>,
+    recipes_dir: Option<PathBuf>,
+    recipe_vocabulary: Option<Box<RecipeVocabularyFn>>,
     open_index_for_corpus: Option<Box<OpenIndexFn>>,
     embed_fn: Option<EmbedFn>,
     ingest_recipe_path: Option<Box<RecipePathFn<RecipeIngested>>>,
@@ -75,8 +80,10 @@ pub struct IngestPortDouble {
     reindex_changed_sources_tiered: Option<Box<ReindexFn>>,
     atlas_teardown_ok: bool,
     installed_indexes: Option<Vec<IndexInfo>>,
+    listing: Option<FsIndexSource>,
     incomplete_ingests: Option<Vec<IncompleteIngest>>,
     foreground_signal: Option<Arc<dyn corpus_engine_yield::ForegroundSignal>>,
+    yield_hooks_ok: bool,
     no_foreground_signal: bool,
     enrich_configs: Option<Vec<(String, EnrichConfigSummary)>>,
     watched_config_root: Option<PathBuf>,
@@ -117,6 +124,22 @@ impl IngestPortDouble {
         self
     }
 
+    /// Program the daemon port's `recipes_dir`.
+    pub fn with_recipes_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.recipes_dir = Some(dir.into());
+        self
+    }
+
+    /// Program the daemon port's `recipe_vocabulary`; `f` gets the
+    /// recipe's path.
+    pub fn on_recipe_vocabulary(
+        mut self,
+        f: impl Fn(&Path) -> Result<Option<super::daemon::RecipeVocabulary>> + Send + Sync + 'static,
+    ) -> Self {
+        self.recipe_vocabulary = Some(Box::new(f));
+        self
+    }
+
     /// Program [`CorpusReadPort::open_index_for_corpus`] to open
     /// `<index_dir>/<corpus_id>` with the leaf's own [`CorpusIndex::open`],
     /// the call ingest's engine makes for it (minus its handle cache).
@@ -130,6 +153,21 @@ impl IngestPortDouble {
             let path = dir.join(corpus_id);
             Box::pin(async move { CorpusIndex::open(&path).await })
         }));
+        self
+    }
+
+    /// Program [`CorpusReadPort::installed_indexes`] and
+    /// [`IndexSource::usable_indexes`] to list `<index_dir>` with the leaf's
+    /// own [`FsIndexSource`], the reader ingest's engine delegates both to,
+    /// and the daemon port's `canonical_path` to name `<index_dir>/<id>`
+    /// with the leaf's `Corpus::root`, as the engine's does.
+    /// Needs [`Self::with_index_dir`] first.
+    pub fn listing_indexes_under_index_dir(mut self) -> Self {
+        let dir = self
+            .index_dir
+            .clone()
+            .expect("IngestPortDouble: with_index_dir before listing_indexes_under_index_dir");
+        self.listing = Some(FsIndexSource::new(dir));
         self
     }
 
@@ -237,6 +275,15 @@ impl IngestPortDouble {
     /// engine does before the daemon installs a signal.
     pub fn without_foreground_signal(mut self) -> Self {
         self.no_foreground_signal = true;
+        self
+    }
+
+    /// Program the daemon port's `set_yield_hook` and
+    /// `set_foreground_signal` to accept what the daemon installs at start;
+    /// the double keeps neither (a lease still needs
+    /// [`Self::with_foreground_signal`]).
+    pub fn accepting_yield_hooks(mut self) -> Self {
+        self.yield_hooks_ok = true;
         self
     }
 
@@ -366,7 +413,10 @@ impl EnrichConfigPort for IngestPortDouble {
 impl IndexSource for IngestPortDouble {
     async fn usable_indexes(&self) -> Result<Vec<IndexInfo>> {
         self.record("usable_indexes");
-        Err(refuse("usable_indexes"))
+        match &self.listing {
+            Some(source) => source.usable_indexes().await,
+            None => Err(refuse("usable_indexes")),
+        }
     }
 
     async fn open_index(&self, _path: &Path) -> Result<CorpusIndex> {
@@ -387,9 +437,10 @@ impl CorpusReadPort for IngestPortDouble {
 
     async fn installed_indexes(&self) -> Result<Vec<IndexInfo>> {
         self.record("installed_indexes");
-        match &self.installed_indexes {
-            Some(indexes) => Ok(indexes.clone()),
-            None => Err(refuse("installed_indexes")),
+        match (&self.listing, &self.installed_indexes) {
+            (Some(source), _) => source.installed_indexes().await,
+            (None, Some(indexes)) => Ok(indexes.clone()),
+            (None, None) => Err(refuse("installed_indexes")),
         }
     }
 
@@ -641,6 +692,22 @@ mod tests {
             err.to_string().contains("IngestPortDouble::recipe_sharing"),
             "{err}"
         );
+    }
+
+    #[tokio::test]
+    async fn the_listing_mode_reads_the_index_dir_with_the_leaf_reader() {
+        let dir = tempfile::tempdir().unwrap();
+        let index = CorpusIndex::create(&dir.path().join("c"), "c", "C", "m", 4, true, "MIT")
+            .await
+            .unwrap();
+        index.mark_ingestion_complete().unwrap();
+        let d = IngestPortDouble::new()
+            .with_index_dir(dir.path())
+            .listing_indexes_under_index_dir();
+        let listed = d.installed_indexes().await.unwrap();
+        let ids: Vec<&str> = listed.iter().map(|i| i.corpus_id.as_str()).collect();
+        assert_eq!(ids, vec!["c"]);
+        assert_eq!(d.calls(), vec!["installed_indexes"]);
     }
 
     #[test]

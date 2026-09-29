@@ -14,6 +14,7 @@ use corpus_engine_yield::{ForegroundSignal, YieldHook};
 use sovereign_contracts::daemon_wire::{RecipeDryRunReport, RecipeParameterSchema};
 
 use super::{refuse, unprogrammed, IngestPortDouble};
+use crate::corpus::Corpus;
 use crate::index::CorpusIndex;
 use crate::ingest_port::cancel::CancellationRegistry;
 use crate::ingest_port::daemon::{
@@ -31,15 +32,24 @@ fn io_refuse(method: &str) -> std::io::Error {
 #[async_trait]
 impl IngestPort for IngestPortDouble {
     fn recipes_dir(&self) -> &Path {
-        panic!("{}", unprogrammed("recipes_dir"))
+        self.record("recipes_dir");
+        match &self.recipes_dir {
+            Some(dir) => dir,
+            None => panic!("{}", unprogrammed("recipes_dir")),
+        }
     }
 
     fn partition_path(&self, _corpus_id: &str) -> PathBuf {
         panic!("{}", unprogrammed("partition_path"))
     }
 
-    fn canonical_path(&self, _corpus_id: &str) -> PathBuf {
-        panic!("{}", unprogrammed("canonical_path"))
+    fn canonical_path(&self, corpus_id: &str) -> PathBuf {
+        self.record("canonical_path");
+        let listing = self.listing.as_ref();
+        match listing.and_then(|source| Corpus::named(source.index_dir(), corpus_id)) {
+            Some(corpus) => corpus.root(),
+            None => panic!("{}", unprogrammed("canonical_path")),
+        }
     }
 
     fn corpus_is_installed(&self, _corpus_id: &str) -> bool {
@@ -137,11 +147,17 @@ impl IngestPort for IngestPortDouble {
     }
 
     fn set_yield_hook(&self, _hook: Arc<dyn YieldHook>) {
-        panic!("{}", unprogrammed("set_yield_hook"))
+        self.record("set_yield_hook");
+        if !self.yield_hooks_ok {
+            panic!("{}", unprogrammed("set_yield_hook"))
+        }
     }
 
     fn set_foreground_signal(&self, _signal: Arc<dyn ForegroundSignal>) {
-        panic!("{}", unprogrammed("set_foreground_signal"))
+        self.record("set_foreground_signal");
+        if !self.yield_hooks_ok {
+            panic!("{}", unprogrammed("set_foreground_signal"))
+        }
     }
 
     async fn ingest_with_overrides(
@@ -228,9 +244,12 @@ impl IngestPort for IngestPortDouble {
         Err(refuse("test_recipe_report"))
     }
 
-    fn recipe_vocabulary(&self, _recipe_path: &Path) -> Result<Option<RecipeVocabulary>> {
+    fn recipe_vocabulary(&self, recipe_path: &Path) -> Result<Option<RecipeVocabulary>> {
         self.record("recipe_vocabulary");
-        Err(refuse("recipe_vocabulary"))
+        match &self.recipe_vocabulary {
+            Some(f) => f(recipe_path),
+            None => Err(refuse("recipe_vocabulary")),
+        }
     }
 
     fn recipe_enrichment_domain(&self, _recipe_path: &Path) -> Option<String> {
