@@ -972,11 +972,12 @@ pub(super) async fn check_daemon_memory(client_url: &str) -> CheckResult {
 /// and it must also work after an abort, when the daemon is down for the very
 /// reason being diagnosed.
 ///
-/// It calls the same pure predicate the boot guard enforces, so doctor and the
-/// daemon can never disagree about what is safe.
+/// It calls the same pure predicate the boot guard enforces
+/// (`sovereign_contracts::containment`, read by serve's guard too), so doctor
+/// and the loader can never disagree about what is safe.
 pub(super) fn check_distributed_primary_contained() -> CheckResult {
-    use sovereign_daemon::build::containment::{
-        classify_containment, ContainmentVerdict, OVERRIDE_ENV,
+    use sovereign_contracts::containment::{
+        classify_containment, rpc_discovery_armed, ContainmentVerdict, OVERRIDE_ENV,
     };
 
     let name = "distributed_primary_contained";
@@ -994,7 +995,7 @@ pub(super) fn check_distributed_primary_contained() -> CheckResult {
         sovereign_inference::engine_factory::child_owns_primary(&config),
         config.shared_model.role,
         false, // self node id is not resolved here; the role term carries it
-        sovereign_daemon::startup::rpc_discovery_armed(),
+        rpc_discovery_armed(),
         std::env::var(OVERRIDE_ENV).is_ok(),
     );
 

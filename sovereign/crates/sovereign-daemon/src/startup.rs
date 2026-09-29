@@ -21,9 +21,3 @@ use std::path::PathBuf;
 pub fn daemon_pid_path() -> PathBuf {
     sovereign_contracts::rebrand::svrnmesh_root().join("daemon.pid")
 }
-
-/// Is this process armed to serve RPC workers? The one reader of
-/// `SOVEREIGN_RPC_DISCOVER` now lives beside the containment verdict it feeds,
-/// in the serving package; re-exported here so every existing caller keeps its
-/// path.
-pub use sovereign_compute::containment::rpc_discovery_armed;

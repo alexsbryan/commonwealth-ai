@@ -23,6 +23,7 @@ pub use oicp_types as oicp;
 /// watcher posture does not link the knowledge engine; corpus-engine
 /// re-exports it at `sovereign_config`.
 pub mod config;
+pub mod containment;
 
 // Wire shapes the daemon's HTTP routes answer with. Here rather than beside
 // the routes because a client that only parses an answer should not have to

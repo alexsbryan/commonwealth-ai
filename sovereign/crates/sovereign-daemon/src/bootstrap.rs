@@ -318,22 +318,6 @@ pub fn build_folder_tiered_deps(
     })
 }
 
-/// THE reader of `SOVEREIGN_RPC_DISCOVER` (TOPOLOGY §10 phase 10, ARCH §10.6).
-///
-/// A PRESENCE check — any value, including empty, arms discovery. That is the
-/// established semantics and it is preserved here rather than tightened;
-/// changing what counts as "set" is a behaviour change and this rung is about
-/// having one answer, not a new one.
-///
-/// Three sites asked independently (`bootstrap`, `build/containment`,
-/// `doctor_cmd`), and two of them feed a containment VERDICT — so a divergence
-/// would mean the doctor reporting a containment posture the daemon does not
-/// actually run under.
-///
-/// Lives in `crate::startup` rather than here (moved 2026-09-17) because this
-/// module is gated on `treesitter` and `build/containment` is not; the env read
-/// has no treesitter dependency.
-pub use crate::startup::rpc_discovery_armed;
 /// The `--rpc-worker` parse and its default bind are the launch contract's
 /// (`sovereign_contracts::launch`). The role → RPC env translation is the
 /// loader's (`sovereign_compute::distributed_role`), which the distribution
