@@ -33,6 +33,8 @@ pub(super) type RecipeTextFn<T> = dyn Fn(&str) -> Result<T> + Send + Sync;
 pub(super) type DryRunFn = dyn Fn(&Path, usize, bool) -> Result<RecipeDryRunReport> + Send + Sync;
 pub(super) type PackCanonicalFn =
     dyn Fn(&Path, Box<dyn std::io::Write + Send>, i32) -> Result<u64> + Send + Sync;
+pub(super) type PrepareInstallFn =
+    dyn Fn(&str) -> std::result::Result<PreparedInstall, InstallRefusal> + Send + Sync;
 pub(super) type SliceIngestFn =
     dyn Fn(SliceIngest) -> super::BoxFuture<Result<IngestResult>> + Send + Sync;
 
@@ -115,6 +117,43 @@ impl IngestPortDouble {
         f: impl Fn(&Path, Box<dyn std::io::Write + Send>, i32) -> Result<u64> + Send + Sync + 'static,
     ) -> Self {
         self.pack_canonical = Some(Box::new(f));
+        self
+    }
+
+    /// Program `prepare_registry_install`; `f` gets the corpus id (the
+    /// parameters are not replayed).
+    pub fn on_prepare_registry_install(
+        mut self,
+        f: impl Fn(&str) -> std::result::Result<PreparedInstall, InstallRefusal> + Send + Sync + 'static,
+    ) -> Self {
+        self.prepare_registry_install = Some(Box::new(f));
+        self
+    }
+
+    /// Program `corpus_disk_status`; `f` gets the corpus id.
+    pub fn on_corpus_disk_status(
+        mut self,
+        f: impl Fn(&str) -> CorpusDiskStatus + Send + Sync + 'static,
+    ) -> Self {
+        self.corpus_disk_status = Some(Box::new(f));
+        self
+    }
+
+    /// Program `cached_article_stats`; `f` gets the corpus id.
+    pub fn on_cached_article_stats(
+        mut self,
+        f: impl Fn(&str) -> Option<ArticleStats> + Send + Sync + 'static,
+    ) -> Self {
+        self.cached_article_stats = Some(Box::new(f));
+        self
+    }
+
+    /// Program `compute_article_stats`; `f` gets the corpus id.
+    pub fn on_compute_article_stats(
+        mut self,
+        f: impl Fn(&str) -> Option<ArticleStats> + Send + Sync + 'static,
+    ) -> Self {
+        self.compute_article_stats = Some(Box::new(f));
         self
     }
 
@@ -237,16 +276,28 @@ impl IngestPort for IngestPortDouble {
         panic!("{}", unprogrammed("corpus_committed_iter_pos"))
     }
 
-    fn corpus_disk_status(&self, _corpus_id: &str) -> CorpusDiskStatus {
-        panic!("{}", unprogrammed("corpus_disk_status"))
+    fn corpus_disk_status(&self, corpus_id: &str) -> CorpusDiskStatus {
+        self.record("corpus_disk_status");
+        match &self.corpus_disk_status {
+            Some(f) => f(corpus_id),
+            None => panic!("{}", unprogrammed("corpus_disk_status")),
+        }
     }
 
-    fn cached_article_stats(&self, _corpus_id: &str) -> Option<ArticleStats> {
-        panic!("{}", unprogrammed("cached_article_stats"))
+    fn cached_article_stats(&self, corpus_id: &str) -> Option<ArticleStats> {
+        self.record("cached_article_stats");
+        match &self.cached_article_stats {
+            Some(f) => f(corpus_id),
+            None => panic!("{}", unprogrammed("cached_article_stats")),
+        }
     }
 
-    fn compute_article_stats(&self, _corpus_id: &str) -> Option<ArticleStats> {
-        panic!("{}", unprogrammed("compute_article_stats"))
+    fn compute_article_stats(&self, corpus_id: &str) -> Option<ArticleStats> {
+        self.record("compute_article_stats");
+        match &self.compute_article_stats {
+            Some(f) => f(corpus_id),
+            None => panic!("{}", unprogrammed("compute_article_stats")),
+        }
     }
 
     fn corpus_status_rows(&self) -> std::io::Result<serde_json::Value> {
@@ -341,13 +392,16 @@ impl IngestPort for IngestPortDouble {
 
     async fn prepare_registry_install(
         self: Arc<Self>,
-        _corpus_id: &str,
+        corpus_id: &str,
         _parameters: &BTreeMap<String, serde_json::Value>,
     ) -> std::result::Result<PreparedInstall, InstallRefusal> {
         self.record("prepare_registry_install");
-        Err(InstallRefusal::RecipeNotFound(unprogrammed(
-            "prepare_registry_install",
-        )))
+        match &self.prepare_registry_install {
+            Some(f) => f(corpus_id),
+            None => Err(InstallRefusal::RecipeNotFound(unprogrammed(
+                "prepare_registry_install",
+            ))),
+        }
     }
 
     async fn recipe_sharing(&self, _corpus_id: &str) -> Result<RecipeSharing> {

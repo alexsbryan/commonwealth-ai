@@ -110,6 +110,10 @@ pub struct IngestPortDouble {
     catalog_configs: Option<Vec<(String, CatalogConfig)>>,
     ingest_catalog_work: Option<Box<CatalogWorkFn>>,
     partition_path: Option<Box<CorpusFn<PathBuf>>>,
+    prepare_registry_install: Option<Box<daemon::PrepareInstallFn>>,
+    corpus_disk_status: Option<Box<CorpusFn<super::daemon::CorpusDiskStatus>>>,
+    cached_article_stats: Option<Box<CorpusFn<Option<super::daemon::ArticleStats>>>>,
+    compute_article_stats: Option<Box<CorpusFn<Option<super::daemon::ArticleStats>>>>,
     cancel_registry: Option<super::cancel::CancellationRegistry>,
     ingest_with_overrides: Option<Box<daemon::SliceIngestFn>>,
 }
@@ -251,6 +255,17 @@ impl IngestPortDouble {
         let cancel = Arc::clone(&in_flight);
         self.ingest_in_flight = Some(Box::new(move |id| in_flight(id)));
         self.cancel_corpus_ingest = Some(Box::new(move |id| cancel(id)));
+        self
+    }
+
+    /// Program [`LocalCorpusPort::cancel_corpus_ingest`] alone, for a test
+    /// whose cancel must reach the ingest it programmed; `f` answers
+    /// whether one was signalled.
+    pub fn on_cancel_corpus_ingest(
+        mut self,
+        f: impl Fn(&str) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.cancel_corpus_ingest = Some(Box::new(f));
         self
     }
 
