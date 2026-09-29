@@ -630,16 +630,16 @@ async fn models_endpoint_with_registered_model() {
     assert_eq!(json["data"][0]["id"], "test-coder");
 }
 
-/// The kind registry is the route mount: every registered kind with a route
-/// answers on it, and rerank is one of them. A kind registered without its
-/// route would 404 here.
+/// Every served kind's route is mounted — forwarded to serve's kind mount
+/// (pb-serve-distributes), at the paths the shared contract names and the
+/// registry is held equal to — and rerank is one of them. A kind path left
+/// unmounted would 404 here.
 #[tokio::test]
 async fn every_served_kind_route_is_mounted_and_rerank_is_served() {
-    let kinds = sovereign_inference::served_kind::served_kinds();
-    let mut paths: Vec<&str> = kinds.iter().filter_map(|k| k.route_path()).collect();
+    let mut paths = sovereign_contracts::served_kinds::SERVED_KIND_PATHS.to_vec();
     assert!(
         paths.contains(&"/v1/rerank"),
-        "rerank must register its route; registered: {kinds:?}"
+        "rerank must name its route; named: {paths:?}"
     );
     paths.sort();
     for path in paths {

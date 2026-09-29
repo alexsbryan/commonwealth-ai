@@ -12,6 +12,11 @@ pub use sovereign_contracts::rerank_kind::serves_rerank;
 
 static DECIDED: std::sync::OnceLock<ServingPath> = std::sync::OnceLock::new();
 
+/// Where the path decided at boot reaches serve: `Some(base)`, or `None` on a
+/// terminal, which dials its entry node and has no serve. Unset where no boot
+/// decided.
+static SERVE_TARGET: std::sync::OnceLock<Option<ServeBase>> = std::sync::OnceLock::new();
+
 /// Where this daemon's inference is served from — THE one decider, read once
 /// at boot.
 ///
@@ -47,7 +52,17 @@ impl ServingPath {
         // Kept as decided: `/status` reports the path this process booted on,
         // which a later config edit does not change.
         let _ = DECIDED.set(path.clone());
+        let terminal =
+            config.node_class() == sovereign_contracts::setup_config::NodeClass::Terminal;
+        let _ = SERVE_TARGET.set((!terminal).then(|| resolve_serve_base(&config.node)));
         path
+    }
+
+    /// Where this process reaches serve, as decided at boot: `Some(Some(base))`,
+    /// `Some(None)` on a terminal (no serve to reach), `None` where no boot
+    /// decided. Readers name each absence apart (principle 6).
+    pub fn decided_serve() -> Option<Option<&'static ServeBase>> {
+        SERVE_TARGET.get().map(Option::as_ref)
     }
 
     /// [`ServingPath::DialsServe`] becomes [`ServingPath::Hosted`] when this
