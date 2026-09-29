@@ -275,7 +275,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-mesh/src/join.rs", Class::Mesh, 2),
     // 2 -> 1 at d413b052b: the newsworthy watcher's MediaWiki client moved
     // into corpus-engine's daemon port (registered there, InboundOnly).
-    ("sovereign/crates/sovereign-daemon/src/daemon.rs", Class::Mesh, 1),
+    // Re-keyed at pb-serve-distributes: the one left, RPC-worker discovery's
+    // `/status` probe client, moved with discovery to serving-host.
+    ("sovereign/crates/sovereign-serving-host/src/rpc_discovery.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-daemon/src/auto_ingest.rs", Class::Mesh, 2),
     // Re-keyed 2026-09-16: the two knowledge-surface clients moved to the
     // client family, `sovereign-turn-client` (domains

@@ -972,6 +972,12 @@ lines = 1195
 note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
+path = "sovereign/crates/sovereign-serving-host/src/rpc_discovery.rs"
+context = "serving"
+lines = 575
+note = "moved from sovereign-daemon daemon.rs (pb-serve-distributes)"
+
+[[module]]
 path = "sovereign/crates/sovereign-pods/src/worker_http.rs"
 context = "compute"
 lines = 2046

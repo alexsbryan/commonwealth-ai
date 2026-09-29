@@ -45,6 +45,9 @@ async-trait = { workspace = true }
 # exception cleared when the remote provider was reached through
 # `oicp-client`).
 oicp-client = { workspace = true }
+# RPC-worker discovery's dial vocabulary: `PeerTransport`, `PeerContact`,
+# `TrafficClass` (a package leaf; pb-serve-distributes).
+mesh-reach = { workspace = true }
 reqwest = { workspace = true }
 urlencoding = "2"
 sha2 = { workspace = true }
