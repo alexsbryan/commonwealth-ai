@@ -122,6 +122,85 @@ fn checked_in_atlas_stores_read_like_freshly_written_ones() {
     assert_eq!(p.edges_from(WIKI_ALPHA_ATOM_ID).len(), 1);
 }
 
+/// The engine half of svrn's atlas_step_reachability (sovereign-tools
+/// tests/main), which walks the checked-in wiki store: every atom in it is an
+/// Entity of ingest's wiki type under the id ingest mints for its title, Alpha
+/// links to Beta, and the seed table svrn builds for it with the leaf's
+/// `AnnSeedTable::build` holds what ingest's `build_persistent_ann_seed_table`
+/// writes from the same entries.
+#[tokio::test]
+async fn the_wiki_fixture_holds_what_ingest_writes_for_the_walk() {
+    use corpus_engine::enrichment::atlas::context::{
+        build_persistent_ann_seed_table, AtlasContext, AtlasEntry,
+    };
+    use corpus_engine::enrichment::atlas::wiki_store::WIKI_ENTITY_TYPE;
+    use corpus_engine_atlas_reader::ann_store::AnnSeedTable;
+    use corpus_engine_atlas_reader::opener::open_walk_provider;
+    use understanding_vocab::atoms::AtomType;
+
+    let checked_in = tempfile::tempdir().unwrap();
+    copy_store_fixture(WIKI_STORE, &checked_in.path().join(WIKI_STORE)).unwrap();
+    let p = open_walk_provider(checked_in.path(), WIKI_STORE)
+        .await
+        .unwrap();
+    let titles = ["Alpha", "Beta"];
+    for title in titles {
+        let id = wiki_atom_id(title, WIKI_STORE);
+        let atom = p
+            .atom(&id)
+            .unwrap_or_else(|| panic!("the wiki fixture must hold `{title}` as {id}"));
+        assert_eq!(atom.name(), title);
+        assert_eq!(atom.kind(), AtomType::Entity);
+        assert_eq!(atom.subtype(), WIKI_ENTITY_TYPE);
+    }
+    let alpha_edges = p.edges_from(WIKI_ALPHA_ATOM_ID);
+    assert_eq!(alpha_edges.len(), 1);
+    assert_eq!(alpha_edges[0].target, wiki_atom_id("Beta", WIKI_STORE));
+
+    let rows: Vec<(String, Vec<f32>)> = titles
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (wiki_atom_id(t, WIKI_STORE), vec![1.0 + i as f32; 4]))
+        .collect();
+    let atlas = checked_in.path().join(WIKI_STORE).join(ATLAS_DIRNAME);
+    let entries = titles
+        .iter()
+        .zip(&rows)
+        .map(|(t, (id, v))| AtlasEntry {
+            atom_id: id.clone(),
+            canonical_name: t.to_string(),
+            embed_text: t.to_string(),
+            embedding: v.clone(),
+        })
+        .collect();
+    build_persistent_ann_seed_table(
+        &atlas,
+        &AtlasContext {
+            atlas_corpus_id: WIKI_STORE.to_string(),
+            entries,
+            top_k: 12,
+        },
+    )
+    .await
+    .unwrap();
+    let mut by_ingest = AnnSeedTable::open_for_atlas(&atlas)
+        .await
+        .unwrap()
+        .all_rows()
+        .await
+        .unwrap();
+    let leaf_dir = tempfile::tempdir().unwrap();
+    let mut by_leaf = AnnSeedTable::build(leaf_dir.path(), &rows)
+        .await
+        .unwrap()
+        .all_rows()
+        .await
+        .unwrap();
+    by_ingest.sort_by(|a, b| a.0.cmp(&b.0));
+    by_leaf.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(by_ingest, by_leaf);
+}
+
 /// Rewrites the checked-in fixtures from ingest's writers.
 #[test]
 #[ignore = "rewrites corpus-engine-atlas-reader/testdata/stores"]
