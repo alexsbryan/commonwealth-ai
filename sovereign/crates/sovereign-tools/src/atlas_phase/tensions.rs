@@ -74,15 +74,18 @@ impl AtlasTensionsTool {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+    use std::sync::Mutex;
 
-    /// The leaf wraps the real graph-strategy candidate selector: read atoms →
-    /// `select_candidates` + de-noise → write `tension_candidates.json`, on the
-    /// canonical atlas paths. Hermetic: a fresh atlas with no atoms yields zero
-    /// candidates and a well-formed file (the selection logic itself is covered
-    /// by corpus-engine's own tests).
+    /// The tool reads atoms on the canonical atlas paths, hands them to the
+    /// port, and reports what the port wrote. Candidate selection and the
+    /// tension_candidates.json schema are ingest's, proven on `IngestAtlas`
+    /// (corpus-engine's atlas_port_parity
+    /// `write_tension_candidates_writes_the_schema_the_classifier_reads`).
     #[tokio::test]
     async fn atlas_tensions_reads_selects_and_writes_on_canonical_paths() {
         let dir = tempfile::tempdir().unwrap();
@@ -94,33 +97,37 @@ mod tests {
         )
         .unwrap();
 
+        let seen: Arc<Mutex<Vec<std::path::PathBuf>>> = Arc::default();
+        let seen_in = Arc::clone(&seen);
+        let port = AtlasPortDouble::new().on_write_tension_candidates(move |dir, atoms| {
+            seen_in.lock().unwrap().push(dir.to_path_buf());
+            Ok((atoms.len(), dir.join("tension_candidates.json")))
+        });
         let params = serde_json::json!({
             "corpus": "c1",
             "index_dir": dir.path().to_string_lossy()
         });
-        let out = AtlasTensionsTool::new(Arc::new(corpus_engine::IngestAtlas))
+        let out = AtlasTensionsTool::new(Arc::new(port))
             .run(&params, &ToolContext::default())
             .await
             .unwrap();
         match out {
-            StepOutput::Text(t) => assert!(t.contains("0 candidate"), "{t}"),
+            StepOutput::Text(t) => {
+                assert!(t.contains("0 candidate"), "{t}");
+                assert!(t.contains("tension_candidates.json"), "{t}");
+            }
             o => panic!("unexpected output: {o:?}"),
         }
+        assert_eq!(*seen.lock().unwrap(), vec![atlas.clone()]);
 
-        // tension_candidates.json is written in the schema the classifier reads.
-        let v: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(atlas.join("tension_candidates.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(v["candidates"].as_array().unwrap().len(), 0);
-        assert_eq!(v["schema_version"], "2.0");
-
-        // A missing atlas is a loud error.
+        // A missing atlas is a loud error, and the port is never asked.
         let bad =
             serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
-        assert!(AtlasTensionsTool::new(Arc::new(corpus_engine::IngestAtlas))
+        let port = Arc::new(AtlasPortDouble::new());
+        assert!(AtlasTensionsTool::new(port.clone())
             .run(&bad, &ToolContext::default())
             .await
             .is_err());
+        assert!(port.calls().is_empty());
     }
 }

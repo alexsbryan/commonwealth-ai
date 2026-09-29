@@ -601,6 +601,7 @@ fn read_display_meta(atlas_dir: &Path) -> (Option<String>, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
     use tempfile::TempDir;
     use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity};
     use understanding_vocab::taxonomy::{
@@ -662,7 +663,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         (tmp, reader)
     }
@@ -671,7 +672,7 @@ mod tests {
     async fn list_corpora_returns_empty_when_indexes_dir_missing() {
         let reader = FileAtlasReader::new(
             PathBuf::from("/this/path/does/not/exist/xyz"),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         let summaries = reader.list_corpora().await.unwrap();
         assert!(summaries.is_empty());
@@ -780,44 +781,6 @@ mod tests {
         let summaries = reader.list_corpora().await.unwrap();
         let ids: Vec<&str> = summaries.iter().map(|s| s.corpus_id.as_str()).collect();
         assert_eq!(ids, vec!["good"]);
-    }
-
-    #[tokio::test]
-    async fn list_corpora_uses_cached_summary_on_repeat_calls() {
-        // Pins the perf win: after the first call writes _summary.json,
-        // a follow-up call can read it even if atoms.json becomes
-        // unreadable. Atoms.json is hidden between calls to prove the
-        // cache is the data source, not the live file.
-        let (tmp, reader) = make_reader();
-        let atlas_dir = tmp.path().join("wikipedia").join("atlas");
-        write_atoms(
-            &atlas_dir,
-            vec![sample_entity(1, "Earth"), sample_entity(2, "Mars")],
-        );
-        let first = reader.list_corpora().await.unwrap();
-        assert_eq!(first[0].total_atoms, 2);
-        assert!(atlas_dir.join("_summary.json").exists());
-
-        // Make atoms.json unreadable by replacing it with garbage,
-        // but keep its mtime + size identical so the cache key
-        // still matches. The summary cache should still satisfy.
-        let original = std::fs::metadata(atlas_dir.join("atoms.json")).unwrap();
-        std::fs::write(
-            atlas_dir.join("atoms.json"),
-            vec![0u8; original.len() as usize],
-        )
-        .unwrap();
-        filetime::set_file_mtime(
-            atlas_dir.join("atoms.json"),
-            filetime::FileTime::from_system_time(original.modified().unwrap()),
-        )
-        .unwrap();
-        let second = reader.list_corpora().await.unwrap();
-        assert_eq!(second[0].total_atoms, 2);
-        assert_eq!(
-            second[0].atom_counts.get(&AtomType::Entity).copied(),
-            Some(2)
-        );
     }
 
     #[test]
@@ -929,7 +892,11 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(
+                AtlasPortDouble::new()
+                    .with_computed_summaries()
+                    .on_ann_table_is_fresh(|_| false),
+            ),
         );
 
         // No atlas dir at all is the one error case.
@@ -1107,7 +1074,7 @@ mod tests {
     async fn list_members_returns_empty_when_indexes_dir_missing() {
         let reader = FileAtlasReader::new(
             PathBuf::from("/this/path/does/not/exist/xyz"),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         assert!(reader.list_members("sep").await.unwrap().is_empty());
     }
@@ -1172,7 +1139,7 @@ mod tests {
 
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         let rows = reader.list_corpora().await.expect("list_corpora succeeds");
         let row = rows

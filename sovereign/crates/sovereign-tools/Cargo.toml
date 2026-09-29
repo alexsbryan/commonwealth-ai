@@ -208,6 +208,10 @@ strsim = "0.11"
 # per-stage info!/debug! (session i/o names, box counts, shapes) so a
 # reader of the run can see inside the PP-OCR pipeline. RUST_LOG-gated.
 tracing-subscriber = { workspace = true }
+# The ingest ports' test doubles and the atlas store fixtures: this crate's
+# tests drive its own code against them, and each port's behaviour is proven
+# on its implementor in corpus-engine (phase-b-47/48).
+corpus-engine-atlas-reader = { workspace = true, features = ["test-doubles"] }
 
 # Examples that import treesitter-gated symbols (SymbolLookupTool,
 # ScipGraphHandle, etc.) only compile when the matching crate

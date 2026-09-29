@@ -30,6 +30,8 @@ pub mod context_loader;
 pub mod cross_corpus;
 pub mod evidence_site;
 pub mod field_model;
+#[cfg(any(test, feature = "test-doubles"))]
+pub mod fixtures;
 pub mod governance;
 pub mod governance_change;
 pub mod governance_view;

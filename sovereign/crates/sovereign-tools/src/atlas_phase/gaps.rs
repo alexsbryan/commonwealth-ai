@@ -73,15 +73,18 @@ impl AtlasGapsTool {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+    use std::sync::Mutex;
 
-    /// The leaf wraps the real corpus-engine gap detector: read atoms+edges →
-    /// detect → write gaps.json, on the canonical `<index>/<corpus>/atlas/` paths.
-    /// Hermetic: a fresh atlas with no atoms yields zero gaps and a well-formed
-    /// `gaps.json` — proving the read→detect→write wiring (the detection logic
-    /// itself is covered by corpus-engine's own tests).
+    /// The tool reads atoms + edges on the canonical `<index>/<corpus>/atlas/`
+    /// paths, hands them to the port, and reports what the port wrote. The
+    /// detection and the gaps.json schema are ingest's, proven on
+    /// `IngestAtlas` (corpus-engine's atlas_port_parity
+    /// `write_deterministic_gaps_writes_the_schema_the_downstream_reads`).
     #[tokio::test]
     async fn atlas_gaps_reads_detects_and_writes_on_canonical_paths() {
         let dir = tempfile::tempdir().unwrap();
@@ -98,32 +101,38 @@ mod tests {
         )
         .unwrap();
 
+        let seen: Arc<Mutex<Vec<std::path::PathBuf>>> = Arc::default();
+        let seen_in = Arc::clone(&seen);
+        let port = AtlasPortDouble::new().on_write_deterministic_gaps(move |dir, atoms, edges| {
+            seen_in.lock().unwrap().push(dir.to_path_buf());
+            Ok((atoms.len() + edges.len(), dir.join("gaps.json")))
+        });
         let params = serde_json::json!({
             "corpus": "c1",
             "index_dir": dir.path().to_string_lossy()
         });
-        let out = AtlasGapsTool::new(Arc::new(corpus_engine::IngestAtlas))
+        let out = AtlasGapsTool::new(Arc::new(port))
             .run(&params, &ToolContext::default())
             .await
             .unwrap();
         match out {
-            StepOutput::Text(t) => assert!(t.contains("0 gap"), "{t}"),
+            StepOutput::Text(t) => {
+                assert!(t.contains("0 gap"), "{t}");
+                assert!(t.contains(&atlas.join("gaps.json").display().to_string()), "{t}");
+            }
             o => panic!("unexpected output: {o:?}"),
         }
+        assert_eq!(*seen.lock().unwrap(), vec![atlas.clone()]);
 
-        // gaps.json is written in the schema the downstream reads.
-        let g: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(atlas.join("gaps.json")).unwrap())
-                .unwrap();
-        assert_eq!(g["gaps"].as_array().unwrap().len(), 0);
-        assert_eq!(g["schema_version"], "2.0");
-
-        // A missing atlas is a loud error (points the operator at resolve).
+        // A missing atlas is a loud error (points the operator at resolve),
+        // and the port is never asked to write.
         let bad =
             serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
-        assert!(AtlasGapsTool::new(Arc::new(corpus_engine::IngestAtlas))
+        let port = Arc::new(AtlasPortDouble::new());
+        assert!(AtlasGapsTool::new(port.clone())
             .run(&bad, &ToolContext::default())
             .await
             .is_err());
+        assert!(port.calls().is_empty());
     }
 }

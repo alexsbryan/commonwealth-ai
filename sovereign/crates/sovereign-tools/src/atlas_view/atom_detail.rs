@@ -522,6 +522,7 @@ fn build_evidence(atom: &AtomEnvelope) -> Vec<EvidenceExcerpt> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
     use corpus_engine_atlas_reader::cross_corpus::{
         CrossCorpusAtomRef, CrossCorpusEdge, CrossCorpusEdgesFile, MatchTrace,
     };
@@ -620,7 +621,7 @@ mod tests {
         write_atoms(&atlas_dir, atoms);
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         (tmp, reader, atlas_dir)
     }
@@ -751,7 +752,7 @@ mod tests {
         );
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
@@ -807,7 +808,7 @@ mod tests {
         );
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
@@ -888,7 +889,7 @@ mod tests {
         write_atoms(&atlas_dir, vec![hume.clone(), claim_with_attribution]);
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         let detail = reader
             .get_atom_detail("wiki", "claim-0001")
@@ -932,7 +933,7 @@ mod tests {
         write_atoms(&atlas_dir, vec![dangling_claim]);
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         let detail = reader
             .get_atom_detail("wiki", "claim-0001")
@@ -978,7 +979,7 @@ mod tests {
         );
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")

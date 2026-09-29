@@ -26,6 +26,10 @@ mod atlas_code_structure;
 mod atlas_evidence_site_wiring;
 #[path = "main/atlas_narrative_markdown.rs"]
 mod atlas_narrative_markdown;
+#[path = "main/atlas_port_parity.rs"]
+mod atlas_port_parity;
+#[path = "main/atlas_store_fixtures.rs"]
+mod atlas_store_fixtures;
 #[path = "main/atoms_schema_back_compat.rs"]
 mod atoms_schema_back_compat;
 #[path = "main/chatgpt_real_export.rs"]

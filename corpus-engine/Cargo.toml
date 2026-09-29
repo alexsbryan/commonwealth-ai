@@ -269,6 +269,9 @@ treesitter = [
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = { workspace = true }
+# The atlas store fixtures and the canned typed-extension envelope the
+# `AtlasPort` parity tests share with svrn's double-side tests (phase-b-48).
+corpus-engine-atlas-reader = { workspace = true, features = ["test-doubles"] }
 # Dev-only, and only to capture what a tracing event ACTUALLY formats to.
 # The F5 demand instrument is a Rust writer read back by a Python reader
 # (scripts/sec-miss-demand.py); the two agree on a log-line grammar and

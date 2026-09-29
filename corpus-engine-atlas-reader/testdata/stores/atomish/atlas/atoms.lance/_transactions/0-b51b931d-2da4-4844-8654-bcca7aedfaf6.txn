@@ -1,0 +1,5 @@
+$b51b931d-2da4-4844-8654-bcca7aedfaf6²Ùid ÿÿÿÿÿÿÿÿÿ*uint328str_id ÿÿÿÿÿÿÿÿÿ*string8kind ÿÿÿÿÿÿÿÿÿ*uint88name ÿÿÿÿÿÿÿÿÿ*string8label ÿÿÿÿÿÿÿÿÿ*string8 content ÿÿÿÿÿÿÿÿÿ*string8 subtype ÿÿÿÿÿÿÿÿÿ*string8$description ÿÿÿÿÿÿÿÿÿ*string8 excerpt ÿÿÿÿÿÿÿÿÿ*string8 salience	 ÿÿÿÿÿÿÿÿÿ*float8"
+confidence
+ ÿÿÿÿÿÿÿÿÿ*float8 payload ÿÿÿÿÿÿÿÿÿ*string8"!
+lance.auto_cleanup.interval20"'
+lance.auto_cleanup.older_than14days

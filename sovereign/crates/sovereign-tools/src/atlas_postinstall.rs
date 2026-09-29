@@ -1140,11 +1140,23 @@ fn write_atomic_json(path: &Path, value: &serde_json::Value) -> std::io::Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
     use understanding_vocab::taxonomy::{EnrichmentDepth, EntityType};
     use understanding_vocab::{
         atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity},
         edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile},
     };
+
+    /// The port as triage asks it: Earth is the only vital article among the
+    /// synthetic names, and titles normalize consistently. That the real list
+    /// and normalizer answer the same for these names is proven on
+    /// `IngestAtlas` (corpus-engine's atlas_port_parity
+    /// `vital_tier_and_normalize_title_answer_triage_s_fixture_names`).
+    fn wiki_port() -> AtlasPortDouble {
+        AtlasPortDouble::new()
+            .on_vital_tier(|name| (name == "Earth").then_some(1))
+            .on_normalize_title(|title| title.to_lowercase())
+    }
 
     /// Build a synthetic structural atlas under `<dir>/<corpus>/atlas/`
     /// containing one L1 entity (low centrality) and a flotilla of
@@ -1262,13 +1274,8 @@ mod tests {
         )
         .unwrap();
 
-        let outcome = build_triage_candidates(
-            &corpus_engine::IngestAtlas,
-            corpus,
-            tmp.path().to_path_buf(),
-            3,
-        )
-        .await;
+        let outcome =
+            build_triage_candidates(&wiki_port(), corpus, tmp.path().to_path_buf(), 3).await;
         let path = match outcome {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("triage failed: {other:?}"),
@@ -1449,13 +1456,8 @@ mod tests {
         // which would in turn promote OTHER noise pages via the
         // expansion ranker. That edge case is real (mismatched
         // tier supply vs. seed cap) but tested separately below.
-        let outcome = build_triage_candidates(
-            &corpus_engine::IngestAtlas,
-            corpus,
-            tmp.path().to_path_buf(),
-            2,
-        )
-        .await;
+        let outcome =
+            build_triage_candidates(&wiki_port(), corpus, tmp.path().to_path_buf(), 2).await;
         let path = match outcome {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("triage failed: {other:?}"),
@@ -1582,13 +1584,8 @@ mod tests {
 
         // Sanity: pre-bump rank places Alpha first (alphabetical
         // tie-break on equal score).
-        let outcome = build_triage_candidates(
-            &corpus_engine::IngestAtlas,
-            corpus,
-            tmp.path().to_path_buf(),
-            2,
-        )
-        .await;
+        let outcome =
+            build_triage_candidates(&wiki_port(), corpus, tmp.path().to_path_buf(), 2).await;
         let path = match outcome {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("pre-bump triage failed: {other:?}"),
@@ -1614,13 +1611,8 @@ mod tests {
 
         // Re-rank: Beta should now win, and bumped_picks should
         // reflect one bumped entry in the kept set.
-        let outcome2 = build_triage_candidates(
-            &corpus_engine::IngestAtlas,
-            corpus,
-            tmp.path().to_path_buf(),
-            2,
-        )
-        .await;
+        let outcome2 =
+            build_triage_candidates(&wiki_port(), corpus, tmp.path().to_path_buf(), 2).await;
         let path2 = match outcome2 {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("post-bump triage failed: {other:?}"),

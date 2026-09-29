@@ -6,9 +6,38 @@
 //! approach band. `#[path]`, so every test name is unchanged.
 
 use super::*;
-use corpus_engine::IngestAtlas;
+use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+use std::sync::{Arc, Mutex};
 use tempfile::tempdir;
 use understanding_vocab::atoms::AtomsFile;
+
+/// The atlas port as the projection asks it: `rows` are the corpus's
+/// `raptor_summaries.lance`, every SEP url names the `abduction` article,
+/// and the atlas writes land as the plain `atoms.json` / `edges.json` the
+/// leaf reads back. The atom-store rebuild, the raptor-index round trip and
+/// the population marker are ingest's, proven on `IngestAtlas`
+/// (corpus-engine's atlas_port_parity
+/// `summary_projection_writes_are_idempotent_and_keep_the_seeds`). Each
+/// population-marker request is recorded in `marked`.
+fn port(rows: Vec<RaptorSummaryRow>, marked: Arc<Mutex<Vec<PathBuf>>>) -> AtlasPortDouble {
+    AtlasPortDouble::new()
+        .on_scan_raptor_summaries(move |_| Ok(rows.clone()))
+        .on_raptor_article_title(|_| "abduction".into())
+        .on_write_atlas_edges(|dir, edges| {
+            let path = dir.join("edges.json");
+            std::fs::write(&path, serde_json::to_vec_pretty(edges).unwrap())?;
+            Ok(path)
+        })
+        .on_write_atlas_atoms(|dir, atoms| {
+            let path = dir.join("atoms.json");
+            std::fs::write(&path, serde_json::to_vec_pretty(atoms).unwrap())?;
+            Ok(path)
+        })
+        .on_write_population_marker(move |dir| {
+            marked.lock().unwrap().push(dir.to_path_buf());
+            Ok(())
+        })
+}
 
 fn emb(i: usize) -> Vec<f32> {
     (0..8usize)
@@ -93,12 +122,10 @@ async fn projecting_twice_writes_the_atoms_once() {
             embedding: emb(i),
         })
         .collect();
-    IngestAtlas
-        .build_raptor_index(&corpus_dir, &rows, 1)
-        .await
-        .unwrap();
+    let marked: Arc<Mutex<Vec<PathBuf>>> = Arc::default();
+    let atlas = port(rows, Arc::clone(&marked));
 
-    let first = write_summary_atoms(&IngestAtlas, root.path(), "sep")
+    let first = write_summary_atoms(&atlas, root.path(), "sep")
         .await
         .unwrap();
     assert_eq!(first.rows_read, 4);
@@ -113,7 +140,7 @@ async fn projecting_twice_writes_the_atoms_once() {
         .iter()
         .any(|d| d.contains("no checkpoint node") || d.contains("checkpoint")));
 
-    let second = write_summary_atoms(&IngestAtlas, root.path(), "sep")
+    let second = write_summary_atoms(&atlas, root.path(), "sep")
         .await
         .unwrap();
     assert_eq!(second.atoms_written, 0, "second run must add no atom");
@@ -132,20 +159,11 @@ async fn projecting_twice_writes_the_atoms_once() {
     // seeds are deleted at the next boot, with nothing erroring and no
     // count looking wrong.
     assert!(
-        corpus_engine::enrichment::atlas::seed_population::population_marker_is_current(
-            &article_atlas
-        ),
+        marked.lock().unwrap().contains(&article_atlas),
         "the population marker must be stamped, or the next backfill drops these seeds"
     );
-    // And the projected atoms are of a kind the derived population admits
-    // — a Summary written into an atlas whose table is not built from
-    // Summary is a seed row nothing will ever look at.
-    assert!(
-        corpus_engine::enrichment::atlas::seed_population::seed_population(&article_atlas)
-            .kinds
-            .contains(&AtomType::Summary),
-        "the seed population must admit Summary"
-    );
+    // That a stamped marker is current, and that the derived population
+    // admits Summary, is ingest's (proven on `IngestAtlas`).
     // The stub parent stayed empty: nothing leaked into `sep/atlas`.
     let stub = read_atlas_atoms(&corpus_dir.join("atlas")).unwrap();
     assert!(stub.atoms().is_empty());
@@ -176,12 +194,10 @@ async fn a_tree_less_projection_is_repaired_when_the_tree_arrives() {
             embedding: emb(i),
         })
         .collect();
-    IngestAtlas
-        .build_raptor_index(&corpus_dir, &rows, 1)
-        .await
-        .unwrap();
+    let marked: Arc<Mutex<Vec<PathBuf>>> = Arc::default();
+    let atlas = port(rows, Arc::clone(&marked));
 
-    let first = write_summary_atoms(&IngestAtlas, root.path(), "sep")
+    let first = write_summary_atoms(&atlas, root.path(), "sep")
         .await
         .unwrap();
     assert_eq!(first.atoms_written, 4);
@@ -216,7 +232,7 @@ async fn a_tree_less_projection_is_repaired_when_the_tree_arrives() {
             .unwrap();
     }
 
-    let second = write_summary_atoms(&IngestAtlas, root.path(), "sep")
+    let second = write_summary_atoms(&atlas, root.path(), "sep")
         .await
         .unwrap();
     assert_eq!(second.repaired, 4, "every stranded atom must be repaired");
@@ -248,7 +264,7 @@ async fn a_tree_less_projection_is_repaired_when_the_tree_arrives() {
 
     // Still idempotent: the repair filled the fields the predicate reads,
     // so a third run has nothing to do.
-    let third = write_summary_atoms(&IngestAtlas, root.path(), "sep")
+    let third = write_summary_atoms(&atlas, root.path(), "sep")
         .await
         .unwrap();
     assert_eq!(third.repaired, 0);
@@ -267,7 +283,7 @@ async fn a_tree_less_projection_is_repaired_when_the_tree_arrives() {
 async fn a_corpus_with_no_summary_table_is_named_not_zeroed() {
     let root = tempdir().unwrap();
     std::fs::create_dir_all(root.path().join("bare")).unwrap();
-    let report = write_summary_atoms(&IngestAtlas, root.path(), "bare")
+    let report = write_summary_atoms(&AtlasPortDouble::new().on_scan_raptor_summaries(|_| Ok(Vec::new())), root.path(), "bare")
         .await
         .unwrap();
     assert_eq!(report.rows_read, 0);

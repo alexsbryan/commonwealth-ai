@@ -198,11 +198,19 @@ pub fn default_paths(data_dir: PathBuf) -> (PathBuf, PathBuf) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+
+    /// The port answers summaries by the leaf's read; the cache ingest
+    /// persists beside it is proven on `IngestAtlas` (corpus-engine's
+    /// atlas_port_parity tests).
+    fn summaries() -> AtlasPortDouble {
+        AtlasPortDouble::new().with_computed_summaries()
+    }
 
     #[test]
     fn empty_indexes_dir_returns_empty() {
         let tmp = tempfile::tempdir().unwrap();
-        let rows = compute_atlas_status(&corpus_engine::IngestAtlas, tmp.path(), tmp.path());
+        let rows = compute_atlas_status(&summaries(), tmp.path(), tmp.path());
         assert!(rows.is_empty());
     }
 
@@ -211,7 +219,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(tmp.path().join("wikipedia")).unwrap();
         std::fs::create_dir_all(tmp.path().join("wikipedia-tier2")).unwrap();
-        let rows = compute_atlas_status(&corpus_engine::IngestAtlas, tmp.path(), tmp.path());
+        let rows = compute_atlas_status(&summaries(), tmp.path(), tmp.path());
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].corpus_id, "wikipedia");
     }
@@ -247,7 +255,7 @@ mod tests {
         )
         .unwrap();
 
-        let rows = compute_atlas_status(&corpus_engine::IngestAtlas, tmp.path(), tmp.path());
+        let rows = compute_atlas_status(&summaries(), tmp.path(), tmp.path());
         assert_eq!(rows.len(), 1);
         assert!(rows[0].atlas.is_some());
         assert_eq!(rows[0].atlas.as_ref().unwrap().tier2_count, 1);

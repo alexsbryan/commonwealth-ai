@@ -22,6 +22,9 @@ use crate::citation::SourceCitation;
 use crate::raptor_read::RaptorSummaryRow;
 use crate::summary::AtlasSummary;
 
+#[cfg(any(test, feature = "test-doubles"))]
+pub mod double;
+
 /// The atlas family's port. Ingest implements it once.
 #[async_trait]
 pub trait AtlasPort: Send + Sync {

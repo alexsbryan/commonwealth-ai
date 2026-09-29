@@ -751,6 +751,8 @@ fn write_bump_state(atlas_dir: &Path, counts: &HashMap<String, u64>) -> std::io:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::fixtures;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
 
     #[test]
     fn filter_signature_is_stable_across_depth_orderings() {
@@ -870,41 +872,43 @@ mod tests {
         }
     }
 
-    /// `<indexes>/<corpus>/atlas/` with `atoms.json` plus the v2 store
-    /// (`atoms.lance` + `edges.csr`) so `AtlasGraph::load_from_disk` can load it
-    /// (ATLAS_STORAGE_V2 retired the `atoms.json` convert-on-load). A
-    /// deliberately-corrupt `atoms_json` (one that doesn't parse) is left
-    /// store-less on purpose — its `graph()` then Errs, which the lazy-load
-    /// eviction test relies on. No ANN table is written, so the corpus has no
-    /// seed bag (its graph stays lazy) — matching the "deferred graph" tests.
-    fn write_atlas_fixture(indexes: &Path, corpus: &str, atoms_json: &str) {
-        use corpus_engine::enrichment::atlas::{read_atlas_atoms, store};
-        let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
-        std::fs::create_dir_all(&atlas).unwrap();
-        std::fs::write(atlas.join("atoms.json"), atoms_json).unwrap();
-        if let Ok(file) = read_atlas_atoms(&atlas) {
-            store::write_store_blocking(&atlas, corpus, file.atoms(), &[]).unwrap();
-        }
+    /// `<indexes>/<corpus>/atlas/` holding the leaf's checked-in empty atom
+    /// store (`atoms.json` + `atoms.lance` + `edges.csr`) so
+    /// `AtlasGraph::load_from_disk` can load it (ATLAS_STORAGE_V2 retired the
+    /// `atoms.json` convert-on-load). Only ingest writes stores; that the
+    /// fixture reads like a freshly written one is corpus-engine's
+    /// `atlas_store_fixtures` test. No ANN table, so the corpus has no seed bag
+    /// (its graph stays lazy) — matching the "deferred graph" tests.
+    fn write_atlas_fixture(indexes: &Path, corpus: &str) {
+        fixtures::copy_store_fixture(fixtures::ATOM_STORE, &indexes.join(corpus)).unwrap();
     }
 
+    /// A deliberately-corrupt `atoms.json` with no store beside it: its
+    /// `graph()` then Errs, which the lazy-load eviction test relies on.
+    fn write_corrupt_atlas(indexes: &Path, corpus: &str) {
+        let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
+        std::fs::create_dir_all(&atlas).unwrap();
+        std::fs::write(atlas.join("atoms.json"), "{ not json").unwrap();
+    }
+
+    /// The manager over an atlas port no lazy-load path asks: every store it
+    /// opens here goes through the leaf's openers, never the port.
     fn manager_for(indexes: &Path) -> AtlasContextManager {
         AtlasContextManager::new(
             indexes.to_path_buf(),
             Arc::new(PanicInference),
             "test-embed".into(),
-            Arc::new(corpus_engine::IngestAtlas),
+            Arc::new(AtlasPortDouble::new()),
         )
     }
-
-    const EMPTY_ATOMS: &str = r#"{"schema_version":"2","atoms":[]}"#;
 
     #[tokio::test]
     async fn init_defers_graphs_for_contextless_atlases() {
         let tmp = tempfile::tempdir().unwrap();
-        write_atlas_fixture(tmp.path(), "t1", EMPTY_ATOMS);
+        write_atlas_fixture(tmp.path(), "t1");
         // Filtered shapes: dot/underscore dirs and a dir without atlas/.
-        write_atlas_fixture(tmp.path(), ".hidden", EMPTY_ATOMS);
-        write_atlas_fixture(tmp.path(), "_scratch", EMPTY_ATOMS);
+        write_atlas_fixture(tmp.path(), ".hidden");
+        write_atlas_fixture(tmp.path(), "_scratch");
         std::fs::create_dir_all(tmp.path().join("no-atlas-here")).unwrap();
 
         let mgr = manager_for(tmp.path());
@@ -919,53 +923,13 @@ mod tests {
         assert!(dirs.contains_key("t1"));
     }
 
-    /// A wiki-class atlas: `articles.lance` + `edges.lance`, no atom store.
-    async fn write_wiki_fixture(indexes: &Path, corpus: &str) {
-        use corpus_engine::enrichment::atlas::wiki_store::build_wikipedia_columnar_store_from_chunks;
-        use corpus_engine::extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
-        use corpus_index::index::StoredChunkWithMetadata;
-        let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
-        std::fs::create_dir_all(&atlas).unwrap();
-        let meta = |links: Vec<(&str, &str)>| {
-            serde_json::to_string(&WikipediaChunkMetadata {
-                section_name: "Lead".into(),
-                section_path: vec!["Lead".into()],
-                section_depth: 0,
-                section_type: "lead".into(),
-                citation_needed_count: None,
-                pov_count: None,
-                clarification_needed_count: None,
-                update_count: None,
-                is_flagged_stable: None,
-                outgoing_links: links
-                    .into_iter()
-                    .map(|(t, l)| WikiLink {
-                        target_title: t.into(),
-                        link_text: l.into(),
-                    })
-                    .collect(),
-                revision_id: Some(1),
-                wikidata_qid: None,
-                page_id: None,
-            })
-            .unwrap()
-        };
-        let ch = |id: u64, title: &str, m: String| StoredChunkWithMetadata {
-            id,
-            title: Some(title.into()),
-            url: None,
-            metadata_raw: Some(m),
-        };
-        build_wikipedia_columnar_store_from_chunks(
-            &atlas,
-            corpus,
-            vec![
-                ch(1, "Alpha", meta(vec![("Beta", "beta")])),
-                ch(2, "Beta", meta(vec![])),
-            ],
-        )
-        .await
-        .unwrap();
+    /// A wiki-class atlas: the leaf's checked-in `articles.lance` +
+    /// `edges.lance` (Alpha → Beta), no atom store. Its atom ids carry the
+    /// corpus id it was written under, so `corpus` is always
+    /// `fixtures::WIKI_STORE`.
+    fn write_wiki_fixture(indexes: &Path, corpus: &str) {
+        assert_eq!(corpus, fixtures::WIKI_STORE);
+        fixtures::copy_store_fixture(fixtures::WIKI_STORE, &indexes.join(corpus)).unwrap();
     }
 
     /// `walk_provider` resolves BY STORE, and each class gets its own.
@@ -978,8 +942,8 @@ mod tests {
     #[tokio::test]
     async fn walk_provider_serves_each_class_from_its_own_store_and_memoizes() {
         let tmp = tempfile::tempdir().unwrap();
-        write_atlas_fixture(tmp.path(), "atomish", EMPTY_ATOMS);
-        write_wiki_fixture(tmp.path(), "wikish").await;
+        write_atlas_fixture(tmp.path(), "atomish");
+        write_wiki_fixture(tmp.path(), "wikish");
         let mgr = manager_for(tmp.path());
         mgr.init_from_cache().await;
 
@@ -1004,7 +968,7 @@ mod tests {
         let w = AtlasContextProvider::walk_provider(&mgr, "wikish")
             .expect("a wiki-class atlas must resolve through walk_provider");
         assert_eq!(w.atlas_corpus_id(), "wikish");
-        let alpha = corpus_engine::enrichment::atlas::wiki_store::wiki_atom_id("Alpha", "wikish");
+        let alpha = fixtures::WIKI_ALPHA_ATOM_ID.to_string();
         assert!(
             w.atom(&alpha).is_some(),
             "the wiki provider must serve atoms"
@@ -1032,7 +996,7 @@ mod tests {
     #[tokio::test]
     async fn a_lazily_opened_wiki_provider_reports_its_missing_seed_table() {
         let tmp = tempfile::tempdir().unwrap();
-        write_wiki_fixture(tmp.path(), "wikish").await;
+        write_wiki_fixture(tmp.path(), "wikish");
         let mgr = manager_for(tmp.path());
         mgr.init_from_cache().await;
         let w = AtlasContextProvider::walk_provider(&mgr, "wikish").expect("wiki provider");
@@ -1054,7 +1018,7 @@ mod tests {
     #[tokio::test]
     async fn graph_lazy_loads_on_first_request_and_memoizes() {
         let tmp = tempfile::tempdir().unwrap();
-        write_atlas_fixture(tmp.path(), "t1", EMPTY_ATOMS);
+        write_atlas_fixture(tmp.path(), "t1");
         let mgr = manager_for(tmp.path());
         mgr.init_from_cache().await;
         assert_eq!(mgr.graphs.read().await.len(), 0);
@@ -1073,7 +1037,7 @@ mod tests {
     #[tokio::test]
     async fn graph_lazy_load_failure_evicts_discovery_entry() {
         let tmp = tempfile::tempdir().unwrap();
-        write_atlas_fixture(tmp.path(), "bad", "{ not json");
+        write_corrupt_atlas(tmp.path(), "bad");
         let mgr = manager_for(tmp.path());
         mgr.init_from_cache().await;
         assert!(mgr.graph_dirs.read().unwrap().contains_key("bad"));

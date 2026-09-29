@@ -395,6 +395,7 @@ fn atom_freshness(atom: &AtomEnvelope, freshness: &HashMap<String, i64>) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
     use tempfile::TempDir;
     use understanding_vocab::atoms::{
         AtomId, AtomsFile, ChunkRef, Claim, Entity, SectionPosition, SectionRange, State,
@@ -462,7 +463,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         write_atoms(
             &tmp.path().join("wiki").join("atlas"),
@@ -522,7 +523,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         let typed = |id: usize, name: &str, t: &str| match entity(id, name, 0.5) {
             AtomEnvelope::Entity(mut e) => {
@@ -735,7 +736,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         let long = "x".repeat(200);
         write_atoms(&tmp.path().join("c").join("atlas"), vec![claim(1, &long)]);
@@ -858,7 +859,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         let corpus_dir = tmp.path().join("news");
         // Insertion order: Alpha, Beta, Gamma.
@@ -902,7 +903,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let reader = FileAtlasReader::new(
             tmp.path().to_path_buf(),
-            std::sync::Arc::new(corpus_engine::IngestAtlas),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
         );
         write_atoms(
             &tmp.path().join("c").join("atlas"),

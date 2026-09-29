@@ -378,6 +378,17 @@ pub(super) fn citation_from_quote_spans(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+
+    /// The port renders the source-recovery block as a marker that carries
+    /// exactly the excerpts it was handed. The block's own wording and its
+    /// quote truncation are ingest's, proven on `IngestAtlas`
+    /// (corpus-engine's atlas_port_parity
+    /// `render_source_recovery_block_carries_the_naming_discipline`).
+    fn port() -> AtlasPortDouble {
+        AtlasPortDouble::new()
+            .on_render_source_recovery_block(|ex| format!("<recovery {}>", ex.join(" | ")))
+    }
 
     fn mk_leaf(node_id: &str, summary: &str, primaries: &[&str]) -> ConvRaptorNodeRow {
         ConvRaptorNodeRow {
@@ -418,7 +429,7 @@ mod tests {
     #[test]
     fn pass_a_user_body_carries_summary_and_entities() {
         let body = build_pass_a_user_body(
-            &corpus_engine::IngestAtlas,
+            &port(),
             "Spread pricing is a PBM mechanism that buys cheap, bills high.",
             &["spread pricing".into(), "PBM".into()],
             &[],
@@ -434,7 +445,7 @@ mod tests {
     #[test]
     fn pass_a_user_body_surfaces_verbatim_quote_spans() {
         let body = build_pass_a_user_body(
-            &corpus_engine::IngestAtlas,
+            &port(),
             "PBMs extract opaque rents through their intermediation role.",
             &["PBM".into()],
             &[
@@ -444,12 +455,12 @@ mod tests {
             &[],
             &[],
         );
-        assert!(body.contains("Verbatim source excerpts"));
-        assert!(body.contains("spread pricing"));
-        assert!(body.contains("$1.4B"));
-        // The naming-discipline block must reach the prompt.
-        assert!(body.contains("Atom-naming discipline"));
-        assert!(body.contains("Prefer verbatim phrasings"));
+        // Both quote spans reach the port's recovery block, in order.
+        assert!(
+            body.contains("<recovery The practice known as spread pricing"),
+            "{body}"
+        );
+        assert!(body.contains(" | FTC documented $1.4B"), "{body}");
     }
 
     #[test]
@@ -459,7 +470,7 @@ mod tests {
         // paraphrased summary when NAMING atoms — the golden resolves
         // on the source's own labels.
         let body = build_pass_a_user_body(
-            &corpus_engine::IngestAtlas,
+            &port(),
             "The essay contrasts two governance framings.",
             &[],
             &[],
@@ -472,39 +483,54 @@ mod tests {
         assert!(body.contains("prefer THESE"));
 
         // Empty excerpts = v1 body shape, no stray heading.
-        let v1 = build_pass_a_user_body(&corpus_engine::IngestAtlas, "summary", &[], &[], &[], &[]);
+        let v1 = build_pass_a_user_body(&port(), "summary", &[], &[], &[], &[]);
         assert!(!v1.contains("Member chunk excerpts"));
     }
 
     #[test]
     fn pass_a_user_body_truncates_overly_long_quotes() {
-        use corpus_engine::enrichment::pipeline::typed_schemas::SOURCE_RECOVERY_QUOTE_CHAR_CAP;
-        let long = "a".repeat(SOURCE_RECOVERY_QUOTE_CHAR_CAP + 50);
-        let body = build_pass_a_user_body(
-            &corpus_engine::IngestAtlas,
+        // Truncation is the recovery block's (ingest's): the body hands a
+        // long quote to the port whole, and caps only the NUMBER of quotes.
+        let long = "a".repeat(2_000);
+        let quotes: Vec<String> = (0..PASS_A_MAX_QUOTES + 2)
+            .map(|i| {
+                if i == 0 {
+                    long.clone()
+                } else {
+                    format!("q{i}")
+                }
+            })
+            .collect();
+        let seen: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+        let seen_in = std::sync::Arc::clone(&seen);
+        let port = AtlasPortDouble::new().on_render_source_recovery_block(move |ex| {
+            *seen_in.lock().unwrap() = ex.iter().map(|s| s.to_string()).collect();
+            String::new()
+        });
+        build_pass_a_user_body(
+            &port,
             "summary text here is long enough",
             &[],
-            &[long],
+            &quotes,
             &[],
             &[],
         );
-        // Body carries an ellipsis token confirming truncation engaged.
-        assert!(body.contains('…'));
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), PASS_A_MAX_QUOTES);
+        assert_eq!(seen[0], long);
     }
 
     #[test]
     fn pass_b_user_body_constrains_axes_and_carries_excerpts() {
         let body = build_pass_b_user_body(
-            &corpus_engine::IngestAtlas,
+            &port(),
             "Themes around markets-vs-regulation across notes.",
             &["markets vs governments is the durable framing the vault returns to.".into()],
         );
         assert!(body.contains("oppositions"));
         assert!(body.contains("concessions"));
         assert!(body.contains("CROSS-NOTE"));
-        assert!(body.contains("Verbatim source excerpts"));
-        assert!(body.contains("markets vs governments"));
-        assert!(body.contains("Atom-naming discipline"));
+        assert!(body.contains("<recovery markets vs governments"), "{body}");
     }
 
     #[test]
@@ -514,12 +540,14 @@ mod tests {
         // RAPTOR rows). The body must still parse and carry the
         // axis-constraint instructions.
         let body = build_pass_b_user_body(
-            &corpus_engine::IngestAtlas,
+            &port(),
             "Theme summary text without any verbatim excerpts.",
             &[],
         );
         assert!(body.contains("CROSS-NOTE"));
-        assert!(!body.contains("Verbatim source excerpts"));
+        // The port is handed no excerpts; what it renders for none is
+        // ingest's (no excerpt heading, proven on `IngestAtlas`).
+        assert!(body.contains("<recovery >"), "{body}");
     }
 
     #[test]

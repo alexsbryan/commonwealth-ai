@@ -40,6 +40,11 @@ workspace-hack = { version = "0.1", path = "../workspace-hack" }
 [lints]
 workspace = true
 
+[features]
+# `ports::double::AtlasPortDouble` and the checked-in store fixtures, for the
+# svrn crates' tests (phase-b-47/48). Adds no dependency.
+test-doubles = []
+
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
