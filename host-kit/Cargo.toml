@@ -27,6 +27,10 @@ http = ["mcp", "dep:axum", "dep:futures", "dep:tokio-stream"]
 # pb-notes-memory): moved whole from sovereign-daemon, whose notes rail moved
 # to the code program and runs under the same supervisor there.
 task = ["dep:tokio", "dep:tracing"]
+# The in-process job table a program's long routes keep their jobs in
+# (pb-serve-distributes): moved whole from sovereign-daemon, so serve's weight
+# downloads take the same table rather than a sixth copy.
+jobs = ["dep:tracing"]
 
 [dependencies]
 axum = { workspace = true, optional = true }

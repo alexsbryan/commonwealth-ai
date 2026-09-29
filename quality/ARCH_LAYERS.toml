@@ -1141,6 +1141,9 @@ name = "host-kit"
 # enable the feature.
 # The server shell joined 2026-09-26 (pb-shell) behind the `shell` feature:
 # crates.io deps only (axum, tower-http), so this allow list is unchanged.
+# The in-process job table joined 2026-09-29 (pb-serve-distributes) behind the
+# `jobs` feature, moved whole from sovereign-daemon so serve's weight
+# downloads take it too: std and tracing only, no path, no store.
 allow = ["oicp-types", "workspace-hack"]
 # Fixed, never ratcheted; the operator's to change (FIVE_PROGRAMS §12 3a
 # rung 4). boundary-gate counts it with size-gate's counter.

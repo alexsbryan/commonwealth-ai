@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task,host-kit/jobs"
         return 0
     fi
 
@@ -229,6 +229,10 @@ if "host-kit" in seen:
     # reason: the daemon and the code program turn it on, a solo run would
     # compile it and its two restart tests to nothing.
     want.append("host-kit/task")
+    # `jobs` gates the in-process job table (pb-serve-distributes), for the
+    # same reason: the daemon turns it on, a solo run would compile it and its
+    # three table tests to nothing.
+    want.append("host-kit/jobs")
 legal = [f for f in want if f.split("/", 1)[0] in nameable]
 dropped = [f for f in want if f not in legal]
 if dropped:
