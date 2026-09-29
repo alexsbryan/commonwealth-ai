@@ -42,7 +42,8 @@ pub(crate) const DEBOUNCE_MAX_IDLE: Duration = Duration::from_secs(300);
 /// Defined here so the debouncer owns the types it needs; the
 /// manager re-exports / embeds it as `ViewEntry`.
 pub(crate) struct ViewEntry {
-    pub(crate) recipe: Recipe,
+    /// The view's recipe document (`super::recipes`).
+    pub(crate) recipe: serde_json::Value,
     /// Serialises long-running ingest + enrichment for this view.
     /// Manager `ingest_view` grabs the same lock so the two paths
     /// can't race on the skeleton.json write.
@@ -277,6 +278,13 @@ async fn run_enrichment(
     };
 
     let embed = engine.embed_fn();
+    let recipe: Recipe = match serde_json::from_value(recipe) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(view_id, error = %e, "failed to construct FieldModelEngine");
+            return;
+        }
+    };
     let field_engine = match FieldModelEngine::from_recipe(&recipe, embed, inference) {
         Ok(e) => e,
         Err(e) => {

@@ -403,7 +403,9 @@ async fn conversational_view_excludes_local_only_skill_conversations() {
     // the query `SqliteAcquirer` will run at ingest time — testing
     // it in isolation pins the filter's behaviour regardless of
     // the pipeline around it.
-    let recipe = conversation_history_recipe(&db_path, &["inner-work"]);
+    let recipe: corpus_engine::recipe::Recipe =
+        serde_json::from_value(conversation_history_recipe(&db_path, &["inner-work"]))
+            .expect("view recipe document parses as a Recipe");
     let query = match recipe.acquire {
         AcquirerConfig::Custom { ref params, .. } => params["query"]
             .as_str()

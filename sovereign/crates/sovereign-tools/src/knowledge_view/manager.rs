@@ -25,7 +25,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use corpus_engine::engine::CorpusEngine;
-use corpus_engine::recipe::Recipe;
 use corpus_engine::types::{CorpusSpec, InferenceFn};
 use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
 use sovereign_core::observer::StateStoreObserver;
@@ -944,12 +943,15 @@ impl LandscapeDigestProvider for KnowledgeViewManager {
 /// The file deliberately persists after ingest, as it always has: this function
 /// does not own the recipe's lifetime, and a stale file from a dead process is
 /// harmless — it is always written before it is read.
-fn recipe_to_tempfile(recipe: &Recipe) -> CorpusResult<PathBuf> {
+fn recipe_to_tempfile(recipe: &serde_json::Value) -> CorpusResult<PathBuf> {
     let toml_text = toml::to_string(recipe)
         .map_err(|e| CorpusError::Recipe(format!("serialize recipe: {e}")))?;
+    let corpus_id = recipe["corpus"]["id"]
+        .as_str()
+        .ok_or_else(|| CorpusError::Recipe("recipe document has no corpus.id".into()))?;
     let dir = std::env::temp_dir().join("sovereign-knowledge-view-recipes");
     std::fs::create_dir_all(&dir).map_err(CorpusError::Io)?;
-    let path = dir.join(format!("{}-{}.toml", recipe.corpus.id, std::process::id()));
+    let path = dir.join(format!("{corpus_id}-{}.toml", std::process::id()));
     std::fs::write(&path, toml_text).map_err(CorpusError::Io)?;
     Ok(path)
 }
