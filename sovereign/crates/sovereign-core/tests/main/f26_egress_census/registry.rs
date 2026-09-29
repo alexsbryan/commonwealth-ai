@@ -93,8 +93,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // under `#[path]`, and every one of the 16 sites was in it — the route
     // file itself constructs none. 16 -> 17 is the same commit's new
     // served-join-link test. A `#[cfg(test)]`-only file is TestOnly, as
-    // `tests/rpc_warm_http.rs` is above.
-    ("sovereign/crates/sovereign-daemon/src/mesh_http_tests.rs", Class::TestOnly, 17),
+    // `tests/rpc_warm_http.rs` is above. 17 -> 15 (pb-serve-placement): the
+    // `/v1/mesh/measurements` door and its two tests retired.
+    ("sovereign/crates/sovereign-daemon/src/mesh_http_tests.rs", Class::TestOnly, 15),
     // NEW (2026-09-04, cw-lift 2f, bc600f424): the ring rail's anti-entropy
     // sender. `exchange` POSTs a RingSyncRequest to `/internal/ring/sync` on
     // each online peer, plus the inline `#[cfg(test)]` module that binds a
@@ -422,7 +423,12 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // gossip round. Class unchanged — loopback to our own daemon.
     // 8 -> 7 (2026-09-27): fetch-model's peer client moved to
     // sovereign-serve/src/fetch_model.rs (c2529c94c).
-    ("sovereign/crates/sovereign-cli-mesh/src/mesh_cmd.rs", Class::Mesh, 7),
+    // 7 -> 6 (pb-serve-placement): `mesh plan`'s live-mesh read moved to
+    // sovereign-serve/src/mesh_plan.rs.
+    ("sovereign/crates/sovereign-cli-mesh/src/mesh_cmd.rs", Class::Mesh, 6),
+    // `mesh plan`'s read of the local daemon's `/v1/mesh/status`
+    // (pb-serve-placement, from mesh_cmd.rs). Loopback to our own daemon.
+    ("sovereign/crates/sovereign-serve/src/mesh_plan.rs", Class::LocalDaemon, 1),
     // NEW 2026-08-28: `svrn mesh forget-member`, the repair for an
     // endpoint-key collision, posts to the running daemon's
     // /v1/mesh/forget-member. Class Mesh — 127.0.0.1 loopback to our own
@@ -512,8 +518,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // building its own client and asks `ServingHost` instead.
     ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
-    ("sovereign/crates/sovereign-cli-mesh/src/mesh_bench.rs", Class::Mesh, 3),
-    ("sovereign/crates/sovereign-cli-mesh/src/remote_gguf.rs", Class::InboundOnly, 2),
+    // `mesh bench` and remote_gguf moved to serve whole (pb-serve-placement);
+    // the sites travelled with the files.
+    ("sovereign/crates/sovereign-serve/src/mesh_bench/shell.rs", Class::Mesh, 3),
+    ("sovereign/crates/sovereign-serve/src/remote_gguf.rs", Class::InboundOnly, 2),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs", Class::LocalDaemon, 2),
     // fp-26 (7e21df175): `svrn chat` asks the local daemon's
@@ -528,7 +536,6 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/solve_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-mesh/src/mesh_travel.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/mod.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs", Class::LocalDaemon, 1),

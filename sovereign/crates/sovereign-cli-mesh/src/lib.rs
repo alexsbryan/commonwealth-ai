@@ -18,6 +18,5 @@ pub mod mesh_token;
 pub mod publish_cmd;
 pub mod rail_migration;
 pub mod rails_up;
-pub mod remote_gguf;
 pub mod ring_cmd;
 pub mod run_cmd;

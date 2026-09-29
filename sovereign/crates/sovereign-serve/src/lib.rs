@@ -68,9 +68,14 @@ pub mod mesh_bench;
 /// Placement measurements: what a placement was observed to do, keyed by
 /// model fingerprint × placement digest × machine witness (phase-b-22).
 pub mod mesh_measurements;
+/// `svrn mesh plan`: dry-run a model's split across a mesh, with what the
+/// placement measurements know about its speed (pb-serve-placement).
+pub mod mesh_plan;
 /// The CLI's side of measurement travel: publish a run, read peers' runs.
 pub mod mesh_travel;
 mod reload;
+/// A model named by URL: fetched header-only so `plan` can read its tensors.
+mod remote_gguf;
 mod self_report;
 mod warm_cache;
 

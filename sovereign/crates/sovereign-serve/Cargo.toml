@@ -36,6 +36,8 @@ serde = { workspace = true }
 sha2 = { workspace = true }
 # bench's record stamp (the wall-clock leaf).
 sovereign-time = { workspace = true }
+# remote_gguf's header-only download lands in a temp dir.
+tempfile = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }
