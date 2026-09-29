@@ -57,7 +57,10 @@ use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::corpus_catalog_http::corpus_catalog_router;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 
-use crate::common::{desktop_services_with_engine, mesh_admin_services, spawn_router};
+use crate::common::{
+    desktop_services_with_engine, mesh_admin_services, reading_double, spawn_router,
+};
+use crate::local_corpus_port_double::leaf_backed_double;
 
 /// One installed corpus on disk, in the shape `installed_indexes()`
 /// reads.
@@ -106,6 +109,21 @@ async fn create_index(
     std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
 }
 
+/// A catalogue row no fixture installs.
+fn fixture_builtin() -> corpus_index::types::BuiltinCorpus {
+    corpus_index::types::BuiltinCorpus {
+        id: "d9a-catalogued".into(),
+        name: "Catalogued (fixture)".into(),
+        description: "A built-in no fixture installs.".into(),
+        size_compressed_gb: 0.1,
+        size_indexed_gb: 0.2,
+        license: "CC0".into(),
+        mesh_sharing: false,
+        parent_corpus_id: None,
+        catalog_status: None,
+    }
+}
+
 /// A serving daemon whose engine's index dir carries `corpora`, each
 /// `(id, created_at, ingestion_in_progress)`.
 async fn daemon_with_indexes(
@@ -119,11 +137,18 @@ async fn daemon_with_indexes(
     for (id, created_at, in_progress) in corpora {
         create_index(&indexes, id, *created_at, *in_progress).await;
     }
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(
-        recipes,
-        indexes,
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) })),
-    ));
+    // Ingest's port double reading the fixture dir with the leaf's own
+    // reader, and one uninstalled built-in (pb-ingest-dial-daemon-tests):
+    // that the engine lists its registry snapshot's catalogue, each entry
+    // with a registry listing, is corpus-engine's daemon_port_parity.
+    let engine = Arc::new(
+        reading_double(
+            indexes,
+            Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) })),
+        )
+        .with_builtin_corpora(vec![fixture_builtin()])
+        .with_registry_listings(Vec::new()),
+    );
     let root = tempfile::tempdir().unwrap();
     let daemon = EmbeddedDaemon::new(
         root.path().to_path_buf(),
@@ -346,8 +371,7 @@ async fn install_a_manager_if_none() {
     std::mem::forget(tmp);
     let store: Arc<dyn sovereign_contracts::traits::StateStore> =
         Arc::new(sovereign_store::memory::InMemoryStateStore::new());
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(
-        data_dir.join("recipes"),
+    let engine = Arc::new(leaf_backed_double(
         data_dir.join("indexes"),
         Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) })),
     ));

@@ -36,7 +36,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
 use sovereign_contracts::traits::StateStore;
 use sovereign_daemon::corpus_watch_http::corpus_watch_router;
@@ -47,12 +47,16 @@ use sovereign_tools::local_corpus::LocalCorpusManager;
 
 use crate::common;
 use crate::common::spawn_router;
+use crate::local_corpus_port_double::leaf_backed_double;
 
 const EMBED_DIM: usize = 8;
 
 fn mock_embed_fn() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; EMBED_DIM]) }))
 }
+
+/// The singleton manager's port, so a test can read the calls it made.
+static ENGINE: OnceLock<Arc<IngestPortDouble>> = OnceLock::new();
 
 /// One-shot harness builder. The singleton is filled the first time
 /// any test calls `install_singleton`; subsequent calls reuse the
@@ -82,14 +86,14 @@ async fn install_singleton_and_spawn() -> (PathBuf, SocketAddr) {
     std::mem::forget(tmp);
 
     let store: Arc<InMemoryStateStore> = Arc::new(InMemoryStateStore::new());
+    // Ingest's port double (pb-ingest-dial-daemon-tests): what the engine
+    // does with a register/remove is proven on `impl LocalCorpusPort for
+    // CorpusEngine`, corpus-engine's local_corpus_port_parity.
     let engine = Arc::new(
-        CorpusEngine::new(
-            data_dir.join("recipes"),
-            data_dir.join("indexes"),
-            mock_embed_fn(),
-        )
-        .with_embedding_model("test-mock"),
+        leaf_backed_double(data_dir.join("indexes"), mock_embed_fn())
+            .on_source_file_progress(|_| None),
     );
+    let _ = ENGINE.set(Arc::clone(&engine));
 
     let manager = Arc::new(
         LocalCorpusManager::init(
@@ -284,6 +288,14 @@ async fn delete_unregisters_corpus_and_subsequent_status_404s() {
         reqwest::StatusCode::OK,
         "delete MUST 200 on a registered corpus; got {}",
         del.status()
+    );
+    // The delete reached ingest: the manager asked the port to remove the
+    // corpus (what that removes is local_corpus_port_parity's
+    // `remove_after_cancel_leaves_no_index_dir`).
+    let calls = ENGINE.get().expect("the singleton's port").calls();
+    assert!(
+        calls.contains(&"remove_corpus_everything"),
+        "delete MUST remove the corpus through ingest's port; calls: {calls:?}"
     );
 
     // Subsequent status MUST 404 (the corpus is gone).

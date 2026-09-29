@@ -21,12 +21,13 @@
 //! donor drops it by name (fork 2), and the first reading below is the proof
 //! that the offer followed the registration rather than the config alone.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use commonwealth_core::knowledge::WorkUnit;
-use corpus_engine::CorpusEngine;
-use corpus_index::types::EmbedFn;
+use corpus_index::ingest_port::cancel::CancellationRegistry;
+use corpus_index::ingest_port::daemon::{IngestPort, IngestResult};
+use corpus_index::ingest_port::double::{IngestPortDouble, SliceIngest};
 use kernel_types::{NodeId, Verdict};
 use oicp_types::work::projection::{WorkProjection, WorkUnitStatus};
 use oicp_types::JobKind;
@@ -42,38 +43,43 @@ fn daemon_node() -> NodeId {
     NodeId::from_u128(0x44ae << 64)
 }
 
-/// A real engine with one local recipe: a plain-text file, paragraph chunks,
-/// a fixed 8-dimension embedding. Returned with its temp root.
-fn an_engine() -> (tempfile::TempDir, Arc<CorpusEngine>) {
+/// The chunks the programmed slice ingest reports its partition holds.
+const SLICE_CHUNKS: u64 = 3;
+
+/// Ingest's port double as this process's engine (pb-ingest-dial-daemon-tests):
+/// a slice ingest makes the partition dir it was handed and reports
+/// [`SLICE_CHUNKS`], and every ask is kept for the test to read. That the
+/// engine's own `ingest_with_overrides` writes this recipe's slice into
+/// its partition is corpus-engine's daemon_port_parity
+/// `a_slice_ingests_into_the_engines_own_partition`. Returned with its temp
+/// root and the asks.
+fn an_engine() -> (
+    tempfile::TempDir,
+    Arc<IngestPortDouble>,
+    Arc<Mutex<Vec<SliceIngest>>>,
+) {
     let dir = tempfile::tempdir().expect("tempdir");
-    let recipes = dir.path().join("recipes");
     let indexes = dir.path().join("indexes");
-    std::fs::create_dir_all(&recipes).unwrap();
     std::fs::create_dir_all(&indexes).unwrap();
-    let source = dir.path().join("source.txt");
-    std::fs::write(
-        &source,
-        "The harbour master keeps two ledgers and admits to one.\n\n\
-         The second is not secret, only inconvenient to explain.\n\n\
-         Both agree about the tides and about nothing else.\n",
-    )
-    .unwrap();
-    std::fs::write(
-        recipes.join(format!("{CORPUS}.toml")),
-        format!(
-            "[corpus]\nid = \"{CORPUS}\"\nname = \"Origin slice\"\n\
-             description = \"pb-work-donor fixture\"\nlicense = \"CC0\"\nmesh_sharing = false\n\n\
-             [acquire]\ntype = \"local_file\"\npath = \"{}\"\n\n\
-             [extract]\ntype = \"plaintext\"\n\n\
-             [chunk]\ntype = \"paragraph\"\nmax_chars = 512\noverlap_chars = 64\n\n\
-             [index]\nembedding_model = \"test-mock\"\nembedding_dimensions = 8\n",
-            source.display()
-        ),
-    )
-    .unwrap();
-    let embed: EmbedFn = Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 8]) }));
-    let engine = CorpusEngine::new(recipes, indexes, embed).with_embedding_model("test-mock");
-    (dir, Arc::new(engine))
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let record = Arc::clone(&asked);
+    let engine = IngestPortDouble::new()
+        .on_partition_path(move |id| indexes.join(format!("{id}-partition-local")))
+        .with_cancel_registry(CancellationRegistry::new())
+        .on_ingest_with_overrides(move |slice| {
+            record.lock().unwrap().push(slice.clone());
+            Box::pin(async move {
+                std::fs::create_dir_all(&slice.output_path)?;
+                Ok(IngestResult {
+                    corpus_id: slice.recipe_id,
+                    chunks_created: SLICE_CHUNKS,
+                    index_size_bytes: 0,
+                    duration_secs: 0,
+                    docs_skipped: 0,
+                })
+            })
+        });
+    (dir, Arc::new(engine), asked)
 }
 
 async fn poll<T>(
@@ -127,7 +133,7 @@ async fn an_ingest_unit_runs_through_cw_rails_donor_inside_this_process() {
     );
 
     // The daemon's origin registers; the offer follows it.
-    let (_dir, engine) = an_engine();
+    let (_dir, engine, asked) = an_engine();
     let origin = Arc::new(WorkOrigin::new(
         IngestExecutor::new(engine.clone()),
         daemon_node(),
@@ -230,9 +236,22 @@ async fn an_ingest_unit_runs_through_cw_rails_donor_inside_this_process() {
         "the slice's partition must be on this process's engine: {}",
         partition.display()
     );
-    assert!(
-        result["partition_chunks_total"].as_u64().unwrap_or(0) > 0,
+    assert_eq!(
+        result["partition_chunks_total"].as_u64(),
+        Some(SLICE_CHUNKS),
         "{result}"
+    );
+    // ONE slice ingest, of the unit's recipe and range, into that partition.
+    assert_eq!(
+        *asked.lock().unwrap(),
+        vec![SliceIngest {
+            recipe_id: CORPUS.into(),
+            file_indices: None,
+            article_range: Some((0, 100)),
+            output_path: partition.clone(),
+            unit_id: Some(0),
+        }],
+        "the donor's unit reached ingest's port as one slice"
     );
 
     // Credited to the roster identity the origin named.

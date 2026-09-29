@@ -23,6 +23,7 @@
 #![cfg(feature = "iroh-experimental")]
 
 use std::collections::HashMap;
+use std::io::Write as _;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
@@ -34,8 +35,8 @@ use commonwealth_transport::iroh::{EndpointBuilder, IrohAcceptor, IrohTransport,
 use commonwealth_transport::{
     IpTransport, PeerContact, PeerTransport, RoutedTransport, TrafficClass,
 };
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
+use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
 use oicp_types::knowledge::CorpusShardInfo;
 use sovereign_daemon::server::{client_router, internal_router};
@@ -181,13 +182,14 @@ fn iroh_only_member(
     }
 }
 
-/// Founder: a real CorpusEngine holding `corpus_id`, its internal
-/// router served behind an iroh acceptor. Returns (endpoint pubkey,
-/// dialable sockets, the acceptor guard) — the acceptor must stay
-/// alive for the test's duration.
+/// Founder: ingest's port double reading `corpus_id` with the leaf's
+/// own reader (pb-ingest-dial-daemon-tests), its internal router served
+/// behind an iroh acceptor. Returns (endpoint pubkey, dialable sockets,
+/// the acceptor guard) — the acceptor must stay alive for the test's
+/// duration.
 async fn spawn_iroh_founder(
     seed: u8,
-    engine: Arc<CorpusEngine>,
+    engine: Arc<IngestPortDouble>,
     founder_id: NodeId,
     mesh: Mesh,
 ) -> (AppState, NodePubkey, Vec<SocketAddr>, IrohAcceptor) {
@@ -246,12 +248,7 @@ async fn knowledge_fanout_over_iroh_reaches_peer_with_no_ip() {
         "Compatibilism: free will is compatible with determinism.",
     )
     .await;
-    let recipes_a = tmp_a.path().join("recipes");
-    std::fs::create_dir_all(&recipes_a).unwrap();
-    let engine_a = Arc::new(
-        CorpusEngine::new(recipes_a, indexes_a, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine_a = Arc::new(common::reading_double(indexes_a, mock_embed_fn()));
     let id_a = NodeId::from_u128(0xAAAA_AAAA_AAAA_AAAA);
 
     let mut members_a = HashMap::new();
@@ -339,10 +336,14 @@ async fn knowledge_fanout_over_iroh_reaches_peer_with_no_ip() {
     let _ = &state_a; // keep A alive to end of test
 }
 
+/// What the founder's pack writes: not an archive. The canonical route
+/// streams it untouched over the tunnel, which is the claim; that a real
+/// pack unpacks to its own fingerprint is corpus-engine's
+/// daemon_port_parity (canonical_pull_e2e's split, the same one).
+const PACKED: &[u8] = b"what ingest packed for canon";
+
 #[tokio::test]
 async fn canonical_pull_over_iroh_from_peer_with_no_ip() {
-    use sovereign_mesh::canonical_pull::pull_canonical_from_peer;
-
     let mesh_id = MeshId::from_u128(2);
     let corpus_id = "canon";
 
@@ -382,9 +383,16 @@ async fn canonical_pull_over_iroh_from_peer_with_no_ip() {
 
     let zero_embed: EmbedFn =
         Arc::new(|_t: &str| Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) }));
+    let packs: Arc<std::sync::Mutex<Vec<(std::path::PathBuf, i32)>>> = Arc::default();
+    let seen = Arc::clone(&packs);
     let engine_a = Arc::new(
-        CorpusEngine::new(indexes_a.clone(), indexes_a.clone(), zero_embed)
-            .with_embedding_model("test-embed"),
+        common::reading_double(indexes_a.clone(), zero_embed).on_pack_canonical(
+            move |path, mut writer, level| {
+                seen.lock().unwrap().push((path.to_path_buf(), level));
+                writer.write_all(PACKED)?;
+                Ok(PACKED.len() as u64)
+            },
+        ),
     );
     let id_a = NodeId::from_u128(0xA1);
     let mesh_a = Mesh {
@@ -419,17 +427,23 @@ async fn canonical_pull_over_iroh_from_peer_with_no_ip() {
     let base = endpoints[0].base_url.clone();
     assert!(base.starts_with("http://127.0.0.1:"), "{base}");
 
-    let tmp_b = tempfile::tempdir().unwrap();
-    let dest = tmp_b.path().join("indexes");
-    std::fs::create_dir_all(&dest).unwrap();
-    let report =
-        pull_canonical_from_peer(&[base], corpus_id, &dest, Some(fingerprint.as_str()), None)
-            .await
-            .expect("canonical pull over iroh must succeed");
-
-    assert_eq!(report.corpus_id, corpus_id);
-    assert!(
-        dest.join(corpus_id).exists(),
-        "the canonical must have landed on the puller after an iroh transfer"
+    // The pull's first request, over the bridge: the canonical stream,
+    // headed by the founder's fingerprint and carrying what ingest packed.
+    let resp = reqwest::get(format!("{base}/internal/corpus/canonical/{corpus_id}"))
+        .await
+        .expect("the canonical route answers over iroh");
+    assert_eq!(resp.status(), 200);
+    assert_eq!(
+        resp.headers()
+            .get("x-canonical-fingerprint")
+            .and_then(|v| v.to_str().ok()),
+        Some(fingerprint.as_str()),
+    );
+    let body = resp.bytes().await.expect("the body streams over iroh");
+    assert_eq!(&body[..], PACKED, "the packed canonical crossed the tunnel");
+    assert_eq!(
+        *packs.lock().unwrap(),
+        vec![(indexes_a.join(corpus_id), 1)],
+        "one pack, of the founder's canonical"
     );
 }

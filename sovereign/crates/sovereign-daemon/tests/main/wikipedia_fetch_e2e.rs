@@ -3,163 +3,105 @@
 //! `wikipedia_fetch` ingests through ingest's port (pb-ingest-dial-tools-close).
 //!
 //! The daemon's real `/mcp` registry (the one the stock process serves),
-//! over an engine whose catalog and content recipes point at a local fixture
-//! in place of en.wikipedia.org: the catalog corpus is installed from a
-//! one-row JSONL, `wikipedia_fetch` is called through the registry, the
-//! engine ingests the article through `CatalogIngestPort` and folds it into
-//! the shared `wikipedia-fetched` corpus, and a read of that corpus finds a
-//! phrase that exists only in the fixture's article body.
+//! over ingest's port double (pb-ingest-dial-daemon-tests): the catalog
+//! corpus is a fixture index on disk the double lists and opens with the
+//! leaf's own reader, its `[catalog]` block is what the double answers,
+//! `wikipedia_fetch` is called through the registry, and the double records
+//! the one catalog work the tool asks ingest for — the content recipe, the
+//! work's url from the template, the staging corpus, and the fold into the
+//! shared `wikipedia-fetched` corpus.
+//!
+//! What ingest does with that work — fetch the article, index it, fold it
+//! into the shared corpus where the next read finds a phrase only the
+//! article carries — is corpus-engine's catalog_fetch_port_parity, over the
+//! same fixture recipes and origin this file served until the split.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use axum::extract::Query;
-use axum::routing::get;
-use axum::Router;
-use corpus_engine::{CorpusEngine, CorpusSpec};
+use corpus_index::index::{CorpusIndex, InsertChunk};
+use corpus_index::ingest_port::{CatalogWork, CatalogWorkIngested};
+use corpus_index::types::{CorpusKind, EmbedFn};
 use serde_json::json;
 use sovereign_contracts::types::{StepOutput, ToolContext};
 
-/// A word that appears in the fixture's article and nowhere else.
-const MARKER: &str = "zyzzyvalattice";
+const DIM: usize = corpus_index::types::DEFAULT_EMBED_DIM;
+const TEMPLATE: &str = "http://fixture.invalid/api?page={id}";
 
-/// The one catalog row and the Action API `parse` body for it.
-async fn fixture_origin() -> String {
-    let catalog = json!({
-        "title": "Fixture Topic",
-        "url": "https://en.wikipedia.org/wiki/Fixture_Topic",
-        "abstract": "A topic that exists only in this test.",
-        "sections": ["History"],
-    })
-    .to_string();
-    let article = move |Query(q): Query<std::collections::HashMap<String, String>>| async move {
-        assert_eq!(q.get("page").map(String::as_str), Some("Fixture_Topic"));
-        json!({ "parse": {
-            "title": "Fixture Topic",
-            "pageid": 1,
-            "revid": 1,
-            "wikitext": format!(
-                "Fixture Topic is a subject studied only by this test. Its defining \
-                 structure is the {MARKER}, which the fetch must carry into the index.\n\n\
-                 == History ==\nThe {MARKER} was first described in a fixture."
-            ),
-            "sections": [{ "line": "History", "level": "2", "index": "1" }],
-            "links": [],
-            "properties": [],
-        }})
-        .to_string()
-    };
-    let app = Router::new()
-        .route("/catalog.jsonl", get(move || async move { catalog }))
-        .route("/api", get(article));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        let _ = axum::serve(listener, app).await;
-    });
-    format!("http://{addr}")
-}
-
-/// The two recipes as local overrides: the catalog's acquire URL and its
-/// download template, and the content recipe's, point at the fixture.
-fn write_recipes(recipes: &std::path::Path, origin: &str) {
-    std::fs::create_dir_all(recipes).unwrap();
-    std::fs::write(
-        recipes.join("wikipedia-catalog.toml"),
-        format!(
-            r#"[corpus]
-id = "wikipedia-catalog"
-name = "Wikipedia Catalog (fixture)"
-description = "One-row fixture catalog."
-license = "CC-BY-SA-4.0"
-kind = "catalog"
-parent_corpus_id = "wikipedia"
-
-[acquire]
-type = "bulk_download"
-url = "{origin}/catalog.jsonl"
-
-[extract]
-type = "wikipedia_catalog"
-
-[chunk]
-type = "passthrough"
-
-[index]
-fts = true
-vector = true
-
-[catalog]
-id_field = "title"
-download_url_template = "{origin}/api?page={{id}}"
-content_recipe = "wikipedia-article"
-target_corpus_id = "wikipedia-fetched"
-expansion_enabled = false
-"#
-        ),
+/// The one-row catalog as ingest leaves it: a `Catalog`-kind index whose
+/// row the tool's literal-id lookup finds.
+async fn install_catalog(indexes: &std::path::Path) {
+    let index = CorpusIndex::create(
+        &indexes.join("wikipedia-catalog"),
+        "wikipedia-catalog",
+        "Wikipedia Catalog (fixture)",
+        "fixture-embed",
+        DIM,
+        false,
+        "CC-BY-SA-4.0",
     )
+    .await
     .unwrap();
-    std::fs::write(
-        recipes.join("wikipedia-article.toml"),
-        format!(
-            r#"[corpus]
-id = "wikipedia-article"
-name = "Wikipedia — Single Article (fixture)"
-description = "On-demand single-article ingest from the fixture."
-license = "CC-BY-SA-4.0"
-kind = "knowledge"
-on_demand = true
-parent_corpus_id = "wikipedia"
-
-[acquire]
-type = "bulk_download"
-url = "{origin}/api?page=PLACEHOLDER"
-
-[extract]
-type = "wikipedia_api_article"
-
-[chunk]
-type = "paragraph"
-max_chars = 1024
-overlap_chars = 128
-
-[index]
-fts = true
-vector = true
-
-[enrichment]
-enabled = false
-"#
-        ),
-    )
-    .unwrap();
+    index
+        .set_kind_and_parent(Some(CorpusKind::Catalog), Some("wikipedia"))
+        .unwrap();
+    index
+        .insert_batch(&[(
+            InsertChunk {
+                content: "Fixture Topic\nGutenberg ID: Fixture_Topic\nA topic that exists only \
+                          in this test."
+                    .into(),
+                title: Some("Fixture Topic".into()),
+                url: None,
+                metadata: None,
+                content_hash: None,
+                source_doc_id: Some("Fixture_Topic".into()),
+                source_file: None,
+                code: Default::default(),
+                unit_id: None,
+            },
+            vec![0.5; DIM],
+        )])
+        .await
+        .unwrap();
+    index.build_indexes(false, true, None).await.unwrap();
+    index.mark_ingestion_complete().unwrap();
 }
 
 /// Fails if `wikipedia_fetch` stops reaching ingest through the registry,
-/// or the port's ingest stops landing the article where the next read looks
-/// (drop the fold into the shared target, or the fetch URL substitution,
-/// and the marker is not found).
+/// or stops asking it for the work the catalog names (drop the fold into
+/// the shared target, or the url substitution, and the recorded work
+/// differs).
 #[tokio::test]
-async fn wikipedia_fetch_through_the_registry_ingests_the_article_and_the_next_read_finds_it() {
+async fn wikipedia_fetch_through_the_registry_asks_ingest_for_the_catalogs_work() {
     let dir = tempfile::tempdir().unwrap();
-    let origin = fixture_origin().await;
-    write_recipes(&dir.path().join("recipes"), &origin);
-    let embed: corpus_index::types::EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async {
-            Ok::<Vec<f32>, corpus_index::Error>(vec![0.5; corpus_index::types::DEFAULT_EMBED_DIM])
-        })
+    let indexes = dir.path().join("indexes");
+    install_catalog(&indexes).await;
+    let embed: EmbedFn = Arc::new(|_text: &str| {
+        Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.5; DIM]) })
     });
+    let catalog = serde_json::from_value(json!({
+        "id_field": "title",
+        "download_url_template": TEMPLATE,
+        "content_recipe": "wikipedia-article",
+        "target_corpus_id": "wikipedia-fetched",
+        "expansion_enabled": false,
+    }))
+    .unwrap();
+    let asked: Arc<Mutex<Vec<CatalogWork>>> = Arc::default();
+    let record = Arc::clone(&asked);
     let engine = Arc::new(
-        CorpusEngine::new(
-            dir.path().join("recipes"),
-            dir.path().join("indexes"),
-            embed,
-        )
-        .with_embedding_model("fixture-embed"),
+        crate::common::reading_double(indexes, embed)
+            .with_catalog_configs(vec![("wikipedia-catalog".into(), catalog)])
+            .on_ingest_catalog_work(move |work| {
+                record.lock().unwrap().push(work);
+                Box::pin(async {
+                    Ok(CatalogWorkIngested {
+                        chunks_created: 2,
+                        opts_out_of_auto_enrichment: true,
+                    })
+                })
+            }),
     );
-    engine
-        .ingest(&CorpusSpec::Builtin("wikipedia-catalog".into()), None)
-        .await
-        .expect("the fixture catalog installs");
 
     let solve_jobs = Arc::new(sovereign_daemon::solve_http::SolveJobs::new(1));
     let registry =
@@ -178,15 +120,18 @@ async fn wikipedia_fetch_through_the_registry_ingests_the_article_and_the_next_r
     };
     assert!(text.contains("wikipedia-fetched"), "{text}");
 
-    let fetched = corpus_index::index::CorpusIndex::open(
-        &dir.path().join("indexes").join("wikipedia-fetched"),
-    )
-    .await
-    .expect("the shared target corpus exists after the fetch");
-    let hits = fetched.search(&[], MARKER, 5).await.expect("FTS read");
-    assert!(
-        hits.iter().any(|h| h.content.contains(MARKER)),
-        "the fetched article is not readable: {} hit(s)",
-        hits.len()
+    let asked = asked.lock().unwrap();
+    assert_eq!(asked.len(), 1, "one work asked of ingest: {asked:?}");
+    let work = &asked[0];
+    assert_eq!(work.content_recipe, "wikipedia-article");
+    assert_eq!(work.catalog_corpus_id, "wikipedia-catalog");
+    assert_eq!(
+        work.download_url, "http://fixture.invalid/api?page=Fixture_Topic",
+        "the template's id is the title, underscored"
     );
+    assert_eq!(
+        work.staging_corpus_id,
+        "_fetch_wikipedia-fetched-Fixture_Topic"
+    );
+    assert_eq!(work.shared_target.as_deref(), Some("wikipedia-fetched"));
 }
