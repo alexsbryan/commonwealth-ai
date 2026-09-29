@@ -15,9 +15,9 @@
 //!    [`a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical`].
 //!    `c001e3634` already pins `merge_participants`' refusal at the unit
 //!    level; what is new is that a real two-donor fold whose peer is
-//!    unreachable produces `PartitionsUnreachable` and leaves NO canonical on
-//!    disk — with a paired positive in the same test showing the same
-//!    scenario merging a 1-of-2 canonical the moment the bar is dropped.
+//!    unreachable produces `PartitionsUnreachable` and hands ingest NO merge
+//!    — with a paired positive in the same test showing the same scenario
+//!    handing it a 1-of-2 merge the moment the bar is dropped.
 //!
 //! 2. **The `continue` in `auto_ingest`'s arm is load-bearing.**
 //!    [`the_folds_refusal_is_final_and_the_disk_path_never_runs`]. Driven
@@ -46,6 +46,11 @@
 //! * Whether the refusal is retried usefully. `auto_ingest` logs "retrying
 //!   next tick" and this file watches one tick.
 //!
+//! * What ingest builds from what it is handed. Every reading here asserts
+//!   what the daemon hands ingest's `PartitionMergePort` (the sibling file's
+//!   port double); that a 1-of-2 merge becomes a reachable half-corpus is
+//!   corpus-engine's `fold_merge_port_parity` (pb-ingest-dial-daemon-tests-merge).
+//!
 //! The `NodeId` fixture hazard the sibling files document applies verbatim.
 
 use std::sync::{Arc, Mutex};
@@ -64,8 +69,9 @@ use tempfile::TempDir;
 
 use crate::common::corpus_at;
 use crate::fold_ingest_cross_node_merge_e2e::{
-    actor, engine_at, key, leader_node, node_state_with_seed, peer_node, probe_canonical, ring,
-    terminal_handoff, terminal_handoff_ops, write_donor_partition, LEADER_ONLY_TERM,
+    actor, key, leader_node, node_port, node_port_with, node_state_with_seed, peer_node, ring,
+    terminal_handoff, terminal_handoff_ops, write_donor_partition, NodePort, LEADER_ONLY_TERM,
+    LEADER_SLICE,
 };
 
 /// The instant the in-memory readings ask the fold about. Same as the sibling
@@ -90,7 +96,12 @@ async fn dead_peer_addr() -> std::net::SocketAddr {
 /// Only the leader's partition is written. The peer's slice exists in the
 /// journal and nowhere this node can reach, which is exactly the shape the
 /// coverage guard is for: the fold says two, the disk can supply one.
-async fn leader_alone(corpus: &str) -> (TempDir, std::path::PathBuf, AppState) {
+///
+/// The node's port lists `corpus` as stranded and nothing as in progress,
+/// which is what the engine's disk scans answer over this disk (its
+/// `corpora_with_stranded_partitions_*` unit tests), so the tick loop below
+/// reaches the arms under test.
+async fn leader_alone(corpus: &str) -> (TempDir, std::path::PathBuf, AppState, NodePort) {
     leader_alone_with_seed(corpus, sovereign_daemon::state::FabricSeed::default()).await
 }
 
@@ -99,19 +110,23 @@ async fn leader_alone(corpus: &str) -> (TempDir, std::path::PathBuf, AppState) {
 async fn leader_alone_with_seed(
     corpus: &str,
     seed: sovereign_daemon::state::FabricSeed,
-) -> (TempDir, std::path::PathBuf, AppState) {
+) -> (TempDir, std::path::PathBuf, AppState, NodePort) {
     let home = TempDir::new().expect("leader tempdir");
     let dir = home.path().join("indexes");
     std::fs::create_dir_all(&dir).expect("index dir");
     write_donor_partition(&dir, leader_node(), corpus, 0, LEADER_ONLY_TERM).await;
     let addr = dead_peer_addr().await;
+    let node = node_port_with(&dir, |port| {
+        port.with_stranded_partitions(vec![corpus.to_string()])
+            .with_in_progress_ingestions(Vec::new())
+    });
     let state = node_state_with_seed(
         leader_node(),
-        &dir,
+        &node,
         &[(peer_node(), &addr.to_string())],
         seed,
     );
-    (home, dir, state)
+    (home, dir, state, node)
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -143,7 +158,7 @@ async fn leader_alone_with_seed(
 async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
     const CORPUS: &str = "cw-lift-5g-refusal";
     let (projection, _handoff) = terminal_handoff(CORPUS).await;
-    let (_home, dir, state) = leader_alone(CORPUS).await;
+    let (_home, dir, state, leader) = leader_alone(CORPUS).await;
 
     let coverage = fold_coverage_for(&projection, &actor(1), CORPUS, NOW_MS)
         .expect("the submitter leads a terminal ingest:v1 handoff for this corpus");
@@ -163,16 +178,16 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
     )
     .await;
 
-    let probe = probe_canonical(&dir, CORPUS).await;
     assert!(
-        !probe.canonical_exists,
-        "THE BAR: no canonical may exist after a coverage refusal. One does, \
-         holding {} chunk(s). A canonical directory is TERMINAL to every \
+        leader.merge_acts().is_empty(),
+        "THE BAR: ingest may be handed no merge after a coverage refusal. It \
+         was: {:?}, slices {:?}. A canonical directory is TERMINAL to every \
          reader — `merge_from_fold_coverage` short-circuits on \
          `AlreadyHasCanonical` and `corpora_with_stranded_partitions` drops \
          the corpus — so a partial one written here is the corpus, for good.\n\
          merge outcome: {outcome:?}",
-        probe.chunk_count,
+        leader.merge_acts(),
+        leader.merges(),
     );
     assert!(
         matches!(
@@ -194,7 +209,7 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
     );
 
     // ── The paired positive: drop the bar, and the same disk merges half ──
-    let (_home2, dir2, state2) = leader_alone(CORPUS).await;
+    let (_home2, _dir2, state2, leader2) = leader_alone(CORPUS).await;
     let node2 = sovereign_daemon::routes_internal::fold_recovery(&state2).await;
     let dropped = merge_from_fold_coverage(
         node2,
@@ -204,17 +219,17 @@ async fn a_two_donor_fold_missing_its_peer_refuses_and_writes_no_canonical() {
         1, // the bar the fold did NOT ask for
     )
     .await;
-    let probe2 = probe_canonical(&dir2, CORPUS).await;
+    let merges2 = leader2.merges();
     assert!(
-        probe2.canonical_exists && probe2.leader_term_reachable && !probe2.peer_term_reachable,
-        "control: with `expected = 1` this scenario MUST produce the partial \
-         canonical, or the refusal above proves only that nothing here can \
-         merge at all. outcome: {dropped:?} | canonical: {} | chunks: {} | \
-         leader term: {} | peer term: {}",
-        probe2.canonical_exists,
-        probe2.chunk_count,
-        probe2.leader_term_reachable,
-        probe2.peer_term_reachable,
+        merges2.len() == 1 && merges2[0].0 == vec![LEADER_SLICE],
+        "control: with `expected = 1` this scenario MUST hand ingest the \
+         leader's slice alone — the partial canonical — or the refusal above \
+         proves only that nothing here can merge at all. outcome: {dropped:?} | \
+         merges: {merges2:?}",
+    );
+    assert_eq!(
+        leader2.merge_acts(),
+        vec!["merge_partitions", "finalize_canonical"]
     );
     assert!(
         matches!(dropped, RecoveryOutcome::Recovered { chunks: 2, .. }),
@@ -270,16 +285,15 @@ async fn the_older_disk_guard_is_dark_without_a_total_shards_stamp() {
          carries no `total_shards`. Meta: {dark_meta}",
     );
 
-    let engine = engine_at(&dir, leader_node());
-    let outcome = try_recover_stranded_partitions(&*engine, &dir, DARK).await;
-    let probe = probe_canonical(&dir, DARK).await;
-    assert!(
-        probe.canonical_exists && probe.leader_term_reachable && !probe.peer_term_reachable,
-        "the disk path must publish a canonical holding ONLY this node's slice \
-         — that is the hazard B7 names, and if it did not happen the premise \
-         would be wrong. outcome: {outcome:?} | canonical: {} | chunks: {}",
-        probe.canonical_exists,
-        probe.chunk_count,
+    let node = node_port(&dir);
+    let outcome = try_recover_stranded_partitions(&*node.port, &dir, DARK).await;
+    assert_eq!(
+        node.disk_merges(),
+        vec![(DARK.to_string(), vec![LEADER_SLICE])],
+        "the disk path must hand ingest a merge of ONLY this node's slice — \
+         that is the hazard B7 names (ingest builds it into a reachable \
+         canonical: `fold_merge_port_parity`), and if it did not happen the \
+         premise would be wrong. outcome: {outcome:?}",
     );
     assert!(
         !matches!(outcome, RecoveryOutcome::IncompleteCoverage { .. }),
@@ -295,7 +309,7 @@ async fn the_older_disk_guard_is_dark_without_a_total_shards_stamp() {
         .set_total_shards(2)
         .expect("stamp total_shards");
 
-    let armed_outcome = try_recover_stranded_partitions(&*engine, &dir, ARMED).await;
+    let armed_outcome = try_recover_stranded_partitions(&*node.port, &dir, ARMED).await;
     assert!(
         matches!(
             armed_outcome,
@@ -305,9 +319,11 @@ async fn the_older_disk_guard_is_dark_without_a_total_shards_stamp() {
          field it reads is present, or the first half is about a broken guard \
          rather than an unarmed one. Got {armed_outcome:?}",
     );
-    assert!(
-        !probe_canonical(&dir, ARMED).await.canonical_exists,
-        "control: the armed guard must leave no canonical behind either",
+    assert_eq!(
+        node.merge_acts(),
+        vec!["merge_partitions_into_canonical"],
+        "control: the armed guard must hand ingest no merge either — the one \
+         call is the dark half's",
     );
 }
 
@@ -436,7 +452,7 @@ async fn the_folds_refusal_is_final_and_the_disk_path_never_runs() {
 
     let rail_home = TempDir::new().expect("rail tempdir");
     let seed = fold_seed(rail_home.path(), CORPUS).await;
-    let (_home, dir, state) = leader_alone_with_seed(CORPUS, seed).await;
+    let (_home, _dir, state, leader) = leader_alone_with_seed(CORPUS, seed).await;
 
     let buf = Arc::new(Mutex::new(Vec::new()));
     let subscriber = tracing_subscriber::fmt()
@@ -465,32 +481,30 @@ async fn the_folds_refusal_is_final_and_the_disk_path_never_runs() {
     // The arm has run and refused. Give the fall-through every chance to
     // happen anyway before claiming it did not.
     let leaked = within(std::time::Duration::from_secs(5), || {
-        corpus_at(&dir, CORPUS).is_installed()
+        !leader.merge_acts().is_empty()
     })
     .await;
-    let probe = probe_canonical(&dir, CORPUS).await;
     assert!(
-        !leaked && !probe.canonical_exists,
-        "THE BAR: a coverage refusal must be FINAL. A canonical exists after \
-         the fold refused to build one, which means the tick fell through to \
-         the disk-derived path and merged the local half — the original bug, \
+        !leaked,
+        "THE BAR: a coverage refusal must be FINAL. Ingest was handed a merge \
+         after the fold refused to build one, which means the tick fell through \
+         to the disk-derived path and merged the local half — the original bug, \
          verbatim.\n\
-         canonical chunk_count      : {}\n\
-         leader-only term reachable : {}\n\
-         peer-only term reachable   : {}\n\
+         port acts   : {:?}\n\
+         disk merges : {:?}\n\
          \n\
          Captured:\n{}",
-        probe.chunk_count,
-        probe.leader_term_reachable,
-        probe.peer_term_reachable,
+        leader.merge_acts(),
+        leader.disk_merges(),
         captured(),
     );
 }
 
 /// **The control for the reading above, and the hazard in one line.** The same
 /// disk and the same loop with no fold to speak for the corpus: the tick falls
-/// through to `try_recover_stranded_partitions` and publishes a canonical
-/// holding one donor's slice out of two.
+/// through to `try_recover_stranded_partitions` and hands ingest a disk merge
+/// of one donor's slice out of two, which ingest publishes as the canonical
+/// (`fold_merge_port_parity`).
 ///
 /// Kept separate rather than folded into the test above because it needs its
 /// own `set_default` guard and its own loop, and because "the control failed"
@@ -500,7 +514,7 @@ async fn without_a_fold_the_same_tick_publishes_the_partial_canonical() {
     const CORPUS: &str = "cw-lift-5g-tick-control";
 
     let daemon_port = dead_peer_addr().await.port();
-    let (_home, dir, state) = leader_alone(CORPUS).await;
+    let (_home, _dir, state, leader) = leader_alone(CORPUS).await;
     // No `install_fold`: `ingest_executor::fold_now` finds no rail and returns
     // `None`, which is every corpus ingested the legacy way.
     assert!(
@@ -512,26 +526,21 @@ async fn without_a_fold_the_same_tick_publishes_the_partial_canonical() {
         sovereign_daemon::auto_ingest::spawn_auto_collaborate_loop(state, daemon_port);
 
     let appeared = within(std::time::Duration::from_secs(60), || {
-        corpus_at(&dir, CORPUS).is_installed()
+        !leader.disk_merges().is_empty()
     })
     .await;
-    let probe = probe_canonical(&dir, CORPUS).await;
 
     assert!(
-        appeared && probe.canonical_exists,
+        appeared,
         "the control must reach the disk-derived path and merge — otherwise \
          the bar above is about a loop that never got as far as the stranded \
-         scan, and proves nothing. canonical: {} | chunks: {}",
-        probe.canonical_exists,
-        probe.chunk_count,
+         scan, and proves nothing. port calls: {:?}",
+        leader.port.calls(),
     );
-    assert!(
-        probe.leader_term_reachable && !probe.peer_term_reachable,
-        "and what it publishes is HALF the corpus: this node's slice only, \
-         with the other donor's unreachable. chunks: {} | leader term: {} | \
-         peer term: {}",
-        probe.chunk_count,
-        probe.leader_term_reachable,
-        probe.peer_term_reachable,
+    assert_eq!(
+        leader.disk_merges(),
+        vec![(CORPUS.to_string(), vec![LEADER_SLICE])],
+        "and what it hands ingest is HALF the corpus: this node's slice only, \
+         with the other donor's nowhere on disk",
     );
 }

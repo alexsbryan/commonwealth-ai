@@ -36,16 +36,29 @@
 //! The bar is a QUERY, not a chunk count. A count can be right for the wrong
 //! reason — two chunks merged twice is four. What is asserted is that a term
 //! appearing ONLY in the remote donor's slice comes back from a search against
-//! the merged canonical — **reached through `CorpusEngine::usable_indexes()`**,
-//! with the corpus present in `installed_indexes()`, which is the list
+//! the merged canonical — **reached through `usable_indexes()`**, with the
+//! corpus present in `installed_indexes()`, which is the list
 //! `hosted_corpora` gossip is built from.
 //!
 //! That altitude is not incidental. The first reading of B2 probed with
 //! `CorpusIndex::open` on the canonical path, which bypasses both of those
 //! gates, and passed over a corpus that `installed_indexes()` could not see at
-//! all. Both probes are read now and they print side by side, because
-//! "the peer's chunks never arrived" and "the chunks arrived and nothing can
-//! route to them" are different defects that a single reading conflates.
+//! all. "The peer's chunks never arrived" and "the chunks arrived and nothing
+//! can route to them" are different defects that a single reading conflates.
+//!
+//! Split at the port (pb-ingest-dial-daemon-tests-merge, phase-b-52)
+//! ---------------------------------------------------------------
+//! The merge and the finalize are ingest's, reached through
+//! `PartitionMergePort`, so each node here holds `IngestPortDouble` and these
+//! readings assert what the daemon HANDS that port: which slices (read as
+//! they arrived, the peer's over the wire), into which canonical, then the
+//! finalize, as the merge family's entries in `calls()`. Nothing on this side
+//! opens the canonical: whether it is on disk was never the daemon's
+//! question. What ingest makes of those two slices, and the two altitudes
+//! told apart (merged-only rows a by-path open finds, finalized rows
+//! `installed_indexes()` and `usable_indexes()` list), is proven on
+//! `impl PartitionMergePort for CorpusEngine` over the same fixture, in
+//! corpus-engine's `fold_merge_port_parity`.
 //!
 //! What this file drives for real
 //! ------------------------------
@@ -54,9 +67,9 @@
 //!   hand-built projection — two units, two DIFFERENT lessees, one handoff —
 //!   over real `ingest:v1` units sealed by cw-rails' seal door over real
 //!   `IngestPayload` bodies.
-//! * The real partition layout: `CorpusEngine::partition_path`, the same call
-//!   `IngestExecutor::run` makes to choose where a slice lands
-//!   (`ingest_executor.rs`).
+//! * The real partition layout: `Corpus::partition`, which the engine's
+//!   `partition_path` — the call `IngestExecutor::run` makes to choose where
+//!   a slice lands — delegates to.
 //! * **The real wire.** The peer donor's partition is served by the peer's own
 //!   `sovereign_daemon::server::internal_router` on a real loopback socket,
 //!   and reaches the leader through `ShardManager::fetch_remote_shard`'s
@@ -95,7 +108,8 @@
 //! bytes for that reason, as in `merge_participants_coverage.rs`.
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use commonwealth_core::ids::{HandoffId, MeshId};
 use commonwealth_core::knowledge::{HandoffPhase, WorkUnit};
@@ -103,9 +117,9 @@ use commonwealth_core::mesh::Mesh;
 use commonwealth_rail_core::{
     actor_of, body_json, sign_ring_op, Op, Person, RailAct, Roster, SignedOp, SigningKey,
 };
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk, InsertCodeMeta};
-use corpus_index::types::EmbedFn;
+use corpus_index::ingest_port::double::IngestPortDouble;
+use corpus_index::ingest_port::merge::PartitionMergeReport;
 use kernel_types::judgement::Reason;
 use kernel_types::ActorKey;
 use kernel_types::{ComputeAttribution, Judgement, NodeId, Server};
@@ -353,25 +367,193 @@ pub(crate) async fn terminal_handoff(corpus: &str) -> (WorkProjection, HandoffId
 // The disk and the wire — two nodes are two index dirs and two sockets
 // ─────────────────────────────────────────────────────────────────
 
-fn embed_fn() -> EmbedFn {
-    Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.25_f32; EMBED_DIM]) }))
+/// What one partition dir held when the daemon handed it to ingest: its rows,
+/// and whether a search of it returns each donor's term. Read at call time,
+/// because `merge_participants` deletes the shard dirs it merged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Slice {
+    pub(crate) chunks: u64,
+    pub(crate) leader_term: bool,
+    pub(crate) peer_term: bool,
 }
 
-/// A `CorpusEngine` rooted at `index_dir` and told it is `node` — the identity
-/// `partition_path` and `index_serve` both name the partition dir from.
-pub(crate) fn engine_at(index_dir: &std::path::Path, node: NodeId) -> Arc<CorpusEngine> {
-    let recipes = index_dir.join("..").join("recipes");
-    std::fs::create_dir_all(&recipes).expect("recipes dir");
-    Arc::new(
-        CorpusEngine::new(recipes, index_dir.to_path_buf(), embed_fn())
-            .with_self_node_id(node.to_string()),
-    )
+pub(crate) const LEADER_SLICE: Slice = Slice {
+    chunks: 2,
+    leader_term: true,
+    peer_term: false,
+};
+pub(crate) const PEER_SLICE: Slice = Slice {
+    chunks: 2,
+    leader_term: false,
+    peer_term: true,
+};
+
+async fn slice_of(dir: &Path) -> corpus_index::Result<Slice> {
+    let index = CorpusIndex::open(dir).await?;
+    Ok(Slice {
+        chunks: index.info().await?.chunk_count,
+        leader_term: term_reachable(&index, LEADER_ONLY_TERM).await?,
+        peer_term: term_reachable(&index, PEER_ONLY_TERM).await?,
+    })
+}
+
+/// Everything the daemon handed one node's ingest port.
+#[derive(Default)]
+pub(crate) struct PortLog {
+    /// Each `merge_partitions`: the slices it was handed, and its output.
+    pub(crate) merges: Mutex<Vec<(Vec<Slice>, PathBuf)>>,
+    /// Each `finalize_canonical`'s corpus id.
+    pub(crate) finalized: Mutex<Vec<String>>,
+    /// Each `merge_partitions_into_canonical`: the corpus id, and the slices
+    /// its partition dirs held.
+    pub(crate) disk_merges: Mutex<Vec<(String, Vec<Slice>)>>,
+}
+
+/// One node's corpus handle: ingest's port double rooted at the node's index
+/// dir, and what the daemon handed it.
+pub(crate) struct NodePort {
+    pub(crate) port: Arc<IngestPortDouble>,
+    pub(crate) log: Arc<PortLog>,
+}
+
+impl NodePort {
+    /// The merge family's entries in the port's `calls()`, in order.
+    pub(crate) fn merge_acts(&self) -> Vec<&'static str> {
+        const MERGE_ACTS: [&str; 3] = [
+            "merge_partitions",
+            "finalize_canonical",
+            "merge_partitions_into_canonical",
+        ];
+        self.port
+            .calls()
+            .into_iter()
+            .filter(|c| MERGE_ACTS.contains(c))
+            .collect()
+    }
+
+    pub(crate) fn merges(&self) -> Vec<(Vec<Slice>, PathBuf)> {
+        self.log.merges.lock().expect("merges lock").clone()
+    }
+
+    pub(crate) fn finalized(&self) -> Vec<String> {
+        self.log.finalized.lock().expect("finalized lock").clone()
+    }
+
+    pub(crate) fn disk_merges(&self) -> Vec<(String, Vec<Slice>)> {
+        self.log
+            .disk_merges
+            .lock()
+            .expect("disk merges lock")
+            .clone()
+    }
+}
+
+/// [`node_port_with`], programmed with nothing more.
+pub(crate) fn node_port(index_dir: &Path) -> NodePort {
+    node_port_with(index_dir, |port| port)
+}
+
+/// Ingest's merge port as a double rooted at `index_dir`, with `program`
+/// chained on for whatever else a reading drives.
+///
+/// Its merge records the slices it was handed and creates the canonical at
+/// the output with the leaf's own `CorpusIndex::create`, empty, because
+/// `merge_participants` opens it before the finalize; it answers the sum of
+/// the slices' rows, what ingest reports for disjoint slices. Its disk merge
+/// records the partition dirs `<corpus>-partition-*` held and answers one
+/// shard per dir. Neither writes a row: what ingest writes is proven on the
+/// engine, in corpus-engine's `fold_merge_port_parity`.
+pub(crate) fn node_port_with(
+    index_dir: &Path,
+    program: impl FnOnce(IngestPortDouble) -> IngestPortDouble,
+) -> NodePort {
+    let log = Arc::new(PortLog::default());
+    let (merges, finalized, disk_merges) = (Arc::clone(&log), Arc::clone(&log), Arc::clone(&log));
+    let port = IngestPortDouble::new()
+        .with_index_dir(index_dir)
+        .on_merge_partitions(move |inputs, output| {
+            let log = Arc::clone(&merges);
+            Box::pin(async move {
+                let mut slices = Vec::new();
+                for dir in &inputs {
+                    slices.push(slice_of(dir).await?);
+                }
+                let chunks = slices.iter().map(|s| s.chunks).sum();
+                log.merges
+                    .lock()
+                    .expect("merges lock")
+                    .push((slices, output.clone()));
+                let id = output
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .expect("the canonical dir is named for its corpus")
+                    .to_string();
+                let canonical = CorpusIndex::create(
+                    &output,
+                    &id,
+                    "cw-lift 5g cross-node",
+                    "test-embed",
+                    EMBED_DIM,
+                    true,
+                    "MIT",
+                )
+                .await?;
+                let mut info = canonical.info().await?;
+                info.chunk_count = chunks;
+                Ok(info)
+            })
+        })
+        .on_finalize_canonical(move |corpus_id| {
+            finalized
+                .finalized
+                .lock()
+                .expect("finalized lock")
+                .push(corpus_id.to_string());
+            Ok(())
+        })
+        .on_merge_partitions_into_canonical(move |index_dir, corpus_id| {
+            let log = Arc::clone(&disk_merges);
+            Box::pin(async move {
+                let corpus = corpus_at(&index_dir, &corpus_id);
+                let prefix = corpus.partition_prefix();
+                let mut dirs: Vec<PathBuf> = std::fs::read_dir(&index_dir)?
+                    .flatten()
+                    .filter(|e| e.file_name().to_string_lossy().starts_with(&prefix))
+                    .map(|e| e.path())
+                    .collect();
+                dirs.sort();
+                let mut slices = Vec::new();
+                for dir in &dirs {
+                    slices.push(slice_of(dir).await?);
+                }
+                let chunks = slices.iter().map(|s| s.chunks).sum();
+                log.disk_merges
+                    .lock()
+                    .expect("disk merges lock")
+                    .push((corpus_id.clone(), slices));
+                Ok(PartitionMergeReport {
+                    shard_union: (0..dirs.len()).collect(),
+                    partition_paths: dirs,
+                    canonical_path: corpus.root(),
+                    chunks_input: chunks,
+                    chunks_merged: chunks,
+                    total_shards: None,
+                    embedding_model: "test-embed".into(),
+                    embedding_dimensions: EMBED_DIM,
+                })
+            })
+        });
+    NodePort {
+        port: Arc::new(program(port)),
+        log,
+    }
 }
 
 /// Write one donor's finished slice into the partition directory the real
 /// [`sovereign_daemon::ingest_executor::IngestExecutor`] would have chosen —
-/// `CorpusEngine::partition_path`, called here rather than re-spelled, so a
-/// change to the layout breaks this test rather than silently detaching it.
+/// `Corpus::partition`, which the engine's `partition_path` delegates to,
+/// called here rather than re-spelled, so a change to the layout breaks this
+/// test rather than silently detaching it.
 pub(crate) async fn write_donor_partition(
     index_dir: &std::path::Path,
     node: NodeId,
@@ -379,8 +561,7 @@ pub(crate) async fn write_donor_partition(
     unit_id: u32,
     term: &str,
 ) {
-    let engine = engine_at(index_dir, node);
-    let path = engine.partition_path(corpus);
+    let path = corpus_at(index_dir, corpus).partition(&node.to_string());
 
     let index = CorpusIndex::create(
         &path,
@@ -423,20 +604,17 @@ pub(crate) async fn write_donor_partition(
         .expect("mark the slice finished");
 }
 
-/// An `AppState` for one node: its own id, its own index dir, and a mesh
-/// holding whatever `others` are reachable from it.
+/// An `AppState` for one node: its own id, its own corpus handle (`node`'s
+/// port, rooted at its own index dir), and a mesh holding whatever `others`
+/// are reachable from it.
 ///
 /// The mesh is what `peer_control_urls` reads to turn a `NodeId` from the fold
 /// into a base URL, so a donor that is not a member here is unreachable —
 /// which is the production behaviour, not a shortcut.
-pub(crate) fn node_state(
-    self_id: NodeId,
-    index_dir: &std::path::Path,
-    others: &[(NodeId, &str)],
-) -> AppState {
+pub(crate) fn node_state(self_id: NodeId, node: &NodePort, others: &[(NodeId, &str)]) -> AppState {
     node_state_with_seed(
         self_id,
-        index_dir,
+        node,
         others,
         sovereign_daemon::state::FabricSeed::default(),
     )
@@ -447,7 +625,7 @@ pub(crate) fn node_state(
 /// staged, and parts are total").
 pub(crate) fn node_state_with_seed(
     self_id: NodeId,
-    index_dir: &std::path::Path,
+    node: &NodePort,
     others: &[(NodeId, &str)],
     seed: sovereign_daemon::state::FabricSeed,
 ) -> AppState {
@@ -476,7 +654,7 @@ pub(crate) fn node_state_with_seed(
     AppState::new_with_seeds(
         self_id,
         mesh,
-        Some(engine_at(index_dir, self_id)),
+        Some(Arc::clone(&node.port) as _),
         None,
         seed,
         sovereign_daemon::state::serving::ServingSeed::default(),
@@ -485,139 +663,14 @@ pub(crate) fn node_state_with_seed(
     )
 }
 
-/// Does a search of `index` return a chunk carrying `term`?
-///
-/// One spelling, used by both probes below, so that "reachable" cannot come
-/// to mean two slightly different things at two altitudes.
-pub(crate) async fn term_reachable(index: &CorpusIndex, term: &str) -> bool {
-    index
+/// Does a search of `index` return a chunk carrying `term`? A failed search
+/// is the port's error, never "not reachable".
+async fn term_reachable(index: &CorpusIndex, term: &str) -> corpus_index::Result<bool> {
+    Ok(index
         .search(&[0.25_f32; EMBED_DIM], term, 10)
-        .await
-        .map(|hits| hits.iter().any(|h| h.content.contains(term)))
-        .unwrap_or(false)
-}
-
-/// What the leader's canonical corpus DIRECTORY actually holds after the
-/// merge — opened by path, with `CorpusIndex::open`.
-///
-/// This answers "are the bytes on disk and are they retrievable from a handle
-/// that already exists". It deliberately does NOT answer "can anyone reach
-/// this corpus", which is [`InstalledProbe`]'s question; the two disagreed for
-/// the whole of `df2ffecb8`, and telling them apart is the point of having
-/// both.
-#[derive(Debug)]
-pub(crate) struct CanonicalProbe {
-    pub(crate) canonical_exists: bool,
-    pub(crate) chunk_count: u64,
-    pub(crate) leader_term_reachable: bool,
-    pub(crate) peer_term_reachable: bool,
-}
-
-pub(crate) async fn probe_canonical(index_dir: &std::path::Path, corpus: &str) -> CanonicalProbe {
-    let canonical = corpus_at(index_dir, corpus).root();
-    let Ok(index) = CorpusIndex::open(&canonical).await else {
-        return CanonicalProbe {
-            canonical_exists: false,
-            chunk_count: 0,
-            leader_term_reachable: false,
-            peer_term_reachable: false,
-        };
-    };
-    let info = index.info().await.expect("canonical info");
-    CanonicalProbe {
-        canonical_exists: true,
-        chunk_count: info.chunk_count,
-        leader_term_reachable: term_reachable(&index, LEADER_ONLY_TERM).await,
-        peer_term_reachable: term_reachable(&index, PEER_ONLY_TERM).await,
-    }
-}
-
-/// The canonical as THE REST OF THE SYSTEM sees it, which is the altitude a
-/// user's query and a peer's gossip actually arrive at.
-///
-/// `CorpusIndex::open` on a path bypasses both gates a merged corpus has to
-/// pass, and a bar asserted through it proves the bytes landed, not that the
-/// corpus works. Measured on `df2ffecb8`, which passed B2 through that probe:
-/// two canonical directories on disk, `installed_indexes()` → 0 rows,
-/// `hosted_corpora` → `[]`.
-///
-/// The two accessors here are those gates, and they are the ones the product
-/// goes through:
-///
-/// * `CorpusEngine::installed_indexes()` gates on `is_ingestion_complete`
-///   (`engine/mod.rs`). It is the list
-///   `sovereign_mesh::capabilities::build_local_capabilities` walks and hands
-///   straight to `build_hosted_corpora` (`capabilities.rs:103` → `:122`), so a
-///   corpus missing from it is advertised to NO peer.
-/// * `CorpusEngine::usable_indexes()` gates additionally on `indexes_built`
-///   and is corpus-engine's own single decider for "can I search it".
-///
-/// `hosted_corpora` is asserted through its input rather than by calling
-/// `build_local_capabilities`: `build_hosted_corpora` is private, and the
-/// public entry point detects hardware and probes GPU VRAM — a lot of machine
-/// to drag into a merge test for a list it copies out of `installed_indexes()`
-/// unchanged apart from the `query_sharing` filter.
-#[derive(Debug)]
-pub(crate) struct InstalledProbe {
-    /// `corpus_id`s from `installed_indexes()` — the gossip term.
-    pub(crate) installed: Vec<String>,
-    /// `corpus_id`s from `usable_indexes()` — the searchable term.
-    pub(crate) usable: Vec<String>,
-    /// Every directory under the index dir carrying a corpus meta, so a
-    /// reading of "zero rows" can be told apart from "nothing was written".
-    pub(crate) dirs_on_disk: Vec<String>,
-    /// `Some` only when the corpus reached `usable_indexes()` and the search
-    /// therefore RAN, through the engine's own by-id accessor. `None` means
-    /// the question was never asked — a different reading from asked-and-
-    /// missed, and not defaulted into one (ARCH §18.3).
-    pub(crate) leader_term_reachable: Option<bool>,
-    pub(crate) peer_term_reachable: Option<bool>,
-}
-
-pub(crate) async fn probe_installed(index_dir: &std::path::Path, corpus: &str) -> InstalledProbe {
-    let engine = engine_at(index_dir, leader_node());
-    let ids = |rows: Vec<corpus_index::types::IndexInfo>| -> Vec<String> {
-        rows.into_iter().map(|i| i.corpus_id).collect()
-    };
-    let installed = ids(engine
-        .installed_indexes()
-        .await
-        .expect("installed_indexes must not fail on a temp dir this test owns"));
-    let usable = ids(engine
-        .usable_indexes()
-        .await
-        .expect("usable_indexes must not fail on a temp dir this test owns"));
-
-    let mut dirs_on_disk: Vec<String> = std::fs::read_dir(index_dir)
-        .expect("index dir")
-        .flatten()
-        .filter(|e| corpus_index::corpus::Corpus::meta_in(e.path()).exists())
-        .filter_map(|e| e.file_name().to_str().map(str::to_string))
-        .collect();
-    dirs_on_disk.sort();
-
-    let (leader_term_reachable, peer_term_reachable) = if usable.iter().any(|c| c == corpus) {
-        // Through the engine's by-id accessor, not a hand-built path:
-        // "the surface a user reaches" is the whole claim.
-        let index = engine
-            .open_index_for_corpus(corpus)
-            .await
-            .expect("a corpus usable_indexes() listed must open");
-        (
-            Some(term_reachable(&index, LEADER_ONLY_TERM).await),
-            Some(term_reachable(&index, PEER_ONLY_TERM).await),
-        )
-    } else {
-        (None, None)
-    };
-
-    InstalledProbe {
-        installed,
-        usable,
-        dirs_on_disk,
-        leader_term_reachable,
-        peer_term_reachable,
-    }
+        .await?
+        .iter()
+        .any(|h| h.content.contains(term)))
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -779,48 +832,37 @@ async fn only_the_submitter_reads_a_merge_out_of_the_fold() {
 // B2, second half — the merge, over a real socket
 // ─────────────────────────────────────────────────────────────────
 
-/// **B2 (second half) — THE BAR.** Two donors, two nodes, one corpus, one
-/// handoff. The leader's canonical corpus contains BOTH donors' chunks, and
-/// the term that only the REMOTE donor's slice carries is reachable by search
-/// **through `usable_indexes()`** — the accessor a user's query goes through —
-/// with the corpus present in `installed_indexes()`, which is what
-/// `hosted_corpora` gossip advertises from.
+/// **B2 (second half) — THE BAR, the daemon's half.** Two donors, two nodes,
+/// one corpus, one handoff. The leader hands ingest BOTH donors' slices —
+/// its own from disk, the peer's as it arrived over the wire from the peer's
+/// own `internal_router` — into the canonical, and THEN the finalize.
 ///
 /// This is B1's scenario with the collector wired. B1 measured
-/// `Recovered { chunks: 2 }` here with `peer-only term reachable : false`.
+/// `Recovered { chunks: 2 }` here with the peer-only term unreachable.
 ///
-/// # Why the altitude, and why this assertion changed
+/// # Why the finalize is asserted, and where the altitude went
 ///
-/// Until 2026-09-09 this test probed with `CorpusIndex::open` on the canonical
-/// path, which bypasses both gates a merged corpus must pass. It went green on
-/// `df2ffecb8` over a canonical that `installed_indexes()` returned zero rows
-/// for and that `hosted_corpora` gossip advertised as `[]` — the merge wrote
-/// the chunks and never called `build_indexes` / `mark_indexes_built` /
-/// `mark_ingestion_complete` / the fingerprint stamp. What that green proved
-/// was that the bytes were on disk, which is not the bar this
-/// pre-registration set. The bar says a query only the remote donor's slice
-/// can satisfy must be answerable, "because a count can be right for the wrong
-/// reason" — and a query nothing routes to is the same failure one level up.
+/// Until 2026-09-09 this bar was read with `CorpusIndex::open` on the
+/// canonical path, and went green on `df2ffecb8` over a canonical that
+/// `installed_indexes()` returned zero rows for: the merge wrote the chunks
+/// and never finalized them. On this side that defect is the finalize
+/// missing from the merge family's `calls()`; that a merge plus the finalize
+/// is a corpus `installed_indexes()` and `usable_indexes()` list, with the
+/// peer's term reachable through the engine's by-id open, is the engine
+/// half (`fold_merge_port_parity`), read at that altitude and never by path.
+/// Nothing here opens the canonical.
 ///
-/// Failing input, named and watched (ARCH §18.1): two of them, and they print
-/// differently, which is the reason [`InstalledProbe`] and [`CanonicalProbe`]
-/// are both read here.
+/// Failing inputs, named, and they print differently:
 ///
 /// 1. *The participant set.* Truncate `coverage.nodes` to the local node
-///    before the merge — the shape of the original defect, where participants
-///    come from local disk instead of the fold. The merge resolves one shard
-///    and the canonical comes back with 2 chunks and `narwhal` unreachable.
-/// 2. *The finalize.* Drop `corpus_engine::finalize_canonical` from
-///    `merge_from_fold_coverage`. Both donors' chunks are on disk and
-///    retrievable through `CorpusIndex::open`, and `peer-only term
-///    (installed)` is `None`: `installed_indexes()` and `usable_indexes()`
-///    both return zero rows beside two canonical directories.
-///
-/// The count assertion is deliberately kept BELOW the query assertion: the
-/// query is the bar and the count is corroboration. A right count with an
-/// unreachable term would be a merge that wrote rows nothing can retrieve.
+///    before the merge — the shape of the original defect, where
+///    participants come from local disk instead of the fold. The port is
+///    handed the leader's slice alone.
+/// 2. *The finalize.* Drop `finalize_canonical` from `merge_participants`.
+///    The port is handed both slices, and `merge_acts` stops at
+///    `merge_partitions`.
 #[tokio::test]
-async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
+async fn two_donors_on_two_nodes_hand_ingest_both_slices_then_the_finalize() {
     const CORPUS: &str = "cw-lift-5g-two-nodes";
 
     let (projection, _handoff) = terminal_handoff(CORPUS).await;
@@ -840,14 +882,16 @@ async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
     // The peer serves its own partition from its own `internal_router`, so
     // `GET /internal/index/serve` → `tar cf` → the wire → `tar xf` is inside
     // this test rather than stubbed around it.
-    let peer_state = node_state(peer_node(), &peer_dir, &[]);
+    let peer = node_port(&peer_dir);
+    let peer_state = node_state(peer_node(), &peer, &[]);
     let peer_addr = common::spawn_router(internal_router(peer_state)).await;
 
     // The leader knows the peer only as a mesh member with an address, which
     // is what `peer_control_urls` resolves through `PeerTransport::endpoints`.
+    let leader = node_port(&leader_dir);
     let leader_state = node_state(
         leader_node(),
-        &leader_dir,
+        &leader,
         &[(peer_node(), &peer_addr.to_string())],
     );
 
@@ -865,86 +909,38 @@ async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
     )
     .await;
 
-    // The BAR is read at the altitude a user reaches: the corpus has to be
-    // in `usable_indexes()` for the search to run at all, and in
-    // `installed_indexes()` for any peer to be told it exists.
-    let seen = probe_installed(&leader_dir, CORPUS).await;
-    // The disk-level reading is kept as CORROBORATION and as the thing that
-    // tells the two failure shapes apart: bytes-missing versus bytes-present-
-    // and-unreachable print differently below.
-    let probe = probe_canonical(&leader_dir, CORPUS).await;
-
+    let merges = leader.merges();
+    let mut slices: Vec<Slice> = merges.iter().flat_map(|(s, _)| s.clone()).collect();
+    slices.sort_by_key(|s| s.peer_term);
     assert_eq!(
-        seen.peer_term_reachable,
-        Some(true),
-        "the peer donor's slice is not reachable through the surface a user \
-         reaches.\n\
-         \n\
-         `peer-only term (installed)` is `None` when the corpus never reached \
-         `usable_indexes()` — the canonical exists on disk and NOTHING can see \
-         it: not local search, and not `hosted_corpora` gossip, which is built \
-         from `installed_indexes()` (`capabilities.rs:103` → `:122`). That is a \
-         different failure from the peer's chunks never arriving, and the \
-         disk-level rows below say which one this is.\n\
-         \n\
-         The peer donor's two chunks (searchable by `{PEER_ONLY_TERM}`) were \
-         written to its own `{}/` on a different index dir and served from a \
-         different socket. The fold named both donors; the merge was supposed \
-         to pull the second AND finish the canonical.\n\
-         \n\
-         merge outcome               : {outcome:?}\n\
-         fold coverage               : expected={} nodes={:?}\n\
-         installed_indexes()         : {:?}\n\
-         usable_indexes()            : {:?}\n\
-         canonical dirs on disk      : {:?}\n\
-         leader-only term (installed): {:?}\n\
-         peer-only term (installed)  : {:?}\n\
-         --- through CorpusIndex::open, which bypasses both gates ---\n\
-         canonical exists            : {}\n\
-         canonical chunk_count       : {} (expected 4: 2 local + 2 peer)\n\
-         leader-only term (on disk)  : {}\n\
-         peer-only term (on disk)    : {}\n\
+        slices,
+        vec![LEADER_SLICE, PEER_SLICE],
+        "the leader must hand ingest BOTH donors' slices whole — its own, and \
+         the peer's `{PEER_ONLY_TERM}` slice pulled from a different index dir \
+         over a different socket. The fold named both donors.\n\
+         merge outcome : {outcome:?}\n\
+         fold coverage : expected={} nodes={:?}\n\
+         merges        : {merges:?}\n\
+         port acts     : {:?}\n\
          \n\
          See `quality/campaigns/cw-lift-5g-part2-prereg.md` B2.",
-        corpus_at("", CORPUS)
-            .partition(&peer_node().to_string())
-            .display(),
         coverage.expected,
         coverage.nodes,
-        seen.installed,
-        seen.usable,
-        seen.dirs_on_disk,
-        seen.leader_term_reachable,
-        seen.peer_term_reachable,
-        probe.canonical_exists,
-        probe.chunk_count,
-        probe.leader_term_reachable,
-        probe.peer_term_reachable,
+        leader.merge_acts(),
     );
+    assert_eq!(merges.len(), 1, "one merge for the handoff: {merges:?}");
+    assert_eq!(merges[0].1, corpus_at(&leader_dir, CORPUS).root());
     assert_eq!(
-        seen.leader_term_reachable,
-        Some(true),
-        "the LOCAL donor's chunks are unreachable through `usable_indexes()`, \
-         which is a different defect than the one this bar is about and a worse \
-         one. outcome: {outcome:?} | installed: {:?} | usable: {:?}",
-        seen.installed,
-        seen.usable,
+        leader.merge_acts(),
+        vec!["merge_partitions", "finalize_canonical"],
+        "the merge must end in the finalize, or it writes chunks that \
+         `installed_indexes()` skips and `hosted_corpora` gossip advertises to \
+         no peer (`df2ffecb8`). outcome: {outcome:?}",
     );
+    assert_eq!(leader.finalized(), vec![CORPUS.to_string()]);
     assert!(
-        seen.installed.iter().any(|c| c == CORPUS),
-        "the canonical is not in `installed_indexes()`, so \
-         `build_hosted_corpora` advertises it to no peer on the mesh \
-         (`capabilities.rs:103` → `:122`). installed: {:?} | dirs on disk: {:?} \
-         | outcome: {outcome:?}",
-        seen.installed,
-        seen.dirs_on_disk,
-    );
-    assert_eq!(
-        probe.chunk_count, 4,
-        "both donors' slices must land whole: 2 chunks each. Got {} — a \
-         reachable peer term with the wrong count is a partial merge, which is \
-         the same defect wearing a passing search. outcome: {outcome:?}",
-        probe.chunk_count,
+        peer.merge_acts().is_empty(),
+        "the peer only serves its slice; it merges nothing",
     );
 
     match outcome {
@@ -952,7 +948,7 @@ async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
             chunks,
             shards_covered,
         } => {
-            assert_eq!(chunks, 4, "the reported chunk count must be the real one");
+            assert_eq!(chunks, 4, "the outcome carries the count ingest reported");
             assert_eq!(
                 shards_covered, 2,
                 "both donors' partitions were covered by this merge",
@@ -966,19 +962,20 @@ async fn two_donors_on_two_nodes_land_both_slices_in_the_canonical() {
     }
 }
 
-/// **THE NEGATIVE CONTROL, retained from B1.** The same scenario at n=1 —
-/// part 1's proof shape: two units, one machine, both partition directories
-/// under one index dir, merged by the DISK-derived path this rung does not
-/// change (`try_recover_stranded_partitions`).
+/// **THE NEGATIVE CONTROL, retained from B1, the daemon's half.** The same
+/// scenario at n=1 — part 1's proof shape: both partition directories under
+/// one index dir, merged by the DISK-derived path this rung does not change
+/// (`try_recover_stranded_partitions`).
 ///
-/// It is kept because it controls for the fixture, not for the collector: if
-/// two partitions written by `write_donor_partition` cannot merge into a
-/// searchable canonical at all, then B2's green above would be about a
-/// different corpus shape than the one the reds were measured on. It also
-/// pins that the legacy path still works, which the collector's `continue`
-/// arm still falls through to for every corpus the fold cannot speak for.
+/// It controls for the fixture, not for the collector: the disk path hands
+/// ingest's disk merge this corpus while both slices sit under its
+/// partition prefix. That the disk merge lands both in a reachable
+/// canonical is the engine half, in `fold_merge_port_parity`. It also pins
+/// that the legacy path still reaches ingest, which the collector's
+/// `continue` arm still falls through to for every corpus the fold cannot
+/// speak for.
 #[tokio::test]
-async fn two_donors_on_one_node_do_land_both_slices_in_the_canonical() {
+async fn two_donors_on_one_node_hand_the_disk_merge_both_slices() {
     const CORPUS: &str = "cw-lift-5g-one-node";
 
     let home = TempDir::new().expect("tempdir");
@@ -990,27 +987,23 @@ async fn two_donors_on_one_node_do_land_both_slices_in_the_canonical() {
     write_donor_partition(&index_dir, leader_node(), CORPUS, 0, LEADER_ONLY_TERM).await;
     write_donor_partition(&index_dir, peer_node(), CORPUS, 1, PEER_ONLY_TERM).await;
 
-    let outcome = format!(
-        "{:?}",
-        sovereign_grants::auto_recover::try_recover_stranded_partitions(
-            &*engine_at(&index_dir, leader_node()),
-            &index_dir,
-            CORPUS
-        )
-        .await
-    );
-    let probe = probe_canonical(&index_dir, CORPUS).await;
+    let node = node_port(&index_dir);
+    let outcome = sovereign_grants::auto_recover::try_recover_stranded_partitions(
+        &*node.port,
+        &index_dir,
+        CORPUS,
+    )
+    .await;
 
-    assert!(
-        probe.canonical_exists && probe.leader_term_reachable && probe.peer_term_reachable,
+    assert_eq!(
+        node.disk_merges(),
+        vec![(CORPUS.to_string(), vec![LEADER_SLICE, PEER_SLICE])],
         "the negative control failed, so B2's green proves LESS than it looks — \
-         this fixture cannot merge two partitions into a searchable canonical \
-         even when both are on one node. merge outcome: {outcome} | canonical: \
-         {} | chunks: {} | leader term: {} | peer term: {}",
-        probe.canonical_exists,
-        probe.chunk_count,
-        probe.leader_term_reachable,
-        probe.peer_term_reachable,
+         the disk path did not hand ingest this fixture's two slices even when \
+         both are on one node. merge outcome: {outcome:?}",
     );
-    assert_eq!(probe.chunk_count, 4, "2 chunks from each of the two units");
+    assert!(
+        matches!(outcome, RecoveryOutcome::Recovered { chunks: 4, .. }),
+        "2 chunks from each of the two units; got {outcome:?}",
+    );
 }

@@ -2,31 +2,35 @@
 //! End-to-end test for the Phase 6 canonical-sync surface.
 //!
 //! Wires a real `sovereign_daemon::internal_router` over an
-//! ephemeral localhost port with a real `CorpusEngine` holding a
-//! synthetic canonical, then drives `canonical_pull` from a
+//! ephemeral localhost port whose corpus handle reads a synthetic
+//! canonical, then drives `canonical_pull` from a
 //! different node's index dir. Confirms:
 //!
-//!   1. `GET /internal/corpus/canonical/{id}` streams a tar+zstd
-//!      with the `X-Canonical-Fingerprint` header populated.
-//!   2. The pull side unpacks into a temp dir, recomputes the
-//!      fingerprint, and atomically renames into the final
-//!      canonical path.
-//!   3. The destination canonical's content_hashes match the
-//!      source's byte-for-byte (verified by recomputing the
-//!      fingerprint after pull).
-//!   4. A pull whose `expected_fingerprint` arg disagrees with the
+//!   1. `GET /internal/corpus/canonical/{id}` streams exactly what
+//!      ingest's `pack_canonical` writes for the canonical, headed by
+//!      its `X-Canonical-Fingerprint` and chunk count.
+//!   2. A pull whose `expected_fingerprint` arg disagrees with the
 //!      peer's advertisement is rejected before any rename.
+//!   3. A pull falls through an unreachable first URL to the peer.
+//!
+//! Split at the port (pb-ingest-dial-daemon-tests-merge, phase-b-52):
+//! the pack is ingest's, reached through `IngestPort::pack_canonical`,
+//! so the serving node holds `IngestPortDouble` and these readings
+//! assert what the route asks of it and streams from it. That what the
+//! port packs unpacks, the way the pull side unpacks it, into a
+//! canonical recomputing the same fingerprint — this file's round trip
+//! until then — is corpus-engine's `daemon_port_parity`.
 
+use std::io::Write as _;
 use std::net::SocketAddr;
-use std::path::Path;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use corpus_engine::CorpusEngine;
-use corpus_index::corpus::Corpus;
 use corpus_index::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
+use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::{fabric, node, serving, AppState};
@@ -35,9 +39,12 @@ use tempfile::tempdir;
 
 use crate::common::ledger_double::RecordingLedger;
 
+/// What the serving node's pack writes: not an archive. The route streams
+/// it untouched, which is the claim; what a real pack holds is the engine's.
+const PACKED: &[u8] = b"what ingest packed for wiki-mini";
+
 /// Build a tiny canonical with three chunks carrying explicit
-/// content_hashes. Returns the index_dir (parent of canonical) and
-/// the stamped fingerprint.
+/// content_hashes. Returns the stamped fingerprint.
 async fn create_synthetic_canonical(index_dir: &Path, corpus_id: &str) -> String {
     let canonical_path = index_dir.join(corpus_id);
     let idx = CorpusIndex::create(
@@ -102,8 +109,17 @@ async fn spawn_router(state: AppState) -> SocketAddr {
     addr
 }
 
-/// Build an AppState whose `corpus_engine` is wired to `index_dir`.
-async fn app_state_with_engine(index_dir: &Path) -> AppState {
+/// Each `pack_canonical` the serving node's port was asked for: the
+/// canonical path and the compression level.
+type Packs = Arc<Mutex<Vec<(PathBuf, i32)>>>;
+
+/// Build an AppState whose corpus handle reads `index_dir`: ingest's port
+/// double over the leaf's own reader (`common::reading_double`). The route
+/// asks the port for `canonical_path`, which the engine answers by the
+/// `Corpus` layout the double delegates to as well, and for
+/// `pack_canonical`, which this double records and answers with
+/// [`PACKED`].
+async fn app_state_with_engine(index_dir: &Path) -> (AppState, Packs) {
     let mesh = Mesh {
         mesh_secret: [0u8; 32],
         invite_expires_at: None,
@@ -117,12 +133,21 @@ async fn app_state_with_engine(index_dir: &Path) -> AppState {
     };
     let zero_embed: EmbedFn =
         Arc::new(|_t: &str| Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) }));
-    let engine = Arc::new(
-        CorpusEngine::new(index_dir.to_path_buf(), index_dir.to_path_buf(), zero_embed)
-            .with_embedding_model("test-embed"),
+    let packs: Packs = Arc::default();
+    let seen = Arc::clone(&packs);
+    let engine: Arc<IngestPortDouble> = Arc::new(
+        crate::common::reading_double(index_dir.to_path_buf(), zero_embed).on_pack_canonical(
+            move |path, mut writer, level| {
+                seen.lock()
+                    .expect("packs lock")
+                    .push((path.to_path_buf(), level));
+                writer.write_all(PACKED)?;
+                Ok(PACKED.len() as u64)
+            },
+        ),
     );
     let self_id = NodeId::from_u128(1);
-    AppState::new_with_seeds(
+    let state = AppState::new_with_seeds(
         self_id,
         mesh,
         Some(engine),
@@ -131,51 +156,54 @@ async fn app_state_with_engine(index_dir: &Path) -> AppState {
         serving::ServingSeed::default(),
         node::NodeSeed::default(),
         Arc::new(RecordingLedger::new(self_id)).seed(),
-    )
+    );
+    (state, packs)
 }
 
+/// The route streams what ingest packed for the canonical — asked for by
+/// the canonical's path at compression level 1 — headed by the fingerprint
+/// and chunk count the canonical carries.
+///
+/// Failing input, named: stream the route's body from a path other than
+/// `canonical_path` (say the partition dir); the recorded pack names it.
 #[tokio::test]
-async fn canonical_pull_round_trip_via_internal_router() {
+async fn the_canonical_route_streams_what_ingest_packs_under_its_fingerprint() {
     let server_dir = tempdir().unwrap();
     let server_index_dir = server_dir.path().to_path_buf();
-
-    // Build the source canonical and stamp its fingerprint.
     let expected_fp = create_synthetic_canonical(&server_index_dir, "wiki-mini").await;
     assert!(!expected_fp.is_empty(), "fingerprint must be non-empty");
 
-    // Bind internal_router on an ephemeral port pointing at this
-    // engine.
-    let state = app_state_with_engine(&server_index_dir).await;
+    let (state, packs) = app_state_with_engine(&server_index_dir).await;
     let addr = spawn_router(state).await;
-    let peer_url = format!("http://127.0.0.1:{}", addr.port());
 
-    // Pull-side temp dir for the receiving node's local index dir.
-    let client_dir = tempdir().unwrap();
-    let client_index_dir = client_dir.path().to_path_buf();
-
-    let candidates = vec![peer_url.clone()];
-    let report = pull_canonical_from_peer(
-        &candidates,
-        "wiki-mini",
-        &client_index_dir,
-        Some(&expected_fp),
-        None,
-    )
+    let resp = reqwest::get(format!(
+        "http://127.0.0.1:{}/internal/corpus/canonical/wiki-mini",
+        addr.port()
+    ))
     .await
-    .expect("pull should succeed");
-
-    assert_eq!(report.fingerprint, expected_fp);
-    assert!(report.bytes_uncompressed > 0);
-    assert_eq!(report.canonical_path, client_index_dir.join("wiki-mini"));
-    assert!(Corpus::meta_in(&report.canonical_path).is_file());
-
-    // The pulled canonical must reproduce the same fingerprint
-    // when reopened — proves the on-disk state is byte-faithful.
-    let pulled = CorpusIndex::open(&report.canonical_path).await.unwrap();
-    let recomputed = pulled.compute_canonical_fingerprint().await.unwrap();
+    .expect("the route answers");
+    assert_eq!(resp.status(), 200);
+    let header = |name: &str| {
+        resp.headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    };
     assert_eq!(
-        recomputed, expected_fp,
-        "pulled canonical's fingerprint must match the source's"
+        header("x-canonical-fingerprint").as_deref(),
+        Some(expected_fp.as_str())
+    );
+    assert_eq!(header("x-canonical-chunk-count").as_deref(), Some("3"));
+    let body = resp.bytes().await.expect("the body streams");
+    assert_eq!(
+        &body[..],
+        PACKED,
+        "the body is what ingest packed, untouched"
+    );
+    assert_eq!(
+        *packs.lock().unwrap(),
+        vec![(server_index_dir.join("wiki-mini"), 1)],
+        "one pack, of the canonical, at the level the route documents",
     );
 }
 
@@ -185,7 +213,7 @@ async fn canonical_pull_rejects_wrong_expected_fingerprint() {
     let server_index_dir = server_dir.path().to_path_buf();
     let _ = create_synthetic_canonical(&server_index_dir, "wiki-mini").await;
 
-    let state = app_state_with_engine(&server_index_dir).await;
+    let (state, _packs) = app_state_with_engine(&server_index_dir).await;
     let addr = spawn_router(state).await;
     let peer_url = format!("http://127.0.0.1:{}", addr.port());
 
@@ -217,18 +245,23 @@ async fn canonical_pull_rejects_wrong_expected_fingerprint() {
 /// Verifies the address-fallthrough fix: when a peer publishes
 /// multiple addresses and the FIRST one is unreachable (e.g. a
 /// LAN IP that doesn't route from the puller's network), the
-/// pull tries the next URL until one succeeds. This is the
+/// pull tries the next URL until one answers. This is the
 /// regression test for the linux-peer case where Alex's MacBook
 /// gossiped `[192.168.1.6, 100.64.0.2-tailscale, ipv6]` and
 /// my first cut picked the LAN address that wasn't reachable
 /// from the puller's network.
+///
+/// The peer is proven reached by its own advertisement: asked for a
+/// fingerprint it does not hold, the pull comes back naming the one the
+/// peer headed its stream with. An unreachable URL alone is a transport
+/// error, never a mismatch.
 #[tokio::test]
 async fn canonical_pull_falls_through_on_unreachable_first_url() {
     let server_dir = tempdir().unwrap();
     let server_index_dir = server_dir.path().to_path_buf();
-    let expected_fp = create_synthetic_canonical(&server_index_dir, "wiki-mini").await;
+    let peer_fp = create_synthetic_canonical(&server_index_dir, "wiki-mini").await;
 
-    let state = app_state_with_engine(&server_index_dir).await;
+    let (state, _packs) = app_state_with_engine(&server_index_dir).await;
     let addr = spawn_router(state).await;
     let working_url = format!("http://127.0.0.1:{}", addr.port());
 
@@ -237,22 +270,23 @@ async fn canonical_pull_falls_through_on_unreachable_first_url() {
     // the pull should advance to the second (working) URL.
     let dead_url = "http://192.0.2.1:9742".to_string();
 
-    let candidates = vec![dead_url, working_url.clone()];
-    let report = pull_canonical_from_peer(
+    let candidates = vec![dead_url, working_url];
+    let r = pull_canonical_from_peer(
         &candidates,
         "wiki-mini",
         tempdir().unwrap().path(),
-        Some(&expected_fp),
+        Some("0".repeat(64).as_str()),
         None,
     )
-    .await
-    .expect("pull should succeed via fallthrough");
+    .await;
 
-    assert_eq!(report.fingerprint, expected_fp);
-    assert_eq!(
-        report.peer_url, working_url,
-        "report.peer_url must reflect the URL that actually worked"
-    );
+    match r {
+        Err(PullError::FingerprintMismatch { actual, .. }) => assert_eq!(
+            actual, peer_fp,
+            "the mismatch must name the working peer's advertisement"
+        ),
+        other => panic!("expected the working URL's FingerprintMismatch, got {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -261,7 +295,7 @@ async fn canonical_pull_returns_404_when_corpus_absent() {
     let server_index_dir = server_dir.path().to_path_buf();
     // Note: NO canonical written.
 
-    let state = app_state_with_engine(&server_index_dir).await;
+    let (state, _packs) = app_state_with_engine(&server_index_dir).await;
     let addr = spawn_router(state).await;
     let peer_url = format!("http://127.0.0.1:{}", addr.port());
 

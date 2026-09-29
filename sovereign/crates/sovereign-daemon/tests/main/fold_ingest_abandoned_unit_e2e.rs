@@ -30,10 +30,13 @@
 //! What this file reuses rather than rebuilds (ARCH §19)
 //! ----------------------------------------------------
 //! Every fixture primitive — the ring, the signer, the sealed `ingest:v1`
-//! units, the partition writer, the two-node `AppState` pair, the canonical
-//! probe — is `fold_ingest_cross_node_merge_e2e`'s, shared through the one
-//! test binary rather than copied. Only the act sequence that abandons a unit
-//! and the gossip reading are new.
+//! units, the partition writer, the two-node `AppState` pair, the merge port
+//! double and the slices it records — is `fold_ingest_cross_node_merge_e2e`'s,
+//! shared through the one test binary rather than copied. Only the act
+//! sequence that abandons a unit and the corpus-clause reading are new. As
+//! there, these readings assert what the daemon hands ingest's
+//! `PartitionMergePort`; the engine half is corpus-engine's
+//! `fold_merge_port_parity` (pb-ingest-dial-daemon-tests-merge).
 //!
 //! What this file does NOT check
 //! -----------------------------
@@ -52,7 +55,6 @@
 
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::knowledge::{HandoffPhase, MAX_UNIT_ATTEMPTS};
-use corpus_index::index::CorpusIndex;
 use oicp_types::work::projection::{WorkProjection, WorkUnitStatus};
 use oicp_types::work::{Submission, WorkAct};
 use oicp_types::JobKind;
@@ -62,10 +64,10 @@ use sovereign_grants::auto_recover::{merge_from_fold_coverage, RecoveryOutcome};
 use tempfile::TempDir;
 
 use crate::common;
-use crate::common::corpus_at;
 use crate::fold_ingest_cross_node_merge_e2e::{
-    actor, completion, ingest_unit, leader_node, node_state, peer_node, probe_canonical, sign,
-    unit_ref, work_rails, write_donor_partition, LEADER_ONLY_TERM, PEER_ONLY_TERM,
+    actor, completion, ingest_unit, leader_node, node_port, node_state, peer_node, sign, unit_ref,
+    work_rails, write_donor_partition, Slice, LEADER_ONLY_TERM, LEADER_SLICE, PEER_ONLY_TERM,
+    PEER_SLICE,
 };
 
 /// Well past the last lease's expiry — see [`abandoned_handoff`]'s timeline.
@@ -249,29 +251,23 @@ async fn a_unit_whose_attempts_are_spent_is_named_in_the_coverage() {
 // B5, second half of the merge clause — it proceeds with what exists
 // ─────────────────────────────────────────────────────────────────
 
-/// **B5 (merge clause).** With one slice abandoned, the merge of the two that
-/// exist still runs and still lands both — over the real wire, the same way
-/// B2's reading does.
+/// **B5 (merge clause), the daemon's half.** With one slice abandoned, the
+/// merge of the two that exist still runs: ingest is handed both — over the
+/// real wire, the same way B2's reading does — and then the finalize.
 ///
 /// This is the half of the bar that says a corpus is not held hostage by a
 /// unit that will never arrive. `expected` is 2 and two shards resolve, so the
 /// coverage guard in `merge_participants` passes: the abandoned unit is not a
 /// missing PARTITION, it is work that never happened, and conflating the two
 /// would make `PartitionsUnreachable` fire forever on a handoff no retry can
-/// fix.
+/// fix. That the two slices ingest is handed land in one reachable canonical
+/// is the engine half, in corpus-engine's `fold_merge_port_parity`.
 ///
 /// Failing input, named and watched: make `fold_coverage_for` count the
 /// abandoned unit into `expected` (`expected: actors.len() + abandoned.len()`).
 /// `merge_participants` then wants 3 shards, resolves 2, and refuses with
-/// `PartitionsUnreachable { covered: 2, expected: 3 }` — no canonical at all,
-/// every tick, forever.
-///
-/// ALTITUDE. Reachability here is read through [`probe_canonical`], which
-/// opens the canonical by path. That answers "did both slices land", which is
-/// this clause's question. It does NOT answer "can anyone reach the corpus" —
-/// on `df2ffecb8` the two answers disagreed for every fold-built canonical,
-/// and the installed-altitude reading of this same merge path is B2's, in
-/// `fold_ingest_cross_node_merge_e2e`.
+/// `PartitionsUnreachable { covered: 2, expected: 3 }` — ingest is handed
+/// nothing, every tick, forever.
 #[tokio::test]
 async fn the_merge_proceeds_with_the_slices_that_exist() {
     const CORPUS: &str = "cw-lift-5g-abandoned-merge";
@@ -285,11 +281,13 @@ async fn the_merge_proceeds_with_the_slices_that_exist() {
     std::fs::create_dir_all(&peer_dir).expect("peer index dir");
     two_donors_on_disk(&leader_dir, &peer_dir, CORPUS).await;
 
-    let peer_state = node_state(peer_node(), &peer_dir, &[]);
+    let peer = node_port(&peer_dir);
+    let peer_state = node_state(peer_node(), &peer, &[]);
     let peer_addr = common::spawn_router(internal_router(peer_state)).await;
+    let leader = node_port(&leader_dir);
     let leader_state = node_state(
         leader_node(),
-        &leader_dir,
+        &leader,
         &[(peer_node(), &peer_addr.to_string())],
     );
 
@@ -310,22 +308,21 @@ async fn the_merge_proceeds_with_the_slices_that_exist() {
     )
     .await;
 
-    let probe = probe_canonical(&leader_dir, CORPUS).await;
-    assert!(
-        probe.leader_term_reachable && probe.peer_term_reachable,
-        "both slices that DO exist must land — an abandoned unit must not \
-         cost the corpus the work that was actually done.\n\
-         merge outcome              : {outcome:?}\n\
-         canonical exists           : {}\n\
-         canonical chunk_count      : {}\n\
-         leader-only term reachable : {}\n\
-         peer-only term reachable   : {}",
-        probe.canonical_exists,
-        probe.chunk_count,
-        probe.leader_term_reachable,
-        probe.peer_term_reachable,
+    let mut slices: Vec<Slice> = leader.merges().into_iter().flat_map(|(s, _)| s).collect();
+    slices.sort_by_key(|s| s.peer_term);
+    assert_eq!(
+        slices,
+        vec![LEADER_SLICE, PEER_SLICE],
+        "both slices that DO exist must reach ingest — an abandoned unit must \
+         not cost the corpus the work that was actually done.\n\
+         merge outcome : {outcome:?}\n\
+         port acts     : {:?}",
+        leader.merge_acts(),
     );
-    assert_eq!(probe.chunk_count, 4, "2 chunks from each of the two donors");
+    assert_eq!(
+        leader.merge_acts(),
+        vec!["merge_partitions", "finalize_canonical"]
+    );
     assert!(
         matches!(outcome, RecoveryOutcome::Recovered { chunks: 4, .. }),
         "the merge must report the canonical it built; got {outcome:?}",
@@ -336,96 +333,28 @@ async fn the_merge_proceeds_with_the_slices_that_exist() {
 // B5, the corpus clause — MEASURED AND NOT MET
 // ─────────────────────────────────────────────────────────────────
 
-/// The canonical's own on-disk record, with the fields that differ for
-/// uninteresting reasons blanked: which corpus it is, what it is called, and
-/// when it was written. What is left is everything the corpus says about
-/// ITSELF.
-fn corpus_record(index_dir: &std::path::Path, corpus: &str) -> serde_json::Value {
-    let raw = std::fs::read_to_string(corpus_at(index_dir, corpus).meta_path())
-        .unwrap_or_else(|e| panic!("{corpus} has no canonical meta: {e}"));
-    let mut v: serde_json::Value = serde_json::from_str(&raw).expect("meta is json");
-    for k in ["corpus_id", "corpus_name", "created_at", "last_updated"] {
-        v[k] = serde_json::Value::Null;
-    }
-    v
-}
-
-/// The `IndexInfo` fields `build_hosted_corpora`
-/// (`sovereign-mesh/src/capabilities.rs:285-310`) copies onto the wire as a
-/// [`CorpusShardInfo`]. Read straight off the canonical rather than through
-/// `CorpusEngine::installed_indexes`, so the comparison of two corpora is
-/// independent of that walk's own filters and dedupe.
-///
-/// It USED to be read this way for a worse reason — the walk dropped this
-/// canonical entirely, because the fold-side merge never finalized what it
-/// built. That is fixed (`corpus_engine::finalize_canonical`, called from
-/// `merge_from_fold_coverage`), and both corpora below now reach
-/// `installed_indexes()` and `usable_indexes()`. It changed nothing about
-/// this bar: they still reach it carrying the same record.
-async fn advertisable(index_dir: &std::path::Path, corpus: &str) -> String {
-    let info = CorpusIndex::open(&corpus_at(index_dir, corpus).root())
-        .await
-        .expect("open the canonical")
-        .info()
-        .await
-        .expect("canonical info");
-    format!(
-        "query_sharing={} is_shard={} chunk_range={:?} chunk_count={} \
-         total_shards={:?} processed_shards={:?}",
-        info.query_sharing,
-        info.is_shard,
-        info.chunk_range,
-        info.chunk_count,
-        info.total_shards,
-        info.processed_shards,
-    )
-}
-
 /// **B5 (corpus clause) — THE BAR, AND IT IS NOT MET.**
 ///
 /// Two corpora on one node, merged the same way from the same fold. One came
 /// from a handoff whose third slice will never exist; the other from a handoff
-/// that delivered everything it promised. Nothing the corpus writes down tells
-/// them apart, and nothing gossip could carry does either.
-///
-/// The chunk counts are equal too, and that is the sharpest form of the
-/// defect: a THREE-unit handoff that delivered two slices is byte-identical to
-/// a TWO-unit handoff that delivered both of its own. A reading that compared
-/// a 1-of-2 corpus against a 2-of-2 one would find different chunk counts and
-/// could be talked into calling that a signal; it is not one, because no peer
-/// knows what the count should have been.
+/// that delivered everything it promised. Nothing the daemon hands ingest
+/// tells them apart, so nothing ingest writes down can either.
 ///
 /// The bar's words are "the corpus must record that it is partial". Today the
 /// only record is a `tracing::warn!` in `auto_ingest`'s arm — process-local,
-/// gone on the next restart, and invisible to every peer. `CorpusShardInfo`
-/// carries `total_shards` / `processed_shards`, which is the shape a
-/// completeness signal would take, and `build_hosted_corpora` reads both off
-/// `IndexInfo` — which comes from the meta, which is stamped only by
-/// `ExtractorConfig::WikipediaJsonl` (`corpus-engine/src/engine/ingest.rs:718`).
-/// So for every fold-sliced recipe both are `None`/`[]` on the whole corpus
-/// and on the partial one alike.
+/// gone on the next restart, and invisible to every peer. Ingest records what
+/// its merge port is handed, and the port carries slices, an output dir and a
+/// corpus id; the fold's `abandoned` reaches none of them. Measured on the
+/// engine before this split (cw-lift 5g part 2): the two canonicals'
+/// `_corpus_meta.json` agreed field for field, their `IndexInfo` (the fields
+/// `build_hosted_corpora` copies into a `CorpusShardInfo`) agreed, and so did
+/// their `canonical_fingerprint`, so a peer comparing fingerprints reads a
+/// 2-of-3 corpus and a 2-of-2 corpus as the same corpus.
 ///
-/// A SEPARATE DEFECT FOUND WHILE MEASURING THIS — **now fixed, and it did not
-/// move this bar.** `merge_participants` builds its output through
-/// `CorpusEngine::merge_partitions` → `sharding::merge_shards`, which creates
-/// the canonical with `CorpusIndex::create` and stops. So a canonical built by
-/// the fold path carried `ingestion_in_progress: true, indexes_built: false`,
-/// `CorpusEngine::installed_indexes` skipped it, and it was advertised to
-/// nobody and searched by nothing — measured, not inferred:
-/// `installed_indexes()` returned zero rows on the disk this test builds.
-/// `merge_from_fold_coverage` now finishes the job with
-/// `corpus_engine::finalize_canonical`, the same sequence in the same order as
-/// the disk path's.
-///
-/// Re-measured here afterwards, because a fix to the thing that was BLOCKING
-/// an advertisement is exactly the fix that could turn a dormant hazard live:
-/// both corpora now carry `ingestion_in_progress: false, indexes_built: true`
-/// and reach `installed_indexes()`. They are still indistinguishable, and one
-/// field sharper than before — the `canonical_fingerprint` is no longer
-/// `None` on either, and it is the SAME hash on both. A peer comparing
-/// fingerprints to decide which canonical to pull now reads a 2-of-3 corpus
-/// and a 2-of-2 corpus as the same corpus. The bar is unchanged and still
-/// open; what changed is that the hazard it describes is now reachable.
+/// The chunk counts are equal too, and that is the sharpest form of the
+/// defect: a THREE-unit handoff that delivered two slices is byte-identical to
+/// a TWO-unit handoff that delivered both of its own. No peer knows what the
+/// count should have been.
 ///
 /// IGNORED, not deleted, and not softened into a test of the current
 /// behaviour. Asserting the indistinguishability would pass forever and go red
@@ -453,11 +382,13 @@ async fn a_corpus_missing_an_abandoned_slice_records_nothing_that_says_so() {
 
     // One peer, one socket, both partitions — the peer serves whichever corpus
     // the leader asks for.
-    let peer_state = node_state(peer_node(), &peer_dir, &[]);
+    let peer = node_port(&peer_dir);
+    let peer_state = node_state(peer_node(), &peer, &[]);
     let peer_addr = common::spawn_router(internal_router(peer_state)).await;
+    let leader = node_port(&leader_dir);
     let leader_state = node_state(
         leader_node(),
-        &leader_dir,
+        &leader,
         &[(peer_node(), &peer_addr.to_string())],
     );
 
@@ -480,49 +411,40 @@ async fn a_corpus_missing_an_abandoned_slice_records_nothing_that_says_so() {
     assert!(!whole_cov.is_partial(), "control: nothing abandoned here");
     merge_one(&leader_state, WHOLE, &whole_cov).await;
 
-    let partial_record = corpus_record(&leader_dir, PARTIAL);
-    let whole_record = corpus_record(&leader_dir, WHOLE);
-    // Computed before the assertion rather than after it, so the wire half is
-    // exercised on every run and reported in the same breath. `IndexInfo` is
-    // derived from the meta, so a meta that says nothing cannot produce a wire
-    // record that does — but stating both is what makes the claim checkable
-    // rather than inferred.
-    let partial_ad = advertisable(&leader_dir, PARTIAL).await;
-    let whole_ad = advertisable(&leader_dir, WHOLE).await;
+    // What ingest was handed for each, the corpus id aside: the slices of its
+    // merge. The finalize carries the id alone.
+    let merges = leader.merges();
+    assert_eq!(merges.len(), 2, "one merge per corpus: {merges:?}");
+    assert_eq!(
+        leader.finalized(),
+        vec![PARTIAL.to_string(), WHOLE.to_string()]
+    );
+    let (partial_handed, whole_handed) = (&merges[0].0, &merges[1].0);
 
     assert_ne!(
-        partial_record,
-        whole_record,
-        "B5's corpus clause: the corpus must RECORD that it is partial. Its \
-         `_corpus_meta.json` is identical, field for field, to one built from a \
-         handoff that delivered everything — so the fact that a slice will \
-         never exist survives only as a WARN in one process's log.\n\
+        partial_handed, whole_handed,
+        "B5's corpus clause: the corpus must RECORD that it is partial, and \
+         ingest records only what its port is handed. The daemon handed it the \
+         same slices for a corpus with a slice that will never exist as for one \
+         that delivered everything — so the fact survives only as a WARN in one \
+         process's log.\n\
          \n\
          The fold knew: abandoned={:?}.\n\
          \n\
-         record (both):\n{}\n\
-         \n\
-         and nothing gossip could carry tells them apart either — these are \
-         exactly the `IndexInfo` fields `build_hosted_corpora` copies into a \
-         `CorpusShardInfo`:\n\
-           partial : {partial_ad}\n\
-           whole   : {whole_ad}\n\
-         \n\
          See `quality/campaigns/cw-lift-5g-part2-prereg.md` B5.",
         partial_cov.abandoned,
-        serde_json::to_string_pretty(&partial_record).expect("render"),
     );
 }
 
 /// Merge one corpus from a coverage, asserting the merge itself succeeded —
-/// a precondition for the gossip reading, not the reading's own bar.
+/// a precondition for the reading, not the reading's own bar.
 async fn merge_one(state: &sovereign_daemon::state::AppState, corpus: &str, cov: &FoldCoverage) {
     let node = sovereign_daemon::routes_internal::fold_recovery(state).await;
     let outcome =
         merge_from_fold_coverage(node, corpus, cov.handoff_id, &cov.nodes, cov.expected).await;
     assert!(
         matches!(outcome, RecoveryOutcome::Recovered { .. }),
-        "precondition for the gossip reading: {corpus} must have a canonical \
-         to advertise. Got {outcome:?}",
+        "precondition for the reading: {corpus} must have a canonical. Got \
+         {outcome:?}",
     );
 }
