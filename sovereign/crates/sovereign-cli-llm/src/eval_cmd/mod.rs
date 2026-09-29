@@ -34,6 +34,7 @@ pub mod attribution;
 pub mod bank;
 pub mod gate_meta;
 pub mod lost_corpora;
+mod probe_score;
 pub mod report;
 pub mod retrieved_chunk;
 pub mod routed_intent;
@@ -46,35 +47,11 @@ use runner_threads as threads;
 
 use std::path::PathBuf;
 
-use crate::chat_cmd::{
-    bootstrap::{build_session, build_session_sealed, ChatSession},
-    config::parse_globals,
-};
+use sovereign_contracts::probe::{AtlasProbe, ProbeEvidence, ProbeMode, ProbeRequest};
 
-/// A bench bank names the ONE corpus it questions, so the session it drives
-/// is sealed to that corpus and the cross-corpus lane members are not loaded
-/// (see `bootstrap::build_session_sealed` for the measured cost).
-///
-/// A bank that names no corpus is the honest exception: nothing has been
-/// resolved to seal to, so the scope stays `All` rather than being sealed to
-/// an empty id that matches nothing (ARCH §18.3 — never silently substitute).
-async fn build_session_for_bank(
-    globals: &crate::chat_cmd::config::ChatGlobals,
-    corpus: &str,
-) -> sovereign_core::error::Result<ChatSession> {
-    if corpus.trim().is_empty() {
-        // SAID, not silent. The scope widens back to every corpus here, and
-        // a run that pays the cross-corpus startup should say why it did
-        // (ARCH §18.3, §9.1).
-        eprintln!(
-            "lane scope: bank names no corpus, so the session loads every corpus \
-             (cross-corpus enrichment members included)"
-        );
-        build_session(globals).await
-    } else {
-        build_session_sealed(globals, corpus).await
-    }
-}
+use crate::chat_cmd::config::parse_globals;
+use crate::probe_cmd::build_session_for_bank;
+
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
@@ -809,12 +786,20 @@ async fn cmd_run(args: &[String]) -> i32 {
          sovereign_tools::knowledge_view=warn",
     );
 
-    let session = match build_session_for_bank(&globals, &bank.bank.corpus).await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("bootstrap failed: {e}");
-            return 1;
-        }
+    let started_at_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    // The white-box modes ask svrn's probe (`svrn __probe`) for raw evidence
+    // and score it here; the bank, the expectations and the verdict never
+    // leave this module (phase-b-58).
+    let probe_request = |mode: ProbeMode, atlas: Option<AtlasProbe>| ProbeRequest {
+        mode,
+        questions: probe_score::probe_questions(&bank),
+        corpus: bank.bank.corpus.clone(),
+        limit: a.limit,
+        isolate: a.isolate,
+        atlas,
     };
 
     if a.routing_only {
@@ -823,7 +808,16 @@ async fn cmd_run(args: &[String]) -> i32 {
              expected_intent (or category default). No retrieval, no synthesis. \
              Useful for tuning the classifier prompt against a specific fast-slot model."
         );
-        let run = match runner::run_bank_routing(&session, &bank).await {
+        let run = match probe_score::run_probe(&globals, &probe_request(ProbeMode::Routing, None))
+            .and_then(|ev| match ev {
+                ProbeEvidence::Routing { rows } => {
+                    probe_score::score_routing(&bank, started_at_unix, &rows)
+                }
+                other => Err(format!(
+                    "probe answered {} to a routing request",
+                    other.mode().as_str()
+                )),
+            }) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");
@@ -841,84 +835,57 @@ async fn cmd_run(args: &[String]) -> i32 {
         return 0;
     }
 
-    let atlas_ctxs: Vec<sovereign_core::atlas_context::AtlasContext> =
-        if let Some(id_list) = a.with_atlas.as_deref() {
-            let include_claims = a.atlas_include_kinds.iter().any(|k| k == "claim");
-            let include_tensions = a.atlas_include_kinds.iter().any(|k| k == "tension");
-            let include_configurations = a.atlas_include_kinds.iter().any(|k| k == "configuration");
-            // Surface unknown kinds as a warning so typos don't silently
-            // produce an entities-only run.
-            for k in &a.atlas_include_kinds {
-                if !matches!(k.as_str(), "claim" | "entity" | "tension" | "configuration") {
-                    eprintln!(
-                        "warn: --atlas-include `{k}` is not yet recognised; \
-                     accepted today: entity, claim, tension, configuration."
-                    );
-                }
-            }
-            // The filter the eval harness applies is the SAME type the grounding
-            // path uses, and `atlas_min_description_chars` now defaults to that
-            // type's own floor (nc-22c found them diverged: 200 here vs 10 there,
-            // so eval measured an atom universe production had abandoned).
-            // Closed 2026-08-21 by operator decision — it moves published eval
-            // numbers, which is why it was not a drive-by (ARCH §18.6).
-            let filter = runner::AtlasContextFilter {
-                min_description_chars: a.atlas_min_description_chars,
-                depth_allowlist: a.atlas_depth.clone(),
-                max_entries: a.atlas_max_entries,
-                include_claims,
-                include_tensions,
-                include_configurations,
-                ..runner::AtlasContextFilter::default()
-            };
-            // `--with-atlas` accepts a comma-separated list of atlas
-            // corpus ids. Each loads independently (with its own
-            // canonical_name = article_slug derivation) and the per-question
-            // retrieval pools their entries via `atlas_top_k_across`. This
-            // is the multi-article SEP-pilot path: enrich N per-article
-            // atlases, point one --with-atlas at all of them, let the
-            // global cosine pick the topically-aligned surfaces.
-            let mut out = Vec::new();
-            for id in id_list.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-                match runner::load_atlas_context(&session, id, a.atlas_top_k, &filter).await {
-                    Ok(ctx) => out.push(ctx),
-                    Err(e) => {
-                        eprintln!("error: --with-atlas {id}: {e}");
-                        return 1;
-                    }
-                }
-            }
-            out
-        } else {
-            Vec::new()
-        };
+    // `--with-atlas` accepts a comma-separated list of atlas corpus ids.
+    let atlas_probe: Option<AtlasProbe> = a.with_atlas.as_deref().map(|id_list| AtlasProbe {
+        corpus_ids: id_list
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect(),
+        top_k: a.atlas_top_k,
+        min_description_chars: a.atlas_min_description_chars,
+        depth_allowlist: a.atlas_depth.clone(),
+        max_entries: a.atlas_max_entries,
+        include_kinds: a.atlas_include_kinds.clone(),
+        seed: a.atlas_seed,
+    });
+    let atlas_named = atlas_probe
+        .as_ref()
+        .is_some_and(|atlas| !atlas.corpus_ids.is_empty());
 
-    // Load the structural graph layer for each atlas (atoms-by-id,
-    // edge adjacency). Used by `atlas_navigate` for graph BFS — the
-    // substantive layer of the atlas that bag-of-atoms cosine
-    // retrieval ignores. Cheap: just parses atoms.json + edges.json
-    // already on disk from build time.
-    let atlas_graphs: Vec<runner::AtlasGraph> = {
-        let mut graphs = Vec::with_capacity(atlas_ctxs.len());
-        for ctx in &atlas_ctxs {
-            let atlas_dir = crate::enrich_cmd::paths::index_root(&ctx.atlas_corpus_id)
-                .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
-            // ATLAS_STORAGE_V2: the AtlasGraph is the v2 store (atoms.lance +
-            // edges.csr), read through the production direct-read backend — the
-            // same reader the daemon uses (atoms resident + edges.csr mmap).
-            match runner::AtlasGraph::load_from_disk(
-                &ctx.atlas_corpus_id,
-                &atlas_dir,
-                corpus_engine::enrichment::atlas::context::read_section_rows(&atlas_dir),
-            ) {
-                Ok(g) => graphs.push(g),
-                Err(e) => eprintln!("warn: atlas-graph load `{}`: {e}", ctx.atlas_corpus_id),
+    // The judges (`--loose-source-judge`, `--essay-judge`) are the one part
+    // of scoring that calls a model; a session is built for them only when
+    // one was asked for.
+    let judge_session = |wanted: bool| {
+        let globals = &globals;
+        let corpus = bank.bank.corpus.clone();
+        async move {
+            if wanted {
+                build_session_for_bank(globals, &corpus).await.map(Some)
+            } else {
+                Ok(None)
             }
         }
-        graphs
     };
 
+    let mut ledger_violations = 0u64;
     let run = if a.synth {
+        let session = match build_session_for_bank(&globals, &bank.bank.corpus).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("bootstrap failed: {e}");
+                return 1;
+            }
+        };
+        // Loaded only so a bag that will not load still fails the run, as it
+        // always has; the synth path uses runtime retrieval, not these.
+        if let Some(atlas) = &atlas_probe {
+            if let Err(e) = crate::probe_cmd::load_atlases(&session, atlas).await {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        }
         // The arm announces itself (ei-7a). Under `--closed-book` the synth
         // banner would be false — nothing about the pipeline runs — and a
         // closed-book artifact is indistinguishable from a grounded one in
@@ -937,7 +904,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             );
             sovereign_contracts::types::TurnMode::Grounded
         };
-        if !atlas_ctxs.is_empty() {
+        if atlas_named {
             eprintln!(
                 "note: --with-atlas is ignored under --synth (synth path uses runtime \
                  retrieval, not the eval runner's chunk search)."
@@ -955,14 +922,44 @@ async fn cmd_run(args: &[String]) -> i32 {
             "prod-pipeline mode — driving the production KnowledgeQuery retrieval \
              pipeline per question (no synthesis)."
         );
-        if !atlas_ctxs.is_empty() {
+        if atlas_named {
             eprintln!(
                 "note: --with-atlas is ignored under --prod-pipeline (the runtime \
                  pipeline owns its own atlas grounding)."
             );
         }
-        match runner::run_bank_prod(&session, &bank, a.limit, a.isolate, a.loose_source_judge).await
-        {
+        let rows = match probe_score::run_probe(
+            &globals,
+            &probe_request(ProbeMode::Prod, atlas_probe.clone()),
+        ) {
+            Ok(ProbeEvidence::Prod {
+                rows,
+                ledger_violations: v,
+            }) => {
+                ledger_violations = v;
+                rows
+            }
+            Ok(other) => {
+                eprintln!(
+                    "error: probe answered {} to a prod-pipeline request",
+                    other.mode().as_str()
+                );
+                return 1;
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        };
+        let judge = match judge_session(a.loose_source_judge).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("bootstrap failed: {e}");
+                return 1;
+            }
+        };
+        let loose = judge.as_ref().map(|s| s.inference.as_ref());
+        match probe_score::score_prod(&bank, a.limit, started_at_unix, &rows, loose).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");
@@ -986,17 +983,35 @@ async fn cmd_run(args: &[String]) -> i32 {
              pipeline, so NO atlas grounding and no RAPTOR injection). Use \
              --prod-pipeline for the pipeline chat actually runs."
         );
-        match runner::run_bank(
-            &session,
-            &bank,
-            a.limit,
-            &atlas_ctxs,
-            &atlas_graphs,
-            a.loose_source_judge,
-            a.essay_judge,
-            a.atlas_seed,
-        )
-        .await
+        let rows = match probe_score::run_probe(
+            &globals,
+            &probe_request(ProbeMode::Retrieve, atlas_probe.clone()),
+        ) {
+            Ok(ProbeEvidence::Retrieve { rows }) => rows,
+            Ok(other) => {
+                eprintln!(
+                    "error: probe answered {} to a raw-index request",
+                    other.mode().as_str()
+                );
+                return 1;
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        };
+        let judge = match judge_session(a.loose_source_judge || a.essay_judge).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("bootstrap failed: {e}");
+                return 1;
+            }
+        };
+        let judge = judge.as_ref().map(|s| s.inference.as_ref());
+        let loose = judge.filter(|_| a.loose_source_judge);
+        let essay = judge.filter(|_| a.essay_judge);
+        match probe_score::score_retrieve(&bank, a.limit, started_at_unix, &rows, loose, essay)
+            .await
         {
             Ok(r) => r,
             Err(e) => {
@@ -1039,7 +1054,8 @@ async fn cmd_run(args: &[String]) -> i32 {
     // bank it scrolls past among thousands of lines. A check with no failing
     // exit is not a check (ARCH §18.1).
     if a.prod_pipeline {
-        let violations = sovereign_core::runtime::retrieval_pipeline::ledger_violation_count();
+        // Counted in the probe process, where the pipeline ran.
+        let violations = ledger_violations;
         if violations > 0 {
             eprintln!(
                 "\nFAIL: {violations} retrieval-pipeline LEDGER VIOLATION(s) during this run.\n\

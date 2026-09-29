@@ -1153,6 +1153,13 @@ async fn async_main() {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
+            // Hidden, like the introspection verbs above: svrn's probe of its
+            // own internals, which `eval run`'s white-box modes exec and score
+            // (phase-b-58). Not in HELP or ALL_VERBS.
+            "__probe" => {
+                let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
             // `backlog` is `svrn code`'s: its items are notes-store todos.
             "backlog" => {
                 let code = dev_bin::exec("backlog", &raw_args[1..]);
@@ -1340,6 +1347,17 @@ mod tests {
     /// lists — `DEV_VERBS` and the `HELP` subcommand table — so the dump
     /// cannot drift from the `match` arms without a test going red. Also pins
     /// sorted + dedup so the reverse check's output is stable.
+    /// `svrn __probe` is wire between svrn and bench, not a verb a user types.
+    #[test]
+    fn the_probe_verb_is_hidden() {
+        assert!(!ALL_VERBS.contains(&"__probe"));
+        for section in HELP.sections {
+            if let HelpSection::Subcommands(entries) = section {
+                assert!(entries.iter().all(|(name, _)| !name.contains("probe")));
+            }
+        }
+    }
+
     #[test]
     fn all_verbs_is_complete_and_sorted() {
         for v in DEV_VERBS {

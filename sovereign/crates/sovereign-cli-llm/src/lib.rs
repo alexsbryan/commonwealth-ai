@@ -79,6 +79,8 @@ mod mobile_cmd;
 mod newsworthy_cmd;
 mod pipeline_cmd;
 mod portfolio_cmd;
+/// `svrn __probe`: svrn describes its own internals for bench to judge.
+mod probe_cmd;
 mod proxy_cmd;
 mod quality_lane_cmd;
 mod reading_diag_cmd;
@@ -214,6 +216,8 @@ async fn async_main() {
         // because every one of them drives inference, ingests a corpus or
         // runs a judge.
         "quality-lane" => quality_lane_cmd::run(rest).await,
+        // Hidden: the probe `eval run`'s white-box modes exec and score.
+        "__probe" => probe_cmd::run(rest).await,
         "" => {
             eprintln!("sovereign-cli-llm: usage: sovereign-cli-llm <subcommand> [args...]");
             2
@@ -280,6 +284,55 @@ mod eval_dispatch {
         assert!(
             offenders.is_empty(),
             "eval_cmd moves to bench and must not name svrn's `{needle}`: {offenders:?}"
+        );
+    }
+
+    /// bench judges what svrn's probe (`svrn __probe`) reports and never runs
+    /// svrn's internal stages itself (phase-b-58). Comments are dropped and
+    /// whitespace squeezed out, so a call split across lines
+    /// (`session\n.runtime\n.router\n.classify(`) is still one match.
+    #[test]
+    fn eval_and_bench_run_no_svrn_internal_stage() {
+        let needles = [
+            ".router.classify(",
+            ".retrieve_evidence(",
+            ".search_with_rerank(",
+            ".lane_sources",
+        ];
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders = Vec::new();
+        let mut scanned = 0usize;
+        let mut stack = vec![src.join("eval_cmd"), src.join("bench_cmd")];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("read src dir").flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "rs") {
+                    continue;
+                }
+                scanned += 1;
+                let text = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+                let code: String = text
+                    .lines()
+                    .map(|l| l.split("//").next().unwrap_or(""))
+                    .collect::<String>()
+                    .chars()
+                    .filter(|c| !c.is_whitespace())
+                    .collect();
+                for n in needles.iter().filter(|n| code.contains(*n)) {
+                    offenders.push(format!("{}: {n}", path.display()));
+                }
+            }
+        }
+        assert!(scanned > 40, "only {scanned} files scanned");
+        assert!(
+            offenders.is_empty(),
+            "a white-box stage runs in bench's own process; exec `svrn __probe` \
+             instead: {offenders:?}"
         );
     }
 }

@@ -16,12 +16,6 @@
 //! run the gate — a graph without a table contributes name-match seeds only,
 //! which the run banner flags.
 
-/// Which seed source `run_question` uses for `atlas_navigate`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SeedMode {
-    /// v1: exact cosine over the in-memory embedding bag + `resolve_atom_id`.
-    Cosine,
-    /// v2: ANN over each corpus's persistent vector column — atom-ids returned
-    /// directly, no per-query resolve. Requires the corpus to be backfilled.
-    Ann,
-}
+/// Which seed source the retrieve probe uses for `atlas_navigate`. Part of the
+/// probe's request, so it lives with it in `sovereign_contracts::probe`.
+pub use sovereign_contracts::probe::SeedMode;
