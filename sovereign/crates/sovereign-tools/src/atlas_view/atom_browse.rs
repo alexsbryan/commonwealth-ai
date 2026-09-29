@@ -172,7 +172,7 @@ impl FileAtlasReader {
             // order, so a never-reindexed corpus renders unchanged.
             let freshness = atlas_dir
                 .parent()
-                .map(corpus_engine::freshness::load_doc_freshness)
+                .map(corpus_index::freshness::load_doc_freshness)
                 .unwrap_or_default();
             Ok(filter_and_page(
                 &corpus_id_owned,
@@ -864,7 +864,7 @@ mod tests {
         freshness.insert("Beta".to_string(), 2_000i64);
         freshness.insert("Gamma".to_string(), 3_000i64);
         std::fs::write(
-            corpus_dir.join(corpus_engine::freshness::DOC_FRESHNESS_FILE),
+            corpus_dir.join(corpus_index::freshness::DOC_FRESHNESS_FILE),
             serde_json::to_vec(&freshness).unwrap(),
         )
         .unwrap();

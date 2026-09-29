@@ -42,6 +42,7 @@ pub mod embed_http;
 pub mod enrichment_state;
 pub mod error;
 pub mod filters;
+pub mod freshness;
 pub mod fs_source;
 pub mod host;
 pub mod index;
