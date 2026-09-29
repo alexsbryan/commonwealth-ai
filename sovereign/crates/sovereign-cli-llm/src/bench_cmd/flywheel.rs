@@ -28,8 +28,8 @@ use sovereign_eval::flywheel::{
     RegressionBank, RegressionCase, Verdict,
 };
 
+use super::subject::SubjectDial;
 use crate::bench_cmd::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
-use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -215,10 +215,10 @@ async fn run(rest: &[String]) -> i32 {
     );
 
     // ── Live session + judge ──
-    let session = match build_session(&globals).await {
+    let subject = match SubjectDial::dial(&globals).await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error: could not build chat session: {e}");
+            eprintln!("error: {e}");
             return 1;
         }
     };
@@ -239,7 +239,7 @@ async fn run(rest: &[String]) -> i32 {
     let mut verdicts: Vec<Verdict> = Vec::with_capacity(probes.len());
     for (pi, probe) in probes.iter().enumerate() {
         let verdict = run_and_verify(
-            &session,
+            &subject,
             judge.as_ref(),
             &args.judge_model,
             &args.corpus,
@@ -313,7 +313,7 @@ async fn run(rest: &[String]) -> i32 {
 
 /// One probe → live answer → observation (judge classification) → verdict.
 async fn run_and_verify(
-    session: &crate::chat_cmd::bootstrap::ChatSession,
+    subject: &SubjectDial,
     judge: &dyn InferenceProvider,
     judge_model: &str,
     corpus: &str,
@@ -321,7 +321,7 @@ async fn run_and_verify(
     verifier: &DeterministicVerifier,
     probe: &Probe,
 ) -> Verdict {
-    let live = run_live(session, corpus, &probe.query).await;
+    let live = run_live(subject, corpus, &probe.query).await;
     let visible = live.visible;
     let chunks = live.retrieved_chunk_texts;
 

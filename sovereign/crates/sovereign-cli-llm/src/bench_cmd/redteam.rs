@@ -40,7 +40,7 @@ use super::gate::chaos_lane_baseline;
 use super::lane_baseline::LaneBaseline;
 use super::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
 use super::scaffolding_param::{decide, PromoteDecision};
-use crate::chat_cmd::bootstrap::{build_session, ChatSession};
+use super::subject::SubjectDial;
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -216,18 +216,18 @@ async fn run(args_in: &[String]) -> i32 {
         );
         (m, f)
     } else {
-        let session = match build_session(&globals).await {
+        let subject = match SubjectDial::dial(&globals).await {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("error: could not build chat session: {e}");
+                eprintln!("error: {e}");
                 return 1;
             }
         };
-        let m = capture(&session, &args.corpus, &probes).await;
+        let m = capture(&subject, &args.corpus, &probes).await;
         let f = if fresh.is_empty() {
             Vec::new()
         } else {
-            capture(&session, &args.corpus, &fresh).await
+            capture(&subject, &args.corpus, &fresh).await
         };
         if let Err(e) = save_captures(&main_path, &m) {
             eprintln!("warning: could not persist captures to {main_path:?}: {e}");
@@ -377,11 +377,11 @@ struct ProbeOutcome {
 }
 
 /// Run every probe through the live chat path once, sealed to `corpus`.
-async fn capture(session: &ChatSession, corpus: &str, probes: &[Probe]) -> Vec<Capture> {
+async fn capture(subject: &SubjectDial, corpus: &str, probes: &[Probe]) -> Vec<Capture> {
     let mut out = Vec::with_capacity(probes.len());
     for (i, p) in probes.iter().enumerate() {
         eprintln!("  [capture {:>2}/{}] {}", i + 1, probes.len(), p.query);
-        let ans = run_live(session, corpus, &p.query).await;
+        let ans = run_live(subject, corpus, &p.query).await;
         out.push(Capture {
             probe: p.clone(),
             visible: ans.visible,

@@ -12,8 +12,8 @@
 //!
 //! This harness makes that class of regression impossible to ship silently. For
 //! each `(corpus, question)` it runs BOTH paths —
-//!   - the **bench** path (`run_live_pinned`, an in-process Runtime delegating
-//!     inference to the daemon), and
+//!   - the **bench** path (`run_live_pinned`, svrn asked over its turn route
+//!     as any client asks it), and
 //!   - the **desktop** path (`run_bridge_live`, the real `#[tauri::command]`
 //!     surface over the debug command bridge) —
 //! extracts each side's **enrichment-signal set** from the SAME persisted
@@ -40,18 +40,17 @@
 //! - Run against **fresh** corpora — a stale build (declared enrichment absent on
 //!   disk) confounds the diff. Phase 4's readiness gate flags those.
 //!
-//! Like `--warm-atlas` in the chaos bench, the in-process session is warmed
-//! (`atlas_mgr.warm_one`) so the bench side actually surfaces its atlas instead
-//! of silently measuring base retrieval. Disable with `--no-warm-atlas`.
+//! svrn warms its own atlas, so `--no-warm-atlas` (which switched off the
+//! in-process warm) is refused by name.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use sovereign_eval::chaos_monkey::ChaosBank;
 
+use super::subject::SubjectDial;
 use crate::bench_cmd::desktop_bridge::{run_bridge_live, BridgeClient, DEFAULT_BRIDGE_URL};
 use crate::bench_cmd::live_runner::run_live_pinned;
-use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -246,45 +245,43 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
         }
     };
 
-    // Bench path: in-process Runtime (delegates inference to the daemon).
-    let session = match build_session(&globals).await {
+    // `--no-warm-atlas` only ever turned off the in-process manager's warm;
+    // svrn warms its own atlas, so the flag has nothing left to switch off.
+    if !pargs.warm_atlas {
+        eprintln!(
+            "error: --no-warm-atlas has no wire form: the bench side is svrn at {}, which \
+             warms its own atlas. Drop the flag.",
+            globals.daemon_base
+        );
+        return 2;
+    }
+    // Bench path: svrn, dialed as any client dials it.
+    let subject = match SubjectDial::dial(&globals).await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!(
-                "error: could not build bench chat session (is the daemon up at {}?): {e}",
-                globals.daemon_base
-            );
+            eprintln!("error: {e}");
             return 1;
         }
     };
-    // Warm the sealed corpus's atlas into the in-process manager (cache-only
-    // build_session would otherwise contribute 0 atlas contexts → the bench side
-    // would silently measure base retrieval and the parity diff would be a lie).
-    let atlas_warm_entries = if pargs.warm_atlas {
-        let n = session.atlas_mgr.warm_one(&corpus).await;
-        eprintln!(
-            "[parity] atlas-warm: {n} context entr{} loaded for `{corpus}`",
-            if n == 1 { "y" } else { "ies" }
-        );
-        if n == 0 {
-            eprintln!(
-                "[parity] WARN: atlas warm loaded 0 entries for `{corpus}` — if this corpus has an \
-                 atlas, relax the filter (SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS=0 \
-                 SOVEREIGN_ATLAS_INCLUDE_CLAIMS=1); a stale/atlas-less corpus makes the diff \
-                 uninformative (Phase 4 readiness gate flags those)."
-            );
-        }
-        n
-    } else {
-        0
-    };
+    // Absent, not zero: the warm count was the in-process manager's.
+    let atlas_warm_entries = serde_json::Value::Null;
 
     // Freshness gate (Phase 4): a corpus whose recipe DECLARES an enrichment the
     // disk lacks (a stale local index) measures a DIFFERENT surface than the
     // recipe promises — a confounded comparison that would read as spurious
     // desktop deficiency. Surface it loudly; the run still proceeds (glassbox
     // over silent skip) but the report records the staleness so CI can gate on it.
-    let corpus_stale_reason = session.corpus_engine.enrichment_drift(&corpus).await;
+    // A disk read of svrn's recipes and indexes, which has no route; a
+    // noop-embed engine is all it needs (no Runtime, no store).
+    let svrnmesh = sovereign_contracts::rebrand::svrnmesh_root();
+    let drift_engine = corpus_engine::CorpusEngine::new(
+        svrnmesh.join("recipes"),
+        svrnmesh.join("indexes"),
+        std::sync::Arc::new(|_: &str| {
+            Box::pin(async move { Ok::<Vec<f32>, corpus_index::Error>(Vec::new()) })
+        }),
+    );
+    let corpus_stale_reason = drift_engine.enrichment_drift(&corpus).await;
     if let Some(reason) = &corpus_stale_reason {
         eprintln!("[parity] WARN: corpus `{corpus}` looks STALE — {reason}");
         eprintln!(
@@ -307,7 +304,7 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
     }
 
     eprintln!(
-        "[parity] bank={:?} corpus={corpus} questions={} transport: bench(in-process @ {}) vs desktop(bridge @ {})",
+        "[parity] bank={:?} corpus={corpus} questions={} transport: bench(svrn @ {}) vs desktop(bridge @ {})",
         pargs.bank,
         bank.questions.len(),
         globals.daemon_base,
@@ -320,7 +317,7 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
     let mut bridge_errors = 0usize;
 
     for (qi, q) in bank.questions.iter().take(take).enumerate() {
-        let bench = run_live_pinned(&session, &corpus, &q.question, None).await;
+        let bench = run_live_pinned(&subject, &corpus, &q.question, None).await;
         let bench_sig = extract_signals(&bench.metadata);
 
         let (desk_sig, desk_answered, desk_gate, bridge_error) =

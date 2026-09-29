@@ -2,7 +2,7 @@
 //! Reusable live-path runner for grounded-calibration benches (chaos-monkey
 //! and the Fidelity Flywheel).
 //!
-//! Drives the SAME desktop chat path (`Runtime::handle_message_stream`), sealed
+//! Asks svrn over its turn route (`subject::SubjectDial`), sealed
 //! to one corpus via `enabled_corpora`, then recovers the retrieved chunks +
 //! routing provenance from the persisted assistant message. Every probe set
 //! (I1–I5) flows through this one runner, so the loop exercises the real router
@@ -20,6 +20,7 @@ use sovereign_core::types::{
     CompletionRequest, DocumentAsset, DocumentSession, Message, Role, Speed,
 };
 
+use super::subject::SubjectDial;
 use crate::chat_cmd::bootstrap::ChatSession;
 
 /// What the live path produced for one probe.
@@ -49,68 +50,43 @@ pub struct LiveAnswer {
     /// `provenance`, …). `Value::Null` for surfaces that don't persist a message
     /// (naked, attached). This is the glassbox channel the parity harness diffs to
     /// prove the desktop surfaces the SAME enrichment legs as the bench — both the
-    /// in-process (`run_live_pinned`) and bridge (`run_bridge_live`) paths populate
+    /// dialed (`run_live_pinned`) and bridge (`run_bridge_live`) paths populate
     /// it from the identical `message.metadata` shape, so one extractor reads both.
     pub metadata: serde_json::Value,
 }
 
-/// Drive the desktop chat path, sealed to `corpus` via `enabled_corpora`.
+/// Ask svrn, sealed to `corpus` via the conversation's `enabled_corpora`.
 /// Best-effort: a seeding/stream failure degrades to an empty answer (the
 /// caller scores it as an abstention / miss) rather than aborting the battery.
-pub async fn run_live(session: &ChatSession, corpus: &str, question: &str) -> LiveAnswer {
-    run_live_pinned(session, corpus, question, None).await
+pub async fn run_live(subject: &SubjectDial, corpus: &str, question: &str) -> LiveAnswer {
+    run_live_pinned(subject, corpus, question, None).await
 }
 
-/// Like [`run_live`] but PINS the turn's intent (via
-/// `handle_message_stream_as`) instead of trusting the router — so a bench can
-/// measure a path that forces a specific intent (e.g. a governance Q&A, which
-/// is always a factual lookup). `None` is identical to [`run_live`].
+/// Like [`run_live`] but PINS the turn's intent (the turn's `intent` on the
+/// wire) instead of trusting the router — so a bench can measure a path that
+/// forces a specific intent (e.g. a governance Q&A, which is always a factual
+/// lookup). `None` is identical to [`run_live`].
 pub async fn run_live_pinned(
-    session: &ChatSession,
+    subject: &SubjectDial,
     corpus: &str,
     question: &str,
-    pin_intent: Option<sovereign_core::types::Intent>,
+    pin_intent: Option<sovereign_contracts::types::Intent>,
 ) -> LiveAnswer {
-    let conv_id = uuid::Uuid::new_v4().to_string();
-    let created_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    // Seal retrieval to the bank's corpus so ABSENT questions genuinely have
-    // nothing to find.
-    let _ = session
-        .store
-        .insert_empty_conversation(&conv_id, created_at, None)
-        .await;
-    let _ = session
-        .store
-        .set_conversation_enabled_corpora(&conv_id, Some(vec![corpus.to_string()]))
-        .await;
-
-    // ONE turn driver (TOPOLOGY §10 phase 6). Instrument-NEUTRAL: this
-    // already drove `handle_message_stream`, so `collect_turn` — which is
-    // `serve_turn` with a collecting sink — runs the identical pipeline. What
-    // it removes is the hand-rolled drain and a fallback arm that used to
-    // re-run `handle_message` and write the question to the conversation
-    // twice.
-    //
-    // A pinned intent is a turn PARAMETER now rather than a different
-    // function to call, which is what let the three `ask` report tools stop
-    // owning turn loops as well.
-    let raw = match sovereign_core::runtime::collect_turn(
-        &session.runtime,
-        session.store.as_ref(),
-        &conv_id,
-        question,
-        sovereign_contracts::types::TurnMode::Grounded,
-        pin_intent,
-    )
-    .await
+    // Sealed to the bank's corpus so ABSENT questions genuinely have nothing
+    // to find.
+    let (raw, last_meta) = match subject
+        .ask(
+            Some(corpus),
+            question,
+            sovereign_contracts::types::TurnMode::Grounded,
+            pin_intent,
+        )
+        .await
     {
-        Ok(turn) => turn.text,
+        Ok(turn) => (turn.text, turn.metadata),
         Err(e) => {
             eprintln!("    [live] turn failed: {e}");
-            String::new()
+            (String::new(), None)
         }
     };
 
@@ -126,12 +102,6 @@ pub async fn run_live_pinned(
     // behaviour (2026-06-10 transport-delta finding). Resolve each
     // (corpus_id, chunk_id) through the corpus index, mirroring the
     // bridge; fall back to the snippet only when resolution fails.
-    let last_meta: Option<serde_json::Value> = session
-        .store
-        .get_conversation(&conv_id)
-        .await
-        .ok()
-        .and_then(|c| c.messages.last().and_then(|m| m.metadata.clone()));
     let chunk_refs: Vec<serde_json::Value> = last_meta
         .as_ref()
         .and_then(|m| {
@@ -162,16 +132,7 @@ pub async fn run_live_pinned(
             c.get("corpus_id").and_then(|v| v.as_str()),
             c.get("chunk_id").and_then(|v| v.as_u64()),
         ) {
-            (Some(cid), Some(chid)) => match session.corpus_engine.open_index_for_corpus(cid).await
-            {
-                Ok(index) => index
-                    .chunks_by_ids(&[chid])
-                    .await
-                    .ok()
-                    .and_then(|mut rows| rows.pop())
-                    .map(|row| row.content),
-                Err(_) => None,
-            },
+            (Some(cid), Some(chid)) => subject.chunk_text(cid, chid).await,
             _ => None,
         };
         let text = resolved.or_else(|| {

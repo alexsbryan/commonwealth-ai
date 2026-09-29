@@ -65,6 +65,7 @@ mod scaffold;
 mod scaffolding_param;
 mod situated;
 pub(crate) mod smoke_subset;
+pub(crate) mod subject;
 mod uap;
 mod vault_report;
 mod verifier;

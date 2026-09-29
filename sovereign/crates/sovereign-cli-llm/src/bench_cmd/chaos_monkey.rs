@@ -2,8 +2,8 @@
 //! `svrn bench chaos-monkey …` — grounded calibration under
 //! adversarial pressure.
 //!
-//! Drives the SAME situated-agent chat path the desktop surface uses
-//! (`Runtime::handle_message_stream`, sealed to the bank's corpus via
+//! Asks svrn the question over its turn route, as the desktop surface does
+//! (sealed to the bank's corpus via
 //! `enabled_corpora`), then scores each answer on the two red-lines defined
 //! in `sovereign_eval::chaos_monkey`: competence-when-present and
 //! honesty-when-absent. The only model-side judgement is a deterministic
@@ -50,6 +50,7 @@ use crate::bench_cmd::live_runner::{
     caveat_credit, classify_abstain, classify_caveat, classify_extraction,
     extraction_scorer_enabled, judge_correctness, run_live_pinned, run_naked, verify_grounding,
 };
+use crate::bench_cmd::subject::SubjectDial;
 use crate::chat_cmd::bootstrap::build_session_sealed;
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -420,10 +421,11 @@ async fn run(rest: &[String]) -> i32 {
         gates.max_hallucination,
     );
 
-    // Direct transport needs an in-process Runtime; bridge transport
-    // dispatches through a live desktop instead (no session at all —
-    // the judge below talks to the daemon directly).
-    let (session, bridge_client) = if args.bridge {
+    // Direct transport asks svrn over its turn route; bridge transport
+    // dispatches through a live desktop instead (the judge below talks to
+    // the daemon directly). The attached-document lane alone still builds a
+    // sealed in-process session: OWED to pb-bench-dials-docs.
+    let (session, subject, bridge_client) = if args.bridge {
         let client = super::desktop_bridge::BridgeClient::new(&args.bridge_url);
         if let Err(e) = client.healthz().await {
             eprintln!("error: {e}");
@@ -439,12 +441,28 @@ async fn run(rest: &[String]) -> i32 {
             return 1;
         }
         eprintln!("[chaos] transport=desktop-bridge ({})", args.bridge_url);
-        (None, Some(client))
-    } else {
+        (None, None, Some(client))
+    } else if args.attached.is_some() || args.attached_asset.is_some() {
         match build_session_sealed(&globals, &corpus).await {
-            Ok(s) => (Some(s), None),
+            Ok(s) => (Some(s), None, None),
             Err(e) => {
                 eprintln!("error: could not build chat session: {e}");
+                return 1;
+            }
+        }
+    } else {
+        if args.warm_atlas {
+            eprintln!(
+                "error: --warm-atlas has no wire form: svrn at {} warms its own atlas. Drop \
+                 the flag.",
+                globals.daemon_base
+            );
+            return 2;
+        }
+        match SubjectDial::dial(&globals).await {
+            Ok(s) => (None, Some(s), None),
+            Err(e) => {
+                eprintln!("error: {e}");
                 return 1;
             }
         }
@@ -734,7 +752,7 @@ async fn run(rest: &[String]) -> i32 {
             crate::bench_cmd::live_runner::run_attached(session, asset, &q.question, doc_chunks)
                 .await
         } else {
-            match (naked_provider.as_deref(), &bridge_client, &session) {
+            match (naked_provider.as_deref(), &bridge_client, &subject) {
                 (Some(p), _, _) => run_naked(p, &model_id, &q.question, naked_max).await,
                 (None, Some(client), _) => {
                     match super::desktop_bridge::run_bridge_live(
@@ -758,10 +776,10 @@ async fn run(rest: &[String]) -> i32 {
                         }
                     }
                 }
-                (None, None, Some(session)) => {
-                    run_live_pinned(session, &corpus, &q.question, args.pin_intent.clone()).await
+                (None, None, Some(subject)) => {
+                    run_live_pinned(subject, &corpus, &q.question, args.pin_intent.clone()).await
                 }
-                (None, None, None) => unreachable!("one of session/bridge is always built"),
+                (None, None, None) => unreachable!("one of subject/bridge is always built"),
             }
         };
         let turn_ms = turn_started.elapsed().as_millis() as u64;
