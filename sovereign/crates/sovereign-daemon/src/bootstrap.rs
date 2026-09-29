@@ -935,7 +935,7 @@ pub async fn setup_watched_folders(
 /// cycle is broken by the handle: `run_daemon` builds every service, commissions
 /// the daemon with all of them at once, then calls `DeferredDaemon::bind`.
 /// The handle is an ARGUMENT rather than minted here because a terminal's
-/// forwarding provider is built earlier still — in `load_provider`, before this
+/// forwarding provider is built earlier still — in `terminal_provider`, before this
 /// runs — and binds to its entry node through the same handle. One
 /// `DeferredDaemon` per daemon, or the terminal would resolve its entry node
 /// through a mesh view nobody ever binds (§10.6).

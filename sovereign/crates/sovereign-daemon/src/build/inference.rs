@@ -1,65 +1,25 @@
-//! Inference provider construction — extracted from `run_daemon` (§3.3).
+//! A terminal's inference provider — extracted from `run_daemon` (§3.3).
 //!
-//! A terminal's forwarder is built here; a node that holds weights gets its
-//! provider from the one serving assembly
-//! (`sovereign_compute::assembly::assemble_serving`). Synchronous — load
-//! happens inline; model files are mmapped so cold-start latency is
-//! dominated by disk I/O on first reference.
-//!
-//! **Family resolution.** The embed slot's family identity decides its
-//! app-side pooling strategy, normalisation, and the document / query
-//! instruction prefixes via `EmbedQuirks`. After the llama-cpp-4 0.2.x
-//! migration the C-side pooling type is forced to `None` in
-//! `EmbedSlot::load` (the binding returns null from `embeddings_seq_ith`
-//! on every gguf whose header says NONE, and setting any other type
-//! ggml_aborts the context constructor for Qwen3-Embedding); pooling
-//! moved into Rust against the per-token `embeddings_ith` reads. The
-//! family lookup is therefore what selects the right strategy (Last for
-//! Qwen3-Embedding, Mean for BERT-style) and the right text prep on the
-//! input — keeping it resolved in one place (`engine_factory`) means the slot loader and the
-//! mesh-advertisement path read from a single source of truth.
+//! A terminal holds no weights and forwards to its entry node. Every other
+//! node's serving is serve's (pb-serve-distributes): the daemon dials it or a
+//! distribution hosts it, and no engine is assembled here.
 
 use std::sync::Arc;
 
-use sovereign_core::model_family::ModelFamily;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
-/// Returns `(provider, engine, embed_family)` on success, or `Err(())`
-/// when a slot fails to load or configure (the caller returns 1; the
-/// operator-facing diagnostics are printed here).
+/// A terminal's provider, or `Err(())` when its entry binding is unusable
+/// (the caller returns 1; the operator-facing diagnostics are printed here).
 ///
-/// - `provider` — the `dyn`-erased view the daemon installs + advertises.
-/// - `engine` — the same object kept concrete, captured for the
-///   RPC-worker auto-reload path (the mesh discovery task force-reloads
-///   the primary when the worker set grows).
-/// - `embed_family` — the manifest-resolved embed slot family; drives
-///   app-side pooling + the mesh advertisement's embed-model info.
-/// - `distributed_primary` — `Some` only under `[compute] distributed_primary`:
-///   the slot whose child owns the mesh-distributed primary. The worker-
-///   discovery loop respawns it on every worker-set change instead of calling
-///   `engine.reload_primary()`.
-/// - `reload` — the factory a hot reload rebuilds through: the same assembly,
-///   against the compute children this build started. A terminal's refuses
-///   (it holds no `[models]`), as its reload always has.
 /// `mesh` is the view a `terminal` resolves its entry node through. Unbound at
 /// this point in the boot — it answers "no peers" until `DeferredDaemon::bind`
 /// — which is correct: a terminal that boots before gossip converges reports
 /// its entry node unreachable and starts serving the moment it appears.
-pub fn load_provider(
+pub fn terminal_provider(
     config: &SetupConfig,
     mesh: Arc<crate::DeferredDaemon>,
-) -> Result<
-    (
-        Arc<dyn InferenceProvider>,
-        Option<Arc<EmbeddedLlamaCpp>>,
-        ModelFamily,
-        Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
-        Arc<sovereign_compute::assembly::ReloadFactory>,
-    ),
-    (),
-> {
+) -> Result<Arc<dyn InferenceProvider>, ()> {
     // ── terminal: hold nothing, forward everything ──────────────────────
     //
     // A `terminal`-class node has no `[models]`, so there is no GGUF to load
@@ -188,30 +148,12 @@ pub fn load_provider(
                     String::new(),
                 )),
             };
-            return Ok((
-                provider,
-                // No engine: nothing in this process owns weights, so the
-                // RPC-worker reload path and every other engine-only caller
-                // must see the absence rather than a stub that lies about it.
-                None,
-                ModelFamily::Unknown,
-                None,
-                Arc::default(),
-            ));
+            return Ok(provider);
         }
     }
-    // A holder: the one serving assembly builds everything from here on.
-    match sovereign_compute::assembly::assemble_serving(config) {
-        Ok(parts) => Ok((
-            parts.provider,
-            parts.llama,
-            parts.embed_family,
-            parts.distributed_primary,
-            parts.reload_factory,
-        )),
-        Err(e) => {
-            eprintln!("error: {e}");
-            Err(())
-        }
-    }
+    // Only a terminal reaches here (`boot_serving`); a node that holds
+    // weights is served by serve. Refused by name, never assembled.
+    tracing::error!(target: "serving_path", node_class = ?config.node_class(), "boot: a terminal provider was asked of a node that is not a terminal");
+    eprintln!("error: this node is not a terminal; its serving is serve's, and this daemon assembles no engine");
+    Err(())
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The serving half of `run_daemon`'s boot — the RPC env contract, llama.cpp's
-//! log route, the VRAM preflight, the grammar env and the provider — split out
-//! of `boot.rs` at its arch-gate ceiling (pb-svrn-dials-serve).
+//! The serving half of `run_daemon`'s boot — the RPC env contract, where
+//! serving lives, and the provider (serve's, or a terminal's forwarder) — split
+//! out of `boot.rs` at its arch-gate ceiling (pb-svrn-dials-serve).
 
 use std::sync::Arc;
 
@@ -15,10 +15,10 @@ use crate::bootstrap;
 pub(super) struct ServingBoot {
     pub provider: Arc<dyn InferenceProvider>,
     pub resolved_embed_family: ModelFamily,
-    /// The distribution over the engine this process loads (compute's
+    /// The distribution over the engine a hosted serve loads (compute's
     /// `distribute`: warm orchestrator, self-manifest refresh, RPC-worker
     /// discovery), started once the mesh is up; `None` where no engine
-    /// loads here (the dialing path).
+    /// loads here (the dialing path, a terminal).
     pub distribute: Option<sovereign_serving_host::rpc_discovery::Distribute>,
     pub reload: crate::provider::ReloadSource,
     pub deferred_daemon: Arc<crate::DeferredDaemon>,
@@ -43,18 +43,16 @@ pub(super) async fn boot_serving(
     bootstrap::apply_shared_model_role_to_env(&config.shared_model);
 
     // Where serving lives, decided once, after the RPC env contract above
-    // (pb-svrn-dials-serve; `ServingPath::decide` traces it). A terminal
-    // already holds no weights and dials its entry node, so it keeps that arm.
-    // A distribution that hosts serve here (`hosted`) turns the dialing path
-    // into the hosted one; the decider stays the one reader (pb-stock-binary).
+    // (`ServingPath::decide` traces it). A distribution that hosts serve here
+    // (`hosted`) turns the dialing path into the hosted one; the decider stays
+    // the one reader (pb-stock-binary). Every node but a terminal serves from
+    // serve (pb-serve-distributes).
     let path = crate::serve_client::ServingPath::decide(config, hosted.is_some());
     let config_path_in_use = config_override
         .clone()
         .unwrap_or_else(sovereign_core::setup_config::SetupConfig::default_path);
     let deferred_daemon = Arc::new(crate::DeferredDaemon::new());
-    if path.serve_serves()
-        && config.node_class() != sovereign_core::setup_config::NodeClass::Terminal
-    {
+    if config.node_class() != sovereign_core::setup_config::NodeClass::Terminal {
         return match hosted {
             Some(hosted) if path == crate::serve_client::ServingPath::Hosted => {
                 host_serve(config, &config_path_in_use, hosted, deferred_daemon, path).await
@@ -63,25 +61,7 @@ pub(super) async fn boot_serving(
         };
     }
     if hosted.is_some() {
-        tracing::info!(target: "serving_path", serving = %path.status_line(), "boot: this path serves from this daemon's own engine; the distribution's serve composition is not run");
-    }
-
-    // Route llama.cpp's internal log into our tracing layer. Without
-    // this, gguf load failures and ggml backend diagnostics print to a
-    // dropped stderr (the daemon's child-style stdio capture swallows
-    // them) — the operator gets a bare "null result from llama cpp"
-    // with no actionable detail. Installed exactly once per process.
-    sovereign_inference::llama::install_log_tracing();
-
-    // VRAM capacity preflight — ADVISORY by default: warns and starts
-    // anyway on overcommit (so CPU-only / low-VRAM machines aren't
-    // hard-blocked). Only refuses under SOVEREIGN_STRICT_VRAM_CHECK=1 or
-    // when a model file is unreadable. Full rationale on
-    // `build::preflight::check_vram`.
-    // Name the config the operator actually passed, not the default one —
-    // a `--config` start used to be told to edit a file it never read.
-    if !crate::build::preflight::check_vram_reporting(&config, &config_path_in_use) {
-        return Err(1);
+        tracing::info!(target: "serving_path", serving = %path.status_line(), "boot: a terminal forwards to its entry node; the distribution's serve composition is not run");
     }
 
     // ── Force-tool-calls config → process env ─────────────────────
@@ -126,11 +106,8 @@ pub(super) async fn boot_serving(
         );
     }
 
-    // Inference provider — load the embedded llama.cpp provider (3 GGUF
-    // slots + extras/idle/rerank wiring); full rationale on
-    // `crate::build::inference::load_provider`. `engine_handle` (concrete) feeds
-    // the RPC-worker auto-reload path; `resolved_embed_family` feeds the
-    // mesh embed-model advertisement.
+    // A terminal holds no weights: its provider forwards to its entry node;
+    // full rationale on `crate::build::inference::terminal_provider`.
     //
     // Minted HERE, before the provider, because a terminal's provider binds to
     // its entry node THROUGH this handle: the bind is a mesh identity, resolved
@@ -138,29 +115,17 @@ pub(super) async fn boot_serving(
     // exactly as a commissioned-but-stopped daemon until `bind` — no peers — so
     // a terminal booting ahead of gossip reports its entry node unreachable
     // rather than inventing an address for it.
-    let (provider, raw_engine, resolved_embed_family, distributed_primary_slot, reload_factory) =
-        match crate::build::inference::load_provider(&config, Arc::clone(&deferred_daemon)) {
-            Ok(t) => t,
+    let provider =
+        match crate::build::inference::terminal_provider(config, Arc::clone(&deferred_daemon)) {
+            Ok(p) => p,
             Err(()) => return Err(1),
         };
-    // `None` whenever nothing in this process owns llama slots — TWO ways in
-    // now, and the engine-only paths (RPC-worker auto-reload, slot hot-swap)
-    // must see the absence rather than a stub either way:
-    //   - a `terminal`, which holds no weights at all and forwards instead;
-    //   - an engine configured with no local llama slots, where the
-    //     RPC-worker reload below is llama's own and simply does not arm.
-    // Already an `Option` before either existed; both make the `None` reachable.
-    // A terminal reaches this arm on the dialing path, where no engine loads
-    // and nothing distributes (boot gated the same way on `DialsServe`).
-    let loads_here = !matches!(path, crate::serve_client::ServingPath::DialsServe);
-    let distribute = loads_here.then(|| {
-        sovereign_compute::distributed_discovery::distribute(raw_engine, distributed_primary_slot)
-    });
     Ok(ServingBoot {
         provider,
-        resolved_embed_family,
-        distribute,
-        reload: crate::provider::ReloadSource::Assembly(reload_factory),
+        resolved_embed_family: ModelFamily::Unknown,
+        // No engine loads here, so nothing distributes.
+        distribute: None,
+        reload: crate::provider::ReloadSource::Terminal,
         deferred_daemon,
         path,
     })
@@ -228,8 +193,8 @@ async fn dial_serve(
 /// The hosted path (pb-stock-binary, phase-b-29 Q1): the distribution
 /// assembles serve in this process and binds its router on serve's port, and
 /// svrn holds the SAME cell serve's routes answer from, so one engine answers
-/// both ports; its engine and slot come back for the discovery svrn still
-/// runs (pb-serve-distributes). Nothing is brought up, no self-report is read, no loopback
+/// both ports; the distribution over its engine comes back for svrn to start
+/// with its mesh ports (pb-serve-distributes). Nothing is brought up, no self-report is read, no loopback
 /// provider is built, and no NER handle is installed: that handle is one
 /// process-global (`sovereign_compute::ner`) which serve's own `/v1/ner`
 /// reads, so a `RemoteNer` here would dial itself. The first reader loads

@@ -314,9 +314,9 @@ fn the_stock_install_serves_both_ports_from_one_process_and_one_engine() {
 
 /// A config that opts into mesh-distributed inference is hosted too
 /// (pb-serve-distributes): serve's assembly builds the one engine, and the
-/// engine's mesh subsystems start beside it. Failing input: keep
-/// `ServingPath::InProcess` out of `with_hosting`, and `/status` names
-/// `in-process (SOVEREIGN_RPC_WORKERS)`.
+/// engine's mesh subsystems start beside it. Failing input: take
+/// `ServingPath::DialsServe` out of `with_hosting`, and `/status` names
+/// `serve`.
 #[test]
 fn a_distributed_config_is_hosted_and_starts_its_mesh_subsystems() {
     let root = tempfile::tempdir().expect("tempdir");

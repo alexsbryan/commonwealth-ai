@@ -906,8 +906,8 @@ pub(super) async fn run_daemon(
     // The distribution over the engine this process loads (the warm
     // orchestrator, the self-manifest refresh, RPC-worker discovery; built by
     // the loader, `sovereign_compute::distributed_discovery::distribute`),
-    // started over this daemon's mesh ports now that the daemon is bound. The
-    // in-process path and a hosted serve hand one; on the dialing path no
+    // started over this daemon's mesh ports now that the daemon is bound. A
+    // hosted serve hands one; on the dialing path and on a terminal no
     // engine loads here, so there is nothing to warm and no worker to
     // discover (pb-svrn-dials-serve, pb-serve-distributes).
     tracing::info!(

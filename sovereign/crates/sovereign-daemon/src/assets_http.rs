@@ -104,15 +104,14 @@ fn with_query(path: &str, raw: Option<String>) -> String {
 }
 
 /// Where serving lives decides who answers (pb-svrn-dials-serve): on the
-/// dialing path serve does, and an unreachable serve is a named 503; on the
-/// in-process path, or where no boot decided (tests), this process does.
+/// dialing and hosted paths serve does, and an unreachable serve is a named
+/// 503; where no boot decided (tests), this process does.
 async fn forward_or(
     daemon: &EmbeddedDaemon,
     path: &str,
     in_process: impl std::future::Future<Output = Response>,
 ) -> Response {
-    if !crate::serve_client::ServingPath::decided()
-        .is_some_and(crate::serve_client::ServingPath::serve_serves)
+    if !crate::serve_client::ServingPath::decided().is_some()
     {
         return in_process.await;
     }

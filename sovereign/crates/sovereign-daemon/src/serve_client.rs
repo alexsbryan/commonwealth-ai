@@ -3,7 +3,6 @@
 //! daemon (pb-svrn-dials-serve): where it listens, and whether this daemon
 //! dials it at all.
 
-use sovereign_contracts::launch::RpcServe;
 use sovereign_contracts::setup_config::{EntryBinding, NodeSection, SetupConfig};
 
 /// Does a provider serve the rerank kind: the one decider, asked here of a
@@ -14,21 +13,16 @@ pub use sovereign_contracts::rerank_kind::serves_rerank;
 static DECIDED: std::sync::OnceLock<ServingPath> = std::sync::OnceLock::new();
 
 /// Where this daemon's inference is served from — THE one decider, read once
-/// at boot after `apply_shared_model_role_to_env`, so the env contract it
-/// reads is the one bootstrap.rs already translated (phase-b-24).
+/// at boot.
 ///
-/// Mesh-distributed inference (RPC-worker discovery, the distributed-primary
-/// respawn, the auto-warm orchestrator, the worker role) still needs the
-/// loading process beside the roster, so a config that opts into it keeps the
-/// in-process path until pb-serve-distributes moves it into serve, unless a
-/// distribution hosts serve here ([`ServingPath::with_hosting`]). Every other
-/// config dials serve.
+/// Serving is serve's on every config (pb-serve-distributes): mesh-distributed
+/// inference (RPC-worker discovery, the distributed-primary respawn, the
+/// auto-warm orchestrator) runs in the process that loads the engine, so a
+/// distribution that hosts serve here runs it here ([`ServingPath::with_hosting`]).
+/// Every other config dials serve. The in-process path pb-svrn-dials-serve
+/// kept for those opt-ins is gone.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServingPath {
-    /// The in-process engine, kept for an opt-in to distributed inference.
-    /// `chosen_by` names the input that chose it, because four inputs are
-    /// not predictable from outside (principle 1).
-    InProcess { chosen_by: &'static str },
     /// Serving lives in `serve`, which this daemon dials.
     DialsServe,
     /// Serving lives in `serve`, assembled in THIS process by the distribution
@@ -38,28 +32,17 @@ pub enum ServingPath {
 }
 
 impl ServingPath {
-    /// Decide from each input's ONE existing reader, never a fresh `var_os`
-    /// (principle 8): the subsystems the in-process path keeps gate on the
-    /// same readers, so they and this decider cannot disagree on a spelling.
-    ///
     /// `hosting` says the process entry was handed a [`HostedServe`]. A path
     /// becomes [`ServingPath::Hosted`] only where serve would be this host's
     /// anyway: not a terminal (it dials its entry node) and no `[node] entry`
     /// address (an operator-named serve stays dialed).
     pub fn decide(config: &SetupConfig, hosting: bool) -> Self {
-        let path = Self::from_inputs(
-            &RpcServe::from_env(),
-            crate::startup::rpc_discovery_armed(),
-            &sovereign_inference::embedded::rpc_workers_from_env(),
-            sovereign_inference::engine_factory::child_owns_primary(config),
-        )
-        .with_hosting(hosting, config);
+        let path = Self::DialsServe.with_hosting(hosting, config);
         tracing::info!(
             target: "serving_path",
             serving = %path.status_line(),
             hosting,
-            owner = "pb-serve-distributes moves the in-process path into serve",
-            "serving path decided (pb-svrn-dials-serve)"
+            "serving path decided"
         );
         // Kept as decided: `/status` reports the path this process booted on,
         // which a later config edit does not change.
@@ -67,16 +50,14 @@ impl ServingPath {
         path
     }
 
-    /// [`ServingPath::DialsServe`] and [`ServingPath::InProcess`] become
-    /// [`ServingPath::Hosted`] when this process hosts serve and serve would
-    /// be this host's anyway: serve's assembly is the one the in-process path
-    /// built, and hands svrn its engine and slot while discovery still runs
-    /// here (pb-serve-distributes). Every other path is kept.
+    /// [`ServingPath::DialsServe`] becomes [`ServingPath::Hosted`] when this
+    /// process hosts serve and serve would be this host's anyway. Every other
+    /// path is kept.
     pub fn with_hosting(self, hosting: bool, config: &SetupConfig) -> Self {
         let here = config.node_class() != sovereign_contracts::setup_config::NodeClass::Terminal
             && resolve_serve_base(&config.node).source == ServeBaseSource::Default;
         match self {
-            Self::DialsServe | Self::InProcess { .. } if hosting && here => Self::Hosted,
+            Self::DialsServe if hosting && here => Self::Hosted,
             path => path,
         }
     }
@@ -87,43 +68,13 @@ impl ServingPath {
         DECIDED.get()
     }
 
-    /// The decision over the four inputs. A `Refused` RPC bind keeps today's
-    /// path, so its refusal is still reported where it is today; an EMPTY
-    /// `SOVEREIGN_RPC_SERVE` is `Off` at its reader and dials serve.
-    pub fn from_inputs(
-        rpc_serve: &RpcServe,
-        discovery_armed: bool,
-        rpc_workers: &[String],
-        child_owns_primary: bool,
-    ) -> Self {
-        let chosen_by = if !matches!(rpc_serve, RpcServe::Off) {
-            "SOVEREIGN_RPC_SERVE"
-        } else if discovery_armed {
-            "SOVEREIGN_RPC_DISCOVER"
-        } else if !rpc_workers.is_empty() {
-            "SOVEREIGN_RPC_WORKERS"
-        } else if child_owns_primary {
-            "[compute] distributed_primary"
-        } else {
-            return Self::DialsServe;
-        };
-        Self::InProcess { chosen_by }
-    }
-
-    /// How `svrn daemon status` names the path: `in-process (<input>)`,
-    /// `serve`, or `serve (this process)`.
+    /// How `svrn daemon status` names the path: `serve`, or
+    /// `serve (this process)`.
     pub fn status_line(&self) -> String {
         match self {
-            Self::InProcess { chosen_by } => format!("in-process ({chosen_by})"),
             Self::DialsServe => "serve".to_string(),
             Self::Hosted => "serve (this process)".to_string(),
         }
-    }
-
-    /// Serve serves: this daemon builds no engine, whether it dials serve or
-    /// hosts it. THE one reading of the split for every site that asks.
-    pub fn serve_serves(&self) -> bool {
-        matches!(self, Self::DialsServe | Self::Hosted)
     }
 }
 
@@ -337,7 +288,7 @@ pub async fn ensure_serve(
 
 /// The slot-alias map on the dialing path: serve's residency, role to model
 /// id, through the one alias policy (`venue::resolution_alias_keys`) that
-/// `register_local_model_slots` applies to `[models]` on the in-process path.
+/// `register_local_model_slots` applies to `[models]` where no boot decided.
 /// So the map names only models serve holds, never svrn's reading of serve's
 /// sections (seat, reviewing c0c39be03).
 pub fn served_slot_aliases(

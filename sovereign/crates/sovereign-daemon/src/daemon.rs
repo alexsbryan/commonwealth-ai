@@ -2925,8 +2925,8 @@ impl EmbeddedDaemon {
         // configured slot (primary / fast / embed) with a
         // deterministic ModelId so reloads don't create duplicates.
         //
-        // The slot-alias map comes from what serves: `[models]` on the
-        // in-process path, serve's residency on the dialing path, where svrn
+        // The slot-alias map comes from what serves: serve's residency on
+        // every path a boot decided (`[models]` only where none did), where svrn
         // does not read serve's sections (seat, reviewing c0c39be03). The
         // inference_store rows and the servable-file allowlist are still
         // registered from `[models]` on both paths: their readers are a node
@@ -2935,8 +2935,7 @@ impl EmbeddedDaemon {
         {
             let cfg = self.setup_config.read().await;
             let config_aliases = register_local_model_slots(&app_state, &cfg, node_id).await;
-            if crate::serve_client::ServingPath::decided()
-                .is_some_and(crate::serve_client::ServingPath::serve_serves)
+            if crate::serve_client::ServingPath::decided().is_some()
             {
                 let slots = match self.inference_provider().await {
                     Some(provider) => provider.resident_slots(),

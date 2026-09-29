@@ -11,52 +11,17 @@ fn node(entry: Option<&str>, entry_node: Option<&str>) -> NodeSection {
     }
 }
 
-fn decide(serve: Option<&str>, discover: bool, workers: &[&str], primary: bool) -> ServingPath {
-    let workers: Vec<String> = workers.iter().map(|w| w.to_string()).collect();
-    ServingPath::from_inputs(
-        &RpcServe::resolve(serve, false),
-        discover,
-        &workers,
-        primary,
-    )
-}
-
+/// Every config dials serve unless this process hosts it
+/// (pb-serve-distributes). Failing input: drop `hosting` from
+/// `with_hosting`'s guard, and svrn alone goes Hosted. That no in-process
+/// arm returns is `no_engine_census`'s, which reads the sources.
 #[test]
 fn a_default_config_dials_serve() {
-    assert_eq!(decide(None, false, &[], false), ServingPath::DialsServe);
-}
-
-#[test]
-fn an_empty_rpc_serve_is_off_and_dials_serve() {
-    assert_eq!(decide(Some(""), false, &[], false), ServingPath::DialsServe);
-}
-
-#[test]
-fn each_opt_in_keeps_the_in_process_path_and_names_itself() {
-    let cases = [
-        (
-            decide(Some("127.0.0.1:50052"), false, &[], false),
-            "SOVEREIGN_RPC_SERVE",
-        ),
-        // A refused plaintext-LAN bind keeps today's path and its refusal.
-        (
-            decide(Some("0.0.0.0:50052"), false, &[], false),
-            "SOVEREIGN_RPC_SERVE",
-        ),
-        (decide(None, true, &[], false), "SOVEREIGN_RPC_DISCOVER"),
-        (
-            decide(None, false, &["10.0.0.2:50052"], false),
-            "SOVEREIGN_RPC_WORKERS",
-        ),
-        (
-            decide(None, false, &[], true),
-            "[compute] distributed_primary",
-        ),
-    ];
-    for (path, input) in cases {
-        assert_eq!(path, ServingPath::InProcess { chosen_by: input });
-        assert_eq!(path.status_line(), format!("in-process ({input})"));
-    }
+    assert_eq!(
+        ServingPath::DialsServe.with_hosting(false, &SetupConfig::unconfigured()),
+        ServingPath::DialsServe
+    );
+    assert_eq!(ServingPath::DialsServe.status_line(), "serve");
 }
 
 /// The hosted path (pb-stock-binary): a process that hosts serve serves from
@@ -78,7 +43,6 @@ fn hosting_turns_only_this_hosts_dialing_path_hosted() {
         ServingPath::Hosted.status_line(),
         "serve (this process)".to_string()
     );
-    assert!(ServingPath::Hosted.serve_serves() && ServingPath::DialsServe.serve_serves());
     // svrn alone dials.
     assert_eq!(
         ServingPath::DialsServe.with_hosting(false, &plain),
@@ -95,24 +59,6 @@ fn hosting_turns_only_this_hosts_dialing_path_hosted() {
         ServingPath::DialsServe.with_hosting(true, &terminal),
         ServingPath::DialsServe
     );
-    // A distributed config is hosted too: serve's assembly is the one the
-    // in-process path built, so the process still holds one engine
-    // (pb-serve-distributes). Without a host, or with a named serve or a
-    // terminal, it keeps its in-process path.
-    let distributed = ServingPath::InProcess {
-        chosen_by: "SOVEREIGN_RPC_DISCOVER",
-    };
-    assert_eq!(
-        distributed.clone().with_hosting(true, &plain),
-        ServingPath::Hosted
-    );
-    assert_eq!(distributed.clone().with_hosting(false, &plain), distributed);
-    assert_eq!(distributed.clone().with_hosting(true, &named), distributed);
-    assert_eq!(
-        distributed.clone().with_hosting(true, &terminal),
-        distributed
-    );
-    assert!(!distributed.serve_serves());
 }
 
 /// A stub serve on a free loopback port whose engine-state route waits

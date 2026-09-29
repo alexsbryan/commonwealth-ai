@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Hot-reload inference provider factory — extracted from `daemon_cmd`
-//! (§3.2). Rebuilds the serving provider through the one serving assembly
+//! (§3.2). Rebuilds the serving provider from serve after it reloads
 //! (wrapped in the mesh-aware router) when the operator changes a model path
 //! at runtime.
 
@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use crate::admin_http::ProviderFactory;
 use async_trait::async_trait;
-use sovereign_compute::assembly::ReloadFactory;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 
@@ -37,10 +36,10 @@ pub struct LlamaCppFactory {
 /// The raw provider a reload wraps, from the path boot chose
 /// (`serve_client::ServingPath`).
 pub enum ReloadSource {
-    /// The in-process path: the factory cold start's assembly returned, so the
-    /// reload builds through the same assembly, against the compute children
-    /// boot started.
-    Assembly(Arc<ReloadFactory>),
+    /// A terminal: its provider is the entry-node forwarder boot built, and it
+    /// holds no engine to rebuild, so a reload refuses by name
+    /// (pb-serve-distributes; the in-process assembly arm is gone).
+    Terminal,
     /// The dialing path: serve rebuilds through its own ReloadFactory, and the
     /// daemon rebuilds its loopback provider from serve's new self-report,
     /// into `cell`, the one boot wrapped. No engine in this process.
@@ -80,10 +79,19 @@ impl LlamaCppFactory {
 
     async fn raw_provider(&self, cfg: &SetupConfig) -> Result<Arc<dyn InferenceProvider>, String> {
         match &self.reload {
-            ReloadSource::Assembly(reload) => Ok(reload
-                .build(cfg)
-                .map_err(|e| format!("reload: {e}"))?
-                .provider),
+            ReloadSource::Terminal => {
+                // The terminal's own refusal when its config still holds no
+                // models (what the assembly returned before); otherwise the
+                // models are new since boot, and serving them is serve's.
+                let why = match cfg.models() {
+                    Err(why) => why,
+                    Ok(_) => "this daemon booted as a terminal and holds no engine; \
+                         restart it to serve the models now configured"
+                        .to_string(),
+                };
+                tracing::warn!(target: "serving_path", reason = %why, "reload refused: a terminal holds no engine");
+                Err(format!("reload: {why}"))
+            }
             ReloadSource::Serve {
                 base,
                 config_context,
@@ -118,10 +126,9 @@ impl ProviderFactory for LlamaCppFactory {
         &self,
         cfg: &SetupConfig,
     ) -> Result<Arc<dyn InferenceProvider>, String> {
-        // Only a holder has an engine to rebuild. A terminal's provider is a
-        // forwarder built once against its entry node; the assembly refuses
-        // its config by name (`SetupConfig::models`) rather than load empty
-        // paths.
+        // Only serve has an engine to rebuild. A terminal's provider is a
+        // forwarder built once against its entry node; its arm refuses by
+        // name (`SetupConfig::models`) rather than load empty paths.
         let raw = self.raw_provider(cfg).await?;
 
         // Wrap so a hot-reloaded daemon keeps its mesh-aware model

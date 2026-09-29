@@ -403,7 +403,7 @@ pub struct StatusResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rpc_worker: Option<RpcWorkerStatus>,
     /// Where serving lives, as decided at boot: `serve`, or
-    /// `in-process (<the input that chose it>)` (pb-svrn-dials-serve).
+    /// `serve (this process)` (pb-svrn-dials-serve, pb-stock-binary).
     /// Absent where no boot decided (the desktop, tests).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serving: Option<String>,
