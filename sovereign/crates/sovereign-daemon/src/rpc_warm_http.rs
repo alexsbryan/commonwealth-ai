@@ -79,6 +79,6 @@ async fn host_transport_bases(state: &AppState, host_node_id: Option<&str>) -> V
 // (`sovereign_compute::distributed_warm`, pb-serve-distributes); re-exported
 // at their historical paths.
 pub use sovereign_compute::distributed_warm::{
-    install_rpc_warm_orchestrator, warm_cache_from_ranges, MeshRpcShardWarmer,
-    RpcWarmShardRequest, RpcWarmShardResponse, RpcWarmSource, TensorRange, WarmRangeStats,
+    install_rpc_warm_orchestrator, warm_cache_from_ranges, MeshRpcShardWarmer, RpcWarmShardRequest,
+    RpcWarmShardResponse, RpcWarmSource, TensorRange, WarmRangeStats,
 };
