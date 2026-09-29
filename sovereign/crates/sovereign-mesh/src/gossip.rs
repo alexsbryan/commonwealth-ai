@@ -43,7 +43,7 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::offer_view;
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
 use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
-use corpus_engine::CorpusEngine;
+use corpus_index::source::CorpusReadPort;
 use serde::{Deserialize, Serialize};
 use sovereign_contracts::self_claims::SelfClaims;
 use tracing::{debug, info, warn};
@@ -147,9 +147,9 @@ impl Drop for GossipHandle {
 /// survive a daemon restart without needing a per-handler persist
 /// callback. Costs one JSON file write per 10s (trivial). `None`
 /// (test harnesses, CLI without persistence) skips persistence.
-pub fn spawn_gossip_loop(
+pub fn spawn_gossip_loop<E: CorpusReadPort + ?Sized + 'static>(
     fabric: Arc<FabricPart>,
-    engine: Option<Arc<CorpusEngine>>,
+    engine: Option<Arc<E>>,
     claims: Arc<dyn SelfClaims>,
     interval: Duration,
     offline_threshold: Duration,
@@ -252,9 +252,9 @@ pub fn spawn_gossip_loop(
 /// wait a full interval before reconciling with peers. Bounded by
 /// `max_duration` so daemon startup stays prompt even when all
 /// peers are unreachable.
-pub async fn initial_sync(
+pub async fn initial_sync<E: CorpusReadPort + ?Sized>(
     fabric: &FabricPart,
-    engine: Option<&Arc<CorpusEngine>>,
+    engine: Option<&Arc<E>>,
     claims: &dyn SelfClaims,
     offline_threshold: Duration,
     max_duration: Duration,
@@ -457,9 +457,9 @@ fn max_online_peers_before_false_offline(
 /// One full gossip round. Touches own `last_seen`, decays stale
 /// peers, then pair-gossips with up to `FANOUT` members — online ones
 /// first (`select_round_peers`).
-pub async fn run_one_round(
+pub async fn run_one_round<E: CorpusReadPort + ?Sized>(
     fabric: &FabricPart,
-    engine: Option<&Arc<CorpusEngine>>,
+    engine: Option<&Arc<E>>,
     claims: &dyn SelfClaims,
     offline_threshold: Duration,
 ) -> Result<(), GossipError> {

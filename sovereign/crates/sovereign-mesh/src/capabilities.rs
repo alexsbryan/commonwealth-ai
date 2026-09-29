@@ -40,7 +40,7 @@ use commonwealth_core::capabilities::{
     AnchorProfile, AvailableResources, HardwareProfile, NodeCapabilities,
 };
 use commonwealth_discovery::hardware;
-use corpus_engine::engine::CorpusEngine;
+use corpus_index::source::CorpusReadPort;
 use oicp_types::knowledge::{ChunkRange as CoreChunkRange, CorpusShardInfo};
 use sovereign_contracts::self_claims::SelfClaims;
 
@@ -61,8 +61,8 @@ use sovereign_contracts::self_claims::SelfClaims;
 /// four off `AppState` and the inference store directly — the `fabric -> host`
 /// backflow the port inverts. Hosted corpora stays here, computed from the
 /// `engine` handle Fabric legitimately names (ralph/DECISIONS.md 2026-09-16).
-pub async fn build_local_capabilities(
-    engine: Option<&Arc<CorpusEngine>>,
+pub async fn build_local_capabilities<E: CorpusReadPort + ?Sized>(
+    engine: Option<&Arc<E>>,
     now_secs: u64,
     claims_source: &dyn SelfClaims,
 ) -> NodeCapabilities {
@@ -117,7 +117,7 @@ pub async fn build_local_capabilities(
         .map(|idxs| idxs.iter().map(|i| i.index_size_bytes).sum())
         .unwrap_or(0);
     let hosted_corpora = match (engine, installed.as_deref()) {
-        (Some(e), Some(idxs)) => build_hosted_corpora(e, idxs).await,
+        (Some(e), Some(idxs)) => build_hosted_corpora(&**e, idxs).await,
         _ => Vec::new(),
     };
 
@@ -264,8 +264,8 @@ pub async fn build_local_capabilities(
 /// `IndexInfo.query_sharing` is resolved at open-time — an index
 /// whose on-disk meta predates this split falls back to
 /// `mesh_sharing` automatically, preserving pre-split behavior.
-async fn build_hosted_corpora(
-    engine: &CorpusEngine,
+async fn build_hosted_corpora<E: CorpusReadPort + ?Sized>(
+    engine: &E,
     indexes: &[corpus_index::types::IndexInfo],
 ) -> Vec<CorpusShardInfo> {
     let indexes_dir = engine.index_dir().to_path_buf();
@@ -477,7 +477,7 @@ mod tests {
     /// you have silently converted a measurement into an extrapolation.
     #[tokio::test]
     async fn gossip_never_advertises_a_benchmark() {
-        let caps = build_local_capabilities(None, 0, &StubClaims).await;
+        let caps = build_local_capabilities(None::<&Arc<dyn CorpusReadPort>>, 0, &StubClaims).await;
         assert!(
             caps.benchmark.is_none(),
             "build_local_capabilities set NodeCapabilities.benchmark. That arms the \
