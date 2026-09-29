@@ -32,11 +32,10 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::Arc;
 
 use crate::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
 use crate::error::Result;
-use crate::index::{CorpusIndex, EnrichmentChunkRow};
+use crate::index::CorpusIndex;
 use crate::recipe::Recipe;
 
 // The inbound port's vocabulary lives in the ingest-port leaf (phase-b-49).
