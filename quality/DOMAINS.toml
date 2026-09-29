@@ -8335,8 +8335,8 @@ lines = 293
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/discovery_policy.rs"
-context = "host"
+path = "sovereign/crates/sovereign-compute/src/discovery_policy.rs"
+context = "serving"
 lines = 689
 note = ""
 

@@ -76,7 +76,8 @@ pub mod daemon;
 #[cfg(feature = "treesitter")]
 pub mod daemon_cmd;
 pub mod daemon_services;
-pub mod discovery_policy;
+/// The distributed-primary tick policy, serve's (pb-serve-distributes).
+pub use sovereign_compute::discovery_policy;
 pub mod documents_http;
 pub mod enrich_http;
 pub mod features_http;

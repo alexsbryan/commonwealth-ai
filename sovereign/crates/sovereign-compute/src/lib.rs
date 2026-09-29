@@ -34,6 +34,7 @@ pub mod child;
 pub mod child_main;
 pub mod client;
 pub mod containment;
+pub mod discovery_policy;
 pub mod distribution;
 pub mod manager;
 pub mod mock;
