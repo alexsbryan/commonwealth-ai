@@ -3926,3 +3926,116 @@ preview vs atlas cluster preview), `Parked`, `Lifecycle`, `Inner`, `Server`,
 The range's added src lines contain no new collapsed `Err`. The
 `unwrap_or(0)` and `let _ =` hits in `wikipedia_columnar.rs`, `fs_source.rs`
 and `mcp_router.rs` are code the range moved without changing it.
+
+## REVIEW-audit-pb-auto-8 (2026-09-29, range dd75e4443..8f09f14f5, since REVIEW-audit-pb-auto-7)
+
+The range holds 119 commits. Product code comes from pb-ingest-dial-tools and
+its six follow-on rows (-atlas, -close, -doubles, -local, -e2e-local,
+-e2e-engine), pb-notes-memory, pb-notes-verbs, pb-grants-merge, pb-code-clean
+and pb-code-clean-lift. All checks ran in the sovereign-vulkan toolbox.
+
+TESTALL at 8f09f14f5 exited 100: 13,729 passed, 2 failed, 1 timed out. Both
+failures were drift, and both were repaired in 9213cbe51.
+`f26_egress_boundary_census` expected 3 clients in `shard_manager.rs` and found
+2, because 783cf0fcb deleted the uncalled `stream_index` along with its
+client. `conformance_tags_are_fresh` failed because 1174853ef (pb-ingest-dial-tools,
+not -atlas as 9213cbe51's body says) moved `sec_facts/coverage.rs` into
+corpus-engine-atlas-reader, so the GR-35 and GR-36 claims move whole. The
+engine's ST-8 claims follow line shifts. `atoms_file_has_exactly_one_door`
+timed out at 180 s, blocked on the build-dir lock. Run alone it passes in 8 s.
+PREPUSH at 9213cbe51 had four blocking lanes: boundary-gate, layout-gate,
+clock-gate and rustfmt. After the three fixes below, PREPUSH has one blocking
+lane, boundary-gate at 20 violations, the declared burn-down (30 at auto-7).
+
+### (1) Per-unit net-line ledger, `.rs` only; tests = a `tests/` segment or a `tests.rs`/`test.rs` file
+
+| unit | src net (+/−) | tests net |
+|---|---|---|
+| pb-notes-memory | +1008 (+1763/−755) | +782 |
+| pb-ingest-dial-tools-doubles | +800 (+1301/−501) | +617 |
+| pb-ingest-dial-tools-atlas | +640 (+1294/−654) | +61 |
+| pb-ingest-dial-tools-local | +425 (+914/−489) | −10 |
+| pb-ingest-dial-tools-close | +386 (+1211/−825) | +278 |
+| pb-ingest-dial-tools-e2e-local | +124 (+145/−21) | +551 |
+| pb-ingest-dial-tools-e2e-engine | +38 (+41/−3) | +14 |
+| pb-grants-merge | −4 (+350/−354) | +69 |
+| pb-code-clean | −60 (+273/−333) | −2 |
+| pb-notes-verbs | −79 (+93/−172) | +147 |
+| pb-code-clean-lift | −720 (+74/−794) | +824 |
+| pb-ingest-dial-tools | −1067 (+3809/−4876) | +937 |
+| TOTAL | +1491 | +4268 |
+
+The doubles' +800 are production-path files (`corpus-index/src/ingest_port/double.rs`,
+`corpus-engine-atlas-reader/src/ports/double.rs`) behind
+`#[cfg(any(test, feature = "test-doubles"))]`, and every consumer turns the
+feature on under `[dev-dependencies]` only, so no shipped binary links them.
+
+### (2) dry-report over the 22 touched crate dirs
+
+For the intersection, each clone member is keyed by (fn name, file) against
+every `fn` the range added or re-added. Five members match, and none of them
+is a new copy. `write`, `flush` and `make_writer` in
+`corpus-engine-atlas-reader/src/sec_facts/tests.rs:468-478` pair with
+`corpus-engine/src/engine/yield_gate.rs:159-169`, a tracing capture writer
+that 1174853ef moved with the test file. The pair already existed inside
+corpus-engine. `new` in `sovereign-tools/src/atlas_phase/gaps.rs:26` ~
+`tensions.rs:29` is two 3-line field initialisers for two distinct tools. The
+SCIP graph is current for the range: `symbols` resolves `recipe_author_seams`,
+which is new at 863ebc546. sovereign-stock loaded 0 symbols, so it is
+could-not-judge, as it was at auto-7.
+
+### (3) converge noun over the 45 nouns the range added (and did not remove)
+
+37 have one production definition. Six have none because they are test-only:
+CountingForeground, Killed, MergeCall, PortLog, RecipeHead and Root. Two have
+more than one, and neither addition is production code. `Fixture` (2, both in
+sovereign-cli-llm gym commands) is the name of a new struct in
+`corpus-engine/tests/main/partition_merge_port_parity.rs`. `Verdict` (11) is
+matched by a string literal inside a refactor-destination test fixture
+(`sovereign-cli-dev/src/refactor_cmd/destination.rs`). No new noun copies
+another.
+
+### Findings
+
+- **rustfmt, fixed in a2f794ece** · 19 files the range touched failed
+  `cargo fmt --all --check`, which is PREPUSH's blocking lane. Whitespace only.
+- **ARCH 8 (clock), fixed in c5a16a830** · f277a780c moved the notes rail into
+  `sovereign-code/src/face/notes_rail.rs:148` with a hand-read `SystemTime`.
+  It now calls `sovereign_time::unix_now()`, which computes the same value.
+- **ARCH 8 (layout), fixed in 90a33b08b** · three literal layout spellings
+  moved with code into files the baseline did not list:
+  `svrn-ingest/finalize.rs:42` (from cli-dev `code_cmd.rs`, eb777c4b0),
+  `sovereign-tools/tests/main/local_corpus_port_double.rs:94` (248daed41) and
+  `corpus-engine/tests/main/corpus_read_port_parity.rs:173` (20a026aaf). They
+  now use `engine.partition_path` and `Corpus::meta_in`. layout-gate went
+  from 101 sites to 98.
+- **ARCH 4, recorded** · 9213cbe51's body credits the `sec_facts` move to
+  pb-ingest-dial-tools-atlas. It was 1174853ef, pb-ingest-dial-tools. This
+  section is the correction, because history is not rewritten.
+- **ARCH 5, open, second audit running** · `atoms_file_has_exactly_one_door`
+  (understanding-vocab `atoms_reds`) spawns cargo. Inside the full nextest run
+  it waits on the build-dir lock past its 180 s timeout, and alone it passes
+  in 8 s. A failure that recurs for one reason is a defect in the
+  instrument: the test should not build under a lock the running suite holds.
+  The fix belongs to the test's owner, so it is not made here.
+- **advisory lanes, recorded** · `hakari-verify` fails: the workspace-hack's
+  flate2 feature set drifted (mesh-reach builds flate2 with features
+  workspace-hack does not pin). The fix is `cargo hakari generate`, which
+  belongs to the build-latency campaign (quality/BUILD_LATENCY.md D1), not to
+  this queue. `deletion-manifest --verify` also fails, and it is advisory.
+- **ARCH 8, reviewed, no change** · pb-notes-memory gives svrn a second notes
+  store (`sovereign-store/src/sqlite/memory_notes.rs`) beside code's
+  `corpus-engine-notes`, by decision (phase-b-30 Group 4). The two share the
+  `RecipeNotes`/`AgentNotes` ports, and both enforce the rule that a feature
+  scope needs a feature_id (`memory_notes.rs` `write_memory_note`,
+  `corpus-engine-notes/src/notes.rs:1293`). They differ in note identity:
+  code's notes carry a content hash, while svrn's are UUIDs with a
+  `has_active_note_with_content` check. That is a design fact about two
+  owners, not a copy.
+
+The range's added production lines introduce no collapsed `Err`. Of the hits,
+`sec_facts/mod.rs:368`, `corpus-index/src/freshness.rs:34`, `tool_ports.rs:244`,
+`enrich_progress.rs:139` and `watched/enrich.rs:721` are moved lines.
+`memory_notes.rs:220` treats an absent query as a recency listing, which is
+the right meaning. `memory_notes_migration.rs:89` sets `busy_timeout` the way
+`sqlite.rs:77` already does.
