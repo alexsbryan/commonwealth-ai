@@ -18,9 +18,9 @@
 //!     checked-in `candidate/rerank.toml` artifact + promote the Dev baseline.
 //!
 //! The write-back is decoupled from `atoms.json` by construction (see
-//! [`ScaffoldingParam`]); reranking is applied in-process via the env vars
-//! `build_session` already reads, so a candidate change needs only a new arm —
-//! no daemon restart.
+//! [`ScaffoldingParam`]); an arm's rerank settings ride each of its turns to
+//! svrn as the turn's rerank pins, so a candidate change needs only a new
+//! arm — no daemon restart.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -35,13 +35,11 @@ use sovereign_eval::flywheel::{DeterministicVerifier, Generator as _, Observatio
 use super::baselines::{baseline_dir, write_dated_and_update_latest_at};
 use super::gate::chaos_lane_baseline;
 use super::lane_baseline::{render_and_exit_code, LaneBaseline};
-use super::live_runner::{
-    caveat_credit, classify_abstain, classify_caveat, strip_think, LiveAnswer,
-};
+use super::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
 use super::scaffolding_param::{
     decide, AutoApplyPolicy, PromoteDecision, RerankSettings, ScaffoldingParam,
 };
-use crate::chat_cmd::bootstrap::{build_session, ChatSession};
+use super::subject::SubjectDial;
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -235,6 +233,13 @@ async fn run(args_in: &[String]) -> i32 {
     }
 
     // ── Live session + judge ──
+    let mut subject = match SubjectDial::dial(&globals).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
     let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
     let judge: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
         &v1,
@@ -260,7 +265,7 @@ async fn run(args_in: &[String]) -> i32 {
 
     // ── Seed-only mode: capture the current-settings Dev baseline + exit ──
     if args.update_baseline {
-        let arm = match run_arm(&globals, &current, &args, &judge, &model_id, &dev).await {
+        let arm = match run_arm(&mut subject, &current, &args, &judge, &model_id, &dev).await {
             Ok(b) => b,
             Err(code) => return code,
         };
@@ -283,15 +288,16 @@ async fn run(args_in: &[String]) -> i32 {
 
     // ── Paired arms on Dev ──
     eprintln!("[promote] running BASELINE arm (current settings) on Dev …");
-    let baseline_arm = match run_arm(&globals, &current, &args, &judge, &model_id, &dev).await {
+    let baseline_arm = match run_arm(&mut subject, &current, &args, &judge, &model_id, &dev).await {
         Ok(b) => b,
         Err(code) => return code,
     };
     eprintln!("[promote] running CANDIDATE arm (proposed settings) on Dev …");
-    let candidate_arm = match run_arm(&globals, &candidate, &args, &judge, &model_id, &dev).await {
-        Ok(b) => b,
-        Err(code) => return code,
-    };
+    let candidate_arm =
+        match run_arm(&mut subject, &candidate, &args, &judge, &model_id, &dev).await {
+            Ok(b) => b,
+            Err(code) => return code,
+        };
 
     let (decision, d) = decide(&baseline_arm, &candidate_arm);
     render_and_exit_code(&d, &format!("flywheel:promote:{}", args.param.id()));
@@ -342,13 +348,13 @@ async fn run(args_in: &[String]) -> i32 {
             }
             eprintln!("[promote] [unseal] burned Test peek #{n} → {peek_path:?}");
 
-            let base_test = match run_arm(&globals, &current, &args, &judge, &model_id, &test).await
-            {
-                Ok(b) => b,
-                Err(code) => return code,
-            };
+            let base_test =
+                match run_arm(&mut subject, &current, &args, &judge, &model_id, &test).await {
+                    Ok(b) => b,
+                    Err(code) => return code,
+                };
             let cand_test =
-                match run_arm(&globals, &candidate, &args, &judge, &model_id, &test).await {
+                match run_arm(&mut subject, &candidate, &args, &judge, &model_id, &test).await {
                     Ok(b) => b,
                     Err(code) => return code,
                 };
@@ -391,30 +397,29 @@ async fn run(args_in: &[String]) -> i32 {
     0
 }
 
-/// Run one arm: set this arm's rerank env, build a fresh in-process session,
-/// run every probe through the live path + verifier, score the two red-lines,
-/// and return the headline [`LaneBaseline`].
+/// Run one arm: pin this arm's rerank settings on the dial, ask every probe
+/// through svrn's live path + verifier, score the two red-lines, and return
+/// the headline [`LaneBaseline`].
 async fn run_arm(
-    globals: &crate::chat_cmd::config::ChatGlobals,
+    subject: &mut SubjectDial,
     settings: &RerankSettings,
     args: &Args,
     judge: &Arc<dyn InferenceProvider>,
     model_id: &str,
     probes: &[Probe],
 ) -> Result<LaneBaseline, i32> {
-    settings.set_env(&args.corpus);
-    let session = match build_session(globals).await {
-        Ok(s) => s,
+    match settings.pins() {
+        Ok(pins) => subject.pin_rerank(pins),
         Err(e) => {
-            eprintln!("error: could not build chat session: {e}");
-            return Err(1);
+            eprintln!("error: {e}");
+            return Err(2);
         }
-    };
+    }
     let verifier = DeterministicVerifier;
     let mut rows = Vec::with_capacity(probes.len());
     for probe in probes {
         let v = run_and_verify(
-            &session,
+            subject,
             judge.as_ref(),
             &args.judge_model,
             &args.corpus,
@@ -438,7 +443,7 @@ async fn run_arm(
 /// (Same shape as the flywheel read-side runner; kept local to avoid coupling
 /// promote's gating loop to the read-side orchestrator's CLI surface.)
 async fn run_and_verify(
-    session: &ChatSession,
+    subject: &SubjectDial,
     judge: &dyn InferenceProvider,
     judge_model: &str,
     corpus: &str,
@@ -446,7 +451,7 @@ async fn run_and_verify(
     verifier: &DeterministicVerifier,
     probe: &Probe,
 ) -> sovereign_eval::flywheel::Verdict {
-    let live = run_live_in_process(session, corpus, &probe.query).await;
+    let live = run_live(subject, corpus, &probe.query).await;
     let visible = live.visible;
     let chunks = live.retrieved_chunk_texts;
     let action = match classify_abstain(judge, judge_model, &visible).await {
@@ -522,101 +527,6 @@ fn settings_value_for(param: &ScaffoldingParam, s: &RerankSettings) -> String {
         "rerank.enabled" => s.enabled.to_string(),
         "rerank.candidates_k" => s.candidates_k.to_string(),
         _ => String::new(),
-    }
-}
-
-/// The in-process live turn, sealed to `corpus`. OWED to pb-bench-dials-rerank:
-/// an arm's rerank settings are env vars only an in-process `Runtime` reads,
-/// so dialing svrn would score both arms at the daemon's settings. Every other
-/// lane asks svrn through `live_runner::run_live`; this copy dies with that row.
-async fn run_live_in_process(session: &ChatSession, corpus: &str, question: &str) -> LiveAnswer {
-    let conv_id = uuid::Uuid::new_v4().to_string();
-    let created_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    let _ = session
-        .store
-        .insert_empty_conversation(&conv_id, created_at, None)
-        .await;
-    let _ = session
-        .store
-        .set_conversation_enabled_corpora(&conv_id, Some(vec![corpus.to_string()]))
-        .await;
-    let raw = match sovereign_core::runtime::collect_turn(
-        &session.runtime,
-        session.store.as_ref(),
-        &conv_id,
-        question,
-        sovereign_contracts::types::TurnMode::Grounded,
-        None,
-    )
-    .await
-    {
-        Ok(turn) => turn.text,
-        Err(e) => {
-            eprintln!("    [live] turn failed: {e}");
-            String::new()
-        }
-    };
-    let last_meta: Option<serde_json::Value> = session
-        .store
-        .get_conversation(&conv_id)
-        .await
-        .ok()
-        .and_then(|c| c.messages.last().and_then(|m| m.metadata.clone()));
-    let chunk_refs: Vec<serde_json::Value> = last_meta
-        .as_ref()
-        .and_then(|m| {
-            m.get("retrieved_chunks")
-                .and_then(|v| v.as_array())
-                .cloned()
-        })
-        .unwrap_or_default();
-    let (gate_action, draft) = last_meta
-        .as_ref()
-        .and_then(|m| m.get("grounding_gate"))
-        .map(|g| {
-            (
-                g.get("action").and_then(|v| v.as_str()).map(str::to_string),
-                g.get("draft").and_then(|v| v.as_str()).map(str::to_string),
-            )
-        })
-        .unwrap_or((None, None));
-    let mut retrieved_chunk_texts = Vec::with_capacity(chunk_refs.len());
-    for c in &chunk_refs {
-        let resolved = match (
-            c.get("corpus_id").and_then(|v| v.as_str()),
-            c.get("chunk_id").and_then(|v| v.as_u64()),
-        ) {
-            (Some(cid), Some(chid)) => match session.corpus_engine.open_index_for_corpus(cid).await
-            {
-                Ok(index) => index
-                    .chunks_by_ids(&[chid])
-                    .await
-                    .ok()
-                    .and_then(|mut rows| rows.pop())
-                    .map(|row| row.content),
-                Err(_) => None,
-            },
-            _ => None,
-        };
-        let text = resolved.or_else(|| {
-            ["text", "content", "passage_preview", "preview", "snippet"]
-                .iter()
-                .find_map(|k| c.get(*k).and_then(|v| v.as_str()))
-                .map(str::to_string)
-        });
-        if let Some(t) = text {
-            retrieved_chunk_texts.push(t);
-        }
-    }
-    LiveAnswer {
-        visible: strip_think(&raw),
-        retrieved_chunk_texts,
-        gate_action,
-        draft,
-        metadata: last_meta.unwrap_or(serde_json::Value::Null),
     }
 }
 

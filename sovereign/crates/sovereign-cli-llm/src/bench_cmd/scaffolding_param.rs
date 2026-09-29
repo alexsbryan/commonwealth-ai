@@ -5,25 +5,26 @@
 //! decoupled from `atoms.json` (the verifier's oracle) **by construction**:
 //! there is no atlas/enrichment variant here, so the loop structurally cannot
 //! touch the thing the oracle reads. The first (and v1-only) channel is
-//! retrieval reranking, applied in-process via the env vars `build_session`
-//! already reads (`SOVEREIGN_RERANK_*`), so a candidate change needs only a new
-//! bench-process arm — no daemon restart.
+//! retrieval reranking, carried to svrn as each turn's rerank pins
+//! (`TurnRequest::Message.rerank`), so a candidate change needs only a new
+//! bench arm — no daemon restart.
 //!
 //! Higher-blast-radius channels (routing thresholds, then enrichment) will join
 //! as new variants with [`AutoApplyPolicy::ProposeOnly`]; rerank is
-//! [`AutoApplyPolicy::AutoOnPass`] because it is atoms-decoupled, in-process,
+//! [`AutoApplyPolicy::AutoOnPass`] because it is atoms-decoupled, per-turn,
 //! and trivially reversible.
 //!
 //! The pure decision logic ([`decide`]) and the settings struct are unit-tested
 //! here; the live arms + gate reuse live in [`super::promote`].
 
 use serde::{Deserialize, Serialize};
+use sovereign_turn_client::RerankOverrides;
 
 use super::lane_baseline::{diff, LaneBaseline, LaneDiff};
 
 /// The persisted retrieval-rerank settings — the loop's tunable state for the
 /// first channel. Serialized to `candidate/rerank.toml` on an accepted change;
-/// applied to a bench arm by setting the env vars `build_session` reads.
+/// applied to a bench arm as its turns' rerank pins ([`Self::pins`]).
 ///
 /// Only the knobs effective WITHOUT a local cross-encoder model are exposed
 /// (the `SOVEREIGN_RERANK_DEDUP_ONLY` path): `enabled` (overfetch + per-article
@@ -65,34 +66,23 @@ impl RerankSettings {
         std::fs::write(path, text).map_err(|e| format!("write {path:?}: {e}"))
     }
 
-    /// Set the `SOVEREIGN_RERANK_*` env vars `build_session` reads so the NEXT
-    /// in-process session is built with these settings. `corpus` is added to the
-    /// dedup allowlist so the knob actually bites on the corpus under test (the
-    /// live default allowlist is SEP-only).
-    ///
-    /// # Safety
-    /// Sequential use only — the bench runs one arm at a time, with no
-    /// concurrent readers of these env vars between `set_env` and the
-    /// subsequent `build_session`.
-    pub fn set_env(&self, corpus: &str) {
-        set_var(
-            "SOVEREIGN_RERANK_DEDUP_ONLY",
-            if self.enabled { "1" } else { "0" },
-        );
-        set_var(
-            "SOVEREIGN_RERANK_CANDIDATES_K",
-            &self.candidates_k.to_string(),
-        );
-        // Apply dedup to the corpus under test (default allowlist is SEP-only,
-        // which would make the knob a no-op on any other corpus).
-        set_var("SOVEREIGN_RERANK_DEDUP_CORPORA", corpus);
+    /// These settings as a turn's rerank pins. svrn applies `enabled` to
+    /// every corpus the turn searches, which for promote's sealed turn is the
+    /// corpus under test (in-process, `corpus` joined the dedup allowlist for
+    /// the same reason). A pool too big for the wire is refused by name.
+    pub fn pins(&self) -> Result<RerankOverrides, String> {
+        let candidates_k = u32::try_from(self.candidates_k).map_err(|_| {
+            format!(
+                "rerank.candidates_k={} does not fit a turn's rerank pin (max {})",
+                self.candidates_k,
+                u32::MAX
+            )
+        })?;
+        Ok(RerankOverrides {
+            enabled: Some(self.enabled),
+            candidates_k: Some(candidates_k),
+        })
     }
-}
-
-fn set_var(k: &str, v: &str) {
-    // `std::env::set_var` is safe on this edition; isolated in one place so a
-    // future edition bump (where it becomes `unsafe`) touches a single call.
-    std::env::set_var(k, v);
 }
 
 /// A single proposed change to the rerank settings.
@@ -232,6 +222,33 @@ mod tests {
         );
         assert!(ScaffoldingParam::parse("bogus=1").is_err(), "unknown key");
         assert!(ScaffoldingParam::parse("rerank.candidates_k=nope").is_err());
+    }
+
+    #[test]
+    fn settings_become_a_turns_rerank_pins() {
+        let on = RerankSettings {
+            enabled: true,
+            candidates_k: 80,
+        };
+        assert_eq!(
+            on.pins().unwrap(),
+            RerankOverrides {
+                enabled: Some(true),
+                candidates_k: Some(80),
+            }
+        );
+        let off = RerankSettings::default();
+        assert_eq!(
+            off.pins().unwrap().enabled,
+            Some(false),
+            "off is sent, not omitted"
+        );
+        let huge = RerankSettings {
+            enabled: true,
+            candidates_k: u32::MAX as usize + 1,
+        };
+        let err = huge.pins().unwrap_err();
+        assert!(err.contains("rerank.candidates_k"), "named: {err}");
     }
 
     fn lane(competence: f64, honesty: f64, hallu: f64) -> LaneBaseline {

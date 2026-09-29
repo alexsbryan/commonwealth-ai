@@ -323,9 +323,7 @@ mod eval_dispatch {
             "build_session_with_skills(",
             "set_var(\"SOVEREIGN_RERANK",
         ];
-        const OWED: [(&str, &str); 5] = [
-            ("bench_cmd/promote.rs", "pb-bench-dials-rerank"),
-            ("bench_cmd/scaffolding_param.rs", "pb-bench-dials-rerank"),
+        const OWED: [(&str, &str); 3] = [
             ("bench_cmd/book_report.rs", "pb-bench-dials-docs"),
             ("bench_cmd/chaos_monkey.rs", "pb-bench-dials-docs"),
             ("bench_cmd/vault_report.rs", "pb-bench-dials-docs"),
