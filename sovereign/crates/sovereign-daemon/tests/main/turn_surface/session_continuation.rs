@@ -83,6 +83,7 @@ async fn turn_leaving_a_session(
             mode: TurnMode::Grounded,
             intent: None,
             sampling: None,
+            rerank: None,
         },
     )
     .await;

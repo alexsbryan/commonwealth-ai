@@ -3614,6 +3614,7 @@ impl TurnClient {
             mode,
             intent,
             sampling,
+            rerank: None,
         })?;
         stream.drain_turn(observer).await
     }
@@ -4136,6 +4137,7 @@ impl TurnSender {
             mode,
             intent,
             sampling: None,
+            rerank: None,
         })
     }
 

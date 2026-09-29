@@ -188,8 +188,8 @@ pub mod answer_doc;
 // crate is one no other process can speak.
 mod turn;
 pub use turn::{
-    is_degenerate_message, is_document_attached, SamplingOverrides, TurnAnswer, TurnFrame,
-    TurnMode, TurnNotice, TurnPrompt, TurnRequest, DEGENERATE_MESSAGE_HINT,
+    is_degenerate_message, is_document_attached, RerankOverrides, SamplingOverrides, TurnAnswer,
+    TurnFrame, TurnMode, TurnNotice, TurnPrompt, TurnRequest, DEGENERATE_MESSAGE_HINT,
     DOCUMENT_ATTACHED_PREFIX, OVERSIZE_MESSAGE_HINT,
 };
 

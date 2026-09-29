@@ -145,6 +145,7 @@ async fn a_socket_still_reads_while_its_turn_is_running() {
                 mode: TurnMode::Grounded,
                 intent: None,
                 sampling: None,
+                rerank: None,
             })
             .unwrap()
             .into(),

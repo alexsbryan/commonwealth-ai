@@ -116,6 +116,7 @@ pub(crate) async fn turn_parked_on_a_question(timers: SocketTimers) -> ParkedTur
             mode: TurnMode::Grounded,
             intent: Some(sovereign_contracts::types::Intent::ComplexTask),
             sampling: None,
+            rerank: None,
         })
         .unwrap()
         .into(),
@@ -368,6 +369,7 @@ async fn a_search_built_information_answer_folds_its_sources_into_the_conversati
             mode: TurnMode::Grounded,
             intent: Some(sovereign_contracts::types::Intent::ComplexTask),
             sampling: None,
+            rerank: None,
         })
         .unwrap()
         .into(),

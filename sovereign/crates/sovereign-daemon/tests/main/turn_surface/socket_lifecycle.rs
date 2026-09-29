@@ -88,6 +88,7 @@ async fn a_settled_turn_is_said_and_the_daemon_closes_the_socket_nobody_reused()
             mode: TurnMode::Grounded,
             intent: None,
             sampling: None,
+            rerank: None,
         },
     )
     .await;
@@ -171,6 +172,7 @@ async fn a_second_turn_on_a_settled_socket_runs_normally() {
                 mode: TurnMode::Grounded,
                 intent: None,
                 sampling: None,
+                rerank: None,
             },
         )
         .await;

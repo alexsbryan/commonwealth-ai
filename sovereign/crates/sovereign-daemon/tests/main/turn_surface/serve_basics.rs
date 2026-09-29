@@ -41,6 +41,7 @@ async fn a_daemon_streams_a_turn_to_a_websocket_client() {
             mode: TurnMode::Grounded,
             intent: None,
             sampling: None,
+            rerank: None,
         })
         .unwrap()
         .into(),

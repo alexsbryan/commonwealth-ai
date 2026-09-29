@@ -36,6 +36,7 @@ async fn ask(
             mode: TurnMode::Grounded,
             intent: None,
             sampling,
+            rerank: None,
         },
     )
     .await;

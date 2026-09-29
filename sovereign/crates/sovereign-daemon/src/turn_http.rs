@@ -91,6 +91,7 @@ use sovereign_contracts::types::{
     ClarificationRequest, InterpretationProposed, ResumeSession, TurnAnswer, TurnFrame, TurnMode,
     TurnNarration, TurnNotice, TurnRequest,
 };
+use sovereign_core::runtime::capabilities::{scope_rerank, scope_sampling, scope_turn};
 use sovereign_core::runtime::Runtime;
 use sovereign_core::runtime::{collect_turn, drive_stream_handle, serve_turn, StreamHandle};
 use sovereign_core::traits::StateStore;
@@ -1308,6 +1309,7 @@ async fn handle_ws(
                 mode,
                 intent,
                 sampling,
+                rerank,
             } => {
                 if refuse_second_turn(&in_flight, &out_tx) {
                     continue;
@@ -1323,28 +1325,24 @@ async fn handle_ws(
                 let turn_approval = claimed_channel();
                 let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
-                    sovereign_core::runtime::capabilities::scope_turn(
-                        turn_approval,
-                        Some(routing),
-                        sovereign_core::runtime::capabilities::scope_sampling(sampling, async {
-                            serve_turn(
-                                &rt,
-                                st.as_ref(),
-                                &cid,
-                                &content,
-                                mode,
-                                intent,
-                                // See the module docs — the daemon has no
-                                // narration broadcast yet, and a `None`
-                                // here is that fact rather than a dropped
-                                // channel.
-                                None,
-                                &tx,
-                            )
-                            .await;
-                        }),
-                    )
-                    .await;
+                    let turn = scope_rerank(rerank, async {
+                        serve_turn(
+                            &rt,
+                            st.as_ref(),
+                            &cid,
+                            &content,
+                            mode,
+                            intent,
+                            // See the module docs — the daemon has no
+                            // narration broadcast yet, and a `None`
+                            // here is that fact rather than a dropped
+                            // channel.
+                            None,
+                            &tx,
+                        )
+                        .await;
+                    });
+                    scope_turn(turn_approval, Some(routing), scope_sampling(sampling, turn)).await;
                 }));
             }
             // The two SESSION-CONTINUATION turns. Each differs from `Message`

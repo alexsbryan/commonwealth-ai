@@ -38,7 +38,7 @@ use std::sync::Arc;
 use tokio::task::futures::TaskLocalFuture;
 
 use crate::traits::{ApprovalChannel, RoutingEventSink};
-use crate::types::{InferenceConfig, SamplingOverrides};
+use crate::types::{InferenceConfig, RerankOverrides, SamplingOverrides};
 
 tokio::task_local! {
     /// The approval channel of the turn running on this task, installed by
@@ -57,6 +57,10 @@ tokio::task_local! {
     /// again: the daemon serves every socket from ONE `Runtime`, so the
     /// session-wide `inference_config` cannot carry one client's pin.
     static TURN_SAMPLING: SamplingOverrides;
+    /// The rerank pins of the turn running on this task, installed by
+    /// [`scope_rerank`] (`TurnRequest::Message.rerank`), on the same bargain
+    /// as sampling: the process-wide lane cannot carry one client's pin.
+    static TURN_RERANK: RerankOverrides;
 }
 
 /// Run `fut` as a turn whose sampling is pinned by `pins`; `None` pins
@@ -82,6 +86,28 @@ pub fn scope_sampling<F: Future>(
 /// The ambient turn's sampling pins; `None` outside a [`scope_sampling`].
 pub(crate) fn current_sampling() -> Option<SamplingOverrides> {
     TURN_SAMPLING.try_with(Clone::clone).ok()
+}
+
+/// Run `fut` as a turn whose rerank is pinned by `pins`; `None` pins
+/// nothing. Boxed here for the reason [`scope_sampling`] gives.
+pub fn scope_rerank<F: Future>(
+    pins: Option<RerankOverrides>,
+    fut: F,
+) -> TaskLocalFuture<RerankOverrides, Pin<Box<F>>> {
+    let pins = pins.unwrap_or_default();
+    if pins != RerankOverrides::default() {
+        tracing::info!(
+            enabled = ?pins.enabled,
+            candidates_k = ?pins.candidates_k,
+            "turn.rerank: this turn's rerank is pinned by its request"
+        );
+    }
+    TURN_RERANK.scope(pins, Box::pin(fut))
+}
+
+/// The ambient turn's rerank pins; `None` outside a [`scope_rerank`].
+pub(crate) fn current_rerank() -> Option<RerankOverrides> {
+    TURN_RERANK.try_with(|p| *p).ok()
 }
 
 /// The ambient pin no `InferenceConfig` field can carry, by name — `top_p`,

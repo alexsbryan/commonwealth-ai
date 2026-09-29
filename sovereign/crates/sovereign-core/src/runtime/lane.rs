@@ -73,6 +73,32 @@ impl Rerank {
     pub fn f(&self) -> Option<&corpus_index::types::RerankFn> {
         self.f.as_ref()
     }
+
+    /// This config with a turn's rerank pins laid over it. `enabled: true`
+    /// is `svrn bench promote`'s dedup arm (overfetch plus per-article dedup
+    /// over every corpus the turn searches, which for its sealed turn is the
+    /// corpus under test); `enabled: false` turns reranking off.
+    fn pinned(mut self, pins: crate::types::RerankOverrides) -> Self {
+        match pins.enabled {
+            Some(true) => {
+                self.config.enabled = true;
+                self.config.per_article = true;
+                self.config.dedup_corpus_filter = None;
+            }
+            Some(false) => self.config.enabled = false,
+            None => {}
+        }
+        if let Some(k) = pins.candidates_k {
+            self.config.candidates_k = k as usize;
+        }
+        tracing::debug!(
+            enabled = self.config.enabled,
+            per_article = self.config.per_article,
+            candidates_k = self.config.candidates_k,
+            "turn.rerank: read the turn's pinned rerank config"
+        );
+        self
+    }
 }
 
 impl Default for Rerank {
@@ -197,7 +223,15 @@ impl Runtime {
     /// The field is `lane_sources` and the method is `lane()` on purpose: what
     /// the process holds and what a turn gets are different values, and the
     /// second is a snapshot of the first.
+    ///
+    /// A turn's rerank pins ([`super::capabilities::scope_rerank`]) are laid
+    /// over the snapshot here, so every read of `lane.rerank` in that turn
+    /// sees them and no other turn does.
     pub fn lane(&self) -> Lane {
-        self.lane_sources.snapshot()
+        let mut lane = self.lane_sources.snapshot();
+        if let Some(pins) = super::capabilities::current_rerank() {
+            lane.rerank = lane.rerank.pinned(pins);
+        }
+        lane
     }
 }
