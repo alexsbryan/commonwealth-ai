@@ -24,8 +24,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::types::{PhaseFailure, PipelinePhase};
-
 /// Canonical orchestration step within a `build` run. Maps 1:1 to
 /// the `Step` enum inside `sovereign-cli/src/enrich_cmd/build.rs`
 /// but lives here so downstream consumers (desktop, web) don't
@@ -80,27 +78,6 @@ impl BuildStep {
             Self::Configure => "Identify interpretive configurations (Phase 8)",
             Self::Report => "§12 schema validation",
             Self::Backfill => "Embed atoms into the ANN seed table (grounding)",
-        }
-    }
-
-    /// Which underlying `PipelinePhase` (if any) this step drives.
-    /// `Report` has no phase of its own — it reads every cached
-    /// phase to assemble the validation table. `Resolve` spans two
-    /// phases (3a + 3b) so it has no single mapping either; we
-    /// report it under `Questions` because its inputs come from the
-    /// Phase 1 cache.
-    pub const fn pipeline_phase(&self) -> Option<PipelinePhase> {
-        match self {
-            Self::Seed => Some(PipelinePhase::SeedExtraction),
-            Self::Extract => Some(PipelinePhase::Questions),
-            Self::Cluster => Some(PipelinePhase::AtlasClusters),
-            Self::Name => Some(PipelinePhase::AtlasNamedClusters),
-            Self::Resolve => None,
-            Self::Tensions => Some(PipelinePhase::Tensions),
-            Self::Gaps => Some(PipelinePhase::Gaps),
-            Self::Configure => None,
-            Self::Report => None,
-            Self::Backfill => None,
         }
     }
 }
@@ -313,59 +290,6 @@ impl EnrichProgress {
             | Self::Cancelled { corpus_id, .. } => corpus_id,
         }
     }
-
-    /// Adapt a Phase 1 failure captured by the runner into the
-    /// `ChapterFailed` variant. Used by the orchestrator so it
-    /// doesn't have to re-serialise Phase 1 failures by hand.
-    pub fn from_phase1_failure(corpus_id: &str, f: &PhaseFailure) -> Self {
-        let kind = match f.kind {
-            super::types::PhaseFailureKind::ThinkTruncated => "think_truncated",
-            super::types::PhaseFailureKind::ParseDrift => "parse_drift",
-            super::types::PhaseFailureKind::ChatError => "chat_error",
-            super::types::PhaseFailureKind::DeadlineExceeded => "deadline_exceeded",
-            super::types::PhaseFailureKind::EmptyExtraction => "empty_extraction",
-            super::types::PhaseFailureKind::Skipped => "skipped",
-            super::types::PhaseFailureKind::UnresolvedEntityName => "unresolved_entity_name",
-            super::types::PhaseFailureKind::EntityMergeAmbiguous => "entity_merge_ambiguous",
-            super::types::PhaseFailureKind::UnresolvedRelationParticipant => {
-                "unresolved_relation_participant"
-            }
-            super::types::PhaseFailureKind::UnresolvedClaimAttribution => {
-                "unresolved_claim_attribution"
-            }
-            super::types::PhaseFailureKind::EndpointTypeMismatch => "endpoint_type_mismatch",
-            super::types::PhaseFailureKind::UnresolvedClaimSubject => "unresolved_claim_subject",
-            super::types::PhaseFailureKind::UnresolvedAttributeRef => "unresolved_attribute_ref",
-            super::types::PhaseFailureKind::NoClusterableItems => "no_clusterable_items",
-            super::types::PhaseFailureKind::ClusterNamingFailed => "cluster_naming_failed",
-            super::types::PhaseFailureKind::Other => "other",
-        };
-        // `subject` may carry a "chapter:<id>" prefix; strip it so
-        // the UI shows the bare id. Non-chapter subjects (resolution
-        // drops, for instance) shouldn't normally reach this helper
-        // but we handle them gracefully rather than asserting.
-        let chapter_id = f
-            .subject
-            .strip_prefix("chapter:")
-            .unwrap_or(f.subject.as_str())
-            .to_string();
-        Self::ChapterFailed {
-            corpus_id: corpus_id.to_string(),
-            chapter_id,
-            failure_kind: kind.to_string(),
-            reason: truncate_reason(&f.reason),
-        }
-    }
-}
-
-fn truncate_reason(s: &str) -> String {
-    const CAP: usize = 200;
-    let flat: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
-    if flat.chars().count() <= CAP {
-        flat
-    } else {
-        flat.chars().take(CAP - 1).collect::<String>() + "…"
-    }
 }
 
 /// Progress-emitting callback type used by the orchestrator.
@@ -476,39 +400,5 @@ mod tests {
                 exit_code: 1,
             },
         ]
-    }
-
-    #[test]
-    fn truncate_reason_collapses_whitespace_and_caps_at_200_chars() {
-        let long = "a ".repeat(300); // 600 chars, lots of whitespace
-        let out = truncate_reason(&long);
-        assert!(out.chars().count() <= 200);
-        // Hidden edge case: when truncation fires we append …, so
-        // the cap includes that character — pin it explicitly.
-        assert!(out.ends_with('…'));
-    }
-
-    #[test]
-    fn from_phase1_failure_strips_chapter_prefix_from_subject() {
-        use super::super::types::{PhaseFailure, PhaseFailureKind, PipelinePhase};
-        let f = PhaseFailure {
-            phase: PipelinePhase::Questions,
-            subject: "chapter:sec_0017".into(),
-            kind: PhaseFailureKind::ParseDrift,
-            reason: "parse error x".into(),
-            raw_response_head: None,
-        };
-        let evt = EnrichProgress::from_phase1_failure("bk", &f);
-        match evt {
-            EnrichProgress::ChapterFailed {
-                chapter_id,
-                failure_kind,
-                ..
-            } => {
-                assert_eq!(chapter_id, "sec_0017");
-                assert_eq!(failure_kind, "parse_drift");
-            }
-            _ => panic!("expected ChapterFailed variant"),
-        }
     }
 }
