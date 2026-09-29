@@ -64,7 +64,7 @@ use tempfile::TempDir;
 
 use crate::common::corpus_at;
 use crate::fold_ingest_cross_node_merge_e2e::{
-    actor, key, leader_node, node_state_with_seed, peer_node, probe_canonical, ring,
+    actor, engine_at, key, leader_node, node_state_with_seed, peer_node, probe_canonical, ring,
     terminal_handoff, terminal_handoff_ops, write_donor_partition, LEADER_ONLY_TERM,
 };
 
@@ -270,7 +270,8 @@ async fn the_older_disk_guard_is_dark_without_a_total_shards_stamp() {
          carries no `total_shards`. Meta: {dark_meta}",
     );
 
-    let outcome = try_recover_stranded_partitions(&dir, DARK).await;
+    let engine = engine_at(&dir, leader_node());
+    let outcome = try_recover_stranded_partitions(&*engine, &dir, DARK).await;
     let probe = probe_canonical(&dir, DARK).await;
     assert!(
         probe.canonical_exists && probe.leader_term_reachable && !probe.peer_term_reachable,
@@ -294,7 +295,7 @@ async fn the_older_disk_guard_is_dark_without_a_total_shards_stamp() {
         .set_total_shards(2)
         .expect("stamp total_shards");
 
-    let armed_outcome = try_recover_stranded_partitions(&dir, ARMED).await;
+    let armed_outcome = try_recover_stranded_partitions(&*engine, &dir, ARMED).await;
     assert!(
         matches!(
             armed_outcome,

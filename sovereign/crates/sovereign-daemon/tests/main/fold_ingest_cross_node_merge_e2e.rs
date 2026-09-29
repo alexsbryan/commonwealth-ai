@@ -992,7 +992,12 @@ async fn two_donors_on_one_node_do_land_both_slices_in_the_canonical() {
 
     let outcome = format!(
         "{:?}",
-        sovereign_grants::auto_recover::try_recover_stranded_partitions(&index_dir, CORPUS).await
+        sovereign_grants::auto_recover::try_recover_stranded_partitions(
+            &*engine_at(&index_dir, leader_node()),
+            &index_dir,
+            CORPUS
+        )
+        .await
     );
     let probe = probe_canonical(&index_dir, CORPUS).await;
 

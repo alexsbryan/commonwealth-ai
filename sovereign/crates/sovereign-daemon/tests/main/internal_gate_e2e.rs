@@ -430,7 +430,7 @@ async fn shard_pull_statuses(stamped: bool) -> Vec<u16> {
         index_dir.clone(),
         embed,
     ));
-    let manager = ShardManager::new(Arc::clone(&engine), Arc::new(SoloReplicatedKv::new()));
+    let manager = ShardManager::new(engine.clone(), Arc::new(SoloReplicatedKv::new()));
 
     let (name, value) = member_stamp();
     let local = NodeId::from_u128(1);

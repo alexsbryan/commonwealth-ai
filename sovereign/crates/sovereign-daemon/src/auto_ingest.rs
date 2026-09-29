@@ -409,6 +409,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             }
 
             let outcome = sovereign_grants::auto_recover::try_recover_stranded_partitions(
+                &**engine,
                 engine.index_dir(),
                 corpus_id,
             )

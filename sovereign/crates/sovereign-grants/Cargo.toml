@@ -27,6 +27,9 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# `IngestPortDouble`: grants' tests drive their own code against ingest's
+# merge port; the merge itself is proven on the engine (phase-b-47).
+corpus-index = { workspace = true, features = ["test-doubles"] }
 
 [lints]
 workspace = true

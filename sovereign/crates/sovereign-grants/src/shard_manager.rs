@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::merge::PartitionMergePort;
+use corpus_index::source::CorpusReadPort;
 use corpus_index::{corpus::Corpus, index::CorpusIndex, types::IndexInfo};
 use kernel_types::{HandoffId, NodeId};
 use oicp_types::work_queue::{IngestionHandoff, PartitionStatus};
@@ -11,7 +12,7 @@ use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_contracts::venue_host::ShardTransferLedger;
 
 pub struct ShardManager {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn PartitionMergePort>,
     mesh_store: Arc<dyn ReplicatedKv>,
     /// Optional emitter for `ShardTransferred` events on the merge
     /// leader's pull path. Optional so existing call sites that
@@ -65,7 +66,7 @@ pub struct MergePlan<'a> {
 }
 
 impl ShardManager {
-    pub fn new(engine: Arc<CorpusEngine>, mesh_store: Arc<dyn ReplicatedKv>) -> Self {
+    pub fn new(engine: Arc<dyn PartitionMergePort>, mesh_store: Arc<dyn ReplicatedKv>) -> Self {
         Self {
             engine,
             mesh_store,
@@ -378,7 +379,7 @@ impl ShardManager {
     ///
     /// # `Ok(Some(info))` means REACHABLE, and that is new
     ///
-    /// The finalize — [`corpus_engine::finalize_canonical`] — is the last
+    /// The finalize — [`PartitionMergePort::finalize_canonical`] — is the last
     /// step of this function rather than something each caller does after it
     /// (cw-lift 5g B8). Until then it was neither: `merge_partitions` writes
     /// the chunks and stops, so both callers produced a canonical carrying
@@ -617,7 +618,7 @@ impl ShardManager {
             Ok(index) => index,
             Err(e) => return Err(self.not_finalized(corpus_id, &output_dir, &info, e)),
         };
-        if let Err(e) = corpus_engine::finalize_canonical(&canonical, corpus_id, None).await {
+        if let Err(e) = self.engine.finalize_canonical(&canonical, corpus_id).await {
             return Err(self.not_finalized(corpus_id, &output_dir, &info, e));
         }
 
@@ -633,7 +634,7 @@ impl ShardManager {
     /// Report "the chunks merged and the finalize did not" as its own fact.
     ///
     /// One spelling for both ways the finalize can be missed — the canonical
-    /// would not open, or [`corpus_engine::finalize_canonical`] itself failed
+    /// would not open, or [`PartitionMergePort::finalize_canonical`] itself failed
     /// — because the STATE they leave behind is identical and a caller that
     /// had to tell them apart would be deciding the same thing twice
     /// (ARCH §10.6). The `error!` lives here, at the site that discovers it,
@@ -813,20 +814,19 @@ impl VerifyReport {
 /// "re-checked N chunks — all matched"). Mirrors the prebuilt-restore re-embed
 /// precedent (`corpus-engine` `try_restore_prebuilt`).
 pub async fn verify_merge_sample(
-    engine: &CorpusEngine,
+    engine: &dyn CorpusReadPort,
     corpus_id: &str,
     sample_n: usize,
     epsilon: f32,
 ) -> corpus_index::Result<VerifyReport> {
     let index = engine.open_index_for_corpus(corpus_id).await?;
     let samples = index.sample_chunks_with_embeddings(sample_n).await?;
-    let embed = engine.embed_fn();
 
     let mut passed = 0u32;
     let mut min_cosine = 1.0f32;
     let mut failures = Vec::new();
     for (i, (text, stored)) in samples.iter().enumerate() {
-        let local = match (embed)(text.as_str()).await {
+        let local = match engine.embed(text.as_str()).await {
             Ok(v) => v,
             Err(e) => {
                 tracing::warn!(

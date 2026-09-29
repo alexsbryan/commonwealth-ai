@@ -81,7 +81,7 @@ async fn pull_once(mesh_proof: Option<(&str, &str)>) -> String {
         index_dir.clone(),
         embed,
     ));
-    let manager = ShardManager::new(Arc::clone(&engine), Arc::new(SoloReplicatedKv::new()));
+    let manager = ShardManager::new(engine.clone(), Arc::new(SoloReplicatedKv::new()));
 
     let local = NodeId::from_u128(1);
     let peer = NodeId::from_u128(2);

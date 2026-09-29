@@ -79,7 +79,7 @@ pub async fn fold_recovery(state: &AppState) -> FoldRecovery {
     let local_node_id = state.identity_reader().current();
     let peer_shard_base_urls = peer_control_urls(state, local_node_id).await;
     FoldRecovery {
-        corpus_engine: state.inner.node.corpus_engine.clone(),
+        corpus_engine: state.inner.node.corpus_engine.clone().map(|e| e as _),
         mesh_store: Arc::clone(&state.inner.store.mesh_store),
         contribution_emitter: shard_transfer_ledger(state),
         local_node_id,
@@ -250,7 +250,7 @@ pub async fn corpus_ingest_partition(
                 // leader observes pull completion). The emit is
                 // attributed to the peer that shipped the bytes —
                 // see `aggregate` for the pull-emission convention.
-                let shard_mgr = ShardManager::new(Arc::clone(&engine), mesh_store)
+                let shard_mgr = ShardManager::new(engine.clone(), mesh_store)
                     .with_emitter(shard_transfer_ledger(&state_clone));
                 match shard_mgr
                     .coordinate_merge(
@@ -595,7 +595,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: kernel_types::HandoffId) {
         let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
         let merge_proof = owned_mesh_proof(&state).await;
 
-        let shard_mgr = ShardManager::new(Arc::clone(&engine), mesh_store)
+        let shard_mgr = ShardManager::new(engine.clone(), mesh_store)
             .with_emitter(shard_transfer_ledger(&state))
             .with_work_queue(Arc::clone(&state.inner.ingest.work_queue));
 
@@ -623,7 +623,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: kernel_types::HandoffId) {
                 const VERIFY_SAMPLE_N: usize = 24;
                 const VERIFY_EPSILON: f32 = 1e-3;
                 match sovereign_grants::verify_merge_sample(
-                    &engine,
+                    &*engine,
                     &info.corpus_id,
                     VERIFY_SAMPLE_N,
                     VERIFY_EPSILON,

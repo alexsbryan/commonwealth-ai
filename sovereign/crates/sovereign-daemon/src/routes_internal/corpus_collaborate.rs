@@ -416,6 +416,7 @@ pub async fn corpus_collaborate(
                 // discovery details. Cheap when nothing to do
                 // (deterministic short-circuits before the cooldown).
                 let outcome = sovereign_grants::auto_recover::try_recover_stranded_partitions(
+                    &**engine,
                     engine.index_dir(),
                     req.corpus_id.as_str(),
                 )

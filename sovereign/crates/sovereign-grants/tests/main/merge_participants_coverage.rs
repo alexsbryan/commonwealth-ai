@@ -197,7 +197,7 @@ pub(crate) async fn fixture() -> Fixture {
         unused_embed_fn(),
     ));
     let mesh_store = Arc::new(SoloReplicatedKv::new());
-    let manager = ShardManager::new(Arc::clone(&engine), mesh_store.clone());
+    let manager = ShardManager::new(engine.clone(), mesh_store.clone());
 
     Fixture {
         _tmp: tmp,

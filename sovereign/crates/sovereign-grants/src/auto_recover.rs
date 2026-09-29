@@ -33,7 +33,8 @@
 //!
 //! `auto_recover` plugs that gap. When the dispatcher's WARN site
 //! is about to fire, we instead try the local on-disk merge via
-//! `corpus_engine::merge_partitions_into_canonical`. If it
+//! ingest's `merge_partitions_into_canonical` (through
+//! [`PartitionMergePort`]). If it
 //! succeeds, the canonical exists, `installed_indexes()` will pick
 //! it up on the next tick, and `hosted_corpora` gossip will
 //! re-advertise. If it fails (no partitions, embedding mismatch,
@@ -56,8 +57,9 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use corpus_engine::CorpusEngine;
 use corpus_index::corpus::Corpus;
+use corpus_index::ingest_port::merge::{MergePhaseProgress, PartitionMergePort};
+use corpus_index::source::CorpusReadPort;
 use kernel_types::{HandoffId, NodeId};
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_contracts::venue_host::ShardTransferLedger;
@@ -152,7 +154,7 @@ pub enum RecoveryOutcome {
     /// The chunks merged into the canonical directory and the finalize that
     /// makes the corpus VISIBLE did not — `build_indexes` /
     /// `mark_indexes_built` / `mark_ingestion_complete` / the fingerprint
-    /// stamp, in `corpus_engine::finalize_canonical`.
+    /// stamp, in `PartitionMergePort::finalize_canonical`.
     ///
     /// Carried here from [`corpus_index::Error::MergedNotFinalized`], which
     /// the merge itself now returns; this enum keeps its own spelling because
@@ -200,8 +202,9 @@ pub enum RecoveryOutcome {
 /// Each field is one read the function made for itself while it lived in
 /// `sovereign-api`.
 pub struct FoldRecovery {
-    /// This node's corpus engine; `None` before one is booted.
-    pub corpus_engine: Option<Arc<CorpusEngine>>,
+    /// Ingest's merge port on this node (its engine, handed in by the
+    /// daemon); `None` before one is booted.
+    pub corpus_engine: Option<Arc<dyn PartitionMergePort>>,
     /// The mesh store the shard manager pulls partitions through.
     pub mesh_store: Arc<dyn ReplicatedKv>,
     /// Ledger fact port for `ShardTransferred` events on the pull path.
@@ -250,7 +253,7 @@ pub struct FoldRecovery {
 /// # The merge is not the end of the job, and the merge knows it
 ///
 /// A merged chunk set is not yet a corpus anyone can reach: the finalize —
-/// [`corpus_engine::finalize_canonical`] — is what `installed_indexes()`,
+/// [`PartitionMergePort::finalize_canonical`] — is what `installed_indexes()`,
 /// `usable_indexes()` and `hosted_corpora` gossip all gate on. This function
 /// used to run it, and `coordinate_merge` (the other caller of the same
 /// merge) did not, so a queue-mode merge produced a canonical nothing could
@@ -363,7 +366,8 @@ pub async fn merge_from_fold_coverage(
 
 /// Attempt to merge all `<corpus>-partition-*/` directories under
 /// `index_dir` into a canonical `<corpus>/`. See module-level
-/// docs for the motivating scenario.
+/// docs for the motivating scenario. This function decides whether to
+/// merge; `merge`, ingest's port, does the merge and the projection.
 ///
 /// Synchronous interface (`async fn` because the underlying
 /// `merge_partitions_into_canonical` is async). The caller is
@@ -377,7 +381,11 @@ pub async fn merge_from_fold_coverage(
 /// stamp — they're cheap, deterministic checks that should always
 /// re-evaluate fresh.
 #[allow(clippy::disallowed_methods)] // real $HOME: the alignment projector materializes rows back to ~/.claude/
-pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) -> RecoveryOutcome {
+pub async fn try_recover_stranded_partitions(
+    merge: &dyn PartitionMergePort,
+    index_dir: &Path,
+    corpus_id: &str,
+) -> RecoveryOutcome {
     // Cheap pre-checks first — these don't consume the cooldown.
     // `Corpus` is corpus-engine's published noun for "which corpus, where":
     // the canonical directory, this node's partition dirs and the meta sidecar
@@ -526,19 +534,19 @@ pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) 
     // human-readable variant lives in the CLI; here every phase
     // boundary becomes a structured info! event for journalctl /
     // sovereign log scraping.
-    let progress: std::sync::Arc<dyn Fn(corpus_engine::MergePhaseProgress) + Send + Sync> = {
+    let progress: std::sync::Arc<dyn Fn(MergePhaseProgress) + Send + Sync> = {
         let corpus_id = corpus_id.to_string();
         std::sync::Arc::new(move |phase| {
             let corpus = corpus_id.clone();
             match phase {
-                corpus_engine::MergePhaseProgress::DiscoveryComplete { partition_count } => {
+                MergePhaseProgress::DiscoveryComplete { partition_count } => {
                     tracing::info!(
                         %corpus,
                         partition_count,
                         "auto_recover: discovery complete"
                     )
                 }
-                corpus_engine::MergePhaseProgress::MergeComplete {
+                MergePhaseProgress::MergeComplete {
                     chunks_merged,
                     chunks_deduped,
                 } => tracing::info!(
@@ -547,11 +555,11 @@ pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) 
                     chunks_deduped,
                     "auto_recover: chunk-merge phase complete"
                 ),
-                corpus_engine::MergePhaseProgress::MetaStamped => tracing::info!(
+                MergePhaseProgress::MetaStamped => tracing::info!(
                     %corpus,
                     "auto_recover: canonical meta stamped"
                 ),
-                corpus_engine::MergePhaseProgress::BuildSubPhase { done, total } => {
+                MergePhaseProgress::BuildSubPhase { done, total } => {
                     tracing::info!(
                         %corpus,
                         done,
@@ -559,7 +567,7 @@ pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) 
                         "auto_recover: build_indexes sub-phase"
                     )
                 }
-                corpus_engine::MergePhaseProgress::Complete => tracing::info!(
+                MergePhaseProgress::Complete => tracing::info!(
                     %corpus,
                     "auto_recover: canonical built and marked complete"
                 ),
@@ -567,12 +575,9 @@ pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) 
         })
     };
 
-    let outcome = match corpus_engine::merge_partitions_into_canonical(
-        index_dir,
-        corpus_id,
-        Some(progress),
-    )
-    .await
+    let outcome = match merge
+        .merge_partitions_into_canonical(index_dir, corpus_id, Some(progress))
+        .await
     {
         Ok(report) => {
             tracing::info!(
@@ -593,7 +598,7 @@ pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) 
             // safe to call unconditionally.
             if let Some(home) = dirs::home_dir() {
                 let canonical_path = index_dir.join(corpus_id);
-                match corpus_engine::alignment_projector::project(&canonical_path, &home).await {
+                match merge.project_alignment(&canonical_path, &home).await {
                     Ok(p) => {
                         if p.wrote > 0 || p.skipped_local_newer > 0 || p.swept_incoming > 0 {
                             tracing::info!(
@@ -641,6 +646,7 @@ pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_index::ingest_port::double::IngestPortDouble;
 
     #[tokio::test]
     async fn returns_already_has_canonical_when_canonical_exists() {
@@ -649,14 +655,16 @@ mod tests {
         std::fs::create_dir_all(canonical_meta.parent().unwrap()).unwrap();
         std::fs::write(&canonical_meta, "{}").unwrap();
 
-        let outcome = try_recover_stranded_partitions(dir.path(), "foo").await;
+        let outcome =
+            try_recover_stranded_partitions(&IngestPortDouble::new(), dir.path(), "foo").await;
         assert!(matches!(outcome, RecoveryOutcome::AlreadyHasCanonical));
     }
 
     #[tokio::test]
     async fn returns_not_enough_partitions_when_no_partition_dirs() {
         let dir = tempfile::tempdir().unwrap();
-        let outcome = try_recover_stranded_partitions(dir.path(), "absent").await;
+        let outcome =
+            try_recover_stranded_partitions(&IngestPortDouble::new(), dir.path(), "absent").await;
         assert!(matches!(outcome, RecoveryOutcome::NotEnoughPartitions));
     }
 
@@ -681,7 +689,9 @@ mod tests {
         std::fs::create_dir_all(&partition).unwrap();
         std::fs::write(Corpus::meta_in(&partition), r#"{"processed_shards":[0]}"#).unwrap();
 
-        let outcome = try_recover_stranded_partitions(dir.path(), "commonwealth").await;
+        let outcome =
+            try_recover_stranded_partitions(&IngestPortDouble::new(), dir.path(), "commonwealth")
+                .await;
         assert!(
             matches!(outcome, RecoveryOutcome::CanonicalDirectoryReserved),
             "expected CanonicalDirectoryReserved, got {outcome:?}",
@@ -692,7 +702,9 @@ mod tests {
         // is cheap and lets recovery resume the moment the SCIP-
         // owned directory goes away (e.g. after a `sovereign
         // corpus remove` flow).
-        let outcome2 = try_recover_stranded_partitions(dir.path(), "commonwealth").await;
+        let outcome2 =
+            try_recover_stranded_partitions(&IngestPortDouble::new(), dir.path(), "commonwealth")
+                .await;
         assert!(matches!(
             outcome2,
             RecoveryOutcome::CanonicalDirectoryReserved
@@ -726,7 +738,8 @@ mod tests {
         )
         .unwrap();
 
-        let outcome = try_recover_stranded_partitions(dir.path(), "foo").await;
+        let outcome =
+            try_recover_stranded_partitions(&IngestPortDouble::new(), dir.path(), "foo").await;
         match outcome {
             RecoveryOutcome::IncompleteCoverage {
                 covered,
@@ -746,7 +759,8 @@ mod tests {
         // Cooldown was NOT stamped on this path — a follow-up call
         // should re-evaluate (and bail again, since the on-disk
         // state is unchanged).
-        let outcome2 = try_recover_stranded_partitions(dir.path(), "foo").await;
+        let outcome2 =
+            try_recover_stranded_partitions(&IngestPortDouble::new(), dir.path(), "foo").await;
         assert!(
             matches!(outcome2, RecoveryOutcome::IncompleteCoverage { .. }),
             "second call should re-evaluate, not be cooldown-blocked; got {:?}",
@@ -784,12 +798,14 @@ mod tests {
         std::fs::create_dir_all(&p1u).unwrap();
         std::fs::write(Corpus::meta_in(&p1u), r#"{"processed_shards":[0,1]}"#).unwrap();
 
-        let outcome = try_recover_stranded_partitions(dir.path(), &unique_corpus).await;
+        let port = IngestPortDouble::new();
+        let outcome = try_recover_stranded_partitions(&port, dir.path(), &unique_corpus).await;
         assert!(
             !matches!(outcome, RecoveryOutcome::IncompleteCoverage { .. }),
             "must NOT short-circuit with IncompleteCoverage when total_shards is absent; got {:?}",
             outcome
         );
+        assert_eq!(port.calls(), vec!["merge_partitions_into_canonical"]);
     }
 
     #[tokio::test]
@@ -814,12 +830,14 @@ mod tests {
         )
         .unwrap();
 
-        let outcome = try_recover_stranded_partitions(dir.path(), &unique_corpus).await;
+        let port = IngestPortDouble::new();
+        let outcome = try_recover_stranded_partitions(&port, dir.path(), &unique_corpus).await;
         assert!(
             !matches!(outcome, RecoveryOutcome::IncompleteCoverage { .. }),
             "complete local coverage must not trigger IncompleteCoverage; got {:?}",
             outcome
         );
+        assert_eq!(port.calls(), vec!["merge_partitions_into_canonical"]);
     }
 
     #[tokio::test]
@@ -844,14 +862,18 @@ mod tests {
         std::fs::create_dir_all(&real_partition).unwrap();
         std::fs::write(Corpus::meta_in(&real_partition), "{}").unwrap();
 
-        let first = try_recover_stranded_partitions(dir.path(), &unique_corpus).await;
+        let first =
+            try_recover_stranded_partitions(&IngestPortDouble::new(), dir.path(), &unique_corpus)
+                .await;
         assert!(
             matches!(first, RecoveryOutcome::Failed(_)),
             "first attempt with junk meta should fail; got {:?}",
             first
         );
 
-        let second = try_recover_stranded_partitions(dir.path(), &unique_corpus).await;
+        let second =
+            try_recover_stranded_partitions(&IngestPortDouble::new(), dir.path(), &unique_corpus)
+                .await;
         assert!(
             matches!(second, RecoveryOutcome::InCooldown),
             "second attempt inside cooldown should be blocked; got {:?}",
@@ -883,7 +905,9 @@ mod tests {
         )
         .unwrap();
 
-        let outcome = try_recover_stranded_partitions(dir.path(), &unique_corpus).await;
+        let outcome =
+            try_recover_stranded_partitions(&IngestPortDouble::new(), dir.path(), &unique_corpus)
+                .await;
         assert!(
             matches!(outcome, RecoveryOutcome::NotEnoughPartitions),
             "in-progress partition should short-circuit as NotEnoughPartitions \
