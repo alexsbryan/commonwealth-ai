@@ -59,35 +59,8 @@ impl SourceFileManifest {
     }
 }
 
-/// Per-file entry in a [`SourceFileManifest`].
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SourceFileRecord {
-    /// Zero-based position in the sorted HuggingFace parquet shard list.
-    pub file_index: usize,
-    /// Filename only, e.g. `"train-00021-of-00041.parquet"`.
-    pub filename: String,
-    /// Raw file size at download time; used to estimate storage requirements.
-    pub size_bytes: u64,
-    pub status: SourceFileStatus,
-}
-
-/// Lifecycle state of a single source file within the ingestion pipeline.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "state")]
-pub enum SourceFileStatus {
-    Pending,
-    InProgress {
-        started_at: DateTime<Utc>,
-    },
-    Complete {
-        /// Number of chunks written to the LanceDB index from this file.
-        chunks_indexed: u64,
-        completed_at: DateTime<Utc>,
-    },
-    Failed {
-        reason: String,
-    },
-}
+// The ingest port's vocabulary lives beside the port (pb-ingest-dial-daemon-ports).
+pub use corpus_index::ingest_port::daemon::{SourceFileRecord, SourceFileStatus};
 
 // ─── Reconstruction report ─────────────────────────────────────────────────
 

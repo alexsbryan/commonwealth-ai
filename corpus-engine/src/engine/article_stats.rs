@@ -49,49 +49,8 @@ const SAMPLE_BYTES: u64 = 100 * 1024 * 1024;
 /// no articles — highly unlikely for real corpora.
 const MIN_SAMPLE_ARTICLES: u64 = 10;
 
-/// Persistent snapshot of the sampler's output. Matches the on-disk
-/// sidecar JSON shape exactly.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ArticleStats {
-    /// Estimated total number of JSONL lines (articles) in the
-    /// extracted file. For tiny files where the whole thing was
-    /// scanned, this is exact.
-    pub total_articles: u64,
-    /// Mean sections per article in the sample. `1.0` means each
-    /// article contributes one extracted doc (e.g. lead-only); `2.5`
-    /// means 2.5 sections on average, typical of Wikipedia.
-    pub mean_sections_per_article: f64,
-    /// Product of the two above — the best denominator for
-    /// `committed_iter_pos / total_sections_estimate` percents.
-    pub total_sections_estimate: u64,
-    /// Source-file mtime (unix seconds) captured at sample time.
-    /// Used for cache invalidation.
-    pub source_mtime_secs: u64,
-    /// Source-file size in bytes captured at sample time.
-    pub source_size_bytes: u64,
-    /// When the sample ran, unix seconds. Purely diagnostic.
-    pub sampled_at_secs: u64,
-}
-
-impl ArticleStats {
-    /// Returns `true` when this cached snapshot was generated from a
-    /// source file whose `(mtime, size)` still matches. Any drift
-    /// invalidates the estimate — the file has been re-extracted or
-    /// appended to since we sampled.
-    pub fn matches_source(&self, path: &Path) -> bool {
-        let Ok(meta) = std::fs::metadata(path) else {
-            return false;
-        };
-        let size = meta.len();
-        let mtime = meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        size == self.source_size_bytes && mtime == self.source_mtime_secs
-    }
-}
+// The ingest port's vocabulary lives beside the port (pb-ingest-dial-daemon-ports).
+pub use corpus_index::ingest_port::daemon::ArticleStats;
 
 /// Compute (or recompute) `ArticleStats` for the extracted JSONL at
 /// `source_path`. Writes a sidecar next to the source so repeated

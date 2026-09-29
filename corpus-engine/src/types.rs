@@ -69,19 +69,8 @@ pub struct ShardInfo {
     pub size_bytes: u64,
 }
 
-// ─── Ingest Result ──────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IngestResult {
-    pub corpus_id: String,
-    pub chunks_created: u64,
-    pub index_size_bytes: u64,
-    pub duration_secs: u64,
-    /// Documents skipped due to extraction errors (e.g. invalid UTF-8, corrupt lines).
-    /// Non-zero warrants inspection of the source file on the ingesting node.
-    #[serde(default)]
-    pub docs_skipped: u64,
-}
+// The ingest port's vocabulary lives beside the port (pb-ingest-dial-daemon-ports).
+pub use corpus_index::ingest_port::daemon::IngestResult;
 
 // ─── Corpus Spec ────────────────────────────────────────
 

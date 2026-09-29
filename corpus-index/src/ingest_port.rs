@@ -21,8 +21,11 @@ use crate::{Error, Result};
 #[cfg(any(test, feature = "test-doubles"))]
 pub mod double;
 
+pub mod cancel;
+pub mod daemon;
 pub mod enrich_config;
 pub mod merge;
+pub mod newsworthy;
 pub mod tiered;
 
 /// Thread-safe ingest progress callback. `Sync` because an ingest holds an

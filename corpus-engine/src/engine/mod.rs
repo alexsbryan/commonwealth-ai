@@ -26,56 +26,8 @@ pub use status::{
 };
 pub use tool_ports::FolderTiered;
 
-/// Consolidated on-disk state for a single corpus — what
-/// [`CorpusEngine::corpus_disk_status`] reports.
-///
-/// Intentionally flat and serde-friendly so the commonwealth-api
-/// `/internal/corpus/status` handler can drop it straight into its
-/// response.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CorpusDiskStatus {
-    pub corpus_id: String,
-    /// Canonical `<corpus>/` directory exists with a meta file.
-    pub canonical_present: bool,
-    /// Partition-of-self `<corpus>-partition-<self>/` directory
-    /// exists with a meta file.
-    pub partition_present: bool,
-    /// `ingestion_in_progress=true` on the canonical meta.
-    pub canonical_in_progress: bool,
-    /// `ingestion_in_progress=true` on the partition-of-self meta.
-    pub partition_in_progress: bool,
-    /// Latest `committed_iter_pos` across partition-of-self and
-    /// canonical (partition preferred when both are present).
-    pub committed_iter_pos: u64,
-    /// ZIP shard indices known to have been fully committed —
-    /// merged across canonical and every partition subdirectory
-    /// for this corpus.
-    pub shards_completed: Vec<usize>,
-    /// Total JSONL shard count inside the source ZIP. `0` when the
-    /// corpus does not have a multi-shard source (HF parquet, plain
-    /// JSONL, code corpora) — the UI treats that as "no shard-based
-    /// percent estimate available".
-    pub shards_total: usize,
-}
-
-impl CorpusDiskStatus {
-    /// Best-effort completion estimate in `[0.0, 1.0]`, or `None`
-    /// when the on-disk signals don't support a sensible estimate.
-    ///
-    /// Current heuristic: for multi-shard JSONL corpora the shard
-    /// completion ratio is both honest and responsive (processed
-    /// shards tick up coarsely but reliably). For everything else we
-    /// return `None` and let the UI fall back to a phase label — the
-    /// raw `IngestProgress` percent isn't reliable enough to bless as
-    /// a standalone completion estimate without more context.
-    pub fn estimated_fraction(&self) -> Option<f32> {
-        if self.shards_total > 0 {
-            Some(self.shards_completed.len() as f32 / self.shards_total as f32)
-        } else {
-            None
-        }
-    }
-}
+// The ingest port's vocabulary lives beside the port (pb-ingest-dial-daemon-ports).
+pub use corpus_index::ingest_port::daemon::CorpusDiskStatus;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
