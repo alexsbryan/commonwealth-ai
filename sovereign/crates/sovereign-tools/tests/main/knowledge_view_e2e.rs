@@ -278,7 +278,6 @@ async fn personal_view_ingest_plus_planted_skeleton_splices_into_context() {
     let manager = Arc::new(
         KnowledgeViewManager::new(
             engine.clone(),
-            stub_inference(),
             db_path.clone(),
             vec!["inner-work".into()],
         )
@@ -450,7 +449,7 @@ async fn splice_without_any_enrichment_still_sets_some_empty_vec() {
     // called out as the biggest risk.
     let (engine, _tmp, db_path) = boot_engine().await;
     let manager = Arc::new(
-        KnowledgeViewManager::new(engine, stub_inference(), db_path, vec!["inner-work".into()])
+        KnowledgeViewManager::new(engine, db_path, vec!["inner-work".into()])
             .await,
     );
     // Deliberately skip init() — no ingest, no enrichment, no
@@ -647,7 +646,6 @@ async fn cross_view_digest_surfaces_resonance_across_personal_and_conversational
     let manager = Arc::new(
         KnowledgeViewManager::new_with_notes_path(
             engine.clone(),
-            stub_inference(),
             db_path.clone(),
             notes_path.clone(),
             vec![],
@@ -735,7 +733,6 @@ async fn cross_view_digest_suppressed_under_local_only_skill() {
     let manager = Arc::new(
         KnowledgeViewManager::new_with_notes_path(
             engine,
-            stub_inference(),
             db_path,
             notes_path,
             vec!["inner-work".into()],

@@ -534,7 +534,6 @@ pub(super) async fn run_daemon(
     let knowledge_view_http = bootstrap::build_knowledge_view_http(
         &data_dir,
         Arc::clone(&engine),
-        Arc::clone(&provider),
         state_store_concrete.clone(),
     )
     .await;

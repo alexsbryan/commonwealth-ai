@@ -16,11 +16,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use corpus_engine::engine::CorpusEngine;
-use corpus_engine::enrichment::field_engine::FieldModelEngine;
-use corpus_engine::recipe::Recipe;
-use corpus_engine::types::InferenceFn;
-use corpus_engine::EnrichmentProgress;
+use corpus_index::ingest_port::{FieldModelError, LocalCorpusPort};
 use tokio::sync::{mpsc, RwLock};
 
 use super::view_kind::ViewKind;
@@ -78,8 +74,7 @@ pub(crate) enum ViewEvent {
 /// so memory writes never trigger synchronous enrichment on the
 /// witness turn. `None` (never installed) = feature inert.
 pub(crate) fn spawn_debouncer(
-    engine: Arc<CorpusEngine>,
-    inference: InferenceFn,
+    engine: Arc<dyn LocalCorpusPort>,
     views: Arc<RwLock<HashMap<String, ViewEntry>>>,
     mut rx: mpsc::UnboundedReceiver<ViewEvent>,
     mem_atlas: Arc<RwLock<Option<crate::mem_atlas::MemAtlasHandles>>>,
@@ -114,7 +109,7 @@ pub(crate) fn spawn_debouncer(
                             }
                             ViewEvent::Manual { view_id } => {
                                 // Manual triggers bypass the debounce window.
-                                run_enrichment(&engine, inference.clone(), &views, &view_id).await;
+                                run_enrichment(&engine, &views, &view_id).await;
                                 if view_id == ViewKind::Personal.id() {
                                     drain_memory_atlas(&mem_atlas, std::mem::take(&mut pending_memory_ids)).await;
                                 }
@@ -136,7 +131,7 @@ pub(crate) fn spawn_debouncer(
                 .map(|(k, _)| k.clone())
                 .collect();
             for view_id in ready {
-                run_enrichment(&engine, inference.clone(), &views, &view_id).await;
+                run_enrichment(&engine, &views, &view_id).await;
                 if view_id == ViewKind::Personal.id() {
                     drain_memory_atlas(&mem_atlas, std::mem::take(&mut pending_memory_ids)).await;
                 }
@@ -235,8 +230,7 @@ fn note(state: &mut HashMap<String, PendingView>, view_id: &str) {
 /// `FieldModelEngine`, and invokes `enrich()`. Soft-fails: logs and
 /// returns on any error so the debouncer loop keeps running.
 async fn run_enrichment(
-    engine: &Arc<CorpusEngine>,
-    inference: InferenceFn,
+    engine: &Arc<dyn LocalCorpusPort>,
     views: &Arc<RwLock<HashMap<String, ViewEntry>>>,
     view_id: &str,
 ) {
@@ -277,27 +271,15 @@ async fn run_enrichment(
         }
     };
 
-    let embed = engine.embed_fn();
-    let recipe: Recipe = match serde_json::from_value(recipe) {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!(view_id, error = %e, "failed to construct FieldModelEngine");
-            return;
+    // Ingest builds the FieldModelEngine from the recipe with its own
+    // embedder and enrichment inference, and logs each progress event.
+    match engine.enrich_field_model(&index, &recipe).await {
+        Ok(stats) => tracing::info!(view_id, stats, "enrichment complete"),
+        Err(FieldModelError::Construct(e)) => {
+            tracing::warn!(view_id, error = %e, "failed to construct FieldModelEngine")
         }
-    };
-    let field_engine = match FieldModelEngine::from_recipe(&recipe, embed, inference) {
-        Ok(e) => e,
-        Err(e) => {
-            tracing::warn!(view_id, error = %e, "failed to construct FieldModelEngine");
-            return;
+        Err(FieldModelError::Enrich(e)) => {
+            tracing::warn!(view_id, error = %e, "enrichment failed")
         }
-    };
-
-    let progress = |p: EnrichmentProgress| {
-        tracing::debug!(view_id, ?p, "enrichment progress");
-    };
-    match field_engine.enrich(&index, &progress).await {
-        Ok(stats) => tracing::info!(view_id, ?stats, "enrichment complete"),
-        Err(e) => tracing::warn!(view_id, error = %e, "enrichment failed"),
     }
 }

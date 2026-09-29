@@ -24,9 +24,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use corpus_engine::engine::CorpusEngine;
-use corpus_engine::types::{CorpusSpec, InferenceFn};
 use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
+use corpus_index::ingest_port::LocalCorpusPort;
 use sovereign_core::observer::StateStoreObserver;
 use sovereign_core::traits::LandscapeDigestProvider;
 use sovereign_core::types::{ConversationContext, LandscapeDigest};
@@ -82,11 +81,10 @@ const CROSS_VIEW_BUDGET_TOKENS: usize = ViewKind::CrossView.default_budget_token
 
 /// One manager per running Sovereign instance. Cheap to clone via `Arc`.
 ///
-/// The inference function passed to `KnowledgeViewManager::new` is
-/// captured by the debouncer task — it is not stored on the manager
-/// itself since all enrichment paths flow through the debouncer.
+/// Enrichment runs in the debouncer task, through ingest's port, with the
+/// engine's own embedder and enrichment inference.
 pub struct KnowledgeViewManager {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn LocalCorpusPort>,
     views: Arc<RwLock<HashMap<String, ViewEntry>>>,
     triggers: mpsc::UnboundedSender<ViewEvent>,
     /// Skill ids whose declared `privacy = "local_only"` means the
@@ -173,10 +171,11 @@ impl KnowledgeViewManager {
     /// `db_path` is the sovereign SQLite file (typically
     /// `~/.svrnmesh/sovereign.db`). `local_only_skill_ids` is the
     /// resolved set of skill ids whose conversations must be excluded
-    /// from the conversational view.
+    /// from the conversational view. Enrichment uses the engine's own
+    /// enrichment inference (`CorpusEngine::with_inference_fn`); an engine
+    /// with none reports it by name at each enrichment.
     pub async fn new(
-        engine: Arc<CorpusEngine>,
-        inference: InferenceFn,
+        engine: Arc<dyn LocalCorpusPort>,
         db_path: PathBuf,
         local_only_skill_ids: Vec<String>,
     ) -> Self {
@@ -184,14 +183,7 @@ impl KnowledgeViewManager {
             .parent()
             .map(|p| p.join("notes.db"))
             .unwrap_or_else(|| PathBuf::from("notes.db"));
-        Self::new_with_notes_path(
-            engine,
-            inference,
-            db_path,
-            notes_db_path,
-            local_only_skill_ids,
-        )
-        .await
+        Self::new_with_notes_path(engine, db_path, notes_db_path, local_only_skill_ids).await
     }
 
     /// Construct with an explicit path for the agent's working-notes
@@ -199,8 +191,7 @@ impl KnowledgeViewManager {
     /// when the notes file lives in a project-scoped directory rather
     /// than `~/.svrnmesh/`.
     pub async fn new_with_notes_path(
-        engine: Arc<CorpusEngine>,
-        inference: InferenceFn,
+        engine: Arc<dyn LocalCorpusPort>,
         db_path: PathBuf,
         notes_db_path: PathBuf,
         local_only_skill_ids: Vec<String>,
@@ -240,13 +231,7 @@ impl KnowledgeViewManager {
         let views = Arc::new(RwLock::new(views));
 
         let mem_atlas_handles = Arc::new(RwLock::new(None));
-        spawn_debouncer(
-            engine.clone(),
-            inference,
-            views.clone(),
-            rx,
-            mem_atlas_handles.clone(),
-        );
+        spawn_debouncer(engine.clone(), views.clone(), rx, mem_atlas_handles.clone());
 
         Self {
             engine,
@@ -865,8 +850,12 @@ impl KnowledgeViewManager {
         // Serialise with any concurrent enrichment for this view.
         let _guard = lock.lock().await;
         let path = recipe_to_tempfile(&recipe)?;
-        let spec = CorpusSpec::RecipePath(path);
-        let result = self.engine.ingest(&spec, None).await.map(|_| ());
+
+        let result = self
+            .engine
+            .ingest_recipe_path(&path, None)
+            .await
+            .map(|_| ());
         // Ingest can change the index (and eventually the skeleton
         // via downstream enrich) — invalidate digest entries for
         // this view so the next splice re-reads. The Phase B
@@ -920,9 +909,9 @@ impl LandscapeDigestProvider for KnowledgeViewManager {
     }
 }
 
-// ── Recipe → temp TOML (for CorpusSpec::RecipePath) ─────────
+// ── Recipe document → temp TOML (for the port's ingest_recipe_path) ─
 
-/// Materialise `recipe` as a TOML file for `CorpusSpec::RecipePath`.
+/// Materialise `recipe` as a TOML file for `LocalCorpusPort::ingest_recipe_path`.
 ///
 /// The filename is scoped to the CURRENT PROCESS (`<id>-<pid>.toml`), and that
 /// is load-bearing, not cosmetic. It used to be `<id>.toml` — one fixed path per
@@ -1060,12 +1049,11 @@ mod tests {
         let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
             Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
         });
-        let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
-            recipes_dir,
-            indexes_dir,
-            embed,
-        ));
-        KnowledgeViewManager::new(engine, infer, db_path, local_only).await
+        let engine = std::sync::Arc::new(
+            corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed)
+                .with_inference_fn(infer),
+        );
+        KnowledgeViewManager::new(engine, db_path, local_only).await
     }
 
     fn tmp_context() -> sovereign_core::types::ConversationContext {
@@ -1365,13 +1353,11 @@ mod tests {
         let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
             Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
         });
-        let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
-            recipes_dir,
-            indexes_dir.clone(),
-            embed,
-        ));
-        let mgr =
-            KnowledgeViewManager::new(engine, infer, db_path, vec!["inner-work".into()]).await;
+        let engine = std::sync::Arc::new(
+            corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir.clone(), embed)
+                .with_inference_fn(infer),
+        );
+        let mgr = KnowledgeViewManager::new(engine, db_path, vec!["inner-work".into()]).await;
 
         let mut ctx = tmp_context();
         mgr.splice_into(&mut ctx, Some("research-analyst")).await;
@@ -1419,13 +1405,11 @@ mod tests {
         let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
             Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
         });
-        let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
-            recipes_dir,
-            indexes_dir,
-            embed,
-        ));
-        let mgr =
-            KnowledgeViewManager::new(engine, infer, db_path, vec!["inner-work".into()]).await;
+        let engine = std::sync::Arc::new(
+            corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed)
+                .with_inference_fn(infer),
+        );
+        let mgr = KnowledgeViewManager::new(engine, db_path, vec!["inner-work".into()]).await;
 
         let mut ctx = tmp_context();
         mgr.splice_into(&mut ctx, Some("inner-work")).await;

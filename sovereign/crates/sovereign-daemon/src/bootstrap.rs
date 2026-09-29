@@ -1602,7 +1602,6 @@ pub fn build_mcp_surface(
 pub async fn build_knowledge_view_http(
     data_dir: &Path,
     engine: Arc<CorpusEngine>,
-    provider: Arc<dyn InferenceProvider>,
     notes: Arc<dyn sovereign_contracts::notes::AgentNotes>,
 ) -> axum::Router {
     // Knowledge-view HTTP surface — POST /v1/knowledge/landscape_digest.
@@ -1625,11 +1624,9 @@ pub async fn build_knowledge_view_http(
     // `MeshLandscapeDigestClient::new` and
     // `LandscapeDigestRequest.active_is_local_only`.
     let knowledge_view_db_path = data_dir.join("sovereign.db");
-    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
     let knowledge_view_manager = Arc::new(
         sovereign_tools::knowledge_view::KnowledgeViewManager::new(
-            Arc::clone(&engine),
-            inference_fn,
+            engine.clone(),
             knowledge_view_db_path,
             Vec::new(),
         )

@@ -54,16 +54,14 @@ async fn bare_manager() -> Arc<KnowledgeViewManager> {
     let infer: corpus_engine::InferenceFn = Arc::new(|_, _: Option<u32>| {
         Box::pin(async { Ok::<String, corpus_index::Error>("{}".into()) })
     });
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(
-        recipes_dir,
-        indexes_dir,
-        embed,
-    ));
+    let engine = Arc::new(
+        corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed).with_inference_fn(infer),
+    );
     // Leak the TempDir intentionally — it lives for the test process
     // duration anyway, and Drop ordering across spawn boundaries is
     // fiddly. Per-test temp prefix means no cross-test collision.
     std::mem::forget(tmp);
-    Arc::new(KnowledgeViewManager::new(engine, infer, db_path, vec![]).await)
+    Arc::new(KnowledgeViewManager::new(engine, db_path, vec![]).await)
 }
 
 /// Sanity that `CorpusResult` is actually re-exported from
