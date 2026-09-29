@@ -309,7 +309,7 @@ async fn run_turn(
             on_notice: None,
         };
         client
-            .run_turn(conversation_id, question, mode, None, &mut observer)
+            .run_turn(conversation_id, question, mode, None, None, &mut observer)
             .await
     };
 
