@@ -561,6 +561,59 @@ class CampaignTests(unittest.TestCase):
             self.assertEqual(result.outcome, ralph.Outcome.HALT)
             self.assertIn("without a commit", result.reason)
 
+    def _quota_session(self, tmp, heads, calls, *, limited_sessions=1):
+        """A session whose first `limited_sessions` runs end on the plan's
+        usage limit with no commit; the next one commits and finishes."""
+        def session(args, prompt, log):
+            calls.append(log)
+            pathlib.Path(log).parent.mkdir(parents=True, exist_ok=True)
+            if len(calls) <= limited_sessions:
+                pathlib.Path(log).write_text("working...\nYou've hit your usage limit · resets 3am\n")
+            else:
+                heads["h"] = "b" * 40
+                write(tmp, "ralph/DONE", "")
+        return session
+
+    def test_a_usage_limit_waits_and_redispatches_the_unit_without_a_stall(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            heads, calls = {"h": "a" * 40}, []
+            c = self.make(tmp, "- [ ] dm-a — depends []\n", max_stall=1,
+                          marker_timeout=24 * 3600,
+                          session_run=self._quota_session(tmp, heads, calls))
+            c.model = "m"
+            probes = iter([(False, "usage limit"), (False, "usage limit"), (True, "")])
+            with mock.patch.object(ralph, "head_of", side_effect=lambda *_: heads["h"]), \
+                    mock.patch.object(ralph, "probe_model", side_effect=lambda *a, **k: next(probes)):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.DONE)
+            self.assertEqual(len(calls), 2)
+
+    def test_a_quota_shaped_tail_the_probe_answers_is_still_a_stall(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            heads, calls = {"h": "a" * 40}, []
+            c = self.make(tmp, "- [ ] dm-a — depends []\n", max_stall=1,
+                          session_run=self._quota_session(tmp, heads, calls, limited_sessions=9))
+            c.model = "m"
+            with mock.patch.object(ralph, "head_of", side_effect=lambda *_: heads["h"]), \
+                    mock.patch.object(ralph, "probe_model", return_value=(True, "")):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertIn("without a commit", result.reason)
+
+    def test_a_usage_limit_that_outlasts_the_wait_limit_halts_naming_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            heads, calls = {"h": "a" * 40}, []
+            c = self.make(tmp, "- [ ] dm-a — depends []\n", max_stall=1,
+                          marker_timeout=2 * ralph.QUOTA_POLL_S,
+                          session_run=self._quota_session(tmp, heads, calls, limited_sessions=9))
+            c.model = "m"
+            with mock.patch.object(ralph, "head_of", side_effect=lambda *_: heads["h"]), \
+                    mock.patch.object(ralph, "probe_model", return_value=(False, "usage limit")):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertIn("usage limit did not clear", result.reason)
+            self.assertEqual(len(calls), 1)
+
     def test_commit_progresses_to_done(self):
         with tempfile.TemporaryDirectory() as tmp:
             heads = {"h": "a" * 40}

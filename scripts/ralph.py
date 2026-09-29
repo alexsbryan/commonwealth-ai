@@ -793,6 +793,28 @@ ERROR_SHAPE_RE = re.compile(
 PROBE_TIMEOUT_S = 45
 PROBE_PROMPT = "Reply with the single word OK."
 
+# A plan usage limit, as the worker's CLI reports it at the end of a session.
+# Matched only in the log's tail, then confirmed by a probe (`quota_confirmed`),
+# because a worker's own transcript can discuss rate limits in code.
+QUOTA_SHAPE_RE = re.compile(
+    r"(?i)\b(usage limit|limit reached|hit your (usage )?limit|rate.?limit(ed)?"
+    r"|quota|out of (extra )?usage)\b")
+QUOTA_TAIL_LINES = 30
+QUOTA_POLL_S = 600
+
+
+def quota_tail(log_path, lines=QUOTA_TAIL_LINES):
+    """The last quota-shaped line in the tail of a session log; empty when none
+    matches or the log is unreadable."""
+    try:
+        tail = pathlib.Path(log_path).read_text(errors="replace").splitlines()[-lines:]
+    except OSError:
+        return ""
+    for line in reversed(tail):
+        if QUOTA_SHAPE_RE.search(line):
+            return line.strip()[:200]
+    return ""
+
 
 def error_tail(text, limit=200):
     """The LAST error-shaped line of a transcript, truncated to one line a
@@ -1435,6 +1457,16 @@ class Campaign:
             if after != before:
                 stall = 0
             else:
+                # A session the plan's usage limit ended never ran; it is not a
+                # stalled row (principle 5: never-ran is not failed). Wait for
+                # the reset and re-dispatch the same unit, counting nothing.
+                cause = quota_tail(self._log_path(iteration))
+                if cause and self._quota_confirmed(cause):
+                    stopped = self._wait_out_quota(cause)
+                    if stopped is not None:
+                        return stopped
+                    iteration -= 1
+                    continue
                 stall += 1
                 say(f"no commit this iteration (stall {stall}/{self.max_stall})")
                 if stall >= self.max_stall:
@@ -1493,6 +1525,43 @@ class Campaign:
 
     def _log_path(self, iteration):
         return str(self.paths.p(self.paths.log_dir) / f"iter-{iteration}.out")
+
+    def _probe(self):
+        """(answered, cause) from one minimal call on the worker model; with
+        no model configured there is nothing to probe, and the tail stands."""
+        if not self.model:
+            return False, "no worker model to probe"
+        return probe_model(self.model, self.paths)
+
+    def _quota_confirmed(self, cause):
+        """The log tail looked like a usage limit. A probe that answers means
+        it was not one (the transcript only mentioned limits), so the stall
+        counts as usual."""
+        answered, why = self._probe()
+        if answered:
+            say(f"quota-shaped tail, but the probe answered — counting a stall: {cause}")
+            return False
+        say(f"usage limit confirmed by probe ({why or 'no answer'}): {cause}")
+        return True
+
+    def _wait_out_quota(self, cause):
+        """Poll until the probe answers, then return None so the same unit is
+        re-dispatched. A STOP ends the wait; a limit that outlasts the loop's
+        wait limit halts with the cause named."""
+        say(f"usage limit — waiting for the reset, no stall counted: {cause}")
+        self.notifier("auto — usage limit, waiting", cause, self.notify_enabled)
+        waited = 0
+        while waited < self.marker_timeout:
+            if self.paths.p(self.paths.stop).exists():
+                return Result(Outcome.OPERATOR_STOP, "stop file present during a usage-limit wait")
+            self.sleep(QUOTA_POLL_S)
+            waited += QUOTA_POLL_S
+            self._beat(f"usage-limit wait {waited}s")
+            answered, _ = self._probe()
+            if answered:
+                say(f"usage limit cleared after {waited}s — re-dispatching the unit")
+                return None
+        return self.halt(f"usage limit did not clear within {self.marker_timeout}s: {cause}")
 
 
 # terminal_stop's answer when it parked a row: not a stop, the campaign re-runs.
