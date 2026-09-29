@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The distributed primary's warm-then-respawn: warm the mesh workers the
 //! discovery tick chose, then respawn the compute child across exactly the
-//! set that warmed (moved from the daemon's bootstrap, pb-serve-distributes).
+//! set that warmed, its spawn gate, and the mesh self-manifest refresh that
+//! follows its lifecycle (moved from the daemon's bootstrap,
+//! pb-serve-distributes).
 
 use std::sync::Arc;
 
@@ -240,3 +242,79 @@ pub fn install_spawn_gate(
         }
     }));
 }
+/// How often the refresher re-derives the manifest to check that no transition
+/// was missed. Slow enough to be free, fast enough that a missed event is a
+/// minute of wrongness rather than an outage.
+const MANIFEST_RECONCILE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Keep the mesh self-manifest in step with the distributed primary's lifecycle.
+///
+/// `build_self_manifest` is a SNAPSHOT of the local provider, taken once when
+/// the [`InferenceRouter`](sovereign_serving_host::peer_inference::InferenceRouter)
+/// is built. At that moment the distributed
+/// slot has never spawned (`DynamicChildSlot::new` deliberately does not spawn),
+/// so `is_serving()` is false, the Slow tier answers with the small FAST model,
+/// and the heavyweight primary is absent from the manifest entirely. Minutes
+/// later the discovery tick warms the workers and respawns the child into
+/// Serving — and nothing rebuilds the snapshot. `locate_named_model` then
+/// returns Unknown and every request that NAMES the shared model 503s from a
+/// perfectly healthy cluster, which defeats the point of sharing a model on a
+/// mesh. Observed live 2026-07-28 (note c5678d34); the same failure shape as
+/// 2026-05-20, which was fixed only for the hot-load path.
+///
+/// Driven by the lifecycle watch rather than a timer, because the requirement is
+/// symmetry, not freshness: advertise exactly what we can serve. A RETIRED or
+/// Failed child must stop being advertised as promptly as a Serving one starts,
+/// or peers route into a guaranteed `ComputeUnavailable` — and `retire()` runs
+/// on every empty-worker tick and every warm refusal, so that window is not
+/// hypothetical.
+pub fn spawn_self_manifest_refresh(
+    mesh_provider: Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
+    distributed_slot: Option<Arc<crate::manager::DynamicChildSlot>>,
+) {
+    let Some(slot) = distributed_slot else {
+        tracing::debug!(
+            target: "compute_child",
+            "self-manifest refresh: no distributed-primary slot — the manifest has no \
+             lifecycle-gated rows to track"
+        );
+        return;
+    };
+    host_kit::supervise::spawn_supervised("self_manifest_refresh", move || {
+        let mesh = Arc::clone(&mesh_provider);
+        let slot = Arc::clone(&slot);
+        async move {
+            let mut rx = slot.subscribe();
+            // `subscribe()` returns a receiver marked-seen, so `changed()` awaits
+            // the NEXT transition. A transition between provider construction and
+            // this point would otherwise be invisible forever — hence one
+            // unconditional reconcile before the loop. Do not drop this as
+            // redundant: it is the boot-race fix.
+            mesh.refresh_self_manifest_because("startup reconcile");
+            loop {
+                tokio::select! {
+                    changed = rx.changed() => {
+                        if changed.is_err() {
+                            // Slot dropped — the daemon is shutting down.
+                            break;
+                        }
+                        // Extract before any await: holding a watch borrow across
+                        // one deadlocks the publisher.
+                        let (lifecycle, reason) = {
+                            let st = rx.borrow_and_update();
+                            (st.lifecycle.as_str(), st.last_transition_reason.clone())
+                        };
+                        mesh.refresh_self_manifest_because(&format!(
+                            "compute child {lifecycle} ({reason})"
+                        ));
+                    }
+                    _ = tokio::time::sleep(MANIFEST_RECONCILE) => {
+                        // Detector, not mechanism — see `reconcile_self_manifest`.
+                        mesh.reconcile_self_manifest();
+                    }
+                }
+            }
+        }
+    });
+}
+
