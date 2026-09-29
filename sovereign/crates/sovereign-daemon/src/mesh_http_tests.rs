@@ -641,3 +641,35 @@ async fn join_rejects_unparseable_input() {
         .unwrap();
     assert_eq!(resp.status(), 400);
 }
+
+/// `/v1/mesh/status`'s engine rows are serve's answer (pb-serve-distributes):
+/// its cached device view, when it was taken, and the block-split pin; a
+/// serve that did not answer reads as not observed yet. Failing input: read
+/// the loader's in-process cache instead, which holds nothing here.
+#[test]
+fn engine_rows_are_serves_answer() {
+    use crate::serve_client::EngineStateRead;
+    use sovereign_contracts::engine_state::{DeviceBytes, DeviceMemoryReading, EngineState};
+    const MIB: u64 = 1024 * 1024;
+    let answered = EngineStateRead::Answered(EngineState {
+        device_memory: Some(DeviceMemoryReading {
+            observed_unix: 1_700_000_000,
+            devices: vec![DeviceBytes {
+                endpoint: Some("10.0.0.7:50052".to_string()),
+                free_bytes: 6 * 1024 * MIB,
+                total_bytes: 8 * 1024 * MIB,
+                reserve_bytes: 0,
+            }],
+        }),
+        rpc_block_split_pin: Some("0,24".to_string()),
+    });
+    let (devices, observed, pin) = engine_view(answered);
+    assert_eq!(observed, Some(1_700_000_000));
+    assert_eq!(pin.as_deref(), Some("0,24"));
+    assert_eq!(devices.len(), 1);
+    assert_eq!(devices[0].endpoint.as_deref(), Some("10.0.0.7:50052"));
+    assert_eq!((devices[0].free_mb, devices[0].total_mb), (6144, 8192));
+
+    let (devices, observed, pin) = engine_view(EngineStateRead::DidNotAnswerInTime);
+    assert!(devices.is_empty() && observed.is_none() && pin.is_none());
+}

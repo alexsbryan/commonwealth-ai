@@ -318,8 +318,8 @@ pub struct DeviceMemoryView {
     pub reserve_mb: u64,
 }
 
-impl From<sovereign_inference::embedded::DeviceMemory> for DeviceMemoryView {
-    fn from(m: sovereign_inference::embedded::DeviceMemory) -> Self {
+impl From<sovereign_contracts::engine_state::DeviceBytes> for DeviceMemoryView {
+    fn from(m: sovereign_contracts::engine_state::DeviceBytes) -> Self {
         const MIB: u64 = 1024 * 1024;
         Self {
             free_mb: m.free_bytes / MIB,
@@ -344,6 +344,29 @@ pub struct SharedModelStatusDto {
     /// serveable" (the exact engine load state isn't HTTP-observable). Below
     /// quorum the cluster is "forming" and consumers fall back to local.
     pub available: bool,
+}
+
+/// `/v1/mesh/status`'s engine rows from what serve answered: its cached
+/// per-device view and when it was taken, and the block-split pin. A serve
+/// that is not there or did not answer in time reads as not observed yet.
+pub(crate) fn engine_view(
+    read: crate::serve_client::EngineStateRead,
+) -> (Vec<DeviceMemoryView>, Option<u64>, Option<String>) {
+    let engine = match read {
+        crate::serve_client::EngineStateRead::Answered(state) => state,
+        crate::serve_client::EngineStateRead::Unreachable(_)
+        | crate::serve_client::EngineStateRead::DidNotAnswerInTime => {
+            return (Vec::new(), None, None)
+        }
+    };
+    let (devices, observed) = match engine.device_memory {
+        Some(s) => (
+            s.devices.into_iter().map(DeviceMemoryView::from).collect(),
+            Some(s.observed_unix),
+        ),
+        None => (Vec::new(), None),
+    };
+    (devices, observed, engine.rpc_block_split_pin)
 }
 
 /// Build the shared-model cluster-health summary, or `None` when this node
@@ -424,16 +447,13 @@ async fn mesh_status(
     // worker, and a worker busy serving a resident model can stall that call for
     // a minute or more — which hung this endpoint (and with it `svrn mesh bench`)
     // on 2026-07-30. A status endpoint must not block on a remote resource. See
-    // `sovereign_inference::embedded::last_device_memory`.
-    let (device_memory, device_memory_observed_unix) =
-        match sovereign_inference::embedded::last_device_memory() {
-            Some(s) => (
-                s.devices.into_iter().map(DeviceMemoryView::from).collect(),
-                Some(s.observed_unix),
-            ),
-            None => (Vec::new(), None),
-        };
-    let rpc_block_split_pin = sovereign_inference::embedded::pinned_block_split_raw();
+    // `sovereign_inference::embedded::last_device_memory`. The loader is serve
+    // (pb-serve-distributes), so the view is serve's, read through its engine
+    // state route on every path and bounded (`read_engine_state`, 2 s): a
+    // serve that is not there, or did not answer, reads as not observed yet.
+    let serve_base = daemon.configured_serve_base().await;
+    let (device_memory, device_memory_observed_unix, rpc_block_split_pin) =
+        engine_view(crate::serve_client::read_engine_state(&serve_base.base).await);
     let (
         peer_inflight_current,
         peer_inflight_ceiling,
