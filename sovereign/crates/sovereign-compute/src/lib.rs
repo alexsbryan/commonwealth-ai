@@ -37,6 +37,7 @@ pub mod containment;
 pub mod discovery_policy;
 pub mod distributed_discovery;
 pub mod distributed_respawn;
+pub mod distributed_warm;
 pub mod distribution;
 pub mod manager;
 pub mod mock;

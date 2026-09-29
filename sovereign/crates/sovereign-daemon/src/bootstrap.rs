@@ -525,16 +525,43 @@ pub fn apply_shared_model_role_to_env(cfg: &sovereign_core::setup_config::Shared
 /// has no treesitter dependency.
 pub use crate::startup::rpc_discovery_armed;
 
-/// This daemon's mesh, as the discovery loop reads it per tick (compute's
-/// `distributed_discovery`, pb-serve-distributes): the roster, transport and
-/// identity of a Running daemon, `None` otherwise; the host role published
-/// for `/v1/mesh/status`; and the discovery memory `rpc_endpoint_node` reads.
+/// This daemon's mesh, as the discovery loop and the warm orchestrator read it
+/// (compute's `distributed_discovery` and `distributed_warm`,
+/// pb-serve-distributes): the roster, transport and identity of a Running
+/// daemon, `None` otherwise; the host role published for `/v1/mesh/status`;
+/// the discovery memory the warm orchestrator resolves endpoints through;
+/// where this daemon serves model files (its internal port, and the reachable
+/// bases on it); and its
+/// mesh proof.
 pub fn mesh_ports(
     daemon: &Arc<EmbeddedDaemon>,
 ) -> sovereign_serving_host::rpc_discovery::MeshPorts {
-    use sovereign_serving_host::rpc_discovery::{MeshNow, MeshPorts};
+    use sovereign_serving_host::rpc_discovery::{MeshNow, MeshPorts, ModelOrigin};
     let reader = Arc::clone(daemon);
+    let origin = Arc::clone(daemon);
+    let prover = Arc::clone(daemon);
     MeshPorts {
+        model_origin: Arc::new(move || {
+            let daemon = Arc::clone(&origin);
+            Box::pin(async move {
+                let (_client_port, internal_port) = daemon.resolved_ports().await;
+                ModelOrigin {
+                    internal_port,
+                    bases: sovereign_mesh::mesh_discovery::reachable_addresses(internal_port)
+                        .into_iter()
+                        .map(|a| format!("http://{a}"))
+                        .collect(),
+                }
+            })
+        }),
+        proof: Arc::new(move || {
+            let daemon = Arc::clone(&prover);
+            Box::pin(async move {
+                let stamp = daemon.app_state().await?.mesh_proof_stamp().await?;
+                let (name, value) = stamp.pair();
+                Some((name, value.to_string()))
+            })
+        }),
         mesh: Arc::new(move || {
             let daemon = Arc::clone(&reader);
             Box::pin(async move {

@@ -566,6 +566,26 @@ pub struct MeshPorts {
     /// Told on every host-role transition (`/v1/mesh/status` reports it).
     pub on_host_role: Arc<dyn Fn(bool) + Send + Sync>,
     pub discovery: Arc<RpcWorkerDiscovery>,
+    /// Where this node serves model files to peers for a warm: the internal
+    /// port and the reachable bases on it (`http://ip:port`).
+    pub model_origin:
+        Arc<dyn Fn() -> futures::future::BoxFuture<'static, ModelOrigin> + Send + Sync>,
+    /// This node's mesh proof for a peer's internal route, as the header
+    /// `(name, value)`; `None` on a mesh with no credential or a mesh that is
+    /// not up (a reported absence, never a default).
+    pub proof: Arc<
+        dyn Fn() -> futures::future::BoxFuture<'static, Option<(&'static str, String)>>
+            + Send
+            + Sync,
+    >,
+}
+
+/// Where this node serves model files: the internal port, and the
+/// reachable `http://ip:port` bases on it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelOrigin {
+    pub internal_port: u16,
+    pub bases: Vec<String>,
 }
 
 impl MeshPorts {

@@ -922,8 +922,9 @@ pub(super) async fn run_daemon(
         serving = %serving_path.status_line(),
         "boot: the engine's mesh subsystems (warm orchestrator, RPC-worker discovery) run where the engine loads"
     );
+    let mesh_ports = bootstrap::mesh_ports(&daemon);
     if loads_here {
-        crate::rpc_warm_http::install_rpc_warm_orchestrator(Arc::clone(&daemon));
+        sovereign_compute::distributed_warm::install_rpc_warm_orchestrator(mesh_ports.clone());
     }
 
     // Must be installed BEFORE discovery starts spawning the child: the
@@ -937,7 +938,7 @@ pub(super) async fn run_daemon(
 
     if loads_here {
         sovereign_compute::distributed_discovery::spawn_rpc_worker_discovery(
-            bootstrap::mesh_ports(&daemon),
+            mesh_ports,
             engine_handle,
             distributed_primary_slot,
         );

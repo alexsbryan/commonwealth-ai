@@ -304,7 +304,7 @@ async fn every_route_the_stamped_builders_hit_admits_a_marked_member() {
             "/internal/corpus/partition_evict",
             "ShardManager::merge_participants (ephemeral)",
         ),
-        ("/internal/rpc-warm", "rpc_warm_http::orchestrate_warm"),
+        ("/internal/rpc-warm", "distributed_warm::orchestrate_warm"),
         (
             commonwealth_core::model::MODELS_LIST_PATH,
             "model_fetch::list_peer_files",

@@ -138,7 +138,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // The 2026-09 split of rpc_warm_http.rs moved sites into a sibling
     // orchestrator and a test module; neither had a row, so this census was
     // already red on main before the FIVE_PROGRAMS cut touched it.
-    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http/orchestrator.rs", Class::Mesh, 2),
+    // Re-keyed at pb-serve-distributes: the orchestrator moved whole to
+    // sovereign-compute (count unchanged, 2).
+    ("sovereign/crates/sovereign-compute/src/distributed_warm.rs", Class::Mesh, 2),
     ("sovereign/crates/sovereign-daemon/src/tests/rpc_warm_http.rs", Class::TestOnly, 4),
     // `#[cfg(test)] mod` at mesh_proof_outbound.rs:59 — the stamp fixture.
     ("sovereign/crates/sovereign-daemon/src/mesh_proof_outbound.rs", Class::TestOnly, 1),

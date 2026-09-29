@@ -839,7 +839,7 @@ note = "retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mes
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs"
 context = "host"
-lines = 1225
+lines = 511
 note = "*_http but the decision is Serving's - distributed-inference auto-warm orchestration; was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -11177,6 +11177,12 @@ path = "sovereign/crates/sovereign-compute/src/distributed_discovery.rs"
 context = "serving"
 lines = 464
 note = "moved from sovereign-daemon bootstrap.rs (pb-serve-distributes)"
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/distributed_warm.rs"
+context = "serving"
+lines = 521
+note = "the rpc-warm orchestrator and wire, moved from sovereign-daemon rpc_warm_http (pb-serve-distributes)"
 
 [[module]]
 path = "sovereign/crates/sovereign-compute/src/distributed_respawn.rs"

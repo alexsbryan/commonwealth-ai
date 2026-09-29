@@ -38,6 +38,11 @@ oicp-client = { workspace = true }
 sovereign-serving-host = { workspace = true }
 commonwealth-core = { workspace = true }
 kernel-types = { workspace = true }
+# The warm orchestrator's dial vocabulary (`PeerEndpoint`, `TrafficClass`;
+# a package leaf), and the model-file URL both ends of a warm build
+# (oicp-types `model_transfer`).
+mesh-reach = { workspace = true }
+oicp-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
