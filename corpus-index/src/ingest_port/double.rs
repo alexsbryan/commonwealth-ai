@@ -64,6 +64,9 @@ pub struct IngestPortDouble {
     cancel_corpus_ingest: Option<Box<CorpusFn<bool>>>,
     reindex_changed_sources_tiered: Option<Box<ReindexFn>>,
     atlas_teardown_ok: bool,
+    installed_indexes: Option<Vec<IndexInfo>>,
+    incomplete_ingests: Option<Vec<IncompleteIngest>>,
+    foreground_signal: Option<Arc<dyn corpus_engine_yield::ForegroundSignal>>,
 }
 
 impl IngestPortDouble {
@@ -190,6 +193,28 @@ impl IngestPortDouble {
         self.atlas_teardown_ok = true;
         self
     }
+
+    /// Program [`CorpusReadPort::installed_indexes`] to list `indexes`.
+    pub fn with_installed_indexes(mut self, indexes: Vec<IndexInfo>) -> Self {
+        self.installed_indexes = Some(indexes);
+        self
+    }
+
+    /// Program [`CorpusReadPort::incomplete_ingests`] to list `ingests`.
+    pub fn with_incomplete_ingests(mut self, ingests: Vec<IncompleteIngest>) -> Self {
+        self.incomplete_ingests = Some(ingests);
+        self
+    }
+
+    /// Program [`CorpusReadPort::foreground_lease`] to hand out a lease on
+    /// `signal`, as the engine does once the daemon installs one.
+    pub fn with_foreground_signal(
+        mut self,
+        signal: Arc<dyn corpus_engine_yield::ForegroundSignal>,
+    ) -> Self {
+        self.foreground_signal = Some(signal);
+        self
+    }
 }
 
 #[async_trait]
@@ -217,7 +242,10 @@ impl CorpusReadPort for IngestPortDouble {
 
     async fn installed_indexes(&self) -> Result<Vec<IndexInfo>> {
         self.record("installed_indexes");
-        Err(refuse("installed_indexes"))
+        match &self.installed_indexes {
+            Some(indexes) => Ok(indexes.clone()),
+            None => Err(refuse("installed_indexes")),
+        }
     }
 
     async fn open_index_for_corpus(&self, corpus_id: &str) -> Result<CorpusIndex> {
@@ -237,7 +265,13 @@ impl CorpusReadPort for IngestPortDouble {
     }
 
     fn foreground_lease(&self) -> Option<corpus_engine_yield::ForegroundLease> {
-        panic!("{}", unprogrammed("foreground_lease"))
+        self.record("foreground_lease");
+        match &self.foreground_signal {
+            Some(signal) => Some(corpus_engine_yield::ForegroundLease::acquire(Arc::clone(
+                signal,
+            ))),
+            None => panic!("{}", unprogrammed("foreground_lease")),
+        }
     }
 
     fn builtin_corpora(&self) -> Vec<BuiltinCorpus> {
@@ -245,7 +279,11 @@ impl CorpusReadPort for IngestPortDouble {
     }
 
     fn incomplete_ingests(&self) -> Vec<IncompleteIngest> {
-        panic!("{}", unprogrammed("incomplete_ingests"))
+        self.record("incomplete_ingests");
+        match &self.incomplete_ingests {
+            Some(ingests) => ingests.clone(),
+            None => panic!("{}", unprogrammed("incomplete_ingests")),
+        }
     }
 
     fn declared_authority_tool(&self, _corpus_id: &str) -> Option<String> {
