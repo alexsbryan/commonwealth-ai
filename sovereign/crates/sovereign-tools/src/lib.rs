@@ -61,17 +61,14 @@ pub mod sec_facts_render;
 /// The recipe-authoring tool bundle moved into the extractable
 /// `sovereign-recipe-author` package; re-exported here as the `recipe_author`
 /// module so every existing `sovereign_tools::recipe_author::…` path (and the
-/// crate-root tool re-exports below) keeps resolving unchanged. The monolith
-/// adapter that backs its tester seam (`recipe_tester_adapter`) stays in this
-/// crate; the notes seam is implemented by svrn's store
-/// (`sovereign_store::sqlite::SqliteStateStore`, pb-notes-memory).
+/// crate-root tool re-exports below) keeps resolving unchanged. Its tester
+/// seam is implemented by ingest (`corpus_engine::recipe_tester`,
+/// pb-ingest-dial-tools) and handed in by the host; the notes seam is
+/// implemented by svrn's store (`sovereign_store::sqlite::SqliteStateStore`,
+/// pb-notes-memory).
 pub use sovereign_recipe_author as recipe_author;
 pub use sovereign_tools_base::read_file;
 pub use sovereign_tools_base::read_json;
-/// Monolith-side adapter binding the real `CorpusEngine::test_recipe` to the
-/// `RecipeTester` contract the recipe validate/test tools depend on (keeps that
-/// bundle corpus-engine-free).
-pub mod recipe_tester_adapter;
 pub use sovereign_tools_base::search;
 pub use sovereign_tools_base::shell;
 pub mod typed_call;

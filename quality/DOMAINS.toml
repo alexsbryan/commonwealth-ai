@@ -15463,8 +15463,8 @@ lines = 101
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-tools/src/recipe_tester_adapter.rs"
-context = "unknown"
+path = "corpus-engine/src/recipe_tester.rs"
+context = "ingest"
 lines = 91
 note = ""
 

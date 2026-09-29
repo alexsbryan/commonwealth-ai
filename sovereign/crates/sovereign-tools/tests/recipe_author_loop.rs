@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use sovereign_core::traits::Tool;
 use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
-use sovereign_tools::recipe_tester_adapter::CorpusEngineRecipeTester;
+use corpus_engine::recipe_tester::CorpusEngineRecipeTester;
 use sovereign_tools::{RecipeReadTool, RecipeValidateTool, RecipeWriteTool, RegistryBrowseTool};
 
 fn ctx() -> ToolContext {

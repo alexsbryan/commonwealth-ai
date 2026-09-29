@@ -73,7 +73,7 @@ use sovereign_tools::recipe_author::{
     RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool,
     RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
 };
-use sovereign_tools::recipe_tester_adapter::CorpusEngineRecipeTester;
+use corpus_engine::recipe_tester::CorpusEngineRecipeTester;
 
 // ─── OpenAI-style wire types ────────────────────────────────────
 //

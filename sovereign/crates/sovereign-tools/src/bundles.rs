@@ -443,29 +443,20 @@ impl ToolBundle for DocumentOperations {
 pub struct RecipeAuthoringTools {
     notes: Option<Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>>,
     features: Option<Arc<sovereign_recipe_author::recipe_project_store::RecipeProjectStore>>,
-    /// The injected recipe variant-catalog descriptor. `sovereign-tools` is the
-    /// only crate holding both the grammar (via `sovereign-recipe-author`) and
-    /// the descriptor (via `corpus-engine`), so the seam is implemented HERE:
-    /// the package tools take the value and never read the repo.
-    descriptor_json: &'static str,
-    /// The injected bundled registry snapshot, same seam as `descriptor_json`.
-    registry_toml: &'static str,
-}
-
-impl Default for RecipeAuthoringTools {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// The tester, the variant-catalog descriptor and the bundled registry
+    /// snapshot — ingest's, handed in by the host that composes it
+    /// (`corpus_engine::recipe_tester::recipe_author_seams`); the package
+    /// tools take the values and never read the repo.
+    seams: sovereign_contracts::recipe::testing::RecipeAuthorSeams,
 }
 
 impl RecipeAuthoringTools {
     /// The seven tools that need no store.
-    pub fn new() -> Self {
+    pub fn new(seams: sovereign_contracts::recipe::testing::RecipeAuthorSeams) -> Self {
         Self {
             notes: None,
             features: None,
-            descriptor_json: corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
-            registry_toml: corpus_engine::registry::BUNDLED_REGISTRY_TOML,
+            seams,
         }
     }
 
@@ -502,28 +493,29 @@ impl ToolBundle for RecipeAuthoringTools {
             RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool,
             RegistryBrowseTool, ResearchFindingTool,
         };
-        use crate::recipe_tester_adapter::CorpusEngineRecipeTester;
 
         let mut r = BundleReport::new(self.name());
         r = r.record(reg.register_reporting(Box::new(RecipeReadTool::new())));
         r = r.record(reg.register_reporting(Box::new(RecipeWriteTool::new())));
         r = r.record(
             reg.register_reporting(Box::new(RecipeWriteStructuredTool::new(
-                Arc::new(CorpusEngineRecipeTester::new()),
-                self.descriptor_json,
+                Arc::clone(&self.seams.tester),
+                self.seams.descriptor_json,
             ))),
         );
         r = r.record(
-            reg.register_reporting(Box::new(RecipeValidateTool::new(Arc::new(
-                CorpusEngineRecipeTester::new(),
+            reg.register_reporting(Box::new(RecipeValidateTool::new(Arc::clone(
+                &self.seams.tester,
             )))),
         );
         r = r.record(
-            reg.register_reporting(Box::new(RecipeTestTool::new(Arc::new(
-                CorpusEngineRecipeTester::new(),
+            reg.register_reporting(Box::new(RecipeTestTool::new(Arc::clone(
+                &self.seams.tester,
             )))),
         );
-        r = r.record(reg.register_reporting(Box::new(RegistryBrowseTool::new(self.registry_toml))));
+        r = r.record(
+            reg.register_reporting(Box::new(RegistryBrowseTool::new(self.seams.registry_toml))),
+        );
         r = r.record(reg.register_reporting(Box::new(ProbeUrlTool::new())));
 
         match &self.notes {

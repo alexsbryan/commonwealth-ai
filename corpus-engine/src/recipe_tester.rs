@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Monolith-side adapter implementing [`RecipeTester`] over the real
-//! `corpus_engine::CorpusEngine`.
+//! Ingest's implementation of the [`RecipeTester`] contract over the real
+//! [`CorpusEngine`], and the [`RecipeAuthorSeams`] recipe authoring takes
+//! from ingest.
 //!
-//! Lives here (not in the recipe-author package) because it is the one piece
-//! that must touch `corpus-engine`. The authoring tools depend only on the
-//! `RecipeTester` contract; this adapter is injected at their construction
-//! sites, exactly like the note port svrn's store implements.
+//! Moved from sovereign-tools' `recipe_tester_adapter` (pb-ingest-dial-tools):
+//! the authoring tools depend only on the contract, and the host that
+//! composes ingest hands these in, exactly like the note port svrn's store
+//! implements.
 //!
 //! It is a faithful in-process stand-in for the future daemon test endpoint:
 //! same recipe + params → the same diagnostics. It maps the engine's rich
@@ -17,13 +18,23 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use corpus_engine::{CorpusEngine, TestOptions};
+use crate::{CorpusEngine, TestOptions};
 use corpus_index::types::EmbedFn;
+use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::recipe::testing::{
-    ExtractionOutcome, RecipeTestOutcome, RecipeTestParams, RecipeTester, SectionMiss,
-    ValidationOutcome,
+    ExtractionOutcome, RecipeAuthorSeams, RecipeTestOutcome, RecipeTestParams, RecipeTester,
+    SectionMiss, ValidationOutcome,
 };
-use sovereign_core::error::{Error, Result};
+
+/// What recipe authoring takes from ingest: the tester over this engine, the
+/// recipe variant-catalog descriptor and the bundled registry snapshot.
+pub fn recipe_author_seams() -> RecipeAuthorSeams {
+    RecipeAuthorSeams {
+        tester: Arc::new(CorpusEngineRecipeTester::new()),
+        descriptor_json: crate::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
+        registry_toml: crate::registry::BUNDLED_REGISTRY_TOML,
+    }
+}
 
 /// `RecipeTester` backed by an in-process stub `CorpusEngine`.
 #[derive(Default)]

@@ -683,7 +683,9 @@ pub(super) async fn run_daemon(
                 // answers. Absent stores are a DEGRADATION the bundle's
                 // report names, matching the desktop's posture.
                 b.push(Box::new({
-                    let mut ra = sovereign_tools::bundles::RecipeAuthoringTools::new();
+                    let mut ra = sovereign_tools::bundles::RecipeAuthoringTools::new(
+                        corpus_engine::recipe_tester::recipe_author_seams(),
+                    );
                     if let Some(fs) = features_store.as_ref() {
                         ra = ra.with_notes(Arc::clone(&state_store_concrete)
                             as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
