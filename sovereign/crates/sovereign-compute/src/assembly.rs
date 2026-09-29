@@ -661,6 +661,9 @@ mod distributed_primary_routing_tests {
 }
 // A sibling file: inline, it put this file past the 800-line band (ARCH §3.1).
 #[cfg(test)]
+#[path = "assembly/reload_builds_tests.rs"]
+mod reload_builds_tests;
+#[cfg(test)]
 #[path = "assembly/reload_tests.rs"]
 mod reload_tests;
 #[cfg(test)]
