@@ -6,10 +6,6 @@ license.workspace = true
 
 [dependencies]
 sovereign-core = { workspace = true }
-# The enrichment store's `config.json` schema + path layout. This crate's
-# watched-folder driver WRITES that file and the CLI subprocess it spawns reads
-# it; both used to carry their own copy (rung nc-16-shared-capability).
-sovereign-enrichment-catalog = { workspace = true }
 # Recipe-author reads url_template / paths / json_to_toml from the contract
 # crate directly. The recipe schema descriptor and the bundled registry are
 # ingest's (`corpus_engine::recipe_schema`, `corpus_engine_recipes`) and are
@@ -30,7 +26,9 @@ sovereign-tools-base = { workspace = true }
 # 2026-09-21; both sides name it, so it is in the protocol leaf now and this
 # crate no longer reaches into a cmnwlth package (quality/ARCH_LAYERS.toml).
 oicp-types = { workspace = true }
-corpus-engine = { workspace = true }
+# Ingest is reached only through its ports (corpus-index's `ingest_port`, the
+# atlas reader's `ports`); this crate links neither corpus-engine nor the
+# enrichment catalog (pb-ingest-dial-tools-close).
 # Leaf items the engine re-exports (`types::*`, `error`, `index`, `corpus`,
 # `recipe::DisplayMeta`) — spelled at their owner now.
 corpus-index = { workspace = true }
@@ -43,9 +41,8 @@ understanding-vocab = { workspace = true, features = ["read"] }
 corpus-engine-atlas-reader = { workspace = true }
 # The section detectors `rag::section` runs — a `regex` + `tracing` leaf. The
 # module came back from `sovereign-tools-base` at sv-surface svt-7 and brought
-# its dependency with it; this crate already links corpus-engine itself, so the
-# edge costs nothing new here (it cost a thin surface's whole exception row
-# there — see `src/rag/mod.rs`).
+# its dependency with it. The leaf also holds the markup strippers the corpus
+# parsers call (`strip`, pb-ingest-dial-tools-close).
 corpus-engine-sections = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
@@ -178,7 +175,9 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 # forbids those in the default build (quality/ARCH_LAYERS.toml, back-of-house).
 default = ["treesitter"]
 email = ["lettre"]
-treesitter = ["corpus-engine/treesitter"]
+# Empty since pb-ingest-dial-tools-close: it gates this crate's own
+# code-intel tools and forwards nothing (the daemon enables it).
+treesitter = []
 # PaddleOCR (ONNX) OCR engine. Off by default so headless/default builds
 # don't pull the OCR inference surface; the desktop enables it once the
 # bake-off greenlights swapping it in for tesseract.
