@@ -4188,39 +4188,12 @@ async fn register_local_model_slots(
         return std::collections::HashMap::new();
     };
 
-    let mut slots: Vec<(String, &std::path::Path)> = vec![
-        ("primary".into(), models.primary.as_path()),
-        ("embed".into(), models.embed.as_path()),
-    ];
-    // Mesh-advertise fast only when it's a distinct GGUF. If the
-    // primary subsumes the fast role, a separate "fast" advertisement
-    // would mislead peers into thinking there are two chat models on
-    // this node when there's actually one.
-    if models.has_explicit_fast() {
-        slots.push(("fast".into(), models.fast_path()));
-    }
-    if let Some(code_path) = models.code.as_ref() {
-        slots.push(("code".into(), code_path.as_path()));
-    }
-    // Multi-primary pool: register N additional primary-class slots so
-    // a high-VRAM host (e.g. MI300X 192 GB) can serve concurrent
-    // chat-completion requests without queueing against a single slot.
-    // Each pool member is registered under `primary_<i>` and points at
-    // the same GGUF; the OICP capability advertiser surfaces them as
-    // distinct claims so the scheduler can dispatch round-robin.
-    if let Some(pool) = models.primary_pool.as_ref() {
-        for i in 0..pool.copies {
-            slots.push((format!("primary_{i}"), pool.path.as_path()));
-        }
-    }
-    // Operator-declared additional chat slots from `[models.extra]`
-    // also need to land in `inference_store` so `/v1/models`
-    // advertises them. Without this entry, clients sending
-    // `model: "<extras-stem>"` would see a 404 from the OICP
-    // capability lookup before the slot picker ever runs.
-    for (slot_name, path) in models.extra.iter() {
-        slots.push((format!("extras:{slot_name}"), path.as_path()));
-    }
+    // The slots this node advertises: the one decider serve's servable-file
+    // list reads too (`sovereign_contracts::model_slots`, pb-serve-distributes).
+    // Fast only when it is a distinct GGUF; each primary-pool copy and each
+    // `[models.extra]` slot as its own claim, so `/v1/models` and the OICP
+    // capability lookup see them.
+    let slots = sovereign_contracts::model_slots::advertised_slots(models);
 
     // Build a slot-name → model_id map so OpenAI-shape clients can
     // address slots by role (`primary`, `fast`, `code`) instead of

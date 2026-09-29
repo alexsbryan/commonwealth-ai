@@ -109,6 +109,7 @@ pub mod middleware;
 pub const MOBILE_HOST_ABSENT: &str =
     "the mobile host was the sovereign-server binary, which was deleted; no mobile host ships";
 pub mod model_family;
+pub mod model_slots;
 pub mod models_manifest;
 /// The NER port — `LabeledEntityExtractor` and its `EntityMention` — so a host
 /// holds an extractor without linking the ONNX stack that serves it.
