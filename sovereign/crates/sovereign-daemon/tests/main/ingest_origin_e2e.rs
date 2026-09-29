@@ -64,7 +64,7 @@ fn an_engine() -> (
     let asked = Arc::new(Mutex::new(Vec::new()));
     let record = Arc::clone(&asked);
     let engine = IngestPortDouble::new()
-        .on_partition_path(move |id| indexes.join(format!("{id}-partition-local")))
+        .on_partition_path(move |id| crate::common::corpus_at(&indexes, id).partition("local"))
         .with_cancel_registry(CancellationRegistry::new())
         .on_ingest_with_overrides(move |slice| {
             record.lock().unwrap().push(slice.clone());

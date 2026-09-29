@@ -788,10 +788,7 @@ async fn cmd_run(args: &[String]) -> i32 {
          sovereign_tools::knowledge_view=warn",
     );
 
-    let started_at_unix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let started_at_unix = sovereign_core::time::unix_now();
     // The white-box modes ask svrn's probe (`svrn __probe`) for raw evidence
     // and score it here; the bank, the expectations and the verdict never
     // leave this module (phase-b-58).

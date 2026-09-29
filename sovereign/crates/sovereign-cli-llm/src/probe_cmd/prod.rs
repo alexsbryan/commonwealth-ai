@@ -34,10 +34,7 @@ async fn probe_question(
     // path so `build_context` + the personal-scope filter see a real row,
     // and isolation scopes retrieval via `enabled_corpora`.
     let conversation_id = uuid::Uuid::new_v4().to_string();
-    let created_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let created_at = sovereign_core::time::unix_now();
     if let Err(e) = session
         .store
         .insert_empty_conversation(&conversation_id, created_at, None)
