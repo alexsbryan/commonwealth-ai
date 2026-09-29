@@ -65,6 +65,9 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-scip = { workspace = true }
 # Leaf items the engine re-exports (types, error, index, corpus) — spelled at their owner.
 corpus-index = { workspace = true }
+corpus-engine-atlas-reader = { workspace = true }
+corpus-engine-yield = { workspace = true }
+understanding-vocab = { workspace = true }
 oplog = { workspace = true }
 http-body = "1"
 arc-swap = { workspace = true }

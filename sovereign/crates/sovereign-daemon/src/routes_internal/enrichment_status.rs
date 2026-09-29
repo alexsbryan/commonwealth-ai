@@ -20,7 +20,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentState, EnrichmentStateFile};
+use corpus_index::enrichment_state::{EnrichmentPhase, EnrichmentState, EnrichmentStateFile};
 
 use crate::state::AppState;
 

@@ -508,8 +508,8 @@ async fn apply_incremental(
     use corpus_engine::enrichment::atlas::strategies::structure_first::{
         aggregate_articles_from_chunks, extract_atoms_for_articles, StructureFirstConfig,
     };
-    use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
     use corpus_engine::meta_atlas::rebuild_for_corpus;
+    use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
 
     if doc_ids.is_empty() {
         return Ok(());
@@ -638,7 +638,7 @@ async fn apply_incremental(
 /// — the caller logs and skips the retry rather than rebuilding on
 /// a half-wiped directory.
 fn wipe_atlas_dir(indexes_dir: &std::path::Path, corpus_id: &str) -> Result<(), String> {
-    use corpus_engine::enrichment::atlas::writer::ATLAS_DIRNAME;
+    use understanding_vocab::read::ATLAS_DIRNAME;
     let atlas_dir = indexes_dir.join(corpus_id).join(ATLAS_DIRNAME);
     if !atlas_dir.exists() {
         return Ok(());

@@ -25,11 +25,11 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use corpus_engine::atlas_traversal::{detect_atom_spans, AtomSpan as DetectorAtomSpan};
-use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, AtomId,
-    CrossCorpusEdge, Edge,
-};
+use corpus_engine_atlas_reader::cross_corpus::{read_atlas_cross_corpus_edges, CrossCorpusEdge};
 use corpus_index::index::EnrichmentChunkRow;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId};
+use understanding_vocab::edges::Edge;
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges};
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{internal_error, not_found, service_unavailable};

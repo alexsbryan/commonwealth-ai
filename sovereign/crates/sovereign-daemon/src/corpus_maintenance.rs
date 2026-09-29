@@ -41,7 +41,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use corpus_engine::{CorpusEngine, Retention};
+use corpus_engine::CorpusEngine;
+use corpus_index::index::Retention;
 
 /// Minutes between sweeps. `0` disables the sweep entirely.
 fn interval_mins() -> u64 {

@@ -477,8 +477,10 @@ pub async fn corpus_status(State(state): State<AppState>) -> Json<CorpusStatusRe
     Json(CorpusStatusResponse { entries })
 }
 
-pub(crate) fn progress_fraction(progress: &corpus_engine::IngestProgress) -> Option<f32> {
-    use corpus_engine::IngestProgress as P;
+pub(crate) fn progress_fraction(
+    progress: &sovereign_contracts::daemon_wire::IngestProgress,
+) -> Option<f32> {
+    use sovereign_contracts::daemon_wire::IngestProgress as P;
     match progress {
         P::Downloading { percent, .. } => Some((*percent / 100.0).clamp(0.0, 1.0)),
         P::Embedding {
@@ -518,7 +520,7 @@ pub struct CorpusStatusEntry {
     /// ingest exited without clearing its entry (daemon crash).
     pub active: bool,
     /// Latest `IngestProgress` observed for this corpus, if any.
-    pub progress: Option<corpus_engine::IngestProgress>,
+    pub progress: Option<sovereign_contracts::daemon_wire::IngestProgress>,
     pub shards_completed: usize,
     pub shards_total: usize,
     pub committed_iter_pos: u64,
@@ -608,7 +610,10 @@ pub async fn corpus_expand(
 /// (say "embedding") with no task running to ever advance it, i.e. a
 /// permanent fake spinner in place of the error. Safe across retries
 /// because `clear_stale_failure` runs before a new attempt spawns.
-fn ingest_progress_callback(state: AppState, corpus_id: String) -> corpus_engine::ProgressCallback {
+fn ingest_progress_callback(
+    state: AppState,
+    corpus_id: String,
+) -> corpus_index::ingest_port::ProgressCallback {
     Box::new(move |p| {
         let state = state.clone();
         let corpus_id = corpus_id.clone();
@@ -618,7 +623,7 @@ fn ingest_progress_callback(state: AppState, corpus_id: String) -> corpus_engine
             let mut map = state.inner.ingest.corpus_progress.write().await;
             if matches!(
                 map.get(&corpus_id),
-                Some(corpus_engine::IngestProgress::Failed { .. })
+                Some(sovereign_contracts::daemon_wire::IngestProgress::Failed { .. })
             ) {
                 return;
             }
@@ -641,7 +646,9 @@ fn ingest_progress_callback(state: AppState, corpus_id: String) -> corpus_engine
 /// legitimate history until overwritten.
 async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
     let mut progress = state.inner.ingest.corpus_progress.write().await;
-    if let Some(corpus_engine::IngestProgress::Failed { .. }) = progress.get(corpus_id) {
+    if let Some(sovereign_contracts::daemon_wire::IngestProgress::Failed { .. }) =
+        progress.get(corpus_id)
+    {
         progress.remove(corpus_id);
     }
 }
@@ -657,7 +664,7 @@ async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
 async fn record_failure(state: &AppState, corpus_id: &str, message: String) {
     state.inner.ingest.corpus_progress.write().await.insert(
         corpus_id.to_string(),
-        corpus_engine::IngestProgress::Failed { message },
+        sovereign_contracts::daemon_wire::IngestProgress::Failed { message },
     );
 }
 
@@ -929,7 +936,7 @@ pub async fn spawn_corpus_install_outcome(
                         );
                         return;
                     }
-                    use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
+                    use corpus_index::enrichment_state::{EnrichmentPhase, EnrichmentStateFile};
                     use sovereign_tools::atlas_postinstall::{
                         build_structural_atlas, build_triage_candidates, effective_tier2_budget,
                         StructuralAtlasOutcome, TriageOutcome,
@@ -1342,7 +1349,8 @@ pub enum InstallOutcome {
 
 #[derive(Debug, Serialize)]
 pub struct ProgressSnapshotResponse {
-    pub progress: std::collections::HashMap<String, corpus_engine::IngestProgress>,
+    pub progress:
+        std::collections::HashMap<String, sovereign_contracts::daemon_wire::IngestProgress>,
 }
 
 /// Signal the corpus's cancellation flag and wait (bounded) for the

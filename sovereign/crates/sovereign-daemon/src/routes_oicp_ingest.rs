@@ -4,7 +4,7 @@
 //! Thin adapters that expose the daemon's corpus-install lifecycle over the
 //! *protocol* surface (`/oicp/v1/...` on the client port :9741), distinct
 //! from the internal `/internal/corpus/*` routes on :9742 that carry
-//! `corpus_engine::IngestProgress` on the wire. Here we translate to the
+//! `sovereign_contracts::daemon_wire::IngestProgress` on the wire. Here we translate to the
 //! protocol DTOs (`CorpusIngestProgress`, `RecipeTestReport`) so a client
 //! built only against `oicp-types` — one that never links the reference
 //! corpus engine — can drive an install and dry-run a recipe.
@@ -138,8 +138,8 @@ pub async fn recipe_test(
 /// The finer engine phases (extract, chunk) collapse into `Downloading`
 /// (the "acquiring & preparing" band) with the true phase in `detail`, so
 /// the protocol's monotone phase ladder holds while nothing is lost.
-fn map_progress(p: &corpus_engine::IngestProgress) -> CorpusIngestProgress {
-    use corpus_engine::IngestProgress as P;
+fn map_progress(p: &sovereign_contracts::daemon_wire::IngestProgress) -> CorpusIngestProgress {
+    use sovereign_contracts::daemon_wire::IngestProgress as P;
     let (phase, detail) = match p {
         P::Downloading { .. } => (IngestPhase::Downloading, None),
         P::Extracting {
@@ -258,14 +258,14 @@ mod tests {
     // protocol ladder, and `detail` preserves the true phase.
     #[test]
     fn extract_and_chunk_fold_onto_downloading_band() {
-        let extracting = corpus_engine::IngestProgress::Extracting {
+        let extracting = sovereign_contracts::daemon_wire::IngestProgress::Extracting {
             documents_processed: 7,
         };
         let m = map_progress(&extracting);
         assert_eq!(m.phase, IngestPhase::Downloading);
         assert!(m.detail.as_deref().unwrap().contains("extracting"));
 
-        let embedding = corpus_engine::IngestProgress::Embedding {
+        let embedding = sovereign_contracts::daemon_wire::IngestProgress::Embedding {
             chunks_embedded: 5,
             total: 10,
             docs_processed: 2,
@@ -276,7 +276,7 @@ mod tests {
         assert_eq!(m.phase, IngestPhase::Embedding);
         assert_eq!(m.fraction, Some(0.5));
 
-        let complete = corpus_engine::IngestProgress::Complete {
+        let complete = sovereign_contracts::daemon_wire::IngestProgress::Complete {
             total_chunks: 100,
             duration_secs: 12,
         };

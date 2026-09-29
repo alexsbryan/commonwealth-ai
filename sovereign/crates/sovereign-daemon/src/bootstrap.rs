@@ -89,7 +89,7 @@ pub fn load_gliner_extractor(
     store: Arc<dyn sovereign_core::daemon_wire::conv_tiered::ChunkEntityStore>,
 ) -> (
     Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
-    Option<Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>>,
+    Option<Arc<dyn corpus_index::ingest_port::tiered::ChunkEntityExtractor>>,
 ) {
     // The store is opened once by `run_daemon` and passed in, so the adapter
     // opens no second handle.
@@ -172,7 +172,7 @@ pub fn build_corpus_engine(
     config: &SetupConfig,
     self_node_id: NodeId,
     chunk_entity_extractor: &Option<
-        Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>,
+        Arc<dyn corpus_index::ingest_port::tiered::ChunkEntityExtractor>,
     >,
 ) -> (Arc<CorpusEngine>, String) {
     // Returned alongside the engine rather than re-derived by the caller. The
@@ -296,7 +296,7 @@ pub fn build_folder_tiered_deps(
     data_dir: &Path,
     provider: Arc<dyn InferenceProvider>,
     chunk_entity_extractor: Option<
-        Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>,
+        Arc<dyn corpus_index::ingest_port::tiered::ChunkEntityExtractor>,
     >,
 ) -> Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps> {
     // The provider comes from the shared builder so the desktop's embedded
@@ -1972,7 +1972,7 @@ pub async fn build_mesh_provider(
 /// chat-slot memory pressure. `None`: no code program in this process.
 pub fn install_foreground_yield_hook(
     daemon: Arc<EmbeddedDaemon>,
-    yield_to: Option<Box<dyn Fn(Arc<dyn corpus_engine::YieldHook>) + Send + Sync>>,
+    yield_to: Option<Box<dyn Fn(Arc<dyn corpus_engine_yield::YieldHook>) + Send + Sync>>,
 ) {
     // ── Foreground back-pressure for lint/test watchers ─────────────
     //

@@ -1143,7 +1143,7 @@ async fn pull_loop(
         // misleading (the real ingest had ~1.5M chunks committed).
         let progress_state = state.clone();
         let progress_cid = corpus_id.clone();
-        let progress_cb: corpus_engine::ProgressCallback = Box::new(move |p| {
+        let progress_cb: corpus_index::ingest_port::ProgressCallback = Box::new(move |p| {
             let progress_state = progress_state.clone();
             let progress_cid = progress_cid.clone();
             tokio::spawn(async move {

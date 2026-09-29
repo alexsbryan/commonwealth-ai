@@ -1235,7 +1235,9 @@ impl EmbeddedDaemon {
     /// not on `commonwealth-api`) can install foreground back-pressure
     /// on the lint/test watchers without taking a direct
     /// `commonwealth-api` dep.
-    pub async fn build_yield_hook(&self) -> Option<std::sync::Arc<dyn corpus_engine::YieldHook>> {
+    pub async fn build_yield_hook(
+        &self,
+    ) -> Option<std::sync::Arc<dyn corpus_engine_yield::YieldHook>> {
         let state = self.app_state().await?;
         Some(crate::yield_hook::AppStateYieldHook::new(
             state.inner.clone(),
@@ -3285,7 +3287,7 @@ impl EmbeddedDaemon {
                     "foreground-yield: window configured"
                 );
             }
-            let hook: Arc<dyn corpus_engine::YieldHook> =
+            let hook: Arc<dyn corpus_engine_yield::YieldHook> =
                 crate::yield_hook::AppStateYieldHook::new(app_state.inner.clone());
             engine.set_yield_hook(hook);
             info!("foreground-yield: hook installed on corpus engine");
@@ -4116,7 +4118,7 @@ impl EmbeddedDaemon {
         // ~tens of milliseconds at most.
         if let Some(engine) = corpus_engine.clone() {
             let indexes_dir = engine.index_dir().to_path_buf();
-            match corpus_engine::enrichment::state::sweep_stalled_states(&indexes_dir) {
+            match corpus_index::enrichment_state::sweep_stalled_states(&indexes_dir) {
                 Ok(corpora) if !corpora.is_empty() => {
                     info!(
                         count = corpora.len(),

@@ -598,7 +598,10 @@ async fn notebooks(
                 if !atlas.join("governance_oplog.jsonl").exists() {
                     continue;
                 }
-                if let Ok(view) = corpus_engine::enrichment::GovernanceView::from_atlas_dir(&atlas)
+                if let Ok(view) =
+                    corpus_engine_atlas_reader::governance_view::GovernanceView::from_atlas_dir(
+                        &atlas,
+                    )
                 {
                     counts.insert(id, view.open_tensions().count() as u32);
                 }
@@ -718,7 +721,7 @@ async fn health(
     // One load, two answers. The command loaded the skeleton TWICE —
     // once to test presence, once to count — which is two chances for
     // the disk to answer differently within one response.
-    let skeleton = corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())
+    let skeleton = corpus_engine_atlas_reader::field_model::load_field_skeleton(&index.path())
         .ok()
         .flatten();
     let has_article_profiles = skeleton.is_some();
@@ -759,9 +762,8 @@ async fn coverage_card(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
 ) -> Result<Response, Absence> {
-    use corpus_engine::enrichment::atlas::analysis::sec_facts::{
-        authoritative_store, coverage_card as derive_card,
-    };
+    use corpus_engine::enrichment::atlas::analysis::sec_facts::authoritative_store;
+    use corpus_engine_atlas_reader::sec_facts::coverage_card as derive_card;
     let engine = engine_for(&daemon)?;
     let card = authoritative_store(engine.index_dir(), engine.recipes_dir(), &corpus)
         .map(|store| derive_card(&store));
@@ -778,7 +780,7 @@ async fn coverage_card(
 /// `Option`, so `null` arrives under a named key.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoverageCardResponse {
-    pub card: Option<corpus_engine::enrichment::atlas::analysis::sec_facts::CoverageCard>,
+    pub card: Option<corpus_engine_atlas_reader::sec_facts::CoverageCard>,
 }
 
 /// POST `/internal/corpus/{corpus}/retry-enrichment` — re-parse stored

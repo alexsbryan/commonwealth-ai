@@ -19,8 +19,8 @@ use axum::{Json, Router};
 use serde::Deserialize;
 
 use corpus_engine::enrichment::atlas::analysis::starter_questions::rank_starter_questions;
-use corpus_engine::enrichment::atlas::read_atlas_atoms;
 use corpus_engine::CorpusEngine;
+use understanding_vocab::read::read_atlas_atoms;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::Absence;

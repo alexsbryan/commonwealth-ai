@@ -94,7 +94,7 @@ pub use sovereign_contracts::daemon_wire::{
 pub struct IngestProgress {
     pub corpus_id: String,
     /// The live phase stamp, when one exists.
-    pub state: Option<corpus_engine::enrichment::state::EnrichmentState>,
+    pub state: Option<corpus_index::enrichment_state::EnrichmentState>,
     /// The terminal receipt, when the ingest half has ended.
     pub outcome: Option<crate::corpus_watch_http::IngestOutcome>,
     /// `true` iff `outcome` is present. Spelled out rather than left to
@@ -580,7 +580,7 @@ async fn ingest_progress(_: LocalOnly, Path(corpus_id): Path<String>) -> Result<
         return Ok(not_registered(&corpus_id));
     }
     let index_dir = manager.index_dir_root().join(&corpus_id);
-    let state = corpus_engine::enrichment::state::EnrichmentStateFile::read(&index_dir)
+    let state = corpus_index::enrichment_state::EnrichmentStateFile::read(&index_dir)
         .ok()
         .flatten();
     let outcome = crate::corpus_watch_http::IngestOutcome::read(&index_dir);

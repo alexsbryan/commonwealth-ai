@@ -29,7 +29,7 @@ pub struct IngestPart {
     /// app closes mid-ingest. Entries are retained until either a
     /// terminal phase (`Complete`) overwrites them or an explicit
     /// cancel wipes the corpus.
-    pub corpus_progress: RwLock<HashMap<String, corpus_engine::IngestProgress>>,
+    pub corpus_progress: RwLock<HashMap<String, sovereign_contracts::daemon_wire::IngestProgress>>,
     /// Operator-triggered tick channel for the `wikipedia-newsworthy`
     /// freshness watcher. Installed by the embedded daemon when (and
     /// only when) the watcher spawns; `None` in tests and on daemons

@@ -31,14 +31,16 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::enrichment::atlas::edges::EdgeId;
 use corpus_engine::enrichment::atlas::migrate_ids::migrate_atlas_ids;
-use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope, AtomId};
-use corpus_engine::enrichment::governance_view::section_titles;
-use corpus_engine::enrichment::{GovernanceOpKind, GovernanceView, TensionDisposition};
 use corpus_engine::CorpusEngine;
+use corpus_engine_atlas_reader::governance::GovernanceOpKind;
+use corpus_engine_atlas_reader::governance_view::section_titles;
+use corpus_engine_atlas_reader::governance_view::{GovernanceView, TensionDisposition};
 use oplog::{Op, Oplog};
 use sovereign_time::unix_now;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId};
+use understanding_vocab::edges::EdgeId;
+use understanding_vocab::read::read_atlas_atoms;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{internal_error, json_error, Absence};

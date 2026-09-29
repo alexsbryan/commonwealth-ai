@@ -80,7 +80,8 @@ use std::time::Duration;
 use std::collections::BTreeSet;
 
 use commonwealth_core::knowledge::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
-use corpus_engine::{CorpusEngine, IngestProgress, ProgressCallback};
+use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::ProgressCallback;
 use kernel_types::quality::VerdictSource;
 use kernel_types::ActorKey;
 use kernel_types::HandoffId;
@@ -88,6 +89,7 @@ use kernel_types::{Judgement, Reason};
 use kernel_types::{NodeId, Server};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sovereign_contracts::daemon_wire::IngestProgress;
 use sovereign_contracts::oicp::work::exec::{subject_of, JobContext, JobError};
 use sovereign_contracts::oicp::work::projection::{WorkHandoff, WorkProjection, WorkUnitStatus};
 use sovereign_contracts::oicp::work::refusal::WorkRefusal;

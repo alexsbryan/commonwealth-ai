@@ -46,7 +46,7 @@ pub struct CodeMount {
     /// Code's client routes (`/v1/projects/*`).
     pub routes: axum::Router,
     /// Hands code's lint/test watchers svrn's foreground signal.
-    pub yield_to: Box<dyn Fn(Arc<dyn corpus_engine::YieldHook>) + Send + Sync>,
+    pub yield_to: Box<dyn Fn(Arc<dyn corpus_engine_yield::YieldHook>) + Send + Sync>,
     /// Keeps code's runtime (Reindexer, watchers, atlas GC) alive for the
     /// process's life.
     pub hold: Box<dyn Any + Send + Sync>,

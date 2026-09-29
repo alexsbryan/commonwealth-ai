@@ -116,7 +116,7 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
 
     let caps = build_local_capabilities(
         None::<&Arc<dyn corpus_index::source::CorpusReadPort>>, // no CorpusEngine — irrelevant for this assertion
-        100,  // reported_at
+        100,                                                    // reported_at
         &state,
     )
     .await;
@@ -130,7 +130,12 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
     // Drain back to zero and rebuild — the next gossip tick must
     // see the drop, not a stale snapshot.
     gauge.set(0);
-    let caps_after = build_local_capabilities(None::<&Arc<dyn corpus_index::source::CorpusReadPort>>, 101, &state).await;
+    let caps_after = build_local_capabilities(
+        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>,
+        101,
+        &state,
+    )
+    .await;
     assert_eq!(
         caps_after.current_in_flight,
         Some(0),
@@ -148,7 +153,12 @@ async fn capabilities_payload_survives_serde_roundtrip() {
     let state = app_state_with_gauge(NodeId::from_u128(3), empty_mesh(), gauge.clone());
     gauge.set(11);
 
-    let caps = build_local_capabilities(None::<&Arc<dyn corpus_index::source::CorpusReadPort>>, 200, &state).await;
+    let caps = build_local_capabilities(
+        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>,
+        200,
+        &state,
+    )
+    .await;
     let json = serde_json::to_string(&caps).expect("serialize");
     assert!(
         json.contains("\"current_in_flight\":11"),
@@ -167,7 +177,12 @@ async fn no_publisher_yields_none_in_gossip_payload() {
     // None`. Older peers without the field deserialize that as
     // None too, so scoring falls back to the founder's local view.
     let state = AppState::new(NodeId::from_u128(4), empty_mesh());
-    let caps = build_local_capabilities(None::<&Arc<dyn corpus_index::source::CorpusReadPort>>, 300, &state).await;
+    let caps = build_local_capabilities(
+        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>,
+        300,
+        &state,
+    )
+    .await;
     assert_eq!(
         caps.current_in_flight, None,
         "no publisher → None in gossip (legacy-compatible)"
@@ -201,7 +216,12 @@ async fn self_claims_publishes_storage_remaining_from_the_budget() {
 
     // And the builder clamps the published free storage to that remaining
     // budget — the behaviour the port replaced a direct `AppState` read for.
-    let caps = build_local_capabilities(None::<&Arc<dyn corpus_index::source::CorpusReadPort>>, 500, &state).await;
+    let caps = build_local_capabilities(
+        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>,
+        500,
+        &state,
+    )
+    .await;
     assert!(
         caps.hardware.free_storage_gb <= 10,
         "budget remaining of 10 GiB must clamp published free_storage_gb, got {}",
