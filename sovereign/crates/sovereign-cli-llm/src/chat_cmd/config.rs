@@ -213,6 +213,39 @@ pub fn parse_globals(args: &[String]) -> Result<(ChatGlobals, Vec<String>), Stri
     Ok((globals, rest))
 }
 
+impl ChatGlobals {
+    /// The argv [`parse_globals`] turns back into these globals, for a verb
+    /// that hands its session config to a child process (`eval run` to
+    /// `svrn __probe`). Only what the operator set is written, so the child
+    /// resolves every default exactly as the parent did.
+    pub fn to_argv(&self) -> Vec<String> {
+        let mut argv = Vec::new();
+        let mut push = |flag: &str, v: String| {
+            argv.push(flag.to_string());
+            argv.push(v);
+        };
+        if self.daemon_explicit {
+            push("--daemon", self.daemon_base.clone());
+        }
+        if self.data_dir_explicit {
+            push("--data-dir", self.data_dir.display().to_string());
+        }
+        if let Some(m) = &self.chat_model {
+            push("--chat-model", m.clone());
+        }
+        if let Some(m) = &self.embed_model {
+            push("--embed-model", m.clone());
+        }
+        if let Some(t) = self.temperature {
+            push("--temperature", t.to_string());
+        }
+        if let Some(n) = self.max_tokens {
+            push("--max-tokens", n.to_string());
+        }
+        argv
+    }
+}
+
 /// Point `globals` at a guest link, if one is in effect and the operator did
 /// not name an endpoint themselves.
 ///
@@ -452,6 +485,40 @@ mod tests {
             .unwrap_err();
         assert!(error.contains("did not answer"), "{error}");
         assert!(error.contains("no fallback"), "{error}");
+    }
+
+    /// `to_argv` is `parse_globals`' inverse: a child handed it resolves the
+    /// same globals, and a flag the operator did not pass stays unwritten.
+    #[test]
+    fn to_argv_parses_back_to_the_same_globals() {
+        let (g, _) = parse_globals(&svec(&[
+            "--daemon",
+            "http://box:9999/v1",
+            "--data-dir",
+            "/tmp/d",
+            "--chat-model",
+            "c",
+            "--embed-model",
+            "e",
+            "--temperature",
+            "0.3",
+            "--max-tokens",
+            "64",
+            "run",
+        ]))
+        .unwrap();
+        let (back, rest) = parse_globals(&g.to_argv()).unwrap();
+        assert!(rest.is_empty(), "{rest:?}");
+        assert_eq!(back.daemon_base, g.daemon_base);
+        assert!(back.daemon_explicit && back.data_dir_explicit);
+        assert_eq!(back.data_dir, g.data_dir);
+        assert_eq!(back.chat_model.as_deref(), Some("c"));
+        assert_eq!(back.embed_model.as_deref(), Some("e"));
+        assert_eq!(back.temperature, Some(0.3));
+        assert_eq!(back.max_tokens, Some(64));
+
+        let (bare, _) = parse_globals(&svec(&["run"])).unwrap();
+        assert!(bare.to_argv().is_empty());
     }
 
     fn a_link(url: &str) -> GuestLink {
