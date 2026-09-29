@@ -298,14 +298,25 @@ pub fn build_folder_tiered_deps(
         Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>,
     >,
 ) -> Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps> {
-    // Delegated to the shared builder so the desktop's embedded daemon wires
-    // an identical stack. See `sovereign_tools::enrichment_bootstrap`.
-    sovereign_tools::enrichment_bootstrap::build_folder_tiered_deps(
+    // The provider comes from the shared builder so the desktop's embedded
+    // daemon wires an identical one (`sovereign_tools::enrichment_bootstrap`);
+    // the engine's `FolderTiered` over it is built here, where the engine is
+    // (phase-b-49).
+    let tiered_provider = sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
         data_dir,
         provider,
-        chunk_entity_extractor,
         Arc::new(corpus_engine::IngestAtlas),
-    )
+    )?;
+    tracing::info!(
+        target: "sovereign_tools::enrichment_bootstrap",
+        "enrichment_bootstrap: folder tiered deps constructed — FolderTieredProvider wired"
+    );
+    Some(sovereign_tools::local_corpus::watched::enrich::TieredDeps {
+        tiered: Arc::new(corpus_engine::FolderTiered::new(
+            tiered_provider,
+            chunk_entity_extractor,
+        )),
+    })
 }
 
 /// Default bind for an anchor's in-process RPC worker. Applied only when a
