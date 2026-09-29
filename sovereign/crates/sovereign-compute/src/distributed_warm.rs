@@ -9,7 +9,6 @@
 //! process that loads the distributed primary runs it. The worker side (the
 //! route's `RpcShardWarmer`) stays in the daemon until its own move.
 
-
 use kernel_types::NodeId;
 use mesh_reach::{PeerEndpoint, TrafficClass};
 use serde::{Deserialize, Serialize};
