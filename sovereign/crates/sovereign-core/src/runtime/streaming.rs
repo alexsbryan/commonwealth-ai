@@ -961,7 +961,7 @@ impl Runtime {
         // System = minimal assistant preamble + the user's persona
         // (custom instructions) when set. Nothing else.
         let mut system = "You are a helpful assistant.".to_string();
-        if let Some(ci) = self.inference_config.custom_instructions.as_deref() {
+        if let Some(ci) = self.turn_inference_config().custom_instructions.as_deref() {
             let ci = ci.trim();
             if !ci.is_empty() {
                 system.push_str("\n\n");
@@ -1328,7 +1328,7 @@ impl Runtime {
         // THIS turn's channel, read here in the turn's own task — the spawn
         // below does not inherit the task-local it comes from.
         let approval = self.turn_approval();
-        let inference_config = self.inference_config.clone();
+        let inference_config = self.turn_inference_config().into_owned();
         // Tool-Mastery Layer 3 — cloned so the nested
         // post-stream gap-check spawn can write a
         // `tool_decision` outcome note after refinement
@@ -2910,10 +2910,10 @@ impl Runtime {
             system_message: Some(kc.system),
             preferred_speed: kc.speed,
             max_tokens: Some(synth_max),
-            temperature: Some(self.inference_config.temperature),
-            think_budget: Some(self.inference_config.think_budget),
+            temperature: Some(self.turn_inference_config().temperature),
+            think_budget: Some(self.turn_inference_config().think_budget),
             structured_output: None,
-            top_k: self.inference_config.top_k,
+            top_k: self.turn_inference_config().top_k,
             top_p: None,
             oicp,
             tools: None,
@@ -3060,7 +3060,7 @@ impl Runtime {
         let store = Arc::clone(&self.store);
         // THIS turn's channel — read before the spawn, as above.
         let approval = self.turn_approval();
-        let inference_config = self.inference_config.clone();
+        let inference_config = self.turn_inference_config().into_owned();
         // Engine handle for acquisition-route resolution on the
         // post-stream gap-check card (EPISTEMIC_STATE.md §4.3).
         let engine_for_routes = self.corpus_engine.clone();

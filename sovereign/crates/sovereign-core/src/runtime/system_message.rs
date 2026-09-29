@@ -299,7 +299,7 @@ impl Runtime {
         // Fully visible to the user in the desktop's ProvenancePanel,
         // which renders this final assembled string.
         if let Some(block) =
-            render_custom_instructions(self.inference_config.custom_instructions.as_deref())
+            render_custom_instructions(self.turn_inference_config().custom_instructions.as_deref())
         {
             parts.push(block);
         }
@@ -771,7 +771,7 @@ impl Runtime {
         match run_collaboration(
             self.inference.as_ref(),
             approval.as_ref(),
-            &self.inference_config,
+            &self.turn_inference_config(),
             conversation_id,
             question,
             response,
@@ -827,7 +827,7 @@ impl Runtime {
             self.inference.as_ref(),
             approval.as_ref(),
             self.store.as_ref(),
-            &self.inference_config,
+            &self.turn_inference_config(),
             conversation_id,
             message_id,
             question,

@@ -116,7 +116,7 @@ impl Runtime {
             // that triggers the auto-`</think>` close on Qwen3.5-vOP.
             (witness_budget, Some(false))
         } else {
-            (self.inference_config.max_tokens, None)
+            (self.turn_inference_config().max_tokens, None)
         };
 
         let oicp = if matches!(intent, Intent::SimpleQuery) {

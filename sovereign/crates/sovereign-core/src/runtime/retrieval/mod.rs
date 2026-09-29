@@ -358,7 +358,7 @@ impl Runtime {
             let knowledge_char_budget = {
                 let mut budget = EXPANDED_KNOWLEDGE_CHARS;
                 if let Some(n_ctx) = self.inference.effective_context_size() {
-                    let reserved_output = self.inference_config.max_tokens as u32;
+                    let reserved_output = self.turn_inference_config().max_tokens as u32;
                     let system_overhead = self
                         .last_assembly(&context.conversation.id)
                         .map(|m| m.system_tokens.saturating_add(256))
@@ -570,7 +570,7 @@ impl Runtime {
             let base = crate::runtime::build_synthesis_system_prompt(
                 false,
                 &gap_note,
-                self.inference_config.think_budget > 0,
+                self.turn_inference_config().think_budget > 0,
                 &budget_note,
             );
             self.build_primary_system_message(&base, context)

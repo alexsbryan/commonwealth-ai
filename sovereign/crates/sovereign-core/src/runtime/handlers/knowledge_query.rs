@@ -972,7 +972,7 @@ impl Runtime {
         const CHARS_PER_TOKEN: u32 = 4;
         let original_budget = knowledge_char_budget;
         if let Some(n_ctx) = self.inference.effective_context_size() {
-            let reserved_output = self.inference_config.max_tokens as u32;
+            let reserved_output = self.turn_inference_config().max_tokens as u32;
             // Phase 3 (budget-sensor redesign): when the assembly memo
             // has last turn's REAL system-message size for this
             // conversation, use it instead of the static cushion —
@@ -1303,10 +1303,10 @@ impl Runtime {
                     system_message: Some(system),
                     preferred_speed: route_speed,
                     max_tokens: Some(output_budget.hard_ceiling),
-                    temperature: Some(self.inference_config.temperature),
+                    temperature: Some(self.turn_inference_config().temperature),
                     think_budget: Some(0),
                     structured_output: None,
-                    top_k: self.inference_config.top_k,
+                    top_k: self.turn_inference_config().top_k,
                     top_p: None,
                     // oicp=None lets the wire layer auto-derive
                     // latency_class=Fast from preferred_speed (per the
@@ -1341,7 +1341,7 @@ impl Runtime {
                 let base = crate::runtime::build_synthesis_system_prompt(
                     false,
                     &gap_note,
-                    self.inference_config.think_budget > 0,
+                    self.turn_inference_config().think_budget > 0,
                     &budget_note,
                 );
                 // Inc 4: on the first-class code route, sharpen the prompt to use
@@ -1358,10 +1358,10 @@ impl Runtime {
                     system_message: Some(system),
                     preferred_speed: route_speed,
                     max_tokens: Some(output_budget.hard_ceiling),
-                    temperature: Some(self.inference_config.temperature),
-                    think_budget: Some(self.inference_config.think_budget),
+                    temperature: Some(self.turn_inference_config().temperature),
+                    think_budget: Some(self.turn_inference_config().think_budget),
                     structured_output: None,
-                    top_k: self.inference_config.top_k,
+                    top_k: self.turn_inference_config().top_k,
                     top_p: None,
                     oicp: self.build_oicp(&Intent::KnowledgeQuery),
                     tools: None,
@@ -1990,7 +1990,7 @@ impl Runtime {
             // response so the desktop chip lights up on length
             // truncation here too, not just on streaming surfaces.
             finish_reason: completion.finish_reason.clone(),
-            max_tokens_budget: Some(self.inference_config.max_tokens),
+            max_tokens_budget: Some(self.turn_inference_config().max_tokens),
             completion_tokens: completion.completion_tokens,
             // Ctx-budget glassbox — paired with `tokens_used` so the
             // desktop chat bubble can render `N / M (X%)` and brighten

@@ -30,10 +30,15 @@
 //! turn socket installs one, and only for its own turn. That is what makes
 //! this behaviour-preserving everywhere it is not the point.
 
+use std::borrow::Cow;
 use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
+use tokio::task::futures::TaskLocalFuture;
+
 use crate::traits::{ApprovalChannel, RoutingEventSink};
+use crate::types::{InferenceConfig, SamplingOverrides};
 
 tokio::task_local! {
     /// The approval channel of the turn running on this task, installed by
@@ -47,6 +52,36 @@ tokio::task_local! {
     /// a broadcast bridge would need a conversation→socket registry to
     /// work out what the turn already knows.
     static TURN_ROUTING_EVENTS: Arc<dyn RoutingEventSink>;
+    /// The sampling pins of the turn running on this task, installed by
+    /// [`scope_sampling`] (`TurnRequest::Message.sampling`). Same bargain
+    /// again: the daemon serves every socket from ONE `Runtime`, so the
+    /// session-wide `inference_config` cannot carry one client's pin.
+    static TURN_SAMPLING: SamplingOverrides;
+}
+
+/// Run `fut` as a turn whose sampling is pinned by `pins`; `None` pins
+/// nothing. Boxes `fut` HERE, not on first poll, so a caller nesting this
+/// inside [`scope_turn`] hands it a pointer-sized future — the doubled
+/// construction [`scope_turn`]'s doc measured is not reintroduced.
+pub fn scope_sampling<F: Future>(
+    pins: Option<SamplingOverrides>,
+    fut: F,
+) -> TaskLocalFuture<SamplingOverrides, Pin<Box<F>>> {
+    let pins = pins.unwrap_or_default();
+    if pins != SamplingOverrides::default() {
+        tracing::info!(
+            temperature = ?pins.temperature,
+            top_p = ?pins.top_p,
+            max_tokens = ?pins.max_tokens,
+            "turn.sampling: this turn's sampling is pinned by its request"
+        );
+    }
+    TURN_SAMPLING.scope(pins, Box::pin(fut))
+}
+
+/// The ambient turn's sampling pins; `None` outside a [`scope_sampling`].
+pub(crate) fn current_sampling() -> Option<SamplingOverrides> {
+    TURN_SAMPLING.try_with(Clone::clone).ok()
 }
 
 /// Run `fut` as a turn whose consent questions go to `approval`.
@@ -145,6 +180,34 @@ impl super::Runtime {
     /// post-turn narration survives the spawn.
     pub(crate) fn turn_routing_events(&self) -> Arc<dyn RoutingEventSink> {
         current_routing_events().unwrap_or_else(|| Arc::clone(&self.routing_events))
+    }
+
+    /// The inference config THIS turn runs at: the commissioned
+    /// `inference_config` with the turn's temperature and max_tokens pins
+    /// laid over it. Borrowed, and byte-identical, when nothing is pinned.
+    /// `top_p` has no `InferenceConfig` field to land on; `serve_turn`
+    /// refuses it by name before the turn starts. Same read-before-spawn
+    /// contract as [`Self::turn_approval`].
+    pub(crate) fn turn_inference_config(&self) -> Cow<'_, InferenceConfig> {
+        let Some(pins) = current_sampling() else {
+            return Cow::Borrowed(&self.inference_config);
+        };
+        if pins.temperature.is_none() && pins.max_tokens.is_none() {
+            return Cow::Borrowed(&self.inference_config);
+        }
+        let mut config = self.inference_config.clone();
+        if let Some(t) = pins.temperature {
+            config.temperature = t;
+        }
+        if let Some(n) = pins.max_tokens {
+            config.max_tokens = n as usize;
+        }
+        tracing::debug!(
+            temperature = config.temperature,
+            max_tokens = config.max_tokens,
+            "turn.sampling: read the turn's pinned inference config"
+        );
+        Cow::Owned(config)
     }
 }
 
