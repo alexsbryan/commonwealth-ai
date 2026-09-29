@@ -464,33 +464,49 @@ pub async fn reload_through_serve(
 /// on a blocking thread, which takes well under this.
 const FORWARD_WINDOW: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// One GET forwarded to serve, its status and body relayed. An unreachable
-/// serve, one past [`FORWARD_WINDOW`], or an unreadable body is an Err naming
-/// which, never a success-shaped answer.
+/// One GET forwarded to serve, its status and body relayed (see [`forward`]).
 pub async fn forward_get(
     base: &str,
     path: &str,
 ) -> Result<(axum::http::StatusCode, Vec<u8>), String> {
+    forward(base, axum::http::Method::GET, path, None).await
+}
+
+/// One request forwarded to serve, its status and body relayed; `body` goes
+/// as JSON when present. An unreachable serve, one past [`FORWARD_WINDOW`],
+/// or an unreadable body is an Err naming which, never a success-shaped
+/// answer.
+pub async fn forward(
+    base: &str,
+    method: axum::http::Method,
+    path: &str,
+    body: Option<Vec<u8>>,
+) -> Result<(axum::http::StatusCode, Vec<u8>), String> {
     let url = format!("{}{path}", base.trim_end_matches('/'));
-    let resp = reqwest::Client::new()
-        .get(&url)
-        .timeout(FORWARD_WINDOW)
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_timeout() {
-                format!("serve at {base} did not answer {path} within {FORWARD_WINDOW:?}")
-            } else {
-                format!("serve at {base} is not reachable for {path}: {e}")
-            }
-        })?;
+    let method = reqwest::Method::from_bytes(method.as_str().as_bytes())
+        .map_err(|e| format!("{method} is not a method serve can be asked: {e}"))?;
+    let mut request = reqwest::Client::new()
+        .request(method.clone(), &url)
+        .timeout(FORWARD_WINDOW);
+    if let Some(body) = body {
+        request = request
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body);
+    }
+    let resp = request.send().await.map_err(|e| {
+        if e.is_timeout() {
+            format!("serve at {base} did not answer {path} within {FORWARD_WINDOW:?}")
+        } else {
+            format!("serve at {base} is not reachable for {path}: {e}")
+        }
+    })?;
     let status = axum::http::StatusCode::from_u16(resp.status().as_u16())
         .unwrap_or(axum::http::StatusCode::BAD_GATEWAY);
     let body = resp
         .bytes()
         .await
         .map_err(|e| format!("serve at {base} answered {path} unreadably: {e}"))?;
-    tracing::debug!(target: "serving_path", serve_base = base, path, status = status.as_u16(), "read forwarded to serve");
+    tracing::debug!(target: "serving_path", serve_base = base, %method, path, status = status.as_u16(), "request forwarded to serve");
     Ok((status, body.to_vec()))
 }
 

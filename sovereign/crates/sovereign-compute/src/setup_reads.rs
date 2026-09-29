@@ -2,8 +2,8 @@
 //! The setup UI's reads of the SERVING machine: what hardware it has, the
 //! primary catalog for its tier, and the single-pick slots. Moved from the
 //! daemon's assets_http.rs (pb-svrn-dials-serve) so the process that serves
-//! answers them: `serve` mounts [`bundle`], and the daemon answers the same
-//! functions in process on its interim path or forwards to serve.
+//! answers them: `serve` mounts [`bundle`], and the daemon forwards to serve
+//! (pb-serve-distributes).
 
 use axum::extract::Query;
 use axum::http::StatusCode;
@@ -145,3 +145,7 @@ pub async fn slot(q: SlotQuery) -> Response {
     let slot: Option<SlotConfig> = setup_planner::resolve_slot(&profile, kind);
     Json(slot).into_response()
 }
+
+#[cfg(test)]
+#[path = "setup_reads/tests.rs"]
+mod tests;
