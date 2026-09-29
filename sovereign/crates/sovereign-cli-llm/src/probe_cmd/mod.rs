@@ -87,7 +87,10 @@ pub async fn run(args: &[String]) -> i32 {
     {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("error: svrn __probe: request {}: {e}", request_path.display());
+            eprintln!(
+                "error: svrn __probe: request {}: {e}",
+                request_path.display()
+            );
             return 2;
         }
     };
@@ -152,8 +155,8 @@ async fn probe(session: &ChatSession, request: &ProbeRequest) -> Result<ProbeEvi
             .await;
             ProbeEvidence::Prod {
                 rows,
-                ledger_violations: sovereign_core::runtime::retrieval_pipeline::ledger_violation_count()
-                    as u64,
+                ledger_violations:
+                    sovereign_core::runtime::retrieval_pipeline::ledger_violation_count() as u64,
             }
         }
         ProbeMode::Retrieve => ProbeEvidence::Retrieve {
@@ -164,7 +167,10 @@ async fn probe(session: &ChatSession, request: &ProbeRequest) -> Result<ProbeEvi
                 request.limit,
                 &atlases,
                 &graphs,
-                request.atlas.as_ref().map_or(sovereign_contracts::probe::SeedMode::Cosine, |a| a.seed),
+                request
+                    .atlas
+                    .as_ref()
+                    .map_or(sovereign_contracts::probe::SeedMode::Cosine, |a| a.seed),
             )
             .await?,
         },

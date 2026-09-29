@@ -610,7 +610,6 @@ pub async fn load_atlas_context(
     .map_err(|e| e.to_string())
 }
 
-
 /// Load every atlas the request names: its embedded context bag, and the
 /// structural graph layer (atoms-by-id, edge adjacency) `atlas_navigate`
 /// walks. A bag that will not load fails the run; a graph that will not load
