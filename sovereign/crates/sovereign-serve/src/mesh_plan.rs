@@ -245,7 +245,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
 /// They routinely disagree, and which one you need depends on the question —
 /// "could this mesh ever run this model" versus "would a load right now succeed".
 /// Picking one on the operator's behalf hid a real cut mismatch for weeks.
-pub async fn cmd_plan(args: &[String]) -> i32 {
+pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
     use sovereign_inference::embedded as inf;
     // Kept as the raw spec, not a PathBuf: it may be `hf:<owner>/<repo>/<variant>`,
     // which `remote_gguf::resolve` turns into header-only stand-ins below.

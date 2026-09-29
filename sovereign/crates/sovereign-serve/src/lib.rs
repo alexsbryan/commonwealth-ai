@@ -64,15 +64,15 @@ mod fetch_ner;
 pub mod measurements_rail;
 /// `svrn mesh bench`: measure a placement's decode rate under the probe's
 /// validity guards and file the record (pb-serve-placement).
-pub mod mesh_bench;
+mod mesh_bench;
 /// Placement measurements: what a placement was observed to do, keyed by
 /// model fingerprint × placement digest × machine witness (phase-b-22).
 pub mod mesh_measurements;
 /// `svrn mesh plan`: dry-run a model's split across a mesh, with what the
 /// placement measurements know about its speed (pb-serve-placement).
-pub mod mesh_plan;
+mod mesh_plan;
 /// The CLI's side of measurement travel: publish a run, read peers' runs.
-pub mod mesh_travel;
+mod mesh_travel;
 mod reload;
 /// A model named by URL: fetched header-only so `plan` can read its tensors.
 mod remote_gguf;
@@ -198,7 +198,8 @@ pub fn child_launch(args: &[String]) -> Option<i32> {
 
 /// The subcommands `run` routes before the server's arguments. The dispatcher
 /// sends `svrn mesh <verb>` here for exactly these.
-pub const WEIGHT_VERBS: &[&str] = &["warm-cache", "fetch-model", "fetch-ner"];
+/// `plan` and `bench` are placement measurement's (pb-serve-placement).
+pub const WEIGHT_VERBS: &[&str] = &["warm-cache", "fetch-model", "fetch-ner", "plan", "bench"];
 
 fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
     let runtime = match tokio::runtime::Builder::new_multi_thread()
@@ -215,6 +216,8 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
         match verb {
             "warm-cache" => warm_cache::cmd_warm_cache(rest).await,
             "fetch-ner" => fetch_ner::cmd_fetch_ner(rest).await,
+            "plan" => mesh_plan::cmd_plan(rest).await,
+            "bench" => mesh_bench::cmd_bench(rest).await,
             _ => fetch_model::cmd_fetch_model(rest).await,
         }
     })

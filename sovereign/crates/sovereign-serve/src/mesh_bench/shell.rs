@@ -17,7 +17,7 @@ struct BenchArgs {
 }
 
 /// `svrn mesh bench [<model.gguf>] [--trials <n>] [--json] [--history]`
-pub async fn cmd_bench(args: &[String]) -> i32 {
+pub(crate) async fn cmd_bench(args: &[String]) -> i32 {
     let mut parsed = BenchArgs {
         assert_model: None,
         trials: 3,

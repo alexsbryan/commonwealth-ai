@@ -55,17 +55,16 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "balance" => cmd_balance().await,
         "leave" => cmd_leave(&args[1..]).await,
         "logs" => cmd_logs().await,
-        // serve's weight verbs (phase-b-22): the dispatcher execs
-        // sovereign-serve for these spellings, so only a direct call lands here.
-        verb @ ("fetch-model" | "warm-cache" | "fetch-ner") => {
+        // serve's weight verbs (phase-b-22) and placement measurement
+        // (pb-serve-placement): the dispatcher execs sovereign-serve for these
+        // spellings, so only a direct call lands here.
+        verb @ ("fetch-model" | "warm-cache" | "fetch-ner" | "plan" | "bench") => {
             eprintln!(
                 "mesh {verb}: owned by serve. Run `svrn mesh {verb}` (the dispatcher \
                  routes it to sovereign-serve) or `sovereign-serve {verb}`."
             );
             2
         }
-        "plan" => sovereign_serve::mesh_plan::cmd_plan(&args[1..]).await,
-        "bench" => sovereign_serve::mesh_bench::cmd_bench(&args[1..]).await,
         "check-invariants" => cmd_check_invariants(&args[1..]).await,
         "soak-gate" => cmd_soak_gate(&args[1..]).await,
         other => {

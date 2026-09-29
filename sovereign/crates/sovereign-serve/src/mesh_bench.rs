@@ -538,7 +538,7 @@ mod shell;
 
 pub(crate) use guards::*;
 pub(crate) use render::*;
-pub use shell::cmd_bench;
+pub(crate) use shell::cmd_bench;
 #[cfg(test)]
 use shell::*;
 

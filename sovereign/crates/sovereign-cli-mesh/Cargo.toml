@@ -12,10 +12,6 @@ sovereign-contracts = { workspace = true }
 host-kit = { workspace = true, features = ["shell"] }
 sovereign-time = { workspace = true }
 commonwealth-media = { workspace = true }
-sovereign-inference = { workspace = true }
-# The placement-measurement store and its travel, serve's since
-# pb-serve-placement; named until plan and bench follow it there.
-sovereign-serve = { workspace = true }
 oicp-types = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # The client half of the daemon's HTTP surface: `ServingHost` decides "is a
