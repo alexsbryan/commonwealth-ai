@@ -317,4 +317,3 @@ pub fn spawn_self_manifest_refresh(
         }
     });
 }
-
