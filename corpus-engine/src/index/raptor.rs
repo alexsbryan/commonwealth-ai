@@ -42,7 +42,7 @@ use crate::error::{Error, Result};
 // (FIVE_PROGRAMS §12 decision 1 — the ground walk's summaries read it).
 pub use corpus_engine_atlas_reader::raptor_read::{
     lance_path, meta_path, read_raptor_meta, search_raptor_summaries, RaptorHit, RaptorIndexMeta,
-    RAPTOR_LANCE_DIR, RAPTOR_META_FILE, RAPTOR_TABLE,
+    RaptorSummaryRow, RAPTOR_LANCE_DIR, RAPTOR_META_FILE, RAPTOR_TABLE,
 };
 
 /// LanceDB table name; the on-disk dir is `<name>.lance`.
@@ -59,18 +59,6 @@ pub const RAPTOR_SCHEMA_VERSION: u32 = 1;
 /// So every current corpus stays on the exact flat path; IVF-PQ engages only
 /// for genuinely wiki-scale summary trees, where the recall gate applies.
 const FLAT_SCAN_THRESHOLD: usize = 30_000;
-
-/// One RAPTOR summary node, as the index builder consumes it. The caller
-/// (sovereign-tools) fills this from `ConvRaptorNodeRow`; this crate never
-/// sees the SQLite type.
-#[derive(Clone, Debug)]
-pub struct RaptorSummaryRow {
-    pub node_id: String,
-    pub conv_uuid: String,
-    pub level: i64,
-    pub summary: String,
-    pub embedding: Vec<f32>,
-}
 
 /// One search hit. `score` is the EXACT cosine similarity, recomputed from the
 /// stored embedding rather than LanceDB's reported `_distance` (which carries

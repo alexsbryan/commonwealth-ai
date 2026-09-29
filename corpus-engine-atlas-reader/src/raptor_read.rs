@@ -194,3 +194,15 @@ pub async fn search_raptor_summaries(
     });
     Ok(hits)
 }
+
+/// One RAPTOR summary node, as the index builder consumes it. The caller
+/// (sovereign-tools) fills this from `ConvRaptorNodeRow`; this crate never
+/// sees the SQLite type.
+#[derive(Clone, Debug)]
+pub struct RaptorSummaryRow {
+    pub node_id: String,
+    pub conv_uuid: String,
+    pub level: i64,
+    pub summary: String,
+    pub embedding: Vec<f32>,
+}
