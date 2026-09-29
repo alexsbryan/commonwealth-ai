@@ -59,7 +59,11 @@ fn servable_files_do_not_guess_missing_shards() {
 #[tokio::test]
 async fn the_bundle_lists_every_shard_of_the_advertised_slots() {
     let dir = tempfile::tempdir().unwrap();
-    for name in ["big-00001-of-00002.gguf", "big-00002-of-00002.gguf", "embed.gguf"] {
+    for name in [
+        "big-00001-of-00002.gguf",
+        "big-00002-of-00002.gguf",
+        "embed.gguf",
+    ] {
         std::fs::write(dir.path().join(name), b"x").unwrap();
     }
     let models = sovereign_contracts::setup_config::ModelsSection {
@@ -94,6 +98,10 @@ async fn the_bundle_lists_every_shard_of_the_advertised_slots() {
     names.sort();
     assert_eq!(
         names,
-        ["big-00001-of-00002.gguf", "big-00002-of-00002.gguf", "embed.gguf"]
+        [
+            "big-00001-of-00002.gguf",
+            "big-00002-of-00002.gguf",
+            "embed.gguf"
+        ]
     );
 }

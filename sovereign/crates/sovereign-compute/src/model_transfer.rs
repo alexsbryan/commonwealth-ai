@@ -421,7 +421,9 @@ pub fn bundle(servable: ServableModelFilesReader) -> host_kit::shell::RouteBundl
 /// What a node configured with `models` serves to peers: every shard of each
 /// slot it advertises (`sovereign_contracts::model_slots`, the list svrn
 /// registers too). Empty for a node with no `[models]`.
-pub fn servable_for(models: Option<&sovereign_contracts::setup_config::ModelsSection>) -> Vec<PathBuf> {
+pub fn servable_for(
+    models: Option<&sovereign_contracts::setup_config::ModelsSection>,
+) -> Vec<PathBuf> {
     let Some(models) = models else {
         return Vec::new();
     };
