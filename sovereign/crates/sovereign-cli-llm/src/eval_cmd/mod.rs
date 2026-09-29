@@ -159,7 +159,6 @@ pub async fn run_eval(args: &[String]) -> i32 {
     }
     match first {
         "run" => cmd_run(&args[1..]).await,
-        "inner-chaos" => crate::inner_chaos::run_inner_chaos(&args[1..]).await,
         other => {
             eprintln!("error: unknown subcommand `{other}`");
             help::print(&HELP);

@@ -188,7 +188,7 @@ async fn async_main() {
         "govern" => govern_cmd::run_govern(rest).await,
         "proxy" => proxy_cmd::run_proxy(rest).await,
         "portfolio" => portfolio_cmd::run_portfolio(rest).await,
-        "eval" => eval_cmd::run_eval(rest).await,
+        "eval" => run_eval_verb(rest).await,
         "voice" => voice_eval::run_voice_eval(rest).await,
         "reading-diag" => reading_diag_cmd::run(rest).await,
         "search-gym" => search_gym_cmd::run_search_gym(rest).await,
@@ -225,6 +225,63 @@ async fn async_main() {
     };
 
     std::process::exit(code);
+}
+
+/// `eval`'s dispatch. `inner-chaos` is svrn's white-box test of itself and
+/// stays here; eval_cmd is bench's and must name no svrn-side module
+/// (phase-b-55), so the arm is routed before eval_cmd sees the args.
+async fn run_eval_verb(rest: &[String]) -> i32 {
+    match rest.first().map(String::as_str) {
+        Some("inner-chaos") => inner_chaos::run_inner_chaos(&rest[1..]).await,
+        _ => eval_cmd::run_eval(rest).await,
+    }
+}
+
+#[cfg(test)]
+mod eval_dispatch {
+    #[tokio::test]
+    async fn eval_inner_chaos_help_is_answered_by_inner_chaos() {
+        let args: Vec<String> = ["inner-chaos", "--help"].map(String::from).to_vec();
+        // eval_cmd answers an unknown subcommand with 2; inner_chaos answers
+        // its own --help with 0.
+        assert_eq!(super::run_eval_verb(&args).await, 0);
+        assert_eq!(super::eval_cmd::run_eval(&args).await, 2);
+    }
+
+    #[test]
+    fn eval_cmd_names_no_inner_chaos_module() {
+        let needle = ["inner", "chaos"].join("_");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/eval_cmd");
+        let mut offenders = Vec::new();
+        let mut scanned = 0usize;
+        let mut stack = vec![root];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("read eval_cmd").flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "rs") {
+                    continue;
+                }
+                scanned += 1;
+                let text = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+                for (i, line) in text.lines().enumerate() {
+                    let code = line.split("//").next().unwrap_or("");
+                    if code.contains(&needle) {
+                        offenders.push(format!("{}:{}", path.display(), i + 1));
+                    }
+                }
+            }
+        }
+        assert!(scanned > 10, "only {scanned} files scanned");
+        assert!(
+            offenders.is_empty(),
+            "eval_cmd moves to bench and must not name svrn's `{needle}`: {offenders:?}"
+        );
+    }
 }
 
 #[cfg(test)]
