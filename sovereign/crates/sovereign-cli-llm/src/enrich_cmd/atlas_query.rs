@@ -341,7 +341,7 @@ async fn conceptual_seed(
             include_configurations: false,
             ..AtlasContextFilter::default()
         };
-        match load_atlas_context(&session, corpus_id, 8, &filter).await {
+        match load_atlas_context(&session.inference, corpus_id, 8, &filter).await {
             Ok(c) => Some(c),
             Err(e) => {
                 eprintln!("atlas-query: no ANN table and embedding bag load failed: {e}");

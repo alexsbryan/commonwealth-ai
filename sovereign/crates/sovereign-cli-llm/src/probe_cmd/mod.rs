@@ -136,7 +136,7 @@ async fn probe(session: &ChatSession, request: &ProbeRequest) -> Result<ProbeEvi
     // the retrieve probe walks them.
     let (atlases, graphs) = match (&request.atlas, request.mode) {
         (Some(atlas), ProbeMode::Prod | ProbeMode::Retrieve) => {
-            load_atlases(session, atlas).await?
+            load_atlases(&session.inference, atlas).await?
         }
         _ => (Vec::new(), Vec::new()),
     };

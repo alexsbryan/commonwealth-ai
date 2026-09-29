@@ -589,16 +589,16 @@ pub(crate) async fn probe(
 /// `corpus_engine::enrichment::atlas::context_loader::load_atlas_context` (ontology-v1
 /// P0.2 moved the body there so the daemon can seed a fresh atlas
 /// in-process). This wrapper supplies only what the CLI has and the library
-/// must not assume: the session's inference provider and the atlas dir under
+/// must not assume: the inference provider and the atlas dir under
 /// the enrichment store.
 pub async fn load_atlas_context(
-    session: &ChatSession,
+    inference: &std::sync::Arc<dyn sovereign_core::traits::InferenceProvider>,
     atlas_corpus_id: &str,
     top_k: usize,
     filter: &AtlasContextFilter,
 ) -> Result<AtlasContext, String> {
     let atlas_dir = paths::index_root(atlas_corpus_id).join(ATLAS_DIRNAME);
-    let embed = sovereign_core::embed_fn::inference_to_embed_query_fn(session.inference.clone());
+    let embed = sovereign_core::embed_fn::inference_to_embed_query_fn(inference.clone());
     corpus_engine::enrichment::atlas::context_loader::load_atlas_context(
         &embed,
         &atlas_dir,
@@ -615,7 +615,7 @@ pub async fn load_atlas_context(
 /// walks. A bag that will not load fails the run; a graph that will not load
 /// is a warning, and that atlas is walked by cosine alone.
 pub(crate) async fn load_atlases(
-    session: &ChatSession,
+    inference: &std::sync::Arc<dyn sovereign_core::traits::InferenceProvider>,
     atlas: &AtlasProbe,
 ) -> Result<(Vec<AtlasContext>, Vec<AtlasGraph>), String> {
     let include_claims = atlas.include_kinds.iter().any(|k| k == "claim");
@@ -655,7 +655,7 @@ pub(crate) async fn load_atlases(
     // global cosine pick the topically-aligned surfaces.
     let mut ctxs = Vec::new();
     for id in &atlas.corpus_ids {
-        match load_atlas_context(session, id, atlas.top_k, &filter).await {
+        match load_atlas_context(inference, id, atlas.top_k, &filter).await {
             Ok(ctx) => ctxs.push(ctx),
             Err(e) => return Err(format!("--with-atlas {id}: {e}")),
         }

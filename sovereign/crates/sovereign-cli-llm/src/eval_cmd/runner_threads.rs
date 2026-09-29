@@ -4,7 +4,7 @@
 //! Where `run_bank_synth` drives one question per fresh `conversation_id`,
 //! this module drives a *thread* of N turns under a SINGLE
 //! `conversation_id`. Sequential turns see prior turns' history via the
-//! runtime's conversation store, so the bench measures whether
+//! conversation svrn holds, so the bench measures whether
 //! coreference, anaphora, and topic continuity survive across turns.
 //!
 //! Per-turn scoring is deterministic (substring fact_recall, title
@@ -25,7 +25,7 @@ use std::time::Instant;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
-use crate::chat_cmd::bootstrap::ChatSession;
+use crate::bench_cmd::subject::SubjectDial;
 use crate::chat_cmd::render::split_reasoning;
 use crate::eval_cmd::bank::{EvalThreadBank, Thread, Turn};
 use crate::eval_cmd::runner::{RetrievedChunk, ScoreSnapshot};
@@ -133,7 +133,7 @@ pub struct DegradationCurve {
 }
 
 pub async fn run_thread_bank(
-    session: &ChatSession,
+    subject: &SubjectDial,
     bank: &EvalThreadBank,
     judge_trials: usize,
 ) -> ThreadEvalRun {
@@ -141,7 +141,7 @@ pub async fn run_thread_bank(
     let mut threads = Vec::with_capacity(bank.threads.len());
     for th in &bank.threads {
         eprintln!("  → thread {} ({} turns)", th.id, th.turns.len());
-        let result = run_thread_synth(session, th, judge_trials).await;
+        let result = run_thread_synth(subject, th, judge_trials).await;
         threads.push(result);
     }
     let finished_at = chrono::Utc::now().to_rfc3339();
@@ -155,15 +155,15 @@ pub async fn run_thread_bank(
 }
 
 async fn run_thread_synth(
-    session: &ChatSession,
+    subject: &SubjectDial,
     thread: &Thread,
     judge_trials: usize,
 ) -> ThreadResult {
-    let conversation_id = uuid::Uuid::new_v4().to_string();
+    let conversation = subject.open(None).await;
     let mut turns: Vec<TurnResult> = Vec::with_capacity(thread.turns.len());
 
     for (i, turn) in thread.turns.iter().enumerate() {
-        let res = run_one_turn(session, &conversation_id, i, thread, turn).await;
+        let res = run_one_turn(subject, &conversation, i, thread, turn).await;
         eprintln!(
             "    turn {i} fact={:.2} src={:.2} {}ms{}",
             res.fact_recall.ratio.unwrap_or(0.0),
@@ -181,16 +181,16 @@ async fn run_thread_synth(
     let judge_result = if judge_trials == 0 {
         None
     } else if judge_trials == 1 {
-        score_thread_coverage(session, thread, &turns).await
+        score_thread_coverage(subject, thread, &turns).await
     } else {
-        score_thread_coverage_multi(session, thread, &turns, judge_trials).await
+        score_thread_coverage_multi(subject, thread, &turns, judge_trials).await
     };
 
     ThreadResult {
         thread_id: thread.id.clone(),
         category: thread.category.clone(),
         description: thread.description.clone(),
-        conversation_id,
+        conversation_id: conversation.unwrap_or_default(),
         turns,
         judge: judge_result,
         degradation,
@@ -198,61 +198,45 @@ async fn run_thread_synth(
 }
 
 async fn run_one_turn(
-    session: &ChatSession,
-    conversation_id: &str,
+    subject: &SubjectDial,
+    conversation: &Result<String, String>,
     turn_index: usize,
     thread: &Thread,
     turn: &Turn,
 ) -> TurnResult {
     let t_wall = Instant::now();
-    // ONE turn driver (TOPOLOGY §10 phase 6). Instrument-neutral — this drove
-    // `handle_message_stream` and `collect_turn` is the same `serve_turn`
-    // pipeline with a collecting sink. Removes the hand-rolled drain and a
-    // fallback that used to re-run `handle_message`, writing the question to
-    // the conversation twice.
-    let (message_id, raw, stream_wall_ms, err): (String, String, u64, Option<String>) =
-        match sovereign_core::runtime::collect_turn(
-            &session.runtime,
-            session.store.as_ref(),
-            conversation_id,
-            &turn.question,
-            sovereign_contracts::types::TurnMode::Grounded,
-            None,
-        )
-        .await
+    // svrn holds the thread's history: every turn goes to the one
+    // conversation it minted, and the metadata comes back with the turn. A
+    // conversation svrn would not open fails each of its turns by name.
+    let (raw, stream_wall_ms, err, metadata): (String, u64, Option<String>, _) = match conversation
+    {
+        Err(e) => (String::new(), 0, Some(e.clone()), None),
+        Ok(id) => match subject
+            .turn(
+                id,
+                &turn.question,
+                sovereign_contracts::types::TurnMode::Grounded,
+                None,
+            )
+            .await
         {
             Ok(t) => (
-                t.message_id,
                 t.text,
                 t_wall.elapsed().as_millis() as u64,
                 None,
+                t.metadata,
             ),
             Err(e) => (
                 String::new(),
-                String::new(),
                 t_wall.elapsed().as_millis() as u64,
                 Some(format!("turn: {e}")),
+                None,
             ),
-        };
+        },
+    };
 
     let (_reasoning_blocks, visible) = split_reasoning(&raw);
     let reasoning_chars: usize = raw.chars().count() - visible.chars().count();
-
-    let metadata = if message_id.is_empty() {
-        None
-    } else {
-        session
-            .store
-            .get_conversation(conversation_id)
-            .await
-            .ok()
-            .and_then(|c| {
-                c.messages
-                    .iter()
-                    .find(|m| m.id == message_id)
-                    .and_then(|m| m.metadata.clone())
-            })
-    };
 
     let prov = metadata.as_ref().and_then(|m| m.get("provenance"));
     let total_latency_ms = prov
@@ -387,7 +371,7 @@ fn compute_degradation(turns: &[TurnResult]) -> DegradationCurve {
 /// it on Fast would compromise the score under load. See
 /// `feedback_wikipedia_learn_thread_judge`.
 async fn score_thread_coverage(
-    session: &ChatSession,
+    subject: &SubjectDial,
     thread: &Thread,
     turns: &[TurnResult],
 ) -> Option<ThreadJudge> {
@@ -478,7 +462,7 @@ async fn score_thread_coverage(
         stable_prefix_len: None,
     };
 
-    let resp = match session.inference.as_ref().complete(&request).await {
+    let resp = match subject.inference.as_ref().complete(&request).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("  [thread-judge] inference failed for {}: {e}", thread.id);
@@ -593,7 +577,7 @@ async fn score_thread_coverage(
 /// for catching judge-side flips on borderline facts without paying
 /// the synth-side cost.
 async fn score_thread_coverage_multi(
-    session: &ChatSession,
+    subject: &SubjectDial,
     thread: &Thread,
     turns: &[TurnResult],
     trials: usize,
@@ -609,7 +593,7 @@ async fn score_thread_coverage_multi(
             trials,
             thread.id
         );
-        if let Some(j) = score_thread_coverage(session, thread, turns).await {
+        if let Some(j) = score_thread_coverage(subject, thread, turns).await {
             trial_results.push(j);
         }
     }

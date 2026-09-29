@@ -7,7 +7,7 @@
 //!   - **Retrieval** ([`run_bank`]) — embed → hybrid search → score
 //!     facts/sources against the retrieved chunk bag. Cheap, isolates
 //!     the index/embed/filter axis from the chat-model axis.
-//!   - **Synth** ([`run_bank_synth`]) — drive the full
+//!   - **Synth** ([`run_bank_synth`]) — ask svrn over its turn route: the full
 //!     `Runtime::handle_message_stream` path the desktop chat surface
 //!     uses (intent classifier → router → search tools → prompt
 //!     assembly → chat completion). Score `expected_facts` against the
@@ -26,7 +26,7 @@ use std::time::Instant;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
-use crate::chat_cmd::bootstrap::ChatSession;
+use crate::bench_cmd::subject::SubjectDial;
 use crate::chat_cmd::render::split_reasoning;
 use crate::eval_cmd::atlas_walk_meta::atlas_walk_from_metadata;
 use crate::eval_cmd::attribution;
@@ -438,7 +438,7 @@ impl EvalResult {
 // directly. The eval framework's `EvalResult` is the one
 // abstraction-boundary that they share.
 
-/// Drive every question through `Runtime::handle_message_stream` and
+/// Ask svrn every question over its turn route (`SubjectDial`) and
 /// score the persisted answer + provenance. Sequential — the chat
 /// model is a single GPU slot and concurrent turns would just queue.
 ///
@@ -454,7 +454,7 @@ impl EvalResult {
 /// gate, tools and the atlas — see `run_question_synth` for what that means
 /// for the row's `retrieved`.
 pub async fn run_bank_synth(
-    session: &ChatSession,
+    subject: &SubjectDial,
     bank: &EvalBank,
     judge: bool,
     isolate: bool,
@@ -470,7 +470,7 @@ pub async fn run_bank_synth(
     // none) on its own based on intent, and a question that ends up
     // routed to web-only is a meaningful eval signal, not a precondition
     // failure. Misconfigured (no corpus AND no chat model) bootstraps
-    // already failed in `build_session` upstream.
+    // already failed at `SubjectDial::dial` upstream.
 
     // Per-corpus isolation: scope retrieval to the bank's target corpus
     // so the run measures THAT corpus's integrity (does it hold +
@@ -494,7 +494,7 @@ pub async fn run_bank_synth(
 
     let mut results = Vec::with_capacity(bank.questions.len());
     for q in &bank.questions {
-        let result = run_question_synth(session, q, judge, isolate_corpora.as_deref(), mode).await;
+        let result = run_question_synth(subject, q, judge, isolate_corpora.as_deref(), mode).await;
         results.push(result);
     }
 
@@ -517,95 +517,38 @@ pub async fn run_bank_synth(
 /// `corpora_hit` and every provenance-derived field below are empty BY
 /// CONSTRUCTION — that is the closed-book arm's definition, not a failure.
 /// The row stays a measurement: `empty_synth_result` is reached only when
-/// `collect_turn` returns `Err`, and `degraded_router` reads `None` from
+/// the dialed turn returns `Err`, and `degraded_router` reads `None` from
 /// absent provenance rather than stamping the row unmeasured. A naked answer
 /// is scored on its text, which is the whole point of the arm.
 async fn run_question_synth(
-    session: &ChatSession,
+    subject: &SubjectDial,
     q: &Question,
     judge: bool,
     isolate_corpora: Option<&[String]>,
     mode: sovereign_contracts::types::TurnMode,
 ) -> EvalResult {
-    let conversation_id = uuid::Uuid::new_v4().to_string();
     let t_wall = Instant::now();
 
-    // Per-corpus isolation: seed the conversation's corpus allow-list
-    // BEFORE the turn. `handle_message_stream` → `build_context` loads
-    // `enabled_corpora` and the retrieval fan-out (Filter 4) honors it;
-    // `save_message`'s upsert preserves the column (ON CONFLICT updates
-    // only `updated_at`). Best-effort — a seeding failure just falls
-    // back to unscoped retrieval rather than voiding the question.
-    if let Some(corpora) = isolate_corpora {
-        let created_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-        if let Err(e) = session
-            .store
-            .insert_empty_conversation(&conversation_id, created_at, None)
-            .await
-        {
-            eprintln!("  warn: isolate seed (insert) failed for {}: {e}", q.id);
-        } else if let Err(e) = session
-            .store
-            .set_conversation_enabled_corpora(&conversation_id, Some(corpora.to_vec()))
-            .await
-        {
-            eprintln!("  warn: isolate seed (scope) failed for {}: {e}", q.id);
-        }
-    }
-
-    // 1. Drive the same path the desktop chat surface uses. Failures
-    //    here become an empty-row result so one model-side error
-    //    doesn't void the rest of the bank.
+    // 1. Ask svrn, as the desktop chat surface does. Per-corpus isolation
+    //    seals the conversation to the bank's corpus before the turn; svrn
+    //    refuses a corpus it does not have, so a sealing it cannot apply is
+    //    this question's error, never an unscoped measurement. Failures
+    //    become an empty-row result so one model-side error doesn't void
+    //    the rest of the bank.
     //
-    // ONE turn driver (TOPOLOGY §10 phase 6). Instrument-NEUTRAL: this drove
-    // `handle_message_stream` and `collect_turn` is `serve_turn` with a
-    // collecting sink, so the pipeline under measurement is unchanged.
-    //
-    // What it deletes is a hand-rolled drain and a fallback whose stated
-    // contract had been retired. The comment here used to say
-    // `handle_message_stream` returns `NotImplemented` for ComplexTask /
-    // Metalingual / Conation / Commissive; all four are handled INLINE now,
-    // specifically so they "must NOT dead-end". The one case that still
-    // refuses is a document-attached turn, and catching it after the fact was
-    // a latent double-write — the streaming path persists the user message
-    // BEFORE it bails, so re-running `handle_message` wrote the question
-    // twice. `serve_turn` decides that case up front, so it cannot happen.
-    let (message_id, raw, stream_wall_ms) = match sovereign_core::runtime::collect_turn(
-        &session.runtime,
-        session.store.as_ref(),
-        &conversation_id,
-        &q.question,
-        mode,
-        None,
-    )
-    .await
-    {
+    // 3. The metadata block comes back with the turn, from the message svrn
+    //    persisted. This is where `retrieved_chunks` and `provenance` live;
+    //    without them we can't score sources.
+    let seal = isolate_corpora.and_then(|c| c.first()).map(String::as_str);
+    let (raw, metadata, stream_wall_ms) = match subject.ask(seal, &q.question, mode, None).await {
         Ok(turn) => {
             let wall = t_wall.elapsed().as_millis() as u64;
-            (turn.message_id, turn.text, wall)
+            (turn.text, turn.metadata, wall)
         }
         Err(e) => {
             return empty_synth_result(q, format!("turn: {e}"), 0);
         }
     };
-
-    // 3. Pull the persisted assistant row to recover the metadata
-    //    block. This is where `retrieved_chunks` and `provenance` live;
-    //    without them we can't score sources.
-    let metadata = session
-        .store
-        .get_conversation(&conversation_id)
-        .await
-        .ok()
-        .and_then(|c| {
-            c.messages
-                .iter()
-                .find(|m| m.id == message_id)
-                .and_then(|m| m.metadata.clone())
-        });
 
     // 4. Split reasoning vs answer the same way the desktop client does.
     let (reasoning_blocks, visible) = split_reasoning(&raw);
@@ -761,7 +704,7 @@ async fn run_question_synth(
             let (score, details) = crate::eval_cmd::score::score_facts_judge(
                 &q.expected_facts,
                 &visible,
-                session.inference.as_ref(),
+                subject.inference.as_ref(),
             )
             .await;
             (Some(score.into()), details)

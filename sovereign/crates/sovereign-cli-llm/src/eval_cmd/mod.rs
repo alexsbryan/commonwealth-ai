@@ -49,8 +49,9 @@ use std::path::PathBuf;
 
 use sovereign_contracts::probe::{AtlasProbe, ProbeEvidence, ProbeMode, ProbeRequest};
 
+use crate::bench_cmd::subject::SubjectDial;
+use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::parse_globals;
-use crate::probe_cmd::build_session_for_bank;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -680,15 +681,15 @@ async fn cmd_run(args: &[String]) -> i32 {
             "sovereign_cli=info,sovereign_tools::atlas_context_manager=info,\
              sovereign_tools::knowledge_view=warn",
         );
-        let session = match build_session_for_bank(&globals, &bank.bank.corpus).await {
+        let subject = match SubjectDial::dial(&globals).await {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("bootstrap failed: {e}");
+                eprintln!("error: {e}");
                 return 1;
             }
         };
         let judge_trials = if a.no_judge { 0 } else { a.judge_trials };
-        let run = threads::run_thread_bank(&session, &bank, judge_trials).await;
+        let run = threads::run_thread_bank(&subject, &bank, judge_trials).await;
         match a.format {
             OutputFormat::Text => threads::print_threads_text(&run),
             OutputFormat::Json => {
@@ -855,14 +856,15 @@ async fn cmd_run(args: &[String]) -> i32 {
         .is_some_and(|atlas| !atlas.corpus_ids.is_empty());
 
     // The judges (`--loose-source-judge`, `--essay-judge`) are the one part
-    // of scoring that calls a model; a session is built for them only when
+    // of scoring that calls a model; the model is reached for them only when
     // one was asked for.
     let judge_session = |wanted: bool| {
         let globals = &globals;
-        let corpus = bank.bank.corpus.clone();
         async move {
             if wanted {
-                build_session_for_bank(globals, &corpus).await.map(Some)
+                build_inference(globals)
+                    .await
+                    .map(|(inference, _, _)| Some(inference))
             } else {
                 Ok(None)
             }
@@ -871,17 +873,17 @@ async fn cmd_run(args: &[String]) -> i32 {
 
     let mut ledger_violations = 0u64;
     let run = if a.synth {
-        let session = match build_session_for_bank(&globals, &bank.bank.corpus).await {
+        let subject = match SubjectDial::dial(&globals).await {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("bootstrap failed: {e}");
+                eprintln!("error: {e}");
                 return 1;
             }
         };
         // Loaded only so a bag that will not load still fails the run, as it
         // always has; the synth path uses runtime retrieval, not these.
         if let Some(atlas) = &atlas_probe {
-            if let Err(e) = crate::probe_cmd::load_atlases(&session, atlas).await {
+            if let Err(e) = crate::probe_cmd::load_atlases(&subject.inference, atlas).await {
                 eprintln!("error: {e}");
                 return 1;
             }
@@ -910,7 +912,7 @@ async fn cmd_run(args: &[String]) -> i32 {
                  retrieval, not the eval runner's chunk search)."
             );
         }
-        match runner::run_bank_synth(&session, &bank, !a.no_judge, a.isolate, turn_mode).await {
+        match runner::run_bank_synth(&subject, &bank, !a.no_judge, a.isolate, turn_mode).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");
@@ -958,7 +960,7 @@ async fn cmd_run(args: &[String]) -> i32 {
                 return 1;
             }
         };
-        let loose = judge.as_ref().map(|s| s.inference.as_ref());
+        let loose = judge.as_deref();
         match probe_score::score_prod(&bank, a.limit, started_at_unix, &rows, loose).await {
             Ok(r) => r,
             Err(e) => {
@@ -1007,7 +1009,7 @@ async fn cmd_run(args: &[String]) -> i32 {
                 return 1;
             }
         };
-        let judge = judge.as_ref().map(|s| s.inference.as_ref());
+        let judge = judge.as_deref();
         let loose = judge.filter(|_| a.loose_source_judge);
         let essay = judge.filter(|_| a.essay_judge);
         match probe_score::score_retrieve(&bank, a.limit, started_at_unix, &rows, loose, essay)
