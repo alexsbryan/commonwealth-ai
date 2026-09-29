@@ -19,7 +19,7 @@ use tokio::sync::RwLock;
 /// (`ring_roster::MeshRosterSource::install`) — but still the set whose
 /// charset and store routing must agree, which is what the test below checks.
 const DAEMON_OWN_NAMESPACES: &[&str] = &[
-    sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID,
+    oicp_types::measurements::MEASUREMENTS_APP_ID,
     commonwealth_state::store_adapter::INFERENCE_APP_ID,
     commonwealth_state::CONTRIBUTIONS_APP_ID,
     commonwealth_state::PROCESSED_SHARDS_APP_ID,

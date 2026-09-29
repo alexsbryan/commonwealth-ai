@@ -45,6 +45,7 @@ pub mod jsonrpc;
 pub mod knowledge;
 pub mod manifest;
 pub mod mcp;
+pub mod measurements;
 pub mod model_aliases;
 pub mod model_catalog;
 /// The node-to-node model-transfer wire (`/internal/v1/models/*`).

@@ -99,6 +99,7 @@ pub mod answer;
 pub mod attribution;
 pub mod conformance;
 pub mod custody;
+pub mod hardware;
 pub mod hash;
 pub mod ids;
 pub mod judgement;
@@ -126,6 +127,7 @@ pub use conformance::{
     AcceptanceScenario, Enforceability, ReqLevel, Requirement, RequirementRegistry,
 };
 pub use custody::{join_custody, Custody};
+pub use hardware::hardware_fingerprint;
 pub use hash::ContentHash;
 pub use ids::{CorpusId, HandoffId, MeshId, ModelId, NodeId, NodePubkey, ProcessId};
 pub use judgement::{

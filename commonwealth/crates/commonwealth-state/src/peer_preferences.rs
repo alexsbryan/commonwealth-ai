@@ -223,7 +223,7 @@ pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &GOSSIP_EXCLUDED;
 ///   There is no writer left on this side (`sovereign_mesh::
 ///   measurements_rail` is the only publisher and it appends to the journal),
 ///   which is exactly the shape `notes-private` already has.
-pub const RAIL_CARRIED_APP_IDS: &[&str] = &["mesh-measurements"];
+pub const RAIL_CARRIED_APP_IDS: &[&str] = &[oicp_types::measurements::MEASUREMENTS_APP_ID];
 
 const GOSSIP_EXCLUDED_LEN: usize =
     commonwealth_rail_core::LOCAL_ONLY_NAMESPACES.len() + RAIL_CARRIED_APP_IDS.len();

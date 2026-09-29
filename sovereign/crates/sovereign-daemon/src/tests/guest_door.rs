@@ -119,10 +119,7 @@ fn the_un_namespaced_page_is_still_served_at_the_bare_prefix() {
 /// that quietly serves the machinery.
 #[test]
 fn a_daemon_owned_namespace_cannot_be_declared_open_to_guests() {
-    for owned in [
-        sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID,
-        "work",
-    ] {
+    for owned in [oicp_types::measurements::MEASUREMENTS_APP_ID, "work"] {
         let mut d = sovereign_core::setup_config::DaemonSection::default();
         d.guest_pages
             .insert(owned.to_string(), GuestPage::Open("/srv/x".into()));

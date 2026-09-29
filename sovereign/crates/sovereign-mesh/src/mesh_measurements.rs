@@ -178,6 +178,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
+use kernel_types::hardware_fingerprint;
+pub use oicp_types::measurements::MEASUREMENTS_APP_ID;
+
 /// Bumped when the probe protocol changes in any way that makes new numbers
 /// incomparable with old ones: the prompt, the token budget, the timing
 /// formula, or the set of validity guards. Old records then stop matching
@@ -230,42 +233,6 @@ impl HostIdentity {
     pub fn fingerprint(self) -> u64 {
         self.0
     }
-}
-
-/// Stable hash of one machine's hardware.
-///
-/// Small on purpose — this needs equality against a previously recorded value,
-/// not cryptographic uniqueness. `gpus` is `(name, vram_gb, backend)`, and the
-/// backend string is part of the hash because the same silicon driven through
-/// different backends is, for throughput purposes, different hardware.
-///
-/// Order-independent across GPUs: the same two cards enumerated in either order
-/// hash identically, so a driver-order change does not invalidate a record.
-pub fn hardware_fingerprint(
-    cpu_cores: u32,
-    system_ram_gb: u32,
-    gpus: &[(String, u32, String)],
-) -> u64 {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    // Hash each GPU independently, then combine with a commutative fold so
-    // enumeration order cannot change the result.
-    let mut gpu_mix: u64 = 0;
-    for (name, vram_gb, backend) in gpus {
-        let mut g = DefaultHasher::new();
-        name.hash(&mut g);
-        vram_gb.hash(&mut g);
-        backend.hash(&mut g);
-        gpu_mix ^= g.finish();
-    }
-
-    let mut h = DefaultHasher::new();
-    cpu_cores.hash(&mut h);
-    system_ram_gb.hash(&mut h);
-    gpus.len().hash(&mut h);
-    gpu_mix.hash(&mut h);
-    h.finish()
 }
 
 /// Fingerprint a model from its GGUF tensor table — `"mf1:<16 hex>"`.
@@ -1479,23 +1446,6 @@ pub fn save(file: &MeasurementFile) -> std::io::Result<()> {
 // measured — so no peer's number can ever be served as the reader's own. They
 // reach the operator through [`near_misses`], attributed, and nowhere else.
 
-/// The namespace measurements travel under. ONE name, and it is this one.
-///
-/// It was the mesh KV `app_id` and it is now also the ring-rail namespace
-/// (cw-lift 2d) — deliberately the same string, because minting a second
-/// spelling for the rail side would be two answers to what this data is
-/// called (ARCH §10.6). It is a legal rail namespace as it stands: lowercase,
-/// digits and `-`, under 64 characters.
-///
-/// It IS in `GOSSIP_EXCLUDED_APP_IDS` now, and that is not a privacy
-/// judgement — a measurement describes hardware capability, the same class of
-/// fact the mesh already gossips in `NodeCapabilities`, and it carries no
-/// prompt text, no corpus content and no model size. Records still reach every
-/// peer; they reach them on the rail. The exclusion is what stops a peer on an
-/// older build re-creating the dead KV namespace here and a reader seeing one
-/// measurement arrive twice by two transports.
-pub const MEASUREMENTS_APP_ID: &str = "mesh-measurements";
-
 /// A record on the wire, versioned so a future incompatible change is *dropped*
 /// by an older reader rather than half-understood.
 ///
@@ -1992,30 +1942,6 @@ mod tests {
         assert_eq!(
             placement_digest("distributed", 48, &shards()),
             placement_digest("distributed", 48, &permuted)
-        );
-    }
-
-    #[test]
-    fn hardware_fingerprint_is_gpu_order_independent() {
-        let a = hardware_fingerprint(
-            32,
-            128,
-            &[
-                ("RTX 4090".into(), 24, "cuda".into()),
-                ("Radeon 8060S".into(), 128, "vulkan".into()),
-            ],
-        );
-        let b = hardware_fingerprint(
-            32,
-            128,
-            &[
-                ("Radeon 8060S".into(), 128, "vulkan".into()),
-                ("RTX 4090".into(), 24, "cuda".into()),
-            ],
-        );
-        assert_eq!(
-            a, b,
-            "driver enumeration order must not invalidate a record"
         );
     }
 

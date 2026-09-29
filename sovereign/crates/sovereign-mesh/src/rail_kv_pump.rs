@@ -151,7 +151,7 @@ async fn seal_planes(rail: &dyn RingRailPort, out: &mut PumpOutcome) {
     }
 }
 
-pub const MEASUREMENTS_NAMESPACE: &str = crate::mesh_measurements::MEASUREMENTS_APP_ID;
+pub const MEASUREMENTS_NAMESPACE: &str = oicp_types::measurements::MEASUREMENTS_APP_ID;
 
 /// The work plane's namespace, taken from the crate that owns the vocabulary
 /// rather than spelled again here (ARCH §10.6) — a second literal would be a

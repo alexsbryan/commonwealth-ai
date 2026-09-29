@@ -932,7 +932,7 @@ mod tests {
         assert!(refuse_derived_roster("house-expenses").is_none());
         assert!(refuse_derived_roster("mesh-measurement").is_none());
         assert_eq!(
-            refuse_derived_roster(sovereign_mesh::mesh_measurements::MEASUREMENTS_APP_ID).is_some(),
+            refuse_derived_roster(oicp_types::measurements::MEASUREMENTS_APP_ID).is_some(),
             true,
             "the guard reads the ONE constant, not a second spelling of it"
         );
