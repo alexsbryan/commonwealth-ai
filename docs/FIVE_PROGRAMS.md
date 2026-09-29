@@ -750,6 +750,15 @@ owns the program's data. The split:
       primitives that bench uses as scorers are not turns; the ladder has no
       rung for them, so their placement is pb-cli-llm-bench-move's census,
       and a leaf for them is the operator's.
+      Amended 2026-09-29 (phase-b-62): the document lanes do not dial.
+      svrn serves no route that attaches an asset to a conversation, and
+      `/v1/documents/{id}/ask` runs the route→execute pipeline decision
+      7693f16b moved the book-report lane off, so dialing it would change
+      the subject. book_report, chaos_monkey's attached transport,
+      vault_report and faithfulness exec `svrn __probe` instead, with new
+      `attached`, `vault-build` and `raptor-nodes` modes: svrn runs its own
+      in-process build and turn and writes raw answers, chunks and a
+      resource ledger; bench scores them (pb-bench-dials-docs, -vault).
 - [ ] Mechanically: each moving group becomes `[lib] + [[bin]]` (the
       `sovereign-agent-bench` precedent), and the DISPATCHER (sovereign-cli,
       `main.rs:877` and `:1204`) get a sibling exec module (`bench_bin::exec`,
