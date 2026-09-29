@@ -145,10 +145,7 @@ pub fn wire_note_propagation_sink(
             // value below. One timestamp, two uses: the wire copy and
             // the liveness stamp (fix 9) share it, so `/status`'s
             // convergence age can never disagree with the receipt.
-            let sent_at = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
+            let sent_at = sovereign_time::unix_now();
             let mut wired = ev.clone();
             wired.sent_at = Some(sent_at);
             // This `to_vec` is the wire. Since order
