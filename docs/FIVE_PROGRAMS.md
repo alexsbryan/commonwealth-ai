@@ -928,6 +928,15 @@ the stock binary. A no-package test crate or a gate that exempts test targets
 would also work, but both are operator decisions and neither is needed. The
 pattern is pb-grants-merge's, and pb-ingest-dial-tools-doubles adopts it for
 sovereign-tools (65 test-module sites, 10 test files, 5,143 lines at 451cc7ee2).
+Phase-b-48 adds two cases. First, a test whose subject is an ingest crate
+moves into that crate's own tests, where the engine is an intra-package
+dev-dependency. The recipe-author tests are the example. Second, when a
+program's code reads an ingest-written ON-DISK artifact directly rather than
+through a port (svrn's `AtlasContextManager` opens atlas stores through the
+leaf's openers), the artifact becomes a checked-in fixture. It lives in the
+leaf that reads its format, behind the same `test-doubles` accessor, and has
+one writer: an engine test regenerates it and asserts the fresh store and
+the checked-in one read the same.
 
 ### Seams with prerequisite chains — MEASURED 2026-09-21 (87 at 1c307943c)
 

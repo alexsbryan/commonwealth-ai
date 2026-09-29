@@ -10,9 +10,11 @@ sovereign-core = { workspace = true }
 # watched-folder driver WRITES that file and the CLI subprocess it spawns reads
 # it; both used to carry their own copy (rung nc-16-shared-capability).
 sovereign-enrichment-catalog = { workspace = true }
-# Recipe-author reads the recipe schema descriptor + (B:P4) url_template /
-# registry consts from the contract crate directly, so it needs no corpus-engine
-# dependency — the seam that lets the authoring stack extract (B:P6).
+# Recipe-author reads url_template / paths / json_to_toml from the contract
+# crate directly. The recipe schema descriptor and the bundled registry are
+# ingest's (`corpus_engine::recipe_schema`, `corpus_engine_recipes`) and are
+# INJECTED into recipe-author (its src/recipe_schema.rs), so it names no
+# corpus-engine (phase-b-48 corrected this comment).
 sovereign-contracts = { workspace = true }
 # The recipe-authoring tool bundle now lives in this extractable package;
 # re-exported as `sovereign_tools::recipe_author`. Its tester seam is ingest's
