@@ -23,7 +23,7 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 use futures::future::BoxFuture;
 use sovereign_contracts::ner::LabeledEntityExtractor;
-use sovereign_contracts::rerank_kind::RERANK_ROLE;
+use sovereign_contracts::rerank_kind::{RERANK_PATH, RERANK_ROLE};
 use sovereign_contracts::setup_config::ModelsSection;
 use sovereign_contracts::traits::InferenceProvider;
 
@@ -196,7 +196,7 @@ pub const RERANK: ServedKind = ServedKind {
     env_path: Some("SOVEREIGN_RERANK_MODEL_PATH"),
     loader: KindLoader::Provider(load_rerank),
     route: KindRoute::Served {
-        path: "/v1/rerank",
+        path: RERANK_PATH,
         serve: serve_rerank,
     },
     client: KindClient::Provided {

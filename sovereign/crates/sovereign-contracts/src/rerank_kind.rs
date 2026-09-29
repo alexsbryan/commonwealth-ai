@@ -10,6 +10,10 @@ use crate::traits::InferenceProvider;
 /// The rerank kind's slot role, and the role of the compute child that hosts it.
 pub const RERANK_ROLE: &str = "rerank";
 
+/// The rerank kind's route (`oicp_types::openai_types::RerankRequest` in,
+/// `RerankResponse` out).
+pub const RERANK_PATH: &str = "/v1/rerank";
+
 /// Does `provider` — what the serving assembly installed — serve the rerank
 /// kind: a rerank slot its engine holds, or a compute child in the kind's
 /// child role? Answered from what loaded, never from the config: a rerank

@@ -185,3 +185,23 @@ async fn an_unreachable_route_is_named() {
         "{err}"
     );
 }
+
+/// Every route the kind registry mounts is a path svrn forwards to serve
+/// (`sovereign_contracts::served_kinds`, pb-serve-distributes), and every
+/// forwarded path is a route some kind mounts. Failing input: register a kind
+/// with a route whose path the list does not name, and svrn would 404 it.
+#[test]
+fn the_registered_kind_routes_are_the_paths_svrn_forwards() {
+    register().expect("the NER kind registers");
+    let mut mounted: Vec<&str> = sovereign_inference::served_kind::served_kinds()
+        .iter()
+        .filter_map(|k| k.route_path())
+        .collect();
+    mounted.sort_unstable();
+    let mut forwarded = sovereign_contracts::served_kinds::SERVED_KIND_PATHS.to_vec();
+    forwarded.sort_unstable();
+    assert_eq!(
+        mounted, forwarded,
+        "the kind registry's routes and the paths svrn forwards must be one set"
+    );
+}
