@@ -31,6 +31,8 @@ fn io_refuse(method: &str) -> std::io::Error {
 
 pub(super) type RecipeTextFn<T> = dyn Fn(&str) -> Result<T> + Send + Sync;
 pub(super) type DryRunFn = dyn Fn(&Path, usize, bool) -> Result<RecipeDryRunReport> + Send + Sync;
+pub(super) type PackCanonicalFn =
+    dyn Fn(&Path, Box<dyn std::io::Write + Send>, i32) -> Result<u64> + Send + Sync;
 
 /// Programming for the daemon port's own methods.
 impl IngestPortDouble {
@@ -86,6 +88,16 @@ impl IngestPortDouble {
     /// Program `corpora_with_stranded_partitions` to answer `ids`.
     pub fn with_stranded_partitions(mut self, ids: Vec<String>) -> Self {
         self.stranded_partitions = Some(ids);
+        self
+    }
+
+    /// Program `pack_canonical`; `f` gets the canonical path, the writer
+    /// and the compression level.
+    pub fn on_pack_canonical(
+        mut self,
+        f: impl Fn(&Path, Box<dyn std::io::Write + Send>, i32) -> Result<u64> + Send + Sync + 'static,
+    ) -> Self {
+        self.pack_canonical = Some(Box::new(f));
         self
     }
 }
@@ -210,12 +222,15 @@ impl IngestPort for IngestPortDouble {
 
     fn pack_canonical(
         &self,
-        _canonical_path: &Path,
-        _writer: Box<dyn std::io::Write + Send>,
-        _compression_level: i32,
+        canonical_path: &Path,
+        writer: Box<dyn std::io::Write + Send>,
+        compression_level: i32,
     ) -> Result<u64> {
         self.record("pack_canonical");
-        Err(refuse("pack_canonical"))
+        match &self.pack_canonical {
+            Some(f) => f(canonical_path, writer, compression_level),
+            None => Err(refuse("pack_canonical")),
+        }
     }
 
     fn set_yield_hook(&self, _hook: Arc<dyn YieldHook>) {

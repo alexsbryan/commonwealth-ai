@@ -17,6 +17,9 @@
 //!   one local file is one chunked record.
 //! - `source_file_progress` counts `Complete` entries of the corpus dir's
 //!   manifest, and a dir with none answers `None`.
+//! - `pack_canonical` writes what the pull side unpacks into a canonical
+//!   with the source's fingerprint (canonical_pull_e2e's round trip,
+//!   pb-ingest-dial-daemon-tests-merge).
 //!
 //! Reads that are pure delegation to the leaf (`installed_indexes`,
 //! `usable_indexes`, the opens) are proven where `FsIndexSource` lives; the
@@ -294,4 +297,86 @@ fn source_file_progress_counts_the_manifests_complete_entries() {
     .unwrap();
     let progress = local.source_file_progress(&dir).unwrap();
     assert_eq!((progress.done, progress.total), (2, 3));
+}
+
+/// **canonical_pull_e2e's round trip, engine half.** The daemon's canonical
+/// route streams whatever `pack_canonical` writes, headed by the canonical's
+/// stamped fingerprint (pb-ingest-dial-daemon-tests-merge). What the port
+/// writes, unpacked the way the pull side unpacks it, is a canonical that
+/// recomputes the same fingerprint: the on-disk state is byte-faithful.
+/// Over canonical_pull's fixture: three chunks with explicit content hashes.
+///
+/// Failing input, named: make `pack_canonical` skip one file of the walk
+/// (`canonical_sync.rs::walk_and_append`); the unpacked canonical no longer
+/// opens, or recomputes a different fingerprint.
+#[tokio::test]
+async fn a_canonical_packed_through_the_port_unpacks_to_its_own_fingerprint() {
+    use corpus_index::index::{CorpusIndex, InsertChunk, InsertCodeMeta};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let engine = engine_at(tmp.path());
+    let canonical = tmp.path().join("indexes").join("wiki-mini");
+    let index = CorpusIndex::create(
+        &canonical,
+        "wiki-mini",
+        "Canonical Sync Test",
+        "test-embed",
+        4,
+        true,
+        "MIT",
+    )
+    .await
+    .unwrap();
+    let rows: Vec<_> = [("hash-aaa", 0), ("hash-bbb", 1), ("hash-ccc", 2)]
+        .into_iter()
+        .map(|(hash, axis)| {
+            let mut vec = vec![0.0_f32; 4];
+            vec[axis] = 1.0;
+            (
+                InsertChunk {
+                    content: format!("content for {hash}"),
+                    title: Some(format!("doc-{hash}")),
+                    url: None,
+                    metadata: None,
+                    content_hash: Some(hash.into()),
+                    source_doc_id: Some(hash.into()),
+                    source_file: None,
+                    code: InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                vec,
+            )
+        })
+        .collect();
+    index.insert_batch(&rows).await.unwrap();
+    index.mark_ingestion_complete().unwrap();
+    let stamped = index.compute_and_stamp_fingerprint().await.unwrap();
+
+    let archive = tmp.path().join("wiki-mini.tar.zst");
+    let packed = port(&engine)
+        .pack_canonical(
+            &canonical,
+            Box::new(std::fs::File::create(&archive).unwrap()),
+            1,
+        )
+        .expect("the port packs the canonical");
+    assert!(packed > 0, "the pack streamed the canonical's files");
+
+    let pulled = tmp.path().join("pulled").join("wiki-mini");
+    corpus_engine::canonical_sync::unpack_canonical(
+        std::fs::File::open(&archive).unwrap(),
+        &pulled,
+    )
+    .expect("the pull side unpacks what the port packed");
+    let recomputed = CorpusIndex::open(&pulled)
+        .await
+        .expect("the unpacked canonical opens")
+        .compute_canonical_fingerprint()
+        .await
+        .unwrap();
+    assert_eq!(
+        recomputed, stamped,
+        "the unpacked canonical must recompute the fingerprint the route heads \
+         the stream with",
+    );
 }
