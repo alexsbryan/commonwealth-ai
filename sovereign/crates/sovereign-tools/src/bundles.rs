@@ -221,12 +221,19 @@ impl ToolBundle for WebTools {
 /// the network.
 pub struct WikipediaTools {
     corpus_engine: Arc<dyn corpus_index::ingest_port::CatalogIngestPort>,
+    atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
 }
 
 impl WikipediaTools {
-    /// Build the family over ingest's catalog port.
-    pub fn new(corpus_engine: Arc<dyn corpus_index::ingest_port::CatalogIngestPort>) -> Self {
-        Self { corpus_engine }
+    /// Build the family over ingest's catalog and atlas ports.
+    pub fn new(
+        corpus_engine: Arc<dyn corpus_index::ingest_port::CatalogIngestPort>,
+        atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
+    ) -> Self {
+        Self {
+            corpus_engine,
+            atlas,
+        }
     }
 }
 
@@ -238,7 +245,8 @@ impl ToolBundle for WikipediaTools {
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
         BundleReport::new(self.name()).record(reg.register_reporting(Box::new(
-            crate::WikipediaFetchTool::new(Arc::clone(&self.corpus_engine)).declared(),
+            crate::WikipediaFetchTool::new(Arc::clone(&self.corpus_engine), Arc::clone(&self.atlas))
+                .declared(),
         )))
     }
 }

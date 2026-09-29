@@ -137,4 +137,57 @@ impl AtlasPort for IngestAtlas {
         use crate::enrichment::atlas::seed_population::{seed_population, write_population_marker};
         write_population_marker(atlas_dir, &seed_population(atlas_dir))
     }
+
+    async fn structural_atlas(
+        &self,
+        corpus_id: &str,
+        indexes_dir: &Path,
+        recipes_dir: &Path,
+    ) -> Result<(serde_json::Value, serde_json::Value), String> {
+        use crate::enrichment::atlas::{AtlasIngestionConfig, AtlasIngestionRegistry};
+        use crate::ProgressCallback;
+        use corpus_index::types::EmbedFn;
+        use sovereign_contracts::daemon_wire::IngestProgress;
+        use std::sync::Arc;
+
+        let registry = AtlasIngestionRegistry::builtin();
+        let Some(strategy) = registry.get("structure_first") else {
+            return Err("structure_first strategy not registered".into());
+        };
+
+        // structure_first reads chunk metadata, never embeds — wire a
+        // no-op EmbedFn so the engine constructor doesn't require a
+        // model. Same pattern as the CLI's `enrich ingest` path.
+        let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
+        let engine = Arc::new(super::CorpusEngine::new(
+            recipes_dir.to_path_buf(),
+            indexes_dir.to_path_buf(),
+            noop_embed.clone(),
+        ));
+
+        let cfg = AtlasIngestionConfig {
+            strategy_id: "structure_first".into(),
+            strategy_config: serde_json::json!({
+                "source_corpus_id": corpus_id,
+            }),
+        };
+
+        let progress: Arc<ProgressCallback> = Arc::new(Box::new(move |ev: IngestProgress| {
+            tracing::debug!(?ev, "structural_atlas: progress");
+        }));
+
+        let data = strategy
+            .ingest(engine, noop_embed, None, cfg, progress)
+            .await
+            .map_err(|e| format!("strategy.ingest failed: {e}"))?;
+        Ok((data.atoms, data.edges))
+    }
+
+    fn vital_tier(&self, canonical_name: &str) -> Option<u8> {
+        crate::enrichment::atlas::vital_tier(canonical_name)
+    }
+
+    fn normalize_title(&self, title: &str) -> String {
+        crate::filters::normalize_title(title)
+    }
 }

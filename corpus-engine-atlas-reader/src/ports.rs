@@ -76,4 +76,20 @@ pub trait AtlasPort: Send + Sync {
     /// Stamp the seed-population marker with the population this atlas
     /// derives now, so the next backfill keeps the seed table.
     fn write_population_marker(&self, atlas_dir: &Path) -> io::Result<()>;
+
+    /// Run the `structure_first` atlas strategy over `corpus_id` (chunk
+    /// metadata only, never embeds) and return the `(atoms, edges)` JSON it
+    /// produced; the caller writes them. `Err` is the human-readable reason.
+    async fn structural_atlas(
+        &self,
+        corpus_id: &str,
+        indexes_dir: &Path,
+        recipes_dir: &Path,
+    ) -> Result<(serde_json::Value, serde_json::Value), String>;
+
+    /// The Wikipedia vital-articles level (1-5) of a canonical name, if listed.
+    fn vital_tier(&self, canonical_name: &str) -> Option<u8>;
+
+    /// The title key ingest normalizes article titles to.
+    fn normalize_title(&self, title: &str) -> String;
 }

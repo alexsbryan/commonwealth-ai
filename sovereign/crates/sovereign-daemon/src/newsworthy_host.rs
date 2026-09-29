@@ -268,6 +268,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
                     "newsworthy.atlas_rebuild_start"
                 );
                 let outcome = sovereign_tools::atlas_postinstall::rebuild_structural_atlas(
+                    &corpus_engine::IngestAtlas,
                     corpus_id,
                     indexes_dir.clone(),
                     recipes_dir.clone(),
@@ -454,6 +455,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
                         let recipes_dir = indexes_dir.clone();
                         let started = std::time::Instant::now();
                         let res = sovereign_tools::atlas_postinstall::rebuild_structural_atlas(
+                            &corpus_engine::IngestAtlas,
                             &c.corpus_id,
                             indexes_dir.clone(),
                             recipes_dir,

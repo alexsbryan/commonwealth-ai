@@ -22,6 +22,7 @@
 
 use std::sync::Arc;
 
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::CatalogIngestPort;
 
 use sovereign_core::error::{Error, Result};
@@ -38,11 +39,13 @@ pub const WIKIPEDIA_CATALOG_CORPUS_ID: &str = "wikipedia-catalog";
 pub struct WikipediaFetchTool {
     /// Ingest's catalog port (pb-ingest-dial-tools).
     engine: Arc<dyn CatalogIngestPort>,
+    /// Ingest's atlas port: the post-ingest structural atlas.
+    atlas: Arc<dyn AtlasPort>,
 }
 
 impl WikipediaFetchTool {
-    pub fn new(engine: Arc<dyn CatalogIngestPort>) -> Self {
-        Self { engine }
+    pub fn new(engine: Arc<dyn CatalogIngestPort>, atlas: Arc<dyn AtlasPort>) -> Self {
+        Self { engine, atlas }
     }
 }
 
@@ -105,9 +108,10 @@ impl WikipediaFetchTool {
         // enrich + atlas summary in one call. Returns the new
         // corpus id on success; we re-shape into a tool-output
         // string so the agent can quote it back to the user.
-        let new_corpus_id = run_catalog_ingest(Arc::clone(&self.engine), req)
-            .await
-            .map_err(|e| Error::Execution(format!("wikipedia_fetch: {e}")))?;
+        let new_corpus_id =
+            run_catalog_ingest(Arc::clone(&self.engine), Arc::clone(&self.atlas), req)
+                .await
+                .map_err(|e| Error::Execution(format!("wikipedia_fetch: {e}")))?;
 
         Ok(StepOutput::Text(format!(
             "Fetched \"{title}\" from Wikipedia and appended to the shared `{new_corpus_id}` \

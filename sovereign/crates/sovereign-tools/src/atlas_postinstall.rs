@@ -22,15 +22,10 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_edges, vital_tier, AtlasIngestionConfig, AtlasIngestionRegistry,
-    AtomEnvelope,
-};
-use corpus_engine::{CorpusEngine, ProgressCallback};
-use corpus_index::types::EmbedFn;
-use sovereign_contracts::daemon_wire::IngestProgress;
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges};
 
 /// Outcome of a structural-atlas post-install run.
 #[derive(Debug)]
@@ -56,11 +51,12 @@ pub enum StructuralAtlasOutcome {
 /// `<data_dir>/recipes`). It's not load-bearing for `structure_first`
 /// today but the `CorpusEngine` constructor requires it.
 pub async fn build_structural_atlas(
+    atlas: &dyn AtlasPort,
     corpus_id: &str,
     indexes_dir: PathBuf,
     recipes_dir: PathBuf,
 ) -> StructuralAtlasOutcome {
-    build_structural_atlas_inner(corpus_id, indexes_dir, recipes_dir, false).await
+    build_structural_atlas_inner(atlas, corpus_id, indexes_dir, recipes_dir, false).await
 }
 
 /// Force a structural atlas rebuild, overwriting any existing
@@ -78,14 +74,16 @@ pub async fn build_structural_atlas(
 /// should run this on a detached task rather than blocking a
 /// request handler.
 pub async fn rebuild_structural_atlas(
+    atlas: &dyn AtlasPort,
     corpus_id: &str,
     indexes_dir: PathBuf,
     recipes_dir: PathBuf,
 ) -> StructuralAtlasOutcome {
-    build_structural_atlas_inner(corpus_id, indexes_dir, recipes_dir, true).await
+    build_structural_atlas_inner(atlas, corpus_id, indexes_dir, recipes_dir, true).await
 }
 
 async fn build_structural_atlas_inner(
+    atlas: &dyn AtlasPort,
     corpus_id: &str,
     indexes_dir: PathBuf,
     recipes_dir: PathBuf,
@@ -104,49 +102,18 @@ async fn build_structural_atlas_inner(
         return StructuralAtlasOutcome::AlreadyPresent { atoms_path };
     }
 
-    let registry = AtlasIngestionRegistry::builtin();
-    let strategy = match registry.get("structure_first") {
-        Some(s) => s,
-        None => {
-            return StructuralAtlasOutcome::Failed {
-                reason: "structure_first strategy not registered".into(),
-            };
-        }
-    };
-
-    // structure_first reads chunk metadata, never embeds — wire a
-    // no-op EmbedFn so the engine constructor doesn't require a
-    // model. Same pattern as the CLI's `enrich ingest` path.
-    let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
-    let engine = Arc::new(CorpusEngine::new(
-        recipes_dir,
-        indexes_dir.clone(),
-        noop_embed.clone(),
-    ));
-
-    let cfg = AtlasIngestionConfig {
-        strategy_id: "structure_first".into(),
-        strategy_config: serde_json::json!({
-            "source_corpus_id": corpus_id,
-        }),
-    };
-
+    // The strategy run is ingest's (registry, engine, no-op embed); the
+    // write below stays here.
     let started = std::time::Instant::now();
-    let progress: Arc<ProgressCallback> = Arc::new(Box::new(move |ev: IngestProgress| {
-        tracing::debug!(?ev, "structural_atlas: progress");
-    }));
-
-    let result = strategy
-        .ingest(engine, noop_embed, None, cfg, progress)
+    let result = atlas
+        .structural_atlas(corpus_id, &indexes_dir, &recipes_dir)
         .await;
     let elapsed_secs = started.elapsed().as_secs_f64();
 
-    let data = match result {
+    let (atoms, edges) = match result {
         Ok(d) => d,
-        Err(e) => {
-            return StructuralAtlasOutcome::Failed {
-                reason: format!("strategy.ingest failed: {e}"),
-            };
+        Err(reason) => {
+            return StructuralAtlasOutcome::Failed { reason };
         }
     };
 
@@ -157,12 +124,12 @@ async fn build_structural_atlas_inner(
     }
 
     let edges_path = atlas_dir.join("edges.json");
-    if let Err(e) = write_atomic_json(&atoms_path, &data.atoms) {
+    if let Err(e) = write_atomic_json(&atoms_path, &atoms) {
         return StructuralAtlasOutcome::Failed {
             reason: format!("write atoms.json: {e}"),
         };
     }
-    if let Err(e) = write_atomic_json(&edges_path, &data.edges) {
+    if let Err(e) = write_atomic_json(&edges_path, &edges) {
         return StructuralAtlasOutcome::Failed {
             reason: format!("write edges.json: {e}"),
         };
@@ -383,6 +350,7 @@ pub enum TriageOutcome {
 /// `top_in_corpus_by_centrality` array; new diagnostic fields land
 /// alongside without bumping the contract.
 pub async fn build_triage_candidates(
+    atlas: &dyn AtlasPort,
     corpus_id: &str,
     indexes_dir: PathBuf,
     budget: usize,
@@ -451,7 +419,7 @@ pub async fn build_triage_candidates(
     // the atlas. Missing → empty (no adaptive prior yet). Counts are
     // additive within tier — they don't promote across tier
     // boundaries.
-    let bumps = read_triage_bumps(&atlas_dir);
+    let bumps = read_triage_bumps(atlas, &atlas_dir);
 
     // Each user-query match is worth this many "centrality points."
     // 10 is calibrated against typical Wikipedia centrality (median
@@ -488,8 +456,8 @@ pub async fn build_triage_candidates(
         .map(|(id, e)| {
             let centrality =
                 inbound.get(id).copied().unwrap_or(0) + outbound.get(id).copied().unwrap_or(0);
-            let tier = vital_tier(&e.canonical_name).unwrap_or(6);
-            let bumps = bump_count_for(&bumps, &e.canonical_name);
+            let tier = atlas.vital_tier(&e.canonical_name).unwrap_or(6);
+            let bumps = bump_count_for(atlas, &bumps, &e.canonical_name);
             Ranked {
                 id: id.clone(),
                 canonical_name: e.canonical_name.clone(),
@@ -573,8 +541,8 @@ pub async fn build_triage_candidates(
             }
             let centrality =
                 inbound.get(&id).copied().unwrap_or(0) + outbound.get(&id).copied().unwrap_or(0);
-            let tier = vital_tier(&ent.canonical_name).unwrap_or(6);
-            let bumps = bump_count_for(&bumps, &ent.canonical_name);
+            let tier = atlas.vital_tier(&ent.canonical_name).unwrap_or(6);
+            let bumps = bump_count_for(atlas, &bumps, &ent.canonical_name);
             Some(Expansion {
                 id,
                 canonical_name: ent.canonical_name.clone(),
@@ -682,8 +650,7 @@ pub async fn build_triage_candidates(
 /// Returns an empty map if the file is missing, malformed, or has a
 /// future schema we don't recognise — adaptive priors are best-effort
 /// telemetry, not a load-bearing contract.
-fn read_triage_bumps(atlas_dir: &Path) -> HashMap<String, u64> {
-    use corpus_engine::filters::normalize_title;
+fn read_triage_bumps(atlas: &dyn AtlasPort, atlas_dir: &Path) -> HashMap<String, u64> {
     let path = atlas_dir.join("triage_bumps.json");
     let raw = match std::fs::read_to_string(&path) {
         Ok(s) => s,
@@ -707,15 +674,19 @@ fn read_triage_bumps(atlas_dir: &Path) -> HashMap<String, u64> {
     parsed
         .bumps
         .into_iter()
-        .map(|(k, v)| (normalize_title(&k), v))
+        .map(|(k, v)| (atlas.normalize_title(&k), v))
         .collect()
 }
 
-fn bump_count_for(bumps: &HashMap<String, u64>, canonical_name: &str) -> u64 {
+fn bump_count_for(
+    atlas: &dyn AtlasPort,
+    bumps: &HashMap<String, u64>,
+    canonical_name: &str,
+) -> u64 {
     if bumps.is_empty() {
         return 0;
     }
-    let key = corpus_engine::filters::normalize_title(canonical_name);
+    let key = atlas.normalize_title(canonical_name);
     bumps.get(&key).copied().unwrap_or(0)
 }
 
@@ -1291,7 +1262,13 @@ mod tests {
         )
         .unwrap();
 
-        let outcome = build_triage_candidates(corpus, tmp.path().to_path_buf(), 3).await;
+        let outcome = build_triage_candidates(
+            &corpus_engine::IngestAtlas,
+            corpus,
+            tmp.path().to_path_buf(),
+            3,
+        )
+        .await;
         let path = match outcome {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("triage failed: {other:?}"),
@@ -1472,7 +1449,13 @@ mod tests {
         // which would in turn promote OTHER noise pages via the
         // expansion ranker. That edge case is real (mismatched
         // tier supply vs. seed cap) but tested separately below.
-        let outcome = build_triage_candidates(corpus, tmp.path().to_path_buf(), 2).await;
+        let outcome = build_triage_candidates(
+            &corpus_engine::IngestAtlas,
+            corpus,
+            tmp.path().to_path_buf(),
+            2,
+        )
+        .await;
         let path = match outcome {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("triage failed: {other:?}"),
@@ -1599,7 +1582,13 @@ mod tests {
 
         // Sanity: pre-bump rank places Alpha first (alphabetical
         // tie-break on equal score).
-        let outcome = build_triage_candidates(corpus, tmp.path().to_path_buf(), 2).await;
+        let outcome = build_triage_candidates(
+            &corpus_engine::IngestAtlas,
+            corpus,
+            tmp.path().to_path_buf(),
+            2,
+        )
+        .await;
         let path = match outcome {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("pre-bump triage failed: {other:?}"),
@@ -1625,7 +1614,13 @@ mod tests {
 
         // Re-rank: Beta should now win, and bumped_picks should
         // reflect one bumped entry in the kept set.
-        let outcome2 = build_triage_candidates(corpus, tmp.path().to_path_buf(), 2).await;
+        let outcome2 = build_triage_candidates(
+            &corpus_engine::IngestAtlas,
+            corpus,
+            tmp.path().to_path_buf(),
+            2,
+        )
+        .await;
         let path2 = match outcome2 {
             TriageOutcome::Built { path, .. } => path,
             other => panic!("post-bump triage failed: {other:?}"),

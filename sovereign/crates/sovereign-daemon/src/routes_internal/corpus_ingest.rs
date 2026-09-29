@@ -951,8 +951,13 @@ pub async fn spawn_corpus_install_outcome(
                         0,
                         Some("walking chunks for structural atom extraction"),
                     );
-                    let atlas_ok = match build_structural_atlas(&cid, indexes.clone(), recipes)
-                        .await
+                    let atlas_ok = match build_structural_atlas(
+                        &corpus_engine::IngestAtlas,
+                        &cid,
+                        indexes.clone(),
+                        recipes,
+                    )
+                    .await
                     {
                         StructuralAtlasOutcome::Built {
                             atoms_path,
@@ -1044,38 +1049,44 @@ pub async fn spawn_corpus_install_outcome(
                             budget,
                             "post-install: triage — start"
                         );
-                        let triage_path_for_tier2 =
-                            match build_triage_candidates(&cid, indexes.clone(), budget).await {
-                                TriageOutcome::Built {
-                                    path,
-                                    in_corpus_picked,
-                                    elapsed_secs,
-                                } => {
-                                    tracing::info!(
-                                        corpus = %cid,
-                                        path = %path.display(),
-                                        articles = in_corpus_picked,
-                                        elapsed_s = elapsed_secs,
-                                        "post-install: triage — built"
-                                    );
-                                    Some(path)
-                                }
-                                TriageOutcome::NoAtlas => {
-                                    tracing::warn!(
-                                        corpus = %cid,
-                                        "post-install: triage skipped (atlas missing)"
-                                    );
-                                    None
-                                }
-                                TriageOutcome::Failed { reason } => {
-                                    tracing::warn!(
-                                        corpus = %cid,
-                                        reason,
-                                        "post-install: triage failed"
-                                    );
-                                    None
-                                }
-                            };
+                        let triage_path_for_tier2 = match build_triage_candidates(
+                            &corpus_engine::IngestAtlas,
+                            &cid,
+                            indexes.clone(),
+                            budget,
+                        )
+                        .await
+                        {
+                            TriageOutcome::Built {
+                                path,
+                                in_corpus_picked,
+                                elapsed_secs,
+                            } => {
+                                tracing::info!(
+                                    corpus = %cid,
+                                    path = %path.display(),
+                                    articles = in_corpus_picked,
+                                    elapsed_s = elapsed_secs,
+                                    "post-install: triage — built"
+                                );
+                                Some(path)
+                            }
+                            TriageOutcome::NoAtlas => {
+                                tracing::warn!(
+                                    corpus = %cid,
+                                    "post-install: triage skipped (atlas missing)"
+                                );
+                                None
+                            }
+                            TriageOutcome::Failed { reason } => {
+                                tracing::warn!(
+                                    corpus = %cid,
+                                    reason,
+                                    "post-install: triage failed"
+                                );
+                                None
+                            }
+                        };
 
                         // Tier-2 extraction: kick off the long-running
                         // background job that runs Phase 1 over every

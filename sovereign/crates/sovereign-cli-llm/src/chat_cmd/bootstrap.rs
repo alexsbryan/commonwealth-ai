@@ -333,6 +333,7 @@ async fn build_session_scoped(
                 );
                 b.push(Box::new(sovereign_tools::bundles::WikipediaTools::new(
                     Arc::clone(&corpus_engine) as _,
+                    Arc::new(corpus_engine::IngestAtlas),
                 )));
                 b.push(Box::new(sovereign_tools::bundles::ShellTools));
                 b

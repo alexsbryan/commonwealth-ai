@@ -675,6 +675,7 @@ pub(super) async fn run_daemon(
                 );
                 b.push(Box::new(sovereign_tools::bundles::WikipediaTools::new(
                     Arc::clone(&engine) as _,
+                    Arc::new(corpus_engine::IngestAtlas),
                 )));
                 // Recipe-authoring, the desktop's twin (rung 6 commit B): the
                 // same bundle the desktop's bootstrap pushes, wired with the

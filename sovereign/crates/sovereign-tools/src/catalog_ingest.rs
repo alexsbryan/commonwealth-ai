@@ -35,6 +35,7 @@
 
 use std::sync::Arc;
 
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::{
     CatalogIngestPort, CatalogWork, CatalogWorkError, ProgressCallback,
 };
@@ -198,6 +199,7 @@ pub type CatalogIngestResult<T> = std::result::Result<T, CatalogIngestError>;
 /// per-work corpus id on success.
 pub async fn run_catalog_ingest(
     engine: Arc<dyn CatalogIngestPort>,
+    atlas: Arc<dyn AtlasPort>,
     request: CatalogIngestRequest,
 ) -> CatalogIngestResult<String> {
     let CatalogIngestRequest {
@@ -347,6 +349,7 @@ pub async fn run_catalog_ingest(
     } else {
         let indexes_dir = engine.index_dir().to_path_buf();
         match crate::atlas_postinstall::build_structural_atlas(
+            &*atlas,
             &final_corpus_id,
             indexes_dir.clone(),
             indexes_dir,
@@ -459,7 +462,12 @@ pub async fn run_catalog_ingest(
                 queued = neighbours.len(),
                 "catalog_ingest: queued one-hop minesweeper expansion"
             );
-            spawn_minesweeper_queue(Arc::clone(&engine), catalog_corpus_id.clone(), neighbours);
+            spawn_minesweeper_queue(
+                Arc::clone(&engine),
+                Arc::clone(&atlas),
+                catalog_corpus_id.clone(),
+                neighbours,
+            );
         }
     }
 
@@ -598,6 +606,7 @@ async fn collect_expansion_neighbours(
 /// false` so the expansion never recurses past one hop.
 fn spawn_minesweeper_queue(
     engine: Arc<dyn CatalogIngestPort>,
+    atlas: Arc<dyn AtlasPort>,
     catalog_corpus_id: String,
     neighbours: Vec<String>,
 ) {
@@ -613,7 +622,7 @@ fn spawn_minesweeper_queue(
                 cancel: None,
                 expand_links: false,
             };
-            match run_catalog_ingest(Arc::clone(&engine), req).await {
+            match run_catalog_ingest(Arc::clone(&engine), Arc::clone(&atlas), req).await {
                 Ok(corpus_id) => {
                     tracing::info!(
                         idx = idx + 1,

@@ -181,7 +181,13 @@ async fn cmd_simulate(args: &[String]) -> i32 {
         // the user sees a single deterministic ingest.
         expand_links: false,
     };
-    match run_catalog_ingest(engine as _, req).await {
+    match run_catalog_ingest(
+        engine as _,
+        std::sync::Arc::new(corpus_engine::IngestAtlas),
+        req,
+    )
+    .await
+    {
         Ok(corpus_id) => {
             println!();
             println!("✓ Ingested → corpus_id = {corpus_id}");

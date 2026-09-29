@@ -37,7 +37,13 @@ async fn main() {
         budget
     );
 
-    let outcome = build_triage_candidates(&corpus_id, indexes_dir.clone(), budget).await;
+    let outcome = build_triage_candidates(
+        &corpus_engine::IngestAtlas,
+        &corpus_id,
+        indexes_dir.clone(),
+        budget,
+    )
+    .await;
     let path = match outcome {
         TriageOutcome::Built {
             path,
