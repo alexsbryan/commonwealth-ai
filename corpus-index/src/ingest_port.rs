@@ -22,6 +22,7 @@ use crate::{Error, Result};
 pub mod double;
 
 pub mod enrich_config;
+pub mod merge;
 pub mod tiered;
 
 /// Thread-safe ingest progress callback. `Sync` because an ingest holds an

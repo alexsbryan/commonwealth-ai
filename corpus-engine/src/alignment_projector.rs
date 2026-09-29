@@ -37,22 +37,8 @@ use crate::error::{Error, Result};
 use crate::index::CorpusIndex;
 use crate::recipe::MutableMergePolicy;
 
-/// Outcome of a single projection pass. Reported back to the merge
-/// caller so daemon logs / progress streams can show what landed
-/// without re-walking the FS.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ProjectReport {
-    pub wrote: usize,
-    pub skipped_local_newer: usize,
-    pub skipped_locked: bool,
-    pub skipped_unsafe_path: usize,
-    pub swept_incoming: usize,
-    /// Number of `notes://` rows upserted into `~/.svrnmesh/notes.db`.
-    pub notes_upserted: usize,
-    /// Number of `notes://` rows whose payload failed to deserialize
-    /// or whose embedded id mismatched the chunk's source_doc_id.
-    pub notes_deserialize_errors: usize,
-}
+// The merge port's vocabulary lives beside the port (pb-grants-merge).
+pub use corpus_index::ingest_port::merge::ProjectReport;
 
 /// Project every alignment row in the canonical at `canonical_path`
 /// onto `<home>/.claude/`. Returns a per-call summary; never blocks
