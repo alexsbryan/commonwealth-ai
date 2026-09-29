@@ -31,10 +31,10 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::enrichment::atlas::migrate_ids::migrate_atlas_ids;
 use corpus_engine_atlas_reader::governance::GovernanceOpKind;
 use corpus_engine_atlas_reader::governance_view::section_titles;
 use corpus_engine_atlas_reader::governance_view::{GovernanceView, TensionDisposition};
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::IngestPort;
 use oplog::{Op, Oplog};
 use sovereign_time::unix_now;
@@ -799,10 +799,10 @@ fn seed_at(dir: &Path) -> GovResult<u32> {
 /// migrate-ids THEN seed. Best-effort on the migrate half and idempotent:
 /// a non-governance or already-content-hash atlas still seeds fine.
 fn post_build_at(dir: &Path, corpus_id: &str) -> GovResult<u32> {
-    match migrate_atlas_ids(dir, corpus_id, false) {
+    match corpus_engine::IngestAtlas.migrate_atlas_ids(dir, corpus_id, false) {
         Ok(summary) => tracing::info!(
             corpus_id,
-            ?summary,
+            %summary,
             "governance_http: migrated atom ids to content-hash"
         ),
         Err(e) => {

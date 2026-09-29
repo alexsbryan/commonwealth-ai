@@ -21,6 +21,11 @@ use understanding_vocab::ontology::NavigationPolicy;
 use crate::citation::SourceCitation;
 use crate::raptor_read::RaptorSummaryRow;
 use crate::summary::AtlasSummary;
+use sovereign_contracts::daemon_wire::enrich::StarterQuestion;
+
+/// A detected atom mention in a chunk's text: what
+/// [`AtlasPort::detect_atom_spans`] answers with.
+pub use understanding_atlas::atlas_traversal::spans::AtomSpan;
 
 #[cfg(any(test, feature = "test-doubles"))]
 pub mod double;
@@ -135,6 +140,29 @@ pub trait AtlasPort: Send + Sync {
         citations: &HashMap<String, SourceCitation>,
         embed_query: EmbedFn,
     ) -> corpus_index::Result<HashMap<String, u32>>;
+
+    /// The atlas's `Question` atoms ranked as starter questions, best first,
+    /// at most `limit`.
+    fn rank_starter_questions(&self, atoms: &[AtomEnvelope], limit: usize) -> Vec<StarterQuestion>;
+
+    /// The atom mentions in a chunk's `text`, anchored at its `section_id`
+    /// (none without one).
+    fn detect_atom_spans(
+        &self,
+        text: &str,
+        section_id: Option<&str>,
+        atoms: &[AtomEnvelope],
+    ) -> Vec<AtomSpan>;
+
+    /// Rewrite `atlas_dir`'s sequential atom ids to content hashes (nothing
+    /// is written when `dry_run`); the migration summary, rendered for the
+    /// log.
+    fn migrate_atlas_ids(
+        &self,
+        atlas_dir: &Path,
+        corpus_id: &str,
+        dry_run: bool,
+    ) -> Result<String, String>;
 }
 
 /// One typed-extension LLM response, carried to ingest as the model wrote

@@ -18,7 +18,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
 
-use corpus_engine::enrichment::atlas::analysis::starter_questions::rank_starter_questions;
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::IngestPort;
 use understanding_vocab::read::read_atlas_atoms;
 
@@ -84,7 +84,7 @@ async fn starter_questions(
         .limit
         .unwrap_or(STARTER_QUESTIONS_DEFAULT)
         .min(STARTER_QUESTIONS_MAX);
-    let starters = rank_starter_questions(&file.atoms(), limit);
+    let starters = corpus_engine::IngestAtlas.rank_starter_questions(&file.atoms(), limit);
     tracing::debug!(
         corpus = %corpus,
         total_atoms = file.atoms().len(),

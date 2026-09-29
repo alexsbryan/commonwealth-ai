@@ -20,10 +20,11 @@ use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity};
 use understanding_vocab::edges::{Edge, EdgesFile};
 use understanding_vocab::ontology::NavigationPolicy;
 
-use super::{ArgumentativeResponse, AtlasPort};
+use super::{ArgumentativeResponse, AtlasPort, AtomSpan};
 use crate::citation::SourceCitation;
 use crate::raptor_read::RaptorSummaryRow;
 use crate::summary::AtlasSummary;
+use sovereign_contracts::daemon_wire::enrich::StarterQuestion;
 
 type H<F> = Option<Box<F>>;
 
@@ -69,6 +70,10 @@ pub struct AtlasPortDouble {
             + Send
             + Sync,
     >,
+    rank_starter_questions: H<dyn Fn(&[AtomEnvelope], usize) -> Vec<StarterQuestion> + Send + Sync>,
+    detect_atom_spans:
+        H<dyn Fn(&str, Option<&str>, &[AtomEnvelope]) -> Vec<AtomSpan> + Send + Sync>,
+    migrate_atlas_ids: H<dyn Fn(&Path, &str, bool) -> Result<String, String> + Send + Sync>,
 }
 
 fn unprogrammed(method: &str) -> String {
@@ -286,6 +291,33 @@ impl AtlasPortDouble {
         self.write_typed_extension = Some(Box::new(f));
         self
     }
+
+    /// Program [`AtlasPort::rank_starter_questions`].
+    pub fn on_rank_starter_questions(
+        mut self,
+        f: impl Fn(&[AtomEnvelope], usize) -> Vec<StarterQuestion> + Send + Sync + 'static,
+    ) -> Self {
+        self.rank_starter_questions = Some(Box::new(f));
+        self
+    }
+
+    /// Program [`AtlasPort::detect_atom_spans`].
+    pub fn on_detect_atom_spans(
+        mut self,
+        f: impl Fn(&str, Option<&str>, &[AtomEnvelope]) -> Vec<AtomSpan> + Send + Sync + 'static,
+    ) -> Self {
+        self.detect_atom_spans = Some(Box::new(f));
+        self
+    }
+
+    /// Program [`AtlasPort::migrate_atlas_ids`].
+    pub fn on_migrate_atlas_ids(
+        mut self,
+        f: impl Fn(&Path, &str, bool) -> Result<String, String> + Send + Sync + 'static,
+    ) -> Self {
+        self.migrate_atlas_ids = Some(Box::new(f));
+        self
+    }
 }
 
 #[async_trait]
@@ -479,6 +511,40 @@ impl AtlasPort for AtlasPortDouble {
             None => Err(corpus_index::Error::Io(io::Error::other(unprogrammed(
                 "write_typed_extension",
             )))),
+        }
+    }
+
+    fn rank_starter_questions(&self, atoms: &[AtomEnvelope], limit: usize) -> Vec<StarterQuestion> {
+        self.record("rank_starter_questions");
+        match &self.rank_starter_questions {
+            Some(f) => f(atoms, limit),
+            None => panic!("{}", unprogrammed("rank_starter_questions")),
+        }
+    }
+
+    fn detect_atom_spans(
+        &self,
+        text: &str,
+        section_id: Option<&str>,
+        atoms: &[AtomEnvelope],
+    ) -> Vec<AtomSpan> {
+        self.record("detect_atom_spans");
+        match &self.detect_atom_spans {
+            Some(f) => f(text, section_id, atoms),
+            None => panic!("{}", unprogrammed("detect_atom_spans")),
+        }
+    }
+
+    fn migrate_atlas_ids(
+        &self,
+        atlas_dir: &Path,
+        corpus_id: &str,
+        dry_run: bool,
+    ) -> Result<String, String> {
+        self.record("migrate_atlas_ids");
+        match &self.migrate_atlas_ids {
+            Some(f) => f(atlas_dir, corpus_id, dry_run),
+            None => Err(unprogrammed("migrate_atlas_ids")),
         }
     }
 }

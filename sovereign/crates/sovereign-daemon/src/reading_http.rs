@@ -25,8 +25,8 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::atlas_traversal::{detect_atom_spans, AtomSpan as DetectorAtomSpan};
 use corpus_engine_atlas_reader::cross_corpus::{read_atlas_cross_corpus_edges, CrossCorpusEdge};
+use corpus_engine_atlas_reader::ports::{AtlasPort, AtomSpan as DetectorAtomSpan};
 use corpus_index::index::EnrichmentChunkRow;
 use understanding_vocab::atoms::{AtomEnvelope, AtomId};
 use understanding_vocab::edges::Edge;
@@ -781,7 +781,8 @@ pub(crate) fn chunk_record_from_row_with_conv(
         .map(String::from);
 
     let atom_spans = match (atoms, section_id.as_deref()) {
-        (Some(atoms), Some(_)) => detect_atom_spans(&row.content, section_id.as_deref(), atoms)
+        (Some(atoms), Some(_)) => corpus_engine::IngestAtlas
+            .detect_atom_spans(&row.content, section_id.as_deref(), atoms)
             .into_iter()
             .map(AtomSpan::from)
             .collect(),

@@ -12,9 +12,10 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use corpus_engine_atlas_reader::citation::SourceCitation;
-use corpus_engine_atlas_reader::ports::{ArgumentativeResponse, AtlasPort};
+use corpus_engine_atlas_reader::ports::{ArgumentativeResponse, AtlasPort, AtomSpan};
 use corpus_engine_atlas_reader::raptor_read::RaptorSummaryRow;
 use corpus_engine_atlas_reader::summary::AtlasSummary;
+use sovereign_contracts::daemon_wire::enrich::StarterQuestion;
 use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity};
 use understanding_vocab::edges::{Edge, EdgesFile};
 
@@ -243,5 +244,29 @@ impl AtlasPort for IngestAtlas {
             citations,
             embed_query,
         )
+    }
+
+    fn rank_starter_questions(&self, atoms: &[AtomEnvelope], limit: usize) -> Vec<StarterQuestion> {
+        crate::enrichment::atlas::analysis::starter_questions::rank_starter_questions(atoms, limit)
+    }
+
+    fn detect_atom_spans(
+        &self,
+        text: &str,
+        section_id: Option<&str>,
+        atoms: &[AtomEnvelope],
+    ) -> Vec<AtomSpan> {
+        crate::atlas_traversal::detect_atom_spans(text, section_id, atoms)
+    }
+
+    fn migrate_atlas_ids(
+        &self,
+        atlas_dir: &Path,
+        corpus_id: &str,
+        dry_run: bool,
+    ) -> Result<String, String> {
+        crate::enrichment::atlas::migrate_ids::migrate_atlas_ids(atlas_dir, corpus_id, dry_run)
+            .map(|summary| format!("{summary:?}"))
+            .map_err(|e| e.to_string())
     }
 }
