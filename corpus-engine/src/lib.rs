@@ -126,7 +126,7 @@ pub use corpus_engine_yield::{
 };
 pub use engine::{
     CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn,
-    CustomExtractorFn, IngestAtlas,
+    CustomExtractorFn, FolderTiered, IngestAtlas,
 };
 pub use enrichment::atlas::atlas_teardown;
 pub use enrichment::{

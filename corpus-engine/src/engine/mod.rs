@@ -19,6 +19,7 @@ pub mod status;
 
 pub use article_stats::ArticleStats;
 pub use atlas_port::IngestAtlas;
+pub use tool_ports::FolderTiered;
 pub use cancel::{CancellationFlag, CancellationRegistry};
 pub(crate) use ingest_helpers::chunk_doc;
 pub use status::{

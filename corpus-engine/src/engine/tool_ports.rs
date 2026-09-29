@@ -9,9 +9,15 @@
 //! expansion stay the tool's. The plugin family: acquirer and extractor
 //! registration.
 
+use std::path::Path;
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use corpus_index::ingest_port::{
-    CatalogIngestPort, CatalogWork, CatalogWorkError, CatalogWorkIngested, ProgressCallback,
+    CatalogIngestPort, CatalogWork, CatalogWorkError, CatalogWorkIngested, DocFetchFn,
+    EmbeddingCluster, EmbeddingClusters, EnrichmentPassRoute, EntityDelta, FieldModelError,
+    FolderTieredPort, LocalCorpusPort, ProgressCallback, PromptFn, RecipeIngested,
+    SourceFileProgress, WatchedUpdate, WatchedUpdateProgressFn, WatchedUpdateStage,
 };
 
 use super::CorpusEngine;
@@ -154,6 +160,291 @@ impl CatalogIngestPort for CorpusEngine {
             chunks_created: ingest_result.chunks_created,
             opts_out_of_auto_enrichment,
         })
+    }
+}
+
+/// The local-corpus family's port (pb-ingest-dial-tools-local): the watched
+/// update, the clustering and the field-model enrichment that sovereign-tools'
+/// local_corpus and knowledge_view drove on the engine directly now run here.
+#[async_trait]
+impl LocalCorpusPort for CorpusEngine {
+    async fn ingest_recipe_path(
+        &self,
+        recipe_path: &Path,
+        progress: Option<ProgressCallback>,
+    ) -> corpus_index::Result<RecipeIngested> {
+        let result = self
+            .ingest(&CorpusSpec::RecipePath(recipe_path.to_path_buf()), progress)
+            .await?;
+        Ok(RecipeIngested {
+            corpus_id: result.corpus_id,
+            chunks_created: result.chunks_created,
+        })
+    }
+
+    async fn ensure_empty_index(&self, recipe_path: &Path) -> corpus_index::Result<()> {
+        CorpusEngine::ensure_empty_index(self, &CorpusSpec::RecipePath(recipe_path.to_path_buf()))
+            .await
+            .map(drop)
+    }
+
+    fn cancel_corpus_ingest(&self, corpus_id: &str) -> bool {
+        CorpusEngine::cancel_corpus_ingest(self, corpus_id)
+    }
+
+    fn ingest_in_flight(&self, corpus_id: &str) -> bool {
+        self.cancel_registry().get(corpus_id).is_some()
+    }
+
+    fn remove_corpus_everything(&self, corpus_id: &str) -> corpus_index::Result<()> {
+        CorpusEngine::remove_corpus_everything(self, corpus_id)
+    }
+
+    fn atlas_teardown(&self, index_dir: &Path, corpus_id: &str) -> std::io::Result<()> {
+        crate::atlas_teardown(index_dir, corpus_id)
+    }
+
+    fn source_file_progress(&self, corpus_dir: &Path) -> Option<SourceFileProgress> {
+        let manifest = crate::progress::SourceFileManifest::load(corpus_dir).ok()??;
+        let done = manifest
+            .files
+            .iter()
+            .filter(|f| matches!(f.status, crate::progress::SourceFileStatus::Complete { .. }))
+            .count();
+        Some(SourceFileProgress {
+            done,
+            total: manifest.files.len(),
+        })
+    }
+
+    async fn reindex_changed_sources_tiered(&self, corpus_id: &str, source_doc_ids: &[String]) {
+        CorpusEngine::reindex_changed_sources_tiered(self, corpus_id, source_doc_ids).await
+    }
+
+    async fn apply_watched_update(
+        self: Arc<Self>,
+        update: &WatchedUpdate,
+        fetch: DocFetchFn,
+        progress: WatchedUpdateProgressFn,
+    ) -> corpus_index::Result<()> {
+        use crate::update::delta::{
+            CorpusUpdater, ManifestDiff, UpdatePhase, UpdateProgress, VersionManifest,
+        };
+        let new_manifest = VersionManifest {
+            corpus_id: update.corpus_id.clone(),
+            version: update.version.clone(),
+            entries: update.entries.clone(),
+        };
+        let mdiff = ManifestDiff {
+            new_documents: update.new_documents.clone(),
+            updated_documents: update.updated_documents.clone(),
+            deleted_documents: update.deleted_documents.clone(),
+        };
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<UpdateProgress>(32);
+        let pump = tokio::spawn(async move {
+            while let Some(p) = rx.recv().await {
+                let stage = match p.phase {
+                    UpdatePhase::Deletions => WatchedUpdateStage::Deletions,
+                    UpdatePhase::Updates => WatchedUpdateStage::Updates,
+                    UpdatePhase::Additions => WatchedUpdateStage::Additions,
+                };
+                progress(stage, p.current, p.total);
+            }
+        });
+        let updater = CorpusUpdater::new(self).with_progress_tx(tx);
+        let result = updater
+            .apply_update(&update.corpus_id, &mdiff, &new_manifest, |doc_id: &str| {
+                fetch(doc_id)
+            })
+            .await;
+        drop(updater);
+        let _ = pump.await;
+        result
+    }
+
+    async fn recipe_enrichment_type(
+        &self,
+        corpus_id: &str,
+    ) -> corpus_index::Result<Option<String>> {
+        Ok(self
+            .load_recipe(corpus_id)
+            .await?
+            .enrichment
+            .map(|e| e.enrichment_type))
+    }
+
+    fn enrichment_pass_route(&self, enrichment_type: &str) -> Option<EnrichmentPassRoute> {
+        self.enrichment_passes()
+            .get(enrichment_type)
+            .map(|p| EnrichmentPassRoute {
+                pass_id: p.id().to_string(),
+                is_atlas: p.id() == super::pass::ATLAS,
+            })
+    }
+
+    fn prompt_fn(
+        &self,
+        inference: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
+    ) -> PromptFn {
+        let infer = crate::enrichment::provider_inference::inference_to_inference_fn(inference);
+        Arc::new(move |prompt: String| {
+            let infer = Arc::clone(&infer);
+            Box::pin(async move {
+                infer(
+                    &crate::enrichment::pipeline::ChatPrompt::new("", prompt.as_str()),
+                    None,
+                )
+                .await
+            })
+        })
+    }
+
+    async fn cluster_embeddings(
+        &self,
+        index: &corpus_index::index::CorpusIndex,
+        min_cluster_size: usize,
+        on_step: &(dyn Fn(&str) + Send + Sync),
+    ) -> corpus_index::Result<EmbeddingClusters> {
+        use crate::enrichment::clustering::EnrichmentProgress;
+        let cluster_cfg = crate::enrichment::domain::ClusteringConfig {
+            min_cluster_size,
+            epsilon: 0.2,
+            label_sample_size: 5,
+            max_cluster_points: 10_000,
+            reduced_dims: 0,
+        };
+        let stage_cb = |p: EnrichmentProgress| {
+            if let EnrichmentProgress::ClusteringStep { step, .. } = &p {
+                on_step(step);
+            }
+        };
+        let result =
+            crate::enrichment::clustering::cluster_embeddings(index, &cluster_cfg, &stage_cb)
+                .await?;
+        Ok(EmbeddingClusters {
+            assignments: result.assignments,
+            clusters: result
+                .clusters
+                .into_iter()
+                .map(|c| EmbeddingCluster {
+                    id: c.id,
+                    size: c.size,
+                    centroid: c.centroid,
+                    central_chunks: c.central_chunks,
+                })
+                .collect(),
+        })
+    }
+
+    fn embed_fn(&self) -> corpus_index::types::EmbedFn {
+        CorpusEngine::embed_fn(self)
+    }
+
+    async fn enrich_field_model(
+        &self,
+        index: &corpus_index::index::CorpusIndex,
+        recipe: &serde_json::Value,
+    ) -> Result<String, FieldModelError> {
+        let recipe: Recipe = serde_json::from_value(recipe.clone()).map_err(|e| {
+            FieldModelError::Construct(corpus_index::Error::Recipe(format!(
+                "knowledge-view recipe document: {e}"
+            )))
+        })?;
+        let inference = self.inference.clone().ok_or_else(|| {
+            FieldModelError::Construct(corpus_index::Error::Recipe(
+                "no enrichment inference is configured on the engine".into(),
+            ))
+        })?;
+        let field_engine = crate::enrichment::field_engine::FieldModelEngine::from_recipe(
+            &recipe,
+            CorpusEngine::embed_fn(self),
+            inference,
+        )
+        .map_err(FieldModelError::Construct)?;
+        let corpus_id = recipe.corpus.id.as_str();
+        let progress = |p: crate::enrichment::clustering::EnrichmentProgress| {
+            tracing::debug!(view_id = corpus_id, ?p, "enrichment progress");
+        };
+        let stats = field_engine
+            .enrich(index, &progress)
+            .await
+            .map_err(FieldModelError::Enrich)?;
+        Ok(format!("{stats:?}"))
+    }
+}
+
+/// The watched-folder driver's tiered build: the tiered provider and the
+/// optional entity extractor, composed at daemon boot.
+pub struct FolderTiered {
+    provider: crate::enrichment::tiered::TieredProviderHandle,
+    entity_extractor: Option<crate::enrichment::tiered::ChunkEntityExtractorHandle>,
+}
+
+impl FolderTiered {
+    /// Compose the driver's tiered build.
+    pub fn new(
+        provider: crate::enrichment::tiered::TieredProviderHandle,
+        entity_extractor: Option<crate::enrichment::tiered::ChunkEntityExtractorHandle>,
+    ) -> Self {
+        Self {
+            provider,
+            entity_extractor,
+        }
+    }
+}
+
+#[async_trait]
+impl FolderTieredPort for FolderTiered {
+    async fn reenrich_sources(
+        &self,
+        corpus_id: &str,
+        source_doc_ids: &[String],
+    ) -> corpus_index::Result<()> {
+        self.provider
+            .reenrich_sources(corpus_id, source_doc_ids)
+            .await
+    }
+
+    async fn extract_entity_delta(
+        &self,
+        corpus_id: &str,
+        index_path: &Path,
+    ) -> Option<corpus_index::Result<EntityDelta>> {
+        let extractor = self.entity_extractor.as_ref()?;
+        Some(
+            extractor
+                .extract_delta_for_corpus(corpus_id, index_path)
+                .await
+                .map(|o| {
+                    // A refusal is not a failure, but it is not nothing
+                    // either — record it where the operator already looks
+                    // (ARCH 6).
+                    crate::enrichment::tiered::report_refused_over_cap(
+                        index_path,
+                        corpus_id,
+                        o.refused_over_cap as u64,
+                    );
+                    EntityDelta {
+                        mentions: o.mentions,
+                        refused_over_cap: o.refused_over_cap,
+                    }
+                }),
+        )
+    }
+
+    async fn run_folder_tiered_enrichment(
+        &self,
+        corpus_id: &str,
+        index_path: &Path,
+    ) -> corpus_index::Result<()> {
+        crate::enrichment::tiered::run_folder_tiered_enrichment(
+            corpus_id,
+            index_path,
+            Some(&self.provider),
+            None,
+        )
+        .await
+        .map(drop)
     }
 }
 
