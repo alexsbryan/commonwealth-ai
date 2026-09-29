@@ -170,27 +170,8 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
     })
 }
 
-/// Does `provider` — what the serving assembly installed — serve the rerank
-/// kind: a rerank slot its engine holds, or a compute child in the kind's
-/// child role? Answered from what loaded, never from the config: a rerank
-/// install that failed leaves the lane unarmed, so no search pays the
-/// cross-encoder's overfetch for a reranker that is not there (ARCH §6).
-pub fn serves_rerank(provider: &dyn InferenceProvider) -> bool {
-    let in_process = provider
-        .resident_slots()
-        .iter()
-        .any(|s| s.role == served_kind::RERANK.role);
-    let child = served_kind::RERANK
-        .child_role()
-        .is_some_and(|role| provider.compute_children().iter().any(|c| c.role == role));
-    tracing::debug!(
-        target: "served_kind",
-        in_process,
-        child,
-        "does this process serve the rerank kind"
-    );
-    in_process || child
-}
+/// The one rerank decider, in sovereign-contracts since pb-serve-distributes.
+pub use sovereign_contracts::rerank_kind::serves_rerank;
 
 /// The compute generation a factory started: what the children were planned
 /// as, and the manager running them (`None` when the layer came up empty).

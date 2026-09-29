@@ -739,7 +739,7 @@ pub(super) async fn run_daemon(
             // This daemon's own rerank kind — the engine's slot or a rerank
             // compute child, reached through the routed provider — when the
             // serving assembly installed one. Never a second load of the GGUF.
-            rerank: sovereign_compute::assembly::serves_rerank(routed_provider.as_ref())
+            rerank: sovereign_contracts::rerank_kind::serves_rerank(routed_provider.as_ref())
                 .then(|| Arc::clone(&routed_provider)),
             // The served NER kind's handle, the one the ingest paths hold.
             ner: gliner_raw.clone(),

@@ -9,7 +9,7 @@ use sovereign_contracts::setup_config::{EntryBinding, NodeSection, SetupConfig};
 /// Does a provider serve the rerank kind: the one decider, asked here of a
 /// [`loopback_provider`] by the clients that dial serve (cli-llm's
 /// `serve_dial`, pb-cli-llm), which link no compute crate.
-pub use sovereign_compute::assembly::serves_rerank;
+pub use sovereign_contracts::rerank_kind::serves_rerank;
 
 static DECIDED: std::sync::OnceLock<ServingPath> = std::sync::OnceLock::new();
 
