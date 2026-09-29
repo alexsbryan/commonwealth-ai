@@ -252,7 +252,6 @@ pub async fn corpus_ingest_partition(
                 // see `aggregate` for the pull-emission convention.
                 let shard_mgr = ShardManager::new(
                     Arc::clone(&engine),
-                    engine.index_dir().to_path_buf(),
                     mesh_store,
                 )
                 .with_emitter(shard_transfer_ledger(&state_clone));
@@ -601,7 +600,6 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: kernel_types::HandoffId) {
 
         let shard_mgr = ShardManager::new(
             Arc::clone(&engine),
-            engine.index_dir().to_path_buf(),
             mesh_store,
         )
         .with_emitter(shard_transfer_ledger(&state))

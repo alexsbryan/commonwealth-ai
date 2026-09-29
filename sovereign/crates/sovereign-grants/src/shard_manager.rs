@@ -3,20 +3,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use corpus_engine::{CorpusEngine, ShardInfo};
-use corpus_index::{
-    corpus::Corpus,
-    index::CorpusIndex,
-    types::{ChunkRange, IndexInfo},
-};
+use corpus_engine::CorpusEngine;
+use corpus_index::{corpus::Corpus, index::CorpusIndex, types::IndexInfo};
 use kernel_types::{HandoffId, NodeId};
-use oicp_types::work_queue::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
+use oicp_types::work_queue::{IngestionHandoff, PartitionStatus};
 use sovereign_contracts::peer::ReplicatedKv;
 use sovereign_contracts::venue_host::ShardTransferLedger;
 
 pub struct ShardManager {
     engine: Arc<CorpusEngine>,
-    shard_dir: PathBuf,
     mesh_store: Arc<dyn ReplicatedKv>,
     /// Optional emitter for `ShardTransferred` events on the merge
     /// leader's pull path. Optional so existing call sites that
@@ -70,14 +65,9 @@ pub struct MergePlan<'a> {
 }
 
 impl ShardManager {
-    pub fn new(
-        engine: Arc<CorpusEngine>,
-        shard_dir: PathBuf,
-        mesh_store: Arc<dyn ReplicatedKv>,
-    ) -> Self {
+    pub fn new(engine: Arc<CorpusEngine>, mesh_store: Arc<dyn ReplicatedKv>) -> Self {
         Self {
             engine,
-            shard_dir,
             mesh_store,
             emitter: None,
             work_queue: None,
@@ -106,79 +96,6 @@ impl ShardManager {
     pub fn with_work_queue(mut self, work_queue: Arc<crate::work_queue::WorkQueueManager>) -> Self {
         self.work_queue = Some(work_queue);
         self
-    }
-
-    // ---- Shard preparation and installation ----
-
-    /// Prepare shard directories for distribution to assigned nodes.
-    pub async fn prepare_shards(
-        &self,
-        corpus_id: &str,
-        assignments: &[KnowledgeShardAssignment],
-    ) -> corpus_index::Result<Vec<PreparedShard>> {
-        let mut shards = Vec::new();
-        for assignment in assignments {
-            if assignment.corpus_id != corpus_id {
-                continue;
-            }
-            if let Some(ref range) = assignment.chunk_range {
-                let output = self.shard_dir.join(format!(
-                    "{}-shard-{}-{}",
-                    corpus_id, range.start_id, range.end_id
-                ));
-                let chunk_range = ChunkRange::new(range.start_id, range.end_id);
-                let info = self
-                    .engine
-                    .extract_shard(corpus_id, chunk_range, &output)
-                    .await?;
-                shards.push(PreparedShard {
-                    target_node: assignment.node_id,
-                    info,
-                });
-            }
-        }
-        Ok(shards)
-    }
-
-    /// Install a received shard directory into the shared index directory.
-    pub fn install_received_shard(
-        &self,
-        corpus_id: &str,
-        chunk_range: &ChunkRange,
-        received_dir: &Path,
-    ) -> corpus_index::Result<PathBuf> {
-        let dest = self.engine.index_dir().join(format!(
-            "{}-shard-{}-{}",
-            corpus_id, chunk_range.start_id, chunk_range.end_id
-        ));
-        std::fs::rename(received_dir, &dest).map_err(corpus_index::Error::Io)?;
-        Ok(dest)
-    }
-
-    /// Merge all local shard directories for a corpus into a complete index.
-    pub async fn consolidate_shards(&self, corpus_id: &str) -> corpus_index::Result<IndexInfo> {
-        let shard_dirs: Vec<PathBuf> = self
-            .engine
-            .installed_indexes()
-            .await?
-            .iter()
-            .filter(|i| i.corpus_id == corpus_id && i.is_shard)
-            .map(|i| i.path.clone())
-            .collect();
-
-        if shard_dirs.is_empty() {
-            return Err(corpus_index::Error::NoShardsFound(corpus_id.into()));
-        }
-
-        let output = self.engine.index_dir().join(corpus_id);
-        let info = self.engine.merge_shards(&shard_dirs, &output).await?;
-
-        // Clean up shard directories after successful merge.
-        for path in &shard_dirs {
-            std::fs::remove_dir_all(path).ok();
-        }
-
-        Ok(info)
     }
 
     // ---- Collaborative merge coordinator ----
@@ -811,99 +728,6 @@ impl ShardManager {
 
         Ok(bytes_received)
     }
-
-    // ---- T7: Index transfer sender ----
-
-    /// Stream a local corpus index to a remote node as a tar archive.
-    ///
-    /// Tars `<index_dir>/<corpus_id>/`, POSTs it to
-    /// `POST {target_base_url}/internal/index/transfer`, and returns a
-    /// receipt on success.
-    ///
-    /// `to_node` and `emitter` are optional so existing callers
-    /// without ledger context can keep calling the function. When
-    /// supplied, a `ShardTransferred` event is emitted on success
-    /// per the dimensional ledger spec — the sender owns the byte
-    /// count, and the recipient's `bytes_received` is inferred from
-    /// the same event during aggregation
-    /// (`commonwealth_core::contributions::aggregate`).
-    pub async fn stream_index(
-        &self,
-        corpus_id: &str,
-        target_base_url: &str,
-        to_node: Option<NodeId>,
-        emitter: Option<(&dyn ShardTransferLedger, NodeId)>,
-    ) -> anyhow::Result<TransferReceipt> {
-        let index_path = self.engine.index_dir().join(corpus_id);
-        if !index_path.exists() {
-            anyhow::bail!(
-                "corpus '{}' not found at {}",
-                corpus_id,
-                index_path.display()
-            );
-        }
-
-        // Create a temporary tar archive.
-        let tar_path = self
-            .engine
-            .index_dir()
-            .join(format!(".{corpus_id}.transfer.tar"));
-
-        let tar_status = std::process::Command::new("tar")
-            .args([
-                "cf",
-                &tar_path.to_string_lossy(),
-                "-C",
-                &self.engine.index_dir().to_string_lossy(),
-                corpus_id,
-            ])
-            .status()?;
-
-        if !tar_status.success() {
-            anyhow::bail!("tar creation failed for corpus '{corpus_id}'");
-        }
-
-        let tar_bytes = std::fs::read(&tar_path)?;
-        std::fs::remove_file(&tar_path).ok();
-        let bytes_transferred = tar_bytes.len() as u64;
-
-        let transfer_url = format!("{target_base_url}/internal/index/transfer");
-        let client = reqwest::Client::new();
-        let resp = client
-            .post(&transfer_url)
-            .header("X-Corpus-Id", corpus_id)
-            .header("Content-Type", "application/octet-stream")
-            .body(tar_bytes)
-            .send()
-            .await?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("index/transfer returned {status} from {target_base_url}: {body}");
-        }
-
-        tracing::info!(
-            corpus = %corpus_id,
-            bytes = bytes_transferred,
-            target = %target_base_url,
-            "stream_index: shard transferred successfully"
-        );
-
-        // Emit `ShardTransferred` on success when both the
-        // recipient id and an emitter are supplied. The aggregator
-        // also lands `bytes_received` on `to_node` from the same
-        // event, so a single emission produces both halves of the
-        // byte ledger (per `aggregate` in commonwealth-core).
-        if let (Some(to), Some((em, self_node_id))) = (to_node, emitter) {
-            em.record_shard_transferred(&self_node_id, &to, corpus_id, bytes_transferred);
-        }
-
-        Ok(TransferReceipt {
-            corpus_id: corpus_id.to_string(),
-            bytes_transferred,
-        })
-    }
 } // end impl ShardManager
 
 /// Recover the set of peers that did work on `corpus_id` by scanning
@@ -940,18 +764,6 @@ fn participating_peers_from_gossip(
         }
     }
     peers
-}
-
-pub struct PreparedShard {
-    pub target_node: NodeId,
-    pub info: ShardInfo,
-}
-
-/// Result of a successful corpus index transfer.
-#[derive(Debug)]
-pub struct TransferReceipt {
-    pub corpus_id: String,
-    pub bytes_transferred: u64,
 }
 
 /// Delete a peer's working partition dir

@@ -179,7 +179,6 @@ async fn queue_mode_handoff(f: &Fixture) -> (HandoffId, ShardManager) {
 
     let manager = ShardManager::new(
         Arc::clone(&f.engine),
-        f.index_dir.clone(),
         f.mesh_store.clone(),
     )
     .with_work_queue(queue);

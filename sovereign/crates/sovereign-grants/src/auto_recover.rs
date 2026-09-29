@@ -291,7 +291,6 @@ pub async fn merge_from_fold_coverage(
 
     let shard_mgr = ShardManager::new(
         Arc::clone(engine),
-        engine.index_dir().to_path_buf(),
         Arc::clone(&mesh_store),
     )
     .with_emitter(contribution_emitter);
