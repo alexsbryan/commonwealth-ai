@@ -154,9 +154,16 @@ ONE process: it builds `serve`'s provider and hands it to svrn through the
 programs still dial it. A standalone svrn dials a configured serve and brings
 nothing up. There is no phone host build; the phone is a client (phase-b-29).
 The same root composes the other programs a stock node runs: ingest's engine
-reaches svrn through an ingest port in `sovereign-contracts`, beside
-`CorpusReadPort`, and code's MCP bundles mount on svrn's port under their own
-mount (phase-b-30). A port between two programs is legitimate because the root
+reaches svrn through ingest's ports, one narrow port per tool family
+(phase-b-33), and code's MCP bundles mount on svrn's port under their own
+mount (phase-b-30). A port lives in the leaf that already owns every type its
+methods name: `corpus-index` beside `CorpusReadPort` (`ingest_port.rs`), or
+`corpus-engine-atlas-reader` for a port that names atlas types.
+`sovereign-contracts` cannot host them, because `corpus-index` depends on it.
+No engine-internal type moves to a leaf to make a port nameable (§12 3a rung
+2, last bullet). When a svrn pipeline passes one, the code that names it moves
+into ingest's crate as the port's implementation, and svrn keeps the tool
+shell and whatever names `sovereign-core` (phase-b-43). A port between two programs is legitimate because the root
 that plugs it sits outside every package.
 Distributions are declared as `[[distribution]]` rows in
 `quality/ARCH_LAYERS.toml`, extending `[thin_surfaces]`: the crate may reach
