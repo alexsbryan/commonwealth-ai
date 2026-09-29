@@ -30,8 +30,9 @@ use sovereign_core::types::{
 use sovereign_tools::document_asset::{DocumentAssetManager, IngestProgress};
 
 use crate::bench_cmd::resource_meter::{MeteredInference, ResourceLedger, ResourceReport};
-use crate::chat_cmd::bootstrap::{build_inference, build_session, SplitInferenceProvider};
+use crate::chat_cmd::bootstrap::{build_inference, build_session};
 use crate::chat_cmd::config::default_globals_for_voice_eval;
+pub(crate) use crate::probe_cmd::provider_for_model;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 /// Bench configuration baked in at compile time. Changing the questions
@@ -805,35 +806,6 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
 
     persist_report(&report, opts.output.as_deref()).map_err(|e| format!("persist report: {e}"))?;
     Ok(report)
-}
-
-/// Build a daemon-backed provider pinned to an explicit chat model id.
-/// Mirrors `chat_cmd::bootstrap`'s provider construction (manifest-aware
-/// context window when the daemon serves OICP capabilities, 8192
-/// fallback otherwise) — the difference is the caller names the chat
-/// model instead of resolving the daemon's default. Used by
-/// `--enrich-model` / `--judge-model` to split roles across models.
-pub(crate) async fn provider_for_model(
-    base: &str,
-    chat_model: &str,
-    embed_model: &str,
-) -> Arc<dyn InferenceProvider> {
-    let v1 = format!("{base}/v1");
-    match oicp_client::fetch_manifest(base, None).await {
-        Some(manifest) => Arc::new(SplitInferenceProvider::from_manifest(
-            &v1,
-            &manifest,
-            chat_model.to_string(),
-            embed_model.to_string(),
-        )),
-        None => Arc::new(SplitInferenceProvider::new(
-            &v1,
-            chat_model.to_string(),
-            embed_model.to_string(),
-            8192,
-            sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(embed_model),
-        )),
-    }
 }
 
 /// `--transport desktop-bridge`: dispatch the bank through a REAL

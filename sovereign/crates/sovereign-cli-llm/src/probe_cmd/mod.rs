@@ -11,7 +11,9 @@
 //! global flags (`--daemon`, `--data-dir`, models, `--temperature`) build the
 //! session exactly as they do for any other verb.
 
+mod attached;
 mod prod;
+pub(crate) mod resource_meter;
 mod retrieve;
 mod routing;
 
@@ -25,6 +27,7 @@ use crate::chat_cmd::{
     config::parse_globals,
 };
 
+pub(crate) use attached::provider_for_model;
 pub use retrieve::load_atlas_context;
 pub(crate) use retrieve::load_atlases;
 
