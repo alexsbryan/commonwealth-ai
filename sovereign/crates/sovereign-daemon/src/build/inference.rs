@@ -159,7 +159,7 @@ pub fn load_provider(
                         sovereign_mesh::persist::resolve_self_node_id(&config.data.dir).to_hex(),
                     );
                     Arc::new(
-                        sovereign_inference::remote::SplitInferenceProvider::resolved(
+                        oicp_client::SplitInferenceProvider::resolved(
                             resolver,
                             // Always off-box, and structurally so: peers are the
                             // mesh MINUS this node, so an entry node resolved from
@@ -183,7 +183,7 @@ pub fn load_provider(
                 // from the 2026-08-30 shape, including deriving the locus from
                 // the address, which is the whole truth in this case.
                 EntryBinding::Address(url) => {
-                    Arc::new(sovereign_inference::remote::SplitInferenceProvider::new(
+                    Arc::new(oicp_client::SplitInferenceProvider::new(
                         &url,
                         "primary".to_string(),
                         embed_model_id,

@@ -12673,6 +12673,7 @@ dependencies = [
  "kernel-types",
  "libc",
  "mesh-join-vocab",
+ "oicp-client",
  "oicp-types",
  "oplog",
  "reqwest 0.12.28",

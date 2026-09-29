@@ -459,7 +459,7 @@ pub fn loopback_provider(
     serve: &ServeBase,
     served: sovereign_contracts::engine_state::ServedSelf,
     config_context: u32,
-) -> sovereign_inference::remote::SplitInferenceProvider {
+) -> oicp_client::SplitInferenceProvider {
     let query_instruction = served
         .embed_family
         .default_quirks()
@@ -473,7 +473,7 @@ pub fn loopback_provider(
             config_context
         }
     };
-    let provider = sovereign_inference::remote::SplitInferenceProvider::new(
+    let provider = oicp_client::SplitInferenceProvider::new(
         &format!("{}/v1", serve.base),
         "primary".to_string(),
         served.embed_model.clone(),

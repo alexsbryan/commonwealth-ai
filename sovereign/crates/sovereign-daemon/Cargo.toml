@@ -42,6 +42,10 @@ sovereign-contracts = { workspace = true }
 host-kit = { workspace = true, features = ["shell", "http", "task"] }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }
+# The HTTP client to serve and to a terminal's entry node
+# (`SplitInferenceProvider`, a package leaf; pb-serve-distributes repointed it
+# from `sovereign_inference::remote`, which re-exported this crate).
+oicp-client = { workspace = true }
 sovereign-serving-host = { path = "../sovereign-serving-host" }
 sovereign-core = { workspace = true }
 sovereign-time = { workspace = true }
