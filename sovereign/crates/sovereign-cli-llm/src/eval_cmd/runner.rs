@@ -152,7 +152,7 @@ pub struct EvalResult {
     /// that does not drive the production pipeline. Absent is never "reached
     /// nothing" — `Some` with empty `nodes` is that.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub atlas_walk: Option<sovereign_core::runtime::AtlasWalkEcho>,
+    pub atlas_walk: Option<sovereign_contracts::daemon_wire::AtlasWalkEcho>,
 }
 
 /// Echo of `sovereign_core::runtime::MetaAtlasHitRecord` for the

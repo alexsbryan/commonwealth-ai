@@ -73,6 +73,8 @@ pub mod conv_tiered;
 pub use conv_tiered::*;
 pub mod sec_coverage;
 pub use sec_coverage::*;
+pub mod atlas_walk;
+pub use atlas_walk::*;
 
 // ─── Local corpus — `/internal/corpus/local/…` (`lc_http`) ──────
 

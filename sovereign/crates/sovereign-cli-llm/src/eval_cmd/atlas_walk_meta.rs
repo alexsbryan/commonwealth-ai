@@ -13,7 +13,7 @@
 //! within tens of lines of its arch-gate ceiling, and because the read has a
 //! case worth a test: see [`atlas_walk_from_metadata`].
 
-use sovereign_core::runtime::{AtlasWalkEcho, ATLAS_WALK_META_KEY};
+use sovereign_contracts::daemon_wire::{AtlasWalkEcho, ATLAS_WALK_META_KEY};
 
 /// Read the turn's walk echo out of its persisted message metadata.
 ///
@@ -54,7 +54,7 @@ pub fn atlas_walk_from_metadata(
 mod tests {
     use super::*;
     use serde_json::json;
-    use sovereign_core::runtime::AtlasWalkNodeEcho;
+    use sovereign_contracts::daemon_wire::AtlasWalkNodeEcho;
 
     /// The two atom ids this test's fixture minted. Every assertion below
     /// compares against THESE, not against "non-empty" — an atom id the echo
