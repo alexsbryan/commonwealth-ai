@@ -61,6 +61,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use corpus_engine::recipe_tester::CorpusEngineRecipeTester;
 use oicp_client::RemoteApiProvider;
 use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
 use sovereign_core::traits::{InferenceProvider, Tool};
@@ -73,7 +74,6 @@ use sovereign_tools::recipe_author::{
     RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool,
     RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
 };
-use corpus_engine::recipe_tester::CorpusEngineRecipeTester;
 
 // ─── OpenAI-style wire types ────────────────────────────────────
 //
@@ -1276,13 +1276,14 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     // session. To sandbox, point HOME at a tempdir before invoking. Recipe
     // authoring keeps its notes in svrn's store (pb-notes-memory).
     let dotsovereign = sovereign_contracts::rebrand::svrnmesh_root();
-    let notes: Arc<dyn RecipeNotes> = match SqliteStateStore::open(&dotsovereign.join("sovereign.db")) {
-        Ok(s) => Arc::new(s),
-        Err(e) => {
-            eprintln!("live-trial: notes store: {e}");
-            return 2;
-        }
-    };
+    let notes: Arc<dyn RecipeNotes> =
+        match SqliteStateStore::open(&dotsovereign.join("sovereign.db")) {
+            Ok(s) => Arc::new(s),
+            Err(e) => {
+                eprintln!("live-trial: notes store: {e}");
+                return 2;
+            }
+        };
     let features = match RecipeProjectStore::open(&dotsovereign.join("features.db")) {
         Ok(s) => Arc::new(s),
         Err(e) => {

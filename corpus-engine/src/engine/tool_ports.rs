@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The catalog family's ingest port: ingest one catalog work (pb-ingest-dial-tools).
+//! Ingest's ports for svrn's tool families, implemented by the engine
+//! (pb-ingest-dial-tools; the traits are `corpus_index::ingest_port`'s).
 //!
-//! The half of sovereign-tools' on-demand catalog ingest that executes ingest —
-//! load and patch the content recipe, ingest it inline, fold a shared-target
-//! staging corpus into its canonical — moved here behind
-//! [`CatalogIngestPort`]; resolving the work, enrichment and link expansion
-//! stay the tool's.
+//! The catalog family: the half of sovereign-tools' on-demand catalog ingest
+//! that executes ingest — load and patch the content recipe, ingest it
+//! inline, fold a shared-target staging corpus into its canonical — moved
+//! here behind [`CatalogIngestPort`]; resolving the work, enrichment and link
+//! expansion stay the tool's. The plugin family: acquirer and extractor
+//! registration.
 
 use async_trait::async_trait;
 use corpus_index::ingest_port::{
@@ -15,6 +17,21 @@ use corpus_index::ingest_port::{
 use super::CorpusEngine;
 use crate::recipe::Recipe;
 use crate::types::CorpusSpec;
+
+/// The plugin family's port: every method delegates to the inherent one.
+impl corpus_index::ingest_port::IngestPluginPort for CorpusEngine {
+    fn register_acquirer(&self, kind: &str, acquirer: corpus_index::ingest_port::CustomAcquirerFn) {
+        CorpusEngine::register_acquirer(self, kind, acquirer)
+    }
+
+    fn register_extractor(
+        &self,
+        kind: &str,
+        extractor: corpus_index::ingest_port::CustomExtractorFn,
+    ) {
+        CorpusEngine::register_extractor(self, kind, extractor)
+    }
+}
 
 #[async_trait]
 impl CatalogIngestPort for CorpusEngine {

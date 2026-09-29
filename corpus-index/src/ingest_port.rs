@@ -10,8 +10,13 @@
 use async_trait::async_trait;
 use sovereign_contracts::daemon_wire::IngestProgress;
 
+use std::future::Future;
+use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::sync::Arc;
+
 use crate::source::CorpusReadPort;
-use crate::Error;
+use crate::{Error, Result};
 
 /// Thread-safe ingest progress callback. `Sync` because an ingest holds an
 /// `&Option<ProgressCallback>` across `.await` points.
@@ -64,4 +69,48 @@ pub trait CatalogIngestPort: CorpusReadPort {
         work: &CatalogWork,
         progress: Option<ProgressCallback>,
     ) -> std::result::Result<CatalogWorkIngested, CatalogWorkError>;
+}
+
+/// Runtime-registered acquirer closure. Receives the custom acquirer
+/// `params` blob from the recipe and the per-ingest `download_dir`;
+/// returns the local path that the extractor should read (typically a
+/// JSONL file).
+///
+/// Uses `Pin<Box<dyn Future>>` rather than the engine's static-dispatch
+/// `Acquirer` trait because it must be object-safe: the registry stores heterogeneous
+/// implementations keyed by `kind` string.
+///
+/// Progress reporting is intentionally omitted here. The
+/// `ProgressCallback` type is not `Clone`, and KnowledgeView-style
+/// acquirers (SQLite → JSONL) finish in sub-second time, so a progress
+/// bar buys nothing. If a future custom acquirer needs progress, the
+/// closure can emit it via its own side channel.
+pub type CustomAcquirerFn = Arc<
+    dyn Fn(serde_json::Value, PathBuf) -> Pin<Box<dyn Future<Output = Result<PathBuf>> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// Closure type for a runtime-registered per-file text extractor.
+///
+/// Recipe sets `extract = { type = "custom", kind = "<key>", extension = "<ext>" }`;
+/// the engine walks the acquired directory, collects files with the
+/// configured extension, and calls this closure on each to produce
+/// `ExtractedDoc.content`. The registered implementation typically
+/// lives in `sovereign-tools` so corpus-engine stays free of heavy
+/// per-format dependencies (pdf-extract, lopdf, libreoffice, …).
+///
+/// Returning `Ok("")` skips the file (treated as empty). Returning
+/// `Err(_)` propagates as a per-file extraction failure that bubbles
+/// through the standard ingest error path.
+pub type CustomExtractorFn = Arc<dyn Fn(&Path) -> Result<String> + Send + Sync>;
+
+/// The plugin family's port: svrn's acquirers and extractors (the SEC and
+/// KnowledgeView acquirers, the PDF extractor) register with ingest here.
+pub trait IngestPluginPort: Send + Sync {
+    /// Resolve recipes with `acquire = { type = "custom", kind }` to `acquirer`.
+    fn register_acquirer(&self, kind: &str, acquirer: CustomAcquirerFn);
+
+    /// Resolve recipes with `extract = { type = "custom", kind }` to `extractor`.
+    fn register_extractor(&self, kind: &str, extractor: CustomExtractorFn);
 }

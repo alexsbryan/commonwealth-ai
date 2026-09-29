@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Wire `local_corpus`'s existing PDF text-extraction helper into the
-//! `CorpusEngine` so recipes declaring
+//! ingest engine (through `IngestPluginPort`) so recipes declaring
 //! `extract = { type = "custom", kind = "pdf" }` can ingest PDFs
 //! downloaded by `http_api + follow` (or any other acquirer).
 //!
@@ -11,7 +11,7 @@
 //! folder-drop watched-folder flow; this module reuses it.
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, CustomExtractorFn};
+use corpus_index::ingest_port::{CustomExtractorFn, IngestPluginPort};
 use corpus_index::{Error, Result};
 
 use super::extract_stage::{safe_extract_pdf_text, SafeExtractError};
@@ -22,7 +22,7 @@ use super::extract_stage::{safe_extract_pdf_text, SafeExtractError};
 /// `scotus-opinions`, etc.). Bare-CLI flows that bypass this
 /// registration will fail loudly at install time with a clear
 /// "register before install" panic.
-pub fn register_pdf_extractor(engine: &CorpusEngine) {
+pub fn register_pdf_extractor(engine: &dyn IngestPluginPort) {
     let extractor: CustomExtractorFn = Arc::new(|path| {
         safe_extract_pdf_text(path).map_err(|e| match e {
             SafeExtractError::Encrypted => Error::Extraction(format!(

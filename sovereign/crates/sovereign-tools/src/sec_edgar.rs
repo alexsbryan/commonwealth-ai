@@ -62,9 +62,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine::engine::{CorpusEngine, CustomAcquirerFn};
-use corpus_engine::enrichment::atlas::analysis::sec_facts::normalize_concept_phrase;
+use corpus_engine_atlas_reader::sec_facts::normalize_concept_phrase;
 use corpus_index::error::{Error, Result};
+use corpus_index::ingest_port::{CustomAcquirerFn, IngestPluginPort};
 use serde::{Deserialize, Serialize};
 
 use crate::sec_facts_render::RenderOutput;
@@ -678,7 +678,7 @@ pub fn place_rendered(root: &Path, rendered: &RenderOutput) -> Result<PlacedFact
 /// Register the acquirer on `engine` under [`KIND`]. Call once at daemon
 /// startup, before any ingest of a recipe naming it. Idempotent:
 /// re-registering overwrites.
-pub fn register(engine: &CorpusEngine) {
+pub fn register(engine: &dyn IngestPluginPort) {
     let acquirer: CustomAcquirerFn = Arc::new(|params_blob, download_dir| {
         Box::pin(async move { acquire(params_blob, download_dir).await })
     });
@@ -1261,7 +1261,7 @@ mod tests {
         );
 
         // 3. What was staged is what the tool will read back.
-        let store: corpus_engine::enrichment::atlas::analysis::sec_facts::SecFactStore =
+        let store: corpus_engine_atlas_reader::sec_facts::SecFactStore =
             serde_json::from_str(&std::fs::read_to_string(&staged).unwrap())
                 .expect("the staged sidecar parses as the type the tool reads");
         assert_eq!(store.concepts.len(), placed.concepts);
@@ -1340,7 +1340,11 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let embed: corpus_index::types::EmbedFn =
             Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0f32; 8]) }));
-        let engine = CorpusEngine::new(dir.path().join("recipes"), dir.path().join("idx"), embed);
+        let engine = corpus_engine::CorpusEngine::new(
+            dir.path().join("recipes"),
+            dir.path().join("idx"),
+            embed,
+        );
         register(&engine);
         // The dispatch arm in ingest_factories.rs errors with
         // "No custom acquirer registered for kind 'sec_edgar'" when this

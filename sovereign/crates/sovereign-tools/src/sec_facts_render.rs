@@ -67,7 +67,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::debug;
 
-use corpus_engine::enrichment::atlas::analysis::sec_facts::{
+use corpus_engine_atlas_reader::sec_facts::{
     AsOf, ConceptFacts, ConceptKind, Coverage, Period, SecFact, SecFactStore,
 };
 use sovereign_core::error::{Error, Result};

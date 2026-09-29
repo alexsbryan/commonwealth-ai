@@ -33,10 +33,10 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::runtime::numeric_audit::numeric_tokens;
 use sovereign_core::types::{StepOutput, ToolContext};
 
-use corpus_engine::enrichment::atlas::analysis::sec_facts::{
+use corpus_engine_atlas_reader::sec_facts::{
     available_period_ends, calendar_period_in_question, change, coverage_summary,
-    discover_authoritative_stores, fmt_compact, fmt_full, fmt_pct, lookup, ratio, resolve_concept,
-    scope_qualifier_in_question, store_claims, SecFact, SecFactStore, SecRefusal,
+    discover_authoritative_stores_by, fmt_compact, fmt_full, fmt_pct, lookup, ratio,
+    resolve_concept, scope_qualifier_in_question, store_claims, SecFact, SecFactStore, SecRefusal,
     SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR,
 };
 use corpus_index::source::CorpusReadPort;
@@ -70,7 +70,9 @@ impl SecFactsTool {
     /// recipe author declares; data placement does not).
     fn claim_stores(&self) -> &[(String, SecFactStore)] {
         self.claim_stores.get_or_init(|| {
-            discover_authoritative_stores(self.engine.index_dir(), self.engine.recipes_dir())
+            discover_authoritative_stores_by(self.engine.index_dir(), &|id| {
+                self.engine.declared_authority_tool(id)
+            })
         })
     }
 

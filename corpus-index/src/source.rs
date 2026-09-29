@@ -44,9 +44,9 @@ pub trait CorpusReadPort: IndexSource {
     /// The registry catalog, one row per entry.
     fn builtin_corpora(&self) -> Vec<BuiltinCorpus>;
 
-    /// The directory the recipes live under (the `[authority]` blocks the
-    /// sec_facts tool reads).
-    fn recipes_dir(&self) -> &Path;
+    /// The `[authority] tool` `corpus_id`'s recipe declares, if any (what the
+    /// sec_facts tool's discovery keys on).
+    fn declared_authority_tool(&self, corpus_id: &str) -> Option<String>;
 
     /// `corpus_id`'s recipe `[catalog]` block; `Ok(None)` when the recipe
     /// has none, `Err` when it does not resolve.

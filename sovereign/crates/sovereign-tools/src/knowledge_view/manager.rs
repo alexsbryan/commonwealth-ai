@@ -206,7 +206,7 @@ impl KnowledgeViewManager {
         notes_db_path: PathBuf,
         local_only_skill_ids: Vec<String>,
     ) -> Self {
-        register_sqlite(&engine);
+        register_sqlite(engine.as_ref());
 
         let local_refs: Vec<&str> = local_only_skill_ids.iter().map(|s| s.as_str()).collect();
         let mut views = HashMap::new();

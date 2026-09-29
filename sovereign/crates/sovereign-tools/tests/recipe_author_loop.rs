@@ -20,9 +20,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use corpus_engine::recipe_tester::CorpusEngineRecipeTester;
 use sovereign_core::traits::Tool;
 use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
-use corpus_engine::recipe_tester::CorpusEngineRecipeTester;
 use sovereign_tools::{RecipeReadTool, RecipeValidateTool, RecipeWriteTool, RegistryBrowseTool};
 
 fn ctx() -> ToolContext {
@@ -249,8 +249,8 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
 /// checkpoint. Mirrors the M1 acceptance scenario in the plan file.
 #[tokio::test]
 async fn recipe_author_project_lifecycle_end_to_end() {
-    use sovereign_store::sqlite::SqliteStateStore;
     use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
+    use sovereign_store::sqlite::SqliteStateStore;
     use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
     use sovereign_tools::recipe_author::{
         capability_request::CapabilityRequest,
