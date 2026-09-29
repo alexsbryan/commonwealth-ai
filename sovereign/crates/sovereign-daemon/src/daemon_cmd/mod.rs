@@ -218,17 +218,10 @@ async fn shutdown_daemon(
     } else {
         0
     };
-    #[cfg(target_os = "macos")]
-    {
-        // Reuse the shared fast-exit (lifted to sovereign-inference 2026-06-16
-        // so the desktop app shares it). Skips `__cxa_finalize_ranges` so the
-        // ggml-metal device sweeper never asserts on still-resident resources.
-        sovereign_inference::fast_exit_skip_destructors(exit_code)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        exit_code
-    }
+    // The ggml-metal teardown fast-exit is the loader's, applied by the
+    // process that holds the weights: the stock binary's main, through serve's
+    // face (pb-serve-distributes).
+    exit_code
 }
 
 /// Install the daemon panic hook. Pub wrapper over the twin module so

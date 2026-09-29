@@ -79,6 +79,12 @@ mod remote_gguf;
 mod self_report;
 mod warm_cache;
 
+/// Exit past ggml's static destructors (the teardown SIGABRT, and on macOS
+/// the ggml-metal device sweeper's assertion): the loader's, so a process
+/// that hosts serve's assembly calls it on its way out, as `run` does
+/// (pb-serve-distributes).
+pub use sovereign_inference::fast_exit_skip_destructors;
+
 /// The run lock's name inside the data root (`host_kit::RunLock`): one
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
 pub const RUN_LOCK: &str = "serve";
