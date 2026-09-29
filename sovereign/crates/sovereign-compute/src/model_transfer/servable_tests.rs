@@ -51,3 +51,49 @@ fn servable_files_do_not_guess_missing_shards() {
     let got = servable_model_files(&[p.clone()]);
     assert_eq!(got, vec![p.canonicalize().unwrap()]);
 }
+
+/// serve's bundle answers the list it was handed, over loopback, and the
+/// list is every shard of each advertised slot (pb-serve-distributes).
+/// Failing input: publish `servable_for`'s input paths unexpanded, and the
+/// split's second shard is missing from the listing.
+#[tokio::test]
+async fn the_bundle_lists_every_shard_of_the_advertised_slots() {
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["big-00001-of-00002.gguf", "big-00002-of-00002.gguf", "embed.gguf"] {
+        std::fs::write(dir.path().join(name), b"x").unwrap();
+    }
+    let models = sovereign_contracts::setup_config::ModelsSection {
+        primary: dir.path().join("big-00001-of-00002.gguf"),
+        embed: dir.path().join("embed.gguf"),
+        ..Default::default()
+    };
+    assert!(servable_for(None).is_empty());
+    let servable = ServableModelFilesReader::default();
+    servable.publish(servable_for(Some(&models)));
+    let app = host_kit::shell::mount(vec![bundle(servable)]);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await
+        .ok()
+    });
+    let listing: ModelFileListing = reqwest::get(format!(
+        "{base}{}",
+        oicp_types::model_transfer::MODELS_LIST_PATH
+    ))
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    let mut names: Vec<String> = listing.files.into_iter().map(|f| f.name).collect();
+    names.sort();
+    assert_eq!(
+        names,
+        ["big-00001-of-00002.gguf", "big-00002-of-00002.gguf", "embed.gguf"]
+    );
+}

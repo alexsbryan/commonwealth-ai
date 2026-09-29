@@ -399,6 +399,39 @@ pub async fn serve_model_file(
     Ok((StatusCode::OK, headers, body).into_response())
 }
 
+/// The two routes as serve's named bundle, at the paths peers fetch from,
+/// over `servable`, the list serve publishes for itself (pb-serve-distributes).
+/// Loopback-only: serve's port faces this host, and a peer reaches these
+/// through svrn's internal port until the flip, then through cw-rails' origin
+/// registry — both local dials.
+pub fn bundle(servable: ServableModelFilesReader) -> host_kit::shell::RouteBundle {
+    let guard = || axum::middleware::from_fn(host_kit::shell::guard::loopback_only);
+    host_kit::shell::RouteBundle::new("model_transfer")
+        .route(
+            oicp_types::model_transfer::MODELS_LIST_PATH,
+            axum::routing::get(list_model_files).layer(guard()),
+        )
+        .route(
+            oicp_types::model_transfer::MODEL_FILE_ROUTE,
+            axum::routing::get(serve_model_file).layer(guard()),
+        )
+        .with_state(servable)
+}
+
+/// What a node configured with `models` serves to peers: every shard of each
+/// slot it advertises (`sovereign_contracts::model_slots`, the list svrn
+/// registers too). Empty for a node with no `[models]`.
+pub fn servable_for(models: Option<&sovereign_contracts::setup_config::ModelsSection>) -> Vec<PathBuf> {
+    let Some(models) = models else {
+        return Vec::new();
+    };
+    let paths: Vec<PathBuf> = sovereign_contracts::model_slots::advertised_slots(models)
+        .into_iter()
+        .map(|(_, path)| path.to_path_buf())
+        .collect();
+    servable_model_files(&paths)
+}
+
 /// The set of files peers may fetch, derived from the configured slot paths:
 /// every shard of a split GGUF, canonicalized, deduped, in slot order.
 ///

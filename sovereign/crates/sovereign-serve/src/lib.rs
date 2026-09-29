@@ -355,6 +355,13 @@ pub async fn assemble(
         error!(target: "serve", error = %e, "engine registration refused");
         return Err(e.to_string());
     }
+    // The files peers may fetch from this node: every shard of each slot it
+    // advertises, published before the engine loads (model transfer is
+    // serve's, phase-b-19; pb-serve-distributes).
+    let servable = sovereign_serving_host::state::ServableModelFilesReader::default();
+    let files = sovereign_compute::model_transfer::servable_for(config.models.as_ref());
+    info!(target: "serve", files = files.len(), "publishing servable model files for peer fetch");
+    servable.publish(files);
     let parts = match tokio::task::spawn_blocking(move || {
         sovereign_compute::assembly::assemble_serving(&config)
     })
@@ -380,6 +387,8 @@ pub async fn assemble(
     routes.push(self_report::bundle(Arc::clone(&cell)));
     // serve's weights: the NER read and the download job, into this root.
     routes.push(sovereign_compute::assets::bundle(data_dir.join("models")));
+    // Model transfer: peers fetch the files above, whole or by byte range.
+    routes.push(sovereign_compute::model_transfer::bundle(servable));
     routes.push(reload::bundle(
         Arc::clone(&cell),
         parts.reload_factory,
