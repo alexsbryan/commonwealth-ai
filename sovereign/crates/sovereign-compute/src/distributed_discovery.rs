@@ -10,11 +10,33 @@ use std::sync::Arc;
 
 use kernel_types::NodeId;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
-use sovereign_serving_host::rpc_discovery::MeshPorts;
+use sovereign_serving_host::rpc_discovery::{Distribute, MeshPorts};
 
 use crate::containment::rpc_discovery_armed;
 use crate::discovery_policy;
 use crate::distributed_respawn::{respawn_distributed_primary, ChildDistributionState};
+
+/// The distribution this loader's engine and distributed-primary slot run
+/// once the process's mesh is up, in boot's order: the warm orchestrator
+/// (installed before any distributing load), the self-manifest refresh
+/// (before discovery can spawn the child, so the manifest never misses the
+/// model the child ends up serving), then RPC-worker discovery.
+pub fn distribute(
+    engine: Option<Arc<EmbeddedLlamaCpp>>,
+    distributed_slot: Option<Arc<crate::manager::DynamicChildSlot>>,
+) -> Distribute {
+    Box::new(move |ports: MeshPorts, router| {
+        tracing::info!(
+            target: "compute_child",
+            engine = engine.is_some(),
+            distributed_primary = distributed_slot.is_some(),
+            "distribution: the warm orchestrator, the self-manifest refresh and RPC-worker discovery start"
+        );
+        crate::distributed_warm::install_rpc_warm_orchestrator(ports.clone());
+        crate::distributed_respawn::spawn_self_manifest_refresh(router, distributed_slot.clone());
+        spawn_rpc_worker_discovery(ports, engine, distributed_slot);
+    })
+}
 
 /// Spawn the mesh RPC-worker auto-discovery loop (opt-in via `SOVEREIGN_RPC_DISCOVER`).
 pub fn spawn_rpc_worker_discovery(

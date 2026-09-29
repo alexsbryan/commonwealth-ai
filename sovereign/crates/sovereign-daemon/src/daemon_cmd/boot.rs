@@ -220,9 +220,8 @@ pub(super) async fn run_daemon(
 
     let super::serving_boot::ServingBoot {
         provider,
-        engine_handle,
         resolved_embed_family,
-        distributed_primary_slot,
+        distribute,
         reload,
         deferred_daemon,
         path: serving_path,
@@ -904,44 +903,21 @@ pub(super) async fn run_daemon(
     let daemon = crate::EmbeddedDaemon::new(data_dir.clone(), config.clone(), services);
     deferred_daemon.bind(Arc::clone(&daemon));
 
-    // Host side of distributed-inference auto-warm. When this node distributes a
-    // large primary across mesh workers, the embedded engine calls this seam to
-    // seed each worker's shard BEFORE loading — so the load is all cache hits and
-    // never streams a large weight share (the upload deadlock). This retires the
-    // manual `SOVEREIGN_RPC_ASSUME_WARMED` for the common case. Installed
-    // unconditionally (harmless on a node that never distributes) so both
-    // auto-discovered and manual (`SOVEREIGN_RPC_WORKERS`) hosts auto-warm.
-    // Where this process loads the engine: the in-process path, or serve
-    // hosted here (whose assembly handed its engine and slot back). On the
-    // dialing path no engine loads here, so there is nothing to warm and no
-    // worker to discover (pb-svrn-dials-serve, pb-serve-distributes).
-    let loads_here = !matches!(serving_path, crate::serve_client::ServingPath::DialsServe);
+    // The distribution over the engine this process loads (the warm
+    // orchestrator, the self-manifest refresh, RPC-worker discovery; built by
+    // the loader, `sovereign_compute::distributed_discovery::distribute`),
+    // started over this daemon's mesh ports now that the daemon is bound. The
+    // in-process path and a hosted serve hand one; on the dialing path no
+    // engine loads here, so there is nothing to warm and no worker to
+    // discover (pb-svrn-dials-serve, pb-serve-distributes).
     tracing::info!(
         target: "serving_path",
-        loads_here,
+        loads_here = distribute.is_some(),
         serving = %serving_path.status_line(),
         "boot: the engine's mesh subsystems (warm orchestrator, RPC-worker discovery) run where the engine loads"
     );
-    let mesh_ports = bootstrap::mesh_ports(&daemon);
-    if loads_here {
-        sovereign_compute::distributed_warm::install_rpc_warm_orchestrator(mesh_ports.clone());
-    }
-
-    // Must be installed BEFORE discovery starts spawning the child: the
-    // manifest is a boot-time snapshot taken while the slot is still unspawned,
-    // so without this the node never advertises the model its child ends up
-    // serving, and every request that names it 503s.
-    bootstrap::spawn_self_manifest_refresh(
-        Arc::clone(&mesh_provider),
-        distributed_primary_slot.clone(),
-    );
-
-    if loads_here {
-        sovereign_compute::distributed_discovery::spawn_rpc_worker_discovery(
-            mesh_ports,
-            engine_handle,
-            distributed_primary_slot,
-        );
+    if let Some(distribute) = distribute {
+        distribute(bootstrap::mesh_ports(&daemon), Arc::clone(&mesh_provider));
     }
 
     bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), mesh_provider);

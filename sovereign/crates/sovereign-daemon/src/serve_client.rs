@@ -131,14 +131,12 @@ impl ServingPath {
 pub type HostedCell = std::sync::Arc<sovereign_contracts::reloadable_provider::ReloadableProvider>;
 
 /// What hosting serve in this process hands svrn: the cell every route
-/// answers from, and the assembly's llama engine and distributed-primary
-/// slot, which RPC-worker discovery, the warm orchestrator and the respawn
-/// read while they still run in svrn (pb-serve-distributes moves them into
-/// serve, one module at a time, and these two fields go with the last).
+/// answers from, and the distribution over serve's engine and slot (the warm
+/// orchestrator, the self-manifest refresh, RPC-worker discovery), which svrn
+/// starts with its mesh ports once its mesh is up (pb-serve-distributes).
 pub struct HostedParts {
     pub cell: HostedCell,
-    pub engine: Option<std::sync::Arc<sovereign_inference::embedded::EmbeddedLlamaCpp>>,
-    pub distributed_primary: Option<std::sync::Arc<sovereign_compute::manager::DynamicChildSlot>>,
+    pub distribute: sovereign_serving_host::rpc_discovery::Distribute,
 }
 
 type Compose = Box<

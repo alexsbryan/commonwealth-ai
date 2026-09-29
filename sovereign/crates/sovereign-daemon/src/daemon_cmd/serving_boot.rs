@@ -8,20 +8,20 @@ use std::sync::Arc;
 use sovereign_core::model_family::ModelFamily;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
 use crate::bootstrap;
 
 /// What the serving boot hands the rest of `run_daemon`.
 pub(super) struct ServingBoot {
     pub provider: Arc<dyn InferenceProvider>,
-    pub engine_handle: Option<Arc<EmbeddedLlamaCpp>>,
     pub resolved_embed_family: ModelFamily,
-    pub distributed_primary_slot: Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
+    /// The distribution over the engine this process loads (compute's
+    /// `distribute`: warm orchestrator, self-manifest refresh, RPC-worker
+    /// discovery), started once the mesh is up; `None` where no engine
+    /// loads here (the dialing path).
+    pub distribute: Option<sovereign_serving_host::rpc_discovery::Distribute>,
     pub reload: crate::provider::ReloadSource,
     pub deferred_daemon: Arc<crate::DeferredDaemon>,
-    /// Where serving lives: boot starts the engine's mesh subsystems
-    /// (RPC discovery, the warm orchestrator) where this process loads it.
     pub path: crate::serve_client::ServingPath,
 }
 
@@ -150,12 +150,16 @@ pub(super) async fn boot_serving(
     //   - an engine configured with no local llama slots, where the
     //     RPC-worker reload below is llama's own and simply does not arm.
     // Already an `Option` before either existed; both make the `None` reachable.
-    let engine_handle: Option<Arc<EmbeddedLlamaCpp>> = raw_engine;
+    // A terminal reaches this arm on the dialing path, where no engine loads
+    // and nothing distributes (boot gated the same way on `DialsServe`).
+    let loads_here = !matches!(path, crate::serve_client::ServingPath::DialsServe);
+    let distribute = loads_here.then(|| {
+        sovereign_compute::distributed_discovery::distribute(raw_engine, distributed_primary_slot)
+    });
     Ok(ServingBoot {
         provider,
-        engine_handle,
         resolved_embed_family,
-        distributed_primary_slot,
+        distribute,
         reload: crate::provider::ReloadSource::Assembly(reload_factory),
         deferred_daemon,
         path,
@@ -209,9 +213,8 @@ async fn dial_serve(
     tracing::info!(target: "serving_path", serve_base = %serve.base, source = ?serve.source, "boot: serving is serve's; this daemon holds no engine");
     Ok(ServingBoot {
         provider,
-        engine_handle: None,
         resolved_embed_family,
-        distributed_primary_slot: None,
+        distribute: None,
         reload: crate::provider::ReloadSource::Serve {
             base: serve,
             config_context,
@@ -238,11 +241,7 @@ async fn host_serve(
     deferred_daemon: Arc<crate::DeferredDaemon>,
     path: crate::serve_client::ServingPath,
 ) -> Result<ServingBoot, i32> {
-    let crate::serve_client::HostedParts {
-        cell,
-        engine,
-        distributed_primary,
-    } = match hosted
+    let crate::serve_client::HostedParts { cell, distribute } = match hosted
         .compose(config.data.dir.clone(), config_path.to_path_buf())
         .await
     {
@@ -258,15 +257,12 @@ async fn host_serve(
     tracing::info!(
         target: "serving_path",
         serve_base = %crate::serve_client::default_serve_base(),
-        engine = engine.is_some(),
-        distributed_primary = distributed_primary.is_some(),
         "boot: serving is serve's, hosted in this process; one engine answers both ports"
     );
     Ok(ServingBoot {
         provider,
-        engine_handle: engine,
         resolved_embed_family,
-        distributed_primary_slot: distributed_primary,
+        distribute: Some(distribute),
         reload: crate::provider::ReloadSource::Hosted { cell },
         deferred_daemon,
         path,

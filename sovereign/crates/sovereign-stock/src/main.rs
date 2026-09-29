@@ -47,8 +47,7 @@ fn main() {
             tracing::info!(target: "serve", listen = %assembly.listen, "hosted serve bound in the stock process");
             let parts = sovereign_daemon::process::HostedParts {
                 cell: assembly.cell,
-                engine: assembly.engine,
-                distributed_primary: assembly.distributed_primary,
+                distribute: assembly.distribute,
             };
             let (routes, run_lock) = (assembly.routes, assembly.run_lock);
             tokio::spawn(async move {

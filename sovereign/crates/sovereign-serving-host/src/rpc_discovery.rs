@@ -580,6 +580,15 @@ pub struct MeshPorts {
     >,
 }
 
+/// What the process that loads the distributed primary starts once its mesh
+/// is up (pb-serve-distributes): the warm orchestrator, the self-manifest
+/// refresh and RPC-worker discovery, over the mesh ports that process hands
+/// it and the mesh router whose self-manifest follows the primary. The
+/// loader builds it (`sovereign_compute::distributed_discovery::distribute`);
+/// svrn calls it, knowing neither the engine nor the slot.
+pub type Distribute =
+    Box<dyn FnOnce(MeshPorts, Arc<crate::peer_inference::InferenceRouter>) + Send>;
+
 /// Where this node serves model files: the internal port, and the
 /// reachable `http://ip:port` bases on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
