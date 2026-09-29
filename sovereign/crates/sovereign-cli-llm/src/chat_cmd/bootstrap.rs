@@ -239,7 +239,9 @@ async fn build_session_scoped(
     };
     eprintln!("Indexes:     {}", indexes_dir.display());
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
-    let inference_fn = corpus_engine::enrichment::provider_inference::inference_to_inference_fn(Arc::clone(&inference));
+    let inference_fn = corpus_engine::enrichment::provider_inference::inference_to_inference_fn(
+        Arc::clone(&inference),
+    );
     // The engine's `expected_embedding_model` flows into
     // `_corpus_meta.json` at ingest time and into shard-consistency
     // checks. The CLI doesn't ingest during chat, but if any tool
@@ -295,7 +297,9 @@ async fn build_session_scoped(
             atlas: Arc::new(corpus_engine::IngestAtlas),
             // This process links ingest's catalog, so the atlas manager's
             // pipeline-map fallback reads configs as it did before the port.
-            enrich_config: Some(Arc::new(sovereign_enrichment_catalog::port::CatalogEnrichConfig)),
+            enrich_config: Some(Arc::new(
+                sovereign_enrichment_catalog::port::CatalogEnrichConfig,
+            )),
             // Cloned: `tool_bundles` below borrows the same handle for
             // `knowledge_lookup`'s notes channel. One store, two readers.
             note_store: note_store.clone(),

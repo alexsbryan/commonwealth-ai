@@ -59,7 +59,6 @@ use corpus_engine::enrichment::pipeline::atlas::{
 };
 use corpus_engine::enrichment::GovernanceOpKind;
 use corpus_engine::CorpusEngine;
-use sovereign_store::sqlite::SqliteStateStore;
 use oplog::{Op, Oplog};
 use sovereign_contracts::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
 use sovereign_contracts::setup_config::SetupConfig;
@@ -69,6 +68,7 @@ use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::governance_http::governance_router;
 use sovereign_daemon::mcp_config_http::mcp_config_router;
 use sovereign_daemon::recipe_project_http::recipe_project_router;
+use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
 
 use crate::common;

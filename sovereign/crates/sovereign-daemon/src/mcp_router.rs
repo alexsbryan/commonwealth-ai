@@ -25,7 +25,9 @@ use axum::extract::{ConnectInfo, Extension};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{Json, Router};
-use host_kit::mcp::{McpCallLog, McpMountedTools, McpRequestContext, McpRequestHandler, ToolOutcome};
+use host_kit::mcp::{
+    McpCallLog, McpMountedTools, McpRequestContext, McpRequestHandler, ToolOutcome,
+};
 use serde_json::Value;
 use tower_http::cors::CorsLayer;
 

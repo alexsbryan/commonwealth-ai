@@ -44,14 +44,23 @@ pub fn wire(notes: &Arc<NoteStore>, rail: NotesRail) {
     match embed {
         Some(embed) => match notes.set_embed_fn(embed) {
             Err(e) => tracing::warn!(target = "notes", error = e, "notes: embed_fn already set"),
-            Ok(()) => tracing::info!(target = "notes", "notes: T1 embed_fn wired to the host's embed slot"),
+            Ok(()) => tracing::info!(
+                target = "notes",
+                "notes: T1 embed_fn wired to the host's embed slot"
+            ),
         },
-        None => tracing::info!(target = "notes", "notes: no embed slot; T1 semantic recall is off"),
+        None => tracing::info!(
+            target = "notes",
+            "notes: no embed slot; T1 semantic recall is off"
+        ),
     }
     match gliner {
         Some(gliner) => match notes.set_gliner_fn(gliner) {
             Err(e) => tracing::warn!(target = "notes", error = e, "notes: gliner_fn already set"),
-            Ok(()) => tracing::info!(target = "notes", "notes: T2 gliner_fn wired to the host's GLiNER session"),
+            Ok(()) => tracing::info!(
+                target = "notes",
+                "notes: T2 gliner_fn wired to the host's GLiNER session"
+            ),
         },
         None => tracing::info!(
             target = "notes",
@@ -63,7 +72,11 @@ pub fn wire(notes: &Arc<NoteStore>, rail: NotesRail) {
     // is the dedup key on the gossip wire, so this field is informational,
     // surfaced in the audit display.
     if let Err(e) = notes.set_origin_node_id(node_id.to_string()) {
-        tracing::warn!(target = "notes", error = e, "notes: origin_node_id already set — wiring race?");
+        tracing::warn!(
+            target = "notes",
+            error = e,
+            "notes: origin_node_id already set — wiring race?"
+        );
     }
     // The reading half of the same identity: whose name a reader sees on
     // the notes coming back, including gossiped ones from peers.
@@ -71,9 +84,15 @@ pub fn wire(notes: &Arc<NoteStore>, rail: NotesRail) {
         Some(roster) => {
             let self_name = roster.self_name().unwrap_or("<unnamed>").to_string();
             match notes.set_node_roster(roster) {
-                Err(e) => tracing::warn!(target = "notes", error = e, "notes: node_roster already set"),
-                Ok(()) => tracing::debug!(target = "notes", self_node = %node_id, self_name = %self_name,
-                    "notes: node roster wired — authors resolve to mesh names"),
+                Err(e) => tracing::warn!(
+                    target = "notes",
+                    error = e,
+                    "notes: node_roster already set"
+                ),
+                Ok(()) => {
+                    tracing::debug!(target = "notes", self_node = %node_id, self_name = %self_name,
+                    "notes: node roster wired — authors resolve to mesh names")
+                }
             }
         }
         None => tracing::debug!(target = "notes", self_node = %node_id,
@@ -81,7 +100,12 @@ pub fn wire(notes: &Arc<NoteStore>, rail: NotesRail) {
     }
     let convergence = convergence.unwrap_or_else(|| Arc::new(SoloConvergence::new()));
     let kv: Arc<dyn ReplicatedKv> = Arc::new(super::atlas::atlas_kv());
-    wire_note_propagation_sink(Arc::clone(notes), Arc::clone(&kv), node_id, Arc::clone(&convergence));
+    wire_note_propagation_sink(
+        Arc::clone(notes),
+        Arc::clone(&kv),
+        node_id,
+        Arc::clone(&convergence),
+    );
     spawn_notes_tier_backfill(Arc::clone(notes));
     spawn_notes_ingest_poller(kv, Arc::clone(notes), node_id, convergence);
 }
@@ -410,4 +434,3 @@ pub fn spawn_notes_ingest_poller(
         }
     });
 }
-

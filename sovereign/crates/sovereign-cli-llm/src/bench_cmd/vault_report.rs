@@ -837,8 +837,9 @@ async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&enrich_inference));
     let batch_embed_fn =
         sovereign_tools::corpus::inference_to_batch_embed_fn(Arc::clone(&enrich_inference));
-    let inference_fn =
-        corpus_engine::enrichment::provider_inference::inference_to_inference_fn(Arc::clone(&enrich_inference));
+    let inference_fn = corpus_engine::enrichment::provider_inference::inference_to_inference_fn(
+        Arc::clone(&enrich_inference),
+    );
     let engine = Arc::new(
         corpus_engine::CorpusEngine::new(recipes_dir.clone(), indexes_dir.clone(), embed_fn)
             .with_embedding_model(&session.embed_model)

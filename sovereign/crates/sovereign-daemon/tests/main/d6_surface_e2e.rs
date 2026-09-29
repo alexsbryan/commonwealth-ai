@@ -55,7 +55,11 @@ use crate::common::spawn_router;
 #[allow(clippy::unwrap_used)]
 async fn build_store_daemon(
     with_features: bool,
-) -> (Arc<EmbeddedDaemon>, Arc<SqliteStateStore>, tempfile::TempDir) {
+) -> (
+    Arc<EmbeddedDaemon>,
+    Arc<SqliteStateStore>,
+    tempfile::TempDir,
+) {
     let tmp = tempfile::tempdir().unwrap();
     let indexes = tmp.path().join("indexes");
     let recipes = tmp.path().join("recipes");
@@ -176,7 +180,9 @@ async fn notes_crud_round_trips_through_the_daemons_own_store() {
     assert_eq!(code.status(), 404);
     let body: serde_json::Value = code.json().await.unwrap();
     assert!(
-        body["error"].as_str().is_some_and(|e| e.contains("svrn code mcp")),
+        body["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("svrn code mcp")),
         "a code kind must name the code program's notes: {body}"
     );
 

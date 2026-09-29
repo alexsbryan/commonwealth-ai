@@ -86,13 +86,16 @@ fn synthesize_watched_config(config: &WatchedEnrichConfig<'_>) -> EnrichConfig {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
 
-    fn watched<'a>(corpus_id: &'a str, pipeline_id: &'a str, source: &'a str) -> WatchedEnrichConfig<'a> {
+    fn watched<'a>(
+        corpus_id: &'a str,
+        pipeline_id: &'a str,
+        source: &'a str,
+    ) -> WatchedEnrichConfig<'a> {
         WatchedEnrichConfig {
             corpus_id,
             pipeline_id,
@@ -105,7 +108,8 @@ mod tests {
 
     #[test]
     fn synthesize_defaults_match_v1_posture() {
-        let cfg = synthesize_watched_config(&watched("test-corpus", "philosophy_atlas", "/tmp/notes"));
+        let cfg =
+            synthesize_watched_config(&watched("test-corpus", "philosophy_atlas", "/tmp/notes"));
         assert_eq!(cfg.corpus_id, "test-corpus");
         assert_eq!(cfg.pipeline_id, "philosophy_atlas");
         assert_eq!(cfg.source_path, PathBuf::from("/tmp/notes"));

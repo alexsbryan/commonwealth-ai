@@ -25,8 +25,8 @@ use host_kit::mcp::{McpMountedTools, McpRequestContext, ToolOutcome};
 use serde_json::{json, Value};
 
 use corpus_engine::CorpusEngine;
-use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_daemon::mcp_router::{mcp_router, McpNotifier};
+use sovereign_store::sqlite::SqliteStateStore;
 
 /// Every tool id the code program serves (sovereign-code's bundles and the
 /// work atlas). The daemon cannot name code's exposure list — it links no

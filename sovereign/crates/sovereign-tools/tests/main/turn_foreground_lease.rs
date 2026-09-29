@@ -97,7 +97,8 @@ async fn a_turn_holds_the_foreground_lease_until_its_stream_is_dropped() {
     let signal = Arc::new(CountingForeground::default());
     let as_signal: Arc<dyn corpus_engine_yield::ForegroundSignal> = signal.clone();
     let engine = Arc::new(
-        corpus_index::ingest_port::double::IngestPortDouble::new().with_foreground_signal(as_signal),
+        corpus_index::ingest_port::double::IngestPortDouble::new()
+            .with_foreground_signal(as_signal),
     );
 
     let store = Arc::new(sovereign_store::memory::InMemoryStateStore::new());

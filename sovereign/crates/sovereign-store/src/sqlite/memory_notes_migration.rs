@@ -183,7 +183,10 @@ impl SqliteStateStore {
             .map_err(map_db)
             .and_then(|()| move_rows(&conn, &backup));
         let finished = match outcome {
-            Ok(report) => conn.execute_batch("COMMIT").map(|()| report).map_err(map_db),
+            Ok(report) => conn
+                .execute_batch("COMMIT")
+                .map(|()| report)
+                .map_err(map_db),
             Err(e) => {
                 if let Err(rb) = conn.execute_batch("ROLLBACK") {
                     tracing::error!(error = %rb, "notes migration: rollback failed");

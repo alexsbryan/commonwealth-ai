@@ -67,7 +67,10 @@ pub(super) fn try_open_notes(root: &Path) -> Option<Arc<dyn AgentNotes>> {
     match SqliteStateStore::open(&path) {
         Ok(s) => Some(Arc::new(s)),
         Err(e) => {
-            eprintln!("awareness: svrn's store at {} did not open ({e}); notes skipped", path.display());
+            eprintln!(
+                "awareness: svrn's store at {} did not open ({e}); notes skipped",
+                path.display()
+            );
             None
         }
     }

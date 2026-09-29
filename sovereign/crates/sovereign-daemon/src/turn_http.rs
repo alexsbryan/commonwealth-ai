@@ -852,9 +852,7 @@ async fn record_tool_outcome(
     Json(body): Json<ToolOutcomeRequest>,
 ) -> Response {
     let Some(notes) = daemon.notes_store() else {
-        return service_unavailable(
-            "this daemon serves no memory notes (/mcp not mounted)",
-        );
+        return service_unavailable("this daemon serves no memory notes (/mcp not mounted)");
     };
     sovereign_core::dossier::record_tool_outcome(
         Some(&**notes as &dyn sovereign_contracts::notes::AgentNotes),

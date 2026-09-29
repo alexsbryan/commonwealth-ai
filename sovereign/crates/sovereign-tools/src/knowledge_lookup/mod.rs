@@ -789,7 +789,10 @@ mod tests {
 
     async fn lookup(tool: &KnowledgeLookupTool, query: &str) -> KnowledgeLookupResponse {
         let out = tool
-            .run(&serde_json::json!({ "query": query, "kinds": ["note"] }), &ctx())
+            .run(
+                &serde_json::json!({ "query": query, "kinds": ["note"] }),
+                &ctx(),
+            )
             .await
             .unwrap();
         let StepOutput::Json(value) = out else {
@@ -854,6 +857,10 @@ mod tests {
         let got = lookup(&tool, "quarterly budget review").await;
         assert_eq!(got.by_kind_counts.note, 0);
         assert_eq!(got.unavailable.len(), 1, "{:?}", got.unavailable);
-        assert!(got.unavailable[0].starts_with("note:"), "{:?}", got.unavailable);
+        assert!(
+            got.unavailable[0].starts_with("note:"),
+            "{:?}",
+            got.unavailable
+        );
     }
 }

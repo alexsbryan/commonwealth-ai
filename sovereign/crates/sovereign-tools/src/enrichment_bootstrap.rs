@@ -28,8 +28,8 @@ use std::sync::Arc;
 
 use sovereign_core::traits::InferenceProvider;
 
-use corpus_index::ingest_port::tiered::TieredEnrichmentProvider;
 use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::tiered::TieredEnrichmentProvider;
 
 use crate::conv_tiered_provider::{FolderTieredProvider, IndexDirResolver, StaticIndexDirResolver};
 

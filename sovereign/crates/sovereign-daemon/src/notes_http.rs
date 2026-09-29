@@ -215,8 +215,7 @@ async fn list_notes(
                     returned = rows.len(),
                     "notes_http: notes listed",
                 );
-                Json(NoteListResponse { notes: rows })
-                .into_response()
+                Json(NoteListResponse { notes: rows }).into_response()
             }
             Err(e) => internal_error(&e.to_string()),
         },
