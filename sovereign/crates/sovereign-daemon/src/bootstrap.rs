@@ -529,10 +529,6 @@ fn worker_allowlist() -> Option<Vec<String>> {
     (!list.is_empty()).then_some(list)
 }
 
-/// The manually configured RPC workers (`SOVEREIGN_RPC_WORKERS`, comma
-/// separated). These never enter the eligible-worker snapshot — discovery only
-/// ever adds to them — so any gate reading that snapshot has to union them back
-/// in or it would permanently hold a manual setup.
 /// THE reader of `SOVEREIGN_RPC_DISCOVER` (TOPOLOGY §10 phase 10, ARCH §10.6).
 ///
 /// A PRESENCE check — any value, including empty, arms discovery. That is the
@@ -549,12 +545,6 @@ fn worker_allowlist() -> Option<Vec<String>> {
 /// module is gated on `treesitter` and `build/containment` is not; the env read
 /// has no treesitter dependency.
 pub use crate::startup::rpc_discovery_armed;
-
-fn env_rpc_workers() -> Vec<String> {
-    // One reader, in `sovereign_inference::embedded` — this function used to
-    // carry a byte-identical copy (TOPOLOGY §10 phase 10).
-    sovereign_inference::embedded::rpc_workers_from_env()
-}
 
 /// Spawn the mesh RPC-worker auto-discovery loop (opt-in via `SOVEREIGN_RPC_DISCOVER`).
 pub fn spawn_rpc_worker_discovery(
@@ -595,54 +585,7 @@ pub fn spawn_rpc_worker_discovery(
                 "distributed primary: spawn gate DISABLED by SOVEREIGN_COMPUTE_SPAWN_GATE=0"
             );
         } else if let Some(slot) = &distributed_slot {
-            let snap = Arc::clone(&snapshot);
-            // Sized once: the GGUF set does not change under a running daemon, and
-            // the gate is re-polled every 2s while held — stat'ing every shard on
-            // each poll would be pure waste.
-            let model_bytes = sovereign_inference::embedded::total_model_bytes(slot.model_path());
-            let gate_model_path = slot.model_path().to_path_buf();
-            let gate_child_ctx = slot
-                .context_size()
-                .unwrap_or(sovereign_compute::child_main::DEFAULT_CTX);
-            slot.set_spawn_gate(Arc::new(
-                move |ctx: &sovereign_compute::manager::SpawnContext<'_>| {
-                    let eligible = snap.read().map(|v| v.clone()).unwrap_or_default();
-                    let env = env_rpc_workers();
-                    // Two independent preconditions. The worker question came
-                    // first; the memory question exists because a respawn into a
-                    // footprint that did not fit is how a contained child crash
-                    // becomes an unusable machine (notes 309c841b, 92d55ceb).
-                    let worker = discovery_policy::spawn_gate_verdict(ctx.pinned, &eligible, &env);
-                    match worker {
-                        sovereign_compute::supervisor::SpawnVerdict::Hold { .. } => worker,
-                        sovereign_compute::supervisor::SpawnVerdict::Allow => {
-                            // One sample for both terms — a reserve sized off one
-                            // reading and a fit judged against another is the
-                            // failure mode this subsystem already has six of.
-                            let (available, total) =
-                                sovereign_inference::embedded::system_memory_bytes();
-                            // llama.cpp's projected KV/compute terms — cached
-                            // after the first success, so the 2s re-poll while
-                            // held does not re-pay the projection.
-                            let overheads = sovereign_inference::embedded::projected_overheads(
-                                &gate_model_path,
-                                gate_child_ctx,
-                                false,
-                            );
-                            discovery_policy::memory_headroom_verdict(
-                                discovery_policy::host_share_need_bytes(
-                                    model_bytes,
-                                    ctx.local_blocks,
-                                    ctx.total_blocks,
-                                    overheads.as_ref(),
-                                ),
-                                available,
-                                sovereign_inference::embedded::host_reserve_bytes_detected(total),
-                            )
-                        }
-                    }
-                },
-            ));
+            sovereign_compute::distributed_respawn::install_spawn_gate(slot, Arc::clone(&snapshot));
         }
         // Distributed-primary child state, shared with the warm task because a
         // warm can take minutes of GGUF transfer and must never block the 15s

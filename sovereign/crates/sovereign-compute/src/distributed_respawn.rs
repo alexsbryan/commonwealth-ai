@@ -181,3 +181,62 @@ pub async fn respawn_distributed_primary(
         }
     }
 }
+
+/// Install the supervisor's spawn gate on the distributed slot, so a respawn
+/// the supervisor would make with identical argv asks first whether a pinned
+/// worker is still eligible (`eligible`, the discovery tick's snapshot) and
+/// whether the host's share still fits in memory. Moved from the daemon's
+/// discovery loop (pb-serve-distributes).
+pub fn install_spawn_gate(
+    slot: &crate::manager::DynamicChildSlot,
+    snapshot: Arc<std::sync::RwLock<Vec<String>>>,
+) {
+    let snap = snapshot;
+    // Sized once: the GGUF set does not change under a running daemon, and
+    // the gate is re-polled every 2s while held — stat'ing every shard on
+    // each poll would be pure waste.
+    let model_bytes = sovereign_inference::embedded::total_model_bytes(slot.model_path());
+    let gate_model_path = slot.model_path().to_path_buf();
+    let gate_child_ctx = slot
+        .context_size()
+        .unwrap_or(crate::child_main::DEFAULT_CTX);
+    slot.set_spawn_gate(Arc::new(move |ctx: &crate::manager::SpawnContext<'_>| {
+        let eligible = snap.read().map(|v| v.clone()).unwrap_or_default();
+        // The manually configured workers never enter the eligible
+        // snapshot (discovery only adds to them), so the gate unions them
+        // back in or it would hold a manual setup forever.
+        let env = sovereign_inference::embedded::rpc_workers_from_env();
+        // Two independent preconditions. The worker question came
+        // first; the memory question exists because a respawn into a
+        // footprint that did not fit is how a contained child crash
+        // becomes an unusable machine (notes 309c841b, 92d55ceb).
+        let worker = crate::discovery_policy::spawn_gate_verdict(ctx.pinned, &eligible, &env);
+        match worker {
+            crate::supervisor::SpawnVerdict::Hold { .. } => worker,
+            crate::supervisor::SpawnVerdict::Allow => {
+                // One sample for both terms — a reserve sized off one
+                // reading and a fit judged against another is the
+                // failure mode this subsystem already has six of.
+                let (available, total) = sovereign_inference::embedded::system_memory_bytes();
+                // llama.cpp's projected KV/compute terms — cached
+                // after the first success, so the 2s re-poll while
+                // held does not re-pay the projection.
+                let overheads = sovereign_inference::embedded::projected_overheads(
+                    &gate_model_path,
+                    gate_child_ctx,
+                    false,
+                );
+                crate::discovery_policy::memory_headroom_verdict(
+                    crate::discovery_policy::host_share_need_bytes(
+                        model_bytes,
+                        ctx.local_blocks,
+                        ctx.total_blocks,
+                        overheads.as_ref(),
+                    ),
+                    available,
+                    sovereign_inference::embedded::host_reserve_bytes_detected(total),
+                )
+            }
+        }
+    }));
+}

@@ -11169,7 +11169,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-compute/src/distributed_respawn.rs"
 context = "serving"
-lines = 183
+lines = 242
 note = ""
 
 [[module]]
