@@ -17,4 +17,3 @@
 
 pub use sovereign_compute::containment;
 pub mod inference;
-pub use sovereign_compute::preflight;

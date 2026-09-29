@@ -393,10 +393,6 @@ pub fn mesh_ports(
     }
 }
 
-/// The self-manifest refresh is the distributed primary's
-/// (`sovereign_compute::distributed_respawn`, pb-serve-distributes).
-pub use sovereign_compute::distributed_respawn::spawn_self_manifest_refresh;
-
 /// Spawn the deferred slot-alias push onto the mesh provider.
 pub fn spawn_slot_alias_push(
     daemon: Arc<EmbeddedDaemon>,
