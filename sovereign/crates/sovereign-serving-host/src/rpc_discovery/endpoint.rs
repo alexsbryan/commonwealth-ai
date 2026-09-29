@@ -13,15 +13,16 @@ use super::{bridge_rpc_endpoint, rpc_tunnel_mode, RpcTunnelMode};
 
 /// Choose the endpoint ggml will dial for a worker on `rpc_port`. Direct raw
 /// TCP to a member IP is the LAN fast path; the iroh bridge is the
-/// cross-network path; the parsed probe host is the last resort.
-/// `SOVEREIGN_RPC_TUNNEL` = `always` prefers the bridge; `never` opts out of
-/// bridging. Returns `(endpoint, via)`.
+/// cross-network path; the parsed probe host, when the port came from a
+/// `/status` probe, is the last resort. `SOVEREIGN_RPC_TUNNEL` = `always`
+/// prefers the bridge; `never` opts out of bridging. Returns `(endpoint,
+/// via)`, or `None` when nothing answered and there is no probe host.
 pub(super) async fn select_rpc_endpoint(
     transport: &Arc<dyn PeerTransport>,
     dial: &PeerContact,
     rpc_port: u16,
     iroh_advertised: bool,
-    probe_host: &str,
+    probe_host: Option<&str>,
 ) -> Option<(String, String)> {
     let mode = rpc_tunnel_mode();
     let allow_bridge = iroh_advertised && mode != RpcTunnelMode::Never;
@@ -37,8 +38,8 @@ pub(super) async fn select_rpc_endpoint(
     if sel.is_none() && allow_bridge {
         sel = bridge_rpc_endpoint(transport, dial).await;
     }
-    if sel.is_none() {
-        sel = Some((format!("{probe_host}:{rpc_port}"), "probe-host".to_string()));
+    if let (None, Some(host)) = (&sel, probe_host) {
+        sel = Some((format!("{host}:{rpc_port}"), "probe-host".to_string()));
     }
     sel
 }
@@ -146,13 +147,13 @@ mod tests {
         let transport: Arc<dyn PeerTransport> = Arc::new(NoBridge);
         let roster_only_iroh = contact(Vec::new(), vec!["127.0.0.1:4433".parse().unwrap()]);
         assert_eq!(
-            select_rpc_endpoint(&transport, &roster_only_iroh, port, false, "probe").await,
+            select_rpc_endpoint(&transport, &roster_only_iroh, port, false, Some("probe")).await,
             Some((format!("127.0.0.1:{port}"), "direct-ip".to_string()))
         );
         // A member the overlay does name is probed there, as before.
         let overlay = contact(vec!["127.0.0.1:9742".parse().unwrap()], Vec::new());
         assert_eq!(
-            select_rpc_endpoint(&transport, &overlay, port, false, "probe").await,
+            select_rpc_endpoint(&transport, &overlay, port, false, Some("probe")).await,
             Some((format!("127.0.0.1:{port}"), "direct-ip".to_string()))
         );
     }

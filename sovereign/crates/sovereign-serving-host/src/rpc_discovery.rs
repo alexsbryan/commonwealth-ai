@@ -9,7 +9,6 @@
 //! the process that loads the distributed primary can run it over whichever
 //! roster and transport its composition hands it.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use kernel_types::NodeId;
@@ -336,10 +335,31 @@ impl RpcWorkerDiscovery {
                 }
                 Reaffirm::FullProbe => {}
             }
-            if fresh.is_none() {
-                // UNKNOWN worker (initial discovery), a probe-host worker, or a
+            // Where the worker listens, as the roster's anchor record says it
+            // (pb-serve-distributes): cw-rails' roster has no daemon `/status`
+            // behind it, so a worker it names is chosen without one. There is
+            // no probe host then, so no last-resort `probe-host` endpoint.
+            let advertised = m
+                .capabilities
+                .anchor
+                .as_ref()
+                .and_then(|a| a.rpc_port.map(|port| (port, a.rpc_iroh)));
+            if let (None, Some((rpc_port, iroh_advertised))) = (&fresh, advertised) {
+                tracing::debug!(peer = %name, rpc_port, iroh_advertised, "rpc-discovery: the roster names this worker's port");
+                fresh = endpoint::select_rpc_endpoint(
+                    transport,
+                    &m.dial,
+                    rpc_port,
+                    iroh_advertised,
+                    None,
+                )
+                .await;
+            } else if fresh.is_none() {
+                // UNKNOWN worker (initial discovery) on a peer whose anchor record
+                // names no rpc port (an older build), a probe-host worker, or a
                 // bridged one whose iroh path just vanished (it may have moved onto
                 // the LAN): run the full `/status` probe + endpoint selection.
+                tracing::debug!(peer = %name, "rpc-discovery: no rpc port on the roster — reading the peer's /status");
                 let probes = transport
                     .endpoints(&m.dial, TrafficClass::StatusProbe)
                     .await;
@@ -385,7 +405,7 @@ impl RpcWorkerDiscovery {
                         &m.dial,
                         rpc_port,
                         iroh_advertised,
-                        &host,
+                        Some(host.as_str()),
                     )
                     .await;
                     break; // one reachable address per peer suffices

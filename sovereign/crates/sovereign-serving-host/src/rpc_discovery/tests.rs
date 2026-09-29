@@ -180,3 +180,87 @@ fn sticky_takes_fresh_direct_ip_immediately() {
     assert!(s.is_direct());
     assert_eq!(s.direct_misses, 0);
 }
+
+/// A roster of one peer, as the membership port hands it.
+struct OnePeer(sovereign_contracts::membership::MembershipEntry<PeerContact>);
+
+#[async_trait::async_trait]
+impl MembershipReader for OnePeer {
+    type Dial = PeerContact;
+    async fn mesh_name(&self) -> String {
+        "fixture".to_string()
+    }
+    async fn federated_meshes(&self) -> Vec<oicp_types::FederatedMeshDescriptor> {
+        Vec::new()
+    }
+    async fn members(&self) -> Vec<sovereign_contracts::membership::MembershipEntry<PeerContact>> {
+        vec![self.0.clone()]
+    }
+}
+
+/// A transport with no path to anyone: no `/status` probe endpoint and no
+/// bridge, as for a peer on cw-rails' roster, which has no daemon `/status`.
+#[derive(Debug)]
+struct Nowhere;
+
+#[async_trait::async_trait]
+impl PeerTransport for Nowhere {
+    fn name(&self) -> &'static str {
+        "none"
+    }
+    async fn endpoints(&self, _: &PeerContact, _: TrafficClass) -> Vec<mesh_reach::PeerEndpoint> {
+        Vec::new()
+    }
+}
+
+/// Discovery reads a worker's port from the roster's anchor record
+/// (pb-serve-distributes), so a worker on a roster with no `/status` behind
+/// it is found and dialled at its direct address. Failing input: read the
+/// port only from the peer's `/status`, and this tick discovers nothing.
+#[tokio::test]
+async fn a_worker_the_roster_names_is_discovered_without_a_status_probe() {
+    let worker = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let port = worker.local_addr().expect("addr").port();
+    let peer = NodeId::from_u128(9);
+    let capabilities: oicp_types::capabilities::NodeCapabilities =
+        serde_json::from_value(serde_json::json!({
+            "hardware": {"gpus": [], "system_ram_gb": 0, "cpu_cores": 0,
+                         "total_storage_gb": 0, "free_storage_gb": 0},
+            "available": {"free_vram_gb": 0.0, "free_ram_gb": 0.0, "free_storage_gb": 0.0,
+                          "gpu_utilization": 0.0, "cpu_utilization": 0.0,
+                          "available_for_mesh": true},
+            "hosted_corpora": [], "reported_at": 0,
+            "anchor": {"can_anchor": true, "vram_gb": 0, "rpc_port": port}
+        }))
+        .expect("capabilities");
+    let roster = OnePeer(sovereign_contracts::membership::MembershipEntry {
+        node_id: peer,
+        name: "worker".to_string(),
+        status: MemberStatus::Online,
+        active: true,
+        last_seen: 0,
+        dialable: true,
+        capabilities,
+        dial: PeerContact {
+            node_id: peer,
+            addresses: vec!["127.0.0.1:9742".parse().unwrap()],
+            node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
+        },
+    });
+    let transport: Arc<dyn PeerTransport> = Arc::new(Nowhere);
+    let outcome = RpcWorkerDiscovery::default()
+        .discover(&roster, &transport, NodeId::from_u128(1))
+        .await;
+    let found: Vec<(NodeId, String)> = outcome
+        .workers
+        .iter()
+        .map(|w| (w.node_id, w.endpoint.clone()))
+        .collect();
+    assert_eq!(found, vec![(peer, format!("127.0.0.1:{port}"))]);
+    assert!(outcome.scanned);
+    assert_eq!(outcome.polled, 1);
+}
