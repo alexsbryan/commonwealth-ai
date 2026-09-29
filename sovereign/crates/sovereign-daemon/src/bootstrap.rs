@@ -318,196 +318,6 @@ pub fn build_folder_tiered_deps(
     })
 }
 
-/// Default bind for an anchor's in-process RPC worker. Applied only when a
-/// `[shared_model]` role asks to serve but no explicit `SOVEREIGN_RPC_SERVE`
-/// is set.
-///
-/// LOOPBACK, not `0.0.0.0`. The ggml rpc-server authenticates nothing and
-/// encrypts nothing, so a node that only set `role = "anchor"` used to offer
-/// its GPU and the tensors crossing it to every host on its network. Members
-/// reach this worker through the encrypted mesh tunnel instead — the
-/// `RPC_ALPN` splice in `sovereign_mesh::iroh_access`, which admits members
-/// only — and that path needs no LAN bind. An operator who genuinely wants the
-/// plaintext LAN bind sets it and acknowledges it; see
-/// [`sovereign_contracts::launch::RpcServe`].
-const DEFAULT_RPC_BIND: &str = "127.0.0.1:50052";
-
-/// `--rpc-worker[=<bind>]` → the address this node should serve its GPU on.
-///
-/// Lending a GPU to the mesh was previously reachable only by editing
-/// `[shared_model] role` in a TOML file or by knowing the name of an
-/// undocumented environment variable. Both work; neither is something an
-/// operator can discover from `--help`, and "turn this box into a worker" is a
-/// one-line intention that deserves a one-line spelling.
-///
-/// Accepts `--rpc-worker`, `--rpc-worker=<bind>` and `--rpc-worker <bind>`. A
-/// following token is taken as the bind only when it is not itself a flag, so
-/// `--rpc-worker --setup-only` means the default bind, not a bind of
-/// `--setup-only`.
-///
-/// This is deliberately NOT the same lever as `role = "anchor"`. The role also
-/// turns on peer *discovery* (`SOVEREIGN_RPC_DISCOVER`) and enters this node in
-/// the host election; this flag only offers the GPU. On a node whose daemon
-/// predates the 2026-07-29 containment fix that distinction matters, because
-/// the discovery flag is what the boot gate reads back — see
-/// [`crate::build::containment`].
-pub fn rpc_worker_flag(args: &[String]) -> Option<String> {
-    let mut it = args.iter().enumerate();
-    let (i, a) =
-        it.find(|(_, a)| a.as_str() == "--rpc-worker" || a.starts_with("--rpc-worker="))?;
-    if let Some(bind) = a.strip_prefix("--rpc-worker=") {
-        let bind = bind.trim();
-        // `--rpc-worker=` with nothing after it is a typo, not a request to
-        // serve on the empty string (which `serve_rpc_worker_if_configured`
-        // would silently ignore, leaving the operator with no worker and no
-        // explanation).
-        return Some(if bind.is_empty() {
-            DEFAULT_RPC_BIND.to_string()
-        } else {
-            bind.to_string()
-        });
-    }
-    let next = args
-        .get(i + 1)
-        .map(String::as_str)
-        .filter(|n| !n.starts_with('-') && !n.is_empty());
-    Some(next.unwrap_or(DEFAULT_RPC_BIND).to_string())
-}
-
-/// Apply `--rpc-worker` to the env contract the RPC consumers read.
-///
-/// Runs BEFORE [`apply_shared_model_role_to_env`], which only fills
-/// `SOVEREIGN_RPC_SERVE` in when it is unset — so an explicit flag beats the
-/// configured role, matching how an explicit env var already beats both.
-pub fn apply_rpc_worker_flag(args: &[String]) {
-    let Some(bind) = rpc_worker_flag(args) else {
-        return;
-    };
-    std::env::set_var("SOVEREIGN_RPC_SERVE", &bind);
-    tracing::info!(bind = %bind, "--rpc-worker → SOVEREIGN_RPC_SERVE");
-}
-
-/// Translate `[shared_model] role` into the RPC env contract that the
-/// three decoupled RPC consumers already read — the inference serve
-/// (`serve_rpc_worker_if_configured`), this module's discovery loop, and
-/// commonwealth-api's `/status` advertise. This is the desktop-friendly
-/// source of the role (the app writes the config; no hand-set env vars);
-/// an explicitly-set env var always wins, so CLI/power users are
-/// unaffected. One traceable place where role → RPC wiring happens.
-///
-/// - `Host`   → discover peers' workers AND serve (a host also anchors).
-/// - `Anchor` → serve this node's GPU into the layer-split.
-/// - `Consumer` (default) → neither; the node only queries the shared
-///   model (that routing is wired separately, not via these env vars).
-pub fn apply_shared_model_role_to_env(cfg: &sovereign_core::setup_config::SharedModelSection) {
-    use sovereign_core::setup_config::SharedModelRole;
-    // The shared model this node routes its primary turns into (any role that
-    // names one — consumers query it, anchors/host also serve it). Read by the
-    // mesh inference provider via SOVEREIGN_SHARED_MODEL_ID.
-    if let Some(id) = cfg.model_id.as_deref() {
-        if !id.is_empty() && std::env::var_os("SOVEREIGN_SHARED_MODEL_ID").is_none() {
-            std::env::set_var("SOVEREIGN_SHARED_MODEL_ID", id);
-            tracing::info!(
-                model_id = id,
-                "shared-model: primary routes to SOVEREIGN_SHARED_MODEL_ID"
-            );
-        }
-    }
-    let serve = matches!(cfg.role, SharedModelRole::Anchor | SharedModelRole::Host);
-    // Host failover: EVERY anchor spawns the discovery loop, not just the
-    // statically-designated host — so any anchor can take over the host role the
-    // instant it is elected leader (`partition::should_host`). The loop stays
-    // dormant (it discovers + keeps worker eligibility warm but does NOT
-    // distribute) until this node is the host. So "discover" now means
-    // "participates in the host election", which every anchor does.
-    let discover = serve;
-    // The plaintext-LAN acknowledgement, carried into the env contract BEFORE
-    // any bind is resolved — `RpcServe` is the one decider and it reads the
-    // env half, so a config that acknowledges must be visible to it whether
-    // the bind came from the role below or from an explicit variable. Env wins
-    // if pre-set, matching every other key in this section.
-    if cfg.allow_plaintext_lan
-        && std::env::var_os(sovereign_contracts::launch::RPC_ALLOW_PLAINTEXT_LAN_ENV).is_none()
-    {
-        std::env::set_var(
-            sovereign_contracts::launch::RPC_ALLOW_PLAINTEXT_LAN_ENV,
-            "1",
-        );
-        tracing::warn!(
-            "shared-model: `[shared_model] allow_plaintext_lan = true` — a non-loopback \
-             RPC bind will be accepted; the ggml worker authenticates nothing"
-        );
-    }
-    if serve && std::env::var_os("SOVEREIGN_RPC_SERVE").is_none() {
-        std::env::set_var("SOVEREIGN_RPC_SERVE", DEFAULT_RPC_BIND);
-        tracing::info!(
-            role = ?cfg.role,
-            bind = DEFAULT_RPC_BIND,
-            "shared-model: anchor role → SOVEREIGN_RPC_SERVE"
-        );
-    }
-    // Anchor-tier worker eligibility: a host treats its fellow anchors with the
-    // stricter `EligibilityConfig::anchor` profile (slower settle, quarantine on
-    // first flap), since a flapping anchor can GGML_ABORT the host mid-decode.
-    // Set the env knobs the eligibility gate reads; an explicit env always wins.
-    // Applied for any serving role so a future failover host (an anchor that
-    // becomes leader) already carries the right profile.
-    if serve {
-        if std::env::var_os("SOVEREIGN_RPC_WORKER_SETTLE_SECS").is_none() {
-            std::env::set_var(
-                "SOVEREIGN_RPC_WORKER_SETTLE_SECS",
-                sovereign_mesh::worker_eligibility::ANCHOR_SETTLE_SECS.to_string(),
-            );
-        }
-        if std::env::var_os("SOVEREIGN_RPC_WORKER_FLAP_THRESHOLD").is_none() {
-            std::env::set_var(
-                "SOVEREIGN_RPC_WORKER_FLAP_THRESHOLD",
-                sovereign_mesh::worker_eligibility::ANCHOR_FLAP_THRESHOLD.to_string(),
-            );
-        }
-    }
-    if discover && std::env::var_os("SOVEREIGN_RPC_DISCOVER").is_none() {
-        std::env::set_var("SOVEREIGN_RPC_DISCOVER", "1");
-        tracing::info!(role = ?cfg.role, "shared-model: anchor spawns the host-election discovery loop");
-    }
-    // The operator's optional designated-host pin. Published so every anchor's
-    // `should_host` check honours it while it's an eligible anchor, and fails
-    // over to election (min NodeId) when it drops out.
-    if let Some(pin) = cfg.host_node_id.as_deref() {
-        if !pin.is_empty() && std::env::var_os("SOVEREIGN_SHARED_MODEL_HOST_NODE_ID").is_none() {
-            std::env::set_var("SOVEREIGN_SHARED_MODEL_HOST_NODE_ID", pin);
-            tracing::info!(pin, "shared-model: designated-host pin published");
-        }
-    }
-    // The host enforces the quorum + pooled-memory gate before distributing, so it
-    // carries those knobs into the RPC env contract too (env wins if already set).
-    if discover {
-        if std::env::var_os("SOVEREIGN_RPC_QUORUM_ANCHORS").is_none() {
-            std::env::set_var(
-                "SOVEREIGN_RPC_QUORUM_ANCHORS",
-                cfg.quorum_anchors.to_string(),
-            );
-        }
-        if let Some(gb) = cfg.min_pooled_gb {
-            if std::env::var_os("SOVEREIGN_RPC_MIN_POOLED_GB").is_none() {
-                std::env::set_var("SOVEREIGN_RPC_MIN_POOLED_GB", gb.to_string());
-            }
-        }
-        if let Some(h) = cfg.headroom {
-            if std::env::var_os("SOVEREIGN_RPC_HEADROOM").is_none() {
-                std::env::set_var("SOVEREIGN_RPC_HEADROOM", h.to_string());
-            }
-        }
-        // Shard-fetch mode (host-side orchestrator reads this). The fleet
-        // default is `ranges` — each anchor pulls only its slice, the only way
-        // a model bigger than one node's disk distributes. Set for any serving
-        // role so a failover host already carries it. Env wins if pre-set.
-        if std::env::var_os("SOVEREIGN_RPC_SHARD_FETCH").is_none() {
-            std::env::set_var("SOVEREIGN_RPC_SHARD_FETCH", cfg.shard_fetch.as_env());
-        }
-    }
-}
-
 /// THE reader of `SOVEREIGN_RPC_DISCOVER` (TOPOLOGY §10 phase 10, ARCH §10.6).
 ///
 /// A PRESENCE check — any value, including empty, arms discovery. That is the
@@ -524,6 +334,13 @@ pub fn apply_shared_model_role_to_env(cfg: &sovereign_core::setup_config::Shared
 /// module is gated on `treesitter` and `build/containment` is not; the env read
 /// has no treesitter dependency.
 pub use crate::startup::rpc_discovery_armed;
+/// The `--rpc-worker` parse and its default bind are the launch contract's
+/// (`sovereign_contracts::launch`), and the role → RPC env translation is the
+/// loader's (`sovereign_compute::distributed_role`), pb-serve-distributes.
+pub use sovereign_compute::distributed_role::{
+    apply_rpc_worker_flag, apply_shared_model_role_to_env,
+};
+pub use sovereign_contracts::launch::rpc_worker_flag;
 
 /// This daemon's mesh, as the discovery loop and the warm orchestrator read it
 /// (compute's `distributed_discovery` and `distributed_warm`,
@@ -1348,12 +1165,6 @@ pub fn write_pidfile() -> (std::path::PathBuf, u32) {
     }
     (pid_path, self_pid)
 }
-
-// Moved to a sibling file: inline, these put this file past its arch-gate
-// slack (ARCH §3.1). `#[path]`, so the names are unchanged.
-#[cfg(test)]
-#[path = "tests/bootstrap_rpc_worker_flag.rs"]
-mod rpc_worker_flag_tests;
 
 // Moved to a sibling file: inline, these put this file past its arch-gate
 // slack (ARCH §3.1). `#[path]`, so the names are unchanged.

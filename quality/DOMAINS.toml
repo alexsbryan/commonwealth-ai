@@ -11185,6 +11185,12 @@ lines = 521
 note = "the rpc-warm orchestrator and wire, moved from sovereign-daemon rpc_warm_http (pb-serve-distributes)"
 
 [[module]]
+path = "sovereign/crates/sovereign-compute/src/distributed_role.rs"
+context = "serving"
+lines = 143
+note = "moved from sovereign-daemon bootstrap.rs (pb-serve-distributes)"
+
+[[module]]
 path = "sovereign/crates/sovereign-compute/src/distributed_respawn.rs"
 context = "serving"
 lines = 320
@@ -11465,6 +11471,12 @@ path = "sovereign/crates/sovereign-contracts/src/launch.rs"
 context = "kernel"
 lines = 825
 note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-contracts/src/launch/rpc_worker_flag.rs"
+context = "kernel"
+lines = 63
+note = "moved from sovereign-daemon bootstrap.rs (pb-serve-distributes)"
 
 [[module]]
 path = "sovereign/crates/sovereign-contracts/src/lessons.rs"

@@ -33,6 +33,9 @@
 //! capability sets belong to whatever the launch constructs. Keeping it that
 //! narrow is what lets it live in Tier 0 with no dependencies.
 
+mod rpc_worker_flag;
+pub use rpc_worker_flag::{rpc_worker_flag, DEFAULT_RPC_BIND};
+
 /// The closed set of things a first-party binary can become.
 ///
 /// Ordering of the parse is significant and is fixed here rather than at each

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Tests for the RPC worker flag — see `bootstrap.rs`.
+//! Tests for the RPC worker flag — see `launch/rpc_worker_flag.rs` (moved
+//! with it from the daemon's `tests/bootstrap_rpc_worker_flag.rs`,
+//! pb-serve-distributes).
 //!
 //! Their own file because keeping them inline put that file past its
 //! arch-gate slack (ARCH §3.1). `#[path]`, so the names are unchanged.
@@ -17,7 +19,7 @@ fn args(v: &[&str]) -> Vec<String> {
 /// rather than on one caller.
 #[test]
 fn the_default_bind_is_loopback_only() {
-    let serve = sovereign_contracts::launch::RpcServe::resolve(Some(DEFAULT_RPC_BIND), false);
+    let serve = crate::launch::RpcServe::resolve(Some(DEFAULT_RPC_BIND), false);
     assert!(
         serve.is_serving(),
         "the default must SERVE with no acknowledgement, not be refused: \
