@@ -553,7 +553,7 @@ impl PendingDecision {
 
 /// A subsystem that can observe its own health and optionally repair itself.
 ///
-/// Implementors live in `sovereign-tools` (`CorpusIndexChecker`, `EnrichmentChecker`),
+/// Implementors live in `sovereign-tools` (`EnrichmentChecker`),
 /// `sovereign-store` (`StateStoreChecker`), and `sovereign-inference`
 /// (`RouterCircuitChecker`). The trait is object-safe so `HealthMonitor` can hold
 /// a `Vec<Arc<dyn HealthCheckable>>`.

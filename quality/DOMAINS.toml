@@ -15007,12 +15007,6 @@ lines = 168
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-tools/src/index_validator.rs"
-context = "unknown"
-lines = 345
-note = ""
-
-[[module]]
 path = "sovereign/crates/sovereign-tools/src/knowledge.rs"
 context = "unknown"
 lines = 224

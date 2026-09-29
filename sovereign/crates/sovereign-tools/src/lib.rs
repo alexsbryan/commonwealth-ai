@@ -26,7 +26,6 @@ pub mod entity_graph;
 pub mod epistemic;
 pub mod extract;
 pub mod file;
-pub mod index_validator;
 pub mod knowledge;
 pub mod knowledge_lookup;
 pub mod knowledge_view;

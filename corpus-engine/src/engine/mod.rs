@@ -4,7 +4,7 @@
 
 pub mod article_stats;
 mod cancel;
-mod catalog_work;
+mod tool_ports;
 mod expand;
 mod ingest;
 mod ingest_factories;
@@ -75,9 +75,7 @@ impl CorpusDiskStatus {
 }
 
 use std::collections::HashMap;
-use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 
 use chrono::Utc;
@@ -96,40 +94,9 @@ use crate::types::{
     ShardInfo,
 };
 use corpus_index::fs_source::FsIndexSource;
-
-/// Runtime-registered acquirer closure. Receives the custom acquirer
-/// `params` blob from the recipe and the per-ingest `download_dir`;
-/// returns the local path that the extractor should read (typically a
-/// JSONL file).
-///
-/// Uses `Pin<Box<dyn Future>>` rather than the static-dispatch [`Acquirer`]
-/// trait because it must be object-safe: the registry stores heterogeneous
-/// implementations keyed by `kind` string.
-///
-/// Progress reporting is intentionally omitted here. The
-/// `ProgressCallback` type is not `Clone`, and KnowledgeView-style
-/// acquirers (SQLite → JSONL) finish in sub-second time, so a progress
-/// bar buys nothing. If a future custom acquirer needs progress, the
-/// closure can emit it via its own side channel.
-pub type CustomAcquirerFn = Arc<
-    dyn Fn(serde_json::Value, PathBuf) -> Pin<Box<dyn Future<Output = Result<PathBuf>> + Send>>
-        + Send
-        + Sync,
->;
-
-/// Closure type for a runtime-registered per-file text extractor.
-///
-/// Recipe sets `extract = { type = "custom", kind = "<key>", extension = "<ext>" }`;
-/// the engine walks the acquired directory, collects files with the
-/// configured extension, and calls this closure on each to produce
-/// `ExtractedDoc.content`. The registered implementation typically
-/// lives in `sovereign-tools` so corpus-engine stays free of heavy
-/// per-format dependencies (pdf-extract, lopdf, libreoffice, …).
-///
-/// Returning `Ok("")` skips the file (treated as empty). Returning
-/// `Err(_)` propagates as a per-file extraction failure that bubbles
-/// through the standard ingest error path.
-pub type CustomExtractorFn = Arc<dyn Fn(&Path) -> Result<String> + Send + Sync>;
+// The plugin closure types are defined beside ingest's ports in the
+// `corpus-index` leaf, so a plugin registers without naming the engine.
+pub use corpus_index::ingest_port::{CustomAcquirerFn, CustomExtractorFn}; // shim: moved by pb-ingest-dial-tools
 
 /// Default partition-suffix for engines constructed without a mesh
 /// node id (standalone CLI / tests). Mesh daemons override via
@@ -1442,7 +1409,7 @@ impl CorpusEngine {
     }
 
     /// Return a clone of the embedding function.
-    /// Used by `CorpusIndexChecker` to re-embed corrupt chunks.
+    /// Used by the KnowledgeView debouncer and manager and by grants' shard manager.
     pub fn embed_fn(&self) -> crate::types::EmbedFn {
         self.embed.clone()
     }
@@ -3704,8 +3671,11 @@ impl corpus_index::source::CorpusReadPort for CorpusEngine {
         CorpusEngine::builtin_corpora(self)
     }
 
-    fn recipes_dir(&self) -> &Path {
-        CorpusEngine::recipes_dir(self)
+    fn declared_authority_tool(&self, corpus_id: &str) -> Option<String> {
+        crate::enrichment::atlas::analysis::sec_facts::recipe_authority_tool(
+            CorpusEngine::recipes_dir(self),
+            corpus_id,
+        )
     }
 
     async fn catalog_config(
