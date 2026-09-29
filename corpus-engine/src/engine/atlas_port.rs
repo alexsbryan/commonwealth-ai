@@ -13,8 +13,8 @@ use async_trait::async_trait;
 use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_engine_atlas_reader::raptor_read::RaptorSummaryRow;
 use corpus_engine_atlas_reader::summary::AtlasSummary;
-use understanding_vocab::atoms::AtomEnvelope;
-use understanding_vocab::edges::Edge;
+use understanding_vocab::atoms::{AtomEnvelope, AtomsFile};
+use understanding_vocab::edges::{Edge, EdgesFile};
 
 use crate::enrichment::atlas::analysis::gaps::{
     detect_deterministic_gaps, GapDetectionInput, GapsOutput,
@@ -112,5 +112,29 @@ impl AtlasPort for IngestAtlas {
         source_version: i64,
     ) -> corpus_index::Result<usize> {
         crate::build_raptor_index(corpus_dir, rows, source_version).await
+    }
+
+    async fn scan_raptor_summaries(
+        &self,
+        corpus_dir: &Path,
+    ) -> corpus_index::Result<Vec<RaptorSummaryRow>> {
+        crate::scan_raptor_summaries(corpus_dir).await
+    }
+
+    fn raptor_article_title(&self, conv_uuid: &str) -> String {
+        crate::raptor_article_title(conv_uuid)
+    }
+
+    fn write_atlas_edges(&self, atlas_dir: &Path, edges: &EdgesFile) -> io::Result<PathBuf> {
+        crate::enrichment::atlas::write_atlas_edges(atlas_dir, edges)
+    }
+
+    fn write_atlas_atoms(&self, atlas_dir: &Path, atoms: &AtomsFile) -> io::Result<PathBuf> {
+        crate::enrichment::atlas::write_atlas_atoms(atlas_dir, atoms)
+    }
+
+    fn write_population_marker(&self, atlas_dir: &Path) -> io::Result<()> {
+        use crate::enrichment::atlas::seed_population::{seed_population, write_population_marker};
+        write_population_marker(atlas_dir, &seed_population(atlas_dir))
     }
 }

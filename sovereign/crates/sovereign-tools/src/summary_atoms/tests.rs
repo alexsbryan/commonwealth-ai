@@ -6,7 +6,7 @@
 //! approach band. `#[path]`, so every test name is unchanged.
 
 use super::*;
-use corpus_engine::{build_raptor_index, RaptorSummaryRow};
+use corpus_engine::IngestAtlas;
 use tempfile::tempdir;
 use understanding_vocab::atoms::AtomsFile;
 
@@ -93,9 +93,14 @@ async fn projecting_twice_writes_the_atoms_once() {
             embedding: emb(i),
         })
         .collect();
-    build_raptor_index(&corpus_dir, &rows, 1).await.unwrap();
+    IngestAtlas
+        .build_raptor_index(&corpus_dir, &rows, 1)
+        .await
+        .unwrap();
 
-    let first = write_summary_atoms(root.path(), "sep").await.unwrap();
+    let first = write_summary_atoms(&IngestAtlas, root.path(), "sep")
+        .await
+        .unwrap();
     assert_eq!(first.rows_read, 4);
     assert_eq!(first.atoms_written, 4);
     assert_eq!(first.seeds_written, 4);
@@ -108,7 +113,9 @@ async fn projecting_twice_writes_the_atoms_once() {
         .iter()
         .any(|d| d.contains("no checkpoint node") || d.contains("checkpoint")));
 
-    let second = write_summary_atoms(root.path(), "sep").await.unwrap();
+    let second = write_summary_atoms(&IngestAtlas, root.path(), "sep")
+        .await
+        .unwrap();
     assert_eq!(second.atoms_written, 0, "second run must add no atom");
     assert_eq!(second.seeds_written, 0, "second run must add no seed row");
     assert_eq!(second.skipped_already_present, 4);
@@ -169,9 +176,14 @@ async fn a_tree_less_projection_is_repaired_when_the_tree_arrives() {
             embedding: emb(i),
         })
         .collect();
-    build_raptor_index(&corpus_dir, &rows, 1).await.unwrap();
+    IngestAtlas
+        .build_raptor_index(&corpus_dir, &rows, 1)
+        .await
+        .unwrap();
 
-    let first = write_summary_atoms(root.path(), "sep").await.unwrap();
+    let first = write_summary_atoms(&IngestAtlas, root.path(), "sep")
+        .await
+        .unwrap();
     assert_eq!(first.atoms_written, 4);
     assert_eq!(first.no_tree_row, 4, "no checkpoint yet");
     assert_eq!(first.with_evidence, 0, "uncitable, by construction");
@@ -204,7 +216,9 @@ async fn a_tree_less_projection_is_repaired_when_the_tree_arrives() {
             .unwrap();
     }
 
-    let second = write_summary_atoms(root.path(), "sep").await.unwrap();
+    let second = write_summary_atoms(&IngestAtlas, root.path(), "sep")
+        .await
+        .unwrap();
     assert_eq!(second.repaired, 4, "every stranded atom must be repaired");
     assert_eq!(second.atoms_written, 0, "a repair adds no atom");
     assert_eq!(
@@ -234,7 +248,9 @@ async fn a_tree_less_projection_is_repaired_when_the_tree_arrives() {
 
     // Still idempotent: the repair filled the fields the predicate reads,
     // so a third run has nothing to do.
-    let third = write_summary_atoms(root.path(), "sep").await.unwrap();
+    let third = write_summary_atoms(&IngestAtlas, root.path(), "sep")
+        .await
+        .unwrap();
     assert_eq!(third.repaired, 0);
     assert_eq!(third.atoms_written, 0);
     assert_eq!(third.skipped_already_present, 4);
@@ -251,7 +267,9 @@ async fn a_tree_less_projection_is_repaired_when_the_tree_arrives() {
 async fn a_corpus_with_no_summary_table_is_named_not_zeroed() {
     let root = tempdir().unwrap();
     std::fs::create_dir_all(root.path().join("bare")).unwrap();
-    let report = write_summary_atoms(root.path(), "bare").await.unwrap();
+    let report = write_summary_atoms(&IngestAtlas, root.path(), "bare")
+        .await
+        .unwrap();
     assert_eq!(report.rows_read, 0);
     assert!(report
         .degradations

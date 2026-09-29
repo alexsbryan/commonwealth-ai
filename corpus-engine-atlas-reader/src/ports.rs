@@ -12,8 +12,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use understanding_vocab::atoms::AtomEnvelope;
-use understanding_vocab::edges::Edge;
+use understanding_vocab::atoms::{AtomEnvelope, AtomsFile};
+use understanding_vocab::edges::{Edge, EdgesFile};
 
 use crate::raptor_read::RaptorSummaryRow;
 use crate::summary::AtlasSummary;
@@ -54,4 +54,26 @@ pub trait AtlasPort: Send + Sync {
         rows: &[RaptorSummaryRow],
         source_version: i64,
     ) -> corpus_index::Result<usize>;
+
+    /// Every row of `<corpus_dir>/raptor_summaries.lance`, embeddings
+    /// included. Empty when the table is absent; a table that is there and
+    /// fails to read is an `Err`.
+    async fn scan_raptor_summaries(
+        &self,
+        corpus_dir: &Path,
+    ) -> corpus_index::Result<Vec<RaptorSummaryRow>>;
+
+    /// The article title a RAPTOR `conv_uuid` names.
+    fn raptor_article_title(&self, conv_uuid: &str) -> String;
+
+    /// Write `edges.json`. Returns the written path.
+    fn write_atlas_edges(&self, atlas_dir: &Path, edges: &EdgesFile) -> io::Result<PathBuf>;
+
+    /// Write `atoms.json` and rebuild the atom store from it and the edges
+    /// on disk. Returns the written path.
+    fn write_atlas_atoms(&self, atlas_dir: &Path, atoms: &AtomsFile) -> io::Result<PathBuf>;
+
+    /// Stamp the seed-population marker with the population this atlas
+    /// derives now, so the next backfill keeps the seed table.
+    fn write_population_marker(&self, atlas_dir: &Path) -> io::Result<()>;
 }

@@ -43,7 +43,7 @@ pub async fn cmd_summary_atoms(args: &[String]) -> i32 {
     }
 
     println!("Projecting RAPTOR summaries into '{corpus_id}' atlases…");
-    match write_summary_atoms(&indexes_dir, &corpus_id).await {
+    match write_summary_atoms(&corpus_engine::IngestAtlas, &indexes_dir, &corpus_id).await {
         Ok(report) => {
             println!("  {}", report.describe());
             // A run that read rows and CHANGED NOTHING is not a success to
