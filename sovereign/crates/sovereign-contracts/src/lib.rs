@@ -152,7 +152,6 @@ pub mod recipe;
 pub mod registry;
 pub mod reloadable_provider;
 pub mod rerank_kind;
-pub mod served_kinds;
 pub mod run_identity;
 /// What this node claims about itself — the port Fabric publishes from. A
 /// consumer in `sovereign-mesh` (Fabric) and an implementation in
@@ -160,6 +159,7 @@ pub mod run_identity;
 /// here beside `identity` (`quality/DAEMON_CORE.md` §4.2 "Gossip asks the node
 /// what to claim").
 pub mod self_claims;
+pub mod served_kinds;
 pub mod setup_config;
 /// `[iroh]` / `[iroh.transport]`, beside `setup_config` because that file is
 /// past its ceiling and this block grows with every origin kind. Re-exported
