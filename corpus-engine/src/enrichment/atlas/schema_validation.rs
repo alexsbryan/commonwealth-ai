@@ -68,13 +68,13 @@ use super::ontology_coverage::build_ontology_coverage;
 
 // The report types are the atlas reader's (pb-ingest-dial-tools); the builder
 // below fills them.
+use crate::enrichment::pipeline::atlas::{DiscourseAct, EnrichmentDepth};
 pub use corpus_engine_atlas_reader::schema_report::{
     AtomTypeCount, AtomTypeFraction, AtomTypeUtilisation, ConfidenceDistribution,
-    CrossCorpusConnectivity, DeterministicGapCounts, DepthDistribution, DiscourseBucket,
+    CrossCorpusConnectivity, DepthDistribution, DeterministicGapCounts, DiscourseBucket,
     DiscourseDistribution, ExtractionCoverage, OrphanAnalysis, OrphanByType,
     SchemaValidationReport,
 }; // shim: moved by pb-ingest-dial-tools
-use crate::enrichment::pipeline::atlas::{DiscourseAct, EnrichmentDepth};
 
 // ── Builder ──────────────────────────────────────────────────
 
