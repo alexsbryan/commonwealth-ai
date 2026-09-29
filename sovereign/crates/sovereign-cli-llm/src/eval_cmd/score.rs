@@ -36,7 +36,7 @@ impl SourceScore {
 }
 
 /// Match `expected_sources` against the titles of `retrieved` chunks.
-/// Title comparison goes through `corpus_engine::filters::normalize_title`,
+/// Title comparison goes through `understanding_vocab::canonical::normalize_title`,
 /// which lowercases and folds underscores/whitespace — so `"Albert
 /// Einstein"`, `"albert_einstein"`, and `"Albert  Einstein"` all match
 /// the same expected entry.
@@ -44,13 +44,13 @@ pub fn score_sources(expected: &[String], retrieved: &[ScoredChunk]) -> SourceSc
     let retrieved_titles: Vec<String> = retrieved
         .iter()
         .filter_map(|c| c.title.as_deref())
-        .map(corpus_engine::filters::normalize_title)
+        .map(understanding_vocab::canonical::normalize_title)
         .collect();
 
     let mut matched = Vec::new();
     let mut missing = Vec::new();
     for want in expected {
-        let want_norm = corpus_engine::filters::normalize_title(want);
+        let want_norm = understanding_vocab::canonical::normalize_title(want);
         if retrieved_titles.iter().any(|t| t == &want_norm) {
             matched.push(want.clone());
         } else {
@@ -179,13 +179,13 @@ fn partition_facts(expected: &[String], lowercased_haystack: &str) -> FactScore 
 pub fn score_sources_titles<S: AsRef<str>>(expected: &[String], titles: &[S]) -> SourceScore {
     let normalized: Vec<String> = titles
         .iter()
-        .map(|t| corpus_engine::filters::normalize_title(t.as_ref()))
+        .map(|t| understanding_vocab::canonical::normalize_title(t.as_ref()))
         .collect();
 
     let mut matched = Vec::new();
     let mut missing = Vec::new();
     for want in expected {
-        let want_norm = corpus_engine::filters::normalize_title(want);
+        let want_norm = understanding_vocab::canonical::normalize_title(want);
         if normalized.iter().any(|t| t == &want_norm) {
             matched.push(want.clone());
         } else {
