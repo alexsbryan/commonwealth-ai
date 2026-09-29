@@ -12,7 +12,6 @@
 
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
 use corpus_index::types::EmbedFn;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
@@ -75,12 +74,7 @@ async fn build_parcel_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
     std::fs::create_dir_all(&atlas_dir).unwrap();
     std::fs::write(atlas_dir.join("atoms.json"), ATOMS_JSON).unwrap();
 
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),

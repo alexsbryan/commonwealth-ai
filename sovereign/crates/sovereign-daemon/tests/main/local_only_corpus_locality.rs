@@ -41,8 +41,8 @@ use std::time::Duration;
 
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
+use corpus_index::source::CorpusReadPort;
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::gossip;
@@ -130,12 +130,7 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
     )
     .await;
 
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
 
     // Build an AppState with the engine wired and a self-member.
     // The gossip refresh path reads `installed_indexes()` from the
@@ -264,10 +259,7 @@ async fn locally_only_corpus_is_still_searchable_via_local_path() {
     )
     .await;
 
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = CorpusEngine::new(recipes, indexes, mock_embed_fn())
-        .with_embedding_model("qwen3-embedding-0.6b");
+    let engine = crate::common::reading_double(indexes, mock_embed_fn());
 
     let installed = engine.installed_indexes().await.unwrap();
     assert_eq!(

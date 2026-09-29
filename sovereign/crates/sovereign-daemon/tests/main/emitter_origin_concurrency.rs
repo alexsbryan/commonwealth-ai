@@ -30,8 +30,8 @@ use std::sync::Arc;
 
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::NodeId;
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
+use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::{fabric, node, serving, AppState};
@@ -52,7 +52,7 @@ fn state_over(
     double: &Arc<RecordingLedger>,
     self_id: NodeId,
     mesh_name: &str,
-    engine: Arc<CorpusEngine>,
+    engine: Arc<IngestPortDouble>,
 ) -> AppState {
     AppState::new_with_seeds(
         self_id,
@@ -129,19 +129,14 @@ async fn concurrent_serves_stamp_origin_as_self_for_every_event() {
 
     let self_id = NodeId::from_u128(0xCAFE_BABE_CAFE_BABE);
 
-    // Real CorpusEngine + one corpus so every request returns
+    // The port double + one corpus so every request returns
     // exactly one chunk → exactly one KnowledgeQueryServed event
     // per request. Cleaner accounting than "some events".
     let tmp = tempfile::tempdir().unwrap();
     let indexes = tmp.path().join("indexes");
     std::fs::create_dir_all(&indexes).unwrap();
     install_corpus(&indexes, "sep").await;
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
 
     let double = Arc::new(RecordingLedger::new(self_id));
     let state = state_over(&double, self_id, "origin-test", engine);
@@ -263,12 +258,7 @@ async fn origin_unaffected_by_a_requester_claiming_to_be_us() {
     let indexes = tmp.path().join("indexes");
     std::fs::create_dir_all(&indexes).unwrap();
     install_corpus(&indexes, "sep").await;
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
 
     let double = Arc::new(RecordingLedger::new(self_id));
     let state = state_over(&double, self_id, "origin-swap-test", engine);

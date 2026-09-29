@@ -6,7 +6,6 @@
 use std::sync::Arc;
 
 use commonwealth_core::ids::NodeId;
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::server::internal_router;
@@ -59,12 +58,7 @@ async fn served_knowledge_query_records_through_the_store_seed() {
         .await
         .unwrap();
     index.mark_ingestion_complete().unwrap();
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
 
     let double = Arc::new(RecordingLedger::new(self_id));
     let state = AppState::new_with_seeds(

@@ -9,7 +9,6 @@ use std::sync::Arc;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use oicp_types::knowledge::CorpusShardInfo;
@@ -56,12 +55,7 @@ async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
         "Some philosophical content.",
     )
     .await;
-    let recipes_a = tmp_a.path().join("recipes");
-    std::fs::create_dir_all(&recipes_a).unwrap();
-    let engine_a = Arc::new(
-        CorpusEngine::new(recipes_a, indexes_a, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine_a = Arc::new(crate::common::reading_double(indexes_a, mock_embed_fn()));
 
     let id_a = NodeId::from_u128(0xA1_A1_A1_A1_A1_A1_A1_A1);
     let id_b = NodeId::from_u128(0xB2_B2_B2_B2_B2_B2_B2_B2);

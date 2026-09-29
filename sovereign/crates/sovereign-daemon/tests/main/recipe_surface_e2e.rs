@@ -3,22 +3,29 @@
 //! (thin-desktop order, 2026-09-11, `recipe_http`): importing an authored
 //! recipe into the local registry and reading a recipe's `[parameters]`.
 //!
-//! Against a REAL daemon whose engine owns a temp recipes dir — the fault
-//! these routes exist to prevent is the desktop writing a recipe into a
-//! directory the daemon's registry does not resolve through.
+//! Against a REAL daemon over ingest's port double, whose recipes dir is a
+//! temp dir — the fault these routes exist to prevent is the desktop writing
+//! a recipe into a directory the daemon's registry does not resolve through.
+//! The double answers from the small table below; what ingest itself does
+//! with the same recipes (the registry write and digest, the parameter
+//! schema, the strict verdict, the sampled run, the harness card) is proven
+//! on its implementors: corpus-engine's tests/main/daemon_port_parity.rs and
+//! sovereign-authoring-harness's port tests (pb-ingest-dial-daemon-tests-reads).
 
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
-use corpus_engine::CorpusEngine;
-use corpus_index::types::EmbedFn;
+use corpus_index::ingest_port::daemon::HarnessRunCardView;
+use corpus_index::ingest_port::double::{IngestPortDouble, RecipeHarnessDouble};
+use sovereign_contracts::daemon_wire::{
+    RecipeDryRunReport, RecipeParameter, RecipeParameterSchema,
+};
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::recipe_http::recipe_router;
 
 use crate::common;
 use crate::common::spawn_router;
-
-const EMBED_DIM: usize = 8;
 
 /// A recipe that passes offline validation (no reachability check on the
 /// download URL) and declares two parameters, one with a default.
@@ -59,44 +66,173 @@ fts = true
 vector = true
 "#;
 
-fn mock_embed_fn() -> EmbedFn {
-    Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; EMBED_DIM]) }))
+/// The recipe id ingest's parser reads out of each fixture text; any other
+/// text fails to parse.
+fn recipe_id_of(toml_text: &str) -> corpus_index::Result<String> {
+    if toml_text == RECIPE_TOML {
+        Ok("author-test".into())
+    } else if toml_text.contains("id = \"dry-run-test\"") {
+        Ok("dry-run-test".into())
+    } else {
+        Err(corpus_index::Error::Recipe("missing field `name`".into()))
+    }
+}
+
+/// The report ingest's dry run gives each fixture: an empty `corpus.name`
+/// fails, a sample of the one local file is one record, and the source is
+/// probed only when not offline. It reads the file the daemon STAGED, so a
+/// route that staged something other than the text it was sent is caught.
+fn dry_run_report(
+    staged: &Path,
+    sample_size: usize,
+    offline: bool,
+) -> corpus_index::Result<RecipeDryRunReport> {
+    let text = std::fs::read_to_string(staged)?;
+    let recipe_id = recipe_id_of(&text)?;
+    let name = if text.contains("name = \"\"") {
+        ""
+    } else if recipe_id == "author-test" {
+        "Author test"
+    } else {
+        "Dry run test"
+    };
+    let errors: Vec<String> = if name.is_empty() {
+        vec!["corpus.name: must not be empty".into()]
+    } else {
+        Vec::new()
+    };
+    let records = sample_size.min(1);
+    Ok(RecipeDryRunReport {
+        passed: errors.is_empty(),
+        errors,
+        warnings: Vec::new(),
+        recipe_id,
+        recipe_name: name.into(),
+        source_reachable: (!offline).then_some(true),
+        records_attempted: records,
+        records_succeeded: records,
+        extraction_rate: 1.0,
+        total_chunks: 2 * records,
+        avg_chars: 50.0,
+        report_markdown: format!("# Recipe test: {name}\n"),
+    })
+}
+
+/// `author-test`'s two declared parameters, one with a default.
+fn author_test_schema() -> RecipeParameterSchema {
+    let parameter = |name: &str, kind: &str, required, default| RecipeParameter {
+        name: name.into(),
+        kind: kind.into(),
+        description: String::new(),
+        required,
+        default,
+    };
+    RecipeParameterSchema {
+        corpus_id: "author-test".into(),
+        parameters: vec![
+            parameter(
+                "since",
+                "date",
+                false,
+                Some(serde_json::json!("2020-01-01")),
+            ),
+            parameter("tickers", "list", true, None),
+        ],
+    }
+}
+
+/// A harness card: the first run over a root captures, later ones do not,
+/// and rung 6 (`enrich`) appears only when it was asked for.
+fn harness_card(first: bool, enrich: bool) -> HarnessRunCardView {
+    let mut stages = vec![serde_json::json!({ "stage": "acquire", "verdict": "pass" })];
+    if enrich {
+        stages.push(serde_json::json!({ "stage": "enrich", "verdict": "pass" }));
+    }
+    HarnessRunCardView {
+        green: true,
+        run: serde_json::json!({ "stages": stages }),
+        ran_at_unix: 1_786_548_248,
+        frozen_docs: 1,
+        frozen_captured_at: 1_786_548_248,
+        frozen_captured_now: first,
+    }
+}
+
+struct Fx {
+    daemon: Arc<EmbeddedDaemon>,
+    tmp: tempfile::TempDir,
+    recipes: PathBuf,
+    engine: Arc<IngestPortDouble>,
+    /// Each `install_local_recipe` text, in order.
+    installed: Arc<Mutex<Vec<String>>>,
+    /// Each harness run's `(harness_root, index_dir)`, in order.
+    harness_runs: Arc<Mutex<Vec<(PathBuf, PathBuf)>>>,
 }
 
 /// Fixture construction: a failure here is a broken fixture, not a
 /// finding, and must abort loudly (`meshapp_surface_e2e`'s allow).
 #[allow(clippy::unwrap_used)]
-async fn build_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir, std::path::PathBuf) {
+async fn build_daemon() -> Fx {
     let tmp = tempfile::tempdir().unwrap();
     let indexes = tmp.path().join("indexes");
     let recipes = tmp.path().join("recipes");
     std::fs::create_dir_all(&indexes).unwrap();
     std::fs::create_dir_all(&recipes).unwrap();
+    let installed = Arc::new(Mutex::new(Vec::new()));
+    let harness_runs = Arc::new(Mutex::new(Vec::<(PathBuf, PathBuf)>::new()));
+    let (install_log, install_dir) = (Arc::clone(&installed), recipes.clone());
     let engine = Arc::new(
-        CorpusEngine::new(recipes.clone(), indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
+        IngestPortDouble::new()
+            .with_index_dir(indexes)
+            .with_recipes_dir(recipes.clone())
+            .on_recipe_corpus_id(recipe_id_of)
+            .on_dry_run_recipe(dry_run_report)
+            .on_install_local_recipe(move |toml_text| {
+                install_log.lock().unwrap().push(toml_text.to_string());
+                Ok(install_dir
+                    .join(recipe_id_of(toml_text)?)
+                    .join("recipe.toml"))
+            })
+            .on_recipe_parameter_schema(|corpus_id| match corpus_id {
+                "author-test" => Ok(author_test_schema()),
+                other => Err(corpus_index::Error::Recipe(format!(
+                    "no recipe `{other}` in the registry"
+                ))),
+            }),
     );
+    let run_log = Arc::clone(&harness_runs);
+    let harness = RecipeHarnessDouble::answering(move |root, index_dir, enrich| {
+        let mut runs = run_log.lock().unwrap();
+        let first = !runs.iter().any(|(r, _)| r == root);
+        runs.push((root.to_path_buf(), index_dir.to_path_buf()));
+        Ok(harness_card(first, enrich))
+    });
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),
         common::desktop_services(common::DesktopParts {
-            recipe_harness: Arc::new(sovereign_authoring_harness::EngineHarness::new(Arc::clone(
-                &engine,
-            ))),
-            ..common::DesktopParts::new(engine)
+            recipe_harness: Arc::new(harness),
+            ..common::DesktopParts::new(Arc::clone(&engine) as _)
         }),
     );
-    (daemon, tmp, recipes)
+    Fx {
+        daemon,
+        tmp,
+        recipes,
+        engine,
+        installed,
+        harness_runs,
+    }
 }
 
-/// A valid recipe lands under the DAEMON's recipes dir as
-/// `<id>/recipe.toml` with a `registry.toml` entry carrying its sha256,
-/// and is then resolvable by the parameters route through the same
-/// registry — the round trip the install form depends on.
+/// A valid recipe is validated and installed through the DAEMON's port,
+/// verbatim, answering the daemon's `<id>/recipe.toml`, and is then
+/// resolvable by the parameters route through the same port — the round
+/// trip the install form depends on.
 #[tokio::test]
 async fn import_writes_the_daemons_registry_and_parameters_read_it_back() {
-    let (daemon, _tmp, recipes) = build_daemon().await;
-    let addr = spawn_router(recipe_router(Arc::clone(&daemon))).await;
+    let fx = build_daemon().await;
+    let addr = spawn_router(recipe_router(Arc::clone(&fx.daemon))).await;
     let client = reqwest::Client::new();
 
     let resp = client
@@ -110,17 +246,16 @@ async fn import_writes_the_daemons_registry_and_parameters_read_it_back() {
     assert_eq!(status, 200, "{body:#?}");
     assert_eq!(body["success"], true, "a valid recipe imports: {body:#?}");
     assert_eq!(body["corpus_id"], "author-test");
-    let landed = recipes.join("author-test").join("recipe.toml");
+    let landed = fx.recipes.join("author-test").join("recipe.toml");
     assert_eq!(
         body["recipe_path"],
         landed.display().to_string(),
         "the path answered is the daemon's, not the client's"
     );
-    assert_eq!(std::fs::read_to_string(&landed).unwrap(), RECIPE_TOML);
-    let registry = std::fs::read_to_string(recipes.join("registry.toml")).unwrap();
+    assert_eq!(*fx.installed.lock().unwrap(), vec![RECIPE_TOML.to_string()]);
     assert!(
-        registry.contains("id = \"author-test\"") && registry.contains("sha256 = \""),
-        "the local registry carries the entry and its digest:\n{registry}"
+        !fx.recipes.join("_import").join("author-test.toml").exists(),
+        "the validation staging file is removed"
     );
 
     let resp = client
@@ -153,8 +288,8 @@ async fn import_writes_the_daemons_registry_and_parameters_read_it_back() {
 /// nothing is written; a body that is not a recipe is a 400.
 #[tokio::test]
 async fn import_refuses_an_invalid_recipe_without_writing_and_400s_on_non_toml() {
-    let (daemon, _tmp, recipes) = build_daemon().await;
-    let addr = spawn_router(recipe_router(Arc::clone(&daemon))).await;
+    let fx = build_daemon().await;
+    let addr = spawn_router(recipe_router(Arc::clone(&fx.daemon))).await;
     let client = reqwest::Client::new();
 
     // No `[acquire]`/`[extract]`/`[chunk]` — parses as a recipe? It must
@@ -167,8 +302,9 @@ async fn import_refuses_an_invalid_recipe_without_writing_and_400s_on_non_toml()
         .unwrap();
     assert_eq!(resp.status().as_u16(), 400, "not a recipe is a refusal");
     assert!(
-        !recipes.join("broken").exists(),
-        "nothing is written on refusal"
+        fx.installed.lock().unwrap().is_empty()
+            && !fx.engine.calls().contains(&"install_local_recipe"),
+        "nothing is installed on refusal"
     );
 
     // Parameters for a recipe nobody imported: a 404 naming it.
@@ -228,15 +364,15 @@ const SAMPLE_TEXT: &str = "Alpha paragraph, long enough to survive a chunker.\n\
 /// `source_reachable` distinguishes "not asked" from "asked and it did not
 /// answer" (ARCH principle 6).
 ///
-/// Watched to fail: `passed: report.passed()` in `dry_run_report` replaced
-/// with `passed: true` — the empty-name case below goes red naming the
-/// verdict. Reverted.
+/// The strict verdict itself (`passed: report.passed()` in corpus-engine's
+/// `dry_run_report`) is pinned on the engine's port, where the sabotage that
+/// used to redden this test now reddens that one.
 #[tokio::test]
 async fn a_validation_only_dry_run_is_inline_and_reports_the_strict_verdict() {
-    let (daemon, tmp, _recipes) = build_daemon().await;
-    let addr = spawn_router(recipe_router(Arc::clone(&daemon))).await;
+    let fx = build_daemon().await;
+    let addr = spawn_router(recipe_router(Arc::clone(&fx.daemon))).await;
     let client = reqwest::Client::new();
-    let source = tmp.path().join("source.txt");
+    let source = fx.tmp.path().join("source.txt");
     std::fs::write(&source, SAMPLE_TEXT).expect("write sample source");
 
     let resp = client
@@ -327,10 +463,10 @@ async fn a_validation_only_dry_run_is_inline_and_reports_the_strict_verdict() {
 /// POST answers 202 and this goes red on the conflict assertion. Reverted.
 #[tokio::test]
 async fn a_sampled_dry_run_is_a_job_and_reports_its_own_report() {
-    let (daemon, tmp, _recipes) = build_daemon().await;
-    let addr = spawn_router(recipe_router(Arc::clone(&daemon))).await;
+    let fx = build_daemon().await;
+    let addr = spawn_router(recipe_router(Arc::clone(&fx.daemon))).await;
     let client = reqwest::Client::new();
-    let source = tmp.path().join("source.txt");
+    let source = fx.tmp.path().join("source.txt");
     std::fs::write(&source, SAMPLE_TEXT).expect("write sample source");
     let toml_text = local_recipe(&source, "Dry run test");
 
@@ -425,8 +561,8 @@ async fn a_sampled_dry_run_is_a_job_and_reports_its_own_report() {
 /// loop goes red naming the handler that answered instead.
 #[tokio::test]
 async fn the_dry_run_progress_route_does_not_shadow_the_parameters_route() {
-    let (daemon, _tmp, _recipes) = build_daemon().await;
-    let addr = spawn_router(recipe_router(Arc::clone(&daemon))).await;
+    let fx = build_daemon().await;
+    let addr = spawn_router(recipe_router(Arc::clone(&fx.daemon))).await;
     let client = reqwest::Client::new();
 
     // The job routes reach their own handlers.
@@ -475,17 +611,14 @@ async fn the_dry_run_progress_route_does_not_shadow_the_parameters_route() {
 /// rung-6 verify runs against `<index_dir>/<recipe-id>` on this side, and
 /// `enrich: false` leaves the rung ABSENT rather than passing.
 ///
-/// Watched to fail: `green: run.green()` in `run_harness_job` replaced with
-/// `green: true` — the card assertion below stays green (this recipe passes),
-/// so the sabotage that actually bites is `frozen_captured_now: false`
-/// hardcoded, which goes red on the first-capture assertion. Both watched;
-/// reverted.
+/// The card's own values (`green`, the first-capture flag) are the
+/// harness's, pinned on `EngineHarness` in sovereign-authoring-harness.
 #[tokio::test]
 async fn the_authoring_harness_is_a_job_over_the_daemons_own_sample_store() {
-    let (daemon, tmp, _recipes) = build_daemon().await;
-    let addr = spawn_router(recipe_router(Arc::clone(&daemon))).await;
+    let fx = build_daemon().await;
+    let addr = spawn_router(recipe_router(Arc::clone(&fx.daemon))).await;
     let client = reqwest::Client::new();
-    let source = tmp.path().join("source.txt");
+    let source = fx.tmp.path().join("source.txt");
     std::fs::write(&source, SAMPLE_TEXT).expect("write sample source");
     let toml_text = local_recipe(&source, "Dry run test");
 
@@ -572,15 +705,15 @@ async fn the_authoring_harness_is_a_job_over_the_daemons_own_sample_store() {
         "rung 6 did not run and must not appear: {card:#?}"
     );
 
-    // The sample is now frozen under the DAEMON's data root, not the
-    // client's — the whole point of the route.
-    assert!(
-        tmp.path()
-            .join("harness")
-            .join("dry-run-test")
-            .join("capture.json")
-            .exists(),
-        "the frozen sample lands under the daemon's own data dir"
+    // The sample is frozen under the DAEMON's data root, not the client's —
+    // the whole point of the route — and rung 6 reads the daemon's index.
+    assert_eq!(
+        *fx.harness_runs.lock().unwrap(),
+        vec![(
+            fx.tmp.path().join("harness").join("dry-run-test"),
+            fx.tmp.path().join("indexes").join("dry-run-test"),
+        )],
+        "the harness runs over the daemon's own data dir and index dir"
     );
 
     // A second run reuses the frozen sample: no capture, and the ladder

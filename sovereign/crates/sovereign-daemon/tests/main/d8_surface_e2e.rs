@@ -52,13 +52,10 @@
 
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim};
-use corpus_engine::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
-use corpus_engine::enrichment::pipeline::atlas::{
-    ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus,
-};
-use corpus_engine::enrichment::GovernanceOpKind;
-use corpus_engine::CorpusEngine;
+use corpus_engine_atlas_reader::governance::GovernanceOpKind;
+use corpus_index::ingest_port::daemon::IngestPort;
+use corpus_index::ingest_port::double::IngestPortDouble;
+use corpus_index::source::CorpusReadPort;
 use oplog::{Op, Oplog};
 use sovereign_contracts::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
 use sovereign_contracts::setup_config::SetupConfig;
@@ -70,6 +67,9 @@ use sovereign_daemon::mcp_config_http::mcp_config_router;
 use sovereign_daemon::recipe_project_http::recipe_project_router;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim};
+use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
+use understanding_vocab::taxonomy::{ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus};
 
 use crate::common;
 use crate::common::spawn_router;
@@ -81,18 +81,22 @@ use crate::common::spawn_router;
 mod fixture {
     use super::*;
 
-    /// A real engine over `tmp`: this file reads through it
-    /// (pb-ingest-dial-daemon-tests-reads repoints it to the double).
-    pub fn engine_at(tmp: &tempfile::TempDir) -> Arc<CorpusEngine> {
+    /// Ingest's port double over `tmp`'s fixture indexes, with the
+    /// daemon's recipes dir beside them (pb-ingest-dial-daemon-tests-reads).
+    pub fn engine_at(tmp: &tempfile::TempDir) -> Arc<IngestPortDouble> {
+        Arc::new(double_at(tmp))
+    }
+
+    fn double_at(tmp: &tempfile::TempDir) -> IngestPortDouble {
         let indexes = tmp.path().join("indexes");
         let recipes = tmp.path().join("recipes");
         std::fs::create_dir_all(&indexes).unwrap();
         std::fs::create_dir_all(&recipes).unwrap();
-        Arc::new(CorpusEngine::new(
-            recipes,
+        common::reading_double(
             indexes,
             Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; common::FIXTURE_EMBED_DIM]) })),
-        ))
+        )
+        .with_recipes_dir(recipes)
     }
 
     pub const CORPUS: &str = "house-rules";
@@ -103,14 +107,22 @@ mod fixture {
     /// thing for the handlers to resolve against.
     pub struct Fx {
         pub daemon: Arc<EmbeddedDaemon>,
-        pub engine: Arc<CorpusEngine>,
+        pub engine: Arc<IngestPortDouble>,
         pub _tmp: tempfile::TempDir,
     }
 
     /// A serving daemon with both stores and an empty tool registry.
     pub fn daemon_with_stores(with_features: bool) -> Fx {
+        daemon_with_stores_over(with_features, |double| double)
+    }
+
+    /// [`daemon_with_stores`], with more programming on the double.
+    pub fn daemon_with_stores_over(
+        with_features: bool,
+        program: impl FnOnce(IngestPortDouble) -> IngestPortDouble,
+    ) -> Fx {
         let tmp = tempfile::tempdir().unwrap();
-        let engine = engine_at(&tmp);
+        let engine = Arc::new(program(double_at(&tmp)));
         let notes = Arc::new(SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap());
         let features = with_features
             .then(|| Arc::new(RecipeProjectStore::open(&tmp.path().join("features.db")).unwrap()));
@@ -135,7 +147,7 @@ mod fixture {
     ///
     /// Both rules are asserted by the log, so the view reports two active
     /// rules and one OPEN tension — the state a steward opens the panel to.
-    pub fn write_atlas(engine: &CorpusEngine, corpus: &str) -> std::path::PathBuf {
+    pub fn write_atlas(engine: &IngestPortDouble, corpus: &str) -> std::path::PathBuf {
         let dir = engine.index_dir().join(corpus).join("atlas");
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -488,7 +500,14 @@ async fn governance_seed_is_idempotent_across_calls() {
 /// then enriches down the literary pipeline with no error anywhere.
 #[tokio::test]
 async fn governance_write_recipe_lands_under_the_daemons_own_recipes_dir() {
-    let fx = fixture::daemon_with_stores(false);
+    let validated = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let fx = fixture::daemon_with_stores_over(false, |double| {
+        let validated = Arc::clone(&validated);
+        double.on_recipe_vocabulary(move |path| {
+            validated.lock().unwrap().push(path.to_path_buf());
+            Ok(Some(Default::default()))
+        })
+    });
     let addr = spawn_router(governance_router(Arc::clone(&fx.daemon))).await;
 
     let resp = reqwest::Client::new()
@@ -514,11 +533,14 @@ async fn governance_write_recipe_lands_under_the_daemons_own_recipes_dir() {
         path.display()
     );
     assert!(path.exists(), "the file is really on disk");
-    let recipe = corpus_engine::Recipe::from_file(&path).expect("the template parses");
+    let text = std::fs::read_to_string(&path).unwrap();
     assert!(
-        recipe.custom_ontology().is_some(),
+        text.contains("domain = \"governance\"") && text.contains("[enrichment.ontology]"),
         "without a custom ontology the corpus enriches down the literary pipeline"
     );
+    // The daemon validates the file it wrote through ingest's parser, on the
+    // port; that the real parser accepts the template is the composed path's.
+    assert_eq!(*validated.lock().unwrap(), vec![path.clone()]);
 }
 
 /// Every governance route on a daemon with no corpus engine is a named

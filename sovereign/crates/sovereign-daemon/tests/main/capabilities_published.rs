@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Proves that a live `EmbeddedDaemon` with a real `CorpusEngine`
+//! Proves that a live `EmbeddedDaemon` with ingest's port double
 //! publishes its `hosted_corpora` to its own `MemberRecord` on the
 //! first gossip round. This is the mechanism by which the Founder's
 //! SEP corpus becomes visible to the Joiner — without it, gossip
@@ -10,8 +10,8 @@ use std::sync::Arc;
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
+use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::state::{fabric, node, serving, AppState};
 use sovereign_mesh::gossip;
@@ -24,7 +24,7 @@ fn mock_embed_fn() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) }))
 }
 
-async fn make_engine_with_sep(dir: &std::path::Path) -> Arc<CorpusEngine> {
+async fn make_engine_with_sep(dir: &std::path::Path) -> Arc<IngestPortDouble> {
     let indexes = dir.join("indexes");
     std::fs::create_dir_all(&indexes).unwrap();
     let idx_path = indexes.join("sep");
@@ -59,10 +59,7 @@ async fn make_engine_with_sep(dir: &std::path::Path) -> Arc<CorpusEngine> {
         .await
         .unwrap();
     index.mark_ingestion_complete().unwrap();
-    Arc::new(
-        CorpusEngine::new(dir.join("recipes"), indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    )
+    Arc::new(crate::common::reading_double(indexes, mock_embed_fn()))
 }
 
 fn empty_node_capabilities() -> NodeCapabilities {
@@ -95,7 +92,7 @@ fn empty_node_capabilities() -> NodeCapabilities {
 
 #[tokio::test]
 async fn gossip_round_publishes_live_hosted_corpora() {
-    // Build a real CorpusEngine containing a single "sep" chunk.
+    // Build ingest's port double containing a single "sep" chunk.
     let dir = tempfile::tempdir().unwrap();
     let engine = make_engine_with_sep(dir.path()).await;
 

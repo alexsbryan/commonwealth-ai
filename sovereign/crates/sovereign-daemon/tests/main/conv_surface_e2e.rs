@@ -37,7 +37,6 @@
 
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
 use corpus_index::index::InsertChunk;
 use corpus_index::types::EmbedFn;
 use sovereign_contracts::daemon_wire::conv_tiered::{ChunkEntityProgressRow, ChunkEntityRow};
@@ -79,7 +78,7 @@ fn node(conv: &str, id: &str, level: i64, entities: &str, coherence: f64) -> Con
 }
 
 /// A serving daemon whose `Runtime` reads the SAME `SqliteStateStore`
-/// this function seeded, and whose `CorpusEngine` has the corpus
+/// this function seeded, and whose corpus port reads the corpus
 /// installed under a display name — so the corpora route has both
 /// halves to compose.
 ///
@@ -221,12 +220,7 @@ async fn build_conv_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
         .await
         .unwrap();
 
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
     let conv: Arc<dyn ConvTieredReader> = Arc::clone(&store) as Arc<dyn ConvTieredReader>;
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
@@ -474,9 +468,7 @@ async fn absence_has_three_answers_and_a_readerless_daemon_says_so() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let indexes = tmp.path().join("indexes");
     std::fs::create_dir_all(&indexes).expect("indexes dir");
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).expect("recipes dir");
-    let engine = Arc::new(CorpusEngine::new(recipes, indexes, mock_embed_fn()));
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
     let bare = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),

@@ -53,7 +53,6 @@
 
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
 use corpus_index::index::InsertChunk;
 use corpus_index::types::EmbedFn;
 use sovereign_contracts::setup_config::SetupConfig;
@@ -136,7 +135,7 @@ fn mock_embed_fn() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; EMBED_DIM]) }))
 }
 
-/// A daemon whose `CorpusEngine` has one installed corpus carrying one
+/// A daemon whose corpus port reads one installed corpus carrying one
 /// chunk and the four-atom atlas above.
 /// Fixture construction: a failure here is a broken fixture, not a
 /// finding, and must abort loudly. `clippy.toml`'s
@@ -178,12 +177,7 @@ async fn build_atlas_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
     std::fs::create_dir_all(&atlas_dir).unwrap();
     std::fs::write(atlas_dir.join("atoms.json"), ATOMS_JSON).unwrap();
 
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),
@@ -238,7 +232,7 @@ async fn corpus_atoms_serves_the_whole_atlas() {
     // And it round-trips into the type the desktop actually holds, which
     // is what makes the repoint a call-site change: this is the same
     // `Vec<AtomEnvelope>` `load_atoms` returns today.
-    let envelopes: Vec<corpus_engine::enrichment::atlas::AtomEnvelope> =
+    let envelopes: Vec<understanding_vocab::atoms::AtomEnvelope> =
         serde_json::from_value(body["atoms"].clone())
             .expect("the page deserialises as AtomEnvelope — the desktop's own type");
     assert_eq!(envelopes.len(), ATOM_COUNT);
@@ -412,7 +406,7 @@ async fn atlas_atoms_browse_filters_by_type() {
         claims
             .items
             .iter()
-            .all(|a| a.atom_type == corpus_engine::enrichment::atlas::AtomType::Claim),
+            .all(|a| a.atom_type == understanding_vocab::atoms::AtomType::Claim),
         "every returned atom must satisfy the filter",
     );
 }

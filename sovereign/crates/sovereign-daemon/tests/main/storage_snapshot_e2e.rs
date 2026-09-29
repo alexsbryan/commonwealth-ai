@@ -33,7 +33,6 @@ use crate::common::ledger_double::RecordingLedger;
 use crate::common::mesh_admin_services;
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::NodeId;
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use sovereign_contracts::setup_config::SetupConfig;
@@ -96,15 +95,11 @@ async fn first_tick_emits_only_mesh_shared_corpora_to_ledger() {
     install_corpus(&indexes, "shared-corpus", "Mesh-Shared", true).await;
     install_corpus(&indexes, "local-only", "Local-Only", false).await;
 
-    // CorpusEngine reads from the same `indexes` dir. The recipes
-    // dir doesn't matter for this test — `installed_indexes()` only
-    // enumerates the index side.
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    // The port double lists the same `indexes` dir through the leaf's
+    // `FsIndexSource` — `installed_indexes()` only enumerates the index
+    // side.
+    let engine =
+        Arc::new(crate::common::reading_double(indexes, mock_embed_fn()).accepting_yield_hooks());
 
     // Daemon: data_dir holds mesh.json + node_id; corpus engine
     // injected so `start_daemon` spawns the snapshot loop with the

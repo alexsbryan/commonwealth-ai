@@ -12,9 +12,8 @@ use std::sync::Arc;
 use sovereign_contracts::traits::StateStore;
 use sovereign_daemon::turn_http::turn_router;
 
-/// [`super::serving_daemon`] over a real engine: these tests read the
-/// installed-index listing through it (pb-ingest-dial-daemon-tests-reads
-/// repoints them to the double's listing mode).
+/// [`super::serving_daemon`] over the reading double: these tests read the
+/// installed-index listing through it (pb-ingest-dial-daemon-tests-reads).
 fn serving_daemon(
     provider: TestProvider,
 ) -> (
@@ -24,8 +23,7 @@ fn serving_daemon(
 ) {
     let tmp = tempfile::tempdir().unwrap();
     let store: Arc<dyn StateStore> = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
-    let engine = Arc::new(corpus_engine::CorpusEngine::new(
-        tmp.path().join("recipes"),
+    let engine = Arc::new(crate::common::reading_double(
         tmp.path().join("indexes"),
         Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
     ));
@@ -40,7 +38,7 @@ fn serving_daemon(
 }
 
 /// Install a corpus at `<indexes>/<id>` with one chunk, marked complete so
-/// the engine's `installed_indexes()` reports it — the same fixture
+/// the port's `installed_indexes()` reports it — the same fixture
 /// `knowledge_served_e2e` uses.
 async fn install_corpus(indexes_dir: &std::path::Path, id: &str) {
     use corpus_index::index::{CorpusIndex, InsertChunk};

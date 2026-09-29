@@ -41,7 +41,6 @@ use std::sync::Arc;
 
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::NodeId;
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::server::internal_router;
@@ -99,7 +98,7 @@ async fn install_corpus_with_chunk(
     index.mark_ingestion_complete().unwrap();
 }
 
-/// Build an `AppState` with a `CorpusEngine` rooted at `tmp/indexes/`
+/// Build an `AppState` with ingest's port double over `tmp/indexes/`
 /// and pre-installed corpora. Returns the state and the on-disk
 /// directory (keep alive for the test's duration), with the recording
 /// double every store port writes to.
@@ -113,12 +112,7 @@ pub(crate) async fn build_state_with_corpora(
     for (id, name, content) in corpora {
         install_corpus_with_chunk(&indexes, id, name, content).await;
     }
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
     let double = Arc::new(RecordingLedger::new(self_id));
     let state = AppState::new_with_seeds(
         self_id,

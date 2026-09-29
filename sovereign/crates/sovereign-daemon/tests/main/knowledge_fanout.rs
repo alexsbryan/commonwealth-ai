@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test for `/v1/knowledge/search` fan-out.
 //!
-//! Builds two `AppState`s: *Host* owns a tiny real `CorpusEngine`
+//! Builds two `AppState`s: *Host* owns ingest's port double
 //! with one chunk in a corpus called `"sep"`; *Joiner* has no corpora
 //! but gossip-knows Host exists and hosts `sep`. We spin a real
 //! `internal_router` for Host on an ephemeral port so the fan-out's
@@ -23,7 +23,7 @@ use axum::http::{Request, StatusCode};
 use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::{
     index::{CorpusIndex, InsertChunk},
     types::EmbedFn,
@@ -41,15 +41,14 @@ fn mock_embed_fn() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) }))
 }
 
-/// Construct a CorpusEngine rooted in `dir` with a single installed
+/// Ingest's port double reading `dir` with a single installed
 /// corpus `corpus_id` holding `chunks`. Completes ingestion so
 /// `installed_indexes()` returns it.
 async fn make_engine_with_corpus(
     dir: &std::path::Path,
     corpus_id: &str,
     chunks: Vec<InsertChunk>,
-) -> Arc<CorpusEngine> {
-    let recipes = dir.join("recipes");
+) -> Arc<IngestPortDouble> {
     let indexes = dir.join("indexes");
     std::fs::create_dir_all(&indexes).unwrap();
 
@@ -77,10 +76,7 @@ async fn make_engine_with_corpus(
     // an hour.
     index.mark_ingestion_complete().unwrap();
 
-    Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    )
+    Arc::new(crate::common::reading_double(indexes, mock_embed_fn()))
 }
 
 /// Start a real TCP internal_router for `state`. Returns the bound
@@ -172,9 +168,13 @@ fn member(
 }
 
 /// Build an `AppState` around `node_id`, optionally attached to a
-/// `CorpusEngine` and populated with a two-member `Mesh` that
+/// port double and populated with a two-member `Mesh` that
 /// includes `peer` as an online member with `hosted_corpora`.
-fn make_state(node_id: NodeId, peer: MemberRecord, engine: Option<Arc<CorpusEngine>>) -> AppState {
+fn make_state(
+    node_id: NodeId,
+    peer: MemberRecord,
+    engine: Option<Arc<IngestPortDouble>>,
+) -> AppState {
     let mesh_id = MeshId::from_u128(42);
     let hash = [7u8; 32];
     // Include self — otherwise the fan-out logic can't tell which

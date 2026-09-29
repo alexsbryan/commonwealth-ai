@@ -5,7 +5,7 @@
 //! desktop's glass-box reading inspector: GETs a chunk by id, GETs
 //! its neighbor window, and (for atlas-enriched corpora) GETs an
 //! atom card by id. These endpoints are loopback-only and read
-//! through the daemon's `CorpusEngine`.
+//! through the daemon's corpus port.
 //!
 //! Pre-fix integration coverage was zero — the 1000+ LOC route
 //! file relied entirely on review for correctness, including the
@@ -28,7 +28,6 @@
 //!    drift.
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::daemon::EmbeddedDaemon;
@@ -99,7 +98,7 @@ async fn install_one_chunk_corpus(
     results[0].chunk_id.unwrap_or(0)
 }
 
-/// Build a daemon backed by a CorpusEngine with one corpus, one
+/// Build a daemon backed by ingest's port double over one corpus, one
 /// chunk. Returns the daemon, its router-mountable Arc, the tmp
 /// dir (held to prevent cleanup), and the row's `chunk_id`.
 async fn build_reading_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir, u64) {
@@ -108,12 +107,7 @@ async fn build_reading_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir, u64)
     std::fs::create_dir_all(&indexes).unwrap();
     let chunk_id = install_one_chunk_corpus(&indexes, "sep", "SEP", CHUNK_TEXT).await;
 
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
 
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
@@ -259,12 +253,7 @@ async fn get_chunk_reports_unpromoted_partition_instead_of_masquerading_as_absen
     // and WITHOUT `_corpus_meta.json` — exactly the shape observed on disk.
     std::fs::create_dir_all(indexes.join("sep").join("atlas")).unwrap();
 
-    let recipes = tmp.path().join("recipes");
-    std::fs::create_dir_all(&recipes).unwrap();
-    let engine = Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),

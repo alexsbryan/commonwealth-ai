@@ -57,7 +57,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
 use corpus_index::types::EmbedFn;
 use sovereign_contracts::traits::StateStore;
 use sovereign_daemon::lc_http::lc_router;
@@ -68,6 +67,7 @@ use sovereign_tools::local_corpus::watched::registry::WatchedFolderRegistry;
 use sovereign_tools::local_corpus::LocalCorpusManager;
 
 use crate::common::spawn_router;
+use crate::local_corpus_port_double::leaf_backed_double;
 
 const EMBED_DIM: usize = 8;
 
@@ -89,13 +89,11 @@ async fn harness() -> (Arc<LocalCorpusManager>, SocketAddr) {
         // it (`corpus_watch_http_e2e`'s reason, same fix).
         std::mem::forget(tmp);
         let store: Arc<InMemoryStateStore> = Arc::new(InMemoryStateStore::new());
+        // The leaf-backed ingest writes no source-file manifest, so no
+        // corpus dir has one — the engine's answer for such a dir.
         let engine = Arc::new(
-            CorpusEngine::new(
-                data_dir.join("recipes"),
-                data_dir.join("indexes"),
-                mock_embed_fn(),
-            )
-            .with_embedding_model("test-mock"),
+            leaf_backed_double(data_dir.join("indexes"), mock_embed_fn())
+                .on_source_file_progress(|_| None),
         );
         let manager = Arc::new(
             LocalCorpusManager::init(

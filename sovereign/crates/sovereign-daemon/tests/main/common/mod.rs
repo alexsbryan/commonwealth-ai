@@ -578,6 +578,22 @@ pub fn engine_at(tmp: &tempfile::TempDir) -> Arc<IngestPortDouble> {
     )
 }
 
+/// Ingest's port double over the fixture indexes under `indexes`, reading
+/// them with the leaf's own reader: the listings through `FsIndexSource`,
+/// the opens through `CorpusIndex::open` — what the engine delegates both
+/// to, so a test that reads fixture indexes builds no engine
+/// (pb-ingest-dial-daemon-tests-reads). Chain more programming onto it.
+pub fn reading_double(
+    indexes: std::path::PathBuf,
+    embed: corpus_index::types::EmbedFn,
+) -> IngestPortDouble {
+    IngestPortDouble::new()
+        .with_index_dir(indexes)
+        .listing_indexes_under_index_dir()
+        .opening_indexes_under_index_dir()
+        .with_embed_fn(embed)
+}
+
 /// A fresh mesh-shared index under `indexes/<corpus_id>`, on the
 /// embedding shape [`engine_at`] mints.
 ///
@@ -645,7 +661,7 @@ impl DesktopParts {
     pub fn new(engine: Arc<dyn IngestPort>) -> Self {
         Self {
             engine,
-            recipe_harness: Arc::new(RecipeHarnessDouble),
+            recipe_harness: Arc::new(RecipeHarnessDouble::default()),
             provider: Arc::new(TestProvider::new()),
             store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
             runtime: stub_runtime(Arc::new(TestProvider::new()), None),

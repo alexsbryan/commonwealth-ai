@@ -50,7 +50,6 @@ use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeC
 use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use corpus_engine::CorpusEngine;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use oicp_types::knowledge::CorpusShardInfo;
@@ -153,7 +152,7 @@ pub(super) fn caps_with_hosted(corpora: &[&str]) -> NodeCapabilities {
 #[tokio::test]
 async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     // === Daemon A (the Founder) ===
-    // Has a real CorpusEngine with the "sep" corpus.
+    // Has ingest's port double with the "sep" corpus.
     let tmp_a = tempfile::tempdir().unwrap();
     let indexes_a = tmp_a.path().join("indexes");
     std::fs::create_dir_all(&indexes_a).unwrap();
@@ -164,12 +163,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
         "Compatibilism: free will is compatible with determinism.",
     )
     .await;
-    let recipes_a = tmp_a.path().join("recipes");
-    std::fs::create_dir_all(&recipes_a).unwrap();
-    let engine_a = Arc::new(
-        CorpusEngine::new(recipes_a, indexes_a, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine_a = Arc::new(crate::common::reading_double(indexes_a, mock_embed_fn()));
 
     let id_a = NodeId::from_u128(0xAAAA_AAAA_AAAA_AAAA);
     // A's mesh contains only A — that's fine, only B needs to know
@@ -221,7 +215,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     let addr_a = spawn_router(internal_router(state_a.clone())).await;
 
     // === Daemon B (the Joiner) ===
-    // No CorpusEngine attached. B's mesh state DOES contain A as
+    // No corpus port attached. B's mesh state DOES contain A as
     // a member with `hosted_corpora=["sep"]` so the fan-out
     // discovery loop picks A up.
     let id_b = NodeId::from_u128(0xBBBB_BBBB_BBBB_BBBB);
@@ -359,12 +353,7 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
     let indexes_a = tmp_a.path().join("indexes");
     std::fs::create_dir_all(&indexes_a).unwrap();
     install_corpus(&indexes_a, "sep", "SEP", "Some content.").await;
-    let recipes_a = tmp_a.path().join("recipes");
-    std::fs::create_dir_all(&recipes_a).unwrap();
-    let engine_a = Arc::new(
-        CorpusEngine::new(recipes_a, indexes_a, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    );
+    let engine_a = Arc::new(crate::common::reading_double(indexes_a, mock_embed_fn()));
     let id_a = NodeId::from_u128(0xA0A0_A0A0_A0A0_A0A0);
     let state_a = AppState::new_with_seeds(
         id_a,
