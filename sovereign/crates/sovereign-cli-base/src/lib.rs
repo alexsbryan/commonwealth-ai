@@ -14,8 +14,10 @@
 //!   crate (pb-code-cli-base).
 //! - [`flag_surface`] and [`host_load`]: moved from `sovereign-cli-shared` so
 //!   bench's CLI names no svrn CLI crate (pb-cli-llm-bench-move); so did
-//!   [`corpus_resolve`], the corpus-argument ladder every CLI verb shares.
+//!   [`corpus_resolve`], the corpus-argument ladder every CLI verb shares,
+//!   and [`chat_globals`], the chat-shaped verbs' global flags.
 
+pub mod chat_globals;
 pub mod code_index;
 pub mod corpus_resolve;
 pub mod deprecation;

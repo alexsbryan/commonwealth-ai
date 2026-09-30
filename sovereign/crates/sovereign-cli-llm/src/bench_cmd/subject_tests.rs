@@ -211,7 +211,7 @@ async fn nothing_at_the_base_is_could_not_judge_naming_it() {
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         l.local_addr().unwrap().port()
     };
-    let mut globals = crate::chat_cmd::config::default_globals_for_voice_eval();
+    let mut globals = sovereign_cli_base::chat_globals::default_globals_for_voice_eval();
     globals.daemon_base = format!("http://127.0.0.1:{port}");
     let err = SubjectDial::dial(&globals)
         .await
@@ -223,7 +223,7 @@ async fn nothing_at_the_base_is_could_not_judge_naming_it() {
 
 #[tokio::test]
 async fn a_data_dir_pin_is_refused_by_name() {
-    let mut globals = crate::chat_cmd::config::default_globals_for_voice_eval();
+    let mut globals = sovereign_cli_base::chat_globals::default_globals_for_voice_eval();
     globals.data_dir_explicit = true;
     let err = SubjectDial::dial(&globals).await.err().expect("refused");
     assert!(err.starts_with("--data-dir"), "{err}");

@@ -21,7 +21,7 @@ use sovereign_turn_client::{
 };
 
 use crate::chat_cmd::bootstrap::build_inference;
-use crate::chat_cmd::config::ChatGlobals;
+use sovereign_cli_base::chat_globals::ChatGlobals;
 
 /// A reachable svrn and the pins every turn to it carries.
 pub struct SubjectDial {

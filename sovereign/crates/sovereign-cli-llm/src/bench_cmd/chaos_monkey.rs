@@ -55,7 +55,7 @@ use crate::bench_cmd::live_runner::{
     extraction_scorer_enabled, judge_correctness, run_live_pinned, run_naked, verify_grounding,
 };
 use crate::bench_cmd::subject::SubjectDial;
-use crate::chat_cmd::config::parse_globals;
+use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {

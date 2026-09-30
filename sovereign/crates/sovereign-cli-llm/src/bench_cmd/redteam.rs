@@ -41,7 +41,7 @@ use super::lane_baseline::LaneBaseline;
 use super::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
 use super::scaffolding_param::{decide, PromoteDecision};
 use super::subject::SubjectDial;
-use crate::chat_cmd::config::parse_globals;
+use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {

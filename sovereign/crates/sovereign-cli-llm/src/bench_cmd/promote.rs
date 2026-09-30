@@ -40,7 +40,7 @@ use super::scaffolding_param::{
     decide, AutoApplyPolicy, PromoteDecision, RerankSettings, ScaffoldingParam,
 };
 use super::subject::SubjectDial;
-use crate::chat_cmd::config::parse_globals;
+use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {

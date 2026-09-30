@@ -248,7 +248,7 @@ async fn run(rest: &[String]) -> i32 {
         attached: None,
         vault: None,
     };
-    let globals = crate::chat_cmd::config::default_globals_for_voice_eval();
+    let globals = sovereign_cli_base::chat_globals::default_globals_for_voice_eval();
     let (db_path, nodes) = match crate::eval_cmd::run_probe(&globals, &request) {
         Ok(ProbeEvidence::RaptorNodes(ev)) => (ev.db_path, ev.nodes),
         Ok(other) => {

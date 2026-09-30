@@ -52,7 +52,7 @@ use sovereign_contracts::probe::{AtlasProbe, ProbeEvidence, ProbeMode, ProbeRequ
 
 use crate::bench_cmd::subject::SubjectDial;
 use crate::chat_cmd::bootstrap::build_inference;
-use crate::chat_cmd::config::parse_globals;
+use sovereign_cli_base::chat_globals::parse_globals;
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
 

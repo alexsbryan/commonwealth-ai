@@ -27,7 +27,7 @@ use super::score::{
     score_essay_readiness, score_facts, score_sources, score_sources_loose, EssayReadinessScore,
     JudgeSourceDetail,
 };
-use crate::chat_cmd::config::ChatGlobals;
+use sovereign_cli_base::chat_globals::ChatGlobals;
 
 /// The bank's questions as the probe takes them: id and text, nothing the
 /// bank expects of them.

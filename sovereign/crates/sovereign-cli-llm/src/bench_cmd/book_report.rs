@@ -27,8 +27,8 @@ use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, DocumentAsset, NarrationEvent, Speed};
 
 use crate::chat_cmd::bootstrap::build_inference;
-use crate::chat_cmd::config::default_globals_for_voice_eval;
 use oicp_client::provider_for_model;
+use sovereign_cli_base::chat_globals::default_globals_for_voice_eval;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 use sovereign_contracts::probe::ResourceReport;
 
@@ -696,7 +696,7 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
 
 /// Exec svrn's attached probe and read back its evidence.
 fn attached_evidence(
-    globals: &crate::chat_cmd::config::ChatGlobals,
+    globals: &sovereign_cli_base::chat_globals::ChatGlobals,
     request: &ProbeRequest,
 ) -> Result<AttachedEvidence, String> {
     match crate::eval_cmd::run_probe(globals, request)? {
