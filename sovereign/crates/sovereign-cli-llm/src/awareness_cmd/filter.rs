@@ -40,9 +40,8 @@ use understanding_vocab::taxonomy::EntityType;
 use super::args::parse_args;
 use super::render::display_path;
 use super::store_open::{atlas_dir_for, sovereign_root};
-use crate::enrich_cmd::inference_client::{
-    probe_daemon, resolve_default_models, DaemonInferenceClient,
-};
+use corpus_index::v1_models::{probe_daemon, resolve_default_models};
+use crate::enrich_cmd::inference_client::DaemonInferenceClient;
 use sovereign_cli_shared::args::Parsed;
 use sovereign_cli_shared::urls::{v1_url, DEFAULT_CLIENT_PORT};
 

@@ -386,9 +386,8 @@ fn dry_run_inference() -> InferenceFn {
 /// pipeline does, with no parallel model load (which would contend
 /// for GPU memory). The daemon must be running before the call.
 async fn real_inference(flags: &Parsed) -> Result<InferenceFn, String> {
-    use crate::enrich_cmd::inference_client::{
-        probe_daemon, resolve_default_models, DaemonInferenceClient,
-    };
+    use corpus_index::v1_models::{probe_daemon, resolve_default_models};
+    use crate::enrich_cmd::inference_client::DaemonInferenceClient;
     use sovereign_cli_shared::urls::{v1_url, DEFAULT_CLIENT_PORT};
 
     let base_url = flags

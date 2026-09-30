@@ -17,7 +17,7 @@ use understanding_vocab::read::ATLAS_DIRNAME;
 
 use super::pool_chunk;
 use crate::chat_cmd::bootstrap::ChatSession;
-use crate::enrich_cmd::paths;
+use sovereign_contracts::index_layout as paths;
 
 fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {

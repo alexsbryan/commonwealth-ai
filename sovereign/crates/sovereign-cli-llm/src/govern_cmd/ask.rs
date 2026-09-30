@@ -142,7 +142,7 @@ async fn render_sources(
     if chunk_refs.is_empty() {
         return;
     }
-    let index_root = crate::enrich_cmd::paths::index_root(corpus_id);
+    let index_root = sovereign_contracts::index_layout::index_root(corpus_id);
     let chunk_to_section =
         corpus_engine_atlas_reader::governance_view::chunk_to_section_map(&index_root);
     let titles = corpus_engine_atlas_reader::governance_view::section_titles(&index_root);
@@ -232,7 +232,7 @@ fn render_supersession_provenance(corpus_id: &str, answer: &str) {
         Err(_) => return,
     };
     let titles = corpus_engine_atlas_reader::governance_view::section_titles(
-        crate::enrich_cmd::paths::index_root(corpus_id),
+        sovereign_contracts::index_layout::index_root(corpus_id),
     );
     let answer_lc = answer.to_lowercase();
 
