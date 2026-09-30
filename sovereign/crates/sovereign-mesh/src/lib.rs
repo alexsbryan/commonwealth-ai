@@ -52,7 +52,7 @@ pub mod gossip;
 pub mod guest_pages;
 pub mod membership;
 pub use sovereign_serving_host::guest_lender; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
-pub mod guest_source;
+pub use sovereign_serving_host::guest_source; // shim: moved by pb-serve-ranks
 pub mod guest_tunnel;
 pub use sovereign_serving_host::inference_adapter; // shim: moved by domains REVIEW-build-serving-move-adapter
 /// Dial-by-key mesh access over iroh (Track W, W1). Server half: binds

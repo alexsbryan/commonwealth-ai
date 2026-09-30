@@ -4,7 +4,7 @@
 //! `StoredGuestLink` (now in `sovereign-serving-host`) resolves a granted id
 //! through two ports — `GuestLinkReader` and `GuestTunnelOpener` — because
 //! neither the holder's link file (`sovereign_contracts::guest_link`, the holder's
-//! credential) nor the tunnel (`crate::guest_tunnel`, Fabric reach) is the
+//! credential) nor the tunnel (`mesh_reach::guest`, Fabric reach) is the
 //! serving package's to name (`sovereign/SERVING_BOUNDARY.md` "The five
 //! entries" (a)). This module implements both over the mesh's own readers,
 //! and carries the factory the daemon installs on its provider.
@@ -17,11 +17,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use sovereign_serving_host::guest_lender::{
+use crate::guest_lender::{
     GuestLenderSource, GuestLinkReader, GuestTunnelHandle, GuestTunnelOpener, LiveGuestLink,
     StoredGuestLink,
 };
+use async_trait::async_trait;
 
 /// Reads `<root>/guest.json` through `sovereign_contracts::guest_link`.
 #[derive(Debug)]
@@ -61,7 +61,7 @@ impl GuestLinkReader for GuestLinkFileReader {
     }
 }
 
-/// Opens the mesh tunnel through `crate::guest_tunnel::GuestTunnel`.
+/// Opens the mesh tunnel through `mesh_reach::guest::GuestTunnel`.
 #[derive(Debug, Default)]
 pub struct MeshTunnelOpener;
 
@@ -69,7 +69,7 @@ pub struct MeshTunnelOpener;
 /// sovereign-serving-host, so the orphan rule wants a local type between them
 /// (pb-reach-guest).
 #[derive(Debug)]
-struct OpenGuestTunnel(crate::guest_tunnel::GuestTunnel);
+struct OpenGuestTunnel(mesh_reach::guest::GuestTunnel);
 
 impl GuestTunnelHandle for OpenGuestTunnel {
     fn base_url(&self) -> &str {
@@ -86,7 +86,7 @@ impl GuestTunnelOpener for MeshTunnelOpener {
         discovery: Option<String>,
     ) -> Result<Arc<dyn GuestTunnelHandle>, String> {
         let tunnel =
-            crate::guest_tunnel::GuestTunnel::open(dial, relay_urls, discovery.as_deref()).await?;
+            mesh_reach::guest::GuestTunnel::open(dial, relay_urls, discovery.as_deref()).await?;
         Ok(Arc::new(OpenGuestTunnel(tunnel)))
     }
 }

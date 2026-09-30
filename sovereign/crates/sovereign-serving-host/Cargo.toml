@@ -46,8 +46,9 @@ async-trait = { workspace = true }
 # `oicp-client`).
 oicp-client = { workspace = true }
 # RPC-worker discovery's dial vocabulary: `PeerTransport`, `PeerContact`,
-# `TrafficClass` (a package leaf; pb-serve-distributes).
-mesh-reach = { workspace = true }
+# `TrafficClass` (a package leaf; pb-serve-distributes), and the guest dialer
+# `guest_source` opens a lend through (pb-serve-ranks).
+mesh-reach = { workspace = true, features = ["guest"] }
 reqwest = { workspace = true }
 urlencoding = "2"
 sha2 = { workspace = true }

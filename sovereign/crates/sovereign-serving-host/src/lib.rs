@@ -11,6 +11,7 @@ pub mod admission;
 pub mod fim_adapter;
 pub mod fim_http;
 pub mod guest_lender;
+pub mod guest_source;
 pub mod inference_adapter;
 pub mod ledger;
 pub mod local_inflight;
