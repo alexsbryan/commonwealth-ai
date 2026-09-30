@@ -58,6 +58,7 @@ use crate::bench_cmd::subject::SubjectDial;
 use crate::bench_cmd::svrn_judge::SvrnJudge;
 use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
+use sovereign_contracts::probe::AssertedValueVerdict;
 
 const HELP: Help = Help {
     command: "svrn bench chaos-monkey",
@@ -112,11 +113,11 @@ struct Args {
     judge_model: String,
     /// Model handle for the CRITIC role — the `verify_grounding` pass (the
     /// production abstention gate, a SEPARATE forward pass from the
-    /// Synthesizer). Defaults to the Critic `RoleProfile`'s preferred tier
-    /// (`sovereign_core::role` → primary), NOT the lighter measurement
-    /// `judge_model`: the keystone is "Critic(35B) catches fabrications".
-    /// Override with `--critic-model`.
-    critic_model: String,
+    /// Synthesizer). `None` = the Critic `RoleProfile`'s preferred tier (svrn's
+    /// role policy → primary, reported by svrn's probe), NOT the lighter
+    /// measurement `judge_model`: the keystone is "Critic(35B) catches
+    /// fabrications". Override with `--critic-model`.
+    critic_model: Option<String>,
     base_url: String,
     manifest: Option<PathBuf>,
     out: PathBuf,
@@ -151,7 +152,7 @@ struct Args {
     /// exclusive with --grounding-verify.
     gv_shadow: bool,
     /// Gate threshold τ override for this run. Unset = the SHARED production
-    /// default (`sovereign_core::runtime::grounding_gate_threshold()`:
+    /// default (svrn's `grounding_gate_threshold()`, reported by its probe:
     /// SOVEREIGN_GV_THRESHOLD env, else 0.9). Until 2026-07-30 this lane
     /// silently re-derived its own 0.5 default — pass `--gv-threshold 0.5`
     /// to reproduce pre-unification gated runs.
@@ -204,13 +205,9 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut bank: Option<PathBuf> = None;
     let mut corpus = None;
     let mut judge_model = "fast".to_string();
-    // Critic role's model comes from its RoleProfile (preferred_tier → primary),
-    // making `role.rs` load-bearing here. Override with `--critic-model`.
-    let mut critic_model =
-        sovereign_core::role::default_profile_for(sovereign_core::role::Role::Critic)
-            .preferred_tier
-            .model_stem()
-            .to_string();
+    // Critic role's model comes from svrn's Critic RoleProfile (preferred_tier
+    // → primary), which svrn's probe reports. Override with `--critic-model`.
+    let mut critic_model: Option<String> = None;
     let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut manifest = None;
     let mut out = PathBuf::from("target/chaos-monkey/results.jsonl");
@@ -245,7 +242,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--bank" => bank = Some(PathBuf::from(val!("--bank"))),
             "--corpus" => corpus = Some(val!("--corpus")),
             "--judge-model" => judge_model = val!("--judge-model"),
-            "--critic-model" => critic_model = val!("--critic-model"),
+            "--critic-model" => critic_model = Some(val!("--critic-model")),
             "--base-url" => base_url = val!("--base-url"),
             "--manifest" => manifest = Some(PathBuf::from(val!("--manifest"))),
             "--out" => out = PathBuf::from(val!("--out")),
@@ -478,34 +475,28 @@ async fn run(rest: &[String]) -> i32 {
     }
 
     let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
-    let judge: std::sync::Arc<dyn InferenceProvider> = std::sync::Arc::new(RemoteApiProvider::new(
-        &v1,
-        None,
-        &args.judge_model,
-        PROVIDER_CTX,
-    ));
     // The forced-choice judges and the critic's grounding pass are svrn's gate
     // registers, answered by svrn on the same daemon.
     let svrn = SvrnJudge::new(&args.base_url, PROVIDER_CTX);
 
-    // Critic role (the `verify_grounding` gate) runs on its own provider —
-    // model sourced from the Critic RoleProfile (primary), a SEPARATE forward
-    // pass from both the Synthesizer and the lighter measurement judge. Reuse
-    // the judge Arc when they happen to be the same handle.
-    let critic: std::sync::Arc<dyn InferenceProvider> = if args.critic_model == args.judge_model {
-        std::sync::Arc::clone(&judge)
-    } else {
-        std::sync::Arc::new(RemoteApiProvider::new(
-            &v1,
-            None,
-            &args.critic_model,
-            PROVIDER_CTX,
-        ))
+    // Critic role (the `verify_grounding` gate and the asserted-value check):
+    // its model is the Critic RoleProfile's (primary) unless overridden, a
+    // SEPARATE forward pass from both the Synthesizer and the lighter
+    // measurement judge; svrn reports it, with the gate threshold it resolves.
+    let (critic_model, gate_threshold) = match svrn
+        .critic_and_threshold(args.critic_model.as_deref())
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("error: could not ask svrn for its critic model and gate threshold: {e}");
+            return 1;
+        }
     };
     if args.grounding_verify {
         eprintln!(
             "[chaos] critic (grounding-verify) model={} (RoleProfile::Critic preferred_tier); judge model={}",
-            args.critic_model, args.judge_model
+            critic_model, args.judge_model
         );
     }
 
@@ -811,15 +802,14 @@ async fn run(rest: &[String]) -> i32 {
             live,
             &svrn,
             &args.judge_model,
-            critic.as_ref(),
-            &args.critic_model,
+            &critic_model,
             &corpus,
             &model_id,
             q,
             naked_provider.is_some(),
             args.grounding_verify,
             args.gv_shadow,
-            args.gv_threshold,
+            args.gv_threshold.unwrap_or(gate_threshold),
         )
         .await;
         if let Some(f) = transcript_file.as_mut() {
@@ -838,7 +828,7 @@ async fn run(rest: &[String]) -> i32 {
                 // stability verdict before `model_id` was checked).
                 // The judge belongs in the key, exactly like the embed
                 // model — a vp is not comparable across critics.
-                "critic_model": args.critic_model,
+                "critic_model": critic_model,
                 "judge_model": args.judge_model,
                 "gv_threshold": args.gv_threshold,
                 "expected_action": format!("{:?}", q.qtype.expected_action()),
@@ -972,7 +962,6 @@ async fn score_question(
     live: crate::bench_cmd::live_runner::LiveAnswer,
     judge: &SvrnJudge,
     judge_model: &str,
-    critic: &dyn InferenceProvider,
     critic_model: &str,
     corpus: &str,
     model_id: &str,
@@ -980,7 +969,7 @@ async fn score_question(
     naked: bool,
     grounding_verify: bool,
     gv_shadow: bool,
-    gv_threshold: Option<f64>,
+    gv_threshold: f64,
 ) -> ResultRow {
     let crate::bench_cmd::live_runner::LiveAnswer {
         visible,
@@ -1021,8 +1010,6 @@ async fn score_question(
     } else {
         None
     };
-    let gv_threshold: f64 =
-        gv_threshold.unwrap_or_else(sovereign_core::runtime::grounding_gate_threshold);
     let gated = grounding_verify && violation_prob.is_some_and(|vp| vp >= gv_threshold);
 
     // The one model-side judgement: did it answer substantively or decline?
@@ -1149,8 +1136,8 @@ async fn score_question(
         None
     };
 
-    // Gold-free value-presence — the SAME `sovereign_core` primitive the
-    // grounding gate decides on (one notion of "is this asserted value
+    // Gold-free value-presence — the SAME svrn primitive the grounding gate
+    // decides on, run by svrn's probe (one notion of "is this asserted value
     // grounded"). Scores `blatant_confab_rate`: did the agent present a specific
     // value absent from the evidence? Only meaningful for a substantive answer
     // backed by retrieved chunks; an abstention or a naked run has nothing to
@@ -1174,19 +1161,13 @@ async fn score_question(
             // here keeps blatant_confab honest on discursive answers.
             && visible.chars().count() <= 1_800
     {
-        use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
-        match assess_asserted_value(
-            critic,
-            &q.question,
-            &visible,
-            &chunk_texts,
-            sovereign_core::oicp::ShardingPrivacy::LocalOnly,
-        )
-        .await
+        match judge
+            .asserted_value(critic_model, &q.question, &visible, &chunk_texts)
+            .await
         {
-            AssertedValue::Grounded(v) => (Some(v), Some(true)),
-            AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
-            AssertedValue::NoValue => (None, None),
+            AssertedValueVerdict::Grounded(v) => (Some(v), Some(true)),
+            AssertedValueVerdict::Ungrounded(v) => (Some(v), Some(false)),
+            AssertedValueVerdict::NoValue => (None, None),
         }
     } else {
         (None, None)
@@ -1232,11 +1213,7 @@ async fn rescore(rest: &[String]) -> i32 {
     let mut bank_path: Option<PathBuf> = None;
     let mut transcripts: Option<PathBuf> = None;
     let mut judge_model = "fast".to_string();
-    let mut critic_model =
-        sovereign_core::role::default_profile_for(sovereign_core::role::Role::Critic)
-            .preferred_tier
-            .model_stem()
-            .to_string();
+    let mut critic_model: Option<String> = None;
     let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut manifest: Option<PathBuf> = None;
     let mut out = PathBuf::from("target/chaos-monkey/rescored.jsonl");
@@ -1262,7 +1239,7 @@ async fn rescore(rest: &[String]) -> i32 {
             "--bank" => bank_path = Some(PathBuf::from(val!("--bank"))),
             "--transcripts" => transcripts = Some(PathBuf::from(val!("--transcripts"))),
             "--judge-model" => judge_model = val!("--judge-model"),
-            "--critic-model" => critic_model = val!("--critic-model"),
+            "--critic-model" => critic_model = Some(val!("--critic-model")),
             "--base-url" => base_url = val!("--base-url"),
             "--manifest" => manifest = Some(PathBuf::from(val!("--manifest"))),
             "--out" => out = PathBuf::from(val!("--out")),
@@ -1313,29 +1290,22 @@ async fn rescore(rest: &[String]) -> i32 {
         }
     };
 
-    let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
-    let judge: std::sync::Arc<dyn InferenceProvider> = std::sync::Arc::new(RemoteApiProvider::new(
-        &v1,
-        None,
-        &judge_model,
-        PROVIDER_CTX,
-    ));
+    // The judges, the critic's passes and the gate threshold are svrn's,
+    // answered by svrn on the daemon at `base_url`.
     let svrn = SvrnJudge::new(&base_url, PROVIDER_CTX);
-    let critic: std::sync::Arc<dyn InferenceProvider> = if critic_model == judge_model {
-        std::sync::Arc::clone(&judge)
-    } else {
-        std::sync::Arc::new(RemoteApiProvider::new(
-            &v1,
-            None,
-            &critic_model,
-            PROVIDER_CTX,
-        ))
-    };
+    let (critic_model, gate_threshold) =
+        match svrn.critic_and_threshold(critic_model.as_deref()).await {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("error: could not ask svrn for its critic model and gate threshold: {e}");
+                return 1;
+            }
+        };
 
     eprintln!(
         "[chaos] RESCORE transcripts={transcripts_path:?} bank={bank_path:?} judge={judge_model} critic={critic_model} gv={grounding_verify} shadow={gv_shadow} tau={}",
         gv_threshold.map_or_else(
-            || format!("{} (shared default)", sovereign_core::runtime::grounding_gate_threshold()),
+            || format!("{gate_threshold} (shared default)"),
             |v| v.to_string()
         )
     );
@@ -1401,7 +1371,6 @@ async fn rescore(rest: &[String]) -> i32 {
             live,
             &svrn,
             &judge_model,
-            critic.as_ref(),
             &critic_model,
             &corpus,
             "rescored",
@@ -1409,7 +1378,7 @@ async fn rescore(rest: &[String]) -> i32 {
             false,
             grounding_verify,
             gv_shadow,
-            gv_threshold,
+            gv_threshold.unwrap_or(gate_threshold),
         )
         .await;
         eprintln!(
@@ -1477,11 +1446,7 @@ fn bench_verdict(
 async fn score_answer(rest: &[String]) -> i32 {
     let mut input: Option<PathBuf> = None;
     let mut judge_model = "fast".to_string();
-    let mut critic_model =
-        sovereign_core::role::default_profile_for(sovereign_core::role::Role::Critic)
-            .preferred_tier
-            .model_stem()
-            .to_string();
+    let mut critic_model: Option<String> = None;
     let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
 
     let mut i = 0;
@@ -1501,7 +1466,7 @@ async fn score_answer(rest: &[String]) -> i32 {
         match rest[i].as_str() {
             "--input" => input = Some(PathBuf::from(val!("--input"))),
             "--judge-model" => judge_model = val!("--judge-model"),
-            "--critic-model" => critic_model = val!("--critic-model"),
+            "--critic-model" => critic_model = Some(val!("--critic-model")),
             "--base-url" => base_url = val!("--base-url"),
             "--help" | "-h" => {
                 eprintln!("usage: svrn bench chaos-monkey score-answer [--input <file>] [--judge-model <stem>] [--critic-model <stem>] [--base-url <url>]");
@@ -1568,42 +1533,28 @@ async fn score_answer(rest: &[String]) -> i32 {
         return 2;
     }
 
-    let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
-    let judge: std::sync::Arc<dyn InferenceProvider> = std::sync::Arc::new(RemoteApiProvider::new(
-        &v1,
-        None,
-        &judge_model,
-        PROVIDER_CTX,
-    ));
+    // The judges, the critic's passes and the gate threshold are svrn's,
+    // answered by svrn on the daemon at `base_url`.
     let svrn = SvrnJudge::new(&base_url, PROVIDER_CTX);
-    let critic: std::sync::Arc<dyn InferenceProvider> = if critic_model == judge_model {
-        std::sync::Arc::clone(&judge)
-    } else {
-        std::sync::Arc::new(RemoteApiProvider::new(
-            &v1,
-            None,
-            &critic_model,
-            PROVIDER_CTX,
-        ))
+    let critic_model = match svrn.critic_and_threshold(critic_model.as_deref()).await {
+        Ok((model, _)) => model,
+        Err(e) => {
+            eprintln!("error: could not ask svrn for its critic model: {e}");
+            return 1;
+        }
     };
 
     // The shared gold-free grounding primitive — the gate DECIDEs with it, the
     // chaos scorer MEASUREs with it: does the answer's asserted value appear in
     // the evidence? Grounded = release; Ungrounded = blatant confabulation (the
     // cardinal sin); NoValue = nothing checkable asserted (a decline/discursive).
-    use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
-    let (value, grounded): (Option<String>, Option<bool>) = match assess_asserted_value(
-        critic.as_ref(),
-        &question,
-        &answer,
-        &chunks,
-        sovereign_core::oicp::ShardingPrivacy::LocalOnly,
-    )
-    .await
+    let (value, grounded): (Option<String>, Option<bool>) = match svrn
+        .asserted_value(&critic_model, &question, &answer, &chunks)
+        .await
     {
-        AssertedValue::Grounded(v) => (Some(v), Some(true)),
-        AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
-        AssertedValue::NoValue => (None, None),
+        AssertedValueVerdict::Grounded(v) => (Some(v), Some(true)),
+        AssertedValueVerdict::Ungrounded(v) => (Some(v), Some(false)),
+        AssertedValueVerdict::NoValue => (None, None),
     };
 
     // The same abstention + caveat classifiers the live scorer uses. `answered`
@@ -1738,6 +1689,8 @@ async fn fidelity(rest: &[String]) -> i32 {
         &judge_model,
         PROVIDER_CTX,
     ));
+    // The pure-decline check is the gate's, answered by svrn.
+    let svrn = SvrnJudge::new(&base_url, PROVIDER_CTX);
 
     let (mut n_rows, mut n_ledger) = (0usize, 0usize);
     let mut verdict_decline_conflicts: Vec<String> = Vec::new();
@@ -1770,7 +1723,7 @@ async fn fidelity(rest: &[String]) -> i32 {
         // content and their receipts are judged in layer 2.
         if matches!(verdict, "grounded" | "mixed")
             && answer.chars().count() < 300
-            && sovereign_core::runtime::released_pure_decline(answer)
+            && svrn.pure_decline(answer).await == Some(true)
         {
             verdict_decline_conflicts.push(id.to_string());
             findings.push(serde_json::json!({

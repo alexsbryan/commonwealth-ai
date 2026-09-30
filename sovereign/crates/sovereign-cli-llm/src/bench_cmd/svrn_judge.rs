@@ -117,6 +117,35 @@ impl SvrnJudge {
         }
     }
 
+    /// The critic model a run's calls pin (`model`, or svrn's Critic
+    /// profile's when `None`) and the grounding-gate threshold as svrn
+    /// resolves it: an assess probe with no ops.
+    pub(crate) async fn critic_and_threshold(
+        &self,
+        model: Option<&str>,
+    ) -> Result<(String, f64), String> {
+        let ev = self.assess(model, Vec::new()).await?;
+        Ok((ev.model, ev.gate_threshold))
+    }
+
+    /// The gate's `released_pure_decline` over `answer`; `None` when the
+    /// probe could not run, named on stderr.
+    pub(crate) async fn pure_decline(&self, answer: &str) -> Option<bool> {
+        let op = AssessOp::PureDecline {
+            answer: answer.to_string(),
+        };
+        match self.assess(None, vec![op]).await {
+            Ok(ev) => match ev.rows.into_iter().next() {
+                Some(AssessAnswer::PureDecline { pure }) => Some(pure),
+                _ => None,
+            },
+            Err(e) => {
+                eprintln!("    [assess] svrn probe failed: {e}");
+                None
+            }
+        }
+    }
+
     /// One judge op and its one answer. A probe that could not run is the
     /// op's own failure (`None` / `Err`), named on stderr.
     pub(crate) async fn judge_one(&self, model: &str, op: JudgeOp) -> Option<JudgeAnswer> {
