@@ -4133,3 +4133,104 @@ No new noun copies another.
   --verify` still fail, as they did at auto-8 (p0-root-junk has grown).
   `size-gate` reports 73 keys grown. All three are advisory and outside this
   queue.
+
+## REVIEW-audit-pb-auto-10 (2026-09-30, range 7603a813c..e25def998, since REVIEW-audit-pb-auto-9)
+
+206 commits, about 160 of them product code, from the pb-serve-placement,
+pb-serve-distributes (and -standalone, -ranks-*), pb-cli-llm-bench-move,
+pb-cli-llm-ingest-move(-compose), pb-ingest-dial-daemon, pb-meshapp-rest and
+pb-svrn-serving-ports rows. All checks ran in the sovereign-vulkan toolbox.
+
+TESTALL at e25def998 exited 100: 13,801 passed, 3 failed, all three drift
+from moves, repaired toward the tree in 47712859e (below). PREPUSH at
+47712859e blocked on boundary-gate, clock-gate and rustfmt. After
+a63f23a6c it blocks on boundary-gate alone, at 17 violations, the declared
+burn-down (20 at auto-9). LINT at a63f23a6c: 0 errors, arch-gate green.
+
+### (1) Per-unit net-line ledger, `.rs/.py/.sh/.mjs/.ts` outside `ralph/`; tests = a `tests/` segment or a `*tests.rs`/`test.rs` file
+
+| unit | src net (+/−) | tests net |
+|---|---|---|
+| pb-cli-llm-bench-move | +1413 (+4401/−2988) | +530 |
+| pb-serve-distributes-standalone | +686 (+1207/−521) | +547 |
+| pb-ingest-dial-daemon | +416 (+949/−533) | +643 |
+| pb-serve-ranks-tests-helpers | +328 (+328/−0) | −314 |
+| pb-svrn-serving-ports | +207 (+1725/−1518) | +80 |
+| pb-cli-llm-ingest-move-compose | +186 (+281/−95) | +377 |
+| pb-serve-distributes | +172 (+5716/−5544) | +1084 |
+| pb-serve-ranks-tests-stock | +137 (+138/−1) | −142 |
+| pb-serve-ranks-discovery | +84 (+169/−85) | +31 |
+| pb-cli-llm-ingest-move | +4 (+219/−215) | +0 |
+| pb-serve-ranks-tests-daemon | +0 | +152 |
+| pb-serve-ranks-tests-serve | +0 | −19 |
+| pb-meshapp-rest | −599 (+1332/−1931) | +926 |
+| pb-serve-placement | −3154 (+7598/−10752) | +2849 |
+| TOTAL | −120 | +6744 |
+
+pb-serve-placement's −3154/+2849 is mostly mesh_cmd.rs's in-file tests
+leaving for serve's `mesh_plan/tests*.rs`. The two -tests-helpers/-stock
+rows move test doubles into src files (`sovereign_contracts::double`,
+`sovereign_daemon::double`), which is why their src rises as tests fall.
+bench-move's +1413 is the probe's wire (assess/judge ops) and the
+contracts-side homes of what bench used to read in-process.
+
+### (2) dry-report over the 36 touched crate dirs
+
+Clone members keyed by (fn name, file) against the 1,007 `fn` sites the
+range added (`git diff -M`, so a renamed file's fns are not "added"). No
+exact group and no near cluster has an added member. The index is current
+for the range: `raw_completion` (serve_dial.rs:32) and `install_spawn_gate`
+(distributed_respawn.rs:192) resolve. sovereign-cli-bench's eight exact
+groups (moral/situated `split_args`, `get_flag`, report accessors; two
+`median`s) travelled with 3c44858e7's crate move and predate the range.
+
+### (3) converge noun over the 45 nouns the range added (and did not remove)
+
+37 have one production definition. Seven have none because they are test
+code: Engine, Killed, NoBridge (a `#[cfg(test)]` double in
+rpc_discovery/endpoint.rs), Nowhere, OnePeer, ProviderService, Rails.
+`Fixture` shows 2, the pre-existing cli-llm gym pair
+(knowledge_gym_cmd/mod.rs:289, search_gym_cmd/runner.rs:28); the range's
+`Fixture` is test code in sovereign-stock/tests/cli_llm_composed_e2e.rs.
+
+### Findings
+
+- **ARCH 5, fixed in 47712859e** · `authority_surface_census`
+  (sovereign-desktop/src-tauri/tests/authority_surface_census.rs:154)
+  looked for `sec_edgar::register(&engine_builder)` in
+  sovereign-daemon/src/bootstrap.rs; a350a9a5d moved the registration to
+  daemon_cmd/boot.rs:441, on the composed ingest port. The census follows
+  the move and keeps its reason.
+- **ARCH 5, fixed in 47712859e** · F26 registry
+  (sovereign-core/tests/main/f26_egress_census/registry.rs:104):
+  163ecfe35's rpc-workers test added one loopback client in
+  sovereign-daemon/src/mesh_http_tests.rs; 15 -> 16, TestOnly.
+- **ARCH 4, fixed in 47712859e** · quality/conformance/sovereign-daemon.toml
+  FE-100 and one more claim shifted 826/1163 -> 831/1168.
+- **ARCH 8, fixed in a63f23a6c** · sovereign-serve/src/mesh_plan.rs:132
+  (aa32d4e8e) wrote out `sovereign_time::unix_now_u64`
+  (sovereign-time/src/lib.rs:33). clock-gate was red; `--tighten` cleared
+  13 stale rows and lowered 3, mesh_cmd.rs's among them.
+- **ARCH 3, fixed in 1b9c2cd6f** · rustfmt drift in sovereign-cli/src/main.rs
+  (3c44858e7) and sovereign-contracts/src/probe.rs (801aa223f).
+- **ARCH 8, recorded, not fixed** · test-only `struct Killed(Child)` plus
+  `free_port` is now written out in 11 test files across five crates; the
+  range added three: sovereign-stock/tests/cli_llm_composed_e2e.rs:34,
+  sovereign-stock/tests/ingest_composed_e2e.rs:35,
+  sovereign-daemon/tests/main/svrn_alone_names_ingest_absent_e2e.rs:28
+  (the pre-existing one they copy is sovereign-stock/tests/one_process_e2e.rs:40).
+  Collapsing needs a shared test-support home across five crates, which is
+  not small; it belongs to whichever row next adds a process-spawning e2e.
+- **ARCH 6, reviewed, no change** · serve standalone's
+  `SetupConfig::load_from(..).ok()` (sovereign-serve/src/standalone.rs:18)
+  is not a silent collapse: `assemble` loads the same file and refuses by
+  name before anything serves. `serve_dial::chat_completion`
+  (sovereign-code/src/edit_predictions/serve_dial.rs:70) reads zero choices
+  as an empty completion, the shape the in-process provider returned.
+  `rpc_worker_views` (sovereign-serve/src/lib.rs:118) is empty where no
+  discovery loop runs, and the route names that absence itself
+  (163ecfe35's `rpc_workers_absent`).
+- **advisory lanes, recorded** · `hakari-verify` and `deletion-manifest
+  --verify` still fail as at auto-9 (p0-root-junk 323069 > 113934).
+  `size-gate` reports 72 keys grown (73 at auto-9). All advisory, outside
+  this queue.
