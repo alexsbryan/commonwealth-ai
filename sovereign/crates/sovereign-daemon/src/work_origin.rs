@@ -25,9 +25,9 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Json;
-use commonwealth_media::origins::{Admit, Framing, OriginRegistration};
 use host_kit::shell::RouteBundle;
 use kernel_types::NodeId;
+use oicp_types::origin::{Admit, Framing, OriginRegistration};
 use sovereign_contracts::oicp::work::exec::{
     exec_slot, ExecCancel, ExecDescription, ExecEvent, ExecRun, JobContext, ProgressSink,
     EXEC_CANCEL_PATH, EXEC_DESCRIBE_PATH, EXEC_RUN_PATH, EXEC_VALIDATE_PATH,
