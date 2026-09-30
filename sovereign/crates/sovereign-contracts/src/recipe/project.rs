@@ -160,13 +160,6 @@ pub mod fixtures {
         format!("RecipeProjectsDouble::{method}: not programmed by this test")
     }
 
-    fn now() -> i64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0)
-    }
-
     type Summaries = Arc<Mutex<HashMap<String, ProjectSummary>>>;
 
     /// The recipe-project port's double.
@@ -284,7 +277,7 @@ pub mod fixtures {
                     "recipe project '{id}' already exists"
                 )));
             }
-            let at = now();
+            let at = sovereign_time::unix_now();
             let row = RecipeProjectRow {
                 id: id.into(),
                 title: title.into(),
