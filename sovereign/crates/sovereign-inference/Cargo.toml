@@ -191,6 +191,9 @@ windows-cuda = ["llama-cpp-4/cuda"]
 # real engine; the schema moved to `sovereign-contracts::planner_schema`
 # 2026-09-21, so the dev-dep on the runtime hub is gone.
 tempfile = "3"
+# `download_gguf`'s stub server (setup_planner/setup_tests.rs, moved from
+# cli-daemon's setup tests at pb-distribution-setup).
+axum = { workspace = true }
 
 [[example]]
 name = "complete"

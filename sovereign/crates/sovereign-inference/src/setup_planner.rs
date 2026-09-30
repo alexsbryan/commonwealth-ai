@@ -716,3 +716,7 @@ mod byom_url_tests {
         assert!(resolve_byom_url("https://example.com/readme.md").is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "setup_planner/setup_tests.rs"]
+mod setup_tests;
