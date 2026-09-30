@@ -104,17 +104,16 @@ async fn wikipedia_fetch_through_the_registry_asks_ingest_for_the_catalogs_work(
     );
 
     let solve_jobs = Arc::new(sovereign_daemon::solve_http::SolveJobs::new(1));
-    let registry =
-        sovereign_daemon::tool_registry::build_tool_registry(
-            Some((
-                engine.clone(),
-                // Unasked: the fixture recipe opts out of auto-enrichment, so
-                // no structural atlas is built.
-                Arc::new(corpus_engine_atlas_reader::ports::double::AtlasPortDouble::new()),
-            )),
-            solve_jobs,
-        )
-        .await;
+    let registry = sovereign_daemon::tool_registry::build_tool_registry(
+        Some((
+            engine.clone(),
+            // Unasked: the fixture recipe opts out of auto-enrichment, so
+            // no structural atlas is built.
+            Arc::new(corpus_engine_atlas_reader::ports::double::AtlasPortDouble::new()),
+        )),
+        solve_jobs,
+    )
+    .await;
     let out = registry
         .get("wikipedia_fetch")
         .expect("wikipedia_fetch is on the daemon's registry")

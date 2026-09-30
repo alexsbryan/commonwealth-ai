@@ -11,8 +11,8 @@
 
 use std::sync::Arc;
 
-use corpus_index::ingest_port::daemon::IngestPort;
 use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_grants::{GuestGrantStore, GuestSessionBinding, GuestSessionStore};
 use sovereign_mesh::ledger_port::ActivityLedgerPort;
 

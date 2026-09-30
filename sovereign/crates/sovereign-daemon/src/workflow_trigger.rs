@@ -30,10 +30,10 @@ use async_trait::async_trait;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use sovereign_tools::local_corpus::config::{LocalCorpusConfig, WatchedFolderConfig};
 use sovereign_tools::local_corpus::watched::diff::WatchedDiff;
 use sovereign_tools::local_corpus::watched::workflow_trigger::WorkflowTriggerRuntime;
-use corpus_engine_atlas_reader::ports::AtlasPort;
 use sovereign_workflow::Workflow;
 
 use sovereign_workflow_host::{resolve_workflow_source, run_workflow_in_process};

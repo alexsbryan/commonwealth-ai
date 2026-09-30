@@ -147,10 +147,14 @@ impl ToolBundle for CoreTurnTools {
                 )));
                 // Deterministic land-value-tax analytics over parcel corpora —
                 // pre-cited figures the ComplexTask synthesizer quotes verbatim.
-                r = r.record(reg.register_reporting(Box::new(
-                    crate::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(corpus_engine))
+                r = r.record(
+                    reg.register_reporting(Box::new(
+                        crate::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(
+                            corpus_engine,
+                        ))
                         .declared(),
-                )));
+                    )),
+                );
                 // Typed SEC-filing figures with basis + accession, or
                 // first-class refusals (FINANCIAL_CORPORA §6).
                 r = r.record(reg.register_reporting(Box::new(
