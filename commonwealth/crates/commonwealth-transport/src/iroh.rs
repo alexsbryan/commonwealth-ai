@@ -60,11 +60,7 @@ pub use mesh_reach::guest::{
 };
 use mesh_reach::guest::{pump, PumpSide};
 
-pub use mesh_reach::alpn::RPC_ALPN;
-/// ALPN for client-API traffic (Track M: phone → `sovereign-server`).
-/// Distinct from [`ALPN`] so one daemon can later accept both and
-/// route by protocol instead of by port.
-pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
+pub use mesh_reach::alpn::{CLIENT_ALPN, RPC_ALPN};
 
 // The three origin protocols moved to `origin_alpn.rs` (2026-09-13, adding
 // `OFFER_ALPN`): this file is past ARCH §3.2's ceiling and a third ALPN with
