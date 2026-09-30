@@ -99,11 +99,22 @@ pub type HostedCell = std::sync::Arc<sovereign_contracts::reloadable_provider::R
 /// What hosting serve in this process hands svrn: the cell every route
 /// answers from, and the distribution over serve's engine and slot (the warm
 /// orchestrator, the self-manifest refresh, RPC-worker discovery), which svrn
-/// starts with its mesh ports once its mesh is up (pb-serve-distributes).
+/// starts once its mesh is up (pb-serve-distributes).
 pub struct HostedParts {
     pub cell: HostedCell,
-    pub distribute: sovereign_serving_host::rpc_discovery::Distribute,
+    pub distribute: StartMesh,
 }
+
+/// How the distribution starts serve's distribution over this daemon's mesh:
+/// the composition root builds the mesh ports from the daemon it is handed
+/// (pb-serve-ranks-discovery), so svrn names neither the ports nor the
+/// discovery they carry. svrn calls it once, with its mesh router.
+pub type StartMesh = Box<
+    dyn FnOnce(
+            std::sync::Arc<crate::EmbeddedDaemon>,
+            std::sync::Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
+        ) + Send,
+>;
 
 type Compose = Box<
     dyn FnOnce(

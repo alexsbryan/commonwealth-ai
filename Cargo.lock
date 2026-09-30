@@ -13258,6 +13258,7 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-daemon",
  "sovereign-enrichment-catalog",
+ "sovereign-mesh",
  "sovereign-serve",
  "sovereign-turn-client",
  "tempfile",

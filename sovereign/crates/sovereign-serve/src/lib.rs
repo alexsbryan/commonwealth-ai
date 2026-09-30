@@ -108,6 +108,10 @@ pub use sovereign_compute::ner::served_ner;
 /// `/internal/rpc-warm` until the flip (pb-serve-distributes).
 pub use sovereign_compute::distributed_warm::MeshRpcShardWarmer;
 
+/// The mesh a process hosting serve's assembly hands its `distribute`: the
+/// composition root builds them from svrn's daemon (pb-serve-ranks-discovery).
+pub use sovereign_serving_host::rpc_discovery::{MeshNow, MeshPorts, ModelOrigin};
+
 /// The run lock's name inside the data root (`host_kit::RunLock`): one
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
 pub const RUN_LOCK: &str = "serve";

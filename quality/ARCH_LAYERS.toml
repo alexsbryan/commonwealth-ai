@@ -1537,11 +1537,18 @@ max_code_lines = 300
 [[distribution.face]]
 package = "svrn"
 krate = "sovereign-daemon"
-items = ["process::run", "process::HostedServe", "process::HostedParts", "process::HostedCode", "process::CodeMount", "process::HostedIngest", "process::IngestMount"]
+items = ["process::run", "process::HostedServe", "process::HostedParts", "process::HostedCode", "process::CodeMount", "process::HostedIngest", "process::IngestMount", "EmbeddedDaemon", "mesh_http::set_shared_model_host"]
 [[distribution.face]]
 package = "cmnwlth"
 krate = "sovereign-serve"
-items = ["bundles", "assemble", "child_launch", "tracing_filter", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner", "MeshRpcShardWarmer"]
+items = ["bundles", "assemble", "child_launch", "tracing_filter", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner", "MeshRpcShardWarmer", "MeshPorts", "MeshNow", "ModelOrigin"]
+# The mesh ports serve's distribution reads, composed in the stock process from
+# svrn's daemon (pb-serve-ranks-discovery): the reachable bases are the mesh
+# crate's one derivation.
+[[distribution.face]]
+package = "cmnwlth"
+krate = "sovereign-mesh"
+items = ["mesh_discovery::reachable_addresses"]
 # Code's face (pb-code-daemon-exit; F2 (a), phase-b-30; phase-b-33): the one
 # composition `svrn code mcp` serves, mounted on svrn's `:9741/mcp`. In
 # code's library, sovereign-code: sovereign-cli-dev is `backstage` above, and

@@ -279,10 +279,6 @@ pub struct EmbeddedDaemon {
     /// `[iroh] media_origin` + `media_allow`, live: boot seeds it, reload
     /// replaces it, the acceptor reads it per dial — one route, as above.
     media_route: sovereign_mesh::iroh_access::MediaRoute,
-    /// RPC-worker discovery's memory across ticks (sticky endpoints, the
-    /// workers ever confirmed, the endpoint → member directory the warm
-    /// orchestrator reads), serving-host's since pb-serve-distributes.
-    rpc_discovery: Arc<sovereign_serving_host::rpc_discovery::RpcWorkerDiscovery>,
 }
 
 /// What became of the API listeners the serve task binds.
@@ -578,7 +574,6 @@ impl EmbeddedDaemon {
             fabric: std::sync::RwLock::new(None),
             published_apps: commonwealth_media::PublishedApps::default(),
             media_route: sovereign_mesh::iroh_access::MediaRoute::default(),
-            rpc_discovery: Default::default(),
         })
     }
 
@@ -649,7 +644,7 @@ impl EmbeddedDaemon {
     /// Mixed-port mesh deployments need a wire-protocol change (a
     /// `client_port` field on `MemberRecord`) and are tracked separately in
     /// §10.1.
-    pub(crate) async fn resolved_ports(&self) -> (u16, u16) {
+    pub async fn resolved_ports(&self) -> (u16, u16) {
         let cfg = self.setup_config.read().await;
         (cfg.daemon.client_port, cfg.daemon.internal_port)
     }
@@ -2486,12 +2481,6 @@ impl EmbeddedDaemon {
         // The roster decision is Fabric's (DC §4.1 "report reach"); the daemon
         // owns only the "is there a node at all" gate.
         app_state.inner.fabric.eligible_anchors().await
-    }
-
-    /// RPC-worker discovery's memory, shared with the discovery loop through
-    /// its mesh ports (`bootstrap::mesh_ports`, pb-serve-distributes).
-    pub fn rpc_discovery(&self) -> Arc<sovereign_serving_host::rpc_discovery::RpcWorkerDiscovery> {
-        Arc::clone(&self.rpc_discovery)
     }
 
     // ── Private ─────────────────────────────────────────

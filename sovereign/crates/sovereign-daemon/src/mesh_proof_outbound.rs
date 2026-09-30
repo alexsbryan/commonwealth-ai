@@ -44,7 +44,8 @@ impl AppState {
     ///
     /// Builders in crates that cannot name `AppState` take the pair from
     /// [`Self::mesh_proof_stamp`] instead — see `sovereign_grants::ShardManager`
-    /// and `sovereign_serving_host::model_fetch`.
+    /// and serve's model fetch, through the mesh ports the distribution
+    /// composes (pb-serve-ranks-discovery).
     pub async fn stamped(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
         match self.mesh_proof_stamp().await {
             Some(stamp) => {

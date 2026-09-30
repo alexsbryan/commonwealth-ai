@@ -223,7 +223,6 @@ pub use sovereign_core::answering::turn_fidelity;
 pub use sovereign_core::deep_research::research_run_dir;
 pub use sovereign_core::turn_approval;
 pub use sovereign_serving_host::inference_adapter;
-pub use sovereign_serving_host::model_fetch;
 pub use sovereign_serving_host::worker_eligibility;
 
 pub use daemon::{ClientListener, EmbeddedDaemon};

@@ -1024,7 +1024,8 @@ pub(super) async fn run_daemon(
     // The distribution over the engine this process loads (the warm
     // orchestrator, the self-manifest refresh, RPC-worker discovery; built by
     // the loader, `sovereign_compute::distributed_discovery::distribute`),
-    // started over this daemon's mesh ports now that the daemon is bound. A
+    // started over this daemon's mesh ports now that the daemon is bound; the
+    // distribution builds the ports (pb-serve-ranks-discovery). A
     // hosted serve hands one; on the dialing path and on a terminal no
     // engine loads here, so there is nothing to warm and no worker to
     // discover (pb-svrn-dials-serve, pb-serve-distributes).
@@ -1035,7 +1036,7 @@ pub(super) async fn run_daemon(
         "boot: the engine's mesh subsystems (warm orchestrator, RPC-worker discovery) run where the engine loads"
     );
     if let Some(distribute) = distribute {
-        distribute(bootstrap::mesh_ports(&daemon), Arc::clone(&mesh_provider));
+        distribute(Arc::clone(&daemon), Arc::clone(&mesh_provider));
     }
 
     bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), mesh_provider);

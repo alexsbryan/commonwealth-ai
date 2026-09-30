@@ -17,7 +17,7 @@ pub(super) struct ServingBoot {
     /// `distribute`: warm orchestrator, self-manifest refresh, RPC-worker
     /// discovery), started once the mesh is up; `None` where no engine
     /// loads here (the dialing path, a terminal).
-    pub distribute: Option<sovereign_serving_host::rpc_discovery::Distribute>,
+    pub distribute: Option<crate::serve_client::StartMesh>,
     pub reload: crate::provider::ReloadSource,
     pub deferred_daemon: Arc<crate::DeferredDaemon>,
     pub path: crate::serve_client::ServingPath,

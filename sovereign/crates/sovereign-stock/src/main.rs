@@ -58,9 +58,12 @@ fn main() {
                 }
             };
             tracing::info!(target: "serve", listen = %assembly.listen, "hosted serve bound in the stock process");
+            // serve's distribution starts over svrn's mesh, whose ports are
+            // composed here (pb-serve-ranks-discovery).
+            let distribute = assembly.distribute;
             let parts = sovereign_daemon::process::HostedParts {
                 cell: assembly.cell,
-                distribute: assembly.distribute,
+                distribute: Box::new(move |daemon, router| distribute(mesh_ports(&daemon), router)),
             };
             let (routes, run_lock) = (assembly.routes, assembly.run_lock);
             tokio::spawn(async move {
@@ -160,5 +163,59 @@ fn main() {
     #[cfg(not(target_os = "macos"))]
     {
         std::process::exit(exit_code)
+    }
+}
+
+/// svrn's mesh, as serve's discovery loop and warm orchestrator read it
+/// (compute's `distributed_discovery` and `distributed_warm`,
+/// pb-serve-distributes), composed here where both programs meet
+/// (pb-serve-ranks-discovery): the roster, transport and identity of a Running
+/// daemon, `None` otherwise; the host role published for `/v1/mesh/status`;
+/// the discovery memory the warm orchestrator resolves endpoints through, one
+/// per process; where this daemon serves model files (its internal port, and
+/// the reachable bases on it); and its mesh proof.
+fn mesh_ports(
+    daemon: &std::sync::Arc<sovereign_daemon::EmbeddedDaemon>,
+) -> sovereign_serve::MeshPorts {
+    use sovereign_serve::{MeshNow, MeshPorts, ModelOrigin};
+    use std::sync::Arc;
+    let reader = Arc::clone(daemon);
+    let origin = Arc::clone(daemon);
+    let prover = Arc::clone(daemon);
+    MeshPorts {
+        model_origin: Arc::new(move || {
+            let daemon = Arc::clone(&origin);
+            Box::pin(async move {
+                let (_client_port, internal_port) = daemon.resolved_ports().await;
+                ModelOrigin {
+                    internal_port,
+                    bases: sovereign_mesh::mesh_discovery::reachable_addresses(internal_port)
+                        .into_iter()
+                        .map(|a| format!("http://{a}"))
+                        .collect(),
+                }
+            })
+        }),
+        proof: Arc::new(move || {
+            let daemon = Arc::clone(&prover);
+            Box::pin(async move {
+                let stamp = daemon.app_state().await?.mesh_proof_stamp().await?;
+                let (name, value) = stamp.pair();
+                Some((name, value.to_string()))
+            })
+        }),
+        mesh: Arc::new(move || {
+            let daemon = Arc::clone(&reader);
+            Box::pin(async move {
+                let app = daemon.app_state().await?;
+                Some(MeshNow {
+                    roster: Arc::clone(&app.inner.fabric.membership),
+                    transport: app.peer_transport(),
+                    self_id: app.inner.fabric.identity.current(),
+                })
+            })
+        }),
+        on_host_role: Arc::new(sovereign_daemon::mesh_http::set_shared_model_host),
+        discovery: Arc::default(),
     }
 }
