@@ -137,3 +137,60 @@ fn an_unspecified_listener_is_reached_on_loopback() {
         "127.0.0.1:7001".parse::<SocketAddr>().unwrap()
     );
 }
+
+/// A stand-in cw-rails: `doc(Some(PEER))` on its roster route, and a reach
+/// door that answers every Inference ask with one bridge, the class it was
+/// asked for in the label.
+async fn stub_rails() -> String {
+    use axum::extract::Query;
+    async fn reach(Query(q): Query<mesh_reach::door::ReachQuery>) -> axum::Json<mesh_reach::door::Reach> {
+        axum::Json(mesh_reach::door::Reach {
+            peer: "worker".into(),
+            node_id: q.peer,
+            class: q.class.clone(),
+            endpoints: vec![mesh_reach::PeerEndpoint {
+                base_url: "http://127.0.0.1:4242".into(),
+                label: format!("stub:{}", q.class),
+            }],
+        })
+    }
+    let app = axum::Router::new()
+        .route(
+            "/v1/mesh/status",
+            axum::routing::get(|| async { axum::Json(doc(Some(PEER))) }),
+        )
+        .route(mesh_reach::door::REACH_PATH, axum::routing::get(reach));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    base
+}
+
+/// A standalone serve ranks the roster's peers, each at the bridge cw-rails'
+/// reach door hands for the Inference class, and never itself; its node id
+/// is cw-rails'. Failing inputs: a venue for this node, or a base URL that
+/// did not come through the door.
+#[tokio::test]
+async fn rails_venues_are_the_rosters_peers_reached_through_cw_rails() {
+    use sovereign_contracts::venue::VenueSource;
+    use sovereign_contracts::venue_host::VenueHost;
+    let venues = RailsVenues::new(RailsRoster::new(stub_rails().await));
+    let got = venues.candidates().await;
+    assert_eq!(got.len(), 1, "one peer, and never this node: {got:?}");
+    assert_eq!(got[0].node_id, NodeId::from_hex(PEER).unwrap());
+    assert_eq!(got[0].base_urls, vec!["http://127.0.0.1:4242/v1".to_string()]);
+    assert!(!got[0].pinned_transport);
+    assert_eq!(venues.local_node_id().await, NodeId::from_hex(ME));
+    assert!(venues.ledger_emitter().await.is_none());
+}
+
+/// No cw-rails answering: no peer venue and no node id, so the router
+/// serves this node's own models.
+#[tokio::test]
+async fn rails_venues_with_no_cw_rails_rank_no_peer() {
+    use sovereign_contracts::venue::VenueSource;
+    use sovereign_contracts::venue_host::VenueHost;
+    let venues = RailsVenues::new(RailsRoster::new("http://127.0.0.1:9"));
+    assert!(venues.candidates().await.is_empty());
+    assert!(venues.local_node_id().await.is_none());
+}

@@ -82,13 +82,24 @@ pub(crate) async fn serve(args: ServeArgs) -> i32 {
     // over its roster and reach, the worker's rpc-warm, and serve's origins
     // in its origin table (pb-serve-distributes-standalone). With no cw-rails
     // answering, every discovery tick scans nothing and the registrations
-    // retry; the OpenAI wire serves as before.
+    // retry; the OpenAI wire serves this node's own models.
     let local = cell as Arc<dyn InferenceProvider>;
     let roster = crate::rails_mesh::RailsRoster::new(rails_base.clone());
     info!(target: "serve", rails = %rails_base, "distribution over cw-rails' roster and reach");
+    // serve ranks (pb-serve-ranks): the node's one router, over its cell and
+    // cw-rails' roster's peers, and serve's OpenAI face answers through it.
+    // A peer's turn arrives on the member client below, over the cell, and
+    // is never re-ranked here.
+    let venues = Arc::new(crate::rails_mesh::RailsVenues::new(roster.clone()));
+    let ranking = crate::rank(Arc::clone(&local), venues.clone(), venues).await;
+    let before = routes.len();
+    routes.retain(|b| b.name() != crate::OPENAI_BUNDLE);
+    let replaced = before - routes.len();
+    routes.push(crate::openai_face(Arc::clone(&ranking.provider)));
+    info!(target: "serve", replaced, "serve's OpenAI face ranks over cw-rails' roster");
     distribute(
         crate::rails_mesh::mesh_ports(roster.clone(), bound_addr),
-        crate::rails_mesh::solo_router(Arc::clone(&local)),
+        ranking.router,
     );
     routes.push(crate::rpc_warm::bundle(
         servable,

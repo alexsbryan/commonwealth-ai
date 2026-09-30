@@ -14,6 +14,9 @@
 //!   member client on `cwth/client/0`, pb-serve-ranks), through the one
 //!   register/renew loop, so the flip turns none of them off.
 //!
+//! - [`RailsVenues`] is what a standalone serve ranks: that roster's peers,
+//!   reached through cw-rails' reach door (pb-serve-ranks).
+//!
 //! The stock binary hands serve the daemon's own mesh until the flip
 //! (phase-b-33) and runs none of this.
 
@@ -297,37 +300,75 @@ pub fn mesh_ports(roster: RailsRoster, listen: SocketAddr) -> MeshPorts {
     }
 }
 
-/// The router a standalone serve hands its distribution: over serve's own
-/// provider, with no peer venues. The distribution only refreshes its
-/// self-manifest (`spawn_self_manifest_refresh`); serve ranks no peer until
-/// pb-serve-ranks.
-pub fn solo_router(
-    local: Arc<dyn sovereign_contracts::InferenceProvider>,
-) -> Arc<sovereign_serving_host::peer_inference::InferenceRouter> {
-    Arc::new(
-        sovereign_serving_host::peer_inference::InferenceRouter::builder(local)
-            .candidates(Arc::new(NoPeers))
-            .host(Arc::new(NoPeers))
-            .manifest(Arc::new(
-                sovereign_serving_host::slot_manifest::CoreSlotManifest,
-            ))
-            .build(),
-    )
+/// The venues a standalone serve ranks, and the host its router asks: cw-rails'
+/// roster (the one reader, [`RailsRoster`]), each peer reached through
+/// cw-rails' reach door on the Inference class, which lands on the peer's
+/// member client (`cwth/client/0`). Which members, and each as a venue, is
+/// the one decision the svrn daemon's roster applies too
+/// (`membership::inference_peers`, `MembershipEntry::inference_venue`).
+pub struct RailsVenues {
+    roster: RailsRoster,
+    transport: RailsTransport,
 }
 
-/// No peer venue and no mesh identity: what a standalone serve's router
-/// routes to besides its own provider.
-struct NoPeers;
-
-#[async_trait]
-impl sovereign_contracts::venue::VenueSource for NoPeers {
-    async fn candidates(&self) -> Vec<sovereign_contracts::venue::InferenceVenue> {
-        Vec::new()
+impl RailsVenues {
+    pub fn new(roster: RailsRoster) -> Self {
+        let transport = RailsTransport::new(roster.base());
+        Self { roster, transport }
     }
 }
 
 #[async_trait]
-impl sovereign_contracts::venue_host::VenueHost for NoPeers {}
+impl sovereign_contracts::venue::VenueSource for RailsVenues {
+    async fn candidates(&self) -> Vec<sovereign_contracts::venue::InferenceVenue> {
+        let reading = match self.roster.read().await {
+            Ok(r) => r,
+            Err(e) => {
+                // The port carries no error; a router reads "no peers" and
+                // serves locally, and the trace names why.
+                debug!(target: TARGET, error = %e, "rails venues: roster unreadable, no peer venues");
+                return Vec::new();
+            }
+        };
+        let members = sovereign_contracts::membership::inference_peers(reading.members, reading.self_id);
+        let mut venues = Vec::with_capacity(members.len());
+        for m in members {
+            let base_urls: Vec<String> = self
+                .transport
+                .endpoints(&m.dial, mesh_reach::TrafficClass::Inference)
+                .await
+                .into_iter()
+                .map(|ep| format!("{}/v1", ep.base_url))
+                .collect();
+            venues.push(m.inference_venue(base_urls));
+        }
+        debug!(target: TARGET, venues = venues.len(), "rails venues: peers from cw-rails' roster");
+        venues
+    }
+}
+
+#[async_trait]
+impl sovereign_contracts::venue_host::VenueHost for RailsVenues {
+    /// cw-rails' own id: this node's identity on the mesh.
+    async fn local_node_id(&self) -> Option<NodeId> {
+        match self.roster.read().await {
+            Ok(r) => Some(r.self_id),
+            Err(e) => {
+                debug!(target: TARGET, error = %e, "rails venues: no node id, cw-rails' roster is unreadable");
+                None
+            }
+        }
+    }
+
+    /// serve holds no contribution ledger: the fact is not recorded, and
+    /// says so.
+    async fn ledger_emitter(
+        &self,
+    ) -> Option<Arc<dyn sovereign_contracts::venue_host::LedgerEmitter>> {
+        debug!(target: TARGET, "rails venues: no contribution ledger here, InferenceReceived is not recorded");
+        None
+    }
+}
 
 /// Where a peer on this host reaches serve's listener: an unspecified bind
 /// is reached on loopback.
