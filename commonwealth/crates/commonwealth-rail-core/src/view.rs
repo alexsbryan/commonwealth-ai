@@ -53,13 +53,24 @@ impl View {
         mark: u64,
         ops: impl IntoIterator<Item = &'a Op<SignedOp>>,
     ) -> Self {
+        let pairs: Vec<(u64, String)> = ops
+            .into_iter()
+            .filter(|op| op.actor == actor && op.kind.seq >= from && op.kind.seq <= mark)
+            .map(|op| (op.kind.seq, crate::admit::derived_id(op).to_string()))
+            .collect();
+        Self::fold_pairs(actor, from, mark, &pairs)
+    }
+
+    /// The fold itself, over `(seq, derived-id)` pairs — the formula the
+    /// module docs state and the surface `fixtures/view_golden.json` pins
+    /// for a second implementation. Ids at one seq are sorted and deduped;
+    /// pairs outside `[from, mark]` are ignored. `of` derives the ids and
+    /// delegates here, so the spec formula has exactly one home.
+    pub fn fold_pairs(actor: &str, from: u64, mark: u64, pairs: &[(u64, String)]) -> Self {
         let mut by_seq: BTreeMap<u64, BTreeSet<String>> = BTreeMap::new();
-        for op in ops {
-            if op.actor == actor && op.kind.seq >= from && op.kind.seq <= mark {
-                by_seq
-                    .entry(op.kind.seq)
-                    .or_default()
-                    .insert(crate::admit::derived_id(op).to_string());
+        for (seq, id) in pairs {
+            if *seq >= from && *seq <= mark {
+                by_seq.entry(*seq).or_default().insert(id.clone());
             }
         }
         let mut h = ContentHash::of(&[VIEW_DOMAIN, b"\0", actor.as_bytes()].concat());
@@ -294,5 +305,78 @@ mod tests {
         let wire = serde_json::to_value(&d).unwrap();
         assert_eq!(wire["v"], 2);
         assert_eq!(serde_json::from_value::<Digest>(wire).unwrap(), d);
+    }
+
+    /// The fixture is the SHAREABLE artifact — the spec-with-vectors a
+    /// second implementation checks against without reading a line of Rust
+    /// (the conformance proof the golden vectors exist for;
+    /// `scripts/view_conformance.py` is the second implementation, written
+    /// from the formula above). This test pins the fixture to the reference
+    /// so the two cannot drift; regenerate with
+    /// `cargo test --lib emit_view_fixture -- --ignored --nocapture`.
+    #[test]
+    fn the_view_fixture_matches_the_reference() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../fixtures/view_golden.json"))
+                .expect("the fixture is JSON");
+        for case in fixture["cases"].as_array().expect("cases") {
+            let actor = case["actor"].as_str().unwrap().to_string();
+            let from = case["from"].as_u64().unwrap();
+            let mark = case["mark"].as_u64().unwrap();
+            let pairs: Vec<(u64, String)> = case["ops"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| (p[0].as_u64().unwrap(), p[1].as_str().unwrap().to_string()))
+                .collect();
+            let head = View::fold_pairs(&actor, from, mark, &pairs).head;
+            assert_eq!(
+                head,
+                case["head"].as_str().unwrap(),
+                "case {} drifted from the fixture",
+                case["name"]
+            );
+        }
+    }
+
+    /// The fixture generator. Prints the JSON to paste into
+    /// `fixtures/view_golden.json`; kept so the freeze is reproducible
+    /// (RFC style: generated once, then pinned).
+    #[test]
+    #[ignore = "fixture generator — run with --ignored --nocapture"]
+    fn emit_view_fixture() {
+        let actor = crate::actor_of(&key(1));
+        let one = signed(&key(1), 100, 0, record("x"));
+        let two = signed(&key(1), 101, 1, record("x"));
+        let left = signed(&key(1), 102, 2, record("left"));
+        let right = signed(&key(1), 102, 2, record("right"));
+        let mut cases = Vec::new();
+        for (name, from, mark, ops) in [
+            ("empty window", 0u64, 0u64, vec![]),
+            ("one op", 0, 0, vec![&one]),
+            ("two ops", 0, 1, vec![&one, &two]),
+            ("offset window", 1, 1, vec![&one, &two]),
+            (
+                "a fork at one seq — ids sorted and deduped",
+                0,
+                2,
+                vec![&one, &left, &right, &two, &left],
+            ),
+        ] {
+            let pairs: Vec<(u64, String)> =
+                ops.iter().map(|o| (o.kind.seq, o.id.to_string())).collect();
+            let head = View::fold_pairs(&actor, from, mark, &pairs).head;
+            cases.push(serde_json::json!({
+                "name": name, "actor": actor, "from": from, "mark": mark,
+                "ops": pairs, "head": head,
+            }));
+        }
+        let doc = serde_json::json!({
+            "domain": "cwth/view/1",
+            "generated": "2026-09-24 from the reference implementation — RFC style: generated once, then pinned",
+            "formula": "h0 = BLAKE3(domain || 0x00 || actor); hs = BLAKE3(h{s-1} || 0x00 || be64(s) || 0x00 || id), ids at s sorted then deduped, s in [from, mark]",
+            "cases": cases,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc).unwrap());
     }
 }
