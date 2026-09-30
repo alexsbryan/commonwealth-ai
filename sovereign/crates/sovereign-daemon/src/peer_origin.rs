@@ -105,7 +105,11 @@ impl Drop for PeerOriginHandle {
 /// Register [`registration`] with cw-rails at `rails_base` and keep it
 /// registered while the handle lives, publishing each claim's tie into
 /// `tie`. A second call on the same cell registers nothing and says so.
-pub fn spawn(rails_base: String, internal_port: u16, tie: &PeerOriginTie) -> Option<PeerOriginHandle> {
+pub fn spawn(
+    rails_base: String,
+    internal_port: u16,
+    tie: &PeerOriginTie,
+) -> Option<PeerOriginHandle> {
     let (tx, rx) = watch::channel(None);
     if tie.install(rx).is_err() {
         tracing::warn!(target: TRACE_TARGET,
