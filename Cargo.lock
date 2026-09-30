@@ -12742,6 +12742,7 @@ dependencies = [
  "sovereign-workflow",
  "sovereign-workflow-host",
  "subtle",
+ "sysinfo 0.35.2",
  "tar",
  "tempfile",
  "thiserror 2.0.18",

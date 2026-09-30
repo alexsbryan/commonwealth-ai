@@ -591,7 +591,10 @@ fn current_free_disk_bytes() -> u64 {
     // Aggregating across all mounted disks matches what the gossiped
     // `HardwareProfile.free_storage_gb` reports — keeping the desktop
     // UI's "X of Y free" in sync with the value the scheduler sees.
-    commonwealth_discovery::hardware::read_disk_free_bytes()
+    // svrn's own read (fp-9): the same sum as commonwealth-discovery's
+    // `hardware::read_disk_free_bytes`, over the same sysinfo version.
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    disks.list().iter().map(|d| d.available_space()).sum()
 }
 
 /// `GET /internal/storage/budget` — current budget, observed usage,
