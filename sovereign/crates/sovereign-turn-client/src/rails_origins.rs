@@ -84,7 +84,28 @@ pub async fn keep_registered(
     ttl_secs: u64,
     every: Duration,
 ) {
+    keep_registered_tied(rails_base, registration, ttl_secs, every, None).await
+}
+
+/// [`keep_registered`], publishing the live claim's tie on `tie`: `Some`
+/// while cw-rails holds the claim, `None` from a refused renew until the
+/// next registration takes. An origin that reads `x-mesh-*` believes it only
+/// on a forward carrying this tie (`kernel_types::member::ORIGIN_TIE_HEADER`).
+/// The tie is a secret: it goes to the channel and nowhere else, never to a
+/// trace.
+pub async fn keep_registered_tied(
+    rails_base: String,
+    registration: OriginRegistration,
+    ttl_secs: u64,
+    every: Duration,
+    tie: Option<tokio::sync::watch::Sender<Option<String>>>,
+) {
     let slot = registration.alpn.clone();
+    let publish = |value: Option<String>| {
+        if let Some(tx) = &tie {
+            tx.send_replace(value);
+        }
+    };
     let mut claim: Option<String> = None;
     let mut told_absent = false;
     loop {
@@ -93,7 +114,9 @@ pub async fn keep_registered(
                 Ok(c) => {
                     info!(target: TRACE_TARGET, claim = %c.claim_id, %slot,
                           prefixes = ?registration.prefixes, port = registration.port,
+                          tie_published = tie.is_some(),
                           "origin registered with cw-rails");
+                    publish(Some(c.tie));
                     claim = Some(c.claim_id);
                     told_absent = false;
                 }
@@ -110,6 +133,7 @@ pub async fn keep_registered(
                 if let Err(e) = renew_origin(&rails_base, id, ttl_secs).await {
                     info!(target: TRACE_TARGET, claim = %id, %slot, error = %e,
                           "the origin's renew was refused — registering again");
+                    publish(None);
                     claim = None;
                     continue;
                 }
