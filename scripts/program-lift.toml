@@ -383,6 +383,64 @@ steps = [
   { do = "count", file = "${SANDBOX}/serve-b-2.log", pattern = "discovered mesh RPC worker", var = "REDISCOVERED", min = 1, fail = "the restarted serve answered without rediscovering A's worker (see ${SANDBOX}/serve-b-2.log)" },
 ]
 
+# ── serve-ranks — a turn serve ranks onto a peer, carried by cw-rails ───────
+# pb-serve-ranks' PROOF: two standalone serves, no svrn daemon, each beside
+# its own cw-rails on a mesh the run founds (loopback, --local-only, as
+# serve-mesh). A holds a real model; B holds only the mock engine, so a turn
+# on B naming A's model can be answered by A alone. B's serve ranks it (its
+# router over cw-rails' roster), B's cw-rails' reach door resolves A on the
+# Inference class, and A's cw-rails forwards `cwth/client/0` to A's member
+# client. Then B's serve reloads, and the same turn still reaches A: the one
+# router survives a reload. Real weights on A, so run it in-tree:
+# `scripts/program-lift.sh --run-only serve-ranks`. A host with no model on
+# disk abstains.
+[lift.serve-ranks]
+package = "cmnwlth"
+seeds = ["sovereign-serve", "commonwealth-rails"]
+build = ["-p", "sovereign-serve", "--bin", "sovereign-serve", "-p", "commonwealth-rails", "--bin", "cw-rails"]
+binary = "debug/sovereign-serve"
+
+[lift.serve-ranks.run]
+pass = "B's serve ranked a turn naming A's model '${A_MODEL}' onto A (${ROUTED} turn(s) served_by A in B's routing outcomes), B's cw-rails resolved A on the Inference class (${REACHED}), A's cw-rails took ${DIALS} dial(s) on cwth/client/0, and A answered '${CHAT}'; after B's serve reloaded (HTTP ${RELOADED}), the same turn still reached A ('${CHAT2}'; ${REROUTED} turns served_by A in all)"
+steps = [
+  { do = "input", var = "MODEL", env = "SERVE_RANKS_MODEL", default = "${TARGET}/../sovereign/models/Qwen3.5-0.8B-UD-Q6_K_XL.gguf" },
+  { do = "input", var = "EMBED", env = "SERVE_RANKS_EMBED", default = "${TARGET}/../sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf" },
+  { do = "exec", argv = ["test", "-f", "${MODEL}"], log = "model.log", on_error = "abstain", fail = "no GGUF for A at ${MODEL} (set SERVE_RANKS_MODEL)" },
+  { do = "exec", argv = ["test", "-f", "${EMBED}"], log = "embed.log", on_error = "abstain", fail = "no embedding GGUF for A at ${EMBED} (set SERVE_RANKS_EMBED)" },
+  { do = "input", var = "RAILS", value = "${TARGET}/debug/cw-rails" },
+  { do = "ports", vars = ["A_RAILS", "B_RAILS", "A_SERVE", "B_SERVE"] },
+  { do = "write", path = "${SANDBOX}/rails-a/rails.toml", text = "name = \"serve-ranks-a\"\nlisten = ${A_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "found", "serve-ranks", "--data-dir", "${SANDBOX}/rails-a"], log = "found.log", fail = "cw-rails could not found the mesh (see ${SANDBOX}/found.log)" },
+  { do = "spawn", id = "rails-a", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/rails-a"], log = "rails-a.log", env = { RUST_LOG = "info,rails=debug" } },
+  { do = "poll", url = "http://127.0.0.1:${A_RAILS}/v1/mesh/status", path = "join_link", var = "INVITE", doc = "a", timeout = 60, alive = "rails-a", fail = "A's cw-rails served no invite within 60s (see ${SANDBOX}/rails-a.log)" },
+  { do = "write", path = "${SANDBOX}/rails-b/rails.toml", text = "name = \"serve-ranks-b\"\nlisten = ${B_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/rails-b", "--name", "serve-ranks-b"], log = "join.log", fail = "B's cw-rails was not admitted (see ${SANDBOX}/join.log)" },
+  { do = "spawn", id = "rails-b", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/rails-b"], log = "rails-b.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/status", path = "members[name=serve-ranks-a].status", var = "A_ON_B", timeout = 60, alive = "rails-b", fail = "A never reached B's cw-rails roster within 60s (see ${SANDBOX}/rails-b.log)" },
+  # A holds the real model; its member client registers on its cw-rails.
+  { do = "write", path = "${SANDBOX}/serve-a/config.toml", text = "[models]\nprimary = \"${MODEL}\"\nembed = \"${EMBED}\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${A_RAILS}\"\n" },
+  { do = "spawn", id = "serve-a", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-a", "--listen", "127.0.0.1:${A_SERVE}"], log = "serve-a.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${A_SERVE}/v1/models", path = "data[owned_by=local].id", var = "A_MODEL", timeout = 180, alive = "serve-a", fail = "A's serve listed no model within 180s (see ${SANDBOX}/serve-a.log)" },
+  # B holds only the mock: A's model is not B's to answer.
+  { do = "write", path = "${SANDBOX}/serve-b/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/serve-b/mock.gguf\"\nembed = \"${SANDBOX}/serve-b/mock-embed.gguf\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${B_RAILS}\"\n" },
+  { do = "spawn", id = "serve-b", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-b", "--listen", "127.0.0.1:${B_SERVE}"], log = "serve-b.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${B_SERVE}/health", path = "state", var = "B_HEALTH", timeout = 60, alive = "serve-b", fail = "B's serve never answered /health (see ${SANDBOX}/serve-b.log)" },
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "${A_MODEL}", max_tokens = 16, messages = [{ role = "user", content = "Say hello." }] }, path = "choices.message.content", var = "CHAT", retry = "120", timeout = 120, alive = "serve-b", fail = "B's serve never answered a turn naming A's model within 120s: ${BODY} (see ${SANDBOX}/serve-b.log, rails-b.log, rails-a.log)" },
+  { do = "require", value = "${CHAT}", match = "^(?!mock response$)", fail = "B's own mock answered a turn naming A's model: ${CHAT}" },
+  { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "routing outcome.*served_by.*peer:serve-ranks-a", var = "ROUTED", min = 1, fail = "B answered without its router routing the turn to A (see ${SANDBOX}/serve-b.log)" },
+  { do = "count", file = "${SANDBOX}/rails-b.log", pattern = "reach door: resolved.*inference", var = "REACHED", min = 1, fail = "B's cw-rails never resolved a peer on the Inference class (see ${SANDBOX}/rails-b.log)" },
+  # A's side, which B cannot author: A's cw-rails took the dial on the
+  # member client's ALPN.
+  { do = "count", file = "${SANDBOX}/rails-a.log", pattern = "acceptor: dial.*cwth/client/0", var = "DIALS", min = 1, fail = "A's cw-rails took no dial on cwth/client/0 (see ${SANDBOX}/rails-a.log)" },
+  # B's serve reloads (the cell swaps under its one router); the same turn
+  # still reaches A.
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/engine/reload", json = {}, status_var = "RELOADED", timeout = 60, fail = "B's serve did not answer the reload" },
+  { do = "require", value = "${RELOADED}", match = "^2", fail = "B's serve refused the reload (HTTP ${RELOADED}): ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "${A_MODEL}", max_tokens = 16, messages = [{ role = "user", content = "Say hello again." }] }, path = "choices.message.content", var = "CHAT2", retry = "60", timeout = 120, alive = "serve-b", fail = "after B's reload, a turn naming A's model was not answered within 60s: ${BODY} (see ${SANDBOX}/serve-b.log)" },
+  { do = "require", value = "${CHAT2}", match = "^(?!mock response$)", fail = "after B's reload, B's own mock answered a turn naming A's model: ${CHAT2}" },
+  { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "routing outcome.*served_by.*peer:serve-ranks-a", var = "REROUTED", min = 2, fail = "after B's reload, its router did not route the turn to A (see ${SANDBOX}/serve-b.log)" },
+]
+
 # ── code — the LSP for agents ───────────────────────────────────────────────
 [lift.code]
 package = "code"
