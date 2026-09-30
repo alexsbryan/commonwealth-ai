@@ -18,8 +18,8 @@
 
 use std::path::PathBuf;
 
-use corpus_engine::enrichment::atlas::atoms::AtomType;
 use sovereign_tools::atlas_view::{AtomFilter, FileAtlasReader, PageCursor};
+use understanding_vocab::atoms::AtomType;
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
 

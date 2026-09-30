@@ -12,16 +12,16 @@
 
 use std::collections::HashSet;
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, Entity};
-use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
-use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, read_atlas_edges};
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use sovereign_tools::knowledge_view::splice_extension::{
     load_chunk_timestamps, relational_notes_for_entity,
 };
 use sovereign_tools::knowledge_view::timeline::{
     assemble_timelines_from_atlas, Interaction, InteractionTimeline, TimelineEntityKind,
 };
+use understanding_vocab::atoms::{AtomEnvelope, Entity};
+use understanding_vocab::edges::{Edge, EdgeType};
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges};
+use understanding_vocab::taxonomy::EntityType;
 
 use super::args::parse_args;
 use super::render::{display_path, format_datetime};

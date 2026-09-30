@@ -22,8 +22,8 @@
 
 use std::sync::Arc;
 
-use corpus_engine::recipe::CatalogConfig;
 use corpus_engine::CorpusEngine;
+use corpus_index::recipe::CatalogConfig;
 use corpus_index::types::{CorpusKind, EmbedFn, ScoredChunk};
 use sovereign_tools::catalog::{partition_hits_by_kind, CatalogResolutionContext};
 use sovereign_tools::catalog_ingest::{

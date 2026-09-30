@@ -7,13 +7,13 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
-use corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter;
-use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
+use corpus_engine_atlas_reader::context_filter::AtlasContextFilter;
 use corpus_index::types::ScoredChunk;
 use sovereign_contracts::probe::{AtlasProbe, PoolEvidence, ProbeQuestion, SeedMode};
 use sovereign_core::atlas_context::{
     atlas_navigate_ann, atlas_top_k_across, cosine, AtlasContext, AtlasGraph,
 };
+use understanding_vocab::read::ATLAS_DIRNAME;
 
 use super::pool_chunk;
 use crate::chat_cmd::bootstrap::ChatSession;
@@ -603,7 +603,7 @@ pub(crate) async fn probe(
 }
 
 /// Load an atlas corpus's embedded context bag through the ONE loader,
-/// `corpus_engine::enrichment::atlas::context_loader::load_atlas_context` (ontology-v1
+/// `corpus_engine_atlas_reader::context_loader::load_atlas_context` (ontology-v1
 /// P0.2 moved the body there so the daemon can seed a fresh atlas
 /// in-process). This wrapper supplies only what the CLI has and the library
 /// must not assume: the inference provider and the atlas dir under
@@ -616,7 +616,7 @@ pub async fn load_atlas_context(
 ) -> Result<AtlasContext, String> {
     let atlas_dir = paths::index_root(atlas_corpus_id).join(ATLAS_DIRNAME);
     let embed = sovereign_core::embed_fn::inference_to_embed_query_fn(inference.clone());
-    corpus_engine::enrichment::atlas::context_loader::load_atlas_context(
+    corpus_engine_atlas_reader::context_loader::load_atlas_context(
         &embed,
         &atlas_dir,
         atlas_corpus_id,
@@ -700,7 +700,7 @@ pub(crate) async fn load_atlases(
         match AtlasGraph::load_from_disk(
             &ctx.atlas_corpus_id,
             &atlas_dir,
-            corpus_engine::enrichment::atlas::context::read_section_rows(&atlas_dir),
+            corpus_engine_atlas_reader::context::read_section_rows(&atlas_dir),
         ) {
             Ok(g) => graphs.push(g),
             Err(e) => eprintln!("warn: atlas-graph load `{}`: {e}", ctx.atlas_corpus_id),

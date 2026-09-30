@@ -11,11 +11,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, Entity};
-use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
-use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, read_atlas_edges};
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use serde_json::json;
+use understanding_vocab::atoms::{AtomEnvelope, Entity};
+use understanding_vocab::edges::{Edge, EdgeType};
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges};
+use understanding_vocab::taxonomy::EntityType;
 
 use sovereign_tools::knowledge_view::splice_extension::relational_notes_for_entity;
 
@@ -500,9 +500,9 @@ fn emit_json(rows: &[EntityRow], seen: &[std::path::PathBuf], missing: &[std::pa
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::atoms::{AtomId, ChunkRef};
-    use corpus_engine::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
-    use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
+    use understanding_vocab::atoms::{AtomId, ChunkRef};
+    use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+    use understanding_vocab::taxonomy::EnrichmentDepth;
 
     fn entity(idx: usize, name: &str, t: EntityType, description: &str) -> Entity {
         Entity {

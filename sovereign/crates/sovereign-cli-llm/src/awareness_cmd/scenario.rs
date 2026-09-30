@@ -24,9 +24,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
-use corpus_engine::enrichment::atlas::writer::read_atlas_atoms;
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use corpus_engine::enrichment::pipeline::ChatPrompt;
 use corpus_engine::InferenceFn;
 use serde::Deserialize;
@@ -38,6 +35,9 @@ use sovereign_tools::knowledge_view::splice_extension::{
 use sovereign_tools::knowledge_view::timeline::{
     assemble_timelines_from_atlas, InteractionTimeline,
 };
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::read_atlas_atoms;
+use understanding_vocab::taxonomy::EntityType;
 
 use super::args::parse_args;
 use super::golden::{

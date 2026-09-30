@@ -56,8 +56,8 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use corpus_engine::enrichment::tiered::ConvBucket;
 use corpus_index::index::CorpusIndex;
+use corpus_index::ingest_port::tiered::ConvBucket;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::DocumentTypeTag;
 use sovereign_store::sqlite::SqliteStateStore;

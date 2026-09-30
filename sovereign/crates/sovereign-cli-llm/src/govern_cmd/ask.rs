@@ -18,7 +18,7 @@
 
 use std::io::Write;
 
-use corpus_engine::enrichment::{GovernanceOpKind, RuleStatus};
+use corpus_engine_atlas_reader::governance::{GovernanceOpKind, RuleStatus};
 use futures::StreamExt as _;
 use oplog::Oplog;
 
@@ -144,8 +144,8 @@ async fn render_sources(
     }
     let index_root = crate::enrich_cmd::paths::index_root(corpus_id);
     let chunk_to_section =
-        corpus_engine::enrichment::governance_view::chunk_to_section_map(&index_root);
-    let titles = corpus_engine::enrichment::governance_view::section_titles(&index_root);
+        corpus_engine_atlas_reader::governance_view::chunk_to_section_map(&index_root);
+    let titles = corpus_engine_atlas_reader::governance_view::section_titles(&index_root);
 
     // Distinct sections in retrieval-rank order. The persisted metadata is
     // relevance-ranked — the rule most relevant to the question comes first —
@@ -231,7 +231,7 @@ fn render_supersession_provenance(corpus_id: &str, answer: &str) {
         Ok(o) => o,
         Err(_) => return,
     };
-    let titles = corpus_engine::enrichment::governance_view::section_titles(
+    let titles = corpus_engine_atlas_reader::governance_view::section_titles(
         crate::enrich_cmd::paths::index_root(corpus_id),
     );
     let answer_lc = answer.to_lowercase();

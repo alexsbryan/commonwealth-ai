@@ -126,6 +126,8 @@ understanding-vocab = { workspace = true, features = ["read"] }
 # The retrieval read-port leaf: index/corpus/types/filters rows this host
 # reads directly instead of via corpus-engine's historical re-exports.
 corpus-index = { workspace = true }
+# The atlas read leaf: governance, context bag and section rows.
+corpus-engine-atlas-reader = { workspace = true }
 oplog = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }

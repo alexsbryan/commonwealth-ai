@@ -29,14 +29,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, Entity};
-use corpus_engine::enrichment::atlas::edges::Edge;
-use corpus_engine::enrichment::atlas::writer::{
-    read_atlas_atoms, read_atlas_edges, write_atlas, ATLAS_DIRNAME,
-};
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
+use corpus_engine::enrichment::atlas::writer::write_atlas;
 use corpus_engine::enrichment::pipeline::ChatPrompt;
 use serde_json::json;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, Entity};
+use understanding_vocab::edges::Edge;
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
+use understanding_vocab::taxonomy::EntityType;
 
 use super::args::parse_args;
 use super::render::display_path;
@@ -617,8 +616,8 @@ mod tests {
 
     #[test]
     fn build_prompt_includes_chunk_and_participant_counts() {
-        use corpus_engine::enrichment::atlas::atoms::ChunkRef;
-        use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
+        use understanding_vocab::atoms::ChunkRef;
+        use understanding_vocab::taxonomy::EnrichmentDepth;
 
         let entity = Entity {
             id: AtomId::entity(1),

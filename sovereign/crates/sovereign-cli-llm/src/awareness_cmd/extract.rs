@@ -18,17 +18,16 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::atoms::{AtomId, Entity};
-use corpus_engine::enrichment::atlas::edges::Edge;
-use corpus_engine::enrichment::atlas::writer::{
-    read_atlas_atoms, read_atlas_edges, write_atlas, ATLAS_DIRNAME,
-};
+use corpus_engine::enrichment::atlas::writer::write_atlas;
 use corpus_engine::enrichment::domain::Domain;
 use corpus_engine::enrichment::domains::conversational::ConversationalDomain;
 use corpus_engine::enrichment::domains::personal::PersonalDomain;
 use corpus_engine::enrichment::entity_extraction::{run_entity_extraction, EntityExtractionResult};
 use corpus_engine::enrichment::EnrichmentProgress;
 use corpus_index::index::StoredChunk;
+use understanding_vocab::atoms::{AtomId, Entity};
+use understanding_vocab::edges::Edge;
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
 
 use sovereign_core::traits::{ConversationStore, MemoryStore};
 use sovereign_store::sqlite::SqliteStateStore;
@@ -398,7 +397,7 @@ impl ExtractSummary {
     }
 
     fn from_result(view: &'static str, r: &EntityExtractionResult) -> Self {
-        use corpus_engine::enrichment::pipeline::atlas::EntityType;
+        use understanding_vocab::taxonomy::EntityType;
         let mut persons = 0usize;
         let mut orgs = 0usize;
         let mut inits = 0usize;

@@ -303,7 +303,7 @@ async fn reuse(
 /// filter (min-description-chars, include-claims) is env-configured; it is
 /// echoed so the measurement stays glassbox.
 async fn warm_atlas(session: &ChatSession, corpus: &str, lane: &str) {
-    let f = corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter::default();
+    let f = corpus_engine_atlas_reader::context_filter::AtlasContextFilter::default();
     let n = session.atlas_mgr.warm_one(corpus).await;
     eprintln!(
         "[{lane}] atlas-warm: {n} context entr{} loaded for `{corpus}` (min_description_chars={}, include_claims={})",

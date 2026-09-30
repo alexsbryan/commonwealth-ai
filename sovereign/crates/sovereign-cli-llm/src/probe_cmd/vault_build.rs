@@ -11,11 +11,12 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 
-use corpus_engine::enrichment::tiered::{
-    run_folder_tiered_enrichment, ChunkEntityExtractor, ChunkEntityExtractorHandle,
-    ChunkNerOutcome, ConvBucket, TieredEnrichmentProvider, TieredProviderHandle,
-};
+use corpus_engine::enrichment::tiered::run_folder_tiered_enrichment;
 use corpus_index::index::EnrichmentChunkRow;
+use corpus_index::ingest_port::tiered::{
+    ChunkEntityExtractor, ChunkEntityExtractorHandle, ChunkNerOutcome, ConvBucket,
+    TieredEnrichmentProvider, TieredProviderHandle,
+};
 use corpus_index::Result as EngineResult;
 use sovereign_contracts::probe::{
     ColdReset, IngestTransition, NoteRecord, PhaseSpan, ProbeEvidence, ProbeRequest,
