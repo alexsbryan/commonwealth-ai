@@ -17,55 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::enrichment::atlas::atoms::Entity;
 use crate::enrichment::pipeline::atlas::EntityType;
 
-/// Tag for a signal that fired on a candidate pair. Round-trips
-/// through the oplog so an auditor can reconstruct exactly which
-/// signals supported a merge.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MergeSignal {
-    /// Canonical names + aliases agree under a fold (lowercase + ASCII
-    /// punctuation collapse).
-    NameSimilarity,
-    /// One of the surface forms is an email address that resolves to
-    /// the other party's company / domain.
-    EmailHeader,
-    /// Person + organisation + role all triangulate (Ken Lay @ Enron
-    /// CEO ↔ Kenneth Lay @ Enron CEO).
-    OrgRole,
-    /// The calibrated judge confirmed the merge after the
-    /// reconciliation policy escalated.
-    JudgeConfirmed,
-    /// Same email-thread root in the carrier doc's metadata (Phase 2
-    /// thread_id matches → the two mentions are in the same
-    /// conversation).
-    ThreadRoot,
-    /// Every external identifier the recipe declared for this type
-    /// (`identity = ["rxnorm_id"]`) is present on both and agrees. The one
-    /// STRICT signal: it satisfies the cross-origin gate on its own, because
-    /// an identifier is a criterion of identity, not evidence toward one.
-    ExternalId,
-    /// Every descriptive key the recipe declared as the fallback
-    /// (`identity_fallback = ["name", "employer"]`) agrees. One ordinary
-    /// signal — it goes through the same count gate every other signal does,
-    /// which is what "a descriptive key is judged, not trusted" means today.
-    DescriptiveKey,
-    Other(String),
-}
-
-impl MergeSignal {
-    pub fn as_str(&self) -> &str {
-        match self {
-            MergeSignal::NameSimilarity => "name_similarity",
-            MergeSignal::EmailHeader => "email_header",
-            MergeSignal::OrgRole => "org_role",
-            MergeSignal::JudgeConfirmed => "judge_confirmed",
-            MergeSignal::ThreadRoot => "thread_root",
-            MergeSignal::ExternalId => "external_id",
-            MergeSignal::DescriptiveKey => "descriptive_key",
-            MergeSignal::Other(s) => s.as_str(),
-        }
-    }
-}
+pub use understanding_vocab::reconciliation::MergeSignal;
 
 /// Trait every signal implements.
 pub trait MergeSignalCheck: Send + Sync {

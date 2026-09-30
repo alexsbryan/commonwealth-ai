@@ -61,6 +61,7 @@ pub mod edges;
 pub mod ontology;
 pub mod read;
 pub mod reading_formatters;
+pub mod reconciliation;
 pub mod skeleton;
 pub mod stable_key;
 pub mod taxonomy;
