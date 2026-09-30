@@ -1369,7 +1369,6 @@ sovereign-cli-llm → sovereign-enrichment-build | pb-cli-llm-ingest-move
 sovereign-cli-llm → sovereign-mesh | pb-mesh-dissolve
 sovereign-cli-llm → sovereign-pipeline | pb-cli-llm-ingest-move
 sovereign-cli-llm → sovereign-authoring-harness | pb-cli-llm-ingest-move
-sovereign-cli-llm → sovereign-eval | pb-cli-llm-bench-move
 sovereign-cli-llm → corpus-engine | pb-cli-llm-ingest-move
 sovereign-cli-llm → sovereign-enrichment-build (dev) | pb-cli-llm-ingest-move
 sovereign-daemon → commonwealth-core | pb-mesh-exit-transport
@@ -1384,8 +1383,6 @@ sovereign-mesh → corpus-engine | pb-mesh-dissolve
 sovereign-mesh → sovereign-work-atlas (dev) | pb-mesh-dissolve
 sovereign-tools → sovereign-recipe-author | pb-ingest-rehome
 sovereign-daemon → commonwealth-discovery | pb-mesh-exit-transport
-sovereign-daemon → sovereign-inference | pb-serve-distributes
-sovereign-daemon → sovereign-compute | pb-serve-distributes
 sovereign-daemon → sovereign-serving-host | pb-serve-ranks
 ```
 
