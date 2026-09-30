@@ -151,6 +151,7 @@ daemon-boot = { max-threads = 3 }
 test-group = "daemon-boot"
 filter = """
 binary_id(sovereign-daemon::solo_rails_e2e)
+| binary_id(sovereign-stock::ingest_composed_e2e)
 | binary_id(sovereign-stock::one_process_e2e)
 | test(/^admin_join_serves_venues_e2e::/)
 | test(/^client_exposure::/)
@@ -165,6 +166,7 @@ binary_id(sovereign-daemon::solo_rails_e2e)
 | test(/^rotate_pre_split_guard::/)
 | test(/^setup_cmd::terminal::join_child::tests::/)
 | test(/^storage_snapshot_e2e::/)
+| test(/^svrn_alone_names_ingest_absent_e2e::/)
 | test(/^svrn_memory_without_code_e2e::/)
 | test(/^try_resume_first_gossip::/)
 """
