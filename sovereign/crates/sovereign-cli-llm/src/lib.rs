@@ -60,6 +60,7 @@ use sovereign_cli_base::corpus_resolve;
 mod corpus_scrub_cmd;
 mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;
+mod daemon_inference;
 mod enrich_cmd;
 mod govern_cmd;
 mod gym_judge;

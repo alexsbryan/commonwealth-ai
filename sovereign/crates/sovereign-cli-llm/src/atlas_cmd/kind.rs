@@ -40,7 +40,7 @@ use corpus_engine::enrichment::atlas::{
 };
 use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 
-use crate::chat_cmd::bootstrap::build_inference;
+use crate::daemon_inference::build_inference;
 use crate::enrich_cmd::paths;
 use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_contracts::eval_bank::load_bank;

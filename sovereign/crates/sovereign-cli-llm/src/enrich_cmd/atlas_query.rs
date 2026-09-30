@@ -28,7 +28,7 @@ use corpus_engine_atlas_reader::context::{
 };
 
 use super::paths;
-use crate::chat_cmd::bootstrap::build_session;
+use crate::daemon_inference::build_inference;
 use corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter;
 use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
@@ -307,10 +307,10 @@ async fn conceptual_seed(
     query: &str,
     graph: &mut AtlasGraph,
 ) -> Option<(String, f32)> {
-    let session = match build_session(globals).await {
-        Ok(s) => s,
+    let inference = match build_inference(globals).await {
+        Ok((inference, _base, _embed_model)) => inference,
         Err(e) => {
-            eprintln!("atlas-query: conceptual seed needs a model but build_session failed: {e}");
+            eprintln!("atlas-query: conceptual seed needs a model but build_inference failed: {e}");
             return None;
         }
     };
@@ -319,7 +319,7 @@ async fn conceptual_seed(
     let attached = open_and_attach_ann_seed_table(corpus_id, atlas_dir, graph.clone()).await;
     *graph = attached;
 
-    let embedding = match session.inference.embed_query(query).await {
+    let embedding = match inference.embed_query(query).await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("atlas-query: embed query failed: {e}");
@@ -341,7 +341,7 @@ async fn conceptual_seed(
             include_configurations: false,
             ..AtlasContextFilter::default()
         };
-        let embed = corpus_index::embed_fn::inference_to_embed_query_fn(session.inference.clone());
+        let embed = corpus_index::embed_fn::inference_to_embed_query_fn(inference.clone());
         match corpus_engine_atlas_reader::context_loader::load_atlas_context(
             &embed, atlas_dir, corpus_id, 8, &filter,
         )

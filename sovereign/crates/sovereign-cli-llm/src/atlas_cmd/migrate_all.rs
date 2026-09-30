@@ -46,7 +46,7 @@ use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use corpus_engine::wikipedia_graph_present;
 use sovereign_enrichment_build::pipeline_map::{ensure_pipeline_map, MapConversion};
 
-use crate::chat_cmd::bootstrap::{build_session, ChatSession};
+use crate::daemon_inference::build_inference;
 use corpus_engine::enrichment::atlas::context_loader::{
     backfill_ann, AtlasContextFilter, BackfillOutcome,
 };
@@ -145,7 +145,8 @@ pub async fn run(args: &[String]) -> i32 {
     //
     // `Err` is remembered as well as `Ok`: without that, a box with no daemon
     // would re-probe once per corpus, 1,081 times.
-    let mut session: Option<ChatSession> = None;
+    let mut session: Option<std::sync::Arc<dyn sovereign_contracts::traits::InferenceProvider>> =
+        None;
     let mut session_err: Option<String> = None;
     // The PRODUCTION grounding filter carries the quality knobs
     // (`min_description_chars`, the depth allowlist, the cap); the corpus's
@@ -264,8 +265,8 @@ pub async fn run(args: &[String]) -> i32 {
                 // the rest of the run reuses it, and a failure is remembered so a
                 // dead daemon costs one probe, not one per corpus.
                 if session.is_none() && session_err.is_none() {
-                    match build_session(&globals).await {
-                        Ok(s) => session = Some(s),
+                    match build_inference(&globals).await {
+                        Ok((inference, _base, _embed_model)) => session = Some(inference),
                         Err(e) => session_err = Some(e.to_string()),
                     }
                 }
@@ -283,13 +284,13 @@ pub async fn run(args: &[String]) -> i32 {
                         );
                         "err"
                     }
-                    Some(session) => {
+                    Some(inference) => {
                         // The ONE writer. It derives the population from this
                         // corpus's navigation map, seeds under it, and stamps the
                         // population marker in the same call — none of which this
                         // verb may decide for itself.
                         let embed = corpus_index::embed_fn::inference_to_embed_query_fn(
-                            session.inference.clone(),
+                            inference.clone(),
                         );
                         match backfill_ann(&embed, &atlas_dir, corpus_id, &filter).await {
                             Ok(BackfillOutcome::Built(_)) => {
@@ -380,11 +381,13 @@ fn print_help() {
 mod tests {
     use std::path::Path;
 
-    /// Assembled at runtime, never a literal: this test module is INSIDE the
-    /// file it scans, so a literal would match its own source. Same trap as
+    /// The daemon reach the ANN sub-step builds (`daemon_inference`'s, since
+    /// pb-cli-llm-ingest-move; the session builder before it). Assembled at
+    /// runtime, never a literal: this test module is INSIDE the file it scans,
+    /// so a literal would match its own source. Same trap as
     /// `no_session_bootstrap_in_this_verb` and as `lib.rs`'s harness guard.
     fn session_builder() -> String {
-        ["build", "session"].join("_")
+        ["build", "inference"].join("_")
     }
 
     /// The production half of this file — the same split

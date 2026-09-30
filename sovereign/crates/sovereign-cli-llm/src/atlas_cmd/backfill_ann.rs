@@ -20,7 +20,7 @@
 use corpus_engine::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 
-use crate::chat_cmd::bootstrap::build_inference;
+use crate::daemon_inference::build_inference;
 use crate::enrich_cmd::paths;
 use corpus_engine::enrichment::atlas::context_loader::{
     backfill_ann, AtlasContextFilter, BackfillOutcome,
@@ -314,7 +314,7 @@ mod tests {
             "{} names the session bootstrap. This verb needs an embedder and \
              an atlas dir; a session also loads the wiki graph and the \
              meta-atlas into this process and has OOM-killed the daemon. Use \
-             `build_inference` (chat_cmd::bootstrap).",
+             `build_inference` (daemon_inference).",
             path.display()
         );
         // Positive control: hop 1 passes trivially if the verb stopped
@@ -332,7 +332,7 @@ mod tests {
         // Hop 2 — the body of the helper hop 1 pins. Scoped to that
         // function, because the session builder's `_with_skills` sibling
         // lives in the same file and is of course allowed to name itself.
-        let (boot_path, boot) = src("chat_cmd/bootstrap.rs");
+        let (boot_path, boot) = src("daemon_inference.rs");
         let start = boot
             .find("pub async fn build_inference(")
             .unwrap_or_else(|| panic!("{}: no `build_inference`", boot_path.display()));

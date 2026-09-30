@@ -14,7 +14,7 @@
 //! the `capabilities` layer. A host resolves a session; a capability is handed
 //! one.
 
-use crate::chat_cmd::bootstrap::build_session;
+use crate::daemon_inference::build_inference;
 use corpus_engine::enrichment::pipeline::{
     progress::wire, BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };
@@ -233,7 +233,7 @@ fn print_cli_event(evt: &EnrichProgress) {
 /// daemon spend exactly one probe each and neither spends two.
 async fn backfill_session_embedder() -> Result<corpus_index::types::EmbedFn, String> {
     let (globals, _) = parse_globals(&[])?;
-    let session = build_session(&globals).await.map_err(|e| {
+    let (inference, _base, _embed_model) = build_inference(&globals).await.map_err(|e| {
         format!(
             "backfill: could not reach the daemon ({e}); start it, or pass \
              `--skip backfill` to build without grounding"
@@ -242,9 +242,7 @@ async fn backfill_session_embedder() -> Result<corpus_index::types::EmbedFn, Str
     // The orchestrator takes an `EmbedFn` since ei-5a-build-cut — resolving the
     // session is still the CLI's job, adapting it is one call. QUERY-side: the
     // seed table must land in the space `atlas_navigate_ann` queries it in.
-    Ok(corpus_index::embed_fn::inference_to_embed_query_fn(
-        session.inference,
-    ))
+    Ok(corpus_index::embed_fn::inference_to_embed_query_fn(inference))
 }
 
 #[cfg(test)]
