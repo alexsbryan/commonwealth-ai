@@ -80,8 +80,8 @@
 //! `CLIENT_ALPN` → the trusting listener, which is what lets their federated
 //! inference (which carries no `Authorization` at all) keep working.
 
-use sovereign_grants::{GuestGrant, GuestSession};
 use sovereign_contracts::principal::Principal;
+use sovereign_grants::{GuestGrant, GuestSession};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use subtle::ConstantTimeEq;

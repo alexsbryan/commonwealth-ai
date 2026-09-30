@@ -12,9 +12,9 @@ use kernel_types::NodeId;
 use oicp_types::model_aliases::ModelAliasTable;
 use serving_policy_core::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
 use sovereign_contracts::membership::MembershipReader;
+use sovereign_contracts::principal::Principal;
 use sovereign_core::identity::IdentityReader;
 use sovereign_grants::{EphemeralGrantStore, GuestGrantStore, GuestSessionStore, WorkQueueManager};
-use sovereign_contracts::principal::Principal;
 
 // Moved to the leaves by domains `REVIEW-build-local-inference`: the wire types
 // are protocol vocabulary (`oicp-types`) and the OpenAI-shaped port is a
