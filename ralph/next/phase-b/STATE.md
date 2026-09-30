@@ -1389,7 +1389,6 @@ sovereign-daemon → commonwealth-media | pb-distribution
 sovereign-daemon → commonwealth-transport | pb-mesh-exit-transport
 sovereign-daemon → sovereign-mesh | pb-mesh-exit-mesh
 sovereign-daemon → sovereign-authoring-harness | pb-ingest-rehome
-sovereign-daemon → corpus-engine | pb-ingest-dial-daemon
 sovereign-daemon → sovereign-tdd | pb-meshapp-solve
 sovereign-mesh → corpus-engine | pb-mesh-dissolve
 sovereign-mesh → sovereign-work-atlas (dev) | pb-mesh-dissolve
