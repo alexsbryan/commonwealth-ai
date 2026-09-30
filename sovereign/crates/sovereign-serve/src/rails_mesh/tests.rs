@@ -93,7 +93,7 @@ fn serve_registers_its_peer_prefixes_and_its_rpc_worker_only_when_it_binds() {
     assert_eq!(
         off[0].prefixes,
         vec![
-            "/internal/v1/models/".to_string(),
+            "/internal/v1/models".to_string(),
             "/internal/rpc-warm".to_string()
         ]
     );

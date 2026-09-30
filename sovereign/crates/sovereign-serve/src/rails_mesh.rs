@@ -48,7 +48,7 @@ const ORIGIN_TTL_SECS: u64 = 60;
 const ORIGIN_RENEW_EVERY: Duration = Duration::from_secs(ORIGIN_TTL_SECS / 3);
 
 /// The HTTP paths serve answers for peers, registered on `cwth/http/0`.
-pub const PEER_PREFIXES: [&str; 2] = ["/internal/v1/models/", RPC_WARM_PATH];
+pub const PEER_PREFIXES: [&str; 2] = ["/internal/v1/models", RPC_WARM_PATH];
 
 /// The worker side of the shard warm (`crate::rpc_warm`).
 pub const RPC_WARM_PATH: &str = "/internal/rpc-warm";
@@ -277,7 +277,7 @@ pub fn mesh_ports(roster: RailsRoster, listen: SocketAddr) -> MeshPorts {
             info!(target: TARGET, am_host, "shared-model host role");
         }),
         discovery: Arc::new(RpcWorkerDiscovery::default()),
-        // Peers fetch model files through cw-rails (`/internal/v1/models/` is
+        // Peers fetch model files through cw-rails (`/internal/v1/models` is
         // registered on `cwth/http/0`); this raw base is the fallback a
         // worker on this host reaches directly.
         model_origin: Arc::new(move || {
