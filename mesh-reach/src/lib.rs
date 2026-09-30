@@ -16,6 +16,9 @@
 //! dependency beyond kernel-types means this crate holds mechanism, not
 //! vocabulary, and the leaf is wrong.
 
+// The two non-origin protocols an endpoint forwards to a registered origin.
+pub mod alpn;
+
 // Ask N peers the same question concurrently, one attributed row each.
 // Compiled for this crate's own tests, whose dev-deps carry tokio and serde.
 #[cfg(any(feature = "fanout", test))]
