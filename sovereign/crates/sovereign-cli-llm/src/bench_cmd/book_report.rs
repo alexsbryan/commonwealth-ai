@@ -589,6 +589,8 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         atlas: None,
         attached: Some(attached(source)),
         vault: None,
+        assess: None,
+        judge: None,
     };
 
     // ── --list-assets exits here ───────────────────────────────

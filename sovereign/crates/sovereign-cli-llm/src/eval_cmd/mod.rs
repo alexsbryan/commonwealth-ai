@@ -801,6 +801,8 @@ async fn cmd_run(args: &[String]) -> i32 {
         atlas,
         attached: None,
         vault: None,
+        assess: None,
+        judge: None,
     };
 
     if a.routing_only {

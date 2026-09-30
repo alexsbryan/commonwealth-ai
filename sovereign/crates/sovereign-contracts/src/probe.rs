@@ -4,8 +4,9 @@
 //!
 //! `svrn __probe` runs ONE internal stage (the router's classifier,
 //! the production retrieval pipeline, a raw index search, an
-//! attached-document turn, a metered folder-vault build, or a read of a
-//! corpus's RAPTOR tree) over plain question text and writes a
+//! attached-document turn, a metered folder-vault build, a read of a
+//! corpus's RAPTOR tree, or the grounding gate's own verdicts and judge
+//! registers) over plain question text and writes a
 //! [`ProbeEvidence`]. It carries no bank, no
 //! expectation and no score: svrn describes itself, bench owns banks and
 //! verdicts (ARCH principle 12; phase-b-58). Both sides name this one type, so
@@ -16,12 +17,17 @@ use serde::{Deserialize, Serialize};
 use crate::traits::CorpusUnavailable;
 
 mod attached;
+mod judge;
 mod raptor_nodes;
 mod resources;
 mod vault;
 
 pub use attached::{
     AttachedEvidence, AttachedProbe, AttachedSource, AttachedTurn, StateTransition,
+};
+pub use judge::{
+    AssessAnswer, AssessEvidence, AssessOp, AssessProbe, AssertedValueVerdict, JudgeAnswer,
+    JudgeEvidence, JudgeOp, JudgeProbe,
 };
 pub use raptor_nodes::{RaptorNodeEvidence, RaptorNodesEvidence};
 pub use resources::{CallRecord, PhaseBucket, PhaseResources, ResourceReport};
@@ -50,17 +56,25 @@ pub enum ProbeMode {
     VaultBuild,
     /// A corpus's stored RAPTOR tree, every level.
     RaptorNodes,
+    /// The gate's verdicts (asserted value, pure decline, value presence,
+    /// the gate threshold) over bench-supplied text.
+    Assess,
+    /// The gate's model registers (forced choice, chunk support, claim
+    /// extraction) over bench-supplied text.
+    Judge,
 }
 
 impl ProbeMode {
     /// Every mode, in command-line order.
-    pub const ALL: [ProbeMode; 6] = [
+    pub const ALL: [ProbeMode; 8] = [
         ProbeMode::Routing,
         ProbeMode::Prod,
         ProbeMode::Retrieve,
         ProbeMode::Attached,
         ProbeMode::VaultBuild,
         ProbeMode::RaptorNodes,
+        ProbeMode::Assess,
+        ProbeMode::Judge,
     ];
 
     /// The command-line spelling.
@@ -72,6 +86,8 @@ impl ProbeMode {
             ProbeMode::Attached => "attached",
             ProbeMode::VaultBuild => "vault-build",
             ProbeMode::RaptorNodes => "raptor-nodes",
+            ProbeMode::Assess => "assess",
+            ProbeMode::Judge => "judge",
         }
     }
 
@@ -108,6 +124,12 @@ pub struct ProbeRequest {
     /// mode, ignored in the others.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vault: Option<VaultBuildProbe>,
+    /// Assess: the ops. Required in that mode, ignored in the others.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assess: Option<AssessProbe>,
+    /// Judge: the ops. Required in that mode, ignored in the others.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge: Option<JudgeProbe>,
 }
 
 /// The atlases a probe loads, and how it filters and seeds them.
@@ -181,6 +203,10 @@ pub enum ProbeEvidence {
     VaultBuild(Box<VaultBuildEvidence>),
     /// [`ProbeMode::RaptorNodes`].
     RaptorNodes(RaptorNodesEvidence),
+    /// [`ProbeMode::Assess`].
+    Assess(Box<AssessEvidence>),
+    /// [`ProbeMode::Judge`].
+    Judge(Box<JudgeEvidence>),
 }
 
 impl ProbeEvidence {
@@ -193,6 +219,8 @@ impl ProbeEvidence {
             ProbeEvidence::Attached(_) => ProbeMode::Attached,
             ProbeEvidence::VaultBuild(_) => ProbeMode::VaultBuild,
             ProbeEvidence::RaptorNodes(_) => ProbeMode::RaptorNodes,
+            ProbeEvidence::Assess(_) => ProbeMode::Assess,
+            ProbeEvidence::Judge(_) => ProbeMode::Judge,
         }
     }
 }
@@ -317,6 +345,8 @@ mod tests {
                 no_gliner: true,
                 allow_watcher: false,
             }),
+            assess: None,
+            judge: None,
         };
         let v = serde_json::to_value(&req).unwrap();
         assert_eq!(v["mode"], "vault_build");
@@ -368,6 +398,8 @@ mod tests {
                 lane: "bench book-report".into(),
             }),
             vault: None,
+            assess: None,
+            judge: None,
         };
         let v = serde_json::to_value(&req).unwrap();
         assert_eq!(v["mode"], "attached");

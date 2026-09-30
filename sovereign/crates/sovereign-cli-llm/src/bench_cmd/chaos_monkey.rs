@@ -644,6 +644,8 @@ async fn run(rest: &[String]) -> i32 {
                 lane: "bench chaos".to_string(),
             }),
             vault: None,
+            assess: None,
+            judge: None,
         };
         let ev = match crate::eval_cmd::run_probe(&globals, &request) {
             Ok(ProbeEvidence::Attached(ev)) => *ev,

@@ -9,13 +9,15 @@
 //! and score what it writes. It runs ONE internal stage per question — the
 //! router's classifier, the production retrieval pipeline, a raw index
 //! search, or an attached-document turn — or once per run: a metered
-//! folder-vault build, or a read of a corpus's RAPTOR tree —
+//! folder-vault build, a read of a corpus's RAPTOR tree, or the grounding
+//! gate's own verdicts and judge registers over text bench supplies —
 //! and writes a `sovereign_contracts::probe::ProbeEvidence`: raw
 //! classifications and pools, no bank, no expectation, no verdict. svrn's
 //! global flags (`--daemon`, `--data-dir`, models, `--temperature`) build the
 //! session exactly as they do for any other verb.
 
 mod attached;
+mod judge;
 mod prod;
 mod raptor_nodes;
 pub(crate) mod resource_meter;
@@ -118,6 +120,16 @@ pub async fn run(args: &[String]) -> i32 {
     let evidence = match request.mode {
         ProbeMode::VaultBuild => vault_build::probe(&globals, &request).await,
         ProbeMode::RaptorNodes => raptor_nodes::probe(&request).await,
+        // The gate's primitives over the bench's text: a pinned provider,
+        // no session.
+        ProbeMode::Assess => match &request.assess {
+            Some(spec) => Ok(judge::assess(&globals.daemon_base, spec).await),
+            None => Err("an assess probe carries its ops (`assess` is missing)".to_string()),
+        },
+        ProbeMode::Judge => match &request.judge {
+            Some(spec) => Ok(judge::judge(&globals.daemon_base, spec).await),
+            None => Err("a judge probe carries its ops (`judge` is missing)".to_string()),
+        },
         _ => {
             let session = match build_session_for_bank(&globals, &request.corpus).await {
                 Ok(s) => s,
@@ -211,7 +223,7 @@ async fn probe(
                 .await?,
             ))
         }
-        ProbeMode::VaultBuild | ProbeMode::RaptorNodes => {
+        ProbeMode::VaultBuild | ProbeMode::RaptorNodes | ProbeMode::Assess | ProbeMode::Judge => {
             return Err(format!(
                 "the {} probe runs once per run, not over a bank's session",
                 request.mode.as_str()

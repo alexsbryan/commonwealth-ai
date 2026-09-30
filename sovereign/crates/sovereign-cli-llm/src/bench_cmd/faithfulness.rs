@@ -247,6 +247,8 @@ async fn run(rest: &[String]) -> i32 {
         atlas: None,
         attached: None,
         vault: None,
+        assess: None,
+        judge: None,
     };
     let globals = sovereign_cli_base::chat_globals::default_globals_for_voice_eval();
     let (db_path, nodes) = match crate::eval_cmd::run_probe(&globals, &request) {
