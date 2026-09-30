@@ -2146,21 +2146,41 @@ mod rationalize_tests {
 
     #[test]
     fn git_churn_since_respects_the_since_bound() {
-        // Runs inside the repo, but nothing has been committed since the year
-        // 2099 — so the fix-signal is empty regardless of anchor. Uses a
+        // A repo of its own with one commit touching `runtime`, so the test
+        // passes outside the monorepo checkout too (program-lift's sandbox
+        // is not a git repo). Nothing is committed after 2099, so the
+        // fix-signal is empty; from 1970 the same pickaxe finds the commit,
+        // which is what makes the bound the thing under test. Uses a
         // >=3-char anchor so it exercises the real git path, not the
         // short-anchor floor below.
-        let repo = sovereign_cli_base::repo::find_repo_root()
-            .expect("this test runs inside the checkout it pickaxes");
-        assert!(git_churn_since(&repo, "runtime", "2099-01-01").is_empty());
+        let dir = tempfile::tempdir().expect("tempdir");
+        let git = |args: &[&str]| {
+            let ok = std::process::Command::new("git")
+                .current_dir(dir.path())
+                .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+                .args(args)
+                .status()
+                .expect("git runs")
+                .success();
+            assert!(ok, "git {args:?}");
+        };
+        git(&["init", "-q"]);
+        std::fs::write(dir.path().join("a.rs"), "fn runtime() {}\n").expect("write");
+        git(&["add", "a.rs"]);
+        git(&["commit", "-q", "-m", "add runtime"]);
+        assert_eq!(
+            git_churn_since(dir.path(), "runtime", "1970-01-01").len(),
+            1
+        );
+        assert!(git_churn_since(dir.path(), "runtime", "2099-01-01").is_empty());
     }
 
     #[test]
     fn git_churn_since_floors_out_tiny_anchors() {
         // A 1-2 char anchor pickaxes against nearly every diff — no signal.
-        // Returns empty without even shelling out to git.
-        let repo =
-            sovereign_cli_base::repo::find_repo_root().expect("this test runs inside the checkout");
+        // Returns empty without even shelling out to git, so any directory
+        // serves (program-lift's sandbox is not a git checkout).
+        let repo = std::env::temp_dir();
         assert!(git_churn_since(&repo, "fn", "1970-01-01").is_empty());
         assert!(git_churn_since(&repo, "x", "1970-01-01").is_empty());
     }
