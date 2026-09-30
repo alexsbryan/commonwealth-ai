@@ -59,21 +59,14 @@ fn ce_rps_err(e: RecipeProjectError) -> Error {
     }
 }
 
-/// Default global maintainer inbox directory (created on demand).
-/// CapabilityRequestTool mirrors per-project requests into this
-/// directory so the maintainer can `sovereign maintainer inbox` to
-/// page through every project's pending requests at once.
-pub const MAINTAINER_INBOX_SUBPATH: &str = "capability-requests/inbox";
+/// The maintainer inbox, in contracts so svrn reads it without this crate
+/// (pb-ingest-rehome).
+pub use sovereign_contracts::recipe::project::{maintainer_inbox_dir, MAINTAINER_INBOX_SUBPATH};
 
 /// Resolve `~/.svrnmesh/recipe-projects/`. Tools and CLI go through
 /// this rather than building paths inline.
 pub fn projects_root_dir() -> Result<PathBuf> {
     Ok(sovereign_contracts::rebrand::svrnmesh_root().join("recipe-projects"))
-}
-
-/// Resolve `~/.svrnmesh/capability-requests/inbox/`.
-pub fn maintainer_inbox_dir() -> Result<PathBuf> {
-    Ok(sovereign_contracts::rebrand::svrnmesh_root().join(MAINTAINER_INBOX_SUBPATH))
 }
 
 /// Which artifact a project authors. The recipe-author project model is

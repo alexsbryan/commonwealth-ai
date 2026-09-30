@@ -2,7 +2,8 @@
 //! The recipe-author project's vocabulary, as a program that does not link
 //! `sovereign-recipe-author` reads it (pb-ingest-rehome-daemon): the store row
 //! and the on-disk summary. Both moved here from that crate, which re-exports
-//! them at their old paths.
+//! them at their old paths, as are the capability-request inbox file and its
+//! directory (pb-ingest-rehome).
 //!
 //! And the port itself: [`RecipeProjectPort`] is how svrn reaches the
 //! recipe-project store and the project model, which are ingest's
@@ -329,4 +330,47 @@ pub mod fixtures {
             })
         }
     }
+}
+
+/// Persisted shape of a capability request. Kept compatible with
+/// `serde_json::from_str` so the maintainer inbox CLI can read
+/// without depending on this crate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapabilityRequest {
+    /// The request's id; its inbox file is `<request_id>.json`.
+    pub request_id: String,
+    /// The project that raised it.
+    pub feature_id: String,
+    /// That project's title.
+    pub project_title: String,
+    /// The format or source the extractors could not handle.
+    pub format_or_source: String,
+    /// The agent's analysis of the gap.
+    pub analysis: String,
+    /// Extractors the agent tried first.
+    pub existing_extractors_tried: Vec<String>,
+    /// How each attempt failed.
+    pub failure_modes: Vec<String>,
+    /// The recipe as it stood, when one was drafted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipe_state_path: Option<String>,
+    /// The recipe sections the gap blocks.
+    pub blocked_recipe_parts: Vec<String>,
+    /// Submission status. v1 ships only `submitted` from the agent;
+    /// the maintainer flips this to `in_progress` / `resolved` /
+    /// `won't_fix` out-of-band by editing the inbox file.
+    pub status: String,
+    /// RFC 3339.
+    pub created_at: String,
+}
+
+/// Default global maintainer inbox directory (created on demand).
+/// CapabilityRequestTool mirrors per-project requests into this
+/// directory so the maintainer can `sovereign maintainer inbox` to
+/// page through every project's pending requests at once.
+pub const MAINTAINER_INBOX_SUBPATH: &str = "capability-requests/inbox";
+
+/// Resolve `~/.svrnmesh/capability-requests/inbox/`.
+pub fn maintainer_inbox_dir() -> Result<PathBuf> {
+    Ok(crate::rebrand::svrnmesh_root().join(MAINTAINER_INBOX_SUBPATH))
 }
