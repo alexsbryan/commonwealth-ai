@@ -793,9 +793,10 @@ owns the program's data. The split:
       and `atlas budget|status|list-corpora|list-atoms|show-atom|typed-extension`
       in cli-llm. `workflow_cmd` stays too: it is a client of svrn's
       `/internal/workflows` (seat, phase-b-33). sovereign-cli-llm names no
-      ingest crate. Its one ingest edge left is corpus-engine as a
-      dev-dependency, for two svrn examples that build an engine
-      (coverage_layers_probe, epistemic_demo), and it is the operator's.
+      ingest crate, not even as a dev-dependency: of the two examples that
+      built an engine, coverage_layers_probe measures ingest's layers and is
+      sovereign-pipeline's, and epistemic_demo is `svrn __probe`'s
+      `epistemic` mode (seat, phase-b-75).
 - [ ] Mechanically: each moving group becomes `[lib] + [[bin]]` (the
       `sovereign-agent-bench` precedent), and the DISPATCHER (sovereign-cli,
       `main.rs:877` and `:1204`) get a sibling exec module (`bench_bin::exec`,

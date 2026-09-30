@@ -161,11 +161,6 @@ libc = "0.2"
 awareness = ["dep:rusqlite"]
 
 [dev-dependencies]
-# examples/{coverage_layers_probe,epistemic_demo}.rs build a `CorpusEngine`
-# to hand svrn's coverage probe a real read port. The one edge
-# pb-cli-llm-ingest-move left red: where a svrn instrument that needs ingest's
-# engine lives is the operator's (ralph/next/phase-b/ctl/NEEDS_HUMAN.md).
-corpus-engine = { workspace = true, features = ["treesitter"] }
 # The local-only list `portfolio-private` must stay in (fp-87) — a leaf.
 commonwealth-rail-core = { workspace = true }
 

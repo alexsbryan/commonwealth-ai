@@ -12420,7 +12420,6 @@ dependencies = [
  "chrono",
  "clap",
  "commonwealth-rail-core",
- "corpus-engine",
  "corpus-engine-atlas-reader",
  "corpus-index",
  "dirs 5.0.1",
