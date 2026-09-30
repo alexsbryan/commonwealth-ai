@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_core::ids::{NodeId, NodePubkey};
+use kernel_types::{NodeId, NodePubkey};
 use commonwealth_transport::iroh::{
     Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, ALPN, APP_ALPN,
     CLIENT_ALPN, MEDIA_ALPN, OFFER_ALPN, RPC_ALPN,

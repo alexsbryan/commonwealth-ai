@@ -7,7 +7,7 @@
 //! spelling of it (ARCH §10.6).
 
 use axum::response::IntoResponse;
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail_core::{
     actor_of, body_json, sign_ring_op, Ed25519Verifier, Op, Payload, Person, RailAct, Roster,

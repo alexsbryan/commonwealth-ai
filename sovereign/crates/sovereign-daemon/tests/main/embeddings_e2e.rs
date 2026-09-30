@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use commonwealth_core::mesh::Mesh;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;
@@ -49,7 +49,7 @@ fn build_app_state(with_embed: bool) -> AppState {
     let mesh = Mesh {
         mesh_secret: [0u8; 32],
         invite_expires_at: None,
-        id: commonwealth_core::ids::MeshId::from_u128(7),
+        id: kernel_types::MeshId::from_u128(7),
         name: "embeddings-test".into(),
         invite_key_hash: [3u8; 32],
         invite_version: 0,

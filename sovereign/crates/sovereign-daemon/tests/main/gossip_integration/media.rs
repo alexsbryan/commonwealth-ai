@@ -80,7 +80,7 @@ async fn an_offer_and_its_withdrawal_reach_a_peers_media_rail_in_one_round() {
         commonwealth_core::mesh::IrohDialInfo {
             relay_url: None,
             direct_addrs: Vec::new(),
-            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            origins: vec![oicp_types::capabilities::OriginKind::Media],
             media_allow: vec!["BeefyMac".into()],
         }
     }));
@@ -106,7 +106,7 @@ async fn an_offer_and_its_withdrawal_reach_a_peers_media_rail_in_one_round() {
             viewer,
             &commonwealth_media::roster_of(&m),
             &[],
-            commonwealth_core::capabilities::OriginKind::Media,
+            oicp_types::capabilities::OriginKind::Media,
         )
     };
 
@@ -184,7 +184,7 @@ async fn an_offer_on_record_survives_rounds_with_no_dial_info() {
     // is published to the dial-info reader, so `self_iroh_dialinfo()` is
     // `None` for every round below.
     let mut holder_rec = member_at(holder, "LittleMac", 100, "127.0.0.1:1".parse().unwrap());
-    holder_rec.capabilities.origins = vec![commonwealth_core::capabilities::OriginKind::Media];
+    holder_rec.capabilities.origins = vec![oicp_types::capabilities::OriginKind::Media];
     holder_rec.capabilities.media_allow = vec!["BeefyMac".into()];
     holder_rec.capabilities.media_available = Some(1.0);
 
@@ -261,7 +261,7 @@ async fn an_offer_on_record_survives_rounds_with_no_dial_info() {
             let m = state_holder.inner.fabric.mesh.read().await;
             assert_eq!(
                 m.members[&holder].capabilities.origins,
-                vec![commonwealth_core::capabilities::OriginKind::Media],
+                vec![oicp_types::capabilities::OriginKind::Media],
                 "round {round} with no dial info must publish the offer this \
                  node already held, not blank it: {:?}",
                 m.members[&holder].capabilities
@@ -273,7 +273,7 @@ async fn an_offer_on_record_survives_rounds_with_no_dial_info() {
             viewer,
             &commonwealth_media::roster_of(&m),
             &[],
-            commonwealth_core::capabilities::OriginKind::Media,
+            oicp_types::capabilities::OriginKind::Media,
         );
         assert_eq!(
             rows.len(),
@@ -367,7 +367,7 @@ async fn an_offer_survives_the_writers_that_contend_with_its_round() {
         commonwealth_core::mesh::IrohDialInfo {
             relay_url: None,
             direct_addrs: Vec::new(),
-            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            origins: vec![oicp_types::capabilities::OriginKind::Media],
             media_allow: vec!["BeefyMac".into()],
         }
     }));
@@ -428,7 +428,7 @@ async fn an_offer_survives_the_writers_that_contend_with_its_round() {
         let m = state_holder.inner.fabric.mesh.read().await;
         assert_eq!(
             m.members[&holder].capabilities.origins,
-            vec![commonwealth_core::capabilities::OriginKind::Media],
+            vec![oicp_types::capabilities::OriginKind::Media],
             "the holder's own record must still carry the offer after its round \
              raced the presence poll, the activity reporter and an inbound gossip"
         );
@@ -440,7 +440,7 @@ async fn an_offer_survives_the_writers_that_contend_with_its_round() {
             viewer,
             &commonwealth_media::roster_of(&m),
             &[],
-            commonwealth_core::capabilities::OriginKind::Media,
+            oicp_types::capabilities::OriginKind::Media,
         )
     };
     assert_eq!(
@@ -526,7 +526,7 @@ async fn a_reading_that_changes_alone_reaches_a_peers_media_rail_in_one_round() 
         commonwealth_core::mesh::IrohDialInfo {
             relay_url: None,
             direct_addrs: Vec::new(),
-            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            origins: vec![oicp_types::capabilities::OriginKind::Media],
             media_allow: vec!["BeefyMac".into()],
         }
     }));
@@ -551,7 +551,7 @@ async fn a_reading_that_changes_alone_reaches_a_peers_media_rail_in_one_round() 
             viewer,
             &commonwealth_media::roster_of(&m),
             &[],
-            commonwealth_core::capabilities::OriginKind::Media,
+            oicp_types::capabilities::OriginKind::Media,
         )
     };
 
@@ -586,7 +586,7 @@ async fn a_reading_that_changes_alone_reaches_a_peers_media_rail_in_one_round() 
         );
         assert_eq!(
             m.members[&holder].capabilities.origins,
-            vec![commonwealth_core::capabilities::OriginKind::Media],
+            vec![oicp_types::capabilities::OriginKind::Media],
             "the offer itself must not move"
         );
     }

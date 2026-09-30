@@ -1146,7 +1146,7 @@ impl AppState {
     /// Register a model as available on the mesh.
     pub async fn register_model(
         &self,
-        model: commonwealth_core::model::ModelInfo,
+        model: oicp_types::model_catalog::ModelInfo,
     ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
         self.inner
             .store
@@ -1158,7 +1158,7 @@ impl AppState {
     /// Set the address of a llama-server for a model (after orchestrator spawns it).
     pub async fn set_llama_server_address(
         &self,
-        model_id: commonwealth_core::ids::ModelId,
+        model_id: kernel_types::ModelId,
         address: String,
     ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
         self.inner
@@ -1171,7 +1171,7 @@ impl AppState {
     /// Get the llama-server address for a model.
     pub async fn get_llama_server_address(
         &self,
-        model_id: commonwealth_core::ids::ModelId,
+        model_id: kernel_types::ModelId,
     ) -> Result<Option<String>, sovereign_mesh::ledger_port::LedgerAbsent> {
         self.inner
             .store
@@ -1183,7 +1183,7 @@ impl AppState {
     /// Get the default model (first in the inference plan).
     pub async fn default_model_id(
         &self,
-    ) -> Result<Option<commonwealth_core::ids::ModelId>, sovereign_mesh::ledger_port::LedgerAbsent>
+    ) -> Result<Option<kernel_types::ModelId>, sovereign_mesh::ledger_port::LedgerAbsent>
     {
         Ok(self
             .inference_plan()
@@ -1215,7 +1215,7 @@ impl AppState {
     /// Drop one registered model; `true` when it was present.
     pub async fn remove_model_info(
         &self,
-        model_id: commonwealth_core::ids::ModelId,
+        model_id: kernel_types::ModelId,
     ) -> Result<bool, sovereign_mesh::ledger_port::LedgerAbsent> {
         self.inner
             .store
@@ -1227,9 +1227,9 @@ impl AppState {
     /// One registered model's info.
     pub async fn model_info(
         &self,
-        model_id: commonwealth_core::ids::ModelId,
+        model_id: kernel_types::ModelId,
     ) -> Result<
-        Option<commonwealth_core::model::ModelInfo>,
+        Option<oicp_types::model_catalog::ModelInfo>,
         sovereign_mesh::ledger_port::LedgerAbsent,
     > {
         self.inner
@@ -1243,7 +1243,7 @@ impl AppState {
     pub async fn list_models(
         &self,
     ) -> Result<
-        HashMap<commonwealth_core::ids::ModelId, commonwealth_core::model::ModelInfo>,
+        HashMap<kernel_types::ModelId, oicp_types::model_catalog::ModelInfo>,
         sovereign_mesh::ledger_port::LedgerAbsent,
     > {
         Ok(self
@@ -1258,7 +1258,7 @@ impl AppState {
     pub async fn list_models_with_origins(
         &self,
     ) -> Result<
-        Vec<(NodeId, commonwealth_core::model::ModelInfo)>,
+        Vec<(NodeId, oicp_types::model_catalog::ModelInfo)>,
         sovereign_mesh::ledger_port::LedgerAbsent,
     > {
         self.inner
@@ -1656,7 +1656,7 @@ impl AppState {
     /// the previous weights are kept — a transient ledger hiccup must not flap
     /// everyone to neutral mid-contention.
     pub async fn refresh_reciprocity_weights(&self, k: f64) {
-        let caps: HashMap<NodeId, commonwealth_core::capabilities::NodeCapabilities> = self
+        let caps: HashMap<NodeId, oicp_types::capabilities::NodeCapabilities> = self
             .membership()
             .members()
             .await
@@ -1667,7 +1667,7 @@ impl AppState {
             .inner
             .store
             .contribution_emitter
-            .current_contributions(&caps, commonwealth_core::contributions::DEFAULT_WINDOW_DAYS)
+            .current_contributions(&caps, oicp_types::contributions::DEFAULT_WINDOW_DAYS)
             .await
         {
             Ok(map) => map,
@@ -2023,7 +2023,7 @@ impl sovereign_core::self_claims::SelfClaims for AppState {
 
 #[cfg(test)]
 pub fn test_app_state() -> AppState {
-    use commonwealth_core::ids::MeshId;
+    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
     use std::collections::HashMap;
     let mesh = Mesh {
@@ -2046,7 +2046,7 @@ pub fn test_app_state() -> AppState {
 /// are total").
 #[cfg(test)]
 pub fn test_app_state_with_token(token: Option<Arc<str>>) -> AppState {
-    use commonwealth_core::ids::MeshId;
+    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
     use std::collections::HashMap;
     let mesh = Mesh {
@@ -2075,7 +2075,7 @@ pub fn test_app_state_with_token(token: Option<Arc<str>>) -> AppState {
 /// arguments rather than installs (DC §4.2 "Construction is staged, and parts
 /// are total").
 pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
-    use commonwealth_core::ids::MeshId;
+    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
     use std::collections::HashMap;
     let mesh = Mesh {
@@ -2103,7 +2103,7 @@ pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
 /// rather than an install (DC §4.2 "Construction is staged, and parts are
 /// total").
 pub fn test_app_state_with_inference(service: Arc<dyn LocalInferenceService>) -> AppState {
-    use commonwealth_core::ids::MeshId;
+    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
     use std::collections::HashMap;
     let mesh = Mesh {

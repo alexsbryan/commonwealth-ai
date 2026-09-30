@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use corpus_index::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_index::ingest_port::double::IngestPortDouble;

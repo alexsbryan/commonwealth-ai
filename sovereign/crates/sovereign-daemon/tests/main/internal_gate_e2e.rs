@@ -19,7 +19,7 @@ use std::net::SocketAddr;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_transport::mesh_proof::mesh_proof_stamp;
 use sovereign_daemon::internal_gate::EXEMPT_ROUTES;
@@ -188,8 +188,8 @@ fn mounted_internal_paths() -> Vec<String> {
         }
     }
     for c in [
-        commonwealth_core::model::MODELS_LIST_PATH,
-        commonwealth_core::model::MODEL_FILE_ROUTE,
+        oicp_types::model_transfer::MODELS_LIST_PATH,
+        oicp_types::model_transfer::MODEL_FILE_ROUTE,
     ] {
         paths.push(c.to_string());
     }
@@ -306,7 +306,7 @@ async fn every_route_the_stamped_builders_hit_admits_a_marked_member() {
         ),
         ("/internal/rpc-warm", "distributed_warm::orchestrate_warm"),
         (
-            commonwealth_core::model::MODELS_LIST_PATH,
+            oicp_types::model_transfer::MODELS_LIST_PATH,
             "model_fetch::list_peer_files",
         ),
         (
@@ -440,7 +440,7 @@ async fn shard_pull_statuses(stamped: bool) -> Vec<u16> {
 
     let _ = manager
         .merge_participants(MergePlan {
-            handoff_id: commonwealth_core::ids::HandoffId::from_u128(7),
+            handoff_id: kernel_types::HandoffId::from_u128(7),
             corpus_id: "wire",
             local_node_id: local,
             participants: &participants,

@@ -143,7 +143,7 @@ async fn register_local_model_slots_writes_info_for_all_three_slots() {
     let mesh = Mesh {
         mesh_secret: [0u8; 32],
         invite_expires_at: None,
-        id: commonwealth_core::ids::MeshId::generate(),
+        id: kernel_types::MeshId::generate(),
         name: "test".into(),
         invite_key_hash: [0u8; 32],
         invite_version: 0,

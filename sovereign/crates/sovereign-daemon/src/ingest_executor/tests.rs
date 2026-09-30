@@ -241,7 +241,7 @@ fn every_error_this_executor_can_return_is_retryable_and_never_a_failed_verdict(
     // already owned rather than a second one.
     assert_eq!(
         MAX_UNIT_ATTEMPTS,
-        commonwealth_core::knowledge::MAX_UNIT_ATTEMPTS
+        oicp_types::work_queue::MAX_UNIT_ATTEMPTS
     );
 }
 
@@ -261,10 +261,10 @@ fn the_lease_interval_is_derived_from_the_lease_the_ingest_queue_already_owns() 
     let (_dir, exec) = executor();
     assert_eq!(
         exec.descriptor().lease_interval_ms,
-        commonwealth_core::knowledge::LEASE_MS / 3
+        oicp_types::work_queue::LEASE_MS / 3
     );
     assert!(
-        exec.descriptor().lease_interval_ms * 2 < commonwealth_core::knowledge::LEASE_MS,
+        exec.descriptor().lease_interval_ms * 2 < oicp_types::work_queue::LEASE_MS,
         "two heartbeats must fit inside one lease, or a single slow journal admit \
          lapses it"
     );

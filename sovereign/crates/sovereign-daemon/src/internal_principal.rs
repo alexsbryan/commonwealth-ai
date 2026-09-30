@@ -381,8 +381,8 @@ fn member_of(p: &Principal) -> Option<NodeId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-    use commonwealth_core::ids::MeshId;
+    use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
     use commonwealth_transport::mesh_proof::mesh_proof_stamp;
     use std::collections::HashMap;

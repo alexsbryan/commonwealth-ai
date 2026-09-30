@@ -11,12 +11,12 @@ use std::sync::{Arc, Mutex};
 
 use crate::state::store::StoreSeed;
 use bytes::Bytes;
-use commonwealth_core::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
-use commonwealth_core::capabilities::NodeCapabilities;
-use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
-use commonwealth_core::ids::{ModelId, NodeId};
-use commonwealth_core::model::ModelInfo;
-use commonwealth_core::oicp::EmbedModelInfo;
+use oicp_types::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
+use oicp_types::capabilities::NodeCapabilities;
+use oicp_types::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
+use kernel_types::{ModelId, NodeId};
+use oicp_types::model_catalog::ModelInfo;
+use oicp_types::EmbedModelInfo;
 use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError};
 use sovereign_mesh::ledger_port::{
     ActivityLedgerPort, ContributionLedgerPort, InferencePlan, InferenceStatePort, LedgerFut,

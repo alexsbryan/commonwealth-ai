@@ -18,7 +18,7 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use commonwealth_transport::iroh::{
     format_dial_string, EndpointBuilder, IrohAcceptor, SecretKey, GUEST_ALPN,
 };

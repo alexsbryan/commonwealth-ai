@@ -21,7 +21,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::knowledge::IngestionHandoff;
+use oicp_types::work_queue::IngestionHandoff;
 use kernel_types::NodeId;
 use sovereign_grants::auto_recover::FoldRecovery;
 use sovereign_grants::shard_manager::ShardManager;
@@ -348,7 +348,7 @@ pub async fn corpus_next_unit(
                 .snapshot(&req.handoff_id)
                 .await
                 .map(|q| q.phase)
-                .unwrap_or(commonwealth_core::knowledge::HandoffPhase::Complete);
+                .unwrap_or(oicp_types::work_queue::HandoffPhase::Complete);
             (
                 StatusCode::NO_CONTENT,
                 Json(NextUnitResponse::Empty { phase }),
@@ -465,7 +465,7 @@ pub async fn corpus_complete_unit(
     State(state): State<AppState>,
     Json(req): Json<CompleteUnitRequest>,
 ) -> (StatusCode, Json<CompleteUnitResponse>) {
-    use commonwealth_core::knowledge::{CompleteOutcome, HandoffPhase};
+    use oicp_types::work_queue::{CompleteOutcome, HandoffPhase};
     use sovereign_grants::QueueError;
     let handoff_id = req.handoff_id;
     let peer_id = req.peer_id;
@@ -689,12 +689,12 @@ pub struct NextUnitRequest {
 #[serde(untagged)]
 pub enum NextUnitResponse {
     Leased {
-        unit_id: commonwealth_core::knowledge::UnitId,
-        unit: commonwealth_core::knowledge::WorkUnit,
+        unit_id: oicp_types::work_queue::UnitId,
+        unit: oicp_types::work_queue::WorkUnit,
         lease_expires_at_ms: u64,
     },
     Empty {
-        phase: commonwealth_core::knowledge::HandoffPhase,
+        phase: oicp_types::work_queue::HandoffPhase,
     },
     Error {
         error: String,
@@ -705,7 +705,7 @@ pub enum NextUnitResponse {
 pub struct HeartbeatRequest {
     pub handoff_id: kernel_types::HandoffId,
     pub peer_id: NodeId,
-    pub unit_id: commonwealth_core::knowledge::UnitId,
+    pub unit_id: oicp_types::work_queue::UnitId,
 }
 
 #[derive(Debug, Serialize)]
@@ -719,8 +719,8 @@ pub enum HeartbeatResponseBody {
 pub struct CompleteUnitRequest {
     pub handoff_id: kernel_types::HandoffId,
     pub peer_id: NodeId,
-    pub unit_id: commonwealth_core::knowledge::UnitId,
-    pub outcome: commonwealth_core::knowledge::CompleteOutcome,
+    pub unit_id: oicp_types::work_queue::UnitId,
+    pub outcome: oicp_types::work_queue::CompleteOutcome,
     #[serde(default)]
     pub reason: Option<String>,
 }
@@ -729,7 +729,7 @@ pub struct CompleteUnitRequest {
 #[serde(untagged)]
 pub enum CompleteUnitResponse {
     Ok {
-        phase: commonwealth_core::knowledge::HandoffPhase,
+        phase: oicp_types::work_queue::HandoffPhase,
     },
     Error {
         error: String,
@@ -808,7 +808,7 @@ pub struct GrantStatusDto {
 pub struct CollaborateStatusResponse {
     pub handoff_id: String,
     pub corpus_id: String,
-    pub phase: commonwealth_core::knowledge::HandoffPhase,
+    pub phase: oicp_types::work_queue::HandoffPhase,
     pub total_units: u32,
     pub complete: u32,
     pub failed: u32,
@@ -843,7 +843,7 @@ pub async fn corpus_collaborate_status(
         return (StatusCode::NOT_FOUND, Json(None));
     };
 
-    use commonwealth_core::knowledge::UnitStatus;
+    use oicp_types::work_queue::UnitStatus;
     use std::collections::HashMap;
     // (leased, completed, failed) per peer.
     let mut per: HashMap<NodeId, (u32, u32, u32)> = HashMap::new();

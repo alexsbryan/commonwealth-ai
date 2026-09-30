@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use axum::Router;
 
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 
 use corpus_index::ingest_port::daemon::{IngestPort, RecipeHarnessPort};
@@ -63,7 +63,7 @@ pub async fn name_member_with_key(
     pubkey: [u8; 32],
 ) {
     let mut rec = member(id, name, "127.0.0.1:9742".parse().unwrap());
-    rec.node_pubkey = Some(commonwealth_core::ids::NodePubkey(pubkey));
+    rec.node_pubkey = Some(kernel_types::NodePubkey(pubkey));
     state
         .inner
         .fabric

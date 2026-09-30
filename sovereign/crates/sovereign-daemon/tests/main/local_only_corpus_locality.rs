@@ -39,7 +39,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::source::CorpusReadPort;

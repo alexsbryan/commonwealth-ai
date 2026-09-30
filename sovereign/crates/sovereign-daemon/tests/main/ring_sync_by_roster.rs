@@ -26,7 +26,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{routing::get, Json, Router};
-use commonwealth_core::ids::{MeshId, NodeId, NodePubkey};
+use kernel_types::{MeshId, NodeId, NodePubkey};
 use commonwealth_core::mesh::{MemberRecord, Mesh};
 use commonwealth_rail_core::{Person, RailAct, RingSigner, Roster};
 use ed25519_dalek::SigningKey;

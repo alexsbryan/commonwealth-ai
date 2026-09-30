@@ -15,7 +15,7 @@
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
@@ -179,12 +179,12 @@ async fn budget_unset_returns_no_remaining() {
 // the user-visible outcome — no partition lands on the over-budget
 // node.
 
-use commonwealth_core::oicp::EmbedModelInfo;
+use oicp_types::EmbedModelInfo;
 use sovereign_contracts::membership::MembershipEntry;
 use sovereign_grants::knowledge_assignment::plan_collaborative_ingestion;
 
 fn embed() -> EmbedModelInfo {
-    use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};
+    use oicp_types::{NormalizationStrategy, PoolingStrategy};
     EmbedModelInfo {
         model_id: "qwen3-embedding-0.6b".into(),
         dimensions: 1024,
@@ -195,7 +195,7 @@ fn embed() -> EmbedModelInfo {
 }
 
 fn planner_member(id: u128, free_storage_gb: u32) -> MembershipEntry<()> {
-    use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+    use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
     use sovereign_contracts::daemon_wire::MemberStatus;
     MembershipEntry {
         node_id: NodeId::from_u128(id),

@@ -4,7 +4,7 @@
 //! tests are `commonwealth_rails::kv`'s, and the namespace-agreement check
 //! is sovereign-mesh's `rail_kv_pump_namespaces`.
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use commonwealth_rail_core::{RailAct, SigningKey};
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::rail_kv_pump::*;
@@ -34,7 +34,7 @@ use std::sync::Arc;
 /// journal that shrank and a queue that forgot.
 #[tokio::test]
 async fn work_namespace_seals_and_keeps_live_leases() {
-    use commonwealth_core::ids::HandoffId;
+    use kernel_types::HandoffId;
     use commonwealth_rail_core::{
         actor_of, body_json, sign_ring_op, Op, Person, RingSigner, Roster, SignedOp,
     };

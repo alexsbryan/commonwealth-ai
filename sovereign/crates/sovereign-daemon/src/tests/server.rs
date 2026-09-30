@@ -586,7 +586,7 @@ async fn models_endpoint_with_registered_model() {
     let state = test_app_state();
 
     // Register a model.
-    use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+    use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
     use oicp_types::{Capability, CapabilityProfile};
     use std::collections::HashMap;
 
@@ -594,7 +594,7 @@ async fn models_endpoint_with_registered_model() {
     caps.insert(Capability::Code, 4);
 
     let model = ModelInfo {
-        id: commonwealth_core::ModelId::from_u128(1),
+        id: kernel_types::ModelId::from_u128(1),
         name: "test-coder".into(),
         repo: "test/model".into(),
         file: "model.gguf".into(),

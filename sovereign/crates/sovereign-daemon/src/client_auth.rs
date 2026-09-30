@@ -521,7 +521,7 @@ mod tests {
         use axum::body::Body;
         use axum::routing::get;
         use axum::Router;
-        use commonwealth_core::ids::MeshId;
+        use kernel_types::MeshId;
         use commonwealth_core::mesh::Mesh;
         use kernel_types::NodeId;
         use std::collections::HashMap;

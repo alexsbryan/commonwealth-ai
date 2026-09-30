@@ -252,7 +252,7 @@ pub async fn knowledge_search(
                 .store
                 .contribution_emitter
                 .record(
-                    commonwealth_core::contributions::LedgerEventKind::KnowledgeQueryServed {
+                    oicp_types::contributions::LedgerEventKind::KnowledgeQueryServed {
                         for_node,
                         corpus_id,
                         chunks_returned: chunks,

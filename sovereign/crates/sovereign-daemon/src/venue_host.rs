@@ -49,7 +49,7 @@ impl LedgerEmitter for DaemonLedger {
             return;
         };
         let emitter = Arc::clone(&self.emitter);
-        let kind = commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
+        let kind = oicp_types::contributions::LedgerEventKind::InferenceReceived {
             from_node: *from_node,
             model_id: model_id.to_string(),
             tokens_generated,
@@ -85,7 +85,7 @@ impl ShardTransferLedger for DaemonLedger {
             return;
         };
         let emitter = Arc::clone(&self.emitter);
-        let kind = commonwealth_core::contributions::LedgerEventKind::ShardTransferred {
+        let kind = oicp_types::contributions::LedgerEventKind::ShardTransferred {
             from_node: *from_node,
             to_node: *to_node,
             corpus_id: corpus_id.to_string(),

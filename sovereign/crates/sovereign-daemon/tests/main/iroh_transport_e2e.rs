@@ -20,7 +20,7 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use commonwealth_core::ids::{NodeId, NodePubkey};
+use kernel_types::{NodeId, NodePubkey};
 use commonwealth_discovery::membership;
 use commonwealth_transport::iroh::{
     Endpoint, EndpointBuilder, IrohAcceptor, IrohTransport, SecretKey, ALPN,

@@ -39,8 +39,8 @@
 //! - Emitted before truncation (over-counted under pressure).
 use std::sync::Arc;
 
-use commonwealth_core::contributions::LedgerEventKind;
-use commonwealth_core::ids::NodeId;
+use oicp_types::contributions::LedgerEventKind;
+use kernel_types::NodeId;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::server::internal_router;

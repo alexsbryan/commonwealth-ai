@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use commonwealth_core::ids::{NodeId, NodePubkey};
+use kernel_types::{NodeId, NodePubkey};
 use commonwealth_transport::iroh::{Endpoint, HttpBridge, IrohAcceptor, ALPN};
 use sovereign_daemon::server::{client_router_for, ClientSurface};
 use sovereign_mesh::iroh_access::{AcceptorRoutes, MediaRoute};

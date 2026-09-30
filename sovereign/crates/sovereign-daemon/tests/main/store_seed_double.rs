@@ -5,7 +5,7 @@
 //! to the double, not to Fabric's private store.
 use std::sync::Arc;
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
 use sovereign_daemon::server::internal_router;
@@ -161,7 +161,7 @@ async fn a_contribution_write_lands_on_the_rails_door() {
         .store
         .contribution_emitter
         .record(
-            commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
+            oicp_types::contributions::LedgerEventKind::InferenceReceived {
                 from_node: peer,
                 model_id: "m".into(),
                 tokens_generated: 7,

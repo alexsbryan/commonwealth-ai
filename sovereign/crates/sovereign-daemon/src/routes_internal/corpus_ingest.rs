@@ -13,7 +13,7 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use commonwealth_core::activity::ActivityEventKind;
+use oicp_types::activity::ActivityEventKind;
 use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::{IngestPort, InstallRefusal};
 use serde::{Deserialize, Serialize};

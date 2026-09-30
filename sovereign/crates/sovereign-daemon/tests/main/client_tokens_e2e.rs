@@ -23,7 +23,7 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use sovereign_daemon::client_tokens::{ClientTokenStore, ClientTokens};
 use sovereign_daemon::server::client_router;

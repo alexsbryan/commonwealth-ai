@@ -24,7 +24,7 @@ use std::sync::Arc;
 use crate::state::AppState;
 use crate::types::MemberStatus;
 use bytes::Bytes;
-use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
+use oicp_types::contributions::{LedgerEvent, LedgerEventKind};
 use commonwealth_core::partition;
 use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
 use corpus_index::ingest_port::newsworthy::{CommittedDocs, NewsworthyHost};

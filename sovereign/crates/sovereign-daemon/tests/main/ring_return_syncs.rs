@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail_core::{Person, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
@@ -83,7 +83,7 @@ fn keyed(
     addr: std::net::SocketAddr,
 ) -> commonwealth_core::mesh::MemberRecord {
     let mut rec = common::member(id, name, addr);
-    rec.node_pubkey = Some(commonwealth_core::ids::NodePubkey(
+    rec.node_pubkey = Some(kernel_types::NodePubkey(
         key.verifying_key().to_bytes(),
     ));
     rec

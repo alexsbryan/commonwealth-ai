@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::gossip;
@@ -114,7 +114,7 @@ async fn a_peers_reach_does_not_overwrite_the_holders_offer_clock() {
         commonwealth_core::mesh::IrohDialInfo {
             relay_url: None,
             direct_addrs: Vec::new(),
-            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            origins: vec![oicp_types::capabilities::OriginKind::Media],
             media_allow: vec!["BeefyMac".into()],
         }
     }));
@@ -129,7 +129,7 @@ async fn a_peers_reach_does_not_overwrite_the_holders_offer_clock() {
         );
         assert_eq!(
             m.members[&holder].capabilities.origins,
-            vec![commonwealth_core::capabilities::OriginKind::Media],
+            vec![oicp_types::capabilities::OriginKind::Media],
             "the holder's own record must carry the offer"
         );
     }
@@ -180,7 +180,7 @@ async fn a_peers_reach_does_not_overwrite_the_holders_offer_clock() {
             viewer,
             &commonwealth_media::roster_of(&m),
             &[],
-            commonwealth_core::capabilities::OriginKind::Media,
+            oicp_types::capabilities::OriginKind::Media,
         )
     };
     assert_eq!(

@@ -218,7 +218,7 @@ pub async fn models_load(
 fn compute_extras_model_id(
     slot_name: &str,
     path: &std::path::Path,
-) -> commonwealth_core::ids::ModelId {
+) -> kernel_types::ModelId {
     use std::hash::{DefaultHasher, Hash, Hasher};
     let role = format!("extras:{slot_name}");
     let mut h = DefaultHasher::new();
@@ -228,7 +228,7 @@ fn compute_extras_model_id(
     role.hash(&mut h);
     path.hash(&mut h);
     let hi = h.finish();
-    commonwealth_core::ids::ModelId::from_u128((u128::from(hi) << 64) | u128::from(lo))
+    kernel_types::ModelId::from_u128((u128::from(hi) << 64) | u128::from(lo))
 }
 
 async fn register_extras_in_store(
@@ -237,7 +237,7 @@ async fn register_extras_in_store(
     path: &std::path::Path,
     model_id_str: &str,
 ) {
-    use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+    use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
     use oicp_types::CapabilityProfile;
 
     let id = compute_extras_model_id(slot_name, path);

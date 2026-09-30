@@ -173,14 +173,14 @@ async fn every_listed_id_is_advertised_by_some_manifest() {
 async fn a_store_entry_no_manifest_carries_is_not_listed() {
     let state = test_app_state_with_inference(Arc::new(TwoNodeMesh));
     state
-        .register_model(commonwealth_core::model::ModelInfo {
-            id: commonwealth_core::ModelId::from_u128(7),
+        .register_model(oicp_types::model_catalog::ModelInfo {
+            id: kernel_types::ModelId::from_u128(7),
             name: "ghost-from-gossip".into(),
             repo: String::new(),
             file: "ghost.gguf".into(),
             size_bytes: 1,
             total_layers: 0,
-            architecture: commonwealth_core::model::ModelArchitecture::Other,
+            architecture: oicp_types::model_catalog::ModelArchitecture::Other,
             available_on: std::collections::HashMap::new(),
             oicp_capabilities: Default::default(),
             quantization: String::new(),
@@ -300,14 +300,14 @@ async fn a_held_but_unloaded_model_lists_as_cold_not_missing() {
 async fn no_local_inference_falls_back_to_the_store() {
     let state = test_app_state();
     state
-        .register_model(commonwealth_core::model::ModelInfo {
-            id: commonwealth_core::ModelId::from_u128(9),
+        .register_model(oicp_types::model_catalog::ModelInfo {
+            id: kernel_types::ModelId::from_u128(9),
             name: "orchestrated".into(),
             repo: String::new(),
             file: "o.gguf".into(),
             size_bytes: 1,
             total_layers: 0,
-            architecture: commonwealth_core::model::ModelArchitecture::Other,
+            architecture: oicp_types::model_catalog::ModelArchitecture::Other,
             available_on: std::collections::HashMap::new(),
             oicp_capabilities: Default::default(),
             quantization: String::new(),

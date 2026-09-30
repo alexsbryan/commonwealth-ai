@@ -111,8 +111,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use commonwealth_core::ids::{HandoffId, MeshId};
-use commonwealth_core::knowledge::{HandoffPhase, WorkUnit};
+use kernel_types::{HandoffId, MeshId};
+use oicp_types::work_queue::{HandoffPhase, WorkUnit};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail_core::{
     actor_of, body_json, sign_ring_op, Op, Person, RailAct, Roster, SignedOp, SigningKey,

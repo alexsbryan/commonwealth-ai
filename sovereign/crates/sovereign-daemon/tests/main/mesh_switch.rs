@@ -23,7 +23,7 @@ use sovereign_mesh::persist;
 fn park_a_mesh(
     root: &std::path::Path,
     name: &str,
-    self_id: commonwealth_core::ids::NodeId,
+    self_id: kernel_types::NodeId,
 ) -> Mesh {
     let (mut mesh, _key) = commonwealth_discovery::membership::init_mesh_with_node_id(
         name,

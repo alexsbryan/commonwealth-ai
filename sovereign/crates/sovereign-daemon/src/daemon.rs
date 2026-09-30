@@ -4170,8 +4170,8 @@ async fn register_local_model_slots(
     cfg: &SetupConfig,
     node_id: NodeId,
 ) -> std::collections::HashMap<String, String> {
-    use commonwealth_core::ids::ModelId;
-    use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+    use kernel_types::ModelId;
+    use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
     use oicp_types::CapabilityProfile;
     use std::collections::HashMap;
     use std::hash::{DefaultHasher, Hash, Hasher};

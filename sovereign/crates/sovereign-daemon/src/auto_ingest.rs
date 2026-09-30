@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::state::AppState;
 use crate::types::MemberStatus;
-use commonwealth_core::knowledge::{
+use oicp_types::work_queue::{
     CompleteOutcome, HandoffPhase, IngestionHandoff, LeasedUnit, UnitId, WorkUnit,
 };
 use corpus_index::ingest_port::cancel::CancellationFlag;
@@ -779,7 +779,7 @@ async fn spawn_local_ingest(state: AppState, corpus_id: String) {
 /// than hand-copied — it was `from_secs(100)` beside a comment saying it
 /// matched, which is two deciders agreeing by luck (ARCH §10.6).
 const HEARTBEAT_INTERVAL: Duration =
-    Duration::from_millis(commonwealth_core::knowledge::LEASE_MS / 3);
+    Duration::from_millis(oicp_types::work_queue::LEASE_MS / 3);
 
 /// How many consecutive `next_unit` failures we tolerate before giving up
 /// on a handoff. Counts both 5xx responses (coordinator alive but broken)

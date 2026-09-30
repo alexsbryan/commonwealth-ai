@@ -23,7 +23,7 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use commonwealth_discovery::membership;
 use commonwealth_transport::iroh::{EndpointBuilder, IrohAcceptor, SecretKey, ALPN};
 use sovereign_daemon::server::internal_router;

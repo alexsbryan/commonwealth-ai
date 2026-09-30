@@ -24,7 +24,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use commonwealth_core::knowledge::WorkUnit;
+use oicp_types::work_queue::WorkUnit;
 use corpus_index::ingest_port::cancel::CancellationRegistry;
 use corpus_index::ingest_port::daemon::{IngestPort, IngestResult};
 use corpus_index::ingest_port::double::{IngestPortDouble, SliceIngest};

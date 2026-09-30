@@ -34,7 +34,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{FinishReason, StreamFrame};

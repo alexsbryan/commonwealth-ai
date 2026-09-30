@@ -79,7 +79,7 @@ use std::time::Duration;
 
 use std::collections::BTreeSet;
 
-use commonwealth_core::knowledge::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
+use oicp_types::work_queue::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
 use corpus_index::ingest_port::daemon::IngestPort;
 use corpus_index::ingest_port::ProgressCallback;
 use kernel_types::quality::VerdictSource;
@@ -136,7 +136,7 @@ const CANCEL_POLL: Duration = Duration::from_millis(500);
 /// are two units. That is what makes the fold's idempotency-per-`unit_hash`
 /// line up with the merge step's dedupe-per-`unit_id`.
 ///
-/// **`unit` is `commonwealth_core::knowledge::WorkUnit`, reused rather than
+/// **`unit` is `oicp_types::work_queue::WorkUnit`, reused rather than
 /// re-spelled.** That enum and its [`WorkUnit::to_ingest_args`] are already
 /// the one decider for "which shards / which article range does this slice
 /// mean"; writing `file_indices` and `article_range` into this payload
@@ -186,7 +186,7 @@ impl IngestPayload {
     pub fn parse(payload: &Value) -> Result<IngestPayload, String> {
         let parsed: IngestPayload = serde_json::from_value(payload.clone()).map_err(|e| {
             // The variant names are PascalCase because
-            // `commonwealth_core::knowledge::WorkUnit` is
+            // `oicp_types::work_queue::WorkUnit` is
             // `#[serde(tag = "kind", content = "value")]` with no
             // `rename_all` (`knowledge.rs:318`). This text said `hf-file` /
             // `jsonl-shard` / `jsonl-range` until 2026-09-09 — three spellings
@@ -469,7 +469,7 @@ impl IngestExecutor {
                     },
                     "unit": {
                         "type": "object",
-                        "description": "Which slice. `commonwealth_core::knowledge::WorkUnit`, externally tagged.",
+                        "description": "Which slice. `oicp_types::work_queue::WorkUnit`, externally tagged.",
                         "required": ["kind", "value"],
                         "properties": {
                             "kind": {"enum": ["HfFile", "JsonlShard", "JsonlRange"]},

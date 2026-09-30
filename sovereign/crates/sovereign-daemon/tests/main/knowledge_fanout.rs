@@ -20,8 +20,8 @@ use std::time::Duration;
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-use commonwealth_core::ids::{MeshId, NodeId};
+use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::{

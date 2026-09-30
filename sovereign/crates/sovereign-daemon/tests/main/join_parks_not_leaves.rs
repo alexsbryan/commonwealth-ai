@@ -33,7 +33,7 @@
 //! lives in the plan's two-machine verification, step 2.
 use std::time::Duration;
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use commonwealth_core::mesh::{MemberRecord, NodeStatus};
 use commonwealth_discovery::membership;
 use sovereign_contracts::setup_config::SetupConfig;

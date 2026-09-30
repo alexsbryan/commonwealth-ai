@@ -8,9 +8,9 @@ use futures::StreamExt;
 use tracing::{debug, info, warn};
 
 use crate::types::MemberStatus;
-use commonwealth_core::activity::{ActivityEventKind, ServedFor};
-use commonwealth_core::contributions::LedgerEventKind;
-use commonwealth_core::ids::ModelId;
+use oicp_types::activity::{ActivityEventKind, ServedFor};
+use oicp_types::contributions::LedgerEventKind;
+use kernel_types::ModelId;
 use kernel_types::NodeId;
 use oicp_types::{CapabilityClaim, InferenceRequirements, ShardingPrivacy};
 use std::collections::HashSet;
@@ -456,7 +456,7 @@ async fn route_with_oicp(
 /// hand-maintained mirror, and single-claim: a small model could
 /// never match a latency_class=Fast request here.)
 fn synthesize_claims_for_model_info(
-    model_info: &commonwealth_core::model::ModelInfo,
+    model_info: &oicp_types::model_catalog::ModelInfo,
 ) -> Vec<CapabilityClaim> {
     crate::routes_oicp::synthesize_default_claims(
         &model_info.name,

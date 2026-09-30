@@ -21,7 +21,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::types::MemberStatus;
-use commonwealth_core::knowledge::IngestionHandoff;
+use oicp_types::work_queue::IngestionHandoff;
 use kernel_types::NodeId;
 use sovereign_grants::knowledge_assignment::{
     build_work_units_hf, build_work_units_jsonl_sharded, build_work_units_jsonl_single,

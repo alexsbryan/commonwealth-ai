@@ -31,7 +31,7 @@ use std::time::Duration;
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use corpus_index::ingest_port::daemon::{
     ArticleStats, CorpusDiskStatus, IngestResult, InstallRefusal, PreparedInstall,

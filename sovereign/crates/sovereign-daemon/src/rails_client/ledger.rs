@@ -11,11 +11,11 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
 
-use commonwealth_core::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
-use commonwealth_core::capabilities::NodeCapabilities;
-use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
-use commonwealth_core::ids::ModelId;
-use commonwealth_core::model::ModelInfo;
+use oicp_types::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
+use oicp_types::capabilities::NodeCapabilities;
+use oicp_types::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
+use kernel_types::ModelId;
+use oicp_types::model_catalog::ModelInfo;
 use kernel_types::NodeId;
 use oicp_types::EmbedModelInfo;
 use serde::de::DeserializeOwned;

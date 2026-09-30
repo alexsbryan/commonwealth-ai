@@ -53,8 +53,8 @@
 //! `Display` is the first EIGHT of sixteen bytes and partition directories are
 //! named from it, so the ids differ in their HIGH bytes.
 
-use commonwealth_core::ids::HandoffId;
-use commonwealth_core::knowledge::{HandoffPhase, MAX_UNIT_ATTEMPTS};
+use kernel_types::HandoffId;
+use oicp_types::work_queue::{HandoffPhase, MAX_UNIT_ATTEMPTS};
 use oicp_types::work::projection::{WorkProjection, WorkUnitStatus};
 use oicp_types::work::{Submission, WorkAct};
 use oicp_types::JobKind;
@@ -165,7 +165,7 @@ async fn abandoned_handoff(corpus: &str) -> (WorkProjection, HandoffId, String) 
             "the third unit must be terminal `Failed`; got {other:?}. Check the \
              lease timeline in this function's docs against LEASE_MS \
              ({}) and MAX_UNIT_ATTEMPTS ({MAX_UNIT_ATTEMPTS}).",
-            commonwealth_core::knowledge::LEASE_MS,
+            oicp_types::work_queue::LEASE_MS,
         ),
     }
     assert_eq!(

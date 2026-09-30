@@ -46,9 +46,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-use commonwealth_core::contributions::LedgerEventKind;
-use commonwealth_core::ids::{MeshId, NodeId};
+use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+use oicp_types::contributions::LedgerEventKind;
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;

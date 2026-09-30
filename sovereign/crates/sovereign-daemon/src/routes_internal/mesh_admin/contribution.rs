@@ -153,7 +153,7 @@ pub struct RecentContributionsResponse {
     /// entry is a full `LedgerEvent` (origin node + timestamp + kind);
     /// the UI is responsible for friendly-name resolution and any
     /// formatting beyond the raw fact.
-    pub events: Vec<commonwealth_core::contributions::LedgerEvent>,
+    pub events: Vec<oicp_types::contributions::LedgerEvent>,
 }
 
 /// `GET /internal/contribution/recent` — recent ledger events, newest
@@ -165,7 +165,7 @@ pub async fn contribution_recent(
     axum::extract::Query(params): axum::extract::Query<RecentContributionsParams>,
 ) -> Result<Json<RecentContributionsResponse>, (StatusCode, String)> {
     let limit = params.limit.unwrap_or(20).min(200);
-    let mut events: Vec<commonwealth_core::contributions::LedgerEvent> = state
+    let mut events: Vec<oicp_types::contributions::LedgerEvent> = state
         .inner
         .store
         .contribution_emitter
@@ -226,7 +226,7 @@ pub async fn contribution_view(
 ) -> Result<Json<Vec<NodeContributionsView>>, (StatusCode, String)> {
     let caps_map: std::collections::HashMap<
         NodeId,
-        commonwealth_core::capabilities::NodeCapabilities,
+        oicp_types::capabilities::NodeCapabilities,
     > = {
         state
             .membership()
@@ -242,7 +242,7 @@ pub async fn contribution_view(
         .contribution_emitter
         .current_contributions(
             &caps_map,
-            commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
+            oicp_types::contributions::DEFAULT_WINDOW_DAYS,
         )
         .await
         .map_err(|e| {
@@ -302,7 +302,7 @@ pub struct ActivitySummaryParams {
 #[derive(Debug, Serialize)]
 pub struct ActivitySummaryResponse {
     #[serde(flatten)]
-    pub activity: commonwealth_core::activity::ActivitySummary,
+    pub activity: oicp_types::activity::ActivitySummary,
     // Folded-in mesh contribution: what THIS node provided to peers
     // (the gossiped contribution ledger, over its own 30-day window).
     pub peer_inference_served_requests: u64,
@@ -321,7 +321,7 @@ pub async fn activity_summary(
 ) -> Result<Json<ActivitySummaryResponse>, (StatusCode, String)> {
     let window_days = params
         .window_days
-        .unwrap_or(commonwealth_core::activity::DEFAULT_ACTIVITY_WINDOW_DAYS)
+        .unwrap_or(oicp_types::activity::DEFAULT_ACTIVITY_WINDOW_DAYS)
         .min(365);
     let activity = state
         .inner
@@ -343,7 +343,7 @@ pub async fn activity_summary(
     let self_id = state.inner.store.contribution_emitter.self_node_id();
     let caps_map: std::collections::HashMap<
         NodeId,
-        commonwealth_core::capabilities::NodeCapabilities,
+        oicp_types::capabilities::NodeCapabilities,
     > = {
         state
             .membership()
@@ -359,7 +359,7 @@ pub async fn activity_summary(
         .contribution_emitter
         .current_contributions(
             &caps_map,
-            commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
+            oicp_types::contributions::DEFAULT_WINDOW_DAYS,
         )
         .await
         .map_err(|e| {
@@ -393,7 +393,7 @@ pub async fn activity_summary(
 pub struct ActivityRecentResponse {
     /// Most recent local activity events, newest first. Each entry is
     /// a full `ActivityEvent`; the UI formats the friendly summary.
-    pub events: Vec<commonwealth_core::activity::ActivityEvent>,
+    pub events: Vec<oicp_types::activity::ActivityEvent>,
 }
 
 /// `GET /internal/activity/recent` — recent local activity events,
@@ -404,7 +404,7 @@ pub async fn activity_recent(
     axum::extract::Query(params): axum::extract::Query<RecentContributionsParams>,
 ) -> Result<Json<ActivityRecentResponse>, (StatusCode, String)> {
     let limit = params.limit.unwrap_or(20).min(200);
-    let mut events: Vec<commonwealth_core::activity::ActivityEvent> = state
+    let mut events: Vec<oicp_types::activity::ActivityEvent> = state
         .inner
         .node
         .activity_emitter

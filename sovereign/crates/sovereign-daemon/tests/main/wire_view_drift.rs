@@ -63,7 +63,7 @@ fn full_status() -> StatusResponse {
         fanout_inflight_current: 0,
         active_corpus_ingests: 1,
         iroh_transport: vec![sovereign_daemon::daemon::MemberReach {
-            node_id: commonwealth_core::ids::NodeId::from_u128(7),
+            node_id: kernel_types::NodeId::from_u128(7),
             name: "peer-one".into(),
             path: Some(PeerTransportPath {
                 path: "mixed".into(),

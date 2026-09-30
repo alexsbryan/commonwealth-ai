@@ -10,8 +10,8 @@ use std::net::SocketAddr;
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-use commonwealth_core::ids::{MeshId, NodeId};
+use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;

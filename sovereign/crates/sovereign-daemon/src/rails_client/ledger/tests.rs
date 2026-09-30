@@ -10,10 +10,10 @@ use std::sync::Arc;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use commonwealth_core::activity::ActivityEventKind;
-use commonwealth_core::contributions::LedgerEventKind;
-use commonwealth_core::ids::ModelId;
-use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+use oicp_types::activity::ActivityEventKind;
+use oicp_types::contributions::LedgerEventKind;
+use kernel_types::ModelId;
+use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
 use kernel_types::NodeId;
 use sovereign_mesh::ledger_port::{
     ActivityLedgerPort, ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,
@@ -190,7 +190,7 @@ async fn a_failed_refill_keeps_the_last_value() {
 /// dialed port unchanged, as cw-rails' `GET /v1/ledger/activity` serves it.
 #[tokio::test]
 async fn a_recorded_activity_event_reads_back_through_the_dial() {
-    let recorded = vec![commonwealth_core::activity::ActivityEvent {
+    let recorded = vec![oicp_types::activity::ActivityEvent {
         node_id: NodeId::from_u128(ME),
         timestamp: 1,
         kind: ActivityEventKind::LocalInferenceServed {

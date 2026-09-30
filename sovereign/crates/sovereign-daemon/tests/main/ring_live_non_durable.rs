@@ -20,7 +20,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use commonwealth_rail_core::{Person, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
 use sovereign_daemon::server::{client_router, client_router_for, internal_router, ClientSurface};

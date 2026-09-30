@@ -31,7 +31,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use commonwealth_core::ids::{MeshId, NodeId};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;

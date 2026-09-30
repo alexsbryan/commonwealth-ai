@@ -7,8 +7,8 @@
 //! `hosted_corpora: vec![]`, defeating the whole knowledge fan-out.
 use std::sync::Arc;
 
-use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-use commonwealth_core::ids::{MeshId, NodeId};
+use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::ingest_port::double::IngestPortDouble;
@@ -229,7 +229,7 @@ async fn gossip_round_carries_media_allow_into_offered_to() {
         .publish(Arc::new(|| commonwealth_core::mesh::IrohDialInfo {
             relay_url: None,
             direct_addrs: Vec::new(),
-            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            origins: vec![oicp_types::capabilities::OriginKind::Media],
             media_allow: vec!["LittleMac".into()],
         }));
 
@@ -247,7 +247,7 @@ async fn gossip_round_carries_media_allow_into_offered_to() {
         viewer,
         &commonwealth_media::roster_of(&m),
         &[],
-        commonwealth_core::capabilities::OriginKind::Media,
+        oicp_types::capabilities::OriginKind::Media,
     );
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(rows[0].offered_to, vec!["LittleMac".to_string()]);
@@ -302,7 +302,7 @@ async fn gossip_round_carries_presence_and_drops_it_with_the_offer() {
         .publish(Arc::new(|| commonwealth_core::mesh::IrohDialInfo {
             relay_url: None,
             direct_addrs: Vec::new(),
-            origins: vec![commonwealth_core::capabilities::OriginKind::Media],
+            origins: vec![oicp_types::capabilities::OriginKind::Media],
             media_allow: Vec::new(),
         }));
 
@@ -322,7 +322,7 @@ async fn gossip_round_carries_presence_and_drops_it_with_the_offer() {
             viewer,
             &commonwealth_media::roster_of(&m),
             &[],
-            commonwealth_core::capabilities::OriginKind::Media,
+            oicp_types::capabilities::OriginKind::Media,
         );
         assert_eq!(rows.len(), 1, "{rows:?}");
         assert_eq!(
@@ -350,7 +350,7 @@ async fn gossip_round_carries_presence_and_drops_it_with_the_offer() {
         viewer,
         &commonwealth_media::roster_of(&m),
         &[],
-        commonwealth_core::capabilities::OriginKind::Media,
+        oicp_types::capabilities::OriginKind::Media,
     );
     assert!(
         rows.is_empty(),
