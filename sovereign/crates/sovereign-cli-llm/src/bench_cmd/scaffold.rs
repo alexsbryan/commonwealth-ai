@@ -19,8 +19,8 @@ use understanding_vocab::atoms::{AtomEnvelope, Entity, Event, Opposition, Positi
 use understanding_vocab::axis_catalog::{all_axes, AxisAtomShape, TypedAxis};
 use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
 
-use crate::enrich_cmd::paths::index_root;
 use sovereign_cli_base::help::{self, Help, HelpSection};
+use sovereign_contracts::index_layout::index_root;
 
 const HELP: Help = Help {
     command: "svrn bench scaffold",

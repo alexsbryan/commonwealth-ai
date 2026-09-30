@@ -209,7 +209,7 @@ fn run(args: &[String], diagnose: bool) -> i32 {
         }
     };
 
-    let index_root = crate::enrich_cmd::paths::index_root(&parsed.corpus_id);
+    let index_root = sovereign_contracts::index_layout::index_root(&parsed.corpus_id);
     let detected = match load_detected(&index_root) {
         Ok(d) => d,
         Err(e) => {
