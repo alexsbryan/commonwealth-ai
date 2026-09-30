@@ -198,7 +198,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // SOVEREIGN_SERVE_PORT). 4 -> 5 at pb-serve-distributes (30ac18fda,
     // reconciled at pb-cli-llm-bench-move): `forward_stream` builds its own
     // client for the model-transfer byte stream, to the same loopback base.
-    ("sovereign/crates/sovereign-daemon/src/serve_client.rs", Class::LocalDaemon, 5),
+    // 5 -> 4 at pb-meshapp-rest: the served-self read moved to
+    // sovereign-turn-client/src/serve_self.rs (row there).
+    ("sovereign/crates/sovereign-daemon/src/serve_client.rs", Class::LocalDaemon, 4),
     // fetch-model's peer client moved here, whole, from sovereign-cli-mesh's
     // mesh_cmd.rs (c2529c94c): the mesh row went 8 -> 7, same class.
     ("sovereign/crates/sovereign-serve/src/fetch_model.rs", Class::Mesh, 1),

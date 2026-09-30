@@ -53,6 +53,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // copies preceded it — so this row is where a future probe-site review
     // lands instead of in each consumer.
     ("sovereign/crates/sovereign-turn-client/src/reach.rs", Class::LocalDaemon, 1),
+    // `serve_self.rs` — serve's self-report read (`GET /v1/engine/self`) at
+    // this host's serve, moved from the daemon's serve_client at
+    // pb-meshapp-rest so code's editor door shares it.
+    ("sovereign/crates/sovereign-turn-client/src/serve_self.rs", Class::LocalDaemon, 1),
     // sovereign-mobile: the phone's ApiClient — one `reqwest::Client`, one
     // `TurnClient::new(base_url)` over the same client family the desktop
     // and CLI use (sv-surface R6, 4e1f99f55), and the response parser.

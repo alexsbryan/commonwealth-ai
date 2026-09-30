@@ -92,6 +92,9 @@ pub mod rails_kv;
 /// shared by svrn's work origin and serve's origins.
 pub mod rails_origins;
 
+// Serve's default base and self-report reader (pb-meshapp-rest).
+pub mod serve_self;
+
 #[cfg(feature = "bundled-backend")]
 pub use reach::BundledBackend;
 pub use reach::{NotReachable, Reached, ServingHost, CAN_BRING_UP_A_BACKEND};
