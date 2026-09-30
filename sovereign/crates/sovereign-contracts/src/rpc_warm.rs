@@ -38,3 +38,34 @@ pub trait RpcShardWarmer: Send + Sync {
         reach: WarmReach,
     ) -> Result<serde_json::Value, String>;
 }
+
+/// Find this node's local copy of `model_id` in the servable allowlist: first an exact
+/// entry (a configured slot), then the same filename in any servable model's
+/// DIRECTORY — so a worker that holds the GGUF on disk (even when it isn't a
+/// configured slot) warms from it instead of re-fetching. Returns `None` when the
+/// node genuinely doesn't have it (the warmer then fetches). Path-safety: a
+/// `model_id` containing a path separator is rejected — it's matched as a bare
+/// file name only, never a traversal.
+pub fn resolve_local_model(allow: &[PathBuf], model_id: &str) -> Option<PathBuf> {
+    if model_id.is_empty() || model_id.contains('/') || model_id.contains('\\') {
+        return None;
+    }
+    // 1. Exact slot match.
+    if let Some(p) = allow
+        .iter()
+        .find(|p| p.file_name().and_then(|n| n.to_str()) == Some(model_id))
+    {
+        return Some(p.clone());
+    }
+    // 2. Same filename in any servable model's directory (on disk, not a slot).
+    let mut seen = std::collections::HashSet::new();
+    for dir in allow.iter().filter_map(|p| p.parent()) {
+        if seen.insert(dir.to_path_buf()) {
+            let candidate = dir.join(model_id);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
