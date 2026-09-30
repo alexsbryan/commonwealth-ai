@@ -89,7 +89,7 @@ async fn qa(args: &[String]) -> i32 {
     }
     if !present("--custom-instructions") {
         chaos.push("--custom-instructions".into());
-        chaos.push(crate::proxy_cmd::ask::PROXY_ASK_DISCIPLINE.to_string());
+        chaos.push(sovereign_contracts::ask_discipline::PROXY_ASK_DISCIPLINE.to_string());
     }
     chaos.extend(rest.iter().cloned());
     eprintln!(

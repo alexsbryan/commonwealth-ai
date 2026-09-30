@@ -116,7 +116,7 @@ async fn qa(args: &[String]) -> i32 {
     }
     if !present("--custom-instructions") {
         chaos.push("--custom-instructions".into());
-        chaos.push(crate::govern_cmd::ask::GOVERN_ASK_DISCIPLINE.to_string());
+        chaos.push(sovereign_contracts::ask_discipline::GOVERN_ASK_DISCIPLINE.to_string());
     }
     chaos.extend(rest.iter().cloned());
     eprintln!(
