@@ -409,7 +409,9 @@ fn mcp(port: u16, id: u64, method: &str, params: Value) -> Value {
 /// name is listed twice, code's `symbols` answers (not svrn's pointer to
 /// `svrn code mcp`), `work_in_flight` is code's and answers, and
 /// `/v1/projects` is code's router. Its boot log says ingest's
-/// enrichment-config port was composed (pb-ingest-dial-tools-close).
+/// enrichment-config port was composed (pb-ingest-dial-tools-close). Code's
+/// editor door answers on the client port with this binary's grammar lookup
+/// (pb-meshapp-rest).
 #[test]
 fn the_stock_install_serves_code_on_its_one_mcp() {
     let root = tempfile::tempdir().expect("tempdir");
@@ -527,6 +529,37 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
         projects.status().is_success(),
         "/v1/projects is not code's router: HTTP {}",
         projects.status()
+    );
+
+    // Code's editor door on svrn's client port, with the grammar lookup this
+    // binary supplies from corpus-engine's registry (pb-meshapp-rest): in a
+    // `.tsx` buffer the `console.log` inside a comment is not a site, so one
+    // edit is proposed, and the debug block names nothing unjudged. Without
+    // the lookup both sites survive (sovereign-code tests/edit_door_grammar.rs).
+    let unit = serde_json::json!({
+        "before": "log", "after": "debug",
+        "left": "  console.", "right": "(\"x\");"
+    });
+    let text = "console.debug(1);\nconsole.debug(2);\nconsole.log(3);\n// console.log(4);\n";
+    let nes: Value = client()
+        .post(format!("http://127.0.0.1:{svrn}/v1/edit_predictions"))
+        .json(&serde_json::json!({
+            "history": [unit, unit], "text": text, "cursor": 0,
+            "path": "/work/src/App.tsx", "debug": true,
+        }))
+        .send()
+        .expect("/v1/edit_predictions answered")
+        .json()
+        .expect("an edit prediction");
+    assert_eq!(nes["object"], "edit_prediction", "{nes}");
+    assert_eq!(
+        nes["edits"].as_array().map(Vec::len),
+        Some(1),
+        "the stock door did not run the syntax filter on .tsx: {nes}"
+    );
+    assert!(
+        nes["sovereign_debug"].get("syntax_filter").is_none(),
+        "the stock door named its syntax filter unjudged: {nes}"
     );
 }
 

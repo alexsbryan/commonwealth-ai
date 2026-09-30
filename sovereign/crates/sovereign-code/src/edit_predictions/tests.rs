@@ -374,6 +374,10 @@ async fn model_lane_without_service_is_explained_silence() {
     assert_eq!(m["consulted"], true);
     assert_eq!(m["reason"], "multiline_fanout");
     assert_eq!(m["dropped"], "unavailable");
+    assert_eq!(
+        body["sovereign_debug"]["model_state"],
+        "dropped:unavailable"
+    );
 }
 
 #[tokio::test]
