@@ -9056,6 +9056,7 @@ name = "oicp-client"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "futures",
  "reqwest 0.12.28",
  "serde",

@@ -21,5 +21,10 @@ tokio-stream = "0.1"
 tracing = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 
+[dev-dependencies]
+# `daemon_models`' tests stand up a fake daemon (`/v1/models`,
+# `/v1/embeddings`) on a loopback port.
+axum = { workspace = true }
+
 [lints]
 workspace = true
