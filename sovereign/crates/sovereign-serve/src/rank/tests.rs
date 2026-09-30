@@ -192,7 +192,8 @@ async fn a_reload_keeps_the_pinned_pods_the_one_router_ranks() {
     )
     .await;
     let pod = pod_id.to_hex();
-    let ranks_pod = |peers: Vec<Option<String>>| peers.iter().any(|p| p.as_deref() == Some(pod.as_str()));
+    let ranks_pod =
+        |peers: Vec<Option<String>>| peers.iter().any(|p| p.as_deref() == Some(pod.as_str()));
     assert!(
         ranks_pod(peer_ids(&ranking.router).await),
         "the router ranks the pinned pod on disk"
