@@ -389,13 +389,13 @@ async fn run_enrich_and_verify(
 }
 
 /// Resolve the daemon's chat + embed model ids through the ONE decider
-/// (`sovereign_workflow_host::daemon_models`, ARCH §10.6): the chat id off
+/// (`oicp_client::daemon_models`, ARCH §10.6): the chat id off
 /// `/v1/models`, the embed id by the configured-stem → advertised ladder
 /// PROVED with a `/v1/embeddings` probe. This used to be a third copy of an
 /// `embed`-substring scan over the listing, and refused a daemon that
 /// embedded fine but advertised only chat ids.
 async fn resolve_daemon_models(v1: &str) -> Result<(String, String), String> {
-    let models = sovereign_workflow_host::discover_models(v1)
+    let models = oicp_client::daemon_models::discover_models(v1)
         .await
         .map_err(|e| {
             format!("daemon /v1/models at {v1} unreachable ({e}); is the daemon running?")
@@ -403,7 +403,7 @@ async fn resolve_daemon_models(v1: &str) -> Result<(String, String), String> {
     let chat = models
         .chat
         .ok_or_else(|| format!("daemon at {v1} advertises no chat model"))?;
-    let embed = sovereign_workflow_host::resolve_embed_model(v1, None)
+    let embed = oicp_client::daemon_models::resolve_embed_model(v1, None)
         .await?
         .id;
     Ok((chat, embed))

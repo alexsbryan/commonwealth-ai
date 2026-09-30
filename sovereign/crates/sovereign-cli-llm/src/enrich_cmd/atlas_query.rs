@@ -22,14 +22,13 @@ use corpus_engine::atlas_traversal::{
 use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, ATLAS_DIRNAME,
 };
-use sovereign_core::atlas_context::{
+use corpus_engine_atlas_reader::context::{
     open_and_attach_ann_seed_table, render_call_chain_brief, seed_atom_by_meaning, AtlasGraph,
     CallDirection,
 };
 
 use super::paths;
 use crate::chat_cmd::bootstrap::build_session;
-use crate::probe_cmd::load_atlas_context;
 use corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter;
 use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
@@ -342,7 +341,13 @@ async fn conceptual_seed(
             include_configurations: false,
             ..AtlasContextFilter::default()
         };
-        match load_atlas_context(&session.inference, corpus_id, 8, &filter).await {
+        let embed = corpus_index::embed_fn::inference_to_embed_query_fn(session.inference.clone());
+        match corpus_engine_atlas_reader::context_loader::load_atlas_context(
+            &embed, atlas_dir, corpus_id, 8, &filter,
+        )
+        .await
+        .map_err(|e| e.to_string())
+        {
             Ok(c) => Some(c),
             Err(e) => {
                 eprintln!("atlas-query: no ANN table and embedding bag load failed: {e}");

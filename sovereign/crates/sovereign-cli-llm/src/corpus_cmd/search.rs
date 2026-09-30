@@ -93,12 +93,12 @@ pub(crate) async fn search_corpus(
     limit: usize,
 ) -> Result<Vec<corpus_index::types::ScoredChunk>, String> {
     // Embed the query via the daemon's embed slot, resolved through the ONE
-    // decider (`sovereign_workflow_host::daemon_models`): configured stem →
+    // decider (`oicp_client::daemon_models`): configured stem →
     // advertised id, proved by a `/v1/embeddings` probe. The refusal names
     // what was probed; "advertises no embedding model" is no longer a
     // verdict anything here reaches from an id substring.
     let v1 = format!("{DEFAULT_DAEMON}/v1");
-    let embed_model = sovereign_workflow_host::resolve_embed_model(&v1, None)
+    let embed_model = oicp_client::daemon_models::resolve_embed_model(&v1, None)
         .await
         .map(|r| r.id)
         .map_err(|e| {
