@@ -669,6 +669,7 @@ pub fn assemble(
 /// `#[cfg(test)]`: nothing outside this crate's unit tests can reach them, so
 /// no production path can obtain a services value it did not assemble itself.
 #[cfg(test)]
+#[path = "daemon_services/fixtures_tests.rs"]
 pub(crate) mod fixtures;
 
 #[cfg(test)]
