@@ -999,6 +999,11 @@ pub(super) async fn run_daemon(
                     provider_factory: Arc::new(crate::provider::LlamaCppFactory {
                         daemon: Arc::clone(&deferred_daemon),
                         reload,
+                        routed: Arc::clone(&routed_provider),
+                        slot_aliases: Some({
+                            let router = Arc::clone(&mesh_provider);
+                            Arc::new(move |map| router.set_slot_aliases(map))
+                        }),
                     }),
                     // The work atlas writes into THIS store, so its entries reach
                     // the store's outbox and ride the ring rail (cw-lift 4b; the

@@ -815,6 +815,16 @@ pub async fn build_mesh_provider(
     // Observed live 2026-08-28: zero `guest-lender` lines in a daemon whose
     // `guest.json` was present and valid.
     mesh_provider.set_guest_source(sovereign_mesh::guest_source::stored_guest_source());
+    // Route this node's primary turns into the mesh-hosted shared model, if
+    // one is configured (SOVEREIGN_SHARED_MODEL_ID, from [shared_model]
+    // model_id). Here, at the one construction: a reload keeps this router,
+    // so the first primary turn after cold start already goes there
+    // (pb-serve-ranks; it ran only on reload before).
+    let shared = sovereign_contracts::launch::SharedModelFleet::from_env();
+    tracing::info!(target: "serving_path", shared_model = ?shared.model_id(), "router: the shared model primary turns route to");
+    if let Some(id) = shared.model_id() {
+        mesh_provider.set_shared_model_id(Some(id.to_string()));
+    }
     (daemon, mesh_provider, in_flight_gauge)
 }
 

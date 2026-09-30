@@ -96,6 +96,10 @@ impl ServingPath {
 /// The provider cell a hosted serve's routes answer from.
 pub type HostedCell = std::sync::Arc<sovereign_contracts::reloadable_provider::ReloadableProvider>;
 
+/// Pushes svrn's slot-alias map into the router that ranks this node's turns.
+pub type SlotAliasSink =
+    std::sync::Arc<dyn Fn(std::collections::HashMap<String, String>) + Send + Sync>;
+
 /// What hosting serve in this process hands svrn: the cell every route
 /// answers from, and the distribution over serve's engine and slot (the warm
 /// orchestrator, the self-manifest refresh, RPC-worker discovery), which svrn

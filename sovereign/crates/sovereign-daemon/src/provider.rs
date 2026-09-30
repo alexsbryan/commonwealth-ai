@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Hot-reload inference provider factory — extracted from `daemon_cmd`
-//! (§3.2). Rebuilds the serving provider from serve after it reloads
-//! (wrapped in the mesh-aware router) when the operator changes a model path
-//! at runtime.
+//! (§3.2). A reload swaps the provider cell under the router boot built and
+//! hands that same router back (pb-serve-ranks: one router per node, cold
+//! start and reload alike), when the operator changes a model path at
+//! runtime.
 
 use std::sync::Arc;
 
@@ -11,9 +12,9 @@ use async_trait::async_trait;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 
-/// Rebuilds the serving provider from a fresh `SetupConfig`, wrapped in the
-/// same `InferenceRouter` used at cold start so hot-reloads preserve
-/// mesh-aware model routing.
+/// Reloads the serving provider from a fresh `SetupConfig` and hands back the
+/// provider boot built over it, so a hot reload keeps mesh-aware model routing
+/// without constructing a second router.
 ///
 /// Hot-swapped into `EmbeddedDaemon::inference_provider` by the admin
 /// reload handler when the user changes a `models.*` path in
@@ -21,16 +22,20 @@ use sovereign_core::traits::InferenceProvider;
 /// panel's model picker). Keeps the model-loading side of the daemon
 /// out of `sovereign-mesh`, which has no business knowing about GGUF.
 pub struct LlamaCppFactory {
-    /// Same `EmbeddedDaemon` the cold-start path wraps the raw
-    /// llama.cpp provider against. Held here so a hot-reload
-    /// (operator changing the primary GGUF path while the daemon is
-    /// running) produces a `InferenceRouter` view of the new
-    /// raw provider — without this, reload would drop the wrapper
-    /// and `/v1/chat/completions` would silently start substituting
-    /// for peer-only model names again.
+    /// The deferred handle boot bound; a reload reads the running daemon's
+    /// state (its slot aliases) through it.
     pub daemon: Arc<crate::DeferredDaemon>,
     /// Where the reload's raw provider comes from.
     pub reload: ReloadSource,
+    /// What boot built over the reload's cell: the router, where one ranks
+    /// this node's turns. A reload swaps the cell under it and returns this,
+    /// so the pinned pods, the venue composite, the guest source and the
+    /// shared model the cold start wired survive every reload (pb-serving-
+    /// proofs (a); the `set_shared_model_id` divergence).
+    pub routed: Arc<dyn InferenceProvider>,
+    /// Pushes the reloaded residency's slot aliases into that router; `None`
+    /// where nothing ranks here.
+    pub slot_aliases: Option<crate::serve_client::SlotAliasSink>,
 }
 
 /// The raw provider a reload wraps, from the path boot chose
@@ -58,7 +63,7 @@ pub enum ReloadSource {
 
 impl LlamaCppFactory {
     /// The alias map follows what serve holds now; `build_provider` pushes it
-    /// into the rebuilt router below. Both serve paths publish through here.
+    /// into the router below. Both serve paths publish through here.
     async fn publish_served_aliases(
         &self,
         slots: &[sovereign_contracts::oicp::ResidentSlot],
@@ -129,84 +134,33 @@ impl ProviderFactory for LlamaCppFactory {
         // Only serve has an engine to rebuild. A terminal's provider is a
         // forwarder built once against its entry node; its arm refuses by
         // name (`SetupConfig::models`) rather than load empty paths.
-        let raw = self.raw_provider(cfg).await?;
-
-        // Wrap so a hot-reloaded daemon keeps its mesh-aware model
-        // routing — same wrapper the cold-start path installs in
-        // `run_daemon`. See the comment on the cold-start wiring
-        // for why a bare `EmbeddedLlamaCpp` here would re-introduce
-        // the silent-substitution bug.
-        //
-        // Hot-reload load-awareness invariant: the new router must
-        // share the SAME `Arc<AtomicU32>` publisher as the old router
-        // (held by AppState's OnceLock). Live `LocalTotalGuard`s
-        // from the old router have already captured a clone of that
-        // Arc and will continue to decrement it as their requests
-        // drain. If we let the new router create a fresh publisher,
-        // the old guards would write to an Arc nobody reads, and
-        // gossip would see a counter that snaps to zero on reload
-        // and stays there until new traffic flows. See
-        // `sovereign/docs/MESH_LOAD_AWARENESS.md`.
-        // The factory is only reachable through `POST /v1/admin/reload`, which
-        // is served BY the daemon — so by the time this runs the handle is
-        // always bound. `None` here would mean a reload that arrived before
-        // the daemon existed, which the HTTP surface cannot produce.
-        let daemon = self
-            .daemon
-            .get()
-            .ok_or_else(|| "reload arrived before the daemon was commissioned".to_string())?;
-        let peer_source: Arc<dyn sovereign_contracts::venue::VenueSource> =
-            Arc::clone(&self.daemon) as Arc<_>;
-        let peer_host: Arc<dyn sovereign_serving_host::venue_host::VenueHost> =
-            Arc::clone(&self.daemon) as Arc<_>;
-        let app_state_opt = daemon.app_state().await;
-        let mut builder = sovereign_serving_host::peer_inference::InferenceRouter::builder(raw)
-            .candidates(Arc::clone(&peer_source))
-            .host(Arc::clone(&peer_host))
-            .manifest(Arc::new(crate::slot_manifest::CoreSlotManifest));
-        // A reload must NOT mint a fresh publisher: live `LocalTotalGuard`s from
-        // the old router hold a clone of the node's `Arc<AtomicU32>` and keep
-        // decrementing it as their requests drain. The gauge exists from
-        // construction (the bootstrap created it before the cold-start router),
-        // so `AppState` already holds it and we hand the same `Arc` to the new
-        // router. A node with no gauge (no router ever built) leaves the
-        // builder to mint a private one.
-        if let Some(publisher) = app_state_opt
-            .as_ref()
-            .and_then(|state| state.in_flight_publisher())
-        {
-            builder = builder.in_flight(publisher);
-        }
-        let mesh_provider = Arc::new(builder.build());
-        // Push current slot aliases into the freshly-built mesh
-        // provider so a reload preserves the deferred-resolution
-        // wiring. Mirrors the cold-start spawned task in
-        // `run_daemon`; here we run inline because the daemon is
-        // already in the Running state at reload time.
-        if let Some(state) = app_state_opt {
-            let snapshot = state.inner.serving.slot_aliases.current();
-            let map: std::collections::HashMap<String, String> = snapshot
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect();
-            if !map.is_empty() {
-                mesh_provider.set_slot_aliases(map);
+        self.raw_provider(cfg).await?;
+        // The cell under the router now holds the reloaded engine. The alias
+        // map follows serve's new residency into the same router; the
+        // in-flight gauge, whose live guards the old requests still hold, is
+        // the router's own and never re-minted.
+        if let Some(sink) = &self.slot_aliases {
+            let state = match self.daemon.get() {
+                Some(daemon) => daemon.app_state().await,
+                None => None,
+            };
+            if let Some(state) = state {
+                let snapshot = state.inner.serving.slot_aliases.current();
+                let map: std::collections::HashMap<String, String> = snapshot
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                if !map.is_empty() {
+                    sink(map);
+                }
             }
         }
-        // A guest link this node has accepted lets a granted model id resolve
-        // to the LENDING node, while the turn itself stays here. Wired from
-        // the data dir because that is where `svrn mesh use` writes
-        // `guest.json`; a node that never ran it gets `NoGuestLenders` and
-        // pays nothing. See `sovereign_mesh::guest_source`.
-        mesh_provider.set_guest_source(sovereign_mesh::guest_source::stored_guest_source());
-        // Route this node's primary turns into the mesh-hosted shared model, if
-        // one is configured (SOVEREIGN_SHARED_MODEL_ID, from [shared_model]
-        // model_id). Survives reload — the env is set once at daemon entry.
-        if let Some(id) = sovereign_contracts::launch::SharedModelFleet::from_env().model_id() {
-            mesh_provider.set_shared_model_id(Some(id.to_string()));
-        }
-        let routed: Arc<dyn InferenceProvider> = mesh_provider;
-        Ok(routed)
+        tracing::info!(
+            target: "serving_path",
+            ranks = self.slot_aliases.is_some(),
+            "reload: the cell swapped under the provider boot built; no second router"
+        );
+        Ok(Arc::clone(&self.routed))
     }
 }
 
@@ -305,6 +259,14 @@ mod reload_through_serve {
                 Default::default(),
             ),
         );
+        // What boot built over the cell (a router, where one ranks), stood in
+        // for by one more wrapper; the reload must hand back this one.
+        let routed: Arc<dyn InferenceProvider> = Arc::new(
+            sovereign_contracts::reloadable_provider::ReloadableProvider::new(
+                Arc::clone(&cell) as Arc<dyn InferenceProvider>,
+                Default::default(),
+            ),
+        );
         let factory = LlamaCppFactory {
             daemon,
             reload: ReloadSource::Serve {
@@ -312,11 +274,17 @@ mod reload_through_serve {
                 config_context: 4096,
                 cell: Arc::clone(&cell),
             },
+            routed: Arc::clone(&routed),
+            slot_aliases: None,
         };
         let provider = factory
             .build_provider(&cfg)
             .await
-            .expect("the reload is forwarded and the provider rebuilt");
+            .expect("the reload is forwarded and the cell swapped");
+        assert!(
+            std::ptr::addr_eq(Arc::as_ptr(&provider), Arc::as_ptr(&routed)),
+            "a reload must hand back the provider boot built, never a second router"
+        );
         assert_eq!(
             reloads.load(Ordering::SeqCst),
             1,
