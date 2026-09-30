@@ -16,19 +16,68 @@ use crate::containment::rpc_discovery_armed;
 use crate::discovery_policy;
 use crate::distributed_respawn::{respawn_distributed_primary, ChildDistributionState};
 
+/// What the in-process arm reloads on a worker-set change: the engine's
+/// primary, redistributed across the current RPC device set.
+#[async_trait::async_trait]
+pub trait PrimaryReload: Send + Sync {
+    /// Reload the primary across the current worker set.
+    async fn reload_primary(&self) -> Result<(), String>;
+}
+
+#[async_trait::async_trait]
+impl PrimaryReload for EmbeddedLlamaCpp {
+    async fn reload_primary(&self) -> Result<(), String> {
+        EmbeddedLlamaCpp::reload_primary(self)
+            .await
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// Where the discovery loop finds the engine each tick: the process's reload
+/// cell, never a handle captured at spawn, so a worker-set change after a
+/// reload redistributes the engine serving now (pb-serving-proofs (b)).
+pub type EngineSource = Arc<dyn Fn() -> Option<Arc<dyn PrimaryReload>> + Send + Sync>;
+
+/// The engine cell a process's reload writes and its discovery reads.
+pub type EngineCell = Arc<std::sync::RwLock<Option<Arc<dyn PrimaryReload>>>>;
+
+/// A cell holding `engine`, as an assembly builds it.
+pub fn engine_cell(engine: Option<Arc<EmbeddedLlamaCpp>>) -> EngineCell {
+    Arc::new(std::sync::RwLock::new(
+        engine.map(|e| e as Arc<dyn PrimaryReload>),
+    ))
+}
+
+/// Swap the engine a reload built into `cell`.
+pub fn publish_engine(cell: &EngineCell, engine: Option<Arc<EmbeddedLlamaCpp>>) {
+    *cell
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) =
+        engine.map(|e| e as Arc<dyn PrimaryReload>);
+}
+
+/// An [`EngineSource`] over `cell`, read on every call.
+pub fn engine_source(cell: EngineCell) -> EngineSource {
+    Arc::new(move || {
+        cell.read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    })
+}
+
 /// The distribution this loader's engine and distributed-primary slot run
 /// once the process's mesh is up, in boot's order: the warm orchestrator
 /// (installed before any distributing load), the self-manifest refresh
 /// (before discovery can spawn the child, so the manifest never misses the
 /// model the child ends up serving), then RPC-worker discovery.
 pub fn distribute(
-    engine: Option<Arc<EmbeddedLlamaCpp>>,
+    engine: EngineSource,
     distributed_slot: Option<Arc<crate::manager::DynamicChildSlot>>,
 ) -> Distribute {
     Box::new(move |ports: MeshPorts, router| {
         tracing::info!(
             target: "compute_child",
-            engine = engine.is_some(),
+            engine = engine().is_some(),
             distributed_primary = distributed_slot.is_some(),
             "distribution: the warm orchestrator, the self-manifest refresh and RPC-worker discovery start"
         );
@@ -41,7 +90,7 @@ pub fn distribute(
 /// Spawn the mesh RPC-worker auto-discovery loop (opt-in via `SOVEREIGN_RPC_DISCOVER`).
 pub fn spawn_rpc_worker_discovery(
     ports: MeshPorts,
-    engine_handle: Option<Arc<EmbeddedLlamaCpp>>,
+    engine_handle: EngineSource,
     distributed_slot: Option<Arc<crate::manager::DynamicChildSlot>>,
 ) {
     // Mesh RPC-worker auto-discovery. With `SOVEREIGN_RPC_DISCOVER` set, this
@@ -64,7 +113,7 @@ pub fn spawn_rpc_worker_discovery(
         );
         sovereign_serving_host::worker_eligibility::set_global(std::sync::Arc::clone(&eligibility));
         let ports_for_disco = ports.clone();
-        let engine_for_reload = engine_handle.clone();
+        let engine_for_reload = Arc::clone(&engine_handle);
         let distributed_slot = distributed_slot.clone();
         // Close the loop between the two independent respawn authorities. The
         // supervisor restarts a crashed child with identical argv, and the
@@ -93,7 +142,7 @@ pub fn spawn_rpc_worker_discovery(
         // reconverges within a tick.
         host_kit::supervise::spawn_supervised("rpc_worker_discovery", move || {
             let ports_for_disco = ports_for_disco.clone();
-            let engine_for_reload = engine_for_reload.clone();
+            let engine_for_reload = Arc::clone(&engine_for_reload);
             let snapshot = Arc::clone(&snapshot);
             let eligibility = std::sync::Arc::clone(&eligibility);
             let distributed_slot = distributed_slot.clone();
@@ -280,7 +329,7 @@ pub fn spawn_rpc_worker_discovery(
                             "shared-model: anchor dropped — reloading now to prune + re-form on survivors"
                         );
                     }
-                    match (&distributed_slot, &engine_for_reload) {
+                    match &distributed_slot {
                         // ── Child mode: the primary lives in a supervised
                         // child, so a worker-set change is a KILL + RESPAWN,
                         // never an in-place reload. An in-place reload has to
@@ -293,7 +342,7 @@ pub fn spawn_rpc_worker_discovery(
                         // The decision itself is `discovery_policy` — pure, so it
                         // can be exercised without a mesh. Only the EFFECTS live
                         // here.
-                        (Some(slot), _) => {
+                        Some(slot) => {
                             let tick = discovery_policy::TickInputs {
                                 am_host,
                                 busy: child_busy.load(std::sync::atomic::Ordering::SeqCst),
@@ -376,26 +425,13 @@ pub fn spawn_rpc_worker_discovery(
                         // moment it's elected host, `changed` vs its empty
                         // `last_loaded` triggers an immediate assemble on the
                         // already-settled survivors.
-                        (None, engine) => {
+                        None => {
                             if am_host
                                 && changed
                                 && (shrank || stable_since.elapsed() >= discovery_policy::STABLE)
                             {
-                                match engine {
-                                    Some(engine) => {
-                                        tracing::info!(workers = ?current, "RPC worker set changed — reloading primary to redistribute");
-                                        match engine.reload_primary().await {
-                                            Ok(()) => last_loaded = current.clone(),
-                                            Err(e) => {
-                                                tracing::warn!(error = %e, "reload_primary failed; will retry next tick")
-                                            }
-                                        }
-                                    }
-                                    // No primary handle (provider build failed) —
-                                    // keep the snapshot fresh so a later manual
-                                    // load still picks workers up.
-                                    None => last_loaded = current.clone(),
-                                }
+                                reload_in_process(&engine_for_reload, &current, &mut last_loaded)
+                                    .await;
                             }
                         }
                     }
@@ -403,6 +439,31 @@ pub fn spawn_rpc_worker_discovery(
                 }
             }
         });
+    }
+}
+
+/// The in-process arm's effect: reload the engine the source holds NOW
+/// across `current`, and record it as loaded. No engine (the provider build
+/// failed) keeps the snapshot fresh so a later manual load picks workers up.
+async fn reload_in_process(
+    engine: &EngineSource,
+    current: &[String],
+    last_loaded: &mut Vec<String>,
+) {
+    match engine() {
+        Some(engine) => {
+            tracing::info!(workers = ?current, "RPC worker set changed — reloading primary to redistribute");
+            match engine.reload_primary().await {
+                Ok(()) => *last_loaded = current.to_vec(),
+                Err(e) => {
+                    tracing::warn!(error = %e, "reload_primary failed; will retry next tick")
+                }
+            }
+        }
+        None => {
+            tracing::debug!(workers = ?current, "no engine to reload — the snapshot stays fresh");
+            *last_loaded = current.to_vec();
+        }
     }
 }
 
@@ -484,3 +545,7 @@ pub struct HostRole {
     /// Whether an operator pin was supplied — not whether it won.
     pub pinned: bool,
 }
+
+#[cfg(test)]
+#[path = "distributed_discovery/tests.rs"]
+mod tests;

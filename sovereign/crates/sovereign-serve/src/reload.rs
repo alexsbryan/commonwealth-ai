@@ -17,6 +17,7 @@ use axum::Json;
 use host_kit::shell::guard::LocalOnly;
 use host_kit::shell::RouteBundle;
 use sovereign_compute::assembly::ReloadFactory;
+use sovereign_compute::distributed_discovery::EngineCell;
 use sovereign_compute::server::openai_refusal;
 use sovereign_contracts::engine_state::{EngineReloaded, RELOAD_PATH};
 use sovereign_contracts::setup_config::SetupConfig;
@@ -32,6 +33,8 @@ struct Reload {
     cell: Arc<ReloadableProvider>,
     factory: Arc<ReloadFactory>,
     config_path: PathBuf,
+    /// The engine the discovery loop reads, swapped with the provider.
+    engine: EngineCell,
 }
 
 /// The reload route, loopback-only: a reload tears down and rebuilds every
@@ -40,6 +43,7 @@ pub fn bundle(
     cell: Arc<ReloadableProvider>,
     factory: Arc<ReloadFactory>,
     config_path: PathBuf,
+    engine: EngineCell,
 ) -> RouteBundle {
     RouteBundle::new("serve_reload")
         .route(
@@ -52,6 +56,7 @@ pub fn bundle(
             cell,
             factory,
             config_path,
+            engine,
         })
 }
 
@@ -70,6 +75,7 @@ async fn reload(_: LocalOnly, State(r): State<Reload>) -> Response {
         Err(e) => return refused(format!("the serving assembly panicked: {e}")),
     };
     r.cell.swap(parts.provider, parts.embed_family.clone());
+    sovereign_compute::distributed_discovery::publish_engine(&r.engine, parts.llama);
     let resident_models: Vec<String> = r
         .cell
         .resident_slots()
@@ -126,7 +132,12 @@ mod tests {
             .await
             .expect("bind");
         let base = format!("http://{}", listener.local_addr().expect("addr"));
-        let routes = vec![bundle(Arc::clone(&cell), Arc::default(), config_path)];
+        let routes = vec![bundle(
+            Arc::clone(&cell),
+            Arc::default(),
+            config_path,
+            sovereign_compute::distributed_discovery::engine_cell(None),
+        )];
         tokio::spawn(host_kit::shell::serve(
             [listener],
             routes,

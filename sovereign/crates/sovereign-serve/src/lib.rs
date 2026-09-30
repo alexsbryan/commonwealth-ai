@@ -396,10 +396,14 @@ pub async fn assemble(
     routes.push(sovereign_compute::assets::bundle(data_dir.join("models")));
     // Model transfer: peers fetch the files above, whole or by byte range.
     routes.push(sovereign_compute::model_transfer::bundle(servable.clone()));
+    // The engine the discovery loop redistributes, read through the cell a
+    // reload swaps (pb-serving-proofs (b)).
+    let engine = sovereign_compute::distributed_discovery::engine_cell(parts.llama);
     routes.push(reload::bundle(
         Arc::clone(&cell),
         parts.reload_factory,
         config_path.to_path_buf(),
+        Arc::clone(&engine),
     ));
     Ok(ServeAssembly {
         cell,
@@ -407,7 +411,7 @@ pub async fn assemble(
         listen: (DEFAULT_LISTEN.0, sovereign_contracts::venue::serve_port()).into(),
         run_lock,
         distribute: sovereign_compute::distributed_discovery::distribute(
-            parts.llama,
+            sovereign_compute::distributed_discovery::engine_source(engine),
             parts.distributed_primary,
         ),
         servable,
