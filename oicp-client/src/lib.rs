@@ -18,6 +18,8 @@ use std::time::Instant;
 
 mod ner;
 pub use ner::RemoteNer;
+mod pinned_provider;
+pub use pinned_provider::provider_for_model;
 mod rerank;
 mod serve_loopback;
 mod turn_admission;

@@ -28,7 +28,7 @@ use sovereign_contracts::types::{CompletionRequest, DocumentAsset, NarrationEven
 
 use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::default_globals_for_voice_eval;
-pub(crate) use crate::probe_cmd::provider_for_model;
+use oicp_client::provider_for_model;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 use sovereign_contracts::probe::ResourceReport;
 
