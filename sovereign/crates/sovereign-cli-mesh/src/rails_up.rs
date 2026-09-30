@@ -83,10 +83,12 @@ pub async fn cmd_up(args: &[String]) -> i32 {
     match reached {
         Ok(sovereign_turn_client::reach::Reached::BroughtUp { pid, .. }) => {
             println!("cw-rails is up at {base} (started, pid {pid})");
+            crate::rails_unit::install_after_bring_up(&base, local_only.is_local_only());
             0
         }
         Ok(sovereign_turn_client::reach::Reached::AlreadyServing { .. }) => {
             println!("cw-rails is up at {base} (already running)");
+            crate::rails_unit::install_after_bring_up(&base, local_only.is_local_only());
             0
         }
         Err(e) => {

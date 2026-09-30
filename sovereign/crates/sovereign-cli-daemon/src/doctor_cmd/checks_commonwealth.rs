@@ -7,6 +7,69 @@
 use super::probe::{http_get_json, http_post_json, tcp_connectable};
 use super::{CheckResult, CheckStatus, Layer, Repair};
 
+/// Is cw-rails started at boot? After the flip it is the node's mesh endpoint,
+/// and nothing but its own unit restarts it, so a node whose unit is disabled
+/// leaves the mesh at the next reboot (phase-b-51). `svrn mesh up` installs the
+/// unit; a node that never ran it has none, which is reported, not failed.
+pub(super) fn check_rails_boot_unit() -> CheckResult {
+    let state = if cfg!(target_os = "linux") {
+        Some(host_kit::service::SystemdUser::system().state(sovereign_turn_client::rails_kv::RAILS_UNIT))
+    } else {
+        None
+    };
+    tracing::debug!(state = ?state, "doctor: cw-rails boot unit");
+    rails_boot_unit_result(state)
+}
+
+/// The check's verdict for one `is-enabled` reading (`None`: no systemd user
+/// units on this platform).
+pub(super) fn rails_boot_unit_result(state: Option<host_kit::service::UnitState>) -> CheckResult {
+    use host_kit::service::UnitState;
+    let unit = sovereign_turn_client::rails_kv::RAILS_UNIT;
+    let up = sovereign_turn_client::rails_kv::RAILS_BRING_UP_VERB;
+    let (status, message, repair) = match state {
+        Some(UnitState::Enabled) => (
+            CheckStatus::Passed,
+            format!("{unit} is enabled: cw-rails starts at boot"),
+            Repair::None,
+        ),
+        Some(UnitState::Disabled(how)) => (
+            CheckStatus::Warning,
+            format!(
+                "{unit} is {how}: cw-rails will NOT start at boot, so this node is off \
+                 the mesh after a reboot until `{up}` runs"
+            ),
+            Repair::executable(up),
+        ),
+        Some(UnitState::NotInstalled) => (
+            CheckStatus::Skipped,
+            format!("no {unit}: this node has not run `{up}`, which installs it"),
+            Repair::None,
+        ),
+        Some(UnitState::Unknown(why)) => (
+            CheckStatus::Warning,
+            format!("could not read {unit}'s state: {why}"),
+            Repair::None,
+        ),
+        None => (
+            CheckStatus::Skipped,
+            format!(
+                "no {unit} on {}: only systemd user units are written; cw-rails starts \
+                 at boot only under a service manager you set up",
+                std::env::consts::OS
+            ),
+            Repair::None,
+        ),
+    };
+    CheckResult {
+        name: "rails_boot_unit",
+        layer: Layer::Commonwealth,
+        status,
+        message,
+        repair,
+    }
+}
+
 pub(super) async fn check_daemon_running() -> CheckResult {
     let up = tcp_connectable("127.0.0.1", 9741).await;
     if up {

@@ -82,6 +82,9 @@ sovereign-contracts = { workspace = true }
 # The client half of the wire: the wizard reads its join child's
 # `GET /v1/mesh/venues` through `TurnClient::mesh_venues`.
 sovereign-turn-client = { workspace = true }
+# doctor reads cw-rails' boot unit through the per-user unit writer's
+# `is-enabled` probe (pb-mesh-exit-transport). std only behind `service`.
+host-kit = { workspace = true, features = ["service"] }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [target.'cfg(unix)'.dependencies]

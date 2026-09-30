@@ -1228,8 +1228,9 @@ and runs the contributions `RetentionGc`; the daemon's dialing side is
 (phase-b-31) svrn's boot and cli-llm's `rails_kv()` only dial it, and an absent one is a named
 absence; ONE opt-in verb brings it up, `svrn mesh up` (sovereign-cli-mesh `rails_up::ensure_rails`),
 a `ServingHost` bring-up of the binary `CW_RAILS_BIN`/sibling/PATH names, logging to `<data dir>/rails.log`;
-a refused dial never re-ensures, and nothing starts it by default (a node that wants it across
-reboots runs it under its own service unit). Since phase-b-3 `ensure_rails` runs the daemon's one-time journal
+a refused dial never re-ensures, and nothing starts it by default; since pb-mesh-exit-transport `svrn mesh up`
+then enables a `cw-rails.service` user unit running the same argv (`rails_unit.rs`, through host-kit's `service`
+writer that `svrn install-service` also uses), and doctor's `rails_boot_unit` reads its state. Since phase-b-3 `ensure_rails` runs the daemon's one-time journal
 handover (`rail_migration::hand_over`) first, before any bring-up; with a cw-rails already answering it
 moves nothing and warns with the namespaces that wait. Since fp-solo-hermetic the bring-up is `run --listen <rails_base port>`,
 plus `--local-only` (`[relay] discovery = "none"`) on a local-only node, which also refuses an already

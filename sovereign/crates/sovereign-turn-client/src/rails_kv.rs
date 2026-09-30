@@ -41,6 +41,10 @@ pub const DEFAULT_RAILS_BASE: &str = "http://127.0.0.1:9747";
 /// and its clients only dial (pb-rails-untether, phase-b-31).
 pub const RAILS_BRING_UP_VERB: &str = "svrn mesh up";
 
+/// The user unit that starts cw-rails at boot, which [`RAILS_BRING_UP_VERB`]
+/// installs and doctor reads (pb-mesh-exit-transport, phase-b-51).
+pub const RAILS_UNIT: &str = "cw-rails.service";
+
 /// The base this daemon dials cw-rails at: `[daemon] rails_base` when set,
 /// else [`DEFAULT_RAILS_BASE`]. THE one reader of the key (fp-112).
 pub fn resolve_rails_base(daemon: &sovereign_contracts::setup_config::DaemonSection) -> String {
