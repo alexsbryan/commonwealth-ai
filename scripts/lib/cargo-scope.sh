@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli-llm/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task,host-kit/jobs"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli-llm/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task,host-kit/jobs,host-kit/service"
         return 0
     fi
 
@@ -236,6 +236,10 @@ if "host-kit" in seen:
     # same reason: the daemon turns it on, a solo run would compile it and its
     # three table tests to nothing.
     want.append("host-kit/jobs")
+    # `service` gates the per-user unit writer (pb-mesh-exit-transport), for
+    # the same reason: sovereign-service and cli-mesh turn it on, a solo run
+    # would compile it and its install test to nothing. std only.
+    want.append("host-kit/service")
 legal = [f for f in want if f.split("/", 1)[0] in nameable]
 dropped = [f for f in want if f not in legal]
 if dropped:

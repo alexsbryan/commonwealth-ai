@@ -65,6 +65,8 @@
 pub mod jobs;
 #[cfg(feature = "mcp")]
 pub mod mcp;
+#[cfg(feature = "service")]
+pub mod service;
 #[cfg(feature = "shell")]
 pub mod shell;
 #[cfg(feature = "task")]

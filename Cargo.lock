@@ -13216,6 +13216,7 @@ name = "sovereign-service"
 version = "0.8.0"
 dependencies = [
  "dirs 5.0.1",
+ "host-kit",
  "libc",
  "sovereign-contracts",
  "workspace-hack",

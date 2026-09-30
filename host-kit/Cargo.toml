@@ -31,6 +31,10 @@ task = ["dep:tokio", "dep:tracing"]
 # (pb-serve-distributes): moved whole from sovereign-daemon, so serve's weight
 # downloads take the same table rather than a sixth copy.
 jobs = ["dep:tracing"]
+# The per-user systemd unit writer (pb-mesh-exit-transport): moved from
+# sovereign-service so `svrn install-service` and `svrn mesh up`'s cw-rails
+# unit write through one mechanism. std only.
+service = []
 
 [dependencies]
 axum = { workspace = true, optional = true }
