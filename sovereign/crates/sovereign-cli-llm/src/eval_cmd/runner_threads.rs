@@ -26,10 +26,10 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 use crate::bench_cmd::subject::SubjectDial;
-use crate::chat_cmd::render::split_reasoning;
 use crate::eval_cmd::bank::{EvalThreadBank, Thread, Turn};
 use crate::eval_cmd::runner::{RetrievedChunk, ScoreSnapshot};
 use crate::eval_cmd::score::{score_facts_in_text, score_sources_titles, FactScore};
+use sovereign_cli_base::reasoning::split_reasoning;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreadEvalRun {

@@ -27,7 +27,6 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 use crate::bench_cmd::subject::SubjectDial;
-use crate::chat_cmd::render::split_reasoning;
 use crate::eval_cmd::atlas_walk_meta::atlas_walk_from_metadata;
 use crate::eval_cmd::attribution;
 use crate::eval_cmd::bank::{EvalBank, Question};
@@ -35,6 +34,7 @@ use crate::eval_cmd::score::{
     score_facts_in_text, score_sources, score_sources_titles, EssayReadinessScore, FactScore,
     JudgeSourceDetail, SourceScore,
 };
+use sovereign_cli_base::reasoning::split_reasoning;
 
 /// One full run of a bank against a corpus. Serialisable so a run can
 /// be archived and diffed against a later run.

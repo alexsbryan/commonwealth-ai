@@ -15,7 +15,8 @@
 //! - [`flag_surface`] and [`host_load`]: moved from `sovereign-cli-shared` so
 //!   bench's CLI names no svrn CLI crate (pb-cli-llm-bench-move); so did
 //!   [`corpus_resolve`], the corpus-argument ladder every CLI verb shares,
-//!   and [`chat_globals`], the chat-shaped verbs' global flags.
+//!   and [`chat_globals`], the chat-shaped verbs' global flags, and
+//!   [`reasoning`], the `<think>` split.
 
 pub mod chat_globals;
 pub mod code_index;
@@ -33,6 +34,7 @@ pub mod models;
 pub mod prompts;
 #[cfg(feature = "rail-client")]
 pub mod rail;
+pub mod reasoning;
 pub mod repo;
 pub mod tracing_init;
 pub mod urls;
