@@ -1585,7 +1585,7 @@ items = ["port::CatalogEnrichConfig"]
 [[distribution.face]]
 package = "ingest"
 krate = "corpus-engine"
-items = ["extractors::code::language_for_extension", "face::compose", "face::IngestParts", "face::atlas"]
+items = ["extractors::code::language_for_extension", "face::compose", "face::IngestParts", "face::atlas", "face::recipe_author"]
 # Ingest's engine, built in the stock process for what svrn hands it
 # (`process::IngestHost`), and the authoring harness over it
 # (pb-ingest-dial-daemon): svrn links no corpus-engine.

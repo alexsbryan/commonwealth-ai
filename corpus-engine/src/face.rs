@@ -80,6 +80,11 @@ pub fn atlas() -> Arc<dyn AtlasPort> {
     Arc::new(crate::IngestAtlas)
 }
 
+/// Ingest's recipe-authoring seams, which need no engine.
+pub fn recipe_author() -> RecipeAuthorSeams {
+    crate::recipe_tester::recipe_author_seams()
+}
+
 /// Build the single shared engine (it serves `/mcp` tools AND
 /// `corpus_collaborate` ingest). Wires a REAL embed slot through
 /// `provider` (a zero-vector stub here once poisoned 4M chunks), the batch

@@ -11,7 +11,7 @@ pub fn hosted() -> sovereign_daemon::process::HostedIngest {
     sovereign_daemon::process::HostedIngest::new(
         std::sync::Arc::new(sovereign_enrichment_catalog::port::CatalogEnrichConfig),
         corpus_engine::face::atlas(),
-        corpus_engine::recipe_tester::recipe_author_seams(),
+        corpus_engine::face::recipe_author(),
         |host| {
             let face = corpus_engine::face::compose(corpus_engine::face::IngestParts {
                 data_dir: host.data_dir,
