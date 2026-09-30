@@ -204,6 +204,20 @@ pub struct ExtractedEntities {
     pub batches_run: usize,
 }
 
+/// Tight initial decode budget of the typed-extension call. Sized so most
+/// responses close their JSON envelope on the first attempt; the minority
+/// that truncate get one retry at [`TYPED_BUDGET_RETRY`]. svrn's
+/// typed-extension pass and ingest's `enrich extract-typed` make the same
+/// call, so both name this one value (`sovereign_tools::typed_call`
+/// re-exports it; pb-cli-llm-ingest-move).
+pub const TYPED_BUDGET_INITIAL: usize = 4096;
+
+/// Retry budget when the tight initial call returned a parse-drift response.
+/// Doubles the budget so the model has room to close the JSON envelope. A
+/// second parse failure at this budget is a real content miss, not a budget
+/// issue.
+pub const TYPED_BUDGET_RETRY: usize = 8192;
+
 /// One typed-extension LLM response, carried to ingest as the model wrote
 /// it; ingest parses it into its own section type at the write.
 #[derive(Debug, Clone)]

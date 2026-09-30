@@ -53,7 +53,7 @@ use corpus_engine::enrichment::pipeline::types::{
 };
 use corpus_engine::enrichment::pipeline::PipelinePhase;
 use corpus_engine::enrichment::pipeline::RunOutputWriter;
-use sovereign_tools::typed_call::{
+use corpus_engine_atlas_reader::ports::{
     TYPED_BUDGET_INITIAL as TYPED_CALL_BUDGET_INITIAL,
     TYPED_BUDGET_RETRY as TYPED_CALL_BUDGET_RETRY,
 };
@@ -166,13 +166,13 @@ fn load_classifications(path: &PathBuf) -> Result<SectionClassificationsFile, St
 
 /// Tight default `max_output_tokens` budget for the typed-extension
 /// chat call. Re-exports the canonical constant from
-/// [`sovereign_tools::typed_call`] so this CLI and the
+/// [`corpus_engine_atlas_reader::ports`] so this CLI and the
 /// `typed_extension` orchestrator stay in lockstep — a bench-driven
 /// tuning move on the helper propagates here automatically.
 pub const TYPED_BUDGET_INITIAL: u32 = TYPED_CALL_BUDGET_INITIAL as u32;
 
 /// Retry budget when the tight initial call returned a parse-drift
-/// response. Re-export from [`sovereign_tools::typed_call`]. A
+/// response. Re-export from [`corpus_engine_atlas_reader::ports`]. A
 /// second parse failure at this budget is a real content miss, not
 /// a budget issue, and gets surfaced as an error.
 pub const TYPED_BUDGET_RETRY: u32 = TYPED_CALL_BUDGET_RETRY as u32;
