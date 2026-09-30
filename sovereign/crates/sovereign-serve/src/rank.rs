@@ -224,3 +224,7 @@ async fn build_mesh_provider(
     }
     (mesh_provider, in_flight_gauge)
 }
+
+#[cfg(test)]
+#[path = "rank/tests.rs"]
+mod tests;
