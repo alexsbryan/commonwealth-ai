@@ -385,7 +385,10 @@ async fn a_registered_origin_is_reached_by_a_member_with_its_verified_identity()
                         .unwrap();
                     let full = founder["self"]["node_id_hex"].as_str().unwrap_or_default();
                     assert_eq!(full.len(), 32, "self.node_id_hex: {founder}");
-                    assert_eq!(row.as_ref().map(|r| r["node_id_hex"].clone()), Some(full.into()));
+                    assert_eq!(
+                        row.as_ref().map(|r| r["node_id_hex"].clone()),
+                        Some(full.into())
+                    );
                     break;
                 }
                 assert!(
