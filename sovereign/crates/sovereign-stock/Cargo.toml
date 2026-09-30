@@ -74,5 +74,10 @@ async-trait = { workspace = true }
 axum = { workspace = true }
 serde = { workspace = true }
 
+[features]
+# `svrn awareness`, served by `sovereign-cli-llm-stock` since
+# pb-cli-llm-ingest-move-remainder; the feature is cli-llm's.
+awareness = ["sovereign-cli-llm/awareness"]
+
 [lints]
 workspace = true

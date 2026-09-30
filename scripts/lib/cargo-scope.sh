@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task,host-kit/jobs"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli-llm/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task,host-kit/jobs"
         return 0
     fi
 
@@ -165,11 +165,14 @@ if "sovereign-cli" in seen:
     # so the gate must compile it. Omitting it would leave `svrn code index`
     # and `svrn refresh` — code real users run — never built by any check.
     want.append("sovereign-cli/code-intel")
+if "sovereign-cli-llm" in seen:
     # Kept in step with sovereign-lint.sh. The two gates resolving DIFFERENT
     # feature sets for one crate is not a coverage question only — cargo
     # fingerprints on features, so alternating lint and test rebuilt
-    # sovereign-cli and sovereign-mesh on every switch.
-    want.append("sovereign-cli/awareness")
+    # sovereign-cli and sovereign-mesh on every switch. The feature lives on
+    # cli-llm since the dispatcher stopped linking it
+    # (pb-cli-llm-ingest-move-remainder).
+    want.append("sovereign-cli-llm/awareness")
 if "sovereign-daemon" in seen:
     # `treesitter` gates `pub mod bootstrap` (lib.rs:63) — and with it the
     # whole `rpc_worker_flag_tests` module. The daemon BINARY enables the

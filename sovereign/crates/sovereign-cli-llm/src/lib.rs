@@ -26,15 +26,16 @@
 //! that owns it. `awareness_cmd` is now a sibling of `enrich_cmd` rather
 //! than a trespasser on it, so the import resolves by construction.
 //!
-//! `sovereign-cli` LINKS this crate — `#[cfg(feature = "awareness")]` only —
-//! to serve `svrn awareness` in its own process. No exec hop: nc-19's whole
-//! deliverable was making one verb stop paying for one, and adding one back
-//! here would spend that.
+//! `svrn awareness` is exec'd into the stock distribution's
+//! `sovereign-cli-llm-stock` like every other verb here, since
+//! pb-cli-llm-ingest-move-remainder: extract and filter write their atlas
+//! through ingest's atlas port, which only a composed process holds. The
+//! dispatcher no longer links this crate.
 //!
 //! ## Where the `awareness` feature lives, and why it lives here
 //!
-//! On THIS crate, and `sovereign-cli/awareness` is a pass-through that also
-//! turns on the link. A feature belongs to the crate holding the code it
+//! On THIS crate, and `sovereign-stock/awareness` passes it through for the
+//! binary that serves it. A feature belongs to the crate holding the code it
 //! gates: while it lived on `sovereign-cli` and the code lived here, the two
 //! could not agree, which is the same class of split-brain that produced the
 //! two disagreeing module gates the feature already died of once (see
@@ -42,8 +43,7 @@
 
 mod alignment_cmd;
 mod atlas_cmd;
-// UNGATED on purpose, and `pub` because `sovereign-cli` calls
-// `awareness_cmd::run_awareness` across the link. Only `awareness_cmd::args`
+// UNGATED on purpose. Only `awareness_cmd::args`
 // (the flag SPEC — data plus the shared parser) compiles without the feature;
 // every heavy submodule carries its own `#[cfg(feature = "awareness")]`.
 // Declaring the module here under a gate as well, while the module itself
@@ -157,6 +157,8 @@ async fn async_main() {
         "meshapp" => init_tracing("sovereign_cli_llm=info,host_kit=info"),
         "pipeline" => init_tracing("sovereign_cli_llm=info,sovereign_pipeline=info"),
         "enrich" => init_tracing("sovereign_cli_llm=info,corpus_engine=info"),
+        // The filter the dispatcher set when it linked awareness in-process.
+        "awareness" => init_tracing("sovereign_cli=info,sovereign_tools=debug,corpus_engine=debug"),
         "voice" | "search-gym" | "knowledge-gym" => init_tracing("sovereign_cli_llm=info"),
         // The bench verbs print their own [chaos]/[parity] summaries via eprintln
         // and stay quiet by default (no subscriber) so harnesses parsing their
@@ -198,6 +200,20 @@ async fn async_main() {
     let code: i32 = match cmd {
         "bench" => run_bench_verb(rest).await,
         "chat" => chat_cmd::run_chat(rest).await,
+        // Execed by the dispatcher (pb-cli-llm-ingest-move-remainder): this
+        // process holds ingest's atlas port, which extract and filter write
+        // through.
+        #[cfg(feature = "awareness")]
+        "awareness" => awareness_cmd::run_awareness(rest).await,
+        #[cfg(not(feature = "awareness"))]
+        "awareness" => {
+            eprintln!(
+                "awareness: built only under the `awareness` cargo feature\n\
+                 (it pulls the heavy knowledge-view surface). Rebuild with\n\
+                 `cargo build -p sovereign-stock --features awareness` to enable."
+            );
+            2
+        }
         "govern" => govern_cmd::run_govern(rest).await,
         "proxy" => proxy_cmd::run_proxy(rest).await,
         "portfolio" => portfolio_cmd::run_portfolio(rest).await,

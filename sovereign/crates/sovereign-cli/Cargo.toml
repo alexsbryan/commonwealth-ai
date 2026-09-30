@@ -64,23 +64,6 @@ oicp-types = { workspace = true, optional = true }
 # `sovereign_cli_shared::flag_surface::parse`, which owns the one prefix rule.
 # ~11 transitive crates on top of the 871 this binary already links.
 clap = { workspace = true }
-# The LLM sibling, LINKED rather than exec'd — the `awareness` feature only.
-# `awareness_cmd` used to live in THIS crate while importing
-# `crate::enrich_cmd::inference_client`, which lives over there; that import
-# stopped resolving when the 2026-05-22 slice-5 split moved `enrich_cmd` out,
-# and `--features awareness` has failed with two `E0433` ever since (nc-26,
-# 2026-08-21). The module moved to the crate it was reaching into, and the
-# dispatcher calls `sovereign_cli_llm::awareness_cmd::run_awareness` in its own
-# process — no exec hop, which is what nc-19 bought and this must not spend.
-#
-# Optional, and pulled ONLY by `awareness` — never by `default` or
-# `dev-tools`. That matters: this crate has no thin `default-features = false`
-# surface, so linking it means llama.cpp, the grammars and arrow. The end-user
-# dispatcher gains nothing, which is the whole point of `awareness` being opt-in.
-#
-# Path dep rather than a `[workspace.dependencies]` entry: this is the crate's
-# first consumer, and the edge is easier to read where it is paid.
-sovereign-cli-llm = { path = "../sovereign-cli-llm", optional = true }
 corpus-index = { workspace = true }
 corpus-engine-scip = { workspace = true, optional = true }
 # The pure-HTTP OICP client — `deep-research`'s loopback calls. Depended on
@@ -170,23 +153,6 @@ code-intel = [
     # non-optional dep of this crate, so enabling this costs no new link.
     "sovereign-cli-shared/mcp-client",
 ]
-# `awareness` builds the heavy `svrn awareness` knowledge-view diagnostic CLI.
-# Opt-in and independent of `dev-tools` so the common developer build stays
-# light — linking the LLM sibling means llama.cpp and the grammars.
-#
-# This is now a PASS-THROUGH, not a definition. The subcommands live in
-# `sovereign-cli-llm` since 2026-08-21 (nc-26) because they need its
-# `enrich_cmd::inference_client`, so the real feature — and every heavy
-# dependency it turns on — is declared there. Two crates cannot both own one
-# feature's dependency list without drifting; that split-brain is exactly how
-# `awareness` came to have two disagreeing gates and stopped compiling for
-# three months (ARCH §10.6 — one decider, one name).
-#
-# The gate that watches this: `scripts/sovereign-lint.sh` now names
-# `sovereign-cli/awareness` in its workspace feature list. Nothing built the
-# feature before, which is the only reason a two-`E0433` break survived from
-# 2026-05-22 to 2026-08-21.
-awareness = ["dep:sovereign-cli-llm", "sovereign-cli-llm/awareness"]
 
 [lints]
 workspace = true

@@ -32,7 +32,7 @@ mod audit_cmd;
 // `sovereign-cli-llm`, which owns the `enrich_cmd::inference_client` two of
 // its files import — an import that had not resolved from this crate since
 // the 2026-05-22 split, because `crate::enrich_cmd` names nothing here. The
-// dispatch arm below calls it across the link, in this process.
+// dispatch arm below execs the LLM sibling for it.
 mod cache_audit_cmd;
 mod charter_cmd;
 // `svrn init` / `svrn project init`. Same gate as the index path it drives —
@@ -1120,28 +1120,12 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "awareness" => {
-                #[cfg(feature = "awareness")]
-                {
-                    util::tracing_init::init_tracing(
-                        "sovereign_cli=info,sovereign_tools=debug,corpus_engine=debug",
-                    );
-                    // LINKED, not exec'd — `sovereign_cli_llm` is a library
-                    // dependency under this feature, so this runs in the
-                    // dispatcher's own process. Adding an exec hop here
-                    // would spend exactly what nc-19 bought.
-                    let code =
-                        sovereign_cli_llm::awareness_cmd::run_awareness(&raw_args[1..]).await;
-                    std::process::exit(code);
-                }
-                #[cfg(not(feature = "awareness"))]
-                {
-                    eprintln!(
-                        "awareness: built only under the `awareness` cargo feature\n\
-                         (it pulls the heavy knowledge-view surface). Rebuild with\n\
-                         `cargo build --features awareness` to enable."
-                    );
-                    std::process::exit(2);
-                }
+                // Exec'd into the composed LLM sibling, which holds ingest's
+                // atlas port for the subcommands that write an atlas
+                // (pb-cli-llm-ingest-move-remainder); the sibling gates the
+                // verb on its own `awareness` feature.
+                let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
             }
             "tools" => {
                 // Moved to the sovereign-cli-dev sibling.

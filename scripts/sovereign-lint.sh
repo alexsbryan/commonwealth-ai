@@ -360,7 +360,8 @@ cargo_args+=(--all-targets)
 # never COMPILE ~1,500 lines that real users run — a worse failure than a
 # gate that goes red, because nothing ever goes red. Same leaf-crate rule.
 #
-# `sovereign-cli/awareness` (2026-08-21, nc-26) is here for that exact reason,
+# `sovereign-cli-llm/awareness` (2026-08-21, nc-26; `sovereign-cli/awareness`
+# until the dispatcher stopped linking cli-llm) is here for that exact reason,
 # and it is the closure loop for the bug that put it here. `awareness_cmd`
 # imported `crate::enrich_cmd::inference_client` from a crate that does not
 # contain `enrich_cmd`; `--features awareness` failed with two E0433 from the
