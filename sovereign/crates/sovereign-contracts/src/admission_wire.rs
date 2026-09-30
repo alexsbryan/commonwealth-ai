@@ -87,7 +87,7 @@ pub fn jittered_retry_after_secs(base: u64) -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let nanos = std::time::SystemTime::now()
+    let nanos = sovereign_time::system_now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| u64::from(d.subsec_nanos()))
         .unwrap_or(0);
