@@ -28,8 +28,6 @@ mod binary_boot_rails_census;
 mod canonical_pull_e2e;
 #[path = "main/capabilities_published.rs"]
 mod capabilities_published;
-#[path = "main/chat_completion_e2e.rs"]
-mod chat_completion_e2e;
 #[path = "main/client_auth.rs"]
 mod client_auth;
 #[path = "main/client_exposure.rs"]
@@ -88,8 +86,6 @@ mod gossip_integration;
 mod gossip_offer_clock;
 #[path = "main/gossip_route.rs"]
 mod gossip_route;
-#[path = "main/guest_lender_routing.rs"]
-mod guest_lender_routing;
 #[path = "main/guest_over_iroh_e2e.rs"]
 mod guest_over_iroh_e2e;
 #[path = "main/ingest_origin_e2e.rs"]
@@ -124,8 +120,6 @@ mod knowledge_served_e2e;
 mod landscape_digest_http_e2e;
 #[path = "main/lc_surface_e2e.rs"]
 mod lc_surface_e2e;
-#[path = "main/load_awareness_e2e.rs"]
-mod load_awareness_e2e;
 // sovereign-tools' leaf-backed `LocalCorpusPort` double, shared rather
 // than copied: the local-corpus routes drive the same manager over it.
 #[path = "../../sovereign-tools/tests/main/local_corpus_port_double.rs"]
@@ -156,12 +150,6 @@ mod no_engine_census;
 mod node_id_persistence;
 #[path = "main/openai_wire_fidelity.rs"]
 mod openai_wire_fidelity;
-#[path = "main/peer_preference_manifest.rs"]
-mod peer_preference_manifest;
-#[path = "main/peer_tally_status_e2e.rs"]
-mod peer_tally_status_e2e;
-#[path = "main/peer_turn_reaches_serve_e2e.rs"]
-mod peer_turn_reaches_serve_e2e;
 #[path = "main/plaintext_join_over_iroh_e2e.rs"]
 mod plaintext_join_over_iroh_e2e;
 #[path = "main/port_config.rs"]
@@ -192,8 +180,6 @@ mod ring_sync_loop_tests;
 mod rotate_pre_split_guard;
 #[path = "main/serving_ports_census.rs"]
 mod serving_ports_census;
-#[path = "main/status_answers_from_serve.rs"]
-mod status_answers_from_serve;
 #[path = "main/storage_budget_route.rs"]
 mod storage_budget_route;
 #[path = "main/storage_snapshot_e2e.rs"]

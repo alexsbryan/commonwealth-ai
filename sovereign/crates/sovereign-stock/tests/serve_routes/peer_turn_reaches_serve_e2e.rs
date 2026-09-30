@@ -16,18 +16,17 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use axum::routing::post;
-use commonwealth_core::ids::{MeshId, NodeId};
-use commonwealth_core::mesh::Mesh;
+use kernel_types::{MeshId, NodeId};
 use serde_json::{json, Value};
 use sovereign_contracts::engine_state::ServedSelf;
 use sovereign_contracts::oicp::ResidentSlot;
 use sovereign_daemon::serve_client::{loopback_provider, ServeBase, ServeBaseSource};
 use sovereign_daemon::server::client_router;
-use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
-use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
+use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 
-use crate::common::{id_to_hex, member_with_last_seen, spawn_router};
+use crate::common::{id_to_hex, member_with_last_seen, solo_mesh, spawn_router};
 
 const SERVED_MODEL: &str = "served-primary";
 
@@ -88,17 +87,10 @@ fn node_a(serve_base: String) -> (AppState, NodeId) {
         peer_id,
         member_with_last_seen(peer_id, "b", 100, "127.0.0.1:9876".parse().unwrap()),
     );
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(42),
-        name: "peer-to-serve".into(),
-        invite_key_hash: [7u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
-    };
+    let mut mesh = solo_mesh(self_id, "peer-to-serve");
+    mesh.id = MeshId::from_u128(42);
+    mesh.invite_key_hash = [7u8; 32];
+    mesh.members = members;
     let serve = ServeBase {
         base: serve_base,
         source: ServeBaseSource::Default,

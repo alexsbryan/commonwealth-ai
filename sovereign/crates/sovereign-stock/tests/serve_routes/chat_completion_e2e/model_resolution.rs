@@ -9,7 +9,7 @@ use axum::extract::Query;
 use axum::response::{sse::Event, IntoResponse, Sse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use oicp_types::{
     CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
     ProviderManifest, ProviderModel,
@@ -17,7 +17,7 @@ use oicp_types::{
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_daemon::daemon::InferenceVenue;
-use sovereign_mesh::peer_inference::InferenceRouter;
+use sovereign_serving_host::peer_inference::InferenceRouter;
 
 use super::{
     drain, local_byom, mip_with_peers, two_slot_manifest, StreamQuery, PEER_RESPONSE_TEXT,

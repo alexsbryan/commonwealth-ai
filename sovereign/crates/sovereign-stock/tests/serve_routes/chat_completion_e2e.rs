@@ -41,8 +41,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use axum::response::IntoResponse;
 use axum::Json;
-use commonwealth_core::ids::NodeId;
 use futures::StreamExt;
+use kernel_types::NodeId;
 use oicp_types::{
     CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
     OICP_VERSION,
@@ -50,7 +50,7 @@ use oicp_types::{
 use serde::Deserialize;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::daemon::InferenceVenue;
-use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
+use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 use crate::common;
 use crate::common::TestProvider;
@@ -112,7 +112,7 @@ pub(crate) fn mip_with_peers(
         local,
         src.clone(),
         src,
-        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
     )
 }
 

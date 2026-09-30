@@ -12726,6 +12726,7 @@ dependencies = [
  "sovereign-authoring-harness",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-daemon",
  "sovereign-grants",
  "sovereign-mesh",
  "sovereign-meshapp",
@@ -13249,10 +13250,16 @@ dependencies = [
 name = "sovereign-stock"
 version = "0.8.0"
 dependencies = [
+ "async-trait",
+ "axum",
  "corpus-engine",
+ "corpus-index",
  "futures",
  "host-kit",
+ "kernel-types",
+ "oicp-types",
  "reqwest 0.12.28",
+ "serde",
  "serde_json",
  "sovereign-authoring-harness",
  "sovereign-cli-llm",
@@ -13262,6 +13269,7 @@ dependencies = [
  "sovereign-enrichment-catalog",
  "sovereign-mesh",
  "sovereign-serve",
+ "sovereign-serving-host",
  "sovereign-turn-client",
  "tempfile",
  "tokio",

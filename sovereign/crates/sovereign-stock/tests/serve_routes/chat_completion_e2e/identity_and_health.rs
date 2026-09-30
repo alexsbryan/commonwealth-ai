@@ -10,7 +10,7 @@ use axum::extract::Query;
 use axum::response::{sse::Event, IntoResponse, Sse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use oicp_types::{CapabilityHint, InferenceRequirements, LatencyClass};
 use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_daemon::daemon::InferenceVenue;

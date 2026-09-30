@@ -29,7 +29,7 @@ use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::CompletionRequest;
 use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_mesh::guest_source::stored_guest_source_in;
-use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
+use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 use crate::common;
 use crate::common::spawn_router;
@@ -41,10 +41,12 @@ trait GrantedOrPanic {
     fn granted_or_panic(self, msg: &str) -> (String, Vec<String>);
 }
 
-impl GrantedOrPanic for sovereign_mesh::guest_lender::GrantPosture {
+impl GrantedOrPanic for sovereign_serving_host::guest_lender::GrantPosture {
     fn granted_or_panic(self, msg: &str) -> (String, Vec<String>) {
         match self {
-            sovereign_mesh::guest_lender::GrantPosture::Granted { lender, ids } => (lender, ids),
+            sovereign_serving_host::guest_lender::GrantPosture::Granted { lender, ids } => {
+                (lender, ids)
+            }
             other => panic!("{msg}: expected Granted, got {other:?}"),
         }
     }
@@ -131,7 +133,7 @@ fn provider_with_link(root: &std::path::Path) -> InferenceRouter {
         local_without_the_model(),
         Arc::new(NoVenues) as Arc<dyn VenueSource>,
         Arc::new(NoVenues) as Arc<dyn VenueHost>,
-        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
     );
     p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
     p
@@ -192,7 +194,7 @@ async fn a_granted_model_is_served_by_the_lender_with_the_real_name_and_no_node_
 /// other direction. This is the source that feeds it.
 #[tokio::test]
 async fn the_granted_ids_are_advertised_for_the_models_listing() {
-    use sovereign_mesh::guest_lender::GuestLenderSource;
+    use sovereign_serving_host::guest_lender::GuestLenderSource;
 
     let seen = Arc::new(Seen::default());
     let lender = spawn_lender(Arc::clone(&seen)).await;
@@ -216,13 +218,13 @@ async fn the_granted_ids_are_advertised_for_the_models_listing() {
 /// node that never accepted one.
 #[tokio::test]
 async fn a_node_without_a_link_advertises_nothing_extra() {
-    use sovereign_mesh::guest_lender::GuestLenderSource;
+    use sovereign_serving_host::guest_lender::GuestLenderSource;
     let dir = tempfile::tempdir().unwrap();
     assert_eq!(
         stored_guest_source_in(dir.path().to_path_buf())
             .posture()
             .await,
-        sovereign_mesh::guest_lender::GrantPosture::NoLink,
+        sovereign_serving_host::guest_lender::GrantPosture::NoLink,
         "a node with no guest.json has NO LINK — not a refused one"
     );
 }
@@ -289,7 +291,7 @@ fn provider_with_link_and_answering_local(root: &std::path::Path) -> InferenceRo
         local_that_answers(),
         Arc::new(NoVenues) as Arc<dyn VenueSource>,
         Arc::new(NoVenues) as Arc<dyn VenueHost>,
-        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
     );
     p.set_guest_source(stored_guest_source_in(root.to_path_buf()));
     p
@@ -420,7 +422,7 @@ async fn a_refused_grant_is_never_answered_by_the_local_model() {
 /// in the other direction.
 #[tokio::test]
 async fn a_refused_grant_advertises_nothing() {
-    use sovereign_mesh::guest_lender::GuestLenderSource;
+    use sovereign_serving_host::guest_lender::GuestLenderSource;
     let lender = spawn_refusing_lender().await;
     let dir = tempfile::tempdir().unwrap();
     store_link(dir.path(), &lender);
@@ -429,7 +431,7 @@ async fn a_refused_grant_advertises_nothing() {
         .posture()
         .await;
     match posture {
-        sovereign_mesh::guest_lender::GrantPosture::Unusable { lender: l, why } => {
+        sovereign_serving_host::guest_lender::GrantPosture::Unusable { lender: l, why } => {
             assert_eq!(l, lender);
             assert!(
                 why.contains("403"),

@@ -1555,6 +1555,13 @@ items = ["bundles", "assemble", "child_launch", "tracing_filter", "measurements_
 package = "cmnwlth"
 krate = "sovereign-mesh"
 items = ["mesh_discovery::reachable_addresses"]
+# Serve's library, for the composition's tests alone (pb-serve-ranks-tests-stock,
+# phase-b-72): the daemon routes serve's router and adapter answer. Empty
+# items keep stock's `src/` from naming any of it.
+[[distribution.face]]
+package = "cmnwlth"
+krate = "sovereign-serving-host"
+items = []
 # Code's face (pb-code-daemon-exit; F2 (a), phase-b-30; phase-b-33): the one
 # composition `svrn code mcp` serves, mounted on svrn's `:9741/mcp`. In
 # code's library, sovereign-code: sovereign-cli-dev is `backstage` above, and

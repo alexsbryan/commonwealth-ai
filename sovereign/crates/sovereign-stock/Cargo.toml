@@ -58,9 +58,21 @@ tempfile = { workspace = true }
 # serve_latency_bars (moved from sovereign-daemon, pb-serve-distributes): the
 # stream and embed calls, serve's readiness probe, and the laps' subscriber.
 futures = { workspace = true }
-sovereign-contracts = { workspace = true }
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 sovereign-turn-client = { workspace = true }
 tracing-subscriber = { workspace = true }
+# serve_routes (moved from sovereign-daemon, pb-serve-ranks-tests-stock): the
+# daemon routes serve's router and adapter answer. Serve's library by its own
+# paths through the empty-items face (phase-b-72), the daemon's seed records
+# from its `double`, ids from kernel-types and the manifest from oicp-types.
+sovereign-serving-host = { path = "../sovereign-serving-host" }
+sovereign-daemon = { workspace = true, features = ["treesitter", "test-doubles"] }
+kernel-types = { workspace = true }
+oicp-types = { workspace = true }
+corpus-index = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
 
 [lints]
 workspace = true

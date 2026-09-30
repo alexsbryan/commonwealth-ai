@@ -29,20 +29,19 @@ use async_trait::async_trait;
 use futures::Stream;
 use serde_json::{json, Value};
 
-use commonwealth_core::ids::{MeshId, NodeId};
-use commonwealth_core::mesh::Mesh;
+use kernel_types::{MeshId, NodeId};
 use sovereign_contracts::error::Result as SovResult;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, ProviderCapabilities, Speed, StreamFrame,
 };
 use sovereign_daemon::server::client_router;
-use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
-use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
+use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
+use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 
 use crate::common;
-use crate::common::{id_to_hex, member_with_last_seen, spawn_router, TestProvider};
+use crate::common::{id_to_hex, member_with_last_seen, solo_mesh, spawn_router, TestProvider};
 
 /// An `InferenceProvider` that sleeps before delegating, so the
 /// "response still generating" window is observable from outside.
@@ -108,17 +107,10 @@ fn build_state(peer_name: &str) -> (AppState, NodeId) {
         peer_id,
         member_with_last_seen(peer_id, peer_name, 100, "127.0.0.1:9876".parse().unwrap()),
     );
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(42),
-        name: "tally-e2e".into(),
-        invite_key_hash: [7u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
-    };
+    let mut mesh = solo_mesh(self_id, "tally-e2e");
+    mesh.id = MeshId::from_u128(42);
+    mesh.invite_key_hash = [7u8; 32];
+    mesh.members = members;
 
     let fast: Arc<dyn InferenceProvider> = Arc::new(
         TestProvider::new()
