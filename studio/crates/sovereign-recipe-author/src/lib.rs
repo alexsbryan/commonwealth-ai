@@ -38,6 +38,7 @@ pub use sovereign_contracts::recipe::json_to_toml;
 /// Path-safety sandbox check, relocated to the shared contract crate; the
 /// recipe root helpers below still wrap it.
 pub use sovereign_contracts::recipe::paths::assert_under_root;
+pub mod port;
 pub mod probe_url;
 pub mod project;
 pub mod read;
