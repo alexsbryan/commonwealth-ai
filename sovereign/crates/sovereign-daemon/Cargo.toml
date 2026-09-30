@@ -142,6 +142,10 @@ treesitter = [
 ocr = ["sovereign-tools/paddle-ocr"]
 # Moved with the iroh e2e tests from sovereign-mesh's test tree.
 iroh-experimental = ["sovereign-mesh/iroh-experimental"]
+# `double`: roster members, a solo mesh, the bound router and a recording
+# ledger, for the tests of a root that drives a daemon route
+# (pb-serve-ranks-tests-stock). Off in every product build.
+test-doubles = []
 
 [dev-dependencies]
 # `code_server_via_mcp_client` builds a real `ScipGraph`.
@@ -168,6 +172,8 @@ sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 # ...and hold `AtlasPortDouble` as ingest's atlas port beside it
 # (pb-ingest-dial-daemon).
 corpus-engine-atlas-reader = { workspace = true, features = ["test-doubles"] }
+# ...and this crate's own `double`, which `tests/main/common` re-exports.
+sovereign-daemon = { path = ".", features = ["test-doubles"] }
 
 [lints]
 workspace = true

@@ -77,6 +77,9 @@ pub mod daemon;
 pub mod daemon_cmd;
 pub mod daemon_services;
 pub mod documents_http;
+/// Test doubles for the records the daemon's seeds take (pb-serve-ranks-tests-stock).
+#[cfg(feature = "test-doubles")]
+pub mod double;
 pub mod enrich_http;
 pub mod features_http;
 /// The `ingest:v1` `JobExecutor` — one corpus partition per unit

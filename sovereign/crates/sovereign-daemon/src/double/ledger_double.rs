@@ -9,6 +9,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
+use crate::state::store::StoreSeed;
 use bytes::Bytes;
 use commonwealth_core::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
 use commonwealth_core::capabilities::NodeCapabilities;
@@ -17,7 +18,6 @@ use commonwealth_core::ids::{ModelId, NodeId};
 use commonwealth_core::model::ModelInfo;
 use commonwealth_core::oicp::EmbedModelInfo;
 use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError};
-use sovereign_daemon::state::store::StoreSeed;
 use sovereign_mesh::ledger_port::{
     ActivityLedgerPort, ContributionLedgerPort, InferencePlan, InferenceStatePort, LedgerFut,
     PeerPreference, PeerPreferencesPort, ProcessedShardsPort,

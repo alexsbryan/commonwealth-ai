@@ -574,10 +574,8 @@ async fn a_namespace_that_is_a_path_is_refused() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 }
 
-// The store ports ride tests/main's recording double.
-#[allow(dead_code)]
-#[path = "../main/common/ledger_double.rs"]
-mod ledger_double;
+// The store ports ride the daemon's recording double.
+use sovereign_daemon::double::ledger_double;
 
 // The replication + sealing half lives in a sibling file: together they put
 // this one into the 800-1200 approach band (ARCH §3.1).
