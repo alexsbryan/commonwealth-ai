@@ -2267,6 +2267,30 @@ def two_queues(tmp):
     write(tmp, "ralph/STATE.md", "- [ ] legacy-1 — depends [] — the default queue\n")
 
 
+class ExcludeTests(unittest.TestCase):
+    def test_a_linked_worktree_writes_the_common_exclude(self):
+        # The failing input: a linked worktree, whose `.git` is a file. On
+        # 2026-09-30 supervise died there on mkdir(<worktree>/.git/info).
+        with tempfile.TemporaryDirectory() as tmp:
+            main, side = os.path.join(tmp, "main"), os.path.join(tmp, "side")
+            git_repo(main)
+            write(main, "a.txt", "a\n")
+            commit_all(main)
+            subprocess.run(["git", "-C", main, "worktree", "add", "-q", "--detach", side],
+                           check=True)
+            ralph.ensure_excludes(side, ("ralph/STOP",))
+            ralph.ensure_excludes(main, ("ralph/DONE",))
+            lines = pathlib.Path(main, ".git", "info", "exclude").read_text().splitlines()
+            self.assertIn("ralph/STOP", lines)
+            self.assertIn("ralph/DONE", lines)
+            self.assertTrue(pathlib.Path(side, ".git").is_file())
+
+    def test_outside_a_repository_it_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ralph.ensure_excludes(tmp, ("ralph/STOP",))
+            self.assertFalse(pathlib.Path(tmp, ".git").exists())
+
+
 class PathsForTests(unittest.TestCase):
     def test_a_queue_by_flag_is_never_swapped_for_the_default(self):
         with tempfile.TemporaryDirectory() as tmp:

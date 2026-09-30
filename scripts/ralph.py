@@ -2243,12 +2243,15 @@ def install_job(name, program_args, workdir, log_path, interval=None):
 
 
 def ensure_excludes(workdir, rel_paths):
-    """Runtime markers must not dirty the tree the campaign commits into."""
-    git_info = pathlib.Path(workdir) / ".git" / "info"
-    if not git_info.parent.exists():
+    """Runtime markers must not dirty the tree the campaign commits into.
+    Git names the exclude file: in a linked worktree `.git` is a file and the
+    excludes live in the common dir, so `<workdir>/.git/info` does not exist."""
+    r = subprocess.run(["git", "-C", str(workdir), "rev-parse", "--git-path", "info/exclude"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
         return
-    git_info.mkdir(parents=True, exist_ok=True)
-    exclude = git_info / "exclude"
+    exclude = pathlib.Path(workdir) / r.stdout.strip()
+    exclude.parent.mkdir(parents=True, exist_ok=True)
     existing = set(exclude.read_text().splitlines()) if exclude.exists() else set()
     with exclude.open("a") as fh:
         for rel in rel_paths:
