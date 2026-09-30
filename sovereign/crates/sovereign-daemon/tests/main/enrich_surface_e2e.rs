@@ -10,7 +10,9 @@
 
 use std::sync::Arc;
 
+use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
 use corpus_index::types::EmbedFn;
+use sovereign_contracts::daemon_wire::enrich::StarterQuestion;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::enrich_http::enrich_router;
@@ -58,6 +60,11 @@ fn mock_embed_fn() -> EmbedFn {
 /// finding, and must abort loudly (`meshapp_surface_e2e`'s allow).
 #[allow(clippy::unwrap_used)]
 async fn build_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
+    build_daemon_over(AtlasPortDouble::new()).await
+}
+
+/// [`build_daemon`], with ingest's atlas port programmed by the caller.
+async fn build_daemon_over(atlas: AtlasPortDouble) -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
     let tmp = tempfile::tempdir().unwrap();
     let indexes = tmp.path().join("indexes");
     std::fs::create_dir_all(&indexes).unwrap();
@@ -101,7 +108,10 @@ async fn build_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),
-        common::desktop_services_with_engine(engine),
+        common::desktop_services(common::DesktopParts {
+            atlas: Arc::new(atlas),
+            ..common::DesktopParts::new(engine)
+        }),
     );
     (daemon, tmp)
 }
@@ -144,36 +154,57 @@ async fn enriched_lists_the_daemons_store_and_skips_the_config_less_dir() {
         .is_some_and(|s| !s.is_empty()));
 }
 
-/// Starter questions come out ranked (thematic before interpretive before
-/// factual), one per section first, length-gated, normalised to `?`, and
-/// capped by `limit`.
+/// The route reads the corpus's atlas from the DAEMON's index dir, hands its
+/// atoms to ingest's ranker with the requested limit (default 6, clamped to
+/// 50), and serves what the ranker returns. The ranking itself (tier order,
+/// one per section first, the length gate, the cap) is ingest's, proven on
+/// the ranker `IngestAtlas` delegates to (corpus-engine
+/// `enrichment/atlas/analysis/starter_questions.rs`, pb-ingest-dial-daemon).
 #[tokio::test]
-async fn starter_questions_are_ranked_diversified_and_capped() {
-    let (daemon, _tmp) = build_daemon().await;
+async fn starter_questions_serve_ingests_ranking_of_the_daemons_atlas() {
+    let asked: Arc<std::sync::Mutex<Vec<(usize, usize)>>> = Arc::default();
+    let seen = Arc::clone(&asked);
+    let ranked = vec![
+        starter(
+            "Is a large republic more stable than a small one?",
+            "sec_00002",
+        ),
+        starter("What does the author mean by faction?", "sec_00001"),
+    ];
+    let atlas = AtlasPortDouble::new().on_rank_starter_questions(move |atoms, limit| {
+        seen.lock().unwrap().push((atoms.len(), limit));
+        ranked.iter().take(limit).cloned().collect()
+    });
+    let (daemon, _tmp) = build_daemon_over(atlas).await;
     let addr = spawn_router(enrich_router(Arc::clone(&daemon))).await;
 
     let (status, body) = get(&addr, &format!("{CORPUS}/starter-questions")).await;
     assert_eq!(status, 200, "{body:#?}");
     let rows = body.as_array().unwrap();
-    assert_eq!(rows.len(), 3, "\"Why?\" fails the length gate: {body:#?}");
-    // Thematic first; the two thematic/interpretive picks cover BOTH
-    // sections before the second sec_00001 question is admitted.
-    assert_eq!(rows[0]["question_type"], "thematic");
+    assert_eq!(rows.len(), 2, "what the ranker returned: {body:#?}");
     assert_eq!(rows[0]["source_section"], "sec_00002");
-    assert_eq!(rows[1]["question_type"], "interpretive");
-    assert_eq!(rows[1]["source_section"], "sec_00001");
-    assert_eq!(rows[2]["question_type"], "factual");
-    assert!(
-        rows[1]["text"].as_str().unwrap().ends_with('?'),
-        "trailing punctuation is normalised to a question mark: {:?}",
-        rows[1]["text"]
-    );
+    assert_eq!(rows[1]["atom_id"], "question-sec_00001");
 
     let (status, body) = get(&addr, &format!("{CORPUS}/starter-questions?limit=1")).await;
     assert_eq!(status, 200);
     assert_eq!(body.as_array().unwrap().len(), 1, "limit caps");
     let (status, _) = get(&addr, &format!("{CORPUS}/starter-questions?limit=100000")).await;
     assert_eq!(status, 200, "an over-large limit is clamped, not refused");
+
+    assert_eq!(
+        *asked.lock().unwrap(),
+        vec![(5, 6), (5, 1), (5, 50)],
+        "every call hands the ranker the atlas's five atoms and the clamped limit"
+    );
+}
+
+fn starter(text: &str, section: &str) -> StarterQuestion {
+    StarterQuestion {
+        text: text.to_string(),
+        atom_id: format!("question-{section}"),
+        source_section: Some(section.to_string()),
+        question_type: "thematic".to_string(),
+    }
 }
 
 /// No atlas and not installed are 404s that NAME the corpus — the desktop

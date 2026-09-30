@@ -5,18 +5,17 @@ use super::*;
 use sovereign_contracts::oicp::work::exec::JobError;
 use sovereign_contracts::oicp::JobKind;
 
-fn an_engine() -> (tempfile::TempDir, Arc<corpus_engine::CorpusEngine>) {
+/// Ingest's port as a double over a scratch root: the doors validate a unit
+/// before any ingest runs (pb-ingest-dial-daemon).
+fn an_engine() -> (
+    tempfile::TempDir,
+    Arc<corpus_index::ingest_port::double::IngestPortDouble>,
+) {
     let dir = tempfile::tempdir().expect("tempdir");
-    let recipes = dir.path().join("recipes");
-    let indexes = dir.path().join("indexes");
-    std::fs::create_dir_all(&recipes).expect("recipes dir");
-    std::fs::create_dir_all(&indexes).expect("indexes dir");
-    let embed: corpus_index::types::EmbedFn =
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
-    (
-        dir,
-        Arc::new(corpus_engine::CorpusEngine::new(recipes, indexes, embed)),
-    )
+    let double = corpus_index::ingest_port::double::IngestPortDouble::new()
+        .with_recipes_dir(dir.path().join("recipes"))
+        .with_index_dir(dir.path().join("indexes"));
+    (dir, Arc::new(double))
 }
 
 fn a_unit(payload: serde_json::Value) -> JobUnit {

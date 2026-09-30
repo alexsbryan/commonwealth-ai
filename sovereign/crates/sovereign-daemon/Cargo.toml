@@ -63,9 +63,10 @@ sovereign-authoring-harness = { workspace = true }
 # codec and the small leaves the edge reads.
 serving-policy-core = { workspace = true }
 sovereign-grants = { workspace = true }
-corpus-engine = { workspace = true, features = ["treesitter"] }
+# No corpus-engine (pb-ingest-dial-daemon): ingest's engine is composed by a
+# distribution (`process::HostedIngest`) and reached through its ports.
 corpus-engine-scip = { workspace = true }
-# Leaf items the engine re-exports (types, error, index, corpus) — spelled at their owner.
+# Ingest's ports and the leaf reader, spelled at their owner.
 corpus-index = { workspace = true }
 corpus-engine-atlas-reader = { workspace = true }
 corpus-engine-yield = { workspace = true }

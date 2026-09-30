@@ -33,6 +33,7 @@ pub mod engine;
 pub mod enrichment;
 pub mod error;
 pub mod extractors;
+pub mod face;
 // The `facts`/`facts_check`/`facts_store` shims are gone: zero importers reached
 // them in-monorepo, so `code-facts` is a feature-forward edge only (Cargo.toml).
 pub mod filters;

@@ -9,10 +9,9 @@ use std::sync::Arc;
 
 use crate::startup::daemon_pid_path;
 use crate::EmbeddedDaemon;
-use corpus_engine::CorpusEngine;
 use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::IngestPort;
-use corpus_index::types::{EmbedFn, NodeRoster, RosterEntry};
+use corpus_index::types::{NodeRoster, RosterEntry};
 use kernel_types::NodeId;
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
@@ -75,37 +74,6 @@ pub fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRo
     Some(NodeRoster::new(self_node, peers))
 }
 
-/// The process's NER handle and the per-chunk adapter over it. The handle is
-/// the one boot took (`ServingBoot::ner`: serve's `RemoteNer`, or the
-/// distribution's in-process kind, loaded once per process); it feeds the
-/// NoteStore T2 `GlinerFn` adapter. The adapter
-/// (corpus-engine's `GlinerChunkExtractor`) feeds the engine's tiered runner
-/// and the folder driver. Both `None` when the model isn't installed — tiered
-/// ingest then falls back to RAPTOR-derived entities.
-///
-/// Generation is chosen inside the kind's loader
-/// (`sovereign_gliner::configured_model_id`); nothing on this side of the
-/// call knows or needs to know which backend it got.
-pub fn load_gliner_extractor(
-    store: Arc<dyn sovereign_core::daemon_wire::conv_tiered::ChunkEntityStore>,
-    ner: Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
-) -> (
-    Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
-    Option<Arc<dyn corpus_index::ingest_port::tiered::ChunkEntityExtractor>>,
-) {
-    // The store is opened once by `run_daemon` and passed in, so the adapter
-    // opens no second handle. The extractor is the handle boot took from where
-    // this process's NER is served (pb-serve-distributes).
-    let chunk = ner.as_ref().map(|extractor| {
-        corpus_engine::enrichment::chunk_ner::GlinerChunkExtractor::new(
-            store,
-            Arc::clone(extractor),
-        )
-        .into_handle()
-    });
-    (ner, chunk)
-}
-
 /// The T1 embed and T2 GLiNER hooks code's note store is wired with when a
 /// distribution composes code into this process: svrn's embed slot and its
 /// loaded GLiNER session, as values (pb-notes-memory). The store is code's,
@@ -161,165 +129,6 @@ pub fn notes_tier_fns(
         f
     });
     (notes_embed, notes_gliner)
-}
-
-/// Build the single shared `CorpusEngine` (powers `/mcp` tools AND
-/// `corpus_collaborate` ingest). Wires a REAL embed slot through `provider`
-/// (a zero-vector stub here once poisoned 4M chunks — see inline note), the
-/// batch variant, the conv-tiered provider, and the shared GLiNER chunk
-/// extractor.
-pub fn build_corpus_engine(
-    data_dir: &Path,
-    provider: Arc<dyn InferenceProvider>,
-    config: &SetupConfig,
-    self_node_id: NodeId,
-    chunk_entity_extractor: &Option<
-        Arc<dyn corpus_index::ingest_port::tiered::ChunkEntityExtractor>,
-    >,
-) -> (Arc<CorpusEngine>, String) {
-    // Returned alongside the engine rather than re-derived by the caller. The
-    // `config.models.embed.file_stem()` expression below already had five
-    // copies tree-wide (ARCH §10.6); the daemon's `Runtime` needs the same
-    // string to key its atlas embedding cache, and a sixth copy is how the
-    // cache and the shards start disagreeing about which model wrote them.
-    let mut derived_embed_model = String::new();
-    let engine: Arc<CorpusEngine> = {
-        let indexes_dir = data_dir.join("indexes");
-        let provider_for_embed = Arc::clone(&provider);
-        let embed: EmbedFn = Arc::new(move |text: &str| {
-            let p = Arc::clone(&provider_for_embed);
-            let text = text.to_string();
-            Box::pin(async move {
-                p.embed(&text)
-                    .await
-                    .map_err(|e| corpus_index::Error::Embed(e.to_string()))
-            })
-        });
-        let provider_for_batch = Arc::clone(&provider);
-        let batch_embed: corpus_index::types::BatchEmbedFn = Arc::new(move |texts: &[String]| {
-            let p = Arc::clone(&provider_for_batch);
-            let texts = texts.to_vec();
-            Box::pin(async move {
-                p.embed_batch(&texts)
-                    .await
-                    .map_err(|e| corpus_index::Error::Embed(e.to_string()))
-            })
-        });
-
-        // Derive the embed model identifier from the configured GGUF
-        // path so `_corpus_meta.json` records the actual model rather
-        // than failing the ingest pre-flight ("embedding model name not
-        // configured"). Matches the wiring in `state.rs:717-723` and
-        // every other call site (`main.rs:506`, `chat_cmd/bootstrap.rs`,
-        // `code_cmd.rs`, `project_cmd.rs`); the standalone daemon was
-        // the lone holdout, which is why the desktop's
-        // `/internal/corpus/install` POST hits this engine and bombs at
-        // the pre-flight before the first byte is downloaded.
-        let embed_model_name = config
-            .local_embed_model_id()
-            .unwrap_or_else(|| "unknown-embed-model".to_string());
-        // recipes_dir doubles as the registry's overrides_dir. Locally-
-        // published recipes from `svrn recipe publish` land at
-        // `~/.svrnmesh/recipes/<id>/recipe.toml` and only resolve when
-        // the engine's overrides_dir points there. Earlier this passed
-        // `indexes_dir` for the recipes argument, which made every
-        // `corpus install` skip the local override and try the public
-        // registry URL — the wikipedia-catalog dev variant could never
-        // be installed because its data URL is not yet hosted.
-        let recipes_dir = data_dir.join("recipes");
-        // Recipe enrichment (`[enrichment] enabled = true, type = "atlas"`)
-        // requires an InferenceFn — without one, `engine.ingest` logs
-        // "no InferenceFn was provided to CorpusEngine — skipping" and
-        // silently degrades to chunks-only ingest. The embedded daemon
-        // was the lone holdout (every other call site —
-        // `sovereign-server/src/main.rs:224`,
-        // `sovereign-desktop/src-tauri/src/state.rs:1053`,
-        // `sovereign-cli/src/main.rs:865`,
-        // `chat_cmd/bootstrap.rs:242` — wires this); surface symptom
-        // was conversations-personal landing 180 embedded chunks with
-        // no atlas/atoms.json. Same provider already drives embed +
-        // batch_embed above.
-        let inference_fn = corpus_engine::enrichment::provider_inference::inference_to_inference_fn(
-            Arc::clone(&provider),
-        );
-        // Conv-tiered enrichment provider — spec
-        // `sovereign/docs/specs/CONV_TIERED_PORT.md`. Constructed by the
-        // shared builder (same `FolderTieredProvider` the desktop's embedded
-        // daemon wires) so both stay in lockstep. Failing to open the store
-        // is non-fatal: the tiered runner falls back to dispatch-plan-only
-        // mode when no provider is injected. `FolderTieredProvider` is the
-        // sole provider — its `finalize_corpus` override runs the
-        // vault-wide synthesis pass needed for `vault_themes`; see the
-        // builder's docs.
-        let tiered_provider = sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
-            data_dir,
-            Arc::clone(&provider),
-            Arc::new(corpus_engine::IngestAtlas),
-        );
-        // GliNER per-chunk entity extractor loaded once in the outer scope
-        // (above) so the engine and the folder driver share the same
-        // Arc<dyn> handle. Clone here to reuse.
-        let chunk_entity_extractor_for_engine = chunk_entity_extractor.clone();
-
-        let mut engine_builder = CorpusEngine::new(recipes_dir, indexes_dir, embed)
-            .with_embedding_model(&embed_model_name)
-            .with_batch_embed_fn(batch_embed)
-            .with_inference_fn(inference_fn)
-            .with_self_node_id(self_node_id.to_string());
-        if let Some(provider) = tiered_provider {
-            engine_builder = engine_builder.with_tiered_provider(provider);
-        }
-        if let Some(extractor) = chunk_entity_extractor_for_engine {
-            engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
-        }
-        // The `sec_edgar` custom acquirer (ticker -> installed SEC
-        // filings corpus) lives in `sovereign-tools` so `corpus-engine`
-        // stays free of SEC domain knowledge. Registered HERE, on the
-        // engine itself, rather than piggybacked on
-        // `KnowledgeViewManager::new`: that runs after
-        // `install_http_and_mcp` has already mounted the install route,
-        // so a fast install could reach `acquire_source` before the
-        // acquirer exists — and it sits behind the
-        // `knowledge_view.enabled` gate, which has nothing to say about
-        // SEC filings. Registration is cheap and unconditional; a
-        // recipe that never names the kind never invokes it.
-        sovereign_tools::sec_edgar::register(&engine_builder);
-        derived_embed_model = embed_model_name.clone();
-        Arc::new(engine_builder)
-    };
-    (engine, derived_embed_model)
-}
-
-/// Build the watched-folder tiered-enrichment deps (its own
-/// `FolderTieredProvider` over the shared `sovereign.db`). Independent of the
-/// engine-side conv provider; `None` (legacy-subprocess fallback) when the
-/// state store can't be opened. Consumes the GLiNER extractor handle.
-pub fn build_folder_tiered_deps(
-    data_dir: &Path,
-    provider: Arc<dyn InferenceProvider>,
-    chunk_entity_extractor: Option<
-        Arc<dyn corpus_index::ingest_port::tiered::ChunkEntityExtractor>,
-    >,
-) -> Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps> {
-    // The provider comes from the shared builder so the desktop's embedded
-    // daemon wires an identical one (`sovereign_tools::enrichment_bootstrap`);
-    // the engine's `FolderTiered` over it is built here, where the engine is
-    // (phase-b-49).
-    let tiered_provider = sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
-        data_dir,
-        provider,
-        Arc::new(corpus_engine::IngestAtlas),
-    )?;
-    tracing::info!(
-        target: "sovereign_tools::enrichment_bootstrap",
-        "enrichment_bootstrap: folder tiered deps constructed — FolderTieredProvider wired"
-    );
-    Some(sovereign_tools::local_corpus::watched::enrich::TieredDeps {
-        tiered: Arc::new(corpus_engine::FolderTiered::new(
-            tiered_provider,
-            chunk_entity_extractor,
-        )),
-    })
 }
 
 /// The `--rpc-worker` parse and its default bind are the launch contract's
@@ -437,26 +246,6 @@ pub fn spawn_slot_alias_push(
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
-        }
-    });
-}
-
-/// Spawn the lazy canonical-fingerprint stamper for legacy (pre-fingerprint) ingests.
-pub fn spawn_lazy_stamp_fingerprints(engine: Arc<CorpusEngine>) {
-    // Lazy-stamp canonical fingerprints for any installed
-    // canonicals that don't yet carry one (legacy ingests pre-
-    // dating the canonical-sync surface). One BLAKE3 over the
-    // content_hash list per corpus; idempotent. Fired in the
-    // background so daemon startup doesn't block on it. See
-    // `corpus_engine::CorpusEngine::lazy_stamp_legacy_fingerprints`
-    // for the contract.
-    let engine_for_stamp = Arc::clone(&engine);
-    // Supervised one-shot: idempotent per the contract above —
-    // DAEMON_RESILIENCE.md P0.4.
-    crate::supervise::spawn_supervised("lazy_stamp_fingerprints", move || {
-        let engine_for_stamp = Arc::clone(&engine_for_stamp);
-        async move {
-            engine_for_stamp.lazy_stamp_legacy_fingerprints().await;
         }
     });
 }
@@ -791,9 +580,9 @@ pub async fn setup_watched_folders(
     // HTTP routes → spawn scheduler) is factored into
     // `crate::watched_folder_setup` so the desktop's
     // embedded daemon can call the same path.
-    // Critical: pass the same `recipes_dir` the `CorpusEngine`
-    // was constructed with (see the `let recipes_dir = …` block
-    // above where the engine is built). Otherwise the manager
+    // Critical: pass the same `recipes_dir` ingest's engine was
+    // constructed with (`<data_dir>/recipes`, corpus-engine's
+    // `face::compose`). Otherwise the manager
     // writes its generated recipe TOMLs into a directory the
     // engine never reads from, and the first sweep's apply step
     // errors `No registry entry for corpus '<id>'`.

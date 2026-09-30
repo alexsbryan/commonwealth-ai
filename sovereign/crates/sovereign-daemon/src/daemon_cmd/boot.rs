@@ -3,7 +3,6 @@
 
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
 use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_contracts::launch::Launch;
@@ -390,30 +389,72 @@ pub(super) async fn run_daemon(
     // origin id, onto code's store (pb-notes-memory).
     let notes_roster = bootstrap::build_node_roster(&data_dir, self_node_id);
 
-    // The served NER kind's handle (loaded once per process) and the per-chunk
-    // adapter over it, hoisted so the engine's tiered runner, the folder
-    // driver, the NoteStore T2 hook and the turn's recipe (below) share one
-    // model. The store opened above is the adapter's port (no second handle).
-    let chunk_entity_store: Arc<dyn sovereign_core::daemon_wire::conv_tiered::ChunkEntityStore> =
-        state_store_concrete.clone();
-    let (gliner_raw, chunk_entity_extractor) =
-        bootstrap::load_gliner_extractor(chunk_entity_store, ner);
+    // The served NER kind's handle (loaded once per process), shared by
+    // ingest's tiered runner and folder driver, the NoteStore T2 hook and the
+    // turn's recipe (below): one model.
+    let gliner_raw = ner;
 
     let (notes_embed, notes_gliner) = bootstrap::notes_tier_fns(&provider, &gliner_raw);
-    let (engine, embed_model_id): (Arc<CorpusEngine>, String) = bootstrap::build_corpus_engine(
-        &data_dir,
-        Arc::clone(&provider),
-        &config,
-        self_node_id,
-        &chunk_entity_extractor,
-    );
+    // The embed model's id, derived ONCE: the engine records it in
+    // `_corpus_meta.json` and the Runtime's atlas embedding cache keys on it.
+    // A second derivation is how the cache and the shards start disagreeing
+    // about which model wrote them (ARCH §10.6).
+    let embed_model_id = config
+        .local_embed_model_id()
+        .unwrap_or_else(|| "unknown-embed-model".to_string());
+
+    // ── Ingest, when the distribution composes it ─────────────────
+    // The stock binary hands in ingest's composition (pb-ingest-dial-daemon):
+    // svrn links no corpus-engine, so the engine this process holds is built
+    // by ingest's face for `IngestHost`. svrn alone gets `None`.
+    let (enrich_config, mount) = match ingest {
+        Some(ingest) => {
+            let atlas = ingest.atlas();
+            let enrich_config = ingest.enrich_config();
+            // Two tiered providers over the one `sovereign.db`: the engine's
+            // conv provider and the watched-folder driver's own, independent
+            // of it. The shared builder is the desktop's too.
+            let tiered_provider = || {
+                sovereign_tools::enrichment_bootstrap::build_folder_tiered_provider(
+                    &data_dir,
+                    Arc::clone(&provider),
+                    Arc::clone(&atlas),
+                )
+            };
+            let mount = ingest.compose(crate::hosted_ingest::IngestHost {
+                data_dir: data_dir.clone(),
+                provider: Arc::clone(&provider),
+                embed_model: embed_model_id.clone(),
+                node_id: self_node_id.to_string(),
+                // The store opened above is the NER adapter's port (no
+                // second handle).
+                chunk_entity_store: state_store_concrete.clone(),
+                ner: gliner_raw.clone(),
+                conv_tiered: tiered_provider(),
+                folder_tiered: tiered_provider(),
+            });
+            // The `sec_edgar` custom acquirer (ticker -> installed SEC filings
+            // corpus) is svrn's, so ingest stays free of SEC domain knowledge.
+            // Registered here, before any route mounts, so a fast install
+            // cannot reach `acquire_source` before the acquirer exists.
+            sovereign_tools::sec_edgar::register(mount.port.as_ref());
+            tracing::info!("daemon: the ingest program is composed in this process");
+            (Some(enrich_config), Some((mount, atlas)))
+        }
+        None => {
+            tracing::info!(
+                "daemon: no ingest program in this process; enrichment-config reads and \
+                 writes report it absent"
+            );
+            (None, None)
+        }
+    };
     // Ingest's ports, as every consumer below acts on them: the engine's port
     // and its atlas. `None` is svrn alone; each consumer withholds its family
     // or subsystem and says so (pb-ingest-dial-daemon).
-    let ingest_ports: Option<(Arc<dyn IngestPort>, Arc<dyn AtlasPort>)> = Some((
-        Arc::clone(&engine) as Arc<dyn IngestPort>,
-        Arc::new(corpus_engine::IngestAtlas) as Arc<dyn AtlasPort>,
-    ));
+    let ingest_ports: Option<(Arc<dyn IngestPort>, Arc<dyn AtlasPort>)> = mount
+        .as_ref()
+        .map(|(m, atlas)| (Arc::clone(&m.port), Arc::clone(atlas)));
     let ingest_port = ingest_ports.as_ref().map(|(port, _)| Arc::clone(port));
     let ingest_atlas = ingest_ports.as_ref().map(|(_, atlas)| Arc::clone(atlas));
     if ingest_ports.is_none() {
@@ -434,22 +475,58 @@ pub(super) async fn run_daemon(
         None => tracing::info!("daemon: no ingest program; corpus maintenance does not run"),
     }
 
+    // The rest of ingest's mount, taken apart once.
+    let (ingest_index, recipe_harness, recipe_author, folder_tiered, arm_geometry) = match mount {
+        Some((m, _)) => {
+            // Idempotent one-shot, supervised (DAEMON_RESILIENCE.md P0.4);
+            // the chore is ingest's, the supervision this process's.
+            let stamp = m.lazy_stamp;
+            crate::supervise::spawn_supervised("lazy_stamp_fingerprints", move || stamp());
+            (
+                Some(m.index),
+                Some(m.harness),
+                Some(m.recipe_author),
+                m.folder_tiered,
+                Some(m.arm_geometry),
+            )
+        }
+        None => (None, None, None, None, None),
+    };
+    // Reads go through the one leaf reader: the engine's own cached one when
+    // ingest is composed, `FsIndexSource` over the same root when not. Either
+    // way the geometry gate is armed from this daemon's embed probe (below).
+    let (read_index, arm_geometry): (
+        Arc<dyn corpus_index::source::IndexSource>,
+        Box<dyn Fn(usize) + Send + Sync>,
+    ) = match (ingest_index, arm_geometry) {
+        (Some(index), Some(arm)) => (index, arm),
+        _ => {
+            let fs = Arc::new(
+                corpus_index::fs_source::FsIndexSource::new(data_dir.join("indexes"))
+                    .with_embedding_model(&embed_model_id),
+            );
+            let armed = Arc::clone(&fs);
+            (
+                fs,
+                Box::new(move |dims| armed.set_expected_embedding_dimensions(dims)),
+            )
+        }
+    };
+
     // ── Folder tiered deps ───────────────────────────────────────
     // Watched-folder corpora reuse the conv-tiered table shape
     // (`conv_*` tables, conv_uuid = corpus_id) via the
-    // `FolderTieredProvider`. The driver opens its own
-    // SqliteStateStore handle so this block is independent of the
-    // engine-side conv provider; both share the underlying db file
-    // (`~/.svrnmesh/sovereign.db`).
-    //
-    // Installed on the manager via `set_tiered_deps` after the
-    // manager is constructed (~line 1593 below). Without these,
-    // `enable_enrichment` falls back to the legacy subprocess.
-    let folder_tiered_deps = bootstrap::build_folder_tiered_deps(
-        &data_dir,
-        Arc::clone(&provider),
-        chunk_entity_extractor,
-    );
+    // `FolderTieredProvider`, over its own SqliteStateStore handle on the
+    // shared db file (`~/.svrnmesh/sovereign.db`). Installed on the manager
+    // via `set_tiered_deps`; without them `enable_enrichment` falls back to
+    // the legacy subprocess.
+    let folder_tiered_deps = folder_tiered.map(|tiered| {
+        tracing::info!(
+            target: "sovereign_tools::enrichment_bootstrap",
+            "enrichment_bootstrap: folder tiered deps constructed — FolderTieredProvider wired"
+        );
+        sovereign_tools::local_corpus::watched::enrich::TieredDeps { tiered }
+    });
 
     // ── Solve job table ───────────────────────────────────────────
     // Shared between the /v1/solve/jobs HTTP router (installed in
@@ -485,7 +562,7 @@ pub(super) async fn run_daemon(
             .compose(crate::hosted_code::CodeHost {
                 data_dir: data_dir.clone(),
                 workspace: workspace_dir.clone(),
-                index: Arc::clone(&engine) as Arc<dyn corpus_index::source::IndexSource>,
+                index: Arc::clone(&read_index),
                 notes_embed,
                 notes_gliner,
                 node_id: self_node_id,
@@ -509,23 +586,6 @@ pub(super) async fn run_daemon(
             tracing::info!(
                 code_server = crate::hosted_code::CODE_SERVER,
                 "daemon: no code program in this process; /mcp names the code server for code tools"
-            );
-            None
-        }
-    };
-    // ── Ingest's ports, when the distribution composes ingest ────
-    // The stock binary hands in the implementors svrn cannot build (it links
-    // no ingest catalog, pb-ingest-dial-tools-close). Without them the
-    // enrichment-config sites report ingest absent by name.
-    let enrich_config = match ingest {
-        Some(ingest) => {
-            tracing::info!("daemon: ingest's enrichment-config port is composed in this process");
-            Some(ingest.enrich_config())
-        }
-        None => {
-            tracing::info!(
-                "daemon: no ingest program in this process; enrichment-config reads and \
-                 writes report it absent"
             );
             None
         }
@@ -559,8 +619,6 @@ pub(super) async fn run_daemon(
         bootstrap::build_mesh_provider(Arc::clone(&provider), deferred_daemon).await;
     let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
 
-    bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));
-
     if let Some(port) = &ingest_port {
         bootstrap::spawn_vector_index_readiness_sweep(Arc::clone(port));
     }
@@ -577,7 +635,7 @@ pub(super) async fn run_daemon(
     // on the maintainer's host `oicp-types` is 768-dim while recording the
     // same `qwen-embedding-0.6b` string as the 1024-dim corpora.
     if let Some(info) = advertise_embed.info() {
-        engine.set_expected_embedding_dimensions(info.dimensions);
+        arm_geometry(info.dimensions);
     }
 
     // The landscape-digest surface. The Reindexer and `/v1/projects/*` that
@@ -705,8 +763,8 @@ pub(super) async fn run_daemon(
             approval: Arc::new(sovereign_core::executor::AutoApprovalChannel),
             inference_config: sovereign_core::types::InferenceConfig::default(),
             indexes_dir: data_dir.join("indexes"),
-            // Derived ONCE, by the corpus-engine builder, and handed here —
-            // see `build_corpus_engine`. The atlas embedding cache keys on it.
+            // Derived ONCE, above, and handed to ingest's engine too. The
+            // atlas embedding cache keys on it.
             embed_model: embed_model_id.clone(),
             // The families this daemon's turn registry carries. Shell is
             // named as WITHHELD rather than simply absent, so the decision is
@@ -749,17 +807,22 @@ pub(super) async fn run_daemon(
                 // tagged `recipe-author` has its tool set whichever host
                 // answers. Absent stores are a DEGRADATION the bundle's
                 // report names, matching the desktop's posture.
-                b.push(Box::new({
-                    let mut ra = sovereign_tools::bundles::RecipeAuthoringTools::new(
-                        corpus_engine::recipe_tester::recipe_author_seams(),
-                    );
-                    if let Some(fs) = features_store.as_ref() {
-                        ra = ra.with_notes(Arc::clone(&state_store_concrete)
-                            as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
-                        ra = ra.with_features(Arc::clone(fs));
-                    }
-                    ra
-                }));
+                b.push(match recipe_author {
+                    Some(seams) => Box::new({
+                        let mut ra = sovereign_tools::bundles::RecipeAuthoringTools::new(seams);
+                        if let Some(fs) = features_store.as_ref() {
+                            ra = ra.with_notes(Arc::clone(&state_store_concrete)
+                                as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
+                            ra = ra.with_features(Arc::clone(fs));
+                        }
+                        ra
+                    }),
+                    None => Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+                        "recipe-authoring",
+                        "no ingest program is composed in this process, and recipe \
+                         testing runs ingest's pipeline",
+                    )),
+                });
                 b.push(Box::new(sovereign_contracts::tool_bundle::Withheld::new(
                     "shell",
                     "no shell in a long-lived daemon running as a different user \
@@ -873,9 +936,7 @@ pub(super) async fn run_daemon(
                     // /internal/corpus/* surface both read.
                     corpus_engine: ingest_port.clone(),
                     atlas: ingest_atlas.clone(),
-                    recipe_harness: Some(Arc::new(
-                        sovereign_authoring_harness::EngineHarness::new(Arc::clone(&engine)),
-                    )),
+                    recipe_harness,
                     inference_provider: Arc::clone(&routed_provider),
                     // The gauge the router above was built with, so AppState
                     // holds the same counter the provider's guards write

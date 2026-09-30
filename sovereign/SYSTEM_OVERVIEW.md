@@ -170,7 +170,7 @@ crates/
 ├── sovereign-scheduler      # Serving's pure tier — ranker, decision records, replay ("The two tiers", SERVING_BOUNDARY.md)
 ├── sovereign-serving-host   # Serving's host tier — peer_inference, admission, turn_admission, entry_endpoint
 ├── sovereign-serve          # `serve`, the model server binary — the OpenAI wire alone (no mesh, no cw-rails) over the one serving assembly
-├── sovereign-stock          # The stock distribution: svrn with serve and code hosted and ingest's enrichment-config port handed in, ONE process, what `svrn daemon run` execs (`[[distribution]] stock`)
+├── sovereign-stock          # The stock distribution: svrn with serve, code and ingest hosted (ingest's engine built by `corpus_engine::face` and handed in through `HostedIngest`; svrn links no corpus-engine), ONE process, what `svrn daemon run` execs (`[[distribution]] stock`)
 ├── sovereign-grants         # GuestGrant, EphemeralGrantStore, `Scope` — per-turn authorization
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries

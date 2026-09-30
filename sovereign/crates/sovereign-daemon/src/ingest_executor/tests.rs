@@ -3,27 +3,26 @@
 //! every one names the failing input it exists to catch (ARCH §18.1).
 use super::*;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::double::IngestPortDouble;
 use sovereign_contracts::oicp::JobRequirements;
 
-fn engine() -> (tempfile::TempDir, Arc<CorpusEngine>) {
+/// Ingest's port as a double over a scratch root: the executor validates and
+/// runs a unit through the port, and what the engine does with a slice is
+/// proven on the engine (pb-ingest-dial-daemon).
+fn engine() -> (tempfile::TempDir, IngestPortDouble) {
     let dir = tempfile::tempdir().expect("tempdir");
-    let recipes = dir.path().join("recipes");
-    let indexes = dir.path().join("indexes");
-    std::fs::create_dir_all(&recipes).expect("recipes dir");
-    std::fs::create_dir_all(&indexes).expect("indexes dir");
-    let embed: corpus_index::types::EmbedFn =
-        Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
-    let engine = Arc::new(CorpusEngine::new(recipes, indexes, embed));
+    let double = IngestPortDouble::new()
+        .with_recipes_dir(dir.path().join("recipes"))
+        .with_index_dir(dir.path().join("indexes"));
     // The TempDir is returned so the caller keeps it alive: dropping it here
-    // would delete the directories the engine resolves paths against, and the
+    // would delete the directories the port resolves paths against, and the
     // failure would surface as an unrelated IO error inside a later assertion.
-    (dir, engine)
+    (dir, double)
 }
 
 fn executor() -> (tempfile::TempDir, IngestExecutor) {
     let (dir, e) = engine();
-    (dir, IngestExecutor::new(e))
+    (dir, IngestExecutor::new(Arc::new(e)))
 }
 
 /// A unit of `kind` over `payload`. Unsealed: `validate` and `execute` read
@@ -280,7 +279,21 @@ fn the_lease_interval_is_derived_from_the_lease_the_ingest_queue_already_owns() 
 /// which the fold counts `unreadable`.
 #[tokio::test]
 async fn a_cancelled_unit_stops_and_claims_no_verdict() {
-    let (_dir, exec) = executor();
+    let (dir, double) = engine();
+    let partitions = dir.path().join("indexes");
+    // The engine's answer for a recipe it has no registry entry for.
+    let double = double
+        .on_partition_path(move |corpus| partitions.join(format!("{corpus}.partition")))
+        .with_cancel_registry(corpus_index::ingest_port::cancel::CancellationRegistry::new())
+        .on_ingest_with_overrides(|slice| {
+            Box::pin(async move {
+                Err(corpus_index::Error::Recipe(format!(
+                    "No registry entry for corpus '{}'",
+                    slice.recipe_id
+                )))
+            })
+        });
+    let exec = IngestExecutor::new(Arc::new(double));
     let unit = unit_of(INGEST_KIND, good_payload());
     let ctx = JobContext::new(std::env::temp_dir());
     // Cancelled before it starts: the recipe does not exist on this engine, so

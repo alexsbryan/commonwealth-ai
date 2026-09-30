@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The daemon acts on ingest only through its ports (pb-ingest-dial-daemon-ports).
 //!
-//! Its production source names `corpus_engine` only where it BUILDS the engine
-//! and the implementors it hands out, which are the construction sites
-//! pb-ingest-dial-daemon moves to the stock binary. Every executing site
-//! reaches ingest through `IngestPort`, `AtlasPort` or `RecipeHarnessPort`. A test rather than a comment (ARCH principle 10): put an
-//! engine call back in an executing file and this goes red naming the line.
+//! Since pb-ingest-dial-daemon its production source names `corpus_engine`
+//! nowhere: the engine and its implementors are built by ingest's face in the
+//! stock binary (`process::HostedIngest`), and every site reaches ingest
+//! through `IngestPort`, `AtlasPort` or `RecipeHarnessPort`. The crate links
+//! no corpus-engine, which boundary-gate holds; this census holds the text,
+//! so a re-added link cannot bring an engine call back with it (ARCH
+//! principle 10).
 //!
 //! Test code is exempt: files named `tests.rs` / `*_tests.rs` are not read, and
 //! each `#[cfg(test)]` item inside a production file is skipped to its closing
@@ -14,26 +16,14 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-/// Files that may name the engine anywhere: they construct it.
-const CONSTRUCTION: &[(&str, &str)] = &[
-    (
-        "bootstrap.rs",
-        "builds the engine, its tiered provider and the chunk NER extractor",
-    ),
-    (
-        "daemon_cmd/boot.rs",
-        "builds the engine, the recipe-author seams and the harness over it",
-    ),
-];
+/// Files that may name the engine anywhere: they construct it. Empty since
+/// pb-ingest-dial-daemon moved the construction to ingest's face.
+const CONSTRUCTION: &[(&str, &str)] = &[];
 
 /// Files that name the engine for a reason another row owns.
 /// Empty since pb-ingest-dial-daemon: the recipe parse went to
 /// `IngestPort::validate_recipe_toml`.
 const OWNED_ELSEWHERE: &[(&str, &str)] = &[];
-
-/// The implementor value any file may still spell: ingest's atlas, handed to
-/// the atlas family's port. pb-ingest-dial-daemon threads it from the host.
-const IMPLEMENTOR: &str = concat!("corpus", "_engine::IngestAtlas");
 
 /// The engine crate's path and import, spelled apart so a grep of this
 /// crate's tests for the engine counts real uses only.
@@ -168,9 +158,7 @@ fn the_daemon_names_the_engine_only_where_it_builds_it() {
                 continue;
             }
             named.insert(rel.clone());
-            let allowed = listed(CONSTRUCTION, &rel)
-                || listed(OWNED_ELSEWHERE, &rel)
-                || !names_engine(&line.replace(IMPLEMENTOR, ""));
+            let allowed = listed(CONSTRUCTION, &rel) || listed(OWNED_ELSEWHERE, &rel);
             if !allowed {
                 offenders.push(format!("src/{rel}:{n}: {}", line.trim()));
             }

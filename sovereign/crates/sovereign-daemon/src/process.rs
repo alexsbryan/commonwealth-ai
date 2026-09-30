@@ -7,7 +7,7 @@
 
 use crate::daemon_cmd;
 pub use crate::hosted_code::{CodeHost, CodeMount, HostedCode};
-pub use crate::hosted_ingest::HostedIngest;
+pub use crate::hosted_ingest::{HostedIngest, IngestHost, IngestMount};
 pub use crate::serve_client::{HostedParts, HostedServe};
 use sovereign_contracts::launch::Launch;
 

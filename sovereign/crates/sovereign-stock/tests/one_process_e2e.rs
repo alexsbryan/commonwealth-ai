@@ -458,11 +458,12 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
         },
     );
 
-    // Ingest's enrichment-config port is handed to svrn in this process
-    // (pb-ingest-dial-tools-close); the bare daemon logs its absence instead.
+    // Ingest is composed into svrn in this process, its engine and its
+    // enrichment-config port (pb-ingest-dial-tools-close,
+    // pb-ingest-dial-daemon); the bare daemon logs its absence instead.
     let boot = std::fs::read_to_string(&log).unwrap_or_default();
     assert!(
-        boot.contains("ingest's enrichment-config port is composed in this process"),
+        boot.contains("the ingest program is composed in this process"),
         "the stock process did not compose ingest's port:\n{}",
         log_tail(&log)
     );

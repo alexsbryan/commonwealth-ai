@@ -9,11 +9,13 @@
 //! decides whether serve is hosted here (`ServingPath::decide`); this binary
 //! only hands it the composition. Code is composed over svrn's data root and
 //! mounted on svrn's one `:9741/mcp` and client surface (pb-code-daemon-exit;
-//! F2 (a), phase-b-30; phase-b-33). Ingest's enrichment-config port is built
-//! from ingest's catalog and handed to svrn, which links no catalog
-//! (pb-ingest-dial-tools-close). boundary-gate holds the face items: every
-//! `sovereign_serve::`, `sovereign_daemon::`, `sovereign_code::` and
-//! `sovereign_enrichment_catalog::` path below is on the
+//! F2 (a), phase-b-30; phase-b-33). Ingest is composed here too: its
+//! enrichment-config port from ingest's catalog (pb-ingest-dial-tools-close),
+//! and the engine svrn's daemon holds, built by ingest's face for what svrn
+//! hands it (pb-ingest-dial-daemon); svrn links neither. boundary-gate holds
+//! the face items: every `sovereign_serve::`, `sovereign_daemon::`,
+//! `sovereign_code::`, `sovereign_enrichment_catalog::`, `corpus_engine::`
+//! and `sovereign_authoring_harness::` path below is on the
 //! `[[distribution]] stock` row, spelled in full.
 
 /// Code's editor door takes its grammar lookup from the host (pb-meshapp-rest):
@@ -119,9 +121,34 @@ fn main() {
             hold: Box::new(face.runtime),
         })
     });
-    let ingest = sovereign_daemon::process::HostedIngest::new(std::sync::Arc::new(
-        sovereign_enrichment_catalog::port::CatalogEnrichConfig,
-    ));
+    let ingest = sovereign_daemon::process::HostedIngest::new(
+        std::sync::Arc::new(sovereign_enrichment_catalog::port::CatalogEnrichConfig),
+        corpus_engine::face::atlas(),
+        |host| {
+            let face = corpus_engine::face::compose(corpus_engine::face::IngestParts {
+                data_dir: host.data_dir,
+                provider: host.provider,
+                embed_model: host.embed_model,
+                node_id: host.node_id,
+                chunk_entity_store: host.chunk_entity_store,
+                ner: host.ner,
+                conv_tiered: host.conv_tiered,
+                folder_tiered: host.folder_tiered,
+            });
+            sovereign_daemon::process::IngestMount {
+                // The authoring harness is ingest's too, over the same engine.
+                harness: std::sync::Arc::new(sovereign_authoring_harness::EngineHarness::new(
+                    std::sync::Arc::clone(&face.engine),
+                )),
+                port: face.port,
+                index: face.index,
+                recipe_author: face.recipe_author,
+                folder_tiered: face.folder_tiered,
+                arm_geometry: face.arm_geometry,
+                lazy_stamp: face.lazy_stamp,
+            }
+        },
+    );
     let exit_code = sovereign_daemon::process::run(&args, Some(hosted), Some(code), Some(ingest));
     // macOS: past `__cxa_finalize_ranges`, so the ggml-metal device sweeper
     // never asserts on still-resident resources; the loader's fast-exit,
