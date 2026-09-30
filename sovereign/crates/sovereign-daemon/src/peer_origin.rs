@@ -29,10 +29,13 @@ use tracing::info;
 /// The trace target of every event here.
 pub const TRACE_TARGET: &str = "peer_origin";
 
-/// How long the claim holds unrenewed, and how often it is renewed: the
-/// work origin's cadence (`crate::work_origin`), three renews per TTL.
+/// How long the claim holds unrenewed: the work origin's TTL
+/// (`crate::work_origin`).
 pub const ORIGIN_TTL_SECS: u64 = 60;
-pub const ORIGIN_RENEW_EVERY: Duration = Duration::from_secs(ORIGIN_TTL_SECS / 3);
+/// How often the claim is renewed: the daemon's gossip interval, because
+/// each renew carries this node's capabilities once cw-rails advertises the
+/// node, and peers must see them no staler than a gossip round shows them.
+pub const ORIGIN_RENEW_EVERY: Duration = sovereign_mesh::gossip::DEFAULT_GOSSIP_INTERVAL;
 
 /// The internal routes a peer dials, each served on the internal port
 /// (`crate::server`): the corpus work queue, the pipeline pause, knowledge
