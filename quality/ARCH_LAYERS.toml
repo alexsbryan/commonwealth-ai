@@ -1752,7 +1752,7 @@ tracking = "five-programs fp-9"
 package = "svrn"
 from = "sovereign-daemon"
 to = "sovereign-serving-host"
-reason = "not in-process serving (that is serve's since pb-svrn-dials-serve) but the daemon's own mesh routing: peer_inference::InferenceRouter over DeferredDaemon, whose local venue is now the loopback terminal arm (bootstrap.rs, provider.rs), the admission middleware that also gates the daemon's knowledge and ring routes (admission.rs), and entry_endpoint inside the terminal arm (build/inference.rs). pb-serve-ranks gives ranking to serve and retires this row (phase-b-23)."
+reason = "not in-process serving (that is serve's since pb-svrn-dials-serve) but two things only: the daemon's own mesh routing — peer_inference::InferenceRouter over DeferredDaemon with its venue_host, pinned_worker_source, rpc_discovery, slot_manifest/slot_select and oicp_synthesis parts (bootstrap.rs, provider.rs, daemon.rs) — and the OpenAI adapter (inference_adapter, tool_profile; lib.rs re-exports it with model_fetch and worker_eligibility). svrn's serving state, admission layers and entry_endpoint are its own, and the admission wire, turn_admission and the OpenAI/FIM rendering are sovereign-contracts' (pb-svrn-serving-ports; tests/main/serving_ports_census.rs keeps them out). pb-serve-ranks gives ranking to serve and retires this row (phase-b-23)."
 tracking = "five-programs fp-68"
 
 

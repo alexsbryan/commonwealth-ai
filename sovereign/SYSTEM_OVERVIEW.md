@@ -1092,7 +1092,7 @@ Two disjoint layers, so a request meets exactly one and is never double-gated.
 `client_fairness_layer` rations traffic that does not, returning early when
 `X-Node-Id` is present. Both key the same
 `serving_policy_core::fair_sched::SchedCore<Principal>`, which also backs the
-serving host's admission gate (`sovereign-serving-host/src/state.rs`), so every
+daemon's serving part (`sovereign-daemon/src/state/serving/part.rs`), so every
 admission gate is fair by identical rules.
 Local requests admit unconditionally; peer requests get 503 + `Retry-After`
 when paused, yielding to recent local foreground work, or refused by the

@@ -196,6 +196,8 @@ mod ring_sync_loop_tests;
 mod rotate_pre_split_guard;
 #[path = "main/scheduler_decision_records.rs"]
 mod scheduler_decision_records;
+#[path = "main/serving_ports_census.rs"]
+mod serving_ports_census;
 #[path = "main/status_answers_from_serve.rs"]
 mod status_answers_from_serve;
 #[path = "main/storage_budget_route.rs"]
