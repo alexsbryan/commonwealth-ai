@@ -98,8 +98,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // file itself constructs none. 16 -> 17 is the same commit's new
     // served-join-link test. A `#[cfg(test)]`-only file is TestOnly, as
     // `tests/rpc_warm_http.rs` is above. 17 -> 15 (pb-serve-placement): the
-    // `/v1/mesh/measurements` door and its two tests retired.
-    ("sovereign/crates/sovereign-daemon/src/mesh_http_tests.rs", Class::TestOnly, 15),
+    // `/v1/mesh/measurements` door and its two tests retired. 15 -> 16
+    // (pb-serve-ranks-discovery, 163ecfe35): the rpc-workers test reads
+    // `/v1/mesh/status` from its own test router, loopback.
+    ("sovereign/crates/sovereign-daemon/src/mesh_http_tests.rs", Class::TestOnly, 16),
     // NEW (2026-09-04, cw-lift 2f, bc600f424): the ring rail's anti-entropy
     // sender. `exchange` POSTs a RingSyncRequest to `/internal/ring/sync` on
     // each online peer, plus the inline `#[cfg(test)]` module that binds a
