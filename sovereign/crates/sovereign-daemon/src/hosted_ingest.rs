@@ -105,6 +105,12 @@ impl HostedIngest {
     }
 }
 
+/// Why an ingest route refuses on svrn alone. The prefix is the one these
+/// routes answered with before ingest left the daemon, so a caller matching
+/// it still does; the rest names the program (pb-ingest-dial-daemon).
+pub const NO_INGEST: &str = "no corpus engine available on this node: no ingest program is \
+                             composed in this process (the stock binary, `svrn daemon`, composes it)";
+
 /// A route ingest serves, answered on svrn alone: 503 naming the program.
 async fn absent(uri: axum::http::Uri) -> axum::response::Response {
     use axum::response::IntoResponse;

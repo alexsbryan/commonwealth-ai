@@ -890,8 +890,12 @@ async fn cluster_progress(
 /// The daemon's ONE local-corpus manager, or the named 503. Same
 /// singleton `corpus_watch_http` reads — this file installs nothing.
 fn manager_or_503() -> Result<Arc<LocalCorpusManager>, Absence> {
-    watched_folder_runtime::manager()
-        .ok_or_else(|| Absence::unavailable("local-corpus runtime not installed on this daemon"))
+    watched_folder_runtime::manager().ok_or_else(|| {
+        Absence::unavailable(
+            "local-corpus runtime not installed on this daemon: watched folders ingest through \
+             the ingest program, and the boot log names why it is absent",
+        )
+    })
 }
 
 fn not_registered(corpus_id: &str) -> axum::response::Response {

@@ -99,7 +99,7 @@ pub async fn corpus_ingest_partition(
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(IngestPartitionResponse {
                     accepted: false,
-                    reason: Some("no corpus engine available on this node".into()),
+                    reason: Some(crate::hosted_ingest::NO_INGEST.into()),
                 }),
             );
         }

@@ -153,7 +153,7 @@ pub async fn corpus_install(
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         ));
     }
@@ -173,7 +173,7 @@ pub async fn corpus_install(
         InstallOutcome::NoEngine => Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         )),
         InstallOutcome::RecipeNotFound(reason) => Err((
@@ -586,7 +586,7 @@ pub async fn corpus_expand(
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         ));
     }
@@ -1360,7 +1360,7 @@ pub async fn corpus_pause(
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         )
     })?;
@@ -1424,7 +1424,7 @@ pub async fn corpus_cancel(
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         )
     })?;

@@ -64,7 +64,7 @@ pub async fn corpus_grant_issue(
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         )
     })?;

@@ -204,6 +204,8 @@ mod storage_budget_route;
 mod storage_snapshot_e2e;
 #[path = "main/store_seed_double.rs"]
 mod store_seed_double;
+#[path = "main/svrn_alone_names_ingest_absent_e2e.rs"]
+mod svrn_alone_names_ingest_absent_e2e;
 #[path = "main/svrn_memory_without_code_e2e.rs"]
 mod svrn_memory_without_code_e2e;
 #[path = "main/throughput_ledger_emission.rs"]

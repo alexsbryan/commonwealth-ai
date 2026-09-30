@@ -41,7 +41,7 @@ pub async fn corpus_install(
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         ));
     }
@@ -76,7 +76,7 @@ pub async fn recipe_test(
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         ));
     };
