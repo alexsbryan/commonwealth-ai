@@ -8,19 +8,26 @@ use sovereign_contracts::probe::{ProbeQuestion, RoutingEvidence};
 
 use crate::chat_cmd::bootstrap::ChatSession;
 
-/// Classify every question in order.
+/// Classify every question in order. The classifier's prompt names the
+/// installed corpora, so the lane refuses when ingest is absent rather than
+/// classify against an empty list.
 pub(crate) async fn probe(
     session: &ChatSession,
     questions: &[ProbeQuestion],
-) -> Vec<RoutingEvidence> {
+) -> Result<Vec<RoutingEvidence>, String> {
+    let corpus = session.corpus()?;
     let mut rows = Vec::with_capacity(questions.len());
     for q in questions {
-        rows.push(probe_question(session, q).await);
+        rows.push(probe_question(session, corpus.as_ref(), q).await);
     }
-    rows
+    Ok(rows)
 }
 
-async fn probe_question(session: &ChatSession, q: &ProbeQuestion) -> RoutingEvidence {
+async fn probe_question(
+    session: &ChatSession,
+    corpus: &dyn corpus_index::source::CorpusReadPort,
+    q: &ProbeQuestion,
+) -> RoutingEvidence {
     use sovereign_core::types::{
         ConversationContext, Effect, Idempotency, Latency, Scope, ToolDescriptor,
     };
@@ -32,8 +39,7 @@ async fn probe_question(session: &ChatSession, q: &ProbeQuestion) -> RoutingEvid
     // surfaced. Skill hints / corrections are intentionally absent:
     // the eval scores BASE classifier behaviour, not the corrected
     // behaviour.
-    let installed = session
-        .corpus_engine
+    let installed = corpus
         .installed_indexes()
         .await
         .map(|ix| ix.into_iter().map(|i| i.corpus_id).collect::<Vec<_>>())

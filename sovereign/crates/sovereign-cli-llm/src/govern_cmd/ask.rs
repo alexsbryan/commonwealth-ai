@@ -181,7 +181,14 @@ async fn render_sources(
         // FULL section text from the index (not the truncated metadata snippet),
         // mirroring the bench live-runner's resolution. Strip the section's own
         // title line so the body isn't printed twice.
-        let body = match session.corpus_engine.open_index_for_corpus(cid).await {
+        let corpus = match session.corpus() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("  (passage bodies not read: {e})");
+                break;
+            }
+        };
+        let body = match corpus.open_index_for_corpus(cid).await {
             Ok(index) => index
                 .chunks_by_ids(&[*chid])
                 .await

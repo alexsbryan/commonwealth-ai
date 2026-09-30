@@ -1162,7 +1162,7 @@ name = "SOVEREIGN_CLI_LLM_BIN"
 cluster = "cli-binaries"
 default = "sibling of dispatcher"
 status = "shipped"
-purpose = "Path override for the sovereign-cli-llm sibling the dispatcher execs."
+purpose = "Path override for the LLM-verb sibling the dispatcher execs: the stock distribution's sovereign-cli-llm-stock, cli-llm with ingest composed in (pb-cli-llm-ingest-move-compose)."
 
 [[flag]]
 name = "SOVEREIGN_CLI_DEV_BIN"

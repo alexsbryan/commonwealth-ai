@@ -175,7 +175,7 @@ async fn probe(
     };
     Ok(match request.mode {
         ProbeMode::Routing => ProbeEvidence::Routing {
-            rows: routing::probe(session, &request.questions).await,
+            rows: routing::probe(session, &request.questions).await?,
         },
         ProbeMode::Prod => {
             let isolate_corpora = request.isolate.then(|| vec![request.corpus.clone()]);

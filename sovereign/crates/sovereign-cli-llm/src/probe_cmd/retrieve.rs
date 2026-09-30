@@ -59,6 +59,23 @@ async fn probe_question(
         }
     };
     let embed_ms = t_embed.elapsed().as_millis() as u64;
+    let corpus = match session.corpus() {
+        Ok(c) => c,
+        Err(e) => {
+            return PoolEvidence {
+                id: q.id.clone(),
+                error: Some(e.to_string()),
+                chunks: Vec::new(),
+                atlas_navigation: Vec::new(),
+                embed_ms,
+                search_ms: 0,
+                corpora_hit: Vec::new(),
+                vector_eligible: false,
+                unavailable_corpora: Vec::new(),
+                atlas_walk: None,
+            }
+        }
+    };
 
     // 2. Compute per-article atlas relevance scores once, before the
     // search loop. These flow into `search_with_rerank` as a third
@@ -122,7 +139,7 @@ async fn probe_question(
             any_vector_eligible = true;
         }
         let query_vec: &[f32] = if dim_match { &embedding } else { &[] };
-        let idx = match session.corpus_engine.open_index(&info.path).await {
+        let idx = match corpus.open_index(&info.path).await {
             Ok(i) => i,
             Err(e) => {
                 eprintln!("  open_index({}): {e}", info.corpus_id);
@@ -347,7 +364,7 @@ async fn probe_question(
         target_indexes
     };
     for info in atlas_target_indexes {
-        let idx = match session.corpus_engine.open_index(&info.path).await {
+        let idx = match corpus.open_index(&info.path).await {
             Ok(i) => i,
             Err(_) => continue,
         };
@@ -506,7 +523,7 @@ pub(crate) async fn probe(
     seed_mode: SeedMode,
 ) -> Result<Vec<PoolEvidence>, String> {
     let indexes = session
-        .corpus_engine
+        .corpus()?
         .installed_indexes()
         .await
         .map_err(|e| format!("installed_indexes(): {e}"))?;

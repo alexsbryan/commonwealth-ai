@@ -165,7 +165,14 @@ async fn render_sources(
         return;
     }
     eprintln!("  sources ({} passage(s) from {corpus_id}):", ids.len());
-    if let Ok(index) = session.corpus_engine.open_index_for_corpus(corpus_id).await {
+    let corpus = match session.corpus() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("  (passage bodies not read: {e})");
+            return;
+        }
+    };
+    if let Ok(index) = corpus.open_index_for_corpus(corpus_id).await {
         for chid in ids.iter().take(4) {
             if let Ok(mut rows) = index.chunks_by_ids(&[*chid]).await {
                 if let Some(row) = rows.pop() {

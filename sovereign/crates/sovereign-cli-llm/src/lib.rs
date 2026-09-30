@@ -99,9 +99,18 @@ mod workflow_cmd;
 
 use sovereign_cli_shared::tracing_init::init_tracing;
 
-/// The sibling binary's entry point. `src/main.rs` is a shim over this so the
-/// crate has exactly one implementation of its verb table.
+/// The bare sibling binary's entry point: no ingest program composed, so a
+/// lane that reads corpora names the absence. `src/main.rs` is a shim over
+/// this so the crate has exactly one implementation of its verb table.
 pub fn bin_main() {
+    bin_main_with(None)
+}
+
+/// The entry with ingest composed by a distribution (the stock
+/// distribution's `sovereign-cli-llm-stock`, pb-cli-llm-ingest-move-compose),
+/// as `process::run` takes it for the daemon.
+pub fn bin_main_with(ingest: Option<sovereign_daemon::hosted_ingest::HostedIngest>) {
+    chat_cmd::ingest::install(ingest);
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "full");
     }

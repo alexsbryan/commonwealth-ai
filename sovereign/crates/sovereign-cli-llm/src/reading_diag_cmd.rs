@@ -388,8 +388,8 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
         .await
         .map_err(|e| format!("embed query: {e}"))?;
 
-    let indexes = session
-        .corpus_engine
+    let corpus = session.corpus()?;
+    let indexes = corpus
         .installed_indexes()
         .await
         .map_err(|e| format!("list installed indexes: {e}"))?;
@@ -438,7 +438,7 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
 
         let query_vec: &[f32] = if dim_match { &embedding } else { &[] };
         let hybrid = dim_match && !embedding.is_empty();
-        let idx = match session.corpus_engine.open_index(&info.path).await {
+        let idx = match corpus.open_index(&info.path).await {
             Ok(i) => i,
             Err(e) => {
                 eprintln!(

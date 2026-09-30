@@ -140,7 +140,14 @@ async fn render_sources(session: &crate::chat_cmd::bootstrap::ChatSession, conv_
 
     eprintln!("\nsources — filing passages retrieved for this answer (most relevant first):");
     for (cid, chid) in distinct.iter().take(TOP) {
-        let body = match session.corpus_engine.open_index_for_corpus(cid).await {
+        let corpus = match session.corpus() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("  (passage bodies not read: {e})");
+                break;
+            }
+        };
+        let body = match corpus.open_index_for_corpus(cid).await {
             Ok(index) => index
                 .chunks_by_ids(&[*chid])
                 .await

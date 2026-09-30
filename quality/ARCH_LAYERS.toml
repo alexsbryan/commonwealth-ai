@@ -1538,6 +1538,12 @@ max_code_lines = 300
 package = "svrn"
 krate = "sovereign-daemon"
 items = ["process::run", "process::HostedServe", "process::HostedParts", "process::HostedCode", "process::CodeMount", "process::HostedIngest", "process::IngestMount", "EmbeddedDaemon", "mesh_http::set_shared_model_host"]
+# svrn's LLM verbs, handed the same ingest composition as the daemon
+# (pb-cli-llm-ingest-move-compose): the `sovereign-cli-llm-stock` bin.
+[[distribution.face]]
+package = "svrn"
+krate = "sovereign-cli-llm"
+items = ["bin_main_with"]
 [[distribution.face]]
 package = "cmnwlth"
 krate = "sovereign-serve"

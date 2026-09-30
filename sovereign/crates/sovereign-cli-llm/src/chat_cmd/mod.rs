@@ -32,6 +32,7 @@
 pub mod ask;
 pub mod bootstrap;
 pub mod config;
+pub mod ingest;
 pub mod inspect;
 pub mod list;
 pub mod render;

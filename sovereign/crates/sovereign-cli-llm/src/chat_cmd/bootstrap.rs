@@ -45,7 +45,9 @@ use crate::chat_cmd::config::ChatGlobals;
 pub struct ChatSession {
     pub runtime: Arc<Runtime>,
     pub store: Arc<dyn StateStore>,
-    pub corpus_engine: Arc<corpus_engine::CorpusEngine>,
+    /// Ingest's read port over the engine the composed ingest built; `None`
+    /// in the bare binary (read it through [`ChatSession::corpus`]).
+    pub corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
     pub inference: Arc<dyn InferenceProvider>,
     pub daemon_base: String,
     /// Resolved embed model id (e.g. `Qwen3-Embedding-0.6B-Q8_0`).
@@ -61,6 +63,16 @@ pub struct ChatSession {
     /// contexts until something warms it. Warming this Arc is visible to
     /// `runtime` because they share it.
     pub atlas_mgr: Arc<sovereign_tools::atlas_context_manager::AtlasContextManager>,
+}
+
+impl ChatSession {
+    /// The corpus read port, or the named absence when no ingest program is
+    /// composed in this process (pb-cli-llm-ingest-move-compose).
+    pub fn corpus(
+        &self,
+    ) -> std::result::Result<&Arc<dyn corpus_index::source::CorpusReadPort>, &'static str> {
+        self.corpus_engine.as_ref().ok_or(super::ingest::NO_INGEST)
+    }
 }
 
 /// Probe the daemon, resolve its `(chat, embed)` model ids, and build the
@@ -173,7 +185,7 @@ async fn build_session_scoped(
     );
     let store: Arc<dyn StateStore> = store_concrete.clone();
 
-    // 4. Build the CorpusEngine. The desktop (`state.rs`) hardcodes
+    // 4. Ingest's engine, built by the composed ingest program. The desktop (`state.rs`) hardcodes
     //    `~/.svrnmesh/{recipes,indexes}` regardless of `config.data.dir` —
     //    that field governs the state DB only, not corpus storage. Matching
     //    that convention means this CLI sees the same corpora the desktop
@@ -184,30 +196,31 @@ async fn build_session_scoped(
     //    using `<data_dir>/indexes` when `--data-dir` was given.
     //    Otherwise stick to the hardcoded well-known path.
     let dotsovereign = sovereign_contracts::rebrand::svrnmesh_root();
-    let (recipes_dir, indexes_dir): (PathBuf, PathBuf) = if globals.data_dir_explicit {
-        (
-            globals.data_dir.join("recipes"),
-            globals.data_dir.join("indexes"),
-        )
+    //    Ingest roots `recipes/` and `indexes/` under the one directory.
+    let ingest_root: PathBuf = if globals.data_dir_explicit {
+        globals.data_dir.clone()
     } else {
-        (dotsovereign.join("recipes"), dotsovereign.join("indexes"))
+        dotsovereign
     };
+    let indexes_dir = ingest_root.join("indexes");
     eprintln!("Indexes:     {}", indexes_dir.display());
-    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
-    let inference_fn = corpus_engine::enrichment::provider_inference::inference_to_inference_fn(
-        Arc::clone(&inference),
-    );
     // The engine's `expected_embedding_model` flows into
     // `_corpus_meta.json` at ingest time and into shard-consistency
     // checks. The CLI doesn't ingest during chat, but if any tool
     // path later triggers an ingest (e.g. watcher-driven reindex
     // through the same engine), it must match what the desktop
     // would have written.
-    let corpus_engine = Arc::new(
-        corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir.clone(), embed_fn)
-            .with_embedding_model(&embed_model)
-            .with_inference_fn(inference_fn),
+    let mount = super::ingest::compose(
+        ingest_root,
+        Arc::clone(&inference),
+        &embed_model,
+        Arc::clone(&store_concrete),
     );
+    if mount.is_none() {
+        eprintln!("Ingest:      absent — {}", super::ingest::NO_INGEST);
+    }
+    let ingest_port = mount.map(|m| m.port);
+    let ingest_ports = super::ingest::ports();
 
     // 5. Session-level overrides. `govern ask` sets custom instructions to its
     //    governance answering rules; ordinary chat leaves them None
@@ -248,13 +261,11 @@ async fn build_session_scoped(
             // The same `SqliteStateStore` handle already opened above also
             // impls `ConvTieredReader` (spec CONV_TIERED_PORT.md).
             conv_tiered: Some(Arc::clone(&store_concrete) as Arc<dyn ConvTieredReader>),
-            corpus_engine: Some(Arc::clone(&corpus_engine) as _),
-            atlas: Some(Arc::new(corpus_engine::IngestAtlas)),
-            // This process links ingest's catalog, so the atlas manager's
+            corpus_engine: ingest_port.clone().map(|port| port as _),
+            atlas: ingest_ports.map(|ingest| ingest.atlas()),
+            // The composed ingest's catalog, so the atlas manager's
             // pipeline-map fallback reads configs as it did before the port.
-            enrich_config: Some(Arc::new(
-                sovereign_enrichment_catalog::port::CatalogEnrichConfig,
-            )),
+            enrich_config: ingest_ports.map(|ingest| ingest.enrich_config()),
             // Cloned: `tool_bundles` below borrows the same handle for
             // `knowledge_lookup`'s notes channel. One store, two readers.
             note_store: note_store.clone(),
@@ -280,7 +291,7 @@ async fn build_session_scoped(
                     sovereign_runtime_recipe::BaselineDeps {
                         store: &store,
                         inference: &inference,
-                        corpus_engine: Some(Arc::clone(&corpus_engine) as _),
+                        corpus_engine: ingest_port.clone().map(|port| port as _),
                         // The same handle passed to `note_store` below — the
                         // notes evidence channel and the tool-decision write
                         // hook read one store, not two.
@@ -294,10 +305,19 @@ async fn build_session_scoped(
                         escalation: sovereign_tools::bundles::WebEscalation::Disabled,
                     },
                 );
-                b.push(Box::new(sovereign_tools::bundles::WikipediaTools::new(
-                    Arc::clone(&corpus_engine) as _,
-                    Arc::new(corpus_engine::IngestAtlas),
-                )));
+                b.push(match (&ingest_port, ingest_ports) {
+                    (Some(port), Some(ingest)) => {
+                        Box::new(sovereign_tools::bundles::WikipediaTools::new(
+                            Arc::clone(port) as _,
+                            ingest.atlas(),
+                        ))
+                    }
+                    _ => Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+                        "wikipedia",
+                        "no ingest program is composed in this process, and \
+                         wikipedia_fetch reads its catalog corpus",
+                    )),
+                });
                 b.push(Box::new(sovereign_tools::bundles::ShellTools));
                 b
             },
@@ -350,7 +370,7 @@ async fn build_session_scoped(
     Ok(ChatSession {
         runtime,
         store,
-        corpus_engine,
+        corpus_engine: ingest_port.map(|port| port as _),
         inference,
         daemon_base: base,
         embed_model,

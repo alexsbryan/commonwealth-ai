@@ -435,18 +435,19 @@ async fn build(
     // Without it the engine falls back to one HTTP round-trip per text
     // (the pre-2026-07-24 path), which would make every measurement a
     // measurement of the wrong pipeline.
-    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&enrich_inference));
-    let batch_embed_fn =
-        sovereign_tools::corpus::inference_to_batch_embed_fn(Arc::clone(&enrich_inference));
-    let inference_fn = corpus_engine::enrichment::provider_inference::inference_to_inference_fn(
+    // Ingest's face wires both, over the metered provider.
+    let store = Arc::new(
+        SqliteStateStore::open(&data_dir.join("sovereign.db"))
+            .map_err(|e| format!("open sovereign.db: {e}"))?,
+    );
+    let engine = crate::chat_cmd::ingest::compose(
+        data_dir.clone(),
         Arc::clone(&enrich_inference),
-    );
-    let engine = Arc::new(
-        corpus_engine::CorpusEngine::new(recipes_dir.clone(), indexes_dir.clone(), embed_fn)
-            .with_embedding_model(&session.embed_model)
-            .with_batch_embed_fn(batch_embed_fn)
-            .with_inference_fn(inference_fn),
-    );
+        &session.embed_model,
+        store,
+    )
+    .ok_or_else(|| crate::chat_cmd::ingest::NO_INGEST.to_string())?
+    .port;
 
     let lc_store: Arc<dyn sovereign_core::traits::StateStore> =
         Arc::new(sovereign_store::memory::InMemoryStateStore::new());
