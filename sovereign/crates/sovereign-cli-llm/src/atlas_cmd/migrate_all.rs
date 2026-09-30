@@ -47,10 +47,10 @@ use corpus_engine::wikipedia_graph_present;
 use sovereign_enrichment_build::pipeline_map::{ensure_pipeline_map, MapConversion};
 
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
-use crate::chat_cmd::config::parse_globals;
 use corpus_engine::enrichment::atlas::context_loader::{
     backfill_ann, AtlasContextFilter, BackfillOutcome,
 };
+use sovereign_cli_base::chat_globals::parse_globals;
 
 pub async fn run(args: &[String]) -> i32 {
     let (globals, rest) = match parse_globals(args) {

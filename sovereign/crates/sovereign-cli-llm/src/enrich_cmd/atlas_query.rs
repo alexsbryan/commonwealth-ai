@@ -29,9 +29,9 @@ use sovereign_core::atlas_context::{
 
 use super::paths;
 use crate::chat_cmd::bootstrap::build_session;
-use crate::chat_cmd::config::parse_globals;
 use crate::probe_cmd::load_atlas_context;
 use corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter;
+use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
 /// Per-node fanout cap on the CallChain BFS — a hot symbol referencing dozens of
@@ -215,7 +215,7 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
 /// CallChain branch — load the graph, seed (named → else conceptual), BFS, and
 /// render a cited brief.
 async fn run_call_chain(
-    globals: &crate::chat_cmd::config::ChatGlobals,
+    globals: &sovereign_cli_base::chat_globals::ChatGlobals,
     parsed: &ParsedQuery,
     atlas_dir: &std::path::Path,
     call_dir: Option<CallDirection>,
@@ -302,7 +302,7 @@ async fn run_call_chain(
 /// the nearest atom. Loads the embedding bag only as a cosine fallback when the
 /// corpus isn't backfilled. `None` on any failure (caller falls back to named).
 async fn conceptual_seed(
-    globals: &crate::chat_cmd::config::ChatGlobals,
+    globals: &sovereign_cli_base::chat_globals::ChatGlobals,
     corpus_id: &str,
     atlas_dir: &std::path::Path,
     query: &str,

@@ -15,10 +15,10 @@
 //! one.
 
 use crate::chat_cmd::bootstrap::build_session;
-use crate::chat_cmd::config::parse_globals;
 use corpus_engine::enrichment::pipeline::{
     progress::wire, BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };
+use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 use sovereign_contracts::traits::InferenceProvider;
 use std::sync::Arc;

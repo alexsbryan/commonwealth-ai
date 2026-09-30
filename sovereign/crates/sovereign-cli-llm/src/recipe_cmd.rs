@@ -340,7 +340,7 @@ async fn run_enrich_and_verify(
     // Daemon-backed engine via the canonical provider + adapters (SSOT — the
     // same path `chat` bootstraps).
     let provider: Arc<dyn sovereign_contracts::traits::InferenceProvider> =
-        Arc::new(crate::chat_cmd::bootstrap::SplitInferenceProvider::new(
+        Arc::new(oicp_client::SplitInferenceProvider::new(
             &v1,
             chat_model,
             embed_model.clone(),

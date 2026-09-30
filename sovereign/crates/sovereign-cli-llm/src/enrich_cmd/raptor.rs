@@ -65,8 +65,8 @@ use sovereign_tools::conv_tiered_provider::{
     FolderTieredProvider, IndexDirResolver, StaticIndexDirResolver,
 };
 
-use crate::chat_cmd::bootstrap::SplitInferenceProvider;
 use crate::enrich_cmd::raptor_census::{census, census_refusal};
+use oicp_client::SplitInferenceProvider;
 use sovereign_cli_base::help;
 
 /// Parsed `enrich raptor` invocation.

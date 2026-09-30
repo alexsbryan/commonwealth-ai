@@ -21,11 +21,11 @@ use corpus_engine::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 
 use crate::chat_cmd::bootstrap::build_inference;
-use crate::chat_cmd::config::parse_globals;
 use crate::enrich_cmd::paths;
 use corpus_engine::enrichment::atlas::context_loader::{
     backfill_ann, AtlasContextFilter, BackfillOutcome,
 };
+use sovereign_cli_base::chat_globals::parse_globals;
 
 pub async fn run(args: &[String]) -> i32 {
     let (globals, rest) = match parse_globals(args) {

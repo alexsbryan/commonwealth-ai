@@ -29,10 +29,10 @@ use sovereign_contracts::setup_config::SetupConfig;
 //
 // `RegisterRequest`'s config is the OTHER direction and is where the live bug
 // was: see `build_watch_config`.
+use sovereign_contracts::daemon_wire::local_corpus::config::{SyncMode, WatchedFolderConfig};
 use sovereign_daemon::corpus_watch_http::{
     AckResponse, ListResponse, RegisterResponse, StateResponse, StatusResponse,
 };
-use sovereign_tools::local_corpus::config::{SyncMode, WatchedFolderConfig};
 use sovereign_tools::local_corpus::watched::status::WatchedFolderStatus;
 
 /// The daemon on THIS host — deliberately NOT env-overridable.
@@ -912,7 +912,7 @@ mod tests {
         assert!(cfg.sensitive, "--sensitive must reach the daemon");
         assert_eq!(
             cfg.sync_mode,
-            sovereign_tools::local_corpus::config::SyncMode::Manual,
+            sovereign_contracts::daemon_wire::local_corpus::config::SyncMode::Manual,
             "--manual must reach the daemon"
         );
         assert_eq!(cfg.run_on_changes.as_deref(), Some("reindex"));
