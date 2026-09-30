@@ -48,8 +48,9 @@ use sovereign_enrichment_build::pipeline_map::{ensure_pipeline_map, MapConversio
 
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
-use crate::eval_cmd::runner::AtlasContextFilter;
-use corpus_engine::enrichment::atlas::context_loader::{backfill_ann, BackfillOutcome};
+use corpus_engine::enrichment::atlas::context_loader::{
+    backfill_ann, AtlasContextFilter, BackfillOutcome,
+};
 
 pub async fn run(args: &[String]) -> i32 {
     let (globals, rest) = match parse_globals(args) {

@@ -384,33 +384,6 @@ fn pick_paragraph(section_text: &str, preview: &str) -> String {
     }
 }
 
-/// The atlas bag loader moved to svrn's probe with the raw-index search that
-/// uses it; reachable here at its historical path.
-pub use crate::probe_cmd::load_atlas_context;
-
-/// The filter applied during atlas-context loading — the SAME type the
-/// production grounding path uses, deliberately.
-///
-/// This was a private `AtlasLoadFilter` here: a renamed copy of
-/// `AtlasContextFilter` carrying six of its seven fields, in a crate that
-/// already depends on `sovereign-tools` and already imported the owner one
-/// module over (`atlas_cmd::migrate_all`). Two call sites hand-copied
-/// `AtlasContextFilter::default()` field-by-field into the copy to keep them
-/// aligned, with a comment saying why — a re-derivation nothing enforced.
-///
-/// It drifted, exactly where that matters most. The owner's
-/// `min_description_chars` floor moved 200 → 10 (and became env-aware) after
-/// 200 was found to drop ~85% of SEP atoms; the copy still documented "200",
-/// and `#[derive(Default)]` gave it 0 rather than either. The eval harness
-/// was the one caller that did not hand-copy, so it filtered the atom
-/// universe by a rule production had already abandoned.
-///
-/// Importing the owner is what stops that recurring (`ARCH_PRINCIPLES`
-/// §10.6, one decider one name; §10, structural not remembered). Surfaced by
-/// nc-22c shape matching — a name-keyed census cannot see a fork that was
-/// renamed on copy.
-pub use corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter;
-
 impl EvalResult {
     /// Used by the embed-failure branch above. Today this just returns
     /// `self`; kept as a hook so a future revision can attach the

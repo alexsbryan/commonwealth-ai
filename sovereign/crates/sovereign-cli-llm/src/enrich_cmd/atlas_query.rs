@@ -30,7 +30,8 @@ use sovereign_core::atlas_context::{
 use super::paths;
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
-use crate::eval_cmd::runner::{load_atlas_context, AtlasContextFilter};
+use crate::probe_cmd::load_atlas_context;
+use corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 /// Per-node fanout cap on the CallChain BFS — a hot symbol referencing dozens of
