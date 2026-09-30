@@ -65,6 +65,7 @@ pub mod eval_bank;
 /// so the serving host reaches it without linking the inference stack; it is
 /// arithmetic over `types::FimStyle`, which already lives here.
 pub mod fim;
+pub mod fim_http;
 pub mod frame;
 pub mod gguf_validator;
 pub mod git;
@@ -133,6 +134,7 @@ pub mod node_identity;
 /// notes without naming `corpus-engine-notes`.
 pub mod notes;
 pub mod observer;
+pub mod openai_http;
 pub mod peer_work;
 // The two ports a daemon speaks to its peers through — a replicated KV store
 // and the convergence stamps — plus the honest N=1 implementations of both.

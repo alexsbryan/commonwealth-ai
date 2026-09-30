@@ -49,7 +49,7 @@ fn local_model_rows(state: &AppState) -> Option<Vec<LoadedModelStatus>> {
         .map(|m| ("local".to_string(), m))
         .collect();
     let aliases = state.inner.serving.slot_aliases.current();
-    let rows = sovereign_serving_host::openai_http::model_rows(holders, &aliases, "local")
+    let rows = sovereign_contracts::openai_http::model_rows(holders, &aliases, "local")
         .into_iter()
         .filter(|row| row.owned_by == "local")
         .map(|row| LoadedModelStatus {

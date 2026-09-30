@@ -115,6 +115,7 @@ pub mod meshapp_http;
 pub mod newsworthy_host;
 pub mod notes_http;
 pub mod ocr_install;
+pub mod openai_http;
 pub mod origin_fanout;
 pub mod principal;
 #[cfg(feature = "treesitter")]

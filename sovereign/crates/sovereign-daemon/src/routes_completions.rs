@@ -16,11 +16,11 @@
 //! fix, and we surface it verbatim (a friend setting this up should
 //! never have to read daemon logs for the common misconfigurations).
 
+use crate::openai_http::{serve_fim_aggregated, serve_fim_sse};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use sovereign_serving_host::fim_http::{serve_fim_aggregated, serve_fim_sse};
 
 use crate::openai_types::{CompletionsRequestWire, ErrorResponse, StopParam};
 use crate::state::{AppState, FimCompletionRequest};

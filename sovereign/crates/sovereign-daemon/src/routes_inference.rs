@@ -615,27 +615,26 @@ pub async fn embeddings(
     };
 
     // The request is answered by the one OpenAI embeddings rendering
-    // (`sovereign_serving_host::openai_http`), which `serve` answers through
+    // (`sovereign_contracts::openai_http`), which `serve` answers through
     // too; what this daemon records about the work stays here.
-    let resp =
-        match sovereign_serving_host::openai_http::embeddings_response(service.as_ref(), request)
-            .await
-        {
-            Ok(resp) => resp,
-            Err(refusal) => {
-                return (
-                    refusal.status,
-                    Json(
-                        serde_json::to_value(ErrorResponse::new(
-                            refusal.message,
-                            refusal.error_type,
-                        ))
+    let resp = match sovereign_contracts::openai_http::embeddings_response(
+        service.as_ref(),
+        request,
+    )
+    .await
+    {
+        Ok(resp) => resp,
+        Err(refusal) => {
+            return (
+                refusal.status,
+                Json(
+                    serde_json::to_value(ErrorResponse::new(refusal.message, refusal.error_type))
                         .unwrap_or_default(),
-                    ),
-                )
-                    .into_response();
-            }
-        };
+                ),
+            )
+                .into_response();
+        }
+    };
     let n_texts = resp.data.len() as u64;
     let approx_tokens = resp.usage.prompt_tokens;
     // Record the embedding work on the local Activity ledger — split
@@ -824,7 +823,7 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
 
     let slot_aliases = state.inner.serving.slot_aliases.current();
     // Rows from the one `/v1/models` row builder, which `serve` reads too.
-    Some(sovereign_serving_host::openai_http::model_rows(
+    Some(sovereign_contracts::openai_http::model_rows(
         holders,
         &slot_aliases,
         "mesh",
@@ -1151,7 +1150,7 @@ async fn serve_local_stream(
     requester: Option<NodeId>,
     model_id_for_ledger: String,
 ) -> Response {
-    let header = sovereign_serving_host::openai_http::ChunkHeader::new(request.model.clone());
+    let header = sovereign_contracts::openai_http::ChunkHeader::new(request.model.clone());
 
     let token_stream = match service.chat_completion_stream(request).await {
         Ok(s) => s,
@@ -1204,9 +1203,7 @@ async fn serve_local_stream(
         if matches!(frame, StreamFrame::Token(_) | StreamFrame::ToolCalls(_)) {
             chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
-        Ok::<_, std::convert::Infallible>(sovereign_serving_host::openai_http::sse_event(
-            &header, frame,
-        ))
+        Ok::<_, std::convert::Infallible>(crate::openai_http::sse_event(&header, frame))
     });
 
     // Append the OpenAI `[DONE]` sentinel so the consumer knows
@@ -1256,7 +1253,7 @@ async fn serve_local_stream(
             }
         }
         Ok::<_, std::convert::Infallible>(
-            Event::default().data(sovereign_serving_host::openai_http::DONE),
+            Event::default().data(sovereign_contracts::openai_http::DONE),
         )
     });
     let combined = sse_events.chain(done);
