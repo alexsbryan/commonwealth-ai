@@ -63,6 +63,42 @@ pub fn eligible_anchors<D>(members: &[MembershipEntry<D>]) -> Vec<NodeId> {
         .collect()
 }
 
+/// The members a router may rank as inference venues: not `self_id`, present
+/// (Online or Busy), and dialable. THE one roster decision behind ranking,
+/// applied to the svrn daemon's roster and to a standalone serve's cw-rails
+/// roster alike (pb-serve-ranks).
+pub fn inference_peers<D>(
+    members: Vec<MembershipEntry<D>>,
+    self_id: NodeId,
+) -> Vec<MembershipEntry<D>> {
+    members
+        .into_iter()
+        .filter(|m| m.node_id != self_id)
+        .filter(|m| matches!(m.status, MemberStatus::Online | MemberStatus::Busy))
+        .filter(|m| m.dialable)
+        .collect()
+}
+
+impl<D> MembershipEntry<D> {
+    /// This member as a venue a router ranks, reached at `base_urls` (its
+    /// Inference-class endpoints, each a `/v1` prefix). The load signals are
+    /// the ones the member gossips, with when they were heard. A mesh peer is
+    /// never a pinned pod: those come from `PinnedWorkerEndpointSource`.
+    pub fn inference_venue(&self, base_urls: Vec<String>) -> crate::venue::InferenceVenue {
+        crate::venue::InferenceVenue {
+            node_id: self.node_id,
+            name: self.name.clone(),
+            base_urls,
+            system_ram_gb: self.capabilities.hardware.system_ram_gb,
+            benchmark: self.capabilities.benchmark.clone(),
+            current_in_flight: self.capabilities.current_in_flight,
+            inference_availability: Some(self.capabilities.inference_availability),
+            gossip_last_seen_unix: self.last_seen,
+            pinned_transport: false,
+        }
+    }
+}
+
 /// The one read of mesh membership. See the module docs.
 #[async_trait]
 pub trait MembershipReader: Send + Sync {
@@ -134,5 +170,27 @@ mod tests {
             eligible_anchors(&roster),
             vec![NodeId::from_u128(1), NodeId::from_u128(2)]
         );
+    }
+
+    /// A router ranks the present, dialable members that are not itself:
+    /// this node, an offline member and an undialable one are each left out.
+    /// Failing input: drop any of the three filters.
+    #[test]
+    fn inference_peers_are_present_dialable_members_other_than_this_node() {
+        let none = serde_json::Value::Null;
+        let mut undialable = member(4, MemberStatus::Online, none.clone());
+        undialable.dialable = false;
+        let roster = vec![
+            member(1, MemberStatus::Online, none.clone()),
+            member(2, MemberStatus::Busy, none.clone()),
+            member(3, MemberStatus::Offline, none.clone()),
+            undialable,
+            member(5, MemberStatus::Online, none),
+        ];
+        let ids: Vec<NodeId> = inference_peers(roster, NodeId::from_u128(5))
+            .into_iter()
+            .map(|m| m.node_id)
+            .collect();
+        assert_eq!(ids, vec![NodeId::from_u128(1), NodeId::from_u128(2)]);
     }
 }

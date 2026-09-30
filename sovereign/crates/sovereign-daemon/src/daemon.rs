@@ -12,7 +12,6 @@ use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use crate::state::{AppState, NodeSeed};
-use crate::types::MemberStatus;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
@@ -2401,18 +2400,12 @@ impl EmbeddedDaemon {
         // `MemberRecord.client_port` wire field — §10.1) lives in
         // the transport's construction at `start_daemon`.
         let transport = app_state.peer_transport();
-        let members: Vec<_> = {
-            let self_id = app_state.inner.fabric.identity.current();
-            app_state
-                .membership()
-                .members()
-                .await
-                .into_iter()
-                .filter(|m| m.node_id != self_id)
-                .filter(|m| matches!(m.status, MemberStatus::Online | MemberStatus::Busy))
-                .filter(|m| m.dialable)
-                .collect()
-        };
+        // Which members, and each as a venue: the one decision serve's
+        // cw-rails roster applies too (pb-serve-ranks).
+        let members = sovereign_contracts::membership::inference_peers(
+            app_state.membership().members().await,
+            app_state.inner.fabric.identity.current(),
+        );
         let mut endpoints = Vec::with_capacity(members.len());
         for m in members {
             let base_urls: Vec<String> = transport
@@ -2421,24 +2414,7 @@ impl EmbeddedDaemon {
                 .into_iter()
                 .map(|ep| format!("{}/v1", ep.base_url))
                 .collect();
-            endpoints.push(InferenceVenue {
-                node_id: m.node_id,
-                name: m.name.clone(),
-                base_urls,
-                system_ram_gb: m.capabilities.hardware.system_ram_gb,
-                benchmark: m.capabilities.benchmark.clone(),
-                current_in_flight: m.capabilities.current_in_flight,
-                inference_availability: Some(m.capabilities.inference_availability),
-                // P2 provenance: the LWW event time on the member
-                // record is exactly the age of the two load signals
-                // above — they arrive on the same gossip payload.
-                gossip_last_seen_unix: m.last_seen,
-                // Mesh peers always use the default plain-HTTP transport
-                // — TLS pinning is reserved for ephemeral worker pods,
-                // which surface through `PinnedWorkerEndpointSource` in
-                // a separate path.
-                pinned_transport: false,
-            });
+            endpoints.push(m.inference_venue(base_urls));
         }
         endpoints
     }
