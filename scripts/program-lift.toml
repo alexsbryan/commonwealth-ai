@@ -48,6 +48,8 @@
 #            or, with `path`, on a non-2xx or an empty value
 #   call     one POST of `json` to `url`; `var` = `path` of the body. `fail` on
 #            no answer, a non-2xx or an empty value (BODY keeps the answer).
+#            `retry` = seconds to POST again (every 5 s) until it answers;
+#            `alive` names a spawn that must stay up meanwhile.
 #            Without `path` it only records: `status_var` = the HTTP status,
 #            and only no answer fails, for a refusal the smoke then requires
 #   count    lines of `file` matching `pattern` into `var`; below `min` fails
@@ -314,6 +316,69 @@ steps = [
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { model = "${MODEL}", messages = [{ role = "user", content = "hello" }] }, path = "choices.message.content", var = "CHAT", fail = "POST /v1/chat/completions gave no answer: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/embeddings", json = { model = "${MODEL}", input = ["hello"] }, path = "data.index", var = "EMBEDDED", fail = "POST /v1/embeddings gave no vector: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/rerank", json = { model = "${MODEL}", query = "hello", documents = ["hello world", "other"] }, path = "results[index=0].relevance_score", var = "SCORE", fail = "POST /v1/rerank gave no score: ${BODY}" },
+]
+
+# ── serve-mesh — serve distributing a primary across a mesh of two ──────────
+# pb-serve-distributes-standalone's PROOF: two standalone serves, no svrn
+# daemon, each beside its own cw-rails on a mesh the run founds (loopback,
+# --local-only, as cmnwlth's run). A lends its GPU (anchor, rpc worker); B
+# hosts (`[compute] distributed_primary`, pinned host) and reaches A only
+# through cw-rails: A's anchor record on cw-rails' roster, A's rpc-warm and
+# rpc worker through cw-rails' origin table. Real weights, so run it in-tree:
+# `scripts/program-lift.sh --run-only serve-mesh`. A host with no model on
+# disk abstains.
+[lift.serve-mesh]
+package = "cmnwlth"
+seeds = ["sovereign-serve", "commonwealth-rails"]
+build = ["-p", "sovereign-serve", "--bin", "sovereign-serve", "-p", "commonwealth-rails", "--bin", "cw-rails"]
+binary = "debug/sovereign-serve"
+
+[lift.serve-mesh.run]
+pass = "B's serve found A's worker through cw-rails ('${A_RPC_SEEN}' on B's roster), loaded ${MODEL} split across both and answered '${CHAT}'; A's rpc-warm answered ${WARMS} time(s) before B's load; after B's serve restarted, the distributed primary respawned and answered '${CHAT2}'"
+steps = [
+  { do = "input", var = "MODEL", env = "SERVE_MESH_MODEL", default = "${TARGET}/../sovereign/models/Qwen3.5-4B.Q6_K.gguf" },
+  { do = "input", var = "FAST", env = "SERVE_MESH_FAST", default = "${TARGET}/../sovereign/models/Qwen3.5-0.8B-UD-Q6_K_XL.gguf" },
+  { do = "input", var = "EMBED", env = "SERVE_MESH_EMBED", default = "${TARGET}/../sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf" },
+  { do = "exec", argv = ["test", "-f", "${EMBED}"], log = "embed.log", on_error = "abstain", fail = "no embedding GGUF at ${EMBED} (set SERVE_MESH_EMBED)" },
+  { do = "exec", argv = ["test", "-f", "${MODEL}"], log = "model.log", on_error = "abstain", fail = "no primary GGUF at ${MODEL} (set SERVE_MESH_MODEL)" },
+  { do = "exec", argv = ["test", "-f", "${FAST}"], log = "fast.log", on_error = "abstain", fail = "no fast GGUF at ${FAST} (set SERVE_MESH_FAST)" },
+  { do = "input", var = "RAILS", value = "${TARGET}/debug/cw-rails" },
+  { do = "ports", vars = ["A_RAILS", "B_RAILS", "A_SERVE", "B_SERVE", "A_RPC", "B_RPC"] },
+  { do = "write", path = "${SANDBOX}/rails-a/rails.toml", text = "name = \"serve-mesh-a\"\nlisten = ${A_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "found", "serve-mesh", "--data-dir", "${SANDBOX}/rails-a"], log = "found.log", fail = "cw-rails could not found the mesh (see ${SANDBOX}/found.log)" },
+  { do = "spawn", id = "rails-a", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/rails-a"], log = "rails-a.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${A_RAILS}/v1/mesh/status", path = "join_link", var = "INVITE", doc = "a", timeout = 60, alive = "rails-a", fail = "A's cw-rails served no invite within 60s (see ${SANDBOX}/rails-a.log)" },
+  { do = "write", path = "${SANDBOX}/rails-b/rails.toml", text = "name = \"serve-mesh-b\"\nlisten = ${B_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/rails-b", "--name", "serve-mesh-b"], log = "join.log", fail = "B's cw-rails was not admitted (see ${SANDBOX}/join.log)" },
+  { do = "spawn", id = "rails-b", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/rails-b"], log = "rails-b.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/status", path = "self.node_id_hex", var = "B_ID", doc = "b", timeout = 60, alive = "rails-b", fail = "B's cw-rails named no full id within 60s (see ${SANDBOX}/rails-b.log)" },
+  # A lends its GPU: an anchor whose worker binds A_RPC; its own primary is the
+  # small model, and the host's GGUF sits in that model's directory, where
+  # rpc-warm finds its local copy. Both nodes carry the same host pin, as a
+  # mesh's configs do: every anchor runs the election, and an unpinned A
+  # elects itself by NodeId and distributes onto B's worker.
+  { do = "write", path = "${SANDBOX}/serve-a/config.toml", text = "[models]\nprimary = \"${FAST}\"\nembed = \"${EMBED}\"\n\n[shared_model]\nrole = \"anchor\"\nhost_node_id = \"${B_ID}\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${A_RAILS}\"\n" },
+  { do = "spawn", id = "serve-a", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-a", "--listen", "127.0.0.1:${A_SERVE}"], log = "serve-a.log", env = { RUST_LOG = "info,sovereign_serving_host=debug", SOVEREIGN_RPC_SERVE = "127.0.0.1:${A_RPC}", SOVEREIGN_RPC_WORKER_SETTLE_SECS = "5" } },
+  # A's registration lands on its own cw-rails, then its anchor record reaches
+  # B's roster by gossip: the only way B learns A's worker.
+  { do = "poll", url = "http://127.0.0.1:${A_RAILS}/v1/mesh/status", path = "members[is_self=true].capabilities.anchor.rpc_port", var = "A_RPC_OWN", timeout = 120, alive = "serve-a", fail = "A's serve never registered its rpc worker with its cw-rails within 120s (see ${SANDBOX}/serve-a.log)" },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/status", path = "members[name=serve-mesh-a].capabilities.anchor.rpc_port", var = "A_RPC_SEEN", timeout = 60, alive = "rails-b", fail = "A's anchor record never reached B's cw-rails roster within 60s (see ${SANDBOX}/rails-b.log)" },
+  { do = "write", path = "${SANDBOX}/serve-b/config.toml", text = "[models]\nprimary = \"${MODEL}\"\nfast = \"${FAST}\"\nembed = \"${EMBED}\"\n\n[compute]\nenabled = true\ndistributed_primary = true\n\n[shared_model]\nrole = \"host\"\nhost_node_id = \"${B_ID}\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${B_RAILS}\"\n" },
+  { do = "spawn", id = "serve-b", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-b", "--listen", "127.0.0.1:${B_SERVE}"], log = "serve-b.log", env = { RUST_LOG = "info,sovereign_serving_host=debug", SOVEREIGN_RPC_SERVE = "127.0.0.1:${B_RPC}", SOVEREIGN_RPC_WORKER_SETTLE_SECS = "5" } },
+  { do = "poll", url = "http://127.0.0.1:${B_SERVE}/health", path = "state", var = "B_HEALTH", timeout = 120, alive = "serve-b", fail = "B's serve never answered /health (see ${SANDBOX}/serve-b.log)" },
+  # The primary is withheld from B's process; a chat answers only once the
+  # distributed child serves it.
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "primary", max_tokens = 16, messages = [{ role = "user", content = "Say hello." }] }, path = "choices.message.content", var = "CHAT", retry = 480, timeout = 120, alive = "serve-b", fail = "B's distributed primary never answered a chat within 480s: ${BODY} (see ${SANDBOX}/serve-b.log, serve-a.log)" },
+  { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "discovered mesh RPC worker", var = "DISCOVERED", min = 1, fail = "B answered without discovering A's worker (see ${SANDBOX}/serve-b.log)" },
+  # A's side, which B cannot author: A's rpc-warm answered for this model
+  # before B's load (the orchestrator holds the load until every worker is
+  # warm).
+  { do = "count", file = "${SANDBOX}/serve-a.log", pattern = "rpc-warm: shard warm", var = "WARMS", min = 1, fail = "A's rpc-warm never answered, so B's load was not warmed through cw-rails (see ${SANDBOX}/serve-a.log)" },
+  # Restart B's serve mid-run: the distributed primary respawns.
+  { do = "kill", id = "serve-b", fail = "B's serve was not running" },
+  { do = "spawn", id = "serve-b", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-b", "--listen", "127.0.0.1:${B_SERVE}"], log = "serve-b-2.log", env = { RUST_LOG = "info,sovereign_serving_host=debug", SOVEREIGN_RPC_SERVE = "127.0.0.1:${B_RPC}", SOVEREIGN_RPC_WORKER_SETTLE_SECS = "5" } },
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "primary", max_tokens = 16, messages = [{ role = "user", content = "Say hello again." }] }, path = "choices.message.content", var = "CHAT2", retry = 480, timeout = 120, alive = "serve-b", fail = "after B's serve restarted, its distributed primary never answered within 480s: ${BODY} (see ${SANDBOX}/serve-b-2.log)" },
+  { do = "count", file = "${SANDBOX}/serve-b-2.log", pattern = "discovered mesh RPC worker", var = "REDISCOVERED", min = 1, fail = "the restarted serve answered without rediscovering A's worker (see ${SANDBOX}/serve-b-2.log)" },
 ]
 
 # ── code — the LSP for agents ───────────────────────────────────────────────

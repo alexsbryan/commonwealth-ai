@@ -462,6 +462,15 @@ class Smoke:
     def do_call(self, s):
         url = self.sub(s["url"])
         status, body = http("POST", url, self.sub(s["json"]), timeout=float(s.get("timeout", 30)))
+        # `retry` seconds: POST again until the answer is a 2xx with a hit at
+        # `path`, for an answer that exists only once a load completes.
+        deadline = time.time() + float(s.get("retry", 0))
+        while "path" in s and time.time() < deadline and not (
+                200 <= status < 300 and self.json_at(body, s["path"])):
+            self.check_alive(s)
+            say(f"POST {url} -> HTTP {status}, retrying: {body.strip()[:120]}")
+            time.sleep(5)
+            status, body = http("POST", url, self.sub(s["json"]), timeout=float(s.get("timeout", 30)))
         self.v["BODY"] = body.strip()[:300]
         if "status_var" in s:
             self.v[s["status_var"]] = str(status)
