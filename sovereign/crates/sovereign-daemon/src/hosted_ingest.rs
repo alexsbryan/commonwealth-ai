@@ -69,22 +69,27 @@ type Compose = Box<dyn Fn(IngestHost) -> IngestMount + Send + Sync>;
 pub struct HostedIngest {
     enrich_config: Arc<dyn EnrichConfigPort>,
     atlas: Arc<dyn AtlasPort>,
+    recipe_author: sovereign_contracts::recipe::testing::RecipeAuthorSeams,
     compose: Compose,
 }
 
 impl HostedIngest {
     /// `enrich_config` reads and writes corpora's enrichment configs;
-    /// `atlas` is ingest's atlas port; `compose` builds the engine for
+    /// `atlas` is ingest's atlas port; `recipe_author` is the recipe
+    /// tester, descriptor and registry snapshot a svrn verb authors
+    /// against without an engine; `compose` builds the engine for
     /// `IngestHost`, once per call: the CLI composes one engine per session
     /// and a metered one per vault build (pb-cli-llm-ingest-move-compose).
     pub fn new(
         enrich_config: Arc<dyn EnrichConfigPort>,
         atlas: Arc<dyn AtlasPort>,
+        recipe_author: sovereign_contracts::recipe::testing::RecipeAuthorSeams,
         compose: impl Fn(IngestHost) -> IngestMount + Send + Sync + 'static,
     ) -> Self {
         Self {
             enrich_config,
             atlas,
+            recipe_author,
             compose: Box::new(compose),
         }
     }
@@ -98,6 +103,12 @@ impl HostedIngest {
     /// is built.
     pub fn atlas(&self) -> Arc<dyn AtlasPort> {
         Arc::clone(&self.atlas)
+    }
+
+    /// The recipe-authoring seams (pb-cli-llm-ingest-move-remainder: the
+    /// recipe agent's live trial authors against them without an engine).
+    pub fn recipe_author(&self) -> sovereign_contracts::recipe::testing::RecipeAuthorSeams {
+        self.recipe_author.clone()
     }
 
     /// Build the engine.

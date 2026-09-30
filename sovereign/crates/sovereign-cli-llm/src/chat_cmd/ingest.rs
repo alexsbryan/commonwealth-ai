@@ -73,6 +73,18 @@ pub(crate) fn ports() -> Option<&'static HostedIngest> {
     HOSTED.get()
 }
 
+/// Ingest's recipe-authoring seams, or [`NO_INGEST`] when none is composed.
+pub(crate) fn recipe_author(
+) -> Result<sovereign_contracts::recipe::testing::RecipeAuthorSeams, &'static str> {
+    match HOSTED.get() {
+        Some(hosted) => Ok(hosted.recipe_author()),
+        None => {
+            tracing::debug!(target: "sovereign_cli_llm::ingest", "recipe-author seams absent: no ingest program composed");
+            Err(NO_INGEST)
+        }
+    }
+}
+
 /// Ingest's atlas port, or [`NO_INGEST`] when none is composed: the one
 /// accessor the svrn verbs that write or read an atlas take it through
 /// (pb-cli-llm-ingest-move-remainder).

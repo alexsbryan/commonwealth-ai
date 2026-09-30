@@ -61,7 +61,6 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::recipe_tester::CorpusEngineRecipeTester;
 use oicp_client::RemoteApiProvider;
 use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
 use sovereign_contracts::traits::{InferenceProvider, Tool};
@@ -1256,6 +1255,14 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         return 1;
     }
 
+    let seams = match crate::chat_cmd::ingest::recipe_author() {
+        Ok(s) => s,
+        Err(why) => {
+            eprintln!("live-trial: {why}");
+            return 2;
+        }
+    };
+
     if let Err(e) = probe_daemon(&args.daemon_base).await {
         eprintln!("live-trial: {e}");
         return 2;
@@ -1355,18 +1362,12 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     registry.register(Box::new(RecipeReadTool::new()));
     registry.register(Box::new(RecipeWriteTool::new()));
     registry.register(Box::new(RecipeWriteStructuredTool::new(
-        Arc::new(CorpusEngineRecipeTester::new()),
-        corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
+        Arc::clone(&seams.tester),
+        seams.descriptor_json,
     )));
-    registry.register(Box::new(RecipeValidateTool::new(Arc::new(
-        CorpusEngineRecipeTester::new(),
-    ))));
-    registry.register(Box::new(RecipeTestTool::new(Arc::new(
-        CorpusEngineRecipeTester::new(),
-    ))));
-    registry.register(Box::new(RegistryBrowseTool::new(
-        corpus_engine::registry::BUNDLED_REGISTRY_TOML,
-    )));
+    registry.register(Box::new(RecipeValidateTool::new(Arc::clone(&seams.tester))));
+    registry.register(Box::new(RecipeTestTool::new(Arc::clone(&seams.tester))));
+    registry.register(Box::new(RegistryBrowseTool::new(seams.registry_toml)));
     registry.register(Box::new(DecisionLogTool::with_notes(Arc::clone(&notes))));
     registry.register(Box::new(CheckpointTool::with_stores(
         Arc::clone(&notes),
@@ -1593,10 +1594,8 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     let mut overall_pass = true;
     if let Some(recipe_id) = summary.recipe_id.as_deref() {
         eprintln!("\nValidating {} …", recipe_id);
-        let validate_tool = RecipeValidateTool::with_recipes_dir(
-            Arc::new(CorpusEngineRecipeTester::new()),
-            recipes_dir.clone(),
-        );
+        let validate_tool =
+            RecipeValidateTool::with_recipes_dir(Arc::clone(&seams.tester), recipes_dir.clone());
         match validate_tool
             .execute(&serde_json::json!({"path": recipe_id}), &ctx)
             .await
@@ -1640,10 +1639,8 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
                 args.sample_size,
                 args.params.len()
             );
-            let test_tool = RecipeTestTool::with_recipes_dir(
-                Arc::new(CorpusEngineRecipeTester::new()),
-                recipes_dir.clone(),
-            );
+            let test_tool =
+                RecipeTestTool::with_recipes_dir(Arc::clone(&seams.tester), recipes_dir.clone());
             // Forward `--param k=v` flags through to `recipe_test` so
             // recipes that declare an install-time parameter (auth tokens,
             // jurisdiction filters, etc.) get the partner's value at fetch
