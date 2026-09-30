@@ -18,6 +18,8 @@
 //! and `sovereign_authoring_harness::` path below is on the
 //! `[[distribution]] stock` row, spelled in full.
 
+mod ingest;
+
 /// Code's editor door takes its grammar lookup from the host (pb-meshapp-rest):
 /// corpus-engine's registry, the one that routes `.tsx` apart from `.ts`,
 /// which code may not name. One supplier, one registry.
@@ -127,34 +129,7 @@ fn main() {
             hold: Box::new(face.runtime),
         })
     });
-    let ingest = sovereign_daemon::process::HostedIngest::new(
-        std::sync::Arc::new(sovereign_enrichment_catalog::port::CatalogEnrichConfig),
-        corpus_engine::face::atlas(),
-        |host| {
-            let face = corpus_engine::face::compose(corpus_engine::face::IngestParts {
-                data_dir: host.data_dir,
-                provider: host.provider,
-                embed_model: host.embed_model,
-                node_id: host.node_id,
-                chunk_entity_store: host.chunk_entity_store,
-                ner: host.ner,
-                conv_tiered: host.conv_tiered,
-                folder_tiered: host.folder_tiered,
-            });
-            sovereign_daemon::process::IngestMount {
-                // The authoring harness is ingest's too, over the same engine.
-                harness: std::sync::Arc::new(sovereign_authoring_harness::EngineHarness::new(
-                    std::sync::Arc::clone(&face.engine),
-                )),
-                port: face.port,
-                index: face.index,
-                recipe_author: face.recipe_author,
-                folder_tiered: face.folder_tiered,
-                arm_geometry: face.arm_geometry,
-                lazy_stamp: face.lazy_stamp,
-            }
-        },
-    );
+    let ingest = ingest::hosted();
     let exit_code = sovereign_daemon::process::run(&args, Some(hosted), Some(code), Some(ingest));
     // macOS: past `__cxa_finalize_ranges`, so the ggml-metal device sweeper
     // never asserts on still-resident resources; the loader's fast-exit,
