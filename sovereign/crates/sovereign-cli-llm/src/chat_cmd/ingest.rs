@@ -10,6 +10,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use sovereign_daemon::hosted_ingest::{HostedIngest, IngestHost, IngestMount};
 use sovereign_store::sqlite::SqliteStateStore;
 
@@ -70,4 +71,17 @@ pub(crate) fn compose(
 /// Ingest's atlas and enrichment-config ports, when composed.
 pub(crate) fn ports() -> Option<&'static HostedIngest> {
     HOSTED.get()
+}
+
+/// Ingest's atlas port, or [`NO_INGEST`] when none is composed: the one
+/// accessor the svrn verbs that write or read an atlas take it through
+/// (pb-cli-llm-ingest-move-remainder).
+pub(crate) fn atlas() -> Result<Arc<dyn AtlasPort>, &'static str> {
+    match HOSTED.get() {
+        Some(hosted) => Ok(hosted.atlas()),
+        None => {
+            tracing::debug!(target: "sovereign_cli_llm::ingest", "atlas port absent: no ingest program composed");
+            Err(NO_INGEST)
+        }
+    }
 }

@@ -611,7 +611,7 @@ async fn build(
         sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
             Arc::clone(&store),
             Arc::clone(&enrich_inference),
-            Arc::new(corpus_engine::IngestAtlas),
+            crate::chat_cmd::ingest::atlas()?,
         )
         .with_index_dir_resolver(resolver)
         .with_summary_mode(sovereign_tools::raptor_atlas::SummaryMode::Extractive),

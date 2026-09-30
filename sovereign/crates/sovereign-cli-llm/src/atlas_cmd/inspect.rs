@@ -348,10 +348,14 @@ fn build_reader() -> Result<FileAtlasReader, i32> {
             return Err(1);
         }
     };
-    Ok(FileAtlasReader::new(
-        indexes_dir,
-        std::sync::Arc::new(corpus_engine::IngestAtlas),
-    ))
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return Err(1);
+        }
+    };
+    Ok(FileAtlasReader::new(indexes_dir, atlas))
 }
 
 /// Resolve the indexes directory the same way other CLI commands do

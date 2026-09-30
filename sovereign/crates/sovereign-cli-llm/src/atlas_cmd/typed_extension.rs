@@ -64,6 +64,13 @@ pub async fn run(args: &[String]) -> i32 {
         print_help();
         return 0;
     }
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
 
     // Resolve data dir → state db + atlas dir for this corpus.
     let data_dir = match resolve_data_dir() {
@@ -145,21 +152,15 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     let started = std::time::Instant::now();
-    let report = match run_typed_extension(
-        &corpus_engine::IngestAtlas,
-        &corpus_id,
-        &store,
-        &inference,
-        &atlas_dir,
-    )
-    .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("error: typed extension failed: {e}");
-            return 1;
-        }
-    };
+    let report =
+        match run_typed_extension(atlas.as_ref(), &corpus_id, &store, &inference, &atlas_dir).await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: typed extension failed: {e}");
+                return 1;
+            }
+        };
     let elapsed_ms = started.elapsed().as_millis();
 
     println!();

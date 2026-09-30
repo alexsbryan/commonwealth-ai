@@ -30,6 +30,14 @@ pub async fn cmd_raptor_index(args: &[String]) -> i32 {
         }
     };
 
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
+
     // Same path derivation as `enrich raptor` (daemon-compatible): `data_dir`
     // owns both the state DB and the indexes dir.
     let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
@@ -56,9 +64,7 @@ pub async fn cmd_raptor_index(args: &[String]) -> i32 {
     };
 
     println!("Building RAPTOR summary-node ANN index for '{corpus_id}'…");
-    let outcome =
-        build_corpus_raptor_index(&corpus_engine::IngestAtlas, &store, &index_path, &corpus_id)
-            .await;
+    let outcome = build_corpus_raptor_index(atlas.as_ref(), &store, &index_path, &corpus_id).await;
     println!("  {outcome}");
 
     match outcome {

@@ -119,6 +119,14 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         }
     };
 
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
+
     // Resolve paths exactly as the daemon does: `data_dir` owns BOTH the
     // state DB (`sovereign.db`) and the corpus indexes dir. Matching the
     // daemon's derivation (daemon_cmd.rs) is what guarantees we augment
@@ -385,11 +393,10 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
             }
         }
     };
-    let mut provider =
-        FolderTieredProvider::new(store, inference, Arc::new(corpus_engine::IngestAtlas))
-            .with_index_dir_resolver(resolver)
-            .with_doc_type(parsed.doc_type.clone())
-            .with_summary_mode(parsed.summary_mode);
+    let mut provider = FolderTieredProvider::new(store, inference, Arc::clone(&atlas))
+        .with_index_dir_resolver(resolver)
+        .with_doc_type(parsed.doc_type.clone())
+        .with_summary_mode(parsed.summary_mode);
     if let Some(policy) = verify_policy {
         provider = provider.with_verify_policy(policy);
     }
@@ -785,7 +792,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // (nothing to index); `enrich raptor-index` rebuilds it standalone.
     if built > 0 || resumed > 0 {
         let outcome = sovereign_tools::raptor_index::build_corpus_raptor_index(
-            &corpus_engine::IngestAtlas,
+            atlas.as_ref(),
             &verify_store,
             &index_path,
             &parsed.corpus_id,
