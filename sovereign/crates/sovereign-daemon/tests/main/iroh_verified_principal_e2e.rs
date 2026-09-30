@@ -149,7 +149,7 @@ async fn internal_principal_probe(
     state: sovereign_daemon::state::AppState,
 ) -> std::net::SocketAddr {
     use axum::routing::get;
-    use sovereign_serving_host::admission::AttachedPrincipal;
+    use sovereign_contracts::principal::AttachedPrincipal;
     let render = |attached: Option<axum::Extension<AttachedPrincipal>>| async move {
         attached
             .map(|axum::Extension(a)| a.0.label())

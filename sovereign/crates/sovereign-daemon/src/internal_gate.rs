@@ -54,7 +54,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 
-use sovereign_serving_host::admission::{AttachedPrincipal, Principal};
+use sovereign_contracts::principal::{AttachedPrincipal, Principal};
 
 use crate::internal_principal::ProvedMeshMember;
 use crate::state::AppState;

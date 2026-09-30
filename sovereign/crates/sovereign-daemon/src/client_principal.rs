@@ -83,7 +83,7 @@ use std::net::SocketAddr;
 
 use axum::http::HeaderMap;
 use sovereign_contracts::principal::{claimed_node_id, ClaimedNodeId};
-use sovereign_serving_host::admission::Principal;
+use sovereign_contracts::principal::Principal;
 
 use crate::client_auth::ClientAuthPolicy;
 use crate::state::AppState;

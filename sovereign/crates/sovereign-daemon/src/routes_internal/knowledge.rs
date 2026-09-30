@@ -100,7 +100,7 @@ fn select_fanout_corpora(installed: &[(String, u64)], filter: &[String]) -> Fano
 /// wire format per peer.
 pub async fn knowledge_search(
     State(state): State<AppState>,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(request): Json<KnowledgeSearchRequest>,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
     // Identify the requester so we can stamp this on emitted ledger

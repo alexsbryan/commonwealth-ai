@@ -227,7 +227,7 @@ fn build_openai_request(
 async fn run_and_frame(
     state: AppState,
     headers: HeaderMap,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     oai: ChatCompletionRequest,
     model: String,
     want_stream: bool,
@@ -447,7 +447,7 @@ pub(crate) async fn show(
 pub(crate) async fn chat(
     State(state): State<AppState>,
     headers: HeaderMap,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(req): Json<OllamaChatRequest>,
 ) -> Response {
     // Ollama defaults `stream` to true.
@@ -478,7 +478,7 @@ pub(crate) async fn chat(
 pub(crate) async fn generate(
     State(state): State<AppState>,
     headers: HeaderMap,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(req): Json<OllamaGenerateRequest>,
 ) -> Response {
     let want_stream = req.stream.unwrap_or(true);
@@ -509,7 +509,7 @@ pub(crate) async fn generate(
 /// inner handler, return the parsed `EmbeddingResponse` (or a forwarded error).
 async fn run_embeddings(
     state: AppState,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     model: String,
     input: EmbeddingInput,
 ) -> Result<EmbeddingResponse, Response> {
@@ -536,7 +536,7 @@ async fn run_embeddings(
 /// strings; response is `{ model, embeddings: [[…], …] }`.
 pub(crate) async fn embed(
     State(state): State<AppState>,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(req): Json<OllamaEmbedRequest>,
 ) -> Response {
     let input = match req.input {
@@ -567,7 +567,7 @@ pub(crate) async fn embed(
 /// legacy `{ "embedding": [...] }` shape.
 pub(crate) async fn embeddings(
     State(state): State<AppState>,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(req): Json<OllamaEmbeddingsRequest>,
 ) -> Response {
     let input = EmbeddingInput::Single(req.prompt.unwrap_or_default());

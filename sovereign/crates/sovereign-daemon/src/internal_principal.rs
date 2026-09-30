@@ -82,7 +82,7 @@ use commonwealth_transport::iroh_identity_forward::{
 };
 use commonwealth_transport::mesh_proof::MESH_PROOF_HEADER;
 use kernel_types::{NodeId, NodePubkey};
-use sovereign_serving_host::admission::Principal;
+use sovereign_contracts::principal::Principal;
 
 use crate::state::AppState;
 

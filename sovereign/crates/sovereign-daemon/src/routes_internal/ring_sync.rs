@@ -142,7 +142,7 @@ fn err(status: StatusCode, msg: impl Into<String>) -> Response {
 /// `roster_origin` is the one decider of which half a namespace is.
 async fn roster_refusal(
     state: &AppState,
-    attached: &Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: &Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     proved: bool,
     peer: Option<std::net::SocketAddr>,
     rail: &dyn sovereign_mesh::rail_port::RingRailPort,
@@ -150,7 +150,7 @@ async fn roster_refusal(
 ) -> Option<String> {
     use crate::internal_gate::admitted_without_a_principal;
 
-    use sovereign_serving_host::admission::Principal;
+    use sovereign_contracts::principal::Principal;
 
     // An ABSENT extension is a request that reached this handler with no
     // resolver in front — not a caller that presented nothing. It reads as
@@ -304,7 +304,7 @@ async fn roster_refusal(
 /// compared against anyway.
 pub async fn ring_sync(
     State(state): State<AppState>,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     // Read for the SAME reason `attached` is: the refusal below names both
     // halves of what admits a caller with no principal, rather than trusting
     // the layer in front to have named them. Both are `Option` because the

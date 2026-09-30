@@ -83,7 +83,7 @@ use crate::state::AppState;
 pub async fn responses(
     State(state): State<AppState>,
     headers: HeaderMap,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(mut req): Json<ResponsesRequest>,
 ) -> Response {
     // ── Harness-aware frontdoor passes ────────────────────────────────

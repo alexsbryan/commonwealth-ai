@@ -46,7 +46,7 @@ fn inference_state_absent(e: &sovereign_mesh::ledger_port::LedgerAbsent) -> Resp
 pub async fn chat_completions(
     State(state): State<AppState>,
     headers: HeaderMap,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     guest: Option<axum::Extension<crate::client_auth::Guest>>,
     connect: Option<axum::Extension<axum::extract::ConnectInfo<std::net::SocketAddr>>>,
     Json(mut request): Json<ChatCompletionRequest>,
@@ -590,7 +590,7 @@ async fn forward_to_llama_server(
 /// chat_completions does.
 pub async fn embeddings(
     State(state): State<AppState>,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(request): Json<EmbeddingRequest>,
 ) -> Response {
     // Who is this for? A peer with no embed model of its own (driving

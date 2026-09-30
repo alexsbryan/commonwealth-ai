@@ -81,7 +81,7 @@
 //! inference (which carries no `Authorization` at all) keep working.
 
 use sovereign_grants::{GuestGrant, GuestSession};
-use sovereign_serving_host::admission::Principal;
+use sovereign_contracts::principal::Principal;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use subtle::ConstantTimeEq;

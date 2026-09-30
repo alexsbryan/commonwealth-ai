@@ -248,7 +248,7 @@ fn inference_state_absent(e: &sovereign_mesh::ledger_port::LedgerAbsent) -> Resp
 /// and routes elsewhere on its own.
 pub async fn capabilities(
     State(state): State<AppState>,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
 ) -> Response {
     let requester = crate::admission::requester(attached);
 

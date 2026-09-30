@@ -14,7 +14,7 @@
 //! fingerprint that principal keys on has a name an operator can read and
 //! revoke by.
 //!
-//! [`Principal::RemoteClient`]: sovereign_serving_host::admission::Principal::RemoteClient
+//! [`Principal::RemoteClient`]: sovereign_contracts::principal::Principal::RemoteClient
 //! [`NodePart::client_token`]: crate::state::node::NodePart::client_token
 //!
 //! ## Where a token lives, and why on disk at all
