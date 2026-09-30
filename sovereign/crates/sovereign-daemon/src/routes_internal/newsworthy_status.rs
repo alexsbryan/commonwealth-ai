@@ -24,10 +24,10 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::types::MemberStatus;
-use commonwealth_core::partition;
 use corpus_index::ingest_port::newsworthy::{
     TickStatusSnapshot, APP_ID_STATUS, STATUS_KEY_LAST_TICK,
 };
+use kernel_types::partition;
 use kernel_types::NodeId;
 use oicp_types::contributions::{LedgerEvent, LedgerEventKind};
 

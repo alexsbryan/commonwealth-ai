@@ -2447,7 +2447,7 @@ impl EmbeddedDaemon {
     /// The current eligible shared-model anchors, by `NodeId`: online mesh
     /// members (including self, when self is an online anchor) that advertise
     /// `anchor.can_anchor`. This is the input to leader election for the host
-    /// role — see `commonwealth_core::partition::should_host`. Pure read of the
+    /// role — see `kernel_types::partition::should_host`. Pure read of the
     /// gossiped membership, so every anchor computes the same set and converges
     /// on the same host without coordination.
     pub async fn eligible_anchors(&self) -> Vec<kernel_types::NodeId> {

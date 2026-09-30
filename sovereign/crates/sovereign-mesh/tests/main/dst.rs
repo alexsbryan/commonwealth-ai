@@ -39,8 +39,9 @@ use commonwealth_core::mesh::{
     aliased_endpoint_keys, EndpointClaim, GossipAuth, GossipAuthArm, Mesh, MeshWire, NodeStatus,
     SecretDisclosure,
 };
-use commonwealth_core::{partition, TestClock};
+use commonwealth_core::TestClock;
 use corpus_engine::CorpusEngine;
+use kernel_types::partition;
 use sovereign_contracts::self_claims::{LocalClaims, SelfClaims};
 use sovereign_mesh::fabric::{FabricPart, FabricSeed};
 use sovereign_mesh_test_harness::fault::{shared_policy, FaultProxy, FaultTransport, SharedPolicy};

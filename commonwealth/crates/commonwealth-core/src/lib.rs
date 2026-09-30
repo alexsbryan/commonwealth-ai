@@ -88,9 +88,6 @@
 //!     dial_sig        signed reachability: only a node changes its own
 //!     ct              constant-time compare, in one place
 //!
-//!   Who does this piece of work?
-//!     partition       leader election and rendezvous hashing over the roster
-//!
 //!   Vocabulary shared with things built on top
 //!     knowledge       corpus shard plans and ingestion handoffs
 //!     model           model metadata and the model-file route strings
@@ -125,7 +122,6 @@ pub mod mesh_merge;
 pub mod model;
 pub mod peer_addr;
 pub use oicp_types as oicp;
-pub mod partition;
 
 pub use clock::{Clock, SystemClock, TestClock};
 pub use error::{Error, Result};

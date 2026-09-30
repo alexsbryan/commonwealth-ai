@@ -34,10 +34,8 @@ sovereign-gliner = { workspace = true }
 oicp-client = { workspace = true }
 # The mesh RPC-worker discovery loop (pb-serve-distributes): discovery and
 # the eligibility gate it feeds, the mesh ports it reads (serving-host), the
-# shared-model host election (commonwealth-core `partition::should_host`),
-# node ids (kernel-types).
+# shared-model host election and node ids (kernel-types `partition::should_host`).
 sovereign-serving-host = { workspace = true }
-commonwealth-core = { workspace = true }
 kernel-types = { workspace = true }
 # The warm orchestrator's dial vocabulary (`PeerEndpoint`, `TrafficClass`;
 # a package leaf), and the model-file URL both ends of a warm build

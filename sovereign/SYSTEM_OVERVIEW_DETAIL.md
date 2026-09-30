@@ -4892,7 +4892,7 @@ The composed OICP scoring product lives ONCE in `oicp-types`
 (`score_with_adjustments` + `ScoreBreakdown`, Phase B of the
 rationalization) and is consumed by sovereign-mesh and
 sovereign-inference; leader election lives in
-`commonwealth_core::partition::elect_leader`.
+`kernel_types::partition::elect_leader`.
 
 **Scheduler quality — measurement, not just plumbing.** Retrieval,
 grounding and synthesis each have a bench and a tight iteration loop;

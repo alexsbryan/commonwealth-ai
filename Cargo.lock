@@ -12582,7 +12582,6 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
- "commonwealth-core",
  "futures",
  "host-kit",
  "kernel-types",

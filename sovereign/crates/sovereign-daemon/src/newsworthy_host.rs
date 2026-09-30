@@ -7,7 +7,7 @@
 //!
 //! - Mesh-state queries (`is_leader`, `is_owner_of`) read the
 //!   `Arc<RwLock<Mesh>>` carried on `AppStateInner` and run the
-//!   answer through `commonwealth_core::partition::{is_leader,
+//!   answer through `kernel_types::partition::{is_leader,
 //!   is_owner}`.
 //! - KV operations forward to the mesh store port directly. SQLite is
 //!   blocking-friendly under tokio's full runtime; the existing
@@ -24,9 +24,9 @@ use std::sync::Arc;
 use crate::state::AppState;
 use crate::types::MemberStatus;
 use bytes::Bytes;
-use commonwealth_core::partition;
 use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
 use corpus_index::ingest_port::newsworthy::{CommittedDocs, NewsworthyHost};
+use kernel_types::partition;
 use kernel_types::NodeId;
 use oicp_types::contributions::{LedgerEvent, LedgerEventKind};
 use sovereign_contracts::identity::IdentityReader;

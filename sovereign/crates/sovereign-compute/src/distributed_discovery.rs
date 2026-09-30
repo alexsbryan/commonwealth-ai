@@ -489,7 +489,7 @@ fn worker_allowlist() -> Option<Vec<String>> {
 /// the decision saw.
 ///
 /// ONE accessor for a question the daemon used to assemble itself from two
-/// reads of this handle plus a `commonwealth_core::partition` call — which
+/// reads of this handle plus a `kernel_types::partition` call — which
 /// is how a binary with no mesh configured still had to link the mesh
 /// substrate to answer a question about itself (cw-lift 3b). `pin` is the
 /// operator-designated host (`[shared_model] host_node_id`); it wins only
@@ -516,7 +516,7 @@ pub async fn host_role(ports: &MeshPorts, pin: Option<NodeId>) -> HostRole {
     };
     let me = now.self_id;
     let anchors = sovereign_contracts::membership::eligible_anchors(&now.roster.members().await);
-    let am_host = commonwealth_core::partition::should_host(me, pin, &anchors);
+    let am_host = kernel_types::partition::should_host(me, pin, &anchors);
     tracing::debug!(
         am_host,
         me = %me.to_hex(),

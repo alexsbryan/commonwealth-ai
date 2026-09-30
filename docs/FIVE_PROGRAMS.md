@@ -266,7 +266,8 @@ never defaulted (ARCH principle 6).
      - it forwards each traffic class to the loopback origin that class's
        owner registered;
      - it carries the peer's identity in `X-Mesh-*` headers;
-     - it advertises what the origins declare;
+     - it advertises what the origins declare, as of each origin's latest
+       register or renew (phase-b-76);
      - it hands a local caller a loopback bridge to a peer's origin.
    - Who a peer is, is cw-rails' question. What that principal may see is
      the owning program's (DAEMON_CORE §1's `principal → Scope` table stays

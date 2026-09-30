@@ -112,6 +112,12 @@ pub mod judgement;
 /// The owners re-import every item at its historical path (ARCH §10.6).
 pub mod member;
 pub mod origin;
+/// Leader election and rendezvous ownership over a set of `NodeId`s — pure
+/// functions every node evaluates alike. Moved here from
+/// `commonwealth-core` by phase-b-76: its only callers are svrn's newsworthy
+/// host and sovereign-compute's shared-model host election, two programs and
+/// no cmnwlth site, so §12 3a's "ids and atoms" rung places it beside `NodeId`.
+pub mod partition;
 // The instrument registry's schema. Feature-gated so the default four-dep
 // budget in Cargo.toml still holds for a lift of this leaf — `toml` is only
 // linked by the three programs that read `quality/instruments.toml`.

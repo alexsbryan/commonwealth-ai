@@ -59,7 +59,7 @@ pub struct TickStatusSnapshot {
 /// Adapter the watcher uses to reach mesh state without depending on
 /// `commonwealth-state` directly. Sovereign-mesh provides the concrete
 /// `MeshNewsworthyHost` impl backed by `MeshStore` + the discovery
-/// membership snapshot + `commonwealth_core::partition::is_leader/is_owner`.
+/// membership snapshot + `kernel_types::partition::is_leader/is_owner`.
 ///
 /// Mesh-state queries (`is_leader`, `is_owner_of`) are async because
 /// the live membership lives behind `tokio::sync::RwLock` in the host

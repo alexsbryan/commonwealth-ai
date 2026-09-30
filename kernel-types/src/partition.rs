@@ -16,7 +16,7 @@
 //!
 //! Both functions are O(N) over mesh size, which is single- to
 //! low-double-digit in practice.
-use crate::ids::NodeId;
+use crate::NodeId;
 
 /// Determine the scheduling leader among a set of online nodes.
 ///
