@@ -11,7 +11,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use crate::state::{AppState, LocalInferenceService, NodeSeed};
+use crate::state::{AppState, NodeSeed};
 use crate::types::MemberStatus;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
@@ -2699,18 +2699,18 @@ impl EmbeddedDaemon {
         // post-construction `Arc::get_mut` installer that could silently no-op
         // and leave `/v1/chat/completions` 503ing with `model_not_ready`.
         //
-        // If Sovereign installed an InferenceProvider, wrap it in the
-        // OpenAI-flavour adapter so this node's `/v1/chat/completions` serves
-        // peer requests directly from the same local model the user would use.
-        // Without this, peer inference requests 503 because the daemon's
-        // scheduler/llama-server path is empty in the embedded topology.
-        let serving_seed = match self.inference_provider().await {
-            Some(provider) => {
-                let adapter: Arc<dyn LocalInferenceService> =
-                    Arc::new(crate::inference_adapter::SovereignInferenceAdapter::new(
-                        provider,
-                        Arc::new(crate::slot_manifest::CoreSlotManifest),
-                    ));
+        // The OpenAI-flavour face the host handed with its provider
+        // (`ServingCore::local_inference`, pb-serve-ranks) serves this node's
+        // `/v1/chat/completions`, peer requests included, from the same model
+        // the user would use. Without it, peer inference requests 503 because
+        // the daemon's scheduler/llama-server path is empty in the embedded
+        // topology.
+        let serving_seed = match self
+            .services
+            .serving()
+            .and_then(|s| s.core.local_inference.clone())
+        {
+            Some(adapter) => {
                 info!("inference adapter: wired into /v1/chat/completions");
                 // Worker side of distributed-inference auto-warm: this node can
                 // seed its RPC tensor cache with a shard on request

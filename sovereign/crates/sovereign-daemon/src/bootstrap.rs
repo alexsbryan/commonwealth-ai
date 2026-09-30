@@ -137,11 +137,16 @@ pub fn notes_tier_fns(
 /// hands svrn through `HostedServe::env_contract` (pb-serve-distributes).
 pub use sovereign_contracts::launch::rpc_worker_flag;
 
-/// Spawn the deferred slot-alias push onto the mesh provider.
+/// Spawn the deferred slot-alias push onto the router that ranks this node's
+/// turns, through its sink; `None`: nothing ranks here, nothing to push.
 pub fn spawn_slot_alias_push(
     daemon: Arc<EmbeddedDaemon>,
-    mesh_provider: Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
+    sink: Option<crate::serve_client::SlotAliasSink>,
 ) {
+    let Some(sink) = sink else {
+        tracing::info!(target: "serving_path", "slot aliases: no router here, so none are pushed");
+        return;
+    };
     // Push slot aliases from AppState into the mesh provider once
     // the daemon's setup phase has registered model slots. Without
     // this, the mesh layer can't resolve `commonwealth/primary` →
@@ -156,7 +161,7 @@ pub fn spawn_slot_alias_push(
     // `AppState` already holds the router's counter
     // (`quality/DAEMON_CORE.md` §4.2 "Where an install slot breaks a cycle").
     let daemon_for_alias_push = Arc::clone(&daemon);
-    let mesh_for_alias_push = mesh_provider.clone();
+    let mesh_for_alias_push = sink;
     // Supervised one-shot: the alias push is idempotent, so a panic-restart
     // just retries the wiring (DAEMON_RESILIENCE.md P0.4).
     crate::supervise::spawn_supervised("slot_alias_push", move || {
@@ -180,7 +185,7 @@ pub fn spawn_slot_alias_push(
                             count = map.len(),
                             "daemon_cmd: pushing slot aliases into mesh provider"
                         );
-                        mesh_for_alias_push.set_slot_aliases(map);
+                        mesh_for_alias_push(map);
                         break;
                     }
                 }
@@ -826,6 +831,33 @@ pub async fn build_mesh_provider(
         mesh_provider.set_shared_model_id(Some(id.to_string()));
     }
     (daemon, mesh_provider, in_flight_gauge)
+}
+
+/// The router [`build_mesh_provider`] builds, as svrn serves it: turns go to
+/// the router, the OpenAI routes answer through the adapter over it, and the
+/// gauge and alias sink are the router's own.
+pub async fn rank_in_process(
+    provider: Arc<dyn InferenceProvider>,
+    daemon: Arc<crate::DeferredDaemon>,
+) -> (
+    Arc<crate::DeferredDaemon>,
+    Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
+    crate::serve_client::Ranked,
+) {
+    let (daemon, router, gauge) = build_mesh_provider(provider, daemon).await;
+    let service: Arc<dyn sovereign_contracts::traits::LocalInferenceService> =
+        Arc::new(crate::inference_adapter::SovereignInferenceAdapter::new(
+            Arc::clone(&router) as Arc<dyn InferenceProvider>,
+            Arc::new(crate::slot_manifest::CoreSlotManifest),
+        ));
+    let sink_router = Arc::clone(&router);
+    let ranked = crate::serve_client::Ranked {
+        provider: Arc::clone(&router) as Arc<dyn InferenceProvider>,
+        service,
+        in_flight: Some(gauge),
+        slot_aliases: Some(Arc::new(move |map| sink_router.set_slot_aliases(map))),
+    };
+    (daemon, router, ranked)
 }
 
 /// Install the AppState foreground-yield hook on the code program's lint/test

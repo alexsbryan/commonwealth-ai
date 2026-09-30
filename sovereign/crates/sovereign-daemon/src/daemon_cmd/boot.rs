@@ -231,6 +231,7 @@ pub(super) async fn run_daemon(
         deferred_daemon,
         path: serving_path,
         ner,
+        relay,
     } = match super::serving_boot::boot_serving(&config, args, &config_override, hosted).await {
         Ok(s) => s,
         Err(code) => return code,
@@ -616,9 +617,21 @@ pub(super) async fn run_daemon(
     // no slot this bootstrap can forget. `DeferredDaemon` breaks the one
     // genuine cycle — the daemon serves peers through a provider that routes
     // to peers — and carries no capability of its own.
-    let (deferred_daemon, mesh_provider, in_flight_gauge) =
-        bootstrap::build_mesh_provider(Arc::clone(&provider), deferred_daemon).await;
-    let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
+    // svrn alone ranks nothing: its turns go to the provider as it is and its
+    // OpenAI routes relay (pb-serve-ranks); otherwise the router ranks here.
+    let (deferred_daemon, mesh_provider, ranked) = match relay {
+        Some(relay) => (
+            deferred_daemon,
+            None,
+            crate::serve_client::relayed(Arc::clone(&provider), relay),
+        ),
+        None => {
+            let (daemon, router, ranked) =
+                bootstrap::rank_in_process(Arc::clone(&provider), deferred_daemon).await;
+            (daemon, Some(router), ranked)
+        }
+    };
+    let routed_provider: Arc<dyn InferenceProvider> = Arc::clone(&ranked.provider);
 
     if let Some(port) = &ingest_port {
         bootstrap::spawn_vector_index_readiness_sweep(Arc::clone(port));
@@ -939,11 +952,12 @@ pub(super) async fn run_daemon(
                     atlas: ingest_atlas.clone(),
                     recipe_harness,
                     inference_provider: Arc::clone(&routed_provider),
+                    local_inference: Some(Arc::clone(&ranked.service)),
                     // The gauge the router above was built with, so AppState
                     // holds the same counter the provider's guards write
                     // (`quality/DAEMON_CORE.md` §4.2 "Where an install slot
-                    // breaks a cycle").
-                    in_flight_gauge: Some(in_flight_gauge),
+                    // breaks a cycle"); `None` where nothing ranks here.
+                    in_flight_gauge: ranked.in_flight.clone(),
                     // The loader's worker-side warmer, if the distribution
                     // handed one (`HostedServe::rpc_warmer`).
                     rpc_shard_warmer: rpc_warmer,
@@ -1000,10 +1014,7 @@ pub(super) async fn run_daemon(
                         daemon: Arc::clone(&deferred_daemon),
                         reload,
                         routed: Arc::clone(&routed_provider),
-                        slot_aliases: Some({
-                            let router = Arc::clone(&mesh_provider);
-                            Arc::new(move |map| router.set_slot_aliases(map))
-                        }),
+                        slot_aliases: ranked.slot_aliases.clone(),
                     }),
                     // The work atlas writes into THIS store, so its entries reach
                     // the store's outbox and ride the ring rail (cw-lift 4b; the
@@ -1044,11 +1055,11 @@ pub(super) async fn run_daemon(
         serving = %serving_path.status_line(),
         "boot: the engine's mesh subsystems (warm orchestrator, RPC-worker discovery) run where the engine loads"
     );
-    if let Some(distribute) = distribute {
-        distribute(Arc::clone(&daemon), Arc::clone(&mesh_provider));
+    if let (Some(distribute), Some(router)) = (distribute, mesh_provider) {
+        distribute(Arc::clone(&daemon), router);
     }
 
-    bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), mesh_provider);
+    bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), ranked.slot_aliases);
 
     // ── Resume or bootstrap a solo mesh ───────────────────────────
     if let Some(exit_code) = resume_or_bootstrap_mesh(&daemon, &config).await {

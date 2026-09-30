@@ -193,6 +193,11 @@ pub struct ServingCore {
     /// daemon holds it behind a lock only because `POST /v1/admin/reload`
     /// swaps it; a host installs it here, once, or not at all.
     pub inference_provider: Arc<dyn InferenceProvider>,
+    /// svrn's OpenAI face over that provider, handed in with it
+    /// (pb-serve-ranks): the adapter over the router that ranks here, or the
+    /// relay to the server svrn dials. `None` answers the OpenAI routes with
+    /// their named 503.
+    pub local_inference: Option<Arc<dyn crate::state::LocalInferenceService>>,
     /// The node's in-flight gauge, created by the bootstrap *before* the
     /// `InferenceRouter` and handed to both the router and `AppState` — one
     /// atomic the provider's guards write and gossip reads

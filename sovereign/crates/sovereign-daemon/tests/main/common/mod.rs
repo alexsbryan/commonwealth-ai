@@ -296,6 +296,9 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_daemon::DaemonServices
                     recipe_harness: Some(parts.recipe_harness),
                     corpus_engine: Some(parts.engine),
                     atlas: Some(parts.atlas),
+                    local_inference: Some(service_double::ProviderService::new(Arc::clone(
+                        &parts.provider,
+                    ))),
                     inference_provider: parts.provider,
                     in_flight_gauge: None,
                     rpc_shard_warmer: None,

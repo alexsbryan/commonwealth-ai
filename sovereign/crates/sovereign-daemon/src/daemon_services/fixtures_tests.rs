@@ -112,6 +112,7 @@ fn serving_with(
             atlas: None,
             recipe_harness: None,
             inference_provider,
+            local_inference: None,
             in_flight_gauge: None,
             rpc_shard_warmer: None,
             state_store,

@@ -7,7 +7,6 @@
 use std::sync::Arc;
 
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_core::traits::InferenceProvider;
 
 /// A terminal's provider, or `Err(())` when its entry binding is unusable
 /// (the caller returns 1; the operator-facing diagnostics are printed here).
@@ -19,7 +18,7 @@ use sovereign_core::traits::InferenceProvider;
 pub fn terminal_provider(
     config: &SetupConfig,
     mesh: Arc<crate::DeferredDaemon>,
-) -> Result<Arc<dyn InferenceProvider>, ()> {
+) -> Result<Arc<oicp_client::SplitInferenceProvider>, ()> {
     // ── terminal: hold nothing, forward everything ──────────────────────
     //
     // A `terminal`-class node has no `[models]`, so there is no GGUF to load
@@ -63,7 +62,7 @@ pub fn terminal_provider(
                 "terminal node: holding no weights, forwarding chat + embeddings to the entry node"
             );
             use sovereign_core::setup_config::EntryBinding;
-            let provider: Arc<dyn InferenceProvider> = match binding {
+            let provider = match binding {
                 // Bound by identity: resolved through the mesh on every turn,
                 // so the terminal follows its entry node across addresses and
                 // reaches it over whatever path the transport offers —

@@ -52,6 +52,9 @@ pub enum ReloadSource {
         base: crate::serve_client::ServeBase,
         config_context: u32,
         cell: Arc<sovereign_contracts::reloadable_provider::ReloadableProvider>,
+        /// svrn alone's OpenAI relay, whose manifest re-reads serve's after
+        /// the reload (pb-serve-ranks); `None` where a distribution ranks.
+        relay: Option<Arc<oicp_client::openai_passthrough::OpenAiPassthrough>>,
     },
     /// The hosted path (pb-stock-binary): serve's reload route swaps `cell`
     /// itself, the one both programs hold, so the daemon forwards and never
@@ -101,9 +104,13 @@ impl LlamaCppFactory {
                 base,
                 config_context,
                 cell,
+                relay,
             } => {
                 let served =
                     crate::serve_client::reload_through_serve(base, cell, *config_context).await?;
+                if let Some(relay) = relay {
+                    relay.read_manifest().await;
+                }
                 self.publish_served_aliases(
                     &served.resident_slots,
                     "serve's self-report after reload",
@@ -273,6 +280,7 @@ mod reload_through_serve {
                 base,
                 config_context: 4096,
                 cell: Arc::clone(&cell),
+                relay: None,
             },
             routed: Arc::clone(&routed),
             slot_aliases: None,

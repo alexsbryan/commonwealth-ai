@@ -100,6 +100,40 @@ pub type HostedCell = std::sync::Arc<sovereign_contracts::reloadable_provider::R
 pub type SlotAliasSink =
     std::sync::Arc<dyn Fn(std::collections::HashMap<String, String>) + Send + Sync>;
 
+/// This node's turns as svrn serves them (pb-serve-ranks): ranked by a router
+/// where a distribution composed one, else the provider itself, with svrn's
+/// OpenAI routes relayed to the server it dials.
+pub struct Ranked {
+    /// Where every turn of svrn's goes.
+    pub provider: std::sync::Arc<dyn sovereign_contracts::InferenceProvider>,
+    /// svrn's OpenAI face over it.
+    pub service: std::sync::Arc<dyn sovereign_contracts::traits::LocalInferenceService>,
+    /// The router's in-flight gauge, which gossip reads; `None` where nothing
+    /// ranks here, which gossip publishes as an absent load, never 0.
+    pub in_flight: Option<sovereign_contracts::in_flight::LocalInFlightGauge>,
+    /// Pushes svrn's slot aliases into the router; `None` where nothing ranks.
+    pub slot_aliases: Option<SlotAliasSink>,
+}
+
+/// svrn alone: nothing ranks in this process. Turns go to the provider as it
+/// is (serve, or a terminal's entry node, ranks them), and the OpenAI routes
+/// relay through `relay`.
+pub fn relayed(
+    provider: std::sync::Arc<dyn sovereign_contracts::InferenceProvider>,
+    relay: std::sync::Arc<oicp_client::openai_passthrough::OpenAiPassthrough>,
+) -> Ranked {
+    tracing::info!(
+        target: "serving_path",
+        "boot: no distribution composed a router here; svrn relays its OpenAI routes and reports no in-flight gauge"
+    );
+    Ranked {
+        provider,
+        service: relay,
+        in_flight: None,
+        slot_aliases: None,
+    }
+}
+
 /// What hosting serve in this process hands svrn: the cell every route
 /// answers from, and the distribution over serve's engine and slot (the warm
 /// orchestrator, the self-manifest refresh, RPC-worker discovery), which svrn
