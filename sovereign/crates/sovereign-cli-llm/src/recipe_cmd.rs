@@ -348,7 +348,7 @@ async fn run_enrich_and_verify(
             sovereign_contracts::models_manifest::DEFAULT_MANIFEST
                 .embed_query_instruction(&embed_model),
         ));
-    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&provider));
+    let embed_fn = corpus_index::embed_fn::inference_to_embed_fn(Arc::clone(&provider));
     let inference_fn = corpus_engine::enrichment::provider_inference::inference_to_inference_fn(
         Arc::clone(&provider),
     );
