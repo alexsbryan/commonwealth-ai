@@ -190,8 +190,9 @@ jobs:
           #   runner: windows-2022
           #   target: x86_64-pc-windows-msvc
           #   # Since sv-surface svt-7 (2026-09-12) the GPU backend is chosen
-          #   # on the SIDECAR's build, not the app's: the desktop links no
-          #   # inference stack to forward a feature to. Set
+          #   # on the LOADER's build (sovereign-stock, staged beside the
+          #   # sidecar since pb-distribution-setup), not the app's: the
+          #   # desktop links no inference stack to forward a feature to. Set
           #   # SOVEREIGN_SIDECAR_FEATURES=windows-vulkan for the
           #   # stage-daemon-sidecar.sh step rather than passing
           #   # `cargo tauri build --features`.

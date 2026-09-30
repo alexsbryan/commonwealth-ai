@@ -57,5 +57,13 @@ tempfile = { workspace = true }
 # rail-core's signed-op fixtures, for the codec's read-side tests.
 commonwealth-rail-core = { workspace = true, features = ["test-support"] }
 
+[features]
+# Windows GPU backend selectors for the loader, forwarded to
+# sovereign-inference (its Cargo.toml has the matrix). sovereign-stock
+# forwards them here; the packaged desktop's loader is built with them
+# (`SOVEREIGN_SIDECAR_FEATURES`, stage-daemon-sidecar.sh; pb-distribution-setup).
+windows-vulkan = ["sovereign-inference/windows-vulkan"]
+windows-cuda = ["sovereign-inference/windows-cuda"]
+
 [lints]
 workspace = true

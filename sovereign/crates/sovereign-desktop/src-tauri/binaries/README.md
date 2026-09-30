@@ -28,14 +28,14 @@ optional target triple and default to the host's.
 
 ```sh
 scripts/fetch-desktop-binaries.sh                 # PaddleOCR models + PDFium
-scripts/stage-daemon-sidecar.sh                   # sovereign-cli-daemon
+scripts/stage-daemon-sidecar.sh                   # sovereign-cli-daemon + sovereign-stock
 ```
 
-`stage-daemon-sidecar.sh` compiles `sovereign-cli-daemon` out of this
-workspace and stages it under the per-triple name Tauri's `externalBin`
-expects. That name must equal `daemon_binary::SIDECAR_BINARY` and the
-`externalBin` entry in `tauri.release.conf.json`; a Rust test asserts the
-latter two agree. See [`../RELEASING.md`](../../RELEASING.md) §"The daemon
+`stage-daemon-sidecar.sh` compiles `sovereign-cli-daemon` and the loader it
+execs, `sovereign-stock`, out of this workspace and stages both under the
+per-triple names Tauri's `externalBin` expects. Those names must equal
+`daemon_binary::{SIDECAR_BINARY, LOADER_SIDECAR}` and the `externalBin`
+entries in `tauri.release.conf.json`; a Rust test asserts they agree. See [`../RELEASING.md`](../../RELEASING.md) §"The daemon
 sidecar". It is NOT needed for `cargo tauri dev` — the base config declares
 no `externalBin`, and in dev the desktop finds a daemon through
 `SVRNMESH_DAEMON_BINARY` or `~/.local/bin/svrn` instead.

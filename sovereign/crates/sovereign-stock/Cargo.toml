@@ -86,6 +86,11 @@ serde = { workspace = true }
 # `svrn awareness`, served by `sovereign-cli-llm-stock` since
 # pb-cli-llm-ingest-move-remainder; the feature is cli-llm's.
 awareness = ["sovereign-cli-llm/awareness"]
+# The Windows GPU backend of the process that loads the weights, which this is
+# (serve's selectors). The packaged desktop builds it with one
+# (`SOVEREIGN_SIDECAR_FEATURES`, stage-daemon-sidecar.sh; pb-distribution-setup).
+windows-vulkan = ["sovereign-serve/windows-vulkan"]
+windows-cuda = ["sovereign-serve/windows-cuda"]
 
 [lints]
 workspace = true
