@@ -207,7 +207,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // lib_tests.rs and reload.rs: `#[cfg(test)]` modules posting to a router
     // the test bound on loopback. lib.rs's tests moved under #[path] to
     // lib_tests.rs at 47e67b4db; the row followed at pb-meshapp-rest.
-    ("sovereign/crates/sovereign-serve/src/lib_tests.rs", Class::TestOnly, 2),
+    // 2 -> 4 (seat, 2026-09-30): pb-serve-ranks added two more `reqwest::Client::new()`
+    // posts to the test's own router base (lib_tests.rs:243, :285), the same loopback class.
+    ("sovereign/crates/sovereign-serve/src/lib_tests.rs", Class::TestOnly, 4),
     ("sovereign/crates/sovereign-serve/src/reload.rs", Class::TestOnly, 2),
     // rails_mesh.rs: serve's roster reads from cw-rails, the mesh's rails
     // daemon (pb-serve-distributes-standalone, 360165b37). Same class as

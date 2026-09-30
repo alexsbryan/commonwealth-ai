@@ -113,10 +113,7 @@ async fn build_mesh_provider(
         Arc::new(sovereign_serving_host::pinned_worker_source::PinnedWorkerEndpointSource::new());
     if let Some(dir) = sovereign_serving_host::pinned_pod_snapshot::default_snapshot_dir() {
         let snapshots = sovereign_serving_host::pinned_pod_snapshot::load_all_snapshots(&dir);
-        let now_unix = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        let now_unix = sovereign_time::unix_now_u64();
         // 2026-05-18: silently expired tokens caused a 6h SEP-on-Vast
         // outage. Registering an already-expired snapshot means every
         // routed inference call gets `token expired` from the pod and
