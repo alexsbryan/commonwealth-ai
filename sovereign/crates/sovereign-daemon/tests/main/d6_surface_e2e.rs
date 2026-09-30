@@ -42,13 +42,13 @@
 use std::sync::Arc;
 
 use corpus_index::ingest_port::double::IngestPortDouble;
+use sovereign_contracts::recipe::project::fixtures::RecipeProjectsDouble;
+use sovereign_contracts::recipe::project::RecipeProjectPort;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::features_http::features_router;
 use sovereign_daemon::notes_http::notes_router;
 use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_contracts::recipe::project::fixtures::RecipeProjectsDouble;
-use sovereign_contracts::recipe::project::RecipeProjectPort;
 
 use crate::common;
 use crate::common::spawn_router;
@@ -78,8 +78,8 @@ async fn build_store_daemon(
     );
 
     let notes = Arc::new(SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap());
-    let features = with_features
-        .then(|| Arc::new(RecipeProjectsDouble::new()) as Arc<dyn RecipeProjectPort>);
+    let features =
+        with_features.then(|| Arc::new(RecipeProjectsDouble::new()) as Arc<dyn RecipeProjectPort>);
 
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
