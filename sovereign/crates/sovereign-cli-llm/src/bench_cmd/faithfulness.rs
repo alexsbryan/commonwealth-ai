@@ -229,13 +229,14 @@ async fn run(rest: &[String]) -> i32 {
 
     // Resolve corpus + open stores (same path derivation as enrich raptor).
     let indexes_dir = sovereign_cli_base::dirs::sovereign_indexes();
-    let corpus_id = match crate::corpus_resolve::resolve_corpus_id(&indexes_dir, &corpus_arg) {
-        Ok(id) => id,
-        Err(e) => {
-            eprintln!("error: {e}");
-            return 2;
-        }
-    };
+    let corpus_id =
+        match sovereign_cli_base::corpus_resolve::resolve_corpus_id(&indexes_dir, &corpus_arg) {
+            Ok(id) => id,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 2;
+            }
+        };
     // svrn reads its own store (`svrn __probe`, raptor-nodes mode).
     let request = ProbeRequest {
         mode: ProbeMode::RaptorNodes,

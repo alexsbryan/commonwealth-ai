@@ -205,7 +205,7 @@ pub async fn cmd_obsidian(args: &[String]) -> i32 {
     // id to `enrich eval`, whose error doesn't list the candidates.
     let indexes_dir = Some(sovereign_contracts::rebrand::data_dir().join("indexes"));
     if let Some(indexes_dir) = indexes_dir {
-        match crate::corpus_resolve::resolve_corpus_id(&indexes_dir, &parsed.corpus) {
+        match sovereign_cli_base::corpus_resolve::resolve_corpus_id(&indexes_dir, &parsed.corpus) {
             Ok(id) => {
                 if id != parsed.corpus {
                     println!("Corpus '{}' resolved to '{id}'", parsed.corpus);

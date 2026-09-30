@@ -54,7 +54,7 @@ mod chat_cmd;
 mod corpus_catalog_cmd;
 mod corpus_cmd;
 mod corpus_extract_entities_cmd;
-mod corpus_resolve;
+use sovereign_cli_base::corpus_resolve;
 mod corpus_scrub_cmd;
 mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;
