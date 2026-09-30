@@ -182,6 +182,10 @@ Distributions are declared as `[[distribution]]` rows in
 `quality/ARCH_LAYERS.toml`, extending `[thin_surfaces]`: the crate may reach
 its own crates, the shared leaves and each program's declared face, judged on
 its direct edges, under a fixed `max_code_lines` that is never ratcheted.
+A distribution's tests count as its edges, so a composition test that must
+name a program's library reaches it through a declared face with empty
+`items`: the face-item scan reads `src/` only, so the root's wiring still
+names none of it (phase-b-72, stock's face on `sovereign-serving-host`).
 Phase B enrols one, the stock binary (cap 300); the dispatcher, the setup
 verbs and service install stay `svrn` members until the follow-on queue carves
 their wiring out, so their edges keep counting (phase-b-30). A distribution
