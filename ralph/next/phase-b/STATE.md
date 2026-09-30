@@ -1458,7 +1458,6 @@ sovereign-daemon → sovereign-mesh | pb-mesh-exit-mesh
 sovereign-daemon → sovereign-tdd | pb-meshapp-solve
 sovereign-mesh → corpus-engine | pb-mesh-dissolve
 sovereign-mesh → sovereign-work-atlas (dev) | pb-mesh-dissolve
-sovereign-tools → sovereign-recipe-author | pb-ingest-rehome
 sovereign-daemon → commonwealth-discovery | pb-mesh-exit-transport
 ```
 
