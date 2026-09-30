@@ -152,7 +152,17 @@ impl RingJournal {
         let ts_unix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+            .map_err(|why| {
+                // Named, never defaulted (ROOT_CAUSE_FIXES C4): the old
+                // `unwrap_or(0)` signed lines stamped 0 on the signature path.
+                tracing::warn!(
+                    target: "rail:door",
+                    ns = %self.namespace,
+                    %why,
+                    "append refused — the wall clock is unreadable"
+                );
+                RailError::Clock
+            })?;
         let view = digest(&existing, &self.namespace, verifier);
         let body = body_json(&act, on_behalf_of, Some(&view));
         let signature = signer.sign(&self.namespace, ts_unix, seq, &body);

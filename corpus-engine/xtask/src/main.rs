@@ -38,6 +38,7 @@ mod lint_gate;
 mod lock_gate;
 mod manifests;
 mod purity_gate;
+mod substitution_gate;
 mod quality_cmd;
 mod refactor_apply;
 mod refactor_land;
@@ -57,6 +58,7 @@ fn main() {
         "boundary-gate" => boundary_gate::run(),
         "clock-gate" => clock_gate::run(&args[1..]),
         "purity-gate" => purity_gate::run(&args[1..]),
+        "substitution-gate" => substitution_gate::run(&args[1..]),
         "concept-gate" => concept_gate::run(&args[1..]),
         "api-gate" => api_gate::run(&args[1..]),
         "env-gate" => env_gate::run(&args[1..]),
@@ -93,6 +95,9 @@ fn print_usage() {
     );
     eprintln!(
         "  purity-gate                              Zero-I/O of the rail's canon is a gate: pure trees, pure closure, wasm32"
+    );
+    eprintln!(
+        "  substitution-gate                        The identity/signature path defaults to nothing — named failures only"
     );
     eprintln!(
         "  arch-gate [--update-baseline|--tighten]   Enforce the §3.1 file-size ratchet + §1 doc-contract"

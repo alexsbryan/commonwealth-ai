@@ -115,8 +115,11 @@ impl<K: Journaled> Op<K> {
     pub fn new(kind: K, ts_unix: i64, actor: impl Into<String>) -> Self {
         let actor = actor.into();
         // serde_json writes fields in declaration order, so the body string —
-        // and therefore the id — is deterministic across runs and builds.
-        let body = serde_json::to_string(&kind).unwrap_or_default();
+        // and therefore the id — is deterministic across runs and builds. A
+        // kind failing to serialise is unreachable; silent `""` would derive
+        // an id over empty bytes (ROOT_CAUSE_FIXES C4).
+        let body = serde_json::to_string(&kind)
+            .expect("a kind serialises — an id over empty bytes is the named catastrophe");
         let input = format!("{}|{ts_unix}|{actor}|{body}", K::ID_PREFIX);
         let v = kind.line_version();
         Self {

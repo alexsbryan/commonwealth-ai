@@ -509,7 +509,11 @@ pub fn admit(
     let floors = crate::sync::sealed_floors(admitted.values().map(|c| c.op), &voided);
     for (actor, by_seq) in &seqs {
         let floor = floors.get(*actor).copied().unwrap_or(0);
-        let highest = by_seq.keys().copied().next_back().unwrap_or(0);
+        let highest = by_seq
+            .keys()
+            .copied()
+            .next_back()
+            .expect("seqs only holds actors that wrote");
         for n in floor..=highest {
             if !by_seq.contains_key(&n) {
                 gaps.push(RailGap::SequenceHole {
@@ -659,5 +663,8 @@ pub fn body_json(
         on_behalf_of,
         view,
     })
-    .unwrap_or_default()
+    // A `RailAct` failing to serialise is unreachable; silent `""` would be
+    // catastrophic — empty bytes on the signature path (ROOT_CAUSE_FIXES C4,
+    // substitution-gate's named target).
+    .expect("a RailAct serialises — signing empty bytes is the named catastrophe")
 }

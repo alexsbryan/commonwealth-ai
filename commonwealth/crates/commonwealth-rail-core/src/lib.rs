@@ -469,6 +469,11 @@ pub enum RailError {
     /// outside its own namespace by naming a path (ARCH §7.1).
     #[error("'{0}' is not a ring namespace — use 1..=64 characters from a-z, 0-9, '-' and '_'")]
     BadNamespace(String),
+    /// The wall clock is unreadable. Refusing to sign is the only honest
+    /// answer: the previous `unwrap_or(0)` quietly signed lines stamped 0,
+    /// on the signature path itself (ROOT_CAUSE_FIXES C4).
+    #[error("the wall clock is unreadable — refusing to sign a line stamped 0")]
+    Clock,
     #[error("ring rail io: {0}")]
     Io(String),
     /// The door refused to author this act. The string is a sentence, because
