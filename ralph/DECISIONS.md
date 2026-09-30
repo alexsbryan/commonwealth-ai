@@ -1639,6 +1639,21 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Correction: ee1a79259's body gives the moved test count as 25 + 2 + 3 + 2 = 34. The junit count is 26 + 2 + 3 + 2 = 33, and it agrees with the daemon's 1158 → 1125. The body is not amended because the tree is shared.
 - Falsified if: a path emits `InferenceReceived` without going through `emit_from_outcome`, or a data frame can raise `chunk_count` without setting `first_chunk_at`.
 
+**phase-b-74 · 2026-09-30 · pb-cli-llm-ingest-move-remainder (worktree B) · seat as B's director (operator autonomy)** — this commit
+- Needed: B's -remainder worker landed seven reaches, then stopped on four forks. (1) awareness runs linked into sovereign-cli's own process (main.rs:1122-1134, feature `awareness`), where no `HostedIngest` exists. (2) bench_atlas is placed by the row's own rule. (3) probe vault-build's tiered run is metered: its own provider and a metered GLiNER extractor (vault_build.rs:625-700), which the composed ports do not take. (4) Remainder modules also reach ingest crates through `crate::enrich_cmd::*` aliases.
+- Chose:
+  - (1) sovereign-cli's `awareness` arm execs the composed LLM sibling with the spelling unchanged. awareness writes and extracts through two new AtlasPort methods, `write_atlas` and `extract_entities`. sovereign-cli's optional edge to cli-llm goes.
+  - (2) bench_atlas moves with the parent, and `svrn bench atlas` execs `svrn-ingest` with the spelling unchanged.
+  - (3) An ingest-face runner that takes vault-build's provider and extractor, plus `gliner_chunk_extractor`, so the metering stays.
+  - (4) -remainder's census covers alias spellings. The parent's census covers the modules that move.
+  - Written into B's -remainder row (B-state commit). This record lands the ruling on `cut`.
+- Because:
+  - Principle 6: option 1(b) would make two awareness subcommands name ingest absent on the awareness build, a user-visible loss. The exec path is the dispatcher's one route for LLM verbs (principle 8).
+  - Principle 12: bench_atlas touches only ingest's config, manifest and pipeline.
+  - Principle 7: an instrument keeps measuring what it measured.
+  - A spelling that resolves to an ingest crate is an edge, whatever the alias.
+  - Nothing a user sees changes. This commit changes no Rust.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
