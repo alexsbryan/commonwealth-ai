@@ -220,3 +220,19 @@ impl AggregatedReport {
             .collect()
     }
 }
+
+/// One unmatched atom, carrying enough context for a judge verdict.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnmatchedAtom {
+    /// Axis that considered the atom (most specific pool wins when an
+    /// atom is a candidate in several — typed axes before generic).
+    pub axis: String,
+    /// Atom envelope kind (`Entity` / `Event` / `State` / ...).
+    pub kind: String,
+    pub label: String,
+    /// Secondary text (description / framing); empty when the family
+    /// has none.
+    pub detail: String,
+    pub evidence_chunk_ids: Vec<String>,
+    pub evidence_previews: Vec<String>,
+}

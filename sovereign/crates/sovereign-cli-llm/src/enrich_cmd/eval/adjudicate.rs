@@ -16,21 +16,7 @@ use super::*;
 // not the capped sample strings — recomputed here with the exact
 // predicates the scorers use, so the two surfaces cannot disagree.
 
-/// One unmatched atom, carrying enough context for a judge verdict.
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct UnmatchedAtom {
-    /// Axis that considered the atom (most specific pool wins when an
-    /// atom is a candidate in several — typed axes before generic).
-    pub axis: String,
-    /// Atom envelope kind (`Entity` / `Event` / `State` / ...).
-    pub kind: String,
-    pub label: String,
-    /// Secondary text (description / framing); empty when the family
-    /// has none.
-    pub detail: String,
-    pub evidence_chunk_ids: Vec<String>,
-    pub evidence_previews: Vec<String>,
-}
+pub(crate) use sovereign_contracts::enrich_eval::UnmatchedAtom;
 
 /// Resolve golden + atlas snapshot for a corpus the same way
 /// `score_corpus` does — shared by `enrich eval` and the adjudicator.

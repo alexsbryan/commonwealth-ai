@@ -25,7 +25,8 @@ use sovereign_contracts::traits::InferenceProvider;
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
-use crate::enrich_cmd::eval::{collect_unmatched_atoms, load_golden_and_snapshot, UnmatchedAtom};
+use crate::enrich_cmd::eval::{collect_unmatched_atoms, load_golden_and_snapshot};
+use sovereign_contracts::enrich_eval::UnmatchedAtom;
 
 const PROVIDER_CTX: u32 = 8192;
 
