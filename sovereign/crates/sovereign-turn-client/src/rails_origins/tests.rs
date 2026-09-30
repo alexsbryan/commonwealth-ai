@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::extract::State;
@@ -14,6 +14,8 @@ use oicp_types::origin::{Admit, Framing, OriginRegistration};
 struct Rails {
     registered: AtomicUsize,
     renewed: AtomicUsize,
+    /// Each register's and renew's declared `loaded_models`, in order.
+    declared: Mutex<Vec<Option<Vec<String>>>>,
 }
 
 /// A cw-rails double: every registration is taken, and the FIRST renew is
@@ -26,6 +28,10 @@ async fn double() -> (String, Arc<Rails>) {
             post(
                 |State(r): State<Arc<Rails>>, Json(req): Json<OriginRegistration>| async move {
                     let n = r.registered.fetch_add(1, Ordering::SeqCst);
+                    r.declared
+                        .lock()
+                        .unwrap()
+                        .push(req.claims.map(|c| c.loaded_models));
                     // A slow re-registration holds the lapse open long
                     // enough to observe: a watch keeps only the latest value.
                     if n > 0 {
@@ -40,7 +46,14 @@ async fn double() -> (String, Arc<Rails>) {
         )
         .route(
             "/v1/mesh/origins/{id}/renew",
-            post(|State(r): State<Arc<Rails>>| async move {
+            post(|State(r): State<Arc<Rails>>, Json(body): Json<serde_json::Value>| async move {
+                r.declared.lock().unwrap().push(
+                    serde_json::from_value::<Option<oicp_types::capabilities::NodeCapabilities>>(
+                        body["claims"].clone(),
+                    )
+                    .unwrap()
+                    .map(|c| c.loaded_models),
+                );
                 if r.renewed.fetch_add(1, Ordering::SeqCst) == 0 {
                     (
                         StatusCode::NOT_FOUND,
@@ -144,4 +157,68 @@ async fn an_absent_cw_rails_is_an_error_naming_the_url() {
         .await
         .expect_err("no cw-rails, no claim");
     assert!(err.contains("http://127.0.0.1:9/v1/mesh/origins"), "{err}");
+}
+
+/// The source is read at every register and renew, so the declaration
+/// follows it; with no source a renew declares nothing and cw-rails keeps
+/// what the registration declared. Failing input: a renew that never sends
+/// the source's answer.
+#[tokio::test]
+async fn a_claims_source_is_declared_at_every_register_and_renew() {
+    let (base, rails) = double().await;
+    let reads = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&reads);
+    let source: super::ClaimsSource = Arc::new(move || {
+        let n = counter.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            let mut caps: oicp_types::capabilities::NodeCapabilities =
+                serde_json::from_value(serde_json::json!({
+                    "hardware": {"gpus": [], "system_ram_gb": 0, "cpu_cores": 0,
+                                 "total_storage_gb": 0, "free_storage_gb": 0},
+                    "available": {"free_vram_gb": 0.0, "free_ram_gb": 0.0,
+                                  "free_storage_gb": 0.0, "gpu_utilization": 0.0,
+                                  "cpu_utilization": 0.0, "available_for_mesh": true},
+                    "hosted_corpora": [], "reported_at": 0
+                }))
+                .unwrap();
+            caps.loaded_models = vec![format!("m{n}")];
+            caps
+        })
+    });
+    let task = tokio::spawn(super::keep_registered_declaring(
+        base,
+        registration(),
+        60,
+        Duration::from_millis(10),
+        None,
+        Some(source),
+    ));
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while rails.renewed.load(Ordering::SeqCst) < 2 {
+        assert!(tokio::time::Instant::now() < deadline, "never renewed twice");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    task.abort();
+    let seen = rails.declared.lock().unwrap().clone();
+    // register m0, renew m1 (refused), register m2, renew m3.
+    let want: Vec<Option<Vec<String>>> = (0..4).map(|n| Some(vec![format!("m{n}")])).collect();
+    assert_eq!(seen[..4], want[..]);
+
+    let (base, rails) = double().await;
+    let task = tokio::spawn(super::keep_registered(
+        base,
+        registration(),
+        60,
+        Duration::from_millis(10),
+    ));
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while rails.renewed.load(Ordering::SeqCst) < 2 {
+        assert!(tokio::time::Instant::now() < deadline, "never renewed twice");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    task.abort();
+    assert!(
+        rails.declared.lock().unwrap().iter().all(Option::is_none),
+        "no source, no declaration on any renew"
+    );
 }

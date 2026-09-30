@@ -7,8 +7,12 @@
 //! (pb-serve-distributes-standalone) because serve cannot link the daemon,
 //! and both link this crate beside [`crate::rails_kv::resolve_rails_base`].
 
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
+use oicp_types::capabilities::NodeCapabilities;
 use oicp_types::origin::{OriginClaim, OriginRegistration};
 use tracing::{debug, info, warn};
 
@@ -63,16 +67,27 @@ pub async fn register_origin(
     post(base, "/v1/mesh/origins", registration).await
 }
 
-/// Push a registered origin's deadline out by `ttl_secs`.
-pub async fn renew_origin(base: &str, claim_id: &str, ttl_secs: u64) -> Result<(), String> {
+/// Push a registered origin's deadline out by `ttl_secs`. `Some(claims)`
+/// replaces the claim's declaration; `None` keeps it.
+pub async fn renew_origin(
+    base: &str,
+    claim_id: &str,
+    ttl_secs: u64,
+    claims: Option<&NodeCapabilities>,
+) -> Result<(), String> {
     let _: serde_json::Value = post(
         base,
         &format!("/v1/mesh/origins/{claim_id}/renew"),
-        &serde_json::json!({ "ttl_secs": ttl_secs }),
+        &serde_json::json!({ "ttl_secs": ttl_secs, "claims": claims }),
     )
     .await?;
     Ok(())
 }
+
+/// What a registrant declares about the node NOW, read at every register and
+/// renew so the declaration moves with the registrant's state.
+pub type ClaimsSource =
+    Arc<dyn Fn() -> Pin<Box<dyn Future<Output = NodeCapabilities> + Send>> + Send + Sync>;
 
 /// Register, then renew every `every` for `ttl_secs`; a renew cw-rails
 /// refuses (it restarted, or the claim lapsed) registers again. cw-rails being
@@ -100,6 +115,20 @@ pub async fn keep_registered_tied(
     every: Duration,
     tie: Option<tokio::sync::watch::Sender<Option<String>>>,
 ) {
+    keep_registered_declaring(rails_base, registration, ttl_secs, every, tie, None).await
+}
+
+/// [`keep_registered_tied`], declaring `claims`' answer at every register and
+/// renew in place of the registration's fixed `claims`. `None` declares what
+/// the registration carries at register and keeps it on every renew.
+pub async fn keep_registered_declaring(
+    rails_base: String,
+    mut registration: OriginRegistration,
+    ttl_secs: u64,
+    every: Duration,
+    tie: Option<tokio::sync::watch::Sender<Option<String>>>,
+    claims: Option<ClaimsSource>,
+) {
     let slot = registration.alpn.clone();
     let publish = |value: Option<String>| {
         if let Some(tx) = &tie {
@@ -110,7 +139,11 @@ pub async fn keep_registered_tied(
     let mut told_absent = false;
     loop {
         match &claim {
-            None => match register_origin(&rails_base, &registration).await {
+            None => {
+                if let Some(source) = &claims {
+                    registration.claims = Some(source().await);
+                }
+                match register_origin(&rails_base, &registration).await {
                 Ok(c) => {
                     info!(target: TRACE_TARGET, claim = %c.claim_id, %slot,
                           prefixes = ?registration.prefixes, port = registration.port,
@@ -128,16 +161,22 @@ pub async fn keep_registered_tied(
                 }
                 Err(e) => debug!(target: TRACE_TARGET, error = %e, %slot,
                                  "origin registration still not taken; retrying"),
-            },
+                }
+            }
             Some(id) => {
-                if let Err(e) = renew_origin(&rails_base, id, ttl_secs).await {
+                let declared = match &claims {
+                    Some(source) => Some(source().await),
+                    None => None,
+                };
+                if let Err(e) = renew_origin(&rails_base, id, ttl_secs, declared.as_ref()).await {
                     info!(target: TRACE_TARGET, claim = %id, %slot, error = %e,
                           "the origin's renew was refused — registering again");
                     publish(None);
                     claim = None;
                     continue;
                 }
-                debug!(target: TRACE_TARGET, claim = %id, %slot, "origin renewed");
+                debug!(target: TRACE_TARGET, claim = %id, %slot,
+                       declares = declared.is_some(), "origin renewed");
             }
         }
         tokio::time::sleep(every).await;
