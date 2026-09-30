@@ -239,10 +239,7 @@ fn every_error_this_executor_can_return_is_retryable_and_never_a_failed_verdict(
     }
     // And the retry itself is bounded, by the constant the ingest queue
     // already owned rather than a second one.
-    assert_eq!(
-        MAX_UNIT_ATTEMPTS,
-        oicp_types::work_queue::MAX_UNIT_ATTEMPTS
-    );
+    assert_eq!(MAX_UNIT_ATTEMPTS, oicp_types::work_queue::MAX_UNIT_ATTEMPTS);
 }
 
 /// The heartbeat cadence is DERIVED from the lease, not restated beside it.

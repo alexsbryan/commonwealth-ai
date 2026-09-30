@@ -39,10 +39,10 @@
 //! - Emitted before truncation (over-counted under pressure).
 use std::sync::Arc;
 
-use oicp_types::contributions::LedgerEventKind;
-use kernel_types::NodeId;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
+use kernel_types::NodeId;
+use oicp_types::contributions::LedgerEventKind;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 

@@ -27,11 +27,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use corpus_index::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
+use kernel_types::{MeshId, NodeId};
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::{fabric, node, serving, AppState};
 use sovereign_mesh::canonical_pull::{pull_canonical_from_peer, PullError};

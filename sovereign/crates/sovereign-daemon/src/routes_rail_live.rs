@@ -202,10 +202,7 @@ async fn push_ephemeral(state: &AppState, namespace: &str, payload: &str) -> Vec
         let node = hex::encode(peer.node_id.as_bytes());
         let name = Some(peer.name.clone());
         let endpoints = transport
-            .endpoints(
-                &peer.dial,
-                mesh_reach::TrafficClass::ControlPlane,
-            )
+            .endpoints(&peer.dial, mesh_reach::TrafficClass::ControlPlane)
             .await;
         handles.push(tokio::spawn(async move {
             offer_peer(&client, &envelope, node, name, &endpoints, stamp.as_ref()).await

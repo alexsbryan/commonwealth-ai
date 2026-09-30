@@ -5,9 +5,9 @@
 //! to the double, not to Fabric's private store.
 use std::sync::Arc;
 
-use kernel_types::NodeId;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
+use kernel_types::NodeId;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::{fabric, node, serving, store::StoreSeed, AppState};
 

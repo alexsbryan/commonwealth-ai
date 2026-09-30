@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
+use kernel_types::{MeshId, NodeId};
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::gossip;
 

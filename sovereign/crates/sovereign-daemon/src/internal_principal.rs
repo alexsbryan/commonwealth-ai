@@ -381,10 +381,10 @@ fn member_of(p: &Principal) -> Option<NodeId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
     use commonwealth_transport::mesh_proof::mesh_proof_stamp;
+    use kernel_types::MeshId;
+    use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
     use std::collections::HashMap;
 
     const KEY: [u8; 32] = [7u8; 32];

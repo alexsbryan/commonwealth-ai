@@ -23,9 +23,9 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use kernel_types::NodeId;
 use commonwealth_discovery::membership;
 use commonwealth_transport::iroh::{EndpointBuilder, IrohAcceptor, SecretKey, ALPN};
+use kernel_types::NodeId;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 

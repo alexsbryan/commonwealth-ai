@@ -408,8 +408,7 @@ pub(crate) fn install_iroh_access(
         .publish(access.dial_info_provider());
     app_state.set_rpc_iroh_accept(access.rpc_route_active());
     if !iroh_routed_classes.is_empty() {
-        let iroh_t: Arc<dyn mesh_reach::PeerTransport> =
-            Arc::new(access.client_transport());
+        let iroh_t: Arc<dyn mesh_reach::PeerTransport> = Arc::new(access.client_transport());
         let mut per_class = std::collections::HashMap::new();
         for class in iroh_routed_classes {
             per_class.insert(*class, iroh_t.clone());
@@ -3910,9 +3909,7 @@ impl EmbeddedDaemon {
         ) = if require_encryption {
             (
                 mesh_reach::TrafficClass::ALL.to_vec(),
-                mesh_reach::TrafficClass::ALL
-                    .into_iter()
-                    .collect(),
+                mesh_reach::TrafficClass::ALL.into_iter().collect(),
             )
         } else {
             (

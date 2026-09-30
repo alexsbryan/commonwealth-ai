@@ -24,12 +24,12 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use oicp_types::work_queue::WorkUnit;
 use corpus_index::ingest_port::cancel::CancellationRegistry;
 use corpus_index::ingest_port::daemon::{IngestPort, IngestResult};
 use corpus_index::ingest_port::double::{IngestPortDouble, SliceIngest};
 use kernel_types::{NodeId, Verdict};
 use oicp_types::work::projection::{WorkProjection, WorkUnitStatus};
+use oicp_types::work_queue::WorkUnit;
 use oicp_types::JobKind;
 use sovereign_daemon::ingest_executor::{IngestExecutor, IngestPayload, INGEST_KIND};
 use sovereign_daemon::work_origin::{spawn, WorkOrigin};

@@ -48,8 +48,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use kernel_types::{MeshId, ModelId, NodeId};
 use commonwealth_core::mesh::Mesh;
+use kernel_types::{MeshId, ModelId, NodeId};
 use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, FabricSeed, NodeSeed, ServingSeed};

@@ -33,9 +33,9 @@
 //! lives in the plan's two-machine verification, step 2.
 use std::time::Duration;
 
-use kernel_types::NodeId;
 use commonwealth_core::mesh::{MemberRecord, NodeStatus};
 use commonwealth_discovery::membership;
+use kernel_types::NodeId;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::{EmbeddedDaemon, MeshError};
 use sovereign_mesh::deep_link;

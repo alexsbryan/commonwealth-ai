@@ -1183,8 +1183,7 @@ impl AppState {
     /// Get the default model (first in the inference plan).
     pub async fn default_model_id(
         &self,
-    ) -> Result<Option<kernel_types::ModelId>, sovereign_mesh::ledger_port::LedgerAbsent>
-    {
+    ) -> Result<Option<kernel_types::ModelId>, sovereign_mesh::ledger_port::LedgerAbsent> {
         Ok(self
             .inference_plan()
             .await?
@@ -2023,8 +2022,8 @@ impl sovereign_core::self_claims::SelfClaims for AppState {
 
 #[cfg(test)]
 pub fn test_app_state() -> AppState {
-    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
+    use kernel_types::MeshId;
     use std::collections::HashMap;
     let mesh = Mesh {
         mesh_secret: [0u8; 32],
@@ -2046,8 +2045,8 @@ pub fn test_app_state() -> AppState {
 /// are total").
 #[cfg(test)]
 pub fn test_app_state_with_token(token: Option<Arc<str>>) -> AppState {
-    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
+    use kernel_types::MeshId;
     use std::collections::HashMap;
     let mesh = Mesh {
         mesh_secret: [0u8; 32],
@@ -2075,8 +2074,8 @@ pub fn test_app_state_with_token(token: Option<Arc<str>>) -> AppState {
 /// arguments rather than installs (DC §4.2 "Construction is staged, and parts
 /// are total").
 pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
-    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
+    use kernel_types::MeshId;
     use std::collections::HashMap;
     let mesh = Mesh {
         mesh_secret: [0u8; 32],
@@ -2103,8 +2102,8 @@ pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
 /// rather than an install (DC §4.2 "Construction is staged, and parts are
 /// total").
 pub fn test_app_state_with_inference(service: Arc<dyn LocalInferenceService>) -> AppState {
-    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
+    use kernel_types::MeshId;
     use std::collections::HashMap;
     let mesh = Mesh {
         mesh_secret: [0u8; 32],

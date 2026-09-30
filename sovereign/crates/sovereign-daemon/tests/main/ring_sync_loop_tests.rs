@@ -7,12 +7,12 @@
 //! spelling of it (ARCH §10.6).
 
 use axum::response::IntoResponse;
-use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail_core::{
     actor_of, body_json, sign_ring_op, Ed25519Verifier, Op, Payload, Person, RailAct, Roster,
     SignedOp, SigningKey,
 };
+use kernel_types::{MeshId, NodeId};
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::rail_port::{LocalRingRail, RingJournal};

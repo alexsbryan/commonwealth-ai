@@ -21,8 +21,8 @@ use std::sync::Arc;
 
 use axum::Router;
 
-use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
+use kernel_types::{MeshId, NodeId};
 
 use corpus_index::ingest_port::daemon::{IngestPort, RecipeHarnessPort};
 use corpus_index::ingest_port::double::{IngestPortDouble, RecipeHarnessDouble};

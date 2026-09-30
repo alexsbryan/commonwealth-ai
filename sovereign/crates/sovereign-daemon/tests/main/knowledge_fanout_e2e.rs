@@ -46,12 +46,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-use oicp_types::contributions::LedgerEventKind;
-use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
+use kernel_types::{MeshId, NodeId};
+use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+use oicp_types::contributions::LedgerEventKind;
 use oicp_types::knowledge::CorpusShardInfo;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;

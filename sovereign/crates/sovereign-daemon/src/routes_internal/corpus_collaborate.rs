@@ -21,8 +21,8 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::types::MemberStatus;
-use oicp_types::work_queue::IngestionHandoff;
 use kernel_types::NodeId;
+use oicp_types::work_queue::IngestionHandoff;
 use sovereign_grants::knowledge_assignment::{
     build_work_units_hf, build_work_units_jsonl_sharded, build_work_units_jsonl_single,
     plan_collaborative_ingestion, plan_collaborative_ingestion_jsonl,
@@ -892,10 +892,7 @@ pub async fn corpus_collaborate(
             // up unable to dispatch to B even though both machines
             // had routable Tailscale addresses advertised).
             let endpoints = transport
-                .endpoints(
-                    &peer.dial,
-                    mesh_reach::TrafficClass::ControlPlane,
-                )
+                .endpoints(&peer.dial, mesh_reach::TrafficClass::ControlPlane)
                 .await;
             if endpoints.is_empty() {
                 tracing::warn!(

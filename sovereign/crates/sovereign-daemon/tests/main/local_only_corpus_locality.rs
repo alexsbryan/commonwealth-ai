@@ -39,11 +39,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::source::CorpusReadPort;
 use corpus_index::types::EmbedFn;
+use kernel_types::{MeshId, NodeId};
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::gossip;
 

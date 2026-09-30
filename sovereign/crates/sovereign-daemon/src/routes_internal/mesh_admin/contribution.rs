@@ -224,10 +224,7 @@ pub struct NodeContributionsView {
 pub async fn contribution_view(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<NodeContributionsView>>, (StatusCode, String)> {
-    let caps_map: std::collections::HashMap<
-        NodeId,
-        oicp_types::capabilities::NodeCapabilities,
-    > = {
+    let caps_map: std::collections::HashMap<NodeId, oicp_types::capabilities::NodeCapabilities> = {
         state
             .membership()
             .members()
@@ -240,10 +237,7 @@ pub async fn contribution_view(
         .inner
         .store
         .contribution_emitter
-        .current_contributions(
-            &caps_map,
-            oicp_types::contributions::DEFAULT_WINDOW_DAYS,
-        )
+        .current_contributions(&caps_map, oicp_types::contributions::DEFAULT_WINDOW_DAYS)
         .await
         .map_err(|e| {
             (
@@ -341,10 +335,7 @@ pub async fn activity_summary(
     // so the self entry is exactly "what I served to / received from
     // the mesh."
     let self_id = state.inner.store.contribution_emitter.self_node_id();
-    let caps_map: std::collections::HashMap<
-        NodeId,
-        oicp_types::capabilities::NodeCapabilities,
-    > = {
+    let caps_map: std::collections::HashMap<NodeId, oicp_types::capabilities::NodeCapabilities> = {
         state
             .membership()
             .members()
@@ -357,10 +348,7 @@ pub async fn activity_summary(
         .inner
         .store
         .contribution_emitter
-        .current_contributions(
-            &caps_map,
-            oicp_types::contributions::DEFAULT_WINDOW_DAYS,
-        )
+        .current_contributions(&caps_map, oicp_types::contributions::DEFAULT_WINDOW_DAYS)
         .await
         .map_err(|e| {
             (

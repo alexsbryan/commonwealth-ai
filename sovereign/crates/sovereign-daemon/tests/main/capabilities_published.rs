@@ -7,12 +7,12 @@
 //! `hosted_corpora: vec![]`, defeating the whole knowledge fan-out.
 use std::sync::Arc;
 
-use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
+use kernel_types::{MeshId, NodeId};
+use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use sovereign_daemon::state::{fabric, node, serving, AppState};
 use sovereign_mesh::gossip;
 use std::collections::HashMap;

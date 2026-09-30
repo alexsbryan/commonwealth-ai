@@ -11,12 +11,12 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
 
+use kernel_types::ModelId;
+use kernel_types::NodeId;
 use oicp_types::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
 use oicp_types::capabilities::NodeCapabilities;
 use oicp_types::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
-use kernel_types::ModelId;
 use oicp_types::model_catalog::ModelInfo;
-use kernel_types::NodeId;
 use oicp_types::EmbedModelInfo;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};

@@ -6,12 +6,12 @@ use std::time::{Duration, Instant};
 
 use crate::state::AppState;
 use crate::types::MemberStatus;
-use oicp_types::work_queue::{
-    CompleteOutcome, HandoffPhase, IngestionHandoff, LeasedUnit, UnitId, WorkUnit,
-};
 use corpus_index::ingest_port::cancel::CancellationFlag;
 use kernel_types::HandoffId;
 use kernel_types::NodeId;
+use oicp_types::work_queue::{
+    CompleteOutcome, HandoffPhase, IngestionHandoff, LeasedUnit, UnitId, WorkUnit,
+};
 use sovereign_time::unix_millis as now_ms;
 
 const CHECK_INTERVAL: Duration = Duration::from_secs(30);
@@ -778,8 +778,7 @@ async fn spawn_local_ingest(state: AppState, corpus_id: String) {
 /// Heartbeat cadence: one third of the lease. DERIVED from `LEASE_MS` rather
 /// than hand-copied — it was `from_secs(100)` beside a comment saying it
 /// matched, which is two deciders agreeing by luck (ARCH §10.6).
-const HEARTBEAT_INTERVAL: Duration =
-    Duration::from_millis(oicp_types::work_queue::LEASE_MS / 3);
+const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(oicp_types::work_queue::LEASE_MS / 3);
 
 /// How many consecutive `next_unit` failures we tolerate before giving up
 /// on a handoff. Counts both 5xx responses (coordinator alive but broken)
@@ -1444,10 +1443,7 @@ async fn find_best_peer_canonical(
             // etc.) doesn't strand the request on a dead address.
             let candidate_urls: Vec<String> = state
                 .peer_transport()
-                .endpoints(
-                    &member.dial,
-                    mesh_reach::TrafficClass::ControlPlane,
-                )
+                .endpoints(&member.dial, mesh_reach::TrafficClass::ControlPlane)
                 .await
                 .into_iter()
                 .map(|ep| ep.base_url)

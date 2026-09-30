@@ -11,10 +11,10 @@ use std::sync::{Arc, Mutex};
 
 use crate::state::store::StoreSeed;
 use bytes::Bytes;
+use kernel_types::{ModelId, NodeId};
 use oicp_types::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
 use oicp_types::capabilities::NodeCapabilities;
 use oicp_types::contributions::{LedgerEvent, LedgerEventKind, NodeContributions};
-use kernel_types::{ModelId, NodeId};
 use oicp_types::model_catalog::ModelInfo;
 use oicp_types::EmbedModelInfo;
 use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError};

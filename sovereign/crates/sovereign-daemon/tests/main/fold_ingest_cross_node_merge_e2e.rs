@@ -111,8 +111,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use kernel_types::{HandoffId, MeshId};
-use oicp_types::work_queue::{HandoffPhase, WorkUnit};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail_core::{
     actor_of, body_json, sign_ring_op, Op, Person, RailAct, Roster, SignedOp, SigningKey,
@@ -123,8 +121,10 @@ use corpus_index::ingest_port::merge::PartitionMergeReport;
 use kernel_types::judgement::Reason;
 use kernel_types::ActorKey;
 use kernel_types::{ComputeAttribution, Judgement, NodeId, Server};
+use kernel_types::{HandoffId, MeshId};
 use oicp_types::work::projection::{WorkProjection, WorkUnitStatus};
 use oicp_types::work::{Completion, Submission, UnitRef, WorkAct};
+use oicp_types::work_queue::{HandoffPhase, WorkUnit};
 use oicp_types::{JobKind, JobUnit};
 use serde_json::json;
 use sovereign_daemon::ingest_executor::{fold_coverage_for, IngestPayload, INGEST_KIND};

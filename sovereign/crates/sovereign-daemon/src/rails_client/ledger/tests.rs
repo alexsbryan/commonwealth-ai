@@ -10,11 +10,11 @@ use std::sync::Arc;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
+use kernel_types::ModelId;
+use kernel_types::NodeId;
 use oicp_types::activity::ActivityEventKind;
 use oicp_types::contributions::LedgerEventKind;
-use kernel_types::ModelId;
 use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
-use kernel_types::NodeId;
 use sovereign_mesh::ledger_port::{
     ActivityLedgerPort, ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,
     ProcessedShardsPort,

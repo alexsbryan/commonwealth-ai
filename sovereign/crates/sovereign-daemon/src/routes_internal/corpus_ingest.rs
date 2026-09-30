@@ -13,9 +13,9 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use oicp_types::activity::ActivityEventKind;
 use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::{IngestPort, InstallRefusal};
+use oicp_types::activity::ActivityEventKind;
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;

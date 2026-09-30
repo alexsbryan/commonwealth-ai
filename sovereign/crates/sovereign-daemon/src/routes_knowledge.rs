@@ -264,10 +264,8 @@ pub async fn knowledge_search(
     // locally OR want to broaden the hit set — for v1 we only fan
     // out for corpora WE DON'T HAVE. Broadening to replicas is a
     // future refinement once the merge-dedupe is proven.
-    let mut fanout_jobs: HashMap<
-        NodeId,
-        (String, mesh_reach::PeerContact, Vec<String>),
-    > = HashMap::new();
+    let mut fanout_jobs: HashMap<NodeId, (String, mesh_reach::PeerContact, Vec<String>)> =
+        HashMap::new();
     for offering in &peer_offerings {
         let relevant: Vec<String> = offering
             .corpora

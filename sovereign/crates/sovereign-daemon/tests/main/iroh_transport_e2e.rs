@@ -20,12 +20,12 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use kernel_types::{NodeId, NodePubkey};
 use commonwealth_discovery::membership;
 use commonwealth_transport::iroh::{
     Endpoint, EndpointBuilder, IrohAcceptor, IrohTransport, SecretKey, ALPN,
 };
 use commonwealth_transport::{PeerContact, PeerTransport, TrafficClass};
+use kernel_types::{NodeId, NodePubkey};
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 

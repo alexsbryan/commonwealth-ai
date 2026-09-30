@@ -357,8 +357,8 @@ mod tests {
     use crate::state::AppState;
     use axum::routing::post;
     use axum::Router;
-    use kernel_types::MeshId;
     use commonwealth_core::mesh::Mesh;
+    use kernel_types::MeshId;
     use kernel_types::NodeId;
     use tower::ServiceExt;
 

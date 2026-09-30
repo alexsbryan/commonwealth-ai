@@ -349,10 +349,7 @@ async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<N
         let node = hex::encode(peer.node_id.as_bytes());
         let name = Some(peer.name.clone());
         let endpoints = transport
-            .endpoints(
-                &peer.dial,
-                mesh_reach::TrafficClass::ControlPlane,
-            )
+            .endpoints(&peer.dial, mesh_reach::TrafficClass::ControlPlane)
             .await;
         let handle = tokio::spawn(async move {
             ask_peer(&client, &body, &node, name, &endpoints, stamp.as_ref()).await

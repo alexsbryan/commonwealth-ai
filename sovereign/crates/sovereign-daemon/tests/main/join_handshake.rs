@@ -24,9 +24,9 @@ use std::time::Duration;
 
 use serde_json::json;
 
-use kernel_types::NodeId;
 use commonwealth_core::mesh::Mesh;
 use commonwealth_discovery::membership;
+use kernel_types::NodeId;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
 

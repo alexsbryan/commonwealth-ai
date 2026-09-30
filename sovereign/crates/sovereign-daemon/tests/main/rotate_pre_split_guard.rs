@@ -17,8 +17,8 @@
 //!
 //! Each test below fails against that inert filter.
 
-use kernel_types::NodeId;
 use commonwealth_core::mesh::{MemberRecord, NodeStatus};
+use kernel_types::NodeId;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::{EmbeddedDaemon, MeshError};
 

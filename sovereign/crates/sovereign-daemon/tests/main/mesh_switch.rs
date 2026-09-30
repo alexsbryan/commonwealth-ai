@@ -20,11 +20,7 @@ use sovereign_mesh::persist;
 /// Write a second, PARKED mesh straight to disk under `root`, leaving the
 /// active pointer where it is. Mirrors what a join to a second mesh leaves
 /// behind, without needing a second daemon to hand it to us.
-fn park_a_mesh(
-    root: &std::path::Path,
-    name: &str,
-    self_id: kernel_types::NodeId,
-) -> Mesh {
+fn park_a_mesh(root: &std::path::Path, name: &str, self_id: kernel_types::NodeId) -> Mesh {
     let (mut mesh, _key) = commonwealth_discovery::membership::init_mesh_with_node_id(
         name,
         "self",

@@ -31,12 +31,12 @@ use std::time::Duration;
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
-use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use corpus_index::ingest_port::daemon::{
     ArticleStats, CorpusDiskStatus, IngestResult, InstallRefusal, PreparedInstall,
 };
 use corpus_index::ingest_port::double::IngestPortDouble;
+use kernel_types::{MeshId, NodeId};
 use sovereign_contracts::daemon_wire::IngestProgress;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::{fabric, node, serving, AppState};

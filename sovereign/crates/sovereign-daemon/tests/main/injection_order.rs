@@ -17,8 +17,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use kernel_types::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
+use kernel_types::{MeshId, NodeId};
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 

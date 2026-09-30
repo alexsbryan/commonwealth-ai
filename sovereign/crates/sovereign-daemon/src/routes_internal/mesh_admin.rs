@@ -215,10 +215,7 @@ pub async fn models_load(
 /// loaded entries hash to the same id when the operator declares
 /// the same `(slot_name, path)` pair statically and dynamically.
 /// Keep both paths in sync.
-fn compute_extras_model_id(
-    slot_name: &str,
-    path: &std::path::Path,
-) -> kernel_types::ModelId {
+fn compute_extras_model_id(slot_name: &str, path: &std::path::Path) -> kernel_types::ModelId {
     use std::hash::{DefaultHasher, Hash, Hasher};
     let role = format!("extras:{slot_name}");
     let mut h = DefaultHasher::new();

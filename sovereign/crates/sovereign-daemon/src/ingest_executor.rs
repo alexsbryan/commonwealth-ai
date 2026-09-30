@@ -79,7 +79,6 @@ use std::time::Duration;
 
 use std::collections::BTreeSet;
 
-use oicp_types::work_queue::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
 use corpus_index::ingest_port::daemon::IngestPort;
 use corpus_index::ingest_port::ProgressCallback;
 use kernel_types::quality::VerdictSource;
@@ -87,6 +86,7 @@ use kernel_types::ActorKey;
 use kernel_types::HandoffId;
 use kernel_types::{Judgement, Reason};
 use kernel_types::{NodeId, Server};
+use oicp_types::work_queue::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sovereign_contracts::daemon_wire::IngestProgress;

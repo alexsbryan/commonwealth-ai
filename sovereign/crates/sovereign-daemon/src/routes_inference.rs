@@ -8,10 +8,10 @@ use futures::StreamExt;
 use tracing::{debug, info, warn};
 
 use crate::types::MemberStatus;
-use oicp_types::activity::{ActivityEventKind, ServedFor};
-use oicp_types::contributions::LedgerEventKind;
 use kernel_types::ModelId;
 use kernel_types::NodeId;
+use oicp_types::activity::{ActivityEventKind, ServedFor};
+use oicp_types::contributions::LedgerEventKind;
 use oicp_types::{CapabilityClaim, InferenceRequirements, ShardingPrivacy};
 use std::collections::HashSet;
 use std::time::Instant;

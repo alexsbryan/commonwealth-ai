@@ -54,9 +54,9 @@
 //! named from it, so the ids differ in their HIGH bytes.
 
 use kernel_types::HandoffId;
-use oicp_types::work_queue::{HandoffPhase, MAX_UNIT_ATTEMPTS};
 use oicp_types::work::projection::{WorkProjection, WorkUnitStatus};
 use oicp_types::work::{Submission, WorkAct};
+use oicp_types::work_queue::{HandoffPhase, MAX_UNIT_ATTEMPTS};
 use oicp_types::JobKind;
 use sovereign_daemon::ingest_executor::{fold_coverage_for, FoldCoverage, INGEST_KIND};
 use sovereign_daemon::server::internal_router;

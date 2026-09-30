@@ -28,11 +28,11 @@
 //! ledger in production. Caught here.
 use std::sync::Arc;
 
-use oicp_types::contributions::LedgerEventKind;
-use kernel_types::NodeId;
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
+use kernel_types::NodeId;
+use oicp_types::contributions::LedgerEventKind;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::{fabric, node, serving, AppState};
 

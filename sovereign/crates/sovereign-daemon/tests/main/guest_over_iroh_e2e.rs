@@ -18,10 +18,10 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-use kernel_types::NodeId;
 use commonwealth_transport::iroh::{
     format_dial_string, EndpointBuilder, IrohAcceptor, SecretKey, GUEST_ALPN,
 };
+use kernel_types::NodeId;
 use sovereign_daemon::server::{client_router_for, ClientSurface};
 use sovereign_mesh::guest_tunnel::GuestTunnel;
 

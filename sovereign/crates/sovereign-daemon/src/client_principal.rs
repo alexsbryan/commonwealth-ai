@@ -258,8 +258,8 @@ mod tests {
     use super::*;
 
     fn state() -> AppState {
-        use kernel_types::MeshId;
         use commonwealth_core::mesh::Mesh;
+        use kernel_types::MeshId;
         use kernel_types::NodeId;
         use std::collections::HashMap;
         let mesh = Mesh {
