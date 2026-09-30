@@ -21,7 +21,7 @@
 //! one and the walk did not select it".
 //!
 //! ```text
-//! cargo run -p sovereign-cli-llm --features corpus-engine/treesitter \
+//! cargo run -p sovereign-pipeline \
 //!   --example coverage_layers_probe -- chaos-secret-agent "With what kind of weapon does Winnie kill Adolf Verloc?"
 //! ```
 
@@ -29,7 +29,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use oicp_client::SplitInferenceProvider;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::traits::InferenceProvider;
 
 fn cosine(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
@@ -72,11 +72,12 @@ async fn main() {
         embed_model.clone(),
         embed_model.clone(),
         8192,
-        sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(&embed_model),
+        sovereign_contracts::models_manifest::DEFAULT_MANIFEST
+            .embed_query_instruction(&embed_model),
     ));
 
     let dotsov = sovereign_contracts::rebrand::svrnmesh_root();
-    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
+    let embed_fn = corpus_index::embed_fn::inference_to_embed_fn(Arc::clone(&inference));
     let engine = Arc::new(
         corpus_engine::CorpusEngine::new(dotsov.join("recipes"), dotsov.join("indexes"), embed_fn)
             .with_embedding_model(&embed_model),
