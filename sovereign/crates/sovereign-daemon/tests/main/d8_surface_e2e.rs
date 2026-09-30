@@ -1008,7 +1008,15 @@ async fn recipe_project_save_toml_refuses_a_broken_recipe_and_writes_nothing() {
     let home = tempfile::tempdir().expect("tempdir");
     let _guard = HomeGuard::set(home.path());
 
-    let fx = fixture::daemon_with_stores(true);
+    // The parse is ingest's (`IngestPort::validate_recipe_toml`); its verdict
+    // on this text is proven on the engine. Here the port refuses it.
+    let fx = fixture::daemon_with_stores_over(true, |double| {
+        double.on_validate_recipe_toml(|_| {
+            Err(corpus_index::Error::Recipe(
+                "expected `=`, found newline".to_string(),
+            ))
+        })
+    });
     let addr = spawn_router(recipe_project_router(Arc::clone(&fx.daemon))).await;
     let http = reqwest::Client::new();
 
@@ -1084,6 +1092,10 @@ async fn recipe_project_save_toml_refuses_a_broken_recipe_and_writes_nothing() {
     assert!(
         report["errors"].as_array().map(Vec::len).unwrap_or(0) > 0,
         "a failing parse always ships at least one message: {report}"
+    );
+    assert!(
+        fx.engine.calls().contains(&"validate_recipe_toml"),
+        "the verdict is ingest's, asked through its port"
     );
 
     let after = std::fs::read_to_string(recipes.join("recipe.toml")).expect("artifact readable");

@@ -76,6 +76,8 @@ pub struct IngestPortDouble {
     recipe_vocabulary: Option<Box<RecipeVocabularyFn>>,
     corpus_status_rows: Option<serde_json::Value>,
     recipe_corpus_id: Option<Box<daemon::RecipeTextFn<String>>>,
+    validate_recipe_toml:
+        Option<Box<daemon::RecipeTextFn<crate::ingest_port::daemon::RecipeValidation>>>,
     install_local_recipe: Option<Box<daemon::RecipeTextFn<PathBuf>>>,
     recipe_parameter_schema: Option<Box<daemon::RecipeTextFn<RecipeParameterSchema>>>,
     dry_run_recipe: Option<Box<daemon::DryRunFn>>,

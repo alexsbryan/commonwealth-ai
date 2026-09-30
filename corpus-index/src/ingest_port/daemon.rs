@@ -183,6 +183,19 @@ pub struct RegistryListing {
     pub toml_url: String,
 }
 
+/// A recipe's offline validation: the pass `svrn recipe validate` runs.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RecipeValidation {
+    /// Blocking problems; empty means the recipe is valid.
+    pub errors: Vec<String>,
+    /// Non-blocking problems.
+    pub warnings: Vec<String>,
+    /// What the recipe will do that the author may want to override.
+    pub notes: Vec<String>,
+    /// The recipe's enrichment produces atoms.
+    pub enrichment_ready: bool,
+}
+
 /// The prose terms a recipe's custom ontology declares.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RecipeVocabulary {
@@ -361,6 +374,8 @@ pub trait IngestPort: LocalCorpusPort + CatalogIngestPort + PartitionMergePort {
     fn registry_listing(&self, id: &str) -> Option<RegistryListing>;
     /// The `[corpus] id` of a recipe TOML; `Err` when it does not parse.
     fn recipe_corpus_id(&self, toml_text: &str) -> Result<String>;
+    /// Validate a recipe TOML offline; `Err` when it does not parse.
+    fn validate_recipe_toml(&self, toml_text: &str) -> Result<RecipeValidation>;
     /// Install a recipe TOML into the local registry; its path.
     fn install_local_recipe(&self, toml_text: &str) -> Result<PathBuf>;
     /// Registry recipe `corpus_id`'s declared `[parameters]`.

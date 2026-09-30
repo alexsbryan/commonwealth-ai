@@ -185,6 +185,47 @@ async fn an_installed_recipe_lands_verbatim_and_its_parameters_read_back() {
     );
 }
 
+/// d8_surface's recipe-project routes judge an artifact through
+/// `validate_recipe_toml` (pb-ingest-dial-daemon): its verdict is the
+/// offline pass `svrn recipe validate` runs, and a text that does not parse
+/// is an `Err` carrying the parser's message.
+#[test]
+fn a_recipe_validated_through_the_port_is_the_offline_pass() {
+    let tmp = tempfile::tempdir().unwrap();
+    let engine = engine_at(tmp.path());
+
+    let recipe = corpus_engine::Recipe::from_toml(RECIPE_TOML).unwrap();
+    let offline = corpus_engine::testing::validate_recipe_offline(&recipe);
+    let v = port(&engine).validate_recipe_toml(RECIPE_TOML).unwrap();
+    assert_eq!(v.errors, offline.errors);
+    assert_eq!(v.warnings, offline.warnings);
+    assert_eq!(v.notes, offline.notes);
+    assert_eq!(v.enrichment_ready, recipe.produces_enriched_atoms());
+
+    // A recipe that parses and still fails: the verdict is the pass's, not
+    // the parser's.
+    let nameless = RECIPE_TOML
+        .replace("name = \"Author test\"", "name = \"\"")
+        .replace("license = \"Public Domain\"", "license = \"\"");
+    let v = port(&engine).validate_recipe_toml(&nameless).unwrap();
+    assert_eq!(v.errors, vec!["`corpus.name` is required but missing"]);
+    assert!(
+        v.warnings
+            .iter()
+            .any(|w| w.starts_with("`corpus.license` is empty")),
+        "the license warning crosses too: {:?}",
+        v.warnings
+    );
+
+    let broken = port(&engine)
+        .validate_recipe_toml("this is not toml = = =")
+        .expect_err("a text that does not parse has no verdict");
+    assert!(
+        !broken.to_string().is_empty(),
+        "the parse error carries the parser's message"
+    );
+}
+
 /// recipe_surface's `local_recipe`: a local-file acquirer, so a sampled run
 /// acquires, extracts and chunks with no network.
 fn local_recipe(source: &Path, name: &str) -> String {

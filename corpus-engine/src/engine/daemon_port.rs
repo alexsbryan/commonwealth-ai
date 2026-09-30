@@ -14,8 +14,8 @@ use corpus_index::index::CorpusIndex;
 use corpus_index::ingest_port::cancel::CancellationRegistry;
 use corpus_index::ingest_port::daemon::{
     ArticleStats, CorpusDiskStatus, IndexOpener, IngestPort, IngestResult, InstallRefusal,
-    NewsworthyHostFactory, PreparedInstall, RecipeSharing, RecipeVocabulary, RegistryListing,
-    SourceFileRecord,
+    NewsworthyHostFactory, PreparedInstall, RecipeSharing, RecipeValidation, RecipeVocabulary,
+    RegistryListing, SourceFileRecord,
 };
 use corpus_index::ingest_port::ProgressCallback;
 use oicp_types::{RecipeStageReport, RecipeTestReport};
@@ -573,6 +573,17 @@ impl IngestPort for CorpusEngine {
 
     fn recipe_corpus_id(&self, toml_text: &str) -> crate::error::Result<String> {
         Recipe::from_toml(toml_text).map(|r| r.corpus.id)
+    }
+
+    fn validate_recipe_toml(&self, toml_text: &str) -> crate::error::Result<RecipeValidation> {
+        let recipe = Recipe::from_toml(toml_text)?;
+        let v = crate::testing::validate_recipe_offline(&recipe);
+        Ok(RecipeValidation {
+            errors: v.errors,
+            warnings: v.warnings,
+            notes: v.notes,
+            enrichment_ready: recipe.produces_enriched_atoms(),
+        })
     }
 
     fn install_local_recipe(&self, toml_text: &str) -> crate::error::Result<PathBuf> {

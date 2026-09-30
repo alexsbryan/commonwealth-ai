@@ -3,9 +3,8 @@
 //!
 //! Its production source names `corpus_engine` only where it BUILDS the engine
 //! and the implementors it hands out, which are the construction sites
-//! pb-ingest-dial-daemon moves to the stock binary, and at two sites other rows
-//! own. Every executing site reaches ingest through `IngestPort`, `AtlasPort` or
-//! `RecipeHarnessPort`. A test rather than a comment (ARCH principle 10): put an
+//! pb-ingest-dial-daemon moves to the stock binary. Every executing site
+//! reaches ingest through `IngestPort`, `AtlasPort` or `RecipeHarnessPort`. A test rather than a comment (ARCH principle 10): put an
 //! engine call back in an executing file and this goes red naming the line.
 //!
 //! Test code is exempt: files named `tests.rs` / `*_tests.rs` are not read, and
@@ -28,10 +27,9 @@ const CONSTRUCTION: &[(&str, &str)] = &[
 ];
 
 /// Files that name the engine for a reason another row owns.
-const OWNED_ELSEWHERE: &[(&str, &str)] = &[(
-    "recipe_project_http.rs",
-    "pb-ingest-rehome: the recipe-project routes reach the store through ingest's port",
-)];
+/// Empty since pb-ingest-dial-daemon: the recipe parse went to
+/// `IngestPort::validate_recipe_toml`.
+const OWNED_ELSEWHERE: &[(&str, &str)] = &[];
 
 /// The implementor value any file may still spell: ingest's atlas, handed to
 /// the atlas family's port. pb-ingest-dial-daemon threads it from the host.

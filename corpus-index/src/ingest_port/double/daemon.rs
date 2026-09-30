@@ -20,7 +20,7 @@ use crate::ingest_port::cancel::CancellationRegistry;
 use crate::ingest_port::daemon::{
     ArticleStats, CorpusDiskStatus, HarnessRunCardView, IndexOpener, IngestPort, IngestResult,
     InstallRefusal, NewsworthyHostFactory, PreparedInstall, RecipeHarnessPort, RecipeSharing,
-    RecipeVocabulary, RegistryListing, SourceFileRecord,
+    RecipeValidation, RecipeVocabulary, RegistryListing, SourceFileRecord,
 };
 use crate::ingest_port::ProgressCallback;
 use crate::Result;
@@ -67,6 +67,15 @@ impl IngestPortDouble {
         f: impl Fn(&str) -> Result<String> + Send + Sync + 'static,
     ) -> Self {
         self.recipe_corpus_id = Some(Box::new(f));
+        self
+    }
+
+    /// Program `validate_recipe_toml`; `f` gets the recipe's TOML text.
+    pub fn on_validate_recipe_toml(
+        mut self,
+        f: impl Fn(&str) -> Result<RecipeValidation> + Send + Sync + 'static,
+    ) -> Self {
+        self.validate_recipe_toml = Some(Box::new(f));
         self
     }
 
@@ -425,6 +434,14 @@ impl IngestPort for IngestPortDouble {
         match &self.recipe_corpus_id {
             Some(f) => f(toml_text),
             None => Err(refuse("recipe_corpus_id")),
+        }
+    }
+
+    fn validate_recipe_toml(&self, toml_text: &str) -> Result<RecipeValidation> {
+        self.record("validate_recipe_toml");
+        match &self.validate_recipe_toml {
+            Some(f) => f(toml_text),
+            None => Err(refuse("validate_recipe_toml")),
         }
     }
 

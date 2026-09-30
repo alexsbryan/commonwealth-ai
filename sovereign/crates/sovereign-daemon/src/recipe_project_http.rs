@@ -33,7 +33,7 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::Recipe;
+use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_contracts::recipe::notes::{Note, NoteScope, RecipeNotes, ScopeFilter};
 use sovereign_tools::recipe_author::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use sovereign_tools::recipe_author::{
@@ -50,6 +50,13 @@ use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 const WORKFLOW_UNJUDGED: &str =
     "this host does not link the workflow parser (sovereign-mesh takes no studio workflow dep — \
      sv-surface rung 5), so a workflow artifact's TOML is not judged here. No verdict is inferred.";
+
+/// Why a recipe's TOML carries no verdict from this host: the recipe parser
+/// is ingest's, reached through its port, and no ingest program is composed
+/// in this process (pb-ingest-dial-daemon).
+const INGEST_UNJUDGED: &str =
+    "no ingest program is composed in this process, and the recipe parser is ingest's, so a \
+     recipe artifact's TOML is not judged here. No verdict is inferred.";
 
 // ─── Wire types ────────────────────────────────────────────────
 
@@ -338,7 +345,11 @@ async fn dashboard_state(
     };
 
     let (validation, validation_unavailable) =
-        validate_artifact_toml(summary.artifact_kind, recipe_toml.as_deref());
+        validate_artifact_toml(
+            daemon.corpus_engine().map(|e| e.as_ref()),
+            summary.artifact_kind,
+            recipe_toml.as_deref(),
+        );
 
     tracing::debug!(
         %feature_id,
@@ -402,7 +413,11 @@ async fn save_edited_toml(
         )));
     };
 
-    let (report, unavailable) = validate_artifact_toml(kind, Some(&body.edited_toml));
+    let (report, unavailable) = validate_artifact_toml(
+        daemon.corpus_engine().map(|e| e.as_ref()),
+        kind,
+        Some(&body.edited_toml),
+    );
     let Some(report) = report else {
         return Err(Absence::unsupported(
             unavailable.unwrap_or_else(|| WORKFLOW_UNJUDGED.to_string()),
@@ -560,7 +575,11 @@ async fn prelude(
                         path.display(),
                         toml.trim_end(),
                     ),
-                    inline_validate(summary.artifact_kind, &toml),
+                    inline_validate(
+                        daemon.corpus_engine().map(|e| e.as_ref()),
+                        summary.artifact_kind,
+                        &toml,
+                    ),
                 ),
                 Err(e) => (
                     format!(
@@ -603,6 +622,7 @@ async fn prelude(
 /// pill over a recipe that cannot extract what it declares is a false
 /// verdict.
 fn validate_artifact_toml(
+    ingest: Option<&dyn IngestPort>,
     kind: ArtifactKind,
     artifact_toml: Option<&str>,
 ) -> (Option<RecipeValidationReport>, Option<String>) {
@@ -612,22 +632,23 @@ fn validate_artifact_toml(
         return (Some(validation_nothing_drafted()), None);
     };
     match kind {
-        ArtifactKind::Recipe => match Recipe::from_toml(toml_str) {
-            Ok(recipe) => {
-                let v = corpus_engine::testing::validate_recipe_offline(&recipe);
-                (
-                    Some(RecipeValidationReport {
-                        ok: v.errors.is_empty(),
-                        errors: v.errors,
-                        no_recipe: false,
-                        enrichment_ready: recipe.produces_enriched_atoms(),
-                        warnings: v.warnings,
-                        notes: v.notes,
-                    }),
-                    None,
-                )
+        ArtifactKind::Recipe => match ingest.map(|port| port.validate_recipe_toml(toml_str)) {
+            None => {
+                tracing::debug!("recipe_project_http: recipe unjudged, no ingest program");
+                (None, Some(INGEST_UNJUDGED.to_string()))
             }
-            Err(e) => (
+            Some(Ok(v)) => (
+                Some(RecipeValidationReport {
+                    ok: v.errors.is_empty(),
+                    errors: v.errors,
+                    no_recipe: false,
+                    enrichment_ready: v.enrichment_ready,
+                    warnings: v.warnings,
+                    notes: v.notes,
+                }),
+                None,
+            ),
+            Some(Err(e)) => (
                 Some(validation_failed(split_parse_errors(&e.to_string()))),
                 None,
             ),
@@ -642,11 +663,11 @@ fn validate_artifact_toml(
 /// a paragraph about the host's crate graph is not project state. The
 /// dashboard is where the unjudged fact is reported to a caller that can
 /// act on it.
-fn inline_validate(kind: ArtifactKind, toml: &str) -> String {
+fn inline_validate(ingest: Option<&dyn IngestPort>, kind: ArtifactKind, toml: &str) -> String {
     match kind {
-        ArtifactKind::Recipe => match Recipe::from_toml(toml) {
-            Ok(_) => String::new(),
-            Err(e) => format!("\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n"),
+        ArtifactKind::Recipe => match ingest.map(|port| port.validate_recipe_toml(toml)) {
+            None | Some(Ok(_)) => String::new(),
+            Some(Err(e)) => format!("\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n"),
         },
         ArtifactKind::Workflow => String::new(),
     }
