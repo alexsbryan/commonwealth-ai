@@ -1242,7 +1242,8 @@ serves the daemon's membership doors (`/v1/mesh/{create,join,join/preview,rotate
 `<data-dir>/meshes/<id>/`), listed as `meshes` on its status. Since phase-b pb-rails-origins its acceptor holds no arm per
 protocol: `/v1/mesh/origins` registers any program's loopback origin (an ALPN, or `cwth/http/0` path
 prefixes) in commonwealth-media's `OriginRegistry`, from which the acceptor table, the advertised ALPNs
-and the gossiped capabilities are all read; each registration is handed a tie (`X-Mesh-Tie`) its origin
+and the gossiped capabilities are all read (a renew carrying `claims` replaces its registration's
+declaration, pb-mesh-exit-transport-claims); each registration is handed a tie (`X-Mesh-Tie`) its origin
 checks with `tied_pubkey`, and an unregistered ALPN or prefix is refused by name. svrn registers its peer
 routes there (`sovereign-daemon/src/peer_origin.rs`), and its internal resolver believes a forward carrying
 that registration's live tie as it believes its own acceptor's mark. Outbound (pb-rails-reach),
