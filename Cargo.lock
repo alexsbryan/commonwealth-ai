@@ -12716,6 +12716,7 @@ dependencies = [
  "kernel-types",
  "libc",
  "mesh-join-vocab",
+ "mesh-reach",
  "oicp-client",
  "oicp-types",
  "oplog",

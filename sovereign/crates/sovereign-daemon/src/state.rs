@@ -583,7 +583,7 @@ impl AppState {
     /// Snapshot of the active [`PeerTransport`]. Cheap (one atomic load
     /// + Arc clone); call per dial, don't cache across awaits — the
     /// watchdog may publish a new one.
-    pub fn peer_transport(&self) -> Arc<dyn commonwealth_transport::PeerTransport> {
+    pub fn peer_transport(&self) -> Arc<dyn mesh_reach::PeerTransport> {
         self.inner.fabric.peer_transport.current()
     }
 
@@ -598,7 +598,7 @@ impl AppState {
     /// (`sovereign_contracts::membership`, pb-mesh-exit-core). Every roster
     /// read in a route or loop goes through here, so the flip re-points one
     /// reader; `tests/main/membership_port.rs` fails on a direct read.
-    pub fn membership(&self) -> &dyn MembershipReader<Dial = commonwealth_transport::PeerContact> {
+    pub fn membership(&self) -> &dyn MembershipReader<Dial = mesh_reach::PeerContact> {
         self.inner.fabric.membership.as_ref()
     }
 

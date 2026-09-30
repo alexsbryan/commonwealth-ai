@@ -894,7 +894,7 @@ pub async fn corpus_collaborate(
             let endpoints = transport
                 .endpoints(
                     &peer.dial,
-                    commonwealth_transport::TrafficClass::ControlPlane,
+                    mesh_reach::TrafficClass::ControlPlane,
                 )
                 .await;
             if endpoints.is_empty() {

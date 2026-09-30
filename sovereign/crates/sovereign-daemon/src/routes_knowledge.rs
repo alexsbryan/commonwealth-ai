@@ -266,7 +266,7 @@ pub async fn knowledge_search(
     // future refinement once the merge-dedupe is proven.
     let mut fanout_jobs: HashMap<
         NodeId,
-        (String, commonwealth_transport::PeerContact, Vec<String>),
+        (String, mesh_reach::PeerContact, Vec<String>),
     > = HashMap::new();
     for offering in &peer_offerings {
         let relevant: Vec<String> = offering
@@ -417,7 +417,7 @@ pub async fn knowledge_search(
 struct PeerOffering {
     node_id: NodeId,
     node_name: String,
-    contact: commonwealth_transport::PeerContact,
+    contact: mesh_reach::PeerContact,
     corpora: Vec<String>,
 }
 
@@ -449,7 +449,7 @@ struct PeerServed {
 #[allow(clippy::too_many_arguments)]
 async fn fanout_one_peer(
     http: reqwest::Client,
-    transport: std::sync::Arc<dyn commonwealth_transport::PeerTransport>,
+    transport: std::sync::Arc<dyn mesh_reach::PeerTransport>,
     requester_id: NodeId,
     target: crate::fanout::FanoutTarget,
     corpora: Vec<String>,
@@ -484,7 +484,7 @@ async fn fanout_one_peer(
         &transport,
         node_id,
         &target.contact,
-        commonwealth_transport::TrafficClass::KnowledgeSearch,
+        mesh_reach::TrafficClass::KnowledgeSearch,
         |ep| {
             let http = http.clone();
             let body = &body;
@@ -614,7 +614,7 @@ fn build_response(
 /// A member is fan-out-worthy if we think they can answer us. We're
 /// permissive with `Busy` (a node serving inference still answers
 /// knowledge search cheaply) and strict with `Offline`.
-fn is_queryable(m: &MembershipEntry<commonwealth_transport::PeerContact>) -> bool {
+fn is_queryable(m: &MembershipEntry<mesh_reach::PeerContact>) -> bool {
     // `is_dialable` accepts an iroh-only peer (pubkey + relay/direct,
     // no gossiped IP — the no-VPN case); the seam still decides the
     // KnowledgeSearch route per dial.

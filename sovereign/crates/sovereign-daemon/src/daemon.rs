@@ -398,9 +398,9 @@ enum DaemonState {
 pub(crate) fn install_iroh_access(
     app_state: &AppState,
     access: &sovereign_mesh::iroh_access::MeshIrohAccess,
-    iroh_routed_classes: &[commonwealth_transport::TrafficClass],
-    iroh_required_classes: &std::collections::HashSet<commonwealth_transport::TrafficClass>,
-    ip_transport: &Arc<dyn commonwealth_transport::PeerTransport>,
+    iroh_routed_classes: &[mesh_reach::TrafficClass],
+    iroh_required_classes: &std::collections::HashSet<mesh_reach::TrafficClass>,
+    ip_transport: &Arc<dyn mesh_reach::PeerTransport>,
     require_encryption: bool,
 ) {
     app_state
@@ -408,7 +408,7 @@ pub(crate) fn install_iroh_access(
         .publish(access.dial_info_provider());
     app_state.set_rpc_iroh_accept(access.rpc_route_active());
     if !iroh_routed_classes.is_empty() {
-        let iroh_t: Arc<dyn commonwealth_transport::PeerTransport> =
+        let iroh_t: Arc<dyn mesh_reach::PeerTransport> =
             Arc::new(access.client_transport());
         let mut per_class = std::collections::HashMap::new();
         for class in iroh_routed_classes {
@@ -2035,7 +2035,7 @@ impl EmbeddedDaemon {
         // match", measured live 2026-09-23), which reads as a working link and
         // costs whoever tries it. Serve NOTHING and say why: the share surface
         // already hides the card on `None` and prompts a rotate.
-        if commonwealth_discovery::membership::hash_join_key(&key) != invite_key_hash {
+        if mesh_join_vocab::join_key::hash_join_key(&key) != invite_key_hash {
             // One warn per process: a status poll repeats, and the divergence
             // does not change until a rotate.
             static WARNED: std::sync::atomic::AtomicBool =
@@ -2409,7 +2409,7 @@ impl EmbeddedDaemon {
         let mut endpoints = Vec::with_capacity(members.len());
         for m in members {
             let base_urls: Vec<String> = transport
-                .endpoints(&m.dial, commonwealth_transport::TrafficClass::Inference)
+                .endpoints(&m.dial, mesh_reach::TrafficClass::Inference)
                 .await
                 .into_iter()
                 .map(|ep| format!("{}/v1", ep.base_url))
@@ -2575,7 +2575,7 @@ impl EmbeddedDaemon {
         // because W3 may PUBLISH a `RoutedTransport` over iroh later in this
         // fn (after the iroh endpoint binds), reusing THIS `IpTransport` as
         // the fallback default.
-        let ip_transport: Arc<dyn commonwealth_transport::PeerTransport> =
+        let ip_transport: Arc<dyn mesh_reach::PeerTransport> =
             Arc::new(commonwealth_transport::IpTransport::new(client_port));
         // This install's identity key and everything derived from it (key
         // beside node_id at `<data_dir>/node_key`; same unconditional
@@ -3905,12 +3905,12 @@ impl EmbeddedDaemon {
         // with no required classes (prefer-iroh, fall back to IP per
         // dial); `[iroh.transport] <class> = "ip"` opts a class out.
         let (iroh_routed_classes, iroh_required_classes): (
-            Vec<commonwealth_transport::TrafficClass>,
-            std::collections::HashSet<commonwealth_transport::TrafficClass>,
+            Vec<mesh_reach::TrafficClass>,
+            std::collections::HashSet<mesh_reach::TrafficClass>,
         ) = if require_encryption {
             (
-                commonwealth_transport::TrafficClass::ALL.to_vec(),
-                commonwealth_transport::TrafficClass::ALL
+                mesh_reach::TrafficClass::ALL.to_vec(),
+                mesh_reach::TrafficClass::ALL
                     .into_iter()
                     .collect(),
             )

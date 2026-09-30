@@ -211,7 +211,7 @@ pub mod yield_hook;
 
 // The shims sovereign-api's lib.rs carried, re-homed here so the moved
 // modules' `crate::<name>` paths keep resolving.
-pub use commonwealth_transport::fanout;
+pub use mesh_reach::fanout;
 pub use oicp_types::openai_types;
 pub use oicp_types::responses_types;
 pub use sovereign_core::answering::turn_fidelity;

@@ -20,6 +20,7 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
 # Join-key hash + format check (fp-9): the pure leaf, not the bootstrap crate.
 mesh-join-vocab = { workspace = true }
+mesh-reach = { workspace = true, features = ["fanout"] }
 commonwealth-media = { path = "../../../commonwealth/crates/commonwealth-media" }
 # The rail's VOCABULARY only (fp-54): the journals live at the serving
 # process, so the daemon names the shared leaf's types (Op, Roster,

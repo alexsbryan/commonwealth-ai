@@ -351,7 +351,7 @@ async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<N
         let endpoints = transport
             .endpoints(
                 &peer.dial,
-                commonwealth_transport::TrafficClass::ControlPlane,
+                mesh_reach::TrafficClass::ControlPlane,
             )
             .await;
         let handle = tokio::spawn(async move {
@@ -381,7 +381,7 @@ async fn ask_peer(
     body: &serde_json::Value,
     node: &str,
     name: Option<String>,
-    endpoints: &[commonwealth_transport::PeerEndpoint],
+    endpoints: &[mesh_reach::PeerEndpoint],
     // This node's proof of mesh membership, or `None` on a mesh with no
     // credential. On a plain-IP hop it is the only thing that tells the
     // peer's internal port a member is calling rather than a stranger.

@@ -204,7 +204,7 @@ async fn push_ephemeral(state: &AppState, namespace: &str, payload: &str) -> Vec
         let endpoints = transport
             .endpoints(
                 &peer.dial,
-                commonwealth_transport::TrafficClass::ControlPlane,
+                mesh_reach::TrafficClass::ControlPlane,
             )
             .await;
         handles.push(tokio::spawn(async move {
@@ -232,7 +232,7 @@ async fn offer_peer(
     envelope: &str,
     node: String,
     name: Option<String>,
-    endpoints: &[commonwealth_transport::PeerEndpoint],
+    endpoints: &[mesh_reach::PeerEndpoint],
     // This node's proof of mesh membership, or `None` on a mesh with no
     // credential — see `mesh_proof_outbound`.
     stamp: Option<&commonwealth_transport::mesh_proof::MeshProofStamp>,

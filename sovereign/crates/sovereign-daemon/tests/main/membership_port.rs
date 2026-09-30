@@ -18,7 +18,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use commonwealth_transport::PeerContact;
+use mesh_reach::PeerContact;
 use kernel_types::NodeId;
 use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use oicp_types::knowledge::CorpusShardInfo;
