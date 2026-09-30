@@ -13268,6 +13268,7 @@ dependencies = [
  "sovereign-code",
  "sovereign-contracts",
  "sovereign-daemon",
+ "sovereign-enrichment-build",
  "sovereign-enrichment-catalog",
  "sovereign-mesh",
  "sovereign-serve",

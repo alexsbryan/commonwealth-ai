@@ -11,7 +11,6 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 
-use corpus_engine::enrichment::tiered::run_folder_tiered_enrichment;
 use corpus_index::index::EnrichmentChunkRow;
 use corpus_index::ingest_port::tiered::{
     ChunkEntityExtractor, ChunkEntityExtractorHandle, ChunkNerOutcome, ConvBucket,
@@ -623,11 +622,12 @@ async fn build(
     });
 
     ledger.set_phase("enrichment");
-    let plan = run_folder_tiered_enrichment(
-        &corpus_id,
-        &index_path,
-        Some(&metered_provider),
-        entity_handle.as_ref(),
+    let run_folder_tiered = &crate::chat_cmd::ingest::calls()?.run_folder_tiered;
+    let documents_enriched = run_folder_tiered(
+        corpus_id.clone(),
+        index_path.clone(),
+        Some(metered_provider),
+        entity_handle,
     )
     .await
     .map_err(|e| format!("run_folder_tiered_enrichment '{corpus_id}': {e}"))?;
@@ -648,7 +648,7 @@ async fn build(
         motif_path,
         files_indexed: stats.files_indexed,
         chunks_written: stats.chunks_written,
-        documents_enriched: plan.total_conversations,
+        documents_enriched,
         entity_mentions,
         time_to_rag_ready_ms,
         time_to_enriched_ms,
@@ -686,8 +686,11 @@ async fn build_entity_extractor(
             // number is read against, and it must be answerable from
             // the report alone.
             let routed = format!("gliner {:?} ({model_id})", g.generation());
-            let base = corpus_engine::enrichment::chunk_ner::GlinerChunkExtractor::new(store, g)
-                .into_handle();
+            let calls = match crate::chat_cmd::ingest::calls() {
+                Ok(c) => c,
+                Err(e) => return (None, format!("unavailable ({e})")),
+            };
+            let base = (calls.gliner_chunk_extractor)(store, g);
             let metered: ChunkEntityExtractorHandle =
                 Arc::new(MeteredEntityExtractor { inner: base, obs });
             (Some(metered), routed)

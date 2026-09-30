@@ -32,6 +32,10 @@ sovereign-code = { workspace = true }
 # (`port::CatalogEnrichConfig`); svrn links no catalog
 # (pb-ingest-dial-tools-close).
 sovereign-enrichment-catalog = { workspace = true }
+# Ingest's enrichment client (`inference_client::DaemonInferenceClient`), the
+# completions `svrn awareness` makes through `process::IngestCalls`
+# (pb-cli-llm-ingest-move-remainder).
+sovereign-enrichment-build = { workspace = true }
 # The grammar registry code's editor door takes as an input
 # (`extractors::code::language_for_extension`, pb-meshapp-rest); code may not
 # name corpus-engine, so the distribution supplies it.

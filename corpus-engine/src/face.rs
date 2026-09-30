@@ -11,13 +11,15 @@
 //! engine, not two.
 
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 
 use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::IngestPort;
-use corpus_index::ingest_port::tiered::TieredEnrichmentProvider;
+use corpus_index::ingest_port::tiered::{
+    ChunkEntityExtractorHandle, TieredEnrichmentProvider, TieredProviderHandle,
+};
 use corpus_index::ingest_port::FolderTieredPort;
 use corpus_index::source::IndexSource;
 use corpus_index::types::{BatchEmbedFn, EmbedFn};
@@ -83,6 +85,34 @@ pub fn atlas() -> Arc<dyn AtlasPort> {
 /// Ingest's recipe-authoring seams, which need no engine.
 pub fn recipe_author() -> RecipeAuthorSeams {
     crate::recipe_tester::recipe_author_seams()
+}
+
+/// Ingest's per-chunk adapter over a served NER kind, writing `store`: the
+/// one [`compose`] wires, for a host that wraps its own (the vault build's
+/// meter).
+pub fn gliner_chunk_extractor(
+    store: Arc<dyn ChunkEntityStore>,
+    ner: Arc<dyn LabeledEntityExtractor>,
+) -> ChunkEntityExtractorHandle {
+    crate::enrichment::chunk_ner::GlinerChunkExtractor::new(store, ner).into_handle()
+}
+
+/// Folder tiered enrichment of `corpus_id` at `index_path` through the
+/// host's provider and entity extractor; the documents enriched.
+pub async fn run_folder_tiered(
+    corpus_id: &str,
+    index_path: &Path,
+    provider: Option<TieredProviderHandle>,
+    extractor: Option<ChunkEntityExtractorHandle>,
+) -> crate::error::Result<usize> {
+    crate::enrichment::tiered::run_folder_tiered_enrichment(
+        corpus_id,
+        index_path,
+        provider.as_ref(),
+        extractor.as_ref(),
+    )
+    .await
+    .map(|plan| plan.total_conversations)
 }
 
 /// Build the single shared engine (it serves `/mcp` tools AND

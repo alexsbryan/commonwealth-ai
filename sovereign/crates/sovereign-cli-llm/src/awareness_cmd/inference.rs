@@ -386,7 +386,6 @@ fn dry_run_inference() -> InferenceFn {
 /// pipeline does, with no parallel model load (which would contend
 /// for GPU memory). The daemon must be running before the call.
 async fn real_inference(flags: &Parsed) -> Result<InferenceFn, String> {
-    use crate::enrich_cmd::inference_client::DaemonInferenceClient;
     use corpus_index::v1_models::{probe_daemon, resolve_default_models};
     use sovereign_cli_shared::urls::{v1_url, DEFAULT_CLIENT_PORT};
 
@@ -436,9 +435,9 @@ async fn real_inference(flags: &Parsed) -> Result<InferenceFn, String> {
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(4096);
 
-    let client = DaemonInferenceClient::new(base_url.clone(), chat_model.clone(), embed_model)
-        .map_err(|e| format!("build daemon client: {e}"))?
-        .with_max_output_tokens(max_output_tokens);
+    // Ingest's enrichment client, through the composition.
+    let daemon_chat = &crate::chat_cmd::ingest::calls()?.daemon_chat;
+    let client = daemon_chat(&base_url, &chat_model, &embed_model, max_output_tokens)?;
 
     eprintln!(
         "awareness inference: daemon at {base_url}, chat model = {chat_model}, \
@@ -446,7 +445,6 @@ async fn real_inference(flags: &Parsed) -> Result<InferenceFn, String> {
     );
 
     let verbose = flags.has("verbose");
-    let client = Arc::new(client);
     let f: InferenceFn = Arc::new(move |prompt: &ChatPrompt, max_tokens: Option<u32>| {
         let client = client.clone();
         let prompt = prompt.clone();
@@ -456,11 +454,9 @@ async fn real_inference(flags: &Parsed) -> Result<InferenceFn, String> {
                 eprintln!("{}", truncate_for_display(&prompt.user, 800));
                 eprintln!("───────────────────────────────────────────────────");
             }
-            let resp = match max_tokens {
-                Some(tokens) => client.complete_with_tokens(&prompt, tokens).await,
-                None => client.complete(&prompt).await,
-            }
-            .map_err(|e| corpus_index::error::Error::Extraction(e.to_string()))?;
+            let resp = client(&prompt, max_tokens)
+                .await
+                .map_err(|e| corpus_index::error::Error::Extraction(e.to_string()))?;
             if verbose {
                 eprintln!("─── awareness daemon response ─────────────────────");
                 eprintln!("{}", truncate_for_display(&resp, 4000));

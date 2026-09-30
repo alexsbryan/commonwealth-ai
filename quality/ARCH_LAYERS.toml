@@ -1537,7 +1537,7 @@ max_code_lines = 300
 [[distribution.face]]
 package = "svrn"
 krate = "sovereign-daemon"
-items = ["process::run", "process::HostedServe", "process::HostedParts", "process::RankPorts", "process::Ranked", "process::HostedCode", "process::CodeMount", "process::HostedIngest", "process::IngestMount", "EmbeddedDaemon", "mesh_http::set_shared_model_host"]
+items = ["process::run", "process::HostedServe", "process::HostedParts", "process::RankPorts", "process::Ranked", "process::HostedCode", "process::CodeMount", "process::HostedIngest", "process::IngestMount", "process::IngestCalls", "EmbeddedDaemon", "mesh_http::set_shared_model_host"]
 # svrn's LLM verbs, handed the same ingest composition as the daemon
 # (pb-cli-llm-ingest-move-compose): the `sovereign-cli-llm-stock` bin.
 [[distribution.face]]
@@ -1585,7 +1585,14 @@ items = ["port::CatalogEnrichConfig"]
 [[distribution.face]]
 package = "ingest"
 krate = "corpus-engine"
-items = ["extractors::code::language_for_extension", "face::compose", "face::IngestParts", "face::atlas", "face::recipe_author"]
+items = ["extractors::code::language_for_extension", "face::compose", "face::IngestParts", "face::atlas", "face::recipe_author", "face::run_folder_tiered", "face::gliner_chunk_extractor"]
+# Ingest's enrichment client, the completions svrn's awareness verb makes
+# through `process::IngestCalls` (pb-cli-llm-ingest-move-remainder): svrn
+# links no enrichment-build, so only a distribution can build it.
+[[distribution.face]]
+package = "ingest"
+krate = "sovereign-enrichment-build"
+items = ["inference_client::DaemonInferenceClient"]
 # Ingest's engine, built in the stock process for what svrn hands it
 # (`process::IngestHost`), and the authoring harness over it
 # (pb-ingest-dial-daemon): svrn links no corpus-engine.

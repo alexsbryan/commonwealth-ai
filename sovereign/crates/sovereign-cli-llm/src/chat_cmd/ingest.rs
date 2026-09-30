@@ -97,3 +97,16 @@ pub(crate) fn atlas() -> Result<Arc<dyn AtlasPort>, &'static str> {
         }
     }
 }
+
+/// Ingest's engine-free calls (the daemon chat client, the folder tiered run,
+/// the NER chunk adapter), or [`NO_INGEST`] when none is composed.
+pub(crate) fn calls() -> Result<&'static sovereign_daemon::hosted_ingest::IngestCalls, &'static str>
+{
+    match HOSTED.get() {
+        Some(hosted) => Ok(hosted.calls()),
+        None => {
+            tracing::debug!(target: "sovereign_cli_llm::ingest", "ingest calls absent: no ingest program composed");
+            Err(NO_INGEST)
+        }
+    }
+}

@@ -262,3 +262,61 @@ async fn no_extractor_injected_is_a_clean_skip_not_a_failure() {
 
     assert_eq!(provider.seen.lock().unwrap().len(), 1);
 }
+
+/// Records the corpora the folder run's delta pass is asked for.
+#[derive(Default)]
+struct DeltaRecorder {
+    corpora: Mutex<Vec<String>>,
+}
+
+#[async_trait::async_trait]
+impl ChunkEntityExtractor for DeltaRecorder {
+    async fn extract_for_conversation(
+        &self,
+        _corpus_id: &str,
+        _conv_uuid: &str,
+        _chunks: Vec<EnrichmentChunkRow>,
+    ) -> Result<ChunkNerOutcome> {
+        Ok(ChunkNerOutcome::default())
+    }
+
+    async fn extract_delta_for_corpus(
+        &self,
+        corpus_id: &str,
+        _index_path: &Path,
+    ) -> Result<ChunkNerOutcome> {
+        self.corpora.lock().unwrap().push(corpus_id.to_string());
+        Ok(ChunkNerOutcome::default())
+    }
+}
+
+/// The vault build's metered run (pb-cli-llm-ingest-move-remainder): ingest's
+/// face runs the folder build with the HOST's extractor, so a meter wrapped
+/// around it sees the NER pass, and returns the documents it grouped.
+#[tokio::test]
+async fn the_faces_folder_run_uses_the_hosts_extractor_and_counts_documents() {
+    let dir = tempfile::tempdir().unwrap();
+    let index_path = dir.path().join("index");
+    build_index(
+        &index_path,
+        &[
+            ("Ailsa asked about the ferry", "conv-a"),
+            ("and Rhona answered", "conv-a"),
+            ("Separate thread about the pier", "conv-b"),
+        ],
+    )
+    .await;
+
+    let extractor = Arc::new(DeltaRecorder::default());
+    let handle: ChunkEntityExtractorHandle = extractor.clone();
+    let documents =
+        corpus_engine::face::run_folder_tiered("threads", &index_path, None, Some(handle))
+            .await
+            .expect("folder run");
+
+    assert_eq!(documents, 2, "one document per source_doc group");
+    assert_eq!(
+        *extractor.corpora.lock().unwrap(),
+        vec!["threads".to_string()]
+    );
+}

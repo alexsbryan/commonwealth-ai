@@ -5,13 +5,42 @@
 //! builds ingest's engine one way.
 
 /// Ingest's enrichment-config port from ingest's catalog
-/// (pb-ingest-dial-tools-close), its atlas port, and the engine built by
-/// ingest's face for what svrn hands it (pb-ingest-dial-daemon).
+/// (pb-ingest-dial-tools-close), its atlas port, its engine-free calls
+/// (pb-cli-llm-ingest-move-remainder), and the engine built by ingest's face
+/// for what svrn hands it (pb-ingest-dial-daemon).
 pub fn hosted() -> sovereign_daemon::process::HostedIngest {
     sovereign_daemon::process::HostedIngest::new(
         std::sync::Arc::new(sovereign_enrichment_catalog::port::CatalogEnrichConfig),
         corpus_engine::face::atlas(),
         corpus_engine::face::recipe_author(),
+        sovereign_daemon::process::IngestCalls {
+            daemon_chat: Box::new(|base_url, chat_model, embed_model, max_output_tokens| {
+                sovereign_enrichment_build::inference_client::DaemonInferenceClient::new(
+                    base_url,
+                    chat_model,
+                    embed_model,
+                )
+                .map(|c| {
+                    c.with_max_output_tokens(max_output_tokens)
+                        .into_closures()
+                        .1
+                })
+                .map_err(|e| format!("build daemon client: {e}"))
+            }),
+            run_folder_tiered: Box::new(|corpus_id, index_path, provider, extractor| {
+                Box::pin(async move {
+                    corpus_engine::face::run_folder_tiered(
+                        &corpus_id,
+                        &index_path,
+                        provider,
+                        extractor,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())
+                })
+            }),
+            gliner_chunk_extractor: Box::new(corpus_engine::face::gliner_chunk_extractor),
+        },
         |host| {
             let face = corpus_engine::face::compose(corpus_engine::face::IngestParts {
                 data_dir: host.data_dir,

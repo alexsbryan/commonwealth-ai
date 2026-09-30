@@ -16,9 +16,14 @@ use std::sync::Arc;
 use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::{IngestPort, RecipeHarnessPort};
 use corpus_index::ingest_port::enrich_config::EnrichConfigPort;
-use corpus_index::ingest_port::tiered::TieredEnrichmentProvider;
+use corpus_index::ingest_port::tiered::{
+    ChunkEntityExtractorHandle, TieredEnrichmentProvider, TieredProviderHandle,
+};
 use corpus_index::ingest_port::FolderTieredPort;
+use corpus_index::prompt::InferenceFn;
 use corpus_index::source::IndexSource;
+use sovereign_contracts::daemon_wire::conv_tiered::ChunkEntityStore;
+use sovereign_contracts::ner::LabeledEntityExtractor;
 
 /// What svrn hands ingest to build the engine this process holds.
 pub struct IngestHost {
@@ -65,11 +70,44 @@ pub struct IngestMount {
 
 type Compose = Box<dyn Fn(IngestHost) -> IngestMount + Send + Sync>;
 
+/// Ingest's calls a svrn verb makes without an engine
+/// (pb-cli-llm-ingest-move-remainder): awareness's completions and the vault
+/// build's metered tiered run.
+pub struct IngestCalls {
+    /// Ingest's enrichment client over a daemon's chat route, as a completion
+    /// closure: `(base_url, chat_model, embed_model, max_output_tokens)`.
+    pub daemon_chat:
+        Box<dyn Fn(&str, &str, &str, u32) -> Result<InferenceFn, String> + Send + Sync>,
+    /// Ingest's folder tiered enrichment of `(corpus_id, index_path)` through
+    /// the caller's provider and entity extractor; the documents enriched.
+    #[allow(clippy::type_complexity)]
+    pub run_folder_tiered: Box<
+        dyn Fn(
+                String,
+                PathBuf,
+                Option<TieredProviderHandle>,
+                Option<ChunkEntityExtractorHandle>,
+            ) -> Pin<Box<dyn Future<Output = Result<usize, String>> + Send>>
+            + Send
+            + Sync,
+    >,
+    /// Ingest's per-chunk adapter over a served NER kind, writing `store`.
+    pub gliner_chunk_extractor: Box<
+        dyn Fn(
+                Arc<dyn ChunkEntityStore>,
+                Arc<dyn LabeledEntityExtractor>,
+            ) -> ChunkEntityExtractorHandle
+            + Send
+            + Sync,
+    >,
+}
+
 /// The distribution's composition of ingest.
 pub struct HostedIngest {
     enrich_config: Arc<dyn EnrichConfigPort>,
     atlas: Arc<dyn AtlasPort>,
     recipe_author: sovereign_contracts::recipe::testing::RecipeAuthorSeams,
+    calls: IngestCalls,
     compose: Compose,
 }
 
@@ -77,19 +115,22 @@ impl HostedIngest {
     /// `enrich_config` reads and writes corpora's enrichment configs;
     /// `atlas` is ingest's atlas port; `recipe_author` is the recipe
     /// tester, descriptor and registry snapshot a svrn verb authors
-    /// against without an engine; `compose` builds the engine for
+    /// against without an engine; `calls` are ingest's engine-free calls;
+    /// `compose` builds the engine for
     /// `IngestHost`, once per call: the CLI composes one engine per session
     /// and a metered one per vault build (pb-cli-llm-ingest-move-compose).
     pub fn new(
         enrich_config: Arc<dyn EnrichConfigPort>,
         atlas: Arc<dyn AtlasPort>,
         recipe_author: sovereign_contracts::recipe::testing::RecipeAuthorSeams,
+        calls: IngestCalls,
         compose: impl Fn(IngestHost) -> IngestMount + Send + Sync + 'static,
     ) -> Self {
         Self {
             enrich_config,
             atlas,
             recipe_author,
+            calls,
             compose: Box::new(compose),
         }
     }
@@ -109,6 +150,11 @@ impl HostedIngest {
     /// recipe agent's live trial authors against them without an engine).
     pub fn recipe_author(&self) -> sovereign_contracts::recipe::testing::RecipeAuthorSeams {
         self.recipe_author.clone()
+    }
+
+    /// Ingest's engine-free calls.
+    pub fn calls(&self) -> &IngestCalls {
+        &self.calls
     }
 
     /// Build the engine.
