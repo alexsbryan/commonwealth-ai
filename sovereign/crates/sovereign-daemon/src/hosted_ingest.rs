@@ -63,7 +63,7 @@ pub struct IngestMount {
     pub lazy_stamp: IngestChore,
 }
 
-type Compose = Box<dyn FnOnce(IngestHost) -> IngestMount + Send>;
+type Compose = Box<dyn Fn(IngestHost) -> IngestMount + Send + Sync>;
 
 /// The distribution's composition of ingest.
 pub struct HostedIngest {
@@ -75,11 +75,12 @@ pub struct HostedIngest {
 impl HostedIngest {
     /// `enrich_config` reads and writes corpora's enrichment configs;
     /// `atlas` is ingest's atlas port; `compose` builds the engine for
-    /// `IngestHost`.
+    /// `IngestHost`, once per call: the CLI composes one engine per session
+    /// and a metered one per vault build (pb-cli-llm-ingest-move-compose).
     pub fn new(
         enrich_config: Arc<dyn EnrichConfigPort>,
         atlas: Arc<dyn AtlasPort>,
-        compose: impl FnOnce(IngestHost) -> IngestMount + Send + 'static,
+        compose: impl Fn(IngestHost) -> IngestMount + Send + Sync + 'static,
     ) -> Self {
         Self {
             enrich_config,
@@ -100,7 +101,7 @@ impl HostedIngest {
     }
 
     /// Build the engine.
-    pub fn compose(self, host: IngestHost) -> IngestMount {
+    pub fn compose(&self, host: IngestHost) -> IngestMount {
         (self.compose)(host)
     }
 }
