@@ -208,32 +208,7 @@ fn read_meta_corpus_id(dir: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
-/// How many chunks a corpus holds, and WHICH field said so.
-///
-/// The source is returned with the number because the two fields do not
-/// mean the same thing: `enriched_chunks` is a count the enrichment pass
-/// wrote, `next_chunk_id` is the id allocator, and a corpus that was
-/// deduped or resumed can make the second disagree with reality. A caller
-/// that asserts on this number (`svrn quality lane chat-ask` does) must be
-/// able to say which field it read; before 2026-09-04 there was no such
-/// caller and `corpus status` simply printed `-` for every
-/// workflow-ingested corpus, because only the first field was consulted and
-/// the notebook workflow never writes it.
-///
-/// Lance is deliberately not opened — far too heavy for a status line.
-pub fn corpus_chunk_count(dir: &Path) -> Option<(usize, &'static str)> {
-    let meta: serde_json::Value = std::fs::read_to_string(Corpus::meta_in(dir))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())?;
-    if let Some(n) = meta.get("enriched_chunks").and_then(|n| n.as_u64()) {
-        return Some((n as usize, "enriched_chunks"));
-    }
-    // `next_chunk_id` is the NEXT id to hand out, so the count is one less.
-    meta.get("next_chunk_id")
-        .and_then(|n| n.as_u64())
-        .and_then(|n| n.checked_sub(1))
-        .map(|n| (n as usize, "next_chunk_id - 1"))
-}
+pub use corpus_index::corpus::corpus_chunk_count;
 
 fn read_corpus_status_row(corpus_id: &str, dir: &Path) -> CorpusStatusRow {
     // Chunks: one decider, see `corpus_chunk_count`.

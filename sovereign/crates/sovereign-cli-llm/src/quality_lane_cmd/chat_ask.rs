@@ -693,7 +693,7 @@ async fn ingest_row(
     }
 
     let state = sovereign_contracts::index_layout::inspect_corpus_index_state(corpus);
-    let chunks = corpus_engine::engine::status::corpus_chunk_count(
+    let chunks = corpus_index::corpus::corpus_chunk_count(
         &sovereign_contracts::index_layout::index_root(corpus),
     );
     let searchable = crate::corpus_cmd::search::search_titles(corpus, &bank.search_probe, 5).await;
