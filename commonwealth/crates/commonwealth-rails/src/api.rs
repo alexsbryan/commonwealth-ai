@@ -203,6 +203,10 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
                 serde_json::json!({
                     "name": m.name,
                     "node_id": m.node_id.to_string(),
+                    // The full id (`node_id` is the truncated display form),
+                    // for a roster reader to key on and name in a reach
+                    // query (pb-serve-distributes-standalone; additive).
+                    "node_id_hex": m.node_id.to_hex(),
                     "status": m.status,
                     // The catalogue's fact, read from the gossiped record
                     // rather than derived a second way here. `offers_media`
@@ -241,6 +245,7 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
     Json(serde_json::json!({
         "self": {
             "node_id": daemon.node.self_id.to_string(),
+            "node_id_hex": daemon.node.self_id.to_hex(),
             "name": daemon.node.config.name,
             "pubkey": hex::encode(daemon.node.pubkey().0),
             "dial": dial,

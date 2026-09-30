@@ -372,6 +372,20 @@ async fn a_registered_origin_is_reached_by_a_member_with_its_verified_identity()
                     .unwrap_or_default();
                 if anchor["rpc_port"] == 50052 && !direct.is_empty() {
                     assert_eq!(anchor["rpc_iroh"], true);
+                    // The member's full id, which a roster reader keys on
+                    // (`node_id` is the truncated display form), is the
+                    // founder's own (pb-serve-distributes-standalone).
+                    let founder: serde_json::Value = http
+                        .get(format!("http://127.0.0.1:{port_a}/v1/mesh/status"))
+                        .send()
+                        .await
+                        .unwrap()
+                        .json()
+                        .await
+                        .unwrap();
+                    let full = founder["self"]["node_id_hex"].as_str().unwrap_or_default();
+                    assert_eq!(full.len(), 32, "self.node_id_hex: {founder}");
+                    assert_eq!(row.as_ref().map(|r| r["node_id_hex"].clone()), Some(full.into()));
                     break;
                 }
                 assert!(
