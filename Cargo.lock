@@ -13178,6 +13178,7 @@ dependencies = [
  "futures",
  "host-kit",
  "kernel-types",
+ "mesh-reach",
  "oicp-types",
  "reqwest 0.12.28",
  "serde",

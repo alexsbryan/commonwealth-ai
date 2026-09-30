@@ -32,6 +32,9 @@ oicp-types = { workspace = true }
 kernel-types = { workspace = true }
 # cw-rails' base, through its one reader (`rails_kv::resolve_rails_base`).
 sovereign-turn-client = { workspace = true }
+# A standalone serve reaches peers only through cw-rails (`RailsTransport`),
+# and registers under the endpoint's protocol names (`alpn`).
+mesh-reach = { workspace = true, features = ["rails"] }
 serde = { workspace = true }
 sha2 = { workspace = true }
 # bench's record stamp (the wall-clock leaf).

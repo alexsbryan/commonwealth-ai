@@ -74,9 +74,11 @@ pub mod mesh_measurements;
 mod mesh_plan;
 /// The CLI's side of measurement travel: publish a run, read peers' runs.
 mod mesh_travel;
+pub mod rails_mesh;
 mod reload;
 /// A model named by URL: fetched header-only so `plan` can read its tensors.
 mod remote_gguf;
+mod rpc_warm;
 mod self_report;
 /// serve's own process body (`run` -> `standalone::serve`).
 mod standalone;
@@ -254,7 +256,7 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
 /// [`tracing_filter`] decides; a host takes the whole filter from there.
 pub const DEFAULT_FILTER: &str = "serve=info,sovereign_serve=info,sovereign_compute=info,\
      sovereign_inference=info,sovereign_serving_host=info,host_kit=info,served_kind=info,\
-     engine_factory=info,serving_assembly=info,compute_child=info";
+     engine_factory=info,serving_assembly=info,compute_child=info,rails_origins=info,transport=info";
 
 /// serve's log filter when `RUST_LOG` is unset, and the one a distribution
 /// hosting serve unions with its own: an allowlist of targets.
@@ -317,6 +319,8 @@ pub struct ServeAssembly {
     /// process starts once its mesh is up (pb-serve-distributes). A
     /// standalone serve drops it, as it did before.
     pub distribute: sovereign_serving_host::rpc_discovery::Distribute,
+    /// The files peers may fetch, where a worker's rpc-warm finds its model.
+    pub servable: sovereign_serving_host::state::ServableModelFilesReader,
 }
 
 /// serve's assembly, from its data root's lock to its last route: the lock,
@@ -391,7 +395,7 @@ pub async fn assemble(
     // serve's weights: the NER read and the download job, into this root.
     routes.push(sovereign_compute::assets::bundle(data_dir.join("models")));
     // Model transfer: peers fetch the files above, whole or by byte range.
-    routes.push(sovereign_compute::model_transfer::bundle(servable));
+    routes.push(sovereign_compute::model_transfer::bundle(servable.clone()));
     routes.push(reload::bundle(
         Arc::clone(&cell),
         parts.reload_factory,
@@ -406,6 +410,7 @@ pub async fn assemble(
             parts.llama,
             parts.distributed_primary,
         ),
+        servable,
     })
 }
 
