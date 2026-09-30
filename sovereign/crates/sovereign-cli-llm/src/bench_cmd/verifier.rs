@@ -11,17 +11,15 @@
 //! diagnostics on stderr.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use corpus_index::index::CorpusIndex;
-use oicp_client::RemoteApiProvider;
-use sovereign_contracts::traits::InferenceProvider;
-use sovereign_core::oicp::ShardingPrivacy;
-use sovereign_core::runtime::{extract_claim_list, value_present_in_chunks};
+use sovereign_contracts::probe::{AssessAnswer, AssessOp};
 use sovereign_eval::flywheel::det_checks::contains_ci;
 use sovereign_eval::flywheel::generators::adversarial as adv;
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
+
+use super::svrn_judge::SvrnJudge;
 
 const HELP: Help = Help {
     command: "svrn bench verifier",
@@ -33,7 +31,7 @@ const HELP: Help = Help {
         HelpSection::Subcommands(&[
             (
                 "extract-claims",
-                "Extract the factual-claim list from ONE (question, answer) pair with the SAME prompt, parser, and budget the longform grounding gate runs (sovereign_core::runtime::extract_claim_list). Reads {\"question\",\"answer\"} JSON from --input or stdin; writes {\"claims\":[..]} to stdout. NO_CLAIM / nothing checkable is an empty list with exit 0; an inference failure exits 1.",
+                "Extract the factual-claim list from ONE (question, answer) pair with the SAME prompt, parser, and budget the longform grounding gate runs (svrn's extract_claim_list, run by `svrn __probe judge`). Reads {\"question\",\"answer\"} JSON from --input or stdin; writes {\"claims\":[..]} to stdout. NO_CLAIM / nothing checkable is an empty list with exit 0; an inference failure exits 1.",
             ),
             (
                 "harvest",
@@ -74,10 +72,9 @@ pub async fn cmd_verifier(args: &[String]) -> i32 {
 /// length limits or shell-quoting hazards (same rationale as score-answer).
 async fn extract_claims(rest: &[String]) -> i32 {
     let mut input: Option<PathBuf> = None;
-    let mut model = sovereign_core::role::default_profile_for(sovereign_core::role::Role::Critic)
-        .preferred_tier
-        .model_stem()
-        .to_string();
+    // `None` = svrn's Critic profile's model, the role the gate routes
+    // extraction under; svrn's probe resolves it.
+    let mut model: Option<String> = None;
     let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut max_claims: usize = 10;
 
@@ -97,7 +94,7 @@ async fn extract_claims(rest: &[String]) -> i32 {
     while i < rest.len() {
         match rest[i].as_str() {
             "--input" => input = Some(PathBuf::from(val!("--input"))),
-            "--model" => model = val!("--model"),
+            "--model" => model = Some(val!("--model")),
             "--base-url" => base_url = val!("--base-url"),
             "--max-claims" => match val!("--max-claims").parse::<usize>() {
                 Ok(n) if n > 0 => max_claims = n,
@@ -159,25 +156,22 @@ async fn extract_claims(rest: &[String]) -> i32 {
         return 2;
     }
 
-    let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
-    let provider: Arc<dyn InferenceProvider> =
-        Arc::new(RemoteApiProvider::new(&v1, None, &model, PROVIDER_CTX));
-
-    match extract_claim_list(
-        &provider,
-        &question,
-        &answer,
-        max_claims,
-        ShardingPrivacy::LocalOnly,
-    )
-    .await
+    // The gate's extraction, run by svrn (`svrn __probe judge`, op ClaimList).
+    let svrn = SvrnJudge::new(&base_url, PROVIDER_CTX);
+    match svrn
+        .claim_list(model.as_deref(), &question, &answer, max_claims)
+        .await
     {
-        Some(claims) => {
+        Ok(Some(claims)) => {
             println!("{}", serde_json::json!({ "claims": claims }));
             0
         }
-        None => {
+        Ok(None) => {
             eprintln!("error: claim-list extraction failed (inference error) — see the daemon log");
+            1
+        }
+        Err(e) => {
+            eprintln!("error: svrn's probe could not run the extraction: {e}");
             1
         }
     }
@@ -190,10 +184,9 @@ async fn extract_claims(rest: &[String]) -> i32 {
 async fn harvest(rest: &[String]) -> i32 {
     let mut corpus: Option<String> = None;
     let mut out = PathBuf::from("claims.json");
-    let mut model = sovereign_core::role::default_profile_for(sovereign_core::role::Role::Critic)
-        .preferred_tier
-        .model_stem()
-        .to_string();
+    // `None` = svrn's Critic profile's model, the role the gate routes
+    // extraction under; svrn's probe resolves it.
+    let mut model: Option<String> = None;
     let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut max_claims: usize = 8;
     let mut window: usize = 2;
@@ -219,7 +212,7 @@ async fn harvest(rest: &[String]) -> i32 {
         match rest[i].as_str() {
             "--corpus" => corpus = Some(val!("--corpus")),
             "--out" => out = PathBuf::from(val!("--out")),
-            "--model" => model = val!("--model"),
+            "--model" => model = Some(val!("--model")),
             "--base-url" => base_url = val!("--base-url"),
             "--max-claims" => match val!("--max-claims").parse::<usize>() {
                 Ok(n) if n > 0 => max_claims = n,
@@ -306,9 +299,8 @@ async fn harvest(rest: &[String]) -> i32 {
         return 1;
     }
 
-    let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
-    let provider: Arc<dyn InferenceProvider> =
-        Arc::new(RemoteApiProvider::new(&v1, None, &model, PROVIDER_CTX));
+    // The gate's extraction, run by svrn (`svrn __probe judge`, op ClaimList).
+    let svrn = SvrnJudge::new(&base_url, PROVIDER_CTX);
 
     let total_windows = rows.len().div_ceil(window);
     if stride > 1 {
@@ -349,15 +341,13 @@ async fn harvest(rest: &[String]) -> i32 {
             .join("\n\n");
         let chunk_texts: Vec<String> = win.iter().map(|r| r.content.clone()).collect();
         let chunk_ids: Vec<String> = win.iter().map(|r| r.id.to_string()).collect();
-        match extract_claim_list(
-            &provider,
-            &question,
-            &answer,
-            max_claims,
-            ShardingPrivacy::LocalOnly,
-        )
-        .await
-        {
+        match svrn
+            .claim_list(model.as_deref(), &question, &answer, max_claims)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("[harvest] window {wi}: svrn's probe could not run: {e}");
+                None
+            }) {
             Some(claims) => {
                 for (ci, claim) in claims.into_iter().enumerate() {
                     items.push(adv::HarvestItem {
@@ -521,13 +511,20 @@ async fn export(rest: &[String]) -> i32 {
     }
 
     // The production checker gets the final word on every constructed label.
+    let production = match production_site_checks(&cases).await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("error: svrn's probe could not answer the production checks: {e}");
+            return 1;
+        }
+    };
     let mut failures = 0usize;
-    for c in &cases {
+    for (c, production) in cases.iter().zip(production) {
         if let Err(e) = adv::validate_site(c) {
             eprintln!("[export] SITE CONTRACT FAILURE: {e}");
             failures += 1;
         }
-        if let Err(e) = production_site_check(c) {
+        if let Err(e) = production {
             eprintln!("[export] PRODUCTION CHECK FAILURE: {e}");
             failures += 1;
         }
@@ -587,21 +584,111 @@ async fn export(rest: &[String]) -> i32 {
     0
 }
 
+/// [`production_site_check`] over every case, with svrn answering each
+/// `value_present_in_chunks` (`svrn __probe assess`, op ValuePresent) in
+/// batches. The checks run against what is known; the questions they asked
+/// that are not known yet go to svrn in one probe; repeat until nothing new is
+/// asked. The final pass uses svrn's answers only, so the batching cannot
+/// change a verdict. A pure check: no model is called, so the daemon need not
+/// be up.
+async fn production_site_checks(
+    cases: &[adv::StreamBCase],
+) -> Result<Vec<Result<(), String>>, String> {
+    let svrn = SvrnJudge::new(
+        &sovereign_contracts::setup_config::client_daemon_base(),
+        PROVIDER_CTX,
+    );
+    answered_checks(cases, |asked| {
+        let svrn = &svrn;
+        async move {
+            let ops = asked
+                .into_iter()
+                .map(|(value, chunks)| AssessOp::ValuePresent { value, chunks })
+                .collect();
+            svrn.assess(None, ops)
+                .await?
+                .rows
+                .into_iter()
+                .map(|row| match row {
+                    AssessAnswer::ValuePresent { present } => Ok(present),
+                    other => Err(format!(
+                        "the assess probe answered {other:?} to ValuePresent"
+                    )),
+                })
+                .collect()
+        }
+    })
+    .await
+}
+
+/// The batching loop of [`production_site_checks`], over any `answer` for a
+/// batch of `(value, chunks)` questions.
+async fn answered_checks<F, Fut>(
+    cases: &[adv::StreamBCase],
+    mut answer: F,
+) -> Result<Vec<Result<(), String>>, String>
+where
+    F: FnMut(Vec<(String, Vec<String>)>) -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<bool>, String>>,
+{
+    let mut known: std::collections::HashMap<(String, Vec<String>), bool> = Default::default();
+    loop {
+        let mut asked: Vec<(String, Vec<String>)> = Vec::new();
+        let results: Vec<Result<(), String>> = cases
+            .iter()
+            .map(|c| {
+                production_site_check(c, &mut |value, chunks| {
+                    let key = (value.to_string(), chunks.to_vec());
+                    match known.get(&key) {
+                        Some(present) => *present,
+                        None => {
+                            if !asked.contains(&key) {
+                                asked.push(key);
+                            }
+                            false
+                        }
+                    }
+                })
+            })
+            .collect();
+        if asked.is_empty() {
+            return Ok(results);
+        }
+        let answers = answer(asked.clone()).await?;
+        if answers.len() != asked.len() {
+            return Err(format!(
+                "{} answers to {} questions",
+                answers.len(),
+                asked.len()
+            ));
+        }
+        tracing::debug!(
+            asked = asked.len(),
+            "export: production checks answered by svrn"
+        );
+        known.extend(asked.into_iter().zip(answers));
+    }
+}
+
 /// Mirror of the flywheel's `validate_site`, but every value-presence check
 /// runs through the PRODUCTION `value_present_in_chunks` — the genuine
-/// article, not the port the pure crate generates against.
-fn production_site_check(c: &adv::StreamBCase) -> Result<(), String> {
+/// article, not the port the pure crate generates against. `present` is that
+/// check as svrn answers it ([`production_site_checks`]).
+fn production_site_check(
+    c: &adv::StreamBCase,
+    present: &mut dyn FnMut(&str, &[String]) -> bool,
+) -> Result<(), String> {
     let ev = &c.evidence_chunks;
     match (&c.label, &c.witness) {
         (adv::CaseLabel::Ungrounded, adv::SiteWitness::InjectedAbsent { injected, original }) => {
-            if value_present_in_chunks(injected, ev) {
+            if present(injected, ev) {
                 return Err(format!(
                     "case `{}`: injected `{injected}` grounds in the window per PRODUCTION checker",
                     c.id
                 ));
             }
             if let Some(o) = original {
-                if !value_present_in_chunks(o, ev) {
+                if !present(o, ev) {
                     return Err(format!(
                         "case `{}`: displaced original `{o}` does not ground per PRODUCTION checker",
                         c.id
@@ -623,11 +710,7 @@ fn production_site_check(c: &adv::StreamBCase) -> Result<(), String> {
                     c.id
                 ));
             }
-            if original_terms.is_empty()
-                || !original_terms
-                    .iter()
-                    .all(|t| value_present_in_chunks(t, ev))
-            {
+            if original_terms.is_empty() || !original_terms.iter().all(|t| present(t, ev)) {
                 return Err(format!(
                     "case `{}`: original terms do not ground per PRODUCTION checker",
                     c.id
@@ -651,8 +734,8 @@ fn production_site_check(c: &adv::StreamBCase) -> Result<(), String> {
                 return Err(format!("case `{}`: connective present in a chunk", c.id));
             }
             let (a, b) = ev.split_at(*boundary);
-            if !frag_a_terms.iter().all(|t| value_present_in_chunks(t, a))
-                || !frag_b_terms.iter().all(|t| value_present_in_chunks(t, b))
+            if !frag_a_terms.iter().all(|t| present(t, a))
+                || !frag_b_terms.iter().all(|t| present(t, b))
             {
                 return Err(format!(
                     "case `{}`: chimera fragments do not ground per PRODUCTION checker",
@@ -669,13 +752,13 @@ fn production_site_check(c: &adv::StreamBCase) -> Result<(), String> {
                 ..
             },
         ) => {
-            if !value_present_in_chunks(value, std::slice::from_ref(distractor_text)) {
+            if !present(value, std::slice::from_ref(distractor_text)) {
                 return Err(format!(
                     "case `{}`: absorbed value does not ground in its distractor doc",
                     c.id
                 ));
             }
-            if value_present_in_chunks(value, ev) {
+            if present(value, ev) {
                 return Err(format!(
                     "case `{}`: absorbed value grounds in the window per PRODUCTION checker",
                     c.id
@@ -684,7 +767,7 @@ fn production_site_check(c: &adv::StreamBCase) -> Result<(), String> {
             Ok(())
         }
         (adv::CaseLabel::Grounded, adv::SiteWitness::Supported { terms }) => {
-            if terms.is_empty() || !terms.iter().all(|t| value_present_in_chunks(t, ev)) {
+            if terms.is_empty() || !terms.iter().all(|t| present(t, ev)) {
                 return Err(format!(
                     "case `{}`: grounded terms do not ALL ground per PRODUCTION checker",
                     c.id
@@ -698,3 +781,7 @@ fn production_site_check(c: &adv::StreamBCase) -> Result<(), String> {
         )),
     }
 }
+
+#[cfg(test)]
+#[path = "verifier_tests.rs"]
+mod tests;

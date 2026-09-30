@@ -146,6 +146,27 @@ impl SvrnJudge {
         }
     }
 
+    /// The gate's `extract_claim_list`: `Ok(Some(claims))`, `Ok(None)` on an
+    /// inference failure (the primitive's own), `Err` when the probe could
+    /// not run.
+    pub(crate) async fn claim_list(
+        &self,
+        model: Option<&str>,
+        question: &str,
+        answer: &str,
+        max_claims: usize,
+    ) -> Result<Option<Vec<String>>, String> {
+        let op = JudgeOp::ClaimList {
+            question: question.to_string(),
+            answer: answer.to_string(),
+            max_claims,
+        };
+        match self.judge(model, vec![op]).await?.rows.into_iter().next() {
+            Some(JudgeAnswer::ClaimList { claims }) => Ok(claims),
+            other => Err(format!("the judge probe answered {other:?} to ClaimList")),
+        }
+    }
+
     /// One judge op and its one answer. A probe that could not run is the
     /// op's own failure (`None` / `Err`), named on stderr.
     pub(crate) async fn judge_one(&self, model: &str, op: JudgeOp) -> Option<JudgeAnswer> {
