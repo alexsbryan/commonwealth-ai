@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `admission`'s test module, split out of `admission.rs` by domains
-//! `REVIEW-audit-4` (the `ring_sync.rs`/`scoring.rs` pattern `REVIEW-audit-daemon-1`
-//! used): the file had climbed into arch-gate's 800-1200 approach band and the
-//! band is a counter ratchet. Behaviour-preserving — `use super::*;` keeps the
-//! same items in scope.
+//! The admission layers' tests, moved with them from serving-host's
+//! `admission/tests.rs` (pb-svrn-serving-ports); the renderer's and the
+//! jitter's went to `sovereign_contracts::admission_wire`.
 
 use super::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
+use axum::http::header::RETRY_AFTER;
 use axum::routing::post;
 use axum::Router;
+use sovereign_contracts::admission_wire::AdmissionReason;
 use tower::ServiceExt;
 
 const VALID: &str = "0000000000000000000000000000002a";
@@ -328,27 +328,6 @@ async fn the_attached_principal_is_used_instead_of_a_second_resolution() {
 }
 
 #[test]
-fn jitter_stays_inside_the_base_plus_spread_window() {
-    for base in [1u64, 2, 30] {
-        for _ in 0..64 {
-            let got = jittered_retry_after_secs(base);
-            assert!(
-                (base..base + RETRY_AFTER_JITTER_SPREAD_SECS).contains(&got),
-                "base {base} produced {got}, outside [{base}, {})",
-                base + RETRY_AFTER_JITTER_SPREAD_SECS
-            );
-        }
-    }
-}
-
-#[test]
-fn jitter_varies_across_calls() {
-    let seen: std::collections::HashSet<u64> =
-        (0..64).map(|_| jittered_retry_after_secs(2)).collect();
-    assert!(seen.len() > 1, "a constant hint is the thundering herd");
-}
-
-#[test]
 fn fair_concurrency_env_reports_a_bad_value_instead_of_accepting_it() {
     let prev = std::env::var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY").ok();
     std::env::set_var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY", "not-a-number");
@@ -386,22 +365,4 @@ fn fairness_defaults_on_and_the_kill_switch_is_explicit() {
         Some(v) => std::env::set_var("SOVEREIGN_CLIENT_FAIRNESS", v),
         None => std::env::remove_var("SOVEREIGN_CLIENT_FAIRNESS"),
     }
-}
-
-#[test]
-fn shed_response_is_503_with_retry_after_and_the_openai_error_object() {
-    let response = shed_response(AdmissionRejection::new(
-        "busy",
-        AdmissionReason::CeilingExceeded,
-        7,
-    ));
-    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(response.headers().get(RETRY_AFTER).unwrap(), "7");
-}
-
-#[test]
-fn local_queue_shed_names_the_queue_position_and_predicted_wait() {
-    let response = local_queue_shed_response(4, 30_000, 5);
-    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(response.headers().get(RETRY_AFTER).unwrap(), "5");
 }

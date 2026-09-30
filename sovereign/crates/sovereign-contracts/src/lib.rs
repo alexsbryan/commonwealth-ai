@@ -18,6 +18,7 @@
 /// `crate::oicp::*` exactly as they did inside `sovereign-core`.
 pub use oicp_types as oicp;
 
+pub mod admission_wire;
 pub mod ask_discipline;
 pub mod baselines;
 /// `.sovereign/sovereign.toml` — the per-project watcher configuration. Moved

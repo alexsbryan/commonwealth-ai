@@ -2,10 +2,10 @@
 //! The daemon's side of admission — the state the decision reads, and the
 //! guards it hands back.
 //!
-//! The decision itself, the two axum middlewares and the 503 renderer live in
-//! `sovereign-serving-host::admission` (`sovereign/SERVING_BOUNDARY.md` "The
-//! five entries" (c)); this module re-exports them at their historical paths
-//! and implements the two ports over [`AppState`]:
+//! The decision's ports and the two axum middlewares are `layers`; the shed
+//! wire and 503 renderer are `sovereign_contracts::admission_wire`
+//! (`sovereign/SERVING_BOUNDARY.md` "The five entries" (c)). This module
+//! re-exports both at their historical paths and implements the ports over [`AppState`]:
 //!
 //! - [`Admission`] — the peer ceiling (pause, foreground yield, the
 //!   reciprocity-scaled `SchedCore` cap) and the client fair share, dispatched
@@ -27,14 +27,19 @@ use crate::state::{AppState, AppStateInner};
 use axum::http::HeaderMap;
 use kernel_types::NodeId;
 
-pub use sovereign_serving_host::admission::{
+mod layers;
+
+pub use layers::{
     client_fair_concurrency_from_env, client_fairness_enabled_from_env, client_fairness_layer,
-    jitter_retry_after, jittered_retry_after_secs, local_queue_shed_response, peer_admission_layer,
-    peer_knowledge_read_layer, shed_response, Admission, AdmissionHost, AdmissionLease,
-    AdmissionPosture, AdmissionReason, AdmissionRejection, AdmissionVerdict, AttachedPrincipal,
-    GuardedBody, PeerWork, Principal, DEFAULT_CLIENT_FAIR_CONCURRENCY,
+    local_queue_shed_response, peer_admission_layer, peer_knowledge_read_layer, shed_response,
+    Admission, AdmissionHost, AdmissionLease, AdmissionPosture, AdmissionVerdict, GuardedBody,
+    PeerWork, DEFAULT_CLIENT_FAIR_CONCURRENCY,
+};
+pub use sovereign_contracts::admission_wire::{
+    jitter_retry_after, jittered_retry_after_secs, AdmissionReason, AdmissionRejection,
     RETRY_AFTER_JITTER_SPREAD_SECS,
 };
+pub use sovereign_contracts::principal::{AttachedPrincipal, Principal};
 
 /// RAII guard returned by the peer admission decision. Holds one slot in the
 /// peer fair scheduler for `key` — the published [`Principal`] (`Member` for
@@ -309,7 +314,7 @@ impl Admission for AppState {
 /// These are attribution sites, not authorization sites: they need an identity
 /// to CREDIT one, and crediting nobody is a sound answer. The site that cannot
 /// answer without an identity is the peer ceiling, and it refuses instead
-/// (`sovereign_serving_host::admission`'s peer gate).
+/// (`layers`' peer gate).
 pub fn requester(attached: Option<axum::Extension<AttachedPrincipal>>) -> Option<NodeId> {
     let who = attached
         .map(|axum::Extension(a)| a.0)
