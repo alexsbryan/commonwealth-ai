@@ -289,9 +289,8 @@ pub async fn run(args: &[String]) -> i32 {
                         // corpus's navigation map, seeds under it, and stamps the
                         // population marker in the same call — none of which this
                         // verb may decide for itself.
-                        let embed = corpus_index::embed_fn::inference_to_embed_query_fn(
-                            inference.clone(),
-                        );
+                        let embed =
+                            corpus_index::embed_fn::inference_to_embed_query_fn(inference.clone());
                         match backfill_ann(&embed, &atlas_dir, corpus_id, &filter).await {
                             Ok(BackfillOutcome::Built(_)) => {
                                 anns += 1;
