@@ -93,37 +93,9 @@ pub fn maintainer_inbox_dir() -> Result<PathBuf> {
 /// type).
 pub use sovereign_contracts::daemon_wire::ArtifactKind;
 
-/// On-disk per-project summary, kept small so `RecipeProject::load`
-/// doesn't have to walk the whole project directory. Updated by
-/// tools that change state — `recipe_id` is set when a recipe is
-/// first written, `last_test_*` after each `RecipeTestTool` run,
-/// `current_sample_size` as the agent climbs the 50→200→1000→full
-/// progression.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectSummary {
-    pub feature_id: String,
-    pub title: String,
-    /// What this project authors (recipe vs workflow). `#[serde(default)]` →
-    /// pre-tag `project.json` files decode as `Recipe`.
-    #[serde(default)]
-    pub artifact_kind: ArtifactKind,
-    /// Recipe id under `~/.svrnmesh/recipes/<recipe_id>/`. `None`
-    /// before the agent has drafted a recipe.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recipe_id: Option<String>,
-    /// Current sample size in the test progression. `None` until the
-    /// first test run.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_sample_size: Option<u64>,
-    /// Pass/fail summary of the most recent `recipe_test` run.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_test_status: Option<String>,
-    /// Human-readable timestamp (RFC 3339) of the most recent test.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_test_at: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
+/// Moved to `sovereign-contracts` (pb-ingest-rehome-daemon) with the store
+/// row; re-exported so every `ProjectSummary` path holds.
+pub use sovereign_contracts::recipe::project::ProjectSummary;
 
 /// Decision-log frontier captured at checkpoint time. Restoring a
 /// checkpoint preserves the decision and research logs (spec §4.2)

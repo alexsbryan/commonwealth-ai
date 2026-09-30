@@ -21,6 +21,7 @@
 pub mod json_to_toml;
 pub mod notes;
 pub mod paths;
+pub mod project;
 pub mod registry;
 pub mod testing;
 pub mod url_template;
