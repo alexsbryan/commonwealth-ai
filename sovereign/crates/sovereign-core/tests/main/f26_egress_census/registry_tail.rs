@@ -202,10 +202,15 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // fetch-model's peer client moved here, whole, from sovereign-cli-mesh's
     // mesh_cmd.rs (c2529c94c): the mesh row went 8 -> 7, same class.
     ("sovereign/crates/sovereign-serve/src/fetch_model.rs", Class::Mesh, 1),
-    // lib.rs and reload.rs: `#[cfg(test)]` modules posting to a router the
-    // test bound on loopback.
-    ("sovereign/crates/sovereign-serve/src/lib.rs", Class::TestOnly, 2),
+    // lib_tests.rs and reload.rs: `#[cfg(test)]` modules posting to a router
+    // the test bound on loopback. lib.rs's tests moved under #[path] to
+    // lib_tests.rs at 47e67b4db; the row followed at pb-meshapp-rest.
+    ("sovereign/crates/sovereign-serve/src/lib_tests.rs", Class::TestOnly, 2),
     ("sovereign/crates/sovereign-serve/src/reload.rs", Class::TestOnly, 2),
+    // rails_mesh.rs: serve's roster reads from cw-rails, the mesh's rails
+    // daemon (pb-serve-distributes-standalone, 360165b37). Same class as
+    // turn-client's rails_kv row.
+    ("sovereign/crates/sovereign-serve/src/rails_mesh.rs", Class::Mesh, 1),
 
     // ---- oicp-client (Mesh — OICP client → a daemon, ours or a peer's) ----
     // 2 -> 3 on 2026-08-31: `RemoteApiProvider::dynamic`, the constructor for a

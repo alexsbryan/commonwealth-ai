@@ -305,6 +305,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // its own client now, dialed only from its one dial thread. The work
     // atlas's claim records ride it to the mesh's rails daemon.
     ("sovereign/crates/sovereign-turn-client/src/rails_kv.rs", Class::Mesh, 1),
+    // rails_origins.rs: the origin register/renew loop against cw-rails,
+    // moved from the daemon (pb-serve-distributes-standalone) so serve and
+    // svrn share it. Same class as rails_kv above.
+    ("sovereign/crates/sovereign-turn-client/src/rails_origins.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/gossip.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/canonical_pull.rs", Class::Mesh, 1),
 
