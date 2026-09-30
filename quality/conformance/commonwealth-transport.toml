@@ -35,12 +35,12 @@ asserts = 2
 requirement = "FE-3"
 test = "commonwealth-transport::identity::tests::load_or_generate_round_trips"
 file = "commonwealth/crates/commonwealth-transport/src/identity.rs"
-line = 268
+line = 196
 asserts = 2
 
 [[claim]]
 requirement = "FE-5"
 test = "commonwealth-transport::identity::tests::join_proof_binds_node_id_and_name"
 file = "commonwealth/crates/commonwealth-transport/src/identity.rs"
-line = 346
+line = 240
 asserts = 3

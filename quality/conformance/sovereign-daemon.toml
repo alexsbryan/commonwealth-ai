@@ -14,7 +14,7 @@
 requirement = "FE-10"
 test = "sovereign-daemon::main::mesh_switch::leaving_clears_the_active_pointer_rather_than_stranding_it"
 file = "sovereign/crates/sovereign-daemon/tests/main/mesh_switch.rs"
-line = 181
+line = 177
 asserts = 3
 
 [[claim]]

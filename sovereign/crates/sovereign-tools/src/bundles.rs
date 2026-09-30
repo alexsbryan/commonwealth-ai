@@ -51,10 +51,6 @@ use sovereign_core::ToolRegistry;
 
 use async_trait::async_trait;
 
-/// The recipe-authoring family moved to ingest, beside its tools
-/// (pb-ingest-rehome-daemon); this path holds until the shim drops.
-pub use sovereign_recipe_author::bundle::RecipeAuthoringTools;
-
 /// The ONE web-search registry every surface resolves.
 ///
 /// Reads the operator's `[search]` section from `SetupConfig`, with the older

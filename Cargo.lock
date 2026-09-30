@@ -13389,7 +13389,6 @@ dependencies = [
  "sha2 0.10.9",
  "sovereign-contracts",
  "sovereign-core",
- "sovereign-recipe-author",
  "sovereign-store",
  "sovereign-tools-base",
  "strsim",

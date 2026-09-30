@@ -50,7 +50,7 @@
 2380	sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs
 1655	sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/runner.rs
 1327	sovereign/crates/sovereign-cli-llm/src/reading_diag_cmd.rs
-1846	sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs
+1832	sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs
 1346	sovereign/crates/sovereign-cli-llm/src/router_fit_cmd.rs
 1264	sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/score.rs
 1510	sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs
@@ -94,7 +94,7 @@
 1263	sovereign/crates/sovereign-core/src/title.rs
 2499	sovereign/crates/sovereign-core/tests/main/core_tests.rs
 2225	sovereign/crates/sovereign-core/tests/main/functional.rs
-1486	sovereign/crates/sovereign-daemon/src/auto_ingest.rs
+1484	sovereign/crates/sovereign-daemon/src/auto_ingest.rs
 1649	sovereign/crates/sovereign-daemon/src/corpus_watch_http.rs
 4446	sovereign/crates/sovereign-daemon/src/daemon.rs
 5775	sovereign/crates/sovereign-daemon/src/frontdoor.rs
