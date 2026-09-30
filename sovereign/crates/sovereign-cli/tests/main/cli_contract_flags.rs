@@ -54,9 +54,17 @@ fn feature_compiled_in(feature: Feature) -> bool {
     match feature {
         Feature::Default => true,
         Feature::DevTools => cfg!(feature = "dev-tools"),
-        Feature::Awareness => cfg!(feature = "awareness"),
+        Feature::Awareness => awareness_in_sibling(),
         Feature::CodeIntel => cfg!(feature = "code-intel"),
     }
+}
+
+/// `awareness` is served by the LLM sibling the dispatcher execs, behind
+/// that crate's feature (pb-cli-llm-ingest-move-remainder), so the sibling
+/// is asked: a build without it answers with its refusal.
+fn awareness_in_sibling() -> bool {
+    !combined(&run(&["awareness", "--help"]))
+        .contains("built only under the `awareness` cargo feature")
 }
 
 /// Flags that are declared but absent from their command's own `--help`.
