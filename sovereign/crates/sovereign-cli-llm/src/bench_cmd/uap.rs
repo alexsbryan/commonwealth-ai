@@ -31,8 +31,6 @@ use sovereign_eval::disposition_bench::{
 use sovereign_eval::disposition_score::{score_with_axis, DispositionReport, Labeling};
 use sovereign_eval::disposition_taxonomy::{era_mask, era_mask_union, year_of};
 
-use corpus_engine::enrichment::pipeline::types::ChatPrompt;
-
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
@@ -358,7 +356,7 @@ fn build_prompt(
     allowed: &[String],
     policy: Policy,
     strip_tail: bool,
-) -> ChatPrompt {
+) -> UapPrompt {
     let narrative = if strip_tail {
         strip_disposition_sentence(&case.narrative)
     } else {
@@ -395,7 +393,12 @@ fn build_prompt(
         "required": ["category"],
         "additionalProperties": false
     });
-    ChatPrompt::new(system, user).with_response_schema("uap_disposition", schema)
+    UapPrompt {
+        system,
+        user,
+        response_schema: Some(schema),
+        response_schema_name: Some("uap_disposition".to_string()),
+    }
 }
 
 /// Strip a trailing "Disposition: X." sentence so the synthetic fixture
@@ -638,6 +641,16 @@ fn short(cat: &str) -> String {
 
 // ── daemon chat (copied from the atlas bench's run_chat) ──────────────
 
+/// The one request this bench sends: system and user turns plus the JSON
+/// schema the daemon constrains the reply to (`response_format`). The
+/// fields a daemon chat call reads, and no more.
+struct UapPrompt {
+    system: String,
+    user: String,
+    response_schema: Option<serde_json::Value>,
+    response_schema_name: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct ChatChoice {
     message: ChatMessage,
@@ -666,7 +679,7 @@ struct ChatResponse {
 async fn run_chat(
     client: &reqwest::Client,
     base_url: &str,
-    prompt: &ChatPrompt,
+    prompt: &UapPrompt,
     max_tokens: u32,
 ) -> Result<ChatResponse, String> {
     let url = format!("{}/v1/chat/completions", base_url);
