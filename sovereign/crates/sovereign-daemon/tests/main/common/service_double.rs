@@ -29,17 +29,19 @@ impl ProviderService {
         Arc::new(Self(provider))
     }
 
-    fn completion_request(request: &ChatCompletionRequest) -> CompletionRequest {
-        let prompt = request
-            .messages
-            .last()
-            .map(|m| m.content.as_str())
-            .unwrap_or("");
-        let mut req = CompletionRequest::new(prompt);
+    fn completion_request(
+        request: &ChatCompletionRequest,
+    ) -> std::result::Result<CompletionRequest, LocalInferenceError> {
+        let Some(last) = request.messages.last() else {
+            return Err(LocalInferenceError::Other(
+                "service_double: request has no messages".into(),
+            ));
+        };
+        let mut req = CompletionRequest::new(&last.content);
         if let Some(model) = request.model.as_deref() {
             req = req.with_model_id(model);
         }
-        req
+        Ok(req)
     }
 }
 
@@ -122,7 +124,7 @@ impl LocalInferenceService for ProviderService {
     ) -> std::result::Result<ChatCompletionResponse, LocalInferenceError> {
         let resp = self
             .0
-            .complete(&Self::completion_request(&request))
+            .complete(&Self::completion_request(&request)?)
             .await
             .map_err(provider_error)?;
         let reason = resp
@@ -157,7 +159,7 @@ impl LocalInferenceService for ProviderService {
     > {
         let inner = self
             .0
-            .complete_stream_with_finish(&Self::completion_request(&request))
+            .complete_stream_with_finish(&Self::completion_request(&request)?)
             .await
             .map_err(provider_error)?;
         Ok(Box::pin(inner.map(wire_frame)))
