@@ -224,53 +224,19 @@ pub async fn spawn(
     };
     info!(target: TRACE_TARGET, %addr, slot = %registration.alpn, rails = %rails_base,
           "work origin: serving; registering it with cw-rails");
-    let register = tokio::spawn(keep_registered(rails_base, registration));
+    // The one register/renew loop, shared with serve's origins
+    // (pb-serve-distributes-standalone).
+    let register = tokio::spawn(sovereign_turn_client::rails_origins::keep_registered(
+        rails_base,
+        registration,
+        ORIGIN_TTL_SECS,
+        ORIGIN_RENEW_EVERY,
+    ));
     Ok(WorkOriginHandle {
         addr,
         serve,
         register,
     })
-}
-
-/// Register, then renew every [`ORIGIN_RENEW_EVERY`]; a renew cw-rails
-/// refuses (it restarted, or the claim lapsed) registers again. cw-rails being
-/// absent is named once at `warn` and then at `debug`, so a node that does
-/// not run cw-rails is told once why it donates no ingest work.
-async fn keep_registered(rails_base: String, registration: OriginRegistration) {
-    let mut claim: Option<String> = None;
-    let mut told_absent = false;
-    loop {
-        match &claim {
-            None => match crate::rails_client::register_origin(&rails_base, &registration).await {
-                Ok(c) => {
-                    info!(target: TRACE_TARGET, claim = %c.claim_id, slot = %registration.alpn,
-                          "work origin: registered with cw-rails — its donor can forward this kind");
-                    claim = Some(c.claim_id);
-                    told_absent = false;
-                }
-                Err(e) if !told_absent => {
-                    warn!(target: TRACE_TARGET, error = %e, slot = %registration.alpn,
-                          "work origin: cw-rails did not take the registration, so no donor on \
-                           this node forwards this kind; retrying");
-                    told_absent = true;
-                }
-                Err(e) => debug!(target: TRACE_TARGET, error = %e,
-                                 "work origin: registration still not taken; retrying"),
-            },
-            Some(id) => {
-                if let Err(e) =
-                    crate::rails_client::renew_origin(&rails_base, id, ORIGIN_TTL_SECS).await
-                {
-                    info!(target: TRACE_TARGET, claim = %id, error = %e,
-                          "work origin: the renew was refused — registering again");
-                    claim = None;
-                    continue;
-                }
-                debug!(target: TRACE_TARGET, claim = %id, "work origin: renewed");
-            }
-        }
-        tokio::time::sleep(ORIGIN_RENEW_EVERY).await;
-    }
 }
 
 #[cfg(test)]

@@ -88,6 +88,10 @@ pub mod landscape_digest_client;
 /// and the code program's work atlas dial (pb-atlas-kv).
 pub mod rails_kv;
 
+/// The one register/renew loop for an origin in cw-rails' origin table,
+/// shared by svrn's work origin and serve's origins.
+pub mod rails_origins;
+
 #[cfg(feature = "bundled-backend")]
 pub use reach::BundledBackend;
 pub use reach::{NotReachable, Reached, ServingHost, CAN_BRING_UP_A_BACKEND};
