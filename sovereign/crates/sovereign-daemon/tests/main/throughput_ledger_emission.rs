@@ -18,7 +18,7 @@
 //! from production logs alone — the request still succeeds, the
 //! reply still streams, only the accounting drifts.
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -26,7 +26,6 @@ use axum::extract::Query;
 use axum::response::{sse::Event, IntoResponse, Sse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::NodeId;
 use futures::StreamExt;
 use oicp_types::{
@@ -37,51 +36,37 @@ use serde::Deserialize;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_daemon::daemon::InferenceVenue;
-use sovereign_mesh::ledger_port::ContributionLedgerPort;
 use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 use sovereign_serving_host::ledger::LedgerEmitter;
 
-use crate::common;
-use crate::common::ledger_double::RecordingLedger;
 use crate::common::TestProvider;
 
 // ── `VenueSource` stub over the recording ledger double ──
 //
-// The daemon's side of the ledger port: the host mints the fact from
-// `RoutingOutcome` and hands it here, where it lands on the
-// contribution port — the recording double, which keeps the call for
-// the assertion to read back (five-programs fp-84).
+// The host mints the fact from `RoutingOutcome` and hands it to its own
+// `LedgerEmitter` port; the double records each call as
+// `(from_node, model_id, tokens)` for the assertion to read back — the
+// shape serving-host's ledger.rs test double uses (phase-b-72).
 struct StubVenueSource {
     peers: Vec<InferenceVenue>,
     ledger: RecordingLedger,
 }
 
-struct TestLedger {
-    ledger: RecordingLedger,
-}
+#[derive(Clone, Default)]
+struct RecordingLedger(Arc<Mutex<Vec<(NodeId, String, u64)>>>);
 
-impl LedgerEmitter for TestLedger {
-    fn record_inference_received(&self, from_node: &NodeId, model_id: &str, tokens_generated: u64) {
-        // The double records on the call; the answer it returns carries nothing.
-        drop(ContributionLedgerPort::record(
-            &self.ledger,
-            LedgerEventKind::InferenceReceived {
-                from_node: *from_node,
-                model_id: model_id.to_string(),
-                tokens_generated,
-            },
-        ));
+impl LedgerEmitter for RecordingLedger {
+    fn record_inference_received(&self, from_node: &NodeId, model_id: &str, tokens: u64) {
+        self.0
+            .lock()
+            .unwrap()
+            .push((*from_node, model_id.to_string(), tokens));
     }
 }
 
-/// The recorded `contributions.record` calls that are `InferenceReceived`.
-fn inference_received(ledger: &RecordingLedger) -> Vec<String> {
-    ledger
-        .calls()
-        .into_iter()
-        .filter(|c| c.method == "contributions.record" && c.args.starts_with("InferenceReceived"))
-        .map(|c| c.args)
-        .collect()
+/// The recorded `InferenceReceived` emissions.
+fn inference_received(ledger: &RecordingLedger) -> Vec<(NodeId, String, u64)> {
+    ledger.0.lock().unwrap().clone()
 }
 
 #[async_trait]
@@ -94,9 +79,7 @@ impl VenueSource for StubVenueSource {
 #[async_trait]
 impl VenueHost for StubVenueSource {
     async fn ledger_emitter(&self) -> Option<Arc<dyn LedgerEmitter>> {
-        Some(Arc::new(TestLedger {
-            ledger: self.ledger.clone(),
-        }))
+        Some(Arc::new(self.ledger.clone()))
     }
 }
 
@@ -195,13 +178,12 @@ async fn spawn_mock_peer() -> SocketAddr {
 
 #[tokio::test]
 async fn peer_routed_stream_emits_inference_received_on_drop() {
-    // 1. Set up the contribution ledger — the recording double.
-    let self_node = NodeId::from_u128(0xAAAA_AAAA_AAAA_AAAA);
-    let ledger = RecordingLedger::new(self_node);
+    // 1. Set up the ledger emitter — the recording double.
+    let ledger = RecordingLedger::default();
 
     // Sanity: ledger starts empty.
     assert!(
-        ledger.calls().is_empty(),
+        inference_received(&ledger).is_empty(),
         "ledger must start empty so we can attribute the new event to the test"
     );
 
@@ -285,29 +267,24 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     // 9. Read the recorded calls back from the double and assert.
-    let events = ledger.calls();
     let received = inference_received(&ledger);
 
     assert_eq!(
         received.len(),
         1,
         "exactly one InferenceReceived event must land on the ledger; \
-         observed events: {events:?}"
+         observed events: {received:?}"
     );
-    let record = &received[0];
-    assert!(
-        record.contains(&format!("from_node: {peer_node_id:?},")),
-        "from_node must be the peer that served the stream; got {record}"
+    let (from_node, model_id, tokens) = &received[0];
+    assert_eq!(
+        *from_node, peer_node_id,
+        "from_node must be the peer that served the stream"
     );
     assert!(
-        !record.contains("model_id: \"\""),
+        !model_id.is_empty(),
         "model_id must be populated; got empty string"
     );
-    let tokens: u64 = record
-        .split("tokens_generated: ")
-        .nth(1)
-        .and_then(|t| t.trim_end_matches(" }").parse().ok())
-        .unwrap_or_else(|| panic!("tokens_generated must be recorded; got {record}"));
+    let tokens = *tokens;
     // chunk_count was 3 deltas + the [DONE] sentinel. The wrapper
     // counts every successful `Ok(chunk)` it forwards through
     // `poll_next`, so the exact count depends on how the SSE bridge
@@ -330,8 +307,7 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
     // a dead address. The wrapper falls through to local, the
     // ThroughputObservedStream never wraps a successful upstream,
     // and the ledger stays empty.
-    let self_node = NodeId::from_u128(0xBBBB_BBBB_BBBB_BBBB);
-    let ledger = RecordingLedger::new(self_node);
+    let ledger = RecordingLedger::default();
 
     let dead_peer = vec![InferenceVenue {
         node_id: NodeId::from_u128(0xDEAD_BEEF_DEAD_BEEF),
