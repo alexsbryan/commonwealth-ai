@@ -5,7 +5,7 @@
 
 use corpus_index::index::CorpusIndex;
 use oicp_client::RemoteApiProvider;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::traits::InferenceProvider;
 
 const DEFAULT_DAEMON: &str = "http://localhost:9741";
 
@@ -114,7 +114,7 @@ pub(crate) async fn search_corpus(
         .map_err(|e| format!("embed query failed: {e}"))?;
 
     // Open the corpus by id under the canonical index dir.
-    let index_dir = sovereign_core::setup_config::SetupConfig::default_path()
+    let index_dir = sovereign_contracts::setup_config::SetupConfig::default_path()
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_default()

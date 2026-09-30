@@ -58,8 +58,8 @@ use std::time::Instant;
 
 use corpus_engine::enrichment::tiered::ConvBucket;
 use corpus_index::index::CorpusIndex;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::DocumentTypeTag;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::DocumentTypeTag;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::conv_tiered_provider::{
     FolderTieredProvider, IndexDirResolver, StaticIndexDirResolver,
@@ -67,7 +67,7 @@ use sovereign_tools::conv_tiered_provider::{
 
 use crate::chat_cmd::bootstrap::SplitInferenceProvider;
 use crate::enrich_cmd::raptor_census::{census, census_refusal};
-use sovereign_cli_shared::help;
+use sovereign_cli_base::help;
 
 /// Parsed `enrich raptor` invocation.
 struct RaptorArgs {
@@ -123,7 +123,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // state DB (`sovereign.db`) and the corpus indexes dir. Matching the
     // daemon's derivation (daemon_cmd.rs) is what guarantees we augment
     // the same store the daemon serves retrieval from.
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");
@@ -351,7 +351,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
         parsed.chat_model.clone(),
         parsed.embed_model.clone(),
         8192,
-        sovereign_core::models_manifest::DEFAULT_MANIFEST
+        sovereign_contracts::models_manifest::DEFAULT_MANIFEST
             .embed_query_instruction(&parsed.embed_model),
     ));
     let probe_inference = Arc::clone(&inference);
@@ -441,7 +441,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                 sovereign_tools::raptor_atlas::EXTRACTIVE_SUMMARIZER.to_string(),
             )),
             sovereign_tools::raptor_atlas::SummaryMode::Abstractive => {
-                let mut probe = sovereign_core::slot_policy::Workload::EnrichBulk
+                let mut probe = sovereign_contracts::slot_policy::Workload::EnrichBulk
                     .request("Reply with the single word: ok".to_string())
                     .with_output_budget(8);
                 probe.think_budget = Some(0);

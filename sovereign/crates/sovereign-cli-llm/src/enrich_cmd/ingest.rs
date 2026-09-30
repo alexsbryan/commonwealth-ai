@@ -18,7 +18,7 @@ use corpus_engine::{CorpusEngine, IngestProgress, ProgressCallback};
 use corpus_index::types::EmbedFn;
 
 use super::paths;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn enrich ingest",
@@ -135,7 +135,7 @@ pub async fn cmd_ingest(args: &[String]) -> i32 {
 
     // Resolve indexes dir from setup config (mirrors how the
     // --from-corpus init path does it).
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let recipes_dir = data_dir.join("recipes");

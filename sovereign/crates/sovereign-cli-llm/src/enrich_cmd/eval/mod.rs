@@ -55,7 +55,7 @@ use serde::{Deserialize, Serialize};
 
 use super::config::EnrichConfig;
 use super::paths;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn enrich eval",
@@ -583,7 +583,7 @@ mod tests {
     /// The shipped golden bank, from the INVOCATION's checkout — never from
     /// where this crate was compiled.
     fn goldens_dir() -> std::path::PathBuf {
-        sovereign_cli_shared::repo::find_checkout_root()
+        sovereign_cli_base::repo::find_checkout_root()
             .expect("this test runs inside the checkout that ships the philosophy goldens")
             .join("sovereign/bench/philosophy")
     }

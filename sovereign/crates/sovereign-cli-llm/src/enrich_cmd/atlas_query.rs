@@ -32,7 +32,7 @@ use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use crate::probe_cmd::load_atlas_context;
 use corpus_engine::enrichment::atlas::context_loader::AtlasContextFilter;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 /// Per-node fanout cap on the CallChain BFS — a hot symbol referencing dozens of
 /// callees can't explode the chain. Matches the code-atlas builder's

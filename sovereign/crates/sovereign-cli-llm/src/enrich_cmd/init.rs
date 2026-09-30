@@ -33,8 +33,8 @@ use super::paths;
 // four directories (ei-5b-build-verb).
 use super::paths::scaffold_dirs;
 use super::templates;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
-use sovereign_cli_shared::prompts::{confirm, stdin_is_tty};
+use sovereign_cli_base::help::{self, Help, HelpSection};
+use sovereign_cli_base::prompts::{confirm, stdin_is_tty};
 
 const HELP: Help = Help {
     command: "svrn enrich init",
@@ -144,7 +144,7 @@ const HELP: Help = Help {
 fn custom_ontology_spec(
     corpus_id: &str,
 ) -> Option<corpus_engine::enrichment::pipeline::CustomAtlasSpec> {
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .ok()?;
     let recipe_path = data_dir.join("recipes").join(corpus_id).join("recipe.toml");
@@ -349,7 +349,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
     // The CONFIGURED client port, not the compiled default: this probe decides
     // whether init can resolve model ids at all, and against a daemon on a
     // non-default port it reported "not responding" while the daemon was fine.
-    let base_url = sovereign_core::setup_config::client_daemon_base();
+    let base_url = sovereign_contracts::setup_config::client_daemon_base();
     let daemon_up = probe_daemon(&base_url).await;
     if !daemon_up {
         eprintln!("note: daemon is not responding at {base_url}.");
@@ -492,7 +492,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
 async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
     // Resolve data dir + indexes dir from setup config (matches
     // every other command's path resolution).
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let recipes_dir = data_dir.join("recipes");
@@ -574,7 +574,7 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
     // Probe daemon + resolve defaults for un-pinned model ids,
     // mirroring the source-file path so downstream extract works
     // identically — including its port resolution.
-    let base_url = sovereign_core::setup_config::client_daemon_base();
+    let base_url = sovereign_contracts::setup_config::client_daemon_base();
     let daemon_up = probe_daemon(&base_url).await;
     let (auto_chat, auto_embed) = if daemon_up {
         resolve_default_models(&base_url).await

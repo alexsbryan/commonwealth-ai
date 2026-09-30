@@ -33,8 +33,8 @@ use corpus_engine::enrichment::pipeline::{
 
 use super::config::EnrichConfig;
 use super::paths;
-use sovereign_cli_shared::dirs::sovereign_indexes;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::dirs::sovereign_indexes;
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn enrich errors",
@@ -665,7 +665,7 @@ mod tests {
         // hard-coding the legacy `.sovereign` dir name — `sovereign_indexes()`
         // prefers `~/.svrnmesh` once it's populated (the cache write above does
         // that), so a hard-coded `.sovereign` path would miss the atlas source.
-        let indexes_root = sovereign_cli_shared::dirs::sovereign_indexes();
+        let indexes_root = sovereign_cli_base::dirs::sovereign_indexes();
         let atlas_dir = indexes_root.join(corpus_id).join(ATLAS_DIRNAME);
         let atlas_failures = vec![
             PhaseFailure {

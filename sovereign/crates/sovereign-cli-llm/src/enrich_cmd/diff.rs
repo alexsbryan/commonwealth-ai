@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::pipeline::{ExtractedQuestion, Phase1Output};
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn enrich diff",

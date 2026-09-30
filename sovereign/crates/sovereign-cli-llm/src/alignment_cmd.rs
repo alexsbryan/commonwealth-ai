@@ -130,11 +130,11 @@ fn stage_recipe() -> Result<PathBuf, String> {
 
 pub async fn run_alignment(args: &[String]) -> i32 {
     if args.is_empty() {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
     match args[0].as_str() {
@@ -142,18 +142,18 @@ pub async fn run_alignment(args: &[String]) -> i32 {
         "status" => cmd_status(&args[1..]).await,
         other => {
             eprintln!("Unknown alignment subcommand: {other}");
-            sovereign_cli_shared::help::print(&HELP);
+            sovereign_cli_base::help::print(&HELP);
             1
         }
     }
 }
 
-const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn alignment",
     summary: "Manage the mesh-replicated alignment workspace (~/.claude/ + notes.db).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn alignment <subcommand> [args]"),
-        sovereign_cli_shared::help::HelpSection::Subcommands(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn alignment <subcommand> [args]"),
+        sovereign_cli_base::help::HelpSection::Subcommands(&[
             (
                 "migrate [--dry-run]",
                 "Back up local state, kick off the alignment corpus ingest, \
@@ -165,7 +165,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
                 "Show local alignment scope (files + notes) and ingest state.",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Sync mechanics: this command lands the LOCAL state on the alignment \
              corpus. Cross-machine convergence happens via the daemon's existing \
              mesh hooks (auto_recover, index_transfer); the projector materializes \
@@ -493,7 +493,7 @@ fn render_ingest_progress(p: &IngestProgress) -> String {
 /// post-rename, which is what made this ingest's progress invisible on
 /// 2026-07-24.)
 fn daemon_log_path() -> String {
-    sovereign_cli_shared::dirs::sovereign_root()
+    sovereign_cli_base::dirs::sovereign_root()
         .join("logs")
         .join("daemon.err")
         .display()
@@ -653,7 +653,7 @@ fn mesh_indexes_dir() -> Option<PathBuf> {
     // "No local alignment corpus yet" even after a fully-materialized
     // 1930-chunk ingest sitting in `~/.svrnmesh/indexes/alignment`
     // (observed 2026-07-24).
-    Some(sovereign_cli_shared::dirs::sovereign_indexes())
+    Some(sovereign_cli_base::dirs::sovereign_indexes())
 }
 
 fn format_unix_secs(secs: i64) -> String {

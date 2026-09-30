@@ -17,8 +17,8 @@ use corpus_engine::snapshot::{
 };
 use corpus_index::index::CorpusIndex;
 
-use sovereign_cli_shared::dirs::sovereign_root;
-use sovereign_cli_shared::help::{Help, HelpSection};
+use sovereign_cli_base::dirs::sovereign_root;
+use sovereign_cli_base::help::{Help, HelpSection};
 
 const PRODUCER_VERSION: &str = concat!("sovereign-cli/", env!("CARGO_PKG_VERSION"));
 
@@ -107,7 +107,7 @@ const HELP_SNAPSHOT_INSPECT: Help = Help {
 
 pub async fn run_snapshot(args: &[String]) -> i32 {
     if args.is_empty() || matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        sovereign_cli_shared::help::print(&HELP_SNAPSHOT);
+        sovereign_cli_base::help::print(&HELP_SNAPSHOT);
         return if args.is_empty() { 1 } else { 0 };
     }
     match args[0].as_str() {
@@ -116,7 +116,7 @@ pub async fn run_snapshot(args: &[String]) -> i32 {
         "restore" => cmd_restore(&args[1..]).await,
         other => {
             eprintln!("Unknown snapshot subcommand: {other}");
-            sovereign_cli_shared::help::print(&HELP_SNAPSHOT);
+            sovereign_cli_base::help::print(&HELP_SNAPSHOT);
             1
         }
     }
@@ -253,7 +253,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
     let parsed = match parse_publish_args(args) {
         Ok(p) => p,
         Err(msg) if msg == "__help__" => {
-            sovereign_cli_shared::help::print(&HELP_SNAPSHOT_PUBLISH);
+            sovereign_cli_base::help::print(&HELP_SNAPSHOT_PUBLISH);
             return 0;
         }
         Err(msg) => {
@@ -463,7 +463,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
                     return 1;
                 }
             };
-        let family_quirks = sovereign_core::models_manifest::DEFAULT_MANIFEST
+        let family_quirks = sovereign_contracts::models_manifest::DEFAULT_MANIFEST
             .embed_quirks_for_model(&embedding_model_for_manifest);
         // VERIFY BEFORE DECLARING (§18.4). The same probe the restorer runs,
         // on this index's own vectors, against this host's embedder: a config
@@ -471,10 +471,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
         // The daemon's HTTP embedder is the one every restorer probes with.
         let probe = {
             let embed: corpus_index::types::EmbedFn = corpus_engine::embed_http::http_embed_fn(
-                format!(
-                    "{}/embeddings",
-                    sovereign_cli_shared::urls::daemon_v1_base()
-                ),
+                format!("{}/embeddings", sovereign_cli_base::urls::daemon_v1_base()),
                 embedding_model_for_manifest.clone(),
             );
             corpus_engine::probe_embedding_space_at(&index_dir, &embed, None)
@@ -886,7 +883,7 @@ fn hash_file_sha256(path: &Path) -> std::result::Result<(String, u64), String> {
 
 fn cmd_inspect(args: &[String]) -> i32 {
     if args.is_empty() || matches!(args[0].as_str(), "--help" | "-h") {
-        sovereign_cli_shared::help::print(&HELP_SNAPSHOT_INSPECT);
+        sovereign_cli_base::help::print(&HELP_SNAPSHOT_INSPECT);
         return if args.is_empty() { 2 } else { 0 };
     }
     let archive_path = PathBuf::from(&args[0]);
@@ -1001,7 +998,7 @@ async fn cmd_restore(args: &[String]) -> i32 {
     let parsed = match parse_restore_args(args) {
         Ok(p) => p,
         Err(msg) if msg == "__help__" => {
-            sovereign_cli_shared::help::print(&HELP_SNAPSHOT_RESTORE);
+            sovereign_cli_base::help::print(&HELP_SNAPSHOT_RESTORE);
             return 0;
         }
         Err(msg) => {
@@ -1107,7 +1104,7 @@ async fn cmd_restore(args: &[String]) -> i32 {
     // The embedder configuration THIS host would embed with — the same
     // resolution the publisher and the daemon use, so a declared mismatch is
     // refused here from the manifest, before anything is extracted.
-    let local_quirks = sovereign_core::models_manifest::DEFAULT_MANIFEST
+    let local_quirks = sovereign_contracts::models_manifest::DEFAULT_MANIFEST
         .embed_quirks_for_model(&parsed.embedding_model);
 
     let outcome = match restore_snapshot_archive(
@@ -1137,10 +1134,7 @@ async fn cmd_restore(args: &[String]) -> i32 {
     // not up, the verdict is COULD-NOT-JUDGE by name and the restored index is
     // REMOVED rather than left in place unjudged (§18.3).
     let embed: corpus_index::types::EmbedFn = corpus_engine::embed_http::http_embed_fn(
-        format!(
-            "{}/embeddings",
-            sovereign_cli_shared::urls::daemon_v1_base()
-        ),
+        format!("{}/embeddings", sovereign_cli_base::urls::daemon_v1_base()),
         parsed.embedding_model.clone(),
     );
     let acceptance = corpus_engine::judge_restored_snapshot(

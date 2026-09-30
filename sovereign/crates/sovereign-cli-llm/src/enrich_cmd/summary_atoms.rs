@@ -13,7 +13,7 @@
 //! this box most RAPTOR nodes have no surviving tree and an atom count alone
 //! cannot tell that from a writer that dropped them.
 
-use sovereign_cli_shared::help;
+use sovereign_cli_base::help;
 use sovereign_tools::summary_atoms::write_summary_atoms;
 
 pub async fn cmd_summary_atoms(args: &[String]) -> i32 {
@@ -30,7 +30,7 @@ pub async fn cmd_summary_atoms(args: &[String]) -> i32 {
         }
     };
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");

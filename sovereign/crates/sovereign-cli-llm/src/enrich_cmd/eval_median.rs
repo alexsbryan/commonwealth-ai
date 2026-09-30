@@ -46,7 +46,7 @@ use serde::{Deserialize, Serialize};
 use super::config::EnrichConfig;
 use super::eval::{score_corpus, EvalReport, PhaseFilter, PhaseScore};
 use super::{build, paths};
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn enrich eval-median",

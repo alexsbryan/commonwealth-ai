@@ -69,7 +69,7 @@ pub(super) async fn cmd_corpus_export_parcels(args: &[String]) -> i32 {
         i += 1;
     }
 
-    let atlas_dir = sovereign_core::setup_config::SetupConfig::load()
+    let atlas_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes")
@@ -234,7 +234,7 @@ pub(super) async fn cmd_corpus_stream_axes(args: &[String]) -> i32 {
         }
     }
 
-    let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
+    let indexes_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes");
@@ -416,7 +416,7 @@ pub(super) async fn cmd_corpus_diag(args: &[String]) -> i32 {
     // mis-resolution is recoverable by passing --titles-file later;
     // we still want it to "just work" against the live install
     // without operator config.
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
@@ -729,7 +729,7 @@ pub(super) async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
         return 1;
     };
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
@@ -925,7 +925,7 @@ pub(super) async fn cmd_corpus_repair(args: &[String]) -> i32 {
         return 1;
     };
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");

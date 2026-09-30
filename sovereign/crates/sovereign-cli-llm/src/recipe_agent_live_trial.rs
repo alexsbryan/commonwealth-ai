@@ -64,9 +64,9 @@ use serde::{Deserialize, Serialize};
 use corpus_engine::recipe_tester::CorpusEngineRecipeTester;
 use oicp_client::RemoteApiProvider;
 use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
-use sovereign_core::traits::{InferenceProvider, Tool};
-use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
-use sovereign_core::ToolRegistry;
+use sovereign_contracts::traits::{InferenceProvider, Tool};
+use sovereign_contracts::types::{ConversationId, StepOutput, ToolContext};
+use sovereign_contracts::ToolRegistry;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
 use sovereign_tools::recipe_author::{
@@ -219,7 +219,7 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
     let mut feature_id: Option<String> = None;
     let mut title: Option<String> = None;
     // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
-    let mut daemon_base = sovereign_core::setup_config::client_daemon_base();
+    let mut daemon_base = sovereign_contracts::setup_config::client_daemon_base();
     let mut skills_dir: Option<PathBuf> = None;
     let mut sample_size: u64 = 50;
     let mut chat_model: Option<String> = None;
@@ -389,7 +389,7 @@ async fn resolve_chat_model(
     if let Some(c) = explicit {
         return Ok(c.to_string());
     }
-    if let Ok(cfg) = sovereign_core::setup_config::SetupConfig::load() {
+    if let Ok(cfg) = sovereign_contracts::setup_config::SetupConfig::load() {
         if let Some(stem) = cfg.primary_model_stem() {
             return Ok(stem);
         }
@@ -1412,7 +1412,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         // Client built by the egress boundary (order deep-research-t2a):
         // tools-base is contract-only and must not construct an
         // egress-capable HTTP client itself.
-        sovereign_core::egress::search_client().expect("egress boundary search client build"),
+        sovereign_contracts::egress::search_client().expect("egress boundary search client build"),
         sovereign_tools::web::search::SearchBackend::DuckDuckGo,
     )));
     let tool_defs = registry_to_tool_defs(&registry);

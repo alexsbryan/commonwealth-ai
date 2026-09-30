@@ -32,11 +32,11 @@ use publish::cmd_publish;
 /// Run a `recipe` subcommand. Returns the exit code.
 pub async fn run_recipe(args: &[String]) -> i32 {
     if args.is_empty() {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
 
@@ -49,18 +49,18 @@ pub async fn run_recipe(args: &[String]) -> i32 {
         "migrate" => cmd_migrate(&args[1..]),
         other => {
             eprintln!("Unknown recipe subcommand: {other}");
-            sovereign_cli_shared::help::print(&HELP);
+            sovereign_cli_base::help::print(&HELP);
             1
         }
     }
 }
 
-const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn recipe",
     summary: "Author and run corpus ingestion recipes: new, validate, test, migrate, list.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn recipe <subcommand> [args]"),
-        sovereign_cli_shared::help::HelpSection::Subcommands(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn recipe <subcommand> [args]"),
+        sovereign_cli_base::help::HelpSection::Subcommands(&[
             ("list", "List all corpora available in the registry"),
             (
                 "test <path>",
@@ -80,7 +80,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
                 "Rewrite a recipe to a newer ontology version, as a diff",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "`list` takes --offline (skip live registry refresh).\n\
              `test` takes --sample-size N, --output <path>, --offline, --verbose, \
              --params k=v[,...], --params-file <json>.\n\
@@ -333,19 +333,20 @@ async fn run_enrich_and_verify(
 
     // The daemon's loaded models are the SSOT for what to call; the daemon URL
     // comes from the canonical port constant + builder (one place owns the
-    // port — see `sovereign_cli_shared::urls`), not a hand-written literal.
-    let v1 = sovereign_cli_shared::urls::v1_url(sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT);
+    // port — see `sovereign_cli_base::urls`), not a hand-written literal.
+    let v1 = sovereign_cli_base::urls::v1_url(sovereign_cli_base::urls::DEFAULT_CLIENT_PORT);
     let (chat_model, embed_model) = resolve_daemon_models(&v1).await?;
 
     // Daemon-backed engine via the canonical provider + adapters (SSOT — the
     // same path `chat` bootstraps).
-    let provider: Arc<dyn sovereign_core::traits::InferenceProvider> =
+    let provider: Arc<dyn sovereign_contracts::traits::InferenceProvider> =
         Arc::new(crate::chat_cmd::bootstrap::SplitInferenceProvider::new(
             &v1,
             chat_model,
             embed_model.clone(),
             8192,
-            sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(&embed_model),
+            sovereign_contracts::models_manifest::DEFAULT_MANIFEST
+                .embed_query_instruction(&embed_model),
         ));
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&provider));
     let inference_fn = corpus_engine::enrichment::provider_inference::inference_to_inference_fn(
@@ -681,4 +682,4 @@ mod test_param_tests {
     }
 }
 
-// print_usage replaced by sovereign_cli_shared::help::print(&HELP); see HELP const above.
+// print_usage replaced by sovereign_cli_base::help::print(&HELP); see HELP const above.

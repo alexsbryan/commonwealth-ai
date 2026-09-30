@@ -19,8 +19,8 @@ use crate::chat_cmd::config::parse_globals;
 use corpus_engine::enrichment::pipeline::{
     progress::wire, BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };
-use sovereign_cli_shared::help::{self, Help, HelpSection};
-use sovereign_core::traits::InferenceProvider;
+use sovereign_cli_base::help::{self, Help, HelpSection};
+use sovereign_contracts::traits::InferenceProvider;
 use std::sync::Arc;
 
 pub use sovereign_enrichment_build::build::*;
@@ -242,7 +242,7 @@ async fn backfill_session_embedder() -> Result<corpus_index::types::EmbedFn, Str
     // The orchestrator takes an `EmbedFn` since ei-5a-build-cut — resolving the
     // session is still the CLI's job, adapting it is one call. QUERY-side: the
     // seed table must land in the space `atlas_navigate_ann` queries it in.
-    Ok(sovereign_core::embed_fn::inference_to_embed_query_fn(
+    Ok(corpus_index::embed_fn::inference_to_embed_query_fn(
         session.inference,
     ))
 }

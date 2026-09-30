@@ -37,11 +37,11 @@ use partitions::{
 
 pub async fn run_corpus(args: &[String]) -> i32 {
     if args.is_empty() {
-        sovereign_cli_shared::help::print(&HELP_CORPUS);
+        sovereign_cli_base::help::print(&HELP_CORPUS);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        sovereign_cli_shared::help::print(&HELP_CORPUS);
+        sovereign_cli_base::help::print(&HELP_CORPUS);
         return 0;
     }
 
@@ -84,18 +84,18 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "export-parcels" => cmd_corpus_export_parcels(&args[1..]).await,
         other => {
             eprintln!("Unknown corpus subcommand: {other}");
-            sovereign_cli_shared::help::print(&HELP_CORPUS);
+            sovereign_cli_base::help::print(&HELP_CORPUS);
             1
         }
     }
 }
 
-const HELP_CORPUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_CORPUS: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn corpus",
     summary: "Manage knowledge corpora shared across the mesh (install / remove / inspect).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn corpus <subcommand> [args]"),
-        sovereign_cli_shared::help::HelpSection::Subcommands(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn corpus <subcommand> [args]"),
+        sovereign_cli_base::help::HelpSection::Subcommands(&[
             ("list",                      "List installed and available corpora"),
             ("ingest <folder>",           "Build a corpus from a folder via the workflow runner (chunk→embed→store; --corpus <id>, --glob, --share)"),
             ("share <id>",                "Let this mesh's members search an installed corpus (sets its query_sharing)"),
@@ -125,7 +125,7 @@ const HELP_CORPUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
             ("watch-remove <id>",         "Unregister a watched folder and remove its index (source folder untouched)"),
             ("export-parcels <id>",       "Export a corpus's deterministic parcel atoms to CSV (--corpus, --out) for independent verification in a spreadsheet"),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "`reconstruct-manifest` accepts --source-dir <path> (default:\n\
              ~/.svrnmesh/indexes/_downloads/<id>) and --yes (skip confirmation).\n\
              `migrate-to-partition` accepts --dry-run to preview without touching disk.",

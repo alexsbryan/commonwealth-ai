@@ -18,7 +18,7 @@ use super::config::EnrichConfig;
 use super::corpus_io::build_corpus;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};
 use super::paths;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn enrich cascade",

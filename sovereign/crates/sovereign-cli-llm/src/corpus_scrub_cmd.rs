@@ -33,7 +33,7 @@ use understanding_vocab::atoms::AtomEnvelope;
 use corpus_engine::pii::{scrub_pii, EntityMap};
 use serde::{Deserialize, Serialize};
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn corpus scrub",

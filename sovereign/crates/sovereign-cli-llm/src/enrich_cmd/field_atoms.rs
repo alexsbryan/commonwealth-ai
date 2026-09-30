@@ -26,7 +26,7 @@
 
 use corpus_engine::enrichment::field_atoms::{publish_to_atlas, skeleton_from_atoms};
 use corpus_index::index::CorpusIndex;
-use sovereign_cli_shared::help;
+use sovereign_cli_base::help;
 
 /// The budget `turn_prepass::splice_ambient_field_digests` renders at. Repeated
 /// here only so `--show-digest` prints what a turn would actually see; the
@@ -51,7 +51,7 @@ pub async fn cmd_field_atoms(args: &[String]) -> i32 {
     };
     let target_id = into.unwrap_or_else(|| corpus_id.clone());
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");

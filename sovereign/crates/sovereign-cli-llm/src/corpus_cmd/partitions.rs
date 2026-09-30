@@ -97,7 +97,7 @@ pub(super) async fn cmd_corpus_pull(args: &[String]) -> i32 {
         return 1;
     };
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
@@ -238,7 +238,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
         return 1;
     };
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
@@ -673,13 +673,13 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
     // 2026-08-24 and the comment claimed it matched the daemon — it did not.
     // `alignment_cmd::mesh_indexes_dir` made the same correction on 2026-07-24
     // after a fully-materialized 1930-chunk ingest reported "no local corpus".
-    let index_dir = sovereign_cli_shared::dirs::sovereign_indexes();
+    let index_dir = sovereign_cli_base::dirs::sovereign_indexes();
 
     // Build a no-op embed function — reconstruction reads metadata only.
     let noop_embed: corpus_index::types::EmbedFn =
         Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 0]) }));
 
-    let recipes_dir = sovereign_cli_shared::dirs::sovereign_root().join("recipes");
+    let recipes_dir = sovereign_cli_base::dirs::sovereign_root().join("recipes");
 
     let engine = CorpusEngine::new(recipes_dir, index_dir, noop_embed);
 
@@ -764,7 +764,7 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
 
     // The manifest has already been written by reconstruct_source_manifest().
     // Confirm path for the user.
-    let index_path = sovereign_cli_shared::dirs::sovereign_indexes()
+    let index_path = sovereign_cli_base::dirs::sovereign_indexes()
         .join(&corpus_id)
         .join("_source_manifest.json");
     println!("Manifest written to: {}", index_path.display());
@@ -841,7 +841,7 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
     // Using `mesh_data_dir()` (platform data dir) would work for a
     // Desktop-only deployment but not for CLI-daemon setups where
     // `config.data.dir` commonly points at `~/.svrnmesh/`.
-    let config = match sovereign_core::setup_config::SetupConfig::load() {
+    let config = match sovereign_contracts::setup_config::SetupConfig::load() {
         Ok(c) => c,
         Err(e) => {
             eprintln!(

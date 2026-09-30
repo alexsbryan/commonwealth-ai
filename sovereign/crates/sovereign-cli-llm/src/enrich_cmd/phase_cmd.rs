@@ -44,7 +44,7 @@ impl PhaseOp {
 
 /// Shared body for every structural-phase subcommand.
 pub async fn run_phase(op: PhaseOp, args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         print_help(op);
         return 0;
     }
@@ -192,14 +192,14 @@ fn fail(msg: &str) -> i32 {
     1
 }
 
-const PHASE_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const PHASE_HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn enrich <phase>",
     summary: "Run one structural phase against a corpus (2-7).",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn enrich <cluster-questions|name-concerns|cluster-chunks|\n  extract-positions|detect-tensions|detect-gaps> <corpus-id>",
         ),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Requires upstream caches. Run `svrn enrich status <corpus>` to see \
              which phases are fresh, stale, or never-run.",
         ),
@@ -207,5 +207,5 @@ const PHASE_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
 };
 
 fn print_help(_op: PhaseOp) {
-    sovereign_cli_shared::help::print(&PHASE_HELP);
+    sovereign_cli_base::help::print(&PHASE_HELP);
 }

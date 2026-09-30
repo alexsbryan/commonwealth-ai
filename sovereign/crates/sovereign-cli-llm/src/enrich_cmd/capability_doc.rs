@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 
 use super::config::EnrichConfig;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 /// Concurrent narration calls in flight. Bounded so the daemon slot isn't
 /// flooded; a multi-seq serving slot (n_seq_max>1) turns this into real parallelism.
@@ -409,7 +409,7 @@ pub async fn cmd_capability_doc(args: &[String]) -> i32 {
     };
     let filter = parse_flag(args, "--filter");
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");

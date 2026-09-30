@@ -16,7 +16,7 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 
 // ─── Wire types ──────────────────────────────────────────────────
 //
@@ -109,7 +109,7 @@ fn describe_request_error(err: &reqwest::Error, url: &str) -> String {
 // ─── `svrn corpus watch <PATH> [flags]` ────────────────
 
 pub async fn run_register(args: &[String]) -> i32 {
-    if args.is_empty() || sovereign_cli_shared::help::wants_help(args) {
+    if args.is_empty() || sovereign_cli_base::help::wants_help(args) {
         print_register_help();
         return if args.is_empty() { 1 } else { 0 };
     }
@@ -393,7 +393,7 @@ async fn attach_consent(workflow: &str, allow: bool) -> std::result::Result<bool
 }
 
 pub async fn run_list(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("svrn corpus watch-list");
         eprintln!();
         eprintln!("List every registered watched-folder corpus and its current status.");

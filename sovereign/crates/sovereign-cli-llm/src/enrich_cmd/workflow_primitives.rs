@@ -20,8 +20,8 @@ use corpus_engine::enrichment::pipeline::{
 use super::atlas_configuration::{build_atlas_summary, finalize_configurations};
 use super::atlas_phase_cmd::render_excerpts;
 use corpus_engine::enrichment::atlas::analysis::configuration::Phase8ParseItem;
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::*;
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
 
 /// Parse a facet string (the Phase-3 `name` selector) into a `Facet`.
 fn parse_facet(s: Option<&str>) -> Result<Facet> {
@@ -54,7 +54,7 @@ use super::config::EnrichConfig;
 use super::corpus_io::rebuild_corpus_state;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 use std::sync::Arc;
 
 /// `atlas_chapters` — the chapter-input prep: split the corpus's pinned source
@@ -71,7 +71,7 @@ impl AtlasChaptersTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("atlas_chapters", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("atlas_chapters", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -106,7 +106,7 @@ impl AtlasSeedTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("atlas_seed", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("atlas_seed", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -152,7 +152,7 @@ impl AtlasClustersTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("atlas_clusters", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("atlas_clusters", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -193,10 +193,13 @@ impl AtlasClusterExcerptsTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("atlas_cluster_excerpts", move |params, ctx| {
-            let state = Arc::clone(&state);
-            async move { state.run(&params, &ctx).await }
-        })
+        sovereign_contracts::tool_manifest::declared(
+            "atlas_cluster_excerpts",
+            move |params, ctx| {
+                let state = Arc::clone(&state);
+                async move { state.run(&params, &ctx).await }
+            },
+        )
     }
 
     /// The executable half of `atlas_cluster_excerpts`.
@@ -261,7 +264,7 @@ impl PipelineAssembleTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("pipeline_assemble", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("pipeline_assemble", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -303,7 +306,7 @@ impl AtlasSummaryTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("atlas_summary", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("atlas_summary", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -334,10 +337,13 @@ impl AtlasWriteConfigurationsTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("atlas_write_configurations", move |params, ctx| {
-            let state = Arc::clone(&state);
-            async move { state.run(&params, &ctx).await }
-        })
+        sovereign_contracts::tool_manifest::declared(
+            "atlas_write_configurations",
+            move |params, ctx| {
+                let state = Arc::clone(&state);
+                async move { state.run(&params, &ctx).await }
+            },
+        )
     }
 
     /// The executable half of `atlas_write_configurations`.
@@ -375,7 +381,7 @@ impl ExemplarSelectTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("exemplar_select", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("exemplar_select", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -456,7 +462,7 @@ impl PipelineParseTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("pipeline_parse", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("pipeline_parse", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -534,7 +540,7 @@ impl PipelineComposeTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("pipeline_compose", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("pipeline_compose", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -623,7 +629,7 @@ impl PipelineComposeTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::Tool;
+    use sovereign_contracts::traits::Tool;
 
     /// `pipeline_compose` routes a typed input to the bespoke compose, no daemon:
     /// a literary_atlas seed prompt from a constructed chapter yields a non-empty

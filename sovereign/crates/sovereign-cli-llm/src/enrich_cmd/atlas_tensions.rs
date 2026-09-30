@@ -7,7 +7,7 @@
 //! moved down to the capability crate (ontology-v1 P0.5) and is re-exported
 //! below, so `super::atlas_tensions::…` keeps resolving for this crate's siblings.
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 pub use sovereign_enrichment_build::atlas_tensions::*;
 

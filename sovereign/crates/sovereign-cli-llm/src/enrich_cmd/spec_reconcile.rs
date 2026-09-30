@@ -49,7 +49,7 @@ use serde::{Deserialize, Serialize};
 
 use super::config::EnrichConfig;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 use sovereign_contracts::drift_fingerprint::write_fingerprint;
 
 /// Top functions by cosine per claim (prototype `K = 8`).
@@ -657,7 +657,7 @@ pub async fn cmd_spec_reconcile(args: &[String]) -> i32 {
         return 2;
     };
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");

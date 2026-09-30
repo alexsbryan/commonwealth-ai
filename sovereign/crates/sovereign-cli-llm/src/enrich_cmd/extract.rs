@@ -9,7 +9,7 @@
 //! bad flag — that is the one behaviour a capability crate cannot provide,
 //! since `HELP` is this host's user interface.
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 pub use sovereign_enrichment_build::extract::*;
 

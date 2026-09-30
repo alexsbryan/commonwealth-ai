@@ -19,8 +19,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use corpus_index::index::CorpusIndex;
+use sovereign_contracts::daemon_wire::conv_tiered::{ChunkEntityProgressRow, ChunkEntityRow};
 use sovereign_contracts::ner::LabeledEntityExtractor;
-use sovereign_core::conv_tiered::{ChunkEntityProgressRow, ChunkEntityRow};
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_time::unix_now as now_unix;
 

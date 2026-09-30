@@ -460,7 +460,7 @@ pub async fn run(args: &[String]) -> i32 {
     // would prefix retrieval's instruction underneath and put the whole race
     // in a fourth space — which is the defect this verb measured on
     // 2026-09-08 (6/43 classified, 0 of them the right row).
-    let embed = sovereign_core::embed_fn::inference_to_embed_fn(inference);
+    let embed = corpus_index::embed_fn::inference_to_embed_fn(inference);
     let classifier = match QuestionKindClassifier::build(&policy, &embed).await {
         Ok(Some(c)) => c,
         Ok(None) => {

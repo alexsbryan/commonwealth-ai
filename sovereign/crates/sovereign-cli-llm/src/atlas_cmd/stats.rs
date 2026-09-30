@@ -42,7 +42,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     }
 
-    let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
+    let indexes_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes");

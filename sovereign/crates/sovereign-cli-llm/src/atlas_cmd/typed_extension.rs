@@ -23,7 +23,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::typed_extension::{run_typed_extension, ExtractionStatus};
 
@@ -39,7 +39,10 @@ use sovereign_tools::typed_extension::{run_typed_extension, ExtractionStatus};
 /// Keeps the `/v1` suffix the flag has always carried — this endpoint is the
 /// OpenAI-shape ROOT, not the daemon base.
 fn default_endpoint() -> String {
-    format!("{}/v1", sovereign_core::setup_config::client_daemon_base())
+    format!(
+        "{}/v1",
+        sovereign_contracts::setup_config::client_daemon_base()
+    )
 }
 
 /// Context window the OpenAI-shape RemoteApiProvider claims. The

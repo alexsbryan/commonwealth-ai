@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use corpus_engine::IngestAtlas;
 use sovereign_tools::atlas_status::{compute_atlas_status, status_for_corpus};
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn atlas status",

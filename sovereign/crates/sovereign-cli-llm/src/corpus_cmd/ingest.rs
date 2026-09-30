@@ -14,12 +14,12 @@
 
 use sovereign_workflow_host::resolve_workflow_source;
 
-/// The daemon base via the ONE decider — `sovereign_core::setup_config::
+/// The daemon base via the ONE decider — `sovereign_contracts::setup_config::
 /// client_daemon_base()` (env `SOVEREIGN_DAEMON_URL`, then `[daemon]
 /// client_port`, then the compiled default), the same resolution
 /// `workflow_cmd::default_daemon` applies.
 fn default_daemon_base() -> String {
-    sovereign_core::setup_config::client_daemon_base()
+    sovereign_contracts::setup_config::client_daemon_base()
 }
 
 pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {

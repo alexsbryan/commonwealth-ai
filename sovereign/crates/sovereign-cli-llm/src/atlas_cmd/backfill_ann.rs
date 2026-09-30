@@ -141,7 +141,7 @@ pub async fn run(args: &[String]) -> i32 {
     // adapter keeps this table in the same vector space `atlas_navigate_ann`
     // queries it in (ei-5a-build-cut). Built once, not once per corpus — the
     // provider behind it is the same Arc either way.
-    let embed = sovereign_core::embed_fn::inference_to_embed_query_fn(inference);
+    let embed = corpus_index::embed_fn::inference_to_embed_query_fn(inference);
 
     // CRITICAL: build the ANN table over the SAME atom universe the daemon /
     // desktop ground with — i.e. the production grounding filter, which is the

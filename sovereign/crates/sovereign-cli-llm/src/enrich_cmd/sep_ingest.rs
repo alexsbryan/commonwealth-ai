@@ -25,8 +25,8 @@ use std::path::PathBuf;
 
 use corpus_engine::enrichment::sep::{list_categories, load_article};
 
-use sovereign_cli_shared::dirs::{sovereign_indexes, sovereign_root};
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::dirs::{sovereign_indexes, sovereign_root};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn enrich sep-ingest",

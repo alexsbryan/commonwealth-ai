@@ -17,7 +17,7 @@ use super::*;
 pub(super) fn cmd_new(args: &[String]) -> i32 {
     const USAGE: &str =
         "Usage: svrn recipe new --ontology <name> [--id <corpus-id>] [--out <path>]";
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         println!("{USAGE}");
         println!(
             "  templates: {}",
@@ -106,7 +106,7 @@ pub(super) fn cmd_new(args: &[String]) -> i32 {
 /// `--dry-run` the file is rewritten in place.
 pub(super) fn cmd_migrate(args: &[String]) -> i32 {
     const USAGE: &str = "Usage: svrn recipe migrate <path> --ontology-version N [--dry-run]";
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         println!("{USAGE}");
         return 0;
     }

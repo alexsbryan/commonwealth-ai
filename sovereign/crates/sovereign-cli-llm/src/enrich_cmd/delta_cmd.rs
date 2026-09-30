@@ -56,7 +56,7 @@ use super::build::{self, ParsedBuild};
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn enrich delta",
@@ -505,7 +505,7 @@ fn chapters_suffix(chapters: &[String]) -> String {
 /// Resolve `~/.svrnmesh/indexes` (or the configured data dir) the
 /// same way `enrich init`'s from-corpus path does.
 fn resolve_indexes_dir() -> PathBuf {
-    sovereign_core::setup_config::SetupConfig::load()
+    sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes")

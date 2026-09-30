@@ -208,7 +208,7 @@ async fn cmd_build(args: &[String]) -> i32 {
     let recipe = recipe.with_resolved_parameters(resolved);
 
     // ── Open the corpus index ──────────────────────────────────
-    let index_dir = sovereign_cli_shared::dirs::sovereign_indexes().join(&corpus_id);
+    let index_dir = sovereign_cli_base::dirs::sovereign_indexes().join(&corpus_id);
     if !index_dir.is_dir() {
         eprintln!(
             "error: corpus `{corpus_id}` is not installed at {}.\n\
@@ -344,7 +344,7 @@ async fn cmd_show(args: &[String]) -> i32 {
     let Some(corpus_id) = args.first() else {
         return arg_error("missing corpus id");
     };
-    let index_dir = sovereign_cli_shared::dirs::sovereign_indexes().join(corpus_id);
+    let index_dir = sovereign_cli_base::dirs::sovereign_indexes().join(corpus_id);
     if !index_dir.is_dir() {
         eprintln!(
             "error: corpus `{corpus_id}` is not installed at {}",
@@ -438,7 +438,7 @@ async fn cmd_recoalesce(args: &[String]) -> i32 {
             "missing corpus id (e.g. `svrn enrich investigation recoalesce uap-blue-book`)",
         );
     };
-    let index_dir = sovereign_cli_shared::dirs::sovereign_indexes().join(corpus_id);
+    let index_dir = sovereign_cli_base::dirs::sovereign_indexes().join(corpus_id);
     let invest_dir = index_dir.join(INVESTIGATION_DIRNAME);
     if !invest_dir.is_dir() {
         eprintln!(

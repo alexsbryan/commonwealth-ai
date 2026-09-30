@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use corpus_engine::enrichment::atlas::atoms::AtomType;
 use sovereign_tools::atlas_view::{AtomFilter, FileAtlasReader, PageCursor};
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const LIST_CORPORA_HELP: Help = Help {
     command: "svrn atlas list-corpora",

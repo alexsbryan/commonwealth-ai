@@ -108,7 +108,7 @@ async fn cmd_align(args: &[String]) -> i32 {
     let mut k = 20usize;
     let mut model = "primary".to_string();
     // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
-    let mut base = sovereign_core::setup_config::client_daemon_base();
+    let mut base = sovereign_contracts::setup_config::client_daemon_base();
     let mut bank_path = "sovereign/bench/sep/questions.toml".to_string();
     let mut right_corpus = "wikipedia".to_string();
 
@@ -427,7 +427,7 @@ async fn cmd_build(args: &[String]) -> i32 {
     }
 
     let indexes_dir = indexes_dir.unwrap_or_else(|| {
-        sovereign_core::setup_config::SetupConfig::load()
+        sovereign_contracts::setup_config::SetupConfig::load()
             .map(|c| c.data.dir)
             .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
             .join("indexes")

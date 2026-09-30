@@ -159,7 +159,7 @@ async fn cmd_simulate(args: &[String]) -> i32 {
             top.title,
             title_id = top.work_id,
         );
-        let confirmed = sovereign_cli_shared::prompts::confirm(&prompt, false);
+        let confirmed = sovereign_cli_base::prompts::confirm(&prompt, false);
         if !confirmed {
             println!("Skipping ingest. Run again later when you're ready.");
             return 0;
@@ -433,7 +433,7 @@ fn print_ingest_event(evt: &CatalogIngestEvent) {
 }
 
 fn build_engine() -> Result<CorpusEngine, i32> {
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let recipes_dir = data_dir.join("recipes");

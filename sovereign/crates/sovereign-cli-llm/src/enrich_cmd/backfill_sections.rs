@@ -55,7 +55,7 @@ use corpus_engine::enrichment::pipeline::{
     assign_chunks_to_sections, ChapterManifest, ChapterManifestWrite,
 };
 use corpus_index::index::EnrichmentChunkRow;
-use sovereign_cli_shared::dirs::sovereign_root;
+use sovereign_cli_base::dirs::sovereign_root;
 
 use super::config::EnrichConfig;
 use super::corpus_io::{detector_for, fetch_all_corpus_chunks};

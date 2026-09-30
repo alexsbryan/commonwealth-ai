@@ -21,7 +21,7 @@ use sovereign_pipeline::driver::{DriverConfig, Shutdown};
 use sovereign_pipeline::{recipe::Recipe, run_recipe, status, worklist::Worklist};
 use tokio::sync::Mutex;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn pipeline",

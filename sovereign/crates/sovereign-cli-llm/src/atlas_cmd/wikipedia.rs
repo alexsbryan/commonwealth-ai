@@ -13,7 +13,7 @@ use corpus_engine::enrichment::atlas::wiki_store::build_wikipedia_columnar_store
 use corpus_engine::CorpusEngine;
 use corpus_index::types::EmbedFn;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn atlas wikipedia",
@@ -159,7 +159,7 @@ pub async fn run(args: &[String]) -> i32 {
 }
 
 fn indexes_dir() -> std::path::PathBuf {
-    sovereign_core::setup_config::SetupConfig::load()
+    sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes")
@@ -346,7 +346,7 @@ async fn cmd_build_graph(args: &[String]) -> i32 {
         return 2;
     };
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let recipes_dir = data_dir.join("recipes");
@@ -572,7 +572,7 @@ async fn cmd_seed_table(args: &[String]) -> i32 {
         return 2;
     };
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes = data_dir.join("indexes");

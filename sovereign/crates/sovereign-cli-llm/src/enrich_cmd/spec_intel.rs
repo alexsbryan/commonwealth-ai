@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use super::config::EnrichConfig;
 use super::inference_client::{probe_daemon, DaemonInferenceClient};
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 /// Minimum section-body length (Unicode scalar values) to extract from —
 /// shorter sections are list-of-headings noise. Mirrors the prototype's
@@ -291,7 +291,7 @@ pub async fn cmd_spec_intel(args: &[String]) -> i32 {
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| spec_stem.clone());
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");
