@@ -95,11 +95,19 @@ async fn peer_ids(
         .collect()
 }
 
-fn own_root() -> tempfile::TempDir {
+/// The process environment these tests set, held for a test's whole body:
+/// `cargo test` (the lift sandbox's runner) runs them as threads of one
+/// process, where nextest gives each its own.
+static ENV: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// This test's own svrnmesh root, with the env lock held until the guard
+/// drops, and the shared-model pin cleared.
+async fn own_root() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
+    let held = ENV.lock().await;
     let root = tempfile::tempdir().expect("temp root");
-    // nextest runs each test in its own process, so this reaches only it.
     std::env::set_var("SVRNMESH_DATA_DIR", root.path());
-    root
+    std::env::remove_var("SOVEREIGN_SHARED_MODEL_ID");
+    (held, root)
 }
 
 /// On a shared-model fleet config, the FIRST primary turn after cold start
@@ -109,7 +117,7 @@ fn own_root() -> tempfile::TempDir {
 /// turn reaches the provider naming no model.
 #[tokio::test]
 async fn the_first_primary_turn_after_cold_start_goes_to_the_shared_model() {
-    let _root = own_root();
+    let (_held, _root) = own_root().await;
     std::env::set_var("SOVEREIGN_SHARED_MODEL_ID", "shared-model");
     let saw = Arc::new(Mutex::new(Vec::new()));
     let local = Arc::new(Holds {
@@ -140,8 +148,7 @@ async fn the_first_primary_turn_after_cold_start_goes_to_the_shared_model() {
 /// router over the roster's venues alone, without the pinned source.
 #[tokio::test]
 async fn a_reload_keeps_the_pinned_pods_the_one_router_ranks() {
-    let root = own_root();
-    std::env::remove_var("SOVEREIGN_SHARED_MODEL_ID");
+    let (_held, root) = own_root().await;
     let owner = sovereign_contracts::worker_pod::derive_signing_key(&[55u8; 32]);
     let (blob, _) = sovereign_contracts::worker_pod::mint_bootstrap(
         sovereign_contracts::worker_pod::BootstrapInputs {
