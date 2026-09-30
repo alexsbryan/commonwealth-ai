@@ -139,14 +139,20 @@ pub struct GuestSession {
     pub issued_at_ms: u64,
     /// Copied from the grant, never computed here. See the module docs.
     pub expires_at_ms: u64,
+    /// Set by [`GuestSessionStore::revoke`] — the session's own half of the
+    /// lazy-liveness revoke `GuestGrantStore::revoke` established for grants
+    /// (ROOT_CAUSE_FIXES C3c). Checked in [`Self::is_live`], the one decider,
+    /// so a revoked handle is dead at every door at once.
+    pub revoked: bool,
 }
 
 impl GuestSession {
-    /// True when this session has not yet lapsed as of `now_ms`. Liveness of
-    /// the GRANT is checked by [`GuestSessionStore::live`], which has it in
-    /// hand; this is the session's own half.
+    /// True when this session has not yet lapsed as of `now_ms` and has not
+    /// been revoked. Liveness of the GRANT is checked by
+    /// [`GuestSessionStore::live`], which has it in hand; this is the
+    /// session's own half.
     pub fn is_live(&self, now_ms: u64) -> bool {
-        now_ms < self.expires_at_ms
+        now_ms < self.expires_at_ms && !self.revoked
     }
 
     /// Whether `other` is the same name to a reader. Case and surrounding
@@ -230,9 +236,21 @@ impl GuestSessionStore {
             // The grant's own expiry, not a TTL of this store's. See the
             // module docs: this is what makes outliving the grant impossible.
             expires_at_ms: grant.expires_at_ms,
+            revoked: false,
         };
         guard.insert(session.handle.clone(), session.clone());
         Ok(session)
+    }
+
+    /// Revoke this handle now — the session's half of the lazy-liveness
+    /// revoke [`GuestGrantStore::revoke`] established for grants
+    /// (ROOT_CAUSE_FIXES C3c). The session stays in the map (expiry sweeps
+    /// it); the mark is what every door reads through [`GuestSession::is_live`].
+    pub fn revoke(&self, handle: &str) -> Option<GuestSession> {
+        let mut inner = self.inner.lock().expect("session store");
+        let session = inner.get_mut(handle)?;
+        session.revoked = true;
+        Some(session.clone())
     }
 
     /// Whether `session` is in the collision-and-recognition domain of
@@ -527,4 +545,33 @@ mod tests {
         assert_eq!(swept[0].handle, "h1");
         assert!(sessions.live("h2", &long, T0 + 2_000).is_some());
     }
+}
+
+/// **C3c: a revoked session is denied immediately** (ROOT_CAUSE_FIXES C3c).
+/// The grant store's lazy-liveness revoke, mirrored onto sessions —
+/// `revoked` is checked in `is_live`, the one decider, so a revoked handle
+/// dies at every door at once rather than at its expiry. Watched failing
+/// against the named defect: a revoke that only marks, without the
+/// `is_live` check, still admits.
+#[test]
+fn a_revoked_session_is_denied_immediately() {
+    let store = GuestSessionStore::new(GuestSessionBinding::Door);
+    let grant = crate::GuestGrant {
+        token: "t".into(),
+        scopes: vec![],
+        label: None,
+        issued_at_ms: 0,
+        expires_at_ms: u64::MAX,
+        revoked: false,
+    };
+    let session = store.claim("h1", &grant, "Ada", 10).expect("claims");
+    assert!(session.is_live(11), "live before the revoke");
+    // The store's copy is what every door reads (through `is_live`, the one
+    // decider) — assert on it, not on the handle returned at claim time.
+    let revoked = store.revoke("h1").expect("the handle was live");
+    assert!(revoked.revoked, "the mark is set");
+    assert!(
+        !revoked.is_live(11),
+        "revoked is dead NOW — not at the expiry it copied from its grant"
+    );
 }

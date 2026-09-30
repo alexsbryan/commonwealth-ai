@@ -297,16 +297,33 @@ fn route_page<'a>(
 /// who DECLARED it. The second is why one QR serves a whole wall — and it is
 /// still bounded by the registry, so a wall grant never reaches a namespace
 /// nobody put on the wall.
+/// Whether THIS grant reaches `ns`: it names it, or it is a wall grant and
+/// the owner declared the ns on the wall. The per-grant predicate — the one
+/// `root_proxy` must ask about the CALLER (ROOT_CAUSE_FIXES C3a).
+fn grant_reaches(
+    grant: &sovereign_grants::GuestGrant,
+    pages: &GuestPages,
+    ns: &str,
+    now_ms: u64,
+) -> bool {
+    grant.is_live(now_ms)
+        && (grant.rail_namespace() == Some(ns) || (grant.is_wall() && pages.declared(ns).is_some()))
+}
+
+/// Whether ANY live grant opens `ns` on this wall — the wall-OPEN question
+/// the page routes ask ("one QR serves a whole wall"). Deliberately NOT the
+/// proxy's question: a live grant naming the ns must not open the app's
+/// surface to every stranger at the door.
 fn namespace_is_granted(
     store: &GuestGrantStore,
     pages: &GuestPages,
     ns: &str,
     now_ms: u64,
 ) -> bool {
-    store.all().iter().any(|g| {
-        g.is_live(now_ms)
-            && (g.rail_namespace() == Some(ns) || (g.is_wall() && pages.declared(ns).is_some()))
-    })
+    store
+        .all()
+        .iter()
+        .any(|g| grant_reaches(g, pages, ns, now_ms))
 }
 
 /// The page routes' state: what is registered, and who may see it.
@@ -513,10 +530,22 @@ async fn page_file(
 /// many apps, and the root names the choice rather than guessing one.
 async fn root_proxy(State(st): State<PageState>, request: axum::extract::Request) -> Response {
     let now = commonwealth_core::clock::unix_now_millis();
+    // THE caller's grant — not "some grant" (ROOT_CAUSE_FIXES C3a): one live
+    // grant naming the ns used to open the proxy for EVERYONE at the door.
+    let caller =
+        crate::client_auth::bearer_token(&request).and_then(|token| st.grants.live(token, now));
+    let Some(caller) = caller else {
+        tracing::debug!(target: "door:proxy", "refused: the caller holds no live grant");
+        return (
+            StatusCode::NOT_FOUND,
+            "no live grant reaches a published app at this door",
+        )
+            .into_response();
+    };
     let live: Vec<(String, String)> = st
         .pages
         .reachable_names()
-        .filter(|ns| namespace_is_granted(&st.grants, &st.pages, ns, now))
+        .filter(|ns| grant_reaches(&caller, &st.pages, ns, now))
         .filter_map(|ns| {
             st.pages
                 .published_addr(ns)

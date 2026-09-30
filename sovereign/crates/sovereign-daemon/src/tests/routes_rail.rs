@@ -97,6 +97,7 @@ fn guest_named(name: &str) -> Guest {
         name: name.into(),
         issued_at_ms: 0,
         expires_at_ms: u64::MAX,
+        revoked: false,
     });
     g
 }

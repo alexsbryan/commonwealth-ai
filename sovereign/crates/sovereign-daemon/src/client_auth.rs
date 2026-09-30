@@ -156,7 +156,7 @@ pub const AUTH_EXEMPT_PATHS: &[&str] = &["/status", "/oicp/v1/capabilities"];
 
 /// Extract the bearer token from an `Authorization` header value, if
 /// present and well-formed (`Bearer <token>`, case-insensitive scheme).
-fn bearer_token(req: &Request) -> Option<&str> {
+pub(crate) fn bearer_token(req: &Request) -> Option<&str> {
     let header = req.headers().get(axum::http::header::AUTHORIZATION)?;
     let value = header.to_str().ok()?;
     let rest = value.strip_prefix("Bearer ").or_else(|| {

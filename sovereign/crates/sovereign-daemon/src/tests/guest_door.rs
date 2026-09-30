@@ -412,3 +412,46 @@ fn a_namespaced_page_names_its_app_on_every_rail_call() {
     let bare = ring_shim("", Some(""));
     assert!(bare.contains("const NS = \"\";"));
 }
+
+/// **C3a: the proxy asks the CALLER's grant, not "some grant"**
+/// (ROOT_CAUSE_FIXES C3a). `route_page`'s granted predicate is the
+/// wall-OPEN question ("one QR serves a whole wall") and stays ∃; the PROXY
+/// is a different question — one live grant naming the ns must not open the
+/// app's surface to every stranger at the door. Watched failing first: the
+/// ∃-filter proxied the bearer-less caller through.
+#[tokio::test]
+async fn a_path_with_no_caller_grant_is_refused_not_proxied() {
+    use sovereign_grants::{GuestGrantStore, Scope};
+    use std::sync::Arc;
+
+    let pages = Arc::new(GuestPages::new(
+        None,
+        Default::default(),
+        [("my-doc".to_string(), "127.0.0.1:4318".to_string())]
+            .into_iter()
+            .collect(),
+    ));
+    let grants = GuestGrantStore::new();
+    let now = commonwealth_core::clock::unix_now_millis();
+    grants.issue(
+        "someone-elses-token",
+        vec![Scope::Rails("my-doc".into())],
+        Some("theirs".into()),
+        3_600,
+        now,
+    );
+    let st = PageState {
+        pages,
+        grants: Arc::new(grants),
+    };
+    let req = axum::http::Request::builder()
+        .uri("/whatever")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let resp = root_proxy(State(st), req).await;
+    assert_eq!(
+        resp.status(),
+        axum::http::StatusCode::NOT_FOUND,
+        "a stranger holding no grant is refused — someone else's grant is not a pass"
+    );
+}
