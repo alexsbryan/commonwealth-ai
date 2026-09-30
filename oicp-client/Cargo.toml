@@ -25,6 +25,9 @@ reqwest = { workspace = true, features = ["stream"] }
 # `daemon_models`' tests stand up a fake daemon (`/v1/models`,
 # `/v1/embeddings`) on a loopback port.
 axum = { workspace = true }
+# `openai_passthrough`'s forwarding test reads the trait's methods from the
+# contracts crate, which reads its own source (`double`, test-fixtures).
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 
 [lints]
 workspace = true

@@ -323,3 +323,22 @@ impl InferenceProvider for TestProvider {
         self.capabilities.clone()
     }
 }
+
+/// The `fn`s `InferenceProvider` declares, read from this crate's own
+/// `traits.rs` at compile time: what a forwarding wrapper's test checks its
+/// impl against, so a method with a default cannot go unforwarded
+/// (pb-serve-ranks; the `ReloadableProvider` test's rule).
+pub fn inference_provider_methods() -> Vec<&'static str> {
+    let traits = include_str!("traits.rs");
+    let start = traits
+        .find("pub trait InferenceProvider")
+        .expect("the trait is declared in traits.rs");
+    let body = &traits[start..];
+    let end = body.find("\n}\n").expect("the trait's closing brace");
+    body[..end]
+        .split("fn ")
+        .skip(1)
+        .filter_map(|rest| rest.split('(').next())
+        .filter(|name| name.chars().all(|c| c.is_alphanumeric() || c == '_'))
+        .collect()
+}

@@ -243,16 +243,11 @@ fn fn_names(text: &str) -> Vec<&str> {
 }
 
 /// The module doc's "every `InferenceProvider` method forwards" as code: a
-/// method with a default compiles unforwarded and answers for the relay.
+/// method with a default compiles unforwarded and answers for the relay. The
+/// trait's methods come from the contracts crate, which reads its own source.
 #[test]
 fn the_relay_forwards_every_inference_provider_method() {
-    let traits = include_str!("../../sovereign/crates/sovereign-contracts/src/traits.rs");
-    let start = traits
-        .find("pub trait InferenceProvider")
-        .expect("the trait is declared in traits.rs");
-    let body = &traits[start..];
-    let end = body.find("\n}\n").expect("the trait's closing brace");
-    let methods = fn_names(&body[..end]);
+    let methods = sovereign_contracts::double::inference_provider_methods();
     assert!(methods.len() > 20, "parsed too few methods: {methods:?}");
 
     let relay = include_str!("openai_passthrough.rs");
