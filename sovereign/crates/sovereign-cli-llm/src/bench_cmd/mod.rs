@@ -55,7 +55,6 @@ mod redteam;
 mod render;
 mod report;
 mod resolver_precision;
-use crate::probe_cmd::resource_meter;
 mod routing_replay;
 /// Shared per-criterion rubric apparatus (judge · calibration gate ·
 /// Wilson-CI scoring + diff). `moral` is its first tenant; the

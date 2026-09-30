@@ -76,9 +76,9 @@ use sovereign_contracts::probe::{
     ProbeEvidence, ProbeMode, ProbeRequest, VaultBuildEvidence, VaultBuildProbe, VaultSource,
 };
 
-use crate::bench_cmd::resource_meter::ResourceReport;
 use crate::chat_cmd::config::default_globals_for_voice_eval;
 use sovereign_cli_base::help::{self, Help, HelpSection};
+use sovereign_contracts::probe::ResourceReport;
 
 const HELP: Help = Help {
     command: "svrn bench vault-report",

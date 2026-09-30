@@ -26,11 +26,11 @@ use sovereign_contracts::probe::{
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, DocumentAsset, NarrationEvent, Speed};
 
-use crate::bench_cmd::resource_meter::ResourceReport;
 use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::default_globals_for_voice_eval;
 pub(crate) use crate::probe_cmd::provider_for_model;
 use sovereign_cli_base::help::{self, Help, HelpSection};
+use sovereign_contracts::probe::ResourceReport;
 
 /// Bench configuration baked in at compile time. Changing the questions
 /// requires rebuilding the CLI; that's intentional — the bench is
