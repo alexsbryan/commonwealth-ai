@@ -55,6 +55,7 @@ pub mod embed_quirks;
 /// One truthiness rule for the workspace's operator switches — see the module
 /// docs for why it is a shared leaf rather than a per-crate helper.
 pub mod env;
+pub mod enrich_eval;
 pub mod error;
 pub mod eval_bank;
 /// Fill-in-the-middle prompt and stop text — the marker table, the PSM prompt

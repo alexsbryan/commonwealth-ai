@@ -530,46 +530,4 @@ pub(super) fn score_axis(
     Some(s)
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub(crate) struct EvalReport {
-    pub corpus_id: String,
-    pub golden_path: String,
-    pub positions: Option<PhaseScore>,
-    pub person_atoms: Option<PhaseScore>,
-    pub concept_atoms: Option<PhaseScore>,
-    pub work_atoms: Option<PhaseScore>,
-    pub event_atoms: Option<PhaseScore>,
-    pub state_atoms: Option<PhaseScore>,
-    pub relation_atoms: Option<PhaseScore>,
-    pub question_atoms: Option<PhaseScore>,
-    pub claim_atoms: Option<PhaseScore>,
-    pub discourse_act_distribution: Option<DiscourseActReport>,
-    pub edges: Option<PhaseScore>,
-    pub fault_lines: Option<PhaseScore>,
-    pub open_questions: Option<PhaseScore>,
-    pub configurations: Option<PhaseScore>,
-
-    // v2 typed-extension axes (Argumentative). Each is scored under
-    // `PhaseFilter::Atoms` when its golden axis is non-empty.
-    //
-    // `axis_scores` is the authoritative storage — keyed by
-    // `TypedAxis.key`. The five named fields below mirror the
-    // canonical map so existing JSON consumers / baseline diffs see
-    // identical keys. New axes added to `AXIS_CATALOG` show up only
-    // in `axis_scores`, not as new named fields.
-    pub axis_scores: BTreeMap<String, PhaseScore>,
-    pub mechanism_atoms: Option<PhaseScore>,
-    pub named_position_atoms: Option<PhaseScore>,
-    pub evidence_atoms: Option<PhaseScore>,
-    pub opposition_atoms: Option<PhaseScore>,
-    pub concession_atoms: Option<PhaseScore>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub(crate) struct DiscourseActReport {
-    pub total_claims: usize,
-    pub act_counts: Vec<(String, usize)>,
-    pub required_satisfied: bool,
-    pub uniform_violation: Option<String>,
-    pub notes: Vec<String>,
-}
+pub(crate) use sovereign_contracts::enrich_eval::{DiscourseActReport, EvalReport};

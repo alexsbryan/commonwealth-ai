@@ -581,7 +581,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrich_cmd::eval::{EvalReport, PhaseScore};
+    use sovereign_contracts::enrich_eval::{EvalReport, PhaseScore};
 
     #[test]
     fn enrichment_summary_no_axes() {

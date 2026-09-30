@@ -28,10 +28,10 @@ use serde::{Deserialize, Serialize};
 
 use understanding_vocab::read::ATLAS_DIRNAME;
 
-use crate::enrich_cmd::eval::{score_corpus, EvalReport, PhaseFilter, PhaseScore};
-use crate::enrich_cmd::eval_median::AggregatedReport;
+use crate::enrich_cmd::eval::{score_corpus, PhaseFilter};
 use crate::eval_cmd::runner::EvalRun;
 use sovereign_cli_base::help::{self, Help, HelpSection};
+use sovereign_contracts::enrich_eval::{AggregatedReport, EvalReport, PhaseScore};
 
 use super::baselines::{read_latest, write_dated_and_update_latest};
 use super::discover::{discover_benches, BenchSurface, DiscoveredBench};
