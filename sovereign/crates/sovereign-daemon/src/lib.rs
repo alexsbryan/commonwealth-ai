@@ -120,6 +120,7 @@ pub mod notes_http;
 pub mod ocr_install;
 pub mod openai_http;
 pub mod origin_fanout;
+pub mod peer_origin;
 pub mod principal;
 #[cfg(feature = "treesitter")]
 pub mod process;

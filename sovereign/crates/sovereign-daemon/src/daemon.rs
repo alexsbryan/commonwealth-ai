@@ -355,6 +355,7 @@ enum DaemonState {
         /// cw-rails on Drop (pb-work-donor). `None` on a local-only daemon and
         /// on a node with no corpus engine.
         _work_origin_handle: Option<crate::work_origin::WorkOriginHandle>,
+        _peer_origin_handle: Option<crate::peer_origin::PeerOriginHandle>,
         /// Stops posting the foreground deadline to cw-rails on Drop.
         _foreground_post_handle: crate::foreground_post::ForegroundPostHandle,
         /// The network posture this boot resolved, and what it produced.
@@ -2531,6 +2532,7 @@ impl EmbeddedDaemon {
         // than a fifth tuple element so the gate stays the SAME `if` the four
         // loops already sit in without re-indenting sixty lines of it.
         let mut work_origin_handle: Option<crate::work_origin::WorkOriginHandle> = None;
+        let mut peer_origin_handle: Option<crate::peer_origin::PeerOriginHandle> = None;
         // What this boot actually spawns, recorded at each spawn site and
         // stored on the Running variant. The profile's claim is about this
         // list, and a list is falsifiable where a config value is not
@@ -3574,14 +3576,25 @@ impl EmbeddedDaemon {
                 // as before. The donor itself is cw-rails'. A node
                 // with no corpus engine serves none, as its registry had no
                 // ingest executor.
+                let rails_base =
+                    crate::rails_client::resolve_rails_base(&self.setup_config.read().await.daemon);
+                // svrn's peer routes, as an origin in cw-rails' table on the
+                // same networked branch (pb-mesh-exit-transport's inbound
+                // half; `crate::peer_origin` says why nothing answers through
+                // it before the daemon reads cw-rails' roster).
+                peer_origin_handle = crate::peer_origin::spawn(
+                    rails_base.clone(),
+                    internal_port,
+                    &app_state.inner.node.peer_origin_tie,
+                );
+                if peer_origin_handle.is_some() {
+                    running_services.record(crate::local_only::MeshService::PeerOrigin);
+                }
                 if let Some(engine) = corpus_engine.clone() {
                     let origin = std::sync::Arc::new(crate::work_origin::WorkOrigin::new(
                         crate::ingest_executor::IngestExecutor::new(engine),
                         app_state.self_node_id(),
                     ));
-                    let rails_base = crate::rails_client::resolve_rails_base(
-                        &self.setup_config.read().await.daemon,
-                    );
                     match crate::work_origin::spawn(origin, rails_base).await {
                         Ok(handle) => {
                             running_services.record(crate::local_only::MeshService::WorkOrigin);
@@ -4096,6 +4109,7 @@ impl EmbeddedDaemon {
             _ring_sync_handle: ring_sync_handle,
             _rail_kv_pump_handle: rail_kv_pump_handle,
             _work_origin_handle: work_origin_handle,
+            _peer_origin_handle: peer_origin_handle,
             _foreground_post_handle: foreground_post_handle,
             local_only,
             running_services,

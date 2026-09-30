@@ -81,6 +81,7 @@ use commonwealth_transport::iroh_identity_forward::{
     is_acceptor_mark, ACCEPTOR_MARK_HEADER, MESH_HEADER_PREFIX,
 };
 use commonwealth_transport::mesh_proof::MESH_PROOF_HEADER;
+use kernel_types::member::ORIGIN_TIE_HEADER;
 use kernel_types::{NodeId, NodePubkey};
 use sovereign_contracts::principal::Principal;
 
@@ -121,6 +122,25 @@ fn tied_to_our_acceptor(headers: &HeaderMap, peer: Option<SocketAddr>) -> bool {
         .get(ACCEPTOR_MARK_HEADER)
         .and_then(|v| v.to_str().ok())
         .is_some_and(is_acceptor_mark)
+}
+
+/// Whether this connection is cw-rails forwarding to svrn's peer-route
+/// registration (`crate::peer_origin`): loopback, as cw-rails always dials
+/// the registered port on `127.0.0.1`, and carrying the live claim's tie.
+/// The cross-process form of [`tied_to_our_acceptor`]'s mark, and the tie
+/// the flip keeps when the acceptor goes (pb-mesh-exit-transport).
+fn tied_to_our_registration(
+    headers: &HeaderMap,
+    peer: Option<SocketAddr>,
+    tie: &crate::peer_origin::PeerOriginTie,
+) -> bool {
+    if !peer.is_some_and(|p| p.ip().is_loopback()) {
+        return false;
+    }
+    headers
+        .get(ORIGIN_TIE_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|presented| tie.holds(presented))
 }
 
 /// Remove every header in the acceptor's namespace, including the mark.
@@ -211,7 +231,10 @@ impl AppState {
         headers: &mut HeaderMap,
         peer: Option<SocketAddr>,
     ) -> (Principal, Option<ProvedMeshMember>) {
-        if !tied_to_our_acceptor(headers, peer) {
+        let by_acceptor = tied_to_our_acceptor(headers, peer);
+        let by_registration = !by_acceptor
+            && tied_to_our_registration(headers, peer, &self.inner.node.peer_origin_tie);
+        if !by_acceptor && !by_registration {
             // BEFORE the strip, because the proof's name sits under
             // `MESH_HEADER_PREFIX` and `strip_mesh_headers` would take it —
             // and it must, so that no handler downstream can re-read a proof
@@ -285,6 +308,12 @@ impl AppState {
             );
         }
         headers.remove(ACCEPTOR_MARK_HEADER);
+        headers.remove(ORIGIN_TIE_HEADER);
+        tracing::debug!(
+            target: "transport",
+            by = if by_acceptor { "acceptor mark" } else { "cw-rails registration tie" },
+            "internal: connection tied to a mesh endpoint forwarding for this daemon"
+        );
 
         let dialer = headers
             .get(PUBKEY_HEADER)
@@ -296,8 +325,8 @@ impl AppState {
             // Reported, never assumed harmless.
             tracing::warn!(
                 target: "transport",
-                "internal: the hop carries this daemon's acceptor mark but no \
-                 readable verified key — resolving unverified"
+                "internal: the hop is tied (acceptor mark or registration tie) \
+                 but carries no readable verified key — resolving unverified"
             );
             return (Principal::Unverified, None);
         };
@@ -730,4 +759,9 @@ mod tests {
             assert_eq!(p, Principal::Unverified, "{bad} must not resolve");
         }
     }
+
+    /// cw-rails' forwards to svrn's peer-route registration
+    /// (`crate::peer_origin`).
+    #[path = "tie.rs"]
+    mod tie;
 }

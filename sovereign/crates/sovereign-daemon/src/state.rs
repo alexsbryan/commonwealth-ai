@@ -1022,6 +1022,7 @@ impl AppState {
                     client_tokens: node_seed.client_tokens,
                     named_client_tokens: node_seed.named_client_tokens,
                     rails_base: node_seed.rails_base,
+                    peer_origin_tie: Default::default(),
                     guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
                     guest_pages: Arc::new(node_seed.guest_pages),
                     edit_door: node_seed.edit_door,

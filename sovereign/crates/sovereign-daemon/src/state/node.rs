@@ -210,6 +210,10 @@ pub struct NodePart {
     /// ([`NodeSeed::rails_base`]), like the port postures: decided before
     /// the state exists, never read from config mid-request.
     pub rails_base: String,
+    /// The live tie of svrn's peer-route registration with cw-rails, which
+    /// the internal resolver checks a forwarded `x-mesh-*` against
+    /// ([`crate::peer_origin`]). Empty until the networked boot registers.
+    pub peer_origin_tie: crate::peer_origin::PeerOriginTie,
     /// The NAMES claimed at this door — one QR serves a room, so the grant
     /// cannot say which phone is asking and the session does. A session is not
     /// a second credential: it names no scope, `GuestGrant::permits_path` on

@@ -74,6 +74,9 @@ pub enum MeshService {
     /// loopback and registered with cw-rails, whose donor forwards units to
     /// it. Spawned only on a node with a corpus engine.
     WorkOrigin,
+    /// svrn's peer routes registered with cw-rails' origin table
+    /// (`crate::peer_origin`), so a member reaches them through cw-rails.
+    PeerOrigin,
     /// The iroh endpoint + acceptor.
     IrohEndpoint,
     /// The founder reachability watchdog (only ever with the endpoint).
@@ -91,6 +94,7 @@ impl MeshService {
             MeshService::RingSync => "ring_sync",
             MeshService::RailKvPump => "rail_kv_pump",
             MeshService::WorkOrigin => "work_origin",
+            MeshService::PeerOrigin => "peer_origin",
             MeshService::IrohEndpoint => "iroh_endpoint",
             MeshService::IrohWatchdog => "iroh_watchdog",
         }
@@ -106,6 +110,7 @@ impl MeshService {
         MeshService::RingSync,
         MeshService::RailKvPump,
         MeshService::WorkOrigin,
+        MeshService::PeerOrigin,
         MeshService::IrohEndpoint,
         MeshService::IrohWatchdog,
     ];
