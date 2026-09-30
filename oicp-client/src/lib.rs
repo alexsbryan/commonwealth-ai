@@ -16,6 +16,7 @@
 use std::pin::Pin;
 use std::time::Instant;
 
+pub mod daemon_inference;
 pub mod daemon_models;
 mod ner;
 pub use ner::RemoteNer;
