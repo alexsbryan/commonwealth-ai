@@ -143,3 +143,81 @@ pub struct CommittedDocs {
     /// atlas update rather than a full rebuild.
     pub doc_ids: Vec<String>,
 }
+
+/// Lifecycle of a tracked article.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Lifecycle {
+    /// First-seen, not yet fetched into the parent `wikipedia` corpus.
+    PendingFetch,
+    /// Present in `wikipedia` at `last_known_rev_id`. Eligible for
+    /// daily revision checks.
+    Present,
+    /// Mid-refresh; another tick wrote this state and is now off
+    /// awaiting MediaWiki. Acts as a soft mutex against double-fetch
+    /// when partition assignment churns mid-tick.
+    Refreshing,
+    /// Fell out of the rolling window. No more daily attention; the
+    /// underlying chunks remain in `wikipedia` until the parent recipe's
+    /// monthly delta cleans them up.
+    Stale,
+    /// Fetch failed and exhausted retries. Manual intervention.
+    Failed,
+}
+
+/// Persistable view of a tracked article. Stored as JSON in
+/// `APP_ID_TRACKED` under key `tracked:<normalised_title>`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackedArticle {
+    pub title: String,
+    pub lifecycle: Lifecycle,
+    pub last_known_rev_id: Option<i64>,
+    /// Unix-seconds timestamp of the last revision check. `None` when
+    /// the article is still `PendingFetch`.
+    pub last_check_at: Option<i64>,
+    pub first_seen_at: i64,
+    /// Most recent tick that observed this title in a portal page.
+    /// Drives window-based eviction.
+    pub last_seen_in_signal_at: i64,
+    /// Soft-delete handle. When `now > evict_after_secs`, the next
+    /// leader tick flips lifecycle to `Stale`.
+    pub evict_after_secs: i64,
+    /// MediaWiki returned a redirect; the canonical title is `redirect_to`
+    /// and chunks live under that in the parent `wikipedia` corpus.
+    pub redirect_to: Option<String>,
+}
+
+/// Idempotency marker for the leader's daily portal-page ingest.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortalMarker {
+    pub date_iso: String,
+    pub last_fetched_revid: i64,
+    pub fetched_at: i64,
+}
+
+/// MeshStore namespace for tracked-article rows. Keyed by
+/// `tracked:<title>` with the title normalised (spaces → underscores).
+///
+/// **Colon-free since cw-lift 4, and it has to be.** This namespace is the
+/// one on this list that REPLICATES (the `:status` and `:portal` siblings are
+/// gossip-excluded), and a replicating `app_id` is now used verbatim as a ring
+/// namespace — which names a DIRECTORY, `<root>/rings/<ns>/`. `:` is not a
+/// legal path component on NTFS, and the desktop ships on Windows
+/// (`scripts/build-desktop-windows.sh`) linking `sovereign-mesh` and through
+/// it `commonwealth-rail`. The alternative was widening the rail's
+/// `valid_namespace` charset for every future namespace to keep one spelling
+/// here; renaming ONE constant is the cheaper decider to change, and a mapping
+/// table would have been two names for one thing (ARCH §10.6). Every reader
+/// goes through this constant, so the value is the only thing that moved.
+///
+/// The rows written under the old spelling are orphaned rather than migrated:
+/// `run_leader_step` re-derives a `TrackedArticle` from the next daily portal
+/// page, so the cost is one tick of `first_seen_at`, and in the shipped daemon
+/// `MeshStore` is `in_memory()` and loses them on every restart anyway.
+pub const APP_ID_TRACKED: &str = "wikipedia-newsworthy-tracked";
+
+/// KV namespace for daily portal-page idempotency markers. Keyed by
+/// `portal:<YYYY-MM-DD>`. Written and read only inside
+/// the watcher's `run_leader_step` — the leader reads
+/// back its own marker — so it is gossip-excluded and stays local.
+pub const APP_ID_PORTAL: &str = "wikipedia-newsworthy-portal";

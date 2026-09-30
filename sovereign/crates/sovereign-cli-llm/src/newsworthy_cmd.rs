@@ -18,7 +18,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use corpus_engine::update::newsworthy_watcher::{
+use corpus_index::ingest_port::newsworthy::{
     Lifecycle, PortalMarker, TrackedArticle, APP_ID_PORTAL, APP_ID_STATUS, APP_ID_TRACKED,
 };
 use sovereign_contracts::peer::ReplicatedKv;
