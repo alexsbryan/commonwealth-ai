@@ -62,7 +62,7 @@ const HELP: Help = Help {
     summary: "Score the resolved atlas against a golden-set TOML; report per-phase precision/recall/F1.",
     sections: &[
         HelpSection::Usage(
-            "svrn enrich eval <corpus-id> <golden-set-path> \\\n  [--phase positions|atoms|fault-lines|gaps|configurations|all] \\\n  [--report <json-path>]",
+            "svrn enrich eval <corpus-id> <golden-set-path> \\\n  [--phase positions|atoms|fault-lines|gaps|configurations|all] \\\n  [--report <json-path>] [--unmatched <json-path>]",
         ),
         HelpSection::Flags(&[
             (
@@ -72,6 +72,10 @@ const HELP: Help = Help {
             (
                 "--report <path>",
                 "Write structured JSON output to this path (in addition to printing the text table to stdout). Useful for tracking F1 across prompt iterations.",
+            ),
+            (
+                "--unmatched <path>",
+                "Write every unmatched atom (explained by no expected or forbidden golden entry) as a JSON array to this path. `bench enrichment-adjudicate` reads it to judge junk vs legitimate extraction.",
             ),
         ]),
         HelpSection::Examples(&[
@@ -123,6 +127,21 @@ pub async fn cmd_eval(args: &[String]) -> i32 {
                 return 1;
             }
         }
+    }
+
+    // The unmatched atoms themselves, for `bench enrichment-adjudicate`,
+    // which samples and judges them: recomputed with the scorers' own
+    // predicates (`collect_unmatched_atoms`), never re-derived by bench.
+    if let Some(path) = parsed.unmatched_path.as_ref() {
+        let unmatched = load_golden_and_snapshot(&parsed.corpus_id, &parsed.golden_path)
+            .map(|(golden, snapshot)| collect_unmatched_atoms(&golden, &snapshot))
+            .and_then(|atoms| serde_json::to_vec(&atoms).map_err(|e| e.to_string()))
+            .and_then(|bytes| std::fs::write(path, bytes).map_err(|e| e.to_string()));
+        if let Err(e) = unmatched {
+            eprintln!("error: writing unmatched atoms {}: {e}", path.display());
+            return 1;
+        }
+        tracing::debug!(path = %path.display(), "wrote unmatched atoms");
     }
 
     0
@@ -522,6 +541,18 @@ mod tests {
         let p = parse_args(&args).unwrap();
         assert_eq!(p.phase, PhaseFilter::FaultLines);
         assert_eq!(p.report_path, Some(PathBuf::from("/tmp/r.json")));
+    }
+
+    /// `bench enrichment-adjudicate` reads the atoms this flag writes.
+    #[test]
+    fn parse_args_unmatched() {
+        let args: Vec<String> = ["fwd", "/tmp/g.toml", "--unmatched", "/tmp/u.json"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let p = parse_args(&args).unwrap();
+        assert_eq!(p.unmatched_path, Some(PathBuf::from("/tmp/u.json")));
+        assert!(p.report_path.is_none());
     }
 
     #[test]

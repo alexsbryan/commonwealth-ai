@@ -16,7 +16,7 @@
 //! `bench gate` is a later decision the calibration data itself funds.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
@@ -25,7 +25,6 @@ use sovereign_contracts::traits::InferenceProvider;
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
-use crate::enrich_cmd::eval::{collect_unmatched_atoms, load_golden_and_snapshot};
 use sovereign_contracts::enrich_eval::UnmatchedAtom;
 
 const PROVIDER_CTX: u32 = 8192;
@@ -104,6 +103,35 @@ struct Report {
 
 /// Deterministic per-atom order key: FNV-1a over seed + axis + label.
 /// Gives a stable, seed-steerable shuffle without RNG state.
+/// The corpus's unmatched atoms as ingest's scorer computes them: `svrn
+/// enrich eval <corpus> <golden> --unmatched <tmp>` through the dispatcher.
+/// The child's text report is discarded; on failure its stderr is the error.
+fn unmatched_atoms(corpus_id: &str, golden: &Path) -> Result<Vec<UnmatchedAtom>, String> {
+    let tmp = tempfile::tempdir().map_err(|e| format!("tempdir: {e}"))?;
+    let out_path = tmp.path().join("unmatched.json");
+    let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
+    let svrn = sovereign_cli_base::dispatcher::dispatcher_exe(&exe)?;
+    let golden = golden.display().to_string();
+    let out = out_path.display().to_string();
+    let argv = ["enrich", "eval", corpus_id, &golden, "--unmatched", &out];
+    tracing::debug!(svrn = %svrn.display(), ?argv, "exec enrich eval --unmatched");
+    let run = std::process::Command::new(&svrn)
+        .args(argv)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| format!("spawn {}: {e}", svrn.display()))?;
+    if !run.status.success() {
+        let stderr = String::from_utf8_lossy(&run.stderr);
+        return Err(stderr
+            .trim()
+            .strip_prefix("error: ")
+            .unwrap_or(stderr.trim())
+            .to_string());
+    }
+    let bytes = std::fs::read(&out_path).map_err(|e| format!("read unmatched atoms: {e}"))?;
+    serde_json::from_slice(&bytes).map_err(|e| format!("parse unmatched atoms: {e}"))
+}
+
 fn order_key(seed: u64, atom: &UnmatchedAtom) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ seed;
     for b in atom.axis.bytes().chain(atom.label.bytes()) {
@@ -217,14 +245,13 @@ async fn run(rest: &[String]) -> i32 {
         return 2;
     };
 
-    let (golden_set, snapshot) = match load_golden_and_snapshot(&corpus_id, &golden_path) {
-        Ok(pair) => pair,
+    let unmatched = match unmatched_atoms(&corpus_id, &golden_path) {
+        Ok(atoms) => atoms,
         Err(e) => {
             eprintln!("error: {e}");
             return 1;
         }
     };
-    let unmatched = collect_unmatched_atoms(&golden_set, &snapshot);
     if unmatched.is_empty() {
         println!("enrichment-adjudicate: {corpus_id} has no unmatched atoms — nothing to price.");
         return 0;

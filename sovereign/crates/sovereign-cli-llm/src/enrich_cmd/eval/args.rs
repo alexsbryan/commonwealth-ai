@@ -48,6 +48,8 @@ pub(super) struct ParsedEval {
     pub(super) golden_path: PathBuf,
     pub(super) phase: PhaseFilter,
     pub(super) report_path: Option<PathBuf>,
+    /// `--unmatched <path>`: where to write the unmatched atoms as JSON.
+    pub(super) unmatched_path: Option<PathBuf>,
 }
 
 pub(super) fn parse_args(args: &[String]) -> Result<ParsedEval, String> {
@@ -55,6 +57,7 @@ pub(super) fn parse_args(args: &[String]) -> Result<ParsedEval, String> {
     let mut golden_path: Option<PathBuf> = None;
     let mut phase = PhaseFilter::All;
     let mut report_path: Option<PathBuf> = None;
+    let mut unmatched_path: Option<PathBuf> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -69,6 +72,13 @@ pub(super) fn parse_args(args: &[String]) -> Result<ParsedEval, String> {
                 report_path = Some(PathBuf::from(
                     args.get(i + 1)
                         .ok_or("--report requires a path".to_string())?,
+                ));
+                i += 2;
+            }
+            "--unmatched" => {
+                unmatched_path = Some(PathBuf::from(
+                    args.get(i + 1)
+                        .ok_or("--unmatched requires a path".to_string())?,
                 ));
                 i += 2;
             }
@@ -92,5 +102,6 @@ pub(super) fn parse_args(args: &[String]) -> Result<ParsedEval, String> {
         golden_path: golden_path.ok_or_else(|| "missing <golden-set-path>".to_string())?,
         phase,
         report_path,
+        unmatched_path,
     })
 }
