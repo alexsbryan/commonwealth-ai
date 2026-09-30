@@ -79,7 +79,7 @@ fn node(dir: &std::path::Path, key: &SigningKey, self_id: NodeId) -> AppState {
 }
 
 fn grant(state: &AppState, token: &str, namespace: &str) {
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     state.inner.node.guest_grants.issue(
         token,
         vec![Scope::Rails(namespace.into())],

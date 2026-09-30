@@ -185,7 +185,7 @@ fn state_with_rail_attested_by(
 }
 
 fn with_guest(state: AppState, scopes: Vec<Scope>) -> AppState {
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     state
         .inner
         .node

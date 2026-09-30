@@ -276,7 +276,7 @@ fn ms(mins: u64) -> u64 {
 /// scoped to a single model.
 fn state_with_guest(scopes: Vec<Scope>) -> AppState {
     let state = state_with_token(Some(TOKEN));
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     state
         .inner
         .node
@@ -376,7 +376,7 @@ async fn a_guest_token_never_satisfies_the_full_token_arm() {
 #[tokio::test]
 async fn an_expired_guest_token_is_401_not_admitted() {
     let state = state_with_token(Some(TOKEN));
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     // Issue against a clock two hours in the past with a 1s TTL: lapsed by the
     // time the layer reads it, without sleeping.
     state.inner.node.guest_grants.issue(
@@ -641,7 +641,7 @@ async fn a_guest_bearer_is_admitted_on_the_guest_listener_from_the_tunnel_hop() 
 #[tokio::test]
 async fn a_guest_grant_is_honoured_on_a_daemon_with_no_client_token() {
     let state = state_with_token(None);
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     state.inner.node.guest_grants.issue(
         GUEST_TOKEN,
         vec![Scope::Models(vec![GRANTED_MODEL.into()])],

@@ -157,7 +157,7 @@ async fn an_ingest_unit_runs_through_cw_rails_donor_inside_this_process() {
     // The foreground holds new takes: the daemon's own post, the call its
     // publisher makes.
     let hold_ms = 12_000;
-    let until_ms = commonwealth_core::clock::unix_now_millis() + hold_ms;
+    let until_ms = sovereign_time::unix_millis() + hold_ms;
     sovereign_daemon::rails_client::post_work_yield(&rails.base, until_ms)
         .await
         .expect("the yield door takes the deadline");
@@ -186,7 +186,7 @@ async fn an_ingest_unit_runs_through_cw_rails_donor_inside_this_process() {
     // Held while the deadline stands: two donor rounds, still queued.
     tokio::time::sleep(Duration::from_secs(8)).await;
     assert!(
-        commonwealth_core::clock::unix_now_millis() < until_ms,
+        sovereign_time::unix_millis() < until_ms,
         "the hold window elapsed before it was read; the reading proves nothing"
     );
     let held = rails.projection().await;
@@ -195,7 +195,7 @@ async fn an_ingest_unit_runs_through_cw_rails_donor_inside_this_process() {
         .values()
         .find_map(|h| h.units.get(&unit.unit_hash))
         .expect("the unit is on the fold")
-        .status_at(commonwealth_core::clock::unix_now_millis());
+        .status_at(sovereign_time::unix_millis());
     assert!(
         matches!(status, WorkUnitStatus::Queued { .. }),
         "the donor took a unit inside the foreground deadline: {status:?}"
@@ -211,7 +211,7 @@ async fn an_ingest_unit_runs_through_cw_rails_donor_inside_this_process() {
                 .handoffs
                 .values()
                 .find_map(|h| h.units.get(&unit.unit_hash))?;
-            match u.status_at(commonwealth_core::clock::unix_now_millis()) {
+            match u.status_at(sovereign_time::unix_millis()) {
                 WorkUnitStatus::Complete {
                     lessee,
                     outcome,

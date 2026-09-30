@@ -115,7 +115,7 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     // `(ts_unix, actor, id)` — so a submit, a lease and its renews written
     // in the same second would be ordered by op id, which is a hash.
     // Distinct seconds make the order the one the scenario means.
-    let now = commonwealth_core::clock::unix_now_secs() as i64;
+    let now = sovereign_time::unix_now_u64() as i64;
     let sign = |key: &SigningKey, seq: u64, ts: i64, act: &WorkAct| -> Op<SignedOp> {
         let act = RailAct::Record {
             payload: payload_of(act),
@@ -174,7 +174,7 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     // above — the read the donor makes.
     let projection = local.work_projection().await.unwrap();
     let mine = ActorKey::parse(donor.actor()).unwrap();
-    let now_ms = commonwealth_core::clock::unix_now_millis();
+    let now_ms = sovereign_time::unix_millis();
     let held = projection
         .handoffs
         .get(&handoff)

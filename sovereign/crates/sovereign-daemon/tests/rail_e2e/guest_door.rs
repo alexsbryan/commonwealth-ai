@@ -240,7 +240,7 @@ async fn an_expired_wall_bearer_is_refused_at_the_door() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = state_with_rail(dir.path(), &key);
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     // Issued ten seconds ago for one second.
     state.inner.node.guest_grants.issue(
         GUEST_TOKEN,
@@ -291,7 +291,7 @@ async fn the_door_opens_at_the_first_rail_grant_and_closes_at_the_last_expiry() 
     assert!(log().await.is_err(), "the door is open with no grant out");
 
     // A models-only grant is not a wall grant: still shut.
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     state.inner.node.guest_grants.issue(
         "models-only-token-models-only-token-models-only-token-0000000000",
         vec![Scope::Models(vec!["m".into()])],
@@ -307,7 +307,7 @@ async fn the_door_opens_at_the_first_rail_grant_and_closes_at_the_last_expiry() 
         vec![Scope::Rails(NS.into())],
         Some("wall".into()),
         3,
-        commonwealth_core::clock::unix_now_millis(),
+        sovereign_time::unix_millis(),
     );
     let deadline = within(4);
     loop {
@@ -540,7 +540,7 @@ fn second_app(state: &AppState, key: &SigningKey) {
         vec![Scope::Rails(DOC_NS.into())],
         Some("doc".into()),
         3_600,
-        commonwealth_core::clock::unix_now_millis(),
+        sovereign_time::unix_millis(),
     );
 }
 

@@ -176,7 +176,7 @@ async fn an_upgraded_caller_gets_no_raw_secret_back() {
 
     let incoming = mesh_with(mesh_id, hash, vec![member(caller, "Caller", 200)]);
     let proof = local
-        .mesh_proof(caller, commonwealth_core::clock::unix_now_secs())
+        .mesh_proof(caller, sovereign_time::unix_now_u64())
         .unwrap();
     let (status, resp) = post_gossip(
         &state,
@@ -217,7 +217,7 @@ async fn a_proving_caller_that_withholds_its_secret_is_recorded_post_split() {
     // Withholding: no `mesh_secret` on the wire at all, only the proof.
     let incoming = mesh_with(mesh_id, hash, vec![member(caller, "Caller", 200)]);
     let proof = local
-        .mesh_proof(caller, commonwealth_core::clock::unix_now_secs())
+        .mesh_proof(caller, sovereign_time::unix_now_u64())
         .unwrap();
     let (status, _) = post_gossip(
         &state,
