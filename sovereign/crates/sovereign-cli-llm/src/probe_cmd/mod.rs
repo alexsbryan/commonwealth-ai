@@ -8,7 +8,8 @@
 //! --attached`), `bench vault-report` and `bench faithfulness`, which exec it
 //! and score what it writes. It runs ONE internal stage per question — the
 //! router's classifier, the production retrieval pipeline, a raw index
-//! search, or an attached-document turn — or once per run: a metered
+//! search, an attached-document turn, or the epistemic ledger's coverage
+//! verdict and acquisition routes — or once per run: a metered
 //! folder-vault build, a read of a corpus's RAPTOR tree, or the grounding
 //! gate's own verdicts and judge registers over text bench supplies —
 //! and writes a `sovereign_contracts::probe::ProbeEvidence`: raw
@@ -17,6 +18,7 @@
 //! session exactly as they do for any other verb.
 
 mod attached;
+mod epistemic;
 mod judge;
 mod prod;
 mod raptor_nodes;
@@ -206,6 +208,7 @@ async fn probe(
             )
             .await?,
         },
+        ProbeMode::Epistemic => epistemic::probe(session, request).await?,
         ProbeMode::Attached => {
             let spec = request
                 .attached

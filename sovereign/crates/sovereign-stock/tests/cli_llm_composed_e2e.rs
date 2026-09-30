@@ -330,6 +330,51 @@ fn probe_retrieve(fx: &Fixture, bin: &Path) -> Result<Vec<(String, String)>, Str
         .collect())
 }
 
+/// The probe's `epistemic` stage: the corpus the coverage verdict names as
+/// nearest (the `epistemic_demo` example's measurement, pb-cli-llm-ingest-move).
+fn probe_epistemic(fx: &Fixture, bin: &Path) -> Result<Option<String>, String> {
+    let dir = fx.root.path().join(format!(
+        "epistemic-{}",
+        bin.file_name().and_then(|n| n.to_str()).unwrap_or("bin")
+    ));
+    std::fs::create_dir_all(&dir).expect("probe dir");
+    let (request, output) = (dir.join("request.json"), dir.join("evidence.json"));
+    std::fs::write(
+        &request,
+        serde_json::to_vec(&json!({
+            "mode": "epistemic",
+            "questions": [{ "id": "q1", "question": QUESTION }],
+            "corpus": "",
+            "limit": 0,
+            "isolate": false,
+        }))
+        .expect("request encodes"),
+    )
+    .expect("request");
+    let out = cli(
+        fx,
+        bin,
+        &["__probe"],
+        &[
+            "--request",
+            request.to_str().expect("utf-8"),
+            "--output",
+            output.to_str().expect("utf-8"),
+        ],
+    );
+    if !out.status.success() {
+        return Err(says(&out));
+    }
+    let evidence: Value =
+        serde_json::from_slice(&std::fs::read(&output).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    let row = &evidence["rows"][0];
+    if !row["error"].is_null() || row["coverage"].is_null() {
+        return Err(format!("the question has no coverage verdict: {row}"));
+    }
+    Ok(row["coverage"]["best_corpus"].as_str().map(str::to_string))
+}
+
 /// What the in-process engine retrieved for `QUESTION` at this row's start
 /// (the bare binary built at f6684957d, before the switch), as
 /// `(corpus_id, content)`: the paragraph chunker keeps the short fixture as
@@ -363,10 +408,16 @@ fn the_composed_cli_retrieves_through_ingests_engine_and_the_bare_one_names_the_
         expected(),
         "the probe's retrieve stage through the composed binary"
     );
+    assert_eq!(
+        probe_epistemic(&fx, composed).unwrap_or_else(|e| panic!("__probe epistemic: {e}")),
+        Some(CORPUS.to_string()),
+        "the probe's epistemic stage finds the fixture corpus nearest"
+    );
 
     for (lane, got) in [
-        ("chat inspect", inspect(&fx, &bare)),
-        ("__probe retrieve", probe_retrieve(&fx, &bare)),
+        ("chat inspect", inspect(&fx, &bare).map(|_| ())),
+        ("__probe retrieve", probe_retrieve(&fx, &bare).map(|_| ())),
+        ("__probe epistemic", probe_epistemic(&fx, &bare).map(|_| ())),
     ] {
         let said = got.expect_err("the bare binary reads no corpus");
         assert!(

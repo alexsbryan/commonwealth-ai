@@ -5,8 +5,9 @@
 //! `svrn __probe` runs ONE internal stage (the router's classifier,
 //! the production retrieval pipeline, a raw index search, an
 //! attached-document turn, a metered folder-vault build, a read of a
-//! corpus's RAPTOR tree, or the grounding gate's own verdicts and judge
-//! registers) over plain question text and writes a
+//! corpus's RAPTOR tree, the grounding gate's own verdicts and judge
+//! registers, or the epistemic ledger's coverage verdict and acquisition
+//! routes) over plain question text and writes a
 //! [`ProbeEvidence`]. It carries no bank, no
 //! expectation and no score: svrn describes itself, bench owns banks and
 //! verdicts (ARCH principle 12; phase-b-58). Both sides name this one type, so
@@ -17,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::traits::CorpusUnavailable;
 
 mod attached;
+mod epistemic;
 mod judge;
 mod raptor_nodes;
 mod resources;
@@ -25,6 +27,7 @@ mod vault;
 pub use attached::{
     AttachedEvidence, AttachedProbe, AttachedSource, AttachedTurn, StateTransition,
 };
+pub use epistemic::{CoverageEvidence, EpistemicEvidence};
 pub use judge::{
     AssertedValueVerdict, AssessAnswer, AssessEvidence, AssessOp, AssessProbe, JudgeAnswer,
     JudgeEvidence, JudgeOp, JudgeProbe,
@@ -62,11 +65,14 @@ pub enum ProbeMode {
     /// The gate's model registers (forced choice, chunk support, claim
     /// extraction) over bench-supplied text.
     Judge,
+    /// The epistemic ledger's live signals on a miss: the cross-corpus
+    /// coverage verdict and the ranked acquisition routes.
+    Epistemic,
 }
 
 impl ProbeMode {
     /// Every mode, in command-line order.
-    pub const ALL: [ProbeMode; 8] = [
+    pub const ALL: [ProbeMode; 9] = [
         ProbeMode::Routing,
         ProbeMode::Prod,
         ProbeMode::Retrieve,
@@ -75,6 +81,7 @@ impl ProbeMode {
         ProbeMode::RaptorNodes,
         ProbeMode::Assess,
         ProbeMode::Judge,
+        ProbeMode::Epistemic,
     ];
 
     /// The command-line spelling.
@@ -88,6 +95,7 @@ impl ProbeMode {
             ProbeMode::RaptorNodes => "raptor-nodes",
             ProbeMode::Assess => "assess",
             ProbeMode::Judge => "judge",
+            ProbeMode::Epistemic => "epistemic",
         }
     }
 
@@ -207,6 +215,11 @@ pub enum ProbeEvidence {
     Assess(Box<AssessEvidence>),
     /// [`ProbeMode::Judge`].
     Judge(Box<JudgeEvidence>),
+    /// [`ProbeMode::Epistemic`].
+    Epistemic {
+        /// One coverage verdict and route slate per question.
+        rows: Vec<EpistemicEvidence>,
+    },
 }
 
 impl ProbeEvidence {
@@ -221,6 +234,7 @@ impl ProbeEvidence {
             ProbeEvidence::RaptorNodes(_) => ProbeMode::RaptorNodes,
             ProbeEvidence::Assess(_) => ProbeMode::Assess,
             ProbeEvidence::Judge(_) => ProbeMode::Judge,
+            ProbeEvidence::Epistemic { .. } => ProbeMode::Epistemic,
         }
     }
 }
@@ -324,6 +338,45 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    /// The epistemic evidence keeps "the probe did not run" (`coverage:
+    /// null`) apart from a verdict, and its routes carry their kind.
+    #[test]
+    fn epistemic_evidence_round_trips() {
+        let ev = ProbeEvidence::Epistemic {
+            rows: vec![
+                EpistemicEvidence {
+                    id: "q1".into(),
+                    error: None,
+                    coverage: Some(CoverageEvidence {
+                        verdict: crate::types::GapCoverage::ClaimUncovered,
+                        best_similarity: 0.8,
+                        best_corpus: Some("c".into()),
+                    }),
+                    routes: vec![crate::types::AcquisitionRoute::ConnectFolder],
+                    embed_ms: 1,
+                    probe_ms: 2,
+                    resolve_ms: 3,
+                },
+                EpistemicEvidence {
+                    id: "q2".into(),
+                    error: None,
+                    coverage: None,
+                    routes: vec![],
+                    embed_ms: 1,
+                    probe_ms: 0,
+                    resolve_ms: 0,
+                },
+            ],
+        };
+        let v = serde_json::to_value(&ev).unwrap();
+        assert_eq!(v["mode"], "epistemic");
+        assert_eq!(v["rows"][0]["coverage"]["verdict"], "claim_uncovered");
+        assert_eq!(v["rows"][0]["routes"][0], "connect_folder");
+        assert!(v["rows"][1]["coverage"].is_null());
+        let back: ProbeEvidence = serde_json::from_value(v).unwrap();
+        assert_eq!(back.mode(), ProbeMode::Epistemic);
     }
 
     /// The vault-build request names its folder corpus by kind; the
