@@ -8,7 +8,7 @@
 use crate::daemon_cmd;
 pub use crate::hosted_code::{CodeHost, CodeMount, HostedCode};
 pub use crate::hosted_ingest::{HostedIngest, IngestHost, IngestMount};
-pub use crate::serve_client::{HostedParts, HostedServe};
+pub use crate::serve_client::{HostedParts, HostedServe, RankPorts, Ranked};
 use sovereign_contracts::launch::Launch;
 
 /// The daemon-verb slice of the old dispatcher. Returns the process

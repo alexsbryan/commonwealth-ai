@@ -25,10 +25,9 @@ pub(super) struct ServingBoot {
     /// on the dialing path, the distribution's in-process kind hosted or on a
     /// terminal, `None` where neither holds a model.
     pub ner: Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
-    /// svrn's OpenAI routes relayed to the server it dials: `Some` exactly
-    /// when no distribution was handed in, so nothing ranks in this process
-    /// (pb-serve-ranks); `None` where the distribution's router ranks.
-    pub relay: Option<Arc<oicp_client::openai_passthrough::OpenAiPassthrough>>,
+    /// This node's turns as svrn serves them: ranked by serve's router where
+    /// the distribution composed one, else relayed (pb-serve-ranks).
+    pub ranked: crate::serve_client::Ranked,
 }
 
 /// `Err(code)` is the exit code `run_daemon` returns.
@@ -36,7 +35,7 @@ pub(super) async fn boot_serving(
     config: &SetupConfig,
     args: &[String],
     config_override: &Option<std::path::PathBuf>,
-    hosted: Option<crate::serve_client::HostedServe>,
+    mut hosted: Option<crate::serve_client::HostedServe>,
 ) -> Result<ServingBoot, i32> {
     // Shared-model cluster role → RPC env contract, applied once, before any
     // RPC consumer reads the env (the hosted engine's worker bind and
@@ -65,13 +64,15 @@ pub(super) async fn boot_serving(
         .clone()
         .unwrap_or_else(sovereign_core::setup_config::SetupConfig::default_path);
     let deferred_daemon = Arc::new(crate::DeferredDaemon::new());
+    // The distribution's ranking, for the paths where serve is not hosted
+    // here; the hosted path ranks inside its composition.
+    let rank = hosted.as_mut().and_then(|h| h.take_rank());
     if config.node_class() != sovereign_core::setup_config::NodeClass::Terminal {
-        let alone = hosted.is_none();
         return match hosted {
             Some(hosted) if path == crate::serve_client::ServingPath::Hosted => {
                 host_serve(config, &config_path_in_use, hosted, deferred_daemon, path).await
             }
-            _ => dial_serve(config, deferred_daemon, path, alone).await,
+            _ => dial_serve(config, deferred_daemon, path, rank).await,
         };
     }
     if hosted.is_some() {
@@ -135,14 +136,25 @@ pub(super) async fn boot_serving(
             Err(()) => return Err(1),
         };
     let provider: Arc<dyn InferenceProvider> = Arc::clone(&split) as Arc<_>;
-    // svrn alone relays its OpenAI routes to the entry node, which ranks; the
-    // relay reads no manifest, since a terminal advertises nothing (§18.3).
-    let relay = hosted.is_none().then(|| {
-        Arc::new(oicp_client::openai_passthrough::OpenAiPassthrough::new(
+    // The distribution's router ranks over the forwarder; with none, svrn
+    // relays its OpenAI routes to the entry node, which ranks. The relay reads
+    // no manifest, since a terminal advertises nothing (§18.3).
+    let ranked = match rank {
+        Some(rank) => {
+            rank(
+                Arc::clone(&provider),
+                crate::serve_client::RankPorts::over(&deferred_daemon),
+            )
+            .await
+        }
+        None => crate::serve_client::relayed(
             Arc::clone(&provider),
-            &split,
-        ))
-    });
+            Arc::new(oicp_client::openai_passthrough::OpenAiPassthrough::new(
+                Arc::clone(&provider),
+                &split,
+            )),
+        ),
+    };
     // A terminal's own ingest and retrieval run NER in this process, through
     // the distribution's in-process kind; svrn alone has none to load.
     let ner = hosted.as_ref().and_then(|h| h.ner_handle());
@@ -156,7 +168,7 @@ pub(super) async fn boot_serving(
         deferred_daemon,
         path,
         ner,
-        relay,
+        ranked,
     })
 }
 
@@ -170,7 +182,7 @@ async fn dial_serve(
     config: &SetupConfig,
     deferred_daemon: Arc<crate::DeferredDaemon>,
     path: crate::serve_client::ServingPath,
-    alone: bool,
+    rank: Option<crate::serve_client::Rank>,
 ) -> Result<ServingBoot, i32> {
     let serve = crate::serve_client::resolve_serve_base(&config.node);
     if let Err(e) =
@@ -220,17 +232,29 @@ async fn dial_serve(
         ),
     );
     let provider: Arc<dyn InferenceProvider> = Arc::clone(&cell) as Arc<_>;
-    // svrn alone relays its OpenAI routes to serve, which answers them, and
+    // The distribution's router ranks over the cell; with none, svrn relays
+    // its OpenAI routes to serve, which answers them, and
     // `/oicp/v1/capabilities` from serve's own manifest (pb-serve-ranks).
-    let relay = if alone {
-        let relay = Arc::new(oicp_client::openai_passthrough::OpenAiPassthrough::new(
-            Arc::clone(&provider),
-            &loopback,
-        ));
-        relay.read_manifest().await;
-        Some(relay)
-    } else {
-        None
+    let (ranked, relay) = match rank {
+        Some(rank) => (
+            rank(
+                Arc::clone(&provider),
+                crate::serve_client::RankPorts::over(&deferred_daemon),
+            )
+            .await,
+            None,
+        ),
+        None => {
+            let relay = Arc::new(oicp_client::openai_passthrough::OpenAiPassthrough::new(
+                Arc::clone(&provider),
+                &loopback,
+            ));
+            relay.read_manifest().await;
+            (
+                crate::serve_client::relayed(Arc::clone(&provider), Arc::clone(&relay)),
+                Some(relay),
+            )
+        }
     };
     tracing::info!(target: "serving_path", serve_base = %serve.base, source = ?serve.source, "boot: serving is serve's; this daemon holds no engine");
     Ok(ServingBoot {
@@ -241,12 +265,12 @@ async fn dial_serve(
             base: serve,
             config_context,
             cell,
-            relay: relay.clone(),
+            relay,
         },
         deferred_daemon,
         path,
         ner,
-        relay,
+        ranked,
     })
 }
 
@@ -266,8 +290,16 @@ async fn host_serve(
     path: crate::serve_client::ServingPath,
 ) -> Result<ServingBoot, i32> {
     let ner_source = hosted.take_ner();
-    let crate::serve_client::HostedParts { cell, distribute } = match hosted
-        .compose(config.data.dir.clone(), config_path.to_path_buf())
+    let crate::serve_client::HostedParts {
+        cell,
+        ranked,
+        distribute,
+    } = match hosted
+        .compose(
+            config.data.dir.clone(),
+            config_path.to_path_buf(),
+            crate::serve_client::RankPorts::over(&deferred_daemon),
+        )
         .await
     {
         Ok(parts) => parts,
@@ -295,6 +327,6 @@ async fn host_serve(
         deferred_daemon,
         path,
         ner,
-        relay: None,
+        ranked,
     })
 }

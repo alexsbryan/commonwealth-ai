@@ -1537,7 +1537,7 @@ max_code_lines = 300
 [[distribution.face]]
 package = "svrn"
 krate = "sovereign-daemon"
-items = ["process::run", "process::HostedServe", "process::HostedParts", "process::HostedCode", "process::CodeMount", "process::HostedIngest", "process::IngestMount", "EmbeddedDaemon", "mesh_http::set_shared_model_host"]
+items = ["process::run", "process::HostedServe", "process::HostedParts", "process::RankPorts", "process::Ranked", "process::HostedCode", "process::CodeMount", "process::HostedIngest", "process::IngestMount", "EmbeddedDaemon", "mesh_http::set_shared_model_host"]
 # svrn's LLM verbs, handed the same ingest composition as the daemon
 # (pb-cli-llm-ingest-move-compose): the `sovereign-cli-llm-stock` bin.
 [[distribution.face]]
@@ -1547,7 +1547,7 @@ items = ["bin_main_with"]
 [[distribution.face]]
 package = "cmnwlth"
 krate = "sovereign-serve"
-items = ["bundles", "assemble", "child_launch", "tracing_filter", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner", "MeshRpcShardWarmer", "MeshPorts", "MeshNow", "ModelOrigin", "rpc_worker_views"]
+items = ["bundles", "assemble", "rank", "Ranking", "child_launch", "tracing_filter", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner", "MeshRpcShardWarmer", "MeshPorts", "MeshNow", "ModelOrigin", "rpc_worker_views"]
 # The mesh ports serve's distribution reads, composed in the stock process from
 # svrn's daemon (pb-serve-ranks-discovery): the reachable bases are the mesh
 # crate's one derivation.
@@ -1767,13 +1767,6 @@ from = "sovereign-daemon"
 to = "commonwealth-discovery"
 reason = "the svrn daemon founds, admits and advertises the mesh (membership::init_mesh_with_identity, init_mesh_with_node_id, generate_join_key, accept_join_with_identity; mdns::MdnsDiscovery) until the de-embed moves `Mesh` out of it (HUMAN-fp9-membership-owner, operator answer (b), 2026-09-24). The pure join-key half already reads mesh-join-vocab."
 tracking = "five-programs fp-9"
-
-[[exception]]
-package = "svrn"
-from = "sovereign-daemon"
-to = "sovereign-serving-host"
-reason = "not in-process serving (that is serve's since pb-svrn-dials-serve) but three things only: the daemon's own mesh routing — peer_inference::InferenceRouter over DeferredDaemon with its venue_host, pinned_worker_source, slot_manifest/slot_select and oicp_synthesis parts (bootstrap.rs, provider.rs, serve_client.rs's StartMesh signature) — the OpenAI adapter (inference_adapter, tool_profile; lib.rs re-exports it), and the test tree (pb-serve-ranks-tests). The discovery hand-off (rpc_discovery's mesh ports, worker_eligibility's status rows) is composed by the distribution since pb-serve-ranks-discovery, and model_fetch is re-exported no more. svrn's serving state, admission layers and entry_endpoint are its own, and the admission wire, turn_admission and the OpenAI/FIM rendering are sovereign-contracts' (pb-svrn-serving-ports; tests/main/serving_ports_census.rs keeps them out). pb-serve-ranks gives ranking to serve and retires this row (phase-b-23)."
-tracking = "five-programs fp-68"
 
 
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —

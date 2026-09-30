@@ -4,8 +4,9 @@
 //!
 //! Moved here from `sovereign-daemon` (phase-b pb-serve-program): the
 //! manifest lives in `sovereign-contracts`, which the host names, so the
-//! daemon and `serve` read it through this ONE reader. The daemon keeps it
-//! reachable at `sovereign_daemon::slot_manifest::CoreSlotManifest`.
+//! daemon and `serve` read it through this ONE reader. The daemon's
+//! re-export went with its serving-host edge (pb-serve-ranks): serve's
+//! adapter and router are the reader's only users.
 
 use crate::slot_select::{SlotManifest, SlotManifestInfo};
 

@@ -133,10 +133,6 @@ pub mod research_http;
 pub mod roster_repair;
 pub mod rpc_warm_http;
 pub mod serve_client;
-/// The daemon's `SlotManifest` port implementation over `sovereign-core`'s
-/// bundled manifest; supplied to the serving host's inference adapter and
-/// self-manifest advertisement (domains REVIEW-build-serving-move-adapter).
-pub mod slot_manifest;
 pub mod solve_http;
 pub mod solve_tools;
 pub mod startup;
@@ -225,7 +221,6 @@ pub use sovereign_core::answering::turn_fidelity;
 // and `sovereign-contracts`, not in this crate).
 pub use sovereign_core::deep_research::research_run_dir;
 pub use sovereign_core::turn_approval;
-pub use sovereign_serving_host::inference_adapter;
 
 pub use daemon::{ClientListener, EmbeddedDaemon};
 pub use daemon_services::{

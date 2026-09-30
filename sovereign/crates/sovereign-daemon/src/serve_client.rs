@@ -100,9 +100,39 @@ pub type HostedCell = std::sync::Arc<sovereign_contracts::reloadable_provider::R
 pub type SlotAliasSink =
     std::sync::Arc<dyn Fn(std::collections::HashMap<String, String>) + Send + Sync>;
 
-/// This node's turns as svrn serves them (pb-serve-ranks): ranked by a router
-/// where a distribution composed one, else the provider itself, with svrn's
-/// OpenAI routes relayed to the server it dials.
+/// The ports a distribution ranks over (pb-serve-ranks): svrn's own roster
+/// and identity, its `DeferredDaemon`, until the flip swaps in cw-rails'
+/// (phase-b-33).
+pub struct RankPorts {
+    /// The peers a turn may go to.
+    pub venues: std::sync::Arc<dyn sovereign_contracts::venue::VenueSource>,
+    /// This node's identity and contribution ledger.
+    pub host: std::sync::Arc<dyn sovereign_contracts::venue_host::VenueHost>,
+}
+
+impl RankPorts {
+    /// Both ports over the deferred handle boot binds.
+    pub fn over(daemon: &std::sync::Arc<crate::DeferredDaemon>) -> Self {
+        Self {
+            venues: std::sync::Arc::clone(daemon) as _,
+            host: std::sync::Arc::clone(daemon) as _,
+        }
+    }
+}
+
+/// How a distribution ranks a provider svrn holds (a dialing path's cell, a
+/// terminal's forwarder) over svrn's ports: serve's router, built once.
+pub type Rank = Box<
+    dyn FnOnce(
+            std::sync::Arc<dyn sovereign_contracts::InferenceProvider>,
+            RankPorts,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Ranked> + Send>>
+        + Send,
+>;
+
+/// This node's turns as svrn serves them (pb-serve-ranks): ranked by serve's
+/// router where a distribution composed one, else the provider itself, with
+/// svrn's OpenAI routes relayed to the server it dials.
 pub struct Ranked {
     /// Where every turn of svrn's goes.
     pub provider: std::sync::Arc<dyn sovereign_contracts::InferenceProvider>,
@@ -135,29 +165,27 @@ pub fn relayed(
 }
 
 /// What hosting serve in this process hands svrn: the cell every route
-/// answers from, and the distribution over serve's engine and slot (the warm
-/// orchestrator, the self-manifest refresh, RPC-worker discovery), which svrn
-/// starts once its mesh is up (pb-serve-distributes).
+/// answers from, serve's router ranked over it (pb-serve-ranks), and the
+/// distribution over serve's engine and slot (the warm orchestrator, the
+/// self-manifest refresh, RPC-worker discovery), which svrn starts once its
+/// mesh is up (pb-serve-distributes).
 pub struct HostedParts {
     pub cell: HostedCell,
+    pub ranked: Ranked,
     pub distribute: StartMesh,
 }
 
 /// How the distribution starts serve's distribution over this daemon's mesh:
 /// the composition root builds the mesh ports from the daemon it is handed
-/// (pb-serve-ranks-discovery), so svrn names neither the ports nor the
-/// discovery they carry. svrn calls it once, with its mesh router.
-pub type StartMesh = Box<
-    dyn FnOnce(
-            std::sync::Arc<crate::EmbeddedDaemon>,
-            std::sync::Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
-        ) + Send,
->;
+/// (pb-serve-ranks-discovery) and closes over serve's router
+/// (pb-serve-ranks), so svrn names neither. svrn calls it once.
+pub type StartMesh = Box<dyn FnOnce(std::sync::Arc<crate::EmbeddedDaemon>) + Send>;
 
 type Compose = Box<
     dyn FnOnce(
             std::path::PathBuf,
             std::path::PathBuf,
+            RankPorts,
         ) -> std::pin::Pin<
             Box<dyn std::future::Future<Output = Result<HostedParts, String>> + Send>,
         > + Send,
@@ -175,6 +203,7 @@ pub struct HostedServe {
     ner: Option<NerSource>,
     rpc_warmer: Option<std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer>>,
     rpc_workers: Option<crate::mesh_http::RpcWorkerRows>,
+    rank: Option<Rank>,
 }
 
 /// The distribution's in-process NER kind: the one handle per process, loaded
@@ -193,24 +222,48 @@ type EnvContract =
 
 impl HostedServe {
     /// `filter` is serve's tracing allowlist, unioned with svrn's. `compose`
-    /// gets the data root and the config path svrn booted on, and assembles
-    /// serve, binds its router on serve's port and returns its parts; an `Err`
-    /// names why, and refuses boot.
+    /// gets the data root and the config path svrn booted on, and svrn's
+    /// ports to rank over; it assembles serve, binds its routes on serve's
+    /// port, ranks over serve's cell and returns its parts; an `Err` names
+    /// why, and refuses boot.
     pub fn new<F, Fut>(filter: String, compose: F) -> Self
     where
-        F: FnOnce(std::path::PathBuf, std::path::PathBuf) -> Fut + Send + 'static,
+        F: FnOnce(std::path::PathBuf, std::path::PathBuf, RankPorts) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = Result<HostedParts, String>> + Send + 'static,
     {
         Self {
             filter,
-            compose: Box::new(move |data_dir, config_path| {
-                Box::pin(compose(data_dir, config_path))
+            compose: Box::new(move |data_dir, config_path, ports| {
+                Box::pin(compose(data_dir, config_path, ports))
             }),
             env_contract: None,
             ner: None,
             rpc_warmer: None,
             rpc_workers: None,
+            rank: None,
         }
+    }
+
+    /// How this distribution ranks a provider svrn holds where serve is not
+    /// hosted here (the dialing path, a terminal): serve's router, in this
+    /// process. Without it svrn ranks nothing and relays (pb-serve-ranks).
+    pub fn rank<F, Fut>(mut self, rank: F) -> Self
+    where
+        F: FnOnce(std::sync::Arc<dyn sovereign_contracts::InferenceProvider>, RankPorts) -> Fut
+            + Send
+            + 'static,
+        Fut: std::future::Future<Output = Ranked> + Send + 'static,
+    {
+        self.rank = Some(Box::new(move |provider, ports| {
+            Box::pin(rank(provider, ports))
+        }));
+        self
+    }
+
+    /// The ranking this distribution handed, taken once by the path that
+    /// uses it.
+    pub fn take_rank(&mut self) -> Option<Rank> {
+        self.rank.take()
     }
 
     /// The RPC-worker rows svrn's `/v1/mesh/status` reports: serve's
@@ -316,8 +369,9 @@ impl HostedServe {
         self,
         data_dir: std::path::PathBuf,
         config_path: std::path::PathBuf,
+        ports: RankPorts,
     ) -> Result<HostedParts, String> {
-        (self.compose)(data_dir, config_path).await
+        (self.compose)(data_dir, config_path, ports).await
     }
 }
 

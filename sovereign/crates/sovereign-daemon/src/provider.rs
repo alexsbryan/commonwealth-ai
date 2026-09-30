@@ -304,11 +304,10 @@ mod reload_through_serve {
             "after-reload",
             "the reload must land in the cell boot wrapped"
         );
-        let manifest = sovereign_serving_host::oicp_synthesis::build_self_manifest(
-            provider.as_ref(),
-            &crate::slot_manifest::CoreSlotManifest,
-        );
-        let ids: Vec<&str> = manifest.models.iter().map(|m| m.id.as_str()).collect();
+        // The residency peers' manifests are built from (serve's
+        // `build_self_manifest` reads `resident_slots`).
+        let slots = provider.resident_slots();
+        let ids: Vec<&str> = slots.iter().map(|s| s.model_id.as_str()).collect();
         assert!(
             ids.contains(&"after-reload"),
             "peers must see the reloaded model, saw {ids:?}"

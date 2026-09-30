@@ -231,7 +231,7 @@ pub(super) async fn run_daemon(
         deferred_daemon,
         path: serving_path,
         ner,
-        relay,
+        ranked,
     } = match super::serving_boot::boot_serving(&config, args, &config_override, hosted).await {
         Ok(s) => s,
         Err(code) => return code,
@@ -617,20 +617,8 @@ pub(super) async fn run_daemon(
     // no slot this bootstrap can forget. `DeferredDaemon` breaks the one
     // genuine cycle — the daemon serves peers through a provider that routes
     // to peers — and carries no capability of its own.
-    // svrn alone ranks nothing: its turns go to the provider as it is and its
-    // OpenAI routes relay (pb-serve-ranks); otherwise the router ranks here.
-    let (deferred_daemon, mesh_provider, ranked) = match relay {
-        Some(relay) => (
-            deferred_daemon,
-            None,
-            crate::serve_client::relayed(Arc::clone(&provider), relay),
-        ),
-        None => {
-            let (daemon, router, ranked) =
-                bootstrap::rank_in_process(Arc::clone(&provider), deferred_daemon).await;
-            (daemon, Some(router), ranked)
-        }
-    };
+    // Ranked by serve's router where the distribution composed one; svrn
+    // alone relays (pb-serve-ranks, `ServingBoot::ranked`).
     let routed_provider: Arc<dyn InferenceProvider> = Arc::clone(&ranked.provider);
 
     if let Some(port) = &ingest_port {
@@ -1055,8 +1043,8 @@ pub(super) async fn run_daemon(
         serving = %serving_path.status_line(),
         "boot: the engine's mesh subsystems (warm orchestrator, RPC-worker discovery) run where the engine loads"
     );
-    if let (Some(distribute), Some(router)) = (distribute, mesh_provider) {
-        distribute(Arc::clone(&daemon), router);
+    if let Some(distribute) = distribute {
+        distribute(Arc::clone(&daemon));
     }
 
     bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), ranked.slot_aliases);

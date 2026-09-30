@@ -387,7 +387,7 @@ fn the_env_contract_is_the_distributions_to_hand_in() {
     use std::sync::Arc;
     let seen = Arc::new(AtomicUsize::new(0));
     let counted = Arc::clone(&seen);
-    let compose = |_: std::path::PathBuf, _: std::path::PathBuf| async {
+    let compose = |_: std::path::PathBuf, _: std::path::PathBuf, _: RankPorts| async {
         Err::<HostedParts, String>("not composed here".to_string())
     };
     let shared = sovereign_contracts::setup_config::SharedModelSection::default();
@@ -430,7 +430,7 @@ fn the_ner_handle_is_the_distributions_in_process_kind() {
             Ok(Vec::new())
         }
     }
-    let compose = |_: std::path::PathBuf, _: std::path::PathBuf| async {
+    let compose = |_: std::path::PathBuf, _: std::path::PathBuf, _: RankPorts| async {
         Err::<HostedParts, String>("not composed here".to_string())
     };
     let handed = HostedServe::new(String::new(), compose).ner(|| {
@@ -471,7 +471,7 @@ fn the_rpc_warmer_is_the_distributions() {
             Ok(serde_json::json!({ "warmed": true }))
         }
     }
-    let compose = |_: std::path::PathBuf, _: std::path::PathBuf| async {
+    let compose = |_: std::path::PathBuf, _: std::path::PathBuf, _: RankPorts| async {
         Err::<HostedParts, String>("not composed here".to_string())
     };
     let handed: std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer> =

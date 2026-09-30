@@ -12732,7 +12732,6 @@ dependencies = [
  "sovereign-meshapp",
  "sovereign-peer-wire",
  "sovereign-runtime-recipe",
- "sovereign-serving-host",
  "sovereign-store",
  "sovereign-tdd",
  "sovereign-time",

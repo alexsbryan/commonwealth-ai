@@ -46,7 +46,6 @@ oicp-types = { workspace = true }
 # (`SplitInferenceProvider`, a package leaf; pb-serve-distributes repointed it
 # from `sovereign_inference::remote`, which re-exported this crate).
 oicp-client = { workspace = true }
-sovereign-serving-host = { path = "../sovereign-serving-host" }
 sovereign-core = { workspace = true }
 sovereign-time = { workspace = true }
 # The bearer-token compare (client_auth.rs, client_tokens.rs). Already in the

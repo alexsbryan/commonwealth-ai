@@ -137,7 +137,7 @@ impl VenueHost for EmbeddedDaemon {
 /// a [`VenueSource`] in the meantime.
 ///
 /// Production wiring is genuinely cyclic and always was: the daemon serves
-/// peers through a [`InferenceRouter`](sovereign_serving_host::peer_inference::InferenceRouter),
+/// peers through serve's `InferenceRouter` (`sovereign_serve::rank`),
 /// and that provider routes through the daemon. One of the two has to exist
 /// first. Before 2026-08-24 the cycle was broken by leaving the daemon's
 /// provider slot empty and punching it in afterwards, which is what made "no

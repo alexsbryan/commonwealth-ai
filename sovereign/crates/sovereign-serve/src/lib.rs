@@ -75,6 +75,9 @@ mod mesh_plan;
 /// The CLI's side of measurement travel: publish a run, read peers' runs.
 mod mesh_travel;
 pub mod rails_mesh;
+/// serve ranks inference venues: the node's one router (pb-serve-ranks).
+mod rank;
+pub use rank::{rank, Ranking};
 mod reload;
 /// A model named by URL: fetched header-only so `plan` can read its tensors.
 mod remote_gguf;

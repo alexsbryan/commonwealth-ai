@@ -43,7 +43,7 @@ fn main() {
     sovereign_serve::measurements_rail::spawn_reconcile(None);
     let hosted = sovereign_daemon::process::HostedServe::new(
         sovereign_serve::tracing_filter(),
-        |data_dir, config_path| async move {
+        |data_dir, config_path, ports| async move {
             let assembly = match sovereign_serve::assemble(&data_dir, &config_path).await {
                 Ok(a) => a,
                 Err(e) => return Err(e),
@@ -60,12 +60,22 @@ fn main() {
                 }
             };
             tracing::info!(target: "serve", listen = %assembly.listen, "hosted serve bound in the stock process");
+            // serve ranks over its own cell, once: a reload swaps the cell
+            // under the router (pb-serve-ranks).
+            let ranking = sovereign_serve::rank(
+                std::sync::Arc::clone(&assembly.cell) as _,
+                ports.venues,
+                ports.host,
+            )
+            .await;
             // serve's distribution starts over svrn's mesh, whose ports are
-            // composed here (pb-serve-ranks-discovery).
+            // composed here (pb-serve-ranks-discovery), with serve's router.
             let distribute = assembly.distribute;
+            let router = std::sync::Arc::clone(&ranking.router);
             let parts = sovereign_daemon::process::HostedParts {
                 cell: assembly.cell,
-                distribute: Box::new(move |daemon, router| distribute(mesh_ports(&daemon), router)),
+                ranked: ranked(ranking),
+                distribute: Box::new(move |daemon| distribute(mesh_ports(&daemon), router)),
             };
             let (routes, run_lock) = (assembly.routes, assembly.run_lock);
             tokio::spawn(async move {
@@ -94,7 +104,12 @@ fn main() {
     ))
     // The RPC-worker rows svrn's `/v1/mesh/status` reports: serve's view in
     // this process (pb-serve-ranks-discovery).
-    .rpc_workers(sovereign_serve::rpc_worker_views);
+    .rpc_workers(sovereign_serve::rpc_worker_views)
+    // Where serve is not hosted here (the dialing path, a terminal), its
+    // router still ranks svrn's turns, over the provider svrn holds.
+    .rank(|provider, ports| async move {
+        ranked(sovereign_serve::rank(provider, ports.venues, ports.host).await)
+    });
     // Placement is this binary's (FIVE_PROGRAMS §2c): code's indexes and
     // result stores are svrn's root's, as they were when svrn hosted them.
     let code = sovereign_daemon::process::HostedCode::new(|host| async move {
@@ -141,6 +156,17 @@ fn main() {
     #[cfg(not(target_os = "macos"))]
     {
         std::process::exit(exit_code)
+    }
+}
+
+/// serve's ranking as svrn is handed it: the router as svrn's provider, its
+/// OpenAI face, gauge and alias sink (pb-serve-ranks).
+fn ranked(ranking: sovereign_serve::Ranking) -> sovereign_daemon::process::Ranked {
+    sovereign_daemon::process::Ranked {
+        provider: ranking.provider,
+        service: ranking.service,
+        in_flight: Some(ranking.in_flight),
+        slot_aliases: Some(ranking.slot_aliases),
     }
 }
 

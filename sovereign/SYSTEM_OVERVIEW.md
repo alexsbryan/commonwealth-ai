@@ -1262,8 +1262,9 @@ client points at it. Ingest uses `embed_http::http_embed_fn`, so a node with
 no local embed model still indexes.
 
 **Integrated** — `EmbeddedDaemon` runs cmnwlth in-process; runtime inference
-is wrapped in `InferenceRouter`, which OICP-routes synthesis to peers when
-scoring favours them. Both sides share `oicp_select`, so the Joiner's selected
+is wrapped in `InferenceRouter`, built once by serve (`sovereign_serve::rank`)
+and handed to svrn by the stock distribution, which OICP-routes synthesis to
+peers when scoring favours them; svrn alone ranks nothing and relays. Both sides share `oicp_select`, so the Joiner's selected
 model and the Founder's served slot cannot drift. Skills with
 `privacy = "local_only"` short-circuit to local.
 
