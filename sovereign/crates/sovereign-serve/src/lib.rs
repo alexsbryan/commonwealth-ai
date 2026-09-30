@@ -76,6 +76,7 @@ mod mesh_travel;
 mod reload;
 /// A model named by URL: fetched header-only so `plan` can read its tensors.
 mod remote_gguf;
+mod engine_state;
 mod self_report;
 /// serve's own process body (`run` -> `standalone::serve`).
 mod standalone;
@@ -435,51 +436,9 @@ pub fn bundles(provider: Arc<dyn InferenceProvider>) -> Vec<RouteBundle> {
         sovereign_compute::setup_reads::bundle(),
         RouteBundle::new("serve_engine_state").route(
             sovereign_contracts::engine_state::ENGINE_STATE_PATH,
-            get(engine_state),
+            get(engine_state::engine_state),
         ),
     ]
-}
-
-/// The loader's CACHED view: the device memory it read the last time it
-/// planned a distributed load, and the pinned block split. Never sampled
-/// here — sampling an RPC device can stall on a busy worker (the 2026-07-30
-/// hang) — so this answers as fast as the daemon's own `/v1/mesh/status`
-/// did when the loader lived there (pb-svrn-dials-serve).
-async fn engine_state() -> Json<sovereign_contracts::engine_state::EngineState> {
-    use sovereign_contracts::engine_state::{DeviceBytes, DeviceMemoryReading, EngineState};
-    use sovereign_inference::embedded::{DeviceMemory, DeviceMemorySnapshot};
-    // Destructured exhaustively: a field added to the loader's reading is a
-    // compile error here, never a field that silently stops at serve.
-    let device_memory = sovereign_inference::embedded::last_device_memory().map(
-        |DeviceMemorySnapshot {
-             observed_unix,
-             devices,
-         }| DeviceMemoryReading {
-            observed_unix,
-            devices: devices
-                .into_iter()
-                .map(
-                    |DeviceMemory {
-                         endpoint,
-                         free_bytes,
-                         total_bytes,
-                         reserve_bytes,
-                     }| DeviceBytes {
-                        endpoint,
-                        free_bytes,
-                        total_bytes,
-                        reserve_bytes,
-                    },
-                )
-                .collect(),
-        },
-    );
-    let state = EngineState {
-        device_memory,
-        rpc_block_split_pin: sovereign_inference::embedded::pinned_block_split_raw(),
-    };
-    debug!(target: "serve", observed = state.device_memory.is_some(), pinned = state.rpc_block_split_pin.is_some(), "engine state: the loader's cached view");
-    Json(state)
 }
 
 /// The OpenAI routes, over the adapter.

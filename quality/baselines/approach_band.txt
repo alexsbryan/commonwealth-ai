@@ -4,4 +4,4 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- arch-gate --tighten
 200	files
-197313	lines
+197272	lines
