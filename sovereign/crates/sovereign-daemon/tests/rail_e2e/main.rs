@@ -207,6 +207,61 @@ fn request(
     req
 }
 
+/// Claim a name the way the shim does, and return the handle. ROOT_CAUSE_FIXES
+/// C1: an unnamed guest append is refused by name, and these rigs bypass the
+/// shim that would have claimed one — so the rigs claim it themselves. Names
+/// are counter-suffixed so two claims never collide (the door refuses a name
+/// another guest holds).
+async fn claimed_handle(state: &AppState, peer: &str, bearer: &str) -> String {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NAMES: AtomicUsize = AtomicUsize::new(0);
+    let name = format!("Ada{}", NAMES.fetch_add(1, Ordering::SeqCst));
+    let (status, claimed) = call(
+        state.clone(),
+        request(
+            "POST",
+            "/v1/guest/session",
+            peer,
+            Some(bearer),
+            Some(serde_json::json!({ "name": name })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "the name claims: {claimed}");
+    claimed["session"]
+        .as_str()
+        .expect("the claim returns a handle")
+        .to_string()
+}
+
+/// An append request carrying the claimed name — the header the door stamps
+/// the act from (`RING_SESSION_HEADER`, the one constant both ends spell).
+fn append_request(
+    peer: &str,
+    bearer: &str,
+    body: serde_json::Value,
+    handle: &str,
+) -> Request<Body> {
+    let mut req = request("POST", "/v1/rail/append", peer, Some(bearer), Some(body));
+    req.headers_mut().insert(
+        sovereign_daemon::routes_guest_session::RING_SESSION_HEADER,
+        handle.parse().expect("header value"),
+    );
+    req
+}
+
+/// An append the way the shim sends one: claim a name, then write with the
+/// handle. The door's write contract (ROOT_CAUSE_FIXES C1 + C3b).
+async fn named_append(
+    state: AppState,
+    peer: &str,
+    bearer: &str,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    let handle = claimed_handle(&state, peer, bearer).await;
+    call(state, append_request(peer, bearer, body, &handle)).await
+}
+
 /// One act, in the reference app's vocabulary. The rail does not read inside
 /// `payload` — it is here in an expense shape only because that is the app
 /// this rail was built against.
@@ -250,17 +305,7 @@ async fn a_ring_app_appends_an_act_and_reads_it_back_attributed_to_a_person() {
         vec![Scope::Rails(NS.into())],
     );
 
-    let (status, body) = call(
-        state.clone(),
-        request(
-            "POST",
-            "/v1/rail/append",
-            LAN_PEER,
-            Some(GUEST_TOKEN),
-            Some(groceries()),
-        ),
-    )
-    .await;
+    let (status, body) = named_append(state.clone(), LAN_PEER, GUEST_TOKEN, groceries()).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["seq"], 0);
     assert_eq!(body["namespace"], NS);
@@ -276,7 +321,12 @@ async fn a_ring_app_appends_an_act_and_reads_it_back_attributed_to_a_person() {
     assert_eq!(log["held"], 1);
     let ops = log["ops"].as_array().unwrap();
     assert_eq!(ops.len(), 1);
-    assert_eq!(ops[0]["person"], "alex", "a person, not a node key");
+    let person = ops[0]["person"].as_str().unwrap_or_default();
+    assert!(
+        person.starts_with("Ada") && person.ends_with(", guest of alex"),
+        "a person, not a node key — the record shows the host vouching the \
+         guest's name (THE_LINK.md), never the raw key: {person}"
+    );
     assert_eq!(ops[0]["voided"], false);
     // The payload comes back exactly as the app wrote it, untouched except
     // for its canonical key order.
@@ -300,17 +350,7 @@ async fn the_journal_outlives_the_state_that_wrote_it() {
             state_with_rail(dir.path(), &key),
             vec![Scope::Rails(NS.into())],
         );
-        let (status, body) = call(
-            state,
-            request(
-                "POST",
-                "/v1/rail/append",
-                LAN_PEER,
-                Some(GUEST_TOKEN),
-                Some(groceries()),
-            ),
-        )
-        .await;
+        let (status, body) = named_append(state.clone(), LAN_PEER, GUEST_TOKEN, groceries()).await;
         assert_eq!(status, StatusCode::OK, "{body}");
     }
     let state = with_guest(
@@ -480,25 +520,21 @@ async fn an_act_the_app_would_refuse_is_still_the_apps_problem_not_the_rails() {
         state_with_rail(dir.path(), &key),
         vec![Scope::Rails(NS.into())],
     );
-    let (status, body) = call(
+    let (status, body) = named_append(
         state,
-        request(
-            "POST",
-            "/v1/rail/append",
-            LAN_PEER,
-            Some(GUEST_TOKEN),
-            Some(serde_json::json!({
-                "op": "record",
-                // An expense for nothing, split between nobody. The reference
-                // app's `validate` refuses this; the rail cannot see it.
-                "payload": {
-                    "kind": "expense",
-                    "payer": "alex",
-                    "amount_cents": 0,
-                    "participants": [],
-                },
-            })),
-        ),
+        LAN_PEER,
+        GUEST_TOKEN,
+        serde_json::json!({
+            "op": "record",
+            // An expense for nothing, split between nobody. The reference
+            // app's `validate` refuses this; the rail cannot see it.
+            "payload": {
+                "kind": "expense",
+                "payer": "alex",
+                "amount_cents": 0,
+                "participants": [],
+            },
+        }),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");

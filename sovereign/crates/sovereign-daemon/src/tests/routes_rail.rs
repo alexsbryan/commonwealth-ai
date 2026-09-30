@@ -315,3 +315,110 @@ fn a_read_only_entry_refuses_a_guests_append_and_nobody_elses() {
     // ...as is a namespace the registry says nothing about.
     assert!(refuse_read_only(&pages, Some(&g), "undeclared").is_none());
 }
+
+/// **C1: a guest's words must say whose they are** (ROOT_CAUSE_FIXES C1).
+/// The name is stamped from the session the door authenticated, never the
+/// wire — and a guest who claimed none is REFUSED rather than published as
+/// the host's words. Watched failing first: the append landed and read as
+/// the host's.
+#[tokio::test]
+async fn a_guest_append_with_no_name_is_refused_by_name() {
+    use sovereign_grants::GuestGrant;
+
+    let dir = tempfile::tempdir().unwrap();
+    let rail = Arc::new(RingRail::new(dir.path(), Arc::new(Unclaimed)));
+    let state = crate::state::test_app_state_with_seed(crate::state::fabric::FabricSeed {
+        ring_rail: Some(rail.clone()),
+        ..Default::default()
+    });
+    let guest = crate::client_auth::Guest {
+        grant: Arc::new(GuestGrant {
+            token: "t".into(),
+            scopes: vec![Scope::Rails("ring-doc".into())],
+            label: None,
+            issued_at_ms: 0,
+            expires_at_ms: u64::MAX,
+            revoked: false,
+        }),
+        session: None,
+    };
+    let resp = append(
+        State(state),
+        Some(axum::Extension(guest)),
+        Query(RailQuery {
+            namespace: Some("ring-doc".into()),
+        }),
+        Json(serde_json::json!({"op": "record", "payload": {"kind": "thing", "what": "hi"}})),
+    )
+    .await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "refused by name"
+    );
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let text = String::from_utf8_lossy(&body);
+    assert!(
+        text.contains("whose words"),
+        "the sentence names the fix: {text}"
+    );
+    let (ops, _) = rail.journal("ring-doc").unwrap().read().unwrap();
+    assert!(ops.is_empty(), "a refused write leaves no trace: {ops:?}");
+}
+
+/// **C3b: a replayed append yields one act** (ROOT_CAUSE_FIXES C3b). The
+/// key rides OUTSIDE the act — door state, never the permanent journal —
+/// and the door replays the recorded answer. Watched failing first: two
+/// POSTs minted two acts. Exactly-once per DOOR PROCESS is the honest
+/// scope; the journal's dedupe covers byte-identical re-ingest.
+#[tokio::test]
+async fn a_replayed_append_yields_one_act() {
+    use commonwealth_rail::RingSigner;
+
+    let dir = tempfile::tempdir().unwrap();
+    let rail = Arc::new(RingRail::new(dir.path(), Arc::new(Unclaimed)));
+    let ns = "ring-doc";
+    let mut members = std::collections::BTreeMap::new();
+    members.insert(
+        commonwealth_rail::Person::from("alex"),
+        vec![Unclaimed.actor()],
+    );
+    rail.journal(ns)
+        .unwrap()
+        .set_roster(&Roster::new(members))
+        .unwrap();
+    let state = crate::state::test_app_state_with_seed(crate::state::fabric::FabricSeed {
+        ring_rail: Some(rail.clone()),
+        ..Default::default()
+    });
+    let body = serde_json::json!({
+        "op": "record",
+        "payload": {"kind": "thing", "what": "hi"},
+        "idempotency_key": "k1",
+    });
+    let call = |payload: serde_json::Value| {
+        append(
+            State(state.clone()),
+            None,
+            Query(RailQuery {
+                namespace: Some(ns.into()),
+            }),
+            Json(payload),
+        )
+    };
+    let r1 = call(body.clone()).await;
+    assert_eq!(r1.status(), StatusCode::OK, "the first write lands");
+    let r2 = call(body.clone()).await;
+    assert_eq!(r2.status(), StatusCode::OK, "the replay is answered");
+    let b1 = axum::body::to_bytes(r1.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let b2 = axum::body::to_bytes(r2.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(b1, b2, "the recorded answer — not a second act's answer");
+    let (ops, _) = rail.journal(ns).unwrap().read().unwrap();
+    assert_eq!(ops.len(), 1, "one act, not two");
+}

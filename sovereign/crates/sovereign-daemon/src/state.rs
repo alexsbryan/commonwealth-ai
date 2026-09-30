@@ -339,6 +339,14 @@ pub struct AppStateInner {
     /// Workbench's part: the next-edit model lane's one-in-flight budget.
     /// Held as a part so route shells read it directly (DC §4.2).
     pub workbench: workbench::WorkbenchPart,
+    /// The append door's idempotency ledger: `(caller, namespace, key) → the
+    /// recorded response`, so a replayed POST yields one act and the same
+    /// answer (ROOT_CAUSE_FIXES C3b). Door-PROCESS scope, and that is the
+    /// honest claim: exactly-once per door process — the journal's own dedupe
+    /// covers byte-identical re-ingest. Short-lived door state, so it never
+    /// goes on the permanent journal.
+    pub rail_idempotency:
+        Arc<std::sync::Mutex<std::collections::BTreeMap<String, serde_json::Value>>>,
 }
 
 impl AppStateInner {
@@ -1091,6 +1099,7 @@ impl AppState {
         Self {
             inner: Arc::new(AppStateInner {
                 fabric,
+                rail_idempotency: Default::default(),
                 rail_live_buffer: Arc::new(crate::routes_rail_live::LiveBuffer::default()),
                 serving: serving::ServingPart {
                     model_aliases: ModelAliasTable::default_table(),

@@ -405,6 +405,35 @@ pub async fn append(
     // Read before the body becomes an act, because `RailAct` does not carry
     // this field and serde drops it on the way in.
     let on_behalf_of = stamp_from(guest, &body);
+    // The idempotency key rides OUTSIDE the act — short-lived door state never
+    // goes on the permanent journal (ROOT_CAUSE_FIXES C3b) — so it is read
+    // before the body becomes an act, like the name above.
+    let idem_key = body
+        .get("idempotency_key")
+        .and_then(|v| v.as_str())
+        .map(|k| {
+            format!(
+                "{}:{}:{k}",
+                guest.map(|g| g.grant.token.as_str()).unwrap_or("member"),
+                journal.namespace()
+            )
+        });
+    if let Some(ledger_key) = &idem_key {
+        if let Some(cached) = state
+            .inner
+            .rail_idempotency
+            .lock()
+            .expect("idempotency ledger")
+            .get(ledger_key)
+        {
+            tracing::debug!(
+                target: "rail:door",
+                ns = %journal.namespace(),
+                "append replayed — the recorded answer"
+            );
+            return Json(cached.clone()).into_response();
+        }
+    }
     // Taken as a `Value` and converted here rather than as `Json<RailAct>`,
     // so a refusal is the rail's own sentence instead of axum's rejection
     // prose wrapped around serde's prose wrapped around it (ARCH §10.6).
@@ -412,6 +441,23 @@ pub async fn append(
         Ok(act) => act,
         Err(e) => return err(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
     };
+    // A guest's words must say whose they are. The name comes from the session
+    // the door authenticated (`stamp_from`) — never the wire — and a guest who
+    // claimed none lands HERE rather than as the host's words (ROOT_CAUSE_FIXES
+    // C1; operator decision 2026-09-23: refused by name). `Seal` is exempt:
+    // delivery, not words — there is nothing it could be said on behalf of.
+    if guest.is_some() && on_behalf_of.is_none() && !matches!(act, RailAct::Seal) {
+        tracing::warn!(
+            target: "rail:door",
+            ns = %journal.namespace(),
+            "guest append refused — no name"
+        );
+        return err(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "a guest append must say whose words these are — claim a name first; \
+             a member writes in their own name",
+        );
+    }
     // Through the rail's ONE roster reader, not the file: the daemon's own
     // namespace derives its roster from membership, and reading the file here
     // refused this node's own key on that ring (ARCH §10.6).
@@ -461,6 +507,14 @@ pub async fn append(
             });
             if let Some(retired) = retired {
                 out["retired"] = retired;
+            }
+            if let Some(ledger_key) = idem_key {
+                state
+                    .inner
+                    .rail_idempotency
+                    .lock()
+                    .expect("idempotency ledger")
+                    .insert(ledger_key, out.clone());
             }
             Json(out).into_response()
         }

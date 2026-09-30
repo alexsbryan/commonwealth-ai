@@ -105,16 +105,11 @@ async fn the_wall_bearer_reaches_the_page_and_the_rail_on_a_and_nothing_else() {
     assert_eq!(status, StatusCode::OK);
 
     // The rail, with the bearer: write, then read it back.
+    let handle = crate::claimed_handle(&a, LAN_PEER, GUEST_TOKEN).await;
     let (status, body) = door(
         a.clone(),
         &page,
-        request(
-            "POST",
-            "/v1/rail/append",
-            LAN_PEER,
-            Some(GUEST_TOKEN),
-            Some(groceries()),
-        ),
+        crate::append_request(LAN_PEER, GUEST_TOKEN, groceries(), &handle),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
