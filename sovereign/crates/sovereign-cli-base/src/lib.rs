@@ -39,4 +39,5 @@ pub mod rail;
 pub mod reasoning;
 pub mod repo;
 pub mod tracing_init;
+pub mod units;
 pub mod urls;

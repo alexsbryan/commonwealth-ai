@@ -16,6 +16,7 @@ mod ingest;
 mod inventory;
 mod optimize;
 mod partitions;
+mod pull;
 mod recipe_source;
 pub(crate) mod search;
 pub(crate) mod status;
@@ -25,11 +26,11 @@ use diagnostics::{
     cmd_corpus_stream_axes,
 };
 use inventory::{cmd_corpus_install, cmd_corpus_list, cmd_corpus_remove};
-use status::cmd_corpus_status;
 use partitions::{
-    cmd_corpus_merge_partitions, cmd_corpus_migrate_to_partition, cmd_corpus_pull,
-    cmd_corpus_reconstruct_manifest,
+    cmd_corpus_merge_partitions, cmd_corpus_migrate_to_partition, cmd_corpus_reconstruct_manifest,
 };
+use pull::cmd_corpus_pull;
+use status::cmd_corpus_status;
 
 pub async fn run_corpus(args: &[String]) -> i32 {
     if args.is_empty() {

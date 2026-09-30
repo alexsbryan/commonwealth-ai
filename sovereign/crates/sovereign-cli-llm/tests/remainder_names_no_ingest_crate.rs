@@ -42,6 +42,8 @@ const STAYING: &[&str] = &[
     "atlas_cmd/inspect.rs",
     "atlas_cmd/budget.rs",
     "atlas_cmd/typed_extension.rs",
+    // pb-cli-llm-ingest-move: `corpus pull` is svrn's member act (the row).
+    "corpus_cmd/pull.rs",
 ];
 
 fn repo_root() -> PathBuf {
