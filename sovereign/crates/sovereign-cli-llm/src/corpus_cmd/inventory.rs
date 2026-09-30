@@ -282,85 +282,9 @@ async fn wait_until_installed(corpus_id: &str, budget_secs: u64, was_ready: bool
     1
 }
 
-/// Base URL of the daemon's INTERNAL listener, honouring
-/// `[daemon] internal_port` in `~/.svrnmesh/config.toml`.
-///
-/// The resolution now lives in `sovereign_contracts::setup_config`, next to the
-/// field it reads, because this same literal had been hardcoded at FOUR sites
-/// (here, `alignment_cmd.rs` progress, `pipeline_cmd.rs` pause, and a `doctor`
-/// probe). The focused sweep this note used to defer is done; all four call the
-/// shared helper. Kept as a thin alias so the call sites below read locally.
-use sovereign_contracts::setup_config::internal_daemon_base;
-
-/// POST an install request to the running daemon's `/internal/corpus/install`
-/// endpoint and report the outcome. The daemon owns the actual ingest task; this
-/// is the thin, fire-and-forget client. Shared by `corpus install` and a
-/// `workflow run <recipe-id>` dispatch so both delegate to the *same* install path
-/// (surface-unify, don't deep-collapse — one client, two callers).
-pub(crate) async fn submit_install_request(
-    id: &str,
-    params: std::collections::BTreeMap<String, serde_json::Value>,
-) -> i32 {
-    let url = format!("{}/internal/corpus/install", internal_daemon_base());
-    let body = serde_json::json!({
-        "corpus_id": id,
-        "parameters": params,
-    });
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Failed to build HTTP client: {e}");
-            return 1;
-        }
-    };
-    match client.post(&url).json(&body).send().await {
-        Ok(resp) if resp.status().is_success() => {
-            // The endpoint is fire-and-forget, but its 200 body carries a
-            // `spawned` flag: true = a new ingest task started, false = an
-            // ingest for this corpus was already in flight (idempotent
-            // no-op). Distinguish them so an already-running corpus doesn't
-            // read as a fresh "Install requested" — the daemon returns 4xx
-            // (handled below) for genuine failures, so a 200 here is never
-            // a silent error, only "started" vs "already going".
-            let body_text = resp.text().await.unwrap_or_default();
-            let spawned = serde_json::from_str::<serde_json::Value>(&body_text)
-                .ok()
-                .and_then(|v| v.get("spawned").and_then(|s| s.as_bool()));
-            match spawned {
-                Some(false) => {
-                    println!("Already in progress: {id} (ingest already running — not re-spawned)");
-                }
-                _ => {
-                    // spawned:true, or a body we couldn't parse — treat as
-                    // a fresh request and still show the raw body for
-                    // observability.
-                    println!("Install requested: {id}");
-                    if !body_text.is_empty() {
-                        println!("{body_text}");
-                    }
-                }
-            }
-            println!("Watch progress: svrn corpus status");
-            0
-        }
-        Ok(resp) => {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            eprintln!("Daemon rejected install ({status}): {body}");
-            1
-        }
-        Err(e) => {
-            eprintln!(
-                "Failed to contact daemon at {url}: {e}\n\n\
-                 Is `svrn daemon` running? Try: svrn daemon status"
-            );
-            1
-        }
-    }
-}
+// The install client and the `--param` value convention are the CLI leaf's,
+// shared with svrn's `workflow run <recipe-id>` (pb-cli-llm-ingest-move).
+use sovereign_cli_base::corpus_install::{param_json_value, submit_install_request};
 
 /// Parse a single `--params` / `--param` value into the running
 /// parameter map. Accepts:
@@ -385,26 +309,6 @@ fn parse_param_spec(
     }
     out.insert(key.to_string(), param_json_value(value));
     Ok(())
-}
-
-/// Shape a single `--param`/`--params` *value* into JSON: a comma-bearing value
-/// becomes an array of trimmed, non-empty strings; otherwise a single trimmed
-/// string. The daemon coerces strings → ints/dates per the recipe's declared
-/// `ParameterKind`, so the CLI only shapes the JSON. Shared by [`parse_param_spec`]
-/// and the `workflow run <recipe-id>` param conversion so the one `--param`
-/// convention behaves identically across both surfaces.
-pub(crate) fn param_json_value(value: &str) -> serde_json::Value {
-    if value.contains(',') {
-        let items: Vec<serde_json::Value> = value
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .map(serde_json::Value::String)
-            .collect();
-        serde_json::Value::Array(items)
-    } else {
-        serde_json::Value::String(value.trim().to_string())
-    }
 }
 
 #[cfg(test)]

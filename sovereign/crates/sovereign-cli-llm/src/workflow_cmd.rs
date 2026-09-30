@@ -22,7 +22,7 @@ use sovereign_workflow_host::{
 // Inc3 surface unification: `workflow run <recipe-id>` delegates to the *same*
 // install client `corpus install` uses, and shapes its `--param` values the same
 // way. Two backends, one surface — the recipe install path stays intact.
-use crate::corpus_cmd::{param_json_value, submit_install_request};
+use sovereign_cli_base::corpus_install::{param_json_value, submit_install_request};
 
 /// The daemon this CLI talks to, resolved through the ONE decider — env
 /// (`SOVEREIGN_DAEMON_URL`), then `[daemon] client_port`, then the compiled

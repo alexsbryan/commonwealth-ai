@@ -20,6 +20,8 @@
 
 pub mod chat_globals;
 pub mod code_index;
+#[cfg(feature = "corpus-install")]
+pub mod corpus_install;
 pub mod corpus_resolve;
 pub mod deprecation;
 pub mod dirs;

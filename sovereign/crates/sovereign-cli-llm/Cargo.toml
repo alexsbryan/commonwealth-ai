@@ -58,7 +58,7 @@ host-kit = { workspace = true, features = ["shell"] }
 # `svrn meshapp`: the corpus-explorer reads over svrn's corpora (a shared-leaf
 # closure), the dirs `meshapp_registry` resolves, and its `tar.zst` packing.
 sovereign-meshapp = { workspace = true }
-sovereign-cli-base = { workspace = true }
+sovereign-cli-base = { workspace = true, features = ["corpus-install"] }
 tar = "0.4"
 zstd = "0.13"
 # `declare`: write this node's own origin credential to the 0600 secret

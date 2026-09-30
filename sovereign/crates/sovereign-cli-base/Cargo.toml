@@ -40,6 +40,8 @@ tempfile = { workspace = true }
 rail-client = ["dep:reqwest", "dep:commonwealth-rail-core"]
 # Enables `sovereign_cli_base::mcp_client` — the daemon `/mcp` tool-call client.
 mcp-client = ["dep:reqwest"]
+# Enables `sovereign_cli_base::corpus_install` — the daemon install client.
+corpus-install = ["dep:reqwest"]
 
 [lints]
 workspace = true

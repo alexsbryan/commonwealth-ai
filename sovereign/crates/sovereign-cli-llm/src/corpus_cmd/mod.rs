@@ -26,10 +26,6 @@ use diagnostics::{
 };
 use inventory::{cmd_corpus_install, cmd_corpus_list, cmd_corpus_remove};
 use status::cmd_corpus_status;
-// Shared with `workflow run <recipe-id>`: one install client + one `--param`
-// value convention across the `corpus` and `workflow` surfaces (Inc3 surface
-// unification — two backends, one surface).
-pub(crate) use inventory::{param_json_value, submit_install_request};
 use partitions::{
     cmd_corpus_merge_partitions, cmd_corpus_migrate_to_partition, cmd_corpus_pull,
     cmd_corpus_reconstruct_manifest,
