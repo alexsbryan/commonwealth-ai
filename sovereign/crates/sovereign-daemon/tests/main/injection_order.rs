@@ -20,11 +20,10 @@ use std::sync::Arc;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use sovereign_contracts::traits::InferenceProvider;
-use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
-use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 
 use crate::common::ledger_double::RecordingLedger;
+use crate::common::service_double::ProviderService;
 use crate::common::TestProvider;
 
 fn empty_mesh() -> Mesh {
@@ -47,10 +46,7 @@ fn local_inference_is_present_at_construction() {
     // constructor argument now, so a future refactor cannot re-order a clone
     // ahead of it (ARCH 10 — structural, not remembered).
     let provider: Arc<dyn InferenceProvider> = Arc::new(TestProvider::new());
-    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
-        provider,
-        Arc::new(CoreSlotManifest),
-    ));
+    let adapter: Arc<dyn LocalInferenceService> = ProviderService::new(provider);
     let app_state = AppState::new_with_serving(
         NodeId::from_u128(0xDEAD_BEEF_CAFE_F00D),
         empty_mesh(),

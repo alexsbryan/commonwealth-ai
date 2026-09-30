@@ -30,11 +30,10 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;
-use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
-use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 
 use crate::common;
+use crate::common::service_double::ProviderService;
 use crate::common::{member, spawn_router, TestProvider};
 
 /// Build an `AppState` with the stub `LocalInferenceService` installed
@@ -68,10 +67,7 @@ fn build_app_state(with_embed: bool) -> AppState {
             .with_model_id("stub-embed")
             .with_embed_marker(|input| vec![input.len() as f32; 8]),
     );
-    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
-        provider,
-        Arc::new(CoreSlotManifest),
-    ));
+    let adapter: Arc<dyn LocalInferenceService> = ProviderService::new(provider);
     AppState::new_with_serving(
         self_id,
         mesh,

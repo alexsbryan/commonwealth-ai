@@ -11,12 +11,12 @@
 //! `routes_inference::serve_local_stream` renders the final chunk
 //! with `"finish_reason": reason.as_openai_str()`.
 //!
-//! Unit tests in `inference_adapter::translate_stream_frame` pin
-//! the per-variant translation. **What's not pinned:** a
-//! `complete_stream_with_finish` that overrides to `Length` actually
-//! produces an SSE chunk reading `"finish_reason":"length"` — i.e.
-//! the typed surface flows end-to-end through `chat_completion_stream`
-//! → `translate_stream_frame` → the SSE renderer → the wire.
+//! Serve's adapter tests pin its per-variant translation. **What's
+//! pinned here:** a `complete_stream_with_finish` that overrides to
+//! `Length` actually produces an SSE chunk reading
+//! `"finish_reason":"length"` — i.e. the typed surface flows through
+//! `chat_completion_stream` (the `common::service_double` stand-in)
+//! → the daemon's SSE renderer → the wire.
 //!
 //! A regression that re-introduced the legacy default (synthesise
 //! `Stop`) would slip past every unit test but be caught here.
@@ -39,11 +39,10 @@ use commonwealth_core::mesh::Mesh;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{FinishReason, StreamFrame};
 use sovereign_daemon::server::client_router;
-use sovereign_daemon::slot_manifest::CoreSlotManifest;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
-use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 
 use crate::common;
+use crate::common::service_double::ProviderService;
 use crate::common::{member, spawn_router, TestProvider};
 
 /// Build a sequence of typed frames terminating in a specific
@@ -79,10 +78,7 @@ fn build_state(provider: Arc<dyn InferenceProvider>) -> AppState {
         members,
         peers: vec![],
     };
-    let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
-        provider,
-        Arc::new(CoreSlotManifest),
-    ));
+    let adapter: Arc<dyn LocalInferenceService> = ProviderService::new(provider);
     AppState::new_with_serving(
         self_id,
         mesh,

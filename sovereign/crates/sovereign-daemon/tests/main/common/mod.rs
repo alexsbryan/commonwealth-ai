@@ -32,6 +32,7 @@ use corpus_index::ingest_port::daemon::{IngestPort, RecipeHarnessPort};
 use corpus_index::ingest_port::double::{IngestPortDouble, RecipeHarnessDouble};
 
 pub mod ledger_double;
+pub mod service_double;
 pub mod work_rails;
 
 // ── Corpus layout ───────────────────────────────────────────────
