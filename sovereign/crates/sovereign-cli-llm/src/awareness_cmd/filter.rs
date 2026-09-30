@@ -29,7 +29,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use corpus_engine::enrichment::atlas::writer::write_atlas;
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::prompt::ChatPrompt;
 use serde_json::json;
 use understanding_vocab::atoms::{AtomEnvelope, AtomId, Entity};
@@ -58,6 +58,15 @@ pub(super) async fn cmd_filter(args: &[String]) -> i32 {
     let verbose = flags.has("verbose");
     let dry_run = flags.has("dry-run");
 
+    // Ingest's atlas port rewrites the atlases; refused before the daemon.
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("awareness filter: {e}");
+            return 1;
+        }
+    };
+
     // The filter pass uses grammar-constrained generation
     // (`response_format: json_schema`) to force the model to emit a
     // decision per candidate. The InferenceFn API can't carry the
@@ -84,7 +93,7 @@ pub(super) async fn cmd_filter(args: &[String]) -> i32 {
 
         println!();
         println!("─── {} ───", view_id);
-        match filter_atlas(&atlas_dir, &client, verbose, dry_run).await {
+        match filter_atlas(atlas.as_ref(), &atlas_dir, &client, verbose, dry_run).await {
             Ok(report) => {
                 report.print();
                 total_kept += report.kept.len();
@@ -213,6 +222,7 @@ async fn build_filter_client(flags: &Parsed) -> Result<DaemonInferenceClient, St
 }
 
 async fn filter_atlas(
+    atlas: &dyn AtlasPort,
     atlas_dir: &std::path::Path,
     client: &DaemonInferenceClient,
     verbose: bool,
@@ -321,7 +331,8 @@ async fn filter_atlas(
         .filter(|edge| !dropped_ids.contains(&edge.target))
         .collect();
 
-    write_atlas(atlas_dir, &new_entities, &[], &new_edges)
+    atlas
+        .write_atlas(atlas_dir, &new_entities, &[], &new_edges)
         .map_err(|e| format!("write atlas: {e}"))?;
 
     Ok(FilterReport {

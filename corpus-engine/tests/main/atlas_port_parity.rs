@@ -389,3 +389,108 @@ async fn summary_projection_writes_are_idempotent_and_keep_the_seeds() {
         .kinds
         .contains(&AtomType::Summary));
 }
+
+/// awareness extract's and filter's atlas write (pb-cli-llm-ingest-move-
+/// remainder): the port writes what the writer writes, and it reads back.
+#[test]
+fn write_atlas_lands_entities_the_reader_reads_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let atlas_dir = dir.path().join("atlas");
+    let AtomEnvelope::Entity(e) = entity(1, "Ada") else {
+        unreachable!()
+    };
+    IngestAtlas.write_atlas(&atlas_dir, &[e], &[], &[]).unwrap();
+    let atoms = read_atlas_atoms(&atlas_dir).unwrap();
+    let names: Vec<&str> = atoms
+        .atoms()
+        .iter()
+        .filter_map(|a| match a {
+            AtomEnvelope::Entity(e) => Some(e.canonical_name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(names, vec!["Ada"]);
+}
+
+const ONE_PERSON: &str = r#"{"persons": [{"name": "Sarah Chen", "mentions": ["1"]}]}"#;
+
+fn canned_inference(
+    calls: Arc<std::sync::atomic::AtomicUsize>,
+) -> corpus_index::prompt::InferenceFn {
+    Arc::new(move |_prompt, _max_tokens| {
+        calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async { Ok(ONE_PERSON.to_string()) })
+    })
+}
+
+fn one_chunk() -> Vec<corpus_index::index::StoredChunk> {
+    vec![corpus_index::index::StoredChunk {
+        id: 1,
+        content: "Sarah Chen met the team.".into(),
+        title: None,
+        source_doc_id: None,
+    }]
+}
+
+/// awareness extract's entity extraction: the port runs the named domain
+/// and hands back what `run_entity_extraction` returns for it.
+#[tokio::test]
+async fn extract_entities_matches_the_direct_run_for_the_named_domain() {
+    use corpus_engine::enrichment::domains::personal::PersonalDomain;
+    use corpus_engine::enrichment::entity_extraction::run_entity_extraction;
+
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let heard = std::sync::Mutex::new(0usize);
+    let via_port = IngestAtlas
+        .extract_entities(
+            "personal",
+            &one_chunk(),
+            canned_inference(calls.clone()),
+            &|_| {
+                *heard.lock().unwrap() += 1;
+            },
+        )
+        .await
+        .unwrap();
+    let direct = run_entity_extraction(
+        &one_chunk(),
+        &PersonalDomain,
+        canned_inference(calls.clone()),
+        &|_| {},
+    )
+    .await
+    .unwrap();
+
+    let names = |es: &[Entity]| {
+        es.iter()
+            .map(|e| e.canonical_name.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(names(&via_port.entities), names(&direct.entities));
+    assert!(names(&via_port.entities).contains(&"Sarah Chen".to_string()));
+    assert_eq!(via_port.edges.len(), direct.edges.len());
+    assert_eq!(via_port.failures, direct.failures.len());
+    assert_eq!(via_port.batches_run, direct.batches_run);
+    assert!(calls.load(std::sync::atomic::Ordering::SeqCst) >= 2);
+    assert!(
+        *heard.lock().unwrap() > 0,
+        "progress events reach the caller"
+    );
+}
+
+/// An unknown domain is refused by name, before any model call.
+#[tokio::test]
+async fn extract_entities_refuses_an_unknown_domain_by_name() {
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let err = IngestAtlas
+        .extract_entities(
+            "nope",
+            &one_chunk(),
+            canned_inference(calls.clone()),
+            &|_| {},
+        )
+        .await
+        .unwrap_err();
+    assert!(err.contains("`nope`"), "{err}");
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+}

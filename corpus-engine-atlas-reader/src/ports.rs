@@ -13,8 +13,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
+use corpus_index::index::StoredChunk;
+use corpus_index::prompt::InferenceFn;
 use corpus_index::types::EmbedFn;
-use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity};
+use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity, Event};
 use understanding_vocab::edges::{Edge, EdgesFile};
 use understanding_vocab::ontology::NavigationPolicy;
 
@@ -163,6 +165,43 @@ pub trait AtlasPort: Send + Sync {
         corpus_id: &str,
         dry_run: bool,
     ) -> Result<String, String>;
+
+    /// Write a step-3a atlas (entities, events and their Involves edges)
+    /// into `atlas_dir`, seed table deferred: the write a caller with no 3b
+    /// pass makes.
+    fn write_atlas(
+        &self,
+        atlas_dir: &Path,
+        entities: &[Entity],
+        events: &[Event],
+        edges: &[Edge],
+    ) -> io::Result<()>;
+
+    /// Extract entities from `chunks` under the entity-extraction domain
+    /// `domain_id` (`personal`, `conversational`), completing through
+    /// `inference`; `progress` hears each progress event, rendered. `Err`
+    /// names an unknown domain or the extraction's failure.
+    async fn extract_entities(
+        &self,
+        domain_id: &str,
+        chunks: &[StoredChunk],
+        inference: InferenceFn,
+        progress: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<ExtractedEntities, String>;
+}
+
+/// What an entity extraction produced, as [`AtlasPort::extract_entities`]
+/// hands it back.
+#[derive(Debug, Clone, Default)]
+pub struct ExtractedEntities {
+    /// The extracted entities, keyed to the chunks' sequential ids.
+    pub entities: Vec<Entity>,
+    /// Their Involves edges.
+    pub edges: Vec<Edge>,
+    /// Batches that failed.
+    pub failures: usize,
+    /// Batches run.
+    pub batches_run: usize,
 }
 
 /// One typed-extension LLM response, carried to ingest as the model wrote

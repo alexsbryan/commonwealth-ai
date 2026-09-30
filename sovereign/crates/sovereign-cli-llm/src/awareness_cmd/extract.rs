@@ -18,12 +18,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::writer::write_atlas;
-use corpus_engine::enrichment::domain::Domain;
-use corpus_engine::enrichment::domains::conversational::ConversationalDomain;
-use corpus_engine::enrichment::domains::personal::PersonalDomain;
-use corpus_engine::enrichment::entity_extraction::{run_entity_extraction, EntityExtractionResult};
-use corpus_engine::enrichment::EnrichmentProgress;
+use corpus_engine_atlas_reader::ports::{AtlasPort, ExtractedEntities};
 use corpus_index::index::StoredChunk;
 use understanding_vocab::atoms::{AtomId, Entity};
 use understanding_vocab::edges::Edge;
@@ -78,6 +73,15 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
         },
     };
     let verbose = flags.has("verbose");
+
+    // Ingest's atlas port writes the atlases; refused before any model call.
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("awareness extract: {e}");
+            return 1;
+        }
+    };
 
     let (inference, mode) = match resolve_inference(&flags).await {
         Ok(p) => p,
@@ -155,14 +159,14 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
     let personal_summary = if personal_chunks.is_empty() {
         ExtractSummary::empty(PERSONAL_VIEW)
     } else {
-        let domain = PersonalDomain;
         let id_map = build_id_map(
             &personal_chunks,
             &memories.iter().map(|m| m.id.clone()).collect::<Vec<_>>(),
         );
         let result = run_entity_extraction_with_progress(
+            atlas.as_ref(),
             &personal_chunks,
-            &domain,
+            PERSONAL_DOMAIN,
             inference.clone(),
             verbose,
         )
@@ -175,7 +179,8 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
             }
         };
         let summary = ExtractSummary::from_result(PERSONAL_VIEW, &result);
-        if let Err(e) = write_remapped_atlas(&personal_corpus_dir, result, &id_map) {
+        if let Err(e) = write_remapped_atlas(atlas.as_ref(), &personal_corpus_dir, result, &id_map)
+        {
             eprintln!("awareness extract: write personal atlas failed: {e}");
             return 1;
         }
@@ -225,7 +230,6 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
     let conv_summary = if conv_chunks.is_empty() {
         ExtractSummary::empty(CONVERSATIONAL_VIEW)
     } else {
-        let domain = ConversationalDomain;
         let id_map = build_id_map(
             &conv_chunks,
             &conversations
@@ -234,9 +238,14 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
                 .collect::<Vec<_>>(),
         );
         let conv_corpus_dir = root.join("indexes").join(CONVERSATIONAL_VIEW);
-        let result =
-            run_entity_extraction_with_progress(&conv_chunks, &domain, inference.clone(), verbose)
-                .await;
+        let result = run_entity_extraction_with_progress(
+            atlas.as_ref(),
+            &conv_chunks,
+            CONVERSATIONAL_DOMAIN,
+            inference.clone(),
+            verbose,
+        )
+        .await;
         let result = match result {
             Ok(r) => r,
             Err(e) => {
@@ -245,7 +254,7 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
             }
         };
         let summary = ExtractSummary::from_result(CONVERSATIONAL_VIEW, &result);
-        if let Err(e) = write_remapped_atlas(&conv_corpus_dir, result, &id_map) {
+        if let Err(e) = write_remapped_atlas(atlas.as_ref(), &conv_corpus_dir, result, &id_map) {
             eprintln!("awareness extract: write conversational atlas failed: {e}");
             return 1;
         }
@@ -310,20 +319,25 @@ fn build_id_map(chunks: &[StoredChunk], source_ids: &[String]) -> HashMap<String
         .collect()
 }
 
+/// Ingest's entity-extraction domains for the two views, by id.
+const PERSONAL_DOMAIN: &str = "personal";
+const CONVERSATIONAL_DOMAIN: &str = "conversational";
+
 async fn run_entity_extraction_with_progress(
+    atlas: &dyn AtlasPort,
     chunks: &[StoredChunk],
-    domain: &dyn Domain,
+    domain_id: &str,
     inference: corpus_index::prompt::InferenceFn,
     verbose: bool,
-) -> Result<EntityExtractionResult, String> {
-    let report = move |p: EnrichmentProgress| {
+) -> Result<ExtractedEntities, String> {
+    let report = move |p: String| {
         if verbose {
-            tracing::debug!(progress = ?p, "entity_extraction: progress");
+            tracing::debug!(progress = %p, "entity_extraction: progress");
         }
     };
-    run_entity_extraction(chunks, domain, inference, &report)
+    atlas
+        .extract_entities(domain_id, chunks, inference, &report)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// Replace sequential chunk_ids with the real source row ids in
@@ -332,8 +346,9 @@ async fn run_entity_extraction_with_progress(
 /// the model occasionally emits chunk references the rewrite step
 /// already filtered, and we'd rather see them than silently drop.
 fn write_remapped_atlas(
+    atlas: &dyn AtlasPort,
     corpus_dir: &std::path::Path,
-    result: EntityExtractionResult,
+    result: ExtractedEntities,
     id_map: &HashMap<String, String>,
 ) -> Result<(), String> {
     let mut entities: Vec<Entity> = result.entities.clone();
@@ -361,7 +376,8 @@ fn write_remapped_atlas(
     }
 
     let atlas_dir = corpus_dir.join(ATLAS_DIRNAME);
-    write_atlas(&atlas_dir, &entities, &[], &edges)
+    atlas
+        .write_atlas(&atlas_dir, &entities, &[], &edges)
         .map_err(|e| format!("{}: {e}", atlas_dir.display()))?;
 
     // Sanity: read it back so a corrupted write surfaces here.
@@ -396,7 +412,7 @@ impl ExtractSummary {
         }
     }
 
-    fn from_result(view: &'static str, r: &EntityExtractionResult) -> Self {
+    fn from_result(view: &'static str, r: &ExtractedEntities) -> Self {
         use understanding_vocab::taxonomy::EntityType;
         let mut persons = 0usize;
         let mut orgs = 0usize;
@@ -421,7 +437,7 @@ impl ExtractSummary {
             organizations: orgs,
             initiatives: inits,
             edges: r.edges.len(),
-            failures: r.failures.len(),
+            failures: r.failures,
             batches: r.batches_run,
             borderline_initiatives: borderline,
         }

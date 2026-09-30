@@ -12,11 +12,15 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use corpus_engine_atlas_reader::citation::SourceCitation;
-use corpus_engine_atlas_reader::ports::{ArgumentativeResponse, AtlasPort, AtomSpan};
+use corpus_engine_atlas_reader::ports::{
+    ArgumentativeResponse, AtlasPort, AtomSpan, ExtractedEntities,
+};
 use corpus_engine_atlas_reader::raptor_read::RaptorSummaryRow;
 use corpus_engine_atlas_reader::summary::AtlasSummary;
+use corpus_index::index::StoredChunk;
+use corpus_index::prompt::InferenceFn;
 use sovereign_contracts::daemon_wire::enrich::StarterQuestion;
-use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity};
+use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity, Event};
 use understanding_vocab::edges::{Edge, EdgesFile};
 
 use crate::enrichment::atlas::analysis::gaps::{
@@ -268,5 +272,48 @@ impl AtlasPort for IngestAtlas {
         crate::enrichment::atlas::migrate_ids::migrate_atlas_ids(atlas_dir, corpus_id, dry_run)
             .map(|summary| format!("{summary:?}"))
             .map_err(|e| e.to_string())
+    }
+
+    fn write_atlas(
+        &self,
+        atlas_dir: &Path,
+        entities: &[Entity],
+        events: &[Event],
+        edges: &[Edge],
+    ) -> io::Result<()> {
+        crate::enrichment::atlas::writer::write_atlas(atlas_dir, entities, events, edges).map(drop)
+    }
+
+    async fn extract_entities(
+        &self,
+        domain_id: &str,
+        chunks: &[StoredChunk],
+        inference: InferenceFn,
+        progress: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<ExtractedEntities, String> {
+        use crate::enrichment::domain::Domain;
+        use crate::enrichment::domains::{
+            conversational::ConversationalDomain, personal::PersonalDomain,
+        };
+        let domains: [&dyn Domain; 2] = [&PersonalDomain, &ConversationalDomain];
+        let Some(domain) = domains.into_iter().find(|d| d.id() == domain_id) else {
+            tracing::debug!(target: "corpus_engine::atlas_port", domain_id, "entity extraction: no such domain");
+            return Err(format!(
+                "no entity-extraction domain named `{domain_id}` (personal, conversational)"
+            ));
+        };
+        tracing::debug!(target: "corpus_engine::atlas_port", domain_id, chunks = chunks.len(), "entity extraction");
+        let report = |p: crate::enrichment::EnrichmentProgress| progress(format!("{p:?}"));
+        let result = crate::enrichment::entity_extraction::run_entity_extraction(
+            chunks, domain, inference, &report,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        Ok(ExtractedEntities {
+            entities: result.entities,
+            edges: result.edges,
+            failures: result.failures.len(),
+            batches_run: result.batches_run,
+        })
     }
 }

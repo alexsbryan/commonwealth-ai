@@ -15,12 +15,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use async_trait::async_trait;
+use corpus_index::index::StoredChunk;
+use corpus_index::prompt::InferenceFn;
 use corpus_index::types::EmbedFn;
-use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity};
+use understanding_vocab::atoms::{AtomEnvelope, AtomsFile, Entity, Event};
 use understanding_vocab::edges::{Edge, EdgesFile};
 use understanding_vocab::ontology::NavigationPolicy;
 
-use super::{ArgumentativeResponse, AtlasPort, AtomSpan};
+use super::{ArgumentativeResponse, AtlasPort, AtomSpan, ExtractedEntities};
 use crate::citation::SourceCitation;
 use crate::raptor_read::RaptorSummaryRow;
 use crate::summary::AtlasSummary;
@@ -74,6 +76,9 @@ pub struct AtlasPortDouble {
     detect_atom_spans:
         H<dyn Fn(&str, Option<&str>, &[AtomEnvelope]) -> Vec<AtomSpan> + Send + Sync>,
     migrate_atlas_ids: H<dyn Fn(&Path, &str, bool) -> Result<String, String> + Send + Sync>,
+    write_atlas: H<dyn Fn(&Path, &[Entity], &[Event], &[Edge]) -> io::Result<()> + Send + Sync>,
+    extract_entities:
+        H<dyn Fn(&str, &[StoredChunk]) -> Result<ExtractedEntities, String> + Send + Sync>,
 }
 
 fn unprogrammed(method: &str) -> String {
@@ -318,6 +323,25 @@ impl AtlasPortDouble {
         self.migrate_atlas_ids = Some(Box::new(f));
         self
     }
+
+    /// Program `write_atlas`.
+    pub fn on_write_atlas(
+        mut self,
+        f: impl Fn(&Path, &[Entity], &[Event], &[Edge]) -> io::Result<()> + Send + Sync + 'static,
+    ) -> Self {
+        self.write_atlas = Some(Box::new(f));
+        self
+    }
+
+    /// Program `extract_entities` (the handler sees the domain id and the
+    /// chunks; the inference and progress arguments are the caller's).
+    pub fn on_extract_entities(
+        mut self,
+        f: impl Fn(&str, &[StoredChunk]) -> Result<ExtractedEntities, String> + Send + Sync + 'static,
+    ) -> Self {
+        self.extract_entities = Some(Box::new(f));
+        self
+    }
 }
 
 #[async_trait]
@@ -545,6 +569,34 @@ impl AtlasPort for AtlasPortDouble {
         match &self.migrate_atlas_ids {
             Some(f) => f(atlas_dir, corpus_id, dry_run),
             None => Err(unprogrammed("migrate_atlas_ids")),
+        }
+    }
+
+    fn write_atlas(
+        &self,
+        atlas_dir: &Path,
+        entities: &[Entity],
+        events: &[Event],
+        edges: &[Edge],
+    ) -> io::Result<()> {
+        self.record("write_atlas");
+        match &self.write_atlas {
+            Some(f) => f(atlas_dir, entities, events, edges),
+            None => Err(io::Error::other(unprogrammed("write_atlas"))),
+        }
+    }
+
+    async fn extract_entities(
+        &self,
+        domain_id: &str,
+        chunks: &[StoredChunk],
+        _inference: InferenceFn,
+        _progress: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<ExtractedEntities, String> {
+        self.record("extract_entities");
+        match &self.extract_entities {
+            Some(f) => f(domain_id, chunks),
+            None => Err(unprogrammed("extract_entities")),
         }
     }
 }
