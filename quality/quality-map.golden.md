@@ -377,7 +377,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `hook-wiring` — .claude/hooks/tests/settings-wiring.sh · runs in: prepush
 - `inner-chaos-calibrate` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: smoke:2
 - `inner-chaos-soak` — sovereign/bench/chaos_monkey/README.md · runs in: smoke:5
-- `judge-replay` — sovereign/crates/sovereign-cli-llm/src/bench_cmd/judge_replay.rs (module header) · runs in: by-hand
+- `judge-replay` — sovereign/crates/sovereign-cli-llm/src/judge_replay.rs (module header) · runs in: by-hand
 - `judge-replay-bank` — quality/campaigns/verifier-loop.toml §vl-bank-live · runs in: run-if-stale, by-hand
 - `judge-replay-bank-feed` — sovereign/bench/chaos_monkey/feed_replay_bank.sh (module header) · runs in: run-if-stale
 - `judge-replay-report` — sovereign/bench/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce) · runs in: by-hand

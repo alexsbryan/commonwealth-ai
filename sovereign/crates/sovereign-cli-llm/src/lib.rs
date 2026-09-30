@@ -63,6 +63,7 @@ mod eval_cmd;
 mod govern_cmd;
 mod gym_judge;
 mod inner_chaos;
+mod judge_replay;
 // `svrn job` — the work plane's operator surface. Sits beside `ring_cmd`
 // rather than inside it because they are two verbs on one rail: `ring`
 // deploys an app to a trust ring, `job` hands that ring a unit of compute.
@@ -87,6 +88,7 @@ mod reading_diag_cmd;
 mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
 mod recipe_cmd;
+mod resolver_precision;
 mod router_cache_cmd;
 mod router_fit_cmd;
 mod search_gym_cmd;
@@ -185,7 +187,7 @@ async fn async_main() {
     }
 
     let code: i32 = match cmd {
-        "bench" => bench_cmd::run_bench(rest).await,
+        "bench" => run_bench_verb(rest).await,
         "chat" => chat_cmd::run_chat(rest).await,
         "govern" => govern_cmd::run_govern(rest).await,
         "proxy" => proxy_cmd::run_proxy(rest).await,
@@ -238,6 +240,32 @@ async fn run_eval_verb(rest: &[String]) -> i32 {
     match rest.first().map(String::as_str) {
         Some("inner-chaos") => inner_chaos::run_inner_chaos(&rest[1..]).await,
         _ => eval_cmd::run_eval(rest).await,
+    }
+}
+
+/// `bench`'s dispatch. `judge-replay` and `resolver-precision` replay svrn's
+/// own grounding gate (phase-b-60) and stay here as svrn's tests; bench_cmd
+/// is bench's and names no svrn-side module, so the two arms are routed
+/// before bench_cmd sees the args. bench_cmd's HELP still lists them.
+async fn run_bench_verb(rest: &[String]) -> i32 {
+    match rest.first().map(String::as_str) {
+        Some("judge-replay") => judge_replay::cmd_judge_replay(&rest[1..]).await,
+        Some("resolver-precision") => resolver_precision::cmd_resolver_precision(&rest[1..]).await,
+        _ => bench_cmd::run_bench(rest).await,
+    }
+}
+
+#[cfg(test)]
+mod bench_dispatch {
+    /// The two gate replays answer their own `--help` with 0 through `bench`'s
+    /// dispatch, and bench_cmd, which no longer holds them, answers 2.
+    #[tokio::test]
+    async fn bench_gate_replays_are_answered_svrn_side() {
+        for verb in ["judge-replay", "resolver-precision"] {
+            let args: Vec<String> = [verb, "--help"].map(String::from).to_vec();
+            assert_eq!(super::run_bench_verb(&args).await, 0, "{verb}");
+            assert_eq!(super::bench_cmd::run_bench(&args).await, 2, "{verb}");
+        }
     }
 }
 

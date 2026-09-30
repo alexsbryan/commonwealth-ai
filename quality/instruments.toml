@@ -389,7 +389,7 @@ baseline = { kind = "none" }
 # the control.
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/judge_replay.rs (module header)"
+doc = "sovereign/crates/sovereign-cli-llm/src/judge_replay.rs (module header)"
 load_bearing = [
   { flag = "--render-only", why = "the mechanical facet without a daemon, bit-stable across repeats — it is how a rendering change is proven not to have moved the register" },
   { flag = "--repeat N", why = "one run is not a measurement (ARCH §18.5); without it the verdict spread is unknown and a flip cannot be told from noise" },

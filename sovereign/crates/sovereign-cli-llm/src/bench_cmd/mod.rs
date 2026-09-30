@@ -41,7 +41,6 @@ mod faithfulness;
 mod flywheel;
 mod gate;
 mod governance;
-mod judge_replay;
 pub(crate) mod lane_baseline;
 pub(crate) mod live_runner;
 mod mechanism_fidelity;
@@ -54,7 +53,6 @@ mod proxy_bench;
 mod redteam;
 mod render;
 mod report;
-mod resolver_precision;
 mod routing_replay;
 /// Shared per-criterion rubric apparatus (judge · calibration gate ·
 /// Wilson-CI scoring + diff). `moral` is its first tenant; the
@@ -198,7 +196,6 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "routing-replay" => routing_replay::cmd_routing_replay(&args[1..]).await,
         "enron" => enron::cmd_enron(&args[1..]).await,
         "flywheel" => flywheel::cmd_flywheel(&args[1..]).await,
-        "resolver-precision" => resolver_precision::cmd_resolver_precision(&args[1..]).await,
         "governance" => governance::cmd_governance(&args[1..]).await,
         "proxy" => proxy_bench::cmd_proxy_bench(&args[1..]).await,
         "promote" => promote::cmd_promote(&args[1..]).await,
@@ -210,7 +207,6 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
         "uap" => uap::cmd_uap(&args[1..]).await,
         "faithfulness" => faithfulness::cmd_faithfulness(&args[1..]).await,
-        "judge-replay" => judge_replay::cmd_judge_replay(&args[1..]).await,
         "enrichment-adjudicate" => adjudicate::cmd_adjudicate(&args[1..]).await,
         "enrichment-ablate" => ablate::cmd_ablate(&args[1..]).await,
         "verifier" => verifier::cmd_verifier(&args[1..]).await,

@@ -9355,7 +9355,7 @@ lines = 400
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/judge_replay.rs"
+path = "sovereign/crates/sovereign-cli-llm/src/judge_replay.rs"
 context = "host"
 lines = 499
 note = ""
@@ -9457,13 +9457,13 @@ lines = 874
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/resolver_precision/mod.rs"
+path = "sovereign/crates/sovereign-cli-llm/src/resolver_precision/mod.rs"
 context = "host"
 lines = 650
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/resolver_precision/transcript.rs"
+path = "sovereign/crates/sovereign-cli-llm/src/resolver_precision/transcript.rs"
 context = "host"
 lines = 279
 note = ""
