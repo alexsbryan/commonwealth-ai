@@ -283,7 +283,7 @@ fn release_and_expiry_withdraw_the_origin() {
     let c = r
         .register(reg(CLIENT_ALPN, &[], 9748, Admit::Members(Vec::new())))
         .unwrap();
-    assert_eq!(r.renew(&c.claim_id, Duration::from_secs(60)), Ok(60));
+    assert_eq!(r.renew(&c.claim_id, Duration::from_secs(60), None), Ok(60));
     assert_eq!(
         r.release(&c.claim_id),
         Ok(vec!["cwth/client/0".to_string()])
@@ -338,6 +338,56 @@ fn declarations_are_read_from_live_registrations() {
     assert_eq!(r.namespaces(), vec!["mesh-measurements".to_string()]);
     r.release(&c.claim_id).unwrap();
     assert!(r.declared_claims().is_empty());
+}
+
+/// A renew's declaration replaces the claim's, on the one slot that holds
+/// it, and a renew without one keeps it (pb-mesh-exit-transport-claims).
+/// Failing input: a renew that moves only the deadline.
+#[test]
+fn a_renew_replaces_the_declaration_and_none_keeps_it() {
+    let r = OriginRegistry::new(PublishedApps::default());
+    let caps = |model: &str| -> NodeCapabilities {
+        serde_json::from_value(serde_json::json!({
+            "hardware": {"gpus": [], "system_ram_gb": 0, "cpu_cores": 0,
+                         "total_storage_gb": 0, "free_storage_gb": 0},
+            "available": {"free_vram_gb": 0.0, "free_ram_gb": 0.0, "free_storage_gb": 0.0,
+                          "gpu_utilization": 0.0, "cpu_utilization": 0.0,
+                          "available_for_mesh": true},
+            "hosted_corpora": [], "reported_at": 0, "loaded_models": [model]
+        }))
+        .unwrap()
+    };
+    let models = |r: &OriginRegistry| -> Vec<Vec<String>> {
+        r.declared_claims()
+            .into_iter()
+            .map(|c| c.loaded_models)
+            .collect()
+    };
+    let mut two = reg(ALPN, &["/b/x", "/a/x"], 9, Admit::Members(Vec::new()));
+    two.claims = Some(caps("a"));
+    let c = r.register(two).unwrap();
+    assert_eq!(models(&r), vec![vec!["a".to_string()]]);
+    r.renew(&c.claim_id, Duration::from_secs(60), Some(caps("b")))
+        .unwrap();
+    assert_eq!(
+        models(&r),
+        vec![vec!["b".to_string()]],
+        "replaced, still one"
+    );
+    r.renew(&c.claim_id, Duration::from_secs(60), None).unwrap();
+    assert_eq!(models(&r), vec![vec!["b".to_string()]], "none keeps it");
+
+    let bare = r
+        .register(reg(CLIENT_ALPN, &[], 9748, Admit::Members(Vec::new())))
+        .unwrap();
+    r.renew(&bare.claim_id, Duration::from_secs(60), Some(caps("c")))
+        .unwrap();
+    // Slot order: `cwth/client/0` sorts before `cwth/http/0/a/x`.
+    assert_eq!(
+        models(&r),
+        vec![vec!["c".to_string()], vec!["b".to_string()]],
+        "a claim that declared nothing declares at renew"
+    );
 }
 
 /// **A local origin is listed and never reachable from the mesh**

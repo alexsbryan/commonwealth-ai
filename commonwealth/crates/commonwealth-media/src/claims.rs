@@ -131,6 +131,10 @@ impl<V> Claims<V> {
     pub fn get(&self, key: &str) -> Option<&Row<V>> {
         self.rows.get(key)
     }
+
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut Row<V>> {
+        self.rows.get_mut(key)
+    }
 }
 
 /// A claim id: the key it holds, plus enough entropy that two runners of the

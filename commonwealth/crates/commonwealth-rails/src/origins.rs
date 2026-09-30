@@ -108,6 +108,9 @@ pub async fn register(
 pub struct Renew {
     #[serde(default)]
     pub ttl_secs: Option<u64>,
+    /// Replaces the claim's declaration; absent keeps it.
+    #[serde(default)]
+    pub claims: Option<NodeCapabilities>,
 }
 
 /// `POST /v1/mesh/origins/{claim_id}/renew`
@@ -116,8 +119,9 @@ pub async fn renew(
     Path(claim_id): Path<String>,
     body: Option<Json<Renew>>,
 ) -> Response {
-    let ttl = crate::api::ttl_of(body.and_then(|Json(b)| b.ttl_secs));
-    match daemon.origins.renew(&claim_id, ttl) {
+    let (ttl_secs, claims) = body.map_or((None, None), |Json(b)| (b.ttl_secs, b.claims));
+    let ttl = crate::api::ttl_of(ttl_secs);
+    match daemon.origins.renew(&claim_id, ttl, claims) {
         Ok(secs) => Json(serde_json::json!({ "claim_id": claim_id, "expires_in_secs": secs }))
             .into_response(),
         Err(e) => refused(e),

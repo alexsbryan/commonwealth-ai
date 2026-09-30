@@ -686,3 +686,105 @@ async fn rails_transport_reaches_a_peers_registered_origin_through_cw_rails() {
         () = test => {}
     }
 }
+
+/// **A registrant's declaration moves with its state**
+/// (pb-mesh-exit-transport-claims), on cw-rails alone. The founder's own
+/// gossip self record carries claims A after register, B and not A after a
+/// renew declaring B, and still B after a renew declaring nothing. Failing
+/// input: a renew that moves only the deadline, so the round stays on A.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_renew_carries_the_registrants_new_declaration_into_gossip() {
+    let dir = tempfile::tempdir().unwrap();
+    found::found(dir.path(), "Lab", "founder").expect("an empty root founds");
+    let port = free_port();
+    let node = RailsNode::bind(dir.path().to_path_buf(), hermetic("founder", port))
+        .await
+        .expect("the founder binds");
+    let key = node.pubkey();
+    let daemon = RailsDaemon::start_from_disk(node)
+        .await
+        .expect("the founder starts");
+    let mesh = daemon.mesh.clone();
+    let origin = echo_origin().await;
+    let claims = |model: &str| {
+        let mut c = declared_claims();
+        c["loaded_models"] = serde_json::json!([model]);
+        c
+    };
+    // The self record's declared models, once a gossip round has run.
+    let models = || async {
+        let mesh = mesh.read().await;
+        mesh.members
+            .values()
+            .find(|m| m.node_pubkey == Some(key))
+            .map(|m| m.capabilities.loaded_models.clone())
+            .unwrap_or_default()
+    };
+    let until = |want: &'static str| async move {
+        let started = Instant::now();
+        loop {
+            let seen = models().await;
+            if seen.iter().any(|m| m == want) {
+                return seen;
+            }
+            assert!(
+                started.elapsed() < BUDGET,
+                "the self record never carried {want}: {seen:?}"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    };
+
+    let test = async {
+        let api = format!("http://127.0.0.1:{port}/v1/mesh/origins");
+        let http = reqwest::Client::new();
+        // The API is up once it serves the join link.
+        poll_join_link(port).await;
+        let claim: serde_json::Value = http
+            .post(&api)
+            .json(&serde_json::json!({
+                "alpn": "cwth/client/0", "port": origin.port(),
+                "admit": {"members": []}, "claims": claims("model-a"),
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let renew = format!("{api}/{}/renew", claim["claim_id"].as_str().unwrap());
+        until("model-a").await;
+
+        let ok = http
+            .post(&renew)
+            .json(&serde_json::json!({"ttl_secs": 60, "claims": claims("model-b")}))
+            .send()
+            .await
+            .unwrap();
+        assert!(ok.status().is_success(), "{ok:?}");
+        let seen = until("model-b").await;
+        assert!(
+            !seen.iter().any(|m| m == "model-a"),
+            "B replaces A, never joins it: {seen:?}"
+        );
+
+        let ok = http
+            .post(&renew)
+            .json(&serde_json::json!({"ttl_secs": 60}))
+            .send()
+            .await
+            .unwrap();
+        assert!(ok.status().is_success(), "{ok:?}");
+        // Three gossip rounds at one second each.
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        assert_eq!(
+            models().await,
+            vec!["model-b".to_string()],
+            "a renew with no claims keeps the declaration"
+        );
+    };
+    tokio::select! {
+        exit = daemon.run() => panic!("the founder stopped serving: {exit:?}"),
+        () = test => {}
+    }
+}

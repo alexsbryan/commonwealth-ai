@@ -288,14 +288,39 @@ impl OriginRegistry {
     }
 
     /// Push a claim's deadline out by `ttl` from now; the seconds granted.
-    pub fn renew(&self, claim_id: &str, ttl: Duration) -> Result<u64, OriginRefusal> {
+    /// `Some(claims)` replaces the claim's declaration, so what a registrant
+    /// declares moves with its state; `None` keeps the one it has.
+    pub fn renew(
+        &self,
+        claim_id: &str,
+        ttl: Duration,
+        claims: Option<NodeCapabilities>,
+    ) -> Result<u64, OriginRefusal> {
         let ttl = ttl.min(crate::claims::MAX_CLAIM_TTL);
-        self.mutate(|s| {
-            s.claimed
+        let declares = claims.is_some();
+        let secs = self.mutate(|s| {
+            let keys = s
+                .claimed
                 .renew(claim_id, ttl)
-                .map(|_| ttl.as_secs())
-                .ok_or_else(|| OriginRefusal::NoSuchClaim(claim_id.to_string()))
-        })
+                .ok_or_else(|| OriginRefusal::NoSuchClaim(claim_id.to_string()))?;
+            if let Some(claims) = claims {
+                // The declaration stays on ONE slot, as `register` put it:
+                // the slot holding it, or the first when it declared none.
+                let holder = keys
+                    .iter()
+                    .find(|k| s.claimed.get(k).is_some_and(|r| r.value.claims.is_some()))
+                    .unwrap_or(&keys[0])
+                    .clone();
+                if let Some(row) = s.claimed.get_mut(&holder) {
+                    row.value.claims = Some(claims);
+                }
+            }
+            Ok(ttl.as_secs())
+        })?;
+        tracing::debug!(target: "transport", claim = %claim_id, ttl_secs = secs, declares,
+                        "origin registry: renewed — a declaration replaces the claim's, \
+                         none keeps it");
+        Ok(secs)
     }
 
     /// Withdraw a claim; the slots it held.
