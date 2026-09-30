@@ -18,13 +18,18 @@
 //! cw-rails' members, so a forward through this registration is refused as
 //! unverified: the registration answers nothing before the flip.
 
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use oicp_types::capabilities::NodeCapabilities;
 use oicp_types::origin::{Admit, Framing, OriginRegistration};
+use sovereign_mesh::capabilities::build_local_capabilities;
+use sovereign_turn_client::rails_origins::ClaimsSource;
 use subtle::ConstantTimeEq;
 use tokio::sync::watch;
-use tracing::info;
+use tracing::{debug, info};
+
+use crate::state::AppState;
 
 /// The trace target of every event here.
 pub const TRACE_TARGET: &str = "peer_origin";
@@ -67,6 +72,36 @@ pub fn registration(internal_port: u16) -> OriginRegistration {
     }
 }
 
+/// What this registration declares at every register and renew: the
+/// capabilities the gossip round builds (`sovereign_mesh::capabilities::
+/// build_local_capabilities` — hosted corpora, embed model, budgeted
+/// storage, availability, in-flight), read from `state` at that moment, so
+/// cw-rails advertises this node's corpora once it is the node's endpoint.
+/// The anchor tier is left out: serve declares it through its rpc
+/// registration (sovereign-serve rails_mesh.rs `anchor_claims`), and
+/// cw-rails keeps the first anchor it merges (`origins::merge_declared`).
+pub fn claims_source(state: AppState) -> ClaimsSource {
+    Arc::new(move || {
+        let state = state.clone();
+        Box::pin(async move {
+            let engine = state.inner.node.corpus_engine.clone();
+            let now = state.clock().now_unix_secs();
+            let caps = without_anchor(build_local_capabilities(engine.as_ref(), now, &state).await);
+            debug!(target: TRACE_TARGET, hosted_corpora = caps.hosted_corpora.len(),
+                   embed_model = caps.embed_model.is_some(),
+                   availability = caps.inference_availability,
+                   "peer origin: declaring this node's capabilities");
+            caps
+        })
+    })
+}
+
+/// `caps` with the anchor tier cleared: serve's to declare, never svrn's.
+fn without_anchor(mut caps: NodeCapabilities) -> NodeCapabilities {
+    caps.anchor = None;
+    caps
+}
+
 /// The live claim's tie, as the register/renew loop publishes it. Empty
 /// until [`spawn`] runs; `None` inside while no claim holds.
 #[derive(Default)]
@@ -106,12 +141,14 @@ impl Drop for PeerOriginHandle {
 }
 
 /// Register [`registration`] with cw-rails at `rails_base` and keep it
-/// registered while the handle lives, publishing each claim's tie into
-/// `tie`. A second call on the same cell registers nothing and says so.
+/// registered while the handle lives, declaring `claims` at every register
+/// and renew and publishing each claim's tie into `tie`. A second call on the
+/// same cell registers nothing and says so.
 pub fn spawn(
     rails_base: String,
     internal_port: u16,
     tie: &PeerOriginTie,
+    claims: ClaimsSource,
 ) -> Option<PeerOriginHandle> {
     let (tx, rx) = watch::channel(None);
     if tie.install(rx).is_err() {
@@ -122,13 +159,16 @@ pub fn spawn(
     info!(target: TRACE_TARGET, rails = %rails_base, internal_port,
           prefixes = ?PEER_PREFIXES,
           "peer origin: registering svrn's peer routes with cw-rails");
-    let register = tokio::spawn(sovereign_turn_client::rails_origins::keep_registered_tied(
-        rails_base,
-        registration(internal_port),
-        ORIGIN_TTL_SECS,
-        ORIGIN_RENEW_EVERY,
-        Some(tx),
-    ));
+    let register = tokio::spawn(
+        sovereign_turn_client::rails_origins::keep_registered_declaring(
+            rails_base,
+            registration(internal_port),
+            ORIGIN_TTL_SECS,
+            ORIGIN_RENEW_EVERY,
+            Some(tx),
+            Some(claims),
+        ),
+    );
     Some(PeerOriginHandle { register })
 }
 
@@ -161,6 +201,36 @@ mod tests {
         let (cell, tx) = tied(Some("abc123"));
         tx.send_replace(None);
         assert!(!cell.holds("abc123"));
+    }
+
+    /// The source reads the node at every call, so what a renew declares is
+    /// the state at that renew. Failing input: build the capabilities once
+    /// and replay them.
+    #[tokio::test]
+    async fn the_claims_source_declares_the_state_at_each_call() {
+        let state = crate::state::test_app_state();
+        let source = claims_source(state.clone());
+        state.update_local_availability(0.25).await;
+        let first = source().await;
+        state.update_local_availability(0.75).await;
+        let second = source().await;
+        assert_eq!(first.inference_availability, 0.25);
+        assert_eq!(second.inference_availability, 0.75);
+    }
+
+    /// svrn never declares the anchor tier, whatever the builder read.
+    /// Failing input: declare the builder's output as it is.
+    #[tokio::test]
+    async fn the_declaration_carries_no_anchor() {
+        let mut caps = claims_source(crate::state::test_app_state())().await;
+        caps.anchor = Some(oicp_types::capabilities::AnchorProfile {
+            can_anchor: true,
+            vram_gb: 24,
+            model_resident: None,
+            rpc_port: Some(50052),
+            rpc_iroh: false,
+        });
+        assert_eq!(without_anchor(caps).anchor, None);
     }
 
     /// A second install is refused: one daemon, one registration.

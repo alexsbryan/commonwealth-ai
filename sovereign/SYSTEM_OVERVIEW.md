@@ -1248,7 +1248,8 @@ prefixes) in commonwealth-media's `OriginRegistry`, from which the acceptor tabl
 and the gossiped capabilities are all read (a renew carrying `claims` replaces its registration's
 declaration, pb-mesh-exit-transport-claims); each registration is handed a tie (`X-Mesh-Tie`) its origin
 checks with `tied_pubkey`, and an unregistered ALPN or prefix is refused by name. svrn registers its peer
-routes there (`sovereign-daemon/src/peer_origin.rs`), and its internal resolver believes a forward carrying
+routes there (`sovereign-daemon/src/peer_origin.rs`), declaring the gossip round's capabilities, anchor
+excepted, at every 10 s renew; its internal resolver believes a forward carrying
 that registration's live tie as it believes its own acceptor's mark. Outbound (pb-rails-reach),
 `GET /v1/mesh/reach?peer=&class=` answers any peer's endpoints for a traffic class from its own transport,
 and the `mesh-reach` leaf's `RailsTransport` is the `PeerTransport` that asks it, so a program that is not
