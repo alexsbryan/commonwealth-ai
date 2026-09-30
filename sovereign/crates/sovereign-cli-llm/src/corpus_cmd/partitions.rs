@@ -854,31 +854,11 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
     };
     let data_dir = config.data.dir.clone();
 
-    // Load the self_node_id the daemon uses so the partition path
-    // matches. Prefer the explicit `<data_dir>/node_id` file; fall
-    // back to mesh.json's `self_node_id` for deployments that never
-    // materialised the separate file (the common path — the daemon
-    // only writes node_id when it generates a fresh one, and existing
-    // meshes carry the ID inside mesh.json).
-    let self_node_id = match sovereign_mesh::persist::load_node_id(&data_dir) {
-        Ok(Some(id)) => id,
-        _ => match sovereign_mesh::persist::load(&data_dir) {
-            Ok(Some(persisted)) => persisted.self_node_id,
-            Ok(None) => {
-                eprintln!(
-                    "No mesh state at {} — run `svrn mesh create` or\n\
-                     `svrn mesh join …` before migrating a corpus so the\n\
-                     daemon has a stable node id.",
-                    data_dir.display()
-                );
-                return 1;
-            }
-            Err(e) => {
-                eprintln!("Failed to load mesh state from {}: {e}", data_dir.display());
-                return 1;
-            }
-        },
-    };
+    // The self_node_id the daemon uses, by the daemon's own precedence
+    // (`node_id` file, then mesh.json's id, then generate-and-persist), so
+    // the partition path matches the one the daemon will write under.
+    let self_node_id = sovereign_contracts::node_identity::resolve_self_node_id(&data_dir);
+    tracing::debug!(%self_node_id, data_dir = %data_dir.display(), "migrate-to-partition: node id resolved");
     let self_node_id_str = self_node_id.to_string();
 
     let index_dir = data_dir.join("indexes");
