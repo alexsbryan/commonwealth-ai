@@ -33,6 +33,7 @@ pub fn recipe_author_seams() -> RecipeAuthorSeams {
         tester: Arc::new(CorpusEngineRecipeTester::new()),
         descriptor_json: crate::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
         registry_toml: crate::registry::BUNDLED_REGISTRY_TOML,
+        probe_parameters: None,
     }
 }
 

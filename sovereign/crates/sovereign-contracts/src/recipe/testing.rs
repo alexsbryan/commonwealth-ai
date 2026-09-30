@@ -139,4 +139,8 @@ pub struct RecipeAuthorSeams {
     pub descriptor_json: &'static str,
     /// The bundled registry snapshot (TOML) `registry_browse` reads.
     pub registry_toml: &'static str,
+    /// `{placeholder}` bindings `probe_url` renders its URL and headers
+    /// against: ingest hands `None`, and a host that has the values (the
+    /// recipe agent's live trial, from `--param key=value`) sets them.
+    pub probe_parameters: Option<std::sync::Arc<std::collections::BTreeMap<String, String>>>,
 }

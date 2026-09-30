@@ -95,7 +95,11 @@ impl ToolBundle for RecipeAuthoringTools {
         r = r.record(
             reg.register_reporting(Box::new(RegistryBrowseTool::new(self.seams.registry_toml))),
         );
-        r = r.record(reg.register_reporting(Box::new(ProbeUrlTool::new())));
+        let probe = match &self.seams.probe_parameters {
+            Some(params) => ProbeUrlTool::new().with_parameters(Arc::clone(params)),
+            None => ProbeUrlTool::new(),
+        };
+        r = r.record(reg.register_reporting(Box::new(probe)));
 
         match &self.notes {
             Some(notes) => {
