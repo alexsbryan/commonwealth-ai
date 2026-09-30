@@ -176,7 +176,7 @@ crates/
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
 ├── sovereign-cli-base       # Leaf half of the CLI shared set (help, dirs, dispatcher, guest_link, urls, repo, prompts, deprecation, tracing init, models, mcp client; rail client uses the rail-core wire leaf)
 ├── sovereign-cli-shared     # svrn CLI shared lib (cli-contract, args, flag surface, lane verdict; re-exports sovereign-cli-base at the historical paths)
-├── sovereign-cli-daemon     # Long-running host + lifecycle; owns Windows GPU backend selection
+├── sovereign-cli-daemon     # Lifecycle verbs + setup; links no sovereign-inference: setup's probe/plan exec the stock binary (`--setup-probe`), which owns Windows GPU backend selection
 ├── sovereign-cli-dev        # Workbench: project lifecycle + code intel + tools; owns the project model (`project init` execs its `project-observe`)
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/workflow/govern; svrn's sub-verbs of atlas/enrich/corpus; svrn's white-box bench lanes)
 ├── sovereign-cli-bench      # bench's CLI — bench, eval, quality lane (dials svrn/ingest; links neither)

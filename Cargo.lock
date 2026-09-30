@@ -12355,7 +12355,6 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-daemon",
- "sovereign-inference",
  "sovereign-service",
  "sovereign-turn-client",
  "tempfile",

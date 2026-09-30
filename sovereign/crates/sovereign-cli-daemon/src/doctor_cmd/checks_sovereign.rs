@@ -991,8 +991,29 @@ pub(super) fn check_distributed_primary_contained() -> CheckResult {
         };
     };
 
+    // Where the primary runs is the loader's decision
+    // (`engine_factory::child_owns_primary`); doctor asks the loader's setup
+    // probe rather than link it (pb-distribution-setup). No loader, no answer:
+    // skipped, naming why, never assumed in-process or contained.
+    let config_path = sovereign_core::setup_config::SetupConfig::default_path();
+    let placement = match crate::setup_cmd::probe::ask::<
+        sovereign_contracts::daemon_wire::PrimaryPlacement,
+    >("placement", &[&config_path.to_string_lossy()])
+    {
+        Ok(p) => p,
+        Err(e) => {
+            return CheckResult {
+                name,
+                layer: Layer::Sovereign,
+                status: CheckStatus::Skipped,
+                message: format!("the loader could not say where the primary runs: {e}"),
+                repair: Repair::None,
+            }
+        }
+    };
+
     let verdict = classify_containment(
-        sovereign_inference::engine_factory::child_owns_primary(&config),
+        placement.child_owns_primary,
         config.shared_model.role,
         false, // self node id is not resolved here; the role term carries it
         rpc_discovery_armed(),

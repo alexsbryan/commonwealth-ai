@@ -4,9 +4,7 @@
 //! A client that spawned this process has no terminal, so these shapes
 //! are its whole view of the run.
 use super::*;
-use axum::{response::IntoResponse, routing::get, Router};
 use sovereign_contracts::daemon_wire::SetupProgressLine;
-use std::net::SocketAddr;
 
 /// The emitter's mode and its capture are process-global — they have to
 /// be, because the narration sites span six modules and several
@@ -20,50 +18,32 @@ fn emit_guard() -> std::sync::MutexGuard<'static, ()> {
     EMIT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-async fn serve(app: Router) -> (String, tokio::task::JoinHandle<()>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let handle = tokio::spawn(async move {
-        let _ = axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await;
-    });
-    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    (format!("http://{addr}"), handle)
-}
-
-/// Drive a real download against a stub server and assert the LINE
-/// SEQUENCE a client sees: an opening `downloading_primary` at zero
+/// Drive a download through a stand-in loader that speaks the probe's
+/// `download` protocol (one `FetchedBytes` line per tick), and assert the
+/// LINE SEQUENCE a client sees: an opening `downloading_primary` at zero
 /// bytes, then progress lines naming the same file, then the terminal
-/// `done` carrying the config path.
+/// `done` carrying the config path. The real loader's download is
+/// `download_gguf`'s tests and the setup probe e2e.
 ///
 /// Watched fail: delete the `narrator.emit` call in
-/// `download.rs::download_with_progress` and the "more than the opening
+/// `download.rs::download_with_progress_via` and the "more than the opening
 /// line" assertion goes red; drop `emit::done`'s `config_path` and the
 /// last assertion does.
+#[cfg(unix)]
 #[tokio::test]
 async fn the_json_run_reports_a_download_as_a_line_sequence() {
-    let mut body = Vec::new();
-    body.extend_from_slice(b"GGUF");
-    body.resize(2 * 1024 * 1024, 0u8);
-    let app = Router::new().route(
-        "/real-model.gguf",
-        get(move || {
-            let body = body.clone();
-            async move {
-                (
-                    [(reqwest::header::CONTENT_TYPE, "application/octet-stream")],
-                    body,
-                )
-                    .into_response()
-            }
-        }),
-    );
-    let (base, _handle) = serve(app).await;
+    use std::os::unix::fs::PermissionsExt as _;
     let tmp = tempfile::tempdir().unwrap();
     let dest = tmp.path().join("real.gguf");
+    let loader = tmp.path().join("loader");
+    std::fs::write(
+        &loader,
+        "#!/bin/sh\n\
+         echo '{\"downloaded\":0,\"total\":2097152}'\n\
+         echo '{\"downloaded\":2097152,\"total\":2097152}'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&loader, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     let _guard = emit_guard();
     emit::set_json_mode(true);
@@ -73,8 +53,9 @@ async fn the_json_run_reports_a_download_as_a_line_sequence() {
         "Downloading the main responder.",
         "real.gguf",
     );
-    download_with_progress(
-        &format!("{base}/real-model.gguf"),
+    download::download_with_progress_via(
+        &loader,
+        "http://stand-in.invalid/real-model.gguf",
         &dest,
         "real",
         0.001,
@@ -160,8 +141,47 @@ fn no_lines_are_delivered_without_json_mode() {
 
 // ── --primary ────────────────────────────────────────────────────
 
+/// Two rows in the shape the loader's `plan` answers (the catalog itself is
+/// the planner's, tested beside it in sovereign-inference).
 fn catalog() -> Vec<PrimaryOption> {
-    build_primary_catalog(&ProfileName::VeryHigh)
+    ["Big-Q4.gguf", "Small-Q8.gguf"]
+        .iter()
+        .enumerate()
+        .map(|(i, file)| PrimaryOption {
+            profile: "very_high".into(),
+            slot: SlotConfig {
+                file: file.to_string(),
+                hf_url: "https://huggingface.co/org/repo".into(),
+                ..Default::default()
+            },
+            recommended: i == 0,
+        })
+        .collect()
+}
+
+/// The loader's download URL per catalog file, as its `plan` answer carries.
+fn urls(cat: &[PrimaryOption]) -> BTreeMap<String, String> {
+    cat.iter()
+        .map(|o| {
+            let url = format!(
+                "https://huggingface.co/org/repo/resolve/main/{}",
+                o.slot.file
+            );
+            (o.slot.file.clone(), url)
+        })
+        .collect()
+}
+
+/// The loader's `byom-url` answer for a pasted `/blob/` link.
+fn byom(link: &str) -> Result<ByomSource, String> {
+    Ok(ByomSource {
+        url: link.replace("/blob/", "/resolve/"),
+        file: link.rsplit('/').next().unwrap_or_default().to_string(),
+    })
+}
+
+fn resolve(spec: &str, cat: &[PrimaryOption]) -> Result<PrimaryChoice, String> {
+    resolve_primary_flag(spec, cat, &urls(cat), &byom)
 }
 
 fn args_for(flags: &[&str]) -> Result<Opts, String> {
@@ -174,10 +194,10 @@ fn args_for(flags: &[&str]) -> Result<Opts, String> {
 fn primary_flag_resolves_a_catalog_file() {
     let cat = catalog();
     let want = cat[0].slot.file.clone();
-    match resolve_primary_flag(&want, &cat).expect("catalog row resolves") {
+    match resolve(&want, &cat).expect("catalog row resolves") {
         PrimaryChoice::Download { slot, url } => {
             assert_eq!(slot.file, want);
-            assert_eq!(url, hf_download_url(&cat[0].slot));
+            assert_eq!(Some(&url), urls(&cat).get(&want));
         }
         PrimaryChoice::InPlace { .. } => panic!("a catalog row is fetched, not used in place"),
     }
@@ -190,7 +210,7 @@ fn primary_flag_resolves_a_catalog_file() {
 fn primary_flag_resolves_a_byom_url() {
     let cat = catalog();
     let spec = "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/blob/main/Q4.gguf";
-    match resolve_primary_flag(spec, &cat).expect("url resolves") {
+    match resolve(spec, &cat).expect("url resolves") {
         PrimaryChoice::Download { slot, url } => {
             assert_eq!(slot.file, "Q4.gguf");
             assert!(
@@ -210,7 +230,7 @@ fn primary_flag_uses_a_local_gguf_in_place() {
     let tmp = tempfile::tempdir().unwrap();
     let p = tmp.path().join("mine.gguf");
     std::fs::write(&p, b"GGUF").unwrap();
-    match resolve_primary_flag(p.to_str().unwrap(), &catalog()).expect("path resolves") {
+    match resolve(p.to_str().unwrap(), &catalog()).expect("path resolves") {
         PrimaryChoice::InPlace { slot, path } => {
             assert_eq!(path, p);
             assert_eq!(slot.file, "mine.gguf");
@@ -255,8 +275,8 @@ fn primary_takes_a_value() {
 /// installs a model nobody asked for and reports success (principle 6).
 #[test]
 fn an_unknown_primary_is_refused_rather_than_defaulted() {
-    let e = resolve_primary_flag("something-else", &catalog()).unwrap_err();
+    let e = resolve("something-else", &catalog()).unwrap_err();
     assert!(e.contains("is not a catalog file"), "{e}");
-    let e = resolve_primary_flag("/no/such/model.gguf", &catalog()).unwrap_err();
+    let e = resolve("/no/such/model.gguf", &catalog()).unwrap_err();
     assert!(e.contains("no such file"), "{e}");
 }
