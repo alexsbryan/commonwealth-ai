@@ -284,7 +284,8 @@ def seeds_args(crates: list[str]) -> list[str]:
 # ── 5. the RUN smoke, interpreted from data ──────────────────────────────────
 
 VAR = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
-SEG = re.compile(r"^([A-Za-z_]\w*)(?:\[(\w+)(!?=)([^\]]*)\])?$")
+# A segment may lead with a digit: `offers.${FOUNDER_ACTOR}` walks a hex actor id.
+SEG = re.compile(r"^(\w+)(?:\[(\w+)(!?=)([^\]]*)\])?$")
 
 
 def walk(doc, path: str) -> list:
