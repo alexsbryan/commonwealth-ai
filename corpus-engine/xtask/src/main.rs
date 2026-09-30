@@ -38,11 +38,11 @@ mod lint_gate;
 mod lock_gate;
 mod manifests;
 mod purity_gate;
-mod substitution_gate;
 mod quality_cmd;
 mod refactor_apply;
 mod refactor_land;
 mod size_gate;
+mod substitution_gate;
 mod target_arch;
 
 fn main() {

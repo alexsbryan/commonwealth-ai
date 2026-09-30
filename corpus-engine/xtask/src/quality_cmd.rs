@@ -27,7 +27,8 @@
 
 use crate::{
     arch_gate, boundary_gate, clock_gate, concept_gate, docs_gate, env_gate, instrument_gate,
-    judge_funnel_gate, layer_gate, layout_gate, lifecycle_gate, lock_gate, purity_gate, substitution_gate,
+    judge_funnel_gate, layer_gate, layout_gate, lifecycle_gate, lock_gate, purity_gate,
+    substitution_gate,
 };
 
 /// Whether a gate's verdict may fail this command.
