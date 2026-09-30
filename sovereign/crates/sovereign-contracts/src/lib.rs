@@ -36,6 +36,9 @@ pub mod containment;
 // path, so the routes are unchanged.
 pub mod daemon_wire;
 pub mod data_roots;
+/// `TestProvider`, the builder-style `InferenceProvider` double.
+#[cfg(feature = "test-fixtures")]
+pub mod double;
 /// The drift fingerprint sidecar codec (`write_fingerprint` / `hash_file` /
 /// `DriftFingerprint`). Moved down from `sovereign-code` so the reconcile
 /// commands in `sovereign-cli-llm` stamp the same fingerprint without linking

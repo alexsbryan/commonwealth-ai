@@ -68,11 +68,16 @@ hex = "0.4"
 # `HeaderMap` is vocabulary, not a server.
 http = "1"
 
+# `double::TestProvider::with_stream_delay` sleeps between chunks. Only under
+# `test-fixtures`; reqwest already puts tokio in this crate's graph.
+tokio = { workspace = true, features = ["time"], optional = true }
+
 [features]
-# The canonical middleware test fixtures (`middleware::fixtures`). Off by
-# default so the lifted contract leaf ships no test support; the crates that
-# own middleware tests enable it through a dev-dependency.
-test-fixtures = []
+# The canonical middleware test fixtures (`middleware::fixtures`) and the
+# `double` module's `TestProvider`. Off by default so the lifted contract leaf
+# ships no test support; the crates that own those tests enable it through a
+# dev-dependency.
+test-fixtures = ["dep:tokio"]
 
 [dev-dependencies]
 tempfile = { workspace = true }

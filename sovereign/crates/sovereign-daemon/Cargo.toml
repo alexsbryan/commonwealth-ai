@@ -163,6 +163,8 @@ tokio-tungstenite = "0.29"
 # The tests that only slot a corpus handle hold `IngestPortDouble`
 # (pb-ingest-dial-daemon-tests-slot).
 corpus-index = { workspace = true, features = ["test-doubles"] }
+# ...and hold `TestProvider` from the contracts leaf (pb-serve-ranks-tests-helpers).
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 # ...and hold `AtlasPortDouble` as ingest's atlas port beside it
 # (pb-ingest-dial-daemon).
 corpus-engine-atlas-reader = { workspace = true, features = ["test-doubles"] }
