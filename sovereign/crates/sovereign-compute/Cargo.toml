@@ -19,8 +19,9 @@ license.workspace = true
 # CompletionResponse / StreamFrame cross the process boundary verbatim, and
 # the child server wraps an `Arc<dyn InferenceProvider>`.
 sovereign-contracts = { workspace = true }
-# The server shell the child serves through (phase-b pb-shell).
-host-kit = { workspace = true, features = ["shell", "jobs"] }
+# The server shell the child serves through (phase-b pb-shell); `task`: the
+# discovery loop and the self-manifest refresh run under the kit's supervisor.
+host-kit = { workspace = true, features = ["shell", "jobs", "task"] }
 # The compute child embeds the real engine: EmbeddedLlamaCpp (generate) /
 # EmbedOnlyProvider (embed), plus fast_exit_skip_destructors on the abort path.
 # Runtime-layer, same layer as this crate, so the direction is legal.
