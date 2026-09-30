@@ -42,74 +42,8 @@ use crate::apps::PublishedApps;
 use crate::claims::{mint_claim_id, Claims, DEFAULT_CLAIM_TTL};
 use crate::identity::{admit_app, admit_spliced_origin, verified_headers, MemberIdentity};
 
-/// Who may reach a registered origin — decided once per connection on the
-/// dialer's verified key.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Admit {
-    /// Any dialer. For an origin that authenticates for itself: a guest door
-    /// reading its bearer, the join route a non-member must reach to become
-    /// one.
-    Any,
-    /// Members, with the verified identity; a member outside a non-empty list
-    /// is refused. `[]` is every member.
-    Members(Vec<String>),
-    /// Members reach this origin; any other dialer is sent to the origin
-    /// registered on the named ALPN (a guest door), or closed if none is.
-    MembersElse(String),
-    /// This node's own processes reach it on loopback, and no dialer ever
-    /// does: it is listed, never advertised and never forwarded
-    /// (`forward_for` answers no route). An execute origin a donor on this
-    /// node finds through the listing (pb-work-donor).
-    Local,
-}
-
-/// How a dial's bytes reach the origin.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Framing {
-    /// HTTP/1.1: every request head carries the verified identity and this
-    /// registration's tie.
-    #[default]
-    Http,
-    /// A byte splice, for a protocol that is not HTTP (a ggml rpc-server).
-    /// It carries no identity, so admission is its only guard.
-    Bytes,
-}
-
-/// The body of `POST /v1/mesh/origins`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OriginRegistration {
-    /// The protocol members dial, e.g. `cwth/client/0`.
-    pub alpn: String,
-    /// For `cwth/http/0` only: the path prefixes this origin answers.
-    #[serde(default)]
-    pub prefixes: Vec<String>,
-    /// The loopback port the origin listens on.
-    pub port: u16,
-    pub admit: Admit,
-    #[serde(default)]
-    pub framing: Framing,
-    #[serde(default)]
-    pub ttl_secs: Option<u64>,
-    /// What this origin's program declares about the node, gossiped as-is.
-    #[serde(default)]
-    pub claims: Option<NodeCapabilities>,
-    /// Ring namespaces this program writes on its own behalf. No
-    /// `roster.json` may narrow them while the endpoint runs.
-    #[serde(default)]
-    pub namespaces: Vec<String>,
-}
-
-/// What a successful registration hands back. The tie is shown here once and
-/// never listed again.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OriginClaim {
-    pub claim_id: String,
-    pub tie: String,
-    pub slots: Vec<String>,
-    pub expires_in_secs: u64,
-}
+/// The registration wire lives in `oicp-types` (pb-serve-distributes-standalone).
+pub use oicp_types::origin::{Admit, Framing, OriginClaim, OriginRegistration};
 
 /// One registered origin as `GET /v1/mesh/origins` lists it — never its tie.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

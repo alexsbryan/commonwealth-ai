@@ -15,6 +15,10 @@ commonwealth-transport = { workspace = true, features = ["iroh", "fanout"] }
 # five-programs fp-46 (§12 decision 3); this crate re-imports them at their
 # historical paths.
 kernel-types = { workspace = true }
+# The origin registration wire (`Admit`, `Framing`, `OriginRegistration`,
+# `OriginClaim`) is oicp's since pb-serve-distributes-standalone; `origins`
+# re-exports it at its historical paths.
+oicp-types = { workspace = true }
 serde = { workspace = true }
 # The fan-out row hands back the origin's JSON already parsed beside the raw
 # body, so every shim does not re-parse it as its first line.
