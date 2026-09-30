@@ -736,7 +736,9 @@ the stock install, mounted on the daemon's one `:9741/mcp` through code's
 face (`sovereign_code::face`, pb-code-daemon-exit); a svrn daemon alone serves
 no code tool and names `svrn code mcp`. The editor door (`POST /v1/edit_predictions`) is code's too
 (`sovereign_code::edit_predictions`, pb-meshapp-rest): the stock binary mounts it on svrn's client
-surfaces, its model lane dials serve, and svrn alone answers it with a 503 naming the code server. The tools live in their own crate, `sovereign-code` — 18,431 lines
+surfaces, its model lane dials serve, and svrn alone answers it with a 503 naming the code server. So is the
+TDD solver (`sovereign_code::solve_http`, `/v1/solve/jobs*` and MCP `solve`, pb-meshapp-solve): its chat
+dials serve, no serve is a named refusal, and svrn alone answers the routes the same way. The tools live in their own crate, `sovereign-code` — 18,431 lines
 lifted out of `sovereign-tools` on 2026-09-21 (822681564), so that `svrn code`
 is a program with a boundary a gate can read rather than a module inside the
 knowledge server (docs/FIVE_PROGRAMS.md §2). Tools under

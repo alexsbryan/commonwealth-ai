@@ -72,7 +72,8 @@ backstage = [
 #     `sovereign-server` and `sovereign-cli-daemon`. It backs two SHIPPED MCP
 #     tools — `tdd_solve` and `tdd_bdd_cycle`, listed in `tools/list`
 #     (`routes_mcp.rs::tdd_tool_descriptors`) — and the `solve` verb's daemon
-#     route (sovereign-daemon/src/solve_http.rs). The product does not ship without those.
+#     route (sovereign-code/src/solve_http.rs since pb-meshapp-solve; the svrn
+#     daemon's until then). The product does not ship without those.
 #     The distinction that decides it: a quality control measures SOVEREIGN,
 #     while this drives red-green-refactor over the USER's repo and emits their
 #     code. It is a feature about tests, not a test of the product.
@@ -1461,6 +1462,15 @@ crates = [
     "corpus-engine-archaeology",
     "code-facts",
     "code-next-edit",
+    # The TDD solver code's server hosts (`/v1/solve/jobs*` and the MCP
+    # `solve` tools, pb-meshapp-solve), its edit executor, and the
+    # agent-coding bench that runs the solver in-process — relabelled from
+    # [bench] by F-rest-1 (b) (phase-b-30 Group 3). The evaluator-links-
+    # product relationship is unchanged; code owning solve with agent-bench
+    # dialing it is phase-c's.
+    "sovereign-tdd",
+    "sovereign-agent-tools",
+    "sovereign-agent-bench",
 ]
 
 [[package]]
@@ -1505,9 +1515,8 @@ doc = "docs/FIVE_PROGRAMS.md"
 # language, is driven by ingest's runner, and no bench member uses it.
 crates = [
     "sovereign-eval",
-    "sovereign-agent-bench",
-    "sovereign-agent-tools",
-    "sovereign-tdd",
+    # sovereign-agent-bench, sovereign-agent-tools and sovereign-tdd are
+    # [code]'s since pb-meshapp-solve.
     # bench's own CLI (pb-cli-llm-bench-move): `svrn bench|eval` and
     # `svrn quality lane`, lifted out of sovereign-cli-llm.
     "sovereign-cli-bench",
