@@ -46,10 +46,9 @@ pub async fn rpc_warm(State(state): State<AppState>, Json(body): Json<Value>) ->
     // allowlist — the same `file_name()` match `serve_model_file` uses. `None`
     // when the node doesn't hold the model (the warmer then fetches it, or
     // range-fetches its shard for the byte-range path).
-    let local_model_path = body
-        .get("model_id")
-        .and_then(Value::as_str)
-        .and_then(|id| resolve_local_model(&state.inner.serving.servable_model_files.current(), id));
+    let local_model_path = body.get("model_id").and_then(Value::as_str).and_then(|id| {
+        resolve_local_model(&state.inner.serving.servable_model_files.current(), id)
+    });
 
     let reach =
         crate::rpc_warm_http::warm_reach(&state, body.get("host_node_id").and_then(Value::as_str))
