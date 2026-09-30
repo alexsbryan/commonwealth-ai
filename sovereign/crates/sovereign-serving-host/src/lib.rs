@@ -32,6 +32,6 @@ pub mod source_content_validator;
 pub mod state;
 pub mod throughput_tracking;
 pub mod tool_profile;
-pub mod turn_admission;
+pub use sovereign_contracts::turn_admission;
 pub mod venue_host;
 pub mod worker_eligibility;

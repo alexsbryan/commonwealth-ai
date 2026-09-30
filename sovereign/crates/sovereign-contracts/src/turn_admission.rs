@@ -12,8 +12,8 @@
 
 use std::net::SocketAddr;
 
+use crate::principal::Principal;
 use oicp_types::openai_types::ChatCompletionRequest;
-use sovereign_contracts::principal::Principal;
 
 /// Is this caller on this host? A loopback connection, and, where the
 /// listener resolves principals (the daemon), not a mesh member, a bearer
@@ -56,7 +56,7 @@ mod tests {
     #[test]
     fn only_a_loopback_caller_that_is_not_a_peer_is_on_this_host() {
         let member = Principal::Member {
-            node_id: sovereign_contracts::principal::NodeId::from_u128(7),
+            node_id: crate::principal::NodeId::from_u128(7),
         };
         assert!(from_this_host(addr("127.0.0.1:1"), None));
         assert!(from_this_host(addr("[::1]:1"), Some(&Principal::Anonymous)));

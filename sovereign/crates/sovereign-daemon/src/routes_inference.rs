@@ -51,9 +51,9 @@ pub async fn chat_completions(
     connect: Option<axum::Extension<axum::extract::ConnectInfo<std::net::SocketAddr>>>,
     Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
-    sovereign_serving_host::turn_admission::honour_turn_admission(
+    sovereign_contracts::turn_admission::honour_turn_admission(
         &mut request,
-        sovereign_serving_host::turn_admission::from_this_host(
+        sovereign_contracts::turn_admission::from_this_host(
             connect.map(|axum::Extension(axum::extract::ConnectInfo(p))| p),
             attached.as_ref().map(|axum::Extension(a)| &a.0),
         ),

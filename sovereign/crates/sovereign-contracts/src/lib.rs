@@ -180,6 +180,7 @@ pub mod tool_bundle;
 pub mod tool_manifest;
 pub mod tool_result_cache;
 pub mod traits;
+pub mod turn_admission;
 pub mod types;
 /// The ranked candidate record (`InferenceVenue`), the `VenueSource` port,
 /// and the slot-alias policy table both advertisement and resolution derive
