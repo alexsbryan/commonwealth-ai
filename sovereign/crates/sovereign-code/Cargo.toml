@@ -30,7 +30,7 @@ uuid = { workspace = true }
 code-facts = { workspace = true, features = ["treesitter", "stores"] }
 # The editor door's lanes (`edit_predictions`, moved from the svrn daemon at
 # pb-meshapp-rest): the pure rule/model/symbol/syntax lanes and the journal.
-code-next-edit = { path = "../../../code-next-edit" }
+code-next-edit = { workspace = true }
 arch-layers = { workspace = true }
 
 arc-swap = { workspace = true }

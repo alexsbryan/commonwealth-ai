@@ -366,6 +366,7 @@ understanding-vocab = { path = "understanding-vocab", default-features = false }
 understanding-atlas = { path = "understanding-atlas" }
 corpus-index = { path = "corpus-index" }
 code-facts = { path = "code-facts" }
+code-next-edit = { path = "code-next-edit" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
