@@ -144,22 +144,22 @@ pub async fn keep_registered_declaring(
                     registration.claims = Some(source().await);
                 }
                 match register_origin(&rails_base, &registration).await {
-                Ok(c) => {
-                    info!(target: TRACE_TARGET, claim = %c.claim_id, %slot,
+                    Ok(c) => {
+                        info!(target: TRACE_TARGET, claim = %c.claim_id, %slot,
                           prefixes = ?registration.prefixes, port = registration.port,
                           tie_published = tie.is_some(),
                           "origin registered with cw-rails");
-                    publish(Some(c.tie));
-                    claim = Some(c.claim_id);
-                    told_absent = false;
-                }
-                Err(e) if !told_absent => {
-                    warn!(target: TRACE_TARGET, error = %e, %slot,
+                        publish(Some(c.tie));
+                        claim = Some(c.claim_id);
+                        told_absent = false;
+                    }
+                    Err(e) if !told_absent => {
+                        warn!(target: TRACE_TARGET, error = %e, %slot,
                           "cw-rails did not take the origin's registration, so nothing reaches \
                            it through the mesh; retrying");
-                    told_absent = true;
-                }
-                Err(e) => debug!(target: TRACE_TARGET, error = %e, %slot,
+                        told_absent = true;
+                    }
+                    Err(e) => debug!(target: TRACE_TARGET, error = %e, %slot,
                                  "origin registration still not taken; retrying"),
                 }
             }

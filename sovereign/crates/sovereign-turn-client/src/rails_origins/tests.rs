@@ -46,23 +46,25 @@ async fn double() -> (String, Arc<Rails>) {
         )
         .route(
             "/v1/mesh/origins/{id}/renew",
-            post(|State(r): State<Arc<Rails>>, Json(body): Json<serde_json::Value>| async move {
-                r.declared.lock().unwrap().push(
+            post(
+                |State(r): State<Arc<Rails>>, Json(body): Json<serde_json::Value>| async move {
+                    r.declared.lock().unwrap().push(
                     serde_json::from_value::<Option<oicp_types::capabilities::NodeCapabilities>>(
                         body["claims"].clone(),
                     )
                     .unwrap()
                     .map(|c| c.loaded_models),
                 );
-                if r.renewed.fetch_add(1, Ordering::SeqCst) == 0 {
-                    (
-                        StatusCode::NOT_FOUND,
-                        Json(serde_json::json!({"error": "no such claim"})),
-                    )
-                } else {
-                    (StatusCode::OK, Json(serde_json::json!({"renewed": true})))
-                }
-            }),
+                    if r.renewed.fetch_add(1, Ordering::SeqCst) == 0 {
+                        (
+                            StatusCode::NOT_FOUND,
+                            Json(serde_json::json!({"error": "no such claim"})),
+                        )
+                    } else {
+                        (StatusCode::OK, Json(serde_json::json!({"renewed": true})))
+                    }
+                },
+            ),
         )
         .with_state(Arc::clone(&rails));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
@@ -195,7 +197,10 @@ async fn a_claims_source_is_declared_at_every_register_and_renew() {
     ));
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     while rails.renewed.load(Ordering::SeqCst) < 2 {
-        assert!(tokio::time::Instant::now() < deadline, "never renewed twice");
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "never renewed twice"
+        );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     task.abort();
@@ -213,7 +218,10 @@ async fn a_claims_source_is_declared_at_every_register_and_renew() {
     ));
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     while rails.renewed.load(Ordering::SeqCst) < 2 {
-        assert!(tokio::time::Instant::now() < deadline, "never renewed twice");
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "never renewed twice"
+        );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     task.abort();
