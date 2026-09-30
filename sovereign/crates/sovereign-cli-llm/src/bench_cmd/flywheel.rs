@@ -17,10 +17,8 @@
 //! `bench_cmd::promote`; this command measures, captures, and reports.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use oicp_client::RemoteApiProvider;
-use sovereign_contracts::traits::InferenceProvider;
+use crate::bench_cmd::svrn_judge::SvrnJudge;
 use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, Gates, PressureKind};
 use sovereign_eval::flywheel::generators::corpus::{AbsentSource, CorpusGenerator};
 use sovereign_eval::flywheel::{
@@ -222,13 +220,8 @@ async fn run(rest: &[String]) -> i32 {
             return 1;
         }
     };
-    let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
-    let judge: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
-        &v1,
-        None,
-        &args.judge_model,
-        PROVIDER_CTX,
-    ));
+    // The forced-choice judges are svrn's gate register, answered by svrn.
+    let judge = SvrnJudge::new(&args.base_url, PROVIDER_CTX);
     let model_id = globals
         .chat_model
         .clone()
@@ -240,7 +233,7 @@ async fn run(rest: &[String]) -> i32 {
     for (pi, probe) in probes.iter().enumerate() {
         let verdict = run_and_verify(
             &subject,
-            judge.as_ref(),
+            &judge,
             &args.judge_model,
             &args.corpus,
             &model_id,
@@ -314,7 +307,7 @@ async fn run(rest: &[String]) -> i32 {
 /// One probe → live answer → observation (judge classification) → verdict.
 async fn run_and_verify(
     subject: &SubjectDial,
-    judge: &dyn InferenceProvider,
+    judge: &SvrnJudge,
     judge_model: &str,
     corpus: &str,
     model_id: &str,

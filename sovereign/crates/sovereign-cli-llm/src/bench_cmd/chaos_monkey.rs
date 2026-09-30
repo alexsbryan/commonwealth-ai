@@ -55,6 +55,7 @@ use crate::bench_cmd::live_runner::{
     extraction_scorer_enabled, judge_correctness, run_live_pinned, run_naked, verify_grounding,
 };
 use crate::bench_cmd::subject::SubjectDial;
+use crate::bench_cmd::svrn_judge::SvrnJudge;
 use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
@@ -483,6 +484,9 @@ async fn run(rest: &[String]) -> i32 {
         &args.judge_model,
         PROVIDER_CTX,
     ));
+    // The forced-choice judges and the critic's grounding pass are svrn's gate
+    // registers, answered by svrn on the same daemon.
+    let svrn = SvrnJudge::new(&args.base_url, PROVIDER_CTX);
 
     // Critic role (the `verify_grounding` gate) runs on its own provider —
     // model sourced from the Critic RoleProfile (primary), a SEPARATE forward
@@ -805,7 +809,7 @@ async fn run(rest: &[String]) -> i32 {
             .unwrap_or(0);
         let row = score_question(
             live,
-            judge.as_ref(),
+            &svrn,
             &args.judge_model,
             critic.as_ref(),
             &args.critic_model,
@@ -966,7 +970,7 @@ pub(crate) fn action_from_gate_signal(
 
 async fn score_question(
     live: crate::bench_cmd::live_runner::LiveAnswer,
-    judge: &dyn InferenceProvider,
+    judge: &SvrnJudge,
     judge_model: &str,
     critic: &dyn InferenceProvider,
     critic_model: &str,
@@ -1013,7 +1017,7 @@ async fn score_question(
     // the action directly rather than re-classifying a canned message (a weak
     // judge mis-reads "the sources don't contain that" as a substantive answer).
     let violation_prob = if (grounding_verify || gv_shadow) && !naked && !chunk_texts.is_empty() {
-        verify_grounding(critic, critic_model, &q.question, &visible, &chunk_texts).await
+        verify_grounding(judge, critic_model, &q.question, &visible, &chunk_texts).await
     } else {
         None
     };
@@ -1316,6 +1320,7 @@ async fn rescore(rest: &[String]) -> i32 {
         &judge_model,
         PROVIDER_CTX,
     ));
+    let svrn = SvrnJudge::new(&base_url, PROVIDER_CTX);
     let critic: std::sync::Arc<dyn InferenceProvider> = if critic_model == judge_model {
         std::sync::Arc::clone(&judge)
     } else {
@@ -1394,7 +1399,7 @@ async fn rescore(rest: &[String]) -> i32 {
         };
         let row = score_question(
             live,
-            judge.as_ref(),
+            &svrn,
             &judge_model,
             critic.as_ref(),
             &critic_model,
@@ -1570,6 +1575,7 @@ async fn score_answer(rest: &[String]) -> i32 {
         &judge_model,
         PROVIDER_CTX,
     ));
+    let svrn = SvrnJudge::new(&base_url, PROVIDER_CTX);
     let critic: std::sync::Arc<dyn InferenceProvider> = if critic_model == judge_model {
         std::sync::Arc::clone(&judge)
     } else {
@@ -1603,15 +1609,10 @@ async fn score_answer(rest: &[String]) -> i32 {
     // The same abstention + caveat classifiers the live scorer uses. `answered`
     // = does a reader come away with an answer? `caveat` = did it flag the answer
     // as general knowledge (out-of-domain honesty)?
-    let answered = crate::bench_cmd::live_runner::classify_extraction(
-        judge.as_ref(),
-        &judge_model,
-        &question,
-        &answer,
-    )
-    .await;
-    let caveat =
-        crate::bench_cmd::live_runner::classify_caveat(judge.as_ref(), &judge_model, &answer).await;
+    let answered =
+        crate::bench_cmd::live_runner::classify_extraction(&svrn, &judge_model, &question, &answer)
+            .await;
+    let caveat = crate::bench_cmd::live_runner::classify_caveat(&svrn, &judge_model, &answer).await;
 
     // Bench-aligned verdict — the chaos scorer's own vocabulary, worst first:
     //   hallucination     answered with a value absent from the evidence (the

@@ -57,11 +57,11 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use kernel_types::Judgement;
-use oicp_client::RemoteApiProvider;
-use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::projection::TurnMetadata;
 use sovereign_contracts::types::{JudgeFailure, JudgeFailureReason, StageId, TurnMode};
 use sovereign_turn_client::{TurnClient, TurnObserver};
+
+use crate::bench_cmd::svrn_judge::SvrnJudge;
 
 use super::{reason, LaneCtx, LaneReport};
 
@@ -223,12 +223,7 @@ fn usefulness_prompt(question: &str, answer: &str) -> String {
 
 /// P(useful). `None` when the judge did not answer — reported, never
 /// defaulted to a number (ARCH §18.3).
-async fn p_useful(
-    judge: &dyn InferenceProvider,
-    model: &str,
-    question: &str,
-    answer: &str,
-) -> Option<f64> {
+async fn p_useful(judge: &SvrnJudge, model: &str, question: &str, answer: &str) -> Option<f64> {
     // The gate's own probe, reused (ARCH §19) — not a second forced-choice
     // implementation beside it.
     crate::bench_cmd::live_runner::forced_choice_ab(
@@ -574,18 +569,13 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         return report.finish();
     }
 
-    let v1 = format!("{}/v1", base.trim_end_matches('/'));
-    let judge: std::sync::Arc<dyn InferenceProvider> = std::sync::Arc::new(RemoteApiProvider::new(
-        &v1,
-        None,
-        &bank.judge.model,
-        PROVIDER_CTX,
-    ));
+    // The usefulness probe is svrn's gate register, answered by svrn.
+    let judge = SvrnJudge::new(&base, PROVIDER_CTX);
 
     // ── Row: judge calibrated ──────────────────────────────────────
     // BEFORE any answer is scored. Validating the instrument after reading
     // the result is how a drifted probe gets believed.
-    let calibrated = calibration_row(&mut report, &bank, judge.as_ref()).await;
+    let calibrated = calibration_row(&mut report, &bank, &judge).await;
 
     let client = TurnClient::new(&base);
     let mut per_question: Vec<(String, Vec<LaneTurn>)> = Vec::new();
@@ -624,16 +614,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
 
     // ── The assertion rows, one per bank question ──────────────────
     for (q, (_, runs)) in bank.questions.iter().zip(per_question.iter()) {
-        assert_question(
-            &mut report,
-            &bank,
-            q,
-            runs,
-            &corpus,
-            judge.as_ref(),
-            calibrated,
-        )
-        .await;
+        assert_question(&mut report, &bank, q, runs, &corpus, &judge, calibrated).await;
     }
 
     // ── Row: per-stage baseline (TRACKED) ──────────────────────────
@@ -783,11 +764,7 @@ async fn ingest_row(
 
 /// Run the bank's two controls through the SAME probe the answers go
 /// through, and say whether the instrument separates.
-async fn calibration_row(
-    report: &mut LaneReport,
-    bank: &ChatAskBank,
-    judge: &dyn InferenceProvider,
-) -> bool {
+async fn calibration_row(report: &mut LaneReport, bank: &ChatAskBank, judge: &SvrnJudge) -> bool {
     let q = "According to the Architecture Tour, what is the runtime pipeline, \
              and what role does the grounding gate play?";
     let good = p_useful(judge, &bank.judge.model, q, &bank.judge.control_good).await;
@@ -825,7 +802,7 @@ async fn assert_question(
     q: &ChatAskQuestion,
     runs: &[LaneTurn],
     corpus: &str,
-    judge: &dyn InferenceProvider,
+    judge: &SvrnJudge,
     calibrated: bool,
 ) {
     let row = |name: &str| format!("{name} [{}]", q.id);

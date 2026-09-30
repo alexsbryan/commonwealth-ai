@@ -22,11 +22,8 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use oicp_client::RemoteApiProvider;
 use serde::{Deserialize, Serialize};
-use sovereign_contracts::traits::InferenceProvider;
 use sovereign_eval::chaos_monkey::{
     score, AgentAction, CalibrationReport, ChaosBank, PressureKind,
 };
@@ -41,6 +38,7 @@ use super::lane_baseline::LaneBaseline;
 use super::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
 use super::scaffolding_param::{decide, PromoteDecision};
 use super::subject::SubjectDial;
+use super::svrn_judge::SvrnJudge;
 use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
@@ -243,13 +241,8 @@ async fn run(args_in: &[String]) -> i32 {
     };
 
     // ── Judge (real fast-slot classifier) + persistent answer→action cache ──
-    let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
-    let judge: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
-        &v1,
-        None,
-        &args.judge_model,
-        PROVIDER_CTX,
-    ));
+    // The forced-choice judges are svrn's gate register, answered by svrn.
+    let judge = SvrnJudge::new(&args.base_url, PROVIDER_CTX);
     let model_id = globals
         .chat_model
         .clone()
@@ -264,7 +257,7 @@ async fn run(args_in: &[String]) -> i32 {
     );
 
     let ctx = Ctx {
-        judge: judge.as_ref(),
+        judge: &judge,
         judge_model: &args.judge_model,
         corpus: &args.corpus,
         model_id: &model_id,
@@ -354,7 +347,7 @@ async fn run(args_in: &[String]) -> i32 {
 
 /// Immutable per-run context shared by every arm.
 struct Ctx<'a> {
-    judge: &'a dyn InferenceProvider,
+    judge: &'a SvrnJudge,
     judge_model: &'a str,
     corpus: &'a str,
     model_id: &'a str,

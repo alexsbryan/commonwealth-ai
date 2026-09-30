@@ -34,7 +34,7 @@ pub mod attribution;
 pub mod bank;
 pub mod gate_meta;
 pub mod lost_corpora;
-mod probe_score;
+pub(crate) mod probe_score;
 pub(crate) use probe_score::run_probe;
 pub mod report;
 pub mod retrieved_chunk;

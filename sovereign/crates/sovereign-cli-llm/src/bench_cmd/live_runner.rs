@@ -20,6 +20,8 @@ use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, Speed};
 
 use super::subject::SubjectDial;
+use super::svrn_judge::SvrnJudge;
+use sovereign_contracts::probe::{JudgeAnswer, JudgeOp};
 
 /// What the live path produced for one probe.
 ///
@@ -295,11 +297,7 @@ pub fn strip_think(raw: &str) -> String {
 }
 
 /// Forced-choice answer-vs-abstain classifier. `Some(true)` = abstained.
-pub async fn classify_abstain(
-    judge: &dyn InferenceProvider,
-    model: &str,
-    answer: &str,
-) -> Option<bool> {
+pub async fn classify_abstain(judge: &SvrnJudge, model: &str, answer: &str) -> Option<bool> {
     if answer.trim().is_empty() {
         return Some(true);
     }
@@ -353,7 +351,7 @@ pub async fn classify_abstain(
 /// absence as answers. Set `SOVEREIGN_CHAOS_EXTRACTION_SCORER=0` to fall back
 /// to `classify_abstain` for A/B comparison.
 pub async fn classify_extraction(
-    judge: &dyn InferenceProvider,
+    judge: &SvrnJudge,
     model: &str,
     question: &str,
     answer: &str,
@@ -439,11 +437,7 @@ pub fn typed_verdict_enabled() -> bool {
 /// Forced-choice provenance-caveat classifier for out-of-domain answers.
 /// `Some(true)` = the reply explicitly flags the answer is general knowledge /
 /// NOT drawn from the provided passages.
-pub async fn classify_caveat(
-    judge: &dyn InferenceProvider,
-    model: &str,
-    answer: &str,
-) -> Option<bool> {
+pub async fn classify_caveat(judge: &SvrnJudge, model: &str, answer: &str) -> Option<bool> {
     if answer.trim().is_empty() {
         return Some(false);
     }
@@ -497,7 +491,7 @@ pub fn caveat_credit(classified: Option<bool>) -> bool {
 /// counting. `Some(true)` = correct. The caller logs every escalation so the
 /// judge's footprint on the correctness signal stays auditable and small.
 pub async fn judge_correctness(
-    judge: &dyn InferenceProvider,
+    judge: &SvrnJudge,
     model: &str,
     question: &str,
     gold_keywords: &[String],
@@ -542,7 +536,7 @@ pub async fn judge_correctness(
 /// one point on it (honesty 0.18→0.45 but competence 0.50→0.33,
 /// 14/24 answerable falsely gated).
 pub async fn verify_grounding(
-    judge: &dyn InferenceProvider,
+    judge: &SvrnJudge,
     model: &str,
     question: &str,
     answer: &str,
@@ -588,21 +582,19 @@ pub async fn verify_grounding(
     // production does not send for entity-anchored turns (measured
     // 2026-08-19). The bench critic judges unanchored, which is what it
     // always did — but the string is now the one the gate ships.
-    let claim_prompt = sovereign_core::runtime::claim_extraction_prompt(question, answer, false);
-    let claim_req = CompletionRequest {
-        prompt: claim_prompt,
-        system_message: Some(sovereign_core::runtime::CLAIM_EXTRACTION_SYSTEM.into()),
-        preferred_speed: Speed::Slow,
-        max_tokens: Some(64),
-        temperature: Some(0.0),
-        think_budget: Some(0),
-        enable_thinking: Some(false),
-        model_id: Some(model.to_string()),
-        ..Default::default()
-    };
-    let claim = match judge.complete(&claim_req).await {
-        Ok(resp) => {
-            let t = resp.text.trim().to_string();
+    // svrn renders and runs it (`svrn __probe judge`, op CentralClaim),
+    // unanchored, with the parameters this call always had.
+    let central = judge
+        .judge_one(
+            model,
+            JudgeOp::CentralClaim {
+                question: question.to_string(),
+                answer: answer.to_string(),
+            },
+        )
+        .await;
+    let claim = match central {
+        Some(JudgeAnswer::CentralClaim { text: Ok(t) }) => {
             if t.is_empty() || t.to_uppercase().contains("NO_CLAIM") {
                 eprintln!("    [gv] claim=NO_CLAIM → violation_prob=0.000");
                 return Some(0.0);
@@ -615,8 +607,12 @@ pub async fn verify_grounding(
             // text; if circularity matters later, detect it in code.)
             t
         }
-        Err(e) => {
+        Some(JudgeAnswer::CentralClaim { text: Err(e) }) => {
             eprintln!("    [gv] claim extraction failed: {e}");
+            return None;
+        }
+        _ => {
+            eprintln!("    [gv] claim extraction failed: svrn's probe gave no answer");
             return None;
         }
     };
@@ -632,8 +628,22 @@ pub async fn verify_grounding(
         // compiler enforces it, and a future change to the register moves the
         // gate and its calibration instrument together (2026-08-13, gate
         // big-O order land B).
-        let prompt = sovereign_core::runtime::chunk_judge_prompt(c, &claim);
-        if let Some((a, b)) = forced_choice_ab(judge, model, "bench_chunk_support", &prompt).await {
+        let op = JudgeOp::ChunkSupport {
+            register: "bench_chunk_support".to_string(),
+            passage: c.clone(),
+            claim: claim.clone(),
+        };
+        let pass = match judge.judge_one(model, op).await {
+            Some(JudgeAnswer::ChunkSupport { a_b }) => a_b,
+            _ => None,
+        };
+        if pass.is_none() {
+            eprintln!(
+                "    [judge] bench_chunk_support: forced-choice pass failed \
+                 (RUST_LOG=grounding_gate=warn for the provider error)"
+            );
+        }
+        if let Some((a, b)) = pass {
             let denom = a + b;
             let support = if denom > 0.0 { a / denom } else { 0.0 };
             if support > max_support {
@@ -666,7 +676,9 @@ pub async fn verify_grounding(
 /// byte-identical held only while nobody edited one side, and none of the
 /// bench's judge traffic reached `call_census` to be timed, traced or
 /// classified. Both are now the compiler's problem (rung vl-1;
-/// `cargo xtask judge-funnel-gate`).
+/// `cargo xtask judge-funnel-gate`). Since pb-cli-llm-bench-move the funnel is
+/// reached through svrn itself (`svrn __probe judge`, op ForcedChoice), so
+/// bench links no gate code.
 ///
 /// `register` names which of the bench's scorers is asking. It rides the
 /// `grounding_gate` trace as `JudgeCall::Harness` — a bench process opens no
@@ -676,20 +688,12 @@ pub async fn verify_grounding(
 /// chat-ask quality lane reuse this exact register so their verdicts share the
 /// runner's forced-choice normalization.
 pub(crate) async fn forced_choice_ab(
-    judge: &dyn InferenceProvider,
+    judge: &SvrnJudge,
     model: &str,
     register: &'static str,
     prompt: &str,
 ) -> Option<(f64, f64)> {
-    let out = sovereign_core::runtime::forced_choice_ab(
-        judge,
-        sovereign_core::runtime::CHUNK_JUDGE_SYSTEM,
-        prompt,
-        None,
-        sovereign_core::runtime::JudgeRouting::PinnedSlot(model),
-        sovereign_core::runtime::JudgeCall::Harness(register),
-    )
-    .await;
+    let out = judge.forced_choice(model, register, prompt).await;
     if out.is_none() {
         // The provider's own message went to the `grounding_gate` warn the
         // funnel emits; that target is off by default, so name the switch

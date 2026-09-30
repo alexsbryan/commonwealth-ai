@@ -17,11 +17,8 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use oicp_client::RemoteApiProvider;
 use serde::Serialize;
-use sovereign_contracts::traits::InferenceProvider;
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
@@ -306,15 +303,14 @@ async fn run(rest: &[String]) -> i32 {
         sampled.len(),
     );
 
-    let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
-    let provider: Arc<dyn InferenceProvider> =
-        Arc::new(RemoteApiProvider::new(&v1, None, &model, PROVIDER_CTX));
+    // The forced-choice pass is svrn's gate register, answered by svrn.
+    let judge = super::svrn_judge::SvrnJudge::new(&base_url, PROVIDER_CTX);
 
     let mut judged: Vec<JudgedAtom> = Vec::new();
     let mut failures = 0usize;
     for (n, atom) in sampled.iter().enumerate() {
         let verdict = super::live_runner::forced_choice_ab(
-            provider.as_ref(),
+            &judge,
             &model,
             "bench_enrichment_adjudicate",
             &judge_prompt(atom),

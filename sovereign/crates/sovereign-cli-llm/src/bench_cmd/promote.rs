@@ -23,10 +23,7 @@
 //! arm — no daemon restart.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use oicp_client::RemoteApiProvider;
-use sovereign_contracts::traits::InferenceProvider;
 use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, PressureKind};
 use sovereign_eval::entity_resolution_bench::PeekBudget;
 use sovereign_eval::flywheel::generators::corpus::{AbsentSource, CorpusGenerator};
@@ -40,6 +37,7 @@ use super::scaffolding_param::{
     decide, AutoApplyPolicy, PromoteDecision, RerankSettings, ScaffoldingParam,
 };
 use super::subject::SubjectDial;
+use super::svrn_judge::SvrnJudge;
 use sovereign_cli_base::chat_globals::parse_globals;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
@@ -240,13 +238,8 @@ async fn run(args_in: &[String]) -> i32 {
             return 1;
         }
     };
-    let v1 = format!("{}/v1", args.base_url.trim_end_matches('/'));
-    let judge: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
-        &v1,
-        None,
-        &args.judge_model,
-        PROVIDER_CTX,
-    ));
+    // The forced-choice judges are svrn's gate register, answered by svrn.
+    let judge = SvrnJudge::new(&args.base_url, PROVIDER_CTX);
     // Resolve the alias to the concrete GGUF stem so both the provider
     // handle and the captured baseline's attribution name the model
     // actually tested — the daemon accepts a concrete stem as a valid
@@ -404,7 +397,7 @@ async fn run_arm(
     subject: &mut SubjectDial,
     settings: &RerankSettings,
     args: &Args,
-    judge: &Arc<dyn InferenceProvider>,
+    judge: &SvrnJudge,
     model_id: &str,
     probes: &[Probe],
 ) -> Result<LaneBaseline, i32> {
@@ -420,7 +413,7 @@ async fn run_arm(
     for probe in probes {
         let v = run_and_verify(
             subject,
-            judge.as_ref(),
+            judge,
             &args.judge_model,
             &args.corpus,
             model_id,
@@ -444,7 +437,7 @@ async fn run_arm(
 /// promote's gating loop to the read-side orchestrator's CLI surface.)
 async fn run_and_verify(
     subject: &SubjectDial,
-    judge: &dyn InferenceProvider,
+    judge: &SvrnJudge,
     judge_model: &str,
     corpus: &str,
     model_id: &str,
