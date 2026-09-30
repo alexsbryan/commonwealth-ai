@@ -7,46 +7,16 @@
 //! historical `crate::types::*` paths. What remains is the ingest/engine
 //! vocabulary.
 
-use std::future::Future;
 use std::path::PathBuf;
-use std::pin::Pin;
-use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::enrichment::pipeline::types::ChatPrompt;
-use crate::error::Result;
-
 // The index row types are DEFINED in the `corpus-index` leaf.
+pub use corpus_index::prompt::InferenceFn;
 pub use corpus_index::types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, DedupPicker, EmbedFn, IncompleteIngest,
     IndexInfo, RerankConfig, RerankFn, ScoredChunk, DEFAULT_EMBED_DIM,
-}; // shim: moved by domains REVIEW-build-index-read-port
-
-// ─── Inference Function ─────────────────────────────────
-
-/// The ONE completion closure port, injected by the caller — the
-/// enrichment pipeline runs claim/relationship extraction, section
-/// naming, reconciliation and synthesis prompts through it. Sovereign
-/// passes its Primary slot; Commonwealth passes the mesh chat
-/// endpoint; tests pass a deterministic closure returning canned JSON.
-///
-/// Converged 2026-09-17 (ARCH 8) from three aliases that named this one
-/// capability: the single-message `InferenceFn`, the multi-message
-/// `ChatCompletionFn`, and `ChatCompletionWithTokensFn`, its
-/// per-call `max_tokens` arm. The prompt is a [`ChatPrompt`], which
-/// carries the system and user messages, the optional JSON Schema for
-/// grammar-constrained generation (read from
-/// `Domain::entity_extraction_schema()` and threaded through), the
-/// per-phase sampling controls and the prompt's own output budget.
-/// The second argument is the per-call output-token override the retry
-/// paths need: `Some(n)` wins over the prompt's budget, `None` defers
-/// to it. Single-message callers pass `ChatPrompt::new("", prompt)`.
-pub type InferenceFn = Arc<
-    dyn Fn(&ChatPrompt, Option<u32>) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
-        + Send
-        + Sync,
->;
+}; // shim: moved by domains REVIEW-build-index-read-port // shim: moved by pb-cli-llm-ingest-move-remainder
 
 // ─── Index Statistics ───────────────────────────────────
 

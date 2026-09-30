@@ -33,8 +33,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use corpus_engine::enrichment::pipeline::{
-    pipelines::literary_atlas::LiteraryAtlasPipeline, ChapterInput, ChatPrompt, Pipeline,
+    pipelines::literary_atlas::LiteraryAtlasPipeline, ChapterInput, Pipeline,
 };
+use corpus_index::prompt::ChatPrompt;
 use serde::{Deserialize, Serialize};
 
 use crate::enrich_cmd::config::EnrichConfig;

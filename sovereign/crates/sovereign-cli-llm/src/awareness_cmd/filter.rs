@@ -30,7 +30,7 @@
 use std::collections::{HashMap, HashSet};
 
 use corpus_engine::enrichment::atlas::writer::write_atlas;
-use corpus_engine::enrichment::pipeline::ChatPrompt;
+use corpus_index::prompt::ChatPrompt;
 use serde_json::json;
 use understanding_vocab::atoms::{AtomEnvelope, AtomId, Entity};
 use understanding_vocab::edges::Edge;

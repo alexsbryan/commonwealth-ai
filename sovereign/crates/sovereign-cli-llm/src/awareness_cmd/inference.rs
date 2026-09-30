@@ -27,8 +27,8 @@
 
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pipeline::ChatPrompt;
-use corpus_engine::InferenceFn;
+use corpus_index::prompt::ChatPrompt;
+use corpus_index::prompt::InferenceFn;
 
 use super::args::parse_args;
 use sovereign_cli_shared::args::Parsed;

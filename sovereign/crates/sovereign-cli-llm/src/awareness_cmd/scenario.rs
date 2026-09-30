@@ -24,8 +24,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pipeline::ChatPrompt;
-use corpus_engine::InferenceFn;
+use corpus_index::prompt::ChatPrompt;
+use corpus_index::prompt::InferenceFn;
 use serde::Deserialize;
 use sovereign_core::traits::ConversationStore;
 use sovereign_store::sqlite::SqliteStateStore;

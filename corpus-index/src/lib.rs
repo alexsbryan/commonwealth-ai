@@ -47,6 +47,7 @@ pub mod fs_source;
 pub mod host;
 pub mod index;
 pub mod ingest_port;
+pub mod prompt;
 pub mod recipe;
 pub mod source;
 pub mod stream_axes;

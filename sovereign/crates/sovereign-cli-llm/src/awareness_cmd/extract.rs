@@ -313,7 +313,7 @@ fn build_id_map(chunks: &[StoredChunk], source_ids: &[String]) -> HashMap<String
 async fn run_entity_extraction_with_progress(
     chunks: &[StoredChunk],
     domain: &dyn Domain,
-    inference: corpus_engine::InferenceFn,
+    inference: corpus_index::prompt::InferenceFn,
     verbose: bool,
 ) -> Result<EntityExtractionResult, String> {
     let report = move |p: EnrichmentProgress| {
