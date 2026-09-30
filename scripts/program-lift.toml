@@ -105,7 +105,9 @@ build = ["-p", "sovereign-pipeline", "--bin", "svrn-ingest"]
 binary = "debug/svrn-ingest"
 # The recipes tree corpus-engine's tests read (tests/main/source_tree.rs
 # `recipes_root`: "a third party who lifts this package carries these tests").
-carry = { CORPUS_ENGINE_RECIPES_DIR = "sovereign-recipes" }
+# And the bench tree `svrn enrich eval`'s golden-parse tests read
+# (sovereign-pipeline enrich_cmd/eval/mod.rs `goldens_dir`).
+carry = { CORPUS_ENGINE_RECIPES_DIR = "sovereign-recipes", SOVEREIGN_BENCH_ROOT = "sovereign/bench" }
 # The source tree corpus-engine's source gates read (recipe_schema, the
 # enrichment_type census): the lift's own crates/, which holds each closure
 # crate by name as the repo root does. Never the monorepo (program_lift.py).

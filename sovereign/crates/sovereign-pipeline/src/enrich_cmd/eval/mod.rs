@@ -580,12 +580,11 @@ mod tests {
         assert!(s.f1().is_none());
     }
 
-    /// The shipped golden bank, from the INVOCATION's checkout — never from
-    /// where this crate was compiled.
+    /// The shipped golden bank, under the bench tree `SOVEREIGN_BENCH_ROOT` names
+    /// (.cargo/config.toml sets it in-tree; ingest's lift carries it).
     fn goldens_dir() -> std::path::PathBuf {
-        sovereign_cli_base::repo::find_checkout_root()
-            .expect("this test runs inside the checkout that ships the philosophy goldens")
-            .join("sovereign/bench/philosophy")
+        let root = std::env::var("SOVEREIGN_BENCH_ROOT").expect("the bench tree is named");
+        std::path::PathBuf::from(root).join("philosophy")
     }
 
     #[test]
