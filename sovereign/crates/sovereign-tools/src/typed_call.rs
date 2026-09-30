@@ -2,7 +2,7 @@
 //! Shared budget-retry loop for typed-extension LLM calls.
 //!
 //! Three sites duplicated this loop pre-lift:
-//! - `sovereign_cli_llm::enrich_cmd::extract_typed` (chapter-level
+//! - `sovereign_pipeline::enrich_cmd::extract_typed` (chapter-level
 //!   typed dispatcher)
 //! - `sovereign_tools::typed_extension::pass::call_argumentative`
 //!   (RAPTOR-leaf typed extraction)

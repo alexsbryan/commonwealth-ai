@@ -739,7 +739,7 @@ owns the program's data. The split:
       gym_judge, quality_lane_cmd), **ingest 45,600** (enrich_cmd, corpus_cmd +
       5 corpus_* files + corpus_resolve, atlas_cmd, meta_atlas_cmd,
       pipeline_cmd, recipe_cmd/{.rs,/}, recipe_agent_cmd, recipe_agent_live_trial,
-      workflow_cmd, worker_pod_provider, alignment_cmd), **svrn 16,975**
+      worker_pod_provider, alignment_cmd), **svrn 16,975**
       (chat_cmd, awareness_cmd, mcp_cmd, mcp_demo_server, govern_cmd, turn_sink,
       newsworthy, mobile, reading_diag, proxy, portfolio, router_*, lib/main).
 - [ ] Amended 2026-09-29 (phase-b-54): inner_chaos and voice_eval are svrn's,
@@ -780,6 +780,22 @@ owns the program's data. The split:
       grounding primitives are the `assess` and `judge` modes of `svrn __probe`
       (phase-b-63), and what bench runs of ingest it execs as `svrn
       enrich|corpus …`.
+- [x] Landed 2026-09-30 (pb-cli-llm-ingest-move): ingest's verbs are
+      `svrn-ingest`'s, sovereign-pipeline's `[[bin]]`, with the moved modules
+      at its lib root (`run_cli_verb`). The dispatcher's `ingest_bin::owns`
+      table routes them there: `enrich`, `corpus`, `atlas`, `meta-atlas`,
+      `recipe`, `pipeline`, `alignment` and `bench atlas`. The ingest list above
+      is amended by phase-b-70 (2): a module that opens svrn's store, calls
+      svrn's routes or uses svrn's tools stays in cli-llm under its unchanged
+      spelling. That keeps recipe_agent_cmd, recipe_agent_live_trial,
+      corpus_watch_cmd, corpus_catalog_cmd, corpus_extract_entities_cmd,
+      `corpus ingest|share|pull`, `enrich raptor|raptor-index|summary-atoms`
+      and `atlas budget|status|list-corpora|list-atoms|show-atom|typed-extension`
+      in cli-llm. `workflow_cmd` stays too: it is a client of svrn's
+      `/internal/workflows` (seat, phase-b-33). sovereign-cli-llm names no
+      ingest crate. Its one ingest edge left is corpus-engine as a
+      dev-dependency, for two svrn examples that build an engine
+      (coverage_layers_probe, epistemic_demo), and it is the operator's.
 - [ ] Mechanically: each moving group becomes `[lib] + [[bin]]` (the
       `sovereign-agent-bench` precedent), and the DISPATCHER (sovereign-cli,
       `main.rs:877` and `:1204`) get a sibling exec module (`bench_bin::exec`,

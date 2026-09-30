@@ -218,7 +218,7 @@ id = "ST-15"
 family = "ST"
 status = "landed"
 clause = '''Compaction is non-destructive, so storage grows until pruning. Pruning is destructive and irreversible: the operator surface MUST have no default and MUST refuse a zero-retention prune; the automatic sweep MUST use a retention window far outside any plausible in-flight reader.'''
-target = '''sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs:80::run_optimize'''
+target = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs:80::run_optimize'''
 asserts = '''`corpus optimize <id> --prune-days 0` (or a non-integer) writes an error naming the constraint to stderr and exits 2 without ever calling CorpusIndex::prune.'''
 catches = '''letting a zero or unparsed retention through to the destructive prune path, deleting every superseded version regardless of what an in-flight reader still holds.'''
 destination = '''sovereign/docs/cli-contract.toml (journey) + optimize.rs mod tests'''
@@ -835,8 +835,8 @@ id = "ST-27"
 family = "ST"
 status = "exists-untagged"
 clause = '''Publishing a corpus bundle MUST refuse an unjoined bundle (X-CO-3). A corpus that declares structure and joins none MUST fail publication, naming the offending corpora and the repair. A partial join is legitimate; an override MUST print the same facts rather than taking a quieter path.'''
-target = '''sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs:711::audit_section_joins'''
-existing = '''sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs:1282::a_sibling_with_sections_and_no_join_fails_the_gate'''
+target = '''sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs:711::audit_section_joins'''
+existing = '''sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs:1282::a_sibling_with_sections_and_no_join_fails_the_gate'''
 
 [[spec]]
 id = "ST-4"
@@ -860,8 +860,8 @@ id = "ST-6"
 family = "ST"
 status = "landed"
 clause = '''**A directory is not an installed corpus.** Readiness MUST be decided by a positive completion signal from the index itself, at the canonical location, by one decider shared by every reader (X-SD-1). In-flight ingests MUST write to a distinct location that no reader mistakes for an installed corpus.'''
-target = '''sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs:844::corpus_readiness'''
-existing = '''sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs:1173::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
+target = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:844::corpus_readiness'''
+existing = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:1173::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
 landed = '''sovereign-cli-llm::corpus_cmd::inventory::tests::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
 
 [[spec]]
@@ -869,8 +869,8 @@ id = "ST-7"
 family = "ST"
 status = "landed"
 clause = '''Readiness MUST be a three-or-more-valued answer (**ready**, **building**, **absent**, and any further distinguishable states), never a boolean.'''
-target = '''sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs:809::CorpusReadiness'''
-existing = '''sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs:1155::readiness_labels_are_stable_api'''
+target = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:809::CorpusReadiness'''
+existing = '''sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs:1155::readiness_labels_are_stable_api'''
 landed = '''sovereign-cli-llm::corpus_cmd::inventory::tests::readiness_labels_are_stable_api'''
 
 [[spec]]

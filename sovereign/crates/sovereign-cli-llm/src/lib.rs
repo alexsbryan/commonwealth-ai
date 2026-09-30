@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign-cli-llm` — sibling binary that owns every LLM-touching
-//! CLI verb (chat/atlas/enrich/recipe/pipeline/...) + every corpus_*
-//! dispatcher. Parent `sovereign` shim execs into this binary for those
-//! argv[1] values. bench's verbs (`bench`, `eval`, `quality-lane`) are
-//! `sovereign-cli-bench`'s since pb-cli-llm-bench-move; svrn's white-box
-//! lanes under those spellings stay here (`run_bench_verb`, `run_eval_verb`).
+//! `sovereign-cli-llm` — sibling binary that owns svrn's LLM-touching
+//! CLI verbs (chat, workflow, govern, ...). Parent `sovereign` shim execs
+//! into this binary for those argv[1] values. bench's verbs (`bench`,
+//! `eval`, `quality-lane`) are `sovereign-cli-bench`'s since
+//! pb-cli-llm-bench-move; svrn's white-box lanes under those spellings stay
+//! here (`run_bench_verb`, `run_eval_verb`). ingest's verbs (`enrich`,
+//! `corpus`, `atlas`, `meta-atlas`, `recipe`, `pipeline`, `alignment`,
+//! `bench atlas`) are `svrn-ingest`'s since pb-cli-llm-ingest-move, except the
+//! sub-verbs under those spellings that are svrn's (`enrich_cmd`, `atlas_cmd`,
+//! `corpus_cmd` here).
 //!
 //! Lives apart from `sovereign-cli` (the dispatcher) and
 //! `sovereign-cli-dev` (project / code / daemon) so each
@@ -41,7 +45,6 @@
 //! two disagreeing module gates the feature already died of once (see
 //! `awareness_cmd/mod.rs`). One decider, one name (ARCH §10.6).
 
-mod alignment_cmd;
 mod atlas_cmd;
 // UNGATED on purpose. Only `awareness_cmd::args`
 // (the flag SPEC — data plus the shared parser) compiles without the feature;
@@ -51,16 +54,12 @@ mod atlas_cmd;
 // all for three months. ONE gate, and it is the inner one. See
 // `awareness_cmd/mod.rs`.
 pub mod awareness_cmd;
-mod bench_atlas;
 mod chat_cmd;
 mod corpus_catalog_cmd;
 mod corpus_cmd;
 mod corpus_extract_entities_cmd;
 use sovereign_cli_base::corpus_resolve;
-mod corpus_scrub_cmd;
-mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;
-mod daemon_inference;
 mod enrich_cmd;
 mod govern_cmd;
 mod gym_judge;
@@ -77,10 +76,8 @@ mod mcp_cmd;
 mod mcp_demo_server;
 pub mod meshapp_cmd;
 pub mod meshapp_registry;
-mod meta_atlas_cmd;
 mod mobile_cmd;
 mod newsworthy_cmd;
-mod pipeline_cmd;
 mod portfolio_cmd;
 /// `svrn __probe`: svrn describes its own internals for bench to judge.
 mod probe_cmd;
@@ -88,7 +85,6 @@ mod proxy_cmd;
 mod reading_diag_cmd;
 mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
-mod recipe_cmd;
 mod resolver_precision;
 mod router_cache_cmd;
 mod router_fit_cmd;
@@ -156,7 +152,6 @@ async fn async_main() {
         // trace and bundle-escape refusals are `host_kit` events. cli-mesh
         // installed no subscriber, so both were invisible (phase-b-16).
         "meshapp" => init_tracing("sovereign_cli_llm=info,host_kit=info"),
-        "pipeline" => init_tracing("sovereign_cli_llm=info,sovereign_pipeline=info"),
         "enrich" => init_tracing("sovereign_cli_llm=info,corpus_engine=info"),
         // The filter the dispatcher set when it linked awareness in-process.
         "awareness" => init_tracing("sovereign_cli=info,sovereign_tools=debug,corpus_engine=debug"),
@@ -224,21 +219,19 @@ async fn async_main() {
         "search-gym" => search_gym_cmd::run_search_gym(rest).await,
         "knowledge-gym" => knowledge_gym_cmd::run_knowledge_gym(rest).await,
         "atlas" => atlas_cmd::run_atlas(rest).await,
-        "meta-atlas" => meta_atlas_cmd::run_meta_atlas(rest).await,
         "enrich" => enrich_cmd::run_enrich(rest).await,
         "newsworthy" => newsworthy_cmd::run(rest).await,
-        "recipe" => recipe_cmd::run_recipe(rest).await,
         "recipe-agent" => recipe_agent_cmd::run_recipe_agent(rest).await,
         "maintainer" => recipe_agent_cmd::run_maintainer(rest).await,
         "router-cache" => router_cache_cmd::run(rest).await,
         "router" => router_fit_cmd::run(rest).await,
-        "pipeline" => pipeline_cmd::run_pipeline(rest).await,
         "workflow" => workflow_cmd::run_workflow(rest).await,
         "mcp" => mcp_cmd::run_mcp(rest).await,
         "meshapp" => meshapp_cmd::run(rest).await,
-        "alignment" => alignment_cmd::run_alignment(rest).await,
         "mobile" => mobile_cmd::run_mobile(rest).await,
         "corpus" => corpus_cmd::run_corpus(rest).await,
+        // ingest's since pb-cli-llm-ingest-move; the dispatcher execs svrn-ingest.
+        "meta-atlas" | "recipe" | "pipeline" | "alignment" => ingest_verb_elsewhere(cmd, ""),
         // One lane of `svrn quality check`: bench's since
         // pb-cli-llm-bench-move, and the dispatcher execs sovereign-cli-bench.
         "quality-lane" => bench_verb_elsewhere("quality-lane", rest),
@@ -277,7 +270,8 @@ async fn run_bench_verb(rest: &[String]) -> i32 {
     match rest.first().map(String::as_str) {
         Some("judge-replay") => judge_replay::cmd_judge_replay(&rest[1..]).await,
         Some("resolver-precision") => resolver_precision::cmd_resolver_precision(&rest[1..]).await,
-        Some("atlas") => bench_atlas::cmd_atlas(&rest[1..]).await,
+        // ingest's white-box lane; the dispatcher execs svrn-ingest for it.
+        Some("atlas") => ingest_verb_elsewhere("bench", "atlas"),
         _ => bench_verb_elsewhere("bench", rest),
     }
 }
@@ -295,14 +289,33 @@ fn bench_verb_elsewhere(verb: &str, rest: &[String]) -> i32 {
     2
 }
 
+/// A verb or sub-verb that is ingest's since pb-cli-llm-ingest-move: a named
+/// pointer, exit 2, never "unknown".
+pub(crate) fn ingest_verb_elsewhere(verb: &str, sub: &str) -> i32 {
+    tracing::debug!(verb, sub, "ingest verb reached sovereign-cli-llm");
+    let spelled = if sub.is_empty() {
+        verb.to_string()
+    } else {
+        format!("{verb} {sub}")
+    };
+    eprintln!(
+        "sovereign-cli-llm: `{spelled}` is ingest's; it runs in svrn-ingest. \
+         Run it as `svrn {spelled}`."
+    );
+    2
+}
+
 #[cfg(test)]
 mod bench_dispatch {
-    /// The white-box lanes answer their own `--help` with 0 through `bench`'s
-    /// dispatch; bench's own verbs, which run in sovereign-cli-bench, answer 2
-    /// with the place they went.
+    /// svrn's white-box lanes answer their own `--help` with 0 through
+    /// `bench`'s dispatch; bench's own verbs, which run in sovereign-cli-bench,
+    /// and ingest's `bench atlas`, which runs in svrn-ingest, answer 2 with the
+    /// place they went.
     #[tokio::test]
     async fn bench_gate_replays_are_answered_svrn_side() {
-        for verb in ["judge-replay", "resolver-precision", "atlas"] {
+        let args: Vec<String> = ["atlas", "--help"].map(String::from).to_vec();
+        assert_eq!(super::run_bench_verb(&args).await, 2);
+        for verb in ["judge-replay", "resolver-precision"] {
             let args: Vec<String> = [verb, "--help"].map(String::from).to_vec();
             assert_eq!(super::run_bench_verb(&args).await, 0, "{verb}");
         }

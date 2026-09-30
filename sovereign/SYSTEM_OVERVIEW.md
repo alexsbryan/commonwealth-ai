@@ -178,11 +178,11 @@ crates/
 ├── sovereign-cli-shared     # svrn CLI shared lib (cli-contract, args, flag surface, lane verdict; re-exports sovereign-cli-base at the historical paths)
 ├── sovereign-cli-daemon     # Long-running host + lifecycle; owns Windows GPU backend selection
 ├── sovereign-cli-dev        # Workbench: project lifecycle + code intel + tools; owns the project model (`project init` execs its `project-observe`)
-├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/atlas/enrich/corpus/meshapp; svrn's white-box bench lanes)
+├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/workflow/govern; svrn's sub-verbs of atlas/enrich/corpus; svrn's white-box bench lanes)
 ├── sovereign-cli-bench      # bench's CLI — bench, eval, quality lane (dials svrn/ingest; links neither)
 ├── sovereign-cli-mesh       # cmnwlth's verbs — mesh (incl. `mesh pod`), ring, job, publish, run
 ├── sovereign-time           # Wall-clock helpers — zero-dep leaf for crates off sovereign-core
-├── sovereign-pipeline       # Pipeline driver (recipes, worklist); pods moved to cli-mesh
+├── sovereign-pipeline       # Pipeline driver (recipes, worklist); pods moved to cli-mesh; `svrn-ingest`, ingest's one CLI (enrich/corpus/atlas/meta-atlas/recipe/pipeline/alignment, `bench atlas`)
 ├── sovereign-eval           # Pure scorers
 ├── sovereign-authoring-harness # Recipe-authoring verdict ladder over harness StageOutputs
 ├── sovereign-meshapp        # Mesh-app explorer ops — pure path-in/DTO-out lib
@@ -801,8 +801,14 @@ corpus-engine: `code index`, `code finalize` and `code watch` exec ingest's
 `svrn-ingest`; `sovereign-cli-llm` holds everything that
 talks to a model or does heavy retrieval, except bench's verbs: `sovereign-cli-bench`
 holds `bench`, `eval` and the `quality lane` lanes (pb-cli-llm-bench-move), and svrn's
-white-box lanes under those spellings (`bench judge-replay|resolver-precision|atlas`,
-`eval inner-chaos`) stay in `-llm`; `sovereign-cli-mesh`, lifted out of
+white-box lanes under those spellings (`bench judge-replay|resolver-precision`,
+`eval inner-chaos`) stay in `-llm`; and except ingest's verbs: `svrn-ingest`
+(sovereign-pipeline) holds `enrich`, `corpus`, `atlas`, `meta-atlas`, `recipe`,
+`pipeline`, `alignment` and `bench atlas` (pb-cli-llm-ingest-move), and the
+sub-verbs under those spellings that are svrn's (`enrich raptor|raptor-index|summary-atoms`,
+`atlas budget|status|list-corpora|list-atoms|show-atom|typed-extension`, `corpus
+ingest|share|pull|catalog|extract-entities|watch*`) stay in `-llm`, one table in
+the dispatcher's `ingest_bin.rs`; `sovereign-cli-mesh`, lifted out of
 `-llm` on 2026-09-21, holds `mesh` (guest grants and media among its
 subcommands), `meshapp`, `ring`, `job`, `publish`, `unpublish` and `run`. `code converge` is the one verb
 LINKED rather than exec'd, from `sovereign-cli-dev`'s `[lib]` target.
@@ -1394,7 +1400,7 @@ the shared report.
 | Find a duplicated concept | IDENTITY `svrn code converge census` / `noun <Name>`; ROLE `converge roles`; SHAPE `converge shape`. Duplicated BEHAVIOUR is `code dry-report`; oversized FILES are `code suggest-seams` |
 | Understand index storage on disk | `corpus-index/src/index/mod.rs` |
 | Understand the v2 atlas pipeline | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `enrichment/pipeline/mod.rs` |
-| Drive v2 enrichment / build inside the daemon | `sovereign-cli-llm/src/enrich_cmd/`; `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) |
+| Drive v2 enrichment / build inside the daemon | `sovereign-pipeline/src/enrich_cmd/`; `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) |
 | Understand delta updates / scope expansion | `corpus-engine/src/update/delta.rs`, `engine/expand.rs` |
 | Understand KnowledgeView | `sovereign-tools/src/knowledge_view/`; injected at `LandscapeDigestProvider::splice_landscape_digests` |
 | Run the long-running daemon | `sovereign-cli-daemon/src/daemon_cmd/` + `sovereign-service/data/` |

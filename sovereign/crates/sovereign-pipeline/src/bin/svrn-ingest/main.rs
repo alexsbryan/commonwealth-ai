@@ -11,6 +11,7 @@ mod pull;
 mod watch;
 
 use clap::{Parser, Subcommand};
+use sovereign_cli_base::tracing_init::init_tracing;
 
 #[derive(Parser, Debug)]
 #[command(name = "svrn-ingest", version, about)]
@@ -38,8 +39,51 @@ enum Command {
     Watch(watch::WatchArgs),
 }
 
+fn main() -> anyhow::Result<()> {
+    // ingest's CLI verbs, moved from sovereign-cli-llm (pb-cli-llm-ingest-move),
+    // keep that binary's hand-rolled argv, process setup and per-verb tracing.
+    let raw: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(verb) = raw.first().map(String::as_str) {
+        if sovereign_pipeline::CLI_VERBS.contains(&verb) {
+            std::process::exit(run_cli_verb(verb, &raw[1..]));
+        }
+    }
+    run_subcommand()
+}
+
+/// The process sovereign-cli-llm's `bin_main` gave these verbs: full
+/// backtraces, 8 MiB stacks, the rebrand migration, and the verb's tracing
+/// filter (target names follow the module path, now `sovereign_pipeline`).
+fn run_cli_verb(verb: &str, rest: &[String]) -> i32 {
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::env::set_var("RUST_BACKTRACE", "full");
+    }
+    if std::env::var_os("RUST_MIN_STACK").is_none() {
+        std::env::set_var("RUST_MIN_STACK", "8388608");
+    }
+    sovereign_contracts::rebrand::promote_legacy_env();
+    sovereign_contracts::rebrand::run_startup_migration();
+    match verb {
+        "pipeline" => init_tracing("sovereign_pipeline=info"),
+        "enrich" => init_tracing("sovereign_pipeline=info,corpus_engine=info"),
+        "bench" if std::env::var_os("RUST_LOG").is_some() => {
+            init_tracing("sovereign_pipeline=info")
+        }
+        _ => {}
+    }
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(8 * 1024 * 1024)
+        .thread_name("svrn-ingest-rt")
+        .build()
+        .expect("failed to build tokio runtime");
+    runtime
+        .block_on(sovereign_pipeline::run_cli_verb(verb, rest))
+        .expect("CLI_VERBS names every verb run_cli_verb answers")
+}
+
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn run_subcommand() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

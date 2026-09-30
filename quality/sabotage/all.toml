@@ -1146,7 +1146,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-48-personal_chunk_must_not_reach_a_remote_p"
 requirement = "FE-48"
-target = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/egress_reds.rs"
+target = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/egress_reds.rs"
 find = "let err = result\n        .expect(\"complete must not hang \u2014 the boundary refuses before any request\")\n        .expect_err(\"the boundary must refuse a personal-custody chunk to a remote provider\");\n    let msg = err.to_string();\n    assert!(\n        msg.contains(\"personal\")\n            || msg.contains(\"custody\")\n            || msg.contains(\"consent\")\n            || msg.contains(\"grant\"),\n        \"the refusal must be typed and name what was withheld (personal custody / consent grant): {msg}\"\n    );"
 replace = "// MUTATION: Remove the assertion that checks for specific error message content.\n// This allows the code to pass even if it fails with a generic or unrelated error,\n// effectively violating the requirement that the rejection reason must clearly indicate\n// why the request was refused based on privacy/custody grounds."
 mustFail = ["personal_chunk_must_not_reach_a_remote_payload"]

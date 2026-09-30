@@ -17,8 +17,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use sovereign_pipeline::driver::{DriverConfig, Shutdown};
-use sovereign_pipeline::{recipe::Recipe, run_recipe, status, worklist::Worklist};
+use crate::driver::{DriverConfig, Shutdown};
+use crate::{recipe::Recipe, run_recipe, status, worklist::Worklist};
 use tokio::sync::Mutex;
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
@@ -197,11 +197,11 @@ async fn cmd_run(args: &[String]) -> i32 {
 
     // Apply source overrides. --key wins over --slugs wins over recipe.
     if !keys_override.is_empty() {
-        recipe.source = sovereign_pipeline::recipe::Source::Inline {
+        recipe.source = crate::recipe::Source::Inline {
             keys: keys_override,
         };
     } else if let Some(path) = slugs_path {
-        recipe.source = sovereign_pipeline::recipe::Source::SlugList { path };
+        recipe.source = crate::recipe::Source::SlugList { path };
         // Override paths from the CLI are relative to the user's cwd,
         // not the recipe dir — clear base_dir so absolute resolution
         // applies. Absolute paths work either way.

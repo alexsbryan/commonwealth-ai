@@ -79,9 +79,9 @@ fn awareness_in_sibling() -> bool {
 /// re-measure, run this test — the failure message prints the list.
 const HELP_GAP_BASELINE: usize = 11;
 
-/// Concatenated sources of the five CLI crates, for the SOURCE tier.
+/// Concatenated sources of the six CLI crates, for the SOURCE tier.
 ///
-/// All five, not just the declaring command's own binary: a verb that
+/// All six, not just the declaring command's own binary: a verb that
 /// execs a sibling parses its flags in the sibling's crate, which the
 /// manifest does not name. Scoping this per-binary reported that as
 /// missing — a false positive that would have taught the next reader
@@ -97,6 +97,8 @@ fn cli_crate_sources() -> String {
         "sovereign-cli-llm",
         "sovereign-cli-bench",
         "sovereign-cli-daemon",
+        // ingest's CLI (`svrn-ingest`), since pb-cli-llm-ingest-move.
+        "sovereign-pipeline",
     ] {
         let src = root.join(crate_name).join("src");
         let mut stack = vec![src];

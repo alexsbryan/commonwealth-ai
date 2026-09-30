@@ -30,10 +30,11 @@
 1	sovereign/crates/sovereign-cli-dev/src/code_index.rs
 1	sovereign/crates/sovereign-cli-dev/src/project_cmd/mod.rs
 2	sovereign/crates/sovereign-cli-dev/src/project_cmd/refresh.rs
-1	sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs
+1	sovereign/crates/sovereign-pipeline/src/alignment_cmd.rs
 1	sovereign/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs
 1	sovereign/crates/sovereign-cli-llm/src/inner_chaos/rejudge.rs
 1	sovereign/crates/sovereign-cli-llm/src/inner_chaos/replay.rs
+1	sovereign/crates/sovereign-pipeline/src/pipeline_cmd.rs
 1	sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs
 4	sovereign/crates/sovereign-cli-shared/src/cli_contract_report.rs
 3	sovereign/crates/sovereign-cli/src/session_cmd.rs

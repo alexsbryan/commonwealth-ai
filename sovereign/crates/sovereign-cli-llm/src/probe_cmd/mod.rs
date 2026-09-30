@@ -36,7 +36,6 @@ use crate::chat_cmd::{
 };
 
 pub(crate) use attached::provider_for_model;
-pub use retrieve::load_atlas_context;
 pub(crate) use retrieve::load_atlases;
 
 /// A bench bank names the ONE corpus it questions, so the session it drives

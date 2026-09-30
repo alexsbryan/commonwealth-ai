@@ -2232,10 +2232,12 @@ verdict = "judgement-line"
 preconditions = [
   "port-listening:9741",
   "slot-decodes:primary",
-  # The lane runs in bench's binary; its ingest row execs `svrn corpus`,
-  # which is sovereign-cli-llm's.
+  # The lane runs in bench's binary; its ingest row execs `svrn corpus
+  # ingest` (sovereign-cli-llm's) and its search and remove rows `svrn corpus
+  # search|remove` (svrn-ingest's since pb-cli-llm-ingest-move).
   "binary:sovereign-cli-bench",
   "binary:sovereign-cli-llm",
+  "binary:svrn-ingest",
 ]
 baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/chat-ask" }
 bank = "sovereign/bench/quality-check/chat-ask.toml"

@@ -3,18 +3,19 @@ name = "sovereign-cli-llm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "LLM-heavy CLI surface (bench, chat, eval, atlas, enrich, mesh, corpus, pipeline) — sibling binary to sovereign."
+description = "svrn's LLM-heavy CLI surface (chat, workflow, govern, ...) — sibling binary to sovereign."
 
 # Sibling binary that owns the LLM-touching subcommands. Lives apart
 # from `sovereign-cli` so the dispatcher (notes / status / drift /
 # audit / etc.) stays lean and fast to compile.
 #
 # Hosted verbs (parent `sovereign` shim execs into this binary):
-#   bench and eval's white-box lanes (bench judge-replay | resolver-precision
-#   | atlas, eval inner-chaos; the rest of bench is sovereign-cli-bench's),
-#   chat, voice, reading-diag, search-gym, knowledge-gym,
-#   atlas, meta-atlas, enrich, newsworthy, recipe, recipe-agent,
-#   maintainer, pipeline, mcp, alignment, mesh, corpus
+#   bench and eval's white-box lanes (bench judge-replay | resolver-precision,
+#   eval inner-chaos; the rest of bench is sovereign-cli-bench's),
+#   chat, voice, reading-diag, search-gym, knowledge-gym, newsworthy,
+#   recipe-agent, maintainer, mcp, mesh, and svrn's sub-verbs of atlas, enrich
+#   and corpus (the rest of those, meta-atlas, recipe, pipeline, alignment and
+#   bench atlas are svrn-ingest's since pb-cli-llm-ingest-move)
 #
 # The REPL surface (`sovereign` with no subcommand) also lives here —
 # it constructs an EmbeddedLlamaCpp + Runtime, which is the heaviest
@@ -41,16 +42,6 @@ path = "src/main.rs"
 # parsed by hand.
 clap = { workspace = true }
 sovereign-core = { workspace = true }
-# The enrichment store below every host that reads it — `enrich_cmd::{config,
-# paths, catalog}` are re-exports of this crate (rung nc-16-shared-capability).
-sovereign-enrichment-catalog = { workspace = true }
-# The atlas build orchestrator + its phase drivers, moved DOWN out of this
-# crate 2026-09-01 (ontology-v1 P0.5) so the daemon and the desktop can reach
-# them without linking this host — and with it `bench_cmd`'s grandfathered
-# `sovereign-eval` edge. `enrich_cmd` keeps the `cmd_*` + HELP halves and
-# calls down; five modules with no CLI half are re-exported wholesale from
-# `enrich_cmd/mod.rs`.
-sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
 # `bench_cmd/ablate.rs` watches the daemon's data-root lock; `shell` is the
 # server shell and bundle guard `meshapp dev` serves through (pb-meshapp-apps).
@@ -86,14 +77,6 @@ sovereign-daemon = { workspace = true }
 # is only what this host resolves — which daemon, which models, which data
 # root. Capabilities layer — down.
 sovereign-runtime-recipe = { workspace = true }
-sovereign-pipeline = { workspace = true }
-# `recipe test` renders the deterministic authoring ladder. It reaches the
-# harness DIRECTLY rather than through `sovereign_eval::authoring_harness`,
-# which is only a compatibility alias: the crate was carved out of
-# sovereign-eval precisely so a product surface could use it without the
-# rusqlite/reqwest/clap weight, and going through the alias put a product verb
-# on a back-of-house crate for nothing.
-sovereign-authoring-harness = { workspace = true }
 # `meshapp dev` serves a bundle + proxies the explorer ops to this shared lib.
 sovereign-cli-shared = { workspace = true, features = ["mcp-client", "rail-client"] }
 # The neutral kernel — `quality lane` rows are `Judgement`s, so the lane and
@@ -120,7 +103,6 @@ kernel-types = { workspace = true }
 # ever needs the shape without the runner, the cut is to ungate `ProcessPayload`
 # and leave `ProcessExecutor` behind the flag.
 bytes = { workspace = true }
-corpus-engine = { workspace = true, features = ["treesitter"] }
 # The atlas vocabulary leaf — the ONE `atoms.json` shape (§10.6).
 understanding-vocab = { workspace = true, features = ["read"] }
 # The retrieval read-port leaf: index/corpus/types/filters rows this host
@@ -179,11 +161,11 @@ libc = "0.2"
 awareness = ["dep:rusqlite"]
 
 [dev-dependencies]
-# First dev-dependency this crate has needed. `test-support` exposes the ONE
-# `test_env::scoped_home` HOME lock: it moved down with `providers`' tests
-# and four test modules here still take it (egress_reds, errors, reset,
-# integration_tests). A feature rather than a second copy of the lock (§10.6).
-sovereign-enrichment-build = { workspace = true, features = ["test-support"] }
+# examples/{coverage_layers_probe,epistemic_demo}.rs build a `CorpusEngine`
+# to hand svrn's coverage probe a real read port. The one edge
+# pb-cli-llm-ingest-move left red: where a svrn instrument that needs ingest's
+# engine lives is the operator's (ralph/next/phase-b/ctl/NEEDS_HUMAN.md).
+corpus-engine = { workspace = true, features = ["treesitter"] }
 # The local-only list `portfolio-private` must stay in (fp-87) — a leaf.
 commonwealth-rail-core = { workspace = true }
 

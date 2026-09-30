@@ -566,14 +566,15 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // traffic, class unchanged.
     ("sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/solve_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-pipeline/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/mod.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs", Class::InboundOnly, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs", Class::InboundOnly, 1),
+    // The install client moved to the CLI leaf (pb-cli-llm-ingest-move).
+    ("sovereign/crates/sovereign-cli-base/src/corpus_install.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-bench/src/bench_cmd/uap.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-bench/src/bench_cmd/model_resolve.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/bench_atlas.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-pipeline/src/bench_atlas.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-pipeline/src/alignment_cmd.rs", Class::LocalDaemon, 1),
 
 ];

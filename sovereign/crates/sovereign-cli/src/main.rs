@@ -865,8 +865,17 @@ async fn async_main() {
             // execs into it without setting up a tracing subscriber —
             // the sibling's main() installs the appropriate filter for
             // each verb.
-            "mobile" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe" | "pipeline"
-            | "recipe-agent" | "maintainer" | "meshapp" => {
+            // ingest's own CLI (pb-cli-llm-ingest-move): its verbs, except
+            // svrn's sub-verbs under those spellings, which fall through to
+            // sovereign-cli-llm below (one table, `ingest_bin::owns`).
+            "enrich" | "corpus" | "atlas" | "meta-atlas" | "recipe" | "pipeline" | "alignment"
+            | "bench"
+                if ingest_bin::owns(first, &raw_args[1..]) =>
+            {
+                let code = ingest_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "mobile" | "corpus" | "mcp" | "recipe-agent" | "maintainer" | "meshapp" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }

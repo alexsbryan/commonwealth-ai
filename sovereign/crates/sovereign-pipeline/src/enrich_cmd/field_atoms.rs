@@ -3,7 +3,7 @@
 //! existing `field_skeleton.json` into `Question` and `Position` atoms in an
 //! atlas (ei-7b).
 //!
-//! The sibling of [`summary_atoms`](super::summary_atoms) and deliberately
+//! The sibling of `summary_atoms` (svrn's `enrich summary-atoms`) and deliberately
 //! shaped like it: one positional corpus id, the same `data_dir` derivation, no
 //! daemon and no inference. **It extracts nothing** — the 549 SEP canonical
 //! questions were extracted in April 2026 and already sit in the index; this

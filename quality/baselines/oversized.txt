@@ -47,10 +47,10 @@
 1293	sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs
 2219	sovereign/crates/sovereign-cli-dev/src/notes_cmd.rs
 1682	sovereign/crates/sovereign-cli-dev/src/refactor_cmd/detector.rs
-1471	sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs
-1765	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_drift_report.rs
-1248	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/delta_cmd.rs
-1311	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/init.rs
+1471	sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs
+1765	sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_drift_report.rs
+1248	sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs
+1311	sovereign/crates/sovereign-pipeline/src/enrich_cmd/init.rs
 2380	sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs
 1655	sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/runner.rs
 1327	sovereign/crates/sovereign-cli-llm/src/reading_diag_cmd.rs

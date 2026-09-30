@@ -6,7 +6,9 @@
 //!
 //! svrn's white-box lanes kept their spellings under `bench` and `eval` but
 //! stayed in sovereign-cli-llm (they exercise svrn's own internals;
-//! phase-b-60, -64), so [`owns`] routes those to `llm_bin` instead.
+//! phase-b-60, -64), so [`owns`] routes those to `llm_bin` instead; `bench
+//! atlas`, ingest's white-box lane, goes to `svrn-ingest` since
+//! pb-cli-llm-ingest-move (`ingest_bin::owns`, matched first).
 
 use std::path::PathBuf;
 

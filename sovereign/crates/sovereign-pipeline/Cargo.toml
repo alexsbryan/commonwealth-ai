@@ -6,7 +6,8 @@ license.workspace = true
 
 # ingest's one CLI (phase-b pb-ingest-cli): `svrn ingest <recipe.toml>` execs
 # it with the verb as its first argument. Moved from corpus-mcp's `ingest`
-# verb; pb-cli-llm-ingest-move fills it with cli-llm's ingest half.
+# verb; pb-cli-llm-ingest-move filled it with cli-llm's ingest half (`svrn
+# enrich|corpus|atlas|meta-atlas|recipe|pipeline|alignment`, `bench atlas`).
 [[bin]]
 name = "svrn-ingest"
 path = "src/bin/svrn-ingest/main.rs"
@@ -21,6 +22,22 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 sovereign-enrichment-build = { workspace = true }
 # The one embeddings-endpoint decider (`host`) and the index read types.
 corpus-index = { workspace = true }
+# ingest's CLI verbs, moved from sovereign-cli-llm (pb-cli-llm-ingest-move):
+# the enrichment store's layout (`enrich_cmd::{catalog, config, paths}`), the
+# deterministic authoring ladder `recipe test` renders, and the shared leaves
+# they read — the CLI plumbing and the install client, the daemon's OICP
+# inference client, the atlas vocabulary and read surface, and the
+# reconciler's oplog.
+sovereign-enrichment-catalog = { workspace = true }
+sovereign-authoring-harness = { workspace = true }
+sovereign-cli-base = { workspace = true, features = ["corpus-install"] }
+oicp-client = { workspace = true }
+understanding-vocab = { workspace = true, features = ["read"] }
+corpus-engine-atlas-reader = { workspace = true }
+oplog = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true }
+sha2 = { workspace = true }
 clap = { workspace = true }
 tracing-subscriber = { workspace = true }
 # Zero-dep leaf: canonical Unix-epoch wall-clock helpers.
@@ -41,9 +58,15 @@ regex = { workspace = true }
 dirs = "5"
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
+[target.'cfg(unix)'.dependencies]
+# `pipeline stop` signals the driver process.
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true }
+# The one `test_env::scoped_home` HOME lock the enrich_cmd test modules take.
+sovereign-enrichment-build = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

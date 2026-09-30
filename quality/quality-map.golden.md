@@ -190,7 +190,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 |---|---|---|---|
 | `api-gate` | `binary:cargo-public-api` | `the pinned nightly` | quality/nightly-pin.txt is the ONLY nightly use in the repo; a different nightly changes the rendered public API and the diff stops meaning anything |
 | `chaos-monkey` | `port-listening:9741`<br>`slot-decodes:primary`<br>`corpus-installed:chaos-secret-agent` | — | — |
-| `chat-ask` | `port-listening:9741`<br>`slot-decodes:primary`<br>`binary:sovereign-cli-bench`<br>`binary:sovereign-cli-llm` | — | — |
+| `chat-ask` | `port-listening:9741`<br>`slot-decodes:primary`<br>`binary:sovereign-cli-bench`<br>`binary:sovereign-cli-llm`<br>`binary:svrn-ingest` | — | — |
 | `ci-bench` | `port-listening:9741`<br>`slot-decodes:primary`<br>`slot-decodes:embed` | `the HARD/SOFT/TRACKED lane split` | a HARD lane breaks the build and a SOFT synth lane never does. Read lane KIND before reading a number: a TRACKED lane carries an ABSOLUTE verdict that is a finding about the system, not a regression signal |
 |  |  | `--update-baseline` | capture/refresh only on a healthy daemon; a baseline minted from a degraded run silently lowers every future bar |
 | `cli-contract-live-verify` | `port-listening:9741` | — | — |

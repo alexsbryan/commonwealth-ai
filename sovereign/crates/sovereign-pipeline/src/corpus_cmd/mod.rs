@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `svrn corpus` subcommand handlers — extracted from `mesh_cmd`
+//! (§3.2). Corpus index management: list / install / remove / status /
+//! stream-axes / diagnostics / dedupe / repair / pull / partition tooling
+//! + parcel export. Dispatched as the `corpus` verb — which previously
+//! lived in `mesh_cmd.rs` purely as a naming lie (the file served both
+//! `mesh` and `corpus`).
+
+// §3.2 sub-breakdown: the corpus surface is grouped into focused
+// submodules. `fmt` is the shared-formatter leaf; `inventory` +
+// `partitions` use it; `diagnostics` borrows the partition-discovery
+// helpers. `run_corpus` below is the dispatcher.
+mod diagnostics;
+mod fmt;
+mod inventory;
+mod optimize;
+mod partitions;
+mod recipe_source;
+pub(crate) mod search;
+pub(crate) mod status;
+
+use diagnostics::{
+    cmd_corpus_dedupe, cmd_corpus_diag, cmd_corpus_export_parcels, cmd_corpus_repair,
+    cmd_corpus_stream_axes,
+};
+use inventory::{cmd_corpus_install, cmd_corpus_list, cmd_corpus_remove};
+use partitions::{
+    cmd_corpus_merge_partitions, cmd_corpus_migrate_to_partition, cmd_corpus_reconstruct_manifest,
+};
+use status::cmd_corpus_status;
+
+pub async fn run_corpus(args: &[String]) -> i32 {
+    if args.is_empty() {
+        sovereign_cli_base::help::print(&HELP_CORPUS);
+        return 1;
+    }
+    if matches!(args[0].as_str(), "--help" | "-h" | "help") {
+        sovereign_cli_base::help::print(&HELP_CORPUS);
+        return 0;
+    }
+
+    match args[0].as_str() {
+        "list" => cmd_corpus_list().await,
+        "search" => search::cmd_corpus_search(&args[1..]).await,
+        "install" => cmd_corpus_install(&args[1..]).await,
+        "remove" => cmd_corpus_remove(&args[1..]).await,
+        "status" => cmd_corpus_status(&args[1..]).await,
+        "diag" => cmd_corpus_diag(&args[1..]).await,
+        "dedupe" => cmd_corpus_dedupe(&args[1..]).await,
+        "repair" => cmd_corpus_repair(&args[1..]).await,
+        "merge-partitions" => cmd_corpus_merge_partitions(&args[1..]).await,
+        "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
+        "migrate-to-partition" => cmd_corpus_migrate_to_partition(&args[1..]).await,
+        "scrub" => crate::corpus_scrub_cmd::run_scrub(&args[1..]).await,
+        "optimize" => optimize::run_optimize(&args[1..]).await,
+        "snapshot" => crate::corpus_snapshot_cmd::run_snapshot(&args[1..]).await,
+        "stream-axes" => cmd_corpus_stream_axes(&args[1..]).await,
+        "export-parcels" => cmd_corpus_export_parcels(&args[1..]).await,
+        // svrn's: `ingest` runs svrn's workflow client, `pull` is svrn's
+        // member act, and catalog, extract-entities and the watched-folder
+        // verbs open svrn's store or call its routes (pb-cli-llm-ingest-move).
+        sub @ ("ingest"
+        | "share"
+        | "pull"
+        | "catalog"
+        | "extract-entities"
+        | "watch"
+        | "watch-list"
+        | "watch-status"
+        | "watch-pause"
+        | "watch-resume"
+        | "watch-confirm-deletion"
+        | "watch-sync-now"
+        | "watch-add-root"
+        | "watch-remove-root"
+        | "watch-remove") => crate::svrn_verb_elsewhere("corpus", sub),
+        other => {
+            eprintln!("Unknown corpus subcommand: {other}");
+            sovereign_cli_base::help::print(&HELP_CORPUS);
+            1
+        }
+    }
+}
+
+const HELP_CORPUS: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
+    command: "svrn corpus",
+    summary: "Manage knowledge corpora shared across the mesh (install / remove / inspect).",
+    sections: &[
+        sovereign_cli_base::help::HelpSection::Usage("svrn corpus <subcommand> [args]"),
+        sovereign_cli_base::help::HelpSection::Subcommands(&[
+            ("list",                      "List installed and available corpora"),
+            ("ingest <folder>",           "Build a corpus from a folder via the workflow runner (chunk→embed→store; --corpus <id>, --glob, --share)"),
+            ("share <id>",                "Let this mesh's members search an installed corpus (sets its query_sharing)"),
+            ("search <id> <query>",       "Search a corpus (embeds the query via the daemon; --limit N, --json for the hits as JSON)"),
+            ("install <id>",              "Install a corpus (e.g. 'wikipedia'). --wait[=SECS] to exit 0 only once the index is usable"),
+            ("remove <id>",               "Remove canonical + partitions (or --canonical-only / --partitions-only)"),
+            ("status [<id>]",             "Show state (ready/building/absent) + shard status; one corpus, or all. <id> --drift: its declared-but-unbuilt enrichment, if any"),
+            ("diag <id>",                 "Audit an installed corpus: distinct-article count vs. recipe filter"),
+            ("dedupe <id>",               "One-shot rescue: collapse duplicate-content rows from a resume-rewind ingest"),
+            ("repair <id>",               "Reset a 'completed' partition with missing shards back to in-progress so resume picks it up"),
+            ("merge-partitions <id>",     "Merge all <id>-partition-*/ dirs into canonical <id>/ (one-shot rescue when peer-merge handoff was lost)"),
+            ("pull <id>",                 "Stream a peer's canonical index over the mesh (use when local is missing or smaller than peer's)"),
+            ("reconstruct-manifest <id>", "Rebuild source-file manifest (required before collaborative ingestion)"),
+            ("migrate-to-partition <id>", "Rename a legacy canonical index into a partition-of-self so collaborative ingest can resume it"),
+            ("scrub",                     "Entity-candidate extraction + bench TOML sanitisation for local-only corpora"),
+            ("optimize <id>",             "Compact fragments + fold unindexed fragments into the indexes (--all, --prune-days N). Continuously-appended corpora re-earn this"),
+            ("snapshot <subcmd>",         "Publish or inspect prebuilt-index tarballs for cold-start onboarding"),
+            ("watch <path>",              "Register a folder the daemon keeps in sync (adds/edits/deletes flow through every ~2 minutes)"),
+            ("watch-list",                "List every registered watched-folder corpus"),
+            ("watch-status <id>",         "Show the most recent reconciliation status for one watched corpus"),
+            ("watch-pause <id>",          "Pause sweeps for a watched folder until `watch-resume`"),
+            ("watch-resume <id>",         "Resume sweeps after a manual pause"),
+            ("watch-confirm-deletion <id>", "Acknowledge a guard-tripped pause so the next sweep applies the pending deletes"),
+            ("watch-sync-now <id>",       "Trigger a sweep on a Manual-mode watched folder (no-op for Continuous corpora)"),
+            ("watch-add-root <id> <path>", "Layer an additional folder onto an existing watched corpus"),
+            ("watch-remove-root <id> <idx>", "Detach an additional folder by 0-based index"),
+            ("watch-remove <id>",         "Unregister a watched folder and remove its index (source folder untouched)"),
+            ("export-parcels <id>",       "Export a corpus's deterministic parcel atoms to CSV (--corpus, --out) for independent verification in a spreadsheet"),
+        ]),
+        sovereign_cli_base::help::HelpSection::Notes(
+            "`reconstruct-manifest` accepts --source-dir <path> (default:\n\
+             ~/.svrnmesh/indexes/_downloads/<id>) and --yes (skip confirmation).\n\
+             `migrate-to-partition` accepts --dry-run to preview without touching disk.",
+        ),
+    ],
+};

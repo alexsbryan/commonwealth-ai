@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! pb-cli-llm-ingest-move-remainder's census: cli-llm's svrn remainder names
-//! no ingest crate. Every module that stays here (phase-b-70's placement
-//! rule: it opens svrn's store, calls svrn's routes, or uses svrn's tools or
-//! atlas views) reaches ingest through the composed ports or names a leaf's
-//! type. The modules pb-cli-llm-ingest-move carries into ingest's CLI are
-//! listed below and skipped; everything else under `src/` is the remainder.
+//! no ingest crate. Every module here (phase-b-70's placement rule: it opens
+//! svrn's store, calls svrn's routes, or uses svrn's tools or atlas views)
+//! reaches ingest through the composed ports or names a leaf's type. Since
+//! pb-cli-llm-ingest-move carried ingest's verbs into `svrn-ingest`, every
+//! file under `src/` is the remainder, so the census scans them all.
 //!
 //! The ingest crates are read from `quality/ARCH_LAYERS.toml`'s `ingest`
 //! package, the one list boundary-gate reads, so a crate joining ingest joins
@@ -14,43 +14,6 @@
 //! module and this goes red naming the file and line.
 
 use std::path::{Path, PathBuf};
-
-/// The modules pb-cli-llm-ingest-move moves (FIVE_PROGRAMS §11's ingest
-/// list, seat ruling (2) for bench_atlas), as paths under `src/`.
-const MOVING: &[&str] = &[
-    "enrich_cmd/",
-    "corpus_cmd/",
-    "corpus_scrub_cmd.rs",
-    "corpus_snapshot_cmd.rs",
-    "atlas_cmd/",
-    "meta_atlas_cmd.rs",
-    "pipeline_cmd.rs",
-    "recipe_cmd.rs",
-    "recipe_cmd/",
-    "alignment_cmd.rs",
-    "bench_atlas.rs",
-];
-
-/// Files inside a moving directory that the placement rule keeps svrn-side
-/// (the row's list: raptor, raptor-index and the census raptor reads;
-/// atlas status, inspect, budget and typed-extension).
-const STAYING: &[&str] = &[
-    "enrich_cmd/raptor.rs",
-    "enrich_cmd/raptor_index.rs",
-    "enrich_cmd/raptor_census.rs",
-    // pb-cli-llm-ingest-move: summary-atoms writes through svrn's tools
-    // (`sovereign_tools::summary_atoms`), so it is svrn's (phase-b-70 (2)).
-    "enrich_cmd/summary_atoms.rs",
-    "atlas_cmd/status.rs",
-    "atlas_cmd/inspect.rs",
-    "atlas_cmd/budget.rs",
-    "atlas_cmd/typed_extension.rs",
-    // pb-cli-llm-ingest-move: `corpus pull` is svrn's member act (the row).
-    "corpus_cmd/pull.rs",
-    // `corpus ingest` runs svrn's workflow client (`workflow_cmd`), and
-    // `corpus share` rides with it (phase-b-70 (2)).
-    "corpus_cmd/ingest.rs",
-];
 
 fn repo_root() -> PathBuf {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -90,13 +53,6 @@ fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn is_remainder(rel: &str) -> bool {
-    STAYING.contains(&rel)
-        || !MOVING
-            .iter()
-            .any(|m| rel == *m || (m.ends_with('/') && rel.starts_with(m)))
-}
-
 #[test]
 fn the_svrn_remainder_names_no_ingest_crate() {
     let root = repo_root();
@@ -122,9 +78,6 @@ fn the_svrn_remainder_names_no_ingest_crate() {
             .unwrap()
             .to_string_lossy()
             .replace('\\', "/");
-        if !is_remainder(&rel) {
-            continue;
-        }
         scanned += 1;
         for (n, line) in std::fs::read_to_string(path).unwrap().lines().enumerate() {
             if line.trim_start().starts_with("//") {

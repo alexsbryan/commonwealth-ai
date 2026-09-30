@@ -5,14 +5,14 @@
 
 use std::process::Command;
 
-const BIN: &str = env!("CARGO_BIN_EXE_sovereign-cli-llm");
+const BIN: &str = env!("CARGO_BIN_EXE_svrn-ingest");
 
 #[test]
 fn pipeline_pod_points_at_mesh_pod_and_exits_nonzero() {
     let out = Command::new(BIN)
         .args(["pipeline", "pod", "list"])
         .output()
-        .expect("spawn sovereign-cli-llm");
+        .expect("spawn svrn-ingest");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(2), "stderr: {stderr}");
     assert!(

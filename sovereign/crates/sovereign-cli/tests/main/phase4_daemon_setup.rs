@@ -43,6 +43,7 @@ fn siblings_built() -> bool {
         "sovereign-cli-dev",
         "sovereign-cli-daemon",
         "sovereign-cli-llm-stock",
+        "svrn-ingest",
     ]
     .iter()
     .all(|b| dir.join(b).is_file())
