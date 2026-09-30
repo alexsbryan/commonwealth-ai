@@ -9289,7 +9289,7 @@ lines = 1781
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/atlas.rs"
+path = "sovereign/crates/sovereign-cli-llm/src/bench_atlas.rs"
 context = "host"
 lines = 824
 note = ""

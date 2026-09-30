@@ -49,6 +49,7 @@ mod atlas_cmd;
 // all for three months. ONE gate, and it is the inner one. See
 // `awareness_cmd/mod.rs`.
 pub mod awareness_cmd;
+mod bench_atlas;
 mod bench_cmd;
 mod chat_cmd;
 mod corpus_catalog_cmd;
@@ -244,24 +245,27 @@ async fn run_eval_verb(rest: &[String]) -> i32 {
 }
 
 /// `bench`'s dispatch. `judge-replay` and `resolver-precision` replay svrn's
-/// own grounding gate (phase-b-60) and stay here as svrn's tests; bench_cmd
-/// is bench's and names no svrn-side module, so the two arms are routed
-/// before bench_cmd sees the args. bench_cmd's HELP still lists them.
+/// own grounding gate (phase-b-60), and `atlas` composes and parses ingest's
+/// own Phase 1 prompts in-process (phase-b-64): they stay here as white-box
+/// tests; bench_cmd is bench's and names no svrn-side module, so the three
+/// arms are routed before bench_cmd sees the args. bench_cmd's HELP still
+/// lists them.
 async fn run_bench_verb(rest: &[String]) -> i32 {
     match rest.first().map(String::as_str) {
         Some("judge-replay") => judge_replay::cmd_judge_replay(&rest[1..]).await,
         Some("resolver-precision") => resolver_precision::cmd_resolver_precision(&rest[1..]).await,
+        Some("atlas") => bench_atlas::cmd_atlas(&rest[1..]).await,
         _ => bench_cmd::run_bench(rest).await,
     }
 }
 
 #[cfg(test)]
 mod bench_dispatch {
-    /// The two gate replays answer their own `--help` with 0 through `bench`'s
+    /// The white-box lanes answer their own `--help` with 0 through `bench`'s
     /// dispatch, and bench_cmd, which no longer holds them, answers 2.
     #[tokio::test]
     async fn bench_gate_replays_are_answered_svrn_side() {
-        for verb in ["judge-replay", "resolver-precision"] {
+        for verb in ["judge-replay", "resolver-precision", "atlas"] {
             let args: Vec<String> = [verb, "--help"].map(String::from).to_vec();
             assert_eq!(super::run_bench_verb(&args).await, 0, "{verb}");
             assert_eq!(super::bench_cmd::run_bench(&args).await, 2, "{verb}");

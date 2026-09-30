@@ -27,7 +27,6 @@
 pub(crate) mod ablate;
 mod adjudicate;
 mod all;
-mod atlas;
 // Crate-visible: `router fit` records its calibration snapshots under
 // the same dated-JSON + `latest.json` convention rather than inventing
 // a second on-disk layout for the same job.
@@ -189,7 +188,6 @@ pub async fn run_bench(args: &[String]) -> i32 {
         // `report` is synchronous — rolls the on-disk baselines up into
         // per-model reliability reports; no daemon calls.
         "report" => report::cmd_report(&args[1..]),
-        "atlas" => atlas::cmd_atlas(&args[1..]).await,
         "book-report" => book_report::cmd_book_report(&args[1..]).await,
         "vault-report" => vault_report::cmd_vault_report(&args[1..]).await,
         "chaos-monkey" => chaos_monkey::cmd_chaos_monkey(&args[1..]).await,

@@ -268,7 +268,8 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // the /v1/embeddings probe that replaced the id-substring test: it
     // asks the LOCAL daemon to embed a short fixed string, so nothing
     // leaves the machine and no estate content is in the payload.
-    ("studio/crates/sovereign-workflow-host/src/daemon_models.rs", Class::LocalDaemon, 2),
+    // Moved whole to oicp-client (pb-cli-llm-bench-move), sites unchanged.
+    ("oicp-client/src/daemon_models.rs", Class::LocalDaemon, 2),
     // NEW (2026-09-09, sv-surface rung 5): the daemon's /internal/workflows/*
     // job surface lives here, and its router tests are the only client
     // constructions — the end-to-end job test and the loopback-guard

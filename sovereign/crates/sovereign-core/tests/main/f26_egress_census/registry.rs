@@ -527,7 +527,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-serve/src/mesh_bench/shell.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-serve/src/remote_gguf.rs", Class::InboundOnly, 2),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs", Class::LocalDaemon, 2),
+    // probe_or_bail and resolve_model_ids moved with build_inference to
+    // oicp-client (pb-cli-llm-bench-move); the two sites travelled with them.
+    ("oicp-client/src/daemon_inference.rs", Class::LocalDaemon, 2),
     // fp-26 (7e21df175): `svrn chat` asks the local daemon's
     // `GET /internal/guest/route` for the guest link's base; the daemon owns
     // the tunnel, so this client never leaves the machine.
@@ -546,7 +548,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-llm/src/bench_cmd/uap.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/bench_cmd/model_resolve.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/bench_cmd/desktop_bridge.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/bench_cmd/atlas.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli-llm/src/bench_atlas.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs", Class::LocalDaemon, 1),
 
 ];
