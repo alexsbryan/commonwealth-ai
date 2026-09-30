@@ -185,8 +185,9 @@ pub const JOINED_LINE_PREFIX: &str = "joined ";
 // the smoketest implementation, and the desktop re-exports it from there.
 // Declaring a second copy would be the §10.6 smell this module exists to
 // remove. `sovereign-contracts` sits BELOW `sovereign-inference`, so it cannot
-// name that constant; the two are pinned equal by a test in a crate that can
-// see both (`sovereign-cli-daemon`, `launch_smoketest_flag_matches_owner`).
+// name that constant; the two are pinned equal by a test in the owner, which
+// sees both (`sovereign_inference::smoketest`,
+// `launch_smoketest_flag_matches_owner`; pb-distribution-setup).
 
 impl Launch {
     /// Decide what this process is, from argv **excluding** `argv[0]`.

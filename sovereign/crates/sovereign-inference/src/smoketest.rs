@@ -210,3 +210,24 @@ fn run(args: SmokeArgs) -> ExitCode {
     );
     ExitCode::SUCCESS
 }
+
+#[cfg(test)]
+mod tests {
+    use sovereign_contracts::launch::Launch;
+
+    /// The smoketest token has ONE owner — `sovereign_inference::smoketest::
+    /// SMOKETEST_FLAG`, next to the implementation. `sovereign-contracts` sits
+    /// below `sovereign-inference` and cannot name it, so `Launch::parse`
+    /// matches the literal. This test is the seam: it feeds the OWNER's
+    /// constant into the parser and fails if either side drifts. Lives with
+    /// the owner, which links sovereign-contracts (pb-distribution-setup).
+    #[test]
+    fn launch_smoketest_flag_matches_owner() {
+        let argv = vec![super::SMOKETEST_FLAG.to_string()];
+        assert_eq!(
+            Launch::parse(&argv, Launch::Bare).as_str(),
+            "smoketest",
+            "sovereign-inference renamed SMOKETEST_FLAG without updating Launch::parse"
+        );
+    }
+}

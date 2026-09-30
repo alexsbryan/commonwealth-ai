@@ -184,22 +184,6 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
 mod tests {
     use sovereign_contracts::launch::Launch;
 
-    /// The smoketest token has ONE owner — `sovereign_inference::smoketest::
-    /// SMOKETEST_FLAG`, next to the implementation. `sovereign-contracts` sits
-    /// below `sovereign-inference` and cannot name it, so `Launch::parse`
-    /// matches the literal. This test is the seam: it feeds the OWNER's
-    /// constant into the parser and fails if either side drifts. Lives here
-    /// because this is a crate that can see both.
-    #[test]
-    fn launch_smoketest_flag_matches_owner() {
-        let argv = vec![sovereign_inference::smoketest::SMOKETEST_FLAG.to_string()];
-        assert_eq!(
-            Launch::parse(&argv, Launch::Bare).as_str(),
-            "smoketest",
-            "sovereign-inference renamed SMOKETEST_FLAG without updating Launch::parse"
-        );
-    }
-
     /// The three tokens `launch.rs` owns must be what spawn sites send. Pins
     /// the round trip a bare literal at a spawn site would silently break.
     #[test]

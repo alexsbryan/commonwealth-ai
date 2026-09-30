@@ -289,8 +289,9 @@ are already there (`sovereign-inference/src/embedded/model_slot.rs:1564,2326`):
 * `sovereign_inference::smoketest::{run_from_argv, SMOKETEST_FLAG}` — the
   probe's whole implementation, which has always lived in the shared crate.
   The daemon's `Launch::parse` ALREADY accepts the flag
-  (`sovereign-cli-daemon/src/lib.rs:316`, `launch_smoketest_flag_matches_owner`
-  pins the two spellings together); it has never spawned it.
+  (`sovereign-contracts/src/launch.rs`; `launch_smoketest_flag_matches_owner`
+  in `sovereign-inference/src/smoketest.rs` pins the two spellings together);
+  it has never spawned it.
 
 Measured 2026-09-11: `grep -rn choose_cpu_safe_chat_model
 sovereign/crates/sovereign-cli-daemon` returns **zero hits**, and the only
