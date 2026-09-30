@@ -27,7 +27,6 @@ use sovereign_contracts::launch::Launch;
 use sovereign_core::setup_config::SetupConfig;
 
 mod serving_status;
-mod vram_plan;
 // `pub(crate)` so `setup_cmd::fim` can reach `restart_daemon` directly.
 // `svrn setup --fim` rewrites the model config and must bounce the
 // daemon itself — telling the operator to go run `svrn daemon restart`
@@ -73,8 +72,9 @@ pub async fn run(launch: &Launch, args: &[String]) -> i32 {
         // Sizing, not lifecycle: what VRAM would a loadout need, and which
         // card holds it. Lives under `daemon` because it answers the same
         // question the serving boot's preflight asks (`sovereign_compute::preflight`),
-        // just ahead of the hardware existing.
-        Some("vram-plan") => vram_plan::run(&args[1..]),
+        // just ahead of the hardware existing. Sizing is placement, so serve
+        // owns the body and this verb execs it (pb-distribution-setup).
+        Some("vram-plan") => crate::daemon_bin::exec_serve("vram-plan", &args[1..]),
         Some(flag) if flag.starts_with("--") => {
             // Bare flags like `svrn daemon --setup-only` route
             // straight to run_daemon — the user means "start the

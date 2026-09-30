@@ -8407,10 +8407,10 @@ lines = 433
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/vram_plan.rs"
+path = "sovereign/crates/sovereign-serve/src/vram_plan.rs"
 context = "host"
 lines = 310
-note = ""
+note = "Moved to serve from cli-daemon with its tests at pb-distribution-setup: sizing is placement."
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/worker.rs"

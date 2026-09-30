@@ -115,6 +115,25 @@ pub(crate) fn exec_pod_worker(args: &[String]) -> i32 {
     exec_bin(&bin, args)
 }
 
+/// A verb serve's binary owns (`sovereign_serve::WEIGHT_VERBS`), exec'd with
+/// its argv: `svrn daemon vram-plan` sizes a loadout in serve, whose
+/// placement it is (pb-distribution-setup).
+pub(crate) fn exec_serve(verb: &str, args: &[String]) -> i32 {
+    const SERVE: &str = "sovereign-serve";
+    let Some(bin) = sovereign_turn_client::reach::locate_sibling(SERVE, "SOVEREIGN_SERVE_BIN")
+    else {
+        eprintln!(
+            "svrn daemon {verb}: owned by serve, whose binary '{SERVE}' was not found. \
+             Build it with `cargo build -p sovereign-serve`, \
+             or set SOVEREIGN_SERVE_BIN to its path."
+        );
+        return 127;
+    };
+    let mut argv = vec![verb.to_string()];
+    argv.extend(args.iter().cloned());
+    exec_bin(&bin, &argv)
+}
+
 fn exec_bin(bin: &Path, args: &[String]) -> i32 {
     let argv: Vec<OsString> = args.iter().map(OsString::from).collect();
 

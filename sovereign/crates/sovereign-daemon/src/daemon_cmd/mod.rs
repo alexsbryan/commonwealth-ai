@@ -76,8 +76,9 @@ pub async fn run(
     }
     match args.first().map(String::as_str) {
         Some("run") => run_daemon(launch, &args[1..], hosted, code, ingest).await,
-        // Sizing is svrn's CLI verb (cli-daemon's `vram_plan`, the one body;
-        // this binary's copy went at pb-serve-distributes). Named, so an
+        // Sizing is svrn's CLI verb, exec'ing serve's `vram_plan`, the one
+        // body (pb-distribution-setup; this binary's copy went at
+        // pb-serve-distributes). Named, so an
         // operator who reaches this binary directly learns where it is.
         Some("vram-plan") => {
             eprintln!("error: `vram-plan` is svrn's — run `svrn daemon vram-plan`");

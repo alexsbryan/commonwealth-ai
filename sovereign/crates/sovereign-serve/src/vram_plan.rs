@@ -21,7 +21,7 @@
 
 use sovereign_inference::capacity::{check_fit_sized, min_total_vram_mb, SizedSlot};
 
-use sovereign_cli_shared::help::{Help, HelpSection};
+use sovereign_cli_base::help::{Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn daemon vram-plan",
@@ -125,8 +125,8 @@ fn parse_slot(spec: &str, default_ctx: u32) -> Result<SizedSlot, String> {
 }
 
 pub fn run(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
 
@@ -168,7 +168,7 @@ pub fn run(args: &[String]) -> i32 {
             }
             other => {
                 eprintln!("error: unknown vram-plan flag '{other}'");
-                sovereign_cli_shared::help::print(&HELP);
+                sovereign_cli_base::help::print(&HELP);
                 return 2;
             }
         }
@@ -176,7 +176,7 @@ pub fn run(args: &[String]) -> i32 {
 
     if specs.is_empty() {
         eprintln!("error: vram-plan needs at least one --slot");
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 2;
     }
 

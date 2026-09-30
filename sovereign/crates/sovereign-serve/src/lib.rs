@@ -85,6 +85,9 @@ mod rpc_warm;
 mod self_report;
 /// serve's own process body (`run` -> `standalone::serve`).
 mod standalone;
+/// `svrn daemon vram-plan`: size a slot loadout and name the smallest card
+/// that holds it. Sizing is placement, so it is serve's (pb-distribution-setup).
+mod vram_plan;
 mod warm_cache;
 
 /// Exit past ggml's static destructors (the teardown SIGABRT, and on macOS
@@ -250,8 +253,16 @@ pub fn child_launch(args: &[String]) -> Option<i32> {
 
 /// The subcommands `run` routes before the server's arguments. The dispatcher
 /// sends `svrn mesh <verb>` here for exactly these.
-/// `plan` and `bench` are placement measurement's (pb-serve-placement).
-pub const WEIGHT_VERBS: &[&str] = &["warm-cache", "fetch-model", "fetch-ner", "plan", "bench"];
+/// `plan` and `bench` are placement measurement's (pb-serve-placement);
+/// `vram-plan` is sizing, which `svrn daemon vram-plan` execs here.
+pub const WEIGHT_VERBS: &[&str] = &[
+    "warm-cache",
+    "fetch-model",
+    "fetch-ner",
+    "plan",
+    "bench",
+    "vram-plan",
+];
 
 fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
     let runtime = match tokio::runtime::Builder::new_multi_thread()
@@ -270,6 +281,7 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
             "fetch-ner" => fetch_ner::cmd_fetch_ner(rest).await,
             "plan" => mesh_plan::cmd_plan(rest).await,
             "bench" => mesh_bench::cmd_bench(rest).await,
+            "vram-plan" => vram_plan::run(rest),
             _ => fetch_model::cmd_fetch_model(rest).await,
         }
     })

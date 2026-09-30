@@ -564,8 +564,9 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
     );
 }
 
-/// The stock binary answers `vram-plan` with a pointer to svrn's one body
-/// (pb-serve-distributes deleted this binary's copy; principle 8, 2 -> 1).
+/// The stock binary answers `vram-plan` with a pointer to svrn's verb, which
+/// execs serve's one body (pb-serve-distributes deleted this binary's copy;
+/// principle 8, 2 -> 1; pb-distribution-setup moved the body to serve).
 /// Failing input: restore the daemon's `vram_plan::run` arm, and it sizes a
 /// loadout (or prints its usage) instead of naming `svrn daemon vram-plan`.
 #[test]
