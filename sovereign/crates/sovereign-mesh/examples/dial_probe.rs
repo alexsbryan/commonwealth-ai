@@ -131,7 +131,11 @@ async fn main() {
     let (relay_urls, discovery) = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| (c.iroh.relay_urls.clone(), c.iroh.discovery.clone()))
         .unwrap_or_default();
-    let relay_cfg = RelayConfig::from_parts(relay_urls, discovery.as_deref());
+    let relay_cfg =
+        RelayConfig::from_parts(relay_urls, discovery.as_deref()).unwrap_or_else(|why| {
+            eprintln!("RESULT: {why}");
+            std::process::exit(2)
+        });
 
     let endpoint = match build_relayed_endpoint(secret, vec![alpn.to_vec()], &relay_cfg).await {
         Ok(e) => e,

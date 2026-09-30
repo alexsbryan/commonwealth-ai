@@ -177,29 +177,57 @@ impl Default for RelayConfig {
     }
 }
 
+/// The closed set of `discovery` spellings (ROOT_CAUSE_FIXES C2). The
+/// config is DATA, and a data value this build does not know is a refusal,
+/// never a default (ARCH §9, §18.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Discovery {
+    /// The n0 relays and DNS — the bootstrap posture.
+    N0,
+    /// Severed from n0: no relay service, no DNS lookup.
+    None,
+}
+
+impl std::str::FromStr for Discovery {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim() {
+            "n0" => Ok(Discovery::N0),
+            "none" => Ok(Discovery::None),
+            "self" | "local" => Err(format!(
+                "`{s}` was never implemented — `none` is the setting that severs n0 \
+                 (ROOT_CAUSE_FIXES C2: a spelling that promises a capability it does \
+                 not have is refused, not aliased)"
+            )),
+            other => Err(format!(
+                "unknown [iroh] discovery `{other}` — accepted: `n0`, `none`"
+            )),
+        }
+    }
+}
+
 impl RelayConfig {
     /// Build from operator config: the `relay_urls` list and a
-    /// `discovery` string (`"n0"` / absent = n0 services; `"none"` /
-    /// `"self"` / `"local"` = sever n0). An unknown value warns and
-    /// keeps the safe n0 default. Central so both `sovereign-mesh` and
-    /// `sovereign-server` map their configs identically.
-    pub fn from_parts(relay_urls: Vec<String>, discovery: Option<&str>) -> Self {
-        let n0_services = match discovery.map(str::trim) {
-            None | Some("") | Some("n0") => true,
-            Some("none") | Some("self") | Some("local") => false,
-            Some(other) => {
-                tracing::warn!(
-                    target: "transport",
-                    value = %other,
-                    "iroh: unknown [iroh] discovery — using n0 services (the safe default)"
-                );
-                true
-            }
+    /// `discovery` spelling. The spellings are a CLOSED set —
+    /// [`Discovery::from_str`] names every one it accepts and refuses the
+    /// rest by name (ROOT_CAUSE_FIXES C2). Absent/`"n0"` = the n0 services
+    /// (bootstrap posture); `"none"` = severed. `"self"`/`"local"` are
+    /// refused rather than aliased: they were never implemented, and a
+    /// spelling that promises a capability it does not have is the
+    /// substitution this door exists to stop. Central so both
+    /// `sovereign-mesh` and `sovereign-server` map their configs
+    /// identically — and a typo refuses to LOAD instead of quietly
+    /// phoning n0.
+    pub fn from_parts(relay_urls: Vec<String>, discovery: Option<&str>) -> Result<Self, String> {
+        let discovery = match discovery.map(str::trim) {
+            None | Some("") => Discovery::N0,
+            Some(s) => s.parse::<Discovery>()?,
         };
-        Self {
+        Ok(Self {
             relay_urls,
-            n0_services,
-        }
+            n0_services: discovery == Discovery::N0,
+        })
     }
 }
 
@@ -1566,23 +1594,59 @@ mod tests {
 
     #[test]
     fn relay_config_from_parts_maps_discovery() {
-        // Default / "n0" / absent → n0 services on.
+        // Default / "n0" / absent / empty → n0 services on.
         assert!(RelayConfig::default().n0_services);
-        assert!(RelayConfig::from_parts(vec![], None).n0_services);
-        assert!(RelayConfig::from_parts(vec![], Some("n0")).n0_services);
-        // Sovereignty spellings → n0 severed.
-        for d in ["none", "self", "local"] {
-            assert!(
-                !RelayConfig::from_parts(vec![], Some(d)).n0_services,
-                "discovery={d} must sever n0"
-            );
-        }
-        // Unknown → safe default (n0 on).
-        assert!(RelayConfig::from_parts(vec![], Some("carrier-pigeon")).n0_services);
+        assert!(
+            RelayConfig::from_parts(vec![], None)
+                .expect("absent is n0")
+                .n0_services
+        );
+        assert!(
+            RelayConfig::from_parts(vec![], Some("n0"))
+                .expect("n0")
+                .n0_services
+        );
+        assert!(
+            RelayConfig::from_parts(vec![], Some(""))
+                .expect("empty is n0")
+                .n0_services
+        );
+        // The one sovereignty spelling → n0 severed.
+        let c = RelayConfig::from_parts(vec![], Some("none")).expect("none");
+        assert!(!c.n0_services);
         // relay_urls passes through.
-        let c = RelayConfig::from_parts(vec!["https://r.example:443".into()], Some("none"));
+        let c = RelayConfig::from_parts(vec!["https://r.example:443".into()], Some("none"))
+            .expect("none");
         assert_eq!(c.relay_urls, vec!["https://r.example:443".to_string()]);
         assert!(!c.n0_services);
+    }
+
+    /// **C2: a typo'd value refuses to load** (ROOT_CAUSE_FIXES C2). The old
+    /// shape warned and kept n0 — the substitution this door exists to stop.
+    /// Watched failing first, with the warn-and-keep planted back.
+    #[test]
+    fn an_unknown_discovery_value_refuses_to_load() {
+        let err = RelayConfig::from_parts(vec![], Some("carrier-pigeon")).unwrap_err();
+        assert!(err.contains("carrier-pigeon"), "the value is named: {err}");
+        assert!(
+            err.contains("accepted"),
+            "and the accepted set is named: {err}"
+        );
+    }
+
+    /// **C2: `self`/`local` are refused naming `none`** — they were never
+    /// implemented, and aliasing them to `none` would keep the lie in the
+    /// vocabulary. Watched failing first with the same plant.
+    #[test]
+    fn self_and_local_refuse_naming_none() {
+        for d in ["self", "local"] {
+            let err = RelayConfig::from_parts(vec![], Some(d)).unwrap_err();
+            assert!(err.contains("never implemented"), "{d}: {err}");
+            assert!(
+                err.contains("`none`"),
+                "{d}: the honest spelling must be named: {err}"
+            );
+        }
     }
 
     #[tokio::test]

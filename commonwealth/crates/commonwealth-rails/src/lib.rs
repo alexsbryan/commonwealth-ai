@@ -145,7 +145,7 @@ impl RailsNode {
         let endpoint = build_relayed_endpoint(
             SecretKey::from_bytes(&key.to_bytes()),
             vec![ALPN.to_vec(), MEDIA_ALPN.to_vec()],
-            &config.relay_config(),
+            &config.relay_config()?,
         )
         .await
         .map_err(Refusal::Endpoint)?;

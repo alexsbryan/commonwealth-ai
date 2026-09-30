@@ -715,7 +715,7 @@ mod tests {
             // red on every run. Assert the posture rather than trusting the
             // spelling — the endpoint must be relay-less, or the whole
             // escalation this test claims to prove never triggers.
-            let cfg = RelayConfig::from_parts(vec![], Some("none"));
+            let cfg = RelayConfig::from_parts(vec![], Some("none")).expect("`none` is a spelling");
             assert!(
                 !cfg.n0_services,
                 "this test needs a relay-LESS endpoint; n0 services would home it and read healthy"
@@ -969,7 +969,7 @@ mod tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
 
         async fn relayless_endpoint(seed: u8) -> Endpoint {
-            let cfg = RelayConfig::from_parts(vec![], Some("none"));
+            let cfg = RelayConfig::from_parts(vec![], Some("none")).expect("`none` is a spelling");
             let secret = SecretKey::from_bytes(&[seed; 32]);
             build_relayed_endpoint(secret, vec![b"cwth/http/0".to_vec()], &cfg)
                 .await

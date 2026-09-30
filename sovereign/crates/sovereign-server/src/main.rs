@@ -768,8 +768,17 @@ async fn main() {
 
     // Dial-by-key access (Track M): off unless `[iroh] enabled`.
     // Failure here never blocks the tailnet path.
-    let iroh_access: Arc<Option<iroh_access::IrohAccess>> =
-        Arc::new(iroh_access::IrohAccess::start(&config, http_port).await);
+    let iroh_access: Arc<Option<iroh_access::IrohAccess>> = Arc::new(
+        match iroh_access::IrohAccess::start(&config, http_port).await {
+            Ok(a) => a,
+            // A wrong config REFUSES to load (ROOT_CAUSE_FIXES C2); a runtime
+            // failure is the degradation the comment above promises.
+            Err(why) => {
+                eprintln!("sovereign-server: refusing to start — {why}");
+                std::process::exit(2);
+            }
+        },
+    );
     let iroh_for_status = Arc::clone(&iroh_access);
 
     // MCP rides `dev-routes` for two reasons: it sits outside the auth

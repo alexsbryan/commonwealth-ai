@@ -58,9 +58,12 @@ impl IrohAccess {
     /// `127.0.0.1:{http_port}`. Returns `None` (with a loud log) on
     /// any failure — iroh access is additive; the tailnet path must
     /// never be taken down by it.
-    pub async fn start(config: &ServerConfig, http_port: u16) -> Option<IrohAccess> {
+    pub async fn start(
+        config: &ServerConfig,
+        http_port: u16,
+    ) -> Result<Option<IrohAccess>, String> {
         if !config.iroh.enabled {
-            return None;
+            return Ok(None);
         }
         let (key_dir, custom_file) = key_dir_and_path(config);
         if let Some(f) = &custom_file {
@@ -80,17 +83,20 @@ impl IrohAccess {
         // a `RelayConfig`: n0 by default, self-hosted relays and/or a
         // full n0 sever (H1) when configured. The client serves only
         // the client ALPN.
+        // A wrong [iroh] spelling REFUSES to load (ROOT_CAUSE_FIXES C2) —
+        // the refusal propagates to the boot, which says so and exits. A
+        // runtime failure below still degrades: the tailnet path stands.
         let relay_cfg = commonwealth_transport::iroh::RelayConfig::from_parts(
             config.iroh.relay_urls.clone(),
             config.iroh.discovery.as_deref(),
-        );
+        )?;
         let endpoint = match build_relayed_endpoint(secret, vec![CLIENT_ALPN.to_vec()], &relay_cfg)
             .await
         {
             Ok(ep) => ep,
             Err(e) => {
                 tracing::error!(error = %e, "iroh: endpoint bind failed — dial-by-key access disabled");
-                return None;
+                return Ok(None);
             }
         };
 
@@ -101,10 +107,10 @@ impl IrohAccess {
             forward_to = %forward_to,
             "iroh: dial-by-key access enabled (ALPN cwth/client/0)"
         );
-        Some(IrohAccess {
+        Ok(Some(IrohAccess {
             endpoint,
             _acceptor: acceptor,
-        })
+        }))
     }
 
     /// Live status for `GET /status` — also the pairing surface.

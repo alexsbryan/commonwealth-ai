@@ -1626,7 +1626,7 @@ impl EmbeddedDaemon {
             commonwealth_transport::iroh::RelayConfig::from_parts(
                 c.iroh.relay_urls.clone(),
                 c.iroh.discovery.as_deref(),
-            )
+            ).unwrap_or_else(|why| panic!("sovereign-daemon: refusing to load — {why}"))
         };
         let handshake = if let (Some(dial), true) = (iroh_dial.as_deref(), invite_encrypted) {
             // ENCRYPTED join: dial the founder by key over iroh and
@@ -4320,7 +4320,7 @@ impl EmbeddedDaemon {
                 commonwealth_transport::iroh::RelayConfig::from_parts(
                     c.iroh.relay_urls.clone(),
                     c.iroh.discovery.as_deref(),
-                ),
+                ).unwrap_or_else(|why| panic!("sovereign-daemon: refusing to load — {why}")),
             )
         };
         // Enablement is tri-state: explicit `[iroh] enabled` wins;
