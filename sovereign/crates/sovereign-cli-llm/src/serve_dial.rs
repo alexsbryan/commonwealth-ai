@@ -12,13 +12,15 @@ use std::sync::Arc;
 
 use sovereign_contracts::engine_state::ServedSelf;
 use sovereign_contracts::ner::LabeledEntityExtractor;
+use sovereign_contracts::rerank_kind::serves_rerank;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::serve_client::{self, ServeBase, ServeBaseSource};
+use sovereign_turn_client::serve_self::{default_serve_base, read_served_self};
 
 /// serve on this host, at the one port serve listens on.
 fn this_hosts_serve() -> ServeBase {
     ServeBase {
-        base: serve_client::default_serve_base(),
+        base: default_serve_base(),
         source: ServeBaseSource::Default,
     }
 }
@@ -36,7 +38,7 @@ fn absent(verb: &str, what: &str, serve: &ServeBase, why: &str) -> String {
 }
 
 async fn served(verb: &str, what: &str, serve: &ServeBase) -> Result<ServedSelf, String> {
-    serve_client::read_served_self(&serve.base)
+    read_served_self(&serve.base)
         .await
         .map_err(|e| absent(verb, what, serve, &e))
 }
@@ -76,7 +78,7 @@ pub async fn serve_reranker(verb: &str) -> Result<Option<Arc<dyn InferenceProvid
     let serve = this_hosts_serve();
     let served = served(verb, "the reranker", &serve).await?;
     let provider = serve_client::loopback_provider(&serve, served, 0);
-    let holds = serve_client::serves_rerank(&provider);
+    let holds = serves_rerank(&provider);
     tracing::info!(verb, serve_base = %serve.base, holds, "serve's rerank kind");
     Ok(holds.then(|| Arc::new(provider) as Arc<dyn InferenceProvider>))
 }
