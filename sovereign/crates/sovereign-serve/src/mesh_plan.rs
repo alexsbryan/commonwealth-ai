@@ -129,10 +129,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
         .get("device_memory_observed_unix")
         .and_then(|v| v.as_u64())
     {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        let now = sovereign_time::unix_now_u64();
         eprintln!(
             "  free-memory reading observed {}s ago, when the loader last planned a cut",
             now.saturating_sub(obs)
