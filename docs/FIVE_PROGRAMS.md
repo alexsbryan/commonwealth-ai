@@ -156,7 +156,11 @@ nothing up. There is no phone host build; the phone is a client (phase-b-29).
 The same root composes the other programs a stock node runs: ingest's engine
 reaches svrn through ingest's ports, one narrow port per tool family
 (phase-b-33), and code's MCP bundles mount on svrn's port under their own
-mount (phase-b-30). A port lives in the leaf that already owns every type its
+mount (phase-b-30). Where a program's face needs a registry another program owns, the root
+hands it in as a value: code's next-edit door takes the extension → grammar
+lookup as `CodeParts::grammar`, the stock binary supplies ingest's registry
+through a declared face item, and standalone `svrn code` passes `None`, so
+the lanes that need a grammar report it absent (phase-b-68). A port lives in the leaf that already owns every type its
 methods name: `corpus-index` beside `CorpusReadPort` (`ingest_port.rs`), or
 `corpus-engine-atlas-reader` for a port that names atlas types.
 `sovereign-contracts` cannot host them, because `corpus-index` depends on it.
