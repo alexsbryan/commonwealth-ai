@@ -9,7 +9,8 @@
 //! `--vault <path>` flag or the `SOVEREIGN_OBSIDIAN_VAULT` env var —
 //! never baked into the repo, so the artifact stays portable.
 //!
-//! The actual scoring is delegated to `enrich_cmd::eval::cmd_eval` so
+//! The actual scoring is delegated to `svrn enrich eval` (run through the
+//! dispatcher) so
 //! the per-phase precision/recall/F1 surface stays unified across
 //! literary, philosophy, and obsidian bench runs. This subcommand is
 //! a thin selector for the right corpus + golden plus a pre-flight
@@ -275,7 +276,30 @@ pub async fn cmd_obsidian(args: &[String]) -> i32 {
         parsed.corpus,
         parsed.golden.display()
     );
-    crate::enrich_cmd::eval::cmd_eval(&forward).await
+    // `enrich` is ingest's verb: run it through the dispatcher, stdio
+    // inherited, and answer with its exit code.
+    let svrn = match std::env::current_exe()
+        .map_err(|e| format!("current_exe: {e}"))
+        .and_then(|exe| sovereign_cli_base::dispatcher::dispatcher_exe(&exe))
+    {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
+    tracing::debug!(svrn = %svrn.display(), ?forward, "exec enrich eval");
+    match std::process::Command::new(&svrn)
+        .args(["enrich", "eval"])
+        .args(&forward)
+        .status()
+    {
+        Ok(s) => s.code().unwrap_or(1),
+        Err(e) => {
+            eprintln!("error: spawn {}: {e}", svrn.display());
+            1
+        }
+    }
 }
 
 #[cfg(test)]
