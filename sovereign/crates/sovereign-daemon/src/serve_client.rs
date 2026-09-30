@@ -628,12 +628,24 @@ pub async fn forward(
     path: &str,
     body: Option<Vec<u8>>,
 ) -> Result<(axum::http::StatusCode, Vec<u8>), String> {
+    forward_within(base, method, path, body, FORWARD_WINDOW).await
+}
+
+/// [`forward`] with its own window, for a request serve answers only after
+/// work of its own (a worker's shard warm reads or fetches gigabytes).
+pub async fn forward_within(
+    base: &str,
+    method: axum::http::Method,
+    path: &str,
+    body: Option<Vec<u8>>,
+    window: std::time::Duration,
+) -> Result<(axum::http::StatusCode, Vec<u8>), String> {
     let url = format!("{}{path}", base.trim_end_matches('/'));
     let method = reqwest::Method::from_bytes(method.as_str().as_bytes())
         .map_err(|e| format!("{method} is not a method serve can be asked: {e}"))?;
     let mut request = reqwest::Client::new()
         .request(method.clone(), &url)
-        .timeout(FORWARD_WINDOW);
+        .timeout(window);
     if let Some(body) = body {
         request = request
             .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -641,7 +653,7 @@ pub async fn forward(
     }
     let resp = request.send().await.map_err(|e| {
         if e.is_timeout() {
-            format!("serve at {base} did not answer {path} within {FORWARD_WINDOW:?}")
+            format!("serve at {base} did not answer {path} within {window:?}")
         } else {
             format!("serve at {base} is not reachable for {path}: {e}")
         }

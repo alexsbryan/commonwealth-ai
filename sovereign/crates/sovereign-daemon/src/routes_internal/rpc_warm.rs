@@ -33,13 +33,20 @@ use crate::state::AppState;
 /// on success.
 pub async fn rpc_warm(State(state): State<AppState>, Json(body): Json<Value>) -> Response {
     let Some(warmer) = state.inner.store.rpc_shard_warmer.clone() else {
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({
-                "error": "this node has no RPC shard warmer (not an inference worker)"
-            })),
-        )
-            .into_response();
+        // No warmer in this process: serve is dialed, not hosted. Until the
+        // flip registers serve's rpc-warm with cw-rails, a peer still dials
+        // this route, so it goes to serve's own (pb-serve-distributes-
+        // standalone), as model transfer does (`model_files`).
+        return match crate::serve_client::ServingPath::decided_serve() {
+            Some(Some(serve)) => forward_to_serve(&serve.base, &body).await,
+            _ => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "error": "this node has no RPC shard warmer (not an inference worker)"
+                })),
+            )
+                .into_response(),
+        };
     };
 
     // Resolve `model_id` → this node's local copy of the GGUF via the servable
@@ -62,3 +69,42 @@ pub async fn rpc_warm(State(state): State<AppState>, Json(body): Json<Value>) ->
             .into_response(),
     }
 }
+
+/// How long a forwarded warm may take: a worker without the model fetches
+/// its shard first.
+const WARM_WINDOW: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+/// `body` to serve's `/internal/rpc-warm` at `base`, its answer relayed; an
+/// unreachable serve is a 503 naming it.
+async fn forward_to_serve(base: &str, body: &Value) -> Response {
+    let path = "/internal/rpc-warm";
+    tracing::info!(target: "serving_path", serve_base = base, "rpc-warm: forwarded to serve");
+    match crate::serve_client::forward_within(
+        base,
+        axum::http::Method::POST,
+        path,
+        Some(body.to_string().into_bytes()),
+        WARM_WINDOW,
+    )
+    .await
+    {
+        Ok((status, answer)) => (
+            status,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            answer,
+        )
+            .into_response(),
+        Err(why) => {
+            tracing::warn!(target: "serving_path", error = %why, "rpc-warm: not forwarded to serve");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({ "error": why })),
+            )
+                .into_response()
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "rpc_warm_tests.rs"]
+mod tests;
