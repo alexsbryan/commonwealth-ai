@@ -642,6 +642,28 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     report.finish()
 }
 
+/// The titles `svrn corpus search <id> <query> --limit <n> --json` returns:
+/// the operator's own search (its embed-model resolution, index path and
+/// hybrid search), run through the dispatcher. On failure, the child's
+/// stderr is the error.
+fn search_titles(svrn: &Path, id: &str, query: &str, limit: usize) -> Result<Vec<String>, String> {
+    let limit = limit.to_string();
+    let out = std::process::Command::new(svrn)
+        .args(["corpus", "search", id, query, "--limit", &limit, "--json"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| format!("spawn {}: {e}", svrn.display()))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let hits: Vec<corpus_index::types::ScoredChunk> =
+        serde_json::from_slice(&out.stdout).map_err(|e| format!("parse search hits: {e}"))?;
+    Ok(hits
+        .into_iter()
+        .map(|h| h.title.unwrap_or_default())
+        .collect())
+}
+
 /// Ingest the fixture from source and assert what came out.
 async fn ingest_row(
     report: &mut LaneReport,
@@ -673,19 +695,37 @@ async fn ingest_row(
         return false;
     }
 
+    // `corpus` is ingest's verb: every step below runs it through the
+    // dispatcher, the spelling the operator types.
+    let svrn = match std::env::current_exe()
+        .map_err(|e| format!("current_exe: {e}"))
+        .and_then(|exe| sovereign_cli_base::dispatcher::dispatcher_exe(&exe))
+    {
+        Ok(p) => p,
+        Err(e) => {
+            report.cannot_judge("ingest", format!("cannot reach `svrn corpus`: {e}"));
+            return false;
+        }
+    };
+
     // Delete first. A corpus that survived the last run would make the
     // chunk count a claim about history rather than about this ingest.
-    let _ =
-        crate::corpus_cmd::run_corpus(&["remove".into(), corpus.to_string(), "--yes".into()]).await;
+    let _ = std::process::Command::new(&svrn)
+        .args(["corpus", "remove", corpus, "--yes"])
+        .status();
 
     let t0 = Instant::now();
-    let code = crate::corpus_cmd::run_corpus(&[
-        "ingest".into(),
-        staged.path().to_string_lossy().into_owned(),
-        "--corpus".into(),
-        corpus.to_string(),
-    ])
-    .await;
+    let staged_dir = staged.path().to_string_lossy().into_owned();
+    let code = match std::process::Command::new(&svrn)
+        .args(["corpus", "ingest", &staged_dir, "--corpus", corpus])
+        .status()
+    {
+        Ok(s) => s.code().unwrap_or(1),
+        Err(e) => {
+            report.cannot_judge("ingest", format!("spawn {}: {e}", svrn.display()));
+            return false;
+        }
+    };
     let secs = t0.elapsed().as_secs_f64();
     if code != 0 {
         report.failed("ingest", format!("`corpus ingest` exited {code}"));
@@ -696,7 +736,7 @@ async fn ingest_row(
     let chunks = corpus_index::corpus::corpus_chunk_count(
         &sovereign_contracts::index_layout::index_root(corpus),
     );
-    let searchable = crate::corpus_cmd::search::search_titles(corpus, &bank.search_probe, 5).await;
+    let searchable = search_titles(&svrn, corpus, &bank.search_probe, 5);
 
     let mut faults: Vec<String> = Vec::new();
     match chunks {

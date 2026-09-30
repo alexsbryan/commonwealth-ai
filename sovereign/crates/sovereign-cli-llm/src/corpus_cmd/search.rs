@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn corpus search <id> <query> [--limit N]` — embed the query via the
+//! `svrn corpus search <id> <query> [--limit N] [--json]` — embed the query via the
 //! daemon's embed slot and search a corpus index, closing the ingest→query loop
 //! for a workflow-built corpus (or any installed one). Vector + FTS hybrid.
 
@@ -12,6 +12,7 @@ const DEFAULT_DAEMON: &str = "http://localhost:9741";
 pub async fn cmd_corpus_search(args: &[String]) -> i32 {
     let mut id: Option<String> = None;
     let mut limit = 5usize;
+    let mut json = false;
     let mut terms: Vec<String> = Vec::new();
     let mut i = 0;
     while i < args.len() {
@@ -20,6 +21,7 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
                 i += 1;
                 limit = args.get(i).and_then(|s| s.parse().ok()).unwrap_or(limit);
             }
+            "--json" => json = true,
             s if id.is_none() => id = Some(s.to_string()),
             s => terms.push(s.to_string()),
         }
@@ -27,11 +29,11 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
     }
     let query = terms.join(" ");
     let Some(id) = id else {
-        eprintln!("Usage: svrn corpus search <id> <query> [--limit N]");
+        eprintln!("Usage: svrn corpus search <id> <query> [--limit N] [--json]");
         return 1;
     };
     if query.is_empty() {
-        eprintln!("Usage: svrn corpus search <id> <query> [--limit N]");
+        eprintln!("Usage: svrn corpus search <id> <query> [--limit N] [--json]");
         return 1;
     }
 
@@ -42,6 +44,21 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
             return 1;
         }
     };
+    // `--json`: the hits as a JSON array of `corpus_index::types::ScoredChunk`
+    // on stdout, for a caller that asserts on them (`svrn quality lane
+    // chat-ask`) rather than reading the table.
+    if json {
+        return match serde_json::to_string(&hits) {
+            Ok(s) => {
+                println!("{s}");
+                0
+            }
+            Err(e) => {
+                eprintln!("serialise hits: {e}");
+                1
+            }
+        };
+    }
     if hits.is_empty() {
         println!("No results in `{id}` for: {query}");
         return 0;
@@ -66,7 +83,8 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
 /// the SAME embed-model resolution, the same index path and the same hybrid
 /// search the operator's `svrn corpus search` runs. A lane that opened the
 /// index its own way would be checking a different question than the one the
-/// operator would type (ARCH §10.6).
+/// operator would type (ARCH §10.6). The lane now runs this verb itself,
+/// `--json`, through the dispatcher (pb-cli-llm-bench-move).
 ///
 /// Errors are strings a human can act on — they are what the command prints.
 pub(crate) async fn search_corpus(
@@ -109,17 +127,4 @@ pub(crate) async fn search_corpus(
         .search(&embedding, query, limit)
         .await
         .map_err(|e| format!("search `{id}`: {e}"))
-}
-
-/// Just the titles, for a caller asserting that a probe finds a document.
-pub(crate) async fn search_titles(
-    id: &str,
-    query: &str,
-    limit: usize,
-) -> Result<Vec<String>, String> {
-    Ok(search_corpus(id, query, limit)
-        .await?
-        .into_iter()
-        .map(|h| h.title.unwrap_or_default())
-        .collect())
 }
