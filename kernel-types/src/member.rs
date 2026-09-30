@@ -97,6 +97,22 @@ impl MemberIdentity {
     }
 }
 
+/// The namespace the acceptor owns. A client-supplied header under it is
+/// stripped before the verified ones are added — the failing input this
+/// module exists for is a forged `X-Mesh-Member` reaching the origin.
+pub const MESH_HEADER_PREFIX: &str = "x-mesh-";
+
+/// The header that ties a forward to ONE registration: cw-rails stamps the
+/// secret an origin was handed when it registered, and that origin believes
+/// `x-mesh-*` only when the tie matches (phase-b pb-rails-origins).
+///
+/// The cross-process form of `commonwealth_transport::iroh_identity_forward::ACCEPTOR_MARK_HEADER`:
+/// the mark ties a forward to the acceptor in the SAME process, which an
+/// endpoint in another process can never present. Under
+/// [`MESH_HEADER_PREFIX`], so a client-supplied
+/// copy is stripped by the same pass that strips a forged `X-Mesh-Member`.
+pub const ORIGIN_TIE_HEADER: &str = "X-Mesh-Tie";
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -26,10 +26,7 @@ use std::net::SocketAddr;
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 
-/// The namespace the acceptor owns. A client-supplied header under it is
-/// stripped before the verified ones are added — the failing input this
-/// module exists for is a forged `X-Mesh-Member` reaching the origin.
-pub const MESH_HEADER_PREFIX: &str = "x-mesh-";
+pub use kernel_types::member::MESH_HEADER_PREFIX;
 
 /// The header an acceptor stamps on a forward to a listener that will READ the
 /// verified identity as an identity, rather than merely log it.

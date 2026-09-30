@@ -242,16 +242,7 @@ async fn refuse(
     Ok(())
 }
 
-/// The header that ties a forward to ONE registration: cw-rails stamps the
-/// secret an origin was handed when it registered, and that origin believes
-/// `x-mesh-*` only when the tie matches (phase-b pb-rails-origins).
-///
-/// The cross-process form of [`crate::iroh_identity_forward::ACCEPTOR_MARK_HEADER`]:
-/// the mark ties a forward to the acceptor in the SAME process, which an
-/// endpoint in another process can never present. Under
-/// [`crate::iroh_identity_forward::MESH_HEADER_PREFIX`], so a client-supplied
-/// copy is stripped by the same pass that strips a forged `X-Mesh-Member`.
-pub const ORIGIN_TIE_HEADER: &str = "X-Mesh-Tie";
+pub use kernel_types::member::ORIGIN_TIE_HEADER;
 
 /// The header the verified dialer key rides in
 /// (`kernel_types::member::verified_headers`).

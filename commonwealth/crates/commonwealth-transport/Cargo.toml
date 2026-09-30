@@ -10,6 +10,7 @@ commonwealth-core = { workspace = true }
 # The dial vocabulary and the fan-out, re-exported at their historical paths
 # (pb-rails-reach).
 mesh-reach = { workspace = true }
+kernel-types = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 ed25519-dalek = { workspace = true }
