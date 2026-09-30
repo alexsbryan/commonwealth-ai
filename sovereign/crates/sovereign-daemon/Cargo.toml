@@ -113,6 +113,7 @@ tracing = { workspace = true }
 # verb's filter allowlist, EnvFilter-driven.
 tracing-subscriber = { workspace = true }
 hex = "0.4"
+getrandom = "0.3"
 hostname = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 tokio-stream = { version = "0.1", features = ["sync"] }

@@ -161,7 +161,7 @@ pub async fn claim_name(
         }
     }
 
-    let handle = match commonwealth_transport::identity::generate_bearer_token() {
+    let handle = match crate::client_auth::generate_bearer_token() {
         Ok(h) => h,
         Err(e) => {
             // Never a name bound to a guessable handle: say the entropy failed.

@@ -12706,6 +12706,7 @@ dependencies = [
  "dirs 5.0.1",
  "ed25519-dalek 2.2.0",
  "futures",
+ "getrandom 0.3.4",
  "hex",
  "host-kit",
  "hostname",

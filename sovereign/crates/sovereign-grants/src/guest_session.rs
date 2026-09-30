@@ -202,7 +202,7 @@ impl GuestSessionStore {
     ///
     /// The handle is a parameter, not minted here: entropy is injected for the
     /// same reason `now_ms` is. Mint with
-    /// `commonwealth_transport::identity::generate_bearer_token`.
+    /// `sovereign_daemon::client_auth::generate_bearer_token`.
     ///
     /// The distinctness check and the insert happen under ONE lock: two phones
     /// typing the same name at the same moment must not both be admitted, and

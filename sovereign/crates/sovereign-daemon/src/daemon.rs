@@ -2751,7 +2751,7 @@ impl EmbeddedDaemon {
                     .filter(|s| !s.trim().is_empty())
                     .or(configured_token)
                     .or_else(|| {
-                        commonwealth_transport::identity::load_or_create_client_token(&data_dir)
+                        crate::client_auth::load_or_create_client_token(&data_dir)
                             .map_err(|e| warn!("client-token persistence failed: {e}"))
                             .ok()
                     })
