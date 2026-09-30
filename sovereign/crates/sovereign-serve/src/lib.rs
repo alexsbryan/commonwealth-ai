@@ -473,13 +473,13 @@ pub fn bundles(provider: Arc<dyn InferenceProvider>) -> Vec<RouteBundle> {
     ]
 }
 
-/// serve's member client: the OpenAI routes over `provider` and nothing else.
-/// A standalone serve binds it on a loopback listener of its own and
-/// registers that port whole on cw-rails' `cwth/client/0`, so a member's
-/// router reaches this node's models (pb-serve-ranks). cw-rails forwards over
-/// loopback, which is why none of serve's loopback-only routes (the reload)
-/// is mounted here.
-pub fn member_client_bundle(provider: Arc<dyn InferenceProvider>) -> RouteBundle {
+/// The OpenAI routes over `provider` and nothing else. A standalone serve
+/// mounts it as its member client, on a loopback listener of its own that it
+/// registers whole on cw-rails' `cwth/client/0`, so a member's router reaches
+/// this node's models (pb-serve-ranks). cw-rails forwards over loopback,
+/// which is why none of serve's loopback-only routes (the reload) is mounted
+/// there.
+pub fn openai_face(provider: Arc<dyn InferenceProvider>) -> RouteBundle {
     openai_bundle(Arc::new(SovereignInferenceAdapter::new(
         provider,
         Arc::new(CoreSlotManifest),

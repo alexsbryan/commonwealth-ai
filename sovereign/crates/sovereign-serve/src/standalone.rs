@@ -105,7 +105,7 @@ pub(crate) async fn serve(args: ServeArgs) -> i32 {
                 info!(target: "serve", member = %addr, "member client listening for cw-rails' forwards");
                 tokio::spawn(host_kit::shell::serve(
                     [member],
-                    vec![crate::member_client_bundle(Arc::clone(&local))],
+                    vec![crate::openai_face(Arc::clone(&local))],
                     std::future::pending(),
                 ));
                 Some(addr)

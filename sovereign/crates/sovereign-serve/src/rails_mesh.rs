@@ -341,7 +341,7 @@ fn origin_addr(listen: SocketAddr) -> SocketAddr {
 
 /// serve's origins as cw-rails' origin table takes them: the model-transfer
 /// and rpc-warm prefixes on `cwth/http/0` at serve's listener, its member
-/// client (`crate::member_client_bundle`) whole on `cwth/client/0` at that
+/// client (`crate::openai_face`) whole on `cwth/client/0` at that
 /// listener (`member`), where the Inference and StatusProbe classes arrive,
 /// and, when
 /// this node lends a GPU (`SOVEREIGN_RPC_SERVE` names a bind), its ggml rpc

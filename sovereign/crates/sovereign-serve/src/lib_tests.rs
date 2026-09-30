@@ -274,7 +274,7 @@ async fn the_member_client_mounts_the_openai_face_and_no_reload() {
     let base = format!("http://{}", listener.local_addr().expect("addr"));
     tokio::spawn(host_kit::shell::serve(
         [listener],
-        vec![member_client_bundle(Arc::new(
+        vec![openai_face(Arc::new(
             sovereign_compute::mock::MockProvider {
                 tokens: 1,
                 delay: std::time::Duration::ZERO,
