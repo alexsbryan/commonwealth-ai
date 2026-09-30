@@ -344,12 +344,11 @@ async fn dashboard_state(
         Err(e) => return Ok(internal_error(&format!("list checkpoints: {e}"))),
     };
 
-    let (validation, validation_unavailable) =
-        validate_artifact_toml(
-            daemon.corpus_engine().map(|e| e.as_ref()),
-            summary.artifact_kind,
-            recipe_toml.as_deref(),
-        );
+    let (validation, validation_unavailable) = validate_artifact_toml(
+        daemon.corpus_engine().map(|e| e.as_ref()),
+        summary.artifact_kind,
+        recipe_toml.as_deref(),
+    );
 
     tracing::debug!(
         %feature_id,
@@ -667,7 +666,9 @@ fn inline_validate(ingest: Option<&dyn IngestPort>, kind: ArtifactKind, toml: &s
     match kind {
         ArtifactKind::Recipe => match ingest.map(|port| port.validate_recipe_toml(toml)) {
             None | Some(Ok(_)) => String::new(),
-            Some(Err(e)) => format!("\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n"),
+            Some(Err(e)) => {
+                format!("\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n")
+            }
         },
         ArtifactKind::Workflow => String::new(),
     }
