@@ -174,11 +174,11 @@ struct RunArgs {
     /// strongest entity grounding through.
     atlas_top_k: usize,
     /// Drop entities whose `description` is shorter than this many
-    /// chars. Default 200 — keeps actually-enriched entities, drops
-    /// structural one-liners ("X is a Y born in Z."). Set to 0 to
-    /// embed every non-placeholder entity (slow on wiki-scale atlases:
-    /// 50K+ entities × ~50ms/embed = ~40 min).
-    atlas_min_description_chars: usize,
+    /// chars. `None` = the grounding path's own `AtlasContextFilter`
+    /// floor, which svrn's probe applies. Set to 0 to embed every
+    /// non-placeholder entity (slow on wiki-scale atlases: 50K+ entities
+    /// × ~50ms/embed = ~40 min).
+    atlas_min_description_chars: Option<usize>,
     /// Optional comma-separated `enrichment_depth` allowlist (e.g.
     /// `extracted` or `extracted,structural_classified`). Empty =
     /// accept any depth.
@@ -297,10 +297,10 @@ impl Default for RunArgs {
             atlas_top_k: 3,
             // Was 200 until 2026-08-21. The grounding path this harness measures
             // uses `AtlasContextFilter::default()`, whose floor moved 200 -> 10
-            // because 200 dropped ~85% of SEP atoms. Reading the owner's default
-            // means the next move of that floor reaches the eval harness too.
-            atlas_min_description_chars: runner::AtlasContextFilter::default()
-                .min_description_chars,
+            // because 200 dropped ~85% of SEP atoms. Leaving it unset lets svrn's
+            // probe apply the owner's default, so the next move of that floor
+            // reaches the eval harness too.
+            atlas_min_description_chars: None,
             atlas_depth: Vec::new(),
             atlas_max_entries: None,
             atlas_include_kinds: Vec::new(),
@@ -535,7 +535,7 @@ async fn cmd_run(args: &[String]) -> i32 {
                 a.atlas_min_description_chars = rest
                     .get(i)
                     .and_then(|s| s.parse().ok())
-                    .unwrap_or(a.atlas_min_description_chars);
+                    .or(a.atlas_min_description_chars);
             }
             "--atlas-depth" => {
                 i += 1;

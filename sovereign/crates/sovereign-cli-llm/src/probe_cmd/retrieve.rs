@@ -637,15 +637,23 @@ pub(crate) async fn load_atlases(
     // so eval measured an atom universe production had abandoned).
     // Closed 2026-08-21 by operator decision — it moves published eval
     // numbers, which is why it was not a drive-by (ARCH §18.6).
+    let defaults = AtlasContextFilter::default();
     let filter = AtlasContextFilter {
-        min_description_chars: atlas.min_description_chars,
+        min_description_chars: atlas
+            .min_description_chars
+            .unwrap_or(defaults.min_description_chars),
         depth_allowlist: atlas.depth_allowlist.clone(),
         max_entries: atlas.max_entries,
         include_claims,
         include_tensions,
         include_configurations,
-        ..AtlasContextFilter::default()
+        ..defaults
     };
+    tracing::debug!(
+        min_description_chars = filter.min_description_chars,
+        from_caller = atlas.min_description_chars.is_some(),
+        "probe: atlas filter floor"
+    );
     // `--with-atlas` accepts a comma-separated list of atlas
     // corpus ids. Each loads independently (with its own
     // canonical_name = article_slug derivation) and the per-question

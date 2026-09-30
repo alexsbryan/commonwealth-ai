@@ -117,8 +117,9 @@ pub struct AtlasProbe {
     pub corpus_ids: Vec<String>,
     /// Atom matches kept per question.
     pub top_k: usize,
-    /// Atoms with a shorter description are dropped.
-    pub min_description_chars: usize,
+    /// Atoms with a shorter description are dropped. `None` = svrn's own
+    /// `AtlasContextFilter` floor, which the probe applies.
+    pub min_description_chars: Option<usize>,
     /// `enrichment_depth` allowlist; empty = any depth.
     pub depth_allowlist: Vec<String>,
     /// Cap on atoms embedded; `None` = unlimited.
