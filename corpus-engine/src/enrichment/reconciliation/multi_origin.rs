@@ -12,8 +12,6 @@
 
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
-
 use super::identity_signals::{identity_blocking_key, signals_for_policy};
 use super::oplog::ReconciliationAct;
 use super::signals::{

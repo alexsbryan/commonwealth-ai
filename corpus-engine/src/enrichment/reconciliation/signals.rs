@@ -12,8 +12,6 @@
 //! map to a known kind, and call out the new tag in the docstring
 //! below so audit-log readers can interpret the new symbol.
 
-use serde::{Deserialize, Serialize};
-
 use crate::enrichment::atlas::atoms::Entity;
 use crate::enrichment::pipeline::atlas::EntityType;
 
