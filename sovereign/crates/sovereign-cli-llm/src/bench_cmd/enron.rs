@@ -25,11 +25,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::reconciliation::{reconcile, ReconciliationPolicy};
 use serde::{Deserialize, Serialize};
 use sovereign_eval::entity_resolution_bench::{BenchGroundTruth, PeekBudget, Split};
 use sovereign_eval::entity_resolution_score::{score, Clustering, EntityResolutionReport};
 use understanding_vocab::atoms::{AtomEnvelope, Entity};
+use understanding_vocab::reconciliation::{ReconciledEntity, ReconciliationPolicy};
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
 
@@ -413,30 +413,17 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
             (predicted, BTreeMap::new(), None)
         }
         Policy::Tuned => {
-            let mut policy = ReconciliationPolicy::default();
-            policy.judge_trials = parsed.judge_trials;
-            if let Some(t) = parsed.name_similarity_threshold {
-                policy.name_similarity_threshold = t;
-            }
-            let outcome = reconcile(entities.clone(), &policy);
+            // Ingest runs the reconciler (and appends its oplog, as this lane
+            // always did); bench scores what it measured.
+            let (policy, reconciled) = measured_reconciliation(&parsed, true)?;
             let mut hist: BTreeMap<String, usize> = BTreeMap::new();
-            for re in &outcome.entities {
+            for re in &reconciled {
                 for s in &re.signals_fired {
                     *hist.entry(s.as_str().to_string()).or_insert(0) += 1;
                 }
             }
-            // Append the reconciler's oplog entries to the on-disk
-            // oplog so the audit trail survives the process exiting.
-            if !outcome.oplog_entries.is_empty() {
-                let oplog = oplog::Oplog::<
-                    corpus_engine::enrichment::reconciliation::ReconciliationAct,
-                >::new(atlas_dir.clone());
-                for entry in &outcome.oplog_entries {
-                    let _ = oplog.append(entry);
-                }
-            }
             let mut predicted = Clustering::new();
-            for re in &outcome.entities {
+            for re in &reconciled {
                 let cluster_id = re.canonical_id.as_str().to_string();
                 // The surface forms recorded on the reconciled
                 // entity ARE the surface forms (verbatim
@@ -616,17 +603,13 @@ async fn cmd_diagnose(args: &[String]) -> Result<i32, String> {
         })
         .collect();
 
-    // Same tuned reconciliation `run --policy tuned` performs.
-    let mut policy = ReconciliationPolicy::default();
-    policy.judge_trials = parsed.judge_trials;
-    if let Some(t) = parsed.name_similarity_threshold {
-        policy.name_similarity_threshold = t;
-    }
-    let outcome = reconcile(entities.clone(), &policy);
+    // Same tuned reconciliation `run --policy tuned` performs; diagnose
+    // never appended the oplog, so it does not ask for it.
+    let (_, reconciled) = measured_reconciliation(&parsed, false)?;
 
     // form -> predicted cluster id (last write wins, matching cmd_run).
     let mut form_cluster: BTreeMap<String, String> = BTreeMap::new();
-    for re in &outcome.entities {
+    for re in &reconciled {
         let cid = re.canonical_id.as_str().to_string();
         for (sf, _) in &re.surface_forms {
             form_cluster.insert(sf.clone(), cid.clone());
@@ -651,7 +634,7 @@ async fn cmd_diagnose(args: &[String]) -> Result<i32, String> {
         parsed.split.as_str()
     );
     println!("  entity atoms     : {}", entities.len());
-    println!("  reconciled into  : {} clusters", outcome.entities.len());
+    println!("  reconciled into  : {} clusters", reconciled.len());
     println!();
     println!("  per-gold coverage + cluster spread:");
     let mut cluster_to_gold: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -706,8 +689,7 @@ async fn cmd_diagnose(args: &[String]) -> Result<i32, String> {
             bridges.len()
         );
         for (cid, gs) in bridges {
-            let re = outcome
-                .entities
+            let re = reconciled
                 .iter()
                 .find(|re| re.canonical_id.as_str() == cid.as_str());
             let size = re.map(|re| re.source_atom_ids.len()).unwrap_or(0);
@@ -725,6 +707,54 @@ async fn cmd_diagnose(args: &[String]) -> Result<i32, String> {
         }
     }
     Ok(0)
+}
+
+/// The reconciler's clustering under this run's knobs: `svrn enrich reconcile
+/// <corpus> --measure <tmp> --judge-trials N [--name-similarity-threshold T]
+/// --indexes-dir <dir> [--append-oplog]` through the dispatcher, read back as
+/// the policy it ran under and every canonical entity. On failure, the
+/// child's stderr is the error.
+fn measured_reconciliation(
+    parsed: &Args,
+    append_oplog: bool,
+) -> Result<(ReconciliationPolicy, Vec<ReconciledEntity>), String> {
+    let tmp = tempfile::tempdir().map_err(|e| format!("tempdir: {e}"))?;
+    let out_path = tmp.path().join("reconciliation.json");
+    let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
+    let svrn = sovereign_cli_base::dispatcher::dispatcher_exe(&exe)?;
+    let mut argv: Vec<String> = [
+        "enrich",
+        "reconcile",
+        &parsed.corpus,
+        "--measure",
+        &out_path.display().to_string(),
+        "--judge-trials",
+        &parsed.judge_trials.to_string(),
+        "--indexes-dir",
+        &parsed.indexes_dir.display().to_string(),
+    ]
+    .map(String::from)
+    .to_vec();
+    if let Some(t) = parsed.name_similarity_threshold {
+        argv.extend(["--name-similarity-threshold".to_string(), t.to_string()]);
+    }
+    if append_oplog {
+        argv.push("--append-oplog".to_string());
+    }
+    tracing::debug!(svrn = %svrn.display(), ?argv, "exec enrich reconcile --measure");
+    let run = std::process::Command::new(&svrn)
+        .args(&argv)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| format!("spawn {}: {e}", svrn.display()))?;
+    if !run.status.success() {
+        return Err(format!(
+            "`svrn enrich reconcile --measure` failed: {}",
+            String::from_utf8_lossy(&run.stderr).trim()
+        ));
+    }
+    let bytes = std::fs::read(&out_path).map_err(|e| format!("read reconciliation: {e}"))?;
+    serde_json::from_slice(&bytes).map_err(|e| format!("parse reconciliation: {e}"))
 }
 
 fn surface_forms_of(e: &Entity) -> Vec<String> {

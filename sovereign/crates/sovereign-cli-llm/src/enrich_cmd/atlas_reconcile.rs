@@ -37,7 +37,11 @@ const HELP: Help = Help {
     command: "svrn enrich reconcile",
     summary: "Run Phase 4 multi-origin reconciliation over a resolved atlas; persist the canonical clustering.",
     sections: &[
-        HelpSection::Usage("svrn enrich reconcile <corpus-id>"),
+        HelpSection::Usage(
+            "svrn enrich reconcile <corpus-id>\n\
+             svrn enrich reconcile <corpus-id> --measure <out.json> [--judge-trials N] \
+             [--name-similarity-threshold T] [--indexes-dir D] [--append-oplog]",
+        ),
         HelpSection::Examples(&[(
             "svrn enrich reconcile enron-sample-multi-wide",
             "Merge cross-inbox entity variants; write atlas/reconciliation.json + oplog.",
@@ -69,6 +73,9 @@ pub async fn cmd_atlas_reconcile(args: &[String]) -> i32 {
     if help::wants_help(args) {
         help::print(&HELP);
         return 0;
+    }
+    if args.iter().any(|a| a == "--measure") {
+        return measure(args);
     }
     let corpus_id = match args.iter().find(|a| !a.starts_with('-')) {
         Some(c) => c.clone(),
@@ -219,6 +226,117 @@ pub async fn cmd_atlas_reconcile(args: &[String]) -> i32 {
     0
 }
 
+/// `svrn enrich reconcile <corpus> --measure <out.json> [--judge-trials N]
+/// [--name-similarity-threshold T] [--indexes-dir D] [--append-oplog]` — the merger as a
+/// measurement, for `svrn bench enron`, which scores it against ground truth.
+///
+/// It runs the same `reconcile` over the same entity atoms, under the
+/// reconciler's compiled defaults plus the two knobs, never the atlas's
+/// declared identity, because the bench sweeps the signal logic. With
+/// `--append-oplog` it appends the reconciler's oplog entries, as `bench enron
+/// run` always did (`diagnose` never did). It writes
+/// `[policy, entities]` (a `ReconciliationPolicy` and every
+/// `ReconciledEntity`, singletons included) to `<out.json>` and nothing to the
+/// atlas: `reconciliation.json` has product readers, and a sweep's knobs must
+/// not reach them.
+fn measure(args: &[String]) -> i32 {
+    let mut corpus: Option<&str> = None;
+    let mut out: Option<std::path::PathBuf> = None;
+    let mut indexes_dir: Option<std::path::PathBuf> = None;
+    let mut policy = ReconciliationPolicy::default();
+    let mut append_oplog = false;
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--append-oplog" {
+            append_oplog = true;
+            i += 1;
+            continue;
+        }
+        let value = args.get(i + 1);
+        match (args[i].as_str(), value) {
+            ("--measure", Some(v)) => out = Some(v.into()),
+            ("--indexes-dir", Some(v)) => indexes_dir = Some(v.into()),
+            ("--judge-trials", Some(v)) => match v.parse() {
+                Ok(n) => policy.judge_trials = n,
+                Err(e) => {
+                    eprintln!("error: --judge-trials: {e}");
+                    return 2;
+                }
+            },
+            ("--name-similarity-threshold", Some(v)) => match v.parse() {
+                Ok(t) => policy.name_similarity_threshold = t,
+                Err(e) => {
+                    eprintln!("error: --name-similarity-threshold: {e}");
+                    return 2;
+                }
+            },
+            (flag, None) if flag.starts_with("--") => {
+                eprintln!("error: {flag} requires a value");
+                return 2;
+            }
+            (flag, _) if flag.starts_with("--") => {
+                eprintln!("error: unknown flag `{flag}`");
+                return 2;
+            }
+            (positional, _) => {
+                corpus = Some(positional);
+                i += 1;
+                continue;
+            }
+        }
+        i += 2;
+    }
+    let (Some(corpus), Some(out)) = (corpus, out) else {
+        eprintln!("error: --measure needs <corpus-id> and an output path");
+        return 2;
+    };
+    let atlas_dir = match indexes_dir {
+        Some(d) => d.join(corpus).join(ATLAS_DIRNAME),
+        None => paths::index_root(corpus).join(ATLAS_DIRNAME),
+    };
+    let atoms_file = match read_atlas_atoms(&atlas_dir) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!(
+                "error: read {}: {e}",
+                atlas_dir.join("atoms.json").display()
+            );
+            return 1;
+        }
+    };
+    let entities: Vec<Entity> = atoms_file
+        .atoms()
+        .iter()
+        .cloned()
+        .filter_map(|env| match env {
+            AtomEnvelope::Entity(e) => Some(e),
+            _ => None,
+        })
+        .collect();
+    let outcome = reconcile(entities, &policy);
+    if append_oplog {
+        let oplog = oplog::Oplog::<ReconciliationAct>::new(atlas_dir.clone());
+        for entry in &outcome.oplog_entries {
+            let _ = oplog.append(entry);
+        }
+    }
+    tracing::debug!(
+        corpus,
+        canonical = outcome.entities.len(),
+        merges = outcome.oplog_entries.len(),
+        append_oplog,
+        "enrich reconcile --measure"
+    );
+    let written = serde_json::to_vec(&(&policy, &outcome.entities))
+        .map_err(|e| e.to_string())
+        .and_then(|bytes| std::fs::write(&out, bytes).map_err(|e| e.to_string()));
+    if let Err(e) = written {
+        eprintln!("error: write {}: {e}", out.display());
+        return 1;
+    }
+    0
+}
+
 /// Append one `same_as` Claim per merge to the atlas, continuing its id
 /// sequences. Returns how many claims were written.
 ///
@@ -261,4 +379,99 @@ fn append_reified_merges(
 /// rather than a guess.
 fn index_suffix(id: &str) -> Option<usize> {
     id.rsplit_once('-')?.1.parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use corpus_engine::enrichment::atlas::atoms::{
+        AtomId, AtomsFile, ChunkRef, SignalKind, SignalProvenance,
+    };
+    use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+
+    use super::*;
+
+    fn ent(id: &str) -> Entity {
+        Entity {
+            id: AtomId::from_raw(id),
+            canonical_name: "Ken Lay".into(),
+            aliases: Vec::new(),
+            entity_type: EntityType::Person,
+            first_appearance: ChunkRef::new("sec-001", None),
+            description: String::new(),
+            defining_quote: None,
+            salience: 0.5,
+            enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
+            provenance: SignalProvenance::new("ext", "msg-1", SignalKind::EmailHeader),
+            attributes: serde_json::Map::new(),
+            concept_kind: None,
+        }
+    }
+
+    /// `--measure` writes the policy and the clustering to its path, touches
+    /// nothing else in the atlas unless asked, and appends the oplog only with
+    /// `--append-oplog`. Failing inputs: drop the flag check and the first run
+    /// writes an oplog; write reconciliation.json and the listing grows.
+    #[test]
+    fn measure_writes_the_clustering_and_the_oplog_only_when_asked() {
+        let indexes = tempfile::tempdir().unwrap();
+        let atlas = indexes.path().join("c").join(ATLAS_DIRNAME);
+        let atoms = AtomsFile::new(vec![
+            AtomEnvelope::Entity(ent("entity-001")),
+            AtomEnvelope::Entity(ent("entity-002")),
+        ]);
+        std::fs::create_dir_all(&atlas).unwrap();
+        std::fs::write(
+            atlas.join("atoms.json"),
+            serde_json::to_vec(&atoms).unwrap(),
+        )
+        .unwrap();
+        let listing = || {
+            let mut names: Vec<String> = std::fs::read_dir(&atlas)
+                .unwrap()
+                .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+                .collect();
+            names.sort();
+            names
+        };
+        let before = listing();
+        let out = indexes.path().join("m.json");
+        let args = |extra: &[&str]| -> Vec<String> {
+            let mut v = vec![
+                "c".to_string(),
+                "--measure".into(),
+                out.display().to_string(),
+                "--indexes-dir".into(),
+                indexes.path().display().to_string(),
+                "--judge-trials".into(),
+                "5".into(),
+            ];
+            v.extend(extra.iter().map(|s| s.to_string()));
+            v
+        };
+
+        assert_eq!(measure(&args(&[])), 0);
+        let (policy, entities): (ReconciliationPolicy, Vec<ReconciledEntity>) =
+            serde_json::from_slice(&std::fs::read(&out).unwrap()).unwrap();
+        assert_eq!(policy.judge_trials, 5);
+        assert_eq!(entities.len(), 1, "the two same-origin mentions merge");
+        assert_eq!(entities[0].source_atom_ids.len(), 2);
+        assert_eq!(listing(), before, "no oplog, no reconciliation.json");
+
+        assert_eq!(measure(&args(&["--append-oplog"])), 0);
+        let after = listing();
+        assert_eq!(
+            after.len(),
+            before.len() + 1,
+            "the oplog, and only it: {after:?}"
+        );
+    }
+
+    #[test]
+    fn measure_refuses_a_missing_path_or_corpus() {
+        assert_eq!(measure(&["c".into(), "--measure".into()]), 2);
+        assert_eq!(measure(&["--measure".into(), "/tmp/x.json".into()]), 2);
+    }
 }
