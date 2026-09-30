@@ -12720,7 +12720,6 @@ dependencies = [
  "serde_json",
  "serving-policy-core",
  "sha2 0.10.9",
- "sovereign-authoring-harness",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-daemon",

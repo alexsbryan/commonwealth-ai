@@ -56,7 +56,6 @@ subtle = "2.6"
 sovereign-tools = { workspace = true }
 sovereign-meshapp = { workspace = true }
 sovereign-store = { workspace = true }
-sovereign-authoring-harness = { workspace = true }
 # The host cluster's own deps, arriving with sovereign-api's modules at
 # domains `dm-daemon-api-edge` (2026-09-18): the admission policy, the grant
 # store, the HTTP body seam, the canonical-sync
