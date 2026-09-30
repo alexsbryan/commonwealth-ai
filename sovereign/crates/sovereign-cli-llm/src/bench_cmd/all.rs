@@ -6,9 +6,10 @@
 //! (Enrichment-eval + Retrieval+LLM-judge), exits 0/1 for CI.
 //!
 //! Two scoring paths:
-//! - **Enrichment lane** — in-process call to
-//!   `enrich_cmd::eval::score_corpus`. Reads atoms.json directly;
-//!   no daemon dependency.
+//! - **Enrichment lane** — subprocess `svrn enrich eval --report`
+//!   through the dispatcher: ingest owns the golden scorer, bench reads
+//!   the report it writes (`sovereign_contracts::enrich_eval`). Reads
+//!   atoms.json directly; no daemon dependency.
 //! - **Retrieval lane** — subprocess `svrn eval run`. The
 //!   retrieval path needs a live `ChatSession` (intent classifier,
 //!   embed slot, atlas-context manager) and replicating that boot
@@ -28,7 +29,6 @@ use serde::{Deserialize, Serialize};
 
 use understanding_vocab::read::ATLAS_DIRNAME;
 
-use crate::enrich_cmd::eval::{score_corpus, PhaseFilter};
 use crate::eval_cmd::runner::EvalRun;
 use sovereign_cli_base::help::{self, Help, HelpSection};
 use sovereign_contracts::enrich_eval::{AggregatedReport, EvalReport, PhaseScore};
@@ -705,6 +705,9 @@ async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome 
 /// to a log file under `target/sov-bench/runs/<ts>/<bench-id>.log`.
 async fn rebuild_corpus(bench: &DiscoveredBench) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
+    // `enrich` is ingest's verb, not this binary's: reach it through the
+    // dispatcher, as `svrn enrich build` spells it.
+    let exe = sovereign_cli_base::dispatcher::dispatcher_exe(&exe)?;
 
     let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
     let log_dir = PathBuf::from("target/sov-bench/runs").join(ts);
@@ -743,8 +746,47 @@ async fn rebuild_corpus(bench: &DiscoveredBench) -> Result<(), String> {
     Ok(())
 }
 
+/// Score `bench`'s golden against its corpus's atlas with ingest's scorer:
+/// `svrn enrich eval <corpus> <golden> --report <tmp>` through the
+/// dispatcher, then the report it wrote. The child's text report is
+/// discarded (it is the same numbers); on failure its stderr is the error.
+fn enrich_eval_report(bench: &DiscoveredBench) -> Result<EvalReport, String> {
+    let tmp = tempfile::tempdir().map_err(|e| format!("tempdir: {e}"))?;
+    let report_path = tmp.path().join("eval.json");
+    let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
+    let svrn = sovereign_cli_base::dispatcher::dispatcher_exe(&exe)?;
+    let golden = bench.bench_path.display().to_string();
+    let report = report_path.display().to_string();
+    let argv = [
+        "enrich",
+        "eval",
+        &bench.corpus_id,
+        &golden,
+        "--report",
+        &report,
+    ];
+    tracing::debug!(svrn = %svrn.display(), ?argv, "exec enrich eval");
+    let out = Command::new(&svrn)
+        .args(argv)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| format!("spawn {}: {e}", svrn.display()))?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        return Err(format!(
+            "`svrn enrich eval` exited {}: {}",
+            out.status
+                .code()
+                .map_or("by signal".to_string(), |c| c.to_string()),
+            stderr.trim()
+        ));
+    }
+    let bytes = std::fs::read(&report_path).map_err(|e| format!("read eval report: {e}"))?;
+    serde_json::from_slice(&bytes).map_err(|e| format!("parse eval report: {e}"))
+}
+
 async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
-    let current = match score_corpus(&bench.corpus_id, &bench.bench_path, PhaseFilter::All) {
+    let current = match enrich_eval_report(bench) {
         Ok(r) => r,
         Err(e) => {
             return BenchOutcome {
@@ -759,7 +801,7 @@ async fn run_enrichment(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
                 tally: None,
                 baseline_captured: None,
                 baseline_age_days: None,
-                note: Some(format!("score_corpus failed: {e}")),
+                note: Some(format!("enrich eval failed: {e}")),
             };
         }
     };
