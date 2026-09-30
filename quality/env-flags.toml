@@ -1200,6 +1200,13 @@ status = "shipped"
 purpose = "Path override for svrn-ingest, ingest's own CLI (sovereign-pipeline), which the dispatcher execs for `svrn ingest` (pb-ingest-cli). The one locator of that binary: corpus-mcp serve's pull (pb-corpus-mcp-reads) and cli-llm's ingest verbs (pb-cli-llm-ingest-move) reuse it."
 
 [[flag]]
+name = "SOVEREIGN_CLI_BENCH_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for sovereign-cli-bench, bench's own CLI, which the dispatcher execs for `svrn bench`, `svrn eval` and `svrn quality lane` (pb-cli-llm-bench-move). svrn's white-box lanes under those spellings (`bench judge-replay|resolver-precision|atlas`, `eval inner-chaos`) stay on SOVEREIGN_CLI_LLM_BIN's binary."
+
+[[flag]]
 name = "SOVEREIGN_SERVE_PORT"
 cluster = "daemon-lifecycle"
 default = "9748 (sovereign_contracts::venue::DEFAULT_SERVE_PORT)"

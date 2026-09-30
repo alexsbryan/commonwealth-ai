@@ -41,13 +41,17 @@ schema_version = 5
 # below leaves the back-of-house crate LINKED INTO THE PRODUCT BINARY. So an
 # exception here is weaker than it looks: it does not say "this edge is fine",
 # it says "the boundary is drawn in the wrong place and the crate split that
-# would fix it has not been paid for". `sovereign-cli-llm` is the live example
-# — `bench_cmd` (51 files, 31k lines) sits beside `chat_cmd` and `corpus_cmd`,
-# so the shipped binary carries `sovereign-eval` no matter what this gate says.
+# would fix it has not been paid for". `sovereign-cli-llm` was the live example
+# — `bench_cmd` (51 files, 31k lines) sat beside `chat_cmd` and `corpus_cmd`, so
+# the shipped binary carried `sovereign-eval` whatever this gate said — until
+# bench's CLI became its own crate (`sovereign-cli-bench`, pb-cli-llm-bench-move).
 # layer-gate repeats this warning whenever the rule fires; do not delete it
 # from either place while an exception is outstanding.
 backstage = [
     "sovereign-eval",
+    # bench's CLI (pb-cli-llm-bench-move): the dispatcher execs it, and no
+    # crate depends on it.
+    "sovereign-cli-bench",
     "sovereign-cli-dev",
     "sovereign-agent-bench",
     "corpus-engine-archaeology",
@@ -1504,6 +1508,9 @@ crates = [
     "sovereign-agent-bench",
     "sovereign-agent-tools",
     "sovereign-tdd",
+    # bench's own CLI (pb-cli-llm-bench-move): `svrn bench|eval` and
+    # `svrn quality lane`, lifted out of sovereign-cli-llm.
+    "sovereign-cli-bench",
 ]
 leaf_budget = ["oicp-types", "sovereign-contracts", "kernel-types", "sovereign-time", "workspace-hack", "understanding-vocab", "oicp-client", "sovereign-turn-client", "sovereign-cli-base", "host-kit", "corpus-index"]
 
@@ -1743,12 +1750,10 @@ tracking = "five-programs fp-68"
 # edge is fine". Each one leaves a back-of-house crate LINKED into a product
 # binary; the crate gate cannot do better, and the module rule named alongside
 # is what actually holds the line until the split is paid for.
-
-[[exception]]
-from = "sovereign-cli-llm"
-to = "sovereign-eval"
-reason = "bench_cmd (51 files, ~31k lines) shares this crate with chat/corpus/mesh, so the shipped binary links the instrument. Priced 2026-08-20 and declined: extracting it needs pub churn through enrich_cmd/eval_cmd/chat_cmd. CONTAINED meanwhile by the module rule bench_cmd_is_the_only_module_naming_the_eval_harness (src/lib.rs) — one module names it, and a test fails if that changes. The product verb that used to cross (recipe_cmd, via the harness alias on the eval crate) was repointed at sovereign-authoring-harness directly and no longer does. UPDATE 2026-08-21 (nc-26): the crate is no longer bin-only — it gained a [lib] target so awareness_cmd could move to the crate whose enrich_cmd it was importing. Half of the declined price is therefore already paid; what remains is the pub-visibility churn, not the lib target."
-tracking = "nc-3-backstage"
+#
+# None remain. The last, `sovereign-cli-llm -> sovereign-eval` (bench_cmd sharing
+# a crate with chat/corpus/mesh), closed when bench's CLI became its own crate,
+# `sovereign-cli-bench` (pb-cli-llm-bench-move).
 
 # ── Thin-surface reaches, grandfathered (sv-no-daemon-management) ────────────
 # The violation list as it stood on 2026-09-11, one row per crate the desktop

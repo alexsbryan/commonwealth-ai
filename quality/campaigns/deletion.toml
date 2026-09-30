@@ -68,7 +68,7 @@ instrument   = "python3 scripts/deletion-manifest.py --lane p0-root-junk"
 [[bar]]
 id           = "p1-bench-baselines"
 one_line     = "Baseline snapshots the reader cannot address — flat files with no <id>/ dir, and dated snapshots that are not a latest.json target"
-derives_from = "sovereign-cli-llm/src/bench_cmd/baselines.rs:39 builds every path as bench_root/<group>/baselines/<id>/ and :44 opens latest.json inside it"
+derives_from = "sovereign-cli-bench/src/bench_cmd/baselines.rs:39 builds every path as bench_root/<group>/baselines/<id>/ and :44 opens latest.json inside it"
 status       = "open"
 target       = 0
 floor        = 384759

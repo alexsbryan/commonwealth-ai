@@ -176,8 +176,8 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 /// ARCH §3.1's slack. A subcommand split belongs with the subcommand.
 ///
 /// `exec_lane` is passed in rather than named here: the LANES live in
-/// `sovereign-cli-llm` (each drives inference, ingests a corpus or runs a
-/// judge) and this crate reaches that sibling by exec, which is the
+/// bench's `sovereign-cli-bench` (each drives inference, ingests a corpus or
+/// runs a judge) and this crate reaches that sibling by exec, which is the
 /// dispatcher's business, not the runner's.
 pub async fn run_verb(args: &[String], exec_lane: impl Fn(&str, &[String]) -> i32) -> i32 {
     match args.first().map(String::as_str) {

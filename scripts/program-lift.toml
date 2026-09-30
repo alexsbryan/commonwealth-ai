@@ -356,7 +356,9 @@ steps = [
 # ── bench — the evaluator ───────────────────────────────────────────────────
 [lift.bench]
 package = "bench"
-build = ["-p", "sovereign-eval", "--bin", "sovereign-eval"]
+# bench's CLI (sovereign-cli-bench, pb-cli-llm-bench-move) builds beside the
+# evaluator: the closure must build its binary with no svrn or ingest crate.
+build = ["-p", "sovereign-eval", "--bin", "sovereign-eval", "-p", "sovereign-cli-bench", "--bin", "sovereign-cli-bench"]
 binary = "debug/sovereign-eval"
 # The banks and seed data sovereign-eval's tests read (bench_root.rs: "a
 # lifted crate must set it itself").

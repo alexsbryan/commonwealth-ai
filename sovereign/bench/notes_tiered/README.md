@@ -83,7 +83,7 @@ holds the committed regression-guard baseline.
 ## Why not a `[bank]/[[questions]]` TOML?
 
 The existing retrieval-bench discovery
-(`sovereign-cli-llm::bench_cmd::discover`) expects a chunked
+(`sovereign-cli-bench::bench_cmd::discover`) expects a chunked
 corpus indexed at `~/.svrnmesh/indexes/<corpus_id>/`. Notes
 live at `~/.svrnmesh/notes.db` (a single SQLite file) — the
 scoring shape is `Note` containment by id, not chunk-section

@@ -12302,6 +12302,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-cli-bench"
+version = "0.8.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "clap",
+ "corpus-index",
+ "futures",
+ "hex",
+ "host-kit",
+ "kernel-types",
+ "libc",
+ "oicp-client",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sovereign-cli-base",
+ "sovereign-contracts",
+ "sovereign-eval",
+ "sovereign-time",
+ "sovereign-turn-client",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
+ "understanding-vocab",
+ "workspace-hack",
+]
+
+[[package]]
 name = "sovereign-cli-daemon"
 version = "0.8.0"
 dependencies = [
@@ -12413,7 +12445,6 @@ dependencies = [
  "sovereign-daemon",
  "sovereign-enrichment-build",
  "sovereign-enrichment-catalog",
- "sovereign-eval",
  "sovereign-mesh",
  "sovereign-meshapp",
  "sovereign-pipeline",

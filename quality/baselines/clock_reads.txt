@@ -31,9 +31,9 @@
 1	sovereign/crates/sovereign-cli-dev/src/project_cmd/mod.rs
 2	sovereign/crates/sovereign-cli-dev/src/project_cmd/refresh.rs
 1	sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs
-2	sovereign/crates/sovereign-cli-llm/src/bench_cmd/live_runner.rs
+2	sovereign/crates/sovereign-cli-bench/src/bench_cmd/live_runner.rs
 1	sovereign/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs
-6	sovereign/crates/sovereign-cli-llm/src/eval_cmd/runner.rs
+6	sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner.rs
 1	sovereign/crates/sovereign-cli-llm/src/inner_chaos/rejudge.rs
 1	sovereign/crates/sovereign-cli-llm/src/inner_chaos/replay.rs
 1	sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs

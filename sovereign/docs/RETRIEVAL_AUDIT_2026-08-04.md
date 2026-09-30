@@ -577,7 +577,7 @@ highest-value thread left on this axis.
 
 ### D5 — the judge collapses its own failures into the score
 
-`sovereign/crates/sovereign-cli-llm/src/eval_cmd/score.rs:341-362`: both a
+`sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs:341-362`: both a
 parse failure and an inference failure push the fact onto `missing` with
 `present: false`. A could-not-judge is recorded as a judged-absent — loud in
 stderr, silent in the metric, and biased downward only. This is the

@@ -60,6 +60,7 @@ pub(crate) fn siblings_built() -> bool {
         "sovereign-cli-dev",
         "sovereign-cli-daemon",
         "sovereign-cli-llm",
+        "sovereign-cli-bench",
     ]
     .iter()
     .all(|b| dir.join(b).is_file())

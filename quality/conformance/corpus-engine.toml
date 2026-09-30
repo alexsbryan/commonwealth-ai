@@ -63,14 +63,14 @@ asserts = 9
 requirement = "ST-6"
 test = "corpus-engine::engine::status::tests::a_stopped_ingest_that_never_built_indexes_is_not_ready"
 file = "corpus-engine/src/engine/status.rs"
-line = 516
+line = 491
 asserts = 1
 
 [[claim]]
 requirement = "ST-7"
 test = "corpus-engine::engine::status::tests::readiness_labels_are_stable_api"
 file = "corpus-engine/src/engine/status.rs"
-line = 496
+line = 471
 asserts = 4
 
 [[claim]]

@@ -10,7 +10,9 @@ description = "LLM-heavy CLI surface (bench, chat, eval, atlas, enrich, mesh, co
 # audit / etc.) stays lean and fast to compile.
 #
 # Hosted verbs (parent `sovereign` shim execs into this binary):
-#   bench, chat, eval, voice, reading-diag, search-gym, knowledge-gym,
+#   bench and eval's white-box lanes (bench judge-replay | resolver-precision
+#   | atlas, eval inner-chaos; the rest of bench is sovereign-cli-bench's),
+#   chat, voice, reading-diag, search-gym, knowledge-gym,
 #   atlas, meta-atlas, enrich, newsworthy, recipe, recipe-agent,
 #   maintainer, pipeline, mcp, alignment, mesh, corpus
 #
@@ -36,8 +38,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Flag surfaces are declared as structs (`#[derive(clap::Parser)]`), not
-# parsed by hand. Already in this crate's build graph via sovereign-eval,
-# so this edge is free — it makes the existing dependency explicit.
+# parsed by hand.
 clap = { workspace = true }
 sovereign-core = { workspace = true }
 # The enrichment store below every host that reads it — `enrich_cmd::{config,
@@ -93,11 +94,6 @@ sovereign-pipeline = { workspace = true }
 # rusqlite/reqwest/clap weight, and going through the alias put a product verb
 # on a back-of-house crate for nothing.
 sovereign-authoring-harness = { workspace = true }
-# Back-of-house (quality/ARCH_LAYERS.toml `backstage`). Reached ONLY by
-# `bench_cmd`, pinned by `bench_cmd_is_the_only_module_naming_the_eval_harness`
-# in src/main.rs. Carried by the default build because bench_cmd shares this
-# crate with `chat`/`corpus`/`mesh` — see the [[exception]] in ARCH_LAYERS.toml.
-sovereign-eval = { workspace = true }
 # `meshapp dev` serves a bundle + proxies the explorer ops to this shared lib.
 sovereign-cli-shared = { workspace = true, features = ["mcp-client", "rail-client"] }
 # The neutral kernel — `quality lane` rows are `Judgement`s, so the lane and

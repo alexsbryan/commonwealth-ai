@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign-cli-llm` — sibling binary that owns every LLM-touching
-//! CLI verb (bench/chat/eval/atlas/enrich/recipe/pipeline/mesh/...) +
-//! every corpus_* dispatcher. Parent `sovereign` shim execs into this
-//! binary for those argv[1] values.
+//! CLI verb (chat/atlas/enrich/recipe/pipeline/...) + every corpus_*
+//! dispatcher. Parent `sovereign` shim execs into this binary for those
+//! argv[1] values. bench's verbs (`bench`, `eval`, `quality-lane`) are
+//! `sovereign-cli-bench`'s since pb-cli-llm-bench-move; svrn's white-box
+//! lanes under those spellings stay here (`run_bench_verb`, `run_eval_verb`).
 //!
 //! Lives apart from `sovereign-cli` (the dispatcher) and
 //! `sovereign-cli-dev` (project / code / daemon) so each
@@ -50,7 +52,6 @@ mod atlas_cmd;
 // `awareness_cmd/mod.rs`.
 pub mod awareness_cmd;
 mod bench_atlas;
-mod bench_cmd;
 mod chat_cmd;
 mod corpus_catalog_cmd;
 mod corpus_cmd;
@@ -60,7 +61,6 @@ mod corpus_scrub_cmd;
 mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;
 mod enrich_cmd;
-mod eval_cmd;
 mod govern_cmd;
 mod gym_judge;
 mod inner_chaos;
@@ -84,7 +84,6 @@ mod portfolio_cmd;
 /// `svrn __probe`: svrn describes its own internals for bench to judge.
 mod probe_cmd;
 mod proxy_cmd;
-mod quality_lane_cmd;
 mod reading_diag_cmd;
 mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
@@ -214,11 +213,9 @@ async fn async_main() {
         "alignment" => alignment_cmd::run_alignment(rest).await,
         "mobile" => mobile_cmd::run_mobile(rest).await,
         "corpus" => corpus_cmd::run_corpus(rest).await,
-        // One lane of `svrn quality check`. The runner lives in
-        // `sovereign-cli` and touches no model; the lanes live here,
-        // because every one of them drives inference, ingests a corpus or
-        // runs a judge.
-        "quality-lane" => quality_lane_cmd::run(rest).await,
+        // One lane of `svrn quality check`: bench's since
+        // pb-cli-llm-bench-move, and the dispatcher execs sovereign-cli-bench.
+        "quality-lane" => bench_verb_elsewhere("quality-lane", rest),
         // Hidden: the probe `eval run`'s white-box modes exec and score.
         "__probe" => probe_cmd::run(rest).await,
         "" => {
@@ -240,7 +237,7 @@ async fn async_main() {
 async fn run_eval_verb(rest: &[String]) -> i32 {
     match rest.first().map(String::as_str) {
         Some("inner-chaos") => inner_chaos::run_inner_chaos(&rest[1..]).await,
-        _ => eval_cmd::run_eval(rest).await,
+        _ => bench_verb_elsewhere("eval", rest),
     }
 }
 
@@ -255,21 +252,36 @@ async fn run_bench_verb(rest: &[String]) -> i32 {
         Some("judge-replay") => judge_replay::cmd_judge_replay(&rest[1..]).await,
         Some("resolver-precision") => resolver_precision::cmd_resolver_precision(&rest[1..]).await,
         Some("atlas") => bench_atlas::cmd_atlas(&rest[1..]).await,
-        _ => bench_cmd::run_bench(rest).await,
+        _ => bench_verb_elsewhere("bench", rest),
     }
+}
+
+/// A bench verb reached this binary directly. It is bench's own
+/// (`sovereign-cli-bench`, pb-cli-llm-bench-move) and the dispatcher execs it
+/// there, so this names where it went rather than answering unknown.
+fn bench_verb_elsewhere(verb: &str, rest: &[String]) -> i32 {
+    let sub = rest.first().map(String::as_str).unwrap_or("");
+    tracing::debug!(verb, sub, "bench verb reached sovereign-cli-llm");
+    eprintln!(
+        "sovereign-cli-llm: `{verb} {sub}` is bench's; it runs in sovereign-cli-bench. \
+         Run it as `svrn {verb} {sub}`."
+    );
+    2
 }
 
 #[cfg(test)]
 mod bench_dispatch {
     /// The white-box lanes answer their own `--help` with 0 through `bench`'s
-    /// dispatch, and bench_cmd, which no longer holds them, answers 2.
+    /// dispatch; bench's own verbs, which run in sovereign-cli-bench, answer 2
+    /// with the place they went.
     #[tokio::test]
     async fn bench_gate_replays_are_answered_svrn_side() {
         for verb in ["judge-replay", "resolver-precision", "atlas"] {
             let args: Vec<String> = [verb, "--help"].map(String::from).to_vec();
             assert_eq!(super::run_bench_verb(&args).await, 0, "{verb}");
-            assert_eq!(super::bench_cmd::run_bench(&args).await, 2, "{verb}");
         }
+        let args: Vec<String> = ["all", "--help"].map(String::from).to_vec();
+        assert_eq!(super::run_bench_verb(&args).await, 2);
     }
 }
 
@@ -278,232 +290,10 @@ mod eval_dispatch {
     #[tokio::test]
     async fn eval_inner_chaos_help_is_answered_by_inner_chaos() {
         let args: Vec<String> = ["inner-chaos", "--help"].map(String::from).to_vec();
-        // eval_cmd answers an unknown subcommand with 2; inner_chaos answers
-        // its own --help with 0.
+        // inner_chaos answers its own --help with 0; bench's `eval run`, which
+        // runs in sovereign-cli-bench, answers 2.
         assert_eq!(super::run_eval_verb(&args).await, 0);
-        assert_eq!(super::eval_cmd::run_eval(&args).await, 2);
-    }
-
-    #[test]
-    fn eval_cmd_names_no_inner_chaos_module() {
-        let needle = ["inner", "chaos"].join("_");
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/eval_cmd");
-        let mut offenders = Vec::new();
-        let mut scanned = 0usize;
-        let mut stack = vec![root];
-        while let Some(dir) = stack.pop() {
-            for entry in std::fs::read_dir(&dir).expect("read eval_cmd").flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    stack.push(path);
-                    continue;
-                }
-                if path.extension().is_none_or(|e| e != "rs") {
-                    continue;
-                }
-                scanned += 1;
-                let text = std::fs::read_to_string(&path)
-                    .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-                for (i, line) in text.lines().enumerate() {
-                    let code = line.split("//").next().unwrap_or("");
-                    if code.contains(&needle) {
-                        offenders.push(format!("{}:{}", path.display(), i + 1));
-                    }
-                }
-            }
-        }
-        assert!(scanned > 10, "only {scanned} files scanned");
-        assert!(
-            offenders.is_empty(),
-            "eval_cmd moves to bench and must not name svrn's `{needle}`: {offenders:?}"
-        );
-    }
-
-    /// bench judges what svrn's probe (`svrn __probe`) reports and never runs
-    /// svrn's internal stages itself (phase-b-58). Comments are dropped and
-    /// whitespace squeezed out, so a call split across lines
-    /// (`session\n.runtime\n.router\n.classify(`) is still one match.
-    #[test]
-    fn eval_and_bench_run_no_svrn_internal_stage() {
-        let needles = [
-            ".router.classify(",
-            ".retrieve_evidence(",
-            ".search_with_rerank(",
-            ".lane_sources",
-        ];
-        let (scanned, offenders) = bench_group_hits(&["eval_cmd", "bench_cmd"], &needles);
-        assert!(scanned > 40, "only {scanned} files scanned");
-        assert!(
-            offenders.is_empty(),
-            "a white-box stage runs in bench's own process; exec `svrn __probe` \
-             instead: {offenders:?}"
-        );
-    }
-
-    /// bench asks svrn a question as any client does and never drives a turn
-    /// in its own process (pb-bench-dials-turns). A file still owed to a
-    /// later row is listed with that row; a file off the list that matches
-    /// is red, and so is a listed file that no longer matches (its row
-    /// landed: drop it from the list).
-    #[test]
-    fn bench_group_drives_no_turn_in_process() {
-        let needles = [
-            "sovereign_core::runtime::Runtime",
-            "collect_turn(",
-            "build_session(",
-            "build_session_sealed(",
-            "build_session_with_skills(",
-            "set_var(\"SOVEREIGN_RERANK",
-            // An attached document is built and answered in svrn's probe
-            // (`svrn __probe`, attached mode; pb-bench-dials-docs).
-            "DocumentAssetManager::new(",
-            // svrn's state store is read in svrn's probe (`svrn __probe`,
-            // vault-build and raptor-nodes modes; pb-bench-dials-vault).
-            "SqliteStateStore::open(",
-        ];
-        // Every row that owed a file here has landed (pb-bench-dials-vault
-        // was the last); pb-cli-llm-bench-move needs it empty.
-        const OWED: [(&str, &str); 0] = [];
-        assert!(OWED.is_empty(), "the bench group owes no in-process svrn");
-        let dirs = [
-            "bench_cmd",
-            "eval_cmd",
-            "search_gym_cmd",
-            "knowledge_gym_cmd",
-            "gym_judge",
-            "quality_lane_cmd",
-        ];
-        let (scanned, hits) = bench_group_hits(&dirs, &needles);
-        assert!(scanned > 60, "only {scanned} files scanned");
-        let owed = |hit: &str| OWED.iter().any(|(f, _)| hit.contains(f));
-        let unowed: Vec<&String> = hits.iter().filter(|h| !owed(h)).collect();
-        assert!(
-            unowed.is_empty(),
-            "a bench lane drives a turn in its own process; ask svrn through \
-             bench_cmd::subject::SubjectDial instead: {unowed:?}"
-        );
-        let paid: Vec<_> = OWED
-            .iter()
-            .filter(|(f, _)| !hits.iter().any(|h| h.contains(f)))
-            .collect();
-        assert!(
-            paid.is_empty(),
-            "no longer drives a turn in-process; drop from OWED: {paid:?}"
-        );
-    }
-
-    /// Every `(file, needle)` hit under `dirs`, comments dropped and
-    /// whitespace squeezed out, plus the count of files scanned.
-    fn bench_group_hits(dirs: &[&str], needles: &[&str]) -> (usize, Vec<String>) {
-        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let mut offenders = Vec::new();
-        let mut scanned = 0usize;
-        let mut stack: Vec<_> = dirs.iter().map(|d| src.join(d)).collect();
-        while let Some(dir) = stack.pop() {
-            for entry in std::fs::read_dir(&dir).expect("read src dir").flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    stack.push(path);
-                    continue;
-                }
-                if path.extension().is_none_or(|e| e != "rs") {
-                    continue;
-                }
-                scanned += 1;
-                let text = std::fs::read_to_string(&path)
-                    .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-                let code: String = text
-                    .lines()
-                    .map(|l| l.split("//").next().unwrap_or(""))
-                    .collect::<String>()
-                    .chars()
-                    .filter(|c| !c.is_whitespace())
-                    .collect();
-                for n in needles.iter().filter(|n| code.contains(*n)) {
-                    offenders.push(format!("{}: {n}", path.display()));
-                }
-            }
-        }
-        (scanned, offenders)
-    }
-}
-
-#[cfg(test)]
-mod backstage_boundary {
-    //! The MODULE-level half of the back-of-house rule.
-    //!
-    //! `quality/ARCH_LAYERS.toml` declares `sovereign-eval` back-of-house and
-    //! forbids product crates from carrying it in the default build. This
-    //! crate carries it anyway, and has an `[[exception]]` saying so, because
-    //! `bench_cmd` (51 files, ~31k lines) shares the crate with `chat_cmd`,
-    //! `corpus_cmd` and `mesh_cmd`. Splitting it out needs a `[lib]` target
-    //! over ~130k lines and pub-visibility churn through the three heaviest
-    //! modules here — priced, and not paid for.
-    //!
-    //! What IS enforceable meanwhile is containment: exactly one module may
-    //! name the instrument. That keeps the eventual crate split a move rather
-    //! than an excavation, and turns "we meant to keep this in bench_cmd" from
-    //! a thing someone remembers into a thing that fails (ARCH §7 — structural,
-    //! not remembered).
-    //!
-    //! This is strictly weaker than a crate boundary: Cargo still LINKS the
-    //! harness crate into the shipped binary. The test cannot fix that and does
-    //! not claim to.
-
-    /// The one module allowed to name the back-of-house instrument.
-    const ALLOWED: &str = "bench_cmd";
-
-    #[test]
-    fn bench_cmd_is_the_only_module_naming_the_eval_harness() {
-        // Assembled at runtime, never written as a literal. THIS FILE IS INSIDE
-        // THE TREE BEING SCANNED, so a literal here would make the guard match
-        // itself and fail on its own source — which is exactly what happened on
-        // the first cut. Keep the token out of this file, including test names
-        // and assertion text.
-        let needle = ["sovereign", "eval"].join("_");
-
-        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let mut offenders = Vec::new();
-        let mut scanned = 0usize;
-        let mut stack = vec![src.clone()];
-        while let Some(dir) = stack.pop() {
-            let entries = std::fs::read_dir(&dir)
-                .unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    stack.push(path);
-                    continue;
-                }
-                if path.extension().is_none_or(|e| e != "rs") {
-                    continue;
-                }
-                let rel = path.strip_prefix(&src).unwrap_or(&path).to_path_buf();
-                scanned += 1;
-                let text = std::fs::read_to_string(&path).unwrap_or_default();
-                if text.contains(&needle)
-                    && !rel.starts_with(ALLOWED)
-                    && rel.file_stem().is_none_or(|s| s != ALLOWED)
-                {
-                    offenders.push(rel.display().to_string());
-                }
-            }
-        }
-
-        // An empty walk would pass while proving nothing — the classic
-        // zero-case false green (ARCH §18.1).
-        assert!(
-            scanned > 100,
-            "only {scanned} files scanned — the walk is broken, not the code"
-        );
-        assert!(
-            offenders.is_empty(),
-            "`{needle}` is back-of-house (quality/ARCH_LAYERS.toml `backstage`) and only \
-             `{ALLOWED}` may name it. These product modules do: {offenders:?}.\n\
-             If you need an authoring-harness verdict, depend on \
-             `sovereign-authoring-harness` DIRECTLY — the `::authoring_harness` path on the \
-             eval crate is only a compatibility alias, and routing a product verb through \
-             it is how this crate acquired the dependency in the first place."
-        );
+        let args: Vec<String> = ["run", "--help"].map(String::from).to_vec();
+        assert_eq!(super::run_eval_verb(&args).await, 2);
     }
 }

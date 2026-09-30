@@ -337,7 +337,7 @@ fn daemon_lock_path() -> PathBuf {
 
 /// The DISPATCHER binary, which is not the one we are running.
 ///
-/// `current_exe()` here is `sovereign-cli-llm`, which owns `eval` and
+/// `current_exe()` here is `sovereign-cli-bench`, which owns `eval` and
 /// `bench` but NOT `daemon` — that verb belongs to
 /// `sovereign-cli-daemon`, reached by exec from the `sovereign-cli`
 /// dispatcher. Handing `daemon run` to our own exe fails with

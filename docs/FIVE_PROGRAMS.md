@@ -759,6 +759,19 @@ owns the program's data. The split:
       `attached`, `vault-build` and `raptor-nodes` modes: svrn runs its own
       in-process build and turn and writes raw answers, chunks and a
       resource ledger; bench scores them (pb-bench-dials-docs, -vault).
+- [x] Landed 2026-09-29 (pb-cli-llm-bench-move): bench's CLI is its own
+      crate, `sovereign-cli-bench` (`[lib] + [[bin]]`, in `[[package]] bench`),
+      holding bench_cmd, eval_cmd and quality_lane_cmd; sovereign-cli-llm links
+      no `sovereign-eval`. The dispatcher's `bench_bin` execs it for `svrn
+      bench|eval` and `svrn quality lane`. The bench list above is amended, by
+      phase-b-60/-64's rule: a lane that exercises a program's own internals and
+      names no `sovereign_eval` stays with that program. So search_gym_cmd,
+      knowledge_gym_cmd and gym_judge stay in cli-llm, and so do the white-box
+      lanes judge_replay, resolver_precision and `bench atlas` (src/bench_atlas.rs).
+      Their `bench …` spellings are routed to cli-llm by the dispatcher. svrn's
+      grounding primitives are the `assess` and `judge` modes of `svrn __probe`
+      (phase-b-63), and what bench runs of ingest it execs as `svrn
+      enrich|corpus …`.
 - [ ] Mechanically: each moving group becomes `[lib] + [[bin]]` (the
       `sovereign-agent-bench` precedent), and the DISPATCHER (sovereign-cli,
       `main.rs:877` and `:1204`) get a sibling exec module (`bench_bin::exec`,

@@ -105,7 +105,7 @@ def lane_p0_root_junk(files: list[str]) -> list[str]:
 def lane_p1_bench_baselines(files: list[str]) -> list[str]:
     """Baseline snapshots the reader cannot address.
 
-    sovereign-cli-llm/src/bench_cmd/baselines.rs:39 builds every path as
+    sovereign-cli-bench/src/bench_cmd/baselines.rs:39 builds every path as
     bench_root/<group>/baselines/<id>/ and :44 opens `latest.json` inside it.
     So (a) any file sitting FLAT in a baselines/ dir has no <id>/ and is
     unreachable by construction, and (b) inside an <id>/ dir only latest.json

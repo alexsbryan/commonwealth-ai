@@ -38,7 +38,7 @@ Document ingestion is not atomic. The asset transitions
 `Pending → Indexing → PartiallyReady → BuildingSkeleton → Ready` and the
 benchmark fires each tier's questions *at the earliest state where the tier
 is plausibly answerable*. Defaults in `bench.toml`
-(`sovereign/crates/sovereign-cli-llm/src/bench_cmd/book_report_bank/bench.toml`
+(`sovereign/crates/sovereign-cli-bench/src/bench_cmd/book_report_bank/bench.toml`
 — embedded in the binary, so it lives inside the crate that reads it):
 
 | Tier | Gate | Why |

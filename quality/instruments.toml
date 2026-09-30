@@ -1325,7 +1325,7 @@ load_bearing = [
 id = "routing-replay"
 kind = "bench"
 claim = "invariant"
-command = "sovereign-cli-llm bench routing-replay --bank <bank> --bridge-url <url>"
+command = "sovereign-cli-bench bench routing-replay --bank <bank> --bridge-url <url>"
 cost_secs = 1200.0
 enforcement = "hard"
 fidelity = "F2"
@@ -2232,6 +2232,9 @@ verdict = "judgement-line"
 preconditions = [
   "port-listening:9741",
   "slot-decodes:primary",
+  # The lane runs in bench's binary; its ingest row execs `svrn corpus`,
+  # which is sovereign-cli-llm's.
+  "binary:sovereign-cli-bench",
   "binary:sovereign-cli-llm",
 ]
 baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/chat-ask" }

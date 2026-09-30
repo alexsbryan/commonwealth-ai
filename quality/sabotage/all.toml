@@ -616,7 +616,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-11-calibration_bank_rejects_single_class_ba"
 requirement = "EV-11"
-target = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs"
+target = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
 find = "    let yes = bank\n        .items\n        .iter()\n        .filter(|i| i.expected == Ballot::Yes)\n        .count();\n    let no = bank.items.len() - yes;\n    if yes < 4 || no < 4 {\n        return Err(format!(\n            \"calibration bank needs at least 4 items of each class (has {yes} yes / {no} no)\"\n        ));\n    }"
 replace = ""
 mustFail = ["calibration_bank_rejects_single_class_banks"]
@@ -1166,7 +1166,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-54-stamping_the_route_is_additive"
 requirement = "FE-54"
-target = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs"
+target = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs"
 find = "    if let Some(ri) = rec.get(\"routed_intent\").filter(|v| !v.is_null()) {\n        m.insert(\"routed_intent\".into(), ri.clone());\n    }"
 replace = "    // MUTATION: Always insert a default route, violating the requirement that\n    // absence should be reported rather than a default.\n    m.insert(\"routed_intent\".into(), serde_json::json!(\"DefaultRoute\"));"
 mustFail = ["stamping_the_route_is_additive"]

@@ -69,7 +69,7 @@ Enrich the full novel and each of those inverts — the extractor gets penalised
 for correctly reading the text. The scoping has to live in the **source
 document**, not in a flag, because the weekly `--rebuild` tier shells
 `enrich build <corpus_id>` with no chapter selection
-(`sovereign-cli-llm/src/bench_cmd/all.rs::rebuild_corpus`).
+(`sovereign-cli-bench/src/bench_cmd/all.rs::rebuild_corpus`).
 
 ## History
 

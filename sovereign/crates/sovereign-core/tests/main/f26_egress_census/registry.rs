@@ -557,9 +557,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/mod.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/bench_cmd/uap.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/bench_cmd/model_resolve.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/bench_cmd/desktop_bridge.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli-bench/src/bench_cmd/uap.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli-bench/src/bench_cmd/model_resolve.rs", Class::LocalDaemon, 1),
+    ("sovereign/crates/sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/bench_atlas.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs", Class::LocalDaemon, 1),
 

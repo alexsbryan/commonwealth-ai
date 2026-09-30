@@ -1,0 +1,88 @@
+# Conformance tags in `sovereign-cli-bench` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "EV-11"
+test = "sovereign-cli-bench::bench_cmd::rubric::judge::tests::a_class_with_no_items_reads_as_not_under_test_never_as_a_measured_pass"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
+line = 610
+asserts = 5
+
+[[claim]]
+requirement = "EV-11"
+test = "sovereign-cli-bench::bench_cmd::rubric::judge::tests::a_tier_below_either_stated_floor_does_not_clear"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
+line = 561
+asserts = 15
+
+[[claim]]
+requirement = "EV-11"
+test = "sovereign-cli-bench::bench_cmd::rubric::judge::tests::the_bank_itself_must_be_large_and_balanced_enough_to_estimate_a_rate"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
+line = 636
+asserts = 3
+
+[[claim]]
+requirement = "EV-4"
+test = "sovereign-cli-bench::bench_cmd::lane_baseline::tests::first_run_when_no_baseline"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
+line = 517
+asserts = 2
+
+[[claim]]
+requirement = "EV-4"
+test = "sovereign-cli-bench::bench_cmd::lane_baseline::tests::lower_is_better_rise_regresses"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
+line = 567
+asserts = 3
+
+[[claim]]
+requirement = "EV-4"
+test = "sovereign-cli-bench::bench_cmd::lane_baseline::tests::near_zero_drift_either_sign_regresses"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
+line = 592
+asserts = 3
+
+[[claim]]
+requirement = "EV-4"
+test = "sovereign-cli-bench::bench_cmd::lane_baseline::tests::one_item_flip_within_tolerance_is_noise"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
+line = 547
+asserts = 1
+
+[[claim]]
+requirement = "EV-4"
+test = "sovereign-cli-bench::bench_cmd::lane_baseline::tests::same_model_compares_normally_and_honours_tolerance"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
+line = 656
+asserts = 4
+
+[[claim]]
+requirement = "EV-7"
+test = "sovereign-cli-bench::bench_cmd::lane_baseline::tests::attribute_refuses_alias_and_accepts_concrete_stem"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
+line = 723
+asserts = 6
+
+[[claim]]
+requirement = "EV-7"
+test = "sovereign-cli-bench::bench_cmd::lane_baseline::tests::is_alias_marker_matches_canonical_slots"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
+line = 750
+asserts = 2
+
+[[claim]]
+requirement = "EV-7"
+test = "sovereign-cli-bench::bench_cmd::lane_baseline::tests::unattributed_baseline_is_flagged_but_still_compares"
+file = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
+line = 675
+asserts = 3

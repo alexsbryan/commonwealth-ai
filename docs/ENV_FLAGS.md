@@ -36,6 +36,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_AGENT_BENCH_BIN` | sibling of dispatcher | shipped | Path override for the sovereign-agent-bench sibling. `svrn agent-bench` execs it rather than linking the crate, which is how a bench-package crate left the svrn dispatcher. |
 | `SOVEREIGN_BIN` | unset | shipped | Drift orchestrator's path to the sovereign CLI. ANCHOR of the sibling-binary synonym cluster — two names for 'where is the CLI' (with SOVEREIGN_CLI). It was three until SOVEREIGN_CLI_PATH was deprecated on 2026-09-11; the anchor moved here so the cluster is described by a row that still has readers. |
 | `SOVEREIGN_CLI` | unset | shipped | Enrichment tool's path to the sovereign CLI. Synonym-cluster member (see SOVEREIGN_BIN). |
+| `SOVEREIGN_CLI_BENCH_BIN` | sibling of dispatcher | shipped | Path override for sovereign-cli-bench, bench's own CLI, which the dispatcher execs for `svrn bench`, `svrn eval` and `svrn quality lane` (pb-cli-llm-bench-move). svrn's white-box lanes under those spellings (`bench judge-replay|resolver-precision|atlas`, `eval inner-chaos`) stay on SOVEREIGN_CLI_LLM_BIN's binary. |
 | `SOVEREIGN_CLI_DAEMON_BIN` | sibling of dispatcher | shipped | Path override for the sovereign-cli-daemon sibling. |
 | `SOVEREIGN_CLI_DEV_BIN` | sibling of dispatcher | shipped | Path override for the sovereign-cli-dev sibling. |
 | `SOVEREIGN_CLI_LLM_BIN` | sibling of dispatcher | shipped | Path override for the sovereign-cli-llm sibling the dispatcher execs. |

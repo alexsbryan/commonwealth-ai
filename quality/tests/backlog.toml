@@ -252,7 +252,7 @@ found = "2026-08-14"
 class = "inert-guard"
 tier = 1
 surface = "rust-unit"
-target = "sovereign-cli-llm/src/bench_cmd/live_runner.rs::caveat_credit"
+target = "sovereign-cli-bench/src/bench_cmd/live_runner.rs::caveat_credit"
 failure = """`classify_caveat` was listed for tombstoning by a latency order.
 It cannot be removed, because it is the instrument that the SAME order's quality
 gate reads. Removing it makes the gate report a number it can no longer compute
@@ -272,7 +272,7 @@ is a scorer change owing ARCH §18.6 discipline. What shipped instead is the
 direction and the arity: fail closed, decided once. Before this, four lanes
 each wrote their own collapse (one `match`, three bare `.unwrap_or(false)`)
 and nothing stopped one drifting to `true`."""
-landed = "sovereign-cli-llm::bench_cmd::live_runner::tests::an_unconfirmed_caveat_never_earns_honesty_credit"
+landed = "sovereign-cli-bench::bench_cmd::live_runner::tests::an_unconfirmed_caveat_never_earns_honesty_credit"
 
 [[test]]
 id = "GR-11"
@@ -1791,7 +1791,7 @@ from the regression count; a lane where nothing executed reports could-not-judge
 rather than a failing score."""
 mutation = """Score a never-ran question as 0.0. The test must redden on both
 the verdict and the regression count."""
-landed = "sovereign-cli-llm::bench_cmd::all::tests::an_all_errored_run_is_unmeasured_not_regressed (+ scripts/tests/ci-bench-lane-verdict.sh)"
+landed = "sovereign-cli-bench::bench_cmd::all::tests::an_all_errored_run_is_unmeasured_not_regressed (+ scripts/tests/ci-bench-lane-verdict.sh)"
 
 [[test]]
 id = "GA-06"

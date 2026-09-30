@@ -51,6 +51,7 @@ mod drift_cmd;
 mod ingest_bin;
 mod init;
 mod journal_cmd;
+mod bench_bin;
 mod llm_bin;
 mod memory_cmd;
 mod mesh_bin;
@@ -1014,7 +1015,8 @@ async fn async_main() {
                 // fingerprint inputs, each precondition probe, each lane's
                 // cap and exit — is a debug event under `sovereign_cli`.
                 util::tracing_init::init_tracing("sovereign_cli=info");
-                let code = quality_check_cmd::run_verb(&raw_args[1..], llm_bin::exec).await;
+                // `quality lane` is bench's (pb-cli-llm-bench-move).
+                let code = quality_check_cmd::run_verb(&raw_args[1..], bench_bin::exec).await;
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]
@@ -1144,6 +1146,13 @@ async fn async_main() {
             "tools" => {
                 // Moved to the sovereign-cli-dev sibling.
                 let code = dev_bin::exec("tools", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // bench's own CLI (pb-cli-llm-bench-move): `bench` and `eval`,
+            // except svrn's white-box lanes under those spellings, which fall
+            // through to sovereign-cli-llm below.
+            "bench" | "eval" if bench_bin::owns(first, &raw_args[1..]) => {
+                let code = bench_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
             // ── LLM cluster (continued) → sovereign-cli-llm ──

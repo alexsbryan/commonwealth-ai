@@ -263,7 +263,7 @@ impl Mode {
 /// parse loop to extend.
 ///
 /// `clap` is free in this crate — it is already in the build graph via
-/// `sovereign-eval` (`cargo tree -p sovereign-cli-llm -i clap` → v4.6.1), so
+/// `sovereign-eval` (`cargo tree -p sovereign-cli-bench -i clap` → v4.6.1), so
 /// this costs no new dependency.
 ///
 /// `disable_help_flag` because `--help` is served by [`HELP`] through
@@ -272,7 +272,7 @@ impl Mode {
 #[command(
     // The `Usage:` line inside a parse error says what the user TYPED. Taken
     // from `HELP.command` rather than spelled again, so the two cannot drift;
-    // without it clap names the binary (`sovereign-cli-llm`), which is not a
+    // without it clap names the binary (`sovereign-cli-bench`), which is not a
     // command anyone runs.
     name = HELP.command,
     no_binary_name = true,
@@ -829,7 +829,7 @@ mod tests {
         // Composed exactly as `cmd_vault_report` composes it. `clap`'s own
         // rendering also opens `error: `, so before `flag_surface::parse`
         // owned the stripping this read `error: error: …`; and the `Usage:`
-        // line named `sovereign-cli-llm`, a binary no user invokes.
+        // line named `sovereign-cli-bench`, a binary no user invokes.
         let rendered = format!("error: {}", parse(&["--nope"]).unwrap_err());
         assert!(!rendered.starts_with("error: error:"), "got: {rendered}");
         assert!(

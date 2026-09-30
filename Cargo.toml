@@ -213,6 +213,8 @@ members = [
     "sovereign/crates/sovereign-cli-dev",
     "sovereign/crates/sovereign-cli-daemon",
     "sovereign/crates/sovereign-cli-llm",
+    # bench's CLI (phase-b pb-cli-llm-bench-move).
+    "sovereign/crates/sovereign-cli-bench",
     "sovereign/crates/sovereign-cli-mesh",
     "sovereign/crates/sovereign-eval",
     "sovereign/crates/sovereign-authoring-harness",

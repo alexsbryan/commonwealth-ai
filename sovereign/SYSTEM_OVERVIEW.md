@@ -178,7 +178,8 @@ crates/
 ├── sovereign-cli-shared     # svrn CLI shared lib (cli-contract, args, flag surface, lane verdict; re-exports sovereign-cli-base at the historical paths)
 ├── sovereign-cli-daemon     # Long-running host + lifecycle; owns Windows GPU backend selection
 ├── sovereign-cli-dev        # Workbench: project lifecycle + code intel + tools; owns the project model (`project init` execs its `project-observe`)
-├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/enrich/corpus/meshapp)
+├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/atlas/enrich/corpus/meshapp; svrn's white-box bench lanes)
+├── sovereign-cli-bench      # bench's CLI — bench, eval, quality lane (dials svrn/ingest; links neither)
 ├── sovereign-cli-mesh       # cmnwlth's verbs — mesh (incl. `mesh pod`), ring, job, publish, run
 ├── sovereign-time           # Wall-clock helpers — zero-dep leaf for crates off sovereign-core
 ├── sovereign-pipeline       # Pipeline driver (recipes, worklist); pods moved to cli-mesh
@@ -277,10 +278,10 @@ and gated by the `recipe_schema` test. Outside the catalog: `codebase`,
 
 ### Bench harnesses
 
-Fixtures under `sovereign/bench/`; orchestrators in `bench_cmd/`, whose turn lanes ask
-svrn over its turn route (`bench_cmd/subject.rs`; the census test
-`bench_group_drives_no_turn_in_process` lists the lanes still in-process); pure scorers
-in `sovereign-eval/`.
+Fixtures under `sovereign/bench/`; orchestrators in `sovereign-cli-bench`'s `bench_cmd/`,
+whose turn lanes ask svrn over its turn route (`bench_cmd/subject.rs`) and whose scorers
+ask svrn's `__probe` for the grounding gate's own verdicts and judge registers
+(`bench_cmd/svrn_judge.rs`); pure scorers in `sovereign-eval/`.
 
 `scripts/sovereign-ci-bench.sh` is the full nightly (~2-4h) and **the primary
 way to catch a regression anywhere in the inference + retrieval stack** — one
@@ -796,7 +797,10 @@ Verbs by sibling: `sovereign-cli` holds the light delegators (`notes`,
 included), `refresh` and the `project` lifecycle subcommands, and links no
 corpus-engine: `code index`, `code finalize` and `code watch` exec ingest's
 `svrn-ingest`; `sovereign-cli-llm` holds everything that
-talks to a model or does heavy retrieval; `sovereign-cli-mesh`, lifted out of
+talks to a model or does heavy retrieval, except bench's verbs: `sovereign-cli-bench`
+holds `bench`, `eval` and the `quality lane` lanes (pb-cli-llm-bench-move), and svrn's
+white-box lanes under those spellings (`bench judge-replay|resolver-precision|atlas`,
+`eval inner-chaos`) stay in `-llm`; `sovereign-cli-mesh`, lifted out of
 `-llm` on 2026-09-21, holds `mesh` (guest grants and media among its
 subcommands), `meshapp`, `ring`, `job`, `publish`, `unpublish` and `run`. `code converge` is the one verb
 LINKED rather than exec'd, from `sovereign-cli-dev`'s `[lib]` target.

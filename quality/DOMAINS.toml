@@ -2963,7 +2963,7 @@ recipe selects both independently, so merging them merges two extension points.
 family = "Seed"
 context = "understanding"
 definitions = [
-  "NAVIGATION SEED (where a walk starts): understanding-vocab/src/ontology/navigation.rs:134 SeedPolicy; corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-llm/src/eval_cmd/atlas_ann.rs:21 SeedMode",
+  "NAVIGATION SEED (where a walk starts): understanding-vocab/src/ontology/navigation.rs:134 SeedPolicy; corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-bench/src/eval_cmd/atlas_ann.rs:21 SeedMode",
   "EXTRACTION SEED (the Stage 1a entity list -> cache/seed.json): corpus-engine/src/enrichment/pipeline/atlas.rs:285 SeedEntity, :300 SeedEntities, :322 SeedOrigin, :348 SeedStrategy; sovereign-enrichment-build/src/seed_cmd.rs:31 SeedError, :61 SeedReport",
   "HOMONYMS: sovereign-cli-dev/src/refactor_cmd/spec.rs:42 SeedEdit; .../refactor_cmd/discover.rs:127 SeededFile; sovereign-cli-llm/src/voice_eval/scenarios.rs:78 SeedMemory; sovereign-mesh/src/governance_http.rs:181 SeededResponse; sovereign-turn-client/src/lib.rs:3758 SeededWire; sovereign-cli-llm/src/awareness_cmd/seed.rs:159 SeedPlan",
 ]
@@ -9271,19 +9271,19 @@ lines = 403
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/ablate.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/ablate.rs"
 context = "host"
 lines = 1187
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/adjudicate.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/adjudicate.rs"
 context = "host"
 lines = 448
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/all.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/all.rs"
 context = "host"
 lines = 1781
 note = ""
@@ -9295,61 +9295,61 @@ lines = 824
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/baselines.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/baselines.rs"
 context = "host"
 lines = 304
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/book_report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/book_report.rs"
 context = "host"
 lines = 2543
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs"
 context = "host"
 lines = 2278
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/desktop_bridge.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs"
 context = "host"
 lines = 249
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/discover.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/discover.rs"
 context = "host"
 lines = 467
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/enron.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/enron.rs"
 context = "host"
 lines = 854
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/faithfulness.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/faithfulness.rs"
 context = "host"
 lines = 574
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/flywheel.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/flywheel.rs"
 context = "host"
 lines = 399
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/gate.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/gate.rs"
 context = "host"
 lines = 801
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/governance.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/governance.rs"
 context = "host"
 lines = 400
 note = ""
@@ -9361,97 +9361,97 @@ lines = 499
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
 context = "host"
 lines = 759
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/live_runner.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/live_runner.rs"
 context = "host"
 lines = 876
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/mechanism_fidelity.rs"
 context = "host"
 lines = 1357
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/mod.rs"
 context = "host"
 lines = 224
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/model_resolve.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/model_resolve.rs"
 context = "host"
 lines = 239
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/mod.rs"
 context = "host"
 lines = 277
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/report.rs"
 context = "host"
 lines = 288
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/runner.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/runner.rs"
 context = "host"
 lines = 157
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/scenarios.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/scenarios.rs"
 context = "host"
 lines = 305
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/obsidian.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/obsidian.rs"
 context = "host"
 lines = 376
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/parity_compare.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/parity_compare.rs"
 context = "host"
 lines = 528
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/promote.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/promote.rs"
 context = "host"
 lines = 597
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/proxy_bench.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/proxy_bench.rs"
 context = "host"
 lines = 119
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/redteam.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/redteam.rs"
 context = "host"
 lines = 748
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/render.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/render.rs"
 context = "host"
 lines = 637
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/report.rs"
 context = "host"
 lines = 874
 note = ""
@@ -9469,115 +9469,115 @@ lines = 279
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/resource_meter.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/resource_meter.rs"
 context = "host"
 lines = 791
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/routing_replay.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/routing_replay.rs"
 context = "host"
 lines = 283
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
 context = "host"
 lines = 723
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/mod.rs"
 context = "host"
 lines = 44
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/paired.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/paired.rs"
 context = "host"
 lines = 621
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/report.rs"
 context = "host"
 lines = 207
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/score.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/score.rs"
 context = "host"
 lines = 444
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/test_support.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/test_support.rs"
 context = "host"
 lines = 58
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/scaffold.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/scaffold.rs"
 context = "host"
 lines = 658
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/scaffolding_param.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/scaffolding_param.rs"
 context = "host"
 lines = 282
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/criteria.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/criteria.rs"
 context = "host"
 lines = 431
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/mod.rs"
 context = "host"
 lines = 333
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/report.rs"
 context = "host"
 lines = 447
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/runner.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/runner.rs"
 context = "host"
 lines = 192
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/transcripts.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/transcripts.rs"
 context = "host"
 lines = 272
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/smoke_subset.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/smoke_subset.rs"
 context = "host"
 lines = 368
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/uap.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/uap.rs"
 context = "host"
 lines = 781
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/vault_report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs"
 context = "host"
 lines = 1917
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/verifier.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/verifier.rs"
 context = "host"
 lines = 700
 note = ""
@@ -10099,61 +10099,61 @@ lines = 792
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/atlas_ann.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/atlas_ann.rs"
 context = "host"
 lines = 27
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/attribution.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/attribution.rs"
 context = "host"
 lines = 159
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/bank.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/bank.rs"
 context = "host"
 lines = 581
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/lost_corpora.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/lost_corpora.rs"
 context = "host"
 lines = 119
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/mod.rs"
 context = "host"
 lines = 1109
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/report.rs"
 context = "host"
 lines = 670
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/routing_metrics.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/routing_metrics.rs"
 context = "host"
 lines = 502
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/runner.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner.rs"
 context = "host"
 lines = 2074
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/runner_threads.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner_threads.rs"
 context = "host"
 lines = 809
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/score.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs"
 context = "host"
 lines = 1152
 note = ""
@@ -10477,25 +10477,25 @@ lines = 589
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/bench_lane.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/bench_lane.rs"
 context = "host"
 lines = 1225
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/chat_ask.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/chat_ask.rs"
 context = "host"
 lines = 1796
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/mod.rs"
 context = "host"
 lines = 196
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/throughput.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/throughput.rs"
 context = "host"
 lines = 1059
 note = ""
