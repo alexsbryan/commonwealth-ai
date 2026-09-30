@@ -16,20 +16,17 @@
 //!   surface the desktop chat will call.
 //! - **Skill manifest** — reads `recipe-author/skill.toml` directly
 //!   (parses `[prompts] synthesis = "..."`); no copy of the prompt.
-//! - **Tool implementations** — the same `RecipeReadTool /
-//!   RecipeWriteTool / RecipeValidateTool / RecipeTestTool /
-//!   RegistryBrowseTool / DecisionLogTool / CheckpointTool /
-//!   CapabilityRequestTool / WebFetchTool / WebSearchTool` registered
-//!   in `sovereign-cli/src/main.rs`.
+//! - **Tool implementations** — ingest's recipe-authoring bundle, the
+//!   one the daemon composes (`RecipeAuthoring::tools`), plus
+//!   `WebFetchTool / WebSearchTool`.
 //! - **Persistence** — `NoteStore` + `RecipeProjectStore` at the user's
 //!   real `~/.svrnmesh/{notes,features}.db`. Capability requests
 //!   land in the user's real maintainer inbox.
-//! - **Project model** — `RecipeProject` provisioned via
-//!   `provision_recipe_project`; sidecar dir at
+//! - **Project model** — provisioned through ingest's recipe-project
+//!   port (`RecipeProjectPort::create`); sidecar dir at
 //!   `~/.svrnmesh/recipe-projects/<feature_id>/`.
-//! - **Situated-context renderer** — same
-//!   `recipe_author::situated_context::render` the M2 desktop will
-//!   call.
+//! - **Situated-context renderer** — the handle's
+//!   `situated_context()`, the renderer the daemon's routes call.
 //!
 //! The one place the harness diverges from the production runtime:
 //! it does NOT go through `sovereign_core::runtime::Runtime`.
@@ -63,16 +60,11 @@ use serde::{Deserialize, Serialize};
 
 use oicp_client::RemoteApiProvider;
 use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
+use sovereign_contracts::recipe::project::RecipeProjectHandle;
 use sovereign_contracts::traits::{InferenceProvider, Tool};
 use sovereign_contracts::types::{ConversationId, StepOutput, ToolContext};
 use sovereign_contracts::ToolRegistry;
 use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
-use sovereign_tools::recipe_author::{
-    situated_context, CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool,
-    RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool,
-    RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
-};
 
 // ─── OpenAI-style wire types ────────────────────────────────────
 //
@@ -469,7 +461,7 @@ async fn execute_tool_call(
     registry: &ToolRegistry,
     call: &ToolCall,
     ctx: &ToolContext,
-    project: &RecipeProject,
+    project: &dyn RecipeProjectHandle,
 ) -> ChatMessage {
     let args: serde_json::Value = match serde_json::from_str(&call.function.arguments) {
         Ok(v) => v,
@@ -955,7 +947,7 @@ async fn run_one_turn(
     tools: &[ToolDefinition],
     registry: &ToolRegistry,
     ctx: &ToolContext,
-    project: &RecipeProject,
+    project: &dyn RecipeProjectHandle,
     max_iters: usize,
     strip_think: bool,
 ) -> std::result::Result<TurnOutcome, String> {
@@ -1255,9 +1247,12 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         return 1;
     }
 
-    let seams = match crate::chat_cmd::ingest::recipe_author() {
-        Ok(s) => s,
-        Err(why) => {
+    let (mut seams, ingest_calls) = match (
+        crate::chat_cmd::ingest::recipe_author(),
+        crate::chat_cmd::ingest::calls(),
+    ) {
+        (Ok(s), Ok(c)) => (s, c),
+        (Err(why), _) | (_, Err(why)) => {
             eprintln!("live-trial: {why}");
             return 2;
         }
@@ -1291,8 +1286,23 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
                 return 2;
             }
         };
-    let features = match RecipeProjectStore::open(&dotsovereign.join("features.db")) {
-        Ok(s) => Arc::new(s),
+    // Forward the trial's `--param key=value` flags into probe_url so the
+    // agent can probe auth-gated endpoints by writing
+    // `Authorization: Token {api_token}` without ever pasting the literal
+    // token. Same surface as the http_api acquirer's `[acquire].headers`
+    // interpolation.
+    let probe_params: std::collections::BTreeMap<String, String> =
+        args.params.iter().cloned().collect();
+    seams.probe_parameters = Some(Arc::new(probe_params));
+    // Ingest's recipe authoring over svrn's notes: the project store behind
+    // its port, and the recipe-authoring tools (pb-ingest-rehome).
+    let authoring = (ingest_calls.recipe_authoring)(
+        &dotsovereign.join("features.db"),
+        Arc::clone(&notes),
+        seams,
+    );
+    let projects = match authoring.projects {
+        Ok(p) => p,
         Err(e) => {
             eprintln!("live-trial: feature store: {e}");
             return 2;
@@ -1300,15 +1310,13 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     };
 
     let project = match args.feature_id.as_deref() {
-        Some(fid) => {
-            match RecipeProject::load(fid, Arc::clone(&notes), Arc::clone(&features)).await {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("live-trial: load project {fid}: {e}");
-                    return 2;
-                }
+        Some(fid) => match projects.load(fid).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("live-trial: load project {fid}: {e}");
+                return 2;
             }
-        }
+        },
         None => {
             let title = args
                 .title
@@ -1320,7 +1328,12 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
                         .map(String::from)
                 })
                 .unwrap_or_else(|| "live-trial project".to_string());
-            match RecipeProject::new(&title, &charter, Arc::clone(&notes), Arc::clone(&features))
+            match projects
+                .create(
+                    &title,
+                    &charter,
+                    sovereign_contracts::daemon_wire::ArtifactKind::Recipe,
+                )
                 .await
             {
                 Ok(p) => p,
@@ -1355,47 +1368,14 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
             .display()
     );
 
-    // Tool registry — focused on recipe-author + web research only.
+    // Tool registry — focused on recipe-author + web research only. The
+    // recipe-authoring family is ingest's bundle, the one the daemon
+    // composes (pb-ingest-rehome); its probe_url carries `--param` above.
     let recipes_dir = dotsovereign.join("recipes");
     let _ = std::fs::create_dir_all(&recipes_dir);
     let mut registry = ToolRegistry::new();
-    registry.register(Box::new(RecipeReadTool::new()));
-    registry.register(Box::new(RecipeWriteTool::new()));
-    registry.register(Box::new(RecipeWriteStructuredTool::new(
-        Arc::clone(&seams.tester),
-        seams.descriptor_json,
-    )));
-    registry.register(Box::new(RecipeValidateTool::new(Arc::clone(&seams.tester))));
-    registry.register(Box::new(RecipeTestTool::new(Arc::clone(&seams.tester))));
-    registry.register(Box::new(RegistryBrowseTool::new(seams.registry_toml)));
-    registry.register(Box::new(DecisionLogTool::with_notes(Arc::clone(&notes))));
-    registry.register(Box::new(CheckpointTool::with_stores(
-        Arc::clone(&notes),
-        Arc::clone(&features),
-    )));
-    registry.register(Box::new(CapabilityRequestTool::with_stores(
-        Arc::clone(&notes),
-        Arc::clone(&features),
-    )));
-    // probe_url + research_finding close the API-shape loop the
-    // earlier trial revealed: probe_url lets the agent confirm an
-    // endpoint contract before drafting; research_finding gives the
-    // v7 NoteStore `research_finding` kind a real writer so web
-    // findings survive across sessions and checkpoint restores.
-    //
-    // Forward the trial's `--param key=value` flags into probe_url
-    // so the agent can probe auth-gated endpoints by writing
-    // `Authorization: Token {api_token}` without ever pasting the
-    // literal token. Same surface as the http_api acquirer's
-    // `[acquire].headers` interpolation.
-    let probe_params: std::collections::BTreeMap<String, String> =
-        args.params.iter().cloned().collect();
-    registry.register(Box::new(
-        ProbeUrlTool::new().with_parameters(Arc::new(probe_params)),
-    ));
-    registry.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(
-        &notes,
-    ))));
+    let report = authoring.tools.register_into(&mut registry).await;
+    tracing::debug!(target: "sovereign_cli_llm::recipe_agent", ?report, "recipe-authoring bundle registered");
     registry.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     // WebSearchTool runs a query → extract → synthesise pipeline that
     // needs an inference provider for the synthesis step. We back it
@@ -1474,7 +1454,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         for (i, partner_msg) in messages_in.iter().enumerate() {
             eprintln!("──── Turn {} ─────────────────────────────────", i + 1);
             eprintln!("Partner: {partner_msg}\n");
-            let situated = match situated_context::render(&project).await {
+            let situated = match project.situated_context().await {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("live-trial: situated render failed: {e}");
@@ -1501,7 +1481,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         for (i, partner_msg) in messages_in.iter().enumerate() {
             eprintln!("──── Turn {} ─────────────────────────────────", i + 1);
             eprintln!("Partner: {partner_msg}\n");
-            let situated = match situated_context::render(&project).await {
+            let situated = match project.situated_context().await {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("live-trial: situated render failed: {e}");
@@ -1525,7 +1505,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
                 &tool_defs,
                 &registry,
                 &ctx,
-                &project,
+                project.as_ref(),
                 args.max_tool_iters,
                 args.strip_think,
             )
@@ -1594,12 +1574,16 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     let mut overall_pass = true;
     if let Some(recipe_id) = summary.recipe_id.as_deref() {
         eprintln!("\nValidating {} …", recipe_id);
-        let validate_tool =
-            RecipeValidateTool::with_recipes_dir(Arc::clone(&seams.tester), recipes_dir.clone());
-        match validate_tool
-            .execute(&serde_json::json!({"path": recipe_id}), &ctx)
-            .await
-        {
+        // The registered tool: it resolves against the same
+        // `~/.svrnmesh/recipes` this trial created above.
+        let validated = match registry.get("recipe_validate") {
+            Ok(tool) => {
+                tool.execute(&serde_json::json!({"path": recipe_id}), &ctx)
+                    .await
+            }
+            Err(e) => Err(e),
+        };
+        match validated {
             Ok(StepOutput::Json(v)) => {
                 let passed = v.get("passed").and_then(|p| p.as_bool()).unwrap_or(false);
                 if passed {
@@ -1639,8 +1623,6 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
                 args.sample_size,
                 args.params.len()
             );
-            let test_tool =
-                RecipeTestTool::with_recipes_dir(Arc::clone(&seams.tester), recipes_dir.clone());
             // Forward `--param k=v` flags through to `recipe_test` so
             // recipes that declare an install-time parameter (auth tokens,
             // jurisdiction filters, etc.) get the partner's value at fetch
@@ -1661,10 +1643,14 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
             if !params_json.is_empty() {
                 test_args.insert("params".into(), serde_json::Value::Object(params_json));
             }
-            match test_tool
-                .execute(&serde_json::Value::Object(test_args), &ctx)
-                .await
-            {
+            let tested = match registry.get("recipe_test") {
+                Ok(tool) => {
+                    tool.execute(&serde_json::Value::Object(test_args), &ctx)
+                        .await
+                }
+                Err(e) => Err(e),
+            };
+            match tested {
                 Ok(StepOutput::Json(v)) => {
                     let attempted = v
                         .get("extraction")
