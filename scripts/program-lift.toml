@@ -48,7 +48,7 @@
 #            or, with `path`, on a non-2xx or an empty value
 #   call     one POST of `json` to `url`; `var` = `path` of the body. `fail` on
 #            no answer, a non-2xx or an empty value (BODY keeps the answer).
-#            `retry` = seconds to POST again (every 5 s) until it answers;
+#            `retry` = seconds (or ${VAR}) to POST again (every 5 s) until it answers;
 #            `alive` names a spawn that must stay up meanwhile.
 #            Without `path` it only records: `status_var` = the HTTP status,
 #            and only no answer fails, for a refusal the smoke then requires
@@ -343,6 +343,9 @@ steps = [
   { do = "exec", argv = ["test", "-f", "${MODEL}"], log = "model.log", on_error = "abstain", fail = "no primary GGUF at ${MODEL} (set SERVE_MESH_MODEL)" },
   { do = "exec", argv = ["test", "-f", "${FAST}"], log = "fast.log", on_error = "abstain", fail = "no fast GGUF at ${FAST} (set SERVE_MESH_FAST)" },
   { do = "input", var = "RAILS", value = "${TARGET}/debug/cw-rails" },
+  # How long a chat may wait for the distributed primary to load (a PLANT's
+  # red needs less than a green's load).
+  { do = "input", var = "CHAT_WAIT", env = "SERVE_MESH_CHAT_WAIT", default = "480" },
   { do = "ports", vars = ["A_RAILS", "B_RAILS", "A_SERVE", "B_SERVE", "A_RPC", "B_RPC"] },
   { do = "write", path = "${SANDBOX}/rails-a/rails.toml", text = "name = \"serve-mesh-a\"\nlisten = ${A_RAILS}\ngossip_interval_secs = 2\n" },
   { do = "exec", argv = ["${RAILS}", "found", "serve-mesh", "--data-dir", "${SANDBOX}/rails-a"], log = "found.log", fail = "cw-rails could not found the mesh (see ${SANDBOX}/found.log)" },
@@ -368,7 +371,7 @@ steps = [
   { do = "poll", url = "http://127.0.0.1:${B_SERVE}/health", path = "state", var = "B_HEALTH", timeout = 120, alive = "serve-b", fail = "B's serve never answered /health (see ${SANDBOX}/serve-b.log)" },
   # The primary is withheld from B's process; a chat answers only once the
   # distributed child serves it.
-  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "primary", max_tokens = 16, messages = [{ role = "user", content = "Say hello." }] }, path = "choices.message.content", var = "CHAT", retry = 480, timeout = 120, alive = "serve-b", fail = "B's distributed primary never answered a chat within 480s: ${BODY} (see ${SANDBOX}/serve-b.log, serve-a.log)" },
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "primary", max_tokens = 16, messages = [{ role = "user", content = "Say hello." }] }, path = "choices.message.content", var = "CHAT", retry = "${CHAT_WAIT}", timeout = 120, alive = "serve-b", fail = "B's distributed primary never answered a chat within ${CHAT_WAIT}s: ${BODY} (see ${SANDBOX}/serve-b.log, serve-a.log)" },
   { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "discovered mesh RPC worker", var = "DISCOVERED", min = 1, fail = "B answered without discovering A's worker (see ${SANDBOX}/serve-b.log)" },
   # A's side, which B cannot author: A's rpc-warm answered for this model
   # before B's load (the orchestrator holds the load until every worker is
@@ -377,7 +380,7 @@ steps = [
   # Restart B's serve mid-run: the distributed primary respawns.
   { do = "kill", id = "serve-b", fail = "B's serve was not running" },
   { do = "spawn", id = "serve-b", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-b", "--listen", "127.0.0.1:${B_SERVE}"], log = "serve-b-2.log", env = { RUST_LOG = "info,sovereign_serving_host=debug", SOVEREIGN_RPC_SERVE = "127.0.0.1:${B_RPC}", SOVEREIGN_RPC_WORKER_SETTLE_SECS = "5" } },
-  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "primary", max_tokens = 16, messages = [{ role = "user", content = "Say hello again." }] }, path = "choices.message.content", var = "CHAT2", retry = 480, timeout = 120, alive = "serve-b", fail = "after B's serve restarted, its distributed primary never answered within 480s: ${BODY} (see ${SANDBOX}/serve-b-2.log)" },
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "primary", max_tokens = 16, messages = [{ role = "user", content = "Say hello again." }] }, path = "choices.message.content", var = "CHAT2", retry = "${CHAT_WAIT}", timeout = 120, alive = "serve-b", fail = "after B's serve restarted, its distributed primary never answered within ${CHAT_WAIT}s: ${BODY} (see ${SANDBOX}/serve-b-2.log)" },
   { do = "count", file = "${SANDBOX}/serve-b-2.log", pattern = "discovered mesh RPC worker", var = "REDISCOVERED", min = 1, fail = "the restarted serve answered without rediscovering A's worker (see ${SANDBOX}/serve-b-2.log)" },
 ]
 

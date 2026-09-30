@@ -464,7 +464,7 @@ class Smoke:
         status, body = http("POST", url, self.sub(s["json"]), timeout=float(s.get("timeout", 30)))
         # `retry` seconds: POST again until the answer is a 2xx with a hit at
         # `path`, for an answer that exists only once a load completes.
-        deadline = time.time() + float(s.get("retry", 0))
+        deadline = time.time() + float(self.sub(str(s.get("retry", 0))))
         while "path" in s and time.time() < deadline and not (
                 200 <= status < 300 and self.json_at(body, s["path"])):
             self.check_alive(s)
