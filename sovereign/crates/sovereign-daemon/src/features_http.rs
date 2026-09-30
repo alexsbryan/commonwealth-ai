@@ -2,10 +2,10 @@
 //! Recipe-author project store over the wire — `/v1/features/projects`
 //! (sv-surface D6, second half).
 //!
-//! Three routes for `RecipeProjectStore`'s whole surface — `list`, `get`,
-//! `provision_recipe_project` — over the `features.db` handle the daemon has
-//! opened since `daemon_cmd/mod.rs:947` and handed to the tool bundles only.
-//! The desktop held a SECOND handle on the same file.
+//! Three routes for the recipe-project store's whole surface — `list`, `get`,
+//! `provision` — over the `features.db` the daemon opens through ingest's
+//! recipe-project port (pb-ingest-rehome-daemon), the same store the tool
+//! bundle writes. The desktop held a SECOND handle on the same file.
 //!
 //! Loopback posture is `reading_http`'s, unchanged.
 //!
@@ -22,7 +22,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use sovereign_tools::recipe_author::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
+use sovereign_contracts::recipe::project::{RecipeProjectPort, RecipeProjectRow};
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{internal_error, json_error, not_found, Absence};
@@ -181,7 +181,7 @@ async fn new_project(
     let store = store_for(&daemon)?;
     Ok(
         match store
-            .provision_recipe_project(&body.id, &body.title, &body.charter_md)
+            .provision(&body.id, &body.title, &body.charter_md)
             .await
         {
             Ok(row) => {
@@ -189,7 +189,7 @@ async fn new_project(
                 "features_http: recipe project provisioned");
                 (StatusCode::CREATED, Json(ProjectEntry::from(row))).into_response()
             }
-            Err(sovereign_tools::recipe_author::recipe_project_store::RecipeProjectError::InvalidInput(why)) => {
+            Err(sovereign_contracts::error::Error::InvalidInput(why)) => {
                 // The store folds "empty id" and "already exists" into one
                 // variant. `already exists` is a CONFLICT — a retry with the
                 // same body will never succeed and the caller must pick a new
@@ -212,10 +212,16 @@ async fn new_project(
 
 // ─── Helpers ───────────────────────────────────────────────────
 
-/// The daemon's own `RecipeProjectStore`. One lookup site, so no handler
-/// can reach a different `features.db` than the tool bundles write to.
-fn store_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<RecipeProjectStore>, Absence> {
-    daemon.features_store().map(Arc::clone).ok_or_else(|| {
-        Absence::unavailable("this daemon has no recipe-author store (features.db did not open)")
+/// Why the recipe-project routes refuse when `features.db` would not open.
+pub const NO_FEATURES_DB: &str =
+    "this daemon has no recipe-author store (features.db did not open)";
+
+/// The daemon's own recipe-project port. One lookup site, so no handler can
+/// reach a different `features.db` than the tool bundle writes to; its
+/// absence is the 503 naming why.
+fn store_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<dyn RecipeProjectPort>, Absence> {
+    daemon.features_store().map(Arc::clone).map_err(|why| {
+        tracing::debug!(reason = why, "features_http: no recipe-project port");
+        Absence::unavailable(why)
     })
 }

@@ -777,17 +777,18 @@ impl EmbeddedDaemon {
             .and_then(|s| s.core.insights.as_ref())
     }
 
-    /// Borrow the recipe-author `RecipeProjectStore` this daemon's
-    /// `features.db` backs (sv-surface D6). `None` on `MeshAdmin` and on a
-    /// serving commission whose `features.db` would not open —
-    /// `features_http` renders that as a named 503, not as a missing route.
+    /// Borrow the recipe-project port over this daemon's `features.db`
+    /// (sv-surface D6; ingest's since pb-ingest-rehome-daemon), or why there
+    /// is none: `MeshAdmin`, a store that would not open, or no ingest
+    /// program — `features_http` renders each as a named 503, not as a
+    /// missing route.
     pub fn features_store(
         &self,
-    ) -> Option<&Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>
-    {
-        self.services
-            .serving()
-            .and_then(|s| s.core.features.as_ref())
+    ) -> Result<&Arc<dyn sovereign_contracts::recipe::project::RecipeProjectPort>, &str> {
+        match self.services.serving() {
+            Some(s) => s.core.features.as_ref().map_err(String::as_str),
+            None => Err(crate::features_http::NO_FEATURES_DB),
+        }
     }
 
     /// Borrow svrn's store behind this daemon's mounted `/mcp` surface, where

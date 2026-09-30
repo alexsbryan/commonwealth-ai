@@ -11,8 +11,11 @@
 //! for the sink route and the reason has not changed.
 //!
 //! Exercised against real artefacts — a real atlas dir with a real
-//! `governance_oplog.jsonl`, a real `sovereign.db` and `features.db`, a real
-//! `recipes/` tree — opened the way production opens them. The fault this
+//! `governance_oplog.jsonl`, a real `sovereign.db`, a real `recipes/` tree —
+//! opened the way production opens them. The recipe-project store is
+//! ingest's since pb-ingest-rehome-daemon: the D8 routes drive its port's
+//! double, and what they read back is proven on the real `features.db` in
+//! sovereign-recipe-author's `port::tests`. The fault this
 //! rung exists to remove is TWO PROCESSES appending to one JSONL log with
 //! one mutex each, and a stubbed oplog cannot exhibit it.
 //!
@@ -66,7 +69,8 @@ use sovereign_daemon::governance_http::governance_router;
 use sovereign_daemon::mcp_config_http::mcp_config_router;
 use sovereign_daemon::recipe_project_http::recipe_project_router;
 use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
+use sovereign_contracts::recipe::project::fixtures::RecipeProjectsDouble;
+use sovereign_contracts::recipe::project::RecipeProjectPort;
 use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim};
 use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
 use understanding_vocab::taxonomy::{ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus};
@@ -124,8 +128,14 @@ mod fixture {
         let tmp = tempfile::tempdir().unwrap();
         let engine = Arc::new(program(double_at(&tmp)));
         let notes = Arc::new(SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap());
-        let features = with_features
-            .then(|| Arc::new(RecipeProjectStore::open(&tmp.path().join("features.db")).unwrap()));
+        // Artifacts live where this host's root resolves when the fixture
+        // is built: a test that redirects HOME first gets its own tree.
+        let features = with_features.then(|| {
+            Arc::new(
+                RecipeProjectsDouble::new()
+                    .with_artifact_root(sovereign_contracts::rebrand::svrnmesh_root()),
+            ) as Arc<dyn RecipeProjectPort>
+        });
         let daemon = EmbeddedDaemon::new(
             tmp.path().to_path_buf(),
             SetupConfig::unconfigured(),
@@ -919,18 +929,9 @@ async fn recipe_project_create_then_list_then_dashboard_over_one_composition() {
         "an omitted kind defaults to recipe, as it did before the tag existed"
     );
 
-    // The artifact tree really exists on THIS host, under the redirected
-    // root — the half a store-only route could not do.
-    let project_dir = home
-        .path()
-        .join(".svrnmesh")
-        .join("recipe-projects")
-        .join(&feature_id);
-    assert!(
-        project_dir.exists(),
-        "the project directory is laid down at {}",
-        project_dir.display()
-    );
+    // The artifact tree the create lays down is the implementor's, proven
+    // on the real store in sovereign-recipe-author's `port::tests`
+    // (`a_created_project_lays_down_its_tree_lists_and_loads`).
 
     // The LIST route sees it.
     let listed: serde_json::Value = reqwest::get(format!("http://{addr}/v1/recipe-projects"))

@@ -409,7 +409,7 @@ pub(super) async fn run_daemon(
     // The stock binary hands in ingest's composition (pb-ingest-dial-daemon):
     // svrn links no corpus-engine, so the engine this process holds is built
     // by ingest's face for `IngestHost`. svrn alone gets `None`.
-    let (enrich_config, mount) = match ingest {
+    let (enrich_config, mount, recipe_authoring) = match ingest {
         Some(ingest) => {
             let atlas = ingest.atlas();
             let enrich_config = ingest.enrich_config();
@@ -440,15 +440,28 @@ pub(super) async fn run_daemon(
             // Registered here, before any route mounts, so a fast install
             // cannot reach `acquire_source` before the acquirer exists.
             sovereign_tools::sec_edgar::register(mount.port.as_ref());
+            // features.db — the recipe-author project layer, ingest's
+            // (pb-ingest-rehome-daemon), composed over svrn's notes (the
+            // store opened above; no second handle) and the mount's seams.
+            let recipe_authoring = (ingest.calls().recipe_authoring)(
+                &data_dir.join("features.db"),
+                state_store_concrete.clone()
+                    as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>,
+                mount.recipe_author.clone(),
+            );
             tracing::info!("daemon: the ingest program is composed in this process");
-            (Some(enrich_config), Some((mount, atlas)))
+            (
+                Some(enrich_config),
+                Some((mount, atlas)),
+                Some(recipe_authoring),
+            )
         }
         None => {
             tracing::info!(
                 "daemon: no ingest program in this process; enrichment-config reads and \
-                 writes report it absent"
+                 writes, and recipe-author projects, report it absent"
             );
-            (None, None)
+            (None, None, None)
         }
     };
     // Ingest's ports, as every consumer below acts on them: the engine's port
@@ -478,7 +491,7 @@ pub(super) async fn run_daemon(
     }
 
     // The rest of ingest's mount, taken apart once.
-    let (ingest_index, recipe_harness, recipe_author, folder_tiered, arm_geometry) = match mount {
+    let (ingest_index, recipe_harness, folder_tiered, arm_geometry) = match mount {
         Some((m, _)) => {
             // Idempotent one-shot, supervised (DAEMON_RESILIENCE.md P0.4);
             // the chore is ingest's, the supervision this process's.
@@ -487,12 +500,11 @@ pub(super) async fn run_daemon(
             (
                 Some(m.index),
                 Some(m.harness),
-                Some(m.recipe_author),
                 m.folder_tiered,
                 Some(m.arm_geometry),
             )
         }
-        None => (None, None, None, None, None),
+        None => (None, None, None, None),
     };
     // Reads go through the one leaf reader: the engine's own cached one when
     // ingest is composed, `FsIndexSource` over the same root when not. Either
@@ -696,26 +708,34 @@ pub(super) async fn run_daemon(
     );
     let skills = Arc::new(skills);
 
-    // features.db — the recipe-author project layer. Warn-and-skip on
-    // failure, the same graceful-degrade posture the desktop's bootstrap
-    // takes: the daemon still serves turns without it, and the authoring
-    // tools report their own named degradation.
-    let features_store: Option<
-        Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>,
-    > = match sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore::open(
-        &data_dir.join("features.db"),
-    ) {
-        Ok(s) => {
-            tracing::info!("daemon: recipe-author features.db opened");
-            Some(Arc::new(s))
+    // features.db — the recipe-author project layer, composed with ingest
+    // above. Warn-and-skip on failure, the same graceful-degrade posture the
+    // desktop's bootstrap takes: the daemon still serves turns without it,
+    // and the authoring tools report their own named degradation. svrn
+    // alone has no store and says so by name (pb-ingest-rehome-daemon).
+    type Projects =
+        Result<Arc<dyn sovereign_contracts::recipe::project::RecipeProjectPort>, String>;
+    let (features_store, recipe_tools): (Projects, _) = match recipe_authoring {
+        Some(authoring) => {
+            let projects = match authoring.projects {
+                Ok(port) => {
+                    tracing::info!("daemon: recipe-author features.db opened");
+                    Ok(port)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "daemon: features.db unavailable — recipe-author tooling will degrade"
+                    );
+                    Err(crate::features_http::NO_FEATURES_DB.to_string())
+                }
+            };
+            (projects, Some(authoring.tools))
         }
-        Err(e) => {
-            tracing::warn!(
-                error = %e,
-                "daemon: features.db unavailable — recipe-author tooling will degrade"
-            );
-            None
-        }
+        None => (
+            Err(crate::hosted_ingest::NO_RECIPE_PROJECTS.to_string()),
+            None,
+        ),
     };
 
     // ── The daemon commissions the ONE Runtime ────────────────────────────
@@ -804,21 +824,13 @@ pub(super) async fn run_daemon(
                     )),
                 });
                 // Recipe-authoring, the desktop's twin (rung 6 commit B): the
-                // same bundle the desktop's bootstrap pushes, wired with the
-                // SAME notes adapter + features store — so a conversation
-                // tagged `recipe-author` has its tool set whichever host
-                // answers. Absent stores are a DEGRADATION the bundle's
-                // report names, matching the desktop's posture.
-                b.push(match recipe_author {
-                    Some(seams) => Box::new({
-                        let mut ra = sovereign_tools::bundles::RecipeAuthoringTools::new(seams);
-                        if let Some(fs) = features_store.as_ref() {
-                            ra = ra.with_notes(Arc::clone(&state_store_concrete)
-                                as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
-                            ra = ra.with_features(Arc::clone(fs));
-                        }
-                        ra
-                    }),
+                // same bundle, ingest's since pb-ingest-rehome-daemon, which
+                // ingest wired above with the SAME notes adapter + features
+                // store — so a conversation tagged `recipe-author` has its
+                // tool set whichever host answers. Absent stores are a
+                // DEGRADATION the bundle's report names.
+                b.push(match recipe_tools {
+                    Some(recipe_authoring_bundle) => recipe_authoring_bundle,
                     None => Box::new(sovereign_contracts::tool_bundle::Withheld::new(
                         "recipe-authoring",
                         "no ingest program is composed in this process, and recipe \
@@ -958,7 +970,7 @@ pub(super) async fn run_daemon(
                     runtime: Arc::clone(&runtime),
                     insights: Some(insight_service),
                     // sv-surface D6: the recipe-author `features.db` opened
-                    // above. Already warn-and-skip, so the `Option` here says
+                    // above. Already warn-and-skip, so the `Result` here says
                     // the same thing the log line did — and `features_http`
                     // now renders it as a named 503 instead of a route that
                     // silently is not there.

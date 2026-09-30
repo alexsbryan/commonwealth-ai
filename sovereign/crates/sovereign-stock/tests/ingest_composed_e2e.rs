@@ -6,7 +6,7 @@
 //! Boots the `sovereign-stock` binary the way `svrn daemon run` execs it (the
 //! argv the sovereign-daemon binary takes: `run --config <path>`) on a temp
 //! root with the model-free mock engine and cw-rails pinned to a closed port,
-//! then drives three ingest acts
+//! then drives four ingest acts
 //! svrn performs only through ingest's port:
 //!
 //! - a registry install: a local-file recipe imported through the recipe
@@ -17,7 +17,9 @@
 //!   terminal counts;
 //! - the governance recipe svrn renders, accepted by ingest's parser as a
 //!   custom-ontology recipe (`render_governance_recipe`; moved here from
-//!   d8_surface by pb-ingest-dial-daemon-tests-reads).
+//!   d8_surface by pb-ingest-dial-daemon-tests-reads);
+//! - recipe-author projects over ingest's recipe-project port: a store
+//!   row, and a project the composition creates (pb-ingest-rehome-daemon).
 //!
 //! Linux only, like its sibling process e2es.
 #![cfg(target_os = "linux")]
@@ -317,5 +319,66 @@ fn the_stock_install_ingests_through_ingests_port() {
             .as_str()
             .is_some_and(|p| p.ends_with("house-rules/recipe.toml")),
         "the recipe lands under ingest's recipes dir: {written}"
+    );
+
+    // ── Recipe-author projects, through ingest's recipe-project port ──
+    // (pb-ingest-rehome-daemon.) The store row round-trips, a taken id is a
+    // conflict, and a project created by the composition lists, serves its
+    // dashboard and lays its tree down under svrn's root.
+    let boot = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        boot.contains("recipe-author features.db opened"),
+        "ingest's recipe authoring opened the project store:\n{}",
+        log_tail(&log)
+    );
+    let row = json!({ "id": "feat-quiet-hours", "title": "Quiet hours", "charter_md": "Whole." });
+    let features = format!("{client_base}/v1/features/projects");
+    let (status, provisioned) = call(reqwest::Method::POST, &features, Some(row.clone()));
+    assert_eq!(status, 201, "the store row provisions: {provisioned}");
+    let (status, one) = call(
+        reqwest::Method::GET,
+        &format!("{features}/feat-quiet-hours"),
+        None,
+    );
+    assert_eq!(
+        (status, &one["charter_md"]),
+        (200, &json!("Whole.")),
+        "the row reads back: {one}"
+    );
+    let (status, dup) = call(reqwest::Method::POST, &features, Some(row));
+    assert_eq!(status, 409, "a taken id is a conflict: {dup}");
+
+    let projects = format!("{client_base}/v1/recipe-projects");
+    let (status, created) = call(
+        reqwest::Method::POST,
+        &projects,
+        Some(json!({ "title": "Roman coin hoards", "charter_md": "Catalogue them." })),
+    );
+    assert_eq!(status, 201, "the composition creates a project: {created}");
+    let feature_id = created["feature_id"].as_str().expect("an id").to_string();
+    let (_, listed) = call(reqwest::Method::GET, &projects, None);
+    assert!(
+        listed
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|r| r["feature_id"] == json!(feature_id))),
+        "the project lists: {listed}"
+    );
+    let (status, dash) = call(
+        reqwest::Method::GET,
+        &format!("{projects}/{feature_id}/dashboard"),
+        None,
+    );
+    assert_eq!(
+        (status, &dash["title"]),
+        (200, &json!("Roman coin hoards")),
+        "the dashboard serves: {dash}"
+    );
+    assert!(
+        root.path()
+            .join("svrnmesh")
+            .join("recipe-projects")
+            .join(&feature_id)
+            .is_dir(),
+        "the project's tree is laid down under svrn's root"
     );
 }

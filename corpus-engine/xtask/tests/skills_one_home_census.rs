@@ -15,7 +15,7 @@
 //! skill axis, silently.
 //!
 //! The one homes: `sovereign_contracts::skills::register_builtin_skills`
-//! (the compiled-in set) and `sovereign_tools::bundles::
+//! (the compiled-in set) and `sovereign_recipe_author::bundle::
 //! RecipeAuthoringTools` (the bundle). This census pins both hosts load
 //! them and the retired spellings cannot return.
 //!
@@ -119,19 +119,30 @@ fn the_daemon_commissions_the_shared_skill_set_not_an_empty_registry() {
     );
 }
 
+/// The bundle is ingest's since pb-ingest-rehome-daemon: the daemon pushes
+/// what ingest's recipe authoring composed, and ingest wires it with the
+/// features store when one opened.
 #[test]
 fn the_daemon_pushes_the_recipe_authoring_bundle() {
     let src = daemon_cmd_source();
     assert_eq!(
-        src.match_indices("bundles::RecipeAuthoringTools::new(")
+        src.match_indices("(ingest.calls().recipe_authoring)(")
             .count(),
         1,
-        "the daemon's tool list must carry the recipe-authoring bundle — \
-         the same one the desktop pushes, so a recipe-author-tagged \
+        "the daemon must compose ingest's recipe authoring — the one place \
+         the recipe-authoring bundle comes from, so a recipe-author-tagged \
          conversation has its tools whichever host answers."
     );
     assert_eq!(
-        src.match_indices("with_features(Arc::clone(fs))").count(),
+        src.match_indices("b.push(match recipe_tools {").count(),
+        1,
+        "the daemon's tool list must carry the recipe-authoring bundle ingest composed"
+    );
+    let path = repo_root::repo_root().join("studio/crates/sovereign-recipe-author/src/port.rs");
+    let port =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    assert_eq!(
+        port.match_indices(".with_features(store)").count(),
         1,
         "the bundle must be wired with the features store when one opened"
     );

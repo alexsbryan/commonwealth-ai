@@ -44,6 +44,10 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 # holds, built here because svrn links no corpus-engine
 # (pb-ingest-dial-daemon), and the authoring harness over it.
 sovereign-authoring-harness = { workspace = true }
+# Ingest's recipe authoring (`port::compose`): the recipe-project store behind
+# its port and the recipe-authoring tools, over svrn's notes
+# (pb-ingest-rehome-daemon).
+sovereign-recipe-author = { workspace = true }
 # The reachable bases serve's model origin advertises
 # (`mesh_discovery::reachable_addresses`), for the mesh ports composed here
 # (pb-serve-ranks-discovery).

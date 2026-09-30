@@ -179,6 +179,67 @@ fn the_daemon_names_the_engine_only_where_it_builds_it() {
     }
 }
 
+/// The shim's spellings, apart so this file does not count itself.
+const RECIPE_AUTHOR_SHIM: &[&str] = &[
+    concat!("sovereign_tools::", "recipe_author"),
+    concat!("bundles::", "RecipeAuthoringTools"),
+];
+
+/// The daemon reaches the recipe project only through ingest's port
+/// (pb-ingest-rehome-daemon): no source or test of this crate names the
+/// recipe-author shim sovereign-tools re-exports, so the parent row can drop
+/// it. THE failing input: a route importing
+/// `sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore`.
+#[test]
+fn the_daemon_reaches_the_recipe_project_only_through_ingests_port() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut files = Vec::new();
+    production_sources(&root.join("src"), &mut files);
+    let before = files.len();
+    all_sources(&root.join("tests"), &mut files);
+    assert!(
+        before > 100 && files.len() > before + 50,
+        "the walk found {before} source and {} test files — it is not scanning \
+         the tree it claims to",
+        files.len() - before
+    );
+    let mut offenders = Vec::new();
+    for path in files {
+        let text = std::fs::read_to_string(&path).expect("read a daemon file");
+        for (n, line) in text.lines().enumerate() {
+            let code = line.split("//").next().unwrap_or("");
+            if RECIPE_AUTHOR_SHIM
+                .iter()
+                .any(|needle| code.contains(needle))
+            {
+                offenders.push(format!("{}:{}: {}", path.display(), n + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "these daemon sites name the recipe-author shim; reach the recipe \
+         project through `RecipeProjectPort` (EmbeddedDaemon::features_store) \
+         and the bundle through `IngestCalls::recipe_authoring`:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// Every `.rs` file under `dir`.
+fn all_sources(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            all_sources(&path, out);
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            out.push(path);
+        }
+    }
+}
+
 /// The skip resumes after a `#[cfg(test)]` item: an engine call placed below
 /// a test module is still production code, and still counted.
 #[test]

@@ -1600,6 +1600,13 @@ items = ["inference_client::DaemonInferenceClient"]
 package = "ingest"
 krate = "sovereign-authoring-harness"
 items = ["EngineHarness"]
+# Ingest's recipe authoring over svrn's notes (pb-ingest-rehome-daemon): the
+# recipe-project store behind its port and the recipe-authoring tool bundle,
+# handed to svrn through `process::IngestCalls`.
+[[distribution.face]]
+package = "ingest"
+krate = "sovereign-recipe-author"
+items = ["port::compose"]
 
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #

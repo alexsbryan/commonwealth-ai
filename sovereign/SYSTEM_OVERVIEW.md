@@ -239,7 +239,7 @@ crates/
 ├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps
 ├── sovereign-workflow-host  # Daemon-runnable workflow host + the NL workflow-author bundle
 ├── sovereign-tools-base     # Pure leaf workflow tools (shell/web/chunk/file/json/csv/zip/vector/MCP)
-├── sovereign-recipe-author  # Recipe-authoring tool bundle + RecipeProject model + project store
+├── sovereign-recipe-author  # Recipe-authoring tool bundle + RecipeProject model + project store (svrn reaches them through the contracts RecipeProjectPort)
 └── sovereign-studio         # Headless studio CLI — the proof the package is independently usable
 ```
 

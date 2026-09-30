@@ -8,10 +8,13 @@
 //! `InsightService` fixture — a second copy of that fixture here would
 //! be the twin this campaign deletes.
 //!
-//! Exercised against real stores — svrn's real `sovereign.db` and a real
-//! `features.db` in a temp dir, opened the way production opens them —
-//! because the fault these routes exist to prevent is TWO handles on one
-//! file, and a stubbed store cannot exhibit it.
+//! Exercised against svrn's real `sovereign.db` in a temp dir, opened the way
+//! production opens it, because the fault these routes exist to prevent is
+//! TWO handles on one file, and a stubbed store cannot exhibit it. The
+//! recipe-project store is ingest's since pb-ingest-rehome-daemon: these
+//! routes drive its port's double (`RecipeProjectsDouble`), and the store
+//! behaviour they read back is proven on the real `features.db` in
+//! sovereign-recipe-author's `port::tests`.
 //!
 //! # Red-watch (2026-09-10, run, not asserted)
 //!
@@ -44,7 +47,8 @@ use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::features_http::features_router;
 use sovereign_daemon::notes_http::notes_router;
 use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
+use sovereign_contracts::recipe::project::fixtures::RecipeProjectsDouble;
+use sovereign_contracts::recipe::project::RecipeProjectPort;
 
 use crate::common;
 use crate::common::spawn_router;
@@ -75,7 +79,7 @@ async fn build_store_daemon(
 
     let notes = Arc::new(SqliteStateStore::open(&tmp.path().join("sovereign.db")).unwrap());
     let features = with_features
-        .then(|| Arc::new(RecipeProjectStore::open(&tmp.path().join("features.db")).unwrap()));
+        .then(|| Arc::new(RecipeProjectsDouble::new()) as Arc<dyn RecipeProjectPort>);
 
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),

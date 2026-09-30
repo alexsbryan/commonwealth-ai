@@ -40,6 +40,7 @@ pub fn hosted() -> sovereign_daemon::process::HostedIngest {
                 })
             }),
             gliner_chunk_extractor: Box::new(corpus_engine::face::gliner_chunk_extractor),
+            recipe_authoring: Box::new(sovereign_recipe_author::port::compose),
         },
         |host| {
             let face = corpus_engine::face::compose(corpus_engine::face::IngestParts {

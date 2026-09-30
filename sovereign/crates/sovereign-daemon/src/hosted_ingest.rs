@@ -100,6 +100,19 @@ pub struct IngestCalls {
             + Send
             + Sync,
     >,
+    /// Ingest's recipe authoring over svrn's notes (pb-ingest-rehome-daemon):
+    /// the recipe-project store at the given `features.db` behind its port,
+    /// and the recipe-authoring tool bundle over it and the mount's seams.
+    #[allow(clippy::type_complexity)]
+    pub recipe_authoring: Box<
+        dyn Fn(
+                &std::path::Path,
+                Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>,
+                sovereign_contracts::recipe::testing::RecipeAuthorSeams,
+            ) -> sovereign_contracts::recipe::project::RecipeAuthoring
+            + Send
+            + Sync,
+    >,
 }
 
 /// The distribution's composition of ingest.
@@ -168,6 +181,12 @@ impl HostedIngest {
 /// it still does; the rest names the program (pb-ingest-dial-daemon).
 pub const NO_INGEST: &str = "no corpus engine available on this node: no ingest program is \
                              composed in this process (the stock binary, `svrn daemon`, composes it)";
+
+/// Why the recipe-project routes refuse on svrn alone: the project store is
+/// ingest's (pb-ingest-rehome-daemon).
+pub const NO_RECIPE_PROJECTS: &str = "this daemon has no recipe-author store: no ingest program \
+                                      is composed in this process (the stock binary, `svrn \
+                                      daemon`, composes it)";
 
 /// A route ingest serves, answered on svrn alone: 503 naming the program.
 async fn absent(uri: axum::http::Uri) -> axum::response::Response {

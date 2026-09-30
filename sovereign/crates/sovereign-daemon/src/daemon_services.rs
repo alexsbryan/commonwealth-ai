@@ -231,20 +231,19 @@ pub struct ServingCore {
     /// concrete store handle; this field is the door, not a second decider.
     pub insights: Option<Arc<sovereign_core::insight::InsightService>>,
     /// The recipe-author project layer — `features.db` at this daemon's
-    /// data root (sv-surface D6). `None` on a commission that could not
-    /// open it, which `features_http` renders as a named 503; the same
-    /// warn-and-skip posture `sovereign daemon run` already took at
-    /// `daemon_cmd/mod.rs:947`, now visible in the type instead of only
-    /// in a log line.
+    /// data root (sv-surface D6), reached through ingest's recipe-project
+    /// port (pb-ingest-rehome-daemon). `Err` carries why there is none —
+    /// the store would not open, or no ingest program is composed — which
+    /// `features_http` renders as a named 503; the same warn-and-skip
+    /// posture `sovereign daemon run` already took, visible in the type
+    /// instead of only in a log line.
     ///
-    /// `Option` for the `insights` reason, not for a different one: a
-    /// serving daemon without an authoring surface is a real shape, and
+    /// A serving daemon without an authoring surface is a real shape, and
     /// "the file would not open" must stay a different fact from "this
     /// route is not mounted" (ARCH §18.3). The store itself is
-    /// `sovereign-recipe-author`'s, reached through `sovereign-store`;
-    /// this field is the door, not a second decider.
-    pub features:
-        Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
+    /// `sovereign-recipe-author`'s; this field is the door, not a second
+    /// decider.
+    pub features: Result<Arc<dyn sovereign_contracts::recipe::project::RecipeProjectPort>, String>,
 }
 
 /// **Ring 2 — CAPABILITY.** What the daemon can *do* beyond answering: the

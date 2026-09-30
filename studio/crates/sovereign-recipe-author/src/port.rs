@@ -124,6 +124,41 @@ impl RecipeProjectPort for ProjectStorePort {
     }
 }
 
+/// Recipe authoring as ingest composes it over svrn's notes: the store at
+/// `features_db` behind the port, and the recipe-authoring tools wired with
+/// the notes and the store. When the store will not open, the port is the
+/// reason and the tools are the store-free seven, which report the rest
+/// withheld — the posture a host that could not open `features.db` had.
+pub fn compose(
+    features_db: &std::path::Path,
+    notes: Arc<dyn RecipeNotes>,
+    seams: sovereign_contracts::recipe::testing::RecipeAuthorSeams,
+) -> sovereign_contracts::recipe::project::RecipeAuthoring {
+    use crate::bundle::RecipeAuthoringTools;
+    use sovereign_contracts::recipe::project::RecipeAuthoring;
+
+    match RecipeProjectStore::open(features_db) {
+        Ok(store) => {
+            let store = Arc::new(store);
+            RecipeAuthoring {
+                projects: Ok(Arc::new(ProjectStorePort::new(
+                    Arc::clone(&notes),
+                    Arc::clone(&store),
+                ))),
+                tools: Box::new(
+                    RecipeAuthoringTools::new(seams)
+                        .with_notes(notes)
+                        .with_features(store),
+                ),
+            }
+        }
+        Err(e) => RecipeAuthoring {
+            projects: Err(e.to_string()),
+            tools: Box::new(RecipeAuthoringTools::new(seams)),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

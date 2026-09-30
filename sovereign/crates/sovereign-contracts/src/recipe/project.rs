@@ -132,3 +132,201 @@ pub struct ProjectSummary {
     /// Unix seconds.
     pub updated_at: i64,
 }
+
+/// The port's double, for a svrn test that drives its own routes (FIVE_PROGRAMS
+/// "Where a cross-program test lives"; off by default like `notes::fixtures`).
+/// The store and model behaviour it stands in for is proven on the
+/// implementor, sovereign-recipe-author's `port::ProjectStorePort`.
+///
+/// It keeps rows and summaries in memory, because a round trip is the whole
+/// contract of those methods and a test reads it back; a provision refuses an
+/// empty or taken id in the store's words. Everything else never answers
+/// success-shaped (principle 6): `restore_checkpoint` refuses naming itself,
+/// and `artifact_root` panics unless the test gave one.
+#[cfg(any(test, feature = "test-fixtures"))]
+pub mod fixtures {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    use super::*;
+    use crate::error::Error;
+
+    fn unprogrammed(method: &str) -> String {
+        format!("RecipeProjectsDouble::{method}: not programmed by this test")
+    }
+
+    fn now() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    }
+
+    type Summaries = Arc<Mutex<HashMap<String, ProjectSummary>>>;
+
+    /// The recipe-project port's double.
+    #[derive(Default)]
+    pub struct RecipeProjectsDouble {
+        rows: Mutex<Vec<RecipeProjectRow>>,
+        summaries: Summaries,
+        artifact_root: Option<PathBuf>,
+    }
+
+    impl RecipeProjectsDouble {
+        /// An empty store.
+        pub fn new() -> Self {
+            Self::default()
+        }
+
+        /// Artifacts live under `root`: recipes in `recipes/`, workflows in
+        /// `workflows/`, the layout the implementor keeps under svrn's root.
+        pub fn with_artifact_root(mut self, root: PathBuf) -> Self {
+            self.artifact_root = Some(root);
+            self
+        }
+
+        fn handle(&self, row: &RecipeProjectRow) -> Box<dyn RecipeProjectHandle> {
+            Box::new(DoubleProject {
+                feature_id: row.id.clone(),
+                title: row.title.clone(),
+                summaries: Arc::clone(&self.summaries),
+            })
+        }
+    }
+
+    struct DoubleProject {
+        feature_id: String,
+        title: String,
+        summaries: Summaries,
+    }
+
+    #[async_trait]
+    impl RecipeProjectHandle for DoubleProject {
+        fn feature_id(&self) -> &str {
+            &self.feature_id
+        }
+
+        fn read_summary(&self) -> Result<ProjectSummary> {
+            self.summaries
+                .lock()
+                .expect("summaries lock")
+                .get(&self.feature_id)
+                .cloned()
+                .ok_or_else(|| Error::InvalidInput(format!("no summary for `{}`", self.feature_id)))
+        }
+
+        fn write_summary(&self, summary: &ProjectSummary) -> Result<()> {
+            self.summaries
+                .lock()
+                .expect("summaries lock")
+                .insert(self.feature_id.clone(), summary.clone());
+            Ok(())
+        }
+
+        fn list_checkpoints(&self) -> Result<Vec<CheckpointMeta>> {
+            Ok(Vec::new())
+        }
+
+        async fn restore_checkpoint(
+            &self,
+            _checkpoint_id: &str,
+            _artifact_id: Option<&str>,
+            _session_id: &str,
+        ) -> Result<String> {
+            Err(Error::InvalidInput(unprogrammed("restore_checkpoint")))
+        }
+
+        async fn situated_context(&self) -> Result<String> {
+            Ok(format!("[Charter] {}\n", self.title))
+        }
+    }
+
+    #[async_trait]
+    impl RecipeProjectPort for RecipeProjectsDouble {
+        async fn list(&self, _include_archived: bool) -> Result<Vec<RecipeProjectRow>> {
+            let mut rows = self.rows.lock().expect("rows lock").clone();
+            rows.reverse();
+            Ok(rows)
+        }
+
+        async fn get(&self, id: &str) -> Result<Option<RecipeProjectRow>> {
+            let rows = self.rows.lock().expect("rows lock");
+            Ok(rows.iter().find(|r| r.id == id).cloned())
+        }
+
+        async fn provision(
+            &self,
+            id: &str,
+            title: &str,
+            charter_md: &str,
+        ) -> Result<RecipeProjectRow> {
+            if id.is_empty() {
+                return Err(Error::InvalidInput(
+                    "recipe project id cannot be empty".into(),
+                ));
+            }
+            let mut rows = self.rows.lock().expect("rows lock");
+            if rows.iter().any(|r| r.id == id) {
+                return Err(Error::InvalidInput(format!(
+                    "recipe project '{id}' already exists"
+                )));
+            }
+            let at = now();
+            let row = RecipeProjectRow {
+                id: id.into(),
+                title: title.into(),
+                charter_md: charter_md.into(),
+                created_at: at,
+                updated_at: at,
+                archived_at: None,
+            };
+            rows.push(row.clone());
+            Ok(row)
+        }
+
+        async fn create(
+            &self,
+            title: &str,
+            charter_md: &str,
+            kind: ArtifactKind,
+        ) -> Result<Box<dyn RecipeProjectHandle>> {
+            let id = format!("double-{}", self.rows.lock().expect("rows lock").len() + 1);
+            let row = self.provision(&id, title, charter_md).await?;
+            self.summaries.lock().expect("summaries lock").insert(
+                id.clone(),
+                ProjectSummary {
+                    feature_id: id,
+                    title: title.into(),
+                    artifact_kind: kind,
+                    recipe_id: None,
+                    current_sample_size: None,
+                    last_test_status: None,
+                    last_test_at: None,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                },
+            );
+            Ok(self.handle(&row))
+        }
+
+        async fn load(&self, feature_id: &str) -> Result<Box<dyn RecipeProjectHandle>> {
+            match self.get(feature_id).await? {
+                Some(row) => Ok(self.handle(&row)),
+                None => Err(Error::InvalidInput(format!(
+                    "no recipe-author project with feature_id `{feature_id}`"
+                ))),
+            }
+        }
+
+        fn artifact_root(&self, kind: ArtifactKind) -> Option<PathBuf> {
+            let root = self
+                .artifact_root
+                .as_ref()
+                .unwrap_or_else(|| panic!("{}", unprogrammed("artifact_root")));
+            Some(match kind {
+                ArtifactKind::Recipe => root.join("recipes"),
+                ArtifactKind::Workflow => root.join("workflows"),
+            })
+        }
+    }
+}

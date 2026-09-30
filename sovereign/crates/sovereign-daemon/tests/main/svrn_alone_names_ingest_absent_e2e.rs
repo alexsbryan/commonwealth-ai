@@ -8,7 +8,8 @@
 //! - `/mcp` lists none of ingest's tools (`wikipedia_fetch`, `sec_facts`,
 //!   the corpus/atlas plane) and still serves its own (`solve`);
 //! - the landscape digest, the watched-folder routes and the collaborate
-//!   kickoff answer 503 naming the ingest program, never a 404.
+//!   kickoff, and the recipe-project routes (pb-ingest-rehome-daemon),
+//!   answer 503 naming the ingest program, never a 404.
 //!
 //! The same acts completing on the stock binary are sovereign-stock's
 //! `ingest_composed_e2e`. Linux only, like its sibling process e2es.
@@ -190,10 +191,13 @@ fn svrn_alone_names_the_ingest_program_where_it_needs_one() {
         );
     }
 
-    // The routes that need ingest answer 503 naming it.
+    // The routes that need ingest answer 503 naming it. The recipe-project
+    // store is ingest's since pb-ingest-rehome-daemon.
     for (port, method, path, body) in [
         (client, "POST", "/v1/knowledge/landscape_digest", "{}"),
         (client, "GET", "/internal/corpus/local", ""),
+        (client, "GET", "/v1/features/projects", ""),
+        (client, "GET", "/v1/recipe-projects", ""),
         (
             internal,
             "POST",

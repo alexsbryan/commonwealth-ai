@@ -118,7 +118,7 @@ fn serving_with(
             state_store,
             runtime: runtime(),
             insights: None,
-            features: None,
+            features: Err(crate::features_http::NO_FEATURES_DB.to_string()),
         },
         capability: ServingCapability {
             mcp: McpSurface::Unavailable {

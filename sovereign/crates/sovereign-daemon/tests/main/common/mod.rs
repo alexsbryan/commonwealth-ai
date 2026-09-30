@@ -26,6 +26,7 @@ use kernel_types::{MeshId, NodeId};
 
 use corpus_index::ingest_port::daemon::{IngestPort, RecipeHarnessPort};
 use corpus_index::ingest_port::double::{IngestPortDouble, RecipeHarnessDouble};
+use sovereign_contracts::recipe::project::RecipeProjectPort;
 
 pub use sovereign_daemon::double::ledger_double;
 pub use sovereign_daemon::double::{
@@ -239,8 +240,7 @@ pub struct DesktopParts {
     pub store: Arc<dyn sovereign_contracts::traits::StateStore>,
     pub runtime: Arc<sovereign_core::runtime::Runtime>,
     pub insights: Option<Arc<sovereign_core::insight::InsightService>>,
-    pub features:
-        Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
+    pub features: Result<Arc<dyn RecipeProjectPort>, String>,
     pub mcp: sovereign_daemon::McpSurface,
 }
 
@@ -255,7 +255,7 @@ impl DesktopParts {
             store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
             runtime: stub_runtime(Arc::new(TestProvider::new()), None),
             insights: None,
-            features: None,
+            features: Err(sovereign_daemon::features_http::NO_FEATURES_DB.to_string()),
             mcp: sovereign_daemon::McpSurface::Unavailable {
                 reason: "test fixture: no tool registry".into(),
             },
@@ -363,9 +363,18 @@ pub fn stub_runtime_with_skills(
     ))
 }
 
+/// `None` is the commission whose `features.db` would not open — the 503
+/// the routes name.
+fn features_or_unopened(
+    features: Option<Arc<dyn RecipeProjectPort>>,
+) -> Result<Arc<dyn RecipeProjectPort>, String> {
+    features.ok_or_else(|| sovereign_daemon::features_http::NO_FEATURES_DB.to_string())
+}
+
 /// A serving desktop commission carrying svrn's real store (behind a
 /// mounted `/mcp` surface, which is where `EmbeddedDaemon::notes_store`
-/// reads it from) and a real `RecipeProjectStore`.
+/// reads it from) and a recipe-project port (the double, or `None` for the
+/// store that would not open).
 ///
 /// The three fixtures above leave both absent, which is the right shape
 /// for testing the named 503 and the wrong one for testing the routes.
@@ -375,10 +384,10 @@ pub fn stub_runtime_with_skills(
 pub fn desktop_services_with_note_and_feature_stores(
     engine: Arc<dyn IngestPort>,
     notes: Arc<sovereign_store::sqlite::SqliteStateStore>,
-    features: Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
+    features: Option<Arc<dyn RecipeProjectPort>>,
 ) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts {
-        features,
+        features: features_or_unopened(features),
         ..DesktopParts::new(engine)
             .mounted(Arc::new(sovereign_contracts::ToolRegistry::new()), notes)
     })
@@ -397,11 +406,11 @@ pub fn desktop_services_with_note_and_feature_stores(
 pub fn desktop_services_with_tool_registry(
     engine: Arc<dyn IngestPort>,
     notes: Arc<sovereign_store::sqlite::SqliteStateStore>,
-    features: Option<Arc<sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore>>,
+    features: Option<Arc<dyn RecipeProjectPort>>,
     tools: Arc<sovereign_contracts::ToolRegistry>,
 ) -> sovereign_daemon::DaemonServices {
     desktop_services(DesktopParts {
-        features,
+        features: features_or_unopened(features),
         ..DesktopParts::new(engine).mounted(tools, notes)
     })
 }
