@@ -33,6 +33,9 @@ pub(super) async fn cmd_corpus_status(args: &[String]) -> i32 {
         .iter()
         .map(|s| s.as_str())
         .find(|a| !a.starts_with('-'));
+    if args.iter().any(|a| a == "--drift") {
+        return print_enrichment_drift(filter).await;
+    }
     let mut rows = match scan_corpus_rows(&indexes_dir) {
         Ok(r) => r,
         Err(e) => {
@@ -105,6 +108,34 @@ pub(super) async fn cmd_corpus_status(args: &[String]) -> i32 {
             cache,
             tokens
         );
+    }
+    0
+}
+
+/// `svrn corpus status <corpus> --drift`: the corpus's declared-vs-built
+/// enrichment drift (`CorpusEngine::enrichment_drift`, the one decider), one
+/// line on stdout when its recipe declares an enrichment none of whose
+/// artifacts is on disk, nothing when it is not stale. `svrn bench
+/// parity-compare` reads it to flag a confounded run. A disk read of the
+/// recipes and indexes under the svrnmesh root; a noop-embed engine is all it
+/// needs (no Runtime, no store).
+async fn print_enrichment_drift(corpus: Option<&str>) -> i32 {
+    let Some(corpus) = corpus else {
+        eprintln!("error: --drift needs a <corpus>");
+        return 2;
+    };
+    let svrnmesh = sovereign_contracts::rebrand::svrnmesh_root();
+    let engine = corpus_engine::CorpusEngine::new(
+        svrnmesh.join("recipes"),
+        svrnmesh.join("indexes"),
+        std::sync::Arc::new(|_: &str| {
+            Box::pin(async move { Ok::<Vec<f32>, corpus_index::Error>(Vec::new()) })
+        }),
+    );
+    let drift = engine.enrichment_drift(corpus).await;
+    tracing::debug!(corpus, stale = drift.is_some(), "corpus status --drift");
+    if let Some(reason) = drift {
+        println!("{reason}");
     }
     0
 }

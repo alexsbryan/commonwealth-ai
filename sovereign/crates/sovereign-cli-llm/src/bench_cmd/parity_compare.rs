@@ -197,6 +197,23 @@ fn parse_parity_args(rest: &[String]) -> Result<ParityArgs, String> {
     })
 }
 
+/// `svrn corpus status <corpus> --drift` through the dispatcher: `Some(reason)`
+/// when the corpus's declared enrichment was never built, `None` when it was.
+fn corpus_drift(corpus: &str) -> Result<Option<String>, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
+    let svrn = sovereign_cli_base::dispatcher::dispatcher_exe(&exe)?;
+    let out = std::process::Command::new(&svrn)
+        .args(["corpus", "status", corpus, "--drift"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| format!("spawn {}: {e}", svrn.display()))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let reason = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    Ok((!reason.is_empty()).then_some(reason))
+}
+
 pub async fn cmd_parity_compare(args: &[String]) -> i32 {
     if args
         .iter()
@@ -271,17 +288,15 @@ pub async fn cmd_parity_compare(args: &[String]) -> i32 {
     // recipe promises — a confounded comparison that would read as spurious
     // desktop deficiency. Surface it loudly; the run still proceeds (glassbox
     // over silent skip) but the report records the staleness so CI can gate on it.
-    // A disk read of svrn's recipes and indexes, which has no route; a
-    // noop-embed engine is all it needs (no Runtime, no store).
-    let svrnmesh = sovereign_contracts::rebrand::svrnmesh_root();
-    let drift_engine = corpus_engine::CorpusEngine::new(
-        svrnmesh.join("recipes"),
-        svrnmesh.join("indexes"),
-        std::sync::Arc::new(|_: &str| {
-            Box::pin(async move { Ok::<Vec<f32>, corpus_index::Error>(Vec::new()) })
-        }),
-    );
-    let corpus_stale_reason = drift_engine.enrichment_drift(&corpus).await;
+    // Ingest owns the decider (`CorpusEngine::enrichment_drift`); its verb
+    // `svrn corpus status <corpus> --drift` prints the reason, or nothing.
+    let corpus_stale_reason = match corpus_drift(&corpus) {
+        Ok(reason) => reason,
+        Err(e) => {
+            eprintln!("[parity] WARN: could not read `{corpus}`'s enrichment drift: {e}");
+            None
+        }
+    };
     if let Some(reason) = &corpus_stale_reason {
         eprintln!("[parity] WARN: corpus `{corpus}` looks STALE — {reason}");
         eprintln!(
