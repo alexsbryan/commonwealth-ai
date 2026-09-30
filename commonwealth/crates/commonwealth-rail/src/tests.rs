@@ -477,6 +477,118 @@ fn a_forked_window_with_a_tiny_budget_still_converges() {
     assert_eq!(fa, fb);
 }
 
+/// **The mutual-removal resolver is deterministic across nodes.** The
+/// amendment's "two members removing each other… the rail's order picks one"
+/// — with both cuts arriving at BOTH nodes in OPPOSITE orders. The rail's
+/// order is content-derived: both nodes fold the same survivor (alex's cut
+/// sorts first at ts 100, so bo is out and bo's counter-cut is NotAMember).
+/// The arrival-order defect's WATCH is the battery in
+/// `membership.rs::every_interleaving_of_a_membership_set_folds_identically`
+/// — measured, not assumed: this end-to-end form stays green under that
+/// plant because `admit` hands the fold an OpId-ordered set, canonicalizing
+/// arrival before the walk. This test pins the property across a wire and
+/// the survivor by name; the battery pins the fold.
+#[test]
+fn two_nodes_that_receive_the_cuts_in_opposite_orders_agree() {
+    let (dir_a, dir_b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (a, b) = (open(dir_a.path()), open(dir_b.path()));
+    let r = ring();
+
+    let alex_cut = signed(
+        &key(1),
+        100,
+        0,
+        RailAct::Remove {
+            key: actor_of(&key(2)),
+            through_seq: 0,
+        },
+    );
+    let bo_cut = signed(
+        &key(2),
+        101,
+        0,
+        RailAct::Remove {
+            key: actor_of(&key(1)),
+            through_seq: 0,
+        },
+    );
+    // Same SET, opposite ARRIVAL.
+    a.ingest_all(&[alex_cut.clone(), bo_cut.clone()]).unwrap();
+    b.ingest_all(&[bo_cut.clone(), alex_cut.clone()]).unwrap();
+
+    let (fa, fb) = (
+        a.admit(&r, &Ed25519Verifier).unwrap(),
+        b.admit(&r, &Ed25519Verifier).unwrap(),
+    );
+    assert_eq!(
+        fa, fb,
+        "the rail's order picks one — the same one on both nodes"
+    );
+    let not_member = fa
+        .gaps
+        .iter()
+        .filter(|g| matches!(g, RailGap::NotAMember { .. }))
+        .count();
+    assert_eq!(
+        not_member, 1,
+        "exactly bo's counter-cut is unstanding: {:?}",
+        fa.gaps
+    );
+    assert!(
+        fa.ops.iter().any(|o| o.id == alex_cut.id),
+        "alex's cut counted — it sorted first, so bo was already out when theirs arrived"
+    );
+}
+
+/// **A3's cost, measured once** (ROOT_CAUSE_FIXES, cross-cutting bar): every
+/// append re-checks the journal's signatures to build its view. This records
+/// the shape — time per append against journal size, and the act's own size —
+/// and asserts only a generous ceiling: the NUMBERS are the bar, and a tight
+/// ceiling would be a flake. The committed figures live in the commit body.
+#[test]
+fn the_views_cost_is_measured_and_bounded() {
+    let dir = tempfile::tempdir().unwrap();
+    let journal = open(dir.path());
+    let r = ring();
+
+    let mut sizes = Vec::new();
+    for &n in &[200usize, 1000, 5000] {
+        // Seed without paying the view cost (ingest does not mint views).
+        let start = journal.read().unwrap().0.len();
+        let ops: Vec<_> = (start..n)
+            .map(|seq| {
+                signed(
+                    &key(1),
+                    1_700_000_000 + seq as i64,
+                    seq as u64,
+                    record("seed"),
+                )
+            })
+            .collect();
+        journal.ingest_all(&ops).unwrap();
+
+        let t = std::time::Instant::now();
+        let written = journal
+            .append(record("measured"), &key(2), &r, None, &Ed25519Verifier)
+            .unwrap();
+        let per_append = t.elapsed();
+        let act_bytes = serde_json::to_vec(&written).unwrap().len();
+        sizes.push((n, per_append, act_bytes));
+        eprintln!(
+            "A3 cost: journal {n} ops — one append (with its view) took \
+             {per_append:?}; the act is {act_bytes} bytes"
+        );
+        assert!(
+            per_append < std::time::Duration::from_secs(5),
+            "append at {n} ops took {per_append:?} — the view re-check is unbounded"
+        );
+        assert!(act_bytes < 16 * 1024, "the act itself is {act_bytes} bytes");
+    }
+    // The shape is the point: cost grows with the journal (one verify per
+    // held op per append). Recorded, not asserted — see the commit body.
+    assert_eq!(sizes.len(), 3);
+}
+
 /// **A peer that dies mid-sync leaves a hole, and the hole is named.**
 ///
 /// Half of B's ops reach A. A must not report a clean answer over what it

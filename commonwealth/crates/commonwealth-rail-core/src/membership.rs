@@ -140,10 +140,17 @@ pub fn membership<'a>(
         counted.insert(derived_id(op));
         match &op.kind.act {
             RailAct::Admit { person, key } => {
+                tracing::debug!(
+                    target: "rail:membership",
+                    key = %key,
+                    person = %person,
+                    "membership: standing gained"
+                );
                 bindings.insert(key.clone(), person.clone());
                 live.insert(key.clone(), person.clone());
             }
             RailAct::Remove { key, .. } => {
+                tracing::debug!(target: "rail:membership", key = %key, "membership: standing lost");
                 live.remove(key);
             }
             _ => {}
@@ -192,6 +199,18 @@ mod tests {
             RailAct::Remove {
                 key: actor_of(&key(leaving)),
                 through_seq,
+            },
+        )
+    }
+
+    fn void(by: u8, ts: i64, seq: u64, target: &Op<SignedOp>) -> Op<SignedOp> {
+        signed(
+            &key(by),
+            ts,
+            seq,
+            RailAct::Correct {
+                corrects: derived_id(target),
+                replacement: None,
             },
         )
     }
@@ -327,5 +346,45 @@ mod tests {
             "and not after the cut — position-scoped standing"
         );
         let _ = Ed25519Verifier;
+    }
+
+    /// **The permutation contract at breadth** (leg 1's battery): sixty-four
+    /// seeded shuffles of a set carrying every interesting pair — a mutual
+    /// removal, an Admit racing its own void, a re-Admit after a cut — and
+    /// every shuffle folds identically. The seed is fixed so the battery is
+    /// deterministic; the assertion is the CONTRACT (arrival never reaches
+    /// the answer), and the shuffles are the arrival orders a live room
+    /// produces.
+    #[test]
+    fn every_interleaving_of_a_membership_set_folds_identically() {
+        let seed = seed_of(&[(1, "alex")]);
+        let raced = admit_act(1, 104, 2, "dee", 4);
+        let ops = vec![
+            admit_act(1, 100, 0, "bo", 2),
+            admit_act(1, 101, 1, "cy", 3),
+            remove_act(2, 102, 0, 3, 1),
+            remove_act(3, 103, 0, 2, 0),
+            raced.clone(),
+            void(1, 105, 3, &raced),
+            admit_act(1, 106, 3, "bo", 2),
+            signed(&key(2), 107, 1, record("bo-writes")),
+            remove_act(1, 108, 4, 2, 1),
+        ];
+        let base = membership(ops.iter(), &seed);
+        let mut state: u64 = 0x5eed;
+        for round in 0..64u64 {
+            let mut order: Vec<&Op<SignedOp>> = ops.iter().collect();
+            // A fixed-seed LCG shuffle — deterministic, no new dependency.
+            for i in (1..order.len()).rev() {
+                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let j = (state >> 33) as usize % (i + 1);
+                order.swap(i, j);
+            }
+            assert_eq!(
+                membership(order.iter().copied(), &seed),
+                base,
+                "interleaving {round} changed the answer — arrival reached the fold"
+            );
+        }
     }
 }
