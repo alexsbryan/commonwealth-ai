@@ -34,11 +34,11 @@ use oicp_client::RemoteApiProvider;
 use serde::Serialize;
 use sovereign_contracts::probe::{ProbeEvidence, ProbeMode, ProbeRequest};
 use sovereign_contracts::traits::InferenceProvider;
-use sovereign_core::oicp::ShardingPrivacy;
-use sovereign_core::runtime::{claim_chunk_support, extract_claim_list};
 use sovereign_eval::faithfulness::{plan_judge_sample, score, ClaimRecord, NodeMeta, SampleMode};
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
+
+use super::svrn_judge::SvrnJudge;
 
 const PROVIDER_CTX: u32 = 8192;
 /// Production parity: the gate checks at most 12 chunks per claim
@@ -145,10 +145,9 @@ struct NodeWork {
 async fn run(rest: &[String]) -> i32 {
     let mut corpus_arg: Option<String> = None;
     let mut out: Option<PathBuf> = None;
-    let mut model = sovereign_core::role::default_profile_for(sovereign_core::role::Role::Critic)
-        .preferred_tier
-        .model_stem()
-        .to_string();
+    // `None` = svrn's Critic profile's model, the role the gate routes its
+    // judgement under; svrn's probe resolves it below.
+    let mut model: Option<String> = None;
     // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
     let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
     let mut max_claims: usize = 4;
@@ -174,7 +173,7 @@ async fn run(rest: &[String]) -> i32 {
         match rest[i].as_str() {
             "--corpus" => corpus_arg = Some(val!("--corpus")),
             "--out" => out = Some(PathBuf::from(val!("--out"))),
-            "--model" => model = val!("--model"),
+            "--model" => model = Some(val!("--model")),
             "--base-url" => base_url = val!("--base-url"),
             "--max-claims" => match val!("--max-claims").parse() {
                 Ok(v) if v > 0 => max_claims = v,
@@ -324,6 +323,18 @@ async fn run(rest: &[String]) -> i32 {
     // and the gate's mixed-judge guard plus LaneBaseline attribution both
     // key on the stem. Resolution failure is a hard stop: an artifact
     // whose judge is unknown cannot be compared to anything.
+    // The claim registers are svrn's, answered by svrn on the same daemon.
+    let svrn = SvrnJudge::new(&base_url, PROVIDER_CTX);
+    let model = match model {
+        Some(m) => m,
+        None => match svrn.critic_and_threshold(None).await {
+            Ok((m, _)) => m,
+            Err(e) => {
+                eprintln!("error: could not ask svrn for its critic model: {e}");
+                return 1;
+            }
+        },
+    };
     let judge_stem = match super::model_resolve::resolve_model_attribution(&base_url, &model).await
     {
         Some(attr) => attr.file_stem,
@@ -421,15 +432,14 @@ async fn run(rest: &[String]) -> i32 {
             }
         }
 
-        let claims = match extract_claim_list(
-            &provider,
-            NODE_QUESTION,
-            &w.summary,
-            max_claims,
-            ShardingPrivacy::LocalOnly,
-        )
-        .await
-        {
+        let extracted = svrn
+            .claim_list(Some(&model), NODE_QUESTION, &w.summary, max_claims)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("faithfulness: svrn's probe could not extract claims: {e}");
+                None
+            });
+        let claims = match extracted {
             Some(c) if c.is_empty() => {
                 n_no_claim += 1;
                 continue;
@@ -467,9 +477,7 @@ async fn run(rest: &[String]) -> i32 {
             let mut max_support = 0.0f64;
             let mut checked = 0usize;
             for passage in ranked.into_iter().take(CHUNK_CAP) {
-                match claim_chunk_support(&provider, passage, claim, ShardingPrivacy::LocalOnly)
-                    .await
-                {
+                match svrn.claim_chunk_support(&model, passage, claim).await {
                     Some(support) => {
                         checked += 1;
                         if support > max_support {

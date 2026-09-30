@@ -167,6 +167,24 @@ impl SvrnJudge {
         }
     }
 
+    /// The gate's `claim_chunk_support`: support in [0,1], or `None` on a
+    /// judge failure or when the probe could not run (named on stderr).
+    pub(crate) async fn claim_chunk_support(
+        &self,
+        model: &str,
+        passage: &str,
+        claim: &str,
+    ) -> Option<f64> {
+        let op = JudgeOp::ClaimChunkSupport {
+            passage: passage.to_string(),
+            claim: claim.to_string(),
+        };
+        match self.judge_one(model, op).await? {
+            JudgeAnswer::ClaimChunkSupport { support } => support,
+            _ => None,
+        }
+    }
+
     /// One judge op and its one answer. A probe that could not run is the
     /// op's own failure (`None` / `Err`), named on stderr.
     pub(crate) async fn judge_one(&self, model: &str, op: JudgeOp) -> Option<JudgeAnswer> {
