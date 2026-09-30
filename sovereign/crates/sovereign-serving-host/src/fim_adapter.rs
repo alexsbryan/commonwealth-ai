@@ -33,14 +33,16 @@ use std::time::Instant;
 
 use futures::StreamExt;
 use oicp_types::openai_types::{self as wire};
-use oicp_types::{EditSlotStatus, FimCompletionRequest, FimStreamStart};
+use oicp_types::{FimCompletionRequest, FimStreamStart};
 use sovereign_contracts::fim::{decide_mode, Feed, FimMode, FimStopTracker, StopOutcome};
 use sovereign_contracts::traits::InferenceProvider;
-use sovereign_contracts::types::{
-    CompletionRequest, EditSlotInfo, PromptShape, SamplingMode, StreamFrame,
-};
+use sovereign_contracts::types::{CompletionRequest, PromptShape, SamplingMode, StreamFrame};
 
 use crate::inference_adapter::{translate_finish_reason, translate_stream_usage};
+
+/// `/status.inference.edit`'s one decider, in the contracts leaf since
+/// pb-serve-ranks: svrn's OpenAI pass-through answers it too.
+pub(crate) use sovereign_contracts::fim_http::edit_status;
 
 /// 503 message when no editing model exists at all — carries the exact
 /// config fix so a first-time setup never needs to read daemon logs.
@@ -88,66 +90,6 @@ fn head_chars(s: &str, max: usize) -> &str {
         s
     } else {
         &s[..s.floor_char_boundary(max)]
-    }
-}
-
-/// Static editing-slot description for `/status.inference.edit`.
-///
-/// The one translation across the commonwealth-api seam (that crate
-/// deliberately names no `sovereign_*` types — same convention as
-/// `ResidentSlot`). Each lane maps to an `Option`: absent means the
-/// slot cannot serve that lane, which is a reportable state rather
-/// than an error.
-pub(crate) fn edit_status(provider: &Arc<dyn InferenceProvider>) -> Option<EditSlotStatus> {
-    provider.edit_slot_info().map(|info| {
-        let advice = edit_slot_advice(&info);
-        EditSlotStatus {
-            slot: info.slot,
-            model_id: info.model_id,
-            aliased_to_fast: info.aliased_to_fast,
-            degraded: info.degraded,
-            next_edit_format: info.next_edit.map(|l| l.format.as_str().to_string()),
-            fim_style: info.fim.map(|l| l.style.as_str().to_string()),
-            advice,
-        }
-    })
-}
-
-/// The operator-facing next step for this arrangement, or `None` when
-/// nothing is worth saying.
-///
-/// One decider for the nudge (ARCH §10.6): `doctor`, `svrn status`, the
-/// desktop and the editor extension all render `/status`, and each
-/// composing its own advice string is how three surfaces end up giving
-/// three different answers to "what should I do about this".
-///
-/// Deliberately silent for a fully-specialised slot — advice nobody
-/// needs is noise, and a status field that always has content stops
-/// being read.
-fn edit_slot_advice(info: &EditSlotInfo) -> Option<String> {
-    match (info.degraded, info.fim.is_some()) {
-        // The graceful-degradation case: suggestions work off the
-        // resident chat model. Name the trade, not just the state —
-        // measured 2026-08-07, a 1.5B specialist matched this quality
-        // (19/30 vs 21/30 on the 60-case gen bank) at ~3x the speed.
-        (true, _) => Some(
-            "Next-edit is being served by the resident chat model because no \
-             [models.edit] is configured. Suggestions work. A dedicated edit \
-             model (~1.5 GB) returns them roughly 3x faster and adds \
-             /v1/completions: set [models.edit].path in ~/.sovereign/config.toml."
-                .to_string(),
-        ),
-        // Operator chose this model, but it cannot do FIM. Worth
-        // saying once, because /v1/completions will 503 and the cause
-        // is invisible from the route's perspective.
-        (false, false) => Some(
-            "This editing model serves next-edit but not fill-in-the-middle: its \
-             tokenizer carries no FIM markers, so /v1/completions returns 503. \
-             Point [models.edit].path at a coder GGUF (Mellum2, Qwen2.5-Coder) \
-             if you need inline completion."
-                .to_string(),
-        ),
-        (false, true) => None,
     }
 }
 

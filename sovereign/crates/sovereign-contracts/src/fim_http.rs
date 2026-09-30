@@ -9,12 +9,14 @@
 //! server named: the aggregate is an `http::Response<String>` and the stream
 //! a run of [`SseItem`]s; each door's axum wrapper renders them (svrn's
 //! `sovereign_daemon::openai_http`, serve's `sovereign_serving_host::fim_http`).
+//! [`edit_status`], `/status.inference.edit`, joined at pb-serve-ranks: serve's
+//! adapter and svrn's OpenAI pass-through both answer it.
 
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use http::{header::CONTENT_TYPE, HeaderValue, Response, StatusCode};
 use oicp_types::openai_types::{ErrorResponse, StreamFrame};
-use oicp_types::FimStreamStart;
+use oicp_types::{EditSlotStatus, FimStreamStart};
 
 use crate::openai_http::SseItem;
 
@@ -181,4 +183,66 @@ pub fn fim_sse_items(
     });
     let done = futures::stream::once(async { SseItem::Data("[DONE]".to_string()) });
     chunks.chain(done).boxed()
+}
+
+/// Static editing-slot description for `/status.inference.edit`.
+///
+/// The one translation across the commonwealth-api seam (that crate
+/// deliberately names no `sovereign_*` types — same convention as
+/// `ResidentSlot`). Each lane maps to an `Option`: absent means the
+/// slot cannot serve that lane, which is a reportable state rather
+/// than an error.
+pub fn edit_status(
+    provider: &std::sync::Arc<dyn crate::traits::InferenceProvider>,
+) -> Option<EditSlotStatus> {
+    provider.edit_slot_info().map(|info| {
+        let advice = edit_slot_advice(&info);
+        EditSlotStatus {
+            slot: info.slot,
+            model_id: info.model_id,
+            aliased_to_fast: info.aliased_to_fast,
+            degraded: info.degraded,
+            next_edit_format: info.next_edit.map(|l| l.format.as_str().to_string()),
+            fim_style: info.fim.map(|l| l.style.as_str().to_string()),
+            advice,
+        }
+    })
+}
+
+/// The operator-facing next step for this arrangement, or `None` when
+/// nothing is worth saying.
+///
+/// One decider for the nudge (ARCH §10.6): `doctor`, `svrn status`, the
+/// desktop and the editor extension all render `/status`, and each
+/// composing its own advice string is how three surfaces end up giving
+/// three different answers to "what should I do about this".
+///
+/// Deliberately silent for a fully-specialised slot — advice nobody
+/// needs is noise, and a status field that always has content stops
+/// being read.
+fn edit_slot_advice(info: &crate::types::EditSlotInfo) -> Option<String> {
+    match (info.degraded, info.fim.is_some()) {
+        // The graceful-degradation case: suggestions work off the
+        // resident chat model. Name the trade, not just the state —
+        // measured 2026-08-07, a 1.5B specialist matched this quality
+        // (19/30 vs 21/30 on the 60-case gen bank) at ~3x the speed.
+        (true, _) => Some(
+            "Next-edit is being served by the resident chat model because no \
+             [models.edit] is configured. Suggestions work. A dedicated edit \
+             model (~1.5 GB) returns them roughly 3x faster and adds \
+             /v1/completions: set [models.edit].path in ~/.sovereign/config.toml."
+                .to_string(),
+        ),
+        // Operator chose this model, but it cannot do FIM. Worth
+        // saying once, because /v1/completions will 503 and the cause
+        // is invisible from the route's perspective.
+        (false, false) => Some(
+            "This editing model serves next-edit but not fill-in-the-middle: its \
+             tokenizer carries no FIM markers, so /v1/completions returns 503. \
+             Point [models.edit].path at a coder GGUF (Mellum2, Qwen2.5-Coder) \
+             if you need inline completion."
+                .to_string(),
+        ),
+        (false, true) => None,
+    }
 }
