@@ -76,12 +76,9 @@ use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::Response;
 use commonwealth_core::Clock;
-use commonwealth_media::MemberIdentity;
-use commonwealth_transport::iroh_identity_forward::{
-    is_acceptor_mark, ACCEPTOR_MARK_HEADER, MESH_HEADER_PREFIX,
-};
+use commonwealth_transport::iroh_identity_forward::{is_acceptor_mark, ACCEPTOR_MARK_HEADER};
 use commonwealth_transport::mesh_proof::MESH_PROOF_HEADER;
-use kernel_types::member::ORIGIN_TIE_HEADER;
+use kernel_types::member::{MemberIdentity, MESH_HEADER_PREFIX, ORIGIN_TIE_HEADER};
 use kernel_types::{NodeId, NodePubkey};
 use sovereign_contracts::principal::Principal;
 
