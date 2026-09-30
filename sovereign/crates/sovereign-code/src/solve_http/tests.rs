@@ -1,5 +1,8 @@
 //! The solve surface's route tests (moved from the svrn daemon at
-//! pb-meshapp-solve).
+//! pb-meshapp-solve). A submit probes serve's ready door, so the tests that
+//! get past it stand a fixture serve on a loopback port; its chat route is
+//! absent, so an accepted job errors in the background as it did against
+//! the closed port these tests used before. A closed port is "no serve".
 
 use super::*;
 use axum::body::Body;
@@ -32,6 +35,22 @@ fn app(jobs: Arc<SolveJobs>) -> Router {
     solve_router(jobs).layer(Extension(axum::extract::ConnectInfo(loopback)))
 }
 
+/// Nothing listens on loopback port 1: the probe is refused at once.
+const NO_SERVE: &str = "http://127.0.0.1:1";
+
+/// A loopback listener that answers serve's ready door (`/v1/models`) and
+/// nothing else; its base.
+async fn fixture_serve() -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = Router::new().route(
+        "/v1/models",
+        get(|| async { Json(serde_json::json!({ "object": "list", "data": [] })) }),
+    );
+    tokio::spawn(async move { axum::serve(listener, router).await });
+    base
+}
+
 fn submit_body(workdir: &std::path::Path) -> String {
     serde_json::json!({
         "workdir": workdir,
@@ -57,7 +76,7 @@ async fn post_submit(app: &Router, body: String) -> (StatusCode, serde_json::Val
 
 #[tokio::test]
 async fn submit_returns_202_with_detected() {
-    let jobs = Arc::new(SolveJobs::new("http://127.0.0.1:1")); // port 1: backend unreachable, job just errors in background
+    let jobs = Arc::new(SolveJobs::new(fixture_serve().await));
     let app = app(Arc::clone(&jobs));
     let repo = fresh_repo();
     std::fs::write(repo.path().join("Cargo.toml"), "[package]\nname=\"x\"\n").unwrap();
@@ -82,7 +101,7 @@ async fn submit_returns_202_with_detected() {
 
 #[tokio::test]
 async fn dirty_workdir_is_refused_422() {
-    let jobs = Arc::new(SolveJobs::new("http://127.0.0.1:1"));
+    let jobs = Arc::new(SolveJobs::new(NO_SERVE));
     let app = app(jobs);
     let repo = fresh_repo();
     std::fs::write(repo.path().join("wip.txt"), "x").unwrap();
@@ -92,9 +111,30 @@ async fn dirty_workdir_is_refused_422() {
     assert_eq!(v["kind"], "uncommitted_changes");
 }
 
+/// The solver's model is serve's (phase-b-33 item 9): with nothing at the
+/// base, a clean submit is refused by name, serve and the base both, and
+/// no job is registered.
+#[tokio::test]
+async fn submit_without_serve_is_refused_503_naming_serve_and_base() {
+    let jobs = Arc::new(SolveJobs::new(NO_SERVE));
+    let app = app(Arc::clone(&jobs));
+    let repo = fresh_repo();
+    let (status, v) = post_submit(&app, submit_body(repo.path())).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{v}");
+    assert_eq!(v["error"], "serve_unreachable");
+    assert_eq!(v["base"], NO_SERVE);
+    let message = v["message"].as_str().unwrap_or_default();
+    assert!(message.contains("`serve`"), "{message}");
+    assert!(message.contains(NO_SERVE), "{message}");
+    assert!(
+        jobs.jobs.lock().unwrap().is_empty(),
+        "a refused submit left a job"
+    );
+}
+
 #[tokio::test]
 async fn one_job_per_workdir_conflicts_409() {
-    let jobs = Arc::new(SolveJobs::new("http://127.0.0.1:1"));
+    let jobs = Arc::new(SolveJobs::new(fixture_serve().await));
     let app = app(Arc::clone(&jobs));
     let repo = fresh_repo();
     let (s1, v1) = post_submit(&app, submit_body(repo.path())).await;
@@ -108,7 +148,7 @@ async fn one_job_per_workdir_conflicts_409() {
 
 #[tokio::test]
 async fn global_capacity_enforced_429() {
-    let jobs = Arc::new(SolveJobs::new("http://127.0.0.1:1"));
+    let jobs = Arc::new(SolveJobs::new(fixture_serve().await));
     let app = app(Arc::clone(&jobs));
     let repos: Vec<_> = (0..3).map(|_| fresh_repo()).collect();
     let mut ids = Vec::new();
@@ -127,7 +167,7 @@ async fn global_capacity_enforced_429() {
 
 #[tokio::test]
 async fn cancel_flips_state_and_emits_done_event() {
-    let jobs = Arc::new(SolveJobs::new("http://127.0.0.1:1"));
+    let jobs = Arc::new(SolveJobs::new(fixture_serve().await));
     let app = app(Arc::clone(&jobs));
     let repo = fresh_repo();
     let (_, v) = post_submit(&app, submit_body(repo.path())).await;
@@ -165,7 +205,7 @@ async fn cancel_flips_state_and_emits_done_event() {
 
 #[tokio::test]
 async fn status_reports_state_and_rounds() {
-    let jobs = Arc::new(SolveJobs::new("http://127.0.0.1:1"));
+    let jobs = Arc::new(SolveJobs::new(fixture_serve().await));
     let app = app(Arc::clone(&jobs));
     let repo = fresh_repo();
     let (_, v) = post_submit(&app, submit_body(repo.path())).await;
@@ -190,7 +230,7 @@ async fn status_reports_state_and_rounds() {
 
 #[tokio::test]
 async fn unknown_job_404s() {
-    let jobs = Arc::new(SolveJobs::new("http://127.0.0.1:1"));
+    let jobs = Arc::new(SolveJobs::new(NO_SERVE));
     let app = app(jobs);
     let req = Request::builder()
         .uri("/v1/solve/jobs/nope")
@@ -203,7 +243,7 @@ async fn unknown_job_404s() {
 
 #[tokio::test]
 async fn split_verb_requires_max_lines() {
-    let jobs = Arc::new(SolveJobs::new("http://127.0.0.1:1"));
+    let jobs = Arc::new(SolveJobs::new(NO_SERVE));
     let app = app(jobs);
     let repo = fresh_repo();
     let body = serde_json::json!({
@@ -218,7 +258,7 @@ async fn split_verb_requires_max_lines() {
 
 #[tokio::test]
 async fn non_loopback_callers_are_rejected() {
-    let jobs = Arc::new(SolveJobs::new("http://127.0.0.1:1"));
+    let jobs = Arc::new(SolveJobs::new(NO_SERVE));
     let remote: SocketAddr = "10.0.0.7:1234".parse().unwrap();
     let app = solve_router(jobs).layer(Extension(axum::extract::ConnectInfo(remote)));
     let req = Request::builder()

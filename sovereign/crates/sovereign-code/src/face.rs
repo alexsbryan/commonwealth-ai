@@ -393,10 +393,10 @@ pub async fn compose(parts: CodeParts) -> Result<CodeFace, String> {
     }
     // ── The solver ──────────────────────────────────────────────
     // One job table behind `/v1/solve/jobs*` and the three MCP tools
-    // (pb-meshapp-solve). Its chat goes to svrn's `/v1/chat/completions`,
-    // the base the daemon handed it before the move.
+    // (pb-meshapp-solve). Its chat dials serve on this host, the base the
+    // editor door's model lane dials too (phase-b-33 item 9).
     let solve_jobs = Arc::new(crate::solve_http::SolveJobs::new(
-        sovereign_contracts::setup_config::client_daemon_base(),
+        sovereign_turn_client::serve_self::default_serve_base(),
     ));
     let bundles: Vec<Box<dyn sovereign_contracts::tool_bundle::ToolBundle>> = vec![
         Box::new(crate::bundle::SolveTools::new(Arc::clone(&solve_jobs))),

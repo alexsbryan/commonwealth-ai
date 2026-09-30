@@ -45,7 +45,7 @@ impl SolveTool {
     async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let wire: SubmitWire = serde_json::from_value(params.clone())
             .map_err(|e| Error::InvalidInput(format!("solve params: {e}")))?;
-        match self.0.submit(wire) {
+        match self.0.submit(wire).await {
             Ok(job) => Ok(StepOutput::Json(json!({
                 "job_id": job.id,
                 "detected": job.detected,

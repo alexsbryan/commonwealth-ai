@@ -13,8 +13,10 @@
 //! The surface is a thin job host over
 //! [`sovereign_tdd::tasks::solve`] — it adds queuing, live round
 //! events, and cancellation, and deliberately NO solver behavior.
-//! The backend is `/v1/chat/completions` at the base the host hands
-//! [`SolveJobs::new`].
+//! The backend is serve's `/v1/chat/completions` at the base the host
+//! hands [`SolveJobs::new`] (serve on this host, phase-b-33 item 9), so a
+//! solve round reaches the models serve loads and no model svrn routes.
+//! No serve at the base is a submit-time refusal naming serve and the base.
 //!
 //! Everything is in-memory: the job table dies with the host,
 //! events are ring-buffered per job. Limits: one running job per
@@ -459,8 +461,10 @@ fn framework_label(f: Framework) -> &'static str {
 
 pub struct SolveJobs {
     jobs: Mutex<HashMap<String, Arc<SolveJob>>>,
-    /// Base URL of the daemon's own OpenAI-compatible surface,
-    /// e.g. `http://127.0.0.1:9741/v1`.
+    /// The chat backend's host root, e.g. `http://127.0.0.1:9743`:
+    /// probed at submit, named in the refusal when it does not answer.
+    base: String,
+    /// `base` + `/v1`, the OpenAI-compatible surface the solver posts to.
     backend_url: String,
 }
 
@@ -481,16 +485,20 @@ pub enum SubmitError {
     /// verb below would execute stale code. Refused with the repair;
     /// `SOVEREIGN_ALLOW_STALE_SOLVE=1` opts out.
     StaleBinary { exe: String },
+    /// Nothing answered serve's ready door at the solver's base.
+    ServeUnreachable { base: String, reason: String },
 }
 
 impl SolveJobs {
-    /// `base` is the chat backend's host root (no `/v1`), e.g.
-    /// `http://127.0.0.1:9741`.
+    /// `base` is the chat backend's host root (no `/v1`); code's face
+    /// hands it serve's on this host
+    /// (`sovereign_turn_client::serve_self::default_serve_base`).
     pub fn new(base: impl Into<String>) -> Self {
-        let base = base.into();
+        let base = base.into().trim_end_matches('/').to_string();
         Self {
             jobs: Mutex::new(HashMap::new()),
-            backend_url: format!("{}/v1", base.trim_end_matches('/')),
+            backend_url: format!("{base}/v1"),
+            base,
         }
     }
 
@@ -501,7 +509,7 @@ impl SolveJobs {
     /// Vet the workdir, run submit-time detection, enforce limits,
     /// and spawn the runner. Returns the job (whose `detected` is
     /// the 202 payload) or a refusal.
-    pub fn submit(&self, req: SubmitWire) -> Result<Arc<SolveJob>, SubmitError> {
+    pub async fn submit(&self, req: SubmitWire) -> Result<Arc<SolveJob>, SubmitError> {
         // Before anything else: is THIS process the code the tree says it
         // is? A rebuild under a live daemon served six 2026-09-02 solve
         // attempts from a pre-dawn binary while every diagnostic on the
@@ -517,6 +525,20 @@ impl SolveJobs {
         let vetted =
             Workdir::check_safe(canonical.clone(), req.force).map_err(SubmitError::DirtyWorkdir)?;
         let verb = parse_verb(req.verb.as_deref(), req.max_lines)?;
+        // The solver's model is serve's (phase-b-33 item 9). One probe of
+        // serve's ready door, bringing nothing up (Q2): a job whose every
+        // candidate would die on a closed port is refused here, by name.
+        if let Err(reason) = sovereign_turn_client::ServingHost::at(&self.base)
+            .probe()
+            .await
+        {
+            tracing::debug!(base = %self.base, %reason, "solve: serve did not answer; refused");
+            return Err(SubmitError::ServeUnreachable {
+                base: self.base.clone(),
+                reason,
+            });
+        }
+        tracing::debug!(base = %self.base, "solve: serve answered");
 
         let framework = detect_framework(&canonical);
         let detected = Detected {
@@ -720,6 +742,18 @@ impl SubmitError {
                                 Opt out (deliberate archaeology only): SOVEREIGN_ALLOW_STALE_SOLVE=1",
                 }),
             ),
+            SubmitError::ServeUnreachable { base, reason } => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                serde_json::json!({
+                    "error": "serve_unreachable",
+                    "base": base,
+                    "message": format!(
+                        "the solver's model is served by `serve`, and serve at {base} did not \
+                         answer ({reason}). Start `sovereign-serve`, or set SOVEREIGN_SERVE_PORT \
+                         to the port the running one listens on"
+                    ),
+                }),
+            ),
         }
     }
 }
@@ -743,7 +777,7 @@ async fn submit(
     Extension(jobs): Extension<Arc<SolveJobs>>,
     Json(req): Json<SubmitWire>,
 ) -> Response {
-    match jobs.submit(req) {
+    match jobs.submit(req).await {
         Ok(job) => (
             StatusCode::ACCEPTED,
             Json(serde_json::json!({
