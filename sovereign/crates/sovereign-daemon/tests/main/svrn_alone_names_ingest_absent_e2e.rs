@@ -175,9 +175,15 @@ fn svrn_alone_names_the_ingest_program_where_it_needs_one() {
         Some(r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#),
     )
     .expect("/mcp answered");
+    // svrn's list still answers. With no ingest it is empty: `solve`, the
+    // one tool it held beside ingest's, is code's since pb-meshapp-solve.
     assert!(
-        listed.contains("\"solve\""),
+        listed.contains("\"tools\":["),
         "svrn's own tools still list: {listed}"
+    );
+    assert!(
+        !listed.contains("\"solve\""),
+        "the solver is code's, not svrn's: {listed}"
     );
     for tool in [
         "wikipedia_fetch",
