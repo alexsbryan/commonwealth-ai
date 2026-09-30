@@ -20,8 +20,26 @@ use sovereign_turn_client::{
     Intent, RerankOverrides, SamplingOverrides, TurnClient, TurnMode, TurnObserver,
 };
 
-use crate::chat_cmd::bootstrap::build_inference;
 use sovereign_cli_base::chat_globals::ChatGlobals;
+
+/// svrn's chat and embed models over HTTP, resolved for `globals`: the
+/// `(inference, daemon_base, embed_model_id)` of
+/// `oicp_client::daemon_inference::build_inference`, fed the `ChatGlobals`
+/// fields it reads. svrn's `chat_cmd::bootstrap::build_inference` is the same
+/// call; bench reaches it here so it names no svrn CLI module.
+pub(crate) async fn build_inference(
+    globals: &ChatGlobals,
+) -> sovereign_contracts::error::Result<(Arc<dyn InferenceProvider>, String, String)> {
+    oicp_client::daemon_inference::build_inference(
+        &globals.daemon_base,
+        globals.bearer.as_deref(),
+        globals.chat_model.as_deref(),
+        globals.embed_model.as_deref(),
+        globals.guest_link_active,
+        globals.guest_lender_url.as_deref(),
+    )
+    .await
+}
 
 /// A reachable svrn and the pins every turn to it carries.
 pub struct SubjectDial {

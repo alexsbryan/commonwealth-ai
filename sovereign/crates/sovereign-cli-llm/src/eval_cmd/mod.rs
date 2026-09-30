@@ -50,8 +50,8 @@ use std::path::PathBuf;
 
 use sovereign_contracts::probe::{AtlasProbe, ProbeEvidence, ProbeMode, ProbeRequest};
 
+use crate::bench_cmd::subject::build_inference;
 use crate::bench_cmd::subject::SubjectDial;
-use crate::chat_cmd::bootstrap::build_inference;
 use sovereign_cli_base::chat_globals::parse_globals;
 
 use sovereign_cli_base::help::{self, Help, HelpSection};
