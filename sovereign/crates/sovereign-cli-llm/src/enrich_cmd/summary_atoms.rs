@@ -42,8 +42,18 @@ pub async fn cmd_summary_atoms(args: &[String]) -> i32 {
         return 1;
     }
 
+    // Ingest's atlas port, handed in by the composed binary; a bare
+    // sovereign-cli-llm names the absence (pb-cli-llm-ingest-move).
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
+
     println!("Projecting RAPTOR summaries into '{corpus_id}' atlases…");
-    match write_summary_atoms(&corpus_engine::IngestAtlas, &indexes_dir, &corpus_id).await {
+    match write_summary_atoms(atlas.as_ref(), &indexes_dir, &corpus_id).await {
         Ok(report) => {
             println!("  {}", report.describe());
             // A run that read rows and CHANGED NOTHING is not a success to

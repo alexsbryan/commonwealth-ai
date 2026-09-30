@@ -490,4 +490,64 @@ mod tests {
              keyed to the model and split it was taken on — not on the gossip path."
         );
     }
+
+    /// Turning `query_sharing` on in a corpus's meta makes the fan-out list
+    /// it on the SAME engine, so the meta write invalidates the engine's info
+    /// cache. `svrn corpus share` is that write (its own test pins the key it
+    /// writes); this half moved here from sovereign-cli-llm
+    /// `corpus_cmd/ingest.rs` with pb-cli-llm-ingest-move, beside the filter
+    /// it exercises. The failing input is a local-only corpus (what
+    /// `corpus_store` creates), which stays unadvertised until the flip.
+    #[tokio::test]
+    async fn a_meta_flip_to_query_sharing_is_listed_by_the_fanout() {
+        async fn hosted(engine: &Arc<corpus_engine::CorpusEngine>) -> Vec<String> {
+            build_local_capabilities(Some(engine), 0, &StubClaims)
+                .await
+                .hosted_corpora
+                .into_iter()
+                .map(|c| c.corpus_id)
+                .collect()
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let indexes = dir.path().join("indexes");
+        let root = indexes.join("larkspur");
+        let idx = corpus_index::index::CorpusIndex::create_with_sharing(
+            &root,
+            "larkspur",
+            "larkspur",
+            "test-embed",
+            8,
+            false,
+            Some(false),
+            "private",
+        )
+        .await
+        .unwrap();
+        idx.mark_ingestion_complete().unwrap();
+        drop(idx);
+        let embed: corpus_index::types::EmbedFn =
+            Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) }));
+        let engine = Arc::new(corpus_engine::CorpusEngine::new(
+            dir.path().join("recipes"),
+            indexes.clone(),
+            embed,
+        ));
+        assert!(
+            hosted(&engine).await.is_empty(),
+            "local-only is not advertised"
+        );
+
+        // A distinct mtime on filesystems with coarse timestamps.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let corpus = corpus_index::corpus::Corpus::named(&indexes, "larkspur").unwrap();
+        let path = corpus.meta_path();
+        let mut meta: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        meta.as_object_mut()
+            .unwrap()
+            .insert("query_sharing".into(), serde_json::Value::Bool(true));
+        std::fs::write(&path, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
+        assert_eq!(hosted(&engine).await, vec!["larkspur".to_string()]);
+    }
 }

@@ -195,14 +195,10 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
     }
 }
 
-/// Where `corpus_readiness` looks. One resolution, so the pre-check and the
-/// wait cannot disagree about which directory they are talking about (§10.6).
-pub(super) fn indexes_dir() -> PathBuf {
-    sovereign_contracts::setup_config::SetupConfig::load()
-        .map(|c| c.data.dir)
-        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
-        .join("indexes")
-}
+// Where `corpus_readiness` looks. One resolution, so the pre-check and the
+// wait cannot disagree about which directory they are talking about (§10.6).
+// The CLI leaf's, shared with svrn's `corpus share` (pb-cli-llm-ingest-move).
+use sovereign_cli_base::dirs::configured_indexes_dir as indexes_dir;
 
 /// Default `--wait` budget. Generous enough for any LOCAL recipe (the
 /// journey fixture commits in ~20s on this host) and far too short for a

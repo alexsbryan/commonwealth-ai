@@ -41,6 +41,17 @@ pub fn sovereign_indexes() -> PathBuf {
     sovereign_root().join("indexes")
 }
 
+/// `<[data] dir>/indexes`: the configured data dir (`config.toml`), else the
+/// brand root. The index root the corpus verbs read and write: ingest's
+/// `corpus install` readiness wait and svrn's `corpus share` (moved from
+/// sovereign-cli-llm `corpus_cmd/inventory.rs` by pb-cli-llm-ingest-move).
+pub fn configured_indexes_dir() -> PathBuf {
+    sovereign_contracts::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
+        .join("indexes")
+}
+
 /// Where installed third-party mesh apps live (`~/.svrnmesh/meshapps/<id>/`),
 /// alongside a shared `_sdk/` and the local `registry.toml` of published apps.
 /// `svrn meshapp install` unpacks here; `meshapp dev <id>` runs from here.

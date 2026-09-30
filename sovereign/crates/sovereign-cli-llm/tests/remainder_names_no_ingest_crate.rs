@@ -38,12 +38,18 @@ const STAYING: &[&str] = &[
     "enrich_cmd/raptor.rs",
     "enrich_cmd/raptor_index.rs",
     "enrich_cmd/raptor_census.rs",
+    // pb-cli-llm-ingest-move: summary-atoms writes through svrn's tools
+    // (`sovereign_tools::summary_atoms`), so it is svrn's (phase-b-70 (2)).
+    "enrich_cmd/summary_atoms.rs",
     "atlas_cmd/status.rs",
     "atlas_cmd/inspect.rs",
     "atlas_cmd/budget.rs",
     "atlas_cmd/typed_extension.rs",
     // pb-cli-llm-ingest-move: `corpus pull` is svrn's member act (the row).
     "corpus_cmd/pull.rs",
+    // `corpus ingest` runs svrn's workflow client (`workflow_cmd`), and
+    // `corpus share` rides with it (phase-b-70 (2)).
+    "corpus_cmd/ingest.rs",
 ];
 
 fn repo_root() -> PathBuf {

@@ -115,7 +115,7 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
     if share {
         return report_share(
             &corpus,
-            share_corpus(&super::inventory::indexes_dir(), &corpus),
+            share_corpus(&sovereign_cli_base::dirs::configured_indexes_dir(), &corpus),
         );
     }
     0
@@ -134,7 +134,10 @@ pub async fn cmd_corpus_share(args: &[String]) -> i32 {
         eprintln!("here; members get cited passages back. `svrn corpus list` names the ids.");
         return if args.is_empty() { 1 } else { 0 };
     };
-    report_share(id, share_corpus(&super::inventory::indexes_dir(), id))
+    report_share(
+        id,
+        share_corpus(&sovereign_cli_base::dirs::configured_indexes_dir(), id),
+    )
 }
 
 fn report_share(id: &str, result: Result<std::path::PathBuf, String>) -> i32 {
@@ -186,38 +189,14 @@ pub(super) fn share_corpus(
 mod tests {
     use super::*;
 
-    struct NoClaims;
-
-    #[async_trait::async_trait]
-    impl sovereign_contracts::self_claims::SelfClaims for NoClaims {
-        async fn claims(&self) -> sovereign_contracts::self_claims::LocalClaims {
-            sovereign_contracts::self_claims::LocalClaims {
-                availability: 1.0,
-                in_flight: None,
-                storage_remaining: None,
-                embed_model: None,
-                media_available: None,
-            }
-        }
-        fn record_storage_used(&self, _used: u64) {}
-    }
-
-    /// The fan-out's corpus list, as gossip builds it from this index root.
-    async fn hosted(engine: &std::sync::Arc<corpus_engine::CorpusEngine>) -> Vec<String> {
-        sovereign_mesh::capabilities::build_local_capabilities(Some(engine), 0, &NoClaims)
-            .await
-            .hosted_corpora
-            .into_iter()
-            .map(|c| c.corpus_id)
-            .collect()
-    }
-
-    /// `corpus share` sets the key and the fan-out lists the corpus — on the
-    /// SAME engine, so the meta write must invalidate its info cache. The
-    /// failing input is a local-only corpus (what `corpus_store` creates)
-    /// that the verb leaves unadvertised.
+    /// `corpus share` sets the key, keeps every other field, and refuses a
+    /// corpus that is not installed. That the fan-out then lists it on the
+    /// same engine is sovereign-mesh's half
+    /// (`a_meta_flip_to_query_sharing_is_listed_by_the_fanout`, moved there
+    /// with pb-cli-llm-ingest-move, beside the filter). The failing input is
+    /// a local-only corpus (what `corpus_store` creates).
     #[tokio::test]
-    async fn share_sets_query_sharing_and_the_fanout_lists_the_corpus() {
+    async fn share_sets_query_sharing_and_keeps_the_meta() {
         let dir = tempfile::tempdir().unwrap();
         let indexes = dir.path().join("indexes");
         let root = indexes.join("larkspur");
@@ -235,26 +214,12 @@ mod tests {
         .unwrap();
         idx.mark_ingestion_complete().unwrap();
         drop(idx);
-        let embed: corpus_index::types::EmbedFn =
-            std::sync::Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) }));
-        let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
-            dir.path().join("recipes"),
-            indexes.clone(),
-            embed,
-        ));
-        assert!(
-            hosted(&engine).await.is_empty(),
-            "local-only is not advertised"
-        );
 
-        // A distinct mtime on filesystems with coarse timestamps.
-        std::thread::sleep(std::time::Duration::from_millis(20));
         let meta = share_corpus(&indexes, "larkspur").unwrap();
         let written: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&meta).unwrap()).unwrap();
         assert_eq!(written["query_sharing"], serde_json::Value::Bool(true));
         assert_eq!(written["corpus_id"], "larkspur", "other fields kept");
-        assert_eq!(hosted(&engine).await, vec!["larkspur".to_string()]);
 
         assert!(
             share_corpus(&indexes, "absent").is_err(),
