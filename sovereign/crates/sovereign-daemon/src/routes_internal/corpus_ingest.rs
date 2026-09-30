@@ -14,6 +14,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 use commonwealth_core::activity::ActivityEventKind;
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::{IngestPort, InstallRefusal};
 use serde::{Deserialize, Serialize};
 
@@ -82,12 +83,14 @@ async fn gather_peer_atlas_advice(
     // Local view: atom counts come from the cached summary; embed
     // model from our own member record (populated by gossip).
     let atlas_dir = indexes_dir.join(corpus_id).join("atlas");
-    let local_summary = corpus_engine_atlas_reader::ports::AtlasPort::atlas_summary(
-        &corpus_engine::IngestAtlas,
-        &atlas_dir,
-    )
-    .ok()
-    .flatten();
+    let Some(atlas) = state.inner.node.atlas.as_ref() else {
+        tracing::debug!(
+            corpus_id,
+            "peer atlas advice: no ingest atlas port; no advice"
+        );
+        return None;
+    };
+    let local_summary = atlas.atlas_summary(&atlas_dir).ok().flatten();
     let local_tier2_count = local_summary.as_ref().map(|s| s.tier2_count).unwrap_or(0);
     let local_fingerprint = local_summary.as_ref().map(|s| s.fingerprint.as_str());
 
@@ -763,6 +766,9 @@ pub async fn spawn_corpus_install_outcome(
         );
         return InstallOutcome::NoEngine;
     };
+    // Ingest's atlas port, for the post-install structural atlas; composed
+    // beside the engine, so `None` only where a host slots an engine alone.
+    let atlas = state.inner.node.atlas.clone();
 
     {
         let mut active = state.inner.ingest.active_ingests.write().await;
@@ -900,6 +906,14 @@ pub async fn spawn_corpus_install_outcome(
                         );
                         return;
                     }
+                    let Some(atlas) = atlas else {
+                        tracing::warn!(
+                            corpus = %cid,
+                            "post-install: no ingest atlas port in this process — skipping \
+                             structural atlas + Tier-2 RAPTOR"
+                        );
+                        return;
+                    };
                     use corpus_index::enrichment_state::{EnrichmentPhase, EnrichmentStateFile};
                     use sovereign_tools::atlas_postinstall::{
                         build_structural_atlas, build_triage_candidates, effective_tier2_budget,
@@ -923,7 +937,7 @@ pub async fn spawn_corpus_install_outcome(
                         Some("walking chunks for structural atom extraction"),
                     );
                     let atlas_ok = match build_structural_atlas(
-                        &corpus_engine::IngestAtlas,
+                        atlas.as_ref(),
                         &cid,
                         indexes.clone(),
                         recipes,
@@ -1021,7 +1035,7 @@ pub async fn spawn_corpus_install_outcome(
                             "post-install: triage — start"
                         );
                         let triage_path_for_tier2 = match build_triage_candidates(
-                            &corpus_engine::IngestAtlas,
+                            atlas.as_ref(),
                             &cid,
                             indexes.clone(),
                             budget,

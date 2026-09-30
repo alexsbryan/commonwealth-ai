@@ -660,6 +660,9 @@ pub fn desktop_services_with_engine(
 /// lines each (ARCH §10.6). They are named here instead.
 pub struct DesktopParts {
     pub engine: Arc<dyn IngestPort>,
+    /// Ingest's atlas port beside the engine: an unprogrammed double, so a
+    /// test that reaches an atlas method it did not program fails naming it.
+    pub atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
     pub recipe_harness: Arc<dyn RecipeHarnessPort>,
     pub provider: Arc<dyn sovereign_contracts::traits::InferenceProvider>,
     pub store: Arc<dyn sovereign_contracts::traits::StateStore>,
@@ -675,6 +678,7 @@ impl DesktopParts {
     pub fn new(engine: Arc<dyn IngestPort>) -> Self {
         Self {
             engine,
+            atlas: Arc::new(corpus_engine_atlas_reader::ports::double::AtlasPortDouble::new()),
             recipe_harness: Arc::new(RecipeHarnessDouble::default()),
             provider: Arc::new(TestProvider::new()),
             store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
@@ -719,7 +723,8 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_daemon::DaemonServices
             serving: sovereign_daemon::ServingProfile {
                 core: sovereign_daemon::ServingCore {
                     recipe_harness: Some(parts.recipe_harness),
-                    corpus_engine: parts.engine,
+                    corpus_engine: Some(parts.engine),
+                    atlas: Some(parts.atlas),
                     inference_provider: parts.provider,
                     in_flight_gauge: None,
                     rpc_shard_warmer: None,

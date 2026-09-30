@@ -26,3 +26,25 @@ impl HostedIngest {
         Arc::clone(&self.enrich_config)
     }
 }
+
+/// A route ingest serves, answered on svrn alone: 503 naming the program.
+async fn absent(uri: axum::http::Uri) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    tracing::debug!(path = %uri.path(), "ingest routes: no ingest program in this process");
+    (
+        axum::http::StatusCode::SERVICE_UNAVAILABLE,
+        axum::Json(serde_json::json!({
+            "error": format!(
+                "{} reads ingest's corpora, and no ingest program is composed in this \
+                 process: run the stock binary (`svrn daemon`)",
+                uri.path()
+            ),
+        })),
+    )
+        .into_response()
+}
+
+/// `/v1/knowledge/landscape_digest` on svrn alone.
+pub fn landscape_digest_absent_router() -> axum::Router {
+    axum::Router::new().route("/v1/knowledge/landscape_digest", axum::routing::any(absent))
+}

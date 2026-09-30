@@ -162,13 +162,17 @@ impl EmbedAdvertisement {
 // ring cannot produce a half-built neighbour.
 // ─────────────────────────────────────────────────────────────────────────
 
-/// **Ring 1 — CORE.** Absence means the daemon cannot serve at all: without an
-/// engine `/v1/knowledge/search` and `/internal/knowledge/search` answer 503
-/// and gossip advertises no `hosted_corpora`; without a provider
-/// `/v1/chat/completions` has nothing behind it. Neither is an `Option`, in
-/// this struct or anywhere downstream.
+/// **Ring 1 — CORE.** Without a provider `/v1/chat/completions` has nothing
+/// behind it, so it is not an `Option`. The engine is ingest's, composed by a
+/// distribution (`process::HostedIngest`, pb-ingest-dial-daemon): `None` is a
+/// svrn with no ingest program, where `/v1/knowledge/search` and
+/// `/internal/knowledge/search` answer 503, gossip advertises no
+/// `hosted_corpora`, and the ingest routes name the absence.
 pub struct ServingCore {
-    pub corpus_engine: Arc<dyn IngestPort>,
+    pub corpus_engine: Option<Arc<dyn IngestPort>>,
+    /// Ingest's atlas port, composed beside the engine; `None` exactly when
+    /// the engine is.
+    pub atlas: Option<Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>>,
     /// The recipe authoring harness over that engine. `None` answers the
     /// harness route with a named 503; every production host composes it.
     pub recipe_harness: Option<Arc<dyn corpus_index::ingest_port::daemon::RecipeHarnessPort>>,

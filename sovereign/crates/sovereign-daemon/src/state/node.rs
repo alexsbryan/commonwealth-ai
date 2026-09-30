@@ -12,6 +12,7 @@
 use std::sync::Arc;
 
 use corpus_index::ingest_port::daemon::IngestPort;
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use sovereign_grants::{GuestGrantStore, GuestSessionBinding, GuestSessionStore};
 use sovereign_mesh::ledger_port::ActivityLedgerPort;
 
@@ -67,6 +68,10 @@ pub struct NodeSeed {
     /// (`hosted_code::CodeMount::edit_routes`, pb-meshapp-rest). `None` mounts
     /// the named absence pointing at `svrn code`.
     pub edit_door: Option<axum::Router>,
+    /// Ingest's atlas port, when a distribution composed ingest into this
+    /// process (`process::HostedIngest`, pb-ingest-dial-daemon). `None` is
+    /// svrn alone: the atlas routes name the absence.
+    pub atlas: Option<Arc<dyn AtlasPort>>,
 }
 
 impl NodeSeed {
@@ -154,6 +159,8 @@ impl NodeSeed {
             rails_base: crate::rails_client::resolve_rails_base(&daemon),
             // Handed in by the daemon from what code's composition mounted.
             edit_door: None,
+            // Handed in by the daemon from what ingest's composition mounted.
+            atlas: None,
         })
     }
 }
@@ -218,6 +225,8 @@ pub struct NodePart {
     /// Code's editor door, mounted by every surface that serves the general
     /// client routes; `None` is svrn alone ([`NodeSeed::edit_door`]).
     pub edit_door: Option<axum::Router>,
+    /// Ingest's atlas port; `None` is svrn alone ([`NodeSeed::atlas`]).
+    pub atlas: Option<Arc<dyn AtlasPort>>,
     /// The holder's stored guest link and the mesh tunnel it opens, for the
     /// daemon's lifetime — served at `/internal/guest/route` so a CLI dials
     /// this instead of holding a tunnel itself (§12 D6).

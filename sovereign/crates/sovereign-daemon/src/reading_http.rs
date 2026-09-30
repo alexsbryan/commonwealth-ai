@@ -469,9 +469,9 @@ async fn get_chunk(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, chunk_id)): Path<(String, u64)>,
 ) -> impl IntoResponse {
-    let engine = match daemon.corpus_engine() {
-        Some(e) => e,
-        None => return service_unavailable("corpus engine not initialised"),
+    let (engine, atlas) = match (daemon.corpus_engine(), daemon.atlas()) {
+        (Some(e), Some(a)) => (e, a.as_ref()),
+        _ => return service_unavailable("corpus engine not initialised"),
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
@@ -486,7 +486,8 @@ async fn get_chunk(
     };
     let atlas_atoms = load_atlas_atoms(&engine, &corpus).await;
     let conv = maybe_resolve_conversation_meta(&daemon, &corpus, &row).await;
-    let record = chunk_record_from_row_with_conv(&corpus, &row, atlas_atoms.as_deref(), conv);
+    let atoms = atlas_atoms.as_deref().map(|atoms| (atlas, atoms));
+    let record = chunk_record_from_row_with_conv(&corpus, &row, atoms, conv);
     (StatusCode::OK, Json(record)).into_response()
 }
 
@@ -497,9 +498,9 @@ async fn get_neighbors(
     Query(NeighborQuery { radius }): Query<NeighborQuery>,
 ) -> impl IntoResponse {
     let radius = radius.min(5);
-    let engine = match daemon.corpus_engine() {
-        Some(e) => e,
-        None => return service_unavailable("corpus engine not initialised"),
+    let (engine, atlas) = match (daemon.corpus_engine(), daemon.atlas()) {
+        (Some(e), Some(a)) => (e, a.as_ref()),
+        _ => return service_unavailable("corpus engine not initialised"),
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
@@ -515,7 +516,7 @@ async fn get_neighbors(
     // the window. atoms.json is small (hundreds of atoms on BK);
     // re-reading per chunk would just multiply IO without benefit.
     let atlas_atoms = load_atlas_atoms(&engine, &corpus).await;
-    let atoms_ref = atlas_atoms.as_deref();
+    let atoms_ref = atlas_atoms.as_deref().map(|atoms| (atlas, atoms));
 
     // Conversation augmentation: resolve once per chunk in the
     // window. The store lookup is keyed on `source_doc_id` so
@@ -766,7 +767,7 @@ fn cross_corpus_links_for_atom(
 pub(crate) fn chunk_record_from_row_with_conv(
     corpus_id: &str,
     row: &EnrichmentChunkRow,
-    atoms: Option<&[AtomEnvelope]>,
+    atoms: Option<(&dyn AtlasPort, &[AtomEnvelope])>,
     conversation: Option<ConversationChunkMeta>,
 ) -> ChunkRecord {
     let metadata: serde_json::Value = row
@@ -781,7 +782,7 @@ pub(crate) fn chunk_record_from_row_with_conv(
         .map(String::from);
 
     let atom_spans = match (atoms, section_id.as_deref()) {
-        (Some(atoms), Some(_)) => corpus_engine::IngestAtlas
+        (Some((atlas, atoms)), Some(_)) => atlas
             .detect_atom_spans(&row.content, section_id.as_deref(), atoms)
             .into_iter()
             .map(AtomSpan::from)

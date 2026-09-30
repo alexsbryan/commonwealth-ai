@@ -1025,6 +1025,7 @@ impl AppState {
                     guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
                     guest_pages: Arc::new(node_seed.guest_pages),
                     edit_door: node_seed.edit_door,
+                    atlas: node_seed.atlas,
                     guest_route: Arc::new(sovereign_mesh::guest_lender::StoredGuestLink::new(
                         Arc::new(sovereign_mesh::guest_source::GuestLinkFileReader::new()),
                         Arc::new(sovereign_mesh::guest_source::MeshTunnelOpener),

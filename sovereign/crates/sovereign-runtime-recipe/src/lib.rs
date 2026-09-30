@@ -243,11 +243,14 @@ pub struct RecipeInputs {
     /// `InMemoryStateStore` does not). `None` is a real answer, not a
     /// forgotten wire — spec `sovereign/docs/specs/CONV_TIERED_PORT.md`.
     pub conv_tiered: Option<Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>>,
-    /// The corpus engine this process retrieves through.
-    pub corpus_engine: Arc<dyn corpus_index::source::CorpusReadPort>,
+    /// The corpus engine this process retrieves through. `None` is a svrn
+    /// with no ingest program (pb-ingest-dial-daemon): the turn has no corpus
+    /// to retrieve from, and the recipe says so rather than inventing one.
+    pub corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
     /// Ingest's atlas port: the atlas context manager's write-or-derive
-    /// reads (the seed-table freshness check) go through it.
-    pub atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
+    /// reads (the seed-table freshness check) go through it. `None` exactly
+    /// when `corpus_engine` is.
+    pub atlas: Option<Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>>,
     /// Ingest's enrichment-config port, when this host composes ingest: the
     /// atlas manager's pipeline-map fallback reads through it. `None` (a svrn
     /// with no ingest program) walks an unconverted atlas without the map
@@ -403,7 +406,10 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         ner,
     } = inputs;
 
-    log_installed_corpora(corpus_engine.as_ref(), progress).await;
+    match &corpus_engine {
+        Some(engine) => log_installed_corpora(engine.as_ref(), progress).await,
+        None => progress.note("Corpora:     none (no ingest program in this process)"),
+    }
 
     let (tools, mcp) = build_tools(&tool_bundles, switches, mcp_extra, progress).await;
     let (router, planner) =
@@ -425,7 +431,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
     .await;
 
     let parts = RuntimeParts {
-        corpus_engine: Some(Arc::clone(&corpus_engine) as _),
+        corpus_engine: corpus_engine.clone().map(|e| e as _),
         note_store,
         ..RuntimeParts::new(
             inference,
@@ -508,8 +514,9 @@ pub struct BaselineDeps<'a> {
     pub store: &'a Arc<dyn StateStore>,
     /// The provider the search and lookup tools infer through.
     pub inference: &'a Arc<dyn InferenceProvider>,
-    /// The corpus this host retrieves from.
-    pub corpus_engine: Arc<dyn corpus_index::source::CorpusReadPort>,
+    /// The corpus this host retrieves from; `None` withholds the corpus
+    /// tools by name (pb-ingest-dial-daemon).
+    pub corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
     /// The open note store, when this host has one. Wires
     /// `knowledge_lookup`'s third evidence channel; `None` is reported as a
     /// withholding rather than passed over in silence.
@@ -643,8 +650,8 @@ async fn build_router_and_planner(
 /// is complete.
 async fn build_lane(
     conv_tiered: Option<Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>>,
-    corpus_engine: &Arc<dyn corpus_index::source::CorpusReadPort>,
-    atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
+    corpus_engine: &Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
+    atlas: Option<Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>>,
     enrich_config: Option<Arc<dyn corpus_index::ingest_port::enrich_config::EnrichConfigPort>>,
     inference: &Arc<dyn InferenceProvider>,
     indexes_dir: &Path,
@@ -677,9 +684,14 @@ async fn build_lane(
     // gets its graph, and one sealed to a 316-chunk bench corpus probes one
     // corpus instead of forty-eight. Measured on the authoring host, 51,845
     // articles / 7,853,503 edges = 2.2 s.
-    if let Some(graph) =
-        load_wikipedia_graph(corpus_engine.as_ref(), indexes_dir, &scope, progress).await
-    {
+    let graph = match corpus_engine {
+        Some(engine) => load_wikipedia_graph(engine.as_ref(), indexes_dir, &scope, progress).await,
+        None => {
+            progress.note("Wiki graph:  not loaded (no ingest program in this process)");
+            None
+        }
+    };
+    if let Some(graph) = graph {
         progress.note(&format!(
             "Wiki graph:  {} articles, {} edges",
             graph.article_count().await,

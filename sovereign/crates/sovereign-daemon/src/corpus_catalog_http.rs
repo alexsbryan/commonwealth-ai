@@ -553,10 +553,7 @@ async fn notebooks(
     // counting that as explorable shipped the Explore tab straight
     // into "No atoms match the current filter" with nothing to match.
     let mut explorable: HashSet<String> = HashSet::new();
-    let reader = FileAtlasReader::new(
-        engine.index_dir().to_path_buf(),
-        Arc::new(corpus_engine::IngestAtlas),
-    );
+    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf(), atlas_for(&daemon)?);
     if let Ok(atom_corpora) = reader.list_corpora().await {
         let notebook_ids: HashSet<&str> = installed
             .iter()
@@ -864,6 +861,17 @@ fn tiers_for(corpus_id: &str) -> Vec<String> {
         "gutenberg" => vec!["full".into()],
         _ => Vec::new(),
     }
+}
+
+/// Ingest's atlas port, composed beside the engine [`engine_for`] reads.
+fn atlas_for(
+    daemon: &Arc<EmbeddedDaemon>,
+) -> Result<Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>, Absence> {
+    daemon.atlas().map(Arc::clone).ok_or_else(|| {
+        Absence::unavailable(
+            "this daemon holds no CorpusEngine (it was commissioned to serve nothing)",
+        )
+    })
 }
 
 /// The daemon's own `CorpusEngine`. One lookup site, so no handler can

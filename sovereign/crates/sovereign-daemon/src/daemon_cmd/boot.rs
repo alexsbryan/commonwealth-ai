@@ -4,6 +4,8 @@
 use std::sync::Arc;
 
 use corpus_engine::CorpusEngine;
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_contracts::launch::Launch;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
@@ -405,6 +407,21 @@ pub(super) async fn run_daemon(
         self_node_id,
         &chunk_entity_extractor,
     );
+    // Ingest's ports, as every consumer below acts on them: the engine's port
+    // and its atlas. `None` is svrn alone; each consumer withholds its family
+    // or subsystem and says so (pb-ingest-dial-daemon).
+    let ingest_ports: Option<(Arc<dyn IngestPort>, Arc<dyn AtlasPort>)> = Some((
+        Arc::clone(&engine) as Arc<dyn IngestPort>,
+        Arc::new(corpus_engine::IngestAtlas) as Arc<dyn AtlasPort>,
+    ));
+    let ingest_port = ingest_ports.as_ref().map(|(port, _)| Arc::clone(port));
+    let ingest_atlas = ingest_ports.as_ref().map(|(_, atlas)| Arc::clone(atlas));
+    if ingest_ports.is_none() {
+        tracing::info!(
+            "daemon: no ingest program in this process; its tool families, subsystems and \
+             routes are withheld by name, and workflow runs get no corpus/atlas tools"
+        );
+    }
 
     // Self-healing corpus maintenance. Continuous appenders (the
     // `wikipedia-newsworthy` freshness daemon, watched folders, mesh pulls)
@@ -412,7 +429,10 @@ pub(super) async fn run_daemon(
     // search, which is silent, correct, and progressively slower. A desktop
     // user has no way to notice or fix that, so the daemon owns it. See
     // `crate::corpus_maintenance`.
-    crate::corpus_maintenance::spawn(engine.clone());
+    match &ingest_port {
+        Some(port) => crate::corpus_maintenance::spawn(Arc::clone(port)),
+        None => tracing::info!("daemon: no ingest program; corpus maintenance does not run"),
+    }
 
     // ── Folder tiered deps ───────────────────────────────────────
     // Watched-folder corpora reuse the conv-tiered table shape
@@ -444,7 +464,7 @@ pub(super) async fn run_daemon(
     // svrn's own `/mcp` tools. Code's tools are code's (pb-code-daemon-exit):
     // they mount beside these when a distribution composes the code program
     // into this process, and svrn alone names `svrn code mcp` for them.
-    let tools = build_tool_registry(engine.clone(), Arc::clone(&solve_jobs)).await;
+    let tools = build_tool_registry(ingest_ports.clone(), Arc::clone(&solve_jobs)).await;
 
     // Notes-rail convergence recorder (order commons-fluency fix 9):
     // ONE shared instance — named on the daemon's `HeadlessRails` so `/status`
@@ -541,7 +561,9 @@ pub(super) async fn run_daemon(
 
     bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));
 
-    bootstrap::spawn_vector_index_readiness_sweep(Arc::clone(&engine));
+    if let Some(port) = &ingest_port {
+        bootstrap::spawn_vector_index_readiness_sweep(Arc::clone(port));
+    }
 
     bootstrap::spawn_tier2_enrichment_resume(&data_dir);
 
@@ -562,19 +584,25 @@ pub(super) async fn run_daemon(
     // were built beside it are the code program's (`code_mount` above).
     let knowledge_view_http = bootstrap::build_knowledge_view_http(
         &data_dir,
-        Arc::clone(&engine),
+        ingest_port.clone(),
         state_store_concrete.clone(),
     )
     .await;
 
-    super::corpus_registry::reconcile_corpus_registry(engine.as_ref(), state_store.as_ref()).await;
+    match &ingest_port {
+        Some(port) => {
+            super::corpus_registry::reconcile_corpus_registry(port.as_ref(), state_store.as_ref())
+                .await
+        }
+        None => tracing::info!("daemon: no ingest program; the corpus registry is not reconciled"),
+    }
 
     // The watched-folder singleton must be installed before the daemon starts
     // serving, but the ROUTE is now part of the daemon's declared capability
     // rather than something this call installs — so a failed subsystem yields
     // handlers that answer 503 with a named reason, not routes that 404.
     let _watched_subsystem = bootstrap::setup_watched_folders(
-        Arc::clone(&engine),
+        ingest_ports.clone(),
         Arc::clone(&state_store),
         &data_dir,
         &config,
@@ -660,8 +688,8 @@ pub(super) async fn run_daemon(
             store: Arc::clone(&state_store),
             conv_tiered: Some(Arc::clone(&state_store_concrete)
                 as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>),
-            corpus_engine: Arc::clone(&engine) as _,
-            atlas: Arc::new(corpus_engine::IngestAtlas),
+            corpus_engine: ingest_port.clone().map(|port| port as _),
+            atlas: ingest_atlas.clone(),
             enrich_config,
             note_store: Some(Arc::clone(&notes_port)),
             // The same compiled-in skill set the desktop ships (rung 6
@@ -689,7 +717,7 @@ pub(super) async fn run_daemon(
                     sovereign_runtime_recipe::BaselineDeps {
                         store: &state_store,
                         inference: &routed_provider,
-                        corpus_engine: Arc::clone(&engine) as _,
+                        corpus_engine: ingest_port.clone().map(|port| port as _),
                         // The daemon opened this above; wiring it here is what
                         // gives `knowledge_lookup` its notes channel. It ran
                         // with that channel dark until 2026-08-26 while the
@@ -704,10 +732,17 @@ pub(super) async fn run_daemon(
                         escalation: sovereign_tools::bundles::WebEscalation::Disabled,
                     },
                 );
-                b.push(Box::new(sovereign_tools::bundles::WikipediaTools::new(
-                    Arc::clone(&engine) as _,
-                    Arc::new(corpus_engine::IngestAtlas),
-                )));
+                b.push(match &ingest_ports {
+                    Some((port, atlas)) => Box::new(sovereign_tools::bundles::WikipediaTools::new(
+                        Arc::clone(port) as _,
+                        Arc::clone(atlas),
+                    )),
+                    None => Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+                        "wikipedia",
+                        "no ingest program is composed in this process, and \
+                         wikipedia_fetch reads its catalog corpus",
+                    )),
+                });
                 // Recipe-authoring, the desktop's twin (rung 6 commit B): the
                 // same bundle the desktop's bootstrap pushes, wired with the
                 // SAME notes adapter + features store — so a conversation
@@ -836,7 +871,8 @@ pub(super) async fn run_daemon(
                 core: crate::ServingCore {
                     // The engine the auto_ingest loop and the
                     // /internal/corpus/* surface both read.
-                    corpus_engine: engine.clone(),
+                    corpus_engine: ingest_port.clone(),
+                    atlas: ingest_atlas.clone(),
                     recipe_harness: Some(Arc::new(
                         sovereign_authoring_harness::EngineHarness::new(Arc::clone(&engine)),
                     )),
@@ -880,11 +916,16 @@ pub(super) async fn run_daemon(
                     // registry omits.
                     workflow_http: sovereign_workflow_host::workflow_http_router(
                         format!("http://127.0.0.1:{}", config.daemon.client_port),
-                        std::sync::Arc::new(|| {
-                            sovereign_tools::workflow_corpus_tools(std::sync::Arc::new(
-                                corpus_engine::IngestAtlas,
-                            ))
-                        }),
+                        {
+                            let atlas = ingest_atlas.clone();
+                            std::sync::Arc::new(move || match &atlas {
+                                Some(atlas) => {
+                                    sovereign_tools::workflow_corpus_tools(Arc::clone(atlas))
+                                }
+                                // Named at boot, beside `ingest_ports`.
+                                None => Vec::new(),
+                            })
+                        },
                     ),
                 },
                 advertise_embed,

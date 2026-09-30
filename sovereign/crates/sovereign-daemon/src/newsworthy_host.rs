@@ -246,7 +246,10 @@ impl NewsworthyHost for MeshNewsworthyHost {
     /// would overlap and the second would block on Lance file
     /// contention until the first finished.
     fn on_chunks_committed(&self, affected: &[(String, &'static str)]) {
-        let Some(engine) = self.app_state.inner.node.corpus_engine.clone() else {
+        let (Some(engine), Some(atlas)) = (
+            self.app_state.inner.node.corpus_engine.clone(),
+            self.app_state.inner.node.atlas.clone(),
+        ) else {
             tracing::warn!(
                 affected_count = affected.len(),
                 "newsworthy.atlas_rebuild_skipped — no corpus_engine on AppState; refreshed chunks landed but atlas stays stale"
@@ -268,7 +271,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
                     "newsworthy.atlas_rebuild_start"
                 );
                 let outcome = sovereign_tools::atlas_postinstall::rebuild_structural_atlas(
-                    &corpus_engine::IngestAtlas,
+                    atlas.as_ref(),
                     corpus_id,
                     indexes_dir.clone(),
                     recipes_dir.clone(),
@@ -372,7 +375,10 @@ impl NewsworthyHost for MeshNewsworthyHost {
             return;
         }
 
-        let Some(engine) = self.app_state.inner.node.corpus_engine.clone() else {
+        let (Some(engine), Some(atlas)) = (
+            self.app_state.inner.node.corpus_engine.clone(),
+            self.app_state.inner.node.atlas.clone(),
+        ) else {
             tracing::warn!(
                 committed_count = committed.len(),
                 "newsworthy.atlas_delta_skipped — no corpus_engine on AppState"
@@ -457,7 +463,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
                         let recipes_dir = indexes_dir.clone();
                         let started = std::time::Instant::now();
                         let res = sovereign_tools::atlas_postinstall::rebuild_structural_atlas(
-                            &corpus_engine::IngestAtlas,
+                            atlas.as_ref(),
                             &c.corpus_id,
                             indexes_dir.clone(),
                             recipes_dir,

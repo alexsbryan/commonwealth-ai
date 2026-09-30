@@ -250,14 +250,11 @@ async fn atom_detail(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, atom_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    let engine = match daemon.corpus_engine() {
-        Some(e) => Arc::clone(e),
-        None => return service_unavailable("corpus engine not initialised"),
+    let (engine, atlas) = match (daemon.corpus_engine(), daemon.atlas()) {
+        (Some(e), Some(a)) => (Arc::clone(e), Arc::clone(a)),
+        _ => return service_unavailable("corpus engine not initialised"),
     };
-    let reader = FileAtlasReader::new(
-        engine.index_dir().to_path_buf(),
-        Arc::new(corpus_engine::IngestAtlas),
-    );
+    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf(), atlas);
     let mut detail = match reader.get_atom_detail(&corpus, &atom_id).await {
         Ok(Some(d)) => d,
         Ok(None) => return not_found("atom not found"),
@@ -774,15 +771,13 @@ fn summarize_entities(nodes: &[ConvRaptorNodeRow], top_n: usize) -> (Vec<String>
 }
 
 fn reader_for(daemon: &Arc<EmbeddedDaemon>) -> Result<FileAtlasReader, Absence> {
-    daemon
-        .corpus_engine()
-        .map(|engine| {
-            FileAtlasReader::new(
-                engine.index_dir().to_path_buf(),
-                Arc::new(corpus_engine::IngestAtlas),
-            )
-        })
-        .ok_or_else(|| Absence::unavailable("corpus engine not initialised"))
+    match (daemon.corpus_engine(), daemon.atlas()) {
+        (Some(engine), Some(atlas)) => Ok(FileAtlasReader::new(
+            engine.index_dir().to_path_buf(),
+            Arc::clone(atlas),
+        )),
+        _ => Err(Absence::unavailable("corpus engine not initialised")),
+    }
 }
 
 /// `AtlasViewError` → status. `CorpusNotFound` is the caller's

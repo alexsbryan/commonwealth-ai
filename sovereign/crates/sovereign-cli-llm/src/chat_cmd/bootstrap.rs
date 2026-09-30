@@ -248,8 +248,8 @@ async fn build_session_scoped(
             // The same `SqliteStateStore` handle already opened above also
             // impls `ConvTieredReader` (spec CONV_TIERED_PORT.md).
             conv_tiered: Some(Arc::clone(&store_concrete) as Arc<dyn ConvTieredReader>),
-            corpus_engine: Arc::clone(&corpus_engine) as _,
-            atlas: Arc::new(corpus_engine::IngestAtlas),
+            corpus_engine: Some(Arc::clone(&corpus_engine) as _),
+            atlas: Some(Arc::new(corpus_engine::IngestAtlas)),
             // This process links ingest's catalog, so the atlas manager's
             // pipeline-map fallback reads configs as it did before the port.
             enrich_config: Some(Arc::new(
@@ -280,7 +280,7 @@ async fn build_session_scoped(
                     sovereign_runtime_recipe::BaselineDeps {
                         store: &store,
                         inference: &inference,
-                        corpus_engine: Arc::clone(&corpus_engine) as _,
+                        corpus_engine: Some(Arc::clone(&corpus_engine) as _),
                         // The same handle passed to `note_store` below — the
                         // notes evidence channel and the tool-decision write
                         // hook read one store, not two.

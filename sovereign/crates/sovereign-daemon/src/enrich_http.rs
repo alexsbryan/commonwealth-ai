@@ -84,7 +84,7 @@ async fn starter_questions(
         .limit
         .unwrap_or(STARTER_QUESTIONS_DEFAULT)
         .min(STARTER_QUESTIONS_MAX);
-    let starters = corpus_engine::IngestAtlas.rank_starter_questions(&file.atoms(), limit);
+    let starters = atlas_for(&daemon)?.rank_starter_questions(&file.atoms(), limit);
     tracing::debug!(
         corpus = %corpus,
         total_atoms = file.atoms().len(),
@@ -93,6 +93,12 @@ async fn starter_questions(
         "enrich_http: starter questions served"
     );
     Ok((StatusCode::OK, Json(starters)).into_response())
+}
+
+fn atlas_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<dyn AtlasPort>, Absence> {
+    daemon
+        .atlas()
+        .ok_or_else(|| Absence::unavailable("corpus engine not initialised"))
 }
 
 fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<dyn IngestPort>, Absence> {

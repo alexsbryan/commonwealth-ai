@@ -10,6 +10,8 @@ use std::sync::Arc;
 use crate::startup::daemon_pid_path;
 use crate::EmbeddedDaemon;
 use corpus_engine::CorpusEngine;
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::daemon::IngestPort;
 use corpus_index::types::{EmbedFn, NodeRoster, RosterEntry};
 use kernel_types::NodeId;
 use sovereign_core::model_family::{
@@ -473,7 +475,7 @@ pub fn spawn_lazy_stamp_fingerprints(engine: Arc<CorpusEngine>) {
 /// It belongs here because this process owns the indexes root and serves the
 /// catalogue that reads the result (ARCH principle 12). Idempotent on every
 /// boot: a corpus already marked built is a read and no write.
-pub fn spawn_vector_index_readiness_sweep(engine: Arc<CorpusEngine>) {
+pub fn spawn_vector_index_readiness_sweep(engine: Arc<dyn IngestPort>) {
     // Supervised one-shot: idempotent per the contract above —
     // DAEMON_RESILIENCE.md P0.4.
     crate::supervise::spawn_supervised("vector_index_readiness_sweep", move || {
@@ -712,9 +714,15 @@ pub fn build_mcp_surface(
 /// until pb-code-daemon-exit are the code program's.
 pub async fn build_knowledge_view_http(
     data_dir: &Path,
-    engine: Arc<CorpusEngine>,
+    engine: Option<Arc<dyn IngestPort>>,
     notes: Arc<dyn sovereign_contracts::notes::AgentNotes>,
 ) -> axum::Router {
+    // The digest reads ingest's corpora; svrn alone answers the route with
+    // the named absence (pb-ingest-dial-daemon).
+    let Some(engine) = engine else {
+        tracing::info!("knowledge_view: no ingest program in this process; the digest is absent");
+        return crate::hosted_ingest::landscape_digest_absent_router();
+    };
     // Knowledge-view HTTP surface — POST /v1/knowledge/landscape_digest.
     //
     // Built read-only at this stage: the daemon holds a
@@ -753,7 +761,7 @@ pub async fn build_knowledge_view_http(
 /// enrichment defaults + tiered deps) and spawn its scheduler; returns the held
 /// subsystem handle.
 pub async fn setup_watched_folders(
-    engine: Arc<CorpusEngine>,
+    ingest: Option<(Arc<dyn IngestPort>, Arc<dyn AtlasPort>)>,
     state_store: Arc<dyn sovereign_core::traits::StateStore>,
     data_dir: &Path,
     config: &SetupConfig,
@@ -789,6 +797,14 @@ pub async fn setup_watched_folders(
     // writes its generated recipe TOMLs into a directory the
     // engine never reads from, and the first sweep's apply step
     // errors `No registry entry for corpus '<id>'`.
+    // Watched folders ingest through ingest's port; svrn alone installs no
+    // manager, and the routes answer 503 naming why (pb-ingest-dial-daemon).
+    let Some((engine, atlas)) = ingest else {
+        tracing::info!(
+            "watched_folder: no ingest program in this process; watched folders are not served"
+        );
+        return None;
+    };
     let lc_recipes_dir = data_dir.join("recipes");
     match sovereign_tools::local_corpus::LocalCorpusManager::init_with_recipes_dir(
         engine.clone(),
@@ -879,10 +895,10 @@ pub async fn setup_watched_folders(
             let trigger_runtime: Option<
                 Arc<dyn sovereign_tools::local_corpus::watched::workflow_trigger::WorkflowTriggerRuntime>,
             > = Some(Arc::new(
-                super::workflow_trigger::DaemonWorkflowRuntime::new(format!(
-                    "http://127.0.0.1:{}",
-                    config.daemon.client_port
-                )),
+                super::workflow_trigger::DaemonWorkflowRuntime::new(
+                    format!("http://127.0.0.1:{}", config.daemon.client_port),
+                    atlas,
+                ),
             ));
             Some(
                 crate::watched_folder_setup::WatchedSubsystem::install(

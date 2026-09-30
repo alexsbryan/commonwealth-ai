@@ -178,7 +178,9 @@ fn manager(indexes: &Path) -> Arc<sovereign_tools::atlas_context_manager::AtlasC
             indexes.to_path_buf(),
             Arc::new(FixedEmbed),
             "test-embed".into(),
-            Arc::new(corpus_engine_atlas_reader::ports::double::AtlasPortDouble::new()),
+            Some(Arc::new(
+                corpus_engine_atlas_reader::ports::double::AtlasPortDouble::new(),
+            )),
         ),
     )
 }

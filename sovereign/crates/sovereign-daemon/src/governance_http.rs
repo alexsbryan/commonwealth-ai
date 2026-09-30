@@ -447,6 +447,10 @@ async fn post_build_seed(
     AxumPath(corpus): AxumPath<String>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
+    let atlas = daemon
+        .atlas()
+        .map(Arc::clone)
+        .ok_or_else(|| Absence::unavailable("this daemon has no corpus engine"))?;
     let dir = atlas_dir(engine.as_ref(), &corpus);
     let recipes = engine.recipes_dir().to_path_buf();
     let cid = corpus.clone();
@@ -455,7 +459,7 @@ async fn post_build_seed(
         if !is_governance_corpus(port.as_ref(), &recipes, &cid) {
             return Ok(0);
         }
-        post_build_at(&dir, &cid)
+        post_build_at(atlas.as_ref(), &dir, &cid)
     })
     .await;
     Ok(match out {
@@ -798,8 +802,8 @@ fn seed_at(dir: &Path) -> GovResult<u32> {
 
 /// migrate-ids THEN seed. Best-effort on the migrate half and idempotent:
 /// a non-governance or already-content-hash atlas still seeds fine.
-fn post_build_at(dir: &Path, corpus_id: &str) -> GovResult<u32> {
-    match corpus_engine::IngestAtlas.migrate_atlas_ids(dir, corpus_id, false) {
+fn post_build_at(atlas: &dyn AtlasPort, dir: &Path, corpus_id: &str) -> GovResult<u32> {
+    match atlas.migrate_atlas_ids(dir, corpus_id, false) {
         Ok(summary) => tracing::info!(
             corpus_id,
             %summary,

@@ -53,7 +53,7 @@ use understanding_vocab::read::ATLAS_DIRNAME;
 /// here. With no ingest program in the process (`enrich_config` is `None`)
 /// there is no config to read, and the graph walks without the map.
 fn attach_pipeline_map(
-    atlas: &dyn AtlasPort,
+    atlas: Option<&dyn AtlasPort>,
     enrich_config: Option<&dyn EnrichConfigPort>,
     graph: sovereign_core::atlas_context::AtlasGraph,
     corpus_id: &str,
@@ -61,7 +61,7 @@ fn attach_pipeline_map(
     if graph.navigation().is_some() {
         return graph;
     }
-    let Some(enrich_config) = enrich_config else {
+    let (Some(atlas), Some(enrich_config)) = (atlas, enrich_config) else {
         tracing::debug!(
             corpus = corpus_id,
             "atlas-graph: no ontology.json and no ingest program in this process; \
@@ -99,8 +99,9 @@ pub const TRIAGE_BUMPS_FILE: &str = "triage_bumps.json";
 pub struct AtlasContextManager {
     indexes_dir: PathBuf,
     /// Ingest's atlas port: the seed-table freshness check and the
-    /// pipeline map go through it.
-    atlas: Arc<dyn AtlasPort>,
+    /// pipeline map go through it. `None` (a svrn with no ingest program,
+    /// pb-ingest-dial-daemon) leaves both unchecked and says so at `debug`.
+    atlas: Option<Arc<dyn AtlasPort>>,
     /// Ingest's enrichment-config port, when this process composes ingest
     /// (`with_enrich_config`): the pipeline-map fallback reads through it.
     enrich_config: Option<Arc<dyn EnrichConfigPort>>,
@@ -168,7 +169,7 @@ impl AtlasContextManager {
         indexes_dir: PathBuf,
         inference: Arc<dyn InferenceProvider>,
         embed_model: String,
-        atlas: Arc<dyn AtlasPort>,
+        atlas: Option<Arc<dyn AtlasPort>>,
     ) -> Self {
         Self {
             indexes_dir,
@@ -342,7 +343,18 @@ impl AtlasContextManager {
             }
             return false;
         }
-        if !self.atlas.ann_table_is_fresh(atlas_dir) {
+        let fresh = match &self.atlas {
+            Some(atlas) => atlas.ann_table_is_fresh(atlas_dir),
+            None => {
+                tracing::debug!(
+                    corpus = corpus_id,
+                    "atlas-context: no ingest program in this process; ANN seed-table \
+                     freshness is unchecked"
+                );
+                true
+            }
+        };
+        if !fresh {
             tracing::warn!(
                 corpus = corpus_id,
                 atlas = %atlas_dir.display(),
@@ -358,7 +370,12 @@ impl AtlasContextManager {
             atlas_dir,
             corpus_engine_atlas_reader::context::read_section_rows(atlas_dir),
         ) {
-            Ok(g) => attach_pipeline_map(&*self.atlas, self.enrich_config.as_deref(), g, corpus_id),
+            Ok(g) => attach_pipeline_map(
+                self.atlas.as_deref(),
+                self.enrich_config.as_deref(),
+                g,
+                corpus_id,
+            ),
             Err(e) => {
                 tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
                 return false;
@@ -693,7 +710,7 @@ impl AtlasContextProvider for AtlasContextManager {
             Ok(graph) => {
                 let load_ms = load_started.elapsed().as_millis();
                 let graph = Arc::new(attach_pipeline_map(
-                    &*self.atlas,
+                    self.atlas.as_deref(),
                     self.enrich_config.as_deref(),
                     graph,
                     atlas_corpus_id,
@@ -925,7 +942,7 @@ mod tests {
             indexes.to_path_buf(),
             Arc::new(PanicInference),
             "test-embed".into(),
-            Arc::new(AtlasPortDouble::new()),
+            Some(Arc::new(AtlasPortDouble::new())),
         )
     }
 

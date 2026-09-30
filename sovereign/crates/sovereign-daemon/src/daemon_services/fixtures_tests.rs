@@ -45,11 +45,11 @@ impl ProviderFactory for NullFactory {
 
 pub(crate) fn engine() -> Arc<dyn IngestPort> {
     let tmp = std::env::temp_dir().join("sovereign-mesh-services-fixture");
-    Arc::new(corpus_engine::CorpusEngine::new(
-        tmp.join("recipes"),
-        tmp.join("indexes"),
-        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
-    ))
+    Arc::new(
+        corpus_index::ingest_port::double::IngestPortDouble::new()
+            .with_recipes_dir(tmp.join("recipes"))
+            .with_index_dir(tmp.join("indexes")),
+    )
 }
 
 /// The cheapest `Runtime` that is still a real one: core's own stub
@@ -108,7 +108,8 @@ fn serving_with(
 ) -> ServingProfile {
     ServingProfile {
         core: ServingCore {
-            corpus_engine: engine(),
+            corpus_engine: Some(engine()),
+            atlas: None,
             recipe_harness: None,
             inference_provider,
             in_flight_gauge: None,

@@ -181,7 +181,15 @@ async fn build_atlas_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir) {
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),
-        common::desktop_services_with_engine(engine),
+        // Ingest's atlas port answers summaries with the leaf's read half;
+        // the `_summary.json` cache it adds is proven on `IngestAtlas`.
+        common::desktop_services(common::DesktopParts {
+            atlas: Arc::new(
+                corpus_engine_atlas_reader::ports::double::AtlasPortDouble::new()
+                    .with_computed_summaries(),
+            ),
+            ..common::DesktopParts::new(engine)
+        }),
     );
     (daemon, tmp)
 }

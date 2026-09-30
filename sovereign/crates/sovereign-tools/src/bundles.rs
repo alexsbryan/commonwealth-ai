@@ -95,7 +95,9 @@ pub enum WebReach {
 pub struct CoreTurnTools {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
-    corpus_engine: Arc<dyn corpus_index::source::CorpusReadPort>,
+    /// Ingest's read port; `None` (a svrn with no ingest program) withholds
+    /// the four corpus tools by name (pb-ingest-dial-daemon).
+    corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
     web: WebReach,
 }
 
@@ -105,7 +107,7 @@ impl CoreTurnTools {
     pub fn new(
         store: Arc<dyn StateStore>,
         inference: Arc<dyn InferenceProvider>,
-        corpus_engine: Arc<dyn corpus_index::source::CorpusReadPort>,
+        corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
         web: WebReach,
     ) -> Self {
         Self {
@@ -135,25 +137,33 @@ impl ToolBundle for CoreTurnTools {
                 .declared(),
             )),
         );
-        r = r.record(reg.register_reporting(Box::new(
-            crate::ClaimSearchTool::new(Arc::clone(&self.corpus_engine)).declared(),
-        )));
-        r = r.record(reg.register_reporting(Box::new(
-            crate::EpistemicLandscapeTool::new(Arc::clone(&self.corpus_engine)).declared(),
-        )));
-        // Deterministic land-value-tax analytics over parcel corpora — pre-cited
-        // figures the ComplexTask synthesizer quotes verbatim.
-        r = r.record(
-            reg.register_reporting(Box::new(
-                crate::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&self.corpus_engine))
-                    .declared(),
-            )),
-        );
-        // Typed SEC-filing figures with basis + accession, or first-class
-        // refusals (FINANCIAL_CORPORA §6).
-        r = r.record(reg.register_reporting(Box::new(
-            crate::sec_facts::SecFactsTool::new(Arc::clone(&self.corpus_engine)).declared(),
-        )));
+        match &self.corpus_engine {
+            Some(corpus_engine) => {
+                r = r.record(reg.register_reporting(Box::new(
+                    crate::ClaimSearchTool::new(Arc::clone(corpus_engine)).declared(),
+                )));
+                r = r.record(reg.register_reporting(Box::new(
+                    crate::EpistemicLandscapeTool::new(Arc::clone(corpus_engine)).declared(),
+                )));
+                // Deterministic land-value-tax analytics over parcel corpora —
+                // pre-cited figures the ComplexTask synthesizer quotes verbatim.
+                r = r.record(reg.register_reporting(Box::new(
+                    crate::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(corpus_engine))
+                        .declared(),
+                )));
+                // Typed SEC-filing figures with basis + accession, or
+                // first-class refusals (FINANCIAL_CORPORA §6).
+                r = r.record(reg.register_reporting(Box::new(
+                    crate::sec_facts::SecFactsTool::new(Arc::clone(corpus_engine)).declared(),
+                )));
+            }
+            None => {
+                r = r.withheld(
+                    "claim_search, epistemic_landscape, parcel_analytics, sec_facts",
+                    "no ingest program is composed in this process, and these read its corpora",
+                );
+            }
+        }
 
         match &self.web {
             WebReach::Granted(client) => {

@@ -690,11 +690,18 @@ impl EmbeddedDaemon {
             .map(|b| b.describe())
     }
 
-    /// Borrow the `CorpusEngine` this host commissioned the daemon with, if
-    /// its variant carries one. `reading_http` and the knowledge handlers
-    /// call this; `MeshAdmin` answers `None` by construction.
+    /// Borrow ingest's port this host commissioned the daemon with, if a
+    /// distribution composed ingest. `reading_http` and the knowledge
+    /// handlers call this; `MeshAdmin` answers `None` by construction.
     pub fn corpus_engine(&self) -> Option<&Arc<dyn IngestPort>> {
-        self.services.serving().map(|s| &s.core.corpus_engine)
+        self.services
+            .serving()
+            .and_then(|s| s.core.corpus_engine.as_ref())
+    }
+
+    /// Borrow ingest's atlas port, composed beside [`Self::corpus_engine`].
+    pub fn atlas(&self) -> Option<&Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>> {
+        self.services.serving().and_then(|s| s.core.atlas.as_ref())
     }
 
     /// Borrow the recipe harness this host composed beside its engine, if
@@ -2539,7 +2546,7 @@ impl EmbeddedDaemon {
         let corpus_engine = self
             .services
             .serving()
-            .map(|s| Arc::clone(&s.core.corpus_engine));
+            .and_then(|s| s.core.corpus_engine.clone());
         // Assigned inside the networked branch below. A `mut` binding rather
         // than a fifth tuple element so the gate stays the SAME `if` the four
         // loops already sit in without re-indenting sixty lines of it.
@@ -2785,6 +2792,9 @@ impl EmbeddedDaemon {
             code_edit_door = node_seed.edit_door.is_some(),
             "daemon: code's editor door (/v1/edit_predictions)"
         );
+        // Ingest's atlas port, when the distribution composed ingest here
+        // (pb-ingest-dial-daemon); the atlas routes name its absence.
+        node_seed.atlas = self.atlas().cloned();
         // Fabric's part is constructed before `AppState` and held on the
         // daemon, so it survives `stop_inner` (DC §4.1; DC §4.2 "Construction
         // is staged, and parts are total"). The membership operations that
