@@ -134,14 +134,17 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // `sovereign_mesh` build). The census scans production `src/` only, so those
     // sites are out of scope now and their rows are removed, not re-keyed —
     // the files still hold 9/4/3 sites, but no longer as production code.
-    ("sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs", Class::Mesh, 2),
+    // Re-keyed (pb-cli-llm-bench-move, repairing pb-serve-distributes b13c2ab8b):
+    // the rpc-warm worker moved to sovereign-compute, its two sites with it.
+    ("sovereign/crates/sovereign-compute/src/distributed_warm/worker.rs", Class::Mesh, 2),
     // The 2026-09 split of rpc_warm_http.rs moved sites into a sibling
     // orchestrator and a test module; neither had a row, so this census was
     // already red on main before the FIVE_PROGRAMS cut touched it.
     // Re-keyed at pb-serve-distributes: the orchestrator moved whole to
     // sovereign-compute (count unchanged, 2).
     ("sovereign/crates/sovereign-compute/src/distributed_warm.rs", Class::Mesh, 2),
-    ("sovereign/crates/sovereign-daemon/src/tests/rpc_warm_http.rs", Class::TestOnly, 4),
+    // Re-keyed with it (b13c2ab8b): the worker's tests, same four sites.
+    ("sovereign/crates/sovereign-compute/src/distributed_warm/worker_tests.rs", Class::TestOnly, 4),
     // `#[cfg(test)] mod` at mesh_proof_outbound.rs:59 — the stamp fixture.
     ("sovereign/crates/sovereign-daemon/src/mesh_proof_outbound.rs", Class::TestOnly, 1),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
@@ -215,7 +218,16 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // PREFIXED forms). Recorded rather than "corrected" — widening the
     // detector is a change to every row's number and belongs to whoever
     // re-baselines the whole file, not to a row being added.
-    ("sovereign/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 4),
+    //
+    // 4 -> 1 at pb-serve-distributes (reconciled at pb-cli-llm-bench-move): the
+    // handlers became forwards to serve, and their route tests moved to
+    // sovereign-compute, two sites to assets/route_tests.rs (0c264ec53) and one
+    // to setup_reads/tests.rs (1d60dad61). The one left is the forward test.
+    ("sovereign/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 1),
+    // `#[cfg(test)]`-only files, each dialing a router its test bound on
+    // loopback. setup_reads' second site is 1d60dad61's own new test.
+    ("sovereign/crates/sovereign-compute/src/assets/route_tests.rs", Class::TestOnly, 2),
+    ("sovereign/crates/sovereign-compute/src/setup_reads/tests.rs", Class::TestOnly, 2),
     // Re-keyed at REVIEW-audit-pb-auto-7: the file moved to sovereign-code
     // at pb-code-freshness (c173a8042). Same four sites, same class.
     ("sovereign/crates/sovereign-code/src/project_http.rs", Class::Mesh, 4),
