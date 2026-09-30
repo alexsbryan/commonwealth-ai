@@ -24,7 +24,7 @@
 1	sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs
 1	sovereign/crates/sovereign-cli-llm/src/corpus_cmd/partitions.rs
 2	sovereign/crates/sovereign-cli-llm/src/corpus_extract_entities_cmd.rs
-2	sovereign/crates/sovereign-cli-llm/src/corpus_resolve.rs
+2	sovereign/crates/sovereign-cli-base/src/corpus_resolve.rs
 1	sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs
 1	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/capability_reconcile.rs
 5	sovereign/crates/sovereign-cli-dev/src/code_refresh.rs
