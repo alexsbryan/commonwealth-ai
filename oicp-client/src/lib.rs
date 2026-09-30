@@ -20,6 +20,7 @@ pub mod daemon_inference;
 pub mod daemon_models;
 mod ner;
 pub use ner::RemoteNer;
+pub mod openai_passthrough;
 mod pinned_provider;
 pub use pinned_provider::provider_for_model;
 mod rerank;
