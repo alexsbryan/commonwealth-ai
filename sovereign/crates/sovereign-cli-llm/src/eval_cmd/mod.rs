@@ -881,9 +881,15 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
         };
         // Loaded only so a bag that will not load still fails the run, as it
-        // always has; the synth path uses runtime retrieval, not these.
+        // always has; the synth path uses runtime retrieval, not these. svrn's
+        // probe loads them (a prod request with no questions loads the bag
+        // and answers nothing), so this harness links no atlas loader.
         if let Some(atlas) = &atlas_probe {
-            if let Err(e) = crate::probe_cmd::load_atlases(&subject.inference, atlas).await {
+            let check = ProbeRequest {
+                questions: Vec::new(),
+                ..probe_request(ProbeMode::Prod, Some(atlas.clone()))
+            };
+            if let Err(e) = probe_score::run_probe(&globals, &check) {
                 eprintln!("error: {e}");
                 return 1;
             }
