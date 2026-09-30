@@ -1,20 +1,17 @@
-//! Serving's part moved to its owner, `sovereign-serving-host`
-//! (`REVIEW-build-daemon-parts`); this module re-exports it at the path the
-//! daemon and its tests already name, and keeps the construction seed the
-//! daemon assembles.
+//! Serving's part (`part.rs`, svrn's own since pb-svrn-serving-ports), and the
+//! construction seed the daemon assembles.
 //!
-//! Three of Serving's twenty fields stay in the daemon
+//! Three of Serving's twenty fields are held apart
 //! (`sovereign_daemon::state::store::StorePart`): `inference_store` and
-//! `peer_preferences` are backed by `commonwealth-state`, which the `serving`
-//! package may not name (a third `[[exception]]` is the campaign's K4 kill
-//! clause — `quality/campaigns/domains.toml:288`), and `rpc_shard_warmer`'s
-//! trait method takes the daemon's `AppState`.
+//! `peer_preferences` are backed by `commonwealth-state`, and
+//! `rpc_shard_warmer`'s trait method takes the daemon's `AppState`.
 
 use std::sync::Arc;
 
-pub use sovereign_serving_host::state::{
-    PrincipalTally, RejectedNodeIdHeader, ServableModelFilesReader, ServingPart, SlotAliasesReader,
-};
+mod part;
+
+pub use part::{PrincipalTally, RejectedNodeIdHeader, ServingPart, SlotAliasesReader};
+pub use sovereign_contracts::rpc_warm::ServableModelFilesReader;
 
 /// Everything Serving's part is constructed with (DC §4.2 "Construction is
 /// staged, and parts are total"): the values that exist before the part is
