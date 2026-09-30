@@ -312,3 +312,232 @@ is cut and restored when `cargo-xwin check` goes red. Unreached means not
 exercised, not unnecessary; step 7's reached-caller rule and step 3's failure
 journeys are the only protection, and they are named so nobody believes the
 cut proved more than it did.
+
+## 11. Dependencies — own the tuned path, absorb the inert, meet the running
+
+Drafted 2026-09-30 from a survey of Lemonade (`lemonade-sdk/lemonade` at
+`6f8e87b`) and nine neighbouring categories. Star counts are the GitHub API on
+that date. Like the rest of this document, it is a draft and not in force.
+
+### 11.1 The rule
+
+A connection costs roughly: how wide the seam is, times how often the other
+side changes, times how much we tune across it. Depending on community work is
+not the same as integrating community systems, and the two are priced
+differently.
+
+- **Own both sides where we tune across the seam.** The answer path is one
+  instrument. Its parts are: the embedder that built the snapshot, the
+  reranker and its fitted margin, evidence ordering for KV reuse, synthesis,
+  claim splitting, the checker and its fitted threshold, and the abstention
+  cut. A process boundary inside it can be debugged but not tuned. The engine
+  belongs here because the gate's prefix-state restore and evidence ordering
+  are tuned across it.
+- **Absorb what is inert, as a pinned dependency.**
+  - Libraries: llama.cpp, Tantivy, Lance, tree-sitter, `ort`, iroh.
+  - Weights: GGUF models, GLiNER, ONNX rerankers and claim checkers.
+  - Formats: Arrow, SCIP, JSON Schema, OTel.
+  - Community data: Linked Open Vocabularies ontologies, schema.org, public
+    benchmarks.
+
+  None of these has a lifecycle we manage. This is where the community's
+  heaviest investment went.
+- **Meet running systems as a guest, at two doors.** Open WebUI, LM Studio,
+  Claude Desktop, LiteLLM and coding harnesses reach us through OpenAI HTTP
+  and MCP. We maintain two faces, not an adapter per host. A host's
+  configuration of us is that host's code.
+- **One exception per category: a "bring your own" door.** Examples are an
+  OpenAI-compatible engine for hardware we do not build for (the NPU via
+  Lemonade) and an external parser for scanned PDFs. The door is optional,
+  never on the default path, and any degradation it causes is named in the
+  verdict.
+
+Our own five programs still dial each other (§4 rule 2). The guest rule is
+about third parties. A third-party process whose lifecycle we hold is the
+"component holding another's lifecycle" smell (ARCH principle 12).
+
+### 11.2 Per program
+
+| Program | Own | Absorb | Meet / bring-your-own |
+|---|---|---|---|
+| `svrn` | Router and plans (§11.4); evidence assembly; synthesis; claim lifecycle and verdicts (§11.5); in-process engine | llama.cpp; ONNX embedder, reranker and checker weights | Hosts via OpenAI HTTP and MCP; external engine door |
+| `svrn ingest` | Recipe runner; source-aware extractors for structured sources (mail, wiki dumps, threads, JSONL, docx); profile-constrained extraction; snapshot format | Lance, Tantivy, GLiNER, ontologies via profiles (§11.3) | Scanned-PDF parser door |
+| `cmnwlth` | Consent and provenance headers only | iroh | Exo and mesh-llm own pooling; we do not compete |
+| `svrn code` | `callers`, `blast` and convergence over the SCIP graph | Upstream SCIP indexers (they emit files) | Serena, ast-grep, FIM editors |
+| `svrn bench` | Banks, calibration, judge validation, per-package grading | Public benchmarks as data | Results export as JSONL and OTel; no adopted harness |
+
+What this reverses from the same survey's earlier drafts:
+- The engine stays in-process. The cost was the vendored divergences and the
+  OS matrix, not the idea. Upstream the two patches in
+  `vendor/llama-cpp-sys-4` and let the engine door cover the rest.
+- No Docling or BookNLP sidecar on the default path.
+- No per-host integration adapters.
+
+### 11.3 The package bank: recipes and profiles
+
+The bank carries two orthogonal package kinds. A legal profile applies to a
+PDF folder and to a mailbox alike, so the bank grows on two axes that combine.
+
+- **Recipe** — how a source is shaped: acquire, extract, chunk, sections,
+  update. This is today's schema (`sovereign-recipes/SCHEMA.md`, 30 entries in
+  `sovereign-recipes/registry.toml`).
+- **Profile** — what the content means. It contains:
+  - a subset of a published ontology, written as SHACL shapes, from which the
+    JSON Schema for constrained extraction is generated;
+  - extraction guidance;
+  - routes (§11.4);
+  - question templates, surfaced as MCP prompts;
+  - a small grading bank.
+
+  Atoms export as JSON-LD carrying the ontology's IRIs. We author profiles,
+  never ontologies.
+
+"Just works" means a local model picks the pair; the user does not.
+
+1. The input lands in a watched inbox, or through the MCP `add_source` tool.
+2. A sample is fingerprinted.
+3. The fingerprint is matched against package descriptions by centroid, and a
+   small model confirms the match.
+4. At a narrow margin, one elicitation question is asked.
+5. With no match, a recipe and profile are drafted under schema,
+   `test_recipe` is run on the sample, and the draft is previewed
+   (`studio/crates/sovereign-recipe-author`).
+6. The build runs as an MCP task.
+7. The profile's bank grades the build, or reports could-not-judge.
+8. Drafted packages, never content, go back to the bank on opt-in. CI builds
+   and grades each one.
+
+### 11.4 The router is owned
+
+Embedding-exemplar routing is available off the shelf
+(`aurelio-labs/semantic-router` 3.9k, NeMo Guardrails canonical forms 7.2k).
+Plans exist without a router: GraphRAG and LightRAG search modes are picked
+by the caller. What nobody ships is a router that:
+- maps query shape to a retrieval-and-grounding plan;
+- is decided by code, not by a model's tool call;
+- has a calibrated margin that can refuse.
+
+The shapes are: lookup, comparison, whole-corpus synthesis, state at a point,
+change over time, inventory, contradiction, and not-in-corpus. The speech-act
+intents stay as a tone layer above them.
+
+Today there are 281 exemplars in `sovereign/router/exemplars.toml`. The embed
+pass takes about 50 ms, against 0.5–2 s for the LLM classifier
+(`sovereign/crates/sovereign-core/src/router_embed.rs`). Its thresholds (0.55
+top, 0.10 margin) are hand-set and were never fitted to a bank.
+
+The target has four parts:
+- routes as data, shipped by profiles;
+- one decider returning plan, runner-up, margin and abstain, with the
+  threshold fitted by bench;
+- plans composed from a few primitives;
+- one MCP `ask` tool on the enforced path, with plans also exposed as tools
+  for hosts that run strong models.
+
+### 11.5 Claims — one type, two owners
+
+- **Source claims** belong to ingest. They carry spans, are keyed to the
+  snapshot, recipe version and profile version, and are re-extracted by
+  `[update]` when their spans change. Tensions are computed here.
+- **Answer claims** belong to `svrn`. They are checked and persisted with the
+  conversation, and stamped with the snapshot they were checked against. A
+  replaced snapshot makes them stale, not wrong: the conversation shows the
+  verification age and re-checks lazily.
+- **The checker** is stateless (`verify`) and backed by a registry.
+- **Calibration** belongs to bench.
+
+When a host's model writes the answer from `search` results, `svrn` can
+verify only if `verify` is called. That answer is labelled unverified rather
+than implied to be checked (ARCH principle 10). The enforced path is `ask`, or
+`svrn` as the model behind an OpenAI connection.
+
+### 11.6 Correctness features are carried; cost features degrade
+
+`svrn` carries the correctness features itself: the embedder, reranker and
+claim checker, about 1 GB of ONNX weights on CPU. That keeps three things
+independent of whichever engine is present:
+- snapshot embedding identity;
+- answerability (the rerank margin);
+- verification.
+
+JSON Schema is the only constraint language assumed. The engine is probed at
+start, and each feature's path is chosen from that probe, never from the
+vendor's name.
+
+| Feature | Affects | Path, best first |
+|---|---|---|
+| Constrained output | correctness | Native JSON Schema → tool-call arguments → validate plus one repair → `CouldNotJudge` |
+| Rerank / answerability, checking, embeddings | correctness | `svrn`'s own weights, so never degraded |
+| Prefix cache | cost | Engine-automatic; evidence ordered shared-first; latency reported |
+| MTP, jump-forward, sibling contexts, llguidance | cost | Our engine only; optional speedups |
+
+With no engine at all, the structure tier still works: sections, tiers, NER,
+retrieval, rerank and `verify`. The semantic tier shows "not built: needs a
+local model". MCP sampling is used only for small consented jobs, such as
+drafting a recipe, and never for bulk extraction.
+
+### 11.7 Forfeited, with the evidence
+
+| Category | Leaders (stars, 2026-09-30) | Our position |
+|---|---|---|
+| Local serving | Ollama 182k, llama.cpp 130k, vLLM 93k | Absorb llama.cpp as a library; engine door for the rest |
+| Device pooling | exo 47.7k; mesh-llm 3.5k (Rust, iroh, layer splits, pushed daily) | Forfeit; keep the two headers |
+| Gateways | LiteLLM 60k | Forfeit |
+| Chat and RAG apps | Open WebUI 154k, Dify 158k, AnythingLLM 67k | Guest via the two doors. They show sources; none checks the answer at runtime |
+| Parsers | markitdown 188k, MinerU 81k, Docling 68k | Scanned-PDF door only |
+| Code intel for agents | Serena 30k | Hold at current size |
+| Eval libraries | promptfoo 26k, DeepEval 19k | Keep ours slim; none validates its judge |
+
+Runtime claim-level verification with abstention is fragmented, not crowded.
+Checker models exist:
+- MiniCheck-Flan-T5-L (0.8B) scores 75.0 on LLM-AggreFact;
+- FactCG-DeBERTa (0.4B) scores 75.6;
+- GPT-4o scores 75.9.
+
+Hosted verifiers (Vertex, Azure) return proprietary shapes and never decide
+to abstain. No wire standard carries claim-level verdicts; OTel's
+`gen_ai.evaluation.result` is per response.
+
+### 11.8 Gates that keep it structural
+
+- Every third-party dependency is a row in one registry: kind (library,
+  weights, format, data, or running system) and whether we tune across it.
+- The default install spawns zero third-party processes.
+  `scripts/install-journey-nightly.sh` asserts the process tree.
+- Every running-system row is optional. Its absence is `CouldNotJudge` or a
+  named degradation, never a failed turn.
+- The adapter count is a size-gate key. If it rises, that is drift toward
+  maintaining connections.
+
+### 11.9 Measurements that decide, bars before data
+
+1. **Checker bake-off.** Our judge against MiniCheck-FT5, FactCG and Granite
+   Guardian as the per-claim checker, on our banks and on LLM-AggreFact.
+   - Bar: honesty parity at five times lower gate latency, the H0 bar of
+     `sovereign/docs/specs/NATIVE_GROUNDING.md`. The baseline is a gate that
+     took 121.5 s of a 150 s turn (2026-08-12).
+   - If our pipeline scores below 75.0 on LLM-AggreFact, adopt their checker
+     and stop tuning ours.
+2. **CPU floor.** The claim-checking and answerability lanes run with only
+   the ONNX weights on CPU.
+   - Bar: honesty within 0.03 of the in-daemon path.
+   - Failing it moves the floor to a laptop GPU, still independent of the
+     engine.
+3. **Router.** A routing bank covering whole-corpus, state-at and
+   contradiction shapes across three profiles. Three routers compete:
+   calibrated embed-plus-margin, an 8B model tool-calling across the plan
+   tools, and semantic-router with the same exemplars.
+   - Bar: calibrated embed wins on accuracy at under a tenth of the latency.
+   - Failing that, plans are exposed as tools and the router stops there.
+4. **Just works.** Twelve unlabelled inputs of different shapes go into the
+   inbox. Count three things:
+   - how many are matched with zero questions, and with one;
+   - how many drafted packages pass their own grading;
+   - whether the first profile prompt returns a supported answer.
+
+   If a wrong match is more common than a question, the confirmation step
+   becomes mandatory.
+5. **First hour.** Fresh install to first verified answer on a Wikipedia
+   snapshot, timed on Strix Halo and on an M-series Mac, plus the build time
+   of one full-length public-domain novel under the fiction profile.
+   Unmeasured today; taken first.
