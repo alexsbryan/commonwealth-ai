@@ -33,7 +33,10 @@ oicp-client = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 serde = { workspace = true }
-serde_json = { workspace = true }
+# `preserve_order`: banked reports keep their authored key order, which
+# `json_keys_survive_the_rubric_extraction` asserts. Declared here, since a
+# lifted build has no workspace-hack to unify it in.
+serde_json = { workspace = true, features = ["preserve_order"] }
 sha2 = { workspace = true }
 sovereign-cli-base = { workspace = true }
 sovereign-contracts = { workspace = true }

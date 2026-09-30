@@ -1621,9 +1621,9 @@ mod tests {
     }
 
     fn bank_text() -> String {
-        let root = find_repo_root().expect("this test runs inside the checkout");
-        std::fs::read_to_string(root.join("sovereign/bench/quality-check/chat-ask.toml"))
-            .expect("the shipped bank")
+        let root =
+            sovereign_eval::bench_root::require_bench_root().expect("the bench tree is named");
+        std::fs::read_to_string(root.join("quality-check/chat-ask.toml")).expect("the shipped bank")
     }
 
     /// The SHIPPED bank parses. A bank this lane cannot read is a lane that

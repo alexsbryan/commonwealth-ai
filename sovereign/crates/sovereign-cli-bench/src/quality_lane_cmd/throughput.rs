@@ -876,10 +876,13 @@ mod tests {
     use super::*;
 
     fn bank_text() -> String {
+        let bank = BANK
+            .strip_prefix("sovereign/bench/")
+            .expect("the bank lives under the bench tree");
         std::fs::read_to_string(
-            find_repo_root()
-                .expect("tests run inside the checkout")
-                .join(BANK),
+            sovereign_eval::bench_root::require_bench_root()
+                .expect("the bench tree is named")
+                .join(bank),
         )
         .expect("the shipped bank is on disk")
     }
