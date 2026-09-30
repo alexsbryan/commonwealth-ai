@@ -27,6 +27,7 @@
 //! to invoke it. The Rust-level publish surface is intentionally
 //! small.
 
+pub mod bundle;
 pub mod capability_request;
 pub mod checkpoint;
 pub mod decision_log;

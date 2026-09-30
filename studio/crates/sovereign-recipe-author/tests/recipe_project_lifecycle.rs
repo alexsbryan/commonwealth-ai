@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The recipe-author project lifecycle over svrn's notes store. The tool
-//! loop itself is recipe-author's own test now
-//! (studio/crates/sovereign-recipe-author/tests/recipe_author_loop.rs,
-//! phase-b-48); this one stays because it names `sovereign_store`.
+//! The recipe-author project lifecycle. Moved from sovereign-tools with the
+//! recipe-authoring bundle (pb-ingest-rehome-daemon); the notes are the
+//! contract's recording double, since svrn's store's `RecipeNotes` fidelity is
+//! pinned on real SQL in sovereign-store tests/main/memory_notes_tests.rs.
 
 use std::sync::Arc;
 
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
+use sovereign_contracts::traits::Tool;
+use sovereign_contracts::types::{ConversationId, StepOutput, ToolContext};
 
 fn ctx() -> ToolContext {
     ToolContext {
@@ -27,24 +27,23 @@ fn ctx() -> ToolContext {
 /// checkpoint. Mirrors the M1 acceptance scenario in the plan file.
 #[tokio::test]
 async fn recipe_author_project_lifecycle_end_to_end() {
+    use sovereign_contracts::notes::fixtures::RecordingNotes;
     use sovereign_contracts::recipe::notes::{NoteScope, RecipeNotes, ScopeFilter};
-    use sovereign_store::sqlite::SqliteStateStore;
-    use sovereign_tools::recipe_author::recipe_project_store::RecipeProjectStore;
-    use sovereign_tools::recipe_author::{
+    use sovereign_recipe_author::recipe_project_store::RecipeProjectStore;
+    use sovereign_recipe_author::RecipeProject;
+    use sovereign_recipe_author::{
         capability_request::CapabilityRequest,
         checkpoint::{do_create as checkpoint_create, restore_checkpoint},
         decision_log::{DecisionAttribution, DecisionKind, DecisionPayload},
         situated_context, CapabilityRequestTool, DecisionLogTool,
     };
-    use sovereign_tools::RecipeProject;
 
     let home = tempfile::tempdir().unwrap();
     std::env::set_var("HOME", home.path());
     let recipes_dir = home.path().join(".sovereign/recipes");
     std::fs::create_dir_all(&recipes_dir).unwrap();
 
-    let notes: Arc<dyn RecipeNotes> =
-        Arc::new(SqliteStateStore::open(&home.path().join("sovereign.db")).unwrap());
+    let notes: Arc<dyn RecipeNotes> = Arc::new(RecordingNotes::default());
     let features = Arc::new(RecipeProjectStore::open(&home.path().join("features.db")).unwrap());
 
     let project = RecipeProject::new(

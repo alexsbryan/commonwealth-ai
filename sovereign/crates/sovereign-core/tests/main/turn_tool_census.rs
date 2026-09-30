@@ -353,9 +353,12 @@ fn read(root: &Path, rel: &str) -> String {
 /// Two files since 2026-08-26: the workflow-authoring family is implemented
 /// beside the workflow host rather than in `sovereign-tools`, and a scan that
 /// knew only the first file would have reported the desktop as losing it.
+/// The recipe-authoring family joined its tools in sovereign-recipe-author
+/// (pb-ingest-rehome-daemon), for the same reason.
 const BUNDLE_DEFINITIONS: &[&str] = &[
     "sovereign/crates/sovereign-tools/src/bundles.rs",
     "studio/crates/sovereign-workflow-host/src/author.rs",
+    "studio/crates/sovereign-recipe-author/src/bundle.rs",
 ];
 
 /// The `ToolBundle` impls across `BUNDLE_DEFINITIONS`, as one text.
