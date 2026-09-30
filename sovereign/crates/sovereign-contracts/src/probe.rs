@@ -26,7 +26,7 @@ pub use attached::{
     AttachedEvidence, AttachedProbe, AttachedSource, AttachedTurn, StateTransition,
 };
 pub use judge::{
-    AssessAnswer, AssessEvidence, AssessOp, AssessProbe, AssertedValueVerdict, JudgeAnswer,
+    AssertedValueVerdict, AssessAnswer, AssessEvidence, AssessOp, AssessProbe, JudgeAnswer,
     JudgeEvidence, JudgeOp, JudgeProbe,
 };
 pub use raptor_nodes::{RaptorNodeEvidence, RaptorNodesEvidence};

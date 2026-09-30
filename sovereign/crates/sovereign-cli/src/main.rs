@@ -41,6 +41,7 @@ mod charter_cmd;
 #[cfg(feature = "dev-tools")]
 #[cfg(feature = "dev-tools")]
 mod agent_bench_bin;
+mod bench_bin;
 mod conformance_cmd;
 mod contract_cmd;
 mod daemon_bin;
@@ -51,7 +52,6 @@ mod drift_cmd;
 mod ingest_bin;
 mod init;
 mod journal_cmd;
-mod bench_bin;
 mod llm_bin;
 mod memory_cmd;
 mod mesh_bin;
