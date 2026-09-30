@@ -181,9 +181,13 @@ struct Ran {
 
 fn run_one(repo: &Path, argv: &[String], report: &Path, stdout: &Path) -> Result<Ran, String> {
     let program = if matches!(argv[0].as_str(), "svrn" | "sovereign" | "sovereign-cli-llm") {
-        // THIS binary, never whatever the operator's PATH holds — the same
-        // rule the runner applies to a lane's own program.
-        std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?
+        // The dispatcher beside THIS binary, never whatever the operator's
+        // PATH holds — the same rule the runner applies to a lane's own
+        // program. The dispatcher, not this binary: an inner command may be
+        // any program's verb (`svrn knowledge-gym` is svrn's, `svrn bench`
+        // is bench's), and only the dispatcher routes every one.
+        let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
+        sovereign_cli_base::dispatcher::dispatcher_exe(&exe)?
     } else {
         PathBuf::from(&argv[0])
     };
