@@ -279,6 +279,9 @@ pub struct EmbeddedDaemon {
     /// `[iroh] media_origin` + `media_allow`, live: boot seeds it, reload
     /// replaces it, the acceptor reads it per dial — one route, as above.
     media_route: sovereign_mesh::iroh_access::MediaRoute,
+    /// The RPC-worker rows `/v1/mesh/status` reports, installed once at boot
+    /// from the distribution's port; unset is a named absence there.
+    rpc_worker_rows: std::sync::OnceLock<crate::mesh_http::RpcWorkerRows>,
 }
 
 /// What became of the API listeners the serve task binds.
@@ -574,6 +577,7 @@ impl EmbeddedDaemon {
             fabric: std::sync::RwLock::new(None),
             published_apps: commonwealth_media::PublishedApps::default(),
             media_route: sovereign_mesh::iroh_access::MediaRoute::default(),
+            rpc_worker_rows: std::sync::OnceLock::new(),
         })
     }
 
@@ -2481,6 +2485,18 @@ impl EmbeddedDaemon {
         // The roster decision is Fabric's (DC §4.1 "report reach"); the daemon
         // owns only the "is there a node at all" gate.
         app_state.inner.fabric.eligible_anchors().await
+    }
+
+    /// Install the RPC-worker rows `/v1/mesh/status` reports (the
+    /// distribution's port, pb-serve-ranks-discovery). The first wins.
+    pub fn set_rpc_worker_rows(&self, rows: crate::mesh_http::RpcWorkerRows) {
+        if self.rpc_worker_rows.set(rows).is_err() {
+            tracing::warn!(target: "mesh_state", "RPC-worker rows already installed; the second port is ignored");
+        }
+    }
+
+    pub(crate) fn rpc_worker_rows(&self) -> Option<crate::mesh_http::RpcWorkerRows> {
+        self.rpc_worker_rows.get().cloned()
     }
 
     // ── Private ─────────────────────────────────────────

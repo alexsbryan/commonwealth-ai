@@ -1541,7 +1541,7 @@ items = ["process::run", "process::HostedServe", "process::HostedParts", "proces
 [[distribution.face]]
 package = "cmnwlth"
 krate = "sovereign-serve"
-items = ["bundles", "assemble", "child_launch", "tracing_filter", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner", "MeshRpcShardWarmer", "MeshPorts", "MeshNow", "ModelOrigin"]
+items = ["bundles", "assemble", "child_launch", "tracing_filter", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner", "MeshRpcShardWarmer", "MeshPorts", "MeshNow", "ModelOrigin", "rpc_worker_views"]
 # The mesh ports serve's distribution reads, composed in the stock process from
 # svrn's daemon (pb-serve-ranks-discovery): the reachable bases are the mesh
 # crate's one derivation.
@@ -1759,7 +1759,7 @@ tracking = "five-programs fp-9"
 package = "svrn"
 from = "sovereign-daemon"
 to = "sovereign-serving-host"
-reason = "not in-process serving (that is serve's since pb-svrn-dials-serve) but two things only: the daemon's own mesh routing — peer_inference::InferenceRouter over DeferredDaemon with its venue_host, pinned_worker_source, rpc_discovery, slot_manifest/slot_select and oicp_synthesis parts (bootstrap.rs, provider.rs, daemon.rs) — and the OpenAI adapter (inference_adapter, tool_profile; lib.rs re-exports it with model_fetch and worker_eligibility). svrn's serving state, admission layers and entry_endpoint are its own, and the admission wire, turn_admission and the OpenAI/FIM rendering are sovereign-contracts' (pb-svrn-serving-ports; tests/main/serving_ports_census.rs keeps them out). pb-serve-ranks gives ranking to serve and retires this row (phase-b-23)."
+reason = "not in-process serving (that is serve's since pb-svrn-dials-serve) but three things only: the daemon's own mesh routing — peer_inference::InferenceRouter over DeferredDaemon with its venue_host, pinned_worker_source, slot_manifest/slot_select and oicp_synthesis parts (bootstrap.rs, provider.rs, serve_client.rs's StartMesh signature) — the OpenAI adapter (inference_adapter, tool_profile; lib.rs re-exports it), and the test tree (pb-serve-ranks-tests). The discovery hand-off (rpc_discovery's mesh ports, worker_eligibility's status rows) is composed by the distribution since pb-serve-ranks-discovery, and model_fetch is re-exported no more. svrn's serving state, admission layers and entry_endpoint are its own, and the admission wire, turn_admission and the OpenAI/FIM rendering are sovereign-contracts' (pb-svrn-serving-ports; tests/main/serving_ports_census.rs keeps them out). pb-serve-ranks gives ranking to serve and retires this row (phase-b-23)."
 tracking = "five-programs fp-68"
 
 

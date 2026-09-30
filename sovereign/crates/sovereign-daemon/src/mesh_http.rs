@@ -205,9 +205,15 @@ pub struct StatusResponse {
     /// RPC inference workers + their eligibility state (host side; empty on a
     /// node not running RPC discovery). Lets an operator see WHY a worker isn't
     /// being distributed to — e.g. `quarantined` with a cooldown after flapping.
-    /// See `crate::worker_eligibility`.
+    /// Serve's eligibility view, read through the port the distribution
+    /// hands (`RpcWorkerRows`, pb-serve-ranks-discovery), rows as serve
+    /// serialises them.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub rpc_workers: Vec<crate::worker_eligibility::WorkerStatusView>,
+    pub rpc_workers: Vec<serde_json::Value>,
+    /// Why `rpc_workers` was not observed: no RPC-worker port was handed to
+    /// this daemon. `None` when it was read (principle 6: not a silent `[]`).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub rpc_workers_absent: Option<String>,
     /// True when THIS node is the current shared-model host (it assembles +
     /// distributes the RPC layer-split). Published by the daemon's discovery
     /// loop via [`set_shared_model_host`]; lets a mesh soak assert the
@@ -393,6 +399,11 @@ async fn shared_model_status(daemon: &EmbeddedDaemon) -> Option<SharedModelStatu
 /// process and one host role per daemon.
 static SHARED_MODEL_HOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// The RPC-worker rows `GET /v1/mesh/status` reports, read from the
+/// eligibility tracker of the process that runs discovery; the distribution
+/// hands it (`HostedServe::rpc_workers`, pb-serve-ranks-discovery).
+pub type RpcWorkerRows = Arc<dyn Fn() -> Vec<serde_json::Value> + Send + Sync>;
+
 /// Publish whether this node is currently the shared-model host.
 pub fn set_shared_model_host(is_host: bool) {
     SHARED_MODEL_HOST.store(is_host, std::sync::atomic::Ordering::Relaxed);
@@ -434,10 +445,18 @@ async fn mesh_status(
     let node_class = daemon.node_class().await.id().to_string();
     let entry_node = daemon.entry_node().await;
     // RPC worker eligibility (host side) — the same tracker the discovery loop
-    // gates on, so the operator sees the live state without DEBUG logs.
-    let rpc_workers = crate::worker_eligibility::global()
-        .map(|e| e.status_views(std::time::Instant::now()))
-        .unwrap_or_default();
+    // gates on, so the operator sees the live state without DEBUG logs. Read
+    // through the distribution's port; none handed is a named absence.
+    let (rpc_workers, rpc_workers_absent) = match daemon.rpc_worker_rows() {
+        Some(rows) => (rows(), None),
+        None => {
+            tracing::debug!(target: "mesh_state", "mesh status: no RPC-worker port handed; rpc_workers not observed");
+            (
+                Vec::new(),
+                Some("no RPC-worker port was handed to this daemon".to_string()),
+            )
+        }
+    };
     // Shared-model cluster health (None unless this node is in a shared-model
     // fleet). Powers the desktop chip + degraded banner in both UI reach modes.
     let shared_model = shared_model_status(&daemon).await;
@@ -480,6 +499,7 @@ async fn mesh_status(
                     join_link: None,
                     client_token: daemon.running_client_token().await,
                     rpc_workers,
+                    rpc_workers_absent,
                     shared_model_host: is_shared_model_host(),
                     shared_model: shared_model.clone(),
                     peer_inflight_current,
@@ -555,6 +575,7 @@ async fn mesh_status(
                 join_link,
                 client_token: daemon.running_client_token().await,
                 rpc_workers,
+                rpc_workers_absent,
                 shared_model_host: is_shared_model_host(),
                 shared_model,
                 peer_inflight_current,

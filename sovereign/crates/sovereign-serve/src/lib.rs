@@ -112,6 +112,22 @@ pub use sovereign_compute::distributed_warm::MeshRpcShardWarmer;
 /// composition root builds them from svrn's daemon (pb-serve-ranks-discovery).
 pub use sovereign_serving_host::rpc_discovery::{MeshNow, MeshPorts, ModelOrigin};
 
+/// This process's RPC-worker eligibility rows, as `/v1/mesh/status` reports
+/// them: what a process hosting serve's assembly hands svrn's status route
+/// (pb-serve-ranks-discovery). Empty where no discovery loop runs here.
+pub fn rpc_worker_views() -> Vec<serde_json::Value> {
+    sovereign_serving_host::worker_eligibility::global()
+        .map(|e| e.status_views(std::time::Instant::now()))
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|view| {
+            serde_json::to_value(&view)
+                .map_err(|e| tracing::warn!(target: "serve", error = %e, endpoint = %view.endpoint, "an RPC-worker row did not serialise; left out of the status view"))
+                .ok()
+        })
+        .collect()
+}
+
 /// The run lock's name inside the data root (`host_kit::RunLock`): one
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
 pub const RUN_LOCK: &str = "serve";

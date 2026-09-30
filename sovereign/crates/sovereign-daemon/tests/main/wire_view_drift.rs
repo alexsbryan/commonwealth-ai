@@ -55,6 +55,7 @@ fn full_status() -> StatusResponse {
         join_link: Some("sovereign://join/cwth-a-b-c".into()),
         client_token: Some("tok".into()),
         rpc_workers: Vec::new(),
+        rpc_workers_absent: None,
         shared_model_host: false,
         shared_model: None,
         peer_inflight_current: 0,

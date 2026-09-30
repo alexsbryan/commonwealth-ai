@@ -136,6 +136,7 @@ pub struct HostedServe {
     env_contract: Option<EnvContract>,
     ner: Option<NerSource>,
     rpc_warmer: Option<std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer>>,
+    rpc_workers: Option<crate::mesh_http::RpcWorkerRows>,
 }
 
 /// The distribution's in-process NER kind: the one handle per process, loaded
@@ -170,7 +171,23 @@ impl HostedServe {
             env_contract: None,
             ner: None,
             rpc_warmer: None,
+            rpc_workers: None,
         }
+    }
+
+    /// The RPC-worker rows svrn's `/v1/mesh/status` reports: serve's
+    /// eligibility view in this process (pb-serve-ranks-discovery).
+    pub fn rpc_workers<F>(mut self, rows: F) -> Self
+    where
+        F: Fn() -> Vec<serde_json::Value> + Send + Sync + 'static,
+    {
+        self.rpc_workers = Some(std::sync::Arc::new(rows));
+        self
+    }
+
+    /// The RPC-worker rows this distribution handed, if any.
+    pub fn rpc_worker_rows(&self) -> Option<crate::mesh_http::RpcWorkerRows> {
+        self.rpc_workers.clone()
     }
 
     /// The loader's worker-side warmer, which svrn's `/internal/rpc-warm`

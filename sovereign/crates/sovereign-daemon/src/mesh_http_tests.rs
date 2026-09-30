@@ -642,6 +642,36 @@ async fn join_rejects_unparseable_input() {
     assert_eq!(resp.status(), 400);
 }
 
+/// `/v1/mesh/status`'s `rpc_workers` is read through the port the distribution
+/// hands (pb-serve-ranks-discovery): with none handed the view names the
+/// absence rather than answering `[]`; with one, its rows go out as handed and
+/// no absence is claimed. Failing input: default the unhanded port to an empty
+/// list.
+#[tokio::test]
+async fn rpc_workers_come_through_the_handed_port() {
+    let (daemon, base, _tmp) = spawn_test_router().await;
+    let client = reqwest::Client::new();
+    let status = || async {
+        let resp = client
+            .get(format!("{base}/v1/mesh/status"))
+            .send()
+            .await
+            .unwrap();
+        resp.json::<serde_json::Value>().await.unwrap()
+    };
+    let body = status().await;
+    assert!(
+        body["rpc_workers_absent"].is_string(),
+        "no port handed must be a named absence: {body}"
+    );
+    daemon.set_rpc_worker_rows(Arc::new(|| {
+        vec![serde_json::json!({"node_id": "bbb", "endpoint": "10.0.0.2:50052"})]
+    }));
+    let body = status().await;
+    assert_eq!(body["rpc_workers"][0]["endpoint"], "10.0.0.2:50052");
+    assert!(body.get("rpc_workers_absent").is_none(), "{body}");
+}
+
 /// `/v1/mesh/status`'s engine rows are serve's answer (pb-serve-distributes):
 /// its cached device view, when it was taken, and the block-split pin; a
 /// serve that did not answer reads as not observed yet. Failing input: read

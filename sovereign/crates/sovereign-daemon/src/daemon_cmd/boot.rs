@@ -222,6 +222,7 @@ pub(super) async fn run_daemon(
     // The loader's worker-side warmer, read before `boot_serving` consumes the
     // distribution's composition (pb-serve-distributes).
     let rpc_warmer = hosted.as_ref().and_then(|h| h.warmer());
+    let rpc_worker_rows = hosted.as_ref().and_then(|h| h.rpc_worker_rows());
     let super::serving_boot::ServingBoot {
         provider,
         resolved_embed_family,
@@ -1020,6 +1021,9 @@ pub(super) async fn run_daemon(
     };
     let daemon = crate::EmbeddedDaemon::new(data_dir.clone(), config.clone(), services);
     deferred_daemon.bind(Arc::clone(&daemon));
+    if let Some(rows) = rpc_worker_rows {
+        daemon.set_rpc_worker_rows(rows);
+    }
 
     // The distribution over the engine this process loads (the warm
     // orchestrator, the self-manifest refresh, RPC-worker discovery; built by

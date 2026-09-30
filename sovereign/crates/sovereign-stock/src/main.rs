@@ -89,7 +89,10 @@ fn main() {
     // The worker-side warmer svrn's `/internal/rpc-warm` hands each request.
     .rpc_warmer(std::sync::Arc::new(
         sovereign_serve::MeshRpcShardWarmer::new(),
-    ));
+    ))
+    // The RPC-worker rows svrn's `/v1/mesh/status` reports: serve's view in
+    // this process (pb-serve-ranks-discovery).
+    .rpc_workers(sovereign_serve::rpc_worker_views);
     // Placement is this binary's (FIVE_PROGRAMS §2c): code's indexes and
     // result stores are svrn's root's, as they were when svrn hosted them.
     let code = sovereign_daemon::process::HostedCode::new(|host| async move {
@@ -177,17 +180,16 @@ fn main() {
 fn mesh_ports(
     daemon: &std::sync::Arc<sovereign_daemon::EmbeddedDaemon>,
 ) -> sovereign_serve::MeshPorts {
-    use sovereign_serve::{MeshNow, MeshPorts, ModelOrigin};
     use std::sync::Arc;
     let reader = Arc::clone(daemon);
     let origin = Arc::clone(daemon);
     let prover = Arc::clone(daemon);
-    MeshPorts {
+    sovereign_serve::MeshPorts {
         model_origin: Arc::new(move || {
             let daemon = Arc::clone(&origin);
             Box::pin(async move {
                 let (_client_port, internal_port) = daemon.resolved_ports().await;
-                ModelOrigin {
+                sovereign_serve::ModelOrigin {
                     internal_port,
                     bases: sovereign_mesh::mesh_discovery::reachable_addresses(internal_port)
                         .into_iter()
@@ -208,7 +210,7 @@ fn mesh_ports(
             let daemon = Arc::clone(&reader);
             Box::pin(async move {
                 let app = daemon.app_state().await?;
-                Some(MeshNow {
+                Some(sovereign_serve::MeshNow {
                     roster: Arc::clone(&app.inner.fabric.membership),
                     transport: app.peer_transport(),
                     self_id: app.inner.fabric.identity.current(),
