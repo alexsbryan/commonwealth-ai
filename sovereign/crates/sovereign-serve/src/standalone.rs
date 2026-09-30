@@ -3,7 +3,10 @@
 //! shutdown signal. A distribution hosting serve's assembly binds it itself
 //! and never runs this.
 
+use std::sync::Arc;
+
 use sovereign_contracts::setup_config::SetupConfig;
+use sovereign_contracts::InferenceProvider;
 use tracing::{error, info};
 
 use crate::{assemble, ServeArgs, ServeAssembly};
@@ -80,20 +83,44 @@ pub(crate) async fn serve(args: ServeArgs) -> i32 {
     // in its origin table (pb-serve-distributes-standalone). With no cw-rails
     // answering, every discovery tick scans nothing and the registrations
     // retry; the OpenAI wire serves as before.
+    let local = cell as Arc<dyn InferenceProvider>;
     let roster = crate::rails_mesh::RailsRoster::new(rails_base.clone());
     info!(target: "serve", rails = %rails_base, "distribution over cw-rails' roster and reach");
     distribute(
         crate::rails_mesh::mesh_ports(roster.clone(), bound_addr),
-        crate::rails_mesh::solo_router(
-            cell as std::sync::Arc<dyn sovereign_contracts::InferenceProvider>,
-        ),
+        crate::rails_mesh::solo_router(Arc::clone(&local)),
     );
     routes.push(crate::rpc_warm::bundle(
         servable,
         roster,
-        std::sync::Arc::new(crate::MeshRpcShardWarmer::new()),
+        Arc::new(crate::MeshRpcShardWarmer::new()),
     ));
-    crate::rails_mesh::spawn_registrations(&rails_base, bound_addr);
+    // The member client on a loopback port of its own, registered whole on
+    // cw-rails' `cwth/client/0`: a member's router reaches this node's
+    // models there and nothing else of serve's. Without it serve still
+    // serves this host; members see no models here.
+    let member_addr = match tokio::net::TcpListener::bind(("127.0.0.1", 0)).await {
+        Ok(member) => match member.local_addr() {
+            Ok(addr) => {
+                info!(target: "serve", member = %addr, "member client listening for cw-rails' forwards");
+                tokio::spawn(host_kit::shell::serve(
+                    [member],
+                    vec![crate::member_client_bundle(Arc::clone(&local))],
+                    std::future::pending(),
+                ));
+                Some(addr)
+            }
+            Err(e) => {
+                error!(target: "serve", error = %e, "the member client's port is unreadable; members reach no model here");
+                None
+            }
+        },
+        Err(e) => {
+            error!(target: "serve", error = %e, "the member client could not bind; members reach no model here");
+            None
+        }
+    };
+    crate::rails_mesh::spawn_registrations(&rails_base, bound_addr, member_addr);
     match host_kit::shell::serve([listener], routes, shutdown).await {
         Ok(()) => 0,
         Err(e) => {

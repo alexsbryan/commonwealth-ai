@@ -9,9 +9,10 @@
 //! - [`mesh_ports`] builds the `MeshPorts` compute's distribution runs over:
 //!   that roster, `mesh_reach::rails::RailsTransport` for every peer dial,
 //!   serve's own listener as the model origin.
-//! - [`spawn_registrations`] puts serve's three origins in cw-rails' origin
-//!   table (rpc, `/internal/v1/models/*`, `/internal/rpc-warm`; phase-b-19),
-//!   through the one register/renew loop, so the flip turns none of them off.
+//! - [`spawn_registrations`] puts serve's origins in cw-rails' origin table
+//!   (rpc, `/internal/v1/models/*`, `/internal/rpc-warm`; phase-b-19, and the
+//!   member client on `cwth/client/0`, pb-serve-ranks), through the one
+//!   register/renew loop, so the flip turns none of them off.
 //!
 //! The stock binary hands serve the daemon's own mesh until the flip
 //! (phase-b-33) and runs none of this.
@@ -339,15 +340,23 @@ fn origin_addr(listen: SocketAddr) -> SocketAddr {
 }
 
 /// serve's origins as cw-rails' origin table takes them: the model-transfer
-/// and rpc-warm prefixes on `cwth/http/0` at serve's listener, and, when
+/// and rpc-warm prefixes on `cwth/http/0` at serve's listener, its member
+/// client (`crate::member_client_bundle`) whole on `cwth/client/0` at that
+/// listener (`member`), where the Inference and StatusProbe classes arrive,
+/// and, when
 /// this node lends a GPU (`SOVEREIGN_RPC_SERVE` names a bind), its ggml rpc
 /// worker on `cwth/rpc/0`, declaring the anchor record peers' discovery reads.
-pub fn registrations(listen: SocketAddr) -> Vec<OriginRegistration> {
-    registrations_for(listen, sovereign_contracts::launch::RpcServe::from_env())
+pub fn registrations(listen: SocketAddr, member: Option<SocketAddr>) -> Vec<OriginRegistration> {
+    registrations_for(
+        listen,
+        member,
+        sovereign_contracts::launch::RpcServe::from_env(),
+    )
 }
 
 fn registrations_for(
     listen: SocketAddr,
+    member: Option<SocketAddr>,
     rpc: sovereign_contracts::launch::RpcServe,
 ) -> Vec<OriginRegistration> {
     let mut out = vec![OriginRegistration {
@@ -360,6 +369,21 @@ fn registrations_for(
         claims: None,
         namespaces: Vec::new(),
     }];
+    match member {
+        Some(member) => out.push(OriginRegistration {
+            alpn: String::from_utf8_lossy(mesh_reach::alpn::CLIENT_ALPN).into_owned(),
+            // `cwth/client/0` is registered whole: cw-rails takes prefixes on
+            // `cwth/http/0` only.
+            prefixes: Vec::new(),
+            port: member.port(),
+            admit: Admit::Members(Vec::new()),
+            framing: Framing::Http,
+            ttl_secs: Some(ORIGIN_TTL_SECS),
+            claims: None,
+            namespaces: Vec::new(),
+        }),
+        None => warn!(target: TARGET, "no member client: serve registers nothing on cwth/client/0"),
+    }
     match rpc.port() {
         Some(port) if rpc.is_serving() => out.push(OriginRegistration {
             alpn: String::from_utf8_lossy(mesh_reach::alpn::RPC_ALPN).into_owned(),
@@ -430,8 +454,8 @@ fn anchor_claims(rpc_port: u16) -> NodeCapabilities {
 
 /// Keep every registration in cw-rails' origin table for as long as serve
 /// runs, through the one register/renew loop.
-pub fn spawn_registrations(rails_base: &str, listen: SocketAddr) {
-    for registration in registrations(listen) {
+pub fn spawn_registrations(rails_base: &str, listen: SocketAddr, member: Option<SocketAddr>) {
+    for registration in registrations(listen, member) {
         info!(target: TARGET, slot = %registration.alpn, prefixes = ?registration.prefixes,
               port = registration.port, rails = %rails_base,
               "registering an origin with cw-rails");

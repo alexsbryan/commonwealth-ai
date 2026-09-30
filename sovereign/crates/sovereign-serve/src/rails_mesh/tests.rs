@@ -86,8 +86,9 @@ fn a_cw_rails_without_full_ids_is_named_not_an_empty_roster() {
 #[test]
 fn serve_registers_its_peer_prefixes_and_its_rpc_worker_only_when_it_binds() {
     let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
-    let off = registrations_for(listen, RpcServe::resolve(None, false));
-    assert_eq!(off.len(), 1, "no worker bind, no rpc origin: {off:?}");
+    let member: Option<SocketAddr> = Some("127.0.0.1:18001".parse().unwrap());
+    let off = registrations_for(listen, member, RpcServe::resolve(None, false));
+    assert_eq!(off.len(), 2, "no worker bind, no rpc origin: {off:?}");
     assert_eq!(off[0].alpn, "cwth/http/0");
     assert_eq!(off[0].port, 18000);
     assert_eq!(
@@ -98,8 +99,19 @@ fn serve_registers_its_peer_prefixes_and_its_rpc_worker_only_when_it_binds() {
         ]
     );
     assert_eq!(off[0].framing, Framing::Http);
+    // The member client, whole on the ALPN the Inference class rides, at its
+    // own listener rather than serve's.
+    assert_eq!(off[1].alpn, "cwth/client/0");
+    assert_eq!(
+        (off[1].port, off[1].framing, off[1].prefixes.len()),
+        (18001, Framing::Http, 0)
+    );
 
-    let on = registrations_for(listen, RpcServe::resolve(Some("127.0.0.1:50060"), false));
+    let on = registrations_for(
+        listen,
+        member,
+        RpcServe::resolve(Some("127.0.0.1:50060"), false),
+    );
     let rpc = on
         .iter()
         .find(|r| r.alpn == "cwth/rpc/0")

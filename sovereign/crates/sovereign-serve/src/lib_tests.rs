@@ -261,3 +261,42 @@ async fn a_turn_cw_rails_forwarded_keeps_no_admission_claim() {
         "a loopback caller keeps its admission; a member cw-rails forwarded does not"
     );
 }
+
+/// What cw-rails forwards a member to on `cwth/client/0` is the member
+/// client alone: the OpenAI face answers, and the reload, which is guarded
+/// only by the caller being on loopback (as cw-rails' forward is), is not
+/// mounted there.
+#[tokio::test]
+async fn the_member_client_mounts_the_openai_face_and_no_reload() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let base = format!("http://{}", listener.local_addr().expect("addr"));
+    tokio::spawn(host_kit::shell::serve(
+        [listener],
+        vec![member_client_bundle(Arc::new(
+            sovereign_compute::mock::MockProvider {
+                tokens: 1,
+                delay: std::time::Duration::ZERO,
+            },
+        ))],
+        std::future::pending(),
+    ));
+    let client = reqwest::Client::new();
+    let models = client
+        .get(format!("{base}/v1/models"))
+        .send()
+        .await
+        .expect("answered");
+    assert_eq!(models.status(), 200, "the member client answers /v1/models");
+    let reload = client
+        .post(format!("{base}{}", sovereign_contracts::engine_state::RELOAD_PATH))
+        .send()
+        .await
+        .expect("answered");
+    assert_eq!(
+        reload.status(),
+        404,
+        "a member must not reach serve's reload through cw-rails"
+    );
+}
