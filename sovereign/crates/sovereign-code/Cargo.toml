@@ -28,6 +28,9 @@ sovereign-turn-client = { workspace = true }
 kernel-types = { workspace = true }
 uuid = { workspace = true }
 code-facts = { workspace = true, features = ["treesitter", "stores"] }
+# The editor door's lanes (`edit_predictions`, moved from the svrn daemon at
+# pb-meshapp-rest): the pure rule/model/symbol/syntax lanes and the journal.
+code-next-edit = { path = "../../../code-next-edit" }
 arch-layers = { workspace = true }
 
 arc-swap = { workspace = true }
@@ -47,6 +50,9 @@ tracing = { workspace = true }
 # phase-b pb-code-freshness): axum routes behind the host kit's loopback guard.
 axum = { workspace = true, optional = true }
 host-kit = { workspace = true, features = ["shell", "mcp", "task"], optional = true }
+# The editor door's model lane dials serve's `/v1/completions` and
+# `/v1/chat/completions` on this host (pb-meshapp-rest; phase-b-23).
+reqwest = { workspace = true, optional = true }
 # SpecWatcher (spec_watcher.rs, moved from sovereign-tools with the spec gate
 # it invalidates, phase-b pb-code-freshness). Same major as the reindexer's.
 notify = "8"
@@ -58,7 +64,7 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 default = ["treesitter"]
 # Also the freshness path (the Reindexer and `/v1/projects/*`), which needs
 # the watchers crate's `reindexer`, gated on that crate's `treesitter`.
-treesitter = ["corpus-engine-watchers/treesitter", "dep:axum", "dep:host-kit"]
+treesitter = ["corpus-engine-watchers/treesitter", "dep:axum", "dep:host-kit", "dep:reqwest"]
 dev-tools = ["dep:corpus-engine-archaeology"]
 
 [dev-dependencies]
@@ -69,3 +75,13 @@ host-kit = { workspace = true, features = ["http"] }
 # project_http.rs's route tests.
 reqwest = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+# The editor door's route tests drive its router with `tower::ServiceExt`.
+tower = { workspace = true, features = ["util"] }
+# The editor door's e2e and offline scorer take their grammar lookup from a
+# test-only table (tests/common/next_edit_grammar.rs): the real registry is
+# corpus-engine's, which code may not name, dev edges included. The same four
+# grammars code-next-edit's own tests register.
+tree-sitter-go = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"

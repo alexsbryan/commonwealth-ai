@@ -265,6 +265,10 @@ pub struct ServingCapability {
     pub project_http: axum::Router,
     pub corpus_watch_http: axum::Router,
     pub workflow_http: axum::Router,
+    /// Code's editor door when a distribution composed code here
+    /// (pb-meshapp-rest). Not a host router: it reaches every general client
+    /// surface through `NodeSeed::edit_door`, not the operator's merge.
+    pub edit_door: Option<axum::Router>,
 }
 
 /// Rings 1–3 as every serving daemon has them, whichever host runs it. The

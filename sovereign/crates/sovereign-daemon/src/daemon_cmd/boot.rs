@@ -457,7 +457,7 @@ pub(super) async fn run_daemon(
 
     // ── The code program, when the distribution composes it ───────
     // The stock binary hands code's composition in (F2 (a), phase-b-30):
-    // code's tools on the one `/mcp`, `/v1/projects/*` and its Reindexer,
+    // code's tools on the one `/mcp`, `/v1/projects/*`, its editor door, its Reindexer,
     // its watchers and work atlas, over this root's `indexes/` and
     // `notes.db`. A composition that fails refuses boot by name.
     let code_mount = match code {
@@ -510,11 +510,18 @@ pub(super) async fn run_daemon(
             None
         }
     };
-    let (code_tools, project_http, code_yield, _code_runtime) = match code_mount {
-        Some(m) => (Some(m.tools), m.routes, Some(m.yield_to), Some(m.hold)),
+    let (code_tools, project_http, edit_door, code_yield, _code_runtime) = match code_mount {
+        Some(m) => (
+            Some(m.tools),
+            m.routes,
+            Some(m.edit_routes),
+            Some(m.yield_to),
+            Some(m.hold),
+        ),
         None => (
             None,
             crate::hosted_code::projects_absent_router(),
+            None,
             None,
             None,
         ),
@@ -864,6 +871,7 @@ pub(super) async fn run_daemon(
                         code_tools,
                     ),
                     project_http,
+                    edit_door,
                     corpus_watch_http: crate::corpus_watch_http::corpus_watch_router(),
                     // sv-surface rung 5: workflow execution is a daemon job
                     // surface (`/internal/workflows/*`). The runtime routes

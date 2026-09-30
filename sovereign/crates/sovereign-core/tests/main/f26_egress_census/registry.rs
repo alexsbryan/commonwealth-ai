@@ -235,6 +235,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // Re-keyed at REVIEW-audit-pb-auto-7: the file moved to sovereign-code
     // at pb-code-freshness (c173a8042). Same four sites, same class.
     ("sovereign/crates/sovereign-code/src/project_http.rs", Class::Mesh, 4),
+    // The editor door (moved from the daemon at pb-meshapp-rest): one client
+    // for the model lane's calls to serve's loopback base on this host.
+    ("sovereign/crates/sovereign-code/src/edit_predictions.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-serving-host/src/model_fetch.rs", Class::Mesh, 5),
     // Moved from sovereign-daemon/src/loopback_guard.rs with the guard itself
     // (pb-shell, da819e9e2): the same three test-module clients, a relocation.

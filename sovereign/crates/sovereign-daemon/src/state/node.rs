@@ -62,6 +62,11 @@ pub struct NodeSeed {
     /// it at a fixture the same way production would point it at a rails
     /// daemon on another port.
     pub rails_base: String,
+    /// Code's editor door (`/v1/edit_predictions` and its outcome route),
+    /// when a distribution composed code into this process
+    /// (`hosted_code::CodeMount::edit_routes`, pb-meshapp-rest). `None` mounts
+    /// the named absence pointing at `svrn code`.
+    pub edit_door: Option<axum::Router>,
 }
 
 impl NodeSeed {
@@ -147,6 +152,8 @@ impl NodeSeed {
             client_tokens,
             named_client_tokens,
             rails_base: crate::rails_client::resolve_rails_base(&daemon),
+            // Handed in by the daemon from what code's composition mounted.
+            edit_door: None,
         })
     }
 }
@@ -208,6 +215,9 @@ pub struct NodePart {
     /// `routes_rail::namespace_for`, which is what scopes a wall grant — the
     /// resource declares, the credential identifies.
     pub guest_pages: Arc<crate::guest_door::GuestPages>,
+    /// Code's editor door, mounted by every surface that serves the general
+    /// client routes; `None` is svrn alone ([`NodeSeed::edit_door`]).
+    pub edit_door: Option<axum::Router>,
     /// The holder's stored guest link and the mesh tunnel it opens, for the
     /// daemon's lifetime — served at `/internal/guest/route` so a CLI dials
     /// this instead of holding a tunnel itself (§12 D6).

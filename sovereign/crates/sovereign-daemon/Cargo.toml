@@ -59,11 +59,10 @@ sovereign-store = { workspace = true }
 sovereign-authoring-harness = { workspace = true }
 # The host cluster's own deps, arriving with sovereign-api's modules at
 # domains `dm-daemon-api-edge` (2026-09-18): the admission policy, the grant
-# store, the next-edit package crate, the HTTP body seam, the canonical-sync
+# store, the HTTP body seam, the canonical-sync
 # codec and the small leaves the edge reads.
 serving-policy-core = { workspace = true }
 sovereign-grants = { workspace = true }
-code-next-edit = { path = "../../../code-next-edit" }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-scip = { workspace = true }
 # Leaf items the engine re-exports (types, error, index, corpus) — spelled at their owner.
@@ -144,7 +143,7 @@ ocr = ["sovereign-tools/paddle-ocr"]
 iroh-experimental = ["sovereign-mesh/iroh-experimental"]
 
 [dev-dependencies]
-# `next_edit_symbol_lane_e2e` builds a real `ScipGraph`.
+# `code_server_via_mcp_client` builds a real `ScipGraph`.
 arc-swap = { workspace = true }
 corpus-engine-scip = { workspace = true }
 # `solve_http`'s route test drives the router with `tower::ServiceExt`.

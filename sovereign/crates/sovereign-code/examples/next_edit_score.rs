@@ -3,12 +3,16 @@
 //! (`sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md` §7, §8 item 1).
 //!
 //! Serves `POST /v1/edit_predictions` with the **same pipeline the
-//! daemon runs** (`sovereign_daemon::routes_edit_predictions::
-//! predict_response`), forwarding the one impure step — inference — to
-//! any OpenAI-compatible endpoint. That is the whole design: a
-//! candidate checkpoint is scored by the daemon's own decisions, not by
-//! a second implementation's opinion of them, so a bakeoff number is a
-//! statement about the model rather than about the harness.
+//! daemon runs** (`sovereign_code::edit_predictions::predict_response`,
+//! code's editor door since pb-meshapp-rest), forwarding the one impure
+//! step — inference — to any OpenAI-compatible endpoint. That is the
+//! whole design: a candidate checkpoint is scored by the daemon's own
+//! decisions, not by a second implementation's opinion of them, so a
+//! bakeoff number is a statement about the model rather than about the
+//! harness. The syntax filter's grammars come from the dev-only table in
+//! `tests/common/next_edit_grammar.rs` (rust, typescript with `.tsx`, go,
+//! python): the stock binary's registry is corpus-engine's, which code may
+//! not name, and the filter judges only those languages.
 //!
 //! Because it speaks the route's contract exactly, **both existing eval
 //! banks run against it unchanged** — the pre-registered gates in
@@ -20,7 +24,7 @@
 //! llama-server -m sweep-next-edit-1.5B.Q8_0.gguf --port 8089
 //!
 //! # terminal 2 — the scorer, speaking the daemon's contract
-//! cargo run -p commonwealth-api --example next_edit_score -- \
+//! cargo run -p sovereign-code --example next_edit_score -- \
 //!     --upstream http://127.0.0.1:8089 --format sweep \
 //!     --model-id sweep-1.5B --port 9799
 //!
@@ -49,10 +53,13 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::Json;
 use code_next_edit::next_edit_model::Prompt;
-use sovereign_daemon::routes_edit_predictions::{
+use sovereign_code::edit_predictions::{
     predict_response, validate_wire, EditPredictionsRequestWire, InferError, InferenceCall,
     ModelSlot,
 };
+
+#[path = "../tests/common/next_edit_grammar.rs"]
+mod next_edit_grammar;
 
 #[derive(Clone)]
 struct Cfg {
@@ -234,21 +241,30 @@ async fn handle(State(cfg): State<Cfg>, Json(wire): Json<EditPredictionsRequestW
         degraded: false,
     });
 
-    let out = predict_response(&wire, model, started, cfg.force, |call| async move {
-        // Permits are AWAITED, not tried: see the module doc. A queued
-        // consult is a throughput fact, not a model defect.
-        let _permit = cfg
-            .slot
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| InferError("error"))?;
-        let fut = upstream_call(&cfg, call);
-        match tokio::time::timeout(std::time::Duration::from_millis(cfg.timeout_ms), fut).await {
-            Err(_) => Err(InferError("timeout")),
-            Ok(r) => r,
-        }
-    })
+    let grammar = Some(next_edit_grammar::grammar_for as sovereign_code::face::GrammarLookup);
+    let out = predict_response(
+        &wire,
+        model,
+        started,
+        cfg.force,
+        grammar,
+        |call| async move {
+            // Permits are AWAITED, not tried: see the module doc. A queued
+            // consult is a throughput fact, not a model defect.
+            let _permit = cfg
+                .slot
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|_| InferError("error"))?;
+            let fut = upstream_call(&cfg, call);
+            match tokio::time::timeout(std::time::Duration::from_millis(cfg.timeout_ms), fut).await
+            {
+                Err(_) => Err(InferError("timeout")),
+                Ok(r) => r,
+            }
+        },
+    )
     .await;
 
     Json(out.body).into_response()

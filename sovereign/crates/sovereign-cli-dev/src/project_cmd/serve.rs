@@ -240,6 +240,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         extra_watchers: docs_watchers,
         // Code alone: the rail dials cw-rails and wires no host model.
         notes_rail: Default::default(),
+        // Code alone holds no grammar registry: the editor door names its
+        // syntax filter and symbol lane unjudged (pb-meshapp-rest).
+        grammar: None,
     })
     .await
     {
@@ -328,6 +331,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     let app = host_kit::mcp::http::routes(Arc::new(dispatcher), notifier)
         .route("/mcp/stats", axum::routing::get(super::mcp_host::mcp_stats))
         .merge(face.routes)
+        .merge(face.edit_routes)
         .localhost_only()
         .layer(axum::Extension(tools))
         .layer(tower_http::cors::CorsLayer::permissive());

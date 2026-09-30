@@ -15,6 +15,7 @@ use corpus_engine_notes::NoteStore;
 use host_kit::mcp::McpDispatcher;
 use sovereign_contracts::ToolRegistry;
 
+pub use code_next_edit::grammar::{Grammar, GrammarLookup};
 pub use mcp_host::{CodeCallLog, CodeTools};
 
 // The atlas identity and store dialer the face uses, moved from
@@ -58,6 +59,10 @@ pub struct CodeParts {
     pub extra_watchers: Vec<Arc<dyn corpus_engine_watchers::BackgroundWatcher>>,
     /// What the host wires the note store with; `Default` is code alone.
     pub notes_rail: NotesRail,
+    /// The host's extension → grammar registry for the editor door's syntax
+    /// filter and symbol lane (pb-meshapp-rest). The stock binary supplies
+    /// corpus-engine's; `None` (code alone) leaves both unjudged, by name.
+    pub grammar: Option<GrammarLookup>,
 }
 
 /// Code, composed: what a host serves and what it holds for its life.
@@ -68,6 +73,10 @@ pub struct CodeFace {
     pub tools: Arc<ToolRegistry>,
     /// `/v1/projects/*`, the Reindexer's HTTP surface.
     pub routes: axum::Router,
+    /// The editor door, `/v1/edit_predictions` and its outcome route
+    /// (`crate::edit_predictions`, pb-meshapp-rest); a host adds its own
+    /// admission gate.
+    pub edit_routes: axum::Router,
     /// One line per store, runner and bundle, for the host's banner or log.
     pub banner: Vec<String>,
     /// The Reindexer, the watcher supervisor and the atlas GC: dropping it
@@ -120,6 +129,7 @@ pub async fn compose(parts: CodeParts) -> Result<CodeFace, String> {
         session_prefix,
         extra_watchers,
         notes_rail,
+        grammar,
     } = parts;
     let mut banner = Vec::new();
     let notes_store = match notes {
@@ -481,10 +491,18 @@ pub async fn compose(parts: CodeParts) -> Result<CodeFace, String> {
             session_id: Arc::new(session_id),
         },
     );
+    // The editor door reads the graphs under code's indexes root and dials
+    // serve on this host for the model lane.
+    let edit_routes = crate::edit_predictions::router(crate::edit_predictions::EditDoor::new(
+        grammar,
+        indexes_dir,
+        sovereign_turn_client::serve_self::default_serve_base(),
+    ));
     Ok(CodeFace {
         mcp,
         tools,
         routes: crate::project_http::project_router(Arc::clone(&reindexer)),
+        edit_routes,
         banner,
         runtime: CodeRuntime {
             _reindexer: reindexer,

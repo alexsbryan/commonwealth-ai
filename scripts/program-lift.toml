@@ -78,7 +78,7 @@ binary = "debug/sovereign-daemon"
 # by sovereign-stock's own e2e, not here. The mock engine loads no weights,
 # and cw-rails is pointed at a closed port. FIM needs an edit model, so it is
 # not asserted here. `--features treesitter`: the daemon's bin requires it.
-pass = "booted on a temp root, dialed the serve the smoke started (status 'serving: ${SERVING}'), answered a chat turn ('${CHAT}') and a rerank (score ${SCORE}) through it and a next-edit request (engine ${NES}), with cw-rails pointed at a closed port; with serve stopped, a turn reported the absence (HTTP ${ABSENT})"
+pass = "booted on a temp root, dialed the serve the smoke started (status 'serving: ${SERVING}'), answered a chat turn ('${CHAT}') and a rerank (score ${SCORE}) through it, with cw-rails pointed at a closed port; with serve stopped, a turn reported the absence (HTTP ${ABSENT})"
 steps = [
   { do = "input", var = "SERVE_BIN", env = "SOVEREIGN_SERVE_BIN", value = "${SERVE_BIN}", abstain = "svrn dials serve: set SOVEREIGN_SERVE_BIN, or --set SERVE_BIN=<path>, to a sovereign-serve binary" },
   { do = "exists", path = "${SERVE_BIN}", fail = "no sovereign-serve at ${SERVE_BIN}" },
@@ -91,7 +91,6 @@ steps = [
   { do = "require", value = "${SERVING}", match = "^serve$", fail = "the daemon booted without dialing serve: serving = ${SERVING}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { messages = [{ role = "user", content = "hello" }] }, path = "choices.message.content", var = "CHAT", fail = "POST /v1/chat/completions gave no answer through serve: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/rerank", json = { query = "hello", documents = ["hello world", "other"] }, path = "results[index=0].relevance_score", var = "SCORE", fail = "POST /v1/rerank gave no score through serve: ${BODY}" },
-  { do = "call", url = "http://127.0.0.1:${PORT}/v1/edit_predictions", json = { history = [], text = "let x = 1;\nlet y = x + 1;\n", cursor = 10, path = "a.rs" }, path = "engine", var = "NES", fail = "POST /v1/edit_predictions gave no answer: ${BODY}" },
   # serve stops mid-run: a turn must report the absence, never an empty answer.
   { do = "exec", argv = ["sh", "-c", "pkill -f '[s]overeign-serve --data-dir ${SANDBOX}/root'"], log = "serve-kill.log", fail = "could not stop serve mid-run (see ${SANDBOX}/serve-kill.log)" },
   { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { messages = [{ role = "user", content = "hello" }] }, status_var = "ABSENT", fail = "the daemon did not answer once serve stopped" },
@@ -400,7 +399,7 @@ carry = { CO_BACKLOG_RULER = "quality/backlog-ruler.toml", SOVEREIGN_WORKSPACE_D
 # rails base name closed ports, so a read that dialled either (this host runs
 # both) fails here rather than pass by borrowing the operator's. The atlas
 # probe is `work_in_flight`, a read, so a misrouted dial can never write.
-pass = "served MCP alone as '${SERVER}' on a temp git repo with no daemon, no model and no cw-rails: tools/list carried ${SYMBOLS} and ${CALLERS}, `symbols` answered without error, and `work_in_flight` named the absent rails door"
+pass = "served MCP alone as '${SERVER}' on a temp git repo with no daemon, no model and no cw-rails: tools/list carried ${SYMBOLS} and ${CALLERS}, `symbols` answered without error, `work_in_flight` named the absent rails door, and a next-edit request answered (engine ${NES}, syntax filter ${SYNTAX})"
 steps = [
   { do = "ports", vars = ["PORT", "DEAD_RAILS_PORT", "DEAD_DAEMON_PORT"] },
   { do = "write", path = "${SANDBOX}/svrnmesh/config.toml", text = "[node]\nentry = \"http://127.0.0.1:${DEAD_DAEMON_PORT}\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${DEAD_RAILS_PORT}\"\n" },
@@ -419,6 +418,12 @@ steps = [
   # line, and the backreference requires the named door to be that port.
   { do = "require", value = "${ABSENCE}\n${DEAD_RAILS_PORT}", match = '127\.0\.0\.1:(\d+)/v1/mesh/kv[\s\S]*\n\1$', fail = "the absence named another door than the configured rails base (port ${DEAD_RAILS_PORT}): ${ABSENCE}" },
   { do = "require", value = "${ABSENCE}", match = "svrn mesh up", fail = "the absence did not say how to bring cw-rails up: ${ABSENCE}" },
+  # The editor door is code's (pb-meshapp-rest): the rule lane answers with no
+  # daemon, and code alone, holding no grammar registry, names its syntax
+  # filter unjudged rather than guessing.
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/edit_predictions", json = { history = [], text = "let x = 1;\nlet y = x + 1;\n", cursor = 10, path = "a.rs" }, path = "engine", var = "NES", fail = "POST /v1/edit_predictions gave no answer: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/edit_predictions", json = { history = [], text = "let x = 1;\nlet y = x + 1;\n", cursor = 10, path = "a.rs", debug = true }, path = "sovereign_debug.syntax_filter", var = "SYNTAX", fail = "the next-edit debug block did not name the syntax filter: ${BODY}" },
+  { do = "require", value = "${SYNTAX}", match = "^unjudged:grammar_absent$", fail = "code alone named the syntax filter '${SYNTAX}', not unjudged for want of a grammar" },
 ]
 
 # ── bench — the evaluator ───────────────────────────────────────────────────

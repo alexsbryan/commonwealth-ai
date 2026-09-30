@@ -28,16 +28,10 @@ const CONSTRUCTION: &[(&str, &str)] = &[
 ];
 
 /// Files that name the engine for a reason another row owns.
-const OWNED_ELSEWHERE: &[(&str, &str)] = &[
-    (
-        "recipe_project_http.rs",
-        "pb-ingest-rehome: the recipe-project routes reach the store through ingest's port",
-    ),
-    (
-        "routes_edit_predictions.rs",
-        "the next-edit lane's grammar lookup over the engine's language table",
-    ),
-];
+const OWNED_ELSEWHERE: &[(&str, &str)] = &[(
+    "recipe_project_http.rs",
+    "pb-ingest-rehome: the recipe-project routes reach the store through ingest's port",
+)];
 
 /// The implementor value any file may still spell: ingest's atlas, handed to
 /// the atlas family's port. pb-ingest-dial-daemon threads it from the host.

@@ -37,6 +37,10 @@ pub mod briefing_tool;
 #[cfg(feature = "treesitter")]
 pub mod bundle;
 pub mod code_search;
+/// The editor door, `POST /v1/edit_predictions` and its outcome route
+/// (NEXT_EDIT.md §3), moved from the svrn daemon at pb-meshapp-rest.
+#[cfg(feature = "treesitter")]
+pub mod edit_predictions;
 /// Code's face: the one composition `svrn code mcp` serves and the stock
 /// binary mounts on svrn's `/mcp` (pb-code-daemon-exit).
 #[cfg(feature = "treesitter")]

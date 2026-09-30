@@ -191,7 +191,6 @@ pub mod mesh_proof_header_gate;
 pub mod mesh_proof_outbound;
 pub mod reshaping;
 pub mod routes_completions;
-pub mod routes_edit_predictions;
 pub mod routes_guest_ask;
 pub mod routes_guest_session;
 pub mod routes_inference;
@@ -212,11 +211,6 @@ pub mod yield_hook;
 
 // The shims sovereign-api's lib.rs carried, re-homed here so the moved
 // modules' `crate::<name>` paths keep resolving.
-pub use code_next_edit::next_edit;
-pub use code_next_edit::next_edit_journal;
-pub use code_next_edit::next_edit_model;
-pub use code_next_edit::next_edit_symbols;
-pub use code_next_edit::next_edit_syntax;
 pub use commonwealth_transport::fanout;
 pub use oicp_types::openai_types;
 pub use oicp_types::responses_types;

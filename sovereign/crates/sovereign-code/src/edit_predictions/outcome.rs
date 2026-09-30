@@ -40,7 +40,7 @@ pub struct OutcomeWire {
 /// The append policy itself is `code_next_edit::next_edit_journal`'s; this
 /// is the route shell that mounts it (DAEMON_CORE.md §4.1's placement test).
 pub async fn edit_prediction_outcome(Json(wire): Json<OutcomeWire>) -> Response {
-    use sovereign_core::types::{JournalLine, NextEditOutcome, NextEditOutcomeLine};
+    use sovereign_contracts::types::{JournalLine, NextEditOutcome, NextEditOutcomeLine};
     let Some(outcome) = NextEditOutcome::from_wire(&wire.outcome) else {
         tracing::debug!(
             target: "next_edit",

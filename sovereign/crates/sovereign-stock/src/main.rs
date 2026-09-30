@@ -16,6 +16,17 @@
 //! `sovereign_enrichment_catalog::` path below is on the
 //! `[[distribution]] stock` row, spelled in full.
 
+/// Code's editor door takes its grammar lookup from the host (pb-meshapp-rest):
+/// corpus-engine's registry, the one that routes `.tsx` apart from `.ts`,
+/// which code may not name. One supplier, one registry.
+fn grammar_for(ext: &str) -> Option<sovereign_code::face::Grammar> {
+    let cfg = corpus_engine::extractors::code::language_for_extension(ext)?;
+    Some(sovereign_code::face::Grammar {
+        id: cfg.id,
+        language: cfg.lang.into(),
+    })
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     // The compute child and the RPC worker re-exec this binary: routed first,
@@ -94,6 +105,7 @@ fn main() {
                 roster: host.roster,
                 convergence: Some(host.convergence),
             },
+            grammar: Some(grammar_for),
         })
         .await?;
         for line in &face.banner {
@@ -102,6 +114,7 @@ fn main() {
         Ok(sovereign_daemon::process::CodeMount {
             tools: std::sync::Arc::new(face.mcp),
             routes: face.routes,
+            edit_routes: face.edit_routes,
             yield_to: face.runtime.yield_setter(),
             hold: Box::new(face.runtime),
         })

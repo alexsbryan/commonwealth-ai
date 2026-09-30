@@ -9,7 +9,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Deserialize;
 
-use crate::openai_types::ErrorResponse;
+use sovereign_contracts::oicp::openai_types::ErrorResponse;
 
 /// Caps: a request past these is malformed, not merely large — the
 /// first-party client enforces the same limits before sending.
@@ -17,7 +17,7 @@ pub(crate) const MAX_TEXT_BYTES: usize = 512 * 1024;
 const MAX_HISTORY: usize = 32;
 pub(crate) const MAX_UNIT_BYTES: usize = 2 * 1024;
 
-/// Transport-level body cap for this route (`server.rs` applies it),
+/// Transport-level body cap for this route (`router` applies it),
 /// well under the router-wide 8 MB frontdoor. Sized so no *legal*
 /// request can trip it: 512 KiB of text can JSON-escape to 1 MiB in
 /// the worst case, plus 32 units × 4 fields × 2 KiB of history, plus

@@ -60,13 +60,6 @@ line = 756
 asserts = 4
 
 [[claim]]
-requirement = "IN-27"
-test = "sovereign-daemon::routes_edit_predictions::outcome::tests::the_outcome_route_answers_204_or_400_and_never_5xx"
-file = "sovereign/crates/sovereign-daemon/src/routes_edit_predictions/outcome.rs"
-line = 89
-asserts = 3
-
-[[claim]]
 requirement = "UI-22"
 test = "sovereign-daemon::tests::daemon::the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated_listener"
 file = "sovereign/crates/sovereign-daemon/src/tests/daemon.rs"

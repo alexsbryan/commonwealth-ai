@@ -1550,7 +1550,7 @@ items = ["bundles", "assemble", "child_launch", "tracing_filter", "measurements_
 [[distribution.face]]
 package = "code"
 krate = "sovereign-code"
-items = ["face::compose", "face::CodeParts", "face::NotesRail"]
+items = ["face::compose", "face::CodeParts", "face::NotesRail", "face::Grammar", "face::GrammarLookup"]
 # Ingest's face (pb-ingest-dial-tools-close): the enrichment-config port's
 # implementor, in the schema's owner, handed to svrn through
 # `process::HostedIngest`. The daemon links no catalog, so only a distribution
@@ -1559,6 +1559,13 @@ items = ["face::compose", "face::CodeParts", "face::NotesRail"]
 package = "ingest"
 krate = "sovereign-enrichment-catalog"
 items = ["port::CatalogEnrichConfig"]
+# Ingest's grammar registry, handed to code's editor door as its grammar
+# lookup (pb-meshapp-rest, phase-b-68): code may not name corpus-engine, and
+# a second table in code is the drift the lanes forbid.
+[[distribution.face]]
+package = "ingest"
+krate = "corpus-engine"
+items = ["extractors::code::language_for_extension"]
 
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #

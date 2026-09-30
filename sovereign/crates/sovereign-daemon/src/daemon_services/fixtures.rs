@@ -125,6 +125,7 @@ fn serving_with(
             project_http: axum::Router::new(),
             corpus_watch_http: axum::Router::new(),
             workflow_http: axum::Router::new(),
+            edit_door: None,
         },
         advertise_embed: EmbedAdvertisement::Unavailable {
             reason: "fixture".into(),

@@ -29,7 +29,6 @@ pub mod ingest;
 pub mod node;
 pub mod serving;
 pub mod store;
-pub mod workbench;
 
 // Fabric's part moved to its owner, `sovereign-mesh`, at domains
 // `dm-daemon-api-edge` (b) — DC §4.2 names `sovereign-mesh` as its home, and
@@ -291,9 +290,6 @@ pub struct AppStateInner {
     /// throttle dials, and the newsworthy tick handle. Held as a part so route
     /// shells read it directly (DC §4.2).
     pub ingest: ingest::IngestPart,
-    /// Workbench's part: the next-edit model lane's one-in-flight budget.
-    /// Held as a part so route shells read it directly (DC §4.2).
-    pub workbench: workbench::WorkbenchPart,
 }
 
 impl AppStateInner {
@@ -1028,6 +1024,7 @@ impl AppState {
                     rails_base: node_seed.rails_base,
                     guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
                     guest_pages: Arc::new(node_seed.guest_pages),
+                    edit_door: node_seed.edit_door,
                     guest_route: Arc::new(sovereign_mesh::guest_lender::StoredGuestLink::new(
                         Arc::new(sovereign_mesh::guest_source::GuestLinkFileReader::new()),
                         Arc::new(sovereign_mesh::guest_source::MeshTunnelOpener),
@@ -1068,9 +1065,6 @@ impl AppState {
                     // load per batch and otherwise behaves identically to
                     // the pre-throttle build.
                     ingest_throttle_milli: std::sync::atomic::AtomicU32::new(1000),
-                },
-                workbench: workbench::WorkbenchPart {
-                    next_edit_model_slot: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
                 },
             }),
         }

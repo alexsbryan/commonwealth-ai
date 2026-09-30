@@ -19,7 +19,9 @@
 
 use code_next_edit::next_edit_symbols::{navigate, Decline};
 use corpus_engine_scip::scip_graph::{ScipGraph, ScipRefRecord, ScipSymbolRecord};
-use sovereign_daemon::routes_edit_predictions::grammar_for;
+#[path = "common/next_edit_grammar.rs"]
+mod next_edit_grammar;
+use next_edit_grammar::grammar_for;
 
 const CORPUS: &str = "e2e-symbol-lane";
 

@@ -7,7 +7,6 @@ use axum::Router;
 use host_kit::shell::BodyLimits;
 
 use crate::routes_completions;
-use crate::routes_edit_predictions;
 use crate::routes_inference;
 use crate::routes_internal;
 use crate::routes_kinds;
@@ -138,6 +137,10 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // probing federation health, and an exempt path that answered would be
     // the one route it could reach without a credential.
     let general: Router<AppState> = if surface.serves_general_client_routes() {
+        let edit_door = match state.inner.node.edit_door.clone() {
+            Some(door) => door,
+            None => crate::hosted_code::edit_door_absent_router(),
+        };
         let general = Router::new()
             // OpenAI-compatible inference endpoints.
             .route(
@@ -154,24 +157,19 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
             // FIM inline completion (INLINE_COMPLETION.md). Loopback-tokenless
             // like the rest of :9741 — the extension talks to its own daemon.
             .route("/v1/completions", post(routes_completions::completions))
-            // Next-edit prediction, both lanes (NEXT_EDIT.md §3). The rule
-            // lane is pure string work, but the model lane consults the
-            // resident FIM slot, so this endpoint carries the same
-            // admission gate as every other inference route — a peer must
-            // not drive local inference through it while the operator has
-            // contribution paused. Local requests (no `X-Node-Id`) are
-            // always admitted, so the editor path is untouched. The tighter
-            // body limit overrides the router-wide 8 MB frontdoor: the
-            // handler's documented caps (512 KiB text, 32 units) are a
-            // contract check, and the transport should refuse a body that
-            // could never satisfy them before serde allocates it.
+            // Next-edit prediction, both lanes (NEXT_EDIT.md §3): code's
+            // editor door, mounted as code's router (pb-meshapp-rest) — its
+            // handlers, body limit and one-in-flight model budget are code's,
+            // and svrn alone mounts the named absence pointing at `svrn code`.
+            // The model lane consults serve's edit slot, so this endpoint
+            // keeps the same admission gate as every other inference route —
+            // a peer must not drive local inference through it while the
+            // operator has contribution paused. Local requests (no
+            // `X-Node-Id`) are always admitted, so the editor path is
+            // untouched.
             .route(
                 "/v1/edit_predictions",
-                post(routes_edit_predictions::edit_predictions)
-                    .layer(axum::extract::DefaultBodyLimit::max(
-                        routes_edit_predictions::MAX_BODY_BYTES,
-                    ))
-                    .layer(admission()),
+                axum::routing::any_service(edit_door.clone()).layer(admission()),
             )
             // What the developer did with a suggestion. Deliberately NOT
             // behind `admission()`: it is a local editor reporting on a
@@ -180,7 +178,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
             // failure rather than protection (decision note `09599af1`).
             .route(
                 "/v1/edit_predictions/outcome",
-                post(routes_edit_predictions::outcome::edit_prediction_outcome),
+                axum::routing::any_service(edit_door),
             )
             // Behind `admission()` for the same reason `/v1/edit_predictions`
             // is: it drives local inference on this box. It was the ONE

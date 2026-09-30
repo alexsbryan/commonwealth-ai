@@ -1251,19 +1251,19 @@ lines = 602
 note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/routes_edit_predictions.rs"
+path = "sovereign/crates/sovereign-code/src/edit_predictions.rs"
 context = "workbench"
-lines = 1357
-note = "the host route shell (DAEMON_CORE.md §4.1 placement test) for POST /v1/edit_predictions; its grammar lookup adapter (grammar_for) is the port the package crate takes. It moves to sovereign-daemon with server.rs at dm-daemon-api-edge. The wire contract split to wire.rs at REVIEW-audit-4 (ARCH 3.1: the file had grown past arch-gate's slack)"
+lines = 794
+note = "the route shell (DAEMON_CORE.md §4.1 placement test) for POST /v1/edit_predictions; its grammar lookup is the port the package crate takes. It moves to sovereign-daemon with server.rs at dm-daemon-api-edge. The wire contract split to wire.rs at REVIEW-audit-4 (ARCH 3.1: the file had grown past arch-gate's slack). Moved to code with its tests (edit_predictions/tests.rs) at pb-meshapp-rest; the grammar lookup arrives from the host and the model lane dials serve (edit_predictions/serve_dial.rs)"
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/routes_edit_predictions/wire.rs"
+path = "sovereign/crates/sovereign-code/src/edit_predictions/wire.rs"
 context = "workbench"
 lines = 133
 note = "the /v1/edit_predictions wire contract — the request shapes, their caps and validate_wire — split out of routes_edit_predictions.rs at REVIEW-audit-4 (ARCH 3.1: the route file had grown past arch-gate's slack). Same shapes, same caps; the route module re-exports the public names at the historical path"
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/routes_edit_predictions/outcome.rs"
+path = "sovereign/crates/sovereign-code/src/edit_predictions/outcome.rs"
 context = "workbench"
 lines = 159
 note = "the host route shell for POST /v1/edit_predictions/outcome, split out of next_edit_journal.rs at dm-next-edit-move so the pure journal policy could leave for code-next-edit"

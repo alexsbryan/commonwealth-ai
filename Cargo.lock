@@ -12546,6 +12546,7 @@ dependencies = [
  "blake3",
  "chrono",
  "code-facts",
+ "code-next-edit",
  "corpus-engine-archaeology",
  "corpus-engine-notes",
  "corpus-engine-scip",
@@ -12568,7 +12569,12 @@ dependencies = [
  "tempfile",
  "tokio",
  "toml 0.8.2",
+ "tower",
  "tracing",
+ "tree-sitter-go",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
  "understanding-vocab",
  "uuid",
  "workspace-hack",
@@ -12687,7 +12693,6 @@ dependencies = [
  "axum",
  "bytes",
  "chrono",
- "code-next-edit",
  "commonwealth-core",
  "commonwealth-discovery",
  "commonwealth-media",
@@ -13244,6 +13249,7 @@ dependencies = [
 name = "sovereign-stock"
 version = "0.8.0"
 dependencies = [
+ "corpus-engine",
  "futures",
  "host-kit",
  "reqwest 0.12.28",

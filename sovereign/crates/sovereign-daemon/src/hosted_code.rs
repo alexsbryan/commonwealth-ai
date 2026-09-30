@@ -45,6 +45,9 @@ pub struct CodeMount {
     pub tools: Arc<dyn host_kit::mcp::McpMountedTools>,
     /// Code's client routes (`/v1/projects/*`).
     pub routes: axum::Router,
+    /// Code's editor door (`/v1/edit_predictions` and its outcome route),
+    /// mounted on every surface that serves the general client routes.
+    pub edit_routes: axum::Router,
     /// Hands code's lint/test watchers svrn's foreground signal.
     pub yield_to: Box<dyn Fn(Arc<dyn corpus_engine_yield::YieldHook>) + Send + Sync>,
     /// Keeps code's runtime (Reindexer, watchers, atlas GC) alive for the
@@ -84,25 +87,35 @@ impl HostedCode {
 /// that serves code's tools and `/v1/projects/*`.
 pub const CODE_SERVER: &str = "svrn code mcp";
 
-/// `/v1/projects/*` on svrn alone: a 503 naming the code program, never a
+/// A route of code's on svrn alone: a 503 naming the code program, never a
 /// 404 that reads as "no such route" (FIVE_PROGRAMS §4 rule 3).
+async fn absent(uri: axum::http::Uri) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    tracing::debug!(path = %uri.path(), "code routes: no code program in this process");
+    (
+        axum::http::StatusCode::SERVICE_UNAVAILABLE,
+        axum::Json(serde_json::json!({
+            "error": format!(
+                "{} is served by the code program, which this svrn does not host: \
+                 run `{CODE_SERVER}`",
+                uri.path()
+            ),
+        })),
+    )
+        .into_response()
+}
+
+/// `/v1/projects/*` on svrn alone.
 pub fn projects_absent_router() -> axum::Router {
-    async fn absent(uri: axum::http::Uri) -> axum::response::Response {
-        use axum::response::IntoResponse;
-        tracing::debug!(path = %uri.path(), "project routes: no code program in this process");
-        (
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            axum::Json(serde_json::json!({
-                "error": format!(
-                    "{} is served by the code program, which this svrn does not host: \
-                     run `{CODE_SERVER}`",
-                    uri.path()
-                ),
-            })),
-        )
-            .into_response()
-    }
     axum::Router::new()
         .route("/v1/projects", axum::routing::any(absent))
         .route("/v1/projects/{*rest}", axum::routing::any(absent))
+}
+
+/// Code's editor door on svrn alone (pb-meshapp-rest): `/v1/edit_predictions`
+/// and its outcome route.
+pub fn edit_door_absent_router() -> axum::Router {
+    axum::Router::new()
+        .route("/v1/edit_predictions", axum::routing::any(absent))
+        .route("/v1/edit_predictions/outcome", axum::routing::any(absent))
 }

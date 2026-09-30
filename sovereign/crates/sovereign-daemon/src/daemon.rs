@@ -2772,9 +2772,19 @@ impl EmbeddedDaemon {
         client_bind = posture.bind;
         // The node's part exists before it is built, token and all (DC §4.2
         // "Construction is staged, and parts are total").
-        let node_seed = NodeSeed::resolved(posture.token, &self.data_dir, &self.setup_config)
+        let mut node_seed = NodeSeed::resolved(posture.token, &self.data_dir, &self.setup_config)
             .await
             .map_err(|e| MeshError::Config(e.to_string()))?;
+        // Code's editor door, when the distribution composed code here
+        // (pb-meshapp-rest); every general client surface mounts it.
+        node_seed.edit_door = self
+            .services
+            .serving()
+            .and_then(|s| s.capability.edit_door.clone());
+        info!(
+            code_edit_door = node_seed.edit_door.is_some(),
+            "daemon: code's editor door (/v1/edit_predictions)"
+        );
         // Fabric's part is constructed before `AppState` and held on the
         // daemon, so it survives `stop_inner` (DC §4.1; DC §4.2 "Construction
         // is staged, and parts are total"). The membership operations that

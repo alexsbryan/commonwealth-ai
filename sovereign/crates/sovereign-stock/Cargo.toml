@@ -26,6 +26,10 @@ sovereign-code = { workspace = true }
 # (`port::CatalogEnrichConfig`); svrn links no catalog
 # (pb-ingest-dial-tools-close).
 sovereign-enrichment-catalog = { workspace = true }
+# The grammar registry code's editor door takes as an input
+# (`extractors::code::language_for_extension`, pb-meshapp-rest); code may not
+# name corpus-engine, so the distribution supplies it.
+corpus-engine = { workspace = true, features = ["treesitter"] }
 host-kit = { workspace = true, features = ["shell"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
