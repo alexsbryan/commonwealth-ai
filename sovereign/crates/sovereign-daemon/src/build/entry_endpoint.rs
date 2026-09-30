@@ -62,7 +62,7 @@ use async_trait::async_trait;
 use kernel_types::NodeId;
 use oicp_client::EndpointResolver;
 
-use sovereign_scheduler::venue::VenueSource;
+use sovereign_contracts::venue::VenueSource;
 
 /// A terminal's entry node, named by mesh identity and located on demand.
 pub struct EntryNodeEndpoint {
@@ -161,7 +161,7 @@ impl EndpointResolver for EntryNodeEndpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_scheduler::venue::InferenceVenue;
+    use sovereign_contracts::venue::InferenceVenue;
 
     /// A mesh view with a fixed peer set.
     struct FixedVenues(Vec<InferenceVenue>);

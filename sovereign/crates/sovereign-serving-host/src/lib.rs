@@ -8,7 +8,6 @@
 //! tiers").
 
 pub mod admission;
-pub mod entry_endpoint;
 pub mod fim_adapter;
 pub mod fim_http;
 pub mod guest_lender;

@@ -75,16 +75,15 @@ pub fn terminal_provider(
                     // it is bound.
                     let mesh_port: Arc<dyn sovereign_contracts::venue::VenueSource> =
                         Arc::clone(&mesh) as Arc<_>;
-                    let resolver =
-                        match sovereign_serving_host::entry_endpoint::EntryNodeEndpoint::parse(
-                            mesh_port, &hex,
-                        ) {
-                            Ok(r) => Arc::new(r),
-                            Err(e) => {
-                                eprintln!("error: [node] entry_node is unusable — {e}");
-                                return Err(());
-                            }
-                        };
+                    let resolver = match crate::build::entry_endpoint::EntryNodeEndpoint::parse(
+                        mesh_port, &hex,
+                    ) {
+                        Ok(r) => Arc::new(r),
+                        Err(e) => {
+                            eprintln!("error: [node] entry_node is unusable — {e}");
+                            return Err(());
+                        }
+                    };
                     // THIS node's identity, stamped on every request the
                     // terminal sends its entry node. Without it the entry node
                     // admits a terminal's turns as its own local traffic:
