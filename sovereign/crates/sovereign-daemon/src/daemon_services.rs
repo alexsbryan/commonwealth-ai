@@ -661,6 +661,7 @@ pub fn assemble(
         // `sovereign-pod-worker` binary (pb-pods-worker).
         Launch::ComputeChild { .. }
         | Launch::RpcWorker { .. }
+        | Launch::SetupProbe { .. }
         | Launch::Worker { .. }
         | Launch::Smoketest { .. }
         | Launch::Bare => Err(AssemblyRefusal::NotAnAssembler { launch: name }),

@@ -20,62 +20,6 @@ fn emit_guard() -> std::sync::MutexGuard<'static, ()> {
     EMIT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn hw(effective_gb: f32) -> HardwareProfile {
-    HardwareProfile {
-        system_ram_bytes: (effective_gb * 1_073_741_824.0) as u64,
-        gpu_available: effective_gb > 0.0,
-        gpu_name: Some("test".into()),
-        gpu_memory_bytes: None,
-        recommended_gpu_layers: 999,
-        is_unified_memory: true,
-    }
-}
-
-/// The plan a client reads is the plan the wizard would act on: it
-/// serializes and parses back into the CONTRACTS types, with the tier,
-/// the recommended row and both single-pick slots intact.
-///
-/// Watched fail: change `ProfileName`'s serde spelling away from
-/// `as_str` and the profile assertion goes red; drop `Serialize` from
-/// `SlotConfig` and it does not compile.
-#[test]
-fn the_plan_round_trips_through_the_contracts_types() {
-    let plan = build_plan(hw(32.0));
-    let json = serde_json::to_string(&plan).expect("plan serializes");
-    let back: SetupPlan = serde_json::from_str(&json).expect("plan parses back");
-
-    assert_eq!(back.profile, ProfileName::VeryHigh);
-    assert_eq!(back.profile.as_str(), "very_high");
-    assert!(
-        json.contains(r#""profile":"very_high""#),
-        "the wire spells the tier the way models.toml does: {json}"
-    );
-    assert!(!back.catalog.is_empty(), "a very_high tier has candidates");
-    assert_eq!(
-        back.catalog.iter().filter(|o| o.recommended).count(),
-        1,
-        "exactly one row is the pick"
-    );
-    let fast = back.fast.expect("very_high defines a fast slot");
-    let embed = back.embed.expect("very_high defines an embed slot");
-    assert!(fast.file.ends_with(".gguf"), "fast: {}", fast.file);
-    assert!(embed.file.ends_with(".gguf"), "embed: {}", embed.file);
-    assert_eq!(
-        back.hardware.system_ram_bytes,
-        plan.hardware.system_ram_bytes
-    );
-}
-
-/// `--plan` is a READ. A cpu_only machine still gets a catalog rather
-/// than a refusal, and nothing about the answer depends on a config
-/// existing — which is the whole reason the flag exists.
-#[test]
-fn a_machine_with_no_gpu_still_has_a_plan() {
-    let plan = build_plan(hw(0.0));
-    assert_eq!(plan.profile, ProfileName::CpuOnly);
-    assert!(!plan.catalog.is_empty());
-}
-
 async fn serve(app: Router) -> (String, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

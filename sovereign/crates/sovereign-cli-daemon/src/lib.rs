@@ -167,6 +167,7 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
         // Other binaries' launches, incl. the compute-child serve's `child_launch` owns.
         // Named explicitly so that adding a variant forces a decision here instead of a `_` arm.
         Launch::ComputeChild { .. }
+        | Launch::SetupProbe { .. }
         | Launch::AdminJoin { .. }
         | Launch::Desktop
         | Launch::Smoketest { .. } => {

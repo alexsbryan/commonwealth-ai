@@ -83,6 +83,9 @@ mod reload;
 mod remote_gguf;
 mod rpc_warm;
 mod self_report;
+/// `--setup-probe`: first-run setup's hardware probe and model planning,
+/// answered by the loader (pb-distribution-setup).
+mod setup_probe;
 /// serve's own process body (`run` -> `standalone::serve`).
 mod standalone;
 /// `svrn daemon vram-plan`: size a slot loadout and name the smallest card
@@ -240,13 +243,17 @@ pub fn run(args: &[String]) -> i32 {
 
 /// The re-execs of a binary that loads weights: the compute child and the RPC
 /// worker re-exec `current_exe()`, so a process hosting serve's assembly
-/// routes them first, before tracing or a runtime (each builds its own).
+/// routes them first, before tracing or a runtime (each builds its own). The
+/// setup probe is routed here too, so every loader answers it.
 /// `Some(exit code)` when `args` is one of them. serve's `run` and the stock
 /// distribution's main both call it (FIVE_PROGRAMS §2c).
 pub fn child_launch(args: &[String]) -> Option<i32> {
     match Launch::parse(args, Launch::Bare) {
         Launch::ComputeChild { args } => Some(sovereign_compute::child_main::run(&args)),
         Launch::RpcWorker { args } => Some(sovereign_inference::rpc_worker_main::run(&args)),
+        // First-run setup asks the loader, before any config exists
+        // (pb-distribution-setup).
+        Launch::SetupProbe { args } => Some(setup_probe::run(&args)),
         _ => None,
     }
 }

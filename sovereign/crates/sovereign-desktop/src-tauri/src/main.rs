@@ -131,6 +131,7 @@ fn main() -> ExitCode {
         | Launch::Daemon { .. }
         | Launch::ComputeChild { .. }
         | Launch::RpcWorker { .. }
+        | Launch::SetupProbe { .. }
         | Launch::AdminJoin { .. }
         | Launch::Worker { .. } => {
             eprintln!("{NOT_A_DAEMON}");

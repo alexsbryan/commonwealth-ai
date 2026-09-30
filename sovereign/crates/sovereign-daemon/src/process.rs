@@ -45,12 +45,16 @@ pub fn run(
     // by serve's `child_launch` in the binaries that load (sovereign-serve,
     // and sovereign-stock before it calls this entry). svrn loads nothing
     // (pb-serve-distributes), so one reaching svrn alone is refused by name,
-    // never booted as a daemon.
-    if let Launch::ComputeChild { .. } | Launch::RpcWorker { .. } = &launch {
+    // never booted as a daemon. The setup probe is the loader's too
+    // (pb-distribution-setup): `SOVEREIGN_DAEMON_BIN` pointed at this binary
+    // gets this refusal from `svrn setup`, not a boot.
+    if let Launch::ComputeChild { .. } | Launch::RpcWorker { .. } | Launch::SetupProbe { .. } =
+        &launch
+    {
         eprintln!(
-            "error: `--compute-child` and `--rpc-worker` are serve's re-execs; this binary \
-             loads no model. Run them through sovereign-serve, or `svrn daemon` (the stock \
-             binary hosts serve)."
+            "error: `--compute-child`, `--rpc-worker` and `--setup-probe` are serve's; this \
+             binary loads no model. Run them through sovereign-serve, or `svrn daemon` (the \
+             stock binary hosts serve)."
         );
         return 2;
     }

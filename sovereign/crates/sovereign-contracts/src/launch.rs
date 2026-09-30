@@ -84,6 +84,17 @@ pub enum Launch {
         args: Vec<String>,
     },
 
+    /// First-run setup's question to the loader: this machine's hardware
+    /// and model plan, a model fetch, a config's placement. `svrn setup` and
+    /// `svrn doctor` spawn `<loader> --setup-probe <sub> …` before any
+    /// daemon or config exists; it answers JSON on stdout and its verdict as
+    /// the exit code. serve's `child_launch` routes it, so the stock binary
+    /// answers it too (pb-distribution-setup).
+    SetupProbe {
+        /// Args after the `--setup-probe` flag.
+        args: Vec<String>,
+    },
+
     /// The setup wizard's mesh join as a process:
     /// `sovereign-daemon join --config <path> --node-name <n>`. It assembles
     /// the mesh-admin shape (never the inference engine), joins the mesh whose
@@ -155,6 +166,10 @@ pub const WORKER_MODE_FLAG: &str = "--worker-mode";
 /// through to verb matching.
 pub const RPC_WORKER_FLAG: &str = "--rpc-worker";
 
+/// Spawns the loader's setup probe ([`Launch::SetupProbe`]). Like the flags
+/// above, found at any argv position.
+pub const SETUP_PROBE_FLAG: &str = "--setup-probe";
+
 /// The `daemon` sub-verb that is [`Launch::AdminJoin`]. Public for the same
 /// reason as the flags above: the spawner names the string the parser reads.
 pub const ADMIN_JOIN_VERB: &str = "join";
@@ -192,6 +207,11 @@ impl Launch {
         }
         if let Some(i) = args.iter().position(|a| a == RPC_WORKER_FLAG) {
             return Launch::RpcWorker {
+                args: args[i + 1..].to_vec(),
+            };
+        }
+        if let Some(i) = args.iter().position(|a| a == SETUP_PROBE_FLAG) {
+            return Launch::SetupProbe {
                 args: args[i + 1..].to_vec(),
             };
         }
@@ -258,6 +278,7 @@ impl Launch {
             Launch::Worker { .. } => "worker",
             Launch::ComputeChild { .. } => "compute-child",
             Launch::RpcWorker { .. } => "rpc-worker",
+            Launch::SetupProbe { .. } => "setup-probe",
             Launch::AdminJoin { .. } => "admin-join",
             Launch::Smoketest { .. } => "smoketest",
             Launch::Desktop => "desktop",
@@ -849,6 +870,19 @@ mod tests {
     #[test]
     fn the_rpc_worker_flag_outranks_a_verb() {
         assert_eq!(parse(&["daemon", "--rpc-worker"]).as_str(), "rpc-worker");
+    }
+
+    /// The setup probe keeps its sub-verb, and a binary that prepends
+    /// `daemon` (sovereign-daemon's entry) still sees a probe, never a boot.
+    #[test]
+    fn the_setup_probe_keeps_its_args_and_outranks_a_verb() {
+        let Launch::SetupProbe { args } = parse(&[SETUP_PROBE_FLAG, "plan"]) else {
+            panic!("expected SetupProbe");
+        };
+        assert_eq!(args, v(&["plan"]));
+        let p = parse(&["daemon", SETUP_PROBE_FLAG, "plan"]);
+        assert_eq!(p.as_str(), "setup-probe");
+        assert!(!p.is_resident());
     }
 
     /// Worker mode is a different server on a different socket, so it must not

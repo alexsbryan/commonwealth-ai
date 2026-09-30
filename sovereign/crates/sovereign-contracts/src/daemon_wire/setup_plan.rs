@@ -224,6 +224,68 @@ pub struct SetupPlan {
 /// A closed set, so an enum (ARCH principle 9). The names are the ones the
 /// desktop's `SetupPhase` already narrates, so the mapping on the other side
 /// is a `match` with no invented cases.
+/// The loader's setup probe (`--setup-probe plan`): the plan, and the
+/// download URL of every slot it names, keyed by file. serve derives the URLs
+/// from the manifest's landing pages; `svrn setup` fetches from them and
+/// links no planner (pb-distribution-setup).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProbedPlan {
+    /// What `svrn setup --plan --json` prints.
+    pub plan: SetupPlan,
+    /// Download URL by slot file, for every catalog row and both single picks.
+    pub urls: std::collections::BTreeMap<String, String>,
+}
+
+/// The probe's `fim [--quant <rung>]` answer: the edit model's rung for this
+/// machine (or the one asked for), its slot, the embed slot the profile
+/// names, the next rung up, and each named slot's download URL by file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FimPlan {
+    /// What the probe detected.
+    pub hardware: HardwareProfile,
+    /// The tier `hardware` selects.
+    pub profile: ProfileName,
+    /// The ladder rung, e.g. `q6_k`.
+    pub rung: String,
+    /// The rung's model.
+    pub slot: SlotConfig,
+    /// The profile's embed slot, when the manifest defines one.
+    pub embed: Option<SlotConfig>,
+    /// The next rung up and its model; `None` at the top.
+    pub next: Option<(String, SlotConfig)>,
+    /// Download URL by slot file.
+    pub urls: std::collections::BTreeMap<String, String>,
+}
+
+/// The probe's `byom-url <link>` answer: a pasted model link resolved to its
+/// raw download URL and the file name it lands as.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ByomSource {
+    /// The raw download URL.
+    pub url: String,
+    /// The GGUF file name.
+    pub file: String,
+}
+
+/// One progress line of the probe's `download`: bytes on disk so far, and the
+/// total once the server has said it.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct FetchedBytes {
+    /// Bytes written, a resumed `.part` included.
+    pub downloaded: u64,
+    /// The file's full size, when known.
+    pub total: Option<u64>,
+}
+
+/// The probe's `placement <config>` answer: whether that config's primary
+/// runs in a supervised compute child (the loader's decision, read by
+/// `svrn doctor`'s containment check).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct PrimaryPlacement {
+    /// `engine_factory::child_owns_primary` for the config.
+    pub child_owns_primary: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SetupProgressPhase {
