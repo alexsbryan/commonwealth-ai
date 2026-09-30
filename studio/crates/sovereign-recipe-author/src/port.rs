@@ -47,6 +47,14 @@ impl RecipeProjectHandle for RecipeProject {
         RecipeProject::feature_id(self)
     }
 
+    fn title(&self) -> &str {
+        RecipeProject::title(self)
+    }
+
+    fn project_dir(&self) -> &std::path::Path {
+        RecipeProject::project_dir(self)
+    }
+
     fn read_summary(&self) -> Result<ProjectSummary> {
         RecipeProject::read_summary(self)
     }

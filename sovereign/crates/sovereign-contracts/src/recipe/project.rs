@@ -26,6 +26,10 @@ use crate::tool_bundle::ToolBundle;
 pub trait RecipeProjectHandle: Send + Sync {
     /// The project's `feature_id`.
     fn feature_id(&self) -> &str;
+    /// The project's title.
+    fn title(&self) -> &str;
+    /// The project's directory on this host.
+    fn project_dir(&self) -> &std::path::Path;
     /// The on-disk sidecar summary.
     fn read_summary(&self) -> Result<ProjectSummary>;
     /// Replace the on-disk sidecar summary.
@@ -205,6 +209,14 @@ pub mod fixtures {
     impl RecipeProjectHandle for DoubleProject {
         fn feature_id(&self) -> &str {
             &self.feature_id
+        }
+
+        fn title(&self) -> &str {
+            &self.title
+        }
+
+        fn project_dir(&self) -> &std::path::Path {
+            panic!("{}", unprogrammed("project_dir"))
         }
 
         fn read_summary(&self) -> Result<ProjectSummary> {
