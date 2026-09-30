@@ -184,3 +184,80 @@ fn the_weight_verbs_route_before_the_server_arguments() {
         assert_eq!(run(&[verb.to_string(), "--help".into()]), 0, "{verb}");
     }
 }
+
+/// The mock, recording the admission each turn reached the provider with.
+struct AdmissionSeen {
+    inner: sovereign_compute::mock::MockProvider,
+    seen: std::sync::Mutex<Vec<Option<String>>>,
+}
+
+impl AdmissionSeen {
+    fn record(&self, request: &sovereign_contracts::CompletionRequest) {
+        self.seen
+            .lock()
+            .unwrap()
+            .push(request.admission.as_ref().map(|a| a.id().to_string()));
+    }
+}
+
+#[async_trait::async_trait]
+impl InferenceProvider for AdmissionSeen {
+    async fn complete(
+        &self,
+        r: &sovereign_contracts::CompletionRequest,
+    ) -> sovereign_contracts::Result<sovereign_contracts::CompletionResponse> {
+        self.record(r);
+        self.inner.complete(r).await
+    }
+    async fn complete_stream(
+        &self,
+        r: &sovereign_contracts::CompletionRequest,
+    ) -> sovereign_contracts::Result<
+        std::pin::Pin<Box<dyn futures::Stream<Item = sovereign_contracts::Result<String>> + Send>>,
+    > {
+        self.record(r);
+        self.inner.complete_stream(r).await
+    }
+    async fn embed(&self, t: &str) -> sovereign_contracts::Result<Vec<f32>> {
+        self.inner.embed(t).await
+    }
+    fn capabilities(&self) -> sovereign_contracts::ProviderCapabilities {
+        self.inner.capabilities()
+    }
+}
+
+/// serve's member client (`cwth/client/0`) is reached through cw-rails over
+/// loopback, so the connection alone would call a peer "this host". The
+/// verified key cw-rails stamps makes it a peer: its admission claim is
+/// dropped, while a loopback caller's is kept.
+#[tokio::test]
+async fn a_turn_cw_rails_forwarded_keeps_no_admission_claim() {
+    let stub = Arc::new(AdmissionSeen {
+        inner: sovereign_compute::mock::MockProvider {
+            tokens: 1,
+            delay: std::time::Duration::ZERO,
+        },
+        seen: std::sync::Mutex::new(Vec::new()),
+    });
+    let base = serving(Arc::clone(&stub) as Arc<dyn InferenceProvider>).await;
+    let client = reqwest::Client::new();
+    for via_mesh in [false, true] {
+        let mut req = client
+            .post(format!("{base}/v1/chat/completions"))
+            .json(&serde_json::json!({
+                "messages": [{"role": "user", "content": "ping"}],
+                "turn_admission": "turn-claimed",
+            }));
+        if via_mesh {
+            req = req.header(kernel_types::member::MESH_PUBKEY_HEADER, "ab".repeat(32));
+        }
+        let resp = req.send().await.expect("answered");
+        assert!(resp.status().is_success(), "refused: {}", resp.status());
+    }
+    let seen = stub.seen.lock().unwrap().clone();
+    assert_eq!(
+        seen,
+        vec![Some("turn-claimed".to_string()), None],
+        "a loopback caller keeps its admission; a member cw-rails forwarded does not"
+    );
+}

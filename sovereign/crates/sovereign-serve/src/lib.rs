@@ -505,13 +505,18 @@ async fn chat_completions(
     State(adapter): AdapterState,
     Extension(lap): Extension<Arc<Lap>>,
     connect: Option<Extension<axum::extract::ConnectInfo<SocketAddr>>>,
+    headers: axum::http::HeaderMap,
     Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
     lap.mark("parsed");
     let peer = connect.map(|Extension(axum::extract::ConnectInfo(p))| p);
+    // A member's turn cw-rails forwarded (serve's member client, on
+    // `cwth/client/0`) arrives over loopback carrying the dialer's verified
+    // key: a peer, not this host.
+    let via_mesh = headers.contains_key(kernel_types::member::MESH_PUBKEY_HEADER);
     sovereign_serving_host::turn_admission::honour_turn_admission(
         &mut request,
-        sovereign_serving_host::turn_admission::from_this_host(peer, None),
+        sovereign_serving_host::turn_admission::from_this_host(peer, None) && !via_mesh,
         "serve",
     );
     if !request.stream.unwrap_or(false) {

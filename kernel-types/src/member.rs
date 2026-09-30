@@ -41,6 +41,11 @@ pub fn member_matches(node_id: NodeId, name: &str, query: &str) -> bool {
     q.len() >= 4 && node_id.to_hex().starts_with(q)
 }
 
+/// The header [`verified_headers`] always sets: the dialer's verified key. A
+/// request carrying it came from another node through a mesh endpoint, even
+/// when it arrives over loopback.
+pub const MESH_PUBKEY_HEADER: &str = "X-Mesh-Pubkey";
+
 /// The one implementation of the `X-Mesh-*` scheme: what the acceptor tells an
 /// origin about a dialer whose key the QUIC handshake verified.
 ///
@@ -60,7 +65,7 @@ pub fn verified_headers(who: Option<&MemberIdentity>, dialer: NodePubkey) -> Vec
         out.push(("X-Mesh-Member".to_string(), who.name.clone()));
         out.push(("X-Mesh-Node".to_string(), who.node_id.to_string()));
     }
-    out.push(("X-Mesh-Pubkey".to_string(), hex::encode(dialer.0)));
+    out.push((MESH_PUBKEY_HEADER.to_string(), hex::encode(dialer.0)));
     out
 }
 
