@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP tools for the SOLVE surface — `solve`, `solve_status`,
-//! `solve_cancel` — registered on the daemon's `/mcp` registry and
-//! dispatching into the same [`SolveJobs`] table the HTTP routes
+//! `solve_cancel` — registered in code's tool set
+//! (`crate::bundle::SolveTools`) and dispatching into the same [`SolveJobs`] table the HTTP routes
 //! use. An MCP agent and a curl session see the same jobs.
 //!
 //! The `solve` description is the discoverability mechanism (spec
@@ -13,11 +13,11 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::{StepOutput, ToolContext};
 
 use super::solve_http::{SolveJobs, SubmitWire};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 pub struct SolveTool(pub Arc<SolveJobs>);
 pub struct SolveStatusTool(pub Arc<SolveJobs>);
@@ -31,7 +31,7 @@ impl SolveTool {
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
         let run_state = Arc::clone(&state);
-        sovereign_core::tool_manifest::declared("solve", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("solve", move |params, ctx| {
             let state = Arc::clone(&run_state);
             async move { state.run(&params, &ctx).await }
         })
@@ -77,7 +77,7 @@ impl SolveStatusTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("solve_status", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("solve_status", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -100,7 +100,7 @@ impl SolveCancelTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("solve_cancel", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("solve_cancel", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -137,11 +137,11 @@ fn no_such_job(id: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::Tool;
+    use sovereign_contracts::traits::Tool;
 
     #[test]
     fn solve_descriptor_names_it_the_standard_engine() {
-        let tool = SolveTool(Arc::new(SolveJobs::new(1)));
+        let tool = SolveTool(Arc::new(SolveJobs::new("http://127.0.0.1:1")));
         let d = tool.declared().descriptor();
         assert_eq!(d.id, "solve");
         // The discoverability sentence is load-bearing (spec
@@ -157,7 +157,7 @@ mod tests {
 
     #[tokio::test]
     async fn status_of_unknown_job_reports_no_such_job() {
-        let tool = SolveStatusTool(Arc::new(SolveJobs::new(1)));
+        let tool = SolveStatusTool(Arc::new(SolveJobs::new("http://127.0.0.1:1")));
         let out = tool
             .declared()
             .execute(&json!({"job_id": "nope"}), &ToolContext::default())

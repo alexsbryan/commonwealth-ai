@@ -17,7 +17,6 @@ use super::shutdown_daemon;
 use super::sovereign_root;
 
 use crate::bootstrap;
-use crate::solve_http;
 use crate::tool_registry::build_tool_registry;
 use crate::workspace::resolve_workspace_dir;
 
@@ -542,20 +541,12 @@ pub(super) async fn run_daemon(
         sovereign_tools::local_corpus::watched::enrich::TieredDeps { tiered }
     });
 
-    // ── Solve job table ───────────────────────────────────────────
-    // Shared between the /v1/solve/jobs HTTP router (installed in
-    // install_http_and_mcp below) and the solve/solve_status/
-    // solve_cancel MCP tools (registered in build_tool_registry) —
-    // an MCP agent and a curl session see the same jobs. The solver
-    // calls back into this daemon's own /v1/chat/completions over
-    // loopback.
-    let solve_jobs = Arc::new(solve_http::SolveJobs::new(config.daemon.client_port));
-
     // ── Tool registry (svrn's) ────────────────────────────────────
-    // svrn's own `/mcp` tools. Code's tools are code's (pb-code-daemon-exit):
-    // they mount beside these when a distribution composes the code program
-    // into this process, and svrn alone names `svrn code mcp` for them.
-    let tools = build_tool_registry(ingest_ports.clone(), Arc::clone(&solve_jobs)).await;
+    // svrn's own `/mcp` tools. Code's tools are code's (pb-code-daemon-exit),
+    // the solver's among them (pb-meshapp-solve): they mount beside these
+    // when a distribution composes the code program into this process, and
+    // svrn alone names `svrn code mcp` for them.
+    let tools = build_tool_registry(ingest_ports.clone()).await;
 
     // Notes-rail convergence recorder (order commons-fluency fix 9):
     // ONE shared instance — named on the daemon's `HeadlessRails` so `/status`
@@ -614,7 +605,8 @@ pub(super) async fn run_daemon(
         ),
         None => (
             None,
-            crate::hosted_code::projects_absent_router(),
+            crate::hosted_code::projects_absent_router()
+                .merge(crate::hosted_code::solve_absent_router()),
             None,
             None,
             None,
@@ -1025,7 +1017,6 @@ pub(super) async fn run_daemon(
                     convergence_recorder: Arc::clone(&convergence_recorder),
                 },
                 knowledge_view_http,
-                solve_http: solve_http::solve_router(Arc::clone(&solve_jobs)),
             }),
         },
     ) {

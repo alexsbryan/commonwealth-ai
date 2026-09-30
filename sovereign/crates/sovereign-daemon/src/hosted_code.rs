@@ -43,7 +43,8 @@ pub struct CodeHost {
 pub struct CodeMount {
     /// Code's tools, listed and called on svrn's `/mcp` beside svrn's own.
     pub tools: Arc<dyn host_kit::mcp::McpMountedTools>,
-    /// Code's client routes (`/v1/projects/*`).
+    /// Code's client routes (`/v1/projects/*`, and `/v1/solve/jobs*` since
+    /// pb-meshapp-solve).
     pub routes: axum::Router,
     /// Code's editor door (`/v1/edit_predictions` and its outcome route),
     /// mounted on every surface that serves the general client routes.
@@ -110,6 +111,14 @@ pub fn projects_absent_router() -> axum::Router {
     axum::Router::new()
         .route("/v1/projects", axum::routing::any(absent))
         .route("/v1/projects/{*rest}", axum::routing::any(absent))
+}
+
+/// The solver's job routes on svrn alone (pb-meshapp-solve):
+/// `/v1/solve/jobs` and everything under it.
+pub fn solve_absent_router() -> axum::Router {
+    axum::Router::new()
+        .route("/v1/solve/jobs", axum::routing::any(absent))
+        .route("/v1/solve/jobs/{*rest}", axum::routing::any(absent))
 }
 
 /// Code's editor door on svrn alone (pb-meshapp-rest): `/v1/edit_predictions`

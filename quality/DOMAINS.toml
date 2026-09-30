@@ -8383,16 +8383,16 @@ lines = 48
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/solve_http.rs"
+path = "sovereign/crates/sovereign-code/src/solve_http.rs"
 context = "host"
-lines = 1150
-note = ""
+lines = 851
+note = "Moved to code from the svrn daemon with its tests (solve_http/tests.rs) at pb-meshapp-solve."
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/solve_tools.rs"
+path = "sovereign/crates/sovereign-code/src/solve_tools.rs"
 context = "host"
 lines = 171
-note = ""
+note = "Moved to code from the svrn daemon at pb-meshapp-solve."
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/startup.rs"

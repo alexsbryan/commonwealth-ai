@@ -165,7 +165,7 @@ pub(crate) fn headless_with_factory(provider_factory: Arc<dyn ProviderFactory>) 
 /// The one `HeadlessServices` literal. Both helpers above vary one
 /// half of it and share the rest; a second copy of this is how one of
 /// them quietly stops setting a field the struct grows (which is
-/// exactly what happened to `solve_http` when a copy was made).
+/// exactly what happened to a router field when a copy was made).
 fn headless_from(
     serving: ServingProfile,
     provider_factory: Arc<dyn ProviderFactory>,
@@ -180,7 +180,6 @@ fn headless_from(
             convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),
         },
         knowledge_view_http: axum::Router::new(),
-        solve_http: axum::Router::new(),
     })
 }
 

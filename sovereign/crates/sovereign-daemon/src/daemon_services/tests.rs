@@ -12,7 +12,6 @@ fn headless_extras() -> HeadlessExtras {
             convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),
         },
         knowledge_view_http: axum::Router::new(),
-        solve_http: axum::Router::new(),
     }
 }
 
@@ -164,7 +163,8 @@ fn each_variant_declares_exactly_its_measured_capability_set() {
     let expected: &[(&str, bool, bool, usize)] = &[
         ("mesh-admin", false, false, 0),
         ("desktop", true, false, 3),
-        ("headless", true, true, 5),
+        // Four: `solve_http` left with the solver for code (pb-meshapp-solve).
+        ("headless", true, true, 4),
     ];
     let variants = fixtures::every_variant();
     assert_eq!(

@@ -323,7 +323,7 @@ async fn handle_tool_call(
                     -32601,
                     format!(
                         "tool not found: {name} — svrn serves no code tool; code intelligence, \
-                         notes and the work atlas are served by `{}`",
+                         notes, the work atlas and the solver are served by `{}`",
                         crate::hosted_code::CODE_SERVER
                     ),
                 )

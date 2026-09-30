@@ -134,8 +134,6 @@ pub mod research_http;
 pub mod roster_repair;
 pub mod rpc_warm_http;
 pub mod serve_client;
-pub mod solve_http;
-pub mod solve_tools;
 pub mod startup;
 /// Moved whole to the host kit (phase-b pb-notes-memory): the code program's
 /// notes rail runs under it too. Reachable at its historical path.

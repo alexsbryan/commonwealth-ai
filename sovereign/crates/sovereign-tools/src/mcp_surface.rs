@@ -58,14 +58,8 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     "atlas_gaps",
     "atlas_tensions",
     "extract",
-    // SOLVE — the daemon-hosted TDD solver (docs/specs/SOLVE_UX.md).
-    // Unconditional on purpose: the `solve` description is the
-    // discoverability mechanism telling agents this is the standard
-    // engine for coding goals, so it must be visible without any
-    // spec-presence gate.
-    "solve",
-    "solve_status",
-    "solve_cancel",
+    // `solve`, `solve_status` and `solve_cancel` are code's since
+    // pb-meshapp-solve (`sovereign_code::mcp_surface`).
 ];
 
 /// svrn's tools registered but not exposed over MCP; `svrn tools call <id>`

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon MCP tool-registry construction — extracted from `daemon_cmd`
 //! (§3.2). Builds svrn's own `/mcp` `ToolRegistry`: the corpus, parcel,
-//! SEC, Wikipedia and solve tools. Code's tools (code intelligence, notes,
-//! the work atlas, lint/test) are the code program's since
-//! pb-code-daemon-exit; they mount beside these when a distribution
-//! composes code into this process (`crate::hosted_code`).
+//! SEC and Wikipedia tools. Code's tools (code intelligence, notes, the
+//! work atlas, lint/test, and since pb-meshapp-solve the solver) are the
+//! code program's since pb-code-daemon-exit; they mount beside these when a
+//! distribution composes code into this process (`crate::hosted_code`).
 
 use std::sync::Arc;
 
@@ -17,7 +17,6 @@ use sovereign_core::ToolRegistry;
 /// corpus, parcel, SEC, Wikipedia and workflow-corpus tools and says so.
 pub async fn build_tool_registry(
     ingest: Option<(Arc<dyn IngestPort>, Arc<dyn AtlasPort>)>,
-    solve_jobs: Arc<super::solve_http::SolveJobs>,
 ) -> ToolRegistry {
     // Tier 4 — shared tool-result cache. This registry serves `/mcp` only;
     // the turn Runtime's tools are `baseline_bundles` plus `[[mcp_servers]]`
@@ -34,19 +33,6 @@ pub async fn build_tool_registry(
              Wikipedia and workflow-corpus tools are withheld from /mcp"
         ),
     }
-
-    // SOLVE — the daemon-hosted TDD solver (docs/specs/SOLVE_UX.md).
-    // Same job table as the /v1/solve/jobs HTTP surface, so MCP
-    // agents and curl sessions see the same jobs.
-    tools.register(Box::new(
-        super::solve_tools::SolveTool(Arc::clone(&solve_jobs)).declared(),
-    ));
-    tools.register(Box::new(
-        super::solve_tools::SolveStatusTool(Arc::clone(&solve_jobs)).declared(),
-    ));
-    tools.register(Box::new(
-        super::solve_tools::SolveCancelTool(solve_jobs).declared(),
-    ));
 
     // Tools that are pure data. Every manifest under
     // `sovereign-contracts/tool-manifests/` declaring `delegate = "<id>"` is

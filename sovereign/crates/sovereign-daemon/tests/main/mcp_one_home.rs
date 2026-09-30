@@ -81,9 +81,8 @@ async fn svrn_registry(dir: &std::path::Path) -> sovereign_contracts::ToolRegist
             .with_index_dir(dir.join("indexes"))
             .with_embed_fn(embed),
     );
-    let solve_jobs = Arc::new(sovereign_daemon::solve_http::SolveJobs::new(1));
     let atlas = Arc::new(corpus_engine_atlas_reader::ports::double::AtlasPortDouble::new());
-    sovereign_daemon::tool_registry::build_tool_registry(Some((engine, atlas)), solve_jobs).await
+    sovereign_daemon::tool_registry::build_tool_registry(Some((engine, atlas))).await
 }
 
 /// Serve `router` on 127.0.0.1:0 with `ConnectInfo`; the URL prefix.

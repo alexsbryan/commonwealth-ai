@@ -362,3 +362,43 @@ impl ToolBundle for ArchTools {
             .record(reg.register_reporting(Box::new(crate::DriftFindingsTool::new().declared())))
     }
 }
+
+/// The TDD solver's three MCP tools over the job table the face's
+/// `/v1/solve/jobs*` routes share, so an MCP agent and a curl session see
+/// the same jobs (moved from the svrn daemon at pb-meshapp-solve).
+#[cfg(feature = "treesitter")]
+pub struct SolveTools {
+    jobs: Arc<crate::solve_http::SolveJobs>,
+}
+
+#[cfg(feature = "treesitter")]
+impl SolveTools {
+    /// Over the job table the solve routes serve.
+    pub fn new(jobs: Arc<crate::solve_http::SolveJobs>) -> Self {
+        Self { jobs }
+    }
+}
+
+#[cfg(feature = "treesitter")]
+#[async_trait]
+impl ToolBundle for SolveTools {
+    fn name(&self) -> &'static str {
+        "solve"
+    }
+
+    async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
+        use crate::solve_tools::{SolveCancelTool, SolveStatusTool, SolveTool};
+        BundleReport::new(self.name())
+            .record(reg.register_reporting(Box::new(SolveTool(Arc::clone(&self.jobs)).declared())))
+            .record(
+                reg.register_reporting(Box::new(
+                    SolveStatusTool(Arc::clone(&self.jobs)).declared(),
+                )),
+            )
+            .record(
+                reg.register_reporting(Box::new(
+                    SolveCancelTool(Arc::clone(&self.jobs)).declared(),
+                )),
+            )
+    }
+}

@@ -71,7 +71,8 @@ pub struct CodeFace {
     pub mcp: McpDispatcher<CodeTools, CodeCallLog>,
     /// The registry behind `mcp`, for `/mcp/stats`.
     pub tools: Arc<ToolRegistry>,
-    /// `/v1/projects/*`, the Reindexer's HTTP surface.
+    /// `/v1/projects/*`, the Reindexer's HTTP surface, and `/v1/solve/jobs*`,
+    /// the solver's (pb-meshapp-solve).
     pub routes: axum::Router,
     /// The editor door, `/v1/edit_predictions` and its outcome route
     /// (`crate::edit_predictions`, pb-meshapp-rest); a host adds its own
@@ -390,7 +391,15 @@ pub async fn compose(parts: CodeParts) -> Result<CodeFace, String> {
         code_intel = code_intel.with_project_root(ws.clone());
         notes_tools = notes_tools.with_workspace_root(ws.clone());
     }
+    // ── The solver ──────────────────────────────────────────────
+    // One job table behind `/v1/solve/jobs*` and the three MCP tools
+    // (pb-meshapp-solve). Its chat goes to svrn's `/v1/chat/completions`,
+    // the base the daemon handed it before the move.
+    let solve_jobs = Arc::new(crate::solve_http::SolveJobs::new(
+        sovereign_contracts::setup_config::client_daemon_base(),
+    ));
     let bundles: Vec<Box<dyn sovereign_contracts::tool_bundle::ToolBundle>> = vec![
+        Box::new(crate::bundle::SolveTools::new(Arc::clone(&solve_jobs))),
         Box::new(code_intel),
         Box::new(crate::bundle::ArchTools::new(workspace.clone())),
         Box::new(watcher_tools),
@@ -501,7 +510,8 @@ pub async fn compose(parts: CodeParts) -> Result<CodeFace, String> {
     Ok(CodeFace {
         mcp,
         tools,
-        routes: crate::project_http::project_router(Arc::clone(&reindexer)),
+        routes: crate::project_http::project_router(Arc::clone(&reindexer))
+            .merge(crate::solve_http::solve_router(solve_jobs)),
         edit_routes,
         banner,
         runtime: CodeRuntime {

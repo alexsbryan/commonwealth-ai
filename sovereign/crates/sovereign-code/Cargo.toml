@@ -31,6 +31,9 @@ code-facts = { workspace = true, features = ["treesitter", "stores"] }
 # The editor door's lanes (`edit_predictions`, moved from the svrn daemon at
 # pb-meshapp-rest): the pure rule/model/symbol/syntax lanes and the journal.
 code-next-edit = { workspace = true }
+# The TDD solver the solve surface hosts (`solve_http`, moved from the svrn
+# daemon at pb-meshapp-solve).
+sovereign-tdd = { workspace = true }
 arch-layers = { workspace = true }
 
 arc-swap = { workspace = true }

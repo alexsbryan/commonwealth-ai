@@ -69,7 +69,7 @@
 //! |---|---|---|
 //! | CORE | cannot serve at all | `corpus_engine`, `inference_provider` |
 //! | POLICY | serves *wrongly* | `SetupConfig` (bind, token, peer-inflight ceiling), `advertise_embed` |
-//! | CAPABILITY | can do less | `mcp`, `project_http`, `corpus_watch_http`, `workflow_http`, `+knowledge_view_http`, `+solve_http` |
+//! | CAPABILITY | can do less | `mcp`, `project_http`, `corpus_watch_http`, `workflow_http`, `+knowledge_view_http` (`+solve_http` left for code at pb-meshapp-solve) |
 //! | RAILS | a surface reports something untrue | `provider_factory`, `mesh_store`, `convergence_recorder` |
 //!
 //! `SetupConfig` sits on the daemon rather than in a variant because all three
@@ -327,17 +327,15 @@ pub struct HeadlessRails {
 
 /// Everything `sovereign daemon run` supplies **beyond** a [`ServingProfile`].
 ///
-/// This is the nesting made literal: Headless = Desktop + rails + two routes.
+/// This is the nesting made literal: Headless = Desktop + rails + one route.
+/// (`/v1/solve/jobs*` was the second until pb-meshapp-solve moved the solver
+/// to code, whose routes arrive in `project_http`.)
 pub struct HeadlessServices {
     pub serving: ServingProfile,
     pub rails: HeadlessRails,
     /// Ring 2 extension — `POST /v1/knowledge/landscape_digest`. Hosted only
     /// here because only this bootstrap owns a `KnowledgeViewManager`.
     pub knowledge_view_http: axum::Router,
-    /// Ring 2 extension — `/v1/solve/jobs*`, the daemon-hosted TDD solver.
-    /// Hosted only here because only this bootstrap owns the job table and the
-    /// `sovereign-tdd` dependency.
-    pub solve_http: axum::Router,
 }
 
 /// Which host built this daemon, and everything that host supplies.
@@ -487,7 +485,6 @@ impl DaemonServices {
                 "corpus_watch_http",
                 "workflow_http",
                 "knowledge_view_http",
-                "solve_http",
             ],
         }
     }
@@ -506,7 +503,6 @@ impl DaemonServices {
                 h.serving.capability.corpus_watch_http.clone(),
                 h.serving.capability.workflow_http.clone(),
                 h.knowledge_view_http.clone(),
-                h.solve_http.clone(),
             ],
         }
     }
@@ -522,8 +518,8 @@ pub enum LaunchParts {
     Admin,
     /// A serving daemon's parts. `headless` is `Some` exactly on the
     /// `sovereign daemon run` bootstrap, which is the only one that owns a
-    /// `ProviderFactory`, a shared mesh store, a convergence recorder, a
-    /// `KnowledgeViewManager` and the solve job table.
+    /// `ProviderFactory`, a shared mesh store, a convergence recorder and a
+    /// `KnowledgeViewManager`.
     Serving {
         serving: ServingProfile,
         headless: Option<HeadlessExtras>,
@@ -536,7 +532,6 @@ pub enum LaunchParts {
 pub struct HeadlessExtras {
     pub rails: HeadlessRails,
     pub knowledge_view_http: axum::Router,
-    pub solve_http: axum::Router,
 }
 
 /// Why a launch mode and a set of parts could not be composed.
@@ -612,11 +607,10 @@ pub fn assemble(
                 serving,
                 rails: extras.rails,
                 knowledge_view_http: extras.knowledge_view_http,
-                solve_http: extras.solve_http,
             })),
             LaunchParts::Serving { headless: None, .. } => Err(AssemblyRefusal::Mismatch {
                 launch: name,
-                wanted: "a headless daemon (rails + knowledge-view + solve)",
+                wanted: "a headless daemon (rails + knowledge-view)",
                 got: "a serving profile with no rails",
             }),
             LaunchParts::Admin => Err(AssemblyRefusal::Mismatch {

@@ -80,10 +80,10 @@ tokio-util = { version = "0.7", features = ["io", "io-util"] }
 dirs = "5"
 # The composition half of `sovereign-cli-daemon`'s `daemon_cmd` (domains
 # `dm-daemon-cli-composition`, DAEMON_CORE.md §4.1 row 4) reaches these
-# directly now: the solve surface (`sovereign-tdd`) and the watched-folder
-# workflow runtime (`sovereign-workflow`, `sovereign-workflow-host`). All at
-# `capabilities`/`runtime`/`knowledge`, below this crate's `mesh-api`.
-sovereign-tdd = { workspace = true }
+# directly now: the watched-folder workflow runtime (`sovereign-workflow`,
+# `sovereign-workflow-host`). All at `runtime`/`knowledge`, below this
+# crate's `mesh-api`. The solve surface (`sovereign-tdd`) is code's since
+# pb-meshapp-solve.
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 # The run path (`daemon_cmd`) commissions the ONE Runtime through the
@@ -152,7 +152,7 @@ test-doubles = []
 # `code_server_via_mcp_client` builds a real `ScipGraph`.
 arc-swap = { workspace = true }
 corpus-engine-scip = { workspace = true }
-# `solve_http`'s route test drives the router with `tower::ServiceExt`.
+# The route tests drive routers with `tower::ServiceExt`.
 tower = { workspace = true, features = ["util"] }
 # The host cluster's own integration tests, moved from sovereign-api at
 # domains `dm-daemon-api-edge`: `rail_e2e` installs a real ring signer and

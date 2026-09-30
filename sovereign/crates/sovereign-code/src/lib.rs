@@ -173,6 +173,13 @@ pub mod freshness;
 #[cfg(feature = "treesitter")]
 pub mod project_http;
 
+/// The TDD solver's job host, `/v1/solve/jobs*`, and its three MCP tools
+/// (docs/specs/SOLVE_UX.md), moved from the svrn daemon at pb-meshapp-solve.
+#[cfg(feature = "treesitter")]
+pub mod solve_http;
+#[cfg(feature = "treesitter")]
+pub mod solve_tools;
+
 /// Code's MCP exposure list and the spec-presence gate.
 pub mod mcp_surface;
 
