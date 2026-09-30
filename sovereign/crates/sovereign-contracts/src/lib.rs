@@ -55,6 +55,7 @@ pub mod embed_quirks;
 /// docs for why it is a shared leaf rather than a per-crate helper.
 pub mod env;
 pub mod error;
+pub mod eval_bank;
 /// Fill-in-the-middle prompt and stop text — the marker table, the PSM prompt
 /// builder, the mode decision and the pure stream stop tracker. Moved down
 /// from `sovereign-inference` (domains `REVIEW-build-serving-drop-inference`)

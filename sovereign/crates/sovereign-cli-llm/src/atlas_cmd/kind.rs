@@ -43,7 +43,7 @@ use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::parse_globals;
 use crate::enrich_cmd::paths;
-use crate::eval_cmd::bank::load_bank;
+use sovereign_contracts::eval_bank::load_bank;
 
 /// One row of the report: what the race said about one question.
 #[derive(Debug, Clone, serde::Serialize)]

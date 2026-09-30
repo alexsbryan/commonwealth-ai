@@ -29,8 +29,8 @@ use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope, ATLAS_DIR
 use corpus_engine::filters::normalize_title;
 
 use super::paths;
-use crate::eval_cmd::bank::load_bank;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_contracts::eval_bank::load_bank;
 
 const HELP: Help = Help {
     command: "svrn enrich atlas-eval",

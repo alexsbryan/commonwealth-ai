@@ -142,7 +142,7 @@ async fn cmd_align(args: &[String]) -> i32 {
     let indexes_dir = sovereign_contracts::rebrand::data_dir().join("indexes");
 
     // Pilot driver set = distinct expected_sources (slugs) in the eval bank.
-    let bank = match crate::eval_cmd::bank::load_bank(std::path::Path::new(&bank_path)) {
+    let bank = match sovereign_contracts::eval_bank::load_bank(std::path::Path::new(&bank_path)) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("error: load bank {bank_path}: {e}");

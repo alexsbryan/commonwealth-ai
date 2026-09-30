@@ -15,6 +15,8 @@
 //!     as N/A (not 0/0 = NaN, not 1.0). The runner skips that dimension.
 
 use corpus_index::types::ScoredChunk;
+pub use sovereign_contracts::eval_bank::is_unscorable_fact;
+use sovereign_contracts::eval_bank::keyword_tokens;
 
 /// Result of comparing a question's `expected_sources` against the
 /// titles of chunks that came back from retrieval.
@@ -197,20 +199,6 @@ pub fn score_sources_titles<S: AsRef<str>>(expected: &[String], titles: &[S]) ->
         missing,
         total_expected: expected.len(),
     }
-}
-
-/// True when [`keyword_tokens`] reduces `fact` to nothing, so no
-/// haystack could ever match it. Lets the bank loader warn the author
-/// at load time about what the scorer will silently skip.
-pub fn is_unscorable_fact(fact: &str) -> bool {
-    keyword_tokens(fact).is_empty()
-}
-
-fn keyword_tokens(s: &str) -> Vec<String> {
-    s.split(|c: char| !c.is_alphanumeric())
-        .filter(|t| t.chars().count() >= 3)
-        .map(|t| t.to_lowercase())
-        .collect()
 }
 
 // ─── Instructor-mode (LLM-as-judge) fact scorer ────────────────
