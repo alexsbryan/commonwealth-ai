@@ -348,6 +348,29 @@ instrument_note = "one actor, two ops: seq 3 before retirement and seq 4 after, 
 goodhart     = "zero is the expected good result and proves nothing alone (ARCH 5): a retired key that never signed anything scores zero perfectly. The same run must carry the positive control - the pre-retirement op admitted and folded. And a retirement that also dropped the key's EARLIER ops would re-divide history, which is the exact failure the roster/op-set separation exists to prevent."
 status       = "open"
 
+# ra-5's bar (the membership amendment, 2026-09-18), recovered from
+# 7cdb2da7e after the ladder re-cut left it without a home in the registry.
+# Filed under ra-11 — the rung that `lands = ["membership"]` — with its
+# provenance named so a renumbering cannot lose it. The five legs landed in
+# ROOT_CAUSE_FIXES A4 on 2026-09-24, each watched failing first; the
+# instrument runs them and emits the fraction.
+
+[[bar]]
+id           = "ra-membership-is-order-free"
+demo         = "Undo a leaked invite in one act, and every node agrees who is in"
+rung         = "ra-11"
+one_line     = "CLAIM: over an op set containing Admit, Remove and voids of both, every permutation admits byte-identically, and each of the three recoveries is one act"
+derives_from = "admit's one property: 'The result is a function of the op SET' (commonwealth-rail-core/src/admit.rs), asserted over permutations of app acts only. Membership on the journal is the first time admission depends on acts that change who may sign, so the property must be re-proven over them — including the one case with two self-consistent answers, two members removing each other."
+floor        = 0.0
+floor_basis  = "structural: FRACTION of five legs in one test run — (1) every permutation of a membership-bearing set, with a mutual removal and an Admit racing its own void, yields a byte-identical Admission, gaps included; (2) voiding one Admit drops that key and every key it transitively admitted; (3) voiding a Remove restores the member and admits what they wrote while removed; (4) a replacement key admitted under the same person, with the old key removed through its last seq, leaves every past act admitted; (5) a parser without the new acts reads them as NewerVersionLine, never as admitted and never as MalformedLine. Zero at declaration: the acts did not exist."
+target       = 1.0
+direction    = "higher_is_better"
+instrument   = "python3 scripts/ra5_instrument.py"
+timeout_s    = 600
+instrument_note = "the five legs' tests in one instrument (scripts/ra5_instrument.py emits the fraction — values only): every_interleaving_of_a_membership_set_folds_identically, voiding_an_admit_drops_what_it_transitively_admitted, voiding_a_remove_restores_the_member_and_their_in_between_writes, a_replacement_key_leaves_every_past_act_admitted, and leg 5 as three checks (the bump rule, the no-Admit byte-identical pin, oplog's pre-parse gate). Each watched failing first against its named defect."
+goodhart     = "a membership function that ignores Admit and Remove passes leg 1 perfectly — every permutation agrees on the seed. Legs 2-4 are what prove the acts do anything, and they run in the same test binary. ra-roster-stays-independent must read 0 in the same run: passing here by writing roster.json would move the roster route into a file."
+status       = "open"
+
 # ── THE LADDER ───────────────────────────────────────────────────────────────
 # LANDING ORDER = TABLE ORDER; ids are identity, not position (ra-4's note).
 # THE 9-BAR CAP (co-lineage.py MAX_BARS, a load error) means this umbrella
@@ -462,7 +485,7 @@ lands  = ["membership"]
 title  = "day zero - join by one QR code on a phone, no account, and see a name not a key"
 status = "open"
 demo   = "D1"
-moves  = []
+moves  = ["ra-membership-is-order-free"]
 note   = "Lands inside ra-15 (the studio is the first app that is phone-first). The guest-grant deep link already carries the QR shape (deep_link.rs); the phone key is a linked device (ra-5) so the phone IS the wallet. Mobile transport unverified on this host (memory: mobile Tauri WS down) - measure before pricing. SHELF: Tauri 2.11.5 + uniffi is the only shell where static page + Rust node is the native shape; a PWA cannot be a node. Android needs a foreground service; iOS is offline while backgrounded; iroh-inside-Tauri-mobile is UNPROVEN and is this rung's first measurement."
 
 [[rung]]
