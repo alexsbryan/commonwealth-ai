@@ -129,35 +129,15 @@ pub fn ensure_rails(
     data_dir: &std::path::Path,
     config_path: &std::path::Path,
 ) -> Result<sovereign_turn_client::reach::Reached, String> {
-    use sovereign_turn_client::reach::{locate_sibling, BundledBackend, Reached, ServingHost};
+    use sovereign_turn_client::reach::{BundledBackend, Reached, ServingHost};
 
     hand_over_first(base, data_dir, config_path);
     let absent = |why: String| {
         tracing::warn!(rails_base = base, reason = %why, "ensure_rails: cw-rails is not reachable");
         why
     };
-    let url = reqwest::Url::parse(base)
-        .map_err(|e| absent(format!("the rails base {base} is not a URL: {e}")))?;
-    let host = url
-        .host_str()
-        .map(|h| h.trim_matches(['[', ']']).to_string())
-        .unwrap_or_default();
-    let loopback = host
-        .parse::<std::net::IpAddr>()
-        .map(|ip| ip.is_loopback())
-        .unwrap_or(host == "localhost");
-    if !loopback {
-        return Err(absent(format!(
-            "the rails base {base} is not loopback; only a local cw-rails is brought up"
-        )));
-    }
-    let Some(port) = url.port() else {
-        return Err(absent(format!(
-            "the rails base {base} names no port; a cw-rails is brought up on the port \
-             its client probes, so the base must name one"
-        )));
-    };
-    let Some(bin) = locate_sibling("cw-rails", "CW_RAILS_BIN") else {
+    let port = loopback_port(base).map_err(absent)?;
+    let Some(bin) = locate_rails() else {
         return Err(absent(
             "no cw-rails binary: set CW_RAILS_BIN, or install it beside this program or on PATH"
                 .into(),
@@ -172,12 +152,9 @@ pub fn ensure_rails(
             data_dir.display()
         ))
     })?;
-    let mut backend = BundledBackend::at(bin)
-        .arg("run")
-        .arg("--listen")
-        .arg(port.to_string());
-    if local_only {
-        backend = backend.arg("--local-only");
+    let mut backend = BundledBackend::at(bin);
+    for arg in run_args(port, local_only) {
+        backend = backend.arg(arg);
     }
     tracing::debug!(
         rails_base = base,
@@ -205,6 +182,49 @@ pub fn ensure_rails(
         }
         Err(e) => Err(absent(e)),
     }
+}
+
+/// The port a local cw-rails is brought up on: `base`'s, when `base` is a
+/// loopback URL that names one. `Err` says which of the three it is not.
+pub(crate) fn loopback_port(base: &str) -> Result<u16, String> {
+    let url = reqwest::Url::parse(base)
+        .map_err(|e| format!("the rails base {base} is not a URL: {e}"))?;
+    let host = url
+        .host_str()
+        .map(|h| h.trim_matches(['[', ']']).to_string())
+        .unwrap_or_default();
+    let loopback = host
+        .parse::<std::net::IpAddr>()
+        .map(|ip| ip.is_loopback())
+        .unwrap_or(host == "localhost");
+    if !loopback {
+        return Err(format!(
+            "the rails base {base} is not loopback; only a local cw-rails is brought up"
+        ));
+    }
+    url.port().ok_or_else(|| {
+        format!(
+            "the rails base {base} names no port; a cw-rails is brought up on the port \
+             its client probes, so the base must name one"
+        )
+    })
+}
+
+/// The cw-rails binary the bring-up and the boot unit both run: `CW_RAILS_BIN`,
+/// else beside this program, else on PATH.
+pub(crate) fn locate_rails() -> Option<std::path::PathBuf> {
+    sovereign_turn_client::reach::locate_sibling("cw-rails", "CW_RAILS_BIN")
+}
+
+/// cw-rails' argv after its binary: the ONE spelling the bring-up and the
+/// boot unit both run (`crate::rails_unit`), so the unit cannot start a
+/// cw-rails on another port or posture than `svrn mesh up` did.
+pub(crate) fn run_args(port: u16, local_only: bool) -> Vec<String> {
+    let mut args = vec!["run".to_string(), "--listen".to_string(), port.to_string()];
+    if local_only {
+        args.push("--local-only".to_string());
+    }
+    args
 }
 
 /// Run `probe` on its own thread and current-thread runtime, so the caller
