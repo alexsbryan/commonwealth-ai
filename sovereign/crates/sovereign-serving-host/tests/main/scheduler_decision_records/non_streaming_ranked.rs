@@ -6,7 +6,7 @@
 //! `complete()` onto `select_route`'s plan.
 
 use sovereign_contracts::traits::InferenceProvider;
-use sovereign_mesh::decision_log::ServedBy;
+use sovereign_scheduler::decision_log::ServedBy;
 
 use super::{
     await_outcome, build, mesh_request, only_decision, peer_endpoint, spawn_peer, PEER_TEXT,

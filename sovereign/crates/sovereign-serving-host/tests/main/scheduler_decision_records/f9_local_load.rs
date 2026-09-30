@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use sovereign_contracts::traits::InferenceProvider;
-use sovereign_mesh::decision_log::{CandidateKind, CaptureDecisionSink, DecisionSink};
-use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
+use sovereign_scheduler::decision_log::{CandidateKind, CaptureDecisionSink, DecisionSink};
+use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 use super::{mesh_request, only_decision, peer_endpoint, spawn_peer, weak_local, StubVenueSource};
 
@@ -57,7 +57,7 @@ async fn the_local_candidate_is_scored_on_this_nodes_real_in_flight_count() {
             Arc::new(StubVenueSource {
                 peers: vec![peer_endpoint("hub", addr, 12)],
             }) as Arc<dyn VenueHost>,
-            Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
+            Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
             Arc::clone(&publisher),
         )
         .with_decision_sink(sink);

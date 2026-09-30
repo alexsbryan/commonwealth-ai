@@ -9,7 +9,7 @@ use futures::StreamExt;
 use oicp_types::{CapabilityHint, InferenceRequirements, LatencyClass, ShardingPrivacy};
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, Speed};
-use sovereign_mesh::decision_log::{
+use sovereign_scheduler::decision_log::{
     CandidateKind, DecisionPath, ExclusionReason, LoadSource, ServedBy, Verdict,
 };
 

@@ -136,8 +136,6 @@ mod local_only_boot;
 mod local_only_corpus_locality;
 #[path = "main/loopback_parity.rs"]
 mod loopback_parity;
-#[path = "main/manifest_fanout_concurrency.rs"]
-mod manifest_fanout_concurrency;
 #[path = "main/mcp_one_home.rs"]
 mod mcp_one_home;
 #[path = "main/membership_port.rs"]
@@ -156,8 +154,6 @@ mod ner_one_load_census;
 mod no_engine_census;
 #[path = "main/node_id_persistence.rs"]
 mod node_id_persistence;
-#[path = "main/openai_finish_reason.rs"]
-mod openai_finish_reason;
 #[path = "main/openai_wire_fidelity.rs"]
 mod openai_wire_fidelity;
 #[path = "main/peer_preference_manifest.rs"]
@@ -194,8 +190,6 @@ mod ring_sync_by_roster;
 mod ring_sync_loop_tests;
 #[path = "main/rotate_pre_split_guard.rs"]
 mod rotate_pre_split_guard;
-#[path = "main/scheduler_decision_records.rs"]
-mod scheduler_decision_records;
 #[path = "main/serving_ports_census.rs"]
 mod serving_ports_census;
 #[path = "main/status_answers_from_serve.rs"]
@@ -210,8 +204,6 @@ mod store_seed_double;
 mod svrn_alone_names_ingest_absent_e2e;
 #[path = "main/svrn_memory_without_code_e2e.rs"]
 mod svrn_memory_without_code_e2e;
-#[path = "main/throughput_ledger_emission.rs"]
-mod throughput_ledger_emission;
 #[path = "main/try_resume_first_gossip.rs"]
 mod try_resume_first_gossip;
 #[path = "main/turn_reshape_fidelity.rs"]

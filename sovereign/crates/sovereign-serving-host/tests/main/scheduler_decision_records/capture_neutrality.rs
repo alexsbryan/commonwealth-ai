@@ -10,9 +10,9 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use sovereign_contracts::traits::InferenceProvider;
-use sovereign_mesh::decision_log::{DecisionEvent, DecisionSink};
-use sovereign_mesh::decision_trace::SchedulerTrace;
-use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
+use sovereign_scheduler::decision_log::{DecisionEvent, DecisionSink};
+use sovereign_scheduler::decision_trace::SchedulerTrace;
+use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 use sovereign_serving_host::recorder::TracingDecisionSink;
 
 use super::{build, mesh_request, peer_endpoint, spawn_peer, weak_local, StubVenueSource};
@@ -35,7 +35,7 @@ async fn jsonl_capture_loads_back_as_a_replayable_trace() {
         Arc::new(StubVenueSource {
             peers: vec![peer_endpoint("hub", addr, 14)],
         }) as Arc<dyn VenueHost>,
-        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
     )
     .with_decision_sink(sink);
 
@@ -116,9 +116,11 @@ async fn the_sink_does_not_change_the_routing_decision() {
         Arc::new(StubVenueSource {
             peers: vec![peer_endpoint("hub", addr, 11)],
         }) as Arc<dyn VenueHost>,
-        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
     )
-    .with_decision_sink(Arc::new(sovereign_mesh::decision_log::NullDecisionSink));
+    .with_decision_sink(Arc::new(
+        sovereign_scheduler::decision_log::NullDecisionSink,
+    ));
 
     let (a_stream, a_attr) = with_capture
         .complete_stream_with_id(&mesh_request())

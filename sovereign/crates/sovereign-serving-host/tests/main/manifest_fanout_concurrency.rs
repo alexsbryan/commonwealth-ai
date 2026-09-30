@@ -28,19 +28,18 @@ use async_trait::async_trait;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use oicp_types::{
     CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
     ProviderManifest, ProviderModel, ShardingPrivacy, OICP_VERSION,
 };
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, Speed};
-use sovereign_core::time::unix_now_u64;
-use sovereign_daemon::daemon::InferenceVenue;
-use sovereign_mesh::peer_inference::{InferenceRouter, VenueHost, VenueSource};
+use sovereign_contracts::venue::InferenceVenue;
+use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
+use sovereign_time::unix_now_u64;
 
-use crate::common;
-use crate::common::TestProvider;
+use sovereign_contracts::double::TestProvider;
 
 // ─── harness ────────────────────────────────────────────────────
 
@@ -183,7 +182,7 @@ fn build(peers: Vec<InferenceVenue>) -> InferenceRouter {
             peers: peers.clone(),
         }) as Arc<dyn VenueSource>,
         Arc::new(StubVenueSource { peers }) as Arc<dyn VenueHost>,
-        Arc::new(sovereign_daemon::slot_manifest::CoreSlotManifest),
+        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
     )
 }
 

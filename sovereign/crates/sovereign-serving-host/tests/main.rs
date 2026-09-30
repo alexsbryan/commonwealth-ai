@@ -19,8 +19,20 @@
 //! [`serving_lift_harness`](serving_lift_harness) inside the sandbox and grep
 //! its `LIFT ` evidence lines.
 
+#[path = "main/manifest_fanout_concurrency.rs"]
+mod manifest_fanout_concurrency;
+
+#[path = "main/openai_finish_reason.rs"]
+mod openai_finish_reason;
+
+#[path = "main/scheduler_decision_records.rs"]
+mod scheduler_decision_records;
+
 #[path = "main/serving_lift_harness.rs"]
 mod serving_lift_harness;
 
 #[path = "main/sheds_commonwealth.rs"]
 mod sheds_commonwealth;
+
+#[path = "main/throughput_ledger_emission.rs"]
+mod throughput_ledger_emission;

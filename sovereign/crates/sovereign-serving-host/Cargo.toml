@@ -84,6 +84,9 @@ tempfile = "3"
 # The pinned-pod snapshot/transport tests mint a bootstrap blob with a fixed
 # owner key (moved host-side by domains REVIEW-build-serving-move-peer).
 ed25519-dalek = { workspace = true }
+# `TestProvider`, the local-slot double the ranking and adapter tests drive
+# (phase-b pb-serve-ranks-tests-serve); never the daemon's test tree.
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 
 [lints]
 workspace = true
