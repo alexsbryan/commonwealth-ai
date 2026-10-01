@@ -8,14 +8,20 @@
 //! this half adds what an edge cannot express: the filesystem rules every
 //! governed crate answers to, the face-ITEM scan over the distribution's
 //! source, and the fixed `max_code_lines` cap.
+//!
+//! Every rule runs per ROW over that row's crates, so a crate several rows
+//! claim answers to each of them (phase-b-88): its `src/` is scanned against
+//! each row's faces and its code lines count against each row's cap, and a
+//! failure is named under every row it fails.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use crate::boundary_gate::{include_escapes, rs_files, runtime_root_escapes};
 
 /// Run every distribution rule, pushing failures into `fails` (one list, one
-/// count, as the package rules). Returns the distribution crates checked.
+/// count, as the package rules). Returns the distribution crates checked,
+/// each counted once however many rows claim it.
 pub(crate) fn check(
     root: &Path,
     map: &arch_layers::LayerMap,
@@ -28,7 +34,7 @@ pub(crate) fn check(
             .iter()
             .map(|v| v.describe()),
     );
-    let mut checked = 0;
+    let mut checked = BTreeSet::new();
     for dist in &map.distributions {
         let scope = dist.name.as_str();
         let mut code_lines = 0usize;
@@ -36,7 +42,7 @@ pub(crate) fn check(
             let Some(rel) = dir_of.get(name.as_str()) else {
                 continue;
             };
-            checked += 1;
+            checked.insert(name.as_str());
             let dir = root.join(rel);
             if dir.join("build.rs").exists() {
                 fails.push(format!(
@@ -58,7 +64,7 @@ pub(crate) fn check(
             fails.push(f);
         }
     }
-    checked
+    checked.len()
 }
 
 /// The fixed cap: set per row, never ratcheted (phase-b-30 Group 2).

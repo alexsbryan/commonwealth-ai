@@ -16,6 +16,15 @@
 //! crates, the shared leaves, and its faces' crates. Which ITEMS of a face
 //! crate it may name is a source rule, checked by `xtask boundary-gate`.
 //!
+//! A crate several rows claim answers to EVERY row that claims it (phase-b-88):
+//! each of its direct edges is judged against each claiming row and fails
+//! under the name of every row that does not allow it, and boundary-gate runs
+//! its face-item scan and counts its lines once per row. That intersection is
+//! the strictest semantics a shared crate can have, so sharing never widens
+//! what a row allows: it is how two distributions compose one thing one way
+//! (ingest's hosting composition, `sovereign-hosted-ingest`) without a
+//! `#[path]` mount out of either crate.
+//!
 //! `Distribution` is this TOML row's name, as `[[package]]` is `Package`. Its
 //! kin elsewhere (`DistributionPlan`, sovereign-inference's layer split) is a
 //! different concept.
@@ -29,7 +38,8 @@ use crate::{DepEdge, LayerMap, Violation};
 #[derive(Debug, Deserialize)]
 pub struct Distribution {
     pub name: String,
-    /// Its own crates. Each is in no package and is no leaf.
+    /// Its own crates. Each is in no package and is no leaf. A crate another
+    /// row also lists is that row's too, and answers to both (phase-b-88).
     pub crates: Vec<String>,
     /// The program faces it composes: the only package crates it may name.
     #[serde(default, rename = "face")]
@@ -67,7 +77,6 @@ pub(crate) fn validate(map: &LayerMap) -> Result<(), String> {
         );
     }
     let mut names: BTreeSet<&str> = BTreeSet::new();
-    let mut claimed: BTreeSet<&str> = BTreeSet::new();
     for dist in &map.distributions {
         if !names.insert(dist.name.as_str()) {
             return Err(format!(
@@ -75,13 +84,9 @@ pub(crate) fn validate(map: &LayerMap) -> Result<(), String> {
                 dist.name
             ));
         }
+        // A crate two rows list is no refusal: it answers to both
+        // (`evaluate_distributions`; phase-b-88).
         for c in &dist.crates {
-            if !claimed.insert(c.as_str()) {
-                return Err(format!(
-                    "crate `{c}` is claimed by two [[distribution]] blocks — a \
-                     composition root has one row"
-                ));
-            }
             if let Some(pkg) = map.packages.iter().find(|p| p.crates.contains(c)) {
                 return Err(format!(
                     "distribution `{}` crate `{c}` is also a member of package `{}` — \
@@ -131,29 +136,30 @@ pub fn missing_distribution_crates(
 
 /// Judge every DIRECT edge out of a distribution crate: it may reach its own
 /// crates, the shared leaves and its faces' crates, and nothing else. Dev and
-/// build edges count, as in a package: the crate carries its tests.
+/// build edges count, as in a package: the crate carries its tests. An edge
+/// out of a crate several rows claim is judged under each of them, and is a
+/// violation under every row that does not allow it (phase-b-88).
 pub fn evaluate_distributions(map: &LayerMap, edges: &[DepEdge]) -> Vec<Violation> {
     let leaves: BTreeSet<&str> = map.package_leaves.iter().map(|l| l.name.as_str()).collect();
     let mut out = Vec::new();
     for edge in edges {
-        let Some(dist) = map
+        let claiming = map
             .distributions
             .iter()
-            .find(|d| d.crates.contains(&edge.from))
-        else {
-            continue;
-        };
-        let allowed = dist.crates.contains(&edge.to)
-            || leaves.contains(edge.to.as_str())
-            || dist.faces.iter().any(|f| f.krate == edge.to);
-        if !allowed {
-            out.push(Violation::DistributionEdge {
-                distribution: dist.name.clone(),
-                doc: dist.doc.clone(),
-                from: edge.from.clone(),
-                to: edge.to.clone(),
-                kind: edge.kind,
-            });
+            .filter(|d| d.crates.contains(&edge.from));
+        for dist in claiming {
+            let allowed = dist.crates.contains(&edge.to)
+                || leaves.contains(edge.to.as_str())
+                || dist.faces.iter().any(|f| f.krate == edge.to);
+            if !allowed {
+                out.push(Violation::DistributionEdge {
+                    distribution: dist.name.clone(),
+                    doc: dist.doc.clone(),
+                    from: edge.from.clone(),
+                    to: edge.to.clone(),
+                    kind: edge.kind,
+                });
+            }
         }
     }
     out
@@ -243,6 +249,59 @@ items = ["bundles"]
         assert!(err.contains("also a member of package `serve`"), "{err}");
         let err = parse(&MAP.replace("crates = [\"stock\"]", "crates = [\"leaf\"]")).unwrap_err();
         assert!(err.contains("also a [[package_leaf]]"), "{err}");
+    }
+
+    /// MAP with a second row, `onprem`, and a crate `shared` both rows list.
+    fn shared_map() -> String {
+        MAP.replace("crates = [\"stock\"]", "crates = [\"stock\", \"shared\"]")
+            + r#"
+[[distribution]]
+name = "onprem"
+crates = ["onprem", "shared"]
+doc = "docs/FIVE_PROGRAMS.md"
+max_code_lines = 200
+[[distribution.face]]
+package = "svrn"
+krate = "daemon"
+items = ["process::run"]
+"#
+    }
+
+    /// phase-b-88: a crate two rows claim is no refusal; it answers to both.
+    #[test]
+    fn a_crate_claimed_by_two_distributions_is_valid() {
+        let map = parse(&shared_map()).expect("a shared crate parses");
+        let claiming: Vec<&str> = map
+            .distributions
+            .iter()
+            .filter(|d| d.crates.iter().any(|c| c == "shared"))
+            .map(|d| d.name.as_str())
+            .collect();
+        assert_eq!(claiming, ["stock", "onprem"]);
+    }
+
+    /// The row's gate test (phase-b-88): an edge out of the shared crate that
+    /// stock's faces allow and onprem's do not fails under onprem's name only;
+    /// one neither allows fails under both; each row's own crates may name it.
+    #[test]
+    fn a_shared_crate_edge_is_judged_under_every_row_that_claims_it() {
+        let map = parse(&shared_map()).unwrap();
+        let ok = [
+            edge("shared", "daemon"),
+            edge("shared", "leaf"),
+            edge("stock", "shared"),
+            edge("onprem", "shared"),
+        ];
+        assert!(evaluate_distributions(&map, &ok).is_empty());
+        let v = evaluate_distributions(&map, &[edge("shared", "serve")]);
+        assert_eq!(v.len(), 1, "{v:?}");
+        let msg = v[0].describe();
+        assert!(msg.starts_with("[onprem] shared → serve"), "{msg}");
+        let v = evaluate_distributions(&map, &[edge("shared", "inference")]);
+        let named: Vec<String> = v.iter().map(|v| v.describe()).collect();
+        assert_eq!(named.len(), 2, "{named:?}");
+        assert!(named[0].starts_with("[stock] shared → inference"), "{named:?}");
+        assert!(named[1].starts_with("[onprem] shared → inference"), "{named:?}");
     }
 
     #[test]
