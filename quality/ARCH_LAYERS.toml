@@ -148,6 +148,12 @@ crates = [
     # them. Its in-repo dep list is `kernel-types` alone — see the three
     # [[forbid]] blocks below, without which this entry enforces nothing.
     "oplog",
+    # The pure envelope split from oplog 2026-09-23 (ROOT_CAUSE_FIXES B4):
+    # Op/OpId/SkippedLine with zero I/O, so the rail fold links no filesystem
+    # code (the rail-core [[forbid]] row below and purity-gate hold the two
+    # halves of that claim). Same tier-0 reason as its parent: `OpId` is
+    # content-addressed and gossiped.
+    "oplog-types",
 ]
 
 # The knowledge layer: corpus-engine + its carve-outs. "Self-contained by
@@ -931,6 +937,27 @@ name = "oplog"
 # ordering and dedup, not identity. Three crates name it today —
 # commonwealth-rail, commonwealth-rail-core, corpus-engine — which is what a
 # shared leaf is rather than a convenience.
+#
+# `oplog-types` joined its allow 2026-09-23 (ROOT_CAUSE_FIXES B4): the pure
+# envelope split out so rail-core links no filesystem code, with `oplog`
+# re-exporting it so corpus-engine's `crate::oplog` paths never moved. The
+# edge is the re-export, and it is the whole crate list of the type half.
+allow = ["kernel-types", "oplog-types"]
+
+[[package_leaf]]
+name = "oplog-types"
+# The pure envelope (Op/OpId/SkippedLine), split from `oplog` 2026-09-23
+# (ROOT_CAUSE_FIXES B4) so `commonwealth-rail-core` — the fold — links ZERO
+# filesystem code; the fs writer stayed behind in `oplog`, which re-exports
+# these types. Admitted 2026-09-30 when boundary-gate named the missing
+# registration: B4 landed the crate and the purity gate but never added the
+# leaf, so the rail's own dependency left every package closure.
+#
+# The objection to any leaf admission is that the list is global; measured
+# rather than argued, this one is the cheapest admission in the file:
+#     oplog-types closure      4 crates (kernel-types, serde, serde_json, itself)
+#     crates NO existing leaf
+#     already carries          0   <- every one is inside `oplog`'s closure
 allow = ["kernel-types"]
 
 # ── The packages ─────────────────────────────────────────────────────────────
