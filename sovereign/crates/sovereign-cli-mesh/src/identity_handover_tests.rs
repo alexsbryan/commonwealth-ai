@@ -3,7 +3,7 @@ use super::*;
 
 /// A daemon store: a key, a node id, the active mesh with its invite key,
 /// and one parked mesh.
-fn daemon_store(
+pub(crate) fn daemon_store(
     dir: &Path,
 ) -> (
     Vec<u8>,

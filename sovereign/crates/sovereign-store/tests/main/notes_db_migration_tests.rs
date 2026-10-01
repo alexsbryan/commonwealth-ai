@@ -178,6 +178,41 @@ async fn the_copy_is_taken_before_a_row_moves() {
     assert_eq!(ids(&backup, "notes").len(), ROWS.len());
 }
 
+/// pb-distribution-f10: a run that finds no marker but a copy already there
+/// (an earlier run interrupted after its copy) keeps that first copy, so a row
+/// written since never reaches the rollback's restore point.
+#[tokio::test]
+async fn a_second_copy_never_overwrites_the_first() {
+    let (dir, notes_db, store) = setup();
+    store.migrate_notes_db(&notes_db).await.unwrap();
+    Connection::open(dir.path().join("sovereign.db"))
+        .unwrap()
+        .execute("DELETE FROM store_markers", [])
+        .unwrap();
+    Connection::open(&notes_db)
+        .unwrap()
+        .execute(
+            "INSERT INTO notes (id, kind, content, session_id, created_at, updated_at)
+             VALUES ('late', 'note', 'late', 's', 9, 9)",
+            [],
+        )
+        .unwrap();
+    let again = store.migrate_notes_db(&notes_db).await.unwrap();
+    assert!(!again.already_done);
+
+    let backup = notes_db_backup_path(&notes_db);
+    assert_eq!(ids(&backup, "notes").len(), ROWS.len());
+    assert!(!ids(&backup, "notes").contains(&"late".to_string()));
+    // RUNBOOK §9 step 2: the copy renamed back is notes.db as main-era left it.
+    std::fs::rename(&backup, &notes_db).unwrap();
+    let restored = tempfile::tempdir().unwrap();
+    fixture(&restored.path().join("notes.db"));
+    assert_eq!(
+        ids(&notes_db, "notes"),
+        ids(&restored.path().join("notes.db"), "notes")
+    );
+}
+
 #[tokio::test]
 async fn a_fresh_install_has_nothing_to_move() {
     let dir = tempfile::tempdir().unwrap();

@@ -25,3 +25,6 @@ pub mod rails_up;
 pub mod ring_cmd;
 pub mod run_cmd;
 pub mod wall_link;
+
+#[cfg(test)]
+mod migration_backup_tests;

@@ -243,3 +243,28 @@ is older than itself (mute: `SOVEREIGN_NO_STALE_WARN=1`).
 The full verb map lives in [`CLI_REFERENCE.md`](./CLI_REFERENCE.md).
 Rule of thumb: after touching daemon-side code, the change is live only
 after `cargo build -p sovereign-cli-daemon && sovereign daemon restart`.
+
+## 9. Rolling back Phase B's moves
+
+`svrn mesh up` and the first daemon boot move a main-era node's files to
+their new owners once. Every move keeps the first original beside it and a
+later run never overwrites it (an empty backup stands for a file that did not
+exist). To go back to the main-era binaries, stop the daemon and cw-rails
+and take the two steps below. What was written after the upgrade (new
+journals, lessons, parked meshes) is not carried back.
+
+1. **`svrn mesh up`'s handover** (identity, rails.toml, ring journals, the
+   media house credential and viewer id, the `[compute.work_offer]` and
+   `[iroh]` keys): from a checkout,
+   `SVRN=<[data] dir> CONFIG=<config.toml> RAILS=<cw-rails data dir> sh sovereign/crates/sovereign-cli-mesh/rollback-handover.sh`.
+   It puts every `*.pre-handover` back in cw-rails' dir (removing a file an
+   empty one marks as created), renames `node_key.handed-over` to `node_key`,
+   moves the journals and the credential back under the daemon, and restores
+   `config.toml.bak` (or, when only `[iroh]` moved, `config.toml.iroh.bak`).
+   The test `the_rollback_script_restores_the_main_era_dir` runs this script
+   on a main-era fixture handed over twice and compares every file.
+2. **The notes move** (first daemon boot): with the daemon stopped, remove
+   `notes.db-wal` and `notes.db-shm` under the `[data] dir` and rename
+   `notes.db.pre-pb-notes-memory` to `notes.db`. svrn's store keeps its
+   marker, so a later upgrade does not move the rows again. The test
+   `a_second_copy_never_overwrites_the_first` restores from that copy.

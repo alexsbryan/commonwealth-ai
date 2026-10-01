@@ -112,22 +112,40 @@ pub fn hand_over(
         meshes += 1;
     }
 
-    std::fs::rename(&svrn_key, svrn_dir.join(HANDED_OVER_KEY))
-        .map_err(|e| format!("the daemon's key was copied but could not be retired: {e}"))?;
-    info!(target: TARGET, meshes, rails = %rails_dir.display(),
+    // A `node_key.handed-over` already there is the first key handed over: it
+    // is kept, and this key, now copied to cw-rails, is removed instead.
+    let retired = svrn_dir.join(HANDED_OVER_KEY);
+    if retired.exists() {
+        std::fs::remove_file(&svrn_key)
+    } else {
+        std::fs::rename(&svrn_key, &retired)
+    }
+    .map_err(|e| format!("the daemon's key was copied but could not be retired: {e}"))?;
+    info!(target: TARGET, meshes, rails = %rails_dir.display(), retired = %retired.display(),
           "identity handover: the daemon's key, node id and meshes are cw-rails'");
     Ok(Handover::Moved { meshes })
 }
 
-/// Rename `path` to `<path>.pre-handover` if it exists.
+/// Rename `path` to `<path>.pre-handover`, once (pb-distribution-f10): an
+/// existing aside is the first original and is kept, and the caller then
+/// overwrites `path`. A `path` that does not exist leaves an empty aside, the
+/// marker the rollback reads as "there was no file" (RUNBOOK §9).
 fn keep_aside(path: &Path) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
-    }
     let mut aside = path.as_os_str().to_owned();
     aside.push(".pre-handover");
-    std::fs::rename(path, &aside)
-        .map_err(|e| format!("{} could not be kept aside: {e}", path.display()))
+    let aside = std::path::PathBuf::from(aside);
+    if aside.exists() {
+        info!(target: TARGET, aside = %aside.display(), "identity handover: an older copy is kept aside; not overwritten");
+        return Ok(());
+    }
+    let kept = if path.exists() {
+        std::fs::rename(path, &aside)
+    } else {
+        std::fs::write(&aside, b"")
+    };
+    kept.map_err(|e| format!("{} could not be kept aside: {e}", path.display()))?;
+    info!(target: TARGET, from = %path.display(), aside = %aside.display(), "identity handover: kept aside");
+    Ok(())
 }
 
 /// Copy `from` to `to`, owner-only: a node key is a secret.
@@ -144,4 +162,4 @@ fn copy_private(from: &Path, to: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 #[path = "identity_handover_tests.rs"]
-mod tests;
+pub(crate) mod tests;

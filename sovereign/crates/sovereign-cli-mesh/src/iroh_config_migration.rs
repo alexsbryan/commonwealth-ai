@@ -92,14 +92,16 @@ pub fn migrate_iroh_keys(config_path: &Path, rails_dir: &Path) {
             section.insert(rails_key, value.clone());
         }
     }
+    let rails_backup = crate::rail_migration::rails_toml_backup(&rails_toml);
     if let Err(e) = std::fs::create_dir_all(rails_dir)
-        .and_then(|()| std::fs::write(&rails_toml, rails.to_string()))
+        .and_then(|()| crate::rail_migration::keep_first(&rails_backup, rails_text.as_bytes()))
+        .and_then(|_| std::fs::write(&rails_toml, rails.to_string()))
     {
         tracing::error!(target: TARGET, error = %e, to = %rails_toml.display(), "iroh migration: rails.toml could not be written; `[iroh]` stays in svrn's config");
         return;
     }
     let backup = config_path.with_extension("toml.iroh.bak");
-    if let Err(e) = std::fs::write(&backup, &text) {
+    if let Err(e) = crate::rail_migration::keep_first(&backup, text.as_bytes()) {
         tracing::warn!(target: TARGET, error = %e, backup = %backup.display(), "iroh migration: the backup could not be written, so `[iroh]` stays in svrn's config (cw-rails reads its own copy)");
         return;
     }
@@ -114,6 +116,7 @@ pub fn migrate_iroh_keys(config_path: &Path, rails_dir: &Path) {
     }
     tracing::info!(target: TARGET, keys = ?moving.iter().map(|m| m.0).collect::<Vec<_>>(),
                    from = %config_path.display(), to = %rails_toml.display(), backup = %backup.display(),
+                   rails_backup = %rails_backup.display(),
                    "iroh migration: `[iroh]` keys moved to rails.toml");
 }
 

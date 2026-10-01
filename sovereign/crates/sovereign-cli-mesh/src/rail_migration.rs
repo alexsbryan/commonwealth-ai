@@ -50,6 +50,34 @@ fn rails_data_dir() -> PathBuf {
     commonwealth_media::rails_data_dir()
 }
 
+/// The one backup rule for every handover move (pb-distribution-f10): write
+/// `original` to `backup` only when no backup exists, so a later run never
+/// overwrites the first original. `Ok(false)` means an older copy was kept.
+/// An empty backup stands for a file that did not exist (RUNBOOK §9).
+pub(crate) fn keep_first(backup: &Path, original: &[u8]) -> std::io::Result<bool> {
+    use std::io::Write;
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(backup)
+    {
+        Ok(mut f) => f.write_all(original).map(|()| true),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            tracing::info!(backup = %backup.display(), "handover backup: an older copy exists; kept, not overwritten");
+            Ok(false)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// `rails.toml.pre-handover`: rails.toml as it was before the first handover
+/// wrote into it, beside the identity handover's `*.pre-handover` files.
+pub(crate) fn rails_toml_backup(rails_toml: &Path) -> PathBuf {
+    let mut name = rails_toml.as_os_str().to_owned();
+    name.push(".pre-handover");
+    PathBuf::from(name)
+}
+
 /// Copy a directory tree. `std::fs::rename` is the path this module expects
 /// to take; this is only the cross-device fallback, and journal directories
 /// are small (a seal prunes them), so a plain recursion is enough.
@@ -274,12 +302,17 @@ fn migrate_viewer_key(config_path: &Path, target: &Path) {
         tracing::error!(error = %e, to = %to.display(), "media migration: the viewer id could not be written to rails' store; the config key stays");
         return;
     }
+    let backup = config_path.with_extension("toml.bak");
+    if let Err(e) = keep_first(&backup, text.as_bytes()) {
+        tracing::warn!(error = %e, backup = %backup.display(), "media migration: the backup could not be written, so the config key stays");
+        return;
+    }
     iroh.remove(VIEWER_KEY);
     if let Err(e) = std::fs::write(config_path, doc.to_string()) {
         tracing::warn!(error = %e, config = %config_path.display(), "media migration: the viewer id is in rails' store, but the config key could not be removed");
         return;
     }
-    tracing::info!(from = %config_path.display(), to = %to.display(), "media migration: the viewer id moved from `[iroh] media_viewer_user` to rails' store");
+    tracing::info!(from = %config_path.display(), to = %to.display(), backup = %backup.display(), "media migration: the viewer id moved from `[iroh] media_viewer_user` to rails' store");
 }
 
 /// Hand `[compute.work_offer]` over to cw-rails, once (pb-work-donor): the
@@ -333,15 +366,18 @@ pub fn migrate_work_offer(config_path: &Path, rails_dir: &Path) {
         tracing::warn!(to = %rails_toml.display(), "work-offer migration: rails.toml already holds `[work_offer]` — kept; svrn's copy is removed");
     } else {
         rails.insert(WORK_OFFER_KEY, section);
+        let rails_backup = rails_toml_backup(&rails_toml);
         if let Err(e) = std::fs::create_dir_all(rails_dir)
-            .and_then(|()| std::fs::write(&rails_toml, rails.to_string()))
+            .and_then(|()| keep_first(&rails_backup, rails_text.as_bytes()))
+            .and_then(|_| std::fs::write(&rails_toml, rails.to_string()))
         {
             tracing::error!(error = %e, to = %rails_toml.display(), "work-offer migration: rails.toml could not be written; `[compute.work_offer]` stays in svrn's config");
             return;
         }
+        tracing::info!(to = %rails_toml.display(), backup = %rails_backup.display(), "work-offer migration: `[work_offer]` written to rails.toml");
     }
     let backup = config_path.with_extension("toml.bak");
-    if let Err(e) = std::fs::write(&backup, &text) {
+    if let Err(e) = keep_first(&backup, text.as_bytes()) {
         tracing::warn!(error = %e, backup = %backup.display(), "work-offer migration: the backup could not be written, so `[compute.work_offer]` stays in svrn's config (cw-rails reads its own copy)");
         return;
     }
