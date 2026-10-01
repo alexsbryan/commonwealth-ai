@@ -22,8 +22,6 @@
 mod adversarial_read;
 #[path = "main/archive_axis_live.rs"]
 mod archive_axis_live;
-#[path = "main/chunk_provenance_census.rs"]
-mod chunk_provenance_census;
 #[path = "main/core_tests.rs"]
 mod core_tests;
 #[path = "main/custody_reds.rs"]
@@ -40,8 +38,6 @@ mod drb1_r3b_goldens;
 mod drb1_t1_admission;
 #[path = "main/evidence_pool_census.rs"]
 mod evidence_pool_census;
-#[path = "main/f26_egress_census.rs"]
-mod f26_egress_census;
 #[path = "main/fr6_decorrelation.rs"]
 mod fr6_decorrelation;
 #[path = "main/functional.rs"]
@@ -87,15 +83,11 @@ mod router_cache_fresh;
 mod routing_log_join;
 #[path = "main/routing_moves.rs"]
 mod routing_moves;
-#[path = "main/runtime_commission_census.rs"]
-mod runtime_commission_census;
 #[path = "main/runtime_source_scan.rs"]
 mod runtime_source_scan;
 #[path = "main/serialization.rs"]
 mod serialization;
 #[path = "main/turn_capability_census.rs"]
 mod turn_capability_census;
-#[path = "main/turn_tool_census.rs"]
-mod turn_tool_census;
 #[path = "main/voice_prompt_shape.rs"]
 mod voice_prompt_shape;

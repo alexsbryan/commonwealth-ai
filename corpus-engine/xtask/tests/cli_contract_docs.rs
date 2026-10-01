@@ -33,15 +33,14 @@ use sovereign_cli_shared::cli_contract::{Contract, Visibility};
 /// Seeded with the stable, fully-documented verbs; expand over time.
 const FLAG_STRICT_VERBS: &[&str] = &["setup", "doctor", "chat", "drift", "pipeline"];
 
-/// Repo path to the `sovereign/` crate-root (two ancestors above this crate).
+/// Repo path to the `sovereign/` tree.
 fn sovereign_root() -> PathBuf {
-    // CARGO_MANIFEST_DIR = .../sovereign/crates/sovereign-cli
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(2)
-        .expect("sovereign-cli has a .../sovereign ancestor")
-        .to_path_buf()
+    repo_root().join("sovereign")
 }
+
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root;
 
 fn read(rel: &str) -> String {
     let p = sovereign_root().join(rel);

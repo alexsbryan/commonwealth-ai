@@ -117,13 +117,9 @@ const NON_CONTENT: &[&str] = &[
     "deserialized",
 ];
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(3)
-        .expect("repo root is four levels above sovereign-core")
-        .to_path_buf()
-}
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root;
 
 /// Every `ChunkProvenance::manufactured("…")` / `Manufactured { producer: "…" }`
 /// in first-party source, minus test modules.

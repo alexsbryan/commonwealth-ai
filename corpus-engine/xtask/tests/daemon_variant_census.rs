@@ -46,14 +46,9 @@
 
 use std::path::{Path, PathBuf};
 
-fn repo_root() -> PathBuf {
-    // .../sovereign/crates/sovereign-daemon -> repo root
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(3)
-        .expect("sovereign-daemon lives three levels under the repo root")
-        .to_path_buf()
-}
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root;
 
 /// Every first-party file that commissions an `EmbeddedDaemon`, the variant it
 /// must end up with, and the `LaunchParts` shape that is the only way to reach

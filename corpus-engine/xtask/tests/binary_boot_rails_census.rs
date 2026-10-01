@@ -23,13 +23,9 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(3)
-        .expect("sovereign-daemon lives three levels under the repo root")
-        .to_path_buf()
-}
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root;
 
 /// Test source: a file under a `tests/` dir, a `tests.rs` module, or a
 /// `*_tests.rs` file a `#[path]` attribute mounts.

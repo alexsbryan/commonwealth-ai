@@ -174,13 +174,9 @@ const DIVERGENT_BASELINE: usize = 23;
 /// Below this, the extractor found nothing and the run proves nothing.
 const MIN_TOOLS_PER_HOST: usize = 8;
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(3)
-        .expect("repo root is four levels above sovereign-core")
-        .to_path_buf()
-}
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root;
 
 /// Strip `//` line comments. A doc comment naming a tool is prose, not a
 /// registration, and counting it is the defect two prior censuses hit.

@@ -126,27 +126,9 @@ use registry_tail::REGISTRY_TAIL;
 // Instrument
 // ---------------------------------------------------------------------------
 
-/// The workspace root: the ancestor of CARGO_MANIFEST_DIR whose
-/// Cargo.toml declares `[workspace]`.
-fn workspace_root() -> PathBuf {
-    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    loop {
-        let toml = dir.join("Cargo.toml");
-        if toml.is_file()
-            && fs::read_to_string(&toml)
-                .map(|t| t.contains("[workspace]"))
-                .unwrap_or(false)
-        {
-            return dir;
-        }
-        if !dir.pop() {
-            panic!(
-                "workspace root not found from {}",
-                env!("CARGO_MANIFEST_DIR")
-            );
-        }
-    }
-}
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root as workspace_root;
 
 /// The workspace member paths from the root Cargo.toml `members`
 /// list (deterministic scan scope — a new member auto-enters).

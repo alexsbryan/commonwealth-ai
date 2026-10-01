@@ -15,14 +15,9 @@
 
 use std::path::{Path, PathBuf};
 
-fn repo_root() -> PathBuf {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    manifest
-        .ancestors()
-        .find(|d| d.join("quality/ARCH_LAYERS.toml").is_file())
-        .unwrap_or_else(|| panic!("no quality/ARCH_LAYERS.toml above {}", manifest.display()))
-        .to_path_buf()
-}
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root;
 
 /// The ingest package's crates, as Rust identifiers.
 fn ingest_crates(root: &Path) -> Vec<String> {
@@ -66,7 +61,7 @@ fn the_svrn_remainder_names_no_ingest_crate() {
     );
     let needle = regex::Regex::new(&pattern).unwrap();
 
-    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let src = root.join("sovereign/crates/sovereign-cli-llm/src");
     let mut files = Vec::new();
     rs_files(&src, &mut files);
     files.sort();

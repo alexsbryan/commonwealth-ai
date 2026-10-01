@@ -22,8 +22,6 @@
 mod admin_join_serves_venues_e2e;
 #[path = "main/atlas_surface_e2e.rs"]
 mod atlas_surface_e2e;
-#[path = "main/binary_boot_rails_census.rs"]
-mod binary_boot_rails_census;
 #[path = "main/canonical_pull_e2e.rs"]
 mod canonical_pull_e2e;
 #[path = "main/client_auth.rs"]
@@ -52,8 +50,6 @@ mod d9_turn_extras_e2e;
 mod d9a_corpus_catalog_e2e;
 #[path = "main/d9a_documents_e2e.rs"]
 mod d9a_documents_e2e;
-#[path = "main/daemon_variant_census.rs"]
-mod daemon_variant_census;
 #[path = "main/daemon_wiring.rs"]
 mod daemon_wiring;
 #[path = "main/embeddings_e2e.rs"]
@@ -151,5 +147,3 @@ mod turn_surface;
 mod wikipedia_fetch_e2e;
 #[path = "main/wire_view_drift.rs"]
 mod wire_view_drift;
-#[path = "main/work_drive_census.rs"]
-mod work_drive_census;

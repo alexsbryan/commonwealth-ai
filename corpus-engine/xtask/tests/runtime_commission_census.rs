@@ -257,14 +257,9 @@ const TURN_EXECUTION_SITES: &[&str] = &[
     // call. `Runtime::handle_message_any` went with them.
 ];
 
-fn repo_root() -> PathBuf {
-    // tests/ -> sovereign-core -> crates -> sovereign -> repo root
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(3)
-        .expect("repo root is four levels above sovereign-core")
-        .to_path_buf()
-}
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root;
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
