@@ -14,5 +14,5 @@
 requirement = "FE-8"
 test = "sovereign-mesh::persist::tests::save_writes_into_the_meshs_own_directory_without_moving_the_pointer"
 file = "sovereign/crates/sovereign-mesh/src/persist.rs"
-line = 908
+line = 909
 asserts = 3

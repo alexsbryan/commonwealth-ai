@@ -210,7 +210,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // lib_tests.rs at 47e67b4db; the row followed at pb-meshapp-rest.
     // 2 -> 4 (seat, 2026-09-30): pb-serve-ranks added two more `reqwest::Client::new()`
     // posts to the test's own router base (lib_tests.rs:243, :285), the same loopback class.
-    ("sovereign/crates/sovereign-serve/src/lib_tests.rs", Class::TestOnly, 4),
+    // 4 -> 5 (REVIEW-audit-pb-auto-11): pb-serve-package-guard (4bf702b69) posts
+    // rpc-warm to its own listener on 127.0.0.1 (lib_tests.rs:406), the same class.
+    ("sovereign/crates/sovereign-serve/src/lib_tests.rs", Class::TestOnly, 5),
     ("sovereign/crates/sovereign-serve/src/reload.rs", Class::TestOnly, 2),
     // rails_mesh.rs: serve's roster reads from cw-rails, the mesh's rails
     // daemon (pb-serve-distributes-standalone, 360165b37). Same class as
@@ -422,6 +424,11 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // on loopback.
     ("commonwealth/crates/commonwealth-rails/src/kv/tests.rs", Class::TestOnly, 4),
     ("commonwealth/crates/commonwealth-rails/src/ledger/tests.rs", Class::TestOnly, 1),
+    // The ring doors' and the ring round's test modules, which the flip
+    // (1c120f23d) brought into cw-rails: the same loopback-router shape.
+    ("commonwealth/crates/commonwealth-rails/src/ring_routes/tests.rs", Class::TestOnly, 2),
+    ("commonwealth/crates/commonwealth-rails/src/ring_sync/tests.rs", Class::TestOnly, 11),
+    ("commonwealth/crates/commonwealth-rails/src/ring_sync/tests/round_tests.rs", Class::TestOnly, 1),
 
     // ---- mesh-reach: the reach leaf (2026-09-28, REVIEW-audit-pb-auto-6) ----
     // `RailsTransport` asks cw-rails' reach door at the loopback API base its
