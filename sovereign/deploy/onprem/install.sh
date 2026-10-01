@@ -272,20 +272,27 @@ fi
 # ── 7. systemd ───────────────────────────────────────────────────────
 say "systemd unit"
 if [ "$NO_SYSTEMD" -eq 1 ]; then
-    install -d -m 0755 "$PREFIX/systemd"
-    UNIT="$PREFIX/systemd/$UNIT_NAME"
+    UNIT_DIR="$PREFIX/systemd"
+    install -d -m 0755 "$UNIT_DIR"
 else
-    UNIT="/etc/systemd/system/$UNIT_NAME"
+    UNIT_DIR=/etc/systemd/system
 fi
+UNIT="$UNIT_DIR/$UNIT_NAME"
 place "$KIT_DIR/systemd/$UNIT_NAME" \
     | sed -e "s|^User=.*|User=$SVC_USER|" -e "s|^Group=.*|Group=$SVC_USER|" > "$UNIT"
 echo "    $UNIT"
-# The unit firm-rag-server.service retired with sovereign-server.
-if [ "$NO_SYSTEMD" -eq 0 ] && [ -f /etc/systemd/system/firm-rag-server.service ]; then
-    systemctl disable --now firm-rag-server.service 2>/dev/null || true
-    rm -f /etc/systemd/system/firm-rag-server.service
-    echo "    retired firm-rag-server.service"
-fi
+# Main's two units: firm-rag-server.service retired with sovereign-server,
+# firm-rag-daemon.service is firm-rag.service now. Left enabled, either
+# binds the daemon's port beside the new unit. Run alone by
+# corpus-engine/xtask/tests/onprem_kit_upgrade_unit.rs.
+# retire-main-units: begin
+for old in firm-rag-server.service firm-rag-daemon.service; do
+    [ -f "$UNIT_DIR/$old" ] || continue
+    [ "$NO_SYSTEMD" -eq 1 ] || systemctl disable --now "$old" 2>/dev/null || true
+    rm -f "$UNIT_DIR/$old"
+    echo "    retired $old"
+done
+# retire-main-units: end
 if command -v systemd-analyze >/dev/null 2>&1; then
     systemd-analyze verify "$UNIT" \
         || die "systemd-analyze verify rejected $UNIT"
