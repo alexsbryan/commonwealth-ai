@@ -336,12 +336,33 @@ async fn standalone_routes() -> (Vec<RouteBundle>, tempfile::TempDir) {
 ///
 /// The guard also turns away no legitimate caller: the same router bound on
 /// every interface still runs rpc-warm for a loopback caller, as cw-rails'
-/// forward is. One test, because `assemble` registers the mock engine and the
-/// registry refuses a second registration in one process (`cargo test` runs
-/// every test of the lifted closure in one process).
+/// forward is. One test in a child process of its own, because `assemble`
+/// registers the mock engine, the registry refuses a second registration in
+/// one process, and reload's tests register it too: `cargo test` (the lift)
+/// runs every test of the binary in one process, in no fixed order.
 #[tokio::test]
 async fn every_internal_route_serve_mounts_refuses_a_non_loopback_caller() {
     use tower::ServiceExt;
+    const CHILD: &str = "SOVEREIGN_SERVE_GUARD_CENSUS_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let out = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "tests::every_internal_route_serve_mounts_refuses_a_non_loopback_caller",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .expect("spawn the census child");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            out.status.success() && stdout.contains("1 passed"),
+            "the census child did not pass exactly this test: {}\n{stdout}\n{}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr)
+        );
+        return;
+    }
     let (routes, _dir) = standalone_routes().await;
     let internal: Vec<String> = routes
         .iter()
