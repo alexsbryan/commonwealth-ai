@@ -91,6 +91,7 @@ async fn register_local_model_slots_writes_info_for_all_three_slots() {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: Some(ModelsSection {
             primary: PathBuf::from("/m/qwen3-coder-30b.gguf"),
             fast: Some(PathBuf::from("/m/qwen3-1.7b.gguf")),

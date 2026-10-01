@@ -110,6 +110,10 @@ pub struct SetupConfig {
     /// which is why a desktop-configured provider never reached a run.
     #[serde(default)]
     pub search: SearchSection,
+    /// `[retrieval]` — the corpus allow-list a keyed daemon grants every API
+    /// key (decision phase-b-86). Read only when the daemon holds keys.
+    #[serde(default)]
+    pub retrieval: RetrievalSection,
     /// External MCP servers whose tools are loaded into the agent's tool
     /// registry at startup (the `[[mcp_servers]]` array). Read by every chat
     /// surface — `sovereign chat`, the desktop, and `sovereign serve` — via
@@ -151,6 +155,23 @@ pub struct SearchSection {
     /// preference is inert — DuckDuckGo serves.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+}
+
+/// `[retrieval]` — what a keyed daemon's callers may retrieve from.
+///
+/// ```toml
+/// [retrieval]
+/// corpora = ["us-code", "firm-docs"]
+/// ```
+///
+/// On a daemon holding API keys this is the corpus grant every key resolves
+/// with, and EMPTY GRANTS NOTHING: absent is never "every corpus" there. A
+/// daemon with no keys does not read it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetrievalSection {
+    /// Corpus ids a key may retrieve from.
+    #[serde(default)]
+    pub corpora: Vec<String>,
 }
 
 /// `[iroh]` and `[iroh.transport]` moved to `setup_config_iroh.rs` when
@@ -1866,6 +1887,7 @@ impl SetupConfig {
             // contract is "every other section at its documented default",
             // so the default is the answer here, not a judgement call.
             search: SearchSection::default(),
+            retrieval: Default::default(),
             mcp_servers: Vec::new(),
         }
     }

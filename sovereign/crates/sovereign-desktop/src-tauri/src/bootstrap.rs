@@ -348,6 +348,7 @@ mod tests {
             engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
+            retrieval: Default::default(),
             models: Some(sovereign_contracts::setup_config::ModelsSection {
                 primary: "/p".into(),
                 fast: Some("/f".into()),

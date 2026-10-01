@@ -26,6 +26,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: Some(ModelsSection {
             primary: paths.primary,
             // `svrn setup` always prompts for an explicit fast

@@ -597,6 +597,7 @@ pub async fn set_setup_context_size(
                 engine: Default::default(),
                 compute: Default::default(),
                 search: Default::default(),
+                retrieval: Default::default(),
                 // The wizard is about to fill these in; an all-empty
                 // section is what "the user has not chosen models yet" has
                 // always meant on this path, and it is NOT the terminal
@@ -717,6 +718,7 @@ pub(crate) fn write_model_slots_to_setup(
             engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
+            retrieval: Default::default(),
             models: Some(ModelsSection {
                 primary: primary_path.clone(),
                 fast: fast_field.clone(),

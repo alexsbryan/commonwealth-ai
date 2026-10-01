@@ -72,6 +72,7 @@ fn write_cfg(dir: &TempDir, primary: &str) -> PathBuf {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: Some(ModelsSection {
             primary: PathBuf::from(primary),
             fast: Some(PathBuf::from("/m/fast.gguf")),
@@ -105,6 +106,7 @@ fn config_diff_flags_iroh_changes_as_restart_required() {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: Some(ModelsSection {
             primary: PathBuf::from("/m/primary.gguf"),
             fast: None,
@@ -160,6 +162,7 @@ fn an_origin_config_change_is_never_reported_as_no_change() {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: None,
         node: Default::default(),
         daemon: DaemonSection::default(),

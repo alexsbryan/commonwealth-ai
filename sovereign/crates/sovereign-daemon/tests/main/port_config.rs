@@ -33,6 +33,7 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: Some(ModelsSection {
             primary: PathBuf::from("/models/primary.gguf"),
             fast: Some(PathBuf::from("/models/fast.gguf")),

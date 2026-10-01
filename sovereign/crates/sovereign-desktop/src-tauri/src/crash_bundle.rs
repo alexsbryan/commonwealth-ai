@@ -514,6 +514,7 @@ mod tests {
             engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
+            retrieval: Default::default(),
             models: Some(ModelsSection {
                 primary: "/home/alex/.sovereign/models/Darwin-36B.gguf".into(),
                 fast: Some("/home/alex/.sovereign/models/Qwen3-2B.gguf".into()),

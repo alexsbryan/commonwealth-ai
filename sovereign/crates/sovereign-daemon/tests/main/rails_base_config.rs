@@ -28,6 +28,7 @@ fn cfg(rails_base: Option<String>) -> SetupConfig {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: Some(ModelsSection {
             primary: PathBuf::from("/models/primary.gguf"),
             fast: Some(PathBuf::from("/models/fast.gguf")),

@@ -475,6 +475,7 @@ async fn run_terminal_join(raw: &str, opts: &Opts) -> i32 {
         // omitted so the file round-trips like any other config.
         engine: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         // The ports this setup was asked to configure — NOT the compiled
         // default. `Default::default()` here is what made a second node on one
         // host impossible: setup wrote 9741/9742 whatever it had been told.
@@ -721,6 +722,7 @@ async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
         // omitted so the file round-trips like any other config.
         engine: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         // Same as the join path: honour the port this setup was told to
         // configure rather than always writing the compiled default.
         daemon: sovereign_contracts::setup_config::DaemonSection {

@@ -614,6 +614,7 @@ impl DesktopConfig {
             engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
+            retrieval: Default::default(),
             models: Some(ModelsSection {
                 primary: PathBuf::new(),
                 fast: None,
