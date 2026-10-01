@@ -260,7 +260,9 @@ could-not-judge / never-ran.
 `twin-plants.toml` + `scripts/twin-census.py` are the sabotage runner for the
 one-decider censuses: prove the census green, apply a real second
 implementation, require a FAIL naming the expected substring, restore
-byte-for-byte. 19 families.
+byte-for-byte. 19 families. They prove named censuses; `cargo xtask
+clone-gate` is the general detector, a ratchet on production lines covered by
+an 8-line normalized window found in two or more files (`baselines/clones.tsv`).
 
 Also here: `CONCEPTS.toml` (the concept register), `TARGET_ARCHITECTURE.md`,
 `env-flags.toml`, `requirements.toml` + `requirements-enforceability.toml`,
@@ -1377,7 +1379,7 @@ aborts on a billing failure is nearly indistinguishable from one that passed.
 Held to a one-minute budget, it scopes to the diff and runs rustfmt, the
 compile, the eight blocking xtask ratchets (docs / arch / boundary / layer /
 lock / layout / env / concept) and the desktop node gates concurrently, then
-two advisory size ratchets. Install via `scripts/install-git-hooks.sh`, which
+two advisory size ratchets and the advisory clone ratchet. Install via `scripts/install-git-hooks.sh`, which
 points `core.hooksPath` at the version-controlled `.githooks/`. It fails
 closed: a push range it cannot diff gates everything.
 
