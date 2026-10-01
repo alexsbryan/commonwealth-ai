@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `cmnwlth`'s CLI verbs, lifted out of `sovereign-cli-llm` (FIVE_PROGRAMS §9).
 
+pub mod daemon_store;
 pub mod guest_route;
 pub mod identity_handover;
 pub mod iroh_config_migration;
@@ -23,3 +24,4 @@ pub mod rails_unit;
 pub mod rails_up;
 pub mod ring_cmd;
 pub mod run_cmd;
+pub mod wall_link;

@@ -28,24 +28,22 @@ pub async fn open_route(link: &GuestLink) -> Result<String, String> {
     let (relay_urls, discovery) = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| (c.iroh.relay_urls.clone(), c.iroh.discovery.clone()))
         .unwrap_or_default();
-    let tunnel =
-        mesh_reach::guest::GuestTunnel::open(dial, relay_urls, discovery.as_deref())
-            .await
-            .map_err(|e| {
-                format!(
-                    "could not reach {} over the mesh tunnel: {e}\n\
+    let tunnel = mesh_reach::guest::GuestTunnel::open(dial, relay_urls, discovery.as_deref())
+        .await
+        .map_err(|e| {
+            format!(
+                "could not reach {} over the mesh tunnel: {e}\n\
              The link names an iroh endpoint, which means the lending node's \
              plaintext API is closed (an encrypted mesh). There is no plaintext \
              fallback — ask for a fresh link, or ask them to check `svrn mesh status`.",
-                    link.url
-                )
-            })?;
+                link.url
+            )
+        })?;
     Ok(TUNNEL.get_or_init(|| tunnel).base_url().to_string())
 }
 
 /// The one live tunnel this process holds. See [`open_route`].
-static TUNNEL: std::sync::OnceLock<mesh_reach::guest::GuestTunnel> =
-    std::sync::OnceLock::new();
+static TUNNEL: std::sync::OnceLock<mesh_reach::guest::GuestTunnel> = std::sync::OnceLock::new();
 
 #[cfg(test)]
 mod tests {

@@ -12443,7 +12443,6 @@ dependencies = [
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-daemon",
- "sovereign-mesh",
  "sovereign-meshapp",
  "sovereign-runtime-recipe",
  "sovereign-store",

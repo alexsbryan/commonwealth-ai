@@ -59,7 +59,6 @@ pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-servin
 /// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).
 pub mod peer_adapter;
 pub use sovereign_serving_host::peer_inference; // shim: moved by domains REVIEW-build-serving-move-peer
-pub mod persist;
 /// The §4.1 candidate objective — rank on predicted time-to-answer
 /// rather than on a product of dimensionless multipliers
 /// (`SCHEDULER_QUALITY.md` §4.1). Public because it is scored from a

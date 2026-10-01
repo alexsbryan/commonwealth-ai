@@ -5,7 +5,7 @@
 //! again when the daemon needed the same rule to return a grant's link
 //! (2026-09-22): the page decision is `sovereign_contracts::guest_pages::wall_page`
 //! and the fragment grammar `mesh_join_vocab::deep_link` (phase-b-90), composed
-//! here through `sovereign_mesh::deep_link::wall_https_link` and in the daemon's
+//! in `crate::wall_link::wall_https_link` and in the daemon's
 //! grant response; the desktop reads the daemon's link. What stays here is the QR RENDERER and the BASE the link is
 //! composed with: the door names the PORT, this machine names the ADDRESS — so
 //! nobody types an address, and a wildcard or loopback bind is never

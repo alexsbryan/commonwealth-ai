@@ -56,7 +56,7 @@ pub(crate) fn open_store() -> Result<(RailsKv, NodeId), String> {
         crate::legacy_store::export_via_cli_mesh,
     )?;
     let data_dir = sovereign_contracts::rebrand::svrnmesh_root();
-    let node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
+    let node_id = sovereign_contracts::node_identity::load_or_generate_self_node_id(&data_dir);
     Ok((kv, node_id))
 }
 

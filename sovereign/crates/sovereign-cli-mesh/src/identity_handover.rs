@@ -59,23 +59,23 @@ pub fn hand_over(
     // Meshes first, read in full before anything is written: a daemon store
     // that does not read moves nothing, key included.
     let root = svrn_dir;
-    let active = sovereign_mesh::persist::load(root).map_err(|e| {
+    let active = crate::daemon_store::load(root).map_err(|e| {
         format!(
             "the daemon's active mesh in {} does not read: {e}",
             root.display()
         )
     })?;
     let active_id = active.as_ref().map(|m| m.mesh_id);
-    let active_key = sovereign_mesh::persist::load_join_key(root)
+    let active_key = crate::daemon_store::load_join_key(root)
         .map_err(|e| format!("the daemon's invite key does not read: {e}"))?;
-    let parked: Vec<_> = sovereign_mesh::persist::list_known(root)
+    let parked: Vec<_> = crate::daemon_store::list_known(root)
         .into_iter()
         .filter(|m| Some(m.mesh_id) != active_id)
         .collect();
 
     keep_aside(&rails_dir.join(NODE_KEY_FILE))?;
     copy_private(&svrn_key, &rails_dir.join(NODE_KEY_FILE))?;
-    match sovereign_mesh::persist::load_node_id(root)
+    match sovereign_contracts::node_identity::load_node_id(root)
         .map_err(|e| format!("the daemon's node_id does not read: {e}"))?
     {
         Some(id) => {
@@ -102,8 +102,8 @@ pub fn hand_over(
         meshes += 1;
     }
     for p in parked {
-        let key_file = sovereign_mesh::persist::mesh_dir(root, &p.mesh_id)
-            .join(sovereign_mesh::persist::JOIN_KEY_FILE);
+        let key_file = crate::daemon_store::mesh_dir(root, &p.mesh_id)
+            .join(crate::daemon_store::JOIN_KEY_FILE);
         let key = std::fs::read_to_string(&key_file).ok();
         let (mesh, _) = p.into_live();
         commonwealth_rails::known::park(rails_dir, &mesh, key.as_deref().map(str::trim))

@@ -8,8 +8,8 @@
 //! step 10: a mesh verb that embedded a daemon left its state in a
 //! process that exits when the command does).
 
-use sovereign_contracts::setup_config::client_daemon_base_for;
 use mesh_join_vocab::deep_link::{build_https_join_link, parse_join_argument};
+use sovereign_contracts::setup_config::client_daemon_base_for;
 use sovereign_turn_client::reach::ServingHost;
 use sovereign_turn_client::TurnClient;
 

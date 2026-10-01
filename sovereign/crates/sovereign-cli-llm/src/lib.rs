@@ -140,7 +140,7 @@ async fn async_main() {
     // the configs sovereign-cli used pre-split.
     match cmd {
         "mesh" => init_tracing(
-            "sovereign_cli=info,sovereign_cli_llm=info,sovereign_mesh=info,\
+            "sovereign_cli=info,sovereign_cli_llm=info,\
              commonwealth_discovery=info,sovereign_daemon=info",
         ),
         // `publish` only reads and rewrites config; it dials nothing.

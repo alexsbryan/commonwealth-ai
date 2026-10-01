@@ -1,17 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! On-disk persistence for a running mesh.
-//!
-//! Without this, `EmbeddedDaemon` is purely in-memory: you create a
-//! mesh, close the app, and the daemon's state vanishes. That breaks
-//! two user stories at once — the founder doesn't see their own mesh
-//! after a restart, and any would-be joiner can't find them on the
-//! LAN because nobody is advertising.
-//!
-//! The solution is a small JSON blob at
-//! `<data_dir>/mesh.json` containing:
-//!   - the full `Mesh` (members, invite_key_hash, peers, mesh_id, name)
-//!   - the founder/self `NodeId` so we can resume under the same
-//!     identity rather than appearing as a new member
+//! The daemon's own mesh store as the daemon wrote it before the identity
+//! handover: `<root>/mesh.json` (or `<root>/meshes/<id>/` under the `active`
+//! pointer) and `join_key.secret`. Its one reader is
+//! [`crate::identity_handover`], which moves these files into cw-rails' store;
+//! nothing writes them any more outside the tests. Moved from sovereign-mesh's
+//! persist.rs (pb-mesh-dissolve); the items neither the handover nor its
+//! tests use were deleted with the move.
 //!
 //! `HashMap<NodeId, MemberRecord>` can't serde_json-encode directly
 //! (NodeId is a byte array, not a string), so we flatten `members`
@@ -40,17 +34,6 @@ pub use sovereign_contracts::node_identity::MESH_JSON_FILE as MESH_FILE;
 /// must keep secret. See `save_join_key` / `load_join_key`.
 pub const JOIN_KEY_FILE: &str = "join_key.secret";
 
-/// Marker file at `<data_dir>/client-exposed`. Its presence means the
-/// operator opted this daemon into serving REMOTE callers (an explicit
-/// `mesh create` / `mesh join` — never the silent solo-mesh auto-create
-/// at first boot). `start_daemon` reads it to bump the client-API bind
-/// from loopback to `0.0.0.0` (and thus require a bearer token). A
-/// separate persisted signal — NOT mesh.json presence, since every
-/// daemon has a solo mesh — so "is a mesh" and "is shared" stay
-/// distinct. Removed on `leave_mesh` to re-secure. See
-/// `set_client_exposed` / `client_exposed` / `clear_client_exposed`.
-pub const CLIENT_EXPOSED_FILE: &str = "client-exposed";
-
 // ── Node identity (five-programs fp-33) ──────────────────────────────────
 // The `node_id` file, the mesh.json identity read, and the FULL precedence
 // decider moved to `sovereign_contracts::node_identity`: the files are
@@ -73,7 +56,7 @@ pub struct PersistedMesh {
     pub mesh_id: MeshId,
     pub name: String,
     /// Gossip-auth credential. Absent from any `mesh.json` written before the
-    /// credential split, hence `#[serde(default)]` — [`migrate_legacy_layout`]
+    /// credential split, hence `#[serde(default)]` — `ensure_mesh_secret`
     /// fills it in deterministically on first read.
     #[serde(default)]
     pub mesh_secret: [u8; 32],
@@ -176,7 +159,7 @@ pub fn mesh_dir(root: &Path, mesh_id: &MeshId) -> PathBuf {
 }
 
 /// Which mesh is active, if any. `None` on a clean install, or on a legacy
-/// layout that [`migrate_legacy_layout`] has not run against yet.
+/// single-mesh layout.
 pub fn active_mesh_id(root: &Path) -> Option<MeshId> {
     active_mesh_hex(root).and_then(|hex| MeshId::from_hex(&hex))
 }
@@ -192,16 +175,6 @@ pub fn set_active(root: &Path, mesh_id: &MeshId) -> std::io::Result<()> {
         f.sync_all()?;
     }
     fs::rename(&tmp, &target)
-}
-
-/// Forget which mesh was active without deleting any mesh. Used by `leave`,
-/// which drops one membership but must not disturb the parked ones.
-pub fn clear_active(root: &Path) -> std::io::Result<()> {
-    match fs::remove_file(active_pointer(root)) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
 }
 
 /// The directory the ACTIVE mesh's files live in — `<root>/meshes/<id>` when a
@@ -252,86 +225,6 @@ fn load_from_dir(dir: &Path) -> Option<PersistedMesh> {
     Some(parsed)
 }
 
-/// Resolve an operator-typed mesh reference against a known-mesh listing.
-///
-/// ONE rule, because there were four and they disagreed (ARCH §10.6). `switch`
-/// accepted an 8-character id prefix and `forget` did not, and the HTTP switch
-/// and the CLI forget each re-derived their own copy — so a reference that
-/// switched a mesh could not forget it, and the fix had to be made in four
-/// places or in none. The rule itself is
-/// `commonwealth_discovery::membership::names_mesh`, which cw-rails' known-mesh
-/// list reads too.
-pub fn resolve_known<'a>(known: &'a [PersistedMesh], target: &str) -> Option<&'a PersistedMesh> {
-    known.iter().find(|m| {
-        commonwealth_discovery::membership::names_mesh(&m.name, &m.mesh_id.to_hex(), target)
-    })
-}
-
-/// Drop a mesh from disk entirely. Refuses to forget the ACTIVE mesh — leaving
-/// the node pointing at a directory that no longer exists would present as a
-/// corrupt install rather than as the mistake it is.
-pub fn forget(root: &Path, mesh_id: &MeshId) -> std::io::Result<()> {
-    if active_mesh_id(root).as_ref() == Some(mesh_id) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "refusing to forget the active mesh — switch or leave first",
-        ));
-    }
-    let dir = mesh_dir(root, mesh_id);
-    match fs::remove_dir_all(&dir) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
-}
-
-/// Move a pre-multi-mesh `<root>/mesh.json` (plus its join key and
-/// client-exposed marker) into `<root>/meshes/<id>/`, derive its `mesh_secret`,
-/// and point `active` at it. Idempotent and safe to call on every boot.
-///
-/// Returns `Ok(true)` when it actually moved something, so the caller can log
-/// the migration once instead of on every start.
-pub fn migrate_legacy_layout(root: &Path) -> std::io::Result<bool> {
-    let legacy = root.join(MESH_FILE);
-    if !legacy.exists() || active_mesh_id(root).is_some() {
-        return Ok(false);
-    }
-    let bytes = fs::read(&legacy)?;
-    let mut parsed: PersistedMesh = serde_json::from_slice(&bytes)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    let derived = parsed.ensure_mesh_secret();
-
-    let dir = mesh_dir(root, &parsed.mesh_id);
-    fs::create_dir_all(&dir)?;
-    let payload = serde_json::to_vec_pretty(&parsed)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    fs::write(dir.join(MESH_FILE), &payload)?;
-
-    // Carry the siblings across before the pointer flips, so a crash midway
-    // leaves the legacy layout intact rather than a half-populated new one.
-    if let Ok(key) = fs::read(root.join(JOIN_KEY_FILE)) {
-        fs::write(dir.join(JOIN_KEY_FILE), &key)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(dir.join(JOIN_KEY_FILE), fs::Permissions::from_mode(0o600));
-        }
-    }
-
-    set_active(root, &parsed.mesh_id)?;
-
-    let _ = fs::remove_file(&legacy);
-    let _ = fs::remove_file(root.join(JOIN_KEY_FILE));
-
-    tracing::info!(
-        mesh = %parsed.name,
-        derived_secret = derived,
-        dir = %dir.display(),
-        "mesh: migrated to the multi-mesh layout"
-    );
-    Ok(true)
-}
-
 /// Persist the plaintext `join_key` for the active mesh. Atomic
 /// (write-tmp-then-rename) and 0600 on Unix so other local users
 /// can't read it.
@@ -364,77 +257,12 @@ pub fn save_join_key(data_dir: &Path, join_key: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Persist the plaintext invite key for a SPECIFIC mesh rather than the active
-/// one. Needed because a join writes the key for the mesh it just joined, which
-/// is not yet the active one at that instant, and because tests set up parked
-/// meshes with their own keys.
-pub fn save_join_key_for(data_dir: &Path, mesh_id: &MeshId, join_key: &str) -> std::io::Result<()> {
-    let dir = mesh_dir(data_dir, mesh_id);
-    fs::create_dir_all(&dir)?;
-    let target = dir.join(JOIN_KEY_FILE);
-    let tmp = target.with_extension("secret.tmp");
-    {
-        let mut f = fs::File::create(&tmp)?;
-        f.write_all(join_key.as_bytes())?;
-        f.sync_all()?;
-    }
-    fs::rename(&tmp, &target)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&target, fs::Permissions::from_mode(0o600));
-    }
-    Ok(())
-}
-
 /// Read the cached plaintext join key. `Ok(None)` when the file
 /// doesn't exist (clean install, or pre-`save_join_key` daemon).
 pub fn load_join_key(data_dir: &Path) -> std::io::Result<Option<String>> {
     match fs::read_to_string(join_key_file(data_dir)) {
         Ok(s) => Ok(Some(s)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e),
-    }
-}
-
-/// Delete the cached plaintext join key. Called on `leave_mesh`
-/// alongside `clear`. Idempotent.
-pub fn clear_join_key(data_dir: &Path) -> std::io::Result<()> {
-    match fs::remove_file(join_key_file(data_dir)) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
-}
-
-fn client_exposed_file(data_dir: &Path) -> std::path::PathBuf {
-    // NODE-level, deliberately not per-mesh. "This node serves remote callers"
-    // is a property of the machine, not of a membership, and `expose_client_api`
-    // is called BEFORE `create_mesh`/`join_mesh` — there is no active mesh dir
-    // to write into at that moment. The per-mesh half of the bind decision is
-    // `mesh.require_encryption`, which `start_daemon` already re-reads on every
-    // resume and switch.
-    data_dir.join(CLIENT_EXPOSED_FILE)
-}
-
-/// Mark this daemon as opted into serving remote callers. Idempotent
-/// (creates an empty marker file). See [`CLIENT_EXPOSED_FILE`].
-pub fn set_client_exposed(data_dir: &Path) -> std::io::Result<()> {
-    fs::create_dir_all(data_dir)?;
-    fs::File::create(client_exposed_file(data_dir))?.sync_all()
-}
-
-/// True iff the client-exposed marker is present.
-pub fn client_exposed(data_dir: &Path) -> bool {
-    client_exposed_file(data_dir).exists()
-}
-
-/// Remove the client-exposed marker (re-secure to loopback on next
-/// start). Called on `leave_mesh`. Idempotent.
-pub fn clear_client_exposed(data_dir: &Path) -> std::io::Result<()> {
-    match fs::remove_file(client_exposed_file(data_dir)) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e),
     }
 }
@@ -526,18 +354,6 @@ pub fn load(data_dir: &Path) -> std::io::Result<Option<PersistedMesh>> {
             Ok(Some(parsed))
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e),
-    }
-}
-
-/// Remove the persisted mesh file. Called on `leave_mesh`.
-/// Returns Ok even if the file doesn't exist — the post-condition
-/// ("no persisted mesh") holds either way.
-pub fn clear(data_dir: &Path) -> std::io::Result<()> {
-    let target = mesh_file(data_dir);
-    match fs::remove_file(&target) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e),
     }
 }
@@ -634,35 +450,12 @@ mod tests {
     }
 
     #[test]
-    fn clear_removes_file_and_is_idempotent() {
-        let tmp = TempDir::new().unwrap();
-        let (mesh, node_id) = sample_mesh();
-        save_and_activate(tmp.path(), &mesh, node_id).unwrap();
-        assert!(mesh_file(tmp.path()).exists());
-
-        clear(tmp.path()).unwrap();
-        assert!(!mesh_file(tmp.path()).exists());
-
-        // Second call on a missing file is a no-op, not an error.
-        clear(tmp.path()).unwrap();
-    }
-
-    #[test]
     fn join_key_save_load_roundtrips() {
         let tmp = TempDir::new().unwrap();
         assert!(load_join_key(tmp.path()).unwrap().is_none());
         save_join_key(tmp.path(), "cwth-1111-2222-3333").unwrap();
         let read_back = load_join_key(tmp.path()).unwrap();
         assert_eq!(read_back.as_deref(), Some("cwth-1111-2222-3333"));
-    }
-
-    #[test]
-    fn join_key_clear_is_idempotent() {
-        let tmp = TempDir::new().unwrap();
-        save_join_key(tmp.path(), "cwth-1111-2222-3333").unwrap();
-        clear_join_key(tmp.path()).unwrap();
-        clear_join_key(tmp.path()).unwrap(); // no-op second time
-        assert!(load_join_key(tmp.path()).unwrap().is_none());
     }
 
     #[cfg(unix)]
@@ -777,49 +570,6 @@ mod tests {
         );
     }
 
-    /// Migration is a pure function of what is already on disk, so it can run
-    /// on every boot. Also pins that it does not lose the invite key.
-    #[test]
-    fn legacy_layout_migrates_once_and_is_idempotent() {
-        let tmp = TempDir::new().unwrap();
-        let (mesh, self_id) = sample_mesh();
-        let mesh_id = mesh.id;
-
-        // Hand-write the OLD layout: mesh.json + join_key.secret at the root,
-        // no `active` pointer, no `meshes/` dir.
-        let mut legacy = PersistedMesh::from_live(&mesh, self_id);
-        legacy.mesh_secret = [0u8; 32];
-        fs::create_dir_all(tmp.path()).unwrap();
-        fs::write(
-            tmp.path().join(MESH_FILE),
-            serde_json::to_vec_pretty(&legacy).unwrap(),
-        )
-        .unwrap();
-        fs::write(tmp.path().join(JOIN_KEY_FILE), b"cwth-aaaa-bbbb-cccc").unwrap();
-
-        assert!(
-            migrate_legacy_layout(tmp.path()).unwrap(),
-            "first run moves"
-        );
-        assert!(
-            !migrate_legacy_layout(tmp.path()).unwrap(),
-            "second run is a no-op"
-        );
-
-        assert_eq!(active_mesh_id(tmp.path()), Some(mesh_id));
-        assert!(!tmp.path().join(MESH_FILE).exists(), "legacy file removed");
-        assert!(mesh_dir(tmp.path(), &mesh_id).join(MESH_FILE).exists());
-
-        let loaded = load(tmp.path()).unwrap().unwrap();
-        assert_ne!(loaded.mesh_secret, [0u8; 32], "secret derived on migrate");
-        assert_eq!(loaded.invite_key_hash, mesh.invite_key_hash);
-        assert_eq!(
-            load_join_key(tmp.path()).unwrap().as_deref(),
-            Some("cwth-aaaa-bbbb-cccc"),
-            "the invite key followed its mesh into the new layout"
-        );
-    }
-
     /// The point of the feature: a second mesh does not disturb the first.
     /// Byte-identical check on the parked mesh, modelled on `join_parks_not_leaves`.
     #[test]
@@ -853,23 +603,6 @@ mod tests {
             Some("cwth-1111-1111-1111"),
             "the invite key is per-mesh, not per-node"
         );
-    }
-
-    #[test]
-    fn forget_refuses_the_active_mesh_and_drops_a_parked_one() {
-        let tmp = TempDir::new().unwrap();
-        let (mesh_a, self_id) = sample_mesh();
-        let (mut mesh_b, _) = sample_mesh();
-        mesh_b.name = "Parked".into();
-        save_and_activate(tmp.path(), &mesh_a, self_id).unwrap();
-        save_and_activate(tmp.path(), &mesh_b, self_id).unwrap(); // b is now active
-
-        assert!(
-            forget(tmp.path(), &mesh_b.id).is_err(),
-            "forgetting the active mesh would strand the pointer"
-        );
-        forget(tmp.path(), &mesh_a.id).unwrap();
-        assert_eq!(list_known(tmp.path()).len(), 1);
     }
 
     /// P6, the switch race. `save` used to re-point `active` at its subject,
@@ -938,31 +671,5 @@ mod tests {
             "the pointer must only ever name a mesh whose state is on disk"
         );
         assert!(load(tmp.path()).unwrap().is_some());
-    }
-
-    /// The rule the four copies disagreed about: an id prefix resolves, and a
-    /// prefix shorter than 8 does NOT — a wrong match here deletes a mesh.
-    #[test]
-    fn resolve_known_accepts_name_full_id_and_an_eight_char_prefix() {
-        let tmp = TempDir::new().unwrap();
-        let (mut mesh, self_id) = sample_mesh();
-        mesh.name = "Study Group".into();
-        save_and_activate(tmp.path(), &mesh, self_id).unwrap();
-        let known = list_known(tmp.path());
-        let hex = mesh.id.to_hex();
-
-        assert!(resolve_known(&known, "Study Group").is_some());
-        assert!(
-            resolve_known(&known, "  study group  ").is_some(),
-            "trimmed + case-folded"
-        );
-        assert!(resolve_known(&known, &hex).is_some());
-        assert!(resolve_known(&known, &hex[..8]).is_some());
-        assert!(
-            resolve_known(&known, &hex[..7]).is_none(),
-            "7 characters is a guess, and the caller may be `forget`"
-        );
-        assert!(resolve_known(&known, "").is_none());
-        assert!(resolve_known(&known, "no-such-mesh").is_none());
     }
 }

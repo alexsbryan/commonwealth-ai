@@ -16,14 +16,14 @@ fn daemon_store(
         commonwealth_discovery::membership::init_mesh("Home", "RuggedFox", Vec::new());
     let self_id = *active.members.keys().next().expect("the founder");
     std::fs::write(
-        sovereign_mesh::persist::node_id_file(dir),
+        sovereign_contracts::node_identity::node_id_file(dir),
         self_id.as_bytes(),
     )
     .unwrap();
     let (parked, _) = commonwealth_discovery::membership::init_mesh("Lab", "RuggedFox", Vec::new());
-    sovereign_mesh::persist::save(dir, &parked, self_id).unwrap();
-    sovereign_mesh::persist::save_and_activate(dir, &active, self_id).unwrap();
-    sovereign_mesh::persist::save_join_key(dir, &active_key).unwrap();
+    crate::daemon_store::save(dir, &parked, self_id).unwrap();
+    crate::daemon_store::save_and_activate(dir, &active, self_id).unwrap();
+    crate::daemon_store::save_join_key(dir, &active_key).unwrap();
     (key, active, parked)
 }
 
@@ -61,7 +61,7 @@ fn the_daemon_identity_becomes_cw_rails_identity() {
     assert_eq!(known.len(), 1);
     assert_eq!(known[0].mesh.id, parked.id);
     // The daemon keeps its node_id (svrn-side readers) and retires its key.
-    assert!(sovereign_mesh::persist::node_id_file(svrn.path()).exists());
+    assert!(sovereign_contracts::node_identity::node_id_file(svrn.path()).exists());
     assert!(!svrn.path().join(NODE_KEY_FILE).exists());
     assert!(svrn.path().join(HANDED_OVER_KEY).exists());
     // A second run finds no key to move.
