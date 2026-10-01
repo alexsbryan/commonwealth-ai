@@ -11,6 +11,7 @@ pub use crate::hosted_ingest::{
     HostedIngest, IngestCalls, IngestHost, IngestMount, RecipeAuthoringCompose,
 };
 pub use crate::hosted_mesh::{HostedMesh, MeshAccess};
+pub use crate::posture::Posture;
 pub use crate::serve_client::{HostedParts, HostedServe, RankPorts, Ranked};
 use sovereign_contracts::launch::Launch;
 
@@ -25,12 +26,14 @@ use sovereign_contracts::launch::Launch;
 /// `None` reports ingest absent by name where svrn needs it. `mesh` is its
 /// composition of the node's mesh, cw-rails' roster and reach
 /// (pb-mesh-exit-transport): `None` reads no roster, named at boot.
+/// `posture` is which of svrn's own surfaces it serves (phase-b-87).
 pub fn run(
     raw_args: &[String],
     hosted: Option<HostedServe>,
     code: Option<HostedCode>,
     ingest: Option<HostedIngest>,
     mesh: Option<HostedMesh>,
+    posture: Posture,
 ) -> i32 {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "full");
@@ -127,7 +130,9 @@ pub fn run(
         .thread_name("sovereign-daemon-rt")
         .build()
         .expect("failed to build tokio runtime");
-    runtime.block_on(daemon_cmd::run(&launch, args, hosted, code, ingest, mesh))
+    runtime.block_on(daemon_cmd::run(
+        &launch, args, hosted, code, ingest, mesh, posture,
+    ))
 }
 
 /// The subscriber over [`compose_filter`], on stderr so machine-readable
@@ -281,7 +286,7 @@ mod tests {
             vec!["--rpc-worker"],
         ] {
             let argv: Vec<String> = argv.into_iter().map(str::to_string).collect();
-            assert_eq!(run(&argv, None, None, None, None), 2, "{argv:?}");
+            assert_eq!(run(&argv, None, None, None, None, Posture::Open), 2, "{argv:?}");
         }
     }
 

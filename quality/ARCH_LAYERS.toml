@@ -1487,7 +1487,7 @@ max_code_lines = 300
 [[distribution.face]]
 package = "svrn"
 krate = "sovereign-daemon"
-items = ["process::run", "process::HostedServe", "process::HostedParts", "process::RankPorts", "process::Ranked", "process::HostedCode", "process::CodeMount", "process::HostedIngest", "process::IngestMount", "process::IngestCalls", "process::HostedMesh", "process::MeshAccess"]
+items = ["process::run", "process::HostedServe", "process::HostedParts", "process::RankPorts", "process::Ranked", "process::HostedCode", "process::CodeMount", "process::HostedIngest", "process::IngestMount", "process::IngestCalls", "process::HostedMesh", "process::MeshAccess", "process::Posture"]
 # svrn's LLM verbs, handed the same ingest composition as the daemon
 # (pb-cli-llm-ingest-move-compose): the `sovereign-cli-llm-stock` bin.
 [[distribution.face]]

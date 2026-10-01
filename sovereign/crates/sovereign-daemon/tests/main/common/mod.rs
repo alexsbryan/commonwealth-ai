@@ -292,6 +292,7 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_daemon::DaemonServices
                 },
                 capability: sovereign_daemon::ServingCapability {
                     mcp: parts.mcp,
+                    posture: sovereign_daemon::posture::Posture::Open,
                     project_http: Router::new(),
                     corpus_watch_http: Router::new(),
                     workflow_http: Router::new(),

@@ -123,6 +123,7 @@ fn serving_with(
             mcp: McpSurface::Unavailable {
                 reason: "fixture".into(),
             },
+            posture: crate::posture::Posture::Open,
             project_http: axum::Router::new(),
             corpus_watch_http: axum::Router::new(),
             workflow_http: axum::Router::new(),

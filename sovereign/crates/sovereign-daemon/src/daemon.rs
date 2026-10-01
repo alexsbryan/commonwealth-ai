@@ -1359,6 +1359,10 @@ impl EmbeddedDaemon {
             .serving()
             .and_then(|s| s.capability.mcp.mount())
             .cloned();
+        let posture = self
+            .services
+            .serving()
+            .map_or(crate::posture::Posture::Open, |s| s.capability.posture);
         let mut mounted: Vec<axum::Router> = Vec::new();
         let mut mount_names: Vec<&'static str> = Vec::new();
         if self.services.serves_host_surface() {
@@ -1523,6 +1527,7 @@ impl EmbeddedDaemon {
         info!(
             profile = self.services.label(),
             mcp = mcp_mount.is_some(),
+            ?posture,
             routers = ?mount_names,
             "daemon: client router assembled"
         );
@@ -1599,7 +1604,11 @@ impl EmbeddedDaemon {
         let listener_outcome = self.client_listener.clone();
         let serve_handle = tokio::spawn(async move {
             let mut client_router = crate::server::client_router(app_state_clone.clone());
-            if let Some(m) = mcp_mount {
+            // A sealed posture withholds the ROUTE, by name; the mount stays
+            // for `notes_store()` (phase-b-87).
+            if let (Some(_), Some(_)) = (&mcp_mount, posture.withheld()) {
+                client_router = client_router.merge(crate::posture::mcp_withheld_router());
+            } else if let Some(m) = mcp_mount {
                 // Phase 5b: a fresh `McpNotifier` with no producer is
                 // fine — the daemon doesn't drive list-changed
                 // notifications today (that's the per-project

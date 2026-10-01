@@ -157,8 +157,15 @@ fn main() {
             transport,
         }
     });
-    let exit_code =
-        sovereign_daemon::process::run(&args, Some(hosted), Some(code), Some(ingest), Some(mesh));
+    // svrn's own surfaces as today: web reach, wikipedia, `/mcp` (phase-b-87).
+    let exit_code = sovereign_daemon::process::run(
+        &args,
+        Some(hosted),
+        Some(code),
+        Some(ingest),
+        Some(mesh),
+        sovereign_daemon::process::Posture::Open,
+    );
     // macOS: past `__cxa_finalize_ranges`, so the ggml-metal device sweeper
     // never asserts on still-resident resources; the loader's fast-exit,
     // through serve's face, where the daemon's `run` used to call it.

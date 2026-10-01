@@ -266,6 +266,10 @@ pub struct ServingCore {
 /// rung 5, 2026-09-09).
 pub struct ServingCapability {
     pub mcp: McpSurface,
+    /// svrn's posture (phase-b-87): under `Sealed` the `/mcp` ROUTE answers a
+    /// named 503 while the mount stays, because its notes store backs the
+    /// notes and tool-outcome routes.
+    pub posture: crate::posture::Posture,
     pub project_http: axum::Router,
     pub corpus_watch_http: axum::Router,
     pub workflow_http: axum::Router,

@@ -27,6 +27,7 @@ pub(super) async fn run_daemon(
     code: Option<crate::hosted_code::HostedCode>,
     ingest: Option<crate::hosted_ingest::HostedIngest>,
     mesh: Option<crate::hosted_mesh::HostedMesh>,
+    posture: crate::posture::Posture,
 ) -> i32 {
     #[cfg(unix)]
     rlimit::raise_open_file_limit();
@@ -411,6 +412,11 @@ pub(super) async fn run_daemon(
     // The stock binary hands in ingest's composition (pb-ingest-dial-daemon):
     // svrn links no corpus-engine, so the engine this process holds is built
     // by ingest's face for `IngestHost`. svrn alone gets `None`.
+    tracing::info!(
+        ?posture,
+        withheld = posture.withheld().unwrap_or("nothing"),
+        "daemon: svrn's posture (web reach, wikipedia, /mcp), the distribution's choice"
+    );
     let (enrich_config, mount, recipe_authoring) = match ingest {
         Some(ingest) => {
             let atlas = ingest.atlas();
@@ -804,21 +810,32 @@ pub(super) async fn run_daemon(
                         // with that channel dark until 2026-08-26 while the
                         // desktop, which wired it by hand, did not.
                         note_store: Some(&notes_port),
-                        web: sovereign_tools::bundles::WebReach::Granted(
-                            sovereign_core::egress::search_client()
-                                .expect("egress boundary search client build"),
-                        ),
+                        // The distribution's posture decides (phase-b-87): a
+                        // sealed one builds no egress client at all.
+                        web: match posture.withheld() {
+                            None => sovereign_tools::bundles::WebReach::Granted(
+                                sovereign_core::egress::search_client()
+                                    .expect("egress boundary search client build"),
+                            ),
+                            Some(why) => sovereign_tools::bundles::WebReach::Withheld(why),
+                        },
                         // No operator switch on a daemon, and escalating to the
                         // open web without one is a decision nobody made.
                         escalation: sovereign_tools::bundles::WebEscalation::Disabled,
                     },
                 );
-                b.push(match &ingest_ports {
-                    Some((port, atlas)) => Box::new(sovereign_tools::bundles::WikipediaTools::new(
-                        Arc::clone(port) as _,
-                        Arc::clone(atlas),
+                b.push(match (&ingest_ports, posture.withheld()) {
+                    (_, Some(why)) => Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+                        "wikipedia",
+                        why,
                     )),
-                    None => Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+                    (Some((port, atlas)), None) => {
+                        Box::new(sovereign_tools::bundles::WikipediaTools::new(
+                            Arc::clone(port) as _,
+                            Arc::clone(atlas),
+                        ))
+                    }
+                    (None, None) => Box::new(sovereign_contracts::tool_bundle::Withheld::new(
                         "wikipedia",
                         "no ingest program is composed in this process, and \
                          wikipedia_fetch reads its catalog corpus",
@@ -1011,6 +1028,7 @@ pub(super) async fn run_daemon(
                         Arc::clone(&state_store_concrete),
                         code_tools,
                     ),
+                    posture,
                     project_http,
                     edit_door,
                     corpus_watch_http: crate::corpus_watch_http::corpus_watch_router(),

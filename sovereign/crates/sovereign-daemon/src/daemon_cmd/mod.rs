@@ -62,7 +62,8 @@ use lifecycle::wait_for_shutdown;
 /// `hosted`: the distribution's composition of serve, when this process
 /// hosts it (`process::run`); `code`: its composition of the code program;
 /// `ingest`: its composition of ingest's ports; `mesh`: its composition of
-/// the node's mesh (cw-rails' roster and reach).
+/// the node's mesh (cw-rails' roster and reach); `posture`: which of
+/// svrn's own surfaces it serves (phase-b-87).
 pub async fn run(
     launch: &Launch,
     args: &[String],
@@ -70,13 +71,14 @@ pub async fn run(
     code: Option<crate::hosted_code::HostedCode>,
     ingest: Option<crate::hosted_ingest::HostedIngest>,
     mesh: Option<crate::hosted_mesh::HostedMesh>,
+    posture: crate::posture::Posture,
 ) -> i32 {
     if help::wants_help(args) {
         help::print(&HELP);
         return 0;
     }
     match args.first().map(String::as_str) {
-        Some("run") => run_daemon(launch, &args[1..], hosted, code, ingest, mesh).await,
+        Some("run") => run_daemon(launch, &args[1..], hosted, code, ingest, mesh, posture).await,
         // Sizing is svrn's CLI verb, exec'ing serve's `vram_plan`, the one
         // body (pb-distribution-setup; this binary's copy went at
         // pb-serve-distributes). Named, so an
@@ -100,7 +102,7 @@ pub async fn run(
             // Bare flags like `--config <path>` route straight to
             // run_daemon — the caller means "start the daemon with
             // these flags."
-            run_daemon(launch, args, hosted, code, ingest, mesh).await
+            run_daemon(launch, args, hosted, code, ingest, mesh, posture).await
         }
         Some(other) => {
             eprintln!("error: unknown daemon subcommand '{other}'");
@@ -111,7 +113,7 @@ pub async fn run(
             // Bare invocation — same destination as `run`. launchd
             // and systemd unit files keep using `daemon run`
             // explicitly; both paths land in the same place.
-            run_daemon(launch, &[], hosted, code, ingest, mesh).await
+            run_daemon(launch, &[], hosted, code, ingest, mesh, posture).await
         }
     }
 }

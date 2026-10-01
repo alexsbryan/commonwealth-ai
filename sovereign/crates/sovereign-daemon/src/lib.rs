@@ -135,6 +135,9 @@ pub mod notes_http;
 pub mod ocr_install;
 pub mod openai_http;
 pub mod peer_origin;
+/// svrn's posture, the distribution's choice of which of svrn's own surfaces
+/// it serves (phase-b-87).
+pub mod posture;
 pub mod principal;
 #[cfg(feature = "treesitter")]
 pub mod process;
