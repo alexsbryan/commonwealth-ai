@@ -333,6 +333,12 @@ async fn standalone_routes() -> (Vec<RouteBundle>, tempfile::TempDir) {
 /// whatever `--listen` names. The paths are read from the mounted bundles, so
 /// an internal route added without `host_kit::shell::guard::loopback_only` is
 /// named here the moment it is mounted.
+///
+/// The guard also turns away no legitimate caller: the same router bound on
+/// every interface still runs rpc-warm for a loopback caller, as cw-rails'
+/// forward is. One test, because `assemble` registers the mock engine and the
+/// registry refuses a second registration in one process (`cargo test` runs
+/// every test of the lifted closure in one process).
 #[tokio::test]
 async fn every_internal_route_serve_mounts_refuses_a_non_loopback_caller() {
     use tower::ServiceExt;
@@ -386,23 +392,14 @@ async fn every_internal_route_serve_mounts_refuses_a_non_loopback_caller() {
         "internal routes answer a non-loopback caller without \
          host_kit::shell::guard::loopback_only: {unguarded:?}"
     );
-}
 
-/// The guard turns away no legitimate caller: serve bound on every interface
-/// still runs rpc-warm for a loopback caller, as cw-rails' forward is. `{}` is
-/// refused by the handler, past the guard, as a malformed body.
-#[tokio::test]
-async fn serve_on_every_interface_still_serves_rpc_warm_to_a_loopback_caller() {
-    let (routes, _dir) = standalone_routes().await;
+    // `{}` is refused by the handler, past the guard, as a malformed body.
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
         .await
         .expect("bind");
     let port = listener.local_addr().expect("addr").port();
-    tokio::spawn(host_kit::shell::serve(
-        [listener],
-        routes,
-        std::future::pending(),
-    ));
+    let service = app.into_make_service_with_connect_info::<SocketAddr>();
+    tokio::spawn(async move { axum::serve(listener, service).await });
     let response = reqwest::Client::new()
         .post(format!(
             "http://127.0.0.1:{port}{}",
