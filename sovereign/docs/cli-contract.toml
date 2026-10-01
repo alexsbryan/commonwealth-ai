@@ -813,18 +813,11 @@ flags = [
   { name = "--save-baseline" },
 ]
 
+# mobile — a named absence: sovereign-server was deleted, and every
+# subcommand prints that and exits 1 (mobile_cmd.rs). No daemon is involved.
 [[command]]
-path = "mobile serve"
+path = "mobile"
 binary = "llm"
-classification = "daemon"
-[[command]]
-path = "mobile status"
-binary = "llm"
-classification = "daemon"
-[[command]]
-path = "mobile pair"
-binary = "llm"
-classification = "daemon"
 
 # alignment — internal workspace replication, default build.
 [[command]]

@@ -426,7 +426,7 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
     ("plan", "Validate a project plan"),
     ("amend", "Amend a charter or plan"),
     ("milestone", "Close a project phase"),
-    ("drift", "Architectural-drift detection + spec accept"),
+    ("drift", "Narrative-vs-code drift detection"),
     ("audit", "Audit rollup / recover"),
     ("refresh", "Rebuild the project code index"),
     (
@@ -1100,12 +1100,19 @@ async fn async_main() {
                 // pipeline they drive. The heavier lifecycle subcommands
                 // (`init`, `serve`, `status`, `found`, …) still live in the
                 // workbench sibling.
-                let code = match project_registry::try_run(&raw_args[1..]).await {
+                let retired =
+                    sovereign_cli_shared::deprecation::refuse_retired(&["project"], &raw_args[1..]);
+                let code = match retired {
                     Some(c) => c,
-                    None if cfg!(feature = "dev-tools") => dev_bin::exec("project", &raw_args[1..]),
-                    None => project_registry::refuse_workbench_subcommand(
-                        raw_args.get(1).map(String::as_str),
-                    ),
+                    None => match project_registry::try_run(&raw_args[1..]).await {
+                        Some(c) => c,
+                        None if cfg!(feature = "dev-tools") => {
+                            dev_bin::exec("project", &raw_args[1..])
+                        }
+                        None => project_registry::refuse_workbench_subcommand(
+                            raw_args.get(1).map(String::as_str),
+                        ),
+                    },
                 };
                 std::process::exit(code);
             }
@@ -1220,7 +1227,11 @@ async fn async_main() {
     // linking llama-cpp-2 + lance.
     //
     // Bare `sovereign` now prints usage and exits. Users who want the
-    // interactive shell type `svrn chat`.
+    // interactive shell type `svrn chat`. A removed verb (`atos`,
+    // `design`) is refused by name first, never answered with usage.
+    if let Some(code) = sovereign_cli_shared::deprecation::refuse_retired(&[], &raw_args) {
+        std::process::exit(code);
+    }
     print_usage();
     std::process::exit(1);
 }

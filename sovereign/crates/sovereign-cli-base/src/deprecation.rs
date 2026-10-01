@@ -63,6 +63,76 @@ pub fn announce_retired(old: &str, hint: &str) {
     eprintln!();
 }
 
+/// Every removed `svrn` spelling with what replaced it — the one table the
+/// dispatcher's fallthrough and each owning verb (`project`, `drift`,
+/// `amend`, `audit`) read before running anything. A spelling token `*`
+/// matches any positional. Flags never take part in the match.
+pub const RETIRED: &[(&[&str], &str)] = &[
+    (
+        &["atos"],
+        "ATOS feature orchestration is gone. Use `svrn charter`, `svrn milestone --project <N>` and `svrn audit` for the project-level flow.",
+    ),
+    (
+        &["design"],
+        "The DESIGN.md session is gone. Write the design doc directly; `svrn plan validate <path>` checks a plan.",
+    ),
+    (
+        &["project", "design"],
+        "The DESIGN.md session is gone. Write the design doc directly; `svrn plan validate <path>` checks a plan.",
+    ),
+    (
+        &["project", "plan"],
+        "Project plan composition is gone. Use `svrn plan validate <path>` to check a plan.",
+    ),
+    (
+        &["project", "amend", "design"],
+        "Amending DESIGN.md is gone with `svrn design`. `svrn amend` amends CHARTER.md.",
+    ),
+    (
+        &["amend", "design"],
+        "Amending DESIGN.md is gone with `svrn design`. `svrn amend` amends CHARTER.md.",
+    ),
+    (
+        &["drift", "accept"],
+        "Spec accept is gone with ATOS. Use `svrn drift detect --code <path> --narrative <doc>...` for narrative-vs-code drift.",
+    ),
+    (
+        &["audit", "*"],
+        "The per-feature audit (`svrn audit <feature-id>`, `--archive`) is gone with ATOS. `svrn audit` is the project-wide rollup.",
+    ),
+];
+
+/// The `RETIRED` row `verb` + `args` spells, with the spelling as typed.
+pub fn find_retired(verb: &[&str], args: &[String]) -> Option<(String, &'static str)> {
+    let typed: Vec<&str> = verb
+        .iter()
+        .copied()
+        .chain(
+            args.iter()
+                .map(String::as_str)
+                .filter(|a| !a.starts_with('-')),
+        )
+        .collect();
+    RETIRED.iter().find_map(|(spelling, hint)| {
+        let hit = spelling.len() <= typed.len()
+            && spelling
+                .iter()
+                .zip(&typed)
+                .all(|(s, t)| *s == "*" || s == t);
+        hit.then(|| (format!("svrn {}", typed[..spelling.len()].join(" ")), *hint))
+    })
+}
+
+/// Refuse a retired spelling by name: the banner (printed even in quiet
+/// mode, so the refusal is never silent), then exit code 2.
+/// `None` means `verb` + `args` is not retired and the caller runs it.
+pub fn refuse_retired(verb: &[&str], args: &[String]) -> Option<i32> {
+    let (old, hint) = find_retired(verb, args)?;
+    tracing::debug!(%old, "refusing a retired spelling");
+    announce_retired(&old, hint);
+    Some(2)
+}
+
 fn is_quiet() -> bool {
     match std::env::var("SOVEREIGN_QUIET_DEPRECATIONS") {
         Ok(v) => {

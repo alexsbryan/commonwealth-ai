@@ -23,6 +23,8 @@ reqwest = { workspace = true, optional = true }
 # `prompts` (the home dir under `~` expansion) and `tracing_init`.
 dirs = "5"
 tracing-subscriber = { workspace = true }
+# `deprecation::refuse_retired` traces each refusal.
+tracing = { workspace = true }
 # `flag_surface` renders a derived clap surface's parse errors.
 clap = { workspace = true }
 # `host_load` only: `getloadavg(3)`, the one reader the check runner and

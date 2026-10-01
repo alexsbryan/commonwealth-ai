@@ -69,6 +69,9 @@ pub async fn run_project(args: &[String]) -> i32 {
     // so behaviour is identical modulo the banner. Suppress with
     // SOVEREIGN_QUIET_DEPRECATIONS=1.
     use sovereign_cli_base::deprecation::announce;
+    if let Some(code) = sovereign_cli_base::deprecation::refuse_retired(&["project"], args) {
+        return code;
+    }
     match args[0].as_str() {
         "charter" => {
             announce("svrn project charter", "svrn charter");
@@ -654,3 +657,7 @@ fn format_age(unix_ts: u64) -> String {
         format!("{} days ago", diff / 86400)
     }
 }
+
+#[cfg(test)]
+#[path = "retired_tests.rs"]
+mod retired_tests;

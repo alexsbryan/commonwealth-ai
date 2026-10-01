@@ -28,6 +28,12 @@ pub async fn run(args: &[String]) -> i32 {
         return crate::dev_bin::exec("audit-recover", &[]);
     }
 
+    // `svrn audit <feature-id>` is retired; forwarding it would run the
+    // project-wide rollup in its place.
+    if let Some(code) = sovereign_cli_shared::deprecation::refuse_retired(&["audit"], args) {
+        return code;
+    }
+
     // `svrn audit` (no args) → project-wide rollup.
     crate::dev_bin::exec("project-audit", args)
 }

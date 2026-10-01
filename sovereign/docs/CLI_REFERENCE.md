@@ -70,6 +70,7 @@ Manage the local Commonwealth mesh.
 
 | Subcommand | Description |
 |---|---|
+| `up` | Bring cw-rails up (rings, KV, work atlas); hands an upgraded node's rings over first. svrn never starts it |
 | `create [--name <name>]` | Promote the solo mesh to a joinable mesh; print invite |
 | `join <arg>` | Join an existing mesh (bare key, https url, or sovereign://) |
 | `rotate [--force]` | Mint a new invite key. Existing members stay connected — rotation changes only who may JOIN |
@@ -355,6 +356,7 @@ Lower-level code-intelligence primitives. `project init` wraps these for the typ
 |---|---|
 | `index <path>` | Index a local repository with tree-sitter |
 | `watch <corpus-id>` | Run a filesystem watcher that re-indexes on save |
+| `mcp` | Run the code MCP server (`svrn serve` is the same server) |
 | `mcp-status` | Ping the local MCP server and list exposed tools |
 | `search <query>` | (placeholder — use `svrn chat ask` or the MCP `code_search` tool for now) |
 
@@ -779,6 +781,7 @@ Long-running service, managed by launchd (macOS) or systemd (Linux). Lives in th
 | `run` (or bare `daemon`) | Run in the foreground; exits on SIGINT/SIGTERM |
 | `start` / `stop` / `status` / `restart` | Lifecycle management against the installed service |
 | `reload` | Apply config changes without a restart |
+| `key --add <sub> \| --revoke <sub> \| --list` | Add, revoke or list on-prem API keys. Writes the key store directly, no running daemon needed; takes effect at the next start |
 | `--setup-only` | Run the first-boot wizard and exit (what `svrn setup` aliases to) |
 
 Logs: `~/.svrnmesh/logs/daemon.log`. Rotated in-process — copy-truncate, 10 MiB cap, 5 backups, 30-min sweep loop; preserves the inode for launchd-held FDs.

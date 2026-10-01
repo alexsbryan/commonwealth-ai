@@ -13,6 +13,10 @@ pub async fn run(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         Some("detect") => crate::dev_bin::exec("drift-detect", &args[1..]),
         _ => {
+            if let Some(code) = sovereign_cli_shared::deprecation::refuse_retired(&["drift"], args)
+            {
+                return code;
+            }
             eprintln!(
                 "  svrn drift requires a subcommand.\n\
                  \n\

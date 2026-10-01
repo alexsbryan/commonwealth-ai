@@ -12302,6 +12302,7 @@ dependencies = [
  "serde_json",
  "sovereign-contracts",
  "tempfile",
+ "tracing",
  "tracing-subscriber",
  "workspace-hack",
 ]
