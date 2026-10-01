@@ -2450,7 +2450,7 @@ class PoolQueueTests(unittest.TestCase):
         write(tmp, "ralph/next/q/queue.toml", toml)
         write(tmp, "ralph/next/q/STATE.md", rows)
         write(tmp, "seed.txt", "seed")
-        write(tmp, ".git/info/exclude", "ralph/next/q/ctl/\n.ralph/\n")
+        write(tmp, ".git/info/exclude", "ralph/next/q/ctl/\n.ralph/\ntarget/\n")
         commit_all(tmp)
         return pathlib.Path(tmp)
 
@@ -2602,6 +2602,21 @@ class PoolQueueTests(unittest.TestCase):
             with mock.patch.object(pool, "_renumber_decisions", return_value=None):
                 self.assertEqual(pool.run(), 3)
             self.assertIn("merge conflict", (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
+
+    def test_a_lanes_evidence_outlives_its_worktree(self):
+        # (12): `git worktree remove --force` takes the lane's target/ with it.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+
+            class CheckingLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    write(self.cwd, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
+                    return super().run(model_args, prompt, log)
+
+            self.assertEqual(self.make(root, lambda cwd, env=None: CheckingLane(cwd)).run(), 0)
+            self.assertFalse((root / ".ralph/wt/q-a").exists())
+            self.assertEqual((root / "target/ralph/q/q-a/q/lint.log").read_text(),
+                             "exit=0 the lane's lint\n")
 
     def test_the_legacy_pool_keeps_its_defaults(self):
         args = ralph.build_parser().parse_args(["pool", "--workdir", "."])

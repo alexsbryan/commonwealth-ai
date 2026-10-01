@@ -2169,6 +2169,23 @@ class Pool:
         self._git("add", "--", DECISIONS_RENDERED)
         return None
 
+    def _keep_evidence(self, unit, wt):
+        """A lane's raw evidence (its target/ralph/: check logs, readings) is
+        copied to <log_dir>/<unit>/ in the main tree before the worktree, its
+        target included, is removed. False when the copy failed: the caller
+        keeps the worktree rather than lose what a commit may cite."""
+        src = wt / "target" / "ralph"
+        if not src.is_dir():
+            return True
+        dest = self.paths.p(self.paths.log_dir) / unit
+        try:
+            shutil.copytree(src, dest, symlinks=True, dirs_exist_ok=True)
+        except (OSError, shutil.Error) as e:
+            say(f"pool: lane {unit} evidence copy to {dest} failed: {e}")
+            return False
+        say(f"pool: lane {unit} evidence kept at {dest}")
+        return True
+
     def run_wave(self, wave, model=None):
         # The chosen model is stamped on the wave line: one glance at
         # launchd.log says which provider served the wave (order
@@ -2242,6 +2259,10 @@ class Pool:
                       else f"ralph: {DECISIONS_RENDERED} after merging {unit}")
             if refused is not None:
                 return self._halt(refused)
+            if not self._keep_evidence(unit, wt):
+                say(f"pool: lane {unit} merged and marked [x] — worktree {wt} kept for its "
+                    "evidence")
+                continue
             self._git("worktree", "remove", "--force", str(wt))
             self._git("branch", "-D", branch)
             say(f"pool: lane {unit} merged and marked [x]")
