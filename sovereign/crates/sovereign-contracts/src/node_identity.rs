@@ -19,7 +19,7 @@
 //!
 //! # The mesh.json read is a projection, and the pin lives with the writer
 //!
-//! This module parses ONLY `self_node_id` and `members[].node_id` out of
+//! This module parses ONLY `self_node_id` and `members[].{node_id,name}` out of
 //! `mesh.json` — serde ignores every other field. It deliberately does not
 //! duplicate the full [`sovereign_mesh::persist::PersistedMesh`] schema (that
 //! parser owns the credential migration and stays the only one). The drift
@@ -275,6 +275,43 @@ struct MeshFileIdentity {
 #[derive(Deserialize)]
 struct MeshFileMember {
     node_id: NodeId,
+    #[serde(default)]
+    name: String,
+}
+
+/// One member row of `mesh.json` as the note-author roster reads it: the id
+/// and the display name the member joined with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MeshMember {
+    /// The member's node id.
+    pub node_id: NodeId,
+    /// The name the member joined with (empty when the row carries none).
+    pub name: String,
+}
+
+/// The active mesh's members, read through the same projection as the
+/// identity fields (phase-b-83 (2): the same projection with one more field).
+/// `Ok(None)` when there is no `mesh.json` (a solo node); `Err` when it exists
+/// but cannot be read or parsed, so the caller can name that rather than
+/// mistake it for "no mesh".
+pub fn read_mesh_members(data_dir: &Path) -> std::io::Result<Option<Vec<MeshMember>>> {
+    let bytes = match fs::read(identity_mesh_json(data_dir)) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let parsed: MeshFileIdentity = serde_json::from_slice(&bytes)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    Ok(Some(
+        parsed
+            .members
+            .into_iter()
+            .map(|m| MeshMember {
+                node_id: m.node_id,
+                name: m.name,
+            })
+            .collect(),
+    ))
 }
 
 /// The projection the resolver consumes: the mesh's own id plus every
@@ -338,6 +375,20 @@ mod tests {
         assert_eq!(parsed.self_node_id, self_id);
         let members: Vec<NodeId> = parsed.members.into_iter().map(|m| m.node_id).collect();
         assert_eq!(members, vec![self_id, peer_id]);
+    }
+
+    /// The note-author roster's read: every member with its name, `None` for
+    /// a solo node, and an error (not `None`) for a document it cannot parse.
+    #[test]
+    fn read_mesh_members_names_each_member_and_tells_absent_from_unreadable() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(read_mesh_members(dir.path()).unwrap(), None);
+        std::fs::write(dir.path().join(MESH_JSON_FILE), SAMPLE_MESH_JSON).unwrap();
+        let members = read_mesh_members(dir.path()).unwrap().unwrap();
+        let names: Vec<&str> = members.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, vec!["self", "peer"]);
+        std::fs::write(dir.path().join(MESH_JSON_FILE), "not json").unwrap();
+        assert!(read_mesh_members(dir.path()).is_err());
     }
 
     /// A document that is not a mesh.json (or a future schema that renamed

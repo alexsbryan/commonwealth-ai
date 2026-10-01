@@ -26,7 +26,7 @@ use sovereign_core::ToolRegistry;
 /// work-atlas store id and the engine's `self_node_id` so a partition-of-self
 /// lookup matches the daemon's own id.
 pub fn resolve_self_node_id(data_dir: &Path) -> NodeId {
-    sovereign_mesh::persist::resolve_self_node_id(data_dir)
+    sovereign_contracts::node_identity::resolve_self_node_id(data_dir)
 }
 
 /// Project the persisted mesh into the roster the NoteStore uses to name
@@ -41,7 +41,7 @@ pub fn resolve_self_node_id(data_dir: &Path) -> NodeId {
 /// and only the full id makes the prefix match unambiguous. Resolution
 /// and ambiguity handling live in `NodeRoster::resolve`.
 pub fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRoster> {
-    let mesh = match sovereign_mesh::persist::load(data_dir) {
+    let members = match sovereign_contracts::node_identity::read_mesh_members(data_dir) {
         Ok(Some(m)) => m,
         Ok(None) => return None,
         Err(e) => {
@@ -56,7 +56,7 @@ pub fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRo
 
     let mut self_node = None;
     let mut peers = Vec::new();
-    for member in &mesh.members {
+    for member in &members {
         let entry = RosterEntry {
             id_hex: member.node_id.to_hex(),
             name: member.name.clone(),

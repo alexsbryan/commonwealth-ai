@@ -114,7 +114,7 @@ pub fn terminal_provider(
                     // stamp another machine's identity onto its own traffic, which
                     // is worse than being unstamped.
                     let node_id_hex = Some(
-                        sovereign_mesh::persist::resolve_self_node_id(&config.data.dir).to_hex(),
+                        sovereign_contracts::node_identity::resolve_self_node_id(&config.data.dir).to_hex(),
                     );
                     Arc::new(oicp_client::SplitInferenceProvider::resolved(
                         resolver,
