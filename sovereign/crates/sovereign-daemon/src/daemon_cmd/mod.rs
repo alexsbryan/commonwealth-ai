@@ -41,7 +41,6 @@ mod lifecycle;
 // Twins of cli-daemon's modules, moved whole — see each file's header.
 mod log_rotation;
 mod memory_watch;
-mod panic_hook;
 mod rlimit;
 mod serving_boot;
 mod start;
@@ -228,12 +227,12 @@ async fn shutdown_daemon(
     exit_code
 }
 
-/// Install the daemon panic hook. Pub wrapper over the twin module so
-/// the bin — which links this crate as an external library and cannot
-/// see `pub(crate)` — can install it before the tokio runtime exists,
-/// exactly where the CLI tree's dispatcher did.
+/// Install the daemon panic hook (the host kit's one copy, which
+/// cli-daemon installs too), kept at this path for the bin's caller in
+/// `process.rs`: before the tokio runtime exists, exactly where the CLI
+/// tree's dispatcher did.
 pub fn install_panic_hook(data_dir: std::path::PathBuf) {
-    panic_hook::install(data_dir);
+    host_kit::panic_hook::install(data_dir);
 }
 
 /// Branded per-user data root (rebrand-aware path SSOT). Twin of

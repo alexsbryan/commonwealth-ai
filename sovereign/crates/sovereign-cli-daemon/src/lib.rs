@@ -18,7 +18,6 @@ mod doctor_cmd;
 mod install_service_cmd;
 mod memory_watch;
 mod model_cmd;
-mod panic_hook;
 mod setup_cmd;
 mod setup_config;
 
@@ -86,7 +85,7 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
     // whoever is about to write it (`host_kit::RunLock`).
     if launch.is_resident() {
         let data_dir = sovereign_contracts::rebrand::svrnmesh_root();
-        panic_hook::install(data_dir);
+        host_kit::panic_hook::install(data_dir);
     }
 
     let runtime = tokio::runtime::Builder::new_multi_thread()

@@ -35,6 +35,9 @@ jobs = ["dep:tracing"]
 # sovereign-service so `svrn install-service` and `svrn mesh up`'s cw-rails
 # unit write through one mechanism. std only.
 service = []
+# The process panic hook (pb-distribution-f11-daemon-twins): one copy, moved
+# from the two daemon crates that forked it at the de-embed.
+panic_hook = ["dep:serde_json"]
 
 [dependencies]
 axum = { workspace = true, optional = true }

@@ -65,6 +65,8 @@
 pub mod jobs;
 #[cfg(feature = "mcp")]
 pub mod mcp;
+#[cfg(feature = "panic_hook")]
+pub mod panic_hook;
 #[cfg(feature = "service")]
 pub mod service;
 #[cfg(feature = "shell")]

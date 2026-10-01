@@ -44,7 +44,7 @@ static SEQ: AtomicU64 = AtomicU64::new(0);
 /// Install the daemon panic hook. Chains the previously-installed hook
 /// (the std default prints the message + backtrace to stderr — we keep
 /// that contract for operators tailing `daemon.err`).
-pub(crate) fn install(data_dir: PathBuf) {
+pub fn install(data_dir: PathBuf) {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         // Nothing in here may panic: a panic inside the hook aborts the

@@ -31,7 +31,7 @@ commonwealth-rail-core = { workspace = true }
 sovereign-peer-wire = { workspace = true }
 sovereign-contracts = { workspace = true }
 # The data-root lock (`daemon_cmd/boot.rs`).
-host-kit = { workspace = true, features = ["shell", "http", "task", "jobs"] }
+host-kit = { workspace = true, features = ["shell", "http", "task", "jobs", "panic_hook"] }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }
 # The HTTP client to serve and to a terminal's entry node
