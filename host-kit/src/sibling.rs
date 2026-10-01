@@ -99,20 +99,20 @@ mod tests {
 
     #[test]
     fn sibling_newer_or_equal_is_not_stale() {
-        let now = SystemTime::now();
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
         assert_eq!(staleness_secs(now, now), None);
         assert_eq!(staleness_secs(now, now + Duration::from_secs(60)), None);
     }
 
     #[test]
     fn skew_within_slack_is_not_stale() {
-        let now = SystemTime::now();
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
         assert_eq!(staleness_secs(now, now - Duration::from_secs(2)), None);
     }
 
     #[test]
     fn sibling_older_than_slack_is_stale() {
-        let now = SystemTime::now();
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
         assert_eq!(
             staleness_secs(now, now - Duration::from_secs(120)),
             Some(120)

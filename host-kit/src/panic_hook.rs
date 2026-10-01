@@ -43,8 +43,10 @@ static SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// Install the daemon panic hook. Chains the previously-installed hook
 /// (the std default prints the message + backtrace to stderr — we keep
-/// that contract for operators tailing `daemon.err`).
-pub fn install(data_dir: PathBuf) {
+/// that contract for operators tailing `daemon.err`). `unix_now` is the
+/// caller's wall-clock decider: the kit names no program's crate, so it
+/// reads no clock of its own (clock-gate).
+pub fn install(data_dir: PathBuf, unix_now: fn() -> u64) {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         // Nothing in here may panic: a panic inside the hook aborts the
@@ -79,7 +81,14 @@ pub fn install(data_dir: PathBuf) {
         // written below carries the same fields (thread, location,
         // message, backtrace) and is durable, so nothing is lost.
 
-        let _ = write_crash_record(&data_dir, &message, &location, &thread, &backtrace);
+        let _ = write_crash_record(
+            &data_dir,
+            unix_now(),
+            &message,
+            &location,
+            &thread,
+            &backtrace,
+        );
 
         // Keep the std default's stderr output (message + backtrace).
         previous(info);
@@ -133,6 +142,7 @@ fn panic_message(info: &std::panic::PanicHookInfo<'_>) -> String {
 
 fn write_crash_record(
     data_dir: &Path,
+    ts: u64,
     message: &str,
     location: &str,
     thread: &str,
@@ -140,10 +150,6 @@ fn write_crash_record(
 ) -> std::io::Result<()> {
     let crashes = data_dir.join("crashes");
     std::fs::create_dir_all(&crashes)?;
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
     let seq = SEQ.fetch_add(1, Ordering::Relaxed);
     let record = serde_json::json!({
         "kind": "panic",
@@ -250,8 +256,15 @@ mod tests {
     #[test]
     fn crash_record_roundtrip_and_marker() {
         let dir = tempfile::tempdir().expect("tempdir");
-        write_crash_record(dir.path(), "boom", "src/x.rs:1:1", "test-thread", "bt")
-            .expect("record written");
+        write_crash_record(
+            dir.path(),
+            1_000_000,
+            "boom",
+            "src/x.rs:1:1",
+            "test-thread",
+            "bt",
+        )
+        .expect("record written");
         let crashes = dir.path().join("crashes");
         let marker = std::fs::read_to_string(crashes.join("last-crash.json")).expect("marker");
         let parsed: serde_json::Value = serde_json::from_str(&marker).expect("valid json");

@@ -232,5 +232,5 @@ async fn shutdown_daemon(
 /// `process.rs`: before the tokio runtime exists, exactly where the CLI
 /// tree's dispatcher did.
 pub fn install_panic_hook(data_dir: std::path::PathBuf) {
-    host_kit::panic_hook::install(data_dir);
+    host_kit::panic_hook::install(data_dir, sovereign_time::unix_now_u64);
 }
