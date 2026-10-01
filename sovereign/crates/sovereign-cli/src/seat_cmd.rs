@@ -373,6 +373,7 @@ mod tests {
     /// open registry file — the same mirror contract read_notes.rs
     /// holds for its compiled floor (one direction each; the two
     /// mirror tests together pin all three copies).
+    #[cfg(feature = "dev-tools")]
     #[test]
     fn default_anchors_mirror_the_registry_file() {
         let registry = crate::posture_cmd::find_repo_root()

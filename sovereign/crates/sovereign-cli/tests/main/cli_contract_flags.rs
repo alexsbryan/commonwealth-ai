@@ -255,6 +255,12 @@ fn flags_missing_from_their_own_help_do_not_grow() {
 /// source tree, a renamed crate — would read as "no phantom flags".
 #[test]
 fn the_gate_reports_a_flag_that_nothing_parses() {
+    // The SOURCE tier reads four programs' CLI crates, so it has a tree to
+    // read only in the monorepo checkout; svrn's lift carries svrn's alone.
+    if sovereign_cli_shared::repo::find_checkout_root().is_none() {
+        eprintln!("skip: not inside the monorepo checkout the SOURCE tier reads");
+        return;
+    }
     let sources = cli_crate_sources();
     let fabricated = "--definitely-not-a-real-sovereign-flag";
     assert!(

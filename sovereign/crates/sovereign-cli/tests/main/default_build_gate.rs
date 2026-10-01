@@ -18,7 +18,7 @@ use std::process::Command;
 /// the point.
 const DEV_VERBS: &[&str] = &[
     // `code` and `project` deliberately left out — both are split surfaces.
-    // See `project_is_served_in_process` and `code_refuses_without_code_intel`.
+    // See `project_is_served_in_process` and `code_is_the_code_programs_in_every_build`.
     "tools",
     "status",
     "charter",
@@ -103,32 +103,30 @@ fn workbench_project_subcommands_refuse_with_a_usable_alternative() {
     );
 }
 
-/// This build has neither `dev-tools` nor `code-intel`, so `svrn code` must
-/// refuse cleanly — naming `code-intel`, never falling through to a missing
-/// sibling. The SHIPPED binary is built WITH `code-intel`
-/// (`scripts/release-cli-local.sh`), so a real user does not see this path;
-/// it exists so a developer who omits the feature gets told which one.
-/// Scoped to the build it describes. WATCHED FAIL (§18.1): without this cfg
-/// the test fails under `--features code-intel` — correctly, because there is
-/// no refusal to assert once the verb is present. That failure is the proof
-/// the assertion is real rather than vacuous.
+/// `svrn code` is the code program's in every build since pb-code-index: the
+/// dispatcher execs `sovereign-cli-dev` and refuses nothing by feature, so
+/// a build without `code-intel` reaches the code program's own help, or, with
+/// no sibling installed, a message naming it. Until pb-distribution this
+/// asserted the old `code-intel` refusal; the monorepo builds with
+/// `dev-tools` and never ran it, and svrn's lift found it red.
 #[cfg(not(feature = "code-intel"))]
 #[test]
-fn code_refuses_without_code_intel() {
+fn code_is_the_code_programs_in_every_build() {
     let out = Command::new(env!("CARGO_BIN_EXE_sovereign-cli"))
-        .args(["code", "index", "."])
+        .args(["code", "--help"])
         .env("SOVEREIGN_NO_STALE_WARN", "1")
         .output()
         .expect("spawn sovereign-cli");
-    assert_eq!(out.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        stderr.contains("code-intel"),
-        "refusal must name the feature that provides it, got:\n{stderr}"
+        !stderr.contains("code-intel"),
+        "`svrn code` must not refuse by feature, got:\n{stderr}"
     );
     assert!(
-        !stderr.contains("cannot find sibling binary"),
-        "must refuse here, not fall through to the sibling, got:\n{stderr}"
+        out.status.success() || stderr.contains("sovereign-cli-dev"),
+        "`svrn code` must reach the code program or name it, got {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        out.status.code()
     );
 }
 
