@@ -285,6 +285,66 @@ def seeds_args(crates: list[str]) -> list[str]:
     return [a for c in crates for a in ("-p", c)]
 
 
+# ── siblings: binaries one lift builds into the shared --target-dir and another
+# reads (pb-distribution-svrn-lift-2). A sibling built at another commit is
+# named, never trusted (principle 6): svrn's 2026-10-01 lift failed two tests on
+# a cw-rails the cmnwlth lift had built on 2026-09-30.
+
+STAMPS = "program-lift-stamps.json"
+
+
+def tip() -> str:
+    """The commit the sandbox is copied from. Uncommitted changes are not part
+    of it: two lifts of one dirty tree at one HEAD compare equal."""
+    r = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short=12", "HEAD"], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise Verdict("could-not-judge", f"no commit to stamp the build with: git rev-parse HEAD said {r.stderr.strip()}")
+    return r.stdout.strip()
+
+
+def stamp_built(build_args: list[str], sandbox: Path, target: Path, lift_id: str, at: str) -> list[str]:
+    """Record `at` against every executable this lift's build put in `target`.
+    A second, no-op build lists them: cargo names each artifact it would link."""
+    env = dict(os.environ, RUSTC_WRAPPER="", CARGO_TARGET_DIR=str(target))
+    r = subprocess.run(["cargo", "build", *build_args, "--message-format=json"], cwd=sandbox, env=env, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise Verdict("could-not-judge", f"the build passed and listing its binaries did not: {r.stderr[-500:]}")
+    built = [Path(e) for e in (json.loads(l).get("executable") for l in r.stdout.splitlines() if l.startswith("{")) if e]
+    path = target / STAMPS
+    stamps = json.loads(path.read_text()) if path.exists() else {}
+    for exe in built:
+        stamps[str(exe.relative_to(target))] = {"commit": at, "lift": lift_id, "mtime_ns": exe.stat().st_mtime_ns}
+    path.write_text(json.dumps(stamps, indent=2, sort_keys=True) + "\n")
+    names = sorted(str(e.relative_to(target)) for e in built)
+    say(f"STAMPED {', '.join(names) or 'nothing'} as built at {at}")
+    return names
+
+
+def judge_siblings(spec: dict, target: Path, sets: dict, at: str, record: dict) -> None:
+    """Each `siblings` row this lift reads must have been built by its lift at
+    `at` and not rebuilt since; otherwise could-not-judge, naming the sibling
+    and both commits. A row whose `unless` knob is set is not read from here."""
+    path = target / STAMPS
+    stamps = json.loads(path.read_text()) if path.exists() else {}
+    for row in spec.get("siblings", []):
+        rel, owner = row["bin"], row["lift"]
+        if any(v in sets or os.environ.get(v) for v in row.get("unless", [])):
+            say(f"SIBLING {rel}: not read from {target} ({' / '.join(row['unless'])} names another)")
+            continue
+        exe, stamp = target / rel, stamps.get(rel)
+        record.setdefault("siblings", {})[rel] = stamp
+        redo = f"run LIFT({owner}) at {at} into the same --target-dir first"
+        if not exe.exists():
+            raise Verdict("could-not-judge", f"this lift reads {exe}, which the {owner} lift builds, and there is none: {redo}")
+        if stamp is None:
+            raise Verdict("could-not-judge", f"this lift reads {exe}, built at no recorded commit: {redo}")
+        if stamp["commit"] != at:
+            raise Verdict("could-not-judge", f"this lift reads {exe}, built by the {stamp['lift']} lift at {stamp['commit']}, and this lift is at {at}: {redo}")
+        if stamp["mtime_ns"] != exe.stat().st_mtime_ns:
+            raise Verdict("could-not-judge", f"this lift reads {exe}, stamped at {at} by the {stamp['lift']} lift and rebuilt since outside any recorded lift: {redo}")
+        say(f"SIBLING {rel}: built by the {stamp['lift']} lift at {at}, this lift's commit")
+
+
 # ── 5. the RUN smoke, interpreted from data ──────────────────────────────────
 
 VAR = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
@@ -576,7 +636,8 @@ def lift(lift_id: str, spec: dict, sandbox: Path, target: Path, keep: bool, sets
     say(f"resolved packages in the lifted closure: {record['resolved_packages']}")
 
     rule("3. the build, outside the monorepo")
-    rc, secs = cargo(["build", *spec.get("build", seeds_args(seeds))], sandbox, target, "build.log", r"^(error|warning: unused)")
+    build = spec.get("build", seeds_args(seeds))
+    rc, secs = cargo(["build", *build], sandbox, target, "build.log", r"^(error|warning: unused)")
     record["build_s"] = round(secs, 1)
     say(f"build: rc={rc} in {secs:.1f}s")
     if rc != 0:
@@ -584,6 +645,9 @@ def lift(lift_id: str, spec: dict, sandbox: Path, target: Path, keep: bool, sets
     binary = target / spec["binary"] if "binary" in spec else None
     if binary is not None and not binary.exists():
         raise Verdict("failed", f"the build reported success and produced no {binary}")
+    at = tip()
+    record["commit"], record["stamped"] = at, stamp_built(build, sandbox, target, lift_id, at)
+    judge_siblings(spec, target, sets, at, record)
 
     rule("4. the package's own tests, in isolation")
     features = ["--features", ",".join(spec["test_features"])] if "test_features" in spec else []

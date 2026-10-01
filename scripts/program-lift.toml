@@ -22,6 +22,12 @@
 #            that ENV_VAR names (a knob that wants a workspace root).
 #   tree     { ENV_VAR = "<sandbox-relative dir>" }: names a directory of the
 #            lifted sandbox itself, for tests that read the source tree.
+#   siblings [{ bin, lift, unless? }]: binaries ANOTHER lift builds into the
+#            shared --target-dir that this lift reads. Every lift stamps what
+#            its build links with the commit (target/program-lift-stamps.json);
+#            a sibling absent, unstamped, rebuilt since, or stamped at another
+#            commit is could-not-judge, named, before the tests run. `unless`
+#            names the knobs that point the reader somewhere else.
 #   run      the RUN smoke: `inputs`, `steps`, `finally` and `pass`. With no
 #            `run`, a closure that builds and tests is never-ran, not passed.
 #
@@ -75,6 +81,12 @@ binary = "debug/sovereign-daemon"
 # and the bench tree sovereign-cli-llm's inner-chaos and search-gym tests load
 # their committed fixtures from (pb-distribution-svrn-lift-2).
 carry = { SOVEREIGN_CLI_CONTRACT = "sovereign/docs/cli-contract.toml", SOVEREIGN_BENCH_ROOT = "sovereign/bench" }
+# sovereign-daemon's rail tests spawn the cw-rails beside them (the cmnwlth
+# lift's), and the RUN smoke dials the serve lift's serve.
+siblings = [
+  { bin = "debug/cw-rails", lift = "cmnwlth" },
+  { bin = "debug/sovereign-serve", lift = "serve", unless = ["SERVE_BIN", "SOVEREIGN_SERVE_BIN"] },
+]
 
 [lift.svrn.run]
 # svrn ALONE dials a configured serve (pb-stock-binary; phase-b-29 Q2): it
