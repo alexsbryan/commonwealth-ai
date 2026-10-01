@@ -124,6 +124,13 @@ pub trait PrincipalResolver: Send + Sync {
     /// turn. A host with no tenancy wires no resolver rather than returning
     /// `None` from one.
     fn principal_for(&self, conversation_id: &str) -> Option<String>;
+
+    /// The corpus ids this host grants its resolved callers, or `None` when
+    /// it grants every corpus their visibility allows. `Some(empty)` grants
+    /// nothing; it is never read as "every corpus".
+    fn corpus_grant(&self) -> Option<Vec<String>> {
+        None
+    }
 }
 
 /// Snapshot of one watched-folder corpus's user-facing metadata.
