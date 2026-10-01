@@ -101,8 +101,9 @@ Not re-run, with the reason:
 
 ## Not blocking: filed to phase-c
 
-These come from the review and are true of split deployments rather than the stock path, each verified
-or filed as stated:
+These come from the review and are true of split deployments rather than the stock path. Until phase-b-97
+(2026-10-01) four of them had no phase-c row despite this list; they are now pc-rpc-probe-identity,
+pc-admin-reload-checks-serve, pc-serve-restart-self-report and pc-mesh-status-serve-down:
 - admin reload reporting success without checking serve's resident models;
 - svrn's self-report staying stale after serve restarts;
 - `/v1/mesh/status` not telling "serve down" from "serve slow";

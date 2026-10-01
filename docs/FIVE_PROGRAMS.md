@@ -270,7 +270,7 @@ never defaulted (ARCH principle 6).
    and `serve` each read only their own sections of the shared 13-section
    `SetupConfig` file (phase-b-2). Splitting it into one file per program,
    with the migration shipping in the same commit as the switch, belongs to
-   the follow-on queue (`ralph/next/phase-c/`).
+   the architecture queue (`ralph/next/phase-d/`, pd-config-split).
 8. The mesh is a layer, never a host (operator, 2026-09-26, phase-b-18:
    "daemons serve, mesh added by cw-rails — it should all gracefully LAYER
    rather than enmesh and embed").
@@ -1323,7 +1323,7 @@ first match wins:
      class table below). Never a leaf. The leaf test: no fs, no store, and a
      dep budget a third-party lifter would pay anyway.
 3. A leaf stays honest by the same test re-applied at every later touch.
-   The follow-on queue (`ralph/next/phase-c/`) re-applies it to
+   The architecture queue (`ralph/next/phase-d/`, pd-contracts) re-applies it to
    `sovereign-contracts` itself, a 42k-line crate that 51 manifests name. Its
    single-program modules move to their owners, and traits whose implementer
    and consumer are the same program move into that program. Phase B deletes
@@ -1533,6 +1533,8 @@ Phase B adds the conditions that make "take THIS without THAT" true
 - [ ] Every program passes its own lift sandbox, meaning it builds and runs
       with only its shared leaves: `svrn`, `ingest`, `cmnwlth`, `serve`,
       `code` and `bench`.
-- Moved to phase-c (operator, 2026-09-27, phase-b-32): each drive in §2c
-  has one implementation. Phase B never ADDS a copy of a drive; collapsing
-  the copies that exist is phase-c's pc-daemon-adopts and its siblings.
+- Moved to phase-c (operator, 2026-09-27, phase-b-32), then to phase-d
+  with the rest of the architecture rows (operator, 2026-10-01, phase-b-97):
+  each drive in §2c has one implementation. Phase B never ADDS a copy of a
+  drive; collapsing the copies that exist is phase-d's pd-daemon-adopts and
+  its siblings.
