@@ -49,6 +49,20 @@ mod tests {
     use mesh_join_vocab::deep_link::{parse_https_guest_link, DeepLink};
     use sovereign_contracts::guest_pages::wall_page_base;
 
+    /// The guardrail against the conflation guest links exist to prevent: a
+    /// guest link, either spelling, is not accepted by the join-argument
+    /// parser, so `svrn mesh join <guest link>` cannot silently half-work.
+    /// Moved from sovereign-mesh's deep_link.rs (pb-mesh-dissolve); its other
+    /// half asserted on `join_confirmation_from_link`, which had no caller.
+    #[test]
+    fn a_guest_link_is_not_joinable() {
+        use mesh_join_vocab::deep_link::{build_guest_link, parse_join_argument};
+        let url = build_guest_link("tok", "http://h:9741", None, 1, None);
+        assert!(parse_join_argument(&url).is_none());
+        let wall = wall_https_link("tok", "http://h:9741", None, true, 1, None, None);
+        assert!(parse_join_argument(&wall).is_none());
+    }
+
     /// The page path a guest link reaches: the app `--rail` names, or the
     /// door's index under `--wall`. A base the operator already spelled a page
     /// path into is never rewritten.

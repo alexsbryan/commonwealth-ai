@@ -12,7 +12,7 @@
 //! identity, so the member arm can be exercised too.
 //!
 //! ```text
-//! cargo run -p sovereign-mesh --example dial_probe -- \
+//! cargo run -p sovereign-cli-mesh --example dial_probe -- \
 //!     --dial '<hex-id>@https://relay…,192.168.1.3:54187' \
 //!     --alpn client --path /v1/models
 //! ```

@@ -261,7 +261,6 @@ members = [
     # is 743 crates and this one is 319; the whole point is the difference
     # (`cargo tree --edges normal`, measured 2026-09-11).
     "commonwealth/crates/commonwealth-rails",
-    "sovereign/crates/sovereign-mesh-test-harness",
     "commonwealth/crates/commonwealth-state",
 
     # Quality program (2026-07-11) — schema + evaluator for the declared
@@ -481,11 +480,9 @@ ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
 # Dial-by-key transport (QUIC by Ed25519 key, hole-punch + relays).
 # iroh 1.0 shipped 2026-06-15 with a committed, wire-stable protocol
 # (any v1 endpoint interops with any other v1 endpoint). Compiled
-# behind commonwealth-transport's `iroh` feature and sovereign-mesh's
-# `iroh-experimental`; all iroh symbol use is confined to
-# `commonwealth-transport/src/iroh.rs`, so a future minor bump is a
-# one-file change. Spike e2e: `cargo test -p sovereign-mesh
-# --features iroh-experimental`.
+# behind commonwealth-transport's `iroh` feature; all iroh symbol use is
+# confined to `commonwealth-transport/src/iroh.rs`, so a future minor bump
+# is a one-file change.
 iroh = "1.0"
 
 # Concurrency

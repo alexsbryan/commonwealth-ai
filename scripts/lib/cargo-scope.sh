@@ -183,15 +183,6 @@ if "sovereign-daemon" in seen:
     # shape as the sovereign-mesh/treesitter hole below. Same value in both
     # gates, so no fingerprint flip.
     want.append("sovereign-daemon/treesitter")
-if "sovereign-mesh" in seen:
-    # `treesitter` gates 30+ integration files of sovereign-mesh
-    # (the `#![cfg(feature = "treesitter")]` crate-gate: turn_surface.rs, knowledge_*,
-    # reading_http_e2e.rs, ...). A --workspace run gets it by unification
-    # from sovereign-cli-llm; a scoped `--package sovereign-mesh` run did
-    # not, so those files compiled to NOTHING and a filter naming one of
-    # their tests exited 4 ("no tests matched") with 880 others skipped —
-    # observed 2026-09-01. Same value both gates, so no fingerprint flip.
-    want.append("sovereign-mesh/treesitter")
 if "commonwealth-transport" in seen:
     # `fanout` is the generic peer fan-out (moved out of commonwealth-api in
     # the rails carve, 2026-09-11). Every workspace consumer turns it on, so

@@ -18,15 +18,6 @@
 //! need process isolation, or a `.config/nextest.toml` override keys on
 //! their binary name. Do not fold those in.
 
-// The loop tests moved here from `src/ring_sync/{tests,snapshot_tests,
-// projection_tests}.rs` and `src/rail_kv_pump/tests.rs` at domains
-// `dm-daemon-api-edge` (b): they assemble the host node, which now lives in
-// `sovereign-daemon`, and a unit test inside this crate that named the daemon
-// would put two builds of `sovereign-mesh` in the graph (a dev-dependency
-// cycle) so the `FabricPart` types would not unify. An integration test
-// resolves both to one build.
-#[path = "main/rail_kv_pump_namespaces.rs"]
-mod rail_kv_pump_namespaces;
 #[path = "main/work_atlas_store.rs"]
 mod work_atlas_store;
 

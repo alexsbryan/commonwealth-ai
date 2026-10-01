@@ -380,7 +380,6 @@ crates = [
     # shells, the edge and the adapters. A stub until the host modules move in;
     # the two [[forbid]] rows below land with it.
     "sovereign-daemon",
-    "sovereign-mesh-test-harness",
     "sovereign-mesh",
 ]
 
@@ -755,42 +754,11 @@ reason = "must stay consumable without the agent runtime — it names NO soverei
 # reaching tier 5; the rows are named because of two things no gate sees: a
 # struct in `sovereign-daemon` that carries every part and is handed to every
 # handler passes all of them while restoring `AppState` under a new name, and
-# a decider can land in the crate green. The harness row sits ABOVE its broad
-# `sovereign-mesh-test-harness -> sovereign-*` sibling so its specific reason
-# is the first match.
+# a decider can land in the crate green.
 [[forbid]]
 from = "sovereign-mesh"
 to = "sovereign-daemon"
 reason = "Fabric observes membership through readers, never the reverse (DAEMON_CORE.md §4.1) — a mesh dependency on the host crate rebuilds the orchestration Fabric's ownership removes"
-
-[[forbid]]
-from = "sovereign-mesh-test-harness"
-to = "sovereign-daemon"
-reason = "the harness simulates a node against the OICP/contracts seam, not the assembled host (DAEMON_CORE.md §4.1)"
-
-[[forbid]]
-from = "sovereign-mesh-test-harness"
-to = "sovereign-*"
-except = ["sovereign-contracts", "sovereign-grants", "sovereign-scheduler"]
-# `sovereign-scheduler` gained at HUMAN-forbid-harness-except (2026-09-17,
-# 9b0b65080): the Tier-1 simulator replays the routing records, so it names them
-# directly. `sovereign-serving-host` is deliberately ABSENT (dm-harness-except,
-# 2026-09-17): the simulator's one host reach
-# (`sovereign_serving_host::recorder::new_decision_id`, mesh_sim/mod.rs:1541) is
-# CUT by dm-mesh-sim-move rather than excepted — the simulator mints its own
-# deterministic id, and widening an `except` is operator-only (ralph/CHARTER.md).
-# TRANSLATED at the domains-2 move (2026-09-11), not deleted. The crate was
-# `commonwealth-test-harness` in `commonwealth/crates/`; it is now
-# `sovereign-mesh-test-harness` beside its only consumer. Deleting the row
-# because `from` stopped matching would have re-hidden, by rename, exactly the
-# edge domains-1 exposed — the harness's `sovereign-api` dep, grandfathered
-# below. The PROPERTY is unchanged: a harness that simulates a mesh node
-# should meet the runtime at the OICP/contracts seam. Same treatment the three
-# `sovereign-{serving,grants,meshapp-registry}` rows above got for the same
-# reason. `sovereign-serving` left this list when the peg was deleted
-# (REVIEW-build-serving-empty-peg, 2026-09-15), and `-meshapp-registry` when
-# the crate was deleted (pb-meshapp-apps, 2026-09-27).
-reason = "cross-family reach — harness should simulate against the OICP/contracts seam (R6)"
 
 # ── Extractable packages ─────────────────────────────────────────────────────
 # A PACKAGE is a crate set that must stay liftable out of this monorepo and
@@ -1415,7 +1383,6 @@ crates = [
     "commonwealth-media",
     "commonwealth-rails",
     "sovereign-mesh",
-    "sovereign-mesh-test-harness",
     "sovereign-scheduler",
     "sovereign-serving-host",
     "serving-policy",
@@ -1563,14 +1530,6 @@ items = ["bundles", "assemble", "rank", "Ranking", "child_launch", "tracing_filt
 [[distribution.face]]
 package = "cmnwlth"
 krate = "sovereign-serving-host"
-items = []
-# The mesh crate, for the composition's tests alone (serve_routes: ledger
-# port records, the guest source, the capability builder), until
-# pb-mesh-exit-mesh and pb-mesh-dissolve re-home them. Empty items: since the
-# flip (pb-mesh-exit-transport) stock's `src/` names none of it.
-[[distribution.face]]
-package = "cmnwlth"
-krate = "sovereign-mesh"
 items = []
 # Code's face (pb-code-daemon-exit; F2 (a), phase-b-30; phase-b-33): the one
 # composition `svrn code mcp` serves, mounted on svrn's `:9741/mcp`. In
