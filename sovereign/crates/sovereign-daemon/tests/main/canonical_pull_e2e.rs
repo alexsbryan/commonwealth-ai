@@ -21,7 +21,7 @@
 //! canonical recomputing the same fingerprint — this file's round trip
 //! until then — is corpus-engine's `daemon_port_parity`.
 
-use std::io::Write as _;
+use std::io::{Read as _, Write as _};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -31,9 +31,9 @@ use corpus_index::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
 use kernel_types::NodeId;
+use sovereign_daemon::canonical_pull::{pull_canonical_from_peer, PullError};
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::{fabric, node, serving, AppState};
-use sovereign_mesh::canonical_pull::{pull_canonical_from_peer, PullError};
 use tempfile::tempdir;
 
 use crate::common::ledger_double::RecordingLedger;
@@ -82,6 +82,12 @@ async fn create_synthetic_canonical(index_dir: &Path, corpus_id: &str) -> String
 
     idx.mark_ingestion_complete().expect("mark complete");
     idx.compute_and_stamp_fingerprint().await.expect("stamp")
+}
+
+/// The pulling node's ingest port. Every pull here fails before the unpack,
+/// so the double is left unprogrammed: an unpack would refuse by name.
+fn unpacker() -> Arc<dyn corpus_index::ingest_port::daemon::IngestPort> {
+    Arc::new(IngestPortDouble::new())
 }
 
 /// Spawn the internal API router for `state` on `127.0.0.1:0`.
@@ -212,6 +218,7 @@ async fn canonical_pull_rejects_wrong_expected_fingerprint() {
     // must remain absent.
     let candidates = vec![peer_url];
     let r = pull_canonical_from_peer(
+        unpacker(),
         &candidates,
         "wiki-mini",
         &client_index_dir,
@@ -258,6 +265,7 @@ async fn canonical_pull_falls_through_on_unreachable_first_url() {
 
     let candidates = vec![dead_url, working_url];
     let r = pull_canonical_from_peer(
+        unpacker(),
         &candidates,
         "wiki-mini",
         tempdir().unwrap().path(),
@@ -288,11 +296,88 @@ async fn canonical_pull_returns_404_when_corpus_absent() {
     let client_index_dir = client_dir.path().to_path_buf();
 
     let candidates = vec![peer_url];
-    let r = pull_canonical_from_peer(&candidates, "missing-corpus", &client_index_dir, None).await;
+    let r = pull_canonical_from_peer(
+        unpacker(),
+        &candidates,
+        "missing-corpus",
+        &client_index_dir,
+        None,
+    )
+    .await;
     match r {
         Err(PullError::PeerHttpError { status, .. }) => {
             assert_eq!(status, 404, "expected 404 for missing canonical");
         }
         other => panic!("expected PeerHttpError(404), got {other:?}"),
     }
+}
+
+/// A pull that passes the peer's advertisement unpacks through the pulling
+/// node's ingest port (`IngestPort::unpack_canonical`), then installs what
+/// the port wrote once it recomputes the advertised fingerprint. The double's
+/// unpack stands in for ingest's by laying down the serving node's canonical;
+/// that ingest's real unpack restores a canonical byte-faithfully is
+/// corpus-engine's `daemon_port_parity`.
+///
+/// Failing input, named: have the pull unpack anywhere but through `port`
+/// (the corpus_engine call it made before pb-mesh-exit-mesh); the double
+/// records no `unpack_canonical` and nothing lands at the destination.
+#[tokio::test]
+async fn a_pull_unpacks_through_the_ingest_port_and_installs_the_canonical() {
+    let server_dir = tempdir().unwrap();
+    let server_index_dir = server_dir.path().to_path_buf();
+    let peer_fp = create_synthetic_canonical(&server_index_dir, "wiki-mini").await;
+
+    let (state, _packs) = app_state_with_engine(&server_index_dir).await;
+    let addr = spawn_router(state).await;
+
+    let source = server_index_dir.join("wiki-mini");
+    let port = Arc::new(
+        IngestPortDouble::new().on_unpack_canonical(move |mut reader, dest| {
+            let mut streamed = Vec::new();
+            reader.read_to_end(&mut streamed)?;
+            assert_eq!(&streamed[..], PACKED, "the unpack reads the peer's stream");
+            copy_tree(&source, dest)?;
+            Ok(streamed.len() as u64)
+        }),
+    );
+
+    let client_dir = tempdir().unwrap();
+    let client_index_dir = client_dir.path().to_path_buf();
+    let report = pull_canonical_from_peer(
+        port.clone(),
+        &[format!("http://127.0.0.1:{}", addr.port())],
+        "wiki-mini",
+        &client_index_dir,
+        Some(peer_fp.as_str()),
+    )
+    .await
+    .expect("the pull installs the canonical");
+
+    assert_eq!(
+        port.calls()
+            .iter()
+            .filter(|c| **c == "unpack_canonical")
+            .count(),
+        1,
+        "one unpack, through the pulling node's port"
+    );
+    assert_eq!(report.fingerprint, peer_fp);
+    assert_eq!(report.canonical_path, client_index_dir.join("wiki-mini"));
+    assert!(report.canonical_path.is_dir(), "the canonical is in place");
+}
+
+/// Copy a directory tree (the double's stand-in for an unpack).
+fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_tree(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
 }

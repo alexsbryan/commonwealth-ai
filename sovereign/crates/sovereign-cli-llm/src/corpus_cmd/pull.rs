@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn corpus pull` — svrn's member act of pulling a peer's canonical
 //! index (HUMAN-fp7 (a)). It stays in svrn when the rest of `corpus`
-//! moves to ingest's CLI (pb-cli-llm-ingest-move); pb-mesh-dissolve
-//! repoints its `sovereign_mesh` call.
+//! moves to ingest's CLI (pb-cli-llm-ingest-move). The pull is the daemon's
+//! (`sovereign_daemon::canonical_pull`, pb-mesh-exit-mesh), its unpack
+//! ingest's port.
 
 use sovereign_cli_base::units::human_bytes;
 
@@ -107,7 +108,12 @@ pub(super) async fn cmd_corpus_pull(args: &[String]) -> i32 {
     // (which loops over candidates for the auto-pull path) sees
     // exactly the one address the user wants to try.
     let candidates = vec![peer_url.clone()];
-    match sovereign_mesh::canonical_pull::pull_canonical_from_peer(
+    let port = match crate::corpus_catalog_cmd::build_engine() {
+        Ok(port) => port,
+        Err(code) => return code,
+    };
+    match sovereign_daemon::canonical_pull::pull_canonical_from_peer(
+        port,
         &candidates,
         &corpus_id,
         &index_dir,

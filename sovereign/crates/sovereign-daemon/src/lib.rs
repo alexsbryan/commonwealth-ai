@@ -47,6 +47,9 @@ pub mod atlas_http;
 /// background work (DAEMON_CORE.md §3.2, `jobs`).
 pub mod auto_ingest;
 pub mod auto_resume;
+/// The canonical-index pull client — svrn's member act of fetching a peer's
+/// canonical (HUMAN-fp7 (a)), unpacking it through ingest's port.
+pub mod canonical_pull;
 /// The composition half of `sovereign-cli-daemon`'s `daemon_cmd`
 /// (DAEMON_CORE.md §4.1 row 4), moved whole at domains
 /// `dm-daemon-cli-composition` (2026-09-17): the bootstrap phases, the

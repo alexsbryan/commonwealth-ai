@@ -109,6 +109,8 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 hex = "0.4"
 getrandom = "0.3"
+# The canonical pull's temp-dir suffix (moved from sovereign-mesh with it).
+rand = "0.9"
 sysinfo = "0.35"
 hostname = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }

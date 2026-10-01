@@ -308,6 +308,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // `/status` probe client, moved with discovery to serving-host.
     ("sovereign/crates/sovereign-serving-host/src/rpc_discovery.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-daemon/src/auto_ingest.rs", Class::Mesh, 2),
+    // Moved from sovereign-mesh (pb-mesh-exit-mesh): the canonical pull's
+    // peer client. Class and count unchanged.
+    ("sovereign/crates/sovereign-daemon/src/canonical_pull.rs", Class::Mesh, 1),
     // Re-keyed 2026-09-16: the two knowledge-surface clients moved to the
     // client family, `sovereign-turn-client` (domains
     // REVIEW-build-mesh-client-pair, DAEMON_CORE.md §4.3). Class and count
@@ -326,7 +329,6 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-turn-client/src/rails_origins.rs", Class::Mesh, 1),
     // sovereign-mesh's gossip.rs: retired (pb-mesh-exit-transport); cw-rails
     // gossips the node.
-    ("sovereign/crates/sovereign-mesh/src/canonical_pull.rs", Class::Mesh, 1),
 
     // ---- sovereign-pods: the rented-pod modules (Wave 1); Class::Mesh per the enum doc's "pod traffic" ----
     ("sovereign/crates/sovereign-pods/src/worker_http.rs", Class::Mesh, 6),

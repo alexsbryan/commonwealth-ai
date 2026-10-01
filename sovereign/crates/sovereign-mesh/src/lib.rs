@@ -21,7 +21,6 @@
 //! `dm-daemon-mesh-adapters` (2026-09-17). Fabric keeps its own modules here;
 //! the host observes them through readers.
 
-pub mod canonical_pull;
 pub mod capabilities;
 /// Fabric's own part of the node's state, moved here from `sovereign-api`'s
 /// `state` at domains `dm-daemon-api-edge` (b): DC §4.2 names `sovereign-mesh`

@@ -431,9 +431,10 @@ fn print_ingest_event(evt: &CatalogIngestEvent) {
     }
 }
 
-/// Ingest's engine for the catalog verbs, through the process's one
-/// composition (`chat_cmd::ingest`). `None` there is the named absence.
-fn build_engine() -> Result<Arc<dyn IngestPort>, i32> {
+/// Ingest's engine for the catalog verbs and `corpus pull`'s unpack, through
+/// the process's one composition (`chat_cmd::ingest`). `None` there is the
+/// named absence.
+pub(crate) fn build_engine() -> Result<Arc<dyn IngestPort>, i32> {
     let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());

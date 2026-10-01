@@ -42,9 +42,10 @@
 //! flows through without sitting in RAM.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use corpus_engine::canonical_sync;
 use corpus_index::index::CorpusIndex;
+use corpus_index::ingest_port::daemon::IngestPort;
 
 /// Result of a successful pull. Lets callers log throughput,
 /// confirm the fingerprint match, and decide whether to emit a
@@ -116,9 +117,13 @@ pub enum PullError {
 /// where the user trusts the source). If `Some`, it must match
 /// both the header and the recomputed fingerprint after unpack.
 ///
+/// The unpack is ingest's, reached through `port`
+/// (`IngestPort::unpack_canonical`, pb-mesh-exit-mesh).
+///
 /// Returns a `CanonicalPullReport` on success. On failure, the
 /// temp dir is removed and no canonical is created.
 pub async fn pull_canonical_from_peer(
+    port: Arc<dyn IngestPort>,
     peer_urls: &[String],
     corpus_id: &str,
     index_dir: &Path,
@@ -259,7 +264,7 @@ pub async fn pull_canonical_from_peer(
 
     let temp_for_unpack = temp_path.clone();
     let unpack_result = tokio::task::spawn_blocking(move || {
-        canonical_sync::unpack_canonical(sync_reader, &temp_for_unpack)
+        port.unpack_canonical(Box::new(sync_reader), &temp_for_unpack)
     })
     .await
     .map_err(|e| PullError::Engine(format!("unpack join: {e}")))?

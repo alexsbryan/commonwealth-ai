@@ -353,7 +353,8 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                     chunk_count = lead.chunk_count,
                     "auto_ingest: peer has healthier canonical — attempting pull"
                 );
-                match sovereign_mesh::canonical_pull::pull_canonical_from_peer(
+                match crate::canonical_pull::pull_canonical_from_peer(
+                    std::sync::Arc::clone(engine),
                     &lead.candidate_urls,
                     corpus_id,
                     engine.index_dir(),
