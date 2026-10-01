@@ -41,6 +41,10 @@ panic_hook = ["dep:serde_json"]
 # The memory soft limit and total-RAM probe (pb-distribution-f11-daemon-twins):
 # one derivation, read by the daemon's watcher and by doctor.
 memory = ["dep:libc"]
+# The stale-sibling warning for a binary that execs another
+# (pb-distribution-f11-daemon-twins): the dispatcher's and cli-daemon's twin,
+# one copy. std only.
+sibling = []
 
 [dependencies]
 axum = { workspace = true, optional = true }

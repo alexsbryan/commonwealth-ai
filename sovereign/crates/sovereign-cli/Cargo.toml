@@ -30,6 +30,9 @@ sovereign-store = { workspace = true }
 # (sovereign-tools) must compute the carried-item advisory identically, and
 # sovereign-cli cannot see sovereign-tools in a gated build.
 sovereign-contracts = { workspace = true }
+# The stale-sibling warning (`sibling::warn_if_stale`), shared with
+# cli-daemon; host-kit is a shared leaf (pb-distribution-f11-daemon-twins).
+host-kit = { workspace = true, features = ["sibling"] }
 # The neutral kernel — `posture` renders every row as a `Judgement`, so the
 # verdict vocabulary, the age format and the staleness band are one decider
 # rather than seven (noun-convergence rung nc-10-judgement). Layer 0, so this

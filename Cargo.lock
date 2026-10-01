@@ -12265,6 +12265,7 @@ dependencies = [
  "corpus-index",
  "dirs 5.0.1",
  "hex",
+ "host-kit",
  "kernel-types",
  "libc",
  "oicp-client",

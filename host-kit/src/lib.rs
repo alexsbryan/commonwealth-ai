@@ -73,6 +73,8 @@ pub mod panic_hook;
 pub mod service;
 #[cfg(feature = "shell")]
 pub mod shell;
+#[cfg(feature = "sibling")]
+pub mod sibling;
 #[cfg(feature = "task")]
 pub mod supervise;
 
