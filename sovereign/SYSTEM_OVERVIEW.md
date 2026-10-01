@@ -13,10 +13,8 @@ measurements, the orders — is
 [`SYSTEM_OVERVIEW_DETAIL.md`](./SYSTEM_OVERVIEW_DETAIL.md), which keeps this
 numbering, so `§4` here is `§4` there. Open it before changing something, to
 learn what already went wrong. Also [`HISTORY.md`](./HISTORY.md) (how the
-shape came to be), [`DEFAULTS_LEDGER.md`](./DEFAULTS_LEDGER.md) (everything
-shipped default-off or dark, with its flip condition and review-by date), and
-[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md) (the
-arch-gate acceptance record).
+shape came to be) and [`DEFAULTS_LEDGER.md`](./DEFAULTS_LEDGER.md) (everything
+shipped default-off or dark, with its flip condition and review-by date).
 
 **This file has a ceiling and it is deliberate.** It reached 10.4k lines by
 accreting an incident log inside a map — single table cells ran three thousand
@@ -35,6 +33,7 @@ commonwealth-ai/
 ├── oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── oicp-conformance/          # Standalone OICP v0.4 host conformance tester
 ├── oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
+├── oplog-types/               # The pure envelope (Op/OpId/SkippedLine) split from oplog — zero I/O, the closure rail-core links (2026-09-23, ROOT_CAUSE_FIXES B4)
 ├── serving-policy/            # Fair-share scheduling + pipeline aliases (tier-0)
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
 ├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, persisted settings, the engine Error
@@ -1012,7 +1011,7 @@ grants, because no `Scope` variant names `/internal/*`.
 | `GET /status` | Node / mesh / inference / knowledge summary, incl. `process.pid` + `run_id` |
 | `GET /oicp/v1/capabilities` | Provider manifest + federation info |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | Ollama-native compatibility shim, pure translation over the OpenAI handlers |
-| `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, and the LIVE lane (delivery, not record — nothing reaches a store or a disk) |
+| `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, membership (the one walk `admit` calls, read off the same fold — `svrn ring membership`), and the LIVE lane (delivery, not record — nothing reaches a store or a disk) |
 | `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list guest grants. On the Operator bind ONLY |
 | `/v1/mesh/*`, `/v1/admin/*`, `/mcp/*` | Loopback-only |
 
@@ -1246,8 +1245,9 @@ closed: a push range it cannot diff gates everything.
 
 **A ratchet failure is not fixed by `--update-baseline` on your working tree**
 — that absorbs your own growth along with everything else. Re-pin at
-`origin/main` and ledger the acceptance in
-[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md).
+`origin/main` and say in the commit body what the lines bought — the baseline
+diff IS the record (there is no ledger file; the citation to one was removed
+2026-09-30 when docs-gate named it).
 `--tighten` is always safe.
 
 Concurrent agents serialize on `scripts/with-cargo-lock.sh`: cargo's package
@@ -1428,12 +1428,11 @@ than a surprise. A big file or a documented gap without an entry is a bug; one
 with an entry is sequenced work. When an entry completes its chronicle moves
 to [`HISTORY.md`](./HISTORY.md) and the row is dropped.
 
-**The live deferral tables and the full acceptance ledger are
-[`../quality/SIZE_DEBT_LEDGER.md`](../quality/SIZE_DEBT_LEDGER.md).** They
-left this file because they are an append-only record keyed to the arch-gate
-workflow — the gate tells you to add a row, and the rows accumulate forever —
-which is a ledger's job and not a map's. `quality/` is where the gate
-baselines already live.
+**The live deferral tables live in the arch-gate baseline diff** —
+`quality/baselines/` is where the gate's state is pinned, and the diff of a
+re-pin (done at `origin/main`, never on a working tree) is the acceptance
+record. There is no separate ledger file; an earlier revision of this
+section pointed at one that never existed, which docs-gate named 2026-09-30.
 
 When `cargo xtask arch-gate` reports a NEW oversized file, add a row there and
 re-baseline, or split the file. Three standing classes live in that ledger:
