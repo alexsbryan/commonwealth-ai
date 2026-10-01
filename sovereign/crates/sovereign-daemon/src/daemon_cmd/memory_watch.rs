@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Twin of `sovereign-cli-daemon/src/memory_watch.rs` (moved whole, unmodified)
-//! — the run path owns the memory watchdog and the daemon crate may not take
-//! a cli-daemon edge. The cli-daemon copy retires with its `daemon_cmd`.
+//! The soft-limit derivation (and the total-RAM probe) is the host kit's
+//! `host_kit::memory`, which doctor reads too; this module owns the rest.
 //!
 //! Proactive RSS watch for the daemon process.
 //!
@@ -56,6 +55,10 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use host_kit::memory::{
+    derived_soft_limit_mb, parse_limit_mb, soft_limit_mb, total_system_ram_mb, LEGACY_SOFT_MB,
+};
+
 /// Latest sampled RSS in MiB. 0 = not yet sampled.
 static LATEST_RSS_MB: AtomicU64 = AtomicU64::new(0);
 
@@ -82,22 +85,6 @@ pub fn hard_exit_requested() -> bool {
 /// (`sovereign-inference` capacity check), so a config the daemon
 /// agreed to load does not sit above its own hard limit.
 const HARD_PCT: u64 = if cfg!(target_os = "macos") { 65 } else { 85 };
-const SOFT_PCT: u64 = if cfg!(target_os = "macos") { 50 } else { 70 };
-
-/// Legacy fallback when total RAM cannot be detected: the historical
-/// defaults (soft 20 GiB, hard disabled).
-const LEGACY_SOFT_MB: u64 = 20_480;
-
-/// Soft warn threshold. Env-overridable; default 70% (Linux) / 50%
-/// (macOS) of total RAM, legacy 20 GiB when RAM is undetectable.
-pub fn soft_limit_mb() -> u64 {
-    let default = derived_soft_limit_mb(total_system_ram_mb()).unwrap_or(LEGACY_SOFT_MB);
-    parse_limit_mb(
-        std::env::var("SOVEREIGN_RSS_SOFT_LIMIT_MB").ok().as_deref(),
-        Some(default),
-    )
-    .unwrap_or(default)
-}
 
 /// Hard restart threshold. **Default OFF** — a self-SIGTERM hard limit is
 /// only useful under a supervisor that relaunches the daemon, so it must be
@@ -178,10 +165,6 @@ fn trim_arenas() -> bool {
 /// pure lock contention for nothing.
 const TRIM_EVERY: Duration = Duration::from_secs(10 * 60);
 
-fn derived_soft_limit_mb(total_ram_mb: Option<u64>) -> Option<u64> {
-    total_ram_mb.map(|ram| ram * SOFT_PCT / 100)
-}
-
 fn derived_hard_limit_mb(total_ram_mb: Option<u64>) -> Option<u64> {
     total_ram_mb.map(|ram| ram * HARD_PCT / 100)
 }
@@ -208,65 +191,6 @@ fn hard_limit_policy(raw: Option<&str>, total_ram_mb: Option<u64>) -> Option<u64
         // Explicit MB value. Non-numeric/garbage is treated as OFF rather
         // than silently deriving a limit — no accidental enable.
         Some(v) => v.parse::<u64>().ok().filter(|&n| n > 0),
-    }
-}
-
-fn parse_limit_mb(raw: Option<&str>, default: Option<u64>) -> Option<u64> {
-    match raw {
-        None => default,
-        Some(v) => v.trim().parse::<u64>().ok().filter(|&n| n > 0).or(default),
-    }
-}
-
-/// Total system RAM in MiB. Linux additionally respects a cgroup v2
-/// `memory.max` below the host total (container / toolbox deployments
-/// see their real ceiling, not the host's). `None` on detection
-/// failure — callers fall back to the legacy posture.
-fn total_system_ram_mb() -> Option<u64> {
-    #[cfg(target_os = "linux")]
-    {
-        // /proc/meminfo "MemTotal:  131072000 kB"
-        let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
-        let host_mb = meminfo.lines().find_map(|l| {
-            let rest = l.strip_prefix("MemTotal:")?;
-            let kb: u64 = rest.trim().trim_end_matches("kB").trim().parse().ok()?;
-            Some(kb / 1024)
-        })?;
-        // cgroup v2 unified hierarchy; "max" = unlimited. Best-effort —
-        // absent/unparseable just means the host total stands.
-        let cgroup_mb = std::fs::read_to_string("/sys/fs/cgroup/memory.max")
-            .ok()
-            .and_then(|s| s.trim().parse::<u64>().ok())
-            .map(|bytes| bytes / (1024 * 1024));
-        Some(match cgroup_mb {
-            Some(limit) if limit < host_mb => limit,
-            _ => host_mb,
-        })
-    }
-    #[cfg(target_os = "macos")]
-    {
-        // sysctl hw.memsize (bytes). SAFETY: fixed-size out-param with
-        // its size passed alongside; the call writes at most `len` bytes.
-        let mut bytes: u64 = 0;
-        let mut len = std::mem::size_of::<u64>();
-        let name = std::ffi::CString::new("hw.memsize").expect("static name");
-        let rc = unsafe {
-            libc::sysctlbyname(
-                name.as_ptr(),
-                &mut bytes as *mut _ as *mut libc::c_void,
-                &mut len,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-        if rc != 0 || bytes == 0 {
-            return None;
-        }
-        Some(bytes / (1024 * 1024))
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
-        None
     }
 }
 
@@ -768,15 +692,7 @@ mod tests {
     }
 
     use super::*;
-
-    #[test]
-    fn limit_parse_policy() {
-        // soft: default applies on unset/garbage/zero
-        assert_eq!(parse_limit_mb(None, Some(20_480)), Some(20_480));
-        assert_eq!(parse_limit_mb(Some("nope"), Some(20_480)), Some(20_480));
-        assert_eq!(parse_limit_mb(Some("0"), Some(20_480)), Some(20_480));
-        assert_eq!(parse_limit_mb(Some("4096"), Some(20_480)), Some(4096));
-    }
+    use host_kit::memory::SOFT_PCT;
 
     #[test]
     fn hard_limit_defaults_off_unless_opted_in() {
@@ -912,16 +828,6 @@ mod tests {
             g.observe_below(17_500, 18_000, t0),
             "crossed down again after recovery — warn again"
         );
-    }
-
-    #[test]
-    fn total_ram_detects_on_supported_platforms() {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
-        {
-            let ram = total_system_ram_mb().expect("total RAM detectable");
-            assert!(ram >= 1024, "implausibly small RAM: {ram} MiB");
-            assert!(ram < 16 * 1024 * 1024, "implausibly large RAM: {ram} MiB");
-        }
     }
 
     #[test]

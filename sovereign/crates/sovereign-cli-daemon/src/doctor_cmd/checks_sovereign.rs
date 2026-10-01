@@ -908,7 +908,7 @@ pub(super) fn check_log_dir_size() -> CheckResult {
 /// `doctor --watch` this is a genuine 30s memory pager. Skipped when
 /// the field is absent (daemon predates the process block).
 pub(super) async fn check_daemon_memory(client_url: &str) -> CheckResult {
-    let soft = crate::memory_watch::soft_limit_mb();
+    let soft = host_kit::memory::soft_limit_mb();
     let Some(status) = http_get_json(&format!("{client_url}/status")).await else {
         return CheckResult {
             name: "daemon_memory",

@@ -16,7 +16,6 @@ mod daemon_bin;
 mod daemon_cmd;
 mod doctor_cmd;
 mod install_service_cmd;
-mod memory_watch;
 mod model_cmd;
 mod setup_cmd;
 mod setup_config;

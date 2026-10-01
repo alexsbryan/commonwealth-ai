@@ -1,31 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Memory-limit POLICY — the soft-limit formula `svrn doctor` judges the
-//! daemon's reported RSS against (`checks_sovereign::check_daemon_memory`).
-//!
-//! The daemon-side sampler — the 60s watch loop, the hard-limit
-//! self-SIGTERM, host-headroom sampling, arena trimming — moved out with
-//! the run body at the de-embed (docs/FIVE_PROGRAMS.md §11 step 10) and
-//! lives in `sovereign-daemon`'s fork of this module. What stays is the
-//! read doctor needs: "what would the soft warn limit be on this host".
-//!
-//! NAMED DUPLICATION: the formula below is the same one the daemon
-//! applies (its fork carries the original). Two copies can drift; the
-//! honest closure is doctor reading the limit from the daemon's
-//! `/status` instead of re-deriving it, which is a daemon-surface
-//! change outside this cut. Until then, change both or neither.
+//! Memory-limit POLICY — the one soft-limit formula. Two readers: the
+//! daemon's watcher (`sovereign-daemon` `daemon_cmd/memory_watch.rs`, which
+//! keeps the sampler, the hard limit and arena trimming) and `svrn doctor`
+//! (`checks_sovereign::check_daemon_memory`), which judges the daemon's
+//! reported RSS against it. The two daemon crates each carried a copy from
+//! the de-embed until pb-distribution-f11-daemon-twins.
 
 /// RAM-fraction default (percent). macOS sits well under the observed
 /// jetsam trigger zone (~69% of RAM); Linux leaves headroom for the
 /// rest of the system before the kernel OOM killer engages.
-const SOFT_PCT: u64 = if cfg!(target_os = "macos") { 50 } else { 70 };
+pub const SOFT_PCT: u64 = if cfg!(target_os = "macos") { 50 } else { 70 };
 
 /// Legacy fallback when total RAM cannot be detected: the historical
 /// default (soft 20 GiB).
-const LEGACY_SOFT_MB: u64 = 20_480;
+pub const LEGACY_SOFT_MB: u64 = 20_480;
 
 /// Soft warn threshold. Env-overridable; default 70% (Linux) / 50%
 /// (macOS) of total RAM, legacy 20 GiB when RAM is undetectable.
-pub(crate) fn soft_limit_mb() -> u64 {
+pub fn soft_limit_mb() -> u64 {
     let default = derived_soft_limit_mb(total_system_ram_mb()).unwrap_or(LEGACY_SOFT_MB);
     parse_limit_mb(
         std::env::var("SOVEREIGN_RSS_SOFT_LIMIT_MB").ok().as_deref(),
@@ -34,13 +26,14 @@ pub(crate) fn soft_limit_mb() -> u64 {
     .unwrap_or(default)
 }
 
-fn derived_soft_limit_mb(total_ram_mb: Option<u64>) -> Option<u64> {
+/// The RAM-derived soft limit, `None` when RAM is undetectable.
+pub fn derived_soft_limit_mb(total_ram_mb: Option<u64>) -> Option<u64> {
     total_ram_mb.map(|ram| ram * SOFT_PCT / 100)
 }
 
 /// Explicit env > default; unset/garbage/zero fall back to the default —
 /// a typo must not silently switch the limit off.
-fn parse_limit_mb(raw: Option<&str>, default: Option<u64>) -> Option<u64> {
+pub fn parse_limit_mb(raw: Option<&str>, default: Option<u64>) -> Option<u64> {
     match raw {
         None => default,
         Some(v) => v.trim().parse::<u64>().ok().filter(|&n| n > 0).or(default),
@@ -51,7 +44,7 @@ fn parse_limit_mb(raw: Option<&str>, default: Option<u64>) -> Option<u64> {
 /// `memory.max` below the host total (container / toolbox deployments
 /// see their real ceiling, not the host's). `None` on detection
 /// failure — callers fall back to the legacy posture.
-fn total_system_ram_mb() -> Option<u64> {
+pub fn total_system_ram_mb() -> Option<u64> {
     #[cfg(target_os = "linux")]
     {
         // /proc/meminfo "MemTotal:  131072000 kB"

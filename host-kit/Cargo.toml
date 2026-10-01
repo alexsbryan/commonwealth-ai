@@ -38,6 +38,9 @@ service = []
 # The process panic hook (pb-distribution-f11-daemon-twins): one copy, moved
 # from the two daemon crates that forked it at the de-embed.
 panic_hook = ["dep:serde_json"]
+# The memory soft limit and total-RAM probe (pb-distribution-f11-daemon-twins):
+# one derivation, read by the daemon's watcher and by doctor.
+memory = ["dep:libc"]
 
 [dependencies]
 axum = { workspace = true, optional = true }
@@ -48,6 +51,9 @@ tokio = { workspace = true, optional = true }
 tokio-stream = { version = "0.1", features = ["sync"], optional = true }
 tower-http = { workspace = true, optional = true, features = ["timeout"] }
 tracing = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 if-addrs = "0.13"
