@@ -127,6 +127,22 @@ impl GuestPage {
     }
 }
 
+/// The loopback port the ring rail listens on, derived from the client port.
+///
+/// **ONE derivation** (ARCH §10.6): the daemon binds it and `svrn ring dev`
+/// dials it, and if those two ever computed it separately a second daemon on a
+/// non-default client port would have its rail silently unreachable — the
+/// worst shape, because the app would get a connection refused and the
+/// operator would go looking at grants.
+///
+/// Derived rather than configured so there is no knob to set inconsistently.
+/// Loopback-only in M0, so it never needs to be advertised or firewalled.
+/// Moved from `commonwealth_core::config` with the bind it places
+/// (pb-mesh-exit-mesh): the svrn daemon binds it, `svrn ring dev` dials it.
+pub fn rail_port(client_port: u16) -> u16 {
+    client_port.saturating_add(2)
+}
+
 mod shim;
 pub use shim::{ring_shim, RING_SHIM};
 

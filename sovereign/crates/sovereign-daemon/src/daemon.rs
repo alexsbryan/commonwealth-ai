@@ -1558,8 +1558,8 @@ impl EmbeddedDaemon {
         // by `crate::guest_origin` below.
 
         // The rail's own listener — `rail_bind` says why it is a separate one.
-        let rail_addr = sovereign_mesh::rail_bind::rail_addr(client_addr.port());
-        let rail_listener = sovereign_mesh::rail_bind::bind(rail_addr).await;
+        let rail_addr = crate::rail_bind::rail_addr(client_addr.port());
+        let rail_listener = crate::rail_bind::bind(rail_addr).await;
 
         // Spawn the API servers in the background. The JoinHandle is stored
         // in `DaemonState::Running` (not discarded) so `stop_inner` can await

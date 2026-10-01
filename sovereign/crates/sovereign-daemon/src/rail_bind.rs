@@ -17,8 +17,8 @@
 //! The peer and guest binds take ephemeral loopback ports because the iroh
 //! acceptor that forwards to them learns the address at bind time. Nothing
 //! forwards to this one: `svrn ring dev` is a separate process that dials it
-//! with only the config to go on. `commonwealth_core::config::rail_port` is
-//! the ONE derivation, so a second daemon on a non-default client port gets
+//! with only the config to go on. `sovereign_contracts::guest_pages::rail_port`
+//! is the ONE derivation, so a second daemon on a non-default client port gets
 //! its own rail rather than a silently unreachable one (ARCH §10.6).
 
 use std::net::SocketAddr;
@@ -31,7 +31,7 @@ use tracing::warn;
 pub fn rail_addr(client_port: u16) -> SocketAddr {
     SocketAddr::from((
         [127u8, 0, 0, 1],
-        commonwealth_core::config::rail_port(client_port),
+        sovereign_contracts::guest_pages::rail_port(client_port),
     ))
 }
 

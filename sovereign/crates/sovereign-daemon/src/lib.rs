@@ -62,12 +62,12 @@ pub mod auto_resume;
 #[cfg(feature = "treesitter")]
 pub mod bootstrap;
 pub mod build;
-/// The notes-rail convergence recorder (`MeshConvergence`), moved from
-/// sovereign-mesh.
-pub mod convergence;
 /// The canonical-index pull client — svrn's member act of fetching a peer's
 /// canonical (HUMAN-fp7 (a)), unpacking it through ingest's port.
 pub mod canonical_pull;
+/// The notes-rail convergence recorder (`MeshConvergence`), moved from
+/// sovereign-mesh.
+pub mod convergence;
 pub mod corpus_catalog_http;
 pub mod corpus_maintenance;
 pub mod corpus_watch_http;
@@ -137,6 +137,9 @@ pub mod principal;
 pub mod process;
 pub mod provider;
 pub mod published_origins;
+/// The ring rail's listener — the client router's fourth, untrusted-loopback
+/// bind (moved from sovereign-mesh).
+pub mod rail_bind;
 pub mod rails_client;
 pub mod reading_http;
 pub mod recipe_http;

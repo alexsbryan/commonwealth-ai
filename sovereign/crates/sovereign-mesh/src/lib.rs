@@ -71,7 +71,6 @@ pub mod persist;
 /// (`SCHEDULER_QUALITY.md` §4.1). Public because it is scored from a
 /// capture as well as from the live path.
 pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-build-sched-move // shim: moved by domains REVIEW-build-mesh-workbench-deferred
-pub mod rail_bind;
 pub mod rail_kv_pump;
 pub mod rail_port;
 pub mod ring_checkpoint;
