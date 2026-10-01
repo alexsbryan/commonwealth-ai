@@ -1832,6 +1832,7 @@ pub fn test_app_state_with_token(token: Option<Arc<str>>) -> AppState {
 /// needs a recorder, rail, roster or clock uses now that those are
 /// constructor arguments rather than installs (DC §4.2 "Construction is
 /// staged, and parts are total").
+#[cfg(feature = "test-doubles")]
 pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
     AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         NodeId::from_u128(1),
@@ -1845,6 +1846,7 @@ pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
 /// serves local chat uses now that the provider is a constructor argument
 /// rather than an install (DC §4.2 "Construction is staged, and parts are
 /// total").
+#[cfg(feature = "test-doubles")]
 pub fn test_app_state_with_inference(service: Arc<dyn LocalInferenceService>) -> AppState {
     AppState::new_with_platform_and_engine_and_serving(
         NodeId::from_u128(1),
