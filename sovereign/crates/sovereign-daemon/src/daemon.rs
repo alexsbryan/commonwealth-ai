@@ -1644,16 +1644,11 @@ impl EmbeddedDaemon {
             // bearer gates), so "land on the index and pick" only worked on
             // the LAN. `door_router` is the one owner of that merge; the
             // pages are grant-filtered by the index itself, exactly as they
-            // are on the door's own bind.
-            // Sealed like the client router, so a keyed daemon has no
-            // listener where a key bypasses its scope.
-            let guest_router = crate::api_keys::seal(
-                crate::guest_door::door_router(
-                    app_state_clone.clone(),
-                    guest_pages.clone(),
-                    turn_host,
-                ),
-                &app_state_clone,
+            // are on the door's own bind. `door_router` seals it too.
+            let guest_router = crate::guest_door::door_router(
+                app_state_clone.clone(),
+                guest_pages.clone(),
+                turn_host,
             );
             let rail_router = crate::api_keys::seal(
                 crate::server::client_router_for(

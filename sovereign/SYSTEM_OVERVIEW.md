@@ -1045,7 +1045,8 @@ grants, because no `Scope` variant names `/internal/*`.
 
 A daemon holding on-prem API keys (`<data_dir>/client-tokens/<sub>.key`,
 written by `svrn daemon key`) is KEYED: `api_keys::seal` wraps every client
-listener, loopback grants nothing, a key resolves to `Principal::Asserted`,
+listener (the guest door's in `guest_door::door_router`, so its own bind and
+the `GUEST_ALPN` forward take one sealed router), loopback grants nothing, a key resolves to `Principal::Asserted`,
 conversations are stored `{sub}:{id}`, a non-`admin` key reaches only
 `api_keys::KEY_SCOPE`, and `[retrieval] corpora` is every key's corpus grant.
 `granted_http` serves the grant: `GET /v1/corpora`, the reading window

@@ -589,5 +589,8 @@ mod rail_bind;
 // The guest door rides the same helpers: the rail on a LAN-reachable bind.
 mod guest_door;
 
+// The door's own bind on a keyed daemon: sealed like the client listener.
+mod guest_door_keyed;
+
 // The live lane's drain: the grant decides, cw-rails holds the buffer.
 mod live_drain;

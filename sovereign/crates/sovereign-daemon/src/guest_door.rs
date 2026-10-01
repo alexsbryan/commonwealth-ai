@@ -347,20 +347,23 @@ pub fn door_router(
     turn_host: Option<Arc<crate::daemon::EmbeddedDaemon>>,
 ) -> Router {
     let grants = state.inner.node.guest_grants.clone();
-    let mut guest = crate::server::client_router_for(state, ClientSurface::Guest);
+    let mut guest = crate::server::client_router_for(state.clone(), ClientSurface::Guest);
     if let Some(host) = turn_host {
         guest = guest.layer(axum::Extension(host));
     }
-    if pages.is_empty() {
-        return guest;
+    if !pages.is_empty() {
+        guest = guest.merge(
+            Router::new()
+                .route(PAGE_PREFIX, get(page_index))
+                .route("/ring/{*rel}", get(page_file))
+                .fallback(root_proxy)
+                .with_state(PageState { pages, grants }),
+        );
     }
-    guest.merge(
-        Router::new()
-            .route(PAGE_PREFIX, get(page_index))
-            .route("/ring/{*rel}", get(page_file))
-            .fallback(root_proxy)
-            .with_state(PageState { pages, grants }),
-    )
+    // Sealed where it is built, after the merge, so every listener serving
+    // the door — its own bind and the GUEST_ALPN forward — holds a key to its
+    // scope on a keyed daemon.
+    crate::api_keys::seal(guest, &state)
 }
 
 /// Serve the door on `bind` for as long as the daemon runs: listen while a
