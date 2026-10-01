@@ -1045,6 +1045,9 @@ written by `svrn daemon key`) is KEYED: `api_keys::seal` wraps every client
 listener, loopback grants nothing, a key resolves to `Principal::Asserted`,
 conversations are stored `{sub}:{id}`, a non-`admin` key reaches only
 `api_keys::KEY_SCOPE`, and `[retrieval] corpora` is every key's corpus grant.
+`granted_http` serves the grant: `GET /v1/corpora`, the reading window
+`GET /v1/corpora/{c}/chunks/{id}` (403 naming an ungranted corpus) and
+`GET /v1/tools`; `GET /health` is an unauthenticated `ok`.
 
 | Path | Notes |
 |---|---|

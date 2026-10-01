@@ -14,6 +14,11 @@
 //! `PrincipalScope::admits` ignore the grant and
 //! `a_key_never_retrieves_outside_the_corpus_grant` goes red. The last test is
 //! the regression guard: a daemon with NO keys serves loopback as before.
+//!
+//! pb-distribution-onprem-routes adds the granted reads (`granted_http`) and
+//! `/health`: each answers under a key and is refused without one, except
+//! `/health`. Drop the grant check in `granted_http::reading_window` and
+//! `the_reading_window_refuses_a_corpus_outside_the_grant` goes red.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -26,6 +31,7 @@ use sovereign_core::context::{build_context, PrincipalScope};
 use sovereign_daemon::api_keys::{self, KeyedOwners};
 use sovereign_daemon::client_tokens::{client_tokens_dir, keys, ClientTokenStore, KEY_ADMIN_GROUP};
 use sovereign_daemon::documents_http::documents_router;
+use sovereign_daemon::granted_http::granted_router;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, NodeSeed};
 use sovereign_daemon::turn_http::turn_router;
@@ -69,10 +75,13 @@ async fn daemon(keys_on_disk: &[(&str, &[&str], &str)]) -> Daemon {
     let store: Arc<dyn StateStore> = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
     let provider: Arc<dyn sovereign_contracts::traits::InferenceProvider> =
         Arc::new(TestProvider::new());
-    let engine = Arc::new(crate::common::reading_double(
-        indexes,
-        Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
-    ));
+    let engine = Arc::new(
+        crate::common::reading_double(
+            indexes,
+            Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
+        )
+        .with_builtin_corpora(Vec::new()),
+    );
     let mut runtime = stub_runtime_with_engine(
         Arc::clone(&provider),
         Some(Arc::clone(&store)),
@@ -105,7 +114,8 @@ async fn daemon(keys_on_disk: &[(&str, &[&str], &str)]) -> Daemon {
     );
     let router = client_router(state.clone())
         .merge(turn_router(Arc::clone(&daemon)))
-        .merge(documents_router(Arc::clone(&daemon)));
+        .merge(documents_router(Arc::clone(&daemon)))
+        .merge(granted_router(Arc::clone(&daemon)));
     let addr: SocketAddr = spawn_router(api_keys::seal(router, &state)).await;
     Daemon {
         _tmp: tmp,
@@ -333,5 +343,104 @@ async fn an_unkeyed_daemon_serves_loopback_as_before() {
         resp.status(),
         reqwest::StatusCode::OK,
         "no keys, no seal: the loopback owner is admitted with no credential"
+    );
+}
+
+/// The one chunk `install_corpus` wrote into `corpus`: whatever id the index
+/// assigned, read back rather than guessed.
+async fn chunk_id(d: &Daemon, corpus: &str) -> u64 {
+    let index = corpus_index::index::CorpusIndex::open(&d._tmp.path().join("indexes").join(corpus))
+        .await
+        .unwrap();
+    let hits = index.search(&[0.0_f32; 4], "", 1).await.unwrap();
+    hits[0].chunk_id.expect("the fixture chunk has an id")
+}
+
+async fn get(d: &Daemon, key: Option<&str>, path: &str) -> reqwest::Response {
+    let req = client().get(format!("{}{path}", d.base));
+    match key {
+        Some(k) => req.bearer_auth(k),
+        None => req,
+    }
+    .send()
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn the_granted_reads_answer_under_a_key_and_refuse_without_one() {
+    let d = daemon(&keyed_set()).await;
+    let window = format!("/v1/corpora/firm-docs/chunks/{}", chunk_id(&d, "firm-docs").await);
+    for path in ["/v1/corpora", window.as_str(), "/v1/tools"] {
+        assert_eq!(
+            get(&d, None, path).await.status(),
+            reqwest::StatusCode::UNAUTHORIZED,
+            "{path} without a key"
+        );
+        let resp = get(&d, Some(ALICE), path).await;
+        assert_eq!(resp.status(), reqwest::StatusCode::OK, "{path} under a lawyer key");
+    }
+
+    let corpora = body(get(&d, Some(ALICE), "/v1/corpora").await).await;
+    let ids: Vec<&str> = corpora["corpora"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["firm-docs"], "only the grant, never `secret`: {corpora}");
+
+    let tools = body(get(&d, Some(ALICE), "/v1/tools").await).await;
+    // The stub Runtime registers no tools; the onprem binary's e2e reads a
+    // real registry.
+    let tools = tools["tools"].as_array().expect("a `tools` array");
+    assert!(
+        tools.iter().all(|t| t["requires_approval"].is_boolean() && t["id"].is_string()),
+        "{tools:?}"
+    );
+
+    let health = get(&d, None, "/health").await;
+    assert_eq!(health.status(), reqwest::StatusCode::OK, "liveness needs no key");
+    assert_eq!(health.text().await.unwrap(), "ok");
+}
+
+#[tokio::test]
+async fn the_reading_window_refuses_a_corpus_outside_the_grant() {
+    let d = daemon(&keyed_set()).await;
+    let (firm, secret) = (chunk_id(&d, "firm-docs").await, chunk_id(&d, "secret").await);
+    let window = body(
+        get(&d, Some(ALICE), &format!("/v1/corpora/firm-docs/chunks/{firm}?radius=2")).await,
+    )
+    .await;
+    assert_eq!(window["center"]["content"], "one chunk", "{window}");
+    assert_eq!(window["center"]["corpus_id"], "firm-docs", "{window}");
+    assert!(window["prev"].is_array() && window["next"].is_array(), "{window}");
+
+    let resp = get(&d, Some(ALICE), &format!("/v1/corpora/secret/chunks/{secret}")).await;
+    assert_eq!(resp.status(), reqwest::StatusCode::FORBIDDEN);
+    let err = body(resp).await["error"].as_str().unwrap_or("").to_string();
+    assert!(
+        err.contains("'secret'") && err.contains("alice"),
+        "the refusal names the corpus and the key: {err}"
+    );
+}
+
+#[tokio::test]
+async fn an_unkeyed_daemon_serves_the_granted_reads_to_loopback() {
+    let d = daemon(&[]).await;
+    let corpora = body(get(&d, None, "/v1/corpora").await).await;
+    let mut ids: Vec<&str> = corpora["corpora"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["id"].as_str().unwrap())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, ["firm-docs", "secret"], "the local owner's grant is every corpus");
+    assert_eq!(
+        get(&d, None, &format!("/v1/corpora/secret/chunks/{}", chunk_id(&d, "secret").await))
+            .await
+            .status(),
+        reqwest::StatusCode::OK
     );
 }

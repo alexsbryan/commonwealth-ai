@@ -147,12 +147,13 @@ impl ClientAuthState {
 }
 
 /// Exact request paths that remain reachable without a token, even
-/// from a non-loopback caller. Both are read-only and advertise-by-
+/// from a non-loopback caller. All are read-only and advertise-by-
 /// design: `/oicp/v1/capabilities` is the federation handshake a peer
-/// reads to decide whether to peer, and `/status` is the liveness /
-/// pairing surface. Matched by EXACT equality (not prefix), so no
-/// child path inherits the exemption.
-pub const AUTH_EXEMPT_PATHS: &[&str] = &["/status", "/oicp/v1/capabilities"];
+/// reads to decide whether to peer, `/status` is the liveness /
+/// pairing surface, and `/health` is bare liveness for a proxy's edge.
+/// Matched by EXACT equality (not prefix), so no child path inherits
+/// the exemption.
+pub const AUTH_EXEMPT_PATHS: &[&str] = &["/status", "/oicp/v1/capabilities", "/health"];
 
 /// Extract the bearer token from an `Authorization` header value, if
 /// present and well-formed (`Bearer <token>`, case-insensitive scheme).

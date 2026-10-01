@@ -1383,6 +1383,8 @@ impl EmbeddedDaemon {
             mount_names.push("assets_http");
             mounted.push(crate::reading_http::reading_router(Arc::clone(&self_arc)));
             mount_names.push("reading_http");
+            mounted.push(crate::granted_http::granted_router(Arc::clone(&self_arc)));
+            mount_names.push("granted_http");
             // Phase 5c — the daemon answers. Built here from `Arc<Self>` like
             // the three above, not accepted from a host, so a serving daemon
             // cannot come up unable to serve a turn.

@@ -204,6 +204,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
             )
             // Status endpoint.
             .route("/status", get(routes_status::status))
+            .route("/health", get(routes_status::health))
             // The operator-only surface, mounted on the `Operator` bind and
             // NOWHERE else. Empty on `Peer` and `Guest`, so those listeners
             // 404 these paths rather than gating them — the distinction

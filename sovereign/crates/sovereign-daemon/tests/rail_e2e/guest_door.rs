@@ -156,14 +156,14 @@ async fn the_wall_bearer_reaches_the_page_and_the_rail_on_a_and_nothing_else() {
             );
         }
     }
-    // The two exceptions, named so they cannot grow silently: the paths
+    // The three exceptions, named so they cannot grow silently: the paths
     // `client_auth` leaves open to ANY non-loopback caller on every surface
-    // (liveness and the federation handshake). The door inherits them with
+    // (liveness, bare `/health`, and the federation handshake). The door inherits them with
     // the Guest router; the room's WiFi can read them, as a LAN can on a
     // non-loopback `client_bind`.
     assert_eq!(
         sovereign_daemon::client_auth::AUTH_EXEMPT_PATHS,
-        &["/status", "/oicp/v1/capabilities"]
+        &["/status", "/oicp/v1/capabilities", "/health"]
     );
     // Without the bearer the rail is shut too.
     let (status, _) = door(

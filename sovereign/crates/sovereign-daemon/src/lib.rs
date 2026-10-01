@@ -150,6 +150,7 @@ pub mod rail_bind;
 /// implementation, `rails_client::RailsRingRail` (pb-mesh-exit-mesh).
 pub mod rail_port;
 pub mod rails_client;
+pub mod granted_http;
 pub mod reading_http;
 pub mod recipe_http;
 pub mod recipe_project_http;

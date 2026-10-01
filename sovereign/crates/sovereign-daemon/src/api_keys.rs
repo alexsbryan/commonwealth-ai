@@ -72,6 +72,9 @@ pub const KEY_SCOPE: &[(&str, &str)] = &[
     ("GET", "/v1/documents/{}/progress"),
     ("POST", "/v1/documents/{}/ask"),
     ("GET", "/v1/documents/{}/ask/{}"),
+    ("GET", "/v1/corpora"),
+    ("GET", "/v1/corpora/{}/chunks/{}"),
+    ("GET", "/v1/tools"),
 ];
 
 /// Static segments a `{}` never matches, because the route they name is

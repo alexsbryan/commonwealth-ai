@@ -65,6 +65,12 @@ fn local_model_rows(state: &AppState) -> Option<Vec<LoadedModelStatus>> {
     Some(rows)
 }
 
+/// GET /health — unauthenticated liveness: `ok` and nothing else, because
+/// `/status` says too much for a public edge (pb-distribution-onprem-routes).
+pub async fn health() -> &'static str {
+    "ok"
+}
+
 /// GET /status — mesh and node status summary.
 pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     let local_rows = local_model_rows(&state);

@@ -247,6 +247,50 @@ fn the_onprem_binary_composes_no_shell_web_or_mcp_surface() {
         );
     }
 
+    // The granted reads (pb-distribution-onprem-routes): each answers under a
+    // key and refuses without one; `/health` alone needs none.
+    let window = "/v1/corpora/firm-docs/chunks/1";
+    for path in ["/v1/corpora", "/v1/tools", window] {
+        let resp = client()
+            .get(format!("http://127.0.0.1:{svrn}{path}"))
+            .send()
+            .unwrap_or_else(|e| panic!("{path} did not answer: {e}"));
+        assert_eq!(resp.status(), 401, "{path} without a key");
+    }
+    let resp = client()
+        .get(format!("http://127.0.0.1:{svrn}/health"))
+        .send()
+        .expect("/health answers");
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.text().unwrap_or_default(), "ok");
+    let resp = get("/v1/corpora").expect("/v1/corpora answers");
+    assert_eq!(resp.status(), 200);
+    let corpora: serde_json::Value = resp.json().expect("corpora json");
+    assert!(corpora["corpora"].is_array(), "{corpora}");
+    // No `[retrieval] corpora` in this config: the grant is empty, so the
+    // window refuses every corpus by name.
+    let resp = get(window).expect("the reading window answers");
+    let status = resp.status();
+    let body = resp.text().unwrap_or_default();
+    assert_eq!(status, 403, "{body}");
+    assert!(body.contains("'firm-docs'"), "the refusal names the corpus: {body}");
+    // The hardening probe: the turn runtime holds no web, wikipedia or
+    // recipe-authoring tool, and no tool the approval gate would stop on
+    // (REST turns auto-approve, so such a tool would need an approve route).
+    let resp = get("/v1/tools").expect("/v1/tools answers");
+    assert_eq!(resp.status(), 200);
+    let tools: serde_json::Value = resp.json().expect("tools json");
+    let tools = tools["tools"].as_array().expect("a tools array");
+    assert!(!tools.is_empty(), "the on-prem turn runtime holds tools");
+    for t in tools {
+        let id = t["id"].as_str().unwrap_or_default();
+        assert!(
+            !["web_fetch", "wikipedia_fetch", "probe_url"].contains(&id),
+            "on-prem holds {id}"
+        );
+        assert_eq!(t["requires_approval"], false, "{t}");
+    }
+
     // A turn over an empty corpus set answers on this box alone.
     let resp = client()
         .post(format!("http://127.0.0.1:{svrn}/v1/chat/completions"))
