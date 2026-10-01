@@ -17112,12 +17112,14 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "arch-layers",
+ "corpus-index",
  "kernel-types",
  "oicp-types",
  "quote",
  "regex",
  "serde_json",
  "sovereign-cli-dev",
+ "sovereign-cli-shared",
  "syn 2.0.118",
  "toml 0.8.2",
  "workspace-hack",

@@ -1082,19 +1082,12 @@ impl JourneyClaim<'_> {
     }
 }
 
-/// Resolve `docs/cli-contract.toml` relative to this crate at compile time.
-/// The crate lives at `sovereign/crates/sovereign-cli-shared`; the manifest
-/// at `sovereign/docs/cli-contract.toml` — two ancestors up, then `docs/`.
+/// `sovereign/docs/cli-contract.toml`, fixed at compile time from the
+/// `SOVEREIGN_CLI_CONTRACT` knob: the workspace `.cargo/config.toml` sets it
+/// in-tree and a lift carries the file and sets it itself. Unset is a compile
+/// error naming the knob, never a guessed path.
 pub fn manifest_path() -> PathBuf {
-    // CARGO_MANIFEST_DIR = .../sovereign/crates/sovereign-cli-shared
-    //   ancestors[0] = .../sovereign-cli-shared
-    //   ancestors[1] = .../crates
-    //   ancestors[2] = .../sovereign
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(2)
-        .map(|sovereign_root| sovereign_root.join("docs").join("cli-contract.toml"))
-        .unwrap_or_else(|| PathBuf::from("docs/cli-contract.toml"))
+    PathBuf::from(env!("SOVEREIGN_CLI_CONTRACT"))
 }
 
 #[cfg(test)]

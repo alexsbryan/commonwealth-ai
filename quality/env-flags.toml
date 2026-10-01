@@ -54,6 +54,13 @@ purpose = "Root of the bank/baseline tree sovereign-eval reads; a lifted bench s
 status = "shipped"
 
 [[flag]]
+name = "SOVEREIGN_CLI_CONTRACT"
+cluster = "infra-paths"
+default = "sovereign/docs/cli-contract.toml (set by the workspace .cargo/config.toml)"
+purpose = "The CLI contract file, fixed at compile time into cli_contract::manifest_path; a lifted svrn carries the file and sets it."
+status = "shipped"
+
+[[flag]]
 name = "SOVEREIGN_TENSOR_BUFT_OVERRIDE"
 cluster = "inference"
 default = "unset"

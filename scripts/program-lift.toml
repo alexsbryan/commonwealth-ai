@@ -65,6 +65,8 @@
 package = "svrn"
 build = ["-p", "sovereign-daemon", "--bin", "sovereign-daemon", "--features", "treesitter"]
 binary = "debug/sovereign-daemon"
+# The CLI contract sovereign-cli-shared's `manifest_path` fixes at compile time.
+carry = { SOVEREIGN_CLI_CONTRACT = "sovereign/docs/cli-contract.toml" }
 
 [lift.svrn.run]
 # svrn ALONE dials a configured serve (pb-stock-binary; phase-b-29 Q2): it
