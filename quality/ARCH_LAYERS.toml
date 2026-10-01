@@ -1043,7 +1043,7 @@ name = "serving-policy-core"
 # The serving-policy ARITHMETIC — fair_sched (SchedCore, EtaEwma, reciprocity,
 # TryGrant, fair_share_cap) and the pipeline_aliases table. Admitted 2026-09-22
 # under FIVE_PROGRAMS fp-17: the daemon's admission path (svrn) computes the
-# same share rule the [cmnwlth] serving cluster does, and a package member may
+# same share rule the [serve] serving cluster does, and a package member may
 # not name another package's crate — the arithmetic is the shared part both
 # ends own. Tested against §12 decision 3 first: contracts takes wire
 # format/vocabulary only, and this is policy arithmetic, not wire — so the leaf
@@ -1290,7 +1290,8 @@ doc = "docs/FIVE_PROGRAMS.md"
 # build` orchestrates, `-catalog` is the store layout) is the same argument:
 # these are atlas WRITERS.
 #
-# `sovereign-gliner` LEFT for [cmnwlth] (phase-b pb-serving-ner, §12 3a rung
+# `sovereign-gliner` LEFT for the serving cluster, [serve] since
+# pb-serve-package (phase-b pb-serving-ner, §12 3a rung
 # 1): its only in-tree loader is the NER served kind's registration in the
 # serving assembly (`sovereign-compute`), so one program uses it. The per-chunk
 # adapter it carried (`GlinerChunkExtractor`, pure over the NER port) moved into
@@ -1329,20 +1330,10 @@ doc = "docs/FIVE_PROGRAMS.md"
 # the `commonwealth` package this row replaces (declared 2026-09-03, green with
 # zero exceptions on the day, and green every day since). Their internal
 # surface is `commonwealth-core` plus the `oplog` / `kernel-types` /
-# `oicp-types` leaves, so folding them into a wider package does not introduce
-# a single new edge among them — what it DOES do is admit the serving cluster
-# as a sibling, and that is where the red was. (`sovereign-mesh` was the other
-# sibling until pb-mesh-dissolve moved its abilities to their owners and
-# deleted it, phase-b-92.)
-#
-# THE SERVING CLUSTER IS HERE BECAUSE INFERENCE IS. §2 gives `cmnwlth` "the
-# serving cluster", and a router with a roster that cannot run a model is a
-# proxy, not a program: `sovereign-scheduler` (arithmetic over the published
-# language), `sovereign-serving-host` (the ports and the knot), `serving-policy`
-# (the admission decider), `sovereign-inference` (the provider layer) and
-# `sovereign-compute` (one supervised child per slot). The consequence is the
-# largest single red edge in this table and it is the correct one: `svrn` reads
-# `sovereign-inference` today and under the design it dials `/v1/*` instead.
+# `oicp-types` leaves. The serving cluster was their sibling here until
+# pb-serve-package moved it to [serve] (phase-b-20, phase-b-21), and
+# `sovereign-mesh` until pb-mesh-dissolve deleted it (phase-b-92). cmnwlth
+# adverts inference and never ranks or runs it, so its closure takes no llama.
 crates = [
     "commonwealth-core",
     "commonwealth-transport",
@@ -1352,20 +1343,34 @@ crates = [
     "commonwealth-work",
     "commonwealth-media",
     "commonwealth-rails",
-    "sovereign-scheduler",
-    "sovereign-serving-host",
-    "serving-policy",
-    "sovereign-inference",
-    "sovereign-compute",
-    # `serve`'s binary (phase-b pb-serve-program): wiring over the serving
-    # crates above. It follows them into `serve` at pb-serve-package.
-    "sovereign-serve",
-    # The NER served kind's loader (phase-b pb-serving-ner); it follows the
-    # serving crates into `serve` at pb-serve-package (phase-b-20).
-    "sovereign-gliner",
     "sovereign-pods",
     # cmnwlth's CLI, lifted out of sovereign-cli-llm 2026-09-21.
     "sovereign-cli-mesh",
+]
+
+[[package]]
+name = "serve"
+doc = "docs/FIVE_PROGRAMS.md"
+# The model server (§2): `/v1/chat/completions`, `/v1/embeddings`,
+# `/v1/rerank`, `/v1/ner`, `/v1/models` and its own OICP manifest. Owns the
+# weights, its placement config and the scheduler's decision log. Split out of
+# [cmnwlth] by pb-serve-package (phase-b-20, phase-b-21): serve owns ranking,
+# distribution and the peer-inference client, and takes no commonwealth crate.
+crates = [
+    # Arithmetic over the published language; the ranker and its decision log.
+    "sovereign-scheduler",
+    # The ports and the knot.
+    "sovereign-serving-host",
+    # The admission decider.
+    "serving-policy",
+    # The provider layer.
+    "sovereign-inference",
+    # One supervised child per slot.
+    "sovereign-compute",
+    # `serve`'s binary (phase-b pb-serve-program): wiring over the crates above.
+    "sovereign-serve",
+    # The NER served kind's loader (phase-b pb-serving-ner).
+    "sovereign-gliner",
 ]
 
 [[package]]
@@ -1472,7 +1477,7 @@ leaf_budget = ["oicp-types", "sovereign-contracts", "kernel-types", "sovereign-t
 # The stock install is ONE process (phase-b-29 Q1): serve's provider built
 # in-process and handed to svrn through the `InferenceProvider` port, serve's
 # router bound on serve's port. Code's face joined at pb-code-daemon-exit,
-# ingest's joins at pb-ingest-dial-tools; serve's face moves to package `serve` at
+# ingest's joins at pb-ingest-dial-tools; serve's face moved to package `serve` at
 # pb-serve-package.
 [[distribution]]
 name = "stock"
@@ -1490,14 +1495,14 @@ package = "svrn"
 krate = "sovereign-cli-llm"
 items = ["bin_main_with"]
 [[distribution.face]]
-package = "cmnwlth"
+package = "serve"
 krate = "sovereign-serve"
 items = ["bundles", "assemble", "rank", "Ranking", "child_launch", "tracing_filter", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner", "rails_mesh::rails_ports", "rails_mesh::join"]
 # Serve's library, for the composition's tests alone (pb-serve-ranks-tests-stock,
 # phase-b-72): the daemon routes serve's router and adapter answer. Empty
 # items keep stock's `src/` from naming any of it.
 [[distribution.face]]
-package = "cmnwlth"
+package = "serve"
 krate = "sovereign-serving-host"
 items = []
 # Code's face (pb-code-daemon-exit; F2 (a), phase-b-30; phase-b-33): the one

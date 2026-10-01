@@ -292,11 +292,9 @@ finally = [
   { do = "remove", paths = ["${RAIL}", "${RAIL}.probe"] },
 ]
 
-# ── serve — the model server (sovereign-serve). Until pb-serve-package declares
-# its own package (phase-b-20), it is judged under cmnwlth's rule, where the
-# serving crates sit today.
+# ── serve — the model server (sovereign-serve), judged under its own package.
 [lift.serve]
-package = "cmnwlth"
+package = "serve"
 seeds = ["sovereign-serve"]
 build = ["-p", "sovereign-serve", "--bin", "sovereign-serve"]
 test = ["-p", "sovereign-serve", "-p", "sovereign-compute", "-p", "sovereign-serving-host"]
