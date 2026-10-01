@@ -55,9 +55,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use host_kit::memory::{
-    derived_soft_limit_mb, parse_limit_mb, soft_limit_mb, total_system_ram_mb, LEGACY_SOFT_MB,
-};
+use host_kit::memory::{parse_limit_mb, soft_limit_mb, total_system_ram_mb, LEGACY_SOFT_MB};
 
 /// Latest sampled RSS in MiB. 0 = not yet sampled.
 static LATEST_RSS_MB: AtomicU64 = AtomicU64::new(0);
@@ -692,7 +690,7 @@ mod tests {
     }
 
     use super::*;
-    use host_kit::memory::SOFT_PCT;
+    use host_kit::memory::{derived_soft_limit_mb, SOFT_PCT};
 
     #[test]
     fn hard_limit_defaults_off_unless_opted_in() {
