@@ -191,6 +191,16 @@ verbs and service install stay `svrn` members until the follow-on queue carves
 their wiring out, so their edges keep counting (phase-b-30). A distribution
 never excuses a program from building and running alone.
 
+A distribution also chooses svrn's posture: which of svrn's own surfaces it
+serves (web reach, the wikipedia bundle, the `/mcp` route), handed down as one
+value through `process::run`. A withheld surface is named, never silent: a
+turn records the bundle as `Withheld`, a route answers a named 503. The
+on-prem distribution withholds all three and composes no code and no recipe
+authoring (phase-b-86, -87). What it withholds is the registration and the
+route, not the type: the tool ids stay linked as routing data in
+`sovereign-contracts`, so a tool's absence is proven by the running registry,
+and a `strings` check proves only literals a non-composed crate alone carries.
+
 **The host kit holds what each program's binary owns about itself:**
 
 - its data-root lock;
