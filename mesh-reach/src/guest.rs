@@ -42,23 +42,9 @@ pub fn relay_pin_active() -> bool {
     }
 }
 
-/// ALPN for GUEST client traffic — someone holding a `sovereign://guest/…`
-/// bearer who is NOT a mesh member.
-///
-/// Distinct from `commonwealth_transport::iroh::CLIENT_ALPN` because the two want opposite trust. A
-/// connection on `CLIENT_ALPN` is forwarded to the daemon's own client
-/// listener, which admits loopback before it reads a bearer — that is
-/// correct for the mesh peers and the paired phone that ride it (peer
-/// federated inference carries no `Authorization` header at all), and it is
-/// exactly wrong for a guest, whose whole credential is the bearer. Routing
-/// guests to the same listener would hand every dial-string holder the full
-/// client API.
-///
-/// So a guest gets its own protocol, forwarded to a SECOND bind of the client
-/// router whose auth layer does not trust loopback
-/// (`sovereign_daemon::client_auth::ClientAuthPolicy`). A guest connection
-/// cannot reach the trusted listener, and a peer's inference is untouched.
-pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
+/// The guest protocol, defined beside its siblings in [`crate::alpn`] and
+/// re-exported at its historical path.
+pub use crate::alpn::GUEST_ALPN;
 
 /// The rustls crypto provider for `EndpointBuilder::crypto_provider`.
 /// iroh's `Builder::empty()` deliberately sets no provider (only

@@ -13,14 +13,8 @@ use sovereign_core::traits::InferenceProvider;
 pub(super) struct ServingBoot {
     pub provider: Arc<dyn InferenceProvider>,
     pub resolved_embed_family: ModelFamily,
-    /// The distribution over the engine a hosted serve loads (compute's
-    /// `distribute`: warm orchestrator, self-manifest refresh, RPC-worker
-    /// discovery), started once the mesh is up; `None` where no engine
-    /// loads here (the dialing path, a terminal).
-    pub distribute: Option<crate::serve_client::StartMesh>,
     pub reload: crate::provider::ReloadSource,
     pub deferred_daemon: Arc<crate::DeferredDaemon>,
-    pub path: crate::serve_client::ServingPath,
     /// This process's NER handle (pb-serve-distributes): serve's `RemoteNer`
     /// on the dialing path, the distribution's in-process kind hosted or on a
     /// terminal, `None` where neither holds a model.
@@ -70,9 +64,9 @@ pub(super) async fn boot_serving(
     if config.node_class() != sovereign_core::setup_config::NodeClass::Terminal {
         return match hosted {
             Some(hosted) if path == crate::serve_client::ServingPath::Hosted => {
-                host_serve(config, &config_path_in_use, hosted, deferred_daemon, path).await
+                host_serve(config, &config_path_in_use, hosted, deferred_daemon).await
             }
-            _ => dial_serve(config, deferred_daemon, path, rank).await,
+            _ => dial_serve(config, deferred_daemon, rank).await,
         };
     }
     if hosted.is_some() {
@@ -162,11 +156,8 @@ pub(super) async fn boot_serving(
     Ok(ServingBoot {
         provider,
         resolved_embed_family: ModelFamily::Unknown,
-        // No engine loads here, so nothing distributes.
-        distribute: None,
         reload: crate::provider::ReloadSource::Terminal,
         deferred_daemon,
-        path,
         ner,
         ranked,
     })
@@ -181,7 +172,6 @@ pub(super) async fn boot_serving(
 async fn dial_serve(
     config: &SetupConfig,
     deferred_daemon: Arc<crate::DeferredDaemon>,
-    path: crate::serve_client::ServingPath,
     rank: Option<crate::serve_client::Rank>,
 ) -> Result<ServingBoot, i32> {
     let serve = crate::serve_client::resolve_serve_base(&config.node);
@@ -260,7 +250,6 @@ async fn dial_serve(
     Ok(ServingBoot {
         provider,
         resolved_embed_family,
-        distribute: None,
         reload: crate::provider::ReloadSource::Serve {
             base: serve,
             config_context,
@@ -268,7 +257,6 @@ async fn dial_serve(
             relay,
         },
         deferred_daemon,
-        path,
         ner,
         ranked,
     })
@@ -277,24 +265,20 @@ async fn dial_serve(
 /// The hosted path (pb-stock-binary, phase-b-29 Q1): the distribution
 /// assembles serve in this process and binds its router on serve's port, and
 /// svrn holds the SAME cell serve's routes answer from, so one engine answers
-/// both ports; the distribution over its engine comes back for svrn to start
-/// with its mesh ports (pb-serve-distributes). Nothing is brought up, no self-report is read, no loopback
-/// provider is built, and the NER handle is the distribution's in-process
-/// kind (`HostedServe::ner`), the one process-global serve's own `/v1/ner`
-/// reads, so a `RemoteNer` here would dial itself.
+/// both ports. serve distributes on its own, over cw-rails
+/// (`rails_mesh::join`, pb-mesh-exit-transport). Nothing is brought up, no
+/// self-report is read, no loopback provider is built, and the NER handle is
+/// the distribution's in-process kind (`HostedServe::ner`), the one
+/// process-global serve's own `/v1/ner` reads, so a `RemoteNer` here would
+/// dial itself.
 async fn host_serve(
     config: &SetupConfig,
     config_path: &std::path::Path,
     mut hosted: crate::serve_client::HostedServe,
     deferred_daemon: Arc<crate::DeferredDaemon>,
-    path: crate::serve_client::ServingPath,
 ) -> Result<ServingBoot, i32> {
     let ner_source = hosted.take_ner();
-    let crate::serve_client::HostedParts {
-        cell,
-        ranked,
-        distribute,
-    } = match hosted
+    let crate::serve_client::HostedParts { cell, ranked } = match hosted
         .compose(
             config.data.dir.clone(),
             config_path.to_path_buf(),
@@ -322,10 +306,8 @@ async fn host_serve(
     Ok(ServingBoot {
         provider,
         resolved_embed_family,
-        distribute: Some(distribute),
         reload: crate::provider::ReloadSource::Hosted { cell },
         deferred_daemon,
-        path,
         ner,
         ranked,
     })

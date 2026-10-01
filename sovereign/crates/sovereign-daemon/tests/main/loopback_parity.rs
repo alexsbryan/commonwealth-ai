@@ -24,9 +24,9 @@
 //! `mesh_router`'s `.layer(from_fn(loopback_only))` deleted:
 //!
 //! ```text
-//! mesh_http_rejects_non_loopback_via_mesh_status      ok
+//! mesh_http_rejects_non_loopback_via_mesh_venues      ok
 //! every_router_fails_closed_when_connect_info_absent  ok
-//! loopback_caller_reaches_mesh_status                 ok
+//! loopback_caller_reaches_mesh_venues                 ok
 //! every_router_refuses_a_request_no_handler_…    FAILED  left: 405  right: 403
 //! ```
 //!

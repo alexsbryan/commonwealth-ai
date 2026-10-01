@@ -60,6 +60,9 @@ use tracing::{debug, error, info, warn};
 mod engine_state;
 mod fetch_model;
 mod fetch_ner;
+/// The live mesh `mesh plan|bench` read: cw-rails' roster beside serve's
+/// engine rows (pb-mesh-exit-transport).
+mod live_mesh;
 /// The measurement codec on cw-rails' `mesh-measurements` journal, and the
 /// reconcile loop that keeps the local file on it (pb-serve-placement).
 pub mod measurements_rail;
@@ -363,6 +366,10 @@ pub struct ServeAssembly {
     pub distribute: sovereign_serving_host::rpc_discovery::Distribute,
     /// The files peers may fetch, where a worker's rpc-warm finds its model.
     pub servable: sovereign_serving_host::state::ServableModelFilesReader,
+    /// cw-rails' API base, the node's mesh endpoint, from the same config
+    /// (`rails_kv::resolve_rails_base`, the one reader): where serve reads the
+    /// roster and registers its origins (`rails_mesh::join`).
+    pub rails_base: String,
 }
 
 /// serve's assembly, from its data root's lock to its last route: the lock,
@@ -411,6 +418,7 @@ pub async fn assemble(
     let files = sovereign_compute::model_transfer::servable_for(config.models.as_ref());
     info!(target: "serve", files = files.len(), "publishing servable model files for peer fetch");
     servable.publish(files);
+    let rails_base = sovereign_turn_client::rails_kv::resolve_rails_base(&config.daemon);
     let parts = match tokio::task::spawn_blocking(move || {
         sovereign_compute::assembly::assemble_serving(&config)
     })
@@ -457,6 +465,7 @@ pub async fn assemble(
             parts.distributed_primary,
         ),
         servable,
+        rails_base,
     })
 }
 

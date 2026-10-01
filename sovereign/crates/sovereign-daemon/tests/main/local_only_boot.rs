@@ -5,77 +5,43 @@
 //!
 //! # Why a boot, not a `cargo tree`
 //!
-//! The bar's instrument counted BLOCKER CLASSES against the daemon's manifest.
-//! Rungs 3a/3b took the direct `commonwealth-*` deps to zero and the claim
-//! ("compiles and boots with zero commonwealth-\* and no iroh") still was not
-//! met: ten commonwealth crates ride `sovereign-mesh` transitively, and the
-//! 2026-09-08 fusion census measured that no seam removes them — 31 of 78
-//! reached items are unmovable, 21 of those are the daemon's own lifecycle,
-//! and the best cut moves 15,634 lines for zero deleted dependencies. K2
-//! fired: the honest deliverable is a RUNTIME profile, so the honest
-//! instrument is a RUNTIME observation.
+//! The profile is a RUNTIME posture (see `sovereign_daemon::local_only`), so
+//! its instrument is a runtime observation: the census of what a booted daemon
+//! actually spawned (`RunningServices`), recorded at the spawn sites.
 //!
-//! # The named failing inputs, watched red (ARCH §18.1, §5)
-//!
-//! Four sabotages were run before this file was committed; each turned
-//! exactly the assertion that names it, and nothing else:
-//!
-//! | reverted | red | message |
-//! |---|---|---|
-//! | the four-loop gate in `start_daemon` | `..._spawns_no_network_service` | spawned `gossip` — census `["gossip", "auto_ingest_collaborate", "ring_sync", "rail_kv_pump"]` |
-//! | `mdns_enabled_effective` stops reading the profile | same | spawned `mdns_advertise` — census `["mdns_advertise", "mdns_browse"]` |
-//! | `iroh_access::resolve_enabled` stops reading the profile | same | spawned `iroh_endpoint` — census `["iroh_endpoint", "iroh_watchdog"]` |
-//! | the local-only/`require_encryption` refusal | `..._refused_by_name` | the boot still fails, but on WS-B's "iroh endpoint failed to bind" — which names neither setting that disagrees |
-//!
-//! The fourth is the sharpest of them and the reason that test asserts on the
-//! message rather than on `is_err()`: without the early refusal the daemon
-//! still stops, so a weaker assertion would stay green while the operator is
-//! told a socket failed to bind when what actually happened is that two
-//! settings contradict each other.
+//! Since pb-mesh-exit-transport the daemon binds no mesh endpoint, advertises
+//! no mDNS and runs no gossip or ring round of its own — those are cw-rails',
+//! and `svrn mesh up` hands this profile to it. What the census covers here is
+//! the daemon's own mesh-facing loops: the peer-assisted ingest handoff, the
+//! rail KV pump, and the origins it registers with cw-rails.
 //!
 //! # The control, and why it is load-bearing
 //!
 //! `the_control_a_networked_daemon_spawns_every_gated_loop` boots the SAME
-//! code with the profile off and asserts all four loops start. Without it the
-//! first test passes vacuously the day someone deletes the spawns outright:
-//! "no network service" is trivially true of a daemon that does nothing.
+//! code with the profile off and asserts the loops start. Without it the first
+//! test passes vacuously the day someone deletes the spawns outright: "no
+//! network service" is trivially true of a daemon that does nothing.
 //!
 //! # What the profile does NOT skip
 //!
-//! The mesh-of-one. `create_mesh` succeeds, the mesh persists with exactly
-//! one member, and `/v1/models` answers — the solo case is the honest N=1,
-//! never an `Option<Mesh>` (see `sovereign_daemon::local_only`). Both are
-//! asserted here, because a profile that made the daemon local-only by making
-//! it useless would satisfy the census and fail the product.
-//!
-//! Hermetic by construction: the local-only config asks for mDNS **on** and
-//! `[iroh] enabled = true`, and the profile must still leave both off — so
-//! this test never binds a multicast socket or contacts a relay, and the
-//! assertion is a real differential rather than a restatement of the config.
+//! The model: `/v1/models` answers. A profile that made the daemon local-only
+//! by making it useless would satisfy the census and fail the product.
 
 use crate::common::mesh_admin_services;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use sovereign_contracts::setup_config::{
-    DaemonSection, DataSection, DiscoverySection, IrohSection, ModelsSection, SetupConfig,
-};
+use sovereign_contracts::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
 use sovereign_daemon::daemon::EmbeddedDaemon;
 use sovereign_daemon::local_only::MeshService;
 
-/// The four loops the profile newly gates, plus the two that already had
-/// runtime off-switches and now read the same decider.
+/// Every loop the profile gates.
 const EVERY_NETWORK_SERVICE: &[MeshService] = MeshService::ALL;
 
 /// A config on ports nothing else in the suite uses, below Linux's ephemeral
 /// range (32768-60999): at 39751 another test's `bind(0)` held the port and
 /// answered `/v1/models` with a 404 (pb-test-load).
-///
-/// `mdns` and `[iroh] enabled` are deliberately set to the values that would
-/// turn each on, so the local-only run proves the PROFILE is what keeps them
-/// off. The control flips them to `false` — it must not open a multicast
-/// socket or a relay connection just to observe four unrelated loops.
 fn cfg(client_port: u16, internal_port: u16, local_only: bool) -> SetupConfig {
     SetupConfig {
         engine: Default::default(),
@@ -104,21 +70,15 @@ fn cfg(client_port: u16, internal_port: u16, local_only: bool) -> SetupConfig {
         data: DataSection::default(),
         watched_folders: Default::default(),
         memory: Default::default(),
-        iroh: IrohSection {
-            enabled: Some(local_only),
-            ..Default::default()
-        },
+        iroh: Default::default(),
         shared_model: Default::default(),
-        discovery: DiscoverySection {
-            mdns: local_only,
-            ..Default::default()
-        },
+        discovery: Default::default(),
         mcp_servers: Vec::new(),
     }
 }
 
-/// THE assertion. A local-only daemon boots, serves, holds a one-member mesh,
-/// and has started nothing that talks to another machine.
+/// THE assertion. A local-only daemon boots, serves, and has started nothing
+/// that talks to another machine.
 #[tokio::test]
 async fn a_local_only_daemon_spawns_no_network_service() {
     // The daemon's store ports dial cw-rails (five-programs fp-88), so the
@@ -157,12 +117,7 @@ async fn a_local_only_daemon_spawns_no_network_service() {
     let dir = tempfile::tempdir().unwrap();
     let daemon = EmbeddedDaemon::new(dir.path().to_path_buf(), config, mesh_admin_services());
 
-    // The mint that `daemon_cmd` performs at boot. Under the profile it must
-    // SUCCEED without mDNS register/browse — the campaign's CLASS 3 blocker.
-    daemon
-        .create_mesh("solo", "node")
-        .await
-        .expect("a local-only daemon boots its solo mesh with no discovery");
+    daemon.start().await.expect("a local-only daemon boots");
 
     let (profile, services) = daemon
         .running_services()
@@ -191,7 +146,7 @@ async fn a_local_only_daemon_spawns_no_network_service() {
     );
 
     // ...and it is still a daemon. The profile skips the NETWORK, not the
-    // model: the client API answers and the mesh-of-one exists.
+    // model: the client API answers.
     let addr = daemon
         .api_address()
         .await
@@ -225,23 +180,13 @@ async fn a_local_only_daemon_spawns_no_network_service() {
         reads.lock().unwrap()
     );
 
-    let state = daemon.app_state().await.expect("running daemon has state");
-    assert_eq!(
-        state.inner.fabric.mesh.read().await.members.len(),
-        1,
-        "the mesh-of-one is still minted — the profile skips the network, not the model"
-    );
-
     daemon.shutdown().await.expect("shutdown");
 }
 
-/// THE CONTROL. The same code with the profile off starts all four gated
-/// loops, so the assertion above cannot pass by the loops having been deleted.
-///
-/// mDNS and iroh are configured OFF here on purpose: their gates are covered
-/// by `iroh_access::resolve_enabled_matrix` and `client_exposure`, and this
-/// test must stay hermetic. What it exists to prove is that the profile — and
-/// nothing else in this config — is what silenced the four.
+/// THE CONTROL. The same code with the profile off starts every gated loop
+/// that needs no corpus engine, so the assertion above cannot pass by the
+/// loops having been deleted. (`WorkOrigin` also needs an engine, which this
+/// mesh-admin daemon has none of.)
 #[tokio::test]
 async fn the_control_a_networked_daemon_spawns_every_gated_loop() {
     let dir = tempfile::tempdir().unwrap();
@@ -250,7 +195,7 @@ async fn the_control_a_networked_daemon_spawns_every_gated_loop() {
         cfg(29851, 29852, false),
         mesh_admin_services(),
     );
-    daemon.create_mesh("solo", "node").await.expect("create");
+    daemon.start().await.expect("start");
 
     let (profile, services) = daemon
         .running_services()
@@ -259,10 +204,10 @@ async fn the_control_a_networked_daemon_spawns_every_gated_loop() {
     assert!(!profile.is_local_only(), "the control must be networked");
 
     for service in [
-        MeshService::Gossip,
         MeshService::AutoIngestCollaborate,
-        MeshService::RingSync,
         MeshService::RailKvPump,
+        MeshService::PeerOrigin,
+        MeshService::GuestOrigin,
     ] {
         assert!(
             services.contains(service),
@@ -271,36 +216,6 @@ async fn the_control_a_networked_daemon_spawns_every_gated_loop() {
             services.names()
         );
     }
-    // The two that were already gated stay off, from their OWN config, which
-    // is what keeps this test hermetic.
-    assert!(!services.contains(MeshService::MdnsAdvertise));
-    assert!(!services.contains(MeshService::IrohEndpoint));
 
     daemon.shutdown().await.expect("shutdown");
-}
-
-/// The one contradiction the profile refuses rather than resolving: an
-/// encrypted mesh must be dialable by key, and local-only binds no endpoint.
-/// Refused loudly at boot (ARCH §18.3) instead of silently downgrading to
-/// plaintext or silently binding the endpoint the profile promised not to.
-#[tokio::test]
-async fn local_only_plus_require_encryption_is_refused_by_name() {
-    let dir = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(
-        dir.path().to_path_buf(),
-        cfg(29951, 29952, true),
-        mesh_admin_services(),
-    );
-    let msg = match daemon.create_mesh_with("encrypted", "node", true).await {
-        Err(e) => e.to_string(),
-        Ok(_) => panic!("local-only + require_encryption must not boot"),
-    };
-    assert!(
-        msg.contains("local-only") && msg.contains("require_encryption"),
-        "the refusal must name BOTH settings that disagree, got: {msg}"
-    );
-    assert!(
-        !daemon.is_running().await,
-        "a refused boot must leave the daemon stopped, not half-started"
-    );
 }

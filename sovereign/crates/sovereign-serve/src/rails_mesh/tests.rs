@@ -143,7 +143,9 @@ fn an_unspecified_listener_is_reached_on_loopback() {
 /// asked for in the label.
 async fn stub_rails() -> String {
     use axum::extract::Query;
-    async fn reach(Query(q): Query<mesh_reach::door::ReachQuery>) -> axum::Json<mesh_reach::door::Reach> {
+    async fn reach(
+        Query(q): Query<mesh_reach::door::ReachQuery>,
+    ) -> axum::Json<mesh_reach::door::Reach> {
         axum::Json(mesh_reach::door::Reach {
             peer: "worker".into(),
             node_id: q.peer,
@@ -178,7 +180,10 @@ async fn rails_venues_are_the_rosters_peers_reached_through_cw_rails() {
     let got = venues.candidates().await;
     assert_eq!(got.len(), 1, "one peer, and never this node: {got:?}");
     assert_eq!(got[0].node_id, NodeId::from_hex(PEER).unwrap());
-    assert_eq!(got[0].base_urls, vec!["http://127.0.0.1:4242/v1".to_string()]);
+    assert_eq!(
+        got[0].base_urls,
+        vec!["http://127.0.0.1:4242/v1".to_string()]
+    );
     assert!(!got[0].pinned_transport);
     assert_eq!(venues.local_node_id().await, NodeId::from_hex(ME));
     assert!(venues.ledger_emitter().await.is_none());

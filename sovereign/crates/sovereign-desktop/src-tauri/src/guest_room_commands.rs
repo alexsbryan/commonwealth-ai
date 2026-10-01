@@ -64,14 +64,14 @@ fn http() -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
-/// This node's own iroh dial string, from the daemon's status — the same field
+/// This node's own iroh dial string, from cw-rails' status — the same field
 /// the CLI reads (`/v1/mesh/status` → `self_reachability.dial`). Best-effort:
 /// iroh off, no reachable address yet, or an unreachable status all mean "no
 /// dial", and the composed link is then the direct (plain-HTTP) form. The
 /// daemon composes; it cannot read its own dial on the grant route, so the
 /// caller that just asked for the status hands it in.
 async fn node_dial(state: &AppState) -> Option<String> {
-    let url = format!("{}/v1/mesh/status", state.client_base_url());
+    let url = format!("{}/v1/mesh/status", state.rails_base_url());
     let resp = http().ok()?.get(&url).send().await.ok()?;
     if !resp.status().is_success() {
         return None;

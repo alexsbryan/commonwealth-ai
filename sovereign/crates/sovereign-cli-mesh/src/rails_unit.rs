@@ -79,7 +79,7 @@ pub fn install_with(
 /// `svrn mesh up`'s last step: install and enable the boot unit for the
 /// cw-rails it just reached, and say what happened. A failure is reported and
 /// does not fail the verb: cw-rails is up, and what the node loses is named.
-pub fn install_after_bring_up(base: &str, local_only: bool) {
+pub fn install_after_bring_up(base: &str, local_only: bool, mdns: bool) {
     if !cfg!(target_os = "linux") {
         tracing::warn!(
             os = std::env::consts::OS,
@@ -95,10 +95,9 @@ pub fn install_after_bring_up(base: &str, local_only: bool) {
     }
     let installed = (|| -> Result<PathBuf, String> {
         let port = crate::rails_up::loopback_port(base)?;
-        let bin = crate::rails_up::locate_rails()
-            .ok_or_else(|| {
-                "no cw-rails binary (CW_RAILS_BIN, beside this program, or PATH)".to_string()
-            })?;
+        let bin = crate::rails_up::locate_rails().ok_or_else(|| {
+            "no cw-rails binary (CW_RAILS_BIN, beside this program, or PATH)".to_string()
+        })?;
         let bin = std::fs::canonicalize(&bin)
             .map_err(|e| format!("cannot resolve {}: {e}", bin.display()))?;
         let path = unit_path()?;
@@ -106,7 +105,7 @@ pub fn install_after_bring_up(base: &str, local_only: bool) {
             &SystemdUser::system(),
             &path,
             &bin,
-            &crate::rails_up::run_args(port, local_only),
+            &crate::rails_up::run_args(port, local_only, mdns),
             &commonwealth_media::rails_data_dir(),
         )?;
         Ok(path)

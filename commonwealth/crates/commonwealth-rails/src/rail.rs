@@ -474,6 +474,43 @@ pub async fn actor(State(daemon): State<Arc<RailsDaemon>>) -> Response {
     Json(serde_json::json!({ "actor": daemon.rail.signer().actor() })).into_response()
 }
 
+/// What `POST /v1/rail/attest` signs: one guest session's name, namespace
+/// and expiry (unix seconds).
+#[derive(Debug, Deserialize)]
+pub struct AttestBody {
+    pub name: String,
+    pub namespace: String,
+    pub expires_at: i64,
+}
+
+/// POST /v1/rail/attest — this node's signed word that `name` may write in
+/// `namespace` until `expires_at`, for a program behind this endpoint that
+/// vouches for its own guests (svrn's guest door, decision five-programs-34).
+/// The node's one key is this daemon's since the flip
+/// (pb-mesh-exit-transport), so the signing is too; the append door verifies
+/// the attestation exactly as it did when svrn signed it. Loopback, like every
+/// door on this API: a local caller that can already append as the node gains
+/// nothing by naming a guest.
+pub async fn attest(
+    State(daemon): State<Arc<RailsDaemon>>,
+    Json(body): Json<AttestBody>,
+) -> Response {
+    let attestation = GuestAttestation::sign(
+        &daemon.node.key,
+        &body.name,
+        &body.namespace,
+        body.expires_at,
+    );
+    tracing::debug!(
+        target: "rails",
+        namespace = %body.namespace,
+        name = %body.name,
+        expires_at = body.expires_at,
+        "rail: attested a guest session for a program behind this endpoint"
+    );
+    Json(attestation).into_response()
+}
+
 /// GET /v1/rail/digest?namespace= — the journal's per-actor high-water marks.
 fn digest_answer(journal: &Arc<RingJournal>) -> Response {
     match journal.digest() {
@@ -758,7 +795,7 @@ impl LiveBuffer {
 
     /// Empty `namespace`'s buffer, returning what was in it and how many
     /// were lost. Every other namespace's buffer is untouched.
-    fn drain(&self, namespace: &str) -> (Vec<String>, usize) {
+    pub(crate) fn drain(&self, namespace: &str) -> (Vec<String>, usize) {
         let mut buffers = self
             .inner
             .lock()

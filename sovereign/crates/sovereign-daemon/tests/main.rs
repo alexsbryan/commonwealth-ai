@@ -26,12 +26,8 @@ mod atlas_surface_e2e;
 mod binary_boot_rails_census;
 #[path = "main/canonical_pull_e2e.rs"]
 mod canonical_pull_e2e;
-#[path = "main/capabilities_published.rs"]
-mod capabilities_published;
 #[path = "main/client_auth.rs"]
 mod client_auth;
-#[path = "main/client_exposure.rs"]
-mod client_exposure;
 #[path = "main/client_tokens_e2e.rs"]
 mod client_tokens_e2e;
 #[path = "main/code_server_via_mcp_client.rs"]
@@ -44,8 +40,6 @@ mod control_plane_not_shed;
 mod conv_surface_e2e;
 #[path = "main/corpus_lifecycle.rs"]
 mod corpus_lifecycle;
-#[path = "main/corpus_sharing_over_iroh_e2e.rs"]
-mod corpus_sharing_over_iroh_e2e;
 #[path = "main/corpus_watch_http_e2e.rs"]
 mod corpus_watch_http_e2e;
 #[path = "main/d6_surface_e2e.rs"]
@@ -78,36 +72,12 @@ mod fold_ingest_abandoned_unit_e2e;
 mod fold_ingest_coverage_refusal_e2e;
 #[path = "main/fold_ingest_cross_node_merge_e2e.rs"]
 mod fold_ingest_cross_node_merge_e2e;
-#[path = "main/gossip_auth.rs"]
-mod gossip_auth;
-#[path = "main/gossip_integration.rs"]
-mod gossip_integration;
-#[path = "main/gossip_offer_clock.rs"]
-mod gossip_offer_clock;
-#[path = "main/gossip_route.rs"]
-mod gossip_route;
-#[path = "main/guest_over_iroh_e2e.rs"]
-mod guest_over_iroh_e2e;
 #[path = "main/ingest_origin_e2e.rs"]
 mod ingest_origin_e2e;
 #[path = "main/injection_order.rs"]
 mod injection_order;
 #[path = "main/internal_gate_e2e.rs"]
 mod internal_gate_e2e;
-#[path = "main/iroh_dialer_admission_e2e.rs"]
-mod iroh_dialer_admission_e2e;
-#[path = "main/iroh_transport_e2e.rs"]
-mod iroh_transport_e2e;
-#[path = "main/iroh_verified_principal_e2e.rs"]
-mod iroh_verified_principal_e2e;
-#[path = "main/join_handshake.rs"]
-mod join_handshake;
-#[path = "main/join_key_persistence.rs"]
-mod join_key_persistence;
-#[path = "main/join_parks_not_leaves.rs"]
-mod join_parks_not_leaves;
-#[path = "main/join_route.rs"]
-mod join_route;
 #[path = "main/knowledge_fanout.rs"]
 mod knowledge_fanout;
 #[path = "main/knowledge_fanout_attribution_e2e.rs"]
@@ -134,8 +104,6 @@ mod loopback_parity;
 mod mcp_one_home;
 #[path = "main/membership_port.rs"]
 mod membership_port;
-#[path = "main/mesh_switch.rs"]
-mod mesh_switch;
 #[path = "main/meshapp_parcels_e2e.rs"]
 mod meshapp_parcels_e2e;
 #[path = "main/meshapp_surface_e2e.rs"]
@@ -146,12 +114,8 @@ mod models_http_e2e;
 mod ner_one_load_census;
 #[path = "main/no_engine_census.rs"]
 mod no_engine_census;
-#[path = "main/node_id_persistence.rs"]
-mod node_id_persistence;
 #[path = "main/openai_wire_fidelity.rs"]
 mod openai_wire_fidelity;
-#[path = "main/plaintext_join_over_iroh_e2e.rs"]
-mod plaintext_join_over_iroh_e2e;
 #[path = "main/port_config.rs"]
 mod port_config;
 #[path = "main/rail_kv_pump_loop_tests.rs"]
@@ -166,18 +130,6 @@ mod recipe_surface_e2e;
 mod research_surface_e2e;
 #[path = "main/responses_adapter_e2e.rs"]
 mod responses_adapter_e2e;
-#[path = "main/ring_append_nudges_sync.rs"]
-mod ring_append_nudges_sync;
-#[path = "main/ring_live_non_durable.rs"]
-mod ring_live_non_durable;
-#[path = "main/ring_return_syncs.rs"]
-mod ring_return_syncs;
-#[path = "main/ring_sync_by_roster.rs"]
-mod ring_sync_by_roster;
-#[path = "main/ring_sync_loop_tests.rs"]
-mod ring_sync_loop_tests;
-#[path = "main/rotate_pre_split_guard.rs"]
-mod rotate_pre_split_guard;
 #[path = "main/serving_ports_census.rs"]
 mod serving_ports_census;
 #[path = "main/storage_budget_route.rs"]
@@ -190,8 +142,6 @@ mod store_seed_double;
 mod svrn_alone_names_ingest_absent_e2e;
 #[path = "main/svrn_memory_without_code_e2e.rs"]
 mod svrn_memory_without_code_e2e;
-#[path = "main/try_resume_first_gossip.rs"]
-mod try_resume_first_gossip;
 #[path = "main/turn_reshape_fidelity.rs"]
 mod turn_reshape_fidelity;
 #[path = "main/turn_surface.rs"]

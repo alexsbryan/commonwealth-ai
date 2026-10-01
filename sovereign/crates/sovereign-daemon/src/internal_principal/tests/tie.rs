@@ -39,7 +39,7 @@ async fn a_forward_carrying_the_live_tie_resolves_to_the_member() {
     let id = NodeId::from_u128(0xBEEF);
     let (state, _tx) = registered(id);
     let mut h = rails_headers(&hex::encode(KEY), TIE);
-    let (p, _) = state.resolve_internal(&mut h, loopback()).await;
+    let p = state.resolve_internal(&mut h, loopback()).await;
     assert_eq!(member_of(&p), Some(id), "got {p:?}");
     assert!(
         h.get(ORIGIN_TIE_HEADER).is_none(),
@@ -54,13 +54,13 @@ async fn a_wrong_or_lapsed_tie_is_not_a_tie() {
     let id = NodeId::from_u128(0xBEEF);
     let (state, tx) = registered(id);
     let mut h = rails_headers(&hex::encode(KEY), "guessed");
-    let (p, _) = state.resolve_internal(&mut h, loopback()).await;
+    let p = state.resolve_internal(&mut h, loopback()).await;
     assert_eq!(p, Principal::Unverified);
     assert!(h.get("x-mesh-pubkey").is_none(), "the claim is stripped");
 
     tx.send_replace(None);
     let mut h = rails_headers(&hex::encode(KEY), TIE);
-    let (p, _) = state.resolve_internal(&mut h, loopback()).await;
+    let p = state.resolve_internal(&mut h, loopback()).await;
     assert_eq!(p, Principal::Unverified, "a lapsed claim ties nothing");
 }
 
@@ -70,7 +70,28 @@ async fn a_wrong_or_lapsed_tie_is_not_a_tie() {
 async fn the_live_tie_from_a_non_loopback_caller_is_not_a_tie() {
     let (state, _tx) = registered(NodeId::from_u128(0xBEEF));
     let mut h = rails_headers(&hex::encode(KEY), TIE);
-    let (p, _) = state.resolve_internal(&mut h, lan()).await;
+    let p = state.resolve_internal(&mut h, lan()).await;
+    assert_eq!(p, Principal::Unverified);
+}
+
+/// A request with no connect info is not loopback (the stricter reading), so
+/// the live tie on it ties nothing. Successor of the pre-flip
+/// `a_missing_connect_info_is_not_loopback`.
+#[tokio::test]
+async fn a_missing_connect_info_is_not_loopback_so_no_tie() {
+    let (state, _tx) = registered(NodeId::from_u128(0xBEEF));
+    let mut h = rails_headers(&hex::encode(KEY), TIE);
+    let p = state.resolve_internal(&mut h, None).await;
+    assert_eq!(p, Principal::Unverified);
+}
+
+/// A tied forward whose key does not parse names nobody. Successor of the
+/// pre-flip `a_malformed_verified_key_resolves_unverified`.
+#[tokio::test]
+async fn a_malformed_tied_key_resolves_unverified() {
+    let (state, _tx) = registered(NodeId::from_u128(0xBEEF));
+    let mut h = rails_headers("not-a-key", TIE);
+    let p = state.resolve_internal(&mut h, loopback()).await;
     assert_eq!(p, Principal::Unverified);
 }
 
@@ -79,7 +100,7 @@ async fn the_live_tie_from_a_non_loopback_caller_is_not_a_tie() {
 async fn an_unregistered_daemon_believes_no_tie() {
     let state = state_with_member(NodeId::from_u128(0xBEEF));
     let mut h = rails_headers(&hex::encode(KEY), TIE);
-    let (p, _) = state.resolve_internal(&mut h, loopback()).await;
+    let p = state.resolve_internal(&mut h, loopback()).await;
     assert_eq!(p, Principal::Unverified);
 }
 
@@ -91,6 +112,6 @@ async fn an_unregistered_daemon_believes_no_tie() {
 async fn a_tied_key_the_roster_does_not_name_is_unverified() {
     let (state, _tx) = registered(NodeId::from_u128(0xBEEF));
     let mut h = rails_headers(&hex::encode([9u8; 32]), TIE);
-    let (p, _) = state.resolve_internal(&mut h, loopback()).await;
+    let p = state.resolve_internal(&mut h, loopback()).await;
     assert_eq!(p, Principal::Unverified);
 }

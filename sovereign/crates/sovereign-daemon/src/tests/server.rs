@@ -403,18 +403,17 @@ async fn warmup_route_is_on_the_client_port_not_the_peer_port() {
     );
 }
 
-/// The other half of that sentence, and the one that was false until
-/// 2026-08-28. Keeping warmup off `:9742` was never enough: a MEMBER
-/// dialling `CLIENT_ALPN` is forwarded to a bind of THIS router, and
-/// arrives wearing the acceptor's loopback address, so `client_auth`
-/// admits it before reading anything. The peer bind serves a router
-/// where the route does not exist.
+/// The other half of that sentence: a bind cw-rails forwards to over
+/// loopback (the guest listener, where a non-member dialling `CLIENT_ALPN`
+/// lands too since pb-mesh-exit-transport) serves a router where the
+/// operator-only routes do not exist. svrn binds no member listener; a
+/// member reaches serve's member client.
 ///
 /// Each surface is driven with a credential it ACCEPTS, so the only
 /// thing left to observe is whether the route is mounted. Asserting
 /// 404 through a refusal would prove nothing — a 401 also is not 200.
 #[tokio::test]
-async fn the_peer_and_guest_surfaces_do_not_serve_the_operator_only_routes() {
+async fn the_guest_and_rail_surfaces_do_not_serve_the_operator_only_routes() {
     const OPERATOR_ONLY: &[&str] = &[
         "/internal/inference/warmup",
         "/internal/guest/grant",
@@ -422,25 +421,6 @@ async fn the_peer_and_guest_surfaces_do_not_serve_the_operator_only_routes() {
         "/internal/guest/route",
     ];
     const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
-
-    // `Peer` trusts a loopback caller — a member's key was already proved
-    // at the QUIC handshake — so the injected ConnectInfo admits us.
-    for path in OPERATOR_ONLY {
-        let response = mock_router_for(test_app_state(), ClientSurface::Peer)
-            .oneshot(
-                Request::post(*path)
-                    .header("content-type", "application/json")
-                    .body(Body::from("{}"))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            response.status(),
-            StatusCode::NOT_FOUND,
-            "peer surface must not serve {path}"
-        );
-    }
 
     // `Guest` and `Rail` do not trust loopback, so they need the daemon
     // token to get past auth. Once past it, the same routes are simply

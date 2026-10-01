@@ -21,7 +21,6 @@
 use std::sync::OnceLock;
 
 use kernel_types::NodePubkey;
-use sovereign_mesh::fabric::ForgottenMember;
 use sovereign_mesh::rail_port::{RailFut, RingRailPort};
 
 /// The typed ledger ports' dialing implementation (fp-78).
@@ -178,55 +177,35 @@ pub async fn post_work_yield(base: &str, until_ms: u64) -> Result<(), RailsDial>
     Ok(())
 }
 
-/// Retire one member row, on the process that owns the roster.
-pub async fn forget_member(
+/// Drain the live lane's payloads peers pushed to `namespace` since the last
+/// drain: cw-rails holds the buffer (its `/internal/ring/live` receives every
+/// peer's push), so the drain is its `GET /v1/rail/live`, body verbatim
+/// (`{payloads, dropped}`).
+pub async fn live_drain(base: &str, namespace: &str) -> Result<serde_json::Value, RailsDial> {
+    get_answer(
+        base,
+        &format!("/v1/rail/live?namespace={namespace}"),
+        "rail live drain",
+    )
+    .await
+}
+
+/// The node's signed word that `name` may write in `namespace` until
+/// `expires_at` (unix seconds): cw-rails signs it with the node's one key
+/// (`POST /v1/rail/attest`, pb-mesh-exit-transport), and its append door
+/// honours it as it honoured the daemon's own (decision five-programs-34).
+pub async fn attest_guest(
     base: &str,
-    member: &str,
-    force: bool,
-) -> Result<ForgottenMember, RailsDial> {
-    let url = format!("{}{}", base.trim_end_matches('/'), "/v1/mesh/forget-member");
-    let resp = client()
-        .post(&url)
-        .json(&serde_json::json!({ "member": member, "force": force }))
-        .send()
-        .await
-        .map_err(|e| RailsDial::Absent {
-            base: base.to_string(),
-            detail: e.to_string(),
-        })?;
-    let status = resp.status();
-    if !status.is_success() {
-        #[derive(serde::Deserialize)]
-        struct Refusal {
-            #[serde(default)]
-            error: String,
-            #[serde(default)]
-            kind: Option<String>,
-        }
-        let body: Refusal = resp.json().await.unwrap_or(Refusal {
-            error: String::new(),
-            kind: None,
-        });
-        return Err(RailsDial::Refused {
-            status,
-            kind: body.kind,
-            message: if body.error.is_empty() {
-                format!("forget-member refused: {status}")
-            } else {
-                body.error
-            },
-        });
-    }
-    serde_json::from_str::<ForgottenMember>(&resp.text().await.map_err(|e| {
-        RailsDial::Unreadable {
-            base: base.to_string(),
-            detail: e.to_string(),
-        }
-    })?)
-    .map_err(|e| RailsDial::Unreadable {
-        base: base.to_string(),
-        detail: e.to_string(),
-    })
+    name: &str,
+    namespace: &str,
+    expires_at: i64,
+) -> Result<commonwealth_rail_core::GuestAttestation, RailsDial> {
+    post_answer(
+        base,
+        "/v1/rail/attest",
+        &serde_json::json!({ "name": name, "namespace": namespace, "expires_at": expires_at }),
+    )
+    .await
 }
 
 // ── The ring rail's dialing implementation ───────────────────

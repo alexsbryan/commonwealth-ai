@@ -34,11 +34,11 @@ use corpus_index::types::EmbedFn;
 use kernel_types::NodeId;
 use oicp_types::contributions::LedgerEventKind;
 use sovereign_daemon::server::internal_router;
-use sovereign_daemon::state::{fabric, node, serving, AppState};
+use sovereign_daemon::state::{node, serving, AppState};
 
 use crate::common;
 use crate::common::ledger_double::RecordingLedger;
-use crate::common::{id_to_hex, solo_mesh, spawn_router};
+use crate::common::{id_to_hex, spawn_router, StaticRoster};
 
 const EMBED_DIM: usize = 8;
 const N_REQUESTERS: u64 = 50;
@@ -47,23 +47,30 @@ fn mock_embed_fn() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; EMBED_DIM]) }))
 }
 
-/// An AppState whose every store port is `double`.
+/// An AppState whose every store port is `double`, over a roster the test
+/// writes, holding cw-rails' registration tie (`common::TIE`).
 fn state_over(
     double: &Arc<RecordingLedger>,
     self_id: NodeId,
     mesh_name: &str,
     engine: Arc<IngestPortDouble>,
-) -> AppState {
-    AppState::new_with_seeds(
+) -> (
+    AppState,
+    Arc<StaticRoster>,
+    tokio::sync::watch::Sender<Option<String>>,
+) {
+    let (roster, fabric) = common::roster_seed(self_id, mesh_name);
+    let state = AppState::new_with_seeds(
         self_id,
-        solo_mesh(self_id, mesh_name),
         Some(engine),
         None,
-        fabric::FabricSeed::default(),
+        fabric,
         serving::ServingSeed::default(),
         node::NodeSeed::default(),
         double.seed(),
-    )
+    );
+    let tie = common::tie_as_cw_rails(&state, common::TIE);
+    (state, roster, tie)
 }
 
 /// The recorded `contributions.record` arguments, in call order.
@@ -139,7 +146,7 @@ async fn concurrent_serves_stamp_origin_as_self_for_every_event() {
     let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
 
     let double = Arc::new(RecordingLedger::new(self_id));
-    let state = state_over(&double, self_id, "origin-test", engine);
+    let (state, roster, _tie) = state_over(&double, self_id, "origin-test", engine);
     let addr = spawn_router(internal_router(state.clone())).await;
 
     // Generate N distinct requester NodeIds. Using a deterministic
@@ -154,7 +161,7 @@ async fn concurrent_serves_stamp_origin_as_self_for_every_event() {
     // and the caller is attributed to nobody, so a test that wants N distinct
     // `for_node` values has to present N distinct VERIFIED keys.
     for (i, requester) in requesters.iter().enumerate() {
-        common::name_member_with_key(&state, *requester, "requester", requester_key(i)).await;
+        common::name_member_with_key(&roster, *requester, "requester", requester_key(i));
     }
 
     // Fire N concurrent requests. `tokio::join!` won't scale to 50;
@@ -168,7 +175,7 @@ async fn concurrent_serves_stamp_origin_as_self_for_every_event() {
         let requester = *requester;
         let key = requester_key(i);
         handles.push(tokio::spawn(async move {
-            common::acceptor_stamp(client.post(&url), "requester", requester, key)
+            common::cw_rails_stamp(client.post(&url), "requester", requester, key)
                 .json(&serde_json::json!({
                     "query_embedding": vec![0.0_f32; EMBED_DIM],
                     "query_text": "content",
@@ -261,14 +268,14 @@ async fn origin_unaffected_by_a_requester_claiming_to_be_us() {
     let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
 
     let double = Arc::new(RecordingLedger::new(self_id));
-    let state = state_over(&double, self_id, "origin-swap-test", engine);
+    let (state, roster, _tie) = state_over(&double, self_id, "origin-swap-test", engine);
     let addr = spawn_router(internal_router(state.clone())).await;
 
     // The requester is a verified member whose node id IS our own self_id.
     // The route treats it as "a peer that is us" — no check that it differs —
     // so the emission still fires, and origin stays self.
-    common::name_member_with_key(&state, self_id, "self", SELF_KEY).await;
-    let resp = common::acceptor_stamp(
+    common::name_member_with_key(&roster, self_id, "self", SELF_KEY);
+    let resp = common::cw_rails_stamp(
         reqwest::Client::new().post(format!("http://{addr}/internal/knowledge/search")),
         "self",
         self_id,

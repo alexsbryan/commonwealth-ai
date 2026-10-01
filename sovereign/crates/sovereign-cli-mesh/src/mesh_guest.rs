@@ -185,14 +185,14 @@ enum GuestPath {
 /// This node's own iroh dial string, or `None` when the endpoint is off or has
 /// no reachable address yet.
 ///
-/// Read from the daemon's `/v1/mesh/status`, not assembled here: the daemon
-/// holds the live endpoint and already publishes exactly this string for
-/// invites. A second assembler would be a second answer to "how is this node
-/// dialled" (§10.6), and it would be the stale one.
-async fn node_dial_string(port: u16) -> Option<String> {
+/// Read from cw-rails' `/v1/mesh/status`, not assembled here: cw-rails holds
+/// the live endpoint (pb-mesh-exit-transport) and already publishes exactly
+/// this string for invites. A second assembler would be a second answer to
+/// "how is this node dialled" (§10.6), and it would be the stale one.
+async fn node_dial_string() -> Option<String> {
     let client = http_client(5).ok()?;
     let resp = client
-        .get(format!("http://127.0.0.1:{port}/v1/mesh/status"))
+        .get(format!("{}/v1/mesh/status", crate::mesh_cmd::rails_base()))
         .send()
         .await
         .ok()?;
@@ -200,11 +200,16 @@ async fn node_dial_string(port: u16) -> Option<String> {
         return None;
     }
     let body: serde_json::Value = resp.json().await.ok()?;
-    body.get("self_reachability")?
+    // cw-rails names it `self.dial`; the daemon's status carried it under
+    // `self_reachability` until the flip.
+    let dial = body
+        .get("self")?
         .get("dial")?
         .as_str()
         .map(str::to_string)
-        .filter(|d| !d.is_empty())
+        .filter(|d| !d.is_empty());
+    tracing::debug!(found = dial.is_some(), "mesh grant: cw-rails' dial string");
+    dial
 }
 
 /// Decide the path this link will name — by asking, never by inferring.
@@ -249,7 +254,7 @@ async fn resolve_guest_path(url_override: Option<&str>, port: u16) -> Result<Gue
         ));
     }
 
-    if let Some(dial) = node_dial_string(port).await {
+    if let Some(dial) = node_dial_string().await {
         // No probe here, and deliberately: dialing our own endpoint from this
         // process would prove nothing about a guest's ability to reach it, and
         // a self-dial that succeeded on loopback would be the instrument
@@ -658,7 +663,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         .is_some_and(|base| base.contains(PAGE_PREFIX));
     let dial_for_link: Option<String> = match (&dial, wall || runtime_origin) {
         (Some(d), _) => Some(d.clone()),
-        (None, true) => node_dial_string(port).await,
+        (None, true) => node_dial_string().await,
         (None, false) => None,
     };
     let https = url_override.as_deref().map(|base| {

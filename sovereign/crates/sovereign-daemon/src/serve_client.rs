@@ -165,21 +165,14 @@ pub fn relayed(
 }
 
 /// What hosting serve in this process hands svrn: the cell every route
-/// answers from, serve's router ranked over it (pb-serve-ranks), and the
-/// distribution over serve's engine and slot (the warm orchestrator, the
-/// self-manifest refresh, RPC-worker discovery), which svrn starts once its
-/// mesh is up (pb-serve-distributes).
+/// answers from, and serve's router ranked over it (pb-serve-ranks). serve's
+/// distribution is its own, over cw-rails' roster and reach
+/// (`sovereign_serve::rails_mesh::join`, pb-mesh-exit-transport): svrn starts
+/// none of it.
 pub struct HostedParts {
     pub cell: HostedCell,
     pub ranked: Ranked,
-    pub distribute: StartMesh,
 }
-
-/// How the distribution starts serve's distribution over this daemon's mesh:
-/// the composition root builds the mesh ports from the daemon it is handed
-/// (pb-serve-ranks-discovery) and closes over serve's router
-/// (pb-serve-ranks), so svrn names neither. svrn calls it once.
-pub type StartMesh = Box<dyn FnOnce(std::sync::Arc<crate::EmbeddedDaemon>) + Send>;
 
 type Compose = Box<
     dyn FnOnce(
@@ -201,8 +194,6 @@ pub struct HostedServe {
     compose: Compose,
     env_contract: Option<EnvContract>,
     ner: Option<NerSource>,
-    rpc_warmer: Option<std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer>>,
-    rpc_workers: Option<crate::mesh_http::RpcWorkerRows>,
     rank: Option<Rank>,
 }
 
@@ -238,8 +229,6 @@ impl HostedServe {
             }),
             env_contract: None,
             ner: None,
-            rpc_warmer: None,
-            rpc_workers: None,
             rank: None,
         }
     }
@@ -264,39 +253,6 @@ impl HostedServe {
     /// uses it.
     pub fn take_rank(&mut self) -> Option<Rank> {
         self.rank.take()
-    }
-
-    /// The RPC-worker rows svrn's `/v1/mesh/status` reports: serve's
-    /// eligibility view in this process (pb-serve-ranks-discovery).
-    pub fn rpc_workers<F>(mut self, rows: F) -> Self
-    where
-        F: Fn() -> Vec<serde_json::Value> + Send + Sync + 'static,
-    {
-        self.rpc_workers = Some(std::sync::Arc::new(rows));
-        self
-    }
-
-    /// The RPC-worker rows this distribution handed, if any.
-    pub fn rpc_worker_rows(&self) -> Option<crate::mesh_http::RpcWorkerRows> {
-        self.rpc_workers.clone()
-    }
-
-    /// The loader's worker-side warmer, which svrn's `/internal/rpc-warm`
-    /// hands each warm request (with the reach it resolves from its mesh)
-    /// until the flip gives the route to serve.
-    pub fn rpc_warmer(
-        mut self,
-        warmer: std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer>,
-    ) -> Self {
-        self.rpc_warmer = Some(warmer);
-        self
-    }
-
-    /// The warmer this distribution handed, if any.
-    pub fn warmer(
-        &self,
-    ) -> Option<std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer>> {
-        self.rpc_warmer.clone()
     }
 
     /// The distribution's in-process NER kind, which svrn's boot takes its
@@ -426,57 +382,6 @@ pub fn resolve_serve_base(node: &NodeSection) -> ServeBase {
     };
     tracing::debug!(serve_base = %resolved.base, source = ?resolved.source, "serve base resolved");
     resolved
-}
-
-/// What reading serve's engine state found. The absences stay apart
-/// (principle 6): "not observed yet" is an [`EngineStateRead::Answered`]
-/// whose `device_memory` is `None`, and it is never the same answer as a
-/// serve that is not there or one that did not answer in time.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EngineStateRead {
-    /// serve answered its cached view.
-    Answered(sovereign_contracts::engine_state::EngineState),
-    /// Nothing answered at the base, or what answered refused or was unreadable.
-    Unreachable(String),
-    /// serve did not answer within the bound.
-    DidNotAnswerInTime,
-}
-
-/// Read serve's engine state, bounded by the bound every serving-host probe
-/// already uses (`sovereign_turn_client::reach::PROBE_TIMEOUT`, 2 s). A
-/// status endpoint must not block on another process, and a cached view on
-/// serve's side does not bound the dial to it (the rule `/v1/mesh/status`
-/// minted on 2026-07-30).
-pub async fn read_engine_state(base: &str) -> EngineStateRead {
-    let bound = sovereign_turn_client::reach::PROBE_TIMEOUT;
-    let url = format!(
-        "{}{}",
-        base.trim_end_matches('/'),
-        sovereign_contracts::engine_state::ENGINE_STATE_PATH
-    );
-    let read = async {
-        let resp = reqwest::Client::new()
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("serve at {base} is not reachable: {e}"))?;
-        if !resp.status().is_success() {
-            return Err(format!(
-                "serve at {base} refused its engine state: HTTP {}",
-                resp.status()
-            ));
-        }
-        resp.json::<sovereign_contracts::engine_state::EngineState>()
-            .await
-            .map_err(|e| format!("serve at {base} answered an unreadable engine state: {e}"))
-    };
-    let outcome = match tokio::time::timeout(bound, read).await {
-        Ok(Ok(state)) => EngineStateRead::Answered(state),
-        Ok(Err(why)) => EngineStateRead::Unreachable(why),
-        Err(_) => EngineStateRead::DidNotAnswerInTime,
-    };
-    tracing::debug!(serve_base = base, bound_ms = bound.as_millis() as u64, outcome = ?outcome, "engine state read from serve");
-    outcome
 }
 
 /// How long boot waits for serve to answer. The daemon used to load its

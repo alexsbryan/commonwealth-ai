@@ -21,7 +21,7 @@
 //!
 //! Approach: install two real `CorpusIndex` instances on disk (one
 //! mesh-shared, one local), point an `EmbeddedDaemon` at them, run
-//! `create_mesh` (which spawns the snapshot loop), wait ~100 ms for
+//! `start` (which spawns the snapshot loop), wait ~100 ms for
 //! the first immediate tick, then read the contribution emitter
 //! and assert the recorded `StorageSnapshot` contains only the
 //! mesh-shared corpus.
@@ -130,16 +130,20 @@ async fn first_tick_emits_only_mesh_shared_corpora_to_ledger() {
         ),
     );
     daemon
-        .create_mesh("storage-snapshot test", "node")
+        .start()
         .await
-        .expect("create_mesh succeeds with engine attached");
+        .expect("start succeeds with engine attached");
 
     // Run-time wait: the snapshot loop's first tick fires
-    // immediately (per `run_storage_snapshot_loop`'s contract); the
-    // tokio::spawn'd record + serialize + store-port set round-trip
-    // completes in single-digit ms on an in-memory store. 200 ms
-    // is comfortable headroom for a loaded CI box.
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    // immediately (per `run_storage_snapshot_loop`'s contract), but the
+    // boot shares this test's one runtime thread with the peer origin's
+    // first registration, whose capability claims probe the hardware for
+    // ~250 ms (pb-mesh-exit-transport). Wait for the write, bounded; the
+    // next tick is an hour away, so "exactly one" below still holds.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while double.recorded_contributions().is_empty() && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 
     let events = double.recorded_contributions();
 
@@ -205,10 +209,7 @@ async fn snapshot_emits_nothing_when_no_corpus_engine_attached() {
     config.daemon.rails_base = Some(format!("http://{door}"));
     let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), config, mesh_admin_services());
     // Intentionally NO `set_corpus_engine` call.
-    daemon
-        .create_mesh("no-engine test", "node")
-        .await
-        .expect("create_mesh works without an engine");
+    daemon.start().await.expect("start works without an engine");
 
     tokio::time::sleep(Duration::from_millis(200)).await;
 

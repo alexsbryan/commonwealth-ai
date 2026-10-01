@@ -849,66 +849,63 @@ open, and keeps the plan healthy as nodes come and go.
 
 ### Discovery and membership
 
-Every node persists an Ed25519 keypair; identity is mesh-independent and
-survives `leave` and every switch. mDNS advertises `_commonwealth._tcp.local`;
-gossip is a 10s epidemic loop over 2–3 random peers with timestamp-LWW
-conflict resolution; latency probing is UDP RTT every 30s.
+Since pb-mesh-exit-transport the node's one mesh endpoint is `cw-rails`: it
+holds the node's one Ed25519 key, the roster, gossip, joins, the known-mesh
+list and the ring round, and svrn neither accepts nor dials a peer itself
+(svrn reads the roster and reaches peers through the ports a distribution
+composes from cw-rails, `hosted_mesh`). Identity is mesh-independent and
+survives `leave` and every switch. mDNS advertises `_commonwealth._tcp.local`
+when `svrn mesh up` starts cw-rails with `--mdns`; gossip is a 10s round over
+3 peers (`select_peers`: active keyed members, Online first, rotated by round)
+with timestamp-LWW conflict resolution, and offline-decay reads this node's
+contact clock, never a peer's `last_seen`.
 
 `Mesh` carries **two** credentials and the split is load-bearing:
 `mesh_secret` authorizes gossip and never rotates; `invite_key_hash` admits
 joiners and rotates freely. A gossip round carries a keyed-BLAKE3 `mesh_proof`
 bound to the sender and a 30s window rather than the raw secret; an OFFERED
 proof that fails is a hard refusal, never a fall-through. Rotation is refused
-while the fleet is mixed, and the confirmation is local observation (the
-`GossipAuthArm` that won), never a peer's claim.
+while an Online peer is pre-split or unconfirmed (`?force` overrides), and the
+confirmation is local observation (each merge's `peer_pre_split`), never a
+peer's claim. `aliased_endpoint_keys` is the one implementation of "one
+endpoint key, one member row"; `merge_from_authenticated` refuses to ADMIT a
+collision, and `/v1/mesh/forget-member` retires one.
 
-**One endpoint key, one member row.** `aliased_endpoint_keys` is the one
-implementation; `merge_from_authenticated` refuses to ADMIT a collision while
-`gossip::one_row_per_endpoint_key` RESOLVES one at the dial site, because
-refusing there strands the machine. Selection fairness is a separate clock
-from liveness: offline-decay reads contact, `select_round_peers` reads
-`peer_last_attempt`, stamped before the dial so refusals and timeouts advance
-it too.
-
-**Encryption, and the honest gap.** A plaintext mesh is the default. A mesh
-created with `require_encryption` flips every node to the iroh dial-by-key
-transport in REQUIRE mode with no plaintext fallback, binds its listeners
-loopback-only, and admits joiners only over an encrypted founder-key-dialed
-channel. **NOT covered: the multi-host tensor-split RPC between
-`llama-server` and `rpc-server` is raw TCP, outside the transport seam, and is
-the sole residual plaintext on an encrypted mesh. Never claim blanket
-end-to-end encryption.** Surface-by-surface posture
+**Encryption.** Every mesh is encrypted: cw-rails founds no other kind, and
+every class rides iroh QUIC dialled by key, admitted against the roster. The
+daemon's internal API binds loopback only. The hops between a program and
+cw-rails, and between `llama-server` and its local bridge, are loopback
+plaintext on the host. Surface-by-surface posture
 [`../docs/THREAT_MODEL.md`](../docs/THREAT_MODEL.md).
 
 ### The PeerTransport seam
 
-`commonwealth-transport` resolves (peer, traffic class) → ordered base URLs in
-exactly one place. `IpTransport` is today's tailnet/LAN overlay;
-`IrohTransport` is dial-by-Ed25519-pubkey QUIC bridged to HTTP through
-localhost byte-tunnels; `RoutedTransport` composes them, concatenating
-candidates ahead of a default so a failed iroh dial degrades to the tailnet
-path on the same request. With iroh enabled every class is iroh-first with
-per-dial IP fallback, and `[iroh] enabled` absent means AUTO (on iff this node
-is in a mesh). Out of seam by design: the join handshake, worker-pod
-transport, loopback self-probes, and the raw-TCP tensor traffic above.
+`mesh-reach` names (peer, traffic class) → ordered base URLs in one trait.
+svrn and serve dial through `RailsTransport`, which asks cw-rails' reach door;
+cw-rails resolves through `commonwealth-transport`'s `IrohTransport`
+(dial-by-Ed25519-pubkey QUIC bridged to HTTP through localhost byte-tunnels).
+The plaintext IP overlay is gone with the plaintext mesh (phase-b-36). Out of
+seam by design: the join handshake, worker-pod transport and loopback
+self-probes.
 
-Six ALPNs carry the encrypted mesh, and what a STRANGER gets differs per
-ALPN — **holding the dial string is not a credential**, so the acceptor routes
-on `(ALPN, dialer)` and the key the QUIC handshake proved is the discriminator:
+Seven ALPNs carry the mesh, and what a STRANGER gets differs per ALPN —
+**holding the dial string is not a credential**, so cw-rails' acceptor routes
+on `(ALPN, dialer)` through its origin registry (each program registers its
+own loopback origin; the key the QUIC handshake proved is the discriminator):
 
 | ALPN | member | stranger |
 |---|---|---|
-| `cwth/client/0` | the PEER listener (no bearer — federated inference carries none, its key is the credential), serving the client router minus `/internal/*` | the bearer-checking listener |
-| `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing |
-| `cwth/media/0` | the declared `[iroh] media_origin` | REFUSED |
-| `cwth/app/0` | one of several named HTTP apps, chosen by first path segment | REFUSED |
-| `cwth/offer/0` | the declared `[iroh] offer_origin` | REFUSED — the dial string is gossiped, so a downgrade would publish a household's inventory |
-| `cwth/guest/0` | — | admitted; the listener reads the bearer |
-| `cwth/http/0` | internal router | internal router, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one |
+| `cwth/client/0` | serve's client origin (no bearer — federated inference carries none, its key is the credential) | svrn's guest listener (`Admit::MembersElse(cwth/guest/0)`) |
+| `cwth/rpc/0` | serve's ggml rpc worker | REFUSED — it authenticates nothing |
+| `cwth/media/0` | the `[media] origin` in cw-rails' rails.toml, for members inside `[media] allow` | REFUSED |
+| `cwth/app/0` | one of several named HTTP apps, chosen by first path segment; each app claim carries its publisher's allow list (svrn's `[iroh] app_allow`) | REFUSED |
+| `cwth/offer/0` | svrn's `[iroh] offer_origin`, for members inside `[iroh] offer_allow` | REFUSED — the dial string is gossiped, so a downgrade would publish a household's inventory |
+| `cwth/guest/0` | — | svrn's guest listener; it reads the bearer |
+| `cwth/http/0` | by registered prefix: gossip and join (any dialer), `/internal/ring` (members), each program's peer prefixes | gossip and join, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one; any other prefix refused by name |
 
 Federated media and named apps ride that surface: the holder declares an
-origin, the viewer asks its own daemon for a loopback bridge URL, and the
-acceptor tells the origin WHO is asking by rewriting request heads
+origin, the viewer asks cw-rails for a loopback bridge URL, and the acceptor
+tells the origin WHO is asking by rewriting request heads
 (`X-Mesh-Member`/`-Node`/`-Pubkey`, every client-supplied `x-mesh-*` header
 dropped first). Responses are a byte copy, which is why `Range` stays
 byte-exact. `svrn mesh offers` enumerates the roster, so a neighbour

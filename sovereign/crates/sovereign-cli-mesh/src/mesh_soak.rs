@@ -2,24 +2,23 @@
 //! Mesh soak invariant checker — the assertion engine behind
 //! `svrn mesh check-invariants` and `scripts/mesh-soak.sh`.
 //!
-//! It polls each node's `GET /v1/mesh/status` and evaluates the mesh-level
-//! invariants a multi-process soak must hold — the HTTP-observable subset of
-//! the in-process DST invariant pack (`sovereign_mesh::dst`): **convergence**
+//! It polls each node's cw-rails `GET /v1/mesh/status` (the mesh endpoint
+//! since pb-mesh-exit-transport; svrn's copy answers 410) and evaluates the
+//! mesh-level invariants a multi-process soak must hold: **convergence**
 //! (all reachable nodes agree on the member set), **no-ghost** (no node shows
 //! a deliberately-downed peer as live), and **liveness** (every reachable node
 //! is seen as live by every other reachable node).
 //!
 //! The pure evaluation here is unit-tested over mock snapshots; the HTTP
 //! polling lives in `mesh_cmd::cmd_check_invariants`. Admission-safety and
-//! bounded-fan-out are not HTTP-observable from `/v1/mesh/status` and stay with
-//! the DST suite / glassbox endpoints.
+//! bounded-fan-out are not HTTP-observable from `/v1/mesh/status`.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 
-/// Minimal projection of `GET /v1/mesh/status`
-/// (the daemon route's `StatusResponse`; the client-parseable subset is
+/// Minimal projection of cw-rails' `GET /v1/mesh/status` (the
+/// client-parseable subset is
 /// `sovereign_contracts::daemon_wire::MeshStatusSummary`). We deserialize only the
 /// fields the invariants need, so the checker is decoupled from the full DTO
 /// and tolerant of additions.

@@ -335,7 +335,7 @@ build = ["-p", "sovereign-serve", "--bin", "sovereign-serve", "-p", "commonwealt
 binary = "debug/sovereign-serve"
 
 [lift.serve-mesh.run]
-pass = "B's serve found A's worker through cw-rails ('${A_RPC_SEEN}' on B's roster), loaded ${MODEL} split across both and answered '${CHAT}'; A's rpc-warm answered ${WARMS} time(s) before B's load; after B's serve restarted, the distributed primary respawned and answered '${CHAT2}'"
+pass = "B's serve found A's worker through cw-rails ('${A_RPC_SEEN}' on B's roster), loaded ${MODEL} split across both over cw-rails' rpc_tensor bridge (via=iroh-bridge) and answered '${CHAT}'; A's rpc-warm answered ${WARMS} time(s) before B's load; after B's serve restarted, the distributed primary respawned and answered '${CHAT2}'"
 steps = [
   { do = "input", var = "MODEL", env = "SERVE_MESH_MODEL", default = "${TARGET}/../sovereign/models/Qwen3.5-4B.Q6_K.gguf" },
   { do = "input", var = "FAST", env = "SERVE_MESH_FAST", default = "${TARGET}/../sovereign/models/Qwen3.5-0.8B-UD-Q6_K_XL.gguf" },
@@ -374,6 +374,11 @@ steps = [
   # distributed child serves it.
   { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "primary", max_tokens = 16, messages = [{ role = "user", content = "Say hello." }] }, path = "choices.message.content", var = "CHAT", retry = "${CHAT_WAIT}", timeout = 120, alive = "serve-b", fail = "B's distributed primary never answered a chat within ${CHAT_WAIT}s: ${BODY} (see ${SANDBOX}/serve-b.log, serve-a.log)" },
   { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "discovered mesh RPC worker", var = "DISCOVERED", min = 1, fail = "B answered without discovering A's worker (see ${SANDBOX}/serve-b.log)" },
+  # The path that carried the tensors (pb-mesh-exit-transport's IP-overlay
+  # bullet): the `rpc_tensor` class through cw-rails' bridge, not a direct
+  # probe of A's worker port. The log colours the field name, so the pattern
+  # matches the `via` value alone.
+  { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "discovered mesh RPC worker.*iroh-bridge", var = "BRIDGED", min = 1, fail = "B's worker discovery named no via=iroh-bridge path: the split did not ride cw-rails' rpc_tensor bridge (see ${SANDBOX}/serve-b.log)" },
   # A's side, which B cannot author: A's rpc-warm answered for this model
   # before B's load (the orchestrator holds the load until every worker is
   # warm).
@@ -441,6 +446,109 @@ steps = [
   { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "${A_MODEL}", max_tokens = 16, messages = [{ role = "user", content = "Say hello again." }] }, path = "choices.message.content", var = "CHAT2", retry = "60", timeout = 120, alive = "serve-b", fail = "after B's reload, a turn naming A's model was not answered within 60s: ${BODY} (see ${SANDBOX}/serve-b.log)" },
   { do = "require", value = "${CHAT2}", match = "^(?!mock response$)", fail = "after B's reload, B's own mock answered a turn naming A's model: ${CHAT2}" },
   { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "routing outcome.*served_by.*peer:serve-ranks-a", var = "REROUTED", min = 2, fail = "after B's reload, its router did not route the turn to A (see ${SANDBOX}/serve-b.log)" },
+]
+
+# ── svrn-mesh — svrn's mesh classes, carried by cw-rails alone ──────────────
+# pb-mesh-exit-transport's PROOF for the classes svrn registers: two stock
+# installs (svrn + hosted serve, mock engine), each beside its own cw-rails on
+# a mesh the run founds (loopback, --local-only, as serve-ranks). svrn neither
+# accepts nor dials a peer: what A's svrn signs reaches B by cw-rails' round,
+# an app `svrn run` publishes on A and A's offer origin are reached from B,
+# a configured app outside A's `[iroh] app_allow` is refused to B, and B's
+# cw-rails reaches A's svrn peer prefixes (knowledge search) on cwth/http/0.
+# Gossip, join, ring sync and media are cmnwlth's run; the member client is
+# serve-ranks'; rpc and rpc-warm are serve-mesh's. No weights: run it in-tree,
+# `scripts/program-lift.sh --run-only svrn-mesh`.
+[lift.svrn-mesh]
+package = "svrn"
+seeds = ["sovereign-daemon", "commonwealth-rails"]
+build = ["-p", "sovereign-stock", "--bin", "sovereign-stock", "-p", "commonwealth-rails", "--bin", "cw-rails", "-p", "sovereign-cli-mesh", "--bin", "sovereign-cli-mesh", "-p", "sovereign-pipeline", "--bin", "svrn-ingest"]
+binary = "debug/sovereign-stock"
+
+[lift.svrn-mesh.run]
+pass = "A's svrn signed '${APPENDED}' through its cw-rails (actor ${SIGNED_BY}) and B's cw-rails held it; B reached the app `svrn run` published on A (HTTP ${SHOWN}) and was refused the one outside A's app_allow (HTTP ${HIDDEN}); B reached A's offer origin (HTTP ${OFFERED}); B's cw-rails carried a knowledge search to A's svrn (HTTP ${KNOW}), B's svrn fanned a search for A's corpus out to A ('${FANNED}'), and A's canonical route answered over the mesh (HTTP ${CANONICAL}); a guest holding A's link was admitted over the mesh tunnel and a forged token refused; A's svrn data holds no node key"
+steps = [
+  { do = "input", var = "RAILS", value = "${TARGET}/debug/cw-rails" },
+  { do = "input", var = "CLI_MESH", value = "${TARGET}/debug/sovereign-cli-mesh" },
+  { do = "ports", vars = ["A_RAILS", "B_RAILS", "A_CLIENT", "A_INTERNAL", "B_CLIENT", "B_INTERNAL", "A_SERVE", "B_SERVE", "OFFER_PORT", "APP_PORT", "HIDDEN_PORT"] },
+  { do = "write", path = "${SANDBOX}/offers/index.json", text = "{\"offers\": [\"a drill going spare\"]}\n" },
+  { do = "write", path = "${SANDBOX}/shown/index.html", text = "svrn-mesh shown app\n" },
+  { do = "write", path = "${SANDBOX}/hidden/index.html", text = "svrn-mesh hidden app\n" },
+  { do = "spawn", id = "offers", argv = ["python3", "-m", "http.server", "${OFFER_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/offers"], log = "offers.log" },
+  { do = "spawn", id = "hidden", argv = ["python3", "-m", "http.server", "${HIDDEN_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/hidden"], log = "hidden.log" },
+  { do = "write", path = "${SANDBOX}/a/rails/rails.toml", text = "name = \"flip-a\"\nlisten = ${A_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "found", "svrn-mesh", "--data-dir", "${SANDBOX}/a/rails"], log = "found.log", fail = "cw-rails could not found the mesh (see ${SANDBOX}/found.log)" },
+  { do = "spawn", id = "rails-a", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/a/rails"], log = "rails-a.log", env = { RUST_LOG = "info,rails=debug" } },
+  { do = "poll", url = "http://127.0.0.1:${A_RAILS}/v1/mesh/status", path = "join_link", var = "INVITE", doc = "a", timeout = 60, alive = "rails-a", fail = "A's cw-rails served no invite within 60s (see ${SANDBOX}/rails-a.log)" },
+  { do = "write", path = "${SANDBOX}/b/rails/rails.toml", text = "name = \"flip-b\"\nlisten = ${B_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/b/rails", "--name", "flip-b"], log = "join.log", fail = "B's cw-rails was not admitted (see ${SANDBOX}/join.log)" },
+  { do = "spawn", id = "rails-b", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/b/rails"], log = "rails-b.log", env = { RUST_LOG = "info,rails=debug" } },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/status", path = "members[name=flip-a].status", var = "A_ON_B", timeout = 60, alive = "rails-b", fail = "A never reached B's cw-rails roster within 60s (see ${SANDBOX}/rails-b.log)" },
+  # A publishes a configured app outside its own app_allow, and an offer.
+  { do = "write", path = "${SANDBOX}/a/svrnmesh/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/a/mock.gguf\"\nembed = \"${SANDBOX}/a/mock-embed.gguf\"\n\n[daemon]\nclient_port = ${A_CLIENT}\ninternal_port = ${A_INTERNAL}\nrails_base = \"http://127.0.0.1:${A_RAILS}\"\n\n[data]\ndir = \"${SANDBOX}/a/data\"\n\n[iroh]\noffer_origin = \"127.0.0.1:${OFFER_PORT}\"\napp_allow = [\"nobody-on-this-mesh\"]\n\n[iroh.apps]\nhidden = \"127.0.0.1:${HIDDEN_PORT}\"\n" },
+  # A hosts a corpus B does not (the ingest lift's embeddings stub, 8-dim
+  # vectors), shared to the mesh, indexed before A's svrn boots.
+  { do = "input", var = "INGEST", value = "${TARGET}/debug/svrn-ingest" },
+  { do = "ports", vars = ["EMBED_PORT"] },
+  { do = "write", path = "${SANDBOX}/stub.py", text = "import http.server, json, sys, zlib\nclass H(http.server.BaseHTTPRequestHandler):\n    def send(self, code, doc):\n        b = json.dumps(doc).encode()\n        self.send_response(code)\n        self.send_header('content-type', 'application/json')\n        self.send_header('content-length', str(len(b)))\n        self.end_headers()\n        self.wfile.write(b)\n    def do_GET(self):\n        if self.path == '/v1/models':\n            self.send(200, {'data': [{'id': 'Qwen3-Embedding-0.6B'}]})\n        else:\n            self.send(404, {'error': 'embeddings-only stub'})\n    def do_POST(self):\n        body = json.loads(self.rfile.read(int(self.headers.get('content-length', 0))) or b'{}')\n        if self.path != '/v1/embeddings':\n            self.send(404, {'error': 'embeddings-only stub'})\n            return\n        inputs = body.get('input', [])\n        inputs = [inputs] if isinstance(inputs, str) else inputs\n        vec = lambda s: [((zlib.crc32(s.encode()) >> k) & 255) / 255.0 + 0.01 for k in range(0, 32, 4)]\n        self.send(200, {'data': [{'index': i, 'embedding': vec(s)} for i, s in enumerate(inputs)]})\nhttp.server.HTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()\n" },
+  { do = "write", path = "${SANDBOX}/fixture/tides.txt", text = "The tide tables are printed each spring and pinned by the harbour door.\n\nBoth ledgers agree about the tides and about nothing else.\n" },
+  { do = "write", path = "${SANDBOX}/recipe.toml", text = "[corpus]\nid = \"flip-corpus\"\nname = \"svrn-mesh fixture\"\ndescription = \"svrn-mesh lift corpus\"\nlicense = \"CC0\"\nmesh_sharing = true\n\n[acquire]\ntype = \"local_file\"\npath = \"${SANDBOX}/fixture\"\n\n[extract]\ntype = \"plaintext\"\n\n[chunk]\ntype = \"paragraph\"\nmax_chars = 512\noverlap_chars = 64\n\n[index]\nfts = true\nvector = true\n" },
+  { do = "spawn", id = "embed", argv = ["python3", "-u", "${SANDBOX}/stub.py", "${EMBED_PORT}"], log = "embed.log" },
+  { do = "poll", url = "http://127.0.0.1:${EMBED_PORT}/v1/models", path = "data.id", var = "EMBED_MODEL", timeout = 30, alive = "embed", fail = "the embeddings stub never answered (see ${SANDBOX}/embed.log)" },
+  { do = "exec", argv = ["${INGEST}", "ingest", "${SANDBOX}/recipe.toml", "--base-url", "http://127.0.0.1:${EMBED_PORT}/v1", "--no-enrich", "--data-dir", "${SANDBOX}/a/data"], log = "ingest.log", env = { HOME = "${SANDBOX}/a/home", SOVEREIGN_DATA_DIR = "${SANDBOX}/a/data", SVRNMESH_DATA_DIR = "${SANDBOX}/a/svrnmesh" }, fail = "svrn-ingest did not index A's corpus (see ${SANDBOX}/ingest.log)" },
+  { do = "spawn", id = "stock-a", argv = ["${BIN}", "run", "--config", "${SANDBOX}/a/svrnmesh/config.toml"], log = "stock-a.log", env = { HOME = "${SANDBOX}/a/home", SVRNMESH_DATA_DIR = "${SANDBOX}/a/svrnmesh", CW_RAILS_DIR = "${SANDBOX}/a/rails", CW_RAILS_BIN = "${SANDBOX}/no-cw-rails", SOVEREIGN_SERVE_PORT = "${A_SERVE}", RUST_LOG = "info,published_origins=debug,rails_origins=debug" } },
+  { do = "poll", url = "http://127.0.0.1:${A_CLIENT}/status", path = "serving", var = "SERVING_A", timeout = 120, alive = "stock-a", fail = "A's svrn never answered /status within 120s (see ${SANDBOX}/stock-a.log)" },
+  { do = "write", path = "${SANDBOX}/b/svrnmesh/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/b/mock.gguf\"\nembed = \"${SANDBOX}/b/mock-embed.gguf\"\n\n[daemon]\nclient_port = ${B_CLIENT}\ninternal_port = ${B_INTERNAL}\nrails_base = \"http://127.0.0.1:${B_RAILS}\"\n\n[data]\ndir = \"${SANDBOX}/b/data\"\n" },
+  { do = "spawn", id = "stock-b", argv = ["${BIN}", "run", "--config", "${SANDBOX}/b/svrnmesh/config.toml"], log = "stock-b.log", env = { HOME = "${SANDBOX}/b/home", SVRNMESH_DATA_DIR = "${SANDBOX}/b/svrnmesh", CW_RAILS_DIR = "${SANDBOX}/b/rails", CW_RAILS_BIN = "${SANDBOX}/no-cw-rails", SOVEREIGN_SERVE_PORT = "${B_SERVE}", RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${B_CLIENT}/status", path = "serving", var = "SERVING_B", timeout = 120, alive = "stock-b", fail = "B's svrn never answered /status within 120s (see ${SANDBOX}/stock-b.log)" },
+  # A's svrn signs through its cw-rails, and the act reaches B by cw-rails' round.
+  { do = "get", url = "http://127.0.0.1:${A_RAILS}/v1/rail/actor", path = "actor", var = "A_ACTOR", fail = "A's cw-rails named no signing actor: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${A_CLIENT}/v1/rail/append?namespace=flip-proof", json = { op = "record", payload = { note = "signed through rails" } }, path = "id", var = "APPENDED", fail = "A's svrn signed nothing through its cw-rails: ${BODY} (see ${SANDBOX}/stock-a.log)" },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/rail/log?namespace=flip-proof", path = "ops[id=${APPENDED}].actor", var = "SIGNED_BY", doc = "ring", timeout = 90, alive = "rails-b", fail = "A's act ${APPENDED} never reached B's cw-rails within 90s (see ${SANDBOX}/rails-a.log, rails-b.log)" },
+  { do = "exec", argv = ["test", "${SIGNED_BY}", "=", "${A_ACTOR}"], log = "signer.log", fail = "A's svrn act was signed by ${SIGNED_BY}, not A's cw-rails key ${A_ACTOR}" },
+  # An app `svrn run` publishes on A is reached from B.
+  { do = "spawn", id = "app", argv = ["${CLI_MESH}", "run", "--as", "shown", "--port", "${APP_PORT}", "--", "python3", "-m", "http.server", "${APP_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/shown"], log = "app.log", env = { HOME = "${SANDBOX}/a/home", SVRNMESH_DATA_DIR = "${SANDBOX}/a/svrnmesh" } },
+  { do = "poll", url = "http://127.0.0.1:${A_RAILS}/v1/mesh/publish", path = "apps[name=shown].name", var = "CLAIMED", doc = "claims", timeout = 60, alive = "app", fail = "`svrn run` never claimed 'shown' on A's cw-rails within 60s (see ${SANDBOX}/app.log)" },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/app", path = "offering.peer", var = "APP_PEER", doc = "apps", timeout = 60, alive = "app", fail = "B's cw-rails listed no member publishing apps within 60s (see ${SANDBOX}/app.log, stock-a.log, rails-a.log)" },
+  { do = "get", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/app?peer=flip-a", path = "url", var = "APP_URL", fail = "B's cw-rails gave no app bridge to A: ${BODY}" },
+  { do = "get", url = "${APP_URL}/shown/", status_var = "SHOWN", timeout = 30, fail = "a GET for A's `svrn run` app got no answer through ${APP_URL}" },
+  { do = "require", value = "${SHOWN}", match = "^200$", fail = "A's `svrn run` app answered B with HTTP ${SHOWN}: ${BODY}" },
+  # The configured app sits outside A's app_allow, so B does not see it.
+  { do = "get", url = "${APP_URL}/hidden/", status_var = "HIDDEN", timeout = 30, fail = "a GET for A's hidden app got no answer through ${APP_URL}" },
+  { do = "require", value = "${HIDDEN}", match = "^404$", fail = "A's app outside its app_allow answered B with HTTP ${HIDDEN}: ${BODY}" },
+  { do = "require", value = "${BODY}", match = "no app named", fail = "the hidden app's refusal did not name the app: ${BODY}" },
+  # The refusal lists what B may reach, and the hidden app is not in it.
+  { do = "require", value = "${BODY}", match = "this node publishes: shown", fail = "the refusal did not list exactly the apps B may reach: ${BODY}" },
+  # A request naming no app is refused, never sent to an arbitrary origin.
+  { do = "get", url = "${APP_URL}/", status_var = "NO_NAME", timeout = 30, fail = "a GET naming no app got no answer through ${APP_URL}" },
+  { do = "require", value = "${NO_NAME}", match = "^404$", fail = "a request naming no app answered HTTP ${NO_NAME}: ${BODY}" },
+  { do = "require", value = "${BODY}", match = "no app named in the request path", fail = "the no-name refusal said something else: ${BODY}" },
+  # A's offer origin is reached from B.
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/offers", path = "offering.peer", var = "OFFER_PEER", doc = "offers", timeout = 60, alive = "rails-b", fail = "B's cw-rails listed no member offering within 60s (see ${SANDBOX}/stock-a.log)" },
+  { do = "get", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/offers?peer=flip-a", path = "url", var = "OFFER_URL", fail = "B's cw-rails gave no offer bridge to A: ${BODY}" },
+  { do = "get", url = "${OFFER_URL}/index.json", status_var = "OFFERED", timeout = 30, fail = "a GET for A's offers got no answer through ${OFFER_URL}" },
+  { do = "require", value = "${OFFERED}", match = "^200$", fail = "A's offer origin answered B with HTTP ${OFFERED}: ${BODY}" },
+  # svrn's peer prefixes ride cw-rails' cwth/http/0: knowledge search.
+  { do = "get", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/reach?peer=flip-a&class=knowledge_search", path = "endpoints.base_url", var = "KB", fail = "B's cw-rails resolved no knowledge-search endpoint for A: ${BODY}" },
+  { do = "call", url = "${KB}/internal/knowledge/search", json = { query_text = "tides", corpora = [] }, status_var = "KNOW", timeout = 30, fail = "a knowledge search to A's svrn got no answer through ${KB}" },
+  { do = "require", value = "${KNOW}", match = "^(200|503)$", fail = "A's knowledge search answered HTTP ${KNOW} through cw-rails: ${BODY}" },
+  { do = "require", value = "${BODY}", match = "\"results\"", fail = "the knowledge-search answer is not svrn's: ${BODY}" },
+  # B's svrn fans a search for A's corpus out to A through cw-rails (B
+  # hosts none of it; a query vector in the corpus' space rides along).
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/status", path = "members[name=flip-a].capabilities.hosted_corpora", var = "A_HOSTS", timeout = 60, alive = "rails-b", fail = "A's hosted corpus never reached B's cw-rails roster within 60s (see ${SANDBOX}/stock-a.log)" },
+  { do = "call", url = "http://127.0.0.1:${B_CLIENT}/v1/knowledge/search", json = { query_text = "tides", corpora = ["flip-corpus"], query_embedding = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] }, path = "results.corpus_id", var = "FANNED", retry = "60", timeout = 30, fail = "B's svrn found nothing of A's corpus through cw-rails: ${BODY} (see ${SANDBOX}/stock-b.log)" },
+  { do = "count", file = "${SANDBOX}/stock-b.log", pattern = "knowledge: fan-out served.*flip-a", var = "SERVED_BY_A", min = 1, fail = "B answered without its fan-out being served by A (see ${SANDBOX}/stock-b.log)" },
+  # The canonical route answers over the mesh too (svrn's peer prefix).
+  { do = "get", url = "${KB}/internal/corpus/canonical/flip-corpus", status_var = "CANONICAL", timeout = 60, fail = "A's canonical route got no answer through ${KB}" },
+  # A guest, who is no member, reaches A's svrn over the mesh tunnel with the
+  # bearer A minted (cwth/guest/0 to svrn's guest listener), and a forged
+  # token is refused.
+  { do = "exec", argv = ["sh", "-c", "'${CLI_MESH}' mesh grant --ttl 10m > '${SANDBOX}/grant.out' 2>&1 && grep -o 'sovereign://guest/[^ ]*' '${SANDBOX}/grant.out' | head -1 > '${SANDBOX}/guest.link' && test -s '${SANDBOX}/guest.link'"], log = "grant.log", env = { HOME = "${SANDBOX}/a/home", SVRNMESH_DATA_DIR = "${SANDBOX}/a/svrnmesh" }, fail = "A minted no guest link (see ${SANDBOX}/grant.out)" },
+  { do = "exec", argv = ["sh", "-c", "'${CLI_MESH}' mesh use \"$(cat '${SANDBOX}/guest.link')\""], log = "guest-use.log", env = { HOME = "${SANDBOX}/c/home", SVRNMESH_DATA_DIR = "${SANDBOX}/c/svrnmesh" }, fail = "a guest holding A's link was not admitted over the mesh tunnel (see ${SANDBOX}/guest-use.log, rails-a.log)" },
+  { do = "count", file = "${SANDBOX}/guest-use.log", pattern = "Verified against", var = "GUESTED", min = 1, fail = "the guest's `mesh use` exited 0 without verifying the link (see ${SANDBOX}/guest-use.log)" },
+  { do = "exec", argv = ["sh", "-c", "! '${CLI_MESH}' mesh use \"$(sed -E 's#guest/[^?]+#guest/forged0000000000000000000000000000#' '${SANDBOX}/guest.link')\""], log = "guest-forged.log", env = { HOME = "${SANDBOX}/c/home2", SVRNMESH_DATA_DIR = "${SANDBOX}/c/svrnmesh2" }, fail = "a forged guest token was admitted over the mesh tunnel (see ${SANDBOX}/guest-forged.log)" },
+  # svrn holds no node key: the key is cw-rails'.
+  { do = "exec", argv = ["sh", "-c", "test ! -e '${SANDBOX}/a/data/node_key' && test ! -e '${SANDBOX}/a/svrnmesh/node_key'"], log = "no-key.log", fail = "A's svrn data holds a node_key; the key is cw-rails'" },
 ]
 
 # ── code — the LSP for agents ───────────────────────────────────────────────

@@ -28,14 +28,12 @@
 //! 3. **Clean stop** (default-impl path, legacy provider) → final
 //!    chunk `"finish_reason":"stop"`. Negative control proving the
 //!    test isn't always matching "length".
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use serde_json::json;
 
-use commonwealth_core::mesh::Mesh;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{FinishReason, StreamFrame};
 use sovereign_daemon::server::client_router;
@@ -43,7 +41,7 @@ use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 
 use crate::common;
 use crate::common::service_double::ProviderService;
-use crate::common::{member, spawn_router, TestProvider};
+use crate::common::{spawn_router, TestProvider};
 
 /// Build a sequence of typed frames terminating in a specific
 /// `FinishReason` — for plugging into `TestProvider::with_typed_frames`
@@ -62,26 +60,9 @@ fn frames_ending_in(prelude: Vec<&str>, reason: FinishReason) -> Vec<StreamFrame
 
 fn build_state(provider: Arc<dyn InferenceProvider>) -> AppState {
     let self_id = NodeId::from_u128(0xCAFE_CAFE_CAFE_CAFE);
-    let mut members = HashMap::new();
-    members.insert(
-        self_id,
-        member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
-    );
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "finish-reason-test".into(),
-        invite_key_hash: [4u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
-    };
     let adapter: Arc<dyn LocalInferenceService> = ProviderService::new(provider);
     AppState::new_with_serving(
         self_id,
-        mesh,
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()

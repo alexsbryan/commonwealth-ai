@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-node admin endpoints: activity reporting, runtime model slot
 //! management, foreground-yield introspection, mesh quiesce flag,
-//! ingest budget throttle, and the join handshake.
+//! and the ingest and storage budgets.
 //!
 //! These handlers cluster together because they all mutate or read
 //! single-node state without touching corpus-collaborate ingestion.
@@ -9,7 +9,6 @@
 //! Tests for `node_activity` and the runtime model slot endpoints
 //! live at the bottom of this file.
 
-use std::net::SocketAddr;
 #[cfg(test)]
 use std::sync::Arc;
 
@@ -18,8 +17,6 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::mesh::Mesh;
-use commonwealth_discovery::membership;
 use kernel_types::NodeId;
 
 use crate::state::AppState;
@@ -638,156 +635,6 @@ pub async fn storage_budget_set(
         free_disk_bytes,
         recommended_bytes: recommended_storage_budget_bytes(free_disk_bytes),
     }))
-}
-
-// ── Mesh join handshake ─────────────────────────────────────
-//
-// The founder (or any existing member) receives a POST from a
-// would-be joiner carrying the raw `join_key`. We BLAKE3-hash it and
-// compare against `mesh.invite_key_hash`; on match we append the new
-// member and return the full mesh snapshot so the joiner can adopt
-// it locally. On mismatch we return 401 — the joiner treats this as
-// "wrong mesh, try the next mDNS candidate" and moves on.
-//
-// Security posture (v1):
-//   - Plain HTTP on the LAN. The join_key is exposed in transit to
-//     anyone sniffing the local network; acceptable under the same
-//     trust model as "I shared this link in a trusted chat".
-//   - mesh_id in mDNS TXT is public (not secret); knowing it does
-//     not grant membership. Only the raw key does, and it's hashed
-//     at rest via `Mesh::invite_key_hash`.
-//   - Timing-attack-resistant equality lives in `membership::verify_join_key`.
-
-// `JoinRequest` / `JoinResponse` / `JoinRejection` are
-// `commonwealth_core::mesh::wire` — one definition for every process that
-// speaks them, including a package-only member that never links this crate.
-// Re-exported so this module's callers are unchanged.
-pub use commonwealth_core::mesh::wire::{JoinRejection, JoinRequest, JoinResponse};
-
-/// Wire shape for the full mesh snapshot: the one projection in
-/// `commonwealth_core::mesh` (it had four declarations once — see its docs).
-pub use commonwealth_core::mesh::{MeshWire, SecretDisclosure};
-
-/// POST /internal/join — verify a join_key and (on match) admit the caller.
-pub async fn join(
-    State(state): State<AppState>,
-    Json(req): Json<JoinRequest>,
-) -> Result<Json<JoinResponse>, (StatusCode, Json<JoinRejection>)> {
-    let self_node_id = state.inner.fabric.identity.current();
-
-    // Identity proof of possession — verified BEFORE taking the mesh
-    // write lock. Only enforced when the joiner presents a pubkey:
-    // pre-identity joiners are admitted exactly as before. A pubkey
-    // with a missing/invalid proof is a loud 401 (never a silent
-    // admit-without-key), because admitting an unproven key would
-    // bind a transport identity the joiner may not control.
-    if let Some(pubkey) = req.node_pubkey.as_ref() {
-        let proven = match (req.proposed_node_id.as_ref(), req.pubkey_proof.as_deref()) {
-            (Some(node_id), Some(proof)) => commonwealth_transport::identity::verify_join_proof(
-                pubkey,
-                node_id,
-                &req.joining_node_name,
-                proof,
-            ),
-            // The proof binds the proposed_node_id; modern joiners
-            // always persist + send one. A pubkey without it (or
-            // without a proof) is malformed.
-            _ => false,
-        };
-        if !proven {
-            tracing::warn!(
-                joining_name = %req.joining_node_name,
-                pubkey = %pubkey,
-                "handshake_rejected: node_pubkey presented without a valid proof of possession"
-            );
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                Json(JoinRejection {
-                    reason: "node_pubkey proof of possession missing or invalid".into(),
-                }),
-            ));
-        }
-    }
-
-    let mut mesh = state.inner.fabric.mesh.write().await;
-
-    // Encrypted-mesh invites are short-lived: reject a join once the TTL has
-    // passed. Plaintext meshes set no expiry, so this is a no-op for them.
-    //
-    // The expiry is read from the MESH, not from this node's `AppState`. It
-    // used to live in per-node RAM, which meant it was armed only on the node
-    // that personally minted the invite and was lost entirely on restart — so
-    // a joiner aimed at any other member, or at the same member after a
-    // bounce, bypassed the TTL completely. Any member can admit (there is no
-    // founder check here and never was), so the expiry has to travel with the
-    // mesh for the check to mean anything.
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    if mesh.invite_expired_at(now) {
-        tracing::warn!(
-            joining_name = %req.joining_node_name,
-            expires_at = ?mesh.invite_expires_at,
-            now,
-            "handshake_rejected: invite link has expired"
-        );
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            Json(JoinRejection {
-                reason: "invite link has expired".into(),
-            }),
-        ));
-    }
-
-    match membership::accept_join_with_identity(
-        &mut mesh,
-        &req.join_key,
-        &req.joining_node_name,
-        req.joining_node_addresses,
-        self_node_id,
-        req.proposed_node_id,
-        req.node_pubkey,
-    ) {
-        Ok(new_id) => {
-            tracing::info!(
-                new_node = %new_id,
-                joining_name = %req.joining_node_name,
-                "handshake_accepted: admitted new mesh member"
-            );
-            // Persist IMMEDIATELY on join accept so the founder
-            // doesn't forget this member if it restarts within the
-            // 10s gossip-loop re-persist window. Hook is `None` in
-            // tests and the standalone daemon, so this is a no-op
-            // where persistence is managed elsewhere.
-            if let Some(hook) = state.inner.fabric.on_mesh_mutation.as_ref() {
-                hook(&mesh, self_node_id);
-            }
-            Ok(Json(JoinResponse {
-                assigned_node_id: new_id,
-                // Disclose, and now it SAYS so. A joiner has no other
-                // channel to obtain the gossip credential, so withholding it
-                // here would admit a node that can never authorize. This was
-                // previously correct by the absence of a redaction line —
-                // indistinguishable, to a reader, from the bug of forgetting
-                // one.
-                mesh: MeshWire::for_peer(&mesh, SecretDisclosure::Disclose),
-            }))
-        }
-        Err(e) => {
-            tracing::warn!(
-                error = %e,
-                joining_name = %req.joining_node_name,
-                "handshake_rejected: join request denied"
-            );
-            Err((
-                StatusCode::UNAUTHORIZED,
-                Json(JoinRejection {
-                    reason: e.to_string(),
-                }),
-            ))
-        }
-    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────

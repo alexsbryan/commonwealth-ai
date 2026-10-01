@@ -183,6 +183,68 @@ pub async fn keep_registered_declaring(
     }
 }
 
+/// Publish one app in cw-rails' app registry (`POST /v1/mesh/publish`) for
+/// the members `allow` names (empty = every member), then renew it every
+/// `every` for `ttl_secs`; a refused renew publishes again. The app tier's
+/// [`keep_registered`]: `cwth/app/0` is the app registry's, never an origin
+/// registration (phase-b-81 (3)). Runs until dropped.
+pub async fn keep_published(
+    rails_base: String,
+    name: String,
+    port: u16,
+    allow: Vec<String>,
+    ttl_secs: u64,
+    every: Duration,
+) {
+    #[derive(serde::Deserialize)]
+    struct Claimed {
+        claim_id: String,
+    }
+    let mut claim: Option<String> = None;
+    let mut told_absent = false;
+    loop {
+        match &claim {
+            None => {
+                let body = serde_json::json!({
+                    "name": name, "port": port, "ttl_secs": ttl_secs, "allow": allow,
+                });
+                match post::<Claimed>(&rails_base, "/v1/mesh/publish", &body).await {
+                    Ok(c) => {
+                        info!(target: TRACE_TARGET, claim = %c.claim_id, app = %name, port,
+                              allow = ?allow, "app published with cw-rails");
+                        claim = Some(c.claim_id);
+                        told_absent = false;
+                    }
+                    Err(e) if !told_absent => {
+                        warn!(target: TRACE_TARGET, error = %e, app = %name,
+                              "cw-rails did not take the app's publish, so no member reaches \
+                               it; retrying");
+                        told_absent = true;
+                    }
+                    Err(e) => debug!(target: TRACE_TARGET, error = %e, app = %name,
+                                     "app publish still not taken; retrying"),
+                }
+            }
+            Some(id) => {
+                let renewed: Result<serde_json::Value, String> = post(
+                    &rails_base,
+                    &format!("/v1/mesh/publish/{id}/renew"),
+                    &serde_json::json!({ "ttl_secs": ttl_secs }),
+                )
+                .await;
+                if let Err(e) = renewed {
+                    info!(target: TRACE_TARGET, claim = %id, app = %name, error = %e,
+                          "the app's renew was refused — publishing again");
+                    claim = None;
+                    continue;
+                }
+                debug!(target: TRACE_TARGET, claim = %id, app = %name, "app renewed");
+            }
+        }
+        tokio::time::sleep(every).await;
+    }
+}
+
 #[cfg(test)]
 #[path = "rails_origins/tests.rs"]
 mod tests;

@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use kernel_types::{MeshId, ModelId, NodeId};
+use kernel_types::{ModelId, NodeId};
 use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
 use serde_json::Value;
 use sovereign_contracts::engine_state::ServedSelf;
@@ -23,12 +23,12 @@ use sovereign_daemon::serve_client::{
     loopback_provider, served_slot_aliases, ServeBase, ServeBaseSource,
 };
 use sovereign_daemon::server::client_router;
-use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
+use sovereign_daemon::state::{AppState, FabricSeed, LocalInferenceService, ServingSeed};
 use sovereign_mesh::ledger_port::{InferencePlan, ShardPlan};
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 
-use crate::common::{member_with_last_seen, solo_mesh, spawn_router};
+use crate::common::{member, roster, spawn_router};
 
 fn slot(role: &str, model: &str) -> ResidentSlot {
     ResidentSlot {
@@ -73,18 +73,16 @@ fn dialing_node() -> AppState {
 /// published from `served()`.
 fn node_over(adapter: Arc<dyn LocalInferenceService>) -> AppState {
     let id = NodeId::from_u128(0x3333 << 64);
-    let mut members = HashMap::new();
-    members.insert(
+    let mut me = member(id, "a");
+    me.last_seen = 100;
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
         id,
-        member_with_last_seen(id, "a", 100, "127.0.0.1:9742".parse().unwrap()),
-    );
-    let mut mesh = solo_mesh(id, "status-from-serve");
-    mesh.id = MeshId::from_u128(43);
-    mesh.invite_key_hash = [7u8; 32];
-    mesh.members = members;
-    let state = AppState::new_with_serving(
-        id,
-        mesh,
+        None,
+        None,
+        FabricSeed {
+            membership: Some(roster("status-from-serve", vec![me])),
+            ..Default::default()
+        },
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()

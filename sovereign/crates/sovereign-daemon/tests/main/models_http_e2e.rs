@@ -45,12 +45,11 @@
 //!    filter TODO") — pinning the half that's already implemented so
 //!    a future regression that bypassed the filter shows up
 //!    immediately.
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use commonwealth_core::mesh::Mesh;
-use kernel_types::{MeshId, ModelId, NodeId};
+use kernel_types::{ModelId, NodeId};
 use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
+use sovereign_contracts::membership::MembershipReader;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, FabricSeed, NodeSeed, ServingSeed};
 
@@ -67,7 +66,7 @@ fn empty_model_info(id: u128, name: &str) -> ModelInfo {
         size_bytes: 1_000_000,
         total_layers: 1,
         architecture: ModelArchitecture::Other,
-        available_on: HashMap::new(),
+        available_on: std::collections::HashMap::new(),
         oicp_capabilities: Default::default(),
         quantization: "Q4_0".into(),
         min_memory_gb: 0,
@@ -77,23 +76,15 @@ fn empty_model_info(id: u128, name: &str) -> ModelInfo {
     }
 }
 
-/// The mesh these tests serve: `self_id` is its only member.
-fn build_mesh(self_id: NodeId) -> Mesh {
-    let mut members = HashMap::new();
-    members.insert(
-        self_id,
-        member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
-    );
-    Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "models-http test".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
+/// The roster these tests serve (cw-rails', through the port): `self_id`
+/// is its only member.
+fn build_roster(self_id: NodeId) -> FabricSeed {
+    FabricSeed {
+        membership: Some(common::roster(
+            "models-http test",
+            vec![member(self_id, "self")],
+        )),
+        ..Default::default()
     }
 }
 
@@ -101,7 +92,12 @@ fn build_mesh(self_id: NodeId) -> Mesh {
 /// any `set_model_info` calls land with self as the origin (= visible
 /// to the live-nodes filter in `list_models`).
 fn build_state(self_id: NodeId) -> AppState {
-    AppState::new(self_id, build_mesh(self_id))
+    AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        self_id,
+        None,
+        None,
+        build_roster(self_id),
+    )
 }
 
 /// Build an AppState over the recording double, whose model scan answers
@@ -109,10 +105,9 @@ fn build_state(self_id: NodeId) -> AppState {
 fn build_state_with_models(self_id: NodeId, rows: Vec<(NodeId, ModelInfo)>) -> AppState {
     AppState::new_with_seeds(
         self_id,
-        build_mesh(self_id),
         None,
         None,
-        FabricSeed::default(),
+        build_roster(self_id),
         ServingSeed::default(),
         NodeSeed::default(),
         Arc::new(RecordingLedger::new(self_id).with_models(rows)).seed(),
@@ -195,16 +190,17 @@ async fn offline_peer_only_model_is_filtered_out_of_v1_models() {
         self_id,
         vec![(offline_peer_id, empty_model_info(2, "ghost-model"))],
     );
-    // Set up: the offline peer is NOT in the mesh's members, so
-    // `live_nodes` will be `{self_id}` only.
-    {
-        let mesh = state.inner.fabric.mesh.read().await;
-        assert!(
-            !mesh.members.contains_key(&offline_peer_id),
-            "test precondition: the offline peer must NOT be in the \
-             mesh's online member set"
-        );
-    }
+    // Set up: the offline peer is NOT in the roster, so `live_nodes` will be
+    // `{self_id}` only.
+    assert!(
+        !state
+            .membership()
+            .members()
+            .await
+            .iter()
+            .any(|m| m.node_id == offline_peer_id),
+        "test precondition: the offline peer must NOT be in the roster"
+    );
 
     // Sanity: the store sees BOTH the self-owned + peer-owned
     // entries — the filter is the only thing standing between this

@@ -9,7 +9,6 @@ use kernel_types::NodeId;
 use sovereign_daemon::state::AppState;
 use sovereign_mesh::rail_kv_pump::*;
 use sovereign_mesh::rail_port::LocalRingRail;
-use sovereign_mesh::ring_roster::tests::{member, mesh_of, pubkey_of};
 use std::sync::Arc;
 
 /// **A seal on `work` must not delete the queue it is sealing.**
@@ -53,7 +52,6 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     let local = LocalRingRail::new(dir.path(), Arc::new(donor.clone()));
     let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         me,
-        mesh_of(vec![member(me, "me", Some(pubkey_of(&donor)))]),
         None,
         None,
         sovereign_daemon::state::FabricSeed {
@@ -61,13 +59,6 @@ async fn work_namespace_seals_and_keeps_live_leases() {
             ..Default::default()
         },
     );
-    sovereign_mesh::ring_roster::MeshRosterSource::install(
-        local.inner(),
-        &state.inner.fabric.mesh,
-        &state.inner.fabric.identity,
-        state.self_node_pubkey(),
-    )
-    .unwrap();
 
     assert_eq!(projector_for(WORK_NAMESPACE), Some(Projector::Work));
 
@@ -77,12 +68,10 @@ async fn work_namespace_seals_and_keeps_live_leases() {
     members.insert(Person::from("submitter"), vec![submitter.actor()]);
     let roster = Roster::new(members);
     journal.set_roster(&roster).unwrap();
-    // The operator's file narrows `work` and the membership default must
-    // not outrank it — the submitter is in no mesh row, only in this file.
     assert_eq!(
         local.inner().roster_origin(WORK_NAMESPACE),
         commonwealth_rail_core::RosterOrigin::File,
-        "the default roster would orphan the operator's roster.json"
+        "the operator's roster.json names who may write `work`"
     );
 
     // ── the peer submits, this node leases and offers ──

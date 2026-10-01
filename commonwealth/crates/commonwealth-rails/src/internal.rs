@@ -48,7 +48,7 @@ use commonwealth_core::mesh::wire::{
 };
 use commonwealth_core::mesh::{GossipAuth, GossipAuthArm, Mesh, MeshWire, SecretDisclosure};
 use host_kit::shell::RouteBundle;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, Notify, RwLock};
 
 use crate::{identity, note_contact, Refusal};
 
@@ -58,6 +58,12 @@ pub struct Inbound {
     pub contacts: Arc<Mutex<HashMap<NodeId, u64>>>,
     pub self_id: NodeId,
     pub data_dir: PathBuf,
+    /// Woken when an inbound round brings an Offline member back Online
+    /// (`crate::gossip::merge_round`).
+    pub ring_nudge: Arc<Notify>,
+    /// Where an inbound round records its sender's credential generation
+    /// (`RailsDaemon::split_generation`).
+    pub split_generation: crate::gossip::SplitGenerations,
 }
 
 /// Bind the internal listener on an ephemeral loopback port and serve.
@@ -67,6 +73,8 @@ pub async fn serve(
     contacts: Arc<Mutex<HashMap<NodeId, u64>>>,
     self_id: NodeId,
     data_dir: PathBuf,
+    ring_nudge: Arc<Notify>,
+    split_generation: crate::gossip::SplitGenerations,
     ring: RouteBundle,
 ) -> Result<(SocketAddr, tokio::task::JoinHandle<()>), Refusal> {
     let bind: SocketAddr = ([127, 0, 0, 1], 0).into();
@@ -81,6 +89,8 @@ pub async fn serve(
         contacts,
         self_id,
         data_dir,
+        ring_nudge,
+        split_generation,
     });
     let task = tokio::spawn(async move {
         let forever = std::future::pending::<()>();
@@ -113,7 +123,15 @@ pub async fn gossip(
         now_secs: now,
     };
     let mut mesh = state.mesh.write().await;
-    let report = mesh.merge_from_authenticated(state.self_id, &incoming, &auth);
+    let report = crate::gossip::merge_round(
+        &mut mesh,
+        state.self_id,
+        &incoming,
+        &auth,
+        req.from,
+        &state.split_generation,
+        &state.ring_nudge,
+    );
 
     if report.rejected() {
         tracing::warn!(
@@ -274,6 +292,8 @@ mod tests {
             mesh: Arc::new(RwLock::new(mesh)),
             contacts: Arc::new(Mutex::new(HashMap::new())),
             data_dir: std::env::temp_dir().join(format!("cw-rails-test-{}", std::process::id())),
+            ring_nudge: Arc::new(Notify::new()),
+            split_generation: Default::default(),
         }
     }
 
@@ -379,6 +399,94 @@ mod tests {
             "both directions prove, or neither"
         );
     }
+    /// `mesh` with a second member `caller`, as a caller's view of it.
+    fn with_caller(mesh: &Mesh, caller: NodeId) -> Mesh {
+        let mut theirs = mesh.clone();
+        let mut row = theirs.members.values().next().unwrap().clone();
+        row.node_id = caller;
+        row.name = "caller".into();
+        row.last_seen += 100;
+        theirs.members.insert(caller, row);
+        theirs
+    }
+
+    /// The daemon's gossip_route `an_upgraded_caller_gets_no_raw_secret_back`:
+    /// a caller that proves AND still ships its secret (every upgraded pair's
+    /// first round) gets none back, and our live secret is untouched.
+    #[tokio::test]
+    async fn an_upgraded_caller_gets_no_raw_secret_back() {
+        let (mesh, _key) =
+            commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+        let st = state(mesh.clone());
+        let caller = NodeId::generate();
+        let now = unix_now_secs();
+        let req = GossipRequest {
+            mesh: MeshWire::for_peer(&with_caller(&mesh, caller), SecretDisclosure::Disclose),
+            from: Some(caller),
+            mesh_proof: mesh.mesh_proof(caller, now),
+        };
+        let out = gossip(State(st.clone()), Json(req))
+            .await
+            .expect("authorized");
+        assert_eq!(
+            out.0.mesh.mesh_secret, [0u8; 32],
+            "the reply leaked the secret"
+        );
+        assert_eq!(st.mesh.read().await.mesh_secret, mesh.mesh_secret);
+    }
+
+    /// The daemon's gossip_route
+    /// `a_proving_caller_that_withholds_its_secret_is_recorded_post_split`: a
+    /// proof is post-split by definition, whatever the payload carried; a
+    /// pre-split record here blocks rotation between two upgraded nodes.
+    #[tokio::test]
+    async fn a_proving_caller_that_withholds_its_secret_is_recorded_post_split() {
+        let (mesh, _key) =
+            commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+        let st = state(mesh.clone());
+        let caller = NodeId::generate();
+        let now = unix_now_secs();
+        let req = GossipRequest {
+            mesh: MeshWire::for_peer(&with_caller(&mesh, caller), SecretDisclosure::Redact),
+            from: Some(caller),
+            mesh_proof: mesh.mesh_proof(caller, now),
+        };
+        gossip(State(st.clone()), Json(req))
+            .await
+            .expect("authorized");
+        assert_eq!(
+            crate::gossip::split_generation_of(&st.split_generation, caller),
+            Some(true)
+        );
+    }
+
+    /// The daemon's gossip_route `a_pre_split_caller_is_still_recorded_pre_split`:
+    /// a caller with neither proof nor secret is admitted on the compat arm
+    /// and recorded pre-split, so rotate keeps refusing while it is online.
+    #[tokio::test]
+    async fn a_pre_split_caller_is_still_recorded_pre_split() {
+        let (mesh, _key) =
+            commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+        let st = state(mesh.clone());
+        let caller = NodeId::generate();
+        let req = GossipRequest {
+            mesh: MeshWire::for_peer(&with_caller(&mesh, caller), SecretDisclosure::Redact),
+            from: Some(caller),
+            mesh_proof: None,
+        };
+        let out = gossip(State(st.clone()), Json(req))
+            .await
+            .expect("the compat arm admits a pre-split caller");
+        assert_eq!(
+            out.0.mesh.mesh_secret, [0u8; 32],
+            "and discloses nothing to it"
+        );
+        assert_eq!(
+            crate::gossip::split_generation_of(&st.split_generation, caller),
+            Some(false)
+        );
+    }
+
     fn join_req(key: &str, name: &str) -> JoinRequest {
         let signer = ed25519_dalek::SigningKey::from_bytes(&[5u8; 32]);
         let id = NodeId::generate();

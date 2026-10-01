@@ -148,7 +148,8 @@ async fn run_bench(args: BenchArgs) -> i32 {
     };
 
     // ── the mesh, for the host's identity and the peers' names ─────────────
-    let mesh_body = match get_json(&client, port, "/v1/mesh/status").await {
+    // cw-rails' roster beside serve's engine rows (`crate::live_mesh`).
+    let mesh_body = match crate::live_mesh::status_doc(&client).await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("{e}");
@@ -361,7 +362,7 @@ async fn run_bench(args: BenchArgs) -> i32 {
     let placement_after = after_body
         .as_ref()
         .and_then(|b| primary_from_status(b).map(|(_, _, p)| p));
-    let mesh_after = get_json(&client, port, "/v1/mesh/status").await.ok();
+    let mesh_after = crate::live_mesh::status_doc(&client).await.ok();
     let peers_after = match &mesh_after {
         Some(b) => peer_liveness(&shards, &MeshView::parse(b)),
         // Unreadable mesh state is not evidence of health. Reporting every peer

@@ -48,10 +48,6 @@ sovereign-authoring-harness = { workspace = true }
 # its port and the recipe-authoring tools, over svrn's notes
 # (pb-ingest-rehome-daemon).
 sovereign-recipe-author = { workspace = true }
-# The reachable bases serve's model origin advertises
-# (`mesh_discovery::reachable_addresses`), for the mesh ports composed here
-# (pb-serve-ranks-discovery).
-sovereign-mesh = { workspace = true }
 # svrn's LLM verbs (`bin_main_with`), handed the same ingest composition.
 sovereign-cli-llm = { path = "../sovereign-cli-llm" }
 host-kit = { workspace = true, features = ["shell"] }
@@ -74,6 +70,9 @@ tracing-subscriber = { workspace = true }
 # paths through the empty-items face (phase-b-72), the daemon's seed records
 # from its `double`, ids from kernel-types and the manifest from oicp-types.
 sovereign-serving-host = { path = "../sovereign-serving-host" }
+# The mesh crate's ledger records, guest source and capability builder, by
+# its empty-items face, until pb-mesh-exit-mesh re-homes them.
+sovereign-mesh = { workspace = true }
 sovereign-daemon = { workspace = true, features = ["treesitter", "test-doubles"] }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }

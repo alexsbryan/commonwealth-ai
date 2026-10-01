@@ -23,10 +23,9 @@
 //!    then commission `EmbeddedDaemon` with all of them in ONE
 //!    `DaemonServices::Headless` value, so `:9741` serves `/v1/*`, `/mcp/*`
 //!    and the rest with no post-construction wiring step to forget.
-//! 5. `try_resume()` the persisted mesh; on first run where no
-//!    `mesh.json` exists, create a silent "solo" mesh so the listener
-//!    comes up. `svrn mesh rotate` (future) can later print a
-//!    shareable join key.
+//! 5. Start the daemon. It holds no mesh: cw-rails is the node's one mesh
+//!    endpoint, and svrn reads its roster through the composed ports
+//!    (pb-mesh-exit-transport).
 //! 6. Block on `tokio::signal::ctrl_c()` so the service manager
 //!    controls lifecycle.
 
@@ -42,10 +41,10 @@ mod lifecycle;
 // Twins of cli-daemon's modules, moved whole — see each file's header.
 mod log_rotation;
 mod memory_watch;
-mod mesh_resume;
 mod panic_hook;
 mod rlimit;
 mod serving_boot;
+mod start;
 
 use boot::run_daemon;
 use lifecycle::wait_for_shutdown;
@@ -62,20 +61,22 @@ use lifecycle::wait_for_shutdown;
 ///
 /// `hosted`: the distribution's composition of serve, when this process
 /// hosts it (`process::run`); `code`: its composition of the code program;
-/// `ingest`: its composition of ingest's ports.
+/// `ingest`: its composition of ingest's ports; `mesh`: its composition of
+/// the node's mesh (cw-rails' roster and reach).
 pub async fn run(
     launch: &Launch,
     args: &[String],
     hosted: Option<crate::serve_client::HostedServe>,
     code: Option<crate::hosted_code::HostedCode>,
     ingest: Option<crate::hosted_ingest::HostedIngest>,
+    mesh: Option<crate::hosted_mesh::HostedMesh>,
 ) -> i32 {
     if help::wants_help(args) {
         help::print(&HELP);
         return 0;
     }
     match args.first().map(String::as_str) {
-        Some("run") => run_daemon(launch, &args[1..], hosted, code, ingest).await,
+        Some("run") => run_daemon(launch, &args[1..], hosted, code, ingest, mesh).await,
         // Sizing is svrn's CLI verb, exec'ing serve's `vram_plan`, the one
         // body (pb-distribution-setup; this binary's copy went at
         // pb-serve-distributes). Named, so an
@@ -99,7 +100,7 @@ pub async fn run(
             // Bare flags like `--config <path>` route straight to
             // run_daemon — the caller means "start the daemon with
             // these flags."
-            run_daemon(launch, args, hosted, code, ingest).await
+            run_daemon(launch, args, hosted, code, ingest, mesh).await
         }
         Some(other) => {
             eprintln!("error: unknown daemon subcommand '{other}'");
@@ -110,7 +111,7 @@ pub async fn run(
             // Bare invocation — same destination as `run`. launchd
             // and systemd unit files keep using `daemon run`
             // explicitly; both paths land in the same place.
-            run_daemon(launch, &[], hosted, code, ingest).await
+            run_daemon(launch, &[], hosted, code, ingest, mesh).await
         }
     }
 }

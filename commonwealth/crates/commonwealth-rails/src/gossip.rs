@@ -37,6 +37,10 @@ use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
 
 use crate::{identity, note_contact, RailsDaemon};
 
+mod merge;
+pub(crate) use merge::merge_round;
+pub use merge::{split_generation_of, SplitGenerations};
+
 /// How many peers one round talks to. Three is the inference daemon's fan and
 /// the reason a round is cheap on a mesh of any size; rotation (below) is
 /// what makes it converge anyway.
@@ -472,7 +476,15 @@ async fn exchange(
     let incoming = parsed.mesh.into_mesh();
     let report = {
         let mut mesh = daemon.mesh.write().await;
-        mesh.merge_from_authenticated(self_id, &incoming, &auth)
+        merge_round(
+            &mut mesh,
+            self_id,
+            &incoming,
+            &auth,
+            Some(peer_id),
+            &daemon.split_generation,
+            &daemon.ring_nudge,
+        )
     };
     if report.rejected() {
         tracing::warn!(
@@ -539,6 +551,8 @@ mod tests {
     use super::*;
     use commonwealth_core::mesh::MemberRecord;
     use std::collections::HashMap;
+
+    mod select_tests;
 
     fn member(id: u128, name: &str, status: NodeStatus, keyed: bool) -> MemberRecord {
         MemberRecord {

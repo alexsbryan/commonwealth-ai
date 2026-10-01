@@ -2,43 +2,27 @@
 //! The service-injection hazards that used to be *remembered* are now
 //! structural.
 //!
-//! `AppState::with_local_inference` and `with_rpc_shard_warmer` mutated
-//! `AppStateInner` through `Arc::get_mut`, which returns `None` the moment any
-//! other code has cloned `app_state.inner` — the installer then became a
-//! `tracing::error!` and a quiet return, NOT a panic or an error result, so the
-//! daemon booted with no local inference and 503'd every chat turn.
+//! `AppState::with_local_inference` mutated `AppStateInner` through
+//! `Arc::get_mut`, which returns `None` the moment any other code has cloned
+//! `app_state.inner` — the installer then became a `tracing::error!` and a
+//! quiet return, NOT a panic or an error result, so the daemon booted with no
+//! local inference and 503'd every chat turn.
 //!
-//! Both values are constructor arguments now (`ServingSeed::local_inference`,
-//! `ServingSeed::rpc_shard_warmer`; DC §4.2 "Construction is staged, and parts
-//! are total"), as is the mesh-mutation hook (`FabricSeed::mesh_mutation_hook`).
-//! The hazard is gone structurally (ARCH 10): there is no installer to
-//! re-order, so these tests assert the values are present the moment the state
-//! exists rather than capturing a log line that a bad ordering would emit.
-use std::collections::HashMap;
+//! The value is a constructor argument now (`ServingSeed::local_inference`;
+//! DC §4.2 "Construction is staged, and parts are total"). The hazard is gone
+//! structurally (ARCH 10): there is no installer to re-order, so this test
+//! asserts the value is present the moment the state exists rather than
+//! capturing a log line that a bad ordering would emit. (The mesh-mutation
+//! hook this file also pinned left with the daemon's roster,
+//! pb-mesh-exit-transport.)
 use std::sync::Arc;
 
-use commonwealth_core::mesh::Mesh;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 
-use crate::common::ledger_double::RecordingLedger;
 use crate::common::service_double::ProviderService;
 use crate::common::TestProvider;
-
-fn empty_mesh() -> Mesh {
-    Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "injection-test".into(),
-        invite_key_hash: [9u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
-    }
-}
 
 #[test]
 fn local_inference_is_present_at_construction() {
@@ -49,7 +33,6 @@ fn local_inference_is_present_at_construction() {
     let adapter: Arc<dyn LocalInferenceService> = ProviderService::new(provider);
     let app_state = AppState::new_with_serving(
         NodeId::from_u128(0xDEAD_BEEF_CAFE_F00D),
-        empty_mesh(),
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()
@@ -59,37 +42,5 @@ fn local_inference_is_present_at_construction() {
     assert!(
         app_state.inner.serving.local_inference.is_some(),
         "a provider passed at construction must be present"
-    );
-}
-
-#[test]
-fn mesh_mutation_hook_is_present_at_construction() {
-    // Sister assertion — the second value that used to ride the same
-    // `Arc::get_mut` contract. It is a constructor argument now, so a future
-    // refactor cannot re-order a clone ahead of it: the hook is present the
-    // moment the state exists (ARCH 10 — structural, not remembered).
-    let hook: sovereign_daemon::state::MeshMutationHook =
-        Arc::new(|_mesh: &Mesh, _self_id: NodeId| {
-            // Body intentionally empty — the test isn't about firing the
-            // hook, only about it surviving construction.
-        });
-    let self_id = NodeId::from_u128(0xDEAD_BEEF_CAFE_F00D);
-    let app_state = AppState::new_with_seeds(
-        self_id,
-        empty_mesh(),
-        None,
-        None,
-        sovereign_daemon::state::FabricSeed {
-            mesh_mutation_hook: Some(hook),
-            ..Default::default()
-        },
-        Default::default(),
-        Default::default(),
-        Arc::new(RecordingLedger::new(self_id)).seed(),
-    );
-
-    assert!(
-        app_state.inner.fabric.on_mesh_mutation.is_some(),
-        "a hook passed at construction must be present"
     );
 }

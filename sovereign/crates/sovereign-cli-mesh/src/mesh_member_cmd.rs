@@ -13,7 +13,15 @@
 
 use sovereign_contracts::daemon_wire::MemberDto;
 
-use crate::mesh_cmd::{daemon_client_port, daemon_listening_on};
+/// cw-rails' `POST /v1/mesh/forget-member` answer, as this client parses it
+/// (the host's `commonwealth_core::mesh_identity::ForgottenMember`, which a
+/// svrn client cannot name).
+#[derive(Debug, serde::Deserialize)]
+struct ForgottenMember {
+    name: String,
+    was_aliased: bool,
+    already_retired: bool,
+}
 
 /// Print a warning for every endpoint key claimed by two ACTIVE members.
 ///
@@ -88,13 +96,9 @@ pub(crate) async fn cmd_forget_member(args: &[String]) -> i32 {
         return 1;
     };
 
-    let port = daemon_client_port();
-    if !daemon_listening_on(port).await {
-        eprintln!("No daemon detected on :{port} — the roster lives in the running daemon.");
-        eprintln!("Start it with `svrn daemon start`.");
-        return 1;
-    }
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/forget-member");
+    // The roster is cw-rails' (pb-mesh-exit-transport); an absent cw-rails
+    // is the request's error below, naming the base.
+    let url = format!("{}/v1/mesh/forget-member", crate::mesh_cmd::rails_base());
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -113,7 +117,7 @@ pub(crate) async fn cmd_forget_member(args: &[String]) -> i32 {
     {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("mesh forget-member: daemon at {url} not reachable: {e}");
+            eprintln!("mesh forget-member: cw-rails at {url} not reachable: {e}");
             return 1;
         }
     };
@@ -127,7 +131,7 @@ pub(crate) async fn cmd_forget_member(args: &[String]) -> i32 {
         eprintln!("{msg}");
         return 1;
     }
-    let out: sovereign_mesh::fabric::ForgottenMember = match serde_json::from_str(&body) {
+    let out: ForgottenMember = match serde_json::from_str(&body) {
         Ok(o) => o,
         Err(e) => {
             eprintln!("mesh forget-member: response shape mismatch ({e}): {body}");

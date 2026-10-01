@@ -112,12 +112,12 @@ async fn refused(router: Router, method: Method, path: &str, exposes: &str) {
 }
 
 #[tokio::test]
-async fn mesh_http_rejects_non_loopback_via_mesh_status() {
+async fn mesh_http_rejects_non_loopback_via_mesh_venues() {
     let (_tmp, d) = fresh_daemon();
     refused(
         mesh_router(d),
         Method::GET,
-        "/v1/mesh/status",
+        "/v1/mesh/venues",
         "it names this host's peers",
     )
     .await;
@@ -282,11 +282,11 @@ async fn lc_http_rejects_non_loopback_via_local_list() {
 // Without the spoof middleware, a real loopback caller should NOT
 // get a 403 — that would mean the guard is over-rejecting and the
 // rejection tests above are firing on noise. We pick one route
-// (mesh_status) that returns 200 on a no-mesh daemon, so we can
+// (mesh_venues) that returns 200 on a no-mesh daemon, so we can
 // assert a clean success.
 
 #[tokio::test]
-async fn loopback_caller_reaches_mesh_status() {
+async fn loopback_caller_reaches_mesh_venues() {
     let (_tmp, daemon) = fresh_daemon();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -299,14 +299,14 @@ async fn loopback_caller_reaches_mesh_status() {
     });
     tokio::time::sleep(Duration::from_millis(20)).await;
     let resp = reqwest::Client::new()
-        .get(format!("http://{addr}/v1/mesh/status"))
+        .get(format!("http://{addr}/v1/mesh/venues"))
         .send()
         .await
         .expect("server reachable");
     assert_eq!(
         resp.status(),
         reqwest::StatusCode::OK,
-        "loopback caller must NOT be 403'd on /v1/mesh/status; \
+        "loopback caller must NOT be 403'd on /v1/mesh/venues; \
          got {} — the loopback guard is over-rejecting",
         resp.status()
     );
@@ -349,7 +349,7 @@ async fn every_router_fails_closed_when_connect_info_absent() {
     }
 
     let (_t1, d1) = fresh_daemon();
-    assert_500_on_bare_serve(mesh_router(d1), "/v1/mesh/status").await;
+    assert_500_on_bare_serve(mesh_router(d1), "/v1/mesh/venues").await;
 
     let (_t2, d2) = fresh_daemon();
     // admin_reload is POST-only, but the loopback middleware runs
@@ -410,9 +410,9 @@ async fn every_router_fails_closed_when_connect_info_absent() {
 // The two families above are NOT gates, and the twin census proved
 // it mechanically (f6a633519). With `mesh_router`'s
 // `.layer(from_fn(loopback_only))` deleted the crate still compiles
-// and BOTH `mesh_http_rejects_non_loopback_via_mesh_status` and
+// and BOTH `mesh_http_rejects_non_loopback_via_mesh_venues` and
 // `every_router_fails_closed_when_connect_info_absent` still pass:
-// `mesh_status` extracts `ConnectInfo` and calls `enforce_localhost`
+// `mesh_venues` extracts `ConnectInfo` and calls `enforce_localhost`
 // itself, so the spoofed LAN caller is 403'd by the HANDLER and the
 // ConnectInfo-less caller 500s in the extractor before any handler
 // body runs. Both assertions are over-determined — satisfied with
@@ -500,7 +500,7 @@ async fn assert_the_guard_owns_the_method_fallback(name: &str, router: Router, p
 #[tokio::test]
 async fn every_router_refuses_a_request_no_handler_of_ours_can_refuse() {
     let (_t1, d1) = fresh_daemon();
-    assert_the_guard_owns_the_method_fallback("mesh_http", mesh_router(d1), "/v1/mesh/status")
+    assert_the_guard_owns_the_method_fallback("mesh_http", mesh_router(d1), "/v1/mesh/venues")
         .await;
 
     let (_t2, d2) = fresh_daemon();

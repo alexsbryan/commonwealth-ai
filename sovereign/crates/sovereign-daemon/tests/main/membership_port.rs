@@ -30,19 +30,12 @@ use sovereign_daemon::state::{test_app_state_with_seed, AppState};
 use sovereign_mesh::fabric::FabricSeed;
 use tower::ServiceExt;
 
-/// The files that may still read `fabric.mesh`, and how many lines each.
-/// daemon.rs is EmbeddedDaemon's create/join/leave/rotate/persist and its
-/// mesh_state snapshot; internal_principal.rs and mesh_proof_outbound.rs are
-/// the mesh proof; gossip.rs and mesh_admin.rs are the gossip and join
-/// handlers. All of it is the endpoint the flip deletes. A count that must
-/// grow means a roster read that belongs behind `AppState::membership()`.
-const ENDPOINT_READS: &[(&str, usize)] = &[
-    ("daemon.rs", 13),
-    ("internal_principal.rs", 3),
-    ("mesh_proof_outbound.rs", 2),
-    ("routes_internal/gossip.rs", 1),
-    ("routes_internal/mesh_admin.rs", 1),
-];
+/// The files that may still read `fabric.mesh`, and how many lines each:
+/// none. The endpoint that read it (create/join/leave/rotate, the mesh proof,
+/// the gossip and join handlers) went with pb-mesh-exit-transport, and the
+/// roster is cw-rails', read through `AppState::membership()`. A read that
+/// appears here belongs behind that port.
+const ENDPOINT_READS: &[(&str, usize)] = &[];
 
 struct RosterDouble {
     name: &'static str,

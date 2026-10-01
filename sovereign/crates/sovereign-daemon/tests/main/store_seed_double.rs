@@ -13,7 +13,7 @@ use sovereign_daemon::state::{fabric, node, serving, store::StoreSeed, AppState}
 
 use crate::common;
 use crate::common::ledger_double::RecordingLedger;
-use crate::common::{solo_mesh, spawn_router};
+use crate::common::spawn_router;
 
 const EMBED_DIM: usize = 8;
 
@@ -61,12 +61,12 @@ async fn served_knowledge_query_records_through_the_store_seed() {
     let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
 
     let double = Arc::new(RecordingLedger::new(self_id));
+    let (roster, fabric_seed) = common::roster_seed(self_id, "store-seed");
     let state = AppState::new_with_seeds(
         self_id,
-        solo_mesh(self_id, "store-seed"),
         Some(engine),
         None,
-        fabric::FabricSeed::default(),
+        fabric_seed,
         serving::ServingSeed::default(),
         node::NodeSeed::default(),
         StoreSeed {
@@ -78,10 +78,11 @@ async fn served_knowledge_query_records_through_the_store_seed() {
             processed_shards: double.clone(),
         },
     );
-    common::name_member_with_key(&state, requester, "requester", requester_key).await;
+    common::name_member_with_key(&roster, requester, "requester", requester_key);
+    let _tie = common::tie_as_cw_rails(&state, common::TIE);
     let addr = spawn_router(internal_router(state)).await;
 
-    let status = common::acceptor_stamp(
+    let status = common::cw_rails_stamp(
         reqwest::Client::new().post(format!("http://{addr}/internal/knowledge/search")),
         "requester",
         requester,
@@ -148,7 +149,6 @@ async fn a_contribution_write_lands_on_the_rails_door() {
     ));
     let state = AppState::new_with_seeds(
         self_id,
-        solo_mesh(self_id, "store-seed-rails"),
         None,
         None,
         fabric::FabricSeed::default(),

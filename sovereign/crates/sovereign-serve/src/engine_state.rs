@@ -42,7 +42,8 @@ pub(crate) async fn engine_state() -> Json<sovereign_contracts::engine_state::En
     let state = EngineState {
         device_memory,
         rpc_block_split_pin: sovereign_inference::embedded::pinned_block_split_raw(),
+        rpc_workers: crate::rpc_worker_views(),
     };
-    debug!(target: "serve", observed = state.device_memory.is_some(), pinned = state.rpc_block_split_pin.is_some(), "engine state: the loader's cached view");
+    debug!(target: "serve", observed = state.device_memory.is_some(), pinned = state.rpc_block_split_pin.is_some(), rpc_workers = state.rpc_workers.len(), "engine state: the loader's cached view");
     Json(state)
 }

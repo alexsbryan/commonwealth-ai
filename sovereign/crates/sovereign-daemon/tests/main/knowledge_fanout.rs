@@ -13,22 +13,23 @@
 //! back, and surfaces it with the `peer_name` field set to `"Host"` so
 //! the UI can render `sep (1) via Host`. Also exercises the
 //! resilience path — an offline peer must not tank the query.
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::{
     index::{CorpusIndex, InsertChunk},
     types::EmbedFn,
 };
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
+use mesh_reach::PeerContact;
 use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use oicp_types::knowledge::CorpusShardInfo;
+use sovereign_contracts::daemon_wire::mesh::MemberStatus;
+use sovereign_contracts::membership::MembershipEntry;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
 use tower::ServiceExt;
@@ -101,112 +102,89 @@ async fn spawn_internal_router(state: AppState) -> SocketAddr {
     addr
 }
 
-/// Build a `MemberRecord` with the given id, name, status, address,
-/// and `hosted_corpora`. Everything else is zero/default.
+/// A roster row with the given id, name, status, address, and
+/// `hosted_corpora`. Everything else is zero/default.
 fn member(
     id: NodeId,
     name: &str,
-    status: NodeStatus,
+    status: MemberStatus,
     addr: SocketAddr,
     hosted: Vec<String>,
-) -> MemberRecord {
-    MemberRecord {
-        removed_at: None,
-        node_pubkey: None,
-        relay_url: None,
-        iroh_direct_addrs: Vec::new(),
-        dial_info_version: 0,
-        dial_info_sig: None,
-        node_id: id,
-        name: name.into(),
-        invited_by: id,
-        joined_at: 0,
-        last_seen: 1_000,
-        status,
-        capabilities: NodeCapabilities {
-            hardware: HardwareProfile {
-                gpus: vec![],
-                system_ram_gb: 0,
-                cpu_cores: 0,
-                total_storage_gb: 0,
-                free_storage_gb: 0,
-                network_bandwidth_mbps: None,
-            },
-            available: AvailableResources::default(),
-            active_processes: vec![],
-            hosted_corpora: hosted
-                .into_iter()
-                .map(|corpus_id| CorpusShardInfo {
-                    corpus_id,
-                    chunk_range: None,
-                    is_replica: false,
-                    last_updated: 1_000,
-                    chunk_count: 0,
-                    canonical_fingerprint: None,
-                    total_shards: None,
-                    processed_shards: vec![],
-                    atlas_atom_count: 0,
-                    atlas_tier2_count: 0,
-                    atlas_fingerprint: None,
-                })
-                .collect(),
-            reported_at: 1_000,
-            inference_availability: 1.0,
-            inference_capable: false,
-            loaded_models: vec![],
-            origins: Vec::new(),
-            media_allow: Vec::new(),
-            media_available: None,
+) -> MembershipEntry<PeerContact> {
+    let mut row = crate::common::peer_row(id, name, status, caps(hosted), vec![addr]);
+    row.last_seen = 1_000;
+    row
+}
 
-            embed_model: None,
-            benchmark: None,
-            current_in_flight: None,
-            anchor: None,
+fn caps(hosted: Vec<String>) -> NodeCapabilities {
+    NodeCapabilities {
+        hardware: HardwareProfile {
+            gpus: vec![],
+            system_ram_gb: 0,
+            cpu_cores: 0,
+            total_storage_gb: 0,
+            free_storage_gb: 0,
+            network_bandwidth_mbps: None,
         },
-        addresses: vec![addr],
+        available: AvailableResources::default(),
+        active_processes: vec![],
+        hosted_corpora: hosted
+            .into_iter()
+            .map(|corpus_id| CorpusShardInfo {
+                corpus_id,
+                chunk_range: None,
+                is_replica: false,
+                last_updated: 1_000,
+                chunk_count: 0,
+                canonical_fingerprint: None,
+                total_shards: None,
+                processed_shards: vec![],
+                atlas_atom_count: 0,
+                atlas_tier2_count: 0,
+                atlas_fingerprint: None,
+            })
+            .collect(),
+        reported_at: 1_000,
+        inference_availability: 1.0,
+        inference_capable: false,
+        loaded_models: vec![],
+        origins: Vec::new(),
+        media_allow: Vec::new(),
+        media_available: None,
+
+        embed_model: None,
+        benchmark: None,
+        current_in_flight: None,
+        anchor: None,
     }
 }
 
 /// Build an `AppState` around `node_id`, optionally attached to a
-/// port double and populated with a two-member `Mesh` that
-/// includes `peer` as an online member with `hosted_corpora`.
+/// port double, whose roster (cw-rails', through the port) holds self and
+/// `peer` as an online member with `hosted_corpora`.
 fn make_state(
     node_id: NodeId,
-    peer: MemberRecord,
+    peer: MembershipEntry<PeerContact>,
     engine: Option<Arc<IngestPortDouble>>,
 ) -> AppState {
-    let mesh_id = MeshId::from_u128(42);
-    let hash = [7u8; 32];
     // Include self — otherwise the fan-out logic can't tell which
     // member is "us" and which are peers.
     let self_record = member(
         node_id,
         "Self",
-        NodeStatus::Online,
+        MemberStatus::Online,
         "127.0.0.1:0".parse().unwrap(),
         vec![],
     );
-    let mut members = HashMap::new();
-    members.insert(node_id, self_record);
-    members.insert(peer.node_id, peer);
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: mesh_id,
-        name: "Test".into(),
-        invite_key_hash: hash,
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
+    let fabric = sovereign_daemon::state::FabricSeed {
+        membership: Some(crate::common::roster("Test", vec![self_record, peer])),
+        ..Default::default()
     };
-
     AppState::new_with_seeds(
         node_id,
-        mesh,
         engine.map(|e| e as Arc<dyn corpus_index::ingest_port::daemon::IngestPort>),
         None,
-        Default::default(),
+        fabric,
         Default::default(),
         Default::default(),
         Arc::new(RecordingLedger::new(node_id)).seed(),
@@ -270,7 +248,7 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
     let host_joiner_peer = member(
         NodeId::from_u128(200),
         "Joiner",
-        NodeStatus::Online,
+        MemberStatus::Online,
         "127.0.0.1:1".parse().unwrap(),
         vec![],
     );
@@ -282,7 +260,7 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
     let host_in_joiner_view = member(
         host_id,
         "mac-peer",
-        NodeStatus::Online,
+        MemberStatus::Online,
         host_addr,
         vec!["sep".into()],
     );
@@ -337,7 +315,7 @@ async fn fanout_survives_offline_peer() {
     let dead_peer = member(
         NodeId::from_u128(301),
         "ZombieFounder",
-        NodeStatus::Online,
+        MemberStatus::Online,
         dead_addr,
         vec!["sep".into()],
     );
@@ -391,7 +369,7 @@ async fn a_named_corpus_nobody_hosts_is_reported_unavailable_not_empty() {
     let peer = member(
         NodeId::from_u128(401),
         "SharesNothing",
-        NodeStatus::Online,
+        MemberStatus::Online,
         "127.0.0.1:1".parse().unwrap(),
         vec![],
     );
@@ -433,7 +411,7 @@ async fn an_unconstrained_search_reports_nothing_unavailable() {
     let peer = member(
         NodeId::from_u128(501),
         "SharesNothing",
-        NodeStatus::Online,
+        MemberStatus::Online,
         "127.0.0.1:1".parse().unwrap(),
         vec![],
     );

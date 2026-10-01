@@ -30,8 +30,7 @@ use std::net::SocketAddr;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use commonwealth_core::mesh::Mesh;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use tower::ServiceExt;
@@ -48,22 +47,9 @@ const PEER_NODE: &str = "0000000000000000000000000000002a";
 
 /// A state that is SHEDDING: contribution paused an hour out, which is the
 /// first refusal in `AppState::admit_peer_request` — reached before any member
-/// lookup, so the mesh needs no members and the fixture stays a fixture.
+/// lookup, so the roster needs no members and the fixture stays a fixture.
 fn shedding_state() -> AppState {
-    let state = AppState::new(
-        NodeId::from_u128(1),
-        Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::from_u128(7),
-            name: "Test".into(),
-            invite_key_hash: [3u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: Default::default(),
-            peers: vec![],
-        },
-    );
+    let state = AppState::new(NodeId::from_u128(1));
     state.set_contribution_paused_until(chrono::Utc::now().timestamp() + 3_600);
     state
 }

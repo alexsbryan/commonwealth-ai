@@ -28,41 +28,36 @@
 //! 3. **Header absent → affinities unchanged**. The local-origin
 //!    /unidentified-peer path is the safe-default and must not
 //!    accidentally pick up some other peer's preference.
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;
-use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
+use sovereign_daemon::state::{AppState, FabricSeed, LocalInferenceService, ServingSeed};
 use sovereign_mesh::ledger_port::peer_preference;
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 
 use crate::common;
-use crate::common::{id_to_hex, member, solo_mesh, spawn_router, TestProvider};
+use crate::common::{id_to_hex, member, roster, spawn_router, TestProvider};
 
 /// Build an AppState with the manifest-producing adapter wired in.
 fn build_state(self_id: NodeId) -> AppState {
-    let mut members = HashMap::new();
-    members.insert(
-        self_id,
-        member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
-    );
-    let mut mesh = solo_mesh(self_id, "preference-test");
-    mesh.id = MeshId::from_u128(1);
-    mesh.invite_key_hash = [9u8; 32];
-    mesh.members = members;
     let provider: Arc<dyn InferenceProvider> =
         Arc::new(TestProvider::new().with_model_id("manifest-stub"));
     let adapter: Arc<dyn LocalInferenceService> = Arc::new(SovereignInferenceAdapter::new(
         provider,
         Arc::new(CoreSlotManifest),
     ));
-    AppState::new_with_serving(
+    AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
         self_id,
-        mesh,
+        None,
+        None,
+        FabricSeed {
+            membership: Some(roster("preference-test", vec![member(self_id, "self")])),
+            ..Default::default()
+        },
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()

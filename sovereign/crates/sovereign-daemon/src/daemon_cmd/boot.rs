@@ -11,10 +11,10 @@ use sovereign_core::traits::InferenceProvider;
 
 use super::log_rotation;
 use super::memory_watch;
-use super::mesh_resume::resume_or_bootstrap_mesh;
 use super::rlimit;
 use super::shutdown_daemon;
 use super::sovereign_root;
+use super::start::start;
 
 use crate::bootstrap;
 use crate::tool_registry::build_tool_registry;
@@ -26,6 +26,7 @@ pub(super) async fn run_daemon(
     hosted: Option<crate::serve_client::HostedServe>,
     code: Option<crate::hosted_code::HostedCode>,
     ingest: Option<crate::hosted_ingest::HostedIngest>,
+    mesh: Option<crate::hosted_mesh::HostedMesh>,
 ) -> i32 {
     #[cfg(unix)]
     rlimit::raise_open_file_limit();
@@ -218,17 +219,11 @@ pub(super) async fn run_daemon(
         }
     };
 
-    // The loader's worker-side warmer, read before `boot_serving` consumes the
-    // distribution's composition (pb-serve-distributes).
-    let rpc_warmer = hosted.as_ref().and_then(|h| h.warmer());
-    let rpc_worker_rows = hosted.as_ref().and_then(|h| h.rpc_worker_rows());
     let super::serving_boot::ServingBoot {
         provider,
         resolved_embed_family,
-        distribute,
         reload,
         deferred_daemon,
-        path: serving_path,
         ner,
         ranked,
     } = match super::serving_boot::boot_serving(&config, args, &config_override, hosted).await {
@@ -950,9 +945,6 @@ pub(super) async fn run_daemon(
                     // (`quality/DAEMON_CORE.md` §4.2 "Where an install slot
                     // breaks a cycle"); `None` where nothing ranks here.
                     in_flight_gauge: ranked.in_flight.clone(),
-                    // The loader's worker-side warmer, if the distribution
-                    // handed one (`HostedServe::rpc_warmer`).
-                    rpc_shard_warmer: rpc_warmer,
                     // Phase 3: the headless daemon's own `sovereign.db`,
                     // opened at the top of this function. `reading_http` now
                     // resolves conversation titles on this variant too.
@@ -997,6 +989,12 @@ pub(super) async fn run_daemon(
                     ),
                 },
                 advertise_embed,
+                // The node's mesh through cw-rails, as the distribution
+                // composed it; svrn alone reads none, named here.
+                mesh: match mesh {
+                    Some(m) => m.compose(&crate::rails_client::resolve_rails_base(&config.daemon)),
+                    None => crate::hosted_mesh::MeshAccess::absent(),
+                },
             },
             headless: Some(crate::HeadlessExtras {
                 rails: crate::HeadlessRails {
@@ -1028,32 +1026,11 @@ pub(super) async fn run_daemon(
     };
     let daemon = crate::EmbeddedDaemon::new(data_dir.clone(), config.clone(), services);
     deferred_daemon.bind(Arc::clone(&daemon));
-    if let Some(rows) = rpc_worker_rows {
-        daemon.set_rpc_worker_rows(rows);
-    }
-
-    // The distribution over the engine this process loads (the warm
-    // orchestrator, the self-manifest refresh, RPC-worker discovery; built by
-    // the loader, `sovereign_compute::distributed_discovery::distribute`),
-    // started over this daemon's mesh ports now that the daemon is bound; the
-    // distribution builds the ports (pb-serve-ranks-discovery). A
-    // hosted serve hands one; on the dialing path and on a terminal no
-    // engine loads here, so there is nothing to warm and no worker to
-    // discover (pb-svrn-dials-serve, pb-serve-distributes).
-    tracing::info!(
-        target: "serving_path",
-        loads_here = distribute.is_some(),
-        serving = %serving_path.status_line(),
-        "boot: the engine's mesh subsystems (warm orchestrator, RPC-worker discovery) run where the engine loads"
-    );
-    if let Some(distribute) = distribute {
-        distribute(Arc::clone(&daemon));
-    }
 
     bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), ranked.slot_aliases);
 
-    // ── Resume or bootstrap a solo mesh ───────────────────────────
-    if let Some(exit_code) = resume_or_bootstrap_mesh(&daemon, &config).await {
+    // ── Start: svrn holds no mesh; cw-rails is the node's endpoint ───
+    if let Some(exit_code) = start(&daemon, &config).await {
         return exit_code;
     }
 

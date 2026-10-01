@@ -1,25 +1,20 @@
-//! The three Serving fields the `serving` package may not name, held by the
-//! daemon.
+//! The Serving fields the `serving` package may not name, held by the daemon.
 //!
 //! DC §4.2 assigns all twenty of Serving's fields to `sovereign-serving-host`,
-//! and seventeen went there at `REVIEW-build-daemon-parts`. These three cannot
-//! cross the crate line:
-//!
-//! * `inference_store` (`sovereign_mesh::ledger_port::InferenceStatePort`
-//!   since fp-93) and `peer_preferences` (`PeerPreferencesPort` since fp-90)
-//!   are backed by `commonwealth-state`, which is not a shared leaf of the
-//!   `serving` package — a dep would be a third `[[exception]]`, and the
-//!   campaign's K4 kill clause splits the cluster rather than widening the
-//!   ledger (`quality/campaigns/domains.toml:288`);
-//! * `rpc_shard_warmer`'s trait method ([`RpcShardWarmer::warm_shard`]) takes
-//!   the daemon's `AppState`, so the trait cannot move to the host either.
+//! and seventeen went there at `REVIEW-build-daemon-parts`. `inference_store`
+//! (`sovereign_mesh::ledger_port::InferenceStatePort` since fp-93) and
+//! `peer_preferences` (`PeerPreferencesPort` since fp-90) cannot cross the
+//! crate line: they are backed by `commonwealth-state`, which is not a shared
+//! leaf of the `serving` package — a dep would be a third `[[exception]]`, and
+//! the campaign's K4 kill clause splits the cluster rather than widening the
+//! ledger (`quality/campaigns/domains.toml:288`). The third, the rpc-warm
+//! hook, is serve's since the flip (pb-mesh-exit-transport).
 //!
 //! Both stores are ports dialed to cw-rails since five-programs fp-88
 //! ([`StoreSeed::rails`]); their home is still the node the daemon assembles.
 
 use std::sync::Arc;
 
-use commonwealth_core::mesh::Mesh;
 use corpus_index::ingest_port::daemon::IngestPort;
 use kernel_types::NodeId;
 use sovereign_contracts::peer::ReplicatedKv;
@@ -28,7 +23,7 @@ use sovereign_mesh::ledger_port::{
     ProcessedShardsPort,
 };
 
-use super::{fabric, node, serving, AppState, RpcShardWarmer};
+use super::{fabric, node, serving, AppState};
 
 /// The store ports `AppState` is assembled over — the one seam every backing
 /// enters through (five-programs fp-97): [`StoreSeed::rails`] in production
@@ -92,7 +87,6 @@ impl AppState {
     /// its store ports and names no store.
     pub fn new_with_seeds(
         self_node_id: NodeId,
-        mesh: Mesh,
         corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         fabric_seed: fabric::FabricSeed,
@@ -100,7 +94,7 @@ impl AppState {
         node_seed: node::NodeSeed,
         store_seed: StoreSeed,
     ) -> Self {
-        let fabric = Arc::new(fabric::FabricPart::new(self_node_id, mesh, fabric_seed));
+        let fabric = Arc::new(fabric::FabricPart::new(self_node_id, fabric_seed));
         Self::assemble_with_fabric(
             self_node_id,
             fabric,
@@ -126,11 +120,6 @@ pub struct StorePart {
     /// fetch to apply per-requester affinity multipliers. Held as a port
     /// (five-programs fp-90), dialed to cw-rails since fp-88.
     pub peer_preferences: Arc<dyn PeerPreferencesPort>,
-    /// Worker-side auto-warm hook for distributed inference, passed at
-    /// construction alongside `local_inference`; drives
-    /// `POST /internal/rpc-warm`. `None` on a node that isn't an inference
-    /// worker. See [`RpcShardWarmer`].
-    pub rpc_shard_warmer: Option<Arc<dyn RpcShardWarmer>>,
     /// The node's replicated KV as a port (five-programs-36 (2)), dialed to
     /// cw-rails since fp-88.
     pub mesh_store: Arc<dyn ReplicatedKv>,

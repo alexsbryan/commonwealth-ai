@@ -252,3 +252,6 @@ pub async fn ring_checkpoint(
         "ring checkpoint: exported");
     Json(document).into_response()
 }
+
+#[cfg(test)]
+mod tests;

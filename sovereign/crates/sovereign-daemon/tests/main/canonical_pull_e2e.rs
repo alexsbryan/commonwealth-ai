@@ -27,11 +27,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use commonwealth_core::mesh::Mesh;
 use corpus_index::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
 use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::types::EmbedFn;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::{fabric, node, serving, AppState};
 use sovereign_mesh::canonical_pull::{pull_canonical_from_peer, PullError};
@@ -120,17 +119,6 @@ type Packs = Arc<Mutex<Vec<(PathBuf, i32)>>>;
 /// `pack_canonical`, which this double records and answers with
 /// [`PACKED`].
 async fn app_state_with_engine(index_dir: &Path) -> (AppState, Packs) {
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "Canonical Sync Test".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: Default::default(),
-        peers: vec![],
-    };
     let zero_embed: EmbedFn =
         Arc::new(|_t: &str| Box::pin(async { Ok::<Vec<f32>, corpus_index::Error>(vec![0.0; 4]) }));
     let packs: Packs = Arc::default();
@@ -149,7 +137,6 @@ async fn app_state_with_engine(index_dir: &Path) -> (AppState, Packs) {
     let self_id = NodeId::from_u128(1);
     let state = AppState::new_with_seeds(
         self_id,
-        mesh,
         Some(engine),
         None,
         fabric::FabricSeed::default(),
@@ -229,7 +216,6 @@ async fn canonical_pull_rejects_wrong_expected_fingerprint() {
         "wiki-mini",
         &client_index_dir,
         Some("0".repeat(64).as_str()),
-        None,
     )
     .await;
     match r {
@@ -276,7 +262,6 @@ async fn canonical_pull_falls_through_on_unreachable_first_url() {
         "wiki-mini",
         tempdir().unwrap().path(),
         Some("0".repeat(64).as_str()),
-        None,
     )
     .await;
 
@@ -303,74 +288,11 @@ async fn canonical_pull_returns_404_when_corpus_absent() {
     let client_index_dir = client_dir.path().to_path_buf();
 
     let candidates = vec![peer_url];
-    let r = pull_canonical_from_peer(&candidates, "missing-corpus", &client_index_dir, None, None)
-        .await;
+    let r = pull_canonical_from_peer(&candidates, "missing-corpus", &client_index_dir, None).await;
     match r {
         Err(PullError::PeerHttpError { status, .. }) => {
             assert_eq!(status, 404, "expected 404 for missing canonical");
         }
         other => panic!("expected PeerHttpError(404), got {other:?}"),
     }
-}
-
-/// `tg-2-strangers-are-refused`, this builder's half: the canonical GET carries
-/// the stamp it was handed, and carries nothing when it was handed none.
-///
-/// **Through a header recorder rather than the real router**, because the claim
-/// is about the REQUEST this function builds, not about what the route does with
-/// it — and the route is covered by
-/// `sovereign-daemon/tests/main/internal_gate_e2e.rs`. The absent case is the
-/// one that matters: a peer on the default `internal_auth` answers 401 to an
-/// unstamped pull over any non-loopback hop, which is what this function built
-/// before the stamp parameter existed.
-#[tokio::test]
-async fn the_canonical_get_carries_the_stamp_it_was_given_and_nothing_otherwise() {
-    use commonwealth_transport::mesh_proof::mesh_proof_stamp;
-    use std::sync::Mutex;
-
-    let seen: Arc<Mutex<Vec<Option<String>>>> = Default::default();
-    let sink = Arc::clone(&seen);
-    let handler = move |headers: axum::http::HeaderMap| {
-        let sink = Arc::clone(&sink);
-        async move {
-            sink.lock().unwrap().push(
-                headers
-                    .get("x-mesh-proof")
-                    .and_then(|v| v.to_str().ok())
-                    .map(str::to_string),
-            );
-            axum::http::StatusCode::NOT_FOUND
-        }
-    };
-    let app = axum::Router::new().route(
-        "/internal/corpus/canonical/{corpus_id}",
-        axum::routing::get(handler),
-    );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        let _ = axum::serve(listener, app).await;
-    });
-    let base = vec![format!("http://{addr}")];
-
-    let mesh = Mesh {
-        mesh_secret: [5u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(31),
-        name: "Pull Test".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: std::collections::HashMap::new(),
-        peers: vec![],
-    };
-    let stamp = mesh_proof_stamp(&mesh, NodeId::from_u128(3), 1_000).expect("secret is set");
-    let expected = stamp.pair().1.to_string();
-
-    let dest = tempdir().unwrap();
-    let _ = pull_canonical_from_peer(&base, "wiki-mini", dest.path(), None, Some(&stamp)).await;
-    let dest2 = tempdir().unwrap();
-    let _ = pull_canonical_from_peer(&base, "wiki-mini", dest2.path(), None, None).await;
-
-    assert_eq!(*seen.lock().unwrap(), vec![Some(expected), None]);
 }

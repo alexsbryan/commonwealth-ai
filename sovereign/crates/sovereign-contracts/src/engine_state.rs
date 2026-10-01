@@ -35,6 +35,13 @@ pub struct EngineState {
     pub device_memory: Option<DeviceMemoryReading>,
     /// `SOVEREIGN_RPC_BLOCK_SPLIT` as the loader reads it, raw.
     pub rpc_block_split_pin: Option<String>,
+    /// The RPC workers this process's discovery holds, one eligibility row
+    /// each (`sovereign_serving_host::worker_eligibility`'s status view:
+    /// `node_id`, `endpoint`, …). svrn's `/v1/mesh/status` carried them
+    /// until pb-mesh-exit-transport; `svrn mesh plan|bench` read them here.
+    /// Empty where no discovery loop runs.
+    #[serde(default)]
+    pub rpc_workers: Vec<serde_json::Value>,
 }
 
 /// One cached reading, with its age.

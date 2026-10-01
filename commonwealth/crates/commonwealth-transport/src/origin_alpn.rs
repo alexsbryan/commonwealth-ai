@@ -36,18 +36,9 @@ pub const MEDIA_ALPN: &[u8] = b"cwth/media/0";
 /// tier is that registering an app is cheaper than a restart.
 pub const APP_ALPN: &[u8] = b"cwth/app/0";
 
-/// A MEMBER reaching the HTTP origin that lists what this node's operator has
-/// to SELL or LEND (`[iroh] offer_origin`) — a drill going spare, six eggs, a
-/// room for a week.
-///
-/// The bridge parses nothing, exactly as `MEDIA_ALPN`'s does not: what an
-/// offer IS stays the origin's, so a house can point this at a static JSON
-/// file, a spreadsheet exporter, or a real shop. The catalogue a member sees
-/// is COMPUTED by asking every publisher at once
-/// (`commonwealth_media::fanout`) rather than stored, so there is no listing
-/// to be excluded from and nobody positioned to rank
-/// (`docs/internal/RING_APPLICATIONS.md` §Commerce).
-pub const OFFER_ALPN: &[u8] = b"cwth/offer/0";
+/// Re-exported from `mesh_reach::alpn`, where svrn names it to register its
+/// offer origin without linking the transport (pb-mesh-exit-transport).
+pub use mesh_reach::alpn::OFFER_ALPN;
 
 #[cfg(test)]
 mod tests {

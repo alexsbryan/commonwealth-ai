@@ -42,7 +42,6 @@
 use std::process::Stdio;
 use std::time::Duration;
 
-use crate::mesh_cmd::daemon_client_port;
 use crate::mesh_guest::{human_duration, parse_ttl};
 
 /// How often the claim is renewed, and how often a lost claim is retaken.
@@ -330,9 +329,10 @@ struct Publisher {
 
 impl Publisher {
     fn new(name: &str, port: u16, ttl_secs: u64) -> Self {
-        let daemon = daemon_client_port();
+        // The app registry is cw-rails' since pb-mesh-exit-transport; svrn's
+        // copy of the route answers 410 naming this base.
         Self::at(
-            &format!("http://127.0.0.1:{daemon}/v1/mesh/publish"),
+            &format!("{}/v1/mesh/publish", crate::mesh_cmd::rails_base()),
             name,
             port,
             ttl_secs,

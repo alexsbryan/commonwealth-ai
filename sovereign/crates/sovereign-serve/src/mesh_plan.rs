@@ -38,30 +38,19 @@ pub(crate) struct MeshDevice {
     pub(crate) link: Option<crate::mesh_measurements::LinkClass>,
 }
 
-/// Read the live mesh from the running daemon's `/v1/mesh/status` and build the
-/// per-device vector for `mesh plan --from-mesh`: online anchor workers first,
-/// this host (`is_self`) last so the output head lands on it. Returns
-/// `(devices, host index)`. Prints the resolved mesh to stderr (so `--json`
-/// stays clean on stdout).
+/// Read the live mesh (`crate::live_mesh`: cw-rails' roster beside serve's
+/// engine rows) and build the per-device vector for `mesh plan --from-mesh`:
+/// online anchor workers first, this host (`is_self`) last so the output head
+/// lands on it. Returns `(devices, host index)`. Prints the resolved mesh to
+/// stderr (so `--json` stays clean on stdout).
 async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<String>), String> {
-    let port = sovereign_contracts::setup_config::SetupConfig::load()
-        .map(|c| c.daemon.client_port)
-        .unwrap_or(9741);
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("http client: {e}"))?;
-    let resp = client.get(&url).send().await.map_err(|e| {
-        format!("daemon at {url} not reachable: {e}\n  hint: start it (`svrn daemon start`) or pass --devices manually")
-    })?;
-    if !resp.status().is_success() {
-        return Err(format!("daemon returned HTTP {} from {url}", resp.status()));
-    }
-    let body: serde_json::Value = resp
-        .json()
+    let body = crate::live_mesh::status_doc(&client)
         .await
-        .map_err(|e| format!("bad status JSON: {e}"))?;
+        .map_err(|e| format!("{e}\n  or pass --devices manually"))?;
     let members = body
         .get("members")
         .and_then(|m| m.as_array())

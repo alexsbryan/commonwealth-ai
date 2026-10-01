@@ -24,7 +24,6 @@ const RAILS_BRING_UP_WINDOW: std::time::Duration = std::time::Duration::from_sec
 /// `LocalOnlyProfile`, and `[data] dir` for the handover. Exit 0 once
 /// cw-rails answers; 1 with the absence named.
 pub async fn cmd_up(args: &[String]) -> i32 {
-    use sovereign_contracts::setup_config::SetupConfig;
     if let Some(arg) = args.first() {
         if matches!(arg.as_str(), "--help" | "-h" | "help") {
             println!(
@@ -45,6 +44,21 @@ pub async fn cmd_up(args: &[String]) -> i32 {
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
         .try_init();
+    match up().await {
+        Ok(_) => 0,
+        Err(e) => {
+            eprintln!("svrn mesh up: {e}");
+            1
+        }
+    }
+}
+
+/// The bring-up `svrn mesh up` runs, and `svrn mesh create|join` run first
+/// since the join and the key are cw-rails' (pb-mesh-exit-transport): the
+/// handover, then cw-rails reachable at `[daemon] rails_base`, its unit
+/// enabled. `Ok` is the base it answers at; `Err` names the absence.
+pub(crate) async fn up() -> Result<String, String> {
+    use sovereign_contracts::setup_config::SetupConfig;
     let config_path = SetupConfig::default_path();
     // No config file is a first run: the defaults. A config that exists and
     // does not load is refused — a handover from a guessed data dir is the
@@ -52,8 +66,7 @@ pub async fn cmd_up(args: &[String]) -> i32 {
     let config = match SetupConfig::load() {
         Ok(c) => c,
         Err(e) if config_path.exists() => {
-            eprintln!("svrn mesh up: {} does not load: {e}", config_path.display());
-            return 1;
+            return Err(format!("{} does not load: {e}", config_path.display()));
         }
         Err(e) => {
             tracing::warn!(error = %e, "mesh up: no setup config; the rails base and data dir are the defaults");
@@ -64,10 +77,12 @@ pub async fn cmd_up(args: &[String]) -> i32 {
     let local_only =
         sovereign_contracts::local_only::LocalOnlyProfile::resolve(config.daemon.local_only);
     let data_dir = config.data.dir.clone();
+    let mdns = mdns_effective(local_only.is_local_only(), config.discovery.mdns);
     tracing::debug!(
         rails_base = %base,
         local_only = local_only.label(),
         local_only_source = local_only.source().as_str(),
+        mdns,
         data_dir = %data_dir.display(),
         config = %config_path.display(),
         "mesh up: resolved"
@@ -75,7 +90,13 @@ pub async fn cmd_up(args: &[String]) -> i32 {
     let reached = {
         let base = base.clone();
         tokio::task::spawn_blocking(move || {
-            ensure_rails(&base, local_only.is_local_only(), &data_dir, &config_path)
+            ensure_rails(
+                &base,
+                local_only.is_local_only(),
+                mdns,
+                &data_dir,
+                &config_path,
+            )
         })
         .await
         .unwrap_or_else(|e| Err(format!("the bring-up thread failed: {e}")))
@@ -83,18 +104,15 @@ pub async fn cmd_up(args: &[String]) -> i32 {
     match reached {
         Ok(sovereign_turn_client::reach::Reached::BroughtUp { pid, .. }) => {
             println!("cw-rails is up at {base} (started, pid {pid})");
-            crate::rails_unit::install_after_bring_up(&base, local_only.is_local_only());
-            0
+            crate::rails_unit::install_after_bring_up(&base, local_only.is_local_only(), mdns);
+            Ok(base)
         }
         Ok(sovereign_turn_client::reach::Reached::AlreadyServing { .. }) => {
             println!("cw-rails is up at {base} (already running)");
-            crate::rails_unit::install_after_bring_up(&base, local_only.is_local_only());
-            0
+            crate::rails_unit::install_after_bring_up(&base, local_only.is_local_only(), mdns);
+            Ok(base)
         }
-        Err(e) => {
-            eprintln!("svrn mesh up: cw-rails is not reachable at {base}: {e}");
-            1
-        }
+        Err(e) => Err(format!("cw-rails is not reachable at {base}: {e}")),
     }
 }
 
@@ -128,16 +146,17 @@ pub async fn cmd_up(args: &[String]) -> i32 {
 pub fn ensure_rails(
     base: &str,
     local_only: bool,
+    mdns: bool,
     data_dir: &std::path::Path,
     config_path: &std::path::Path,
 ) -> Result<sovereign_turn_client::reach::Reached, String> {
     use sovereign_turn_client::reach::{BundledBackend, Reached, ServingHost};
 
-    hand_over_first(base, data_dir, config_path);
     let absent = |why: String| {
         tracing::warn!(rails_base = base, reason = %why, "ensure_rails: cw-rails is not reachable");
         why
     };
+    hand_over_first(base, data_dir, config_path).map_err(absent)?;
     let port = loopback_port(base).map_err(absent)?;
     let Some(bin) = locate_rails() else {
         return Err(absent(
@@ -155,13 +174,14 @@ pub fn ensure_rails(
         ))
     })?;
     let mut backend = BundledBackend::at(bin);
-    for arg in run_args(port, local_only) {
+    for arg in run_args(port, local_only, mdns) {
         backend = backend.arg(arg);
     }
     tracing::debug!(
         rails_base = base,
         port,
         local_only,
+        mdns,
         "ensure_rails: bring-up argv resolved"
     );
     let serving = ServingHost::at(base)
@@ -220,13 +240,34 @@ pub(crate) fn locate_rails() -> Option<std::path::PathBuf> {
 
 /// cw-rails' argv after its binary: the ONE spelling the bring-up and the
 /// boot unit both run (`crate::rails_unit`), so the unit cannot start a
-/// cw-rails on another port or posture than `svrn mesh up` did.
-pub(crate) fn run_args(port: u16, local_only: bool) -> Vec<String> {
+/// cw-rails on another port or posture than `svrn mesh up` did. `mdns` is
+/// [`mdns_effective`]'s answer.
+pub(crate) fn run_args(port: u16, local_only: bool, mdns: bool) -> Vec<String> {
     let mut args = vec!["run".to_string(), "--listen".to_string(), port.to_string()];
     if local_only {
         args.push("--local-only".to_string());
     }
+    if mdns {
+        args.push("--mdns".to_string());
+    }
     args
+}
+
+/// Whether this node's cw-rails advertises and browses mDNS: `[discovery]
+/// mdns`, never on a local-only node, and off under `SOVEREIGN_DISABLE_MDNS`.
+/// The daemon's `mdns_enabled_effective`, moved here when mDNS left the
+/// daemon for cw-rails (pb-mesh-exit-transport): the one decider, now read
+/// by the one verb that starts cw-rails.
+pub(crate) fn mdns_effective(local_only: bool, cfg_mdns: bool) -> bool {
+    if local_only {
+        return false;
+    }
+    let env_force_off = std::env::var("SOVEREIGN_DISABLE_MDNS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    let on = cfg_mdns && !env_force_off;
+    tracing::debug!(cfg_mdns, env_force_off, on, "mesh up: mdns posture");
+    on
 }
 
 /// Run `probe` on its own thread and current-thread runtime, so the caller
@@ -252,7 +293,15 @@ fn on_own_runtime<T: Send, F: std::future::Future<Output = Result<T, String>>>(
 /// One probe of `base`, then the handover: moved when nothing answers, left
 /// in place and named when a cw-rails already does. A probe that cannot run
 /// moves nothing — a journal under a live store is the loss this prevents.
-fn hand_over_first(base: &str, data_dir: &std::path::Path, config_path: &std::path::Path) {
+///
+/// The identity handover (`crate::identity_handover`) runs on the same probe:
+/// a key, node id and meshes that fail to move are an `Err`, and nothing is
+/// brought up over a half-moved store.
+fn hand_over_first(
+    base: &str,
+    data_dir: &std::path::Path,
+    config_path: &std::path::Path,
+) -> Result<(), String> {
     let host = sovereign_turn_client::reach::ServingHost::at(base).ready_at("/v1/mesh/status");
     let answering = on_own_runtime("handover probe", || async { Ok(host.is_serving().await) });
     let answering = answering.unwrap_or_else(|e| {
@@ -260,7 +309,15 @@ fn hand_over_first(base: &str, data_dir: &std::path::Path, config_path: &std::pa
         true
     });
     tracing::debug!(rails_base = base, answering, "ensure_rails: handover probe");
+    let identity = crate::identity_handover::hand_over(
+        data_dir,
+        &commonwealth_media::rails_data_dir(),
+        answering,
+    )
+    .map_err(|e| format!("the daemon's identity did not hand over to cw-rails: {e}"))?;
+    tracing::info!(rails_base = base, outcome = ?identity, "ensure_rails: identity handover");
     crate::rail_migration::hand_over(data_dir, config_path, answering);
+    Ok(())
 }
 
 /// A local-only node found a cw-rails it did not start: `Ok` only when that

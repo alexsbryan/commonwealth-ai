@@ -37,10 +37,11 @@ pub const TRACE_TARGET: &str = "peer_origin";
 /// How long the claim holds unrenewed: the work origin's TTL
 /// (`crate::work_origin`).
 pub const ORIGIN_TTL_SECS: u64 = 60;
-/// How often the claim is renewed: the daemon's gossip interval, because
-/// each renew carries this node's capabilities once cw-rails advertises the
-/// node, and peers must see them no staler than a gossip round shows them.
-pub const ORIGIN_RENEW_EVERY: Duration = sovereign_mesh::gossip::DEFAULT_GOSSIP_INTERVAL;
+/// How often the claim is renewed: cw-rails' default gossip round
+/// (commonwealth-rails config.rs `default_gossip_interval`, 10 s), because
+/// each renew carries this node's capabilities and cw-rails gossips what the
+/// last renew declared, so peers see them no staler than one round.
+pub const ORIGIN_RENEW_EVERY: Duration = Duration::from_secs(10);
 
 /// The internal routes a peer dials, each served on the internal port
 /// (`crate::server`): the corpus work queue, the pipeline pause, knowledge
@@ -85,7 +86,7 @@ pub fn claims_source(state: AppState) -> ClaimsSource {
         let state = state.clone();
         Box::pin(async move {
             let engine = state.inner.node.corpus_engine.clone();
-            let now = state.clock().now_unix_secs();
+            let now = sovereign_time::unix_now_u64();
             let caps = without_anchor(build_local_capabilities(engine.as_ref(), now, &state).await);
             debug!(target: TRACE_TARGET, hosted_corpora = caps.hosted_corpora.len(),
                    embed_model = caps.embed_model.is_some(),

@@ -415,37 +415,42 @@ pub async fn append(
     // A guest's name crosses the dial only as this node's signed word
     // (decision five-programs-34): the rails daemon holds no sessions,
     // so it honours `on_behalf_of` under an attestation it verifies against
-    // its roster — and refuses, by name, when this node's key is not in it.
-    // The attestation lives as long as the guest's session does.
-    // `stamp_from` names the session's own name, so the name and its expiry
-    // come from one session — never a defaulted expiry (principle 6).
+    // its roster. The node's key is cw-rails' (pb-mesh-exit-transport), so
+    // cw-rails signs the word this door vouches for. The attestation lives as
+    // long as the guest's session does. `stamp_from` names the session's own
+    // name, so the name and its expiry come from one session — never a
+    // defaulted expiry (principle 6).
     let session = guest.and_then(|g| g.session.as_ref());
     let attestation = match on_behalf_of.as_deref().zip(session) {
         None => None,
         Some((name, session)) => {
             let expires_at = (session.expires_at_ms / 1000) as i64;
-            match state.attest_guest(name, &namespace, expires_at) {
-                Some(a) => {
+            let base = &state.inner.node.rails_base;
+            match crate::rails_client::attest_guest(base, name, &namespace, expires_at).await {
+                Ok(a) => {
                     tracing::debug!(
                         namespace,
                         guest = name,
                         expires_at,
                         signer = %a.signer,
-                        "rail: attested a guest's append for the rails daemon"
+                        "rail: cw-rails attested a guest's append"
                     );
                     Some(a)
                 }
-                None => {
+                Err(e) => {
                     tracing::warn!(
                         namespace,
                         guest = name,
-                        "rail: refused a guest append — this node has no key to attest with"
+                        error = %e,
+                        "rail: refused a guest append — cw-rails did not attest the guest"
                     );
                     return err(
                         StatusCode::SERVICE_UNAVAILABLE,
-                        "guest writes need this node's identity key to vouch for \
-                         the guest's name, and this daemon has none — the write \
-                         would land under the member's name, so it is refused",
+                        format!(
+                            "guest writes need the node's signed word for the guest's name, \
+                             and cw-rails did not give it ({e}) — the write would land under \
+                             the member's name, so it is refused"
+                        ),
                     );
                 }
             }

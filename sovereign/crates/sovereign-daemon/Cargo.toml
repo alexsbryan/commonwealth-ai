@@ -15,22 +15,17 @@ path = "src/bin/sovereign-daemon.rs"
 required-features = ["treesitter"]
 
 [dependencies]
-# Commonwealth crates (embedded as library)
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
-commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
+# cw-rails is the node's one mesh endpoint (pb-mesh-exit-transport): svrn links
+# no commonwealth-core, -discovery, -media or -transport, and reaches the mesh
+# through the ports its distribution composes (`hosted_mesh`).
 # Join-key hash + format check (fp-9): the pure leaf, not the bootstrap crate.
 mesh-join-vocab = { workspace = true }
 mesh-reach = { workspace = true, features = ["fanout"] }
-commonwealth-media = { path = "../../../commonwealth/crates/commonwealth-media" }
 # The rail's VOCABULARY only (fp-54): the journals live at the serving
 # process, so the daemon names the shared leaf's types (Op, Roster,
 # Admission, RailAct) and dials `/v1/rail/*` through the port
 # (`rails_client::RailsRingRail`) — no journal crate.
 commonwealth-rail-core = { workspace = true }
-# `features = ["iroh"]`: the daemon's dial-by-key binding is compiled into the
-# default build — runtime-gated by `[iroh] enabled`, not cfg-gated. `fanout`
-# because `media_fanout` calls the fan-out core where it lives (ARCH §8.3).
-commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport", features = ["iroh", "fanout"] }
 # Fabric's own crate — the host cluster names it for the state and the loops
 # that stay behind (DC §4.1; `[[forbid]] sovereign-mesh -> sovereign-daemon`
 # keeps the arrow one-way).
@@ -141,8 +136,6 @@ treesitter = [
 # half (domains `dm-daemon-cli-composition`); the binary's features forward
 # to these.
 ocr = ["sovereign-tools/paddle-ocr"]
-# Moved with the iroh e2e tests from sovereign-mesh's test tree.
-iroh-experimental = ["sovereign-mesh/iroh-experimental"]
 # `double`: roster members, a solo mesh, the bound router and a recording
 # ledger, for the tests of a root that drives a daemon route
 # (pb-serve-ranks-tests-stock). Off in every product build.

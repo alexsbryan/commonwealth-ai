@@ -69,14 +69,14 @@ async fn default_ports_used_when_setup_config_absent() {
     // `api_address()` exposes the chosen client bind decision.
     let daemon = EmbeddedDaemon::in_memory(SetupConfig::unconfigured(), mesh_admin_services());
     daemon
-        .create_mesh("default-port test", "node")
+        .start()
         .await
-        .expect("create_mesh succeeds against an empty in-memory daemon");
+        .expect("start succeeds against an empty in-memory daemon");
 
     let addr = daemon
         .api_address()
         .await
-        .expect("daemon must report an api_address after create_mesh");
+        .expect("daemon must report an api_address after start");
     assert_eq!(
         addr.port(),
         9741,
@@ -94,14 +94,14 @@ async fn custom_client_port_from_setup_config_flows_to_api_address() {
     // no-op (operator changed the TOML, daemon still bound 9741).
     let daemon = EmbeddedDaemon::in_memory(cfg_with_ports(29741, 29742), mesh_admin_services());
     daemon
-        .create_mesh("custom-port test", "node")
+        .start()
         .await
-        .expect("create_mesh succeeds with custom-port config");
+        .expect("start succeeds with custom-port config");
 
     let addr = daemon
         .api_address()
         .await
-        .expect("daemon must report an api_address after create_mesh");
+        .expect("daemon must report an api_address after start");
     assert_eq!(
         addr.port(),
         29741,

@@ -18,31 +18,23 @@
 //! the loopback-vs-remote split must not depend on the CI box having a
 //! routable NIC.
 //!
-//! The replication drills go through `internal_router`, which is where the
-//! receiver's `DefaultBodyLimit` lives — see §"the convergence ceiling", the
-//! only place in the tree that says what happens when one exchange outgrows
-//! it.
+//! A guest's act is attested by the node's key, which is cw-rails' since
+//! pb-mesh-exit-transport: [`attest_door`] stands in for cw-rails'
+//! `POST /v1/rail/attest`, signing with the key a test names.
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use commonwealth_core::mesh::Mesh;
-use commonwealth_rail_core::{
-    Digest, Ed25519Verifier, Op, Payload, Person, RailAct, RingSigner, Roster, SignedOp,
-};
+use commonwealth_rail_core::{Person, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
-use kernel_types::{MeshId, NodeId};
-use sovereign_daemon::routes_internal::{
-    RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES,
-};
+use kernel_types::NodeId;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use sovereign_grants::Scope;
-use sovereign_mesh::rail_port::{LocalRingRail, RingJournal};
+use sovereign_mesh::rail_port::LocalRingRail;
 use tower::ServiceExt;
 
 const LOOPBACK: &str = "127.0.0.1:55001";
@@ -56,45 +48,70 @@ fn bare_state() -> AppState {
         sovereign_daemon::state::FabricSeed::default(),
         sovereign_grants::GuestSessionBinding::Door,
         Default::default(),
+        None,
     )
 }
 
 /// [`bare_state`] with Fabric's construction seed — the rail is a construction
 /// argument now, not a post-construction install (DC §4.2 "Construction is
-/// staged, and parts are total").
+/// staged, and parts are total") — and, when `rails_base` names one, the
+/// cw-rails the guest door asks for attestations.
 fn bare_state_with_seed(
     seed: sovereign_daemon::state::FabricSeed,
     sessions: sovereign_grants::GuestSessionBinding,
     pages: sovereign_daemon::guest_door::GuestPages,
+    rails_base: Option<String>,
 ) -> AppState {
     let node = NodeId::from_u128(1);
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(7),
-        name: "Test".into(),
-        invite_key_hash: [3u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
+    let mut node_seed = sovereign_daemon::state::NodeSeed {
+        client_token: Some(Arc::<str>::from(TOKEN)),
+        guest_sessions: sessions,
+        guest_pages: pages,
+        internal_auth: Default::default(),
+        ..Default::default()
     };
+    if let Some(base) = rails_base {
+        node_seed.rails_base = base;
+    }
     AppState::new_with_seeds(
         node,
-        mesh,
         None,
         None,
         seed,
         sovereign_daemon::state::ServingSeed::default(),
-        sovereign_daemon::state::NodeSeed {
-            client_token: Some(Arc::<str>::from(TOKEN)),
-            guest_sessions: sessions,
-            guest_pages: pages,
-            internal_auth: Default::default(),
-            ..Default::default()
-        },
+        node_seed,
         Arc::new(ledger_double::RecordingLedger::new(node)).seed(),
     )
+}
+
+/// A stand-in for cw-rails' `POST /v1/rail/attest`, signing with `key`: the
+/// node's key is cw-rails' since pb-mesh-exit-transport, and svrn's guest door
+/// asks it for each attestation (`rails_client::attest_guest`). Returns its
+/// base. Needs the test's runtime.
+fn attest_door(key: &SigningKey) -> String {
+    let key = key.clone();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = axum::Router::new().route(
+        "/v1/rail/attest",
+        axum::routing::post(move |axum::Json(b): axum::Json<serde_json::Value>| {
+            let key = key.clone();
+            async move {
+                axum::Json(commonwealth_rail_core::GuestAttestation::sign(
+                    &key,
+                    b["name"].as_str().unwrap_or_default(),
+                    b["namespace"].as_str().unwrap_or_default(),
+                    b["expires_at"].as_i64().unwrap_or_default(),
+                ))
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    format!("http://{addr}")
 }
 
 /// A daemon with ring storage under `root`, signing as `key`, and a roster
@@ -143,15 +160,6 @@ fn state_with_rail_sessions(
     state_with_rail_attested_by(root, key, key, sessions, pages)
 }
 
-/// The guest door's attester, as the daemon builds it: a closure over a node
-/// key (daemon.rs, beside the dial signer).
-fn attester(key: &SigningKey) -> Arc<sovereign_daemon::state::fabric::GuestAttester> {
-    let key = key.clone();
-    Arc::new(move |name: &str, namespace: &str, expires_at: i64| {
-        commonwealth_rail_core::GuestAttestation::sign(&key, name, namespace, expires_at)
-    })
-}
-
 /// [`state_with_rail_sessions`] whose guest door attests with `attest_key`
 /// rather than the rail's own key — a door the roster may not admit.
 fn state_with_rail_attested_by(
@@ -176,11 +184,11 @@ fn state_with_rail_attested_by(
     bare_state_with_seed(
         sovereign_daemon::state::FabricSeed {
             ring_rail: Some(Arc::new(rail)),
-            guest_attester: Some(attester(attest_key)),
             ..Default::default()
         },
         sessions,
         pages,
+        Some(attest_door(attest_key)),
     )
 }
 
@@ -243,17 +251,6 @@ fn groceries() -> serde_json::Value {
             "participants": ["alex", "bo"],
         }
     })
-}
-
-fn expense_payload(payer: &str, cents: i64, what: &str) -> Payload {
-    Payload::new(serde_json::json!({
-        "kind": "expense",
-        "payer": payer,
-        "amount_cents": cents,
-        "description": what,
-        "participants": ["alex", "bo"],
-    }))
-    .unwrap()
 }
 
 // ── the outcome the whole rail exists for ────────────────────
@@ -577,19 +574,15 @@ async fn a_namespace_that_is_a_path_is_refused() {
 // The store ports ride the daemon's recording double.
 use sovereign_daemon::double::ledger_double;
 
-// The replication + sealing half lives in a sibling file: together they put
-// this one into the 800-1200 approach band (ARCH §3.1).
+// The sealing half lives in a sibling file: together they put this one into
+// the 800-1200 approach band (ARCH §3.1).
 mod replication;
 
-// `sync_raw` / `sync_once` moved with the replication suite; the sibling
-// suites below reach them through `use super::*`, as they always did.
-use replication::{sync_once, sync_raw};
-
-mod ceiling;
-
-// The ring-sync route's OWN refusal, driven at the handler because the gate in
-// front never lets the case reach the mounted route.
-mod roster_refusal;
+// The rail bind's own refusals.
+mod rail_bind;
 
 // The guest door rides the same helpers: the rail on a LAN-reachable bind.
 mod guest_door;
+
+// The live lane's drain: the grant decides, cw-rails holds the buffer.
+mod live_drain;

@@ -172,24 +172,19 @@ fn an_origin_config_change_is_never_reported_as_no_change() {
         mcp_servers: Vec::new(),
     };
 
+    // The media origin reloaded live into the daemon's acceptor until
+    // pb-mesh-exit-transport; cw-rails serves media now and reads its own
+    // rails.toml `[media]`, so a change here is reported, never applied.
     let mut origin_set = base.clone();
     origin_set.iroh.media_origin = Some("127.0.0.1:8096".into());
     let d = ConfigDiff::diff(&base, &origin_set);
-    assert_eq!(d.media_changed, vec!["iroh.media_origin"]);
-    assert!(
-        d.restart_required.is_empty(),
-        "the media origin reloads live"
-    );
+    assert_eq!(d.restart_required, vec!["iroh.media_origin"]);
     assert!(!d.is_noop(), "a changed config must never read as a no-op");
 
     let mut allow_set = base.clone();
     allow_set.iroh.media_allow = vec!["LittleMac".into()];
     let d = ConfigDiff::diff(&base, &allow_set);
-    assert_eq!(d.media_changed, vec!["iroh.media_allow"]);
-    assert!(
-        d.restart_required.is_empty(),
-        "the media allow list reloads live"
-    );
+    assert_eq!(d.restart_required, vec!["iroh.media_allow"]);
     assert!(!d.is_noop());
 
     let mut app_published = base.clone();

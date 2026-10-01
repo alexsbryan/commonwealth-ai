@@ -29,19 +29,19 @@ use async_trait::async_trait;
 use futures::Stream;
 use serde_json::{json, Value};
 
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_contracts::error::Result as SovResult;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, ProviderCapabilities, Speed, StreamFrame,
 };
 use sovereign_daemon::server::client_router;
-use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
+use sovereign_daemon::state::{AppState, FabricSeed, LocalInferenceService, ServingSeed};
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 
 use crate::common;
-use crate::common::{id_to_hex, member_with_last_seen, solo_mesh, spawn_router, TestProvider};
+use crate::common::{id_to_hex, member, roster, spawn_router, TestProvider};
 
 /// An `InferenceProvider` that sleeps before delegating, so the
 /// "response still generating" window is observable from outside.
@@ -98,19 +98,17 @@ fn build_state(peer_name: &str) -> (AppState, NodeId) {
     // render identically and the attribution check would be blind.
     let self_id = NodeId::from_u128(0x1111_1111_1111_1111 << 64);
     let peer_id = NodeId::from_u128(0x2222_2222_2222_2222 << 64);
-    let mut members = HashMap::new();
-    members.insert(
-        self_id,
-        member_with_last_seen(self_id, "self", 100, "127.0.0.1:9742".parse().unwrap()),
-    );
-    members.insert(
-        peer_id,
-        member_with_last_seen(peer_id, peer_name, 100, "127.0.0.1:9876".parse().unwrap()),
-    );
-    let mut mesh = solo_mesh(self_id, "tally-e2e");
-    mesh.id = MeshId::from_u128(42);
-    mesh.invite_key_hash = [7u8; 32];
-    mesh.members = members;
+    let rows = [
+        (self_id, "self", "127.0.0.1:9742"),
+        (peer_id, peer_name, "127.0.0.1:9876"),
+    ]
+    .map(|(id, name, addr)| {
+        let mut row = member(id, name);
+        row.last_seen = 100;
+        row.dial.addresses = vec![addr.parse().unwrap()];
+        row
+    })
+    .to_vec();
 
     let fast: Arc<dyn InferenceProvider> = Arc::new(
         TestProvider::new()
@@ -125,9 +123,14 @@ fn build_state(peer_name: &str) -> (AppState, NodeId) {
         slow,
         Arc::new(CoreSlotManifest),
     ));
-    let app_state = AppState::new_with_serving(
+    let app_state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
         self_id,
-        mesh,
+        None,
+        None,
+        FabricSeed {
+            membership: Some(roster("tally-e2e", rows)),
+            ..Default::default()
+        },
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()

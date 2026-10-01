@@ -77,6 +77,7 @@ pub fn hand_over(data_dir: &Path, config_path: &Path, rails_answering: bool) {
         migrate_journals_to_rails(data_dir);
         migrate_media_to_rails(data_dir, config_path, &rails_data_dir());
         migrate_work_offer(config_path, &rails_data_dir());
+        crate::iroh_config_migration::migrate_iroh_keys(config_path, &rails_data_dir());
         return;
     }
     let namespaces: Vec<String> = match std::fs::read_dir(source_root(data_dir)) {

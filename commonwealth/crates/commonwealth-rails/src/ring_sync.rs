@@ -4,9 +4,8 @@
 //!
 //! Moved here from sovereign-mesh (phase-b pb-rails-parity). cw-rails runs
 //! the round over its own journals ([`crate::RailsDaemon`] is a
-//! [`RingSyncHost`]) and answers `/internal/ring/sync` with [`answer`]; the
-//! daemon runs the same round over its rail port until the flip turns its
-//! copy off.
+//! [`RingSyncHost`]) and answers `/internal/ring/sync` with [`answer`]. The
+//! daemon's copy retired with pb-mesh-exit-transport: this is the one round.
 //!
 //! # Why this is a digest and not a snapshot
 //!
@@ -25,8 +24,9 @@
 //! event-driven `broadcast_now` beside it are deleted, `MeshStore` is a
 //! projection of these journals on both sides of the wire, and this is the ONE
 //! sender of replicated state in the workspace. The nudge is what keeps that
-//! affordable for a latency-sensitive writer — `AppState::ring_write_nudge`
-//! starts a round when a local write reaches a journal, so the sixty seconds
+//! affordable for a latency-sensitive writer — `RailsDaemon::ring_nudge`
+//! starts a round when the append door signs onto a journal or a member comes
+//! back Online, so the sixty seconds
 //! is a ceiling on idleness rather than on a write.
 //!
 //! # The exchange
@@ -742,3 +742,6 @@ pub async fn append(
     }
     answer
 }
+
+#[cfg(test)]
+mod tests;

@@ -16,13 +16,11 @@
 // Every test binary uses a different subset of these helpers; the
 // `dead_code` lint would otherwise fire per-binary on the unused ones.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Router;
 
-use commonwealth_core::mesh::Mesh;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 
 use corpus_index::ingest_port::daemon::{IngestPort, RecipeHarnessPort};
 use corpus_index::ingest_port::double::{IngestPortDouble, RecipeHarnessDouble};
@@ -30,7 +28,8 @@ use sovereign_contracts::recipe::project::RecipeProjectPort;
 
 pub use sovereign_daemon::double::ledger_double;
 pub use sovereign_daemon::double::{
-    empty_capabilities, id_to_hex, member, member_with_last_seen, solo_mesh, spawn_router,
+    empty_capabilities, id_to_hex, keyed_member, member, peer_row, roster, spawn_router,
+    tie_as_cw_rails, StaticRoster,
 };
 pub mod service_double;
 pub mod work_rails;
@@ -50,88 +49,71 @@ pub fn corpus_at(
 
 // ── The verified peer identity on the internal plane ────────────
 
-/// Name `id` in `state`'s roster with a verified key, so a request stamped by
-/// [`acceptor_stamp`] with that key resolves to this member.
-///
-/// A member whose record carries no `node_pubkey` is a member this node cannot
-/// identify on the wire, and `internal_principal` resolves such a caller
-/// `Unverified` by design — so a test that wants attribution has to say which
-/// key the roster knows, exactly as a real join does.
-pub async fn name_member_with_key(
-    state: &sovereign_daemon::state::AppState,
-    id: NodeId,
-    name: &str,
-    pubkey: [u8; 32],
-) {
-    let mut rec = member(id, name, "127.0.0.1:9742".parse().unwrap());
-    rec.node_pubkey = Some(kernel_types::NodePubkey(pubkey));
-    state
-        .inner
-        .fabric
-        .mesh
-        .write()
-        .await
-        .members
-        .insert(id, rec);
+/// The tie a test installs with [`tie_as_cw_rails`] and presents with
+/// [`cw_rails_stamp`].
+pub const TIE: &str = "0123456789abcdef-test-origin-tie";
+
+/// A roster the test owns, holding `self_id` as `self`, and the seed that
+/// hands it to the daemon: cw-rails' roster through the membership port
+/// (pb-mesh-exit-transport).
+pub fn roster_seed(
+    self_id: NodeId,
+    mesh_name: &str,
+) -> (Arc<StaticRoster>, sovereign_daemon::state::FabricSeed) {
+    let owned = Arc::new(StaticRoster::new(mesh_name, vec![member(self_id, "self")]));
+    let seed = sovereign_daemon::state::FabricSeed {
+        membership: Some(owned.clone()),
+        ..Default::default()
+    };
+    (owned, seed)
 }
 
-/// Stamp a request exactly as this node's OWN iroh acceptor stamps an internal
-/// forward: the verified identity triple plus the per-process acceptor mark.
+/// A daemon state over `roster`, as cw-rails' roster through the port.
+pub fn state_over_roster(
+    self_id: NodeId,
+    mesh_name: &str,
+    rows: Vec<sovereign_contracts::membership::MembershipEntry<mesh_reach::PeerContact>>,
+) -> sovereign_daemon::state::AppState {
+    sovereign_daemon::state::AppState::new_with_platform_and_engine_and_gauge_and_fabric(
+        self_id,
+        None,
+        None,
+        sovereign_daemon::state::FabricSeed {
+            membership: Some(roster(mesh_name, rows)),
+            ..Default::default()
+        },
+    )
+}
+
+/// Name `id` in `roster` with a verified key, so a request stamped by
+/// [`cw_rails_stamp`] with that key resolves to this member.
 ///
-/// This is how an internal-plane test speaks as a peer now. A bare
-/// `X-Node-Id` header is no longer an identity anywhere behind the internal
-/// router — it is what a caller TYPES, and `internal_principal` strips it —
-/// so a test that wants to be attributed has to present what the acceptor
-/// presents. The mark is this process's secret and a test runs in the same
-/// process as the router it is driving, which is what makes the tie reachable
-/// here and unreachable from outside.
-pub fn acceptor_stamp(
+/// A member whose row carries no key is a member this node cannot identify on
+/// the wire, and `internal_principal` resolves such a caller `Unverified` by
+/// design — so a test that wants attribution says which key the roster knows,
+/// as cw-rails' roster does.
+pub fn name_member_with_key(roster: &StaticRoster, id: NodeId, name: &str, pubkey: [u8; 32]) {
+    roster.insert(keyed_member(id, name, pubkey));
+}
+
+/// Stamp a request exactly as cw-rails stamps a member's forward to svrn's
+/// registered peer routes: the verified identity triple plus the registration
+/// tie (`kernel_types::member::ORIGIN_TIE_HEADER`). The state under test must
+/// hold [`TIE`] (`tie_as_cw_rails(&state, TIE)`).
+///
+/// A bare `X-Node-Id` header is no identity behind the internal router — it is
+/// what a caller TYPES, and `internal_principal` strips it — so a test that
+/// wants to be attributed presents what cw-rails presents.
+pub fn cw_rails_stamp(
     req: reqwest::RequestBuilder,
     name: &str,
     id: NodeId,
     pubkey: [u8; 32],
 ) -> reqwest::RequestBuilder {
-    use commonwealth_transport::iroh_identity_forward::{acceptor_mark, ACCEPTOR_MARK_HEADER};
     req.header("X-Mesh-Member", name)
         .header("X-Mesh-Node", id.to_string())
         .header("X-Mesh-Pubkey", hex::encode(pubkey))
-        .header(ACCEPTOR_MARK_HEADER, acceptor_mark())
-}
-
-/// An `AppState` with one member (self) and a client token configured.
-///
-/// Shared by the tests that drive the REAL `sovereign_daemon` client router
-/// over a transport — they differ only in the mesh's encryption posture, and a
-/// second copy of this would drift from the first.
-pub fn client_app_state(
-    self_id: NodeId,
-    token: Option<&str>,
-    require_encryption: bool,
-) -> sovereign_daemon::state::AppState {
-    let mut members = HashMap::new();
-    members.insert(
-        self_id,
-        member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
-    );
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "transport test".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption,
-        members,
-        peers: vec![],
-    };
-    sovereign_daemon::state::AppState::new_with_node(
-        self_id,
-        mesh,
-        sovereign_daemon::state::NodeSeed {
-            client_token: token.map(std::sync::Arc::<str>::from),
-            ..Default::default()
-        },
-    )
+        .header(kernel_types::member::ORIGIN_TIE_HEADER, TIE)
 }
 
 pub use sovereign_contracts::double::TestProvider;
@@ -301,7 +283,6 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_daemon::DaemonServices
                     ))),
                     inference_provider: parts.provider,
                     in_flight_gauge: None,
-                    rpc_shard_warmer: None,
                     state_store: parts.store,
                     runtime: parts.runtime,
                     insights: parts.insights,
@@ -317,6 +298,7 @@ pub fn desktop_services(parts: DesktopParts) -> sovereign_daemon::DaemonServices
                 advertise_embed: sovereign_daemon::EmbedAdvertisement::Unavailable {
                     reason: "test fixture: no embed probe".into(),
                 },
+                mesh: sovereign_daemon::hosted_mesh::MeshAccess::absent(),
             },
         },
     )
@@ -584,7 +566,9 @@ pub fn mesh_admin_services() -> sovereign_daemon::DaemonServices {
             name: "mesh".to_string(),
             args: Vec::new(),
         },
-        sovereign_daemon::LaunchParts::Admin,
+        sovereign_daemon::LaunchParts::Admin {
+            mesh: sovereign_daemon::process::MeshAccess::absent(),
+        },
     )
     .expect("a verb launch with admin parts assembles to MeshAdmin")
 }

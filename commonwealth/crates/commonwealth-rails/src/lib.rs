@@ -337,8 +337,15 @@ pub struct RailsDaemon {
     /// [`rail::LiveBuffer`].
     pub rail_live: Arc<rail::LiveBuffer>,
     /// Wakes the ring round now rather than at its interval: fired by the
-    /// append door after a signed write (see [`ring_sync::append`]).
+    /// append door after a signed write (see [`ring_sync::append`]), and by a
+    /// gossip merge that brings an Offline member back.
     pub ring_nudge: Arc<Notify>,
+    /// Each peer's credential generation as this process last merged it:
+    /// `true` post-split (it proved, or withheld its secret), `false`
+    /// pre-split, absent when not merged since start. Fed by both gossip
+    /// directions (`gossip::merge_round`); read by rotate's pre-split guard
+    /// (`membership::rotate`).
+    pub split_generation: gossip::SplitGenerations,
     /// The foreground deadline `POST /v1/work/yield` holds (pb-work-donor).
     pub work_yield: Arc<work::ForegroundYield>,
     /// The mesh store, projected from `rail`'s journals and pumped back onto
@@ -408,11 +415,15 @@ impl RailsDaemon {
             commonwealth_media::PublishedApps::default(),
         );
         let rail_live = Arc::new(rail::LiveBuffer::default());
+        let ring_nudge = Arc::new(Notify::new());
+        let split_generation = gossip::SplitGenerations::default();
         let (internal_addr, internal) = internal::serve(
             mesh.clone(),
             contacts.clone(),
             node.self_id,
             node.data_dir.clone(),
+            ring_nudge.clone(),
+            split_generation.clone(),
             ring_routes::router(ring_routes::RingInbound {
                 rail: rail.clone(),
                 live: rail_live.clone(),
@@ -449,7 +460,8 @@ impl RailsDaemon {
             origins,
             rail,
             rail_live,
-            ring_nudge: Arc::new(Notify::new()),
+            ring_nudge,
+            split_generation,
             work_yield: Arc::default(),
             kv,
             media_presence: Arc::new(std::sync::RwLock::new(None)),

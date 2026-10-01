@@ -135,17 +135,20 @@ impl TurnClient {
     // `contract` layer). A client that could name them would be a client
     // that links the daemon.
 
-    /// `GET /v1/mesh/status` — the whole mesh view in one read:
-    /// membership, online counts, the invite, every joined mesh, and
-    /// this node's own reachability.
+    /// `GET /v1/mesh/status` on cw-rails — the whole mesh view in one read:
+    /// membership, online counts, the invite, every joined mesh, and this
+    /// node's own reachability. Build the client at cw-rails' base.
     ///
-    /// `T` is `sovereign_contracts::daemon_wire::MeshStatusSummary` (the
-    /// route's `sovereign_daemon::mesh_http::StatusResponse` for a caller
-    /// that links the daemon). It is a READ and it always answers: a node in no mesh reports `running: false`
-    /// with `mesh_name: None`, which is a fact and not an absence. An
+    /// cw-rails' document is read through
+    /// `sovereign_contracts::daemon_wire::RailsMeshStatus` and projected
+    /// onto svrn's `MeshStatusSummary` by its one `From`, so every client
+    /// sees full-hex member ids and the derived hardware columns. An
     /// unreachable host is an `Err` (ARCH principle 6).
-    pub async fn mesh_status<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
-        self.internal_get("/v1/mesh/status".to_string(), &[]).await
+    pub async fn mesh_status(&self) -> Result<sovereign_contracts::daemon_wire::MeshStatusSummary> {
+        let doc: sovereign_contracts::daemon_wire::RailsMeshStatus = self
+            .internal_get("/v1/mesh/status".to_string(), &[])
+            .await?;
+        Ok(doc.into())
     }
 
     /// `POST /v1/mesh/create` — create a mesh and answer with the

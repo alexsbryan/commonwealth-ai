@@ -30,7 +30,6 @@
 //!    test pins both via the middleware path.
 use std::sync::Arc;
 
-use commonwealth_core::Result as CorpusResult;
 use sovereign_daemon::landscape_digest_http::landscape_digest_router;
 use sovereign_tools::knowledge_view::KnowledgeViewManager;
 
@@ -61,13 +60,6 @@ async fn bare_manager() -> Arc<KnowledgeViewManager> {
     // fiddly. Per-test temp prefix means no cross-test collision.
     std::mem::forget(tmp);
     Arc::new(KnowledgeViewManager::new(engine, db_path, vec![]).await)
-}
-
-/// Sanity that `CorpusResult` is actually re-exported from
-/// `commonwealth_core` and the dev-dep chain reaches us.
-#[allow(dead_code)]
-fn _result_alias_compiles<T>(r: CorpusResult<T>) -> CorpusResult<T> {
-    r
 }
 
 #[tokio::test]

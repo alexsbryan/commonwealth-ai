@@ -11,7 +11,6 @@ use crate::routes_inference;
 use crate::routes_internal;
 use crate::routes_kinds;
 use crate::routes_knowledge;
-use crate::routes_mesh_kv;
 use crate::routes_oicp;
 use crate::routes_oicp_ingest;
 use crate::routes_ollama;
@@ -99,11 +98,6 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // credential is read.
     let operator_routes: Router<AppState> = if surface.serves_operator_routes() {
         routes_internal::client_token_routes()
-            // The mesh-KV serving surface (fp-33): the workbench's atlas
-            // stores dial this instead of opening a mesh store directly.
-            // Operator-only — a claim store is local coordination, exactly
-            // like the token and guest-grant routes beside it.
-            .merge(routes_mesh_kv::router())
             .route(
                 "/internal/inference/warmup",
                 post(routes_internal::inference_warmup),
@@ -341,8 +335,6 @@ pub fn internal_router(state: AppState) -> Router {
     );
 
     Router::new()
-        .route("/internal/gossip", post(routes_internal::gossip))
-        .route("/internal/join", post(routes_internal::join))
         .route(
             "/internal/scheduling/intent",
             post(routes_internal::scheduling_intent),
@@ -355,20 +347,8 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/model/transfer",
             post(routes_internal::model_transfer),
         )
-        // Peer-to-peer GGUF distribution: serve's, forwarded (see
-        // routes_internal::model_files).
-        .route(
-            oicp_types::model_transfer::MODELS_LIST_PATH,
-            get(routes_internal::list_model_files),
-        )
-        .route(
-            oicp_types::model_transfer::MODEL_FILE_ROUTE,
-            get(routes_internal::serve_model_file),
-        )
-        // Distributed-inference auto-warm: a host asks this worker to seed its
-        // RPC tensor cache with its shard before a distributed load. The worker
-        // fetches the GGUF (or its byte ranges) from the model-file route above.
-        .route("/internal/rpc-warm", post(routes_internal::rpc_warm))
+        // Model files and the worker's rpc-warm are serve's, on serve's own
+        // cw-rails registration (`sovereign_serve::rails_mesh::join`).
         .route(
             "/internal/index/transfer",
             post(routes_internal::index_transfer),
@@ -502,25 +482,6 @@ pub fn internal_router(state: AppState) -> Router {
         .route(
             "/internal/node/activity",
             post(routes_internal::node_activity),
-        )
-        // Ring-ledger anti-entropy — the ONE receiver of replicated state.
-        // `/internal/app/state` sat beside it until cw-lift rung 2e and took
-        // a full mesh-store snapshot from every online peer every 10s; the
-        // store is a projection of these journals now, so a ledger that only
-        // grows is carried by digest instead of by snapshot.
-        .route("/internal/ring/sync", post(routes_internal::ring_sync))
-        // The live lane's receiver. Deliberately NOT beside `ring/sync` in
-        // the census of replicated-state senders: what arrives here reaches
-        // the bounded in-memory buffer on `AppState` and nothing else, so a
-        // restart is the whole of its retention policy.
-        .route("/internal/ring/live", post(routes_internal::ring_live))
-        // One ring's record, frozen — the v1 checkpoint document. A READ,
-        // not a replicated-state sender: a peer syncs by digest, it does not
-        // freeze copies of this node's record, so this serves the loopback
-        // callers the gate admits and nobody finer-grained.
-        .route(
-            "/internal/ring/checkpoint/{ns}",
-            get(routes_internal::ring_checkpoint),
         )
         // Runtime slot management — load/unload extras chat slots
         // without daemon restart. Complements the static

@@ -227,9 +227,6 @@ async fn admin_reload(
 #[derive(Debug, Default)]
 pub(crate) struct ConfigDiff {
     pub models_changed: Vec<&'static str>,
-    /// `[iroh] media_origin` / `media_allow`: applied by swapping the live
-    /// `MediaRoute`, no restart.
-    pub media_changed: Vec<&'static str>,
     pub restart_required: Vec<&'static str>,
 }
 
@@ -351,13 +348,11 @@ impl ConfigDiff {
         // silently kept the old value (ARCH §18.3: absence is reported, never
         // defaulted). Observed setting `media_origin` on this host: the verb
         // said stored, reload said nothing changed, the fanout still 401'd.
-        // The media two are live since ring-room (`MediaRoute`): reload
-        // applies them, so they are compared here and restart nothing.
         if old.iroh.media_origin != new.iroh.media_origin {
-            d.media_changed.push("iroh.media_origin");
+            d.restart_required.push("iroh.media_origin");
         }
         if old.iroh.media_allow != new.iroh.media_allow {
-            d.media_changed.push("iroh.media_allow");
+            d.restart_required.push("iroh.media_allow");
         }
         if old.iroh.apps != new.iroh.apps {
             // `[iroh.apps]` is the durable publish tier; the ephemeral one
@@ -380,9 +375,7 @@ impl ConfigDiff {
     }
 
     pub(crate) fn is_noop(&self) -> bool {
-        self.models_changed.is_empty()
-            && self.media_changed.is_empty()
-            && self.restart_required.is_empty()
+        self.models_changed.is_empty() && self.restart_required.is_empty()
     }
 }
 

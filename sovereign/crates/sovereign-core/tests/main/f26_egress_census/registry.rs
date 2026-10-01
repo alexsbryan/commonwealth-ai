@@ -55,8 +55,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-turn-client/src/reach.rs", Class::LocalDaemon, 1),
     // `serve_self.rs` — serve's self-report read (`GET /v1/engine/self`) at
     // this host's serve, moved from the daemon's serve_client at
-    // pb-meshapp-rest so code's editor door shares it.
-    ("sovereign/crates/sovereign-turn-client/src/serve_self.rs", Class::LocalDaemon, 1),
+    // pb-meshapp-rest so code's editor door shares it. 1 -> 2
+    // (pb-mesh-exit-transport): `read_engine_state` moved here from the
+    // daemon's serve_client so `svrn mesh plan|bench` share it.
+    ("sovereign/crates/sovereign-turn-client/src/serve_self.rs", Class::LocalDaemon, 2),
     // sovereign-mobile: the phone's ApiClient — one `reqwest::Client`, one
     // `TurnClient::new(base_url)` over the same client family the desktop
     // and CLI use (sv-surface R6, 4e1f99f55), and the response parser.
@@ -100,8 +102,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // `tests/rpc_warm_http.rs` is above. 17 -> 15 (pb-serve-placement): the
     // `/v1/mesh/measurements` door and its two tests retired. 15 -> 16
     // (pb-serve-ranks-discovery, 163ecfe35): the rpc-workers test reads
-    // `/v1/mesh/status` from its own test router, loopback.
-    ("sovereign/crates/sovereign-daemon/src/mesh_http_tests.rs", Class::TestOnly, 16),
+    // `/v1/mesh/status` from its own test router, loopback. 16 -> retired
+    // (pb-mesh-exit-transport): the routes it drove are cw-rails', and
+    // `mesh_http_tests.rs` went with them.
     // NEW (2026-09-04, cw-lift 2f, bc600f424): the ring rail's anti-entropy
     // sender. `exchange` POSTs a RingSyncRequest to `/internal/ring/sync` on
     // each online peer, plus the inline `#[cfg(test)]` module that binds a
@@ -151,8 +154,8 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-compute/src/distributed_warm.rs", Class::Mesh, 2),
     // Re-keyed with it (b13c2ab8b): the worker's tests, same four sites.
     ("sovereign/crates/sovereign-compute/src/distributed_warm/worker_tests.rs", Class::TestOnly, 4),
-    // `#[cfg(test)] mod` at mesh_proof_outbound.rs:59 — the stamp fixture.
-    ("sovereign/crates/sovereign-daemon/src/mesh_proof_outbound.rs", Class::TestOnly, 1),
+    // mesh_proof_outbound.rs's stamp fixture: retired with the mesh proof
+    // (pb-mesh-exit-transport).
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
     // (`reload_applies_a_context_size_change_without_a_restart`,
     // `reload_applies_a_code_slot_change_without_a_restart`) each build a
@@ -200,8 +203,11 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // test module moved verbatim to child files, so the fourteen sites moved
     // with it — the eight reload tests to `tests/reload.rs`, the other six to
     // `tests.rs`. Same sites, same class; `admin_http.rs` itself has none.
+    //
+    // reload.rs 8 -> 7 (pb-mesh-exit-transport): the media-origin reload test
+    // retired with the daemon's media acceptor (cw-rails owns `[media]`).
     ("sovereign/crates/sovereign-daemon/src/admin_http/tests.rs", Class::Mesh, 6),
-    ("sovereign/crates/sovereign-daemon/src/admin_http/tests/reload.rs", Class::Mesh, 8),
+    ("sovereign/crates/sovereign-daemon/src/admin_http/tests/reload.rs", Class::Mesh, 7),
     // NEW ROW 2026-09-12 (sv-surface svt-7). `assets_http.rs` is the daemon's
     // weights surface — hardware / catalog / slot / NER reads plus the one
     // asset-download job. All five constructions are inside its
@@ -318,7 +324,8 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // moved from the daemon (pb-serve-distributes-standalone) so serve and
     // svrn share it. Same class as rails_kv above.
     ("sovereign/crates/sovereign-turn-client/src/rails_origins.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-mesh/src/gossip.rs", Class::Mesh, 1),
+    // sovereign-mesh's gossip.rs: retired (pb-mesh-exit-transport); cw-rails
+    // gossips the node.
     ("sovereign/crates/sovereign-mesh/src/canonical_pull.rs", Class::Mesh, 1),
 
     // ---- sovereign-pods: the rented-pod modules (Wave 1); Class::Mesh per the enum doc's "pod traffic" ----

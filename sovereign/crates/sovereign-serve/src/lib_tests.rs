@@ -290,7 +290,10 @@ async fn the_member_client_mounts_the_openai_face_and_no_reload() {
         .expect("answered");
     assert_eq!(models.status(), 200, "the member client answers /v1/models");
     let reload = client
-        .post(format!("{base}{}", sovereign_contracts::engine_state::RELOAD_PATH))
+        .post(format!(
+            "{base}{}",
+            sovereign_contracts::engine_state::RELOAD_PATH
+        ))
         .send()
         .await
         .expect("answered");

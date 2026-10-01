@@ -122,6 +122,35 @@ pub trait MembershipReader: Send + Sync {
     }
 }
 
+/// The roster of a program composed with no roster reader: no members, no
+/// name. Whoever holds one names why at the moment it was chosen (svrn alone
+/// at boot); each read traces the absence at `debug`.
+pub struct NoMembership<D>(std::marker::PhantomData<fn() -> D>);
+
+impl<D> Default for NoMembership<D> {
+    fn default() -> Self {
+        Self(std::marker::PhantomData)
+    }
+}
+
+#[async_trait]
+impl<D: Clone + Send + Sync + 'static> MembershipReader for NoMembership<D> {
+    type Dial = D;
+
+    async fn mesh_name(&self) -> String {
+        String::new()
+    }
+
+    async fn federated_meshes(&self) -> Vec<FederatedMeshDescriptor> {
+        Vec::new()
+    }
+
+    async fn members(&self) -> Vec<MembershipEntry<D>> {
+        tracing::debug!(target: "mesh", "no roster reader composed: no members");
+        Vec::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

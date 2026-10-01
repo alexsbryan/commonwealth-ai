@@ -330,10 +330,31 @@ async fn run_roster(args: &[String]) -> i32 {
 
 /// This node's own signing key, as the rail names it: hex of the Ed25519
 /// public key. The same value `Op.actor` carries.
-fn self_actor() -> Result<String, String> {
-    let data_dir = sovereign_cli_base::dirs::sovereign_root();
-    let key = commonwealth_transport::identity::load_or_generate_node_key(&data_dir);
-    Ok(commonwealth_rail::actor_of(&key))
+///
+/// Asked of cw-rails (`GET /v1/rail/actor`), which holds the node's one key
+/// since pb-mesh-exit-transport, never read or minted off disk here: a key
+/// minted by this verb would be a second identity nobody signs with. An
+/// absent cw-rails is an `Err` naming its base.
+async fn self_actor() -> Result<String, String> {
+    let base = crate::mesh_cmd::rails_base();
+    let url = format!("{base}/v1/rail/actor");
+    #[derive(serde::Deserialize)]
+    struct Actor {
+        actor: String,
+    }
+    let resp = reqwest::get(&url).await.map_err(|e| {
+        format!(
+            "cw-rails at {base} holds this node's key and did not answer: {e} (`{}` brings it up)",
+            sovereign_turn_client::rails_kv::RAILS_BRING_UP_VERB
+        )
+    })?;
+    if !resp.status().is_success() {
+        return Err(format!("cw-rails refused {url}: HTTP {}", resp.status()));
+    }
+    resp.json::<Actor>()
+        .await
+        .map(|a| a.actor)
+        .map_err(|e| format!("cw-rails answered {url} unreadably: {e}"))
 }
 
 async fn roster_add(namespace: &str, args: &[String]) -> i32 {
@@ -342,7 +363,7 @@ async fn roster_add(namespace: &str, args: &[String]) -> i32 {
         return 2;
     };
     let key = if args.iter().any(|a| a == "--self") {
-        match self_actor() {
+        match self_actor().await {
             Ok(k) => k,
             Err(e) => {
                 eprintln!("ring roster add: {e}");

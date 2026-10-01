@@ -35,20 +35,15 @@
 //!    for the rationale: SEP has `mesh_sharing=false, query_sharing=true`
 //!    and DOES get advertised — the wire-fan-out path is separately
 //!    gated.)
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::source::CorpusReadPort;
 use corpus_index::types::EmbedFn;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_daemon::state::AppState;
-use sovereign_mesh::gossip;
 
 use crate::common;
-use crate::common::empty_capabilities;
 use crate::common::ledger_double::RecordingLedger;
 
 const EMBED_DIM: usize = 8;
@@ -132,46 +127,14 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
 
     let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
 
-    // Build an AppState with the engine wired and a self-member.
-    // The gossip refresh path reads `installed_indexes()` from the
-    // engine, filters on `query_sharing`, and writes the result back
-    // into our own MemberRecord.capabilities.hosted_corpora.
+    // Build an AppState with the engine wired. What this node advertises
+    // is what its peer-origin registration declares to cw-rails at every
+    // register and renew (`peer_origin::claims_source`,
+    // pb-mesh-exit-transport): `installed_indexes()` from the engine,
+    // filtered on `query_sharing`, as `hosted_corpora`.
     let self_id = NodeId::from_u128(0xA770A770);
-    let self_addr = "127.0.0.1:9742".parse().unwrap();
-    let mut members = HashMap::new();
-    members.insert(
-        self_id,
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
-            node_id: self_id,
-            name: "Self".into(),
-            invited_by: self_id,
-            joined_at: 0,
-            last_seen: 100,
-            status: NodeStatus::Online,
-            capabilities: empty_capabilities(),
-            addresses: vec![self_addr],
-        },
-    );
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "locality-test".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
-    };
     let state = AppState::new_with_seeds(
         self_id,
-        mesh,
         Some(engine),
         None,
         Default::default(),
@@ -180,38 +143,8 @@ async fn query_sharing_false_corpus_does_not_publish_to_hosted_corpora() {
         Arc::new(RecordingLedger::new(self_id)).seed(),
     );
 
-    // Pre-condition: self's hosted_corpora is empty (the initial
-    // MemberRecord ships with capabilities default-empty).
-    {
-        let m = state.inner.fabric.mesh.read().await;
-        assert!(m
-            .members
-            .get(&self_id)
-            .unwrap()
-            .capabilities
-            .hosted_corpora
-            .is_empty());
-    }
-
-    // Drive one gossip round. No peers, but the "refresh self
-    // capabilities" path runs regardless — it doesn't need a peer
-    // to be reachable. After this, our own MemberRecord's
-    // `hosted_corpora` is the filtered list.
-    gossip::run_one_round(
-        &*state.inner.fabric,
-        state.inner.node.corpus_engine.as_ref(),
-        &state,
-        Duration::from_secs(60),
-    )
-    .await
-    .expect("gossip round succeeds with no peers");
-
-    let m = state.inner.fabric.mesh.read().await;
-    let corpora_ids: Vec<&str> = m
-        .members
-        .get(&self_id)
-        .unwrap()
-        .capabilities
+    let declared = sovereign_daemon::peer_origin::claims_source(state.clone())().await;
+    let corpora_ids: Vec<&str> = declared
         .hosted_corpora
         .iter()
         .map(|c| c.corpus_id.as_str())

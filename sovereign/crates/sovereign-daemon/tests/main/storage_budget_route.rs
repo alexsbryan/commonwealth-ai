@@ -15,26 +15,13 @@
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use commonwealth_core::mesh::Mesh;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
-use std::collections::HashMap;
 use tower::ServiceExt;
 
 fn fresh_state() -> AppState {
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "Test Mesh".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
-    };
-    AppState::new(NodeId::from_u128(1), mesh)
+    AppState::new(NodeId::from_u128(1))
 }
 
 async fn get_storage_budget(state: AppState) -> (StatusCode, serde_json::Value) {

@@ -42,12 +42,12 @@
 //!
 //! # What the profile skips, and what it does not
 //!
-//! It skips the NETWORK, never the model. A local-only daemon still mints and
-//! persists its `Mesh` with one member — the solo case is the honest N=1, and
-//! an `Option<Mesh>` would fork every reader of membership into two shapes.
-//! What it removes is the traffic: no multicast advertise/browse, no iroh
-//! endpoint or relay contact, no gossip round, no peer-assisted ingest
-//! handoff, no ring anti-entropy, no rail KV pump.
+//! It skips the NETWORK, never the model. Since pb-mesh-exit-transport the
+//! daemon binds no mesh endpoint, advertises no mDNS and runs no gossip or
+//! ring round at all — those are cw-rails', and `svrn mesh up` hands this
+//! profile to it (`--local-only`). What the profile removes here is the
+//! daemon's own mesh-facing loops: no peer-assisted ingest handoff, no rail KV
+//! pump, and no origin registered with cw-rails.
 
 pub use sovereign_contracts::local_only::{LocalOnlyProfile, LocalOnlySource, ENV_VAR};
 
@@ -58,16 +58,8 @@ pub use sovereign_contracts::local_only::{LocalOnlyProfile, LocalOnlySource, ENV
 /// entry is a compile-visible omission rather than an invisible one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MeshService {
-    /// mDNS `_commonwealth._tcp` advertise (the multicast socket).
-    MdnsAdvertise,
-    /// mDNS browse loop populating the discovered-peers table.
-    MdnsBrowse,
-    /// The gossip heartbeat loop.
-    Gossip,
     /// The peer-assisted ingest handoff loop (`auto_ingest`).
     AutoIngestCollaborate,
-    /// Ring-ledger anti-entropy (`ring_sync`).
-    RingSync,
     /// The mesh-store outbox pump that signs local writes onto their rings.
     RailKvPump,
     /// The `ingest:v1` execute origin (`crate::work_origin`), served on
@@ -77,42 +69,31 @@ pub enum MeshService {
     /// svrn's peer routes registered with cw-rails' origin table
     /// (`crate::peer_origin`), so a member reaches them through cw-rails.
     PeerOrigin,
-    /// The iroh endpoint + acceptor.
-    IrohEndpoint,
-    /// The founder reachability watchdog (only ever with the endpoint).
-    IrohWatchdog,
+    /// svrn's guest listener registered with cw-rails on `cwth/guest/0`
+    /// (`crate::guest_origin`).
+    GuestOrigin,
 }
 
 impl MeshService {
     /// Stable name — what the boot trace prints and what a test asserts on.
     pub fn as_str(self) -> &'static str {
         match self {
-            MeshService::MdnsAdvertise => "mdns_advertise",
-            MeshService::MdnsBrowse => "mdns_browse",
-            MeshService::Gossip => "gossip",
             MeshService::AutoIngestCollaborate => "auto_ingest_collaborate",
-            MeshService::RingSync => "ring_sync",
             MeshService::RailKvPump => "rail_kv_pump",
             MeshService::WorkOrigin => "work_origin",
             MeshService::PeerOrigin => "peer_origin",
-            MeshService::IrohEndpoint => "iroh_endpoint",
-            MeshService::IrohWatchdog => "iroh_watchdog",
+            MeshService::GuestOrigin => "guest_origin",
         }
     }
 
     /// Every service the census can name. Used by the trace to print what was
     /// NOT spawned, which is the half a log of spawns cannot show.
     pub const ALL: &'static [MeshService] = &[
-        MeshService::MdnsAdvertise,
-        MeshService::MdnsBrowse,
-        MeshService::Gossip,
         MeshService::AutoIngestCollaborate,
-        MeshService::RingSync,
         MeshService::RailKvPump,
         MeshService::WorkOrigin,
         MeshService::PeerOrigin,
-        MeshService::IrohEndpoint,
-        MeshService::IrohWatchdog,
+        MeshService::GuestOrigin,
     ];
 }
 
@@ -185,12 +166,12 @@ mod tests {
         assert!(!svc.any_network_service());
         assert_eq!(svc.skipped_names().len(), MeshService::ALL.len());
 
-        svc.record(MeshService::Gossip);
-        svc.record(MeshService::RingSync);
+        svc.record(MeshService::AutoIngestCollaborate);
+        svc.record(MeshService::PeerOrigin);
         assert!(svc.any_network_service());
-        assert!(svc.contains(MeshService::Gossip));
-        assert!(!svc.contains(MeshService::IrohEndpoint));
-        assert_eq!(svc.names(), vec!["gossip", "ring_sync"]);
+        assert!(svc.contains(MeshService::PeerOrigin));
+        assert!(!svc.contains(MeshService::GuestOrigin));
+        assert_eq!(svc.names(), vec!["auto_ingest_collaborate", "peer_origin"]);
         assert!(svc.skipped_names().contains(&"rail_kv_pump"));
     }
 }

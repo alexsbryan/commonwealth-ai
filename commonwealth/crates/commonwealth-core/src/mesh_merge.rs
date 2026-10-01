@@ -65,8 +65,8 @@ pub struct MergeReport {
     ///
     /// This is the ONLY moment that fact is observable: it lives in the
     /// gossip payload, not in any member record, so a caller that does not
-    /// capture it here cannot recover it later. `EmbeddedDaemon::rotate_invite`
-    /// needs it, because rotating while such a peer is online partitions
+    /// capture it here cannot recover it later. Rotate's pre-split guard
+    /// (cw-rails `membership::rotate`) needs it, because rotating while such a peer is online partitions
     /// exactly that peer (it still authorizes gossip on `invite_key_hash`).
     ///
     /// Meaningful only when [`Self::rejected`] is false — a refused merge
@@ -78,7 +78,7 @@ pub struct MergeReport {
     peer_pre_split: bool,
     /// Which predicate authorized this merge. The caller's reply uses it to
     /// decide whether the raw `mesh_secret` still needs to be on the wire —
-    /// see `routes_internal::gossip`.
+    /// see cw-rails' `internal::gossip`.
     auth_arm: GossipAuthArm,
     /// True when the merge was refused outright because `other`
     /// described a different mesh (mismatching `id` or

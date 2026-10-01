@@ -151,7 +151,7 @@ pub(crate) async fn render_kind_refusal(
     {
         return format!("{msg}\n");
     }
-    let route_works = probe_known_kind(client, port).await;
+    let route_works = probe_known_kind(client).await;
     let local = sovereign_contracts::run_identity::stamp(env!("CARGO_PKG_VERSION"));
     let remote = daemon_stamp(client, port).await.ok().flatten();
     let builds = format!(
@@ -212,8 +212,8 @@ pub(crate) async fn render_kind_refusal(
 /// origin — it costs one loopback round trip and has no effect any neighbour
 /// could observe. `Some(true)` means the route answered; `Some(false)` that
 /// it refused this too; `None` that the question could not be put.
-async fn probe_known_kind(client: &reqwest::Client, port: u16) -> Option<bool> {
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/fanout");
+async fn probe_known_kind(client: &reqwest::Client) -> Option<bool> {
+    let url = format!("{}/v1/mesh/fanout", crate::mesh_cmd::rails_base());
     let body = serde_json::json!({ "path": "/", "kind": "media", "peers": [] });
     let resp = client.post(&url).json(&body).send().await.ok()?;
     Some(resp.status().is_success())

@@ -521,24 +521,10 @@ mod tests {
         use axum::body::Body;
         use axum::routing::get;
         use axum::Router;
-        use commonwealth_core::mesh::Mesh;
-        use kernel_types::MeshId;
         use kernel_types::NodeId;
-        use std::collections::HashMap;
         use tower::ServiceExt;
 
-        let mesh = Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::from_u128(1),
-            name: "Attach Test".into(),
-            invite_key_hash: [0u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: HashMap::new(),
-            peers: vec![],
-        };
-        let state = AppState::new(NodeId::from_u128(1), mesh);
+        let state = AppState::new(NodeId::from_u128(1));
 
         let app = Router::new()
             .route(

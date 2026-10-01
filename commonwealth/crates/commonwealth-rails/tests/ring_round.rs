@@ -136,3 +136,147 @@ async fn an_act_signed_on_one_rails_daemon_reaches_the_other_through_its_own_rou
         "beta holds alpha's act, carried by cw-rails' round alone"
     );
 }
+
+/// How long a nudged round may take to carry one act to the peer: the
+/// interval is sixty seconds, so an act inside this was carried by a nudge.
+const NUDGE_BUDGET: Duration = Duration::from_secs(2);
+
+/// Two daemons on one mesh, alpha's ring loop running at the sixty-second
+/// interval, and alpha's loopback API served. Returns alpha, beta, alpha's
+/// API address, and the loop's handle.
+async fn two_with_alpha_looping(
+    dirs: &(tempfile::TempDir, tempfile::TempDir),
+) -> (
+    std::sync::Arc<RailsDaemon>,
+    RailsDaemon,
+    std::net::SocketAddr,
+    ring_sync::RingSyncHandle,
+) {
+    let a = RailsNode::bind(dirs.0.path().to_path_buf(), hermetic("alpha"))
+        .await
+        .expect("alpha binds");
+    let b = RailsNode::bind(dirs.1.path().to_path_buf(), hermetic("beta"))
+        .await
+        .expect("beta binds");
+    let addrs_a = wait_for_addrs(&a).await;
+    let addrs_b = wait_for_addrs(&b).await;
+    let (mut mesh, _invite) =
+        commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+    mesh.members.clear();
+    mesh.members.insert(a.self_id, record(&a, addrs_a));
+    mesh.members.insert(b.self_id, record(&b, addrs_b));
+    let daemon_a = std::sync::Arc::new(
+        RailsDaemon::start(a, mesh.clone())
+            .await
+            .expect("alpha starts"),
+    );
+    let daemon_b = RailsDaemon::start(b, mesh).await.expect("beta starts");
+    let looping = ring_sync::spawn_ring_sync_loop(
+        daemon_a.clone(),
+        ring_sync::DEFAULT_RING_SYNC_INTERVAL,
+        daemon_a.ring_nudge.clone(),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("an ephemeral port");
+    let api = listener.local_addr().expect("its address");
+    let router = commonwealth_rails::api::router(daemon_a.clone());
+    tokio::spawn(async move {
+        let _ = axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await;
+    });
+    // The loop's boot round runs at once and carries nothing.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    (daemon_a, daemon_b, api, looping)
+}
+
+/// `POST /v1/rail/append` on alpha's loopback door.
+async fn append_over_http(api: std::net::SocketAddr) {
+    let appended = reqwest::Client::new()
+        .post(format!("http://{api}/v1/rail/append?namespace={RING}"))
+        .json(&serde_json::json!({ "op": "record", "payload": { "kind": "doc-change" } }))
+        .send()
+        .await
+        .expect("alpha's append door answers");
+    let status = appended.status();
+    assert!(
+        status.is_success(),
+        "{status}: {}",
+        appended.text().await.unwrap_or_default()
+    );
+}
+
+/// Wait until beta holds one act, inside [`NUDGE_BUDGET`] from `at`.
+async fn beta_holds_it_within_the_budget(beta: &RailsDaemon, at: std::time::Instant, why: &str) {
+    while held(&beta.rail) == 0 {
+        assert!(
+            at.elapsed() < NUDGE_BUDGET,
+            "beta still holds nothing {}ms later — {why}, so the act waits for the \
+             {}s tick",
+            at.elapsed().as_millis(),
+            ring_sync::DEFAULT_RING_SYNC_INTERVAL.as_secs()
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert_eq!(held(&beta.rail), 1, "beta holds exactly the one act");
+}
+
+/// The daemon's `ring_append_nudges_sync`, on cw-rails: an act appended over
+/// the loopback door wakes the round, so the peer holds it within two
+/// seconds rather than at the sixty-second tick. Failing input: the append
+/// door's `notify_one` removed (`ring_sync::append`).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_act_appended_over_http_is_held_by_the_peer_within_two_seconds() {
+    let dirs = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (_alpha, beta, api, _loop) = two_with_alpha_looping(&dirs).await;
+    assert_eq!(
+        held(&beta.rail),
+        0,
+        "control: the boot round carried nothing"
+    );
+    append_over_http(api).await;
+    beta_holds_it_within_the_budget(&beta, std::time::Instant::now(), "the append did not nudge")
+        .await;
+}
+
+/// The daemon's `ring_return_syncs`, on cw-rails: a write made while a peer
+/// was Offline is not offered to it (the round exchanges with Online members
+/// only), and travels within two seconds of the gossip merge that brings
+/// that peer back Online (`gossip::merge_waking_ring`). Failing input: the
+/// merge's nudge removed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_write_made_while_the_peer_was_offline_travels_when_it_returns() {
+    let dirs = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (alpha, beta, api, _loop) = two_with_alpha_looping(&dirs).await;
+    let beta_id = beta.node.self_id;
+    alpha
+        .mesh
+        .write()
+        .await
+        .members
+        .get_mut(&beta_id)
+        .expect("beta on alpha's roster")
+        .status = NodeStatus::Offline;
+    append_over_http(api).await;
+    tokio::time::sleep(NUDGE_BUDGET).await;
+    assert_eq!(
+        held(&beta.rail),
+        0,
+        "control: the round exchanges with Online members only, so the write \
+         cannot have travelled while beta was Offline"
+    );
+
+    // Beta's own round stamps its row and gossips it to alpha, whose inbound
+    // merge brings beta back Online.
+    gossip::run_one_round(&beta, 1).await;
+    let at = std::time::Instant::now();
+    assert_eq!(
+        alpha.mesh.read().await.members[&beta_id].status,
+        NodeStatus::Online,
+        "beta's round must bring it back Online on alpha, or this is not the case"
+    );
+    beta_holds_it_within_the_budget(&beta, at, "the return did not wake the ring round").await;
+}

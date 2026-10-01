@@ -88,6 +88,10 @@ struct MemberDoc {
     capabilities: NodeCapabilities,
     #[serde(default)]
     dial: DialDoc,
+    /// The member's key, full hex; `None` from a cw-rails older than the
+    /// field, or for a pre-identity member.
+    #[serde(default)]
+    node_pubkey: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -129,6 +133,17 @@ fn parse(doc: StatusDoc) -> Result<RosterReading, String> {
             // applies once the key is known, and cw-rails lists no member
             // without one).
             let dialable = m.dial.relay_url.is_some() || !m.dial.iroh_direct_addrs.is_empty();
+            // The key names the member cw-rails' forwards carry; one that is
+            // present but unreadable is refused like a bad id, never dropped.
+            let node_pubkey = match m.node_pubkey.as_deref() {
+                None => None,
+                Some(h) => Some(kernel_types::NodePubkey::from_hex(h).ok_or_else(|| {
+                    format!(
+                        "cw-rails' roster names an unreadable key for {}: {h}",
+                        m.name
+                    )
+                })?),
+            };
             Ok(MembershipEntry {
                 node_id,
                 name: m.name,
@@ -137,13 +152,14 @@ fn parse(doc: StatusDoc) -> Result<RosterReading, String> {
                 last_seen: m.last_seen,
                 dialable,
                 capabilities: m.capabilities,
-                // cw-rails holds the key and every overlay decision: the
-                // overlay addresses are empty (its roster fills none), and a
-                // program reaches the member through `RailsTransport`.
+                // cw-rails holds every overlay decision: the overlay
+                // addresses are empty (its roster fills none), and a program
+                // reaches the member through `RailsTransport`. The key is the
+                // member's public name, never a dial input here.
                 dial: PeerContact {
                     node_id,
                     addresses: Vec::new(),
-                    node_pubkey: None,
+                    node_pubkey,
                     relay_url: m.dial.relay_url,
                     iroh_direct_addrs: m.dial.iroh_direct_addrs,
                 },
@@ -238,6 +254,21 @@ impl MembershipReader for RailsRoster {
     }
 }
 
+/// cw-rails' roster and reach door at `rails_base`, as the ports a program
+/// that is not the mesh endpoint reads the mesh through: the stock binary
+/// hands these to svrn's daemon (pb-mesh-exit-transport, phase-b-80 fork 1),
+/// the same pair [`mesh_ports`] builds for serve's distribution.
+pub fn rails_ports(
+    rails_base: &str,
+) -> (
+    Arc<dyn MembershipReader<Dial = PeerContact>>,
+    Arc<dyn PeerTransport>,
+) {
+    let roster = RailsRoster::new(rails_base);
+    let transport: Arc<dyn PeerTransport> = Arc::new(RailsTransport::new(roster.base()));
+    (Arc::new(roster), transport)
+}
+
 /// The mesh ports a standalone serve hands its distribution: cw-rails'
 /// roster, `RailsTransport` over cw-rails' reach door, and serve's own
 /// listener (`listen`) as the model origin. A cw-rails that does not answer
@@ -330,7 +361,8 @@ impl sovereign_contracts::venue::VenueSource for RailsVenues {
                 return Vec::new();
             }
         };
-        let members = sovereign_contracts::membership::inference_peers(reading.members, reading.self_id);
+        let members =
+            sovereign_contracts::membership::inference_peers(reading.members, reading.self_id);
         let mut venues = Vec::with_capacity(members.len());
         for m in members {
             let base_urls: Vec<String> = self
@@ -417,7 +449,12 @@ fn registrations_for(
             // `cwth/http/0` only.
             prefixes: Vec::new(),
             port: member.port(),
-            admit: Admit::Members(Vec::new()),
+            // A member reaches serve's member client; a non-member dialling the
+            // same protocol goes to the guest door svrn registers on
+            // `GUEST_ALPN` (pb-mesh-exit-transport), whose auth reads its bearer.
+            admit: Admit::MembersElse(
+                String::from_utf8_lossy(mesh_reach::alpn::GUEST_ALPN).into_owned(),
+            ),
             framing: Framing::Http,
             ttl_secs: Some(ORIGIN_TTL_SECS),
             claims: None,
@@ -491,6 +528,60 @@ fn anchor_claims(rpc_port: u16) -> NodeCapabilities {
             rpc_iroh: true,
         }),
     }
+}
+
+/// serve on the node's mesh, through cw-rails alone (pb-serve-distributes-
+/// standalone): discovery and the warm orchestrator over its roster and
+/// reach, the worker's rpc-warm on serve's routes, the member client on a
+/// loopback port of its own, and serve's origins in cw-rails' origin table.
+/// The standalone serve and the stock binary's hosted serve both run this
+/// (pb-mesh-exit-transport), so a stock node offers members what a
+/// standalone serve does. With no cw-rails answering, every discovery tick
+/// scans nothing and the registrations retry; the OpenAI wire serves this
+/// node's own models.
+pub async fn join(
+    rails_base: &str,
+    listen: SocketAddr,
+    local: Arc<dyn sovereign_contracts::InferenceProvider>,
+    router: Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
+    distribute: sovereign_serving_host::rpc_discovery::Distribute,
+    servable: sovereign_serving_host::state::ServableModelFilesReader,
+    routes: &mut Vec<host_kit::shell::RouteBundle>,
+) {
+    let roster = RailsRoster::new(rails_base);
+    info!(target: TARGET, rails = %rails_base, "distribution over cw-rails' roster and reach");
+    distribute(mesh_ports(roster.clone(), listen), router);
+    routes.push(crate::rpc_warm::bundle(
+        servable,
+        roster,
+        Arc::new(crate::MeshRpcShardWarmer::new()),
+    ));
+    // The member client on a loopback port of its own, registered whole on
+    // cw-rails' `cwth/client/0`: a member's router reaches this node's
+    // models there and nothing else of serve's. Without it serve still
+    // serves this host; members see no models here.
+    let member_addr = match tokio::net::TcpListener::bind(("127.0.0.1", 0)).await {
+        Ok(member) => match member.local_addr() {
+            Ok(addr) => {
+                info!(target: TARGET, member = %addr, "member client listening for cw-rails' forwards");
+                tokio::spawn(host_kit::shell::serve(
+                    [member],
+                    vec![crate::openai_face(local)],
+                    std::future::pending(),
+                ));
+                Some(addr)
+            }
+            Err(e) => {
+                tracing::error!(target: TARGET, error = %e, "the member client's port is unreadable; members reach no model here");
+                None
+            }
+        },
+        Err(e) => {
+            tracing::error!(target: TARGET, error = %e, "the member client could not bind; members reach no model here");
+            None
+        }
+    };
+    spawn_registrations(rails_base, listen, member_addr);
 }
 
 /// Keep every registration in cw-rails' origin table for as long as serve

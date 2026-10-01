@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The wizard's join, end to end against a real entry daemon (fp-cond2-c).
+//! The wizard's join, end to end against a real entry mesh (fp-cond2-c).
 //!
-//! The fixture is five-programs-62's: a terminal-class `sovereign-daemon run
-//! --config` founds a solo mesh in about a second and a half with no model
-//! load, and its `join_link` joins only with `&relay=127.0.0.1:<internal>`
-//! appended, since mDNS does not find it on this host. A cli-daemon test
-//! cannot build another package's `[[bin]]`, so the binary is resolved the
-//! way `daemon_bin::locate` does and the test FAILS, naming the build
-//! command, when it is absent.
+//! Since pb-mesh-exit-transport the mesh and its key are cw-rails': the
+//! entry is a `cw-rails found` + `run`, and the joiner's cw-rails listens on
+//! the base the provisional config names, so the test never touches the
+//! live cw-rails the wizard's `svrn mesh up` brings up on the default base
+//! (phase-b-81 (1)). Both cw-rails run `--local-only`, so the invite dials
+//! direct addresses on this host. A cli-daemon test cannot build another
+//! package's `[[bin]]`, so the stock binary and cw-rails are resolved beside
+//! this test and the test FAILS, naming the build command, when either is
+//! absent.
 #![cfg(unix)]
 
 use std::net::TcpListener;
@@ -18,10 +20,9 @@ use std::time::{Duration, Instant};
 use super::super::find_holders;
 use super::*;
 
-/// `SOVEREIGN_DAEMON_BIN`, else `target/<profile>/sovereign-daemon` beside
-/// this test's `deps/` directory.
-fn daemon_bin() -> PathBuf {
-    if let Some(p) = std::env::var_os("SOVEREIGN_DAEMON_BIN") {
+/// `env`, else `target/<profile>/<name>` beside this test's `deps/` directory.
+fn sibling(name: &str, env: &str, build: &str) -> PathBuf {
+    if let Some(p) = std::env::var_os(env) {
         return PathBuf::from(p);
     }
     let exe = std::env::current_exe().expect("current_exe");
@@ -29,17 +30,16 @@ fn daemon_bin() -> PathBuf {
         .parent()
         .and_then(Path::parent)
         .expect("test binary lives in target/<profile>/deps");
-    let bin = profile.join("sovereign-daemon");
+    let bin = profile.join(name);
     assert!(
         bin.is_file(),
-        "{} is missing: build it with `cargo build -p sovereign-daemon` \
-         (or run TEST(sovereign-daemon) first), or set SOVEREIGN_DAEMON_BIN",
+        "{} is missing: build it with `cargo build -p {build}`, or set {env}",
         bin.display()
     );
     bin
 }
 
-/// Kills and reaps the founder on every exit path, panics included.
+/// Kills and reaps its child on every exit path, panics included.
 struct Killed(Child);
 
 impl Drop for Killed {
@@ -49,19 +49,24 @@ impl Drop for Killed {
     }
 }
 
+fn free_port() -> u16 {
+    TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .expect("ephemeral port")
+        .port()
+}
+
 /// A client port whose `+1` internal port is also free.
 fn free_pair() -> u16 {
     loop {
-        let port = TcpListener::bind("127.0.0.1:0")
-            .and_then(|l| l.local_addr())
-            .expect("ephemeral port")
-            .port();
+        let port = free_port();
         if port < u16::MAX && TcpListener::bind(("127.0.0.1", port + 1)).is_ok() {
             return port;
         }
     }
 }
 
+/// A process with its home, svrn data dir and cw-rails dir under `dir`.
 fn node_env(dir: &Path, bin: &Path) -> Command {
     let home = dir.join("home");
     std::fs::create_dir_all(&home).expect("home");
@@ -72,100 +77,113 @@ fn node_env(dir: &Path, bin: &Path) -> Command {
     cmd
 }
 
-fn mesh_dirs(data: &Path) -> Vec<String> {
-    std::fs::read_dir(data.join("meshes"))
-        .map(|rd| {
-            rd.filter_map(Result::ok)
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn the_wizard_joins_through_a_spawned_daemon_and_stops_it() {
-    let bin = daemon_bin();
-    let root = tempfile::tempdir().expect("tempdir");
-    let (fdir, jdir) = (root.path().join("founder"), root.path().join("joiner"));
-
-    // The entry: a terminal-class founder on ephemeral ports.
-    let f_client = free_pair();
-    let fdata = fdir.join("data");
-    std::fs::create_dir_all(&fdata).expect("founder data");
-    let fcfg = fdir.join("config.toml");
-    std::fs::write(
-        &fcfg,
-        format!(
-            "[node]\nentry_node = \"00000000000000000000000000000001\"\n\n\
-             [daemon]\nclient_port = {f_client}\ninternal_port = {}\n\
-             rails_base = \"http://127.0.0.1:{}\"\n\n[data]\ndir = \"{}\"\n",
-            f_client + 1,
-            free_pair(),
-            fdata.display()
-        ),
-    )
-    .expect("founder config");
-    let _founder = Killed(
-        node_env(&fdir, &bin)
-            .args(["run", "--config"])
-            .arg(&fcfg)
+/// `cw-rails run --listen <port> --local-only` over `dir`'s cw-rails dir.
+fn cw_rails_run(rails: &Path, dir: &Path, port: u16) -> Killed {
+    Killed(
+        node_env(dir, rails)
+            .args(["run", "--listen", &port.to_string(), "--local-only"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .expect("spawn founder"),
-    );
-    let http = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .expect("http client");
+            .expect("spawn cw-rails"),
+    )
+}
+
+/// Poll cw-rails' status on `port` until `pick` finds what it wants.
+async fn poll_status<T>(
+    http: &reqwest::Client,
+    port: u16,
+    what: &str,
+    pick: impl Fn(&serde_json::Value) -> Option<T>,
+) -> T {
     let deadline = Instant::now() + Duration::from_secs(60);
-    let join_link = loop {
+    loop {
         if let Ok(resp) = http
-            .get(format!("http://127.0.0.1:{f_client}/v1/mesh/status"))
+            .get(format!("http://127.0.0.1:{port}/v1/mesh/status"))
             .send()
             .await
         {
             if let Ok(v) = resp.json::<serde_json::Value>().await {
-                if let Some(link) = v["join_link"].as_str() {
-                    break link.to_string();
+                if let Some(t) = pick(&v) {
+                    return t;
                 }
             }
         }
-        assert!(
-            Instant::now() < deadline,
-            "founder never published a join_link"
-        );
+        assert!(Instant::now() < deadline, "never saw {what}");
         tokio::time::sleep(Duration::from_millis(200)).await;
-    };
-    let link = format!("{join_link}&relay=127.0.0.1:{}", f_client + 1);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_wizard_joins_through_a_spawned_daemon_and_stops_it() {
+    let stock = sibling("sovereign-stock", "SOVEREIGN_DAEMON_BIN", "sovereign-stock");
+    let rails = sibling("cw-rails", "CW_RAILS_BIN", "commonwealth-rails");
+    let root = tempfile::tempdir().expect("tempdir");
+    let (fdir, jdir) = (root.path().join("founder"), root.path().join("joiner"));
+    let http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .expect("http client");
+
+    // The entry: a cw-rails mesh, and its invite.
+    let founded = node_env(&fdir, &rails)
+        .args(["found", "Lab", "--name", "founder"])
+        .stdout(Stdio::null())
+        .status()
+        .expect("cw-rails found");
+    assert!(founded.success(), "cw-rails found failed");
+    let f_rails = free_port();
+    let _founder = cw_rails_run(&rails, &fdir, f_rails);
+    let link = poll_status(&http, f_rails, "the founder's join_link", |v| {
+        v["join_link"].as_str().map(str::to_string)
+    })
+    .await;
+
+    // The joiner's cw-rails, solo until the child asks it to join, under the
+    // member name the child joins as (cw-rails has one name per node).
+    let jrails = jdir.join("rails");
+    std::fs::create_dir_all(jrails.join("rails")).expect("joiner rails dir");
+    std::fs::write(jrails.join("rails").join("rails.toml"), "name = \"j\"\n")
+        .expect("joiner rails.toml");
+    let j_rails = free_port();
+    let _joiner_rails = cw_rails_run(&rails, &jrails, j_rails);
+    poll_status(&http, j_rails, "the joiner's cw-rails answering", |_| {
+        Some(())
+    })
+    .await;
 
     // The wizard's join, over a fresh data dir with no daemon listening.
     let jdata = jdir.join("data");
     let j_client = free_pair();
-    let (child, mesh_name) = match join(node_env(&jdir, &bin), &jdata, j_client, &link, "j").await {
+    let rails_base = format!("http://127.0.0.1:{j_rails}");
+    let mut cmd = node_env(&jdir, &stock);
+    cmd.env("CW_RAILS_DIR", jrails.join("rails"));
+    let (child, mesh_name) = match join(cmd, &jdata, j_client, Some(&rails_base), &link, "j").await
+    {
         Ok(joined) => joined,
         Err(JoinFailure::Refused) => panic!("the join child exited without joining"),
         Err(JoinFailure::Launch(e)) => panic!("the join child did not start: {e}"),
     };
-    assert!(!mesh_name.is_empty(), "joined line carried no mesh name");
+    assert_eq!(mesh_name, "Lab", "the joined line names the founder's mesh");
     let pid = child.id();
 
-    // The identity landed in the run data dir, because the child owns it.
-    let founder_meshes = mesh_dirs(&fdata);
-    assert!(!founder_meshes.is_empty(), "founder persisted no mesh");
-    let joined_meshes = mesh_dirs(&jdata);
-    assert!(
-        founder_meshes.iter().all(|m| joined_meshes.contains(m)),
-        "joiner meshes {joined_meshes:?} lack the founder's {founder_meshes:?}"
-    );
-    // `node_id` is raw bytes, not text.
-    let node_id = std::fs::read(jdata.join("node_id")).expect("joiner node_id");
-    assert!(!node_id.is_empty(), "empty node_id");
-    assert_ne!(
-        node_id,
-        std::fs::read(fdata.join("node_id")).expect("founder node_id"),
-        "the joiner minted its own node id"
-    );
+    // The joiner's cw-rails now holds the founder's mesh beside its own row.
+    let founder_id = poll_status(&http, f_rails, "the founder's self row", |v| {
+        v["members"]
+            .as_array()?
+            .iter()
+            .find(|r| r["is_self"] == true)
+            .map(|r| r["node_id"].clone())
+    })
+    .await;
+    poll_status(&http, j_rails, "the founder on the joiner's roster", |v| {
+        v["members"]
+            .as_array()?
+            .iter()
+            .any(|r| r["node_id"] == founder_id && r["is_self"] != true)
+            .then_some(())
+    })
+    .await;
 
     // `find_holders` reads the child's venues: the founder IS a member (so
     // the "has members" refusal, not "no peers appeared"), and holds no model.

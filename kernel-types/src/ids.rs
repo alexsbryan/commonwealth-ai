@@ -162,6 +162,13 @@ impl NodePubkey {
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
+
+    /// The inverse of `Display`: exactly 32 bytes of hex, or `None`. A short
+    /// or malformed value is not narrowed to a prefix.
+    pub fn from_hex(s: &str) -> Option<Self> {
+        let bytes: [u8; 32] = hex::decode(s.trim()).ok()?.try_into().ok()?;
+        Some(Self(bytes))
+    }
 }
 
 impl fmt::Display for NodePubkey {

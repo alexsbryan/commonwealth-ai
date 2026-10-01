@@ -11,22 +11,21 @@
 //!
 //! serve is a stub here that answers chat and records each body it is sent.
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use axum::routing::post;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use serde_json::{json, Value};
 use sovereign_contracts::engine_state::ServedSelf;
 use sovereign_contracts::oicp::ResidentSlot;
 use sovereign_daemon::serve_client::{loopback_provider, ServeBase, ServeBaseSource};
 use sovereign_daemon::server::client_router;
-use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
+use sovereign_daemon::state::{AppState, FabricSeed, LocalInferenceService, ServingSeed};
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 
-use crate::common::{id_to_hex, member_with_last_seen, solo_mesh, spawn_router};
+use crate::common::{id_to_hex, member, roster, spawn_router};
 
 const SERVED_MODEL: &str = "served-primary";
 
@@ -78,19 +77,17 @@ fn served() -> ServedSelf {
 fn node_a(serve_base: String) -> (AppState, NodeId) {
     let self_id = NodeId::from_u128(0x1111_1111_1111_1111 << 64);
     let peer_id = NodeId::from_u128(0x2222_2222_2222_2222 << 64);
-    let mut members = HashMap::new();
-    members.insert(
-        self_id,
-        member_with_last_seen(self_id, "a", 100, "127.0.0.1:9742".parse().unwrap()),
-    );
-    members.insert(
-        peer_id,
-        member_with_last_seen(peer_id, "b", 100, "127.0.0.1:9876".parse().unwrap()),
-    );
-    let mut mesh = solo_mesh(self_id, "peer-to-serve");
-    mesh.id = MeshId::from_u128(42);
-    mesh.invite_key_hash = [7u8; 32];
-    mesh.members = members;
+    let rows = [
+        (self_id, "a", "127.0.0.1:9742"),
+        (peer_id, "b", "127.0.0.1:9876"),
+    ]
+    .map(|(id, name, addr)| {
+        let mut row = member(id, name);
+        row.last_seen = 100;
+        row.dial.addresses = vec![addr.parse().unwrap()];
+        row
+    })
+    .to_vec();
     let serve = ServeBase {
         base: serve_base,
         source: ServeBaseSource::Default,
@@ -100,9 +97,14 @@ fn node_a(serve_base: String) -> (AppState, NodeId) {
         arm,
         Arc::new(CoreSlotManifest),
     ));
-    let state = AppState::new_with_serving(
+    let state = AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
         self_id,
-        mesh,
+        None,
+        None,
+        FabricSeed {
+            membership: Some(roster("peer-to-serve", rows)),
+            ..Default::default()
+        },
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()

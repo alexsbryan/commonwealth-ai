@@ -43,16 +43,15 @@
 //!   (§10's intra-mesh accounting). Pre-fix the header was never
 //!   set and the peer's ledger silently stayed empty for every
 //!   fan-out request. The third test below pins this end-to-end.
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use oicp_types::contributions::LedgerEventKind;
 use oicp_types::knowledge::CorpusShardInfo;
+use sovereign_contracts::daemon_wire::mesh::MemberStatus;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
 
@@ -166,113 +165,60 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     let engine_a = Arc::new(crate::common::reading_double(indexes_a, mock_embed_fn()));
 
     let id_a = NodeId::from_u128(0xAAAA_AAAA_AAAA_AAAA);
-    // A's mesh contains only A — that's fine, only B needs to know
+    // A's roster contains only A — that's fine, only B needs to know
     // about A for fan-out to work.
-    let mut members_a = HashMap::new();
-    members_a.insert(
-        id_a,
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
-            node_id: id_a,
-            name: "Founder".into(),
-            invited_by: id_a,
-            joined_at: 0,
-            last_seen: 0,
-            status: NodeStatus::Online,
-            capabilities: caps_with_hosted(&["sep"]),
-            addresses: vec!["127.0.0.1:9742".parse().unwrap()],
-        },
-    );
-    let mesh_a = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "fanout-test".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: members_a,
-        peers: vec![],
+    let seed_a = sovereign_daemon::state::FabricSeed {
+        membership: Some(common::roster(
+            "fanout-test",
+            vec![common::peer_row(
+                id_a,
+                "Founder",
+                MemberStatus::Online,
+                caps_with_hosted(&["sep"]),
+                vec!["127.0.0.1:9742".parse().unwrap()],
+            )],
+        )),
+        ..Default::default()
     };
     let state_a = AppState::new_with_seeds(
         id_a,
-        mesh_a,
         Some(engine_a.clone()),
         None,
-        Default::default(),
+        seed_a,
         Default::default(),
         Default::default(),
         Arc::new(RecordingLedger::new(id_a)).seed(),
     );
     // Spawn A's internal router. The ephemeral port is what B's
-    // fan-out will dial — we'll plug it into B's MemberRecord
-    // below.
+    // fan-out will dial — we'll plug it into B's roster row below.
     let addr_a = spawn_router(internal_router(state_a.clone())).await;
 
     // === Daemon B (the Joiner) ===
-    // No corpus port attached. B's mesh state DOES contain A as
-    // a member with `hosted_corpora=["sep"]` so the fan-out
-    // discovery loop picks A up.
+    // No corpus port attached. B's roster DOES contain A as a member
+    // with `hosted_corpora=["sep"]` so the fan-out discovery loop picks
+    // A up — at the ACTUAL bound address, which is what
+    // `fanout_one_peer` will try.
     let id_b = NodeId::from_u128(0xBBBB_BBBB_BBBB_BBBB);
-    let mut members_b = HashMap::new();
-    // Self record.
-    members_b.insert(
+    let state_b = common::state_over_roster(
         id_b,
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
-            node_id: id_b,
-            name: "Joiner".into(),
-            invited_by: id_a,
-            joined_at: 0,
-            last_seen: 0,
-            status: NodeStatus::Online,
-            capabilities: caps_with_hosted(&[]),
-            addresses: vec!["127.0.0.1:0".parse().unwrap()],
-        },
+        "fanout-test",
+        vec![
+            common::peer_row(
+                id_b,
+                "Joiner",
+                MemberStatus::Online,
+                caps_with_hosted(&[]),
+                vec!["127.0.0.1:0".parse().unwrap()],
+            ),
+            common::peer_row(
+                id_a,
+                "Founder",
+                MemberStatus::Online,
+                caps_with_hosted(&["sep"]),
+                vec![addr_a],
+            ),
+        ],
     );
-    // A's record — with the ACTUAL bound address as the only
-    // gossiped address. This is what `fanout_one_peer` will try.
-    members_b.insert(
-        id_a,
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
-            node_id: id_a,
-            name: "Founder".into(),
-            invited_by: id_a,
-            joined_at: 0,
-            last_seen: 0,
-            status: NodeStatus::Online,
-            capabilities: caps_with_hosted(&["sep"]),
-            addresses: vec![addr_a],
-        },
-    );
-    let mesh_b = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "fanout-test".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: members_b,
-        peers: vec![],
-    };
-    let state_b = AppState::new(id_b, mesh_b);
     let addr_b = spawn_router(client_router(state_b.clone())).await;
 
     // === Client request ===
@@ -357,17 +303,6 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
     let id_a = NodeId::from_u128(0xA0A0_A0A0_A0A0_A0A0);
     let state_a = AppState::new_with_seeds(
         id_a,
-        Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::from_u128(1),
-            name: "offline-test".into(),
-            invite_key_hash: [0u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: HashMap::new(),
-            peers: vec![],
-        },
         Some(engine_a),
         None,
         Default::default(),
@@ -379,58 +314,25 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
 
     // B sees A as Offline.
     let id_b = NodeId::from_u128(0xB0B0_B0B0_B0B0_B0B0);
-    let mut members_b = HashMap::new();
-    members_b.insert(
+    let state_b = common::state_over_roster(
         id_b,
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
-            node_id: id_b,
-            name: "Joiner".into(),
-            invited_by: id_a,
-            joined_at: 0,
-            last_seen: 0,
-            status: NodeStatus::Online,
-            capabilities: caps_with_hosted(&[]),
-            addresses: vec!["127.0.0.1:0".parse().unwrap()],
-        },
-    );
-    members_b.insert(
-        id_a,
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
-            node_id: id_a,
-            name: "Sleeper".into(),
-            invited_by: id_a,
-            joined_at: 0,
-            last_seen: 0,
-            status: NodeStatus::Offline, // ← the gate
-            capabilities: caps_with_hosted(&["sep"]),
-            addresses: vec![addr_a],
-        },
-    );
-    let state_b = AppState::new(
-        id_b,
-        Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::from_u128(1),
-            name: "offline-test".into(),
-            invite_key_hash: [0u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: members_b,
-            peers: vec![],
-        },
+        "offline-test",
+        vec![
+            common::peer_row(
+                id_b,
+                "Joiner",
+                MemberStatus::Online,
+                caps_with_hosted(&[]),
+                vec!["127.0.0.1:0".parse().unwrap()],
+            ),
+            common::peer_row(
+                id_a,
+                "Sleeper",
+                MemberStatus::Offline, // ← the gate
+                caps_with_hosted(&["sep"]),
+                vec![addr_a],
+            ),
+        ],
     );
     let addr_b = spawn_router(client_router(state_b)).await;
 

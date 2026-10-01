@@ -15,16 +15,13 @@
 //! handler, so we assert them exactly; ADMIT outcomes we assert as
 //! "not an auth rejection" to stay decoupled from handler internals.
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use kernel_types::{MeshId, NodeId};
-use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+use kernel_types::NodeId;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, NodeSeed};
 use tower::ServiceExt;
@@ -33,68 +30,12 @@ const LOOPBACK: &str = "127.0.0.1:55001";
 const LAN_PEER: &str = "192.168.1.50:44444";
 const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
 
-fn member(id: NodeId) -> MemberRecord {
-    MemberRecord {
-        removed_at: None,
-        node_pubkey: None,
-        relay_url: None,
-        iroh_direct_addrs: Vec::new(),
-        dial_info_version: 0,
-        dial_info_sig: None,
-        node_id: id,
-        name: "A".into(),
-        invited_by: id,
-        joined_at: 0,
-        last_seen: 0,
-        status: NodeStatus::Online,
-        capabilities: NodeCapabilities {
-            hardware: HardwareProfile {
-                gpus: vec![],
-                system_ram_gb: 0,
-                cpu_cores: 0,
-                total_storage_gb: 0,
-                free_storage_gb: 0,
-                network_bandwidth_mbps: None,
-            },
-            available: AvailableResources::default(),
-            active_processes: vec![],
-            hosted_corpora: vec![],
-            reported_at: 0,
-            inference_availability: 1.0,
-            inference_capable: false,
-            loaded_models: vec![],
-            origins: Vec::new(),
-            media_allow: Vec::new(),
-            media_available: None,
-            embed_model: None,
-            benchmark: None,
-            current_in_flight: None,
-            anchor: None,
-        },
-        addresses: vec!["192.168.1.1:9742".parse::<SocketAddr>().unwrap()],
-    }
-}
-
 /// `AppState` with `token` configured (`Some` = token configured,
 /// `None` = no token → remote callers fail closed).
 fn state_with_token(token: Option<&str>) -> AppState {
     let node = NodeId::from_u128(1);
-    let mut members = HashMap::new();
-    members.insert(node, member(node));
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(7),
-        name: "Test".into(),
-        invite_key_hash: [3u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
-    };
     AppState::new_with_node(
         node,
-        mesh,
         NodeSeed {
             client_token: token.map(Arc::<str>::from),
             ..Default::default()

@@ -48,7 +48,7 @@ use sovereign_daemon::state::AppState;
 
 use crate::common;
 use crate::common::ledger_double::RecordingLedger;
-use crate::common::{id_to_hex, solo_mesh, spawn_router};
+use crate::common::{id_to_hex, spawn_router};
 
 pub(crate) const EMBED_DIM: usize = 8;
 
@@ -99,13 +99,19 @@ async fn install_corpus_with_chunk(
 }
 
 /// Build an `AppState` with ingest's port double over `tmp/indexes/`
-/// and pre-installed corpora. Returns the state and the on-disk
-/// directory (keep alive for the test's duration), with the recording
-/// double every store port writes to.
+/// and pre-installed corpora. Returns the state, the recording double every
+/// store port writes to, the roster the test names members in (cw-rails'
+/// registration tie is installed, `common::TIE`), and the on-disk directory
+/// (keep alive for the test's duration).
 pub(crate) async fn build_state_with_corpora(
     self_id: NodeId,
     corpora: &[(&str, &str, &str)], // (id, name, chunk_content)
-) -> (AppState, Arc<RecordingLedger>, tempfile::TempDir) {
+) -> (
+    AppState,
+    Arc<RecordingLedger>,
+    Arc<common::StaticRoster>,
+    tempfile::TempDir,
+) {
     let tmp = tempfile::tempdir().unwrap();
     let indexes = tmp.path().join("indexes");
     std::fs::create_dir_all(&indexes).unwrap();
@@ -114,17 +120,19 @@ pub(crate) async fn build_state_with_corpora(
     }
     let engine = Arc::new(crate::common::reading_double(indexes, mock_embed_fn()));
     let double = Arc::new(RecordingLedger::new(self_id));
+    let (roster, fabric) = common::roster_seed(self_id, "knowledge-served-test");
     let state = AppState::new_with_seeds(
         self_id,
-        solo_mesh(self_id, "knowledge-served-test"),
         Some(engine),
         None,
-        Default::default(),
+        fabric,
         Default::default(),
         Default::default(),
         double.seed(),
     );
-    (state, double, tmp)
+    // The receiver keeps the last tie after its sender drops.
+    let _ = common::tie_as_cw_rails(&state, common::TIE);
+    (state, double, roster, tmp)
 }
 
 /// The recorded `KnowledgeQueryServed` records, `Debug`-rendered, in call order.
@@ -157,7 +165,7 @@ const REQUESTER_KEY: [u8; 32] = [0x5a; 32];
 async fn peer_request_emits_one_knowledge_query_served_per_contributing_corpus() {
     let self_id = NodeId::from_u128(0xAAAA_AAAA);
     let requester = NodeId::from_u128(0xBBBB_BBBB);
-    let (state, double, _tmp) = build_state_with_corpora(
+    let (state, double, roster, _tmp) = build_state_with_corpora(
         self_id,
         &[
             ("sep", "Stanford Encyclopedia", "Free will and determinism."),
@@ -168,11 +176,11 @@ async fn peer_request_emits_one_knowledge_query_served_per_contributing_corpus()
     // The requester is a MEMBER whose key this node's roster names — the
     // only shape that can be attributed now. A typed `X-Node-Id` is a claim,
     // not an identity, and the internal router strips it.
-    common::name_member_with_key(&state, requester, "requester", REQUESTER_KEY).await;
+    common::name_member_with_key(&roster, requester, "requester", REQUESTER_KEY);
     let addr = spawn_router(internal_router(state.clone())).await;
 
     // Request both corpora — both should contribute one chunk each.
-    let resp = common::acceptor_stamp(
+    let resp = common::cw_rails_stamp(
         reqwest::Client::new().post(format!("http://{addr}/internal/knowledge/search")),
         "requester",
         requester,
@@ -222,7 +230,7 @@ async fn local_origin_request_with_no_x_node_id_emits_nothing() {
     // promises intra-mesh-only accounting, and a missing header
     // means "I can't tell who you are" → safe-default skip.
     let self_id = NodeId::from_u128(0xCCCC_CCCC);
-    let (state, double, _tmp) = build_state_with_corpora(
+    let (state, double, _roster, _tmp) = build_state_with_corpora(
         self_id,
         &[("sep", "Stanford Encyclopedia", "Compatibilism essay.")],
     )
@@ -265,7 +273,7 @@ async fn unavailable_corpus_filter_emits_no_event_and_lists_unavailable() {
     // event emitted (zero chunks → no entry in per_corpus_chunks).
     let self_id = NodeId::from_u128(0xDDDD_DDDD);
     let requester = NodeId::from_u128(0xEEEE_EEEE);
-    let (state, double, _tmp) = build_state_with_corpora(
+    let (state, double, _roster, _tmp) = build_state_with_corpora(
         self_id,
         &[("sep", "Stanford Encyclopedia", "Some content.")],
     )

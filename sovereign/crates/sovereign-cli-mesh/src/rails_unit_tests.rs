@@ -5,7 +5,7 @@ use host_kit::service::UnitState;
 fn the_unit_runs_the_bring_ups_binary_port_and_posture() {
     let text = unit_text(
         Path::new("/opt/cw rails/cw-rails"),
-        &crate::rails_up::run_args(9747, true),
+        &crate::rails_up::run_args(9747, true, false),
         "/usr/bin:/bin",
         Path::new("/home/a/.commonwealth-rails"),
     );
@@ -30,7 +30,7 @@ fn the_unit_runs_the_bring_ups_binary_port_and_posture() {
 fn a_percent_or_quote_in_a_path_survives_the_unit_file() {
     let text = unit_text(
         Path::new("/opt/50%\"/cw-rails"),
-        &crate::rails_up::run_args(9747, false),
+        &crate::rails_up::run_args(9747, false, false),
         "/a%b",
         Path::new("/r"),
     );
@@ -83,7 +83,7 @@ fn mesh_up_leaves_the_rails_unit_enabled_and_not_started_twice() {
         &systemd,
         &path,
         Path::new("/usr/bin/cw-rails"),
-        &crate::rails_up::run_args(9747, false),
+        &crate::rails_up::run_args(9747, false, false),
         dir.path(),
     )
     .unwrap();
@@ -100,4 +100,19 @@ fn mesh_up_leaves_the_rails_unit_enabled_and_not_started_twice() {
     assert!(std::fs::read_to_string(&path)
         .unwrap()
         .contains("ExecStart=\"/usr/bin/cw-rails\" \"run\" \"--listen\" \"9747\"\n"));
+}
+
+/// cw-rails browses mDNS when `[discovery] mdns` says so, and never on a
+/// local-only node, whatever the config says: the daemon's
+/// `mdns_enabled_effective` rule, now the bring-up's. Failing input: pass
+/// the config value through unfiltered.
+#[test]
+fn mdns_follows_the_config_and_never_runs_local_only() {
+    assert!(crate::rails_up::mdns_effective(false, true));
+    assert!(!crate::rails_up::mdns_effective(false, false));
+    assert!(!crate::rails_up::mdns_effective(true, true));
+    assert_eq!(
+        crate::rails_up::run_args(9747, false, true),
+        ["run", "--listen", "9747", "--mdns"]
+    );
 }

@@ -139,6 +139,15 @@ async fn one_round_converges_two_daemons_and_carries_the_media_offer() {
         daemon_a.contacts.lock().await.contains_key(&id_b),
         "alpha never had contact with beta — the round did not complete"
     );
+    // A reach is noted on alpha's own clock and never written into beta's
+    // record: beta's `last_seen` is beta's stamp, the LWW key its offer rides
+    // on (the daemon's `a_peers_reach_does_not_overwrite_the_holders_offer_clock`).
+    let beta_stamp = daemon_b.mesh.read().await.members[&id_b].last_seen;
+    assert_eq!(
+        daemon_a.mesh.read().await.members[&id_b].last_seen,
+        beta_stamp,
+        "alpha's reach rewrote the holder's clock"
+    );
 
     // Beta learned alpha's stamp through the inbound half: its identity key,
     // its reachability, and its MEDIA OFFER. Before the offer rode gossip a

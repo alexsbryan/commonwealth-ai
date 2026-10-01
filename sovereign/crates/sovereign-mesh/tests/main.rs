@@ -18,11 +18,6 @@
 //! need process isolation, or a `.config/nextest.toml` override keys on
 //! their binary name. Do not fold those in.
 
-#[path = "main/dst.rs"]
-#[cfg(feature = "dst")]
-mod dst;
-#[path = "main/dst_scenarios.rs"]
-mod dst_scenarios;
 // The loop tests moved here from `src/ring_sync/{tests,snapshot_tests,
 // projection_tests}.rs` and `src/rail_kv_pump/tests.rs` at domains
 // `dm-daemon-api-edge` (b): they assemble the host node, which now lives in

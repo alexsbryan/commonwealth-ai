@@ -76,7 +76,7 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     let peer = args.iter().find(|a| !a.starts_with("--"));
 
     let port = daemon_client_port();
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/media");
+    let url = format!("{}/v1/mesh/media", crate::mesh_cmd::rails_base());
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
@@ -93,7 +93,7 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     let resp = match client.get(&url).query(&[("peer", peer)]).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("mesh media: daemon at {url} not reachable: {e}");
+            eprintln!("mesh media: cw-rails at {url} not reachable: {e}");
             eprintln!("The bridge lives in the running daemon — `svrn daemon start`.");
             return 1;
         }
@@ -215,7 +215,7 @@ async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32
     let resp = match client.get(url).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("mesh media: daemon at {url} not reachable: {e}");
+            eprintln!("mesh media: cw-rails at {url} not reachable: {e}");
             eprintln!("The roster lives in the running daemon — `svrn daemon start`.");
             return 1;
         }
@@ -385,7 +385,7 @@ pub(crate) async fn cmd_fanout(app: Option<&str>, args: &[String]) -> i32 {
     let port = daemon_client_port();
     // The generic route. `svrn mesh media fanout` reaches the same handler
     // with `kind` left out, so the two verbs cannot drift.
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/fanout");
+    let url = format!("{}/v1/mesh/fanout", crate::mesh_cmd::rails_base());
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(60))
         .build()
@@ -413,7 +413,7 @@ pub(crate) async fn cmd_fanout(app: Option<&str>, args: &[String]) -> i32 {
     let resp = match client.post(&url).json(&body).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("{verb}: daemon at {url} not reachable: {e}");
+            eprintln!("{verb}: cw-rails at {url} not reachable: {e}");
             eprintln!("The bridges live in the running daemon — `svrn daemon start`.");
             return 1;
         }

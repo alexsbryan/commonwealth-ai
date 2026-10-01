@@ -99,6 +99,12 @@ fn answer(code: StatusCode, body: serde_json::Value) -> Response {
     (code, Json(body)).into_response()
 }
 
+/// A refusal whose body carries more than its sentence.
+fn answer_refusal(code: StatusCode, verb: &str, body: serde_json::Value) -> Response {
+    tracing::info!(target: "rails", verb, status = code.as_u16(), body = %body, "membership: refused");
+    answer(code, body)
+}
+
 fn refuse(code: StatusCode, verb: &str, why: impl std::fmt::Display) -> Response {
     tracing::info!(target: "rails", verb, status = code.as_u16(), why = %why, "membership: refused");
     answer(code, serde_json::json!({ "error": why.to_string() }))
@@ -307,10 +313,94 @@ pub async fn preview(Json(req): Json<PreviewRequest>) -> Response {
     }
 }
 
+/// `POST /v1/mesh/rotate` query.
+#[derive(Debug, Default, Deserialize)]
+pub struct RotateQuery {
+    /// Rotate even though an Online peer is on a pre-split build, or has not
+    /// been confirmed since start, and may be partitioned by it.
+    #[serde(default)]
+    pub force: bool,
+}
+
+/// The Online peers a rotation could partition, in two populations with two
+/// remedies: `pre_split` (merged, and it offered neither a proof nor a
+/// secret: upgrade it) and `unconfirmed` (not merged since start: wait one
+/// round). A pre-split peer authorizes gossip on `invite_key_hash`, which a
+/// rotation changes.
+pub fn rotate_blockers(
+    mesh: &Mesh,
+    self_id: commonwealth_core::ids::NodeId,
+    split: &gossip::SplitGenerations,
+) -> (Vec<String>, Vec<String>) {
+    let (mut pre_split, mut unconfirmed) = (Vec::new(), Vec::new());
+    for m in mesh.members.values() {
+        if m.node_id == self_id
+            || !m.is_active()
+            || m.status != commonwealth_core::mesh::NodeStatus::Online
+        {
+            continue;
+        }
+        let generation = gossip::split_generation_of(split, m.node_id);
+        tracing::debug!(target: "rails", peer = %m.node_id, name = %m.name,
+                        generation = ?generation, "rotate: pre-split check");
+        match generation {
+            Some(true) => {}
+            Some(false) => pre_split.push(m.name.clone()),
+            None => unconfirmed.push(m.name.clone()),
+        }
+    }
+    (pre_split, unconfirmed)
+}
+
+/// The refusal's sentence: which population blocked, with its own remedy.
+fn describe_rotate_refusal(pre_split: &[String], unconfirmed: &[String]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !pre_split.is_empty() {
+        parts.push(format!(
+            "{} peer(s) are still on a pre-split build ({}) — upgrade them first",
+            pre_split.len(),
+            pre_split.join(", ")
+        ));
+    }
+    if !unconfirmed.is_empty() {
+        parts.push(format!(
+            "{} peer(s) have not been confirmed since this daemon started ({}) — \
+             retry after the next gossip round",
+            unconfirmed.len(),
+            unconfirmed.join(", ")
+        ));
+    }
+    format!(
+        "Rotating now could partition the mesh: {}. Or re-run with --force to rotate anyway.",
+        parts.join("; ")
+    )
+}
+
 /// `POST /v1/mesh/rotate` — mint a new invite key for the active mesh. The
 /// new hash rides the next gossip round (`invite_version`), so every member
 /// refuses the old key once it has converged.
-pub async fn rotate(State(daemon): State<Arc<RailsDaemon>>) -> Response {
+///
+/// Refused (409) while an Online peer is pre-split or unconfirmed, unless
+/// `?force=true` (the daemon's guard, here since pb-mesh-exit-transport;
+/// FE-15, FE-17). The generation map is in memory, so a rotate soon after
+/// start would refuse on an instrument that has not run: one gossip round
+/// first, when any Online peer is unconfirmed, before the verbs lock (the
+/// round takes it).
+pub async fn rotate(
+    State(daemon): State<Arc<RailsDaemon>>,
+    axum::extract::Query(q): axum::extract::Query<RotateQuery>,
+) -> Response {
+    if !q.force && !daemon.is_solo() {
+        let unconfirmed = {
+            let mesh = daemon.mesh.read().await;
+            rotate_blockers(&mesh, daemon.node.self_id, &daemon.split_generation).1
+        };
+        if !unconfirmed.is_empty() {
+            tracing::info!(target: "rails", unconfirmed = ?unconfirmed,
+                "rotate: peers unconfirmed since start — one gossip round before deciding");
+            gossip::run_one_round(&daemon, 0).await;
+        }
+    }
     let _verbs = daemon.verbs.lock().await;
     if daemon.is_solo() {
         return refuse(StatusCode::NOT_FOUND, "rotate", "no mesh to rotate");
@@ -319,6 +409,21 @@ pub async fn rotate(State(daemon): State<Arc<RailsDaemon>>) -> Response {
     let now = commonwealth_core::clock::unix_now_secs();
     let mesh = {
         let mut mesh = daemon.mesh.write().await;
+        if !q.force {
+            let (pre_split, unconfirmed) =
+                rotate_blockers(&mesh, daemon.node.self_id, &daemon.split_generation);
+            if !pre_split.is_empty() || !unconfirmed.is_empty() {
+                return answer_refusal(
+                    StatusCode::CONFLICT,
+                    "rotate",
+                    serde_json::json!({
+                        "error": describe_rotate_refusal(&pre_split, &unconfirmed),
+                        "pre_split": pre_split,
+                        "unconfirmed": unconfirmed,
+                    }),
+                );
+            }
+        }
         let expires_at = mesh.require_encryption.then_some(now + INVITE_TTL_SECS);
         mesh.rotate_invite_key(hash_join_key(&key), expires_at);
         mesh.clone()

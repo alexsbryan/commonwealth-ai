@@ -6,7 +6,7 @@ use arc_swap::ArcSwap;
 use tokio::sync::RwLock;
 
 use async_trait::async_trait;
-use commonwealth_core::mesh::Mesh;
+
 use corpus_index::ingest_port::daemon::IngestPort;
 use kernel_types::NodeId;
 use oicp_types::model_aliases::ModelAliasTable;
@@ -38,10 +38,7 @@ pub mod store;
 // so the daemon and the test harnesses name them at `state::*` (the same
 // surface the constructors take).
 pub use sovereign_mesh::fabric;
-pub use sovereign_mesh::fabric::{
-    ClockReader, DialInfoReader, DialSigner, FabricPart, FabricSeed, JoinKeyReader,
-    MeshMutationHook, TransportReader,
-};
+pub use sovereign_mesh::fabric::{FabricPart, FabricSeed, TransportReader};
 // Serving's construction seed, its readers and the two tally types, for the
 // same reason.
 pub use serving::{
@@ -176,22 +173,6 @@ impl From<oicp_types::ComputeChildStatus> for ComputeChildStatus {
     }
 }
 
-/// The worker side of distributed-inference auto-warm, the contracts port
-/// (`sovereign_contracts::rpc_warm`, pb-serve-distributes): the route resolves
-/// the reach from this daemon's mesh (`rpc_warm_http::warm_reach`) and hands it
-/// in as data, so the warmer — the loader's — names no `AppState`.
-pub use sovereign_contracts::rpc_warm::RpcShardWarmer;
-
-/// Callback the route handlers fire whenever they mutate `Mesh` —
-/// `/internal/join` (accepting a new member), `/internal/gossip`
-/// (merging a peer's view). `sovereign-mesh::EmbeddedDaemon` installs
-/// a hook that persists `mesh.json` synchronously so a restart within
-/// the gossip interval never forgets a mutation. Tests leave this
-/// `None` and rely on their assertions without touching disk.
-///
-/// Moved to Fabric's own module with the part at domains
-/// `dm-daemon-api-edge` (b); re-exported at the top of this file.
-
 // `PrincipalTally` and `RejectedNodeIdHeader` moved to Serving's owner,
 // `sovereign-serving-host::state`, with the part at `REVIEW-build-daemon-parts`;
 // re-exported through `serving` below so the in-crate callers are unchanged.
@@ -260,14 +241,6 @@ pub struct AppStateInner {
     /// (DC §4.2). An `Arc` because the mesh loops take a handle to the part
     /// (they may not name this crate's `AppState`).
     pub fabric: std::sync::Arc<fabric::FabricPart>,
-    /// The ring rail's LIVE lane: what peers have pushed ephemerally and
-    /// nobody has drained yet (main, 2026-09-18). Held by the daemon — the
-    /// `LiveBuffer` type lives in this crate's `routes_rail_live`, which the
-    /// mesh's `FabricPart` may not name — and read through one accessor
-    /// (ARCH §7.5). Main's original placement was beside `ring_write_nudge`
-    /// in the flat `AppStateInner`; the dissolution moved the rail's durable
-    /// state into `FabricPart`, and the live lane stays here with its routes.
-    pub rail_live_buffer: std::sync::Arc<crate::routes_rail_live::LiveBuffer>,
     /// Serving's part: the model, pipeline and slot aliases, the servable
     /// model files, the local inference handle, the peer and client admission
     /// schedulers with their caps, switch, tallies, rejected-header record and
@@ -478,53 +451,6 @@ impl AppState {
         self.inner.serving.servable_model_files.clone()
     }
 
-    /// This node's identity pubkey, if the node has one.
-    pub fn self_node_pubkey(&self) -> Option<kernel_types::NodePubkey> {
-        self.inner.fabric.self_node_pubkey
-    }
-
-    /// This node's current iroh dial info, if iroh access is on. Pulled live
-    /// from the endpoint each call through the reader.
-    pub fn self_iroh_dialinfo(&self) -> Option<commonwealth_core::mesh::IrohDialInfo> {
-        self.inner.fabric.dial_info.current()
-    }
-
-    /// Fabric's dial-info reader — the owner's write handle. The endpoint owner
-    /// (the daemon, and the reachability watchdog on an endpoint rebuild)
-    /// publishes through it while the part reads. A reader created first, not a
-    /// slot filled later (DC §4.2 "Construction is staged, and parts are
-    /// total").
-    pub fn dial_info_reader(&self) -> fabric::DialInfoReader {
-        self.inner.fabric.dial_info.clone()
-    }
-
-    /// Sign this node's dial info (hex), or `None` if the node has no identity
-    /// key (iroh disabled / pre-identity build).
-    pub fn sign_dial_info(
-        &self,
-        version: u64,
-        relay_url: Option<&str>,
-        direct_addrs: &[std::net::SocketAddr],
-    ) -> Option<String> {
-        let signer = self.inner.fabric.self_dial_signer.clone()?;
-        Some(signer(
-            version,
-            relay_url.map(|s| s.to_string()),
-            direct_addrs.to_vec(),
-        ))
-    }
-
-    /// Sign a guest session's attestation with the node key, or `None` if
-    /// the node has no identity key (decision five-programs-34).
-    pub fn attest_guest(
-        &self,
-        name: &str,
-        namespace: &str,
-        expires_at: i64,
-    ) -> Option<commonwealth_rail_core::GuestAttestation> {
-        self.inner.fabric.attest_guest(name, namespace, expires_at)
-    }
-
     /// The ring rail's storage, or `None` if the daemon has none.
     pub fn ring_rail(&self) -> Option<Arc<dyn sovereign_mesh::rail_port::RingRailPort>> {
         self.inner.fabric.ring_rail.clone()
@@ -546,13 +472,6 @@ impl AppState {
     /// §7.5).
     pub fn ring_write_nudge(&self) -> Arc<tokio::sync::Notify> {
         Arc::clone(&self.inner.fabric.ring_write_nudge)
-    }
-
-    /// The live lane's arrived-payload buffer. ONE accessor for ONE buffer
-    /// (ARCH §7.5): the internal receiver pushes through it and the client
-    /// drain empties it, and nothing else may hold a second one.
-    pub fn rail_live_buffer(&self) -> Arc<crate::routes_rail_live::LiveBuffer> {
-        Arc::clone(&self.inner.rail_live_buffer)
     }
 
     /// The configured client-API bearer token. `None` ⇒ no token configured.
@@ -602,151 +521,24 @@ impl AppState {
         self.inner.fabric.membership.as_ref()
     }
 
-    /// Snapshot of the active [`commonwealth_core::Clock`]. Cheap (one atomic
-    /// load + Arc clone); call per timestamp, don't cache across awaits.
-    pub fn clock(&self) -> Arc<dyn commonwealth_core::Clock> {
-        self.inner.fabric.clock.current()
-    }
-
-    /// Fabric's clock reader — the owner's write handle. The harness publishes a
-    /// per-node `TestClock` through it to drive skew; production leaves the
-    /// `SystemClock` the seed supplied.
-    pub fn clock_reader(&self) -> fabric::ClockReader {
-        self.inner.fabric.clock.clone()
-    }
-
-    /// Record that we just observed `peer`'s liveness — its gossiped record
-    /// advanced (added or LWW-updated, possibly via transitive gossip) or we
-    /// reached it directly — at local time `now_secs`. The stamp is always
-    /// OUR clock, so a peer's skewed `last_seen` can't drive offline-decay.
-    pub fn observe_peer_contact(&self, peer: NodeId, now_secs: u64) {
-        self.inner
-            .fabric
-            .peer_last_contact
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(peer, now_secs);
-    }
-
-    /// Record that this round SPENT A SLOT dialing `peer` — called for every
-    /// selected peer before the dial, so it stamps refusals and timeouts too.
-    ///
-    /// Deliberately not folded into [`Self::observe_peer_contact`]: that one is
-    /// liveness evidence and a failed dial is not evidence of life. See
-    /// `peer_last_attempt` for why the two clocks are separate.
-    pub fn note_peer_attempt(&self, peer: NodeId, now_secs: u64) {
-        self.inner
-            .fabric
-            .peer_last_attempt
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(peer, now_secs);
-    }
-
-    /// When a round last spent a slot on `peer`, initializing to `now_secs`
-    /// when we have never dialed it.
-    ///
-    /// The lazy init matters for FAIRNESS rather than for grace: a peer we have
-    /// never tried starts level with one we just tried, so it takes its turn on
-    /// staleness like everyone else instead of jumping the queue for ever.
-    pub fn peer_attempt_or_init(&self, peer: NodeId, now_secs: u64) -> u64 {
-        *self
-            .inner
-            .fabric
-            .peer_last_attempt
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .entry(peer)
-            .or_insert(now_secs)
-    }
-
-    /// Local-observation time for `peer`, initializing it to `now_secs` (and
-    /// returning that) when we have no record yet. The lazy init gives a
-    /// freshly-seen peer a full threshold grace window before it can decay, so
-    /// a peer learned at startup isn't decayed before we've had a chance to
-    /// gossip with it.
-    pub fn peer_contact_or_init(&self, peer: NodeId, now_secs: u64) -> u64 {
-        *self
-            .inner
-            .fabric
-            .peer_last_contact
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .entry(peer)
-            .or_insert(now_secs)
-    }
-
-    /// Record which credential generation `peer` is running, learned from a
-    /// gossip payload we just merged (`MergeReport::peer_pre_split`).
-    ///
-    /// Call this on EVERY successful merge, not only when the answer is
-    /// "pre-split": a peer that upgrades mid-session must be able to clear its
-    /// own flag, or the first pre-split round it ever sent would block invite
-    /// rotation for the rest of the daemon's life.
-    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {
-        self.inner
-            .fabric
-            .peer_post_split
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(peer, post_split);
-    }
-
-    /// Whether we have positively confirmed `peer` is post-credential-split.
-    ///
-    /// Unknown answers `false` — see [`fabric::FabricPart::peer_post_split`]. A
-    /// caller using this to decide whether a destructive action is safe gets
-    /// the conservative answer until a gossip round proves otherwise.
-    pub fn peer_confirmed_post_split(&self, peer: NodeId) -> bool {
-        self.peer_split_generation(peer).unwrap_or(false)
-    }
-
-    /// What we actually know about `peer`'s credential generation, WITHOUT
-    /// collapsing the two ways of not knowing into one.
-    ///
-    /// - `Some(true)`  — it proved possession, or sent a matching secret.
-    /// - `Some(false)` — we merged from it and it offered neither. A genuinely
-    ///                   pre-split build.
-    /// - `None`        — we have not merged from it since this daemon started.
-    ///
-    /// [`Self::peer_confirmed_post_split`] answers the SAFETY question and is
-    /// right to fold `None` into "unsafe". This answers the DIAGNOSTIC one, and
-    /// folding there produced a refusal that told the operator their fleet was
-    /// un-migrated when the truth was "this daemon has been up for four
-    /// seconds". Same map, two questions, one decider each (ARCH §10.6).
-    pub fn peer_split_generation(&self, peer: NodeId) -> Option<bool> {
-        self.inner
-            .fabric
-            .peer_post_split
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(&peer)
-            .copied()
-    }
-
-    pub fn new(self_node_id: NodeId, mesh: Mesh) -> Self {
+    pub fn new(self_node_id: NodeId) -> Self {
         // Test-support constructor (callers in tests/ + the test-harness).
-        Self::new_with_platform(self_node_id, mesh)
+        Self::new_with_platform(self_node_id)
     }
 
     /// [`Self::new`] with Serving's construction seed — the test-support shape
     /// for an integration test that serves local chat (DC §4.2 "Construction
     /// is staged, and parts are total").
-    pub fn new_with_serving(
-        self_node_id: NodeId,
-        mesh: Mesh,
-        serving_seed: serving::ServingSeed,
-    ) -> Self {
-        Self::new_with_platform_and_engine_and_serving(self_node_id, mesh, None, serving_seed)
+    pub fn new_with_serving(self_node_id: NodeId, serving_seed: serving::ServingSeed) -> Self {
+        Self::new_with_platform_and_engine_and_serving(self_node_id, None, serving_seed)
     }
 
     /// [`Self::new`] with the node's construction seed — the test-support shape
     /// for a test that configures a client token (DC §4.2 "Construction is
     /// staged, and parts are total").
-    pub fn new_with_node(self_node_id: NodeId, mesh: Mesh, node_seed: node::NodeSeed) -> Self {
+    pub fn new_with_node(self_node_id: NodeId, node_seed: node::NodeSeed) -> Self {
         Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
             self_node_id,
-            mesh,
             None,
             None,
             fabric::FabricSeed::default(),
@@ -756,8 +548,8 @@ impl AppState {
     }
 
     /// Create state with explicit platform components (used by the daemon).
-    pub fn new_with_platform(self_node_id: NodeId, mesh: Mesh) -> Self {
-        Self::new_with_platform_and_engine(self_node_id, mesh, None)
+    pub fn new_with_platform(self_node_id: NodeId) -> Self {
+        Self::new_with_platform_and_engine(self_node_id, None)
     }
 
     /// Create state with an optional `CorpusEngine` attached. The
@@ -776,10 +568,9 @@ impl AppState {
     /// nodes take the absent form.
     pub fn new_with_platform_and_engine(
         self_node_id: NodeId,
-        mesh: Mesh,
         corpus_engine: Option<Arc<dyn IngestPort>>,
     ) -> Self {
-        Self::new_with_platform_and_engine_and_gauge(self_node_id, mesh, corpus_engine, None)
+        Self::new_with_platform_and_engine_and_gauge(self_node_id, corpus_engine, None)
     }
 
     /// [`Self::new_with_platform_and_engine`] with the node's in-flight gauge.
@@ -791,13 +582,11 @@ impl AppState {
     /// never a zeroed default (ARCH 6).
     pub fn new_with_platform_and_engine_and_gauge(
         self_node_id: NodeId,
-        mesh: Mesh,
         corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
     ) -> Self {
         Self::new_with_platform_and_engine_and_gauge_and_fabric(
             self_node_id,
-            mesh,
             corpus_engine,
             in_flight_gauge,
             fabric::FabricSeed::default(),
@@ -813,14 +602,12 @@ impl AppState {
     /// shorter constructors.
     pub fn new_with_platform_and_engine_and_gauge_and_fabric(
         self_node_id: NodeId,
-        mesh: Mesh,
         corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         fabric_seed: fabric::FabricSeed,
     ) -> Self {
         Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
             self_node_id,
-            mesh,
             corpus_engine,
             in_flight_gauge,
             fabric_seed,
@@ -836,13 +623,11 @@ impl AppState {
     /// parts are total"). Tests that serve local chat take this form.
     pub fn new_with_platform_and_engine_and_serving(
         self_node_id: NodeId,
-        mesh: Mesh,
         corpus_engine: Option<Arc<dyn IngestPort>>,
         serving_seed: serving::ServingSeed,
     ) -> Self {
         Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
             self_node_id,
-            mesh,
             corpus_engine,
             None,
             fabric::FabricSeed::default(),
@@ -859,7 +644,6 @@ impl AppState {
     /// than installing them afterwards.
     pub fn new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
         self_node_id: NodeId,
-        mesh: Mesh,
         corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         fabric_seed: fabric::FabricSeed,
@@ -867,7 +651,6 @@ impl AppState {
     ) -> Self {
         Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
             self_node_id,
-            mesh,
             corpus_engine,
             in_flight_gauge,
             fabric_seed,
@@ -885,7 +668,6 @@ impl AppState {
     /// part afterwards.
     pub fn new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
         self_node_id: NodeId,
-        mesh: Mesh,
         corpus_engine: Option<Arc<dyn IngestPort>>,
         in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
         fabric_seed: fabric::FabricSeed,
@@ -898,7 +680,7 @@ impl AppState {
         // daemon calls [`Self::new_with_fabric_and_serving_and_node`] with the
         // `Arc` it holds; this seed-shaped entry point builds one for the
         // callers (tests, the rail harness) that have no daemon.
-        let fabric = Arc::new(fabric::FabricPart::new(self_node_id, mesh, fabric_seed));
+        let fabric = Arc::new(fabric::FabricPart::new(self_node_id, fabric_seed));
         // Every test keeps ONE store: the ports seed over Fabric's own
         // (five-programs fp-111).
         let store_seed = store::StoreSeed::local(&fabric, self_node_id);
@@ -954,7 +736,6 @@ impl AppState {
         Self {
             inner: Arc::new(AppStateInner {
                 fabric,
-                rail_live_buffer: Arc::new(crate::routes_rail_live::LiveBuffer::default()),
                 serving: serving::ServingPart {
                     model_aliases: ModelAliasTable::default_table(),
                     pipeline_aliases:
@@ -1008,7 +789,6 @@ impl AppState {
                 store: store::StorePart {
                     inference_store: store_seed.inference,
                     peer_preferences: store_seed.peer_preferences,
-                    rpc_shard_warmer: serving_seed.rpc_shard_warmer,
                     mesh_store: store_seed.kv,
                     contribution_emitter: store_seed.contributions,
                     processed_shards: store_seed.processed_shards,
@@ -2023,21 +1803,7 @@ impl sovereign_core::self_claims::SelfClaims for AppState {
 
 #[cfg(test)]
 pub fn test_app_state() -> AppState {
-    use commonwealth_core::mesh::Mesh;
-    use kernel_types::MeshId;
-    use std::collections::HashMap;
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "Test Mesh".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
-    };
-    AppState::new(NodeId::from_u128(1), mesh)
+    AppState::new(NodeId::from_u128(1))
 }
 
 /// [`test_app_state`] with a client token — the shape a test that exercises the
@@ -2046,23 +1812,8 @@ pub fn test_app_state() -> AppState {
 /// are total").
 #[cfg(test)]
 pub fn test_app_state_with_token(token: Option<Arc<str>>) -> AppState {
-    use commonwealth_core::mesh::Mesh;
-    use kernel_types::MeshId;
-    use std::collections::HashMap;
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "Test Mesh".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
-    };
     AppState::new_with_node(
         NodeId::from_u128(1),
-        mesh,
         node::NodeSeed {
             client_token: token,
             ..Default::default()
@@ -2071,27 +1822,12 @@ pub fn test_app_state_with_token(token: Option<Arc<str>>) -> AppState {
 }
 
 /// [`test_app_state`] with Fabric's construction seed — the shape a test that
-/// needs a recorder, rail, hook or clock uses now that those are constructor
-/// arguments rather than installs (DC §4.2 "Construction is staged, and parts
-/// are total").
+/// needs a recorder, rail, roster or clock uses now that those are
+/// constructor arguments rather than installs (DC §4.2 "Construction is
+/// staged, and parts are total").
 pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
-    use commonwealth_core::mesh::Mesh;
-    use kernel_types::MeshId;
-    use std::collections::HashMap;
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "Test Mesh".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
-    };
     AppState::new_with_platform_and_engine_and_gauge_and_fabric(
         NodeId::from_u128(1),
-        mesh,
         None,
         None,
         seed,
@@ -2103,23 +1839,8 @@ pub fn test_app_state_with_seed(seed: fabric::FabricSeed) -> AppState {
 /// rather than an install (DC §4.2 "Construction is staged, and parts are
 /// total").
 pub fn test_app_state_with_inference(service: Arc<dyn LocalInferenceService>) -> AppState {
-    use commonwealth_core::mesh::Mesh;
-    use kernel_types::MeshId;
-    use std::collections::HashMap;
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "Test Mesh".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
-    };
     AppState::new_with_platform_and_engine_and_serving(
         NodeId::from_u128(1),
-        mesh,
         None,
         serving::ServingSeed {
             local_inference: Some(service),

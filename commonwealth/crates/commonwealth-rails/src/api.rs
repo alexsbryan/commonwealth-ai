@@ -144,6 +144,8 @@ fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
         .route("/v1/rail/ingest", post(crate::rail::journal_ingest))
         .route("/v1/rail/admit", post(crate::rail::journal_admit))
         .route("/v1/rail/compact", post(crate::rail::journal_compact))
+        // The node's signed word for a program's guest (pb-mesh-exit-transport).
+        .route("/v1/rail/attest", post(crate::rail::attest))
         // The `work` queue, folded where its journal lives (fp-45).
         .route("/v1/work/projection", get(crate::work::projection))
         // The submitter's doors (pb-work-doors): seal, submit, the refusal
@@ -191,6 +193,22 @@ pub async fn serve(
 /// `GET /v1/mesh/status` — who I am, who is on the roster, who offers media.
 pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse {
     let mesh = daemon.mesh.read().await;
+    // The summary counts svrn's `/v1/mesh/status` carried, under the same
+    // names, so its clients (`sovereign_contracts::daemon_wire::
+    // MeshStatusSummary`) read this answer unchanged once the route is
+    // cw-rails' (pb-mesh-exit-transport; additive).
+    let members_total = mesh
+        .members
+        .values()
+        .filter(|m| m.removed_at.is_none())
+        .count();
+    let members_online = mesh
+        .members
+        .values()
+        .filter(|m| {
+            m.removed_at.is_none() && m.status == commonwealth_core::mesh::NodeStatus::Online
+        })
+        .count();
     let members: Vec<serde_json::Value> = {
         let mut rows: Vec<_> = mesh
             .members
@@ -225,6 +243,11 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
                         "relay_url": m.relay_url,
                         "iroh_direct_addrs": m.iroh_direct_addrs,
                     },
+                    // The member's key, full hex, so a program behind this
+                    // endpoint names the member cw-rails' forward carries in
+                    // `X-Mesh-Pubkey` (pb-mesh-exit-transport; additive).
+                    // Absent for a pre-identity member.
+                    "node_pubkey": m.node_pubkey.map(|k| hex::encode(k.0)),
                 })
             })
             .collect()
@@ -252,6 +275,10 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
             "media_origin": daemon.node.config.media.origin,
         },
         "mesh": { "id": mesh.id.to_string(), "name": mesh.name },
+        "running": true,
+        "mesh_name": mesh.name,
+        "members_online": members_online,
+        "members_total": members_total,
         "join_link": invite.as_ref().ok(),
         "join_link_absent": invite.as_ref().err().map(|a| a.reason()),
         "mdns": match &daemon.lan {
@@ -448,7 +475,7 @@ pub async fn publish_app(
     let addr: SocketAddr = ([127, 0, 0, 1], req.port).into();
     match daemon
         .published_apps
-        .claim(&req.name, addr, ttl_of(req.ttl_secs))
+        .claim_allowing(&req.name, addr, ttl_of(req.ttl_secs), req.allow)
     {
         Ok(claim) => (StatusCode::OK, Json(serde_json::json!(claim))).into_response(),
         Err(e) => publish_refusal(e),
@@ -597,6 +624,10 @@ pub struct ClaimRequest {
     pub port: u16,
     #[serde(default)]
     pub ttl_secs: Option<u64>,
+    /// Who the publisher admits, by member name or node-id prefix; empty is
+    /// every member. svrn sends its `[iroh] app_allow` (phase-b-81 (3)).
+    #[serde(default)]
+    pub allow: Vec<String>,
 }
 
 /// `POST /v1/mesh/publish/{claim_id}/renew` body. An empty body is valid.

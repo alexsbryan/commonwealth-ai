@@ -31,6 +31,10 @@ commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state",
 commonwealth-rail = { workspace = true }
 commonwealth-work = { workspace = true, features = ["process"] }
 commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
+# `svrn mesh up`'s identity handover writes the daemon's key, node id and
+# meshes through cw-rails' own store writers (identity_handover.rs,
+# pb-mesh-exit-transport): one decider for cw-rails' disk format.
+commonwealth-rails = { workspace = true }
 bytes = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }
@@ -65,6 +69,8 @@ tempfile = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# identity_handover's tests found meshes the way cw-rails' own tests do.
+commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
 
 [lints]
 workspace = true

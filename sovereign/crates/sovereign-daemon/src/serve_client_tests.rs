@@ -61,56 +61,6 @@ fn hosting_turns_only_this_hosts_dialing_path_hosted() {
     );
 }
 
-/// A stub serve on a free loopback port whose engine-state route waits
-/// `hold` before it answers the empty view.
-async fn stub_serve(hold: std::time::Duration) -> String {
-    use axum::routing::get;
-    let app = axum::Router::new().route(
-        sovereign_contracts::engine_state::ENGINE_STATE_PATH,
-        get(move || async move {
-            tokio::time::sleep(hold).await;
-            axum::Json(sovereign_contracts::engine_state::EngineState::default())
-        }),
-    );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(listener, app).await });
-    base
-}
-
-#[tokio::test]
-async fn a_serve_that_holds_the_route_past_the_bound_is_named_not_waited_on() {
-    let base = stub_serve(std::time::Duration::from_secs(30)).await;
-    let started = std::time::Instant::now();
-    let read = read_engine_state(&base).await;
-    let took = started.elapsed();
-    assert_eq!(read, EngineStateRead::DidNotAnswerInTime);
-    assert!(
-        took < sovereign_turn_client::reach::PROBE_TIMEOUT + std::time::Duration::from_secs(1),
-        "the read waited {took:?}, past the bound plus 1 s"
-    );
-}
-
-#[tokio::test]
-async fn a_serve_that_answers_is_read_and_not_observed_yet_stays_none() {
-    let base = stub_serve(std::time::Duration::ZERO).await;
-    match read_engine_state(&base).await {
-        EngineStateRead::Answered(state) => assert_eq!(state.device_memory, None),
-        other => panic!("expected an answer, got {other:?}"),
-    }
-}
-
-#[tokio::test]
-async fn no_serve_at_the_base_is_unreachable_not_empty() {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    drop(listener);
-    assert!(matches!(
-        read_engine_state(&base).await,
-        EngineStateRead::Unreachable(_)
-    ));
-}
-
 async fn stub(app: axum::Router) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -451,35 +401,4 @@ fn the_ner_handle_is_the_distributions_in_process_kind() {
     assert!(HostedServe::new(String::new(), compose)
         .ner_handle()
         .is_none());
-}
-
-/// The worker-side warmer svrn's `/internal/rpc-warm` hands requests to is
-/// the one the distribution handed (pb-serve-distributes); none when none
-/// was. Failing input: have `warmer` answer `None`, and the first assertion
-/// goes red.
-#[test]
-fn the_rpc_warmer_is_the_distributions() {
-    struct Warm;
-    #[async_trait::async_trait]
-    impl sovereign_contracts::rpc_warm::RpcShardWarmer for Warm {
-        async fn warm_shard(
-            &self,
-            _: serde_json::Value,
-            _: Option<std::path::PathBuf>,
-            _: sovereign_contracts::rpc_warm::WarmReach,
-        ) -> Result<serde_json::Value, String> {
-            Ok(serde_json::json!({ "warmed": true }))
-        }
-    }
-    let compose = |_: std::path::PathBuf, _: std::path::PathBuf, _: RankPorts| async {
-        Err::<HostedParts, String>("not composed here".to_string())
-    };
-    let handed: std::sync::Arc<dyn sovereign_contracts::rpc_warm::RpcShardWarmer> =
-        std::sync::Arc::new(Warm);
-    let hosted =
-        HostedServe::new(String::new(), compose).rpc_warmer(std::sync::Arc::clone(&handed));
-    assert!(hosted
-        .warmer()
-        .is_some_and(|w| std::sync::Arc::ptr_eq(&w, &handed)));
-    assert!(HostedServe::new(String::new(), compose).warmer().is_none());
 }

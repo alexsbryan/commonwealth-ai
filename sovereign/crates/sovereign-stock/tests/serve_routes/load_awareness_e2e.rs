@@ -38,7 +38,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_contracts::in_flight::LocalInFlightGauge;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;
@@ -49,25 +49,13 @@ use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 
 use crate::common;
 use crate::common::ledger_double::RecordingLedger;
-use crate::common::{member_with_last_seen, solo_mesh, spawn_router, TestProvider};
-
-/// `solo_mesh`'s record with no members. A macro, not a fn, so this root
-/// never names commonwealth-core's `Mesh` (pb-serve-ranks-tests-stock).
-macro_rules! empty_mesh {
-    () => {{
-        let mut mesh = solo_mesh(NodeId::from_u128(0), "test");
-        mesh.invite_key_hash = [0u8; 32];
-        mesh.members.clear();
-        mesh
-    }};
-}
+use crate::common::{member, roster, spawn_router, TestProvider};
 
 /// An `AppState` holding `gauge` — the production shape, where the node
 /// creates the gauge before the provider and gives the same handle to both.
 fn app_state_with_gauge(id: NodeId, gauge: LocalInFlightGauge) -> AppState {
     AppState::new_with_seeds(
         id,
-        empty_mesh!(),
         None,
         Some(gauge),
         sovereign_daemon::state::FabricSeed::default(),
@@ -172,7 +160,7 @@ async fn no_publisher_yields_none_in_gossip_payload() {
     // must produce the legacy "no signal" shape: `current_in_flight:
     // None`. Older peers without the field deserialize that as
     // None too, so scoring falls back to the founder's local view.
-    let state = AppState::new(NodeId::from_u128(4), empty_mesh!());
+    let state = AppState::new(NodeId::from_u128(4));
     let caps = build_local_capabilities(
         None::<&Arc<dyn corpus_index::source::CorpusReadPort>>,
         300,
@@ -196,7 +184,7 @@ async fn no_publisher_yields_none_in_gossip_payload() {
 /// trait's own tests use a fake; this is the positive control for the wiring.
 #[tokio::test]
 async fn self_claims_publishes_storage_remaining_from_the_budget() {
-    let state = AppState::new(NodeId::from_u128(5), empty_mesh!());
+    let state = AppState::new(NodeId::from_u128(5));
     let ten_gib = 10 * 1_073_741_824_u64;
     state
         .set_storage_budget_bytes(Some(ten_gib))
@@ -259,15 +247,8 @@ async fn self_claims_publishes_storage_remaining_from_the_budget() {
 #[tokio::test]
 async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
     let self_id = NodeId::from_u128(0x5EF_u128);
-    let mut members = std::collections::HashMap::new();
-    members.insert(
-        self_id,
-        member_with_last_seen(self_id, "self", 100, "127.0.0.1:9742".parse().unwrap()),
-    );
-    let mut mesh = solo_mesh(self_id, "inbound-load-test");
-    mesh.id = MeshId::from_u128(77);
-    mesh.invite_key_hash = [3u8; 32];
-    mesh.members = members;
+    let mut me = member(self_id, "self");
+    me.last_seen = 100;
 
     // The gauge gossip publishes. Created before the node and shared with the
     // probe closure below so the provider can read it mid-serve.
@@ -300,10 +281,12 @@ async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
     // total").
     let state = AppState::new_with_seeds(
         self_id,
-        mesh,
         None,
         Some(gauge),
-        sovereign_daemon::state::FabricSeed::default(),
+        sovereign_daemon::state::FabricSeed {
+            membership: Some(roster("inbound-load-test", vec![me])),
+            ..Default::default()
+        },
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()

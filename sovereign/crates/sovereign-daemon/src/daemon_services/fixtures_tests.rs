@@ -114,7 +114,6 @@ fn serving_with(
             inference_provider,
             local_inference: None,
             in_flight_gauge: None,
-            rpc_shard_warmer: None,
             state_store,
             runtime: runtime(),
             insights: None,
@@ -132,6 +131,7 @@ fn serving_with(
         advertise_embed: EmbedAdvertisement::Unavailable {
             reason: "fixture".into(),
         },
+        mesh: crate::hosted_mesh::MeshAccess::absent(),
     }
 }
 
@@ -186,5 +186,9 @@ fn headless_from(
 /// Every variant, so a test can enumerate the whole space rather than
 /// spot-check the arms it happened to think of.
 pub(crate) fn every_variant() -> Vec<DaemonServices> {
-    vec![DaemonServices::mesh_admin(), desktop(), headless()]
+    vec![
+        DaemonServices::mesh_admin(crate::hosted_mesh::MeshAccess::absent()),
+        desktop(),
+        headless(),
+    ]
 }

@@ -8,6 +8,7 @@
 use crate::daemon_cmd;
 pub use crate::hosted_code::{CodeHost, CodeMount, HostedCode};
 pub use crate::hosted_ingest::{HostedIngest, IngestCalls, IngestHost, IngestMount};
+pub use crate::hosted_mesh::{HostedMesh, MeshAccess};
 pub use crate::serve_client::{HostedParts, HostedServe, RankPorts, Ranked};
 use sovereign_contracts::launch::Launch;
 
@@ -19,12 +20,15 @@ use sovereign_contracts::launch::Launch;
 /// serve (phase-b-29 Q1, Q2). `code` is its composition of the code program
 /// (pb-code-daemon-exit; F2 (a), phase-b-30): `None` serves no code tool.
 /// `ingest` is its composition of ingest's ports (pb-ingest-dial-tools-close):
-/// `None` reports ingest absent by name where svrn needs it.
+/// `None` reports ingest absent by name where svrn needs it. `mesh` is its
+/// composition of the node's mesh, cw-rails' roster and reach
+/// (pb-mesh-exit-transport): `None` reads no roster, named at boot.
 pub fn run(
     raw_args: &[String],
     hosted: Option<HostedServe>,
     code: Option<HostedCode>,
     ingest: Option<HostedIngest>,
+    mesh: Option<HostedMesh>,
 ) -> i32 {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "full");
@@ -74,6 +78,7 @@ pub fn run(
             &launch,
             config.as_deref(),
             node_name.as_deref(),
+            mesh,
         ));
     }
 
@@ -120,7 +125,7 @@ pub fn run(
         .thread_name("sovereign-daemon-rt")
         .build()
         .expect("failed to build tokio runtime");
-    runtime.block_on(daemon_cmd::run(&launch, args, hosted, code, ingest))
+    runtime.block_on(daemon_cmd::run(&launch, args, hosted, code, ingest, mesh))
 }
 
 /// The subscriber over [`compose_filter`], on stderr so machine-readable
@@ -275,7 +280,7 @@ mod tests {
             vec!["--rpc-worker"],
         ] {
             let argv: Vec<String> = argv.into_iter().map(str::to_string).collect();
-            assert_eq!(run(&argv, None, None, None), 2, "{argv:?}");
+            assert_eq!(run(&argv, None, None, None, None), 2, "{argv:?}");
         }
     }
 

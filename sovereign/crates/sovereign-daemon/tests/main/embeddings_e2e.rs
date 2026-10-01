@@ -20,13 +20,11 @@
 //!    to a different surface would be invisible to callers that
 //!    branch on the error code (Sovereign's own desktop bootstrap
 //!    does).
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use serde_json::json;
 
-use commonwealth_core::mesh::Mesh;
 use kernel_types::NodeId;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;
@@ -34,31 +32,15 @@ use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
 
 use crate::common;
 use crate::common::service_double::ProviderService;
-use crate::common::{member, spawn_router, TestProvider};
+use crate::common::{spawn_router, TestProvider};
 
 /// Build an `AppState` with the stub `LocalInferenceService` installed
 /// (`with_embed=true`) or without (`with_embed=false`, to pin the
 /// no-backend 503).
 fn build_app_state(with_embed: bool) -> AppState {
     let self_id = NodeId::from_u128(0xE5E5_E5E5_E5E5_E5E5);
-    let mut members = HashMap::new();
-    members.insert(
-        self_id,
-        member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
-    );
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: kernel_types::MeshId::from_u128(7),
-        name: "embeddings-test".into(),
-        invite_key_hash: [3u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
-    };
     if !with_embed {
-        return AppState::new_with_serving(self_id, mesh, ServingSeed::default());
+        return AppState::new_with_serving(self_id, ServingSeed::default());
     }
     // Marker-encoded vector: `embed("foo") = [3.0; 8]`. Lets the
     // test verify per-input ordering survives the fan-out.
@@ -70,7 +52,6 @@ fn build_app_state(with_embed: bool) -> AppState {
     let adapter: Arc<dyn LocalInferenceService> = ProviderService::new(provider);
     AppState::new_with_serving(
         self_id,
-        mesh,
         ServingSeed {
             local_inference: Some(adapter),
             ..Default::default()

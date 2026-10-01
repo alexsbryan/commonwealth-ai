@@ -89,9 +89,11 @@ pub struct IrohSection {
     ///
     /// Absent (the default) means this node serves no media and does not
     /// advertise the protocol at all, so a dial is closed rather than hanging.
-    /// Present means the daemon's acceptor forwards `MEDIA_ALPN` to it for a
-    /// dialer the roster carries — no VPN, no port-forward, no public exposure:
-    /// the origin stays bound to loopback and the only way in is a mesh key.
+    /// Since pb-mesh-exit-transport the media origin is cw-rails' own
+    /// (`[media] origin` in rails.toml): `svrn mesh up` moves this key there
+    /// once, and cw-rails' acceptor forwards `MEDIA_ALPN` to it for a dialer
+    /// the roster carries — no VPN, no port-forward, no public exposure: the
+    /// origin stays bound to loopback and the only way in is a mesh key.
     ///
     /// It is the OPERATOR's declaration, like `[compute.work_offer] image`: this
     /// repository ships no media server and must not guess at one. A value that
@@ -167,8 +169,9 @@ pub struct IrohSection {
     ///
     /// Absent (the default) means this node publishes no offers and does not
     /// advertise the protocol at all, so a dial is closed rather than left
-    /// hanging. Present means the acceptor forwards `OFFER_ALPN` to it for a
-    /// dialer the roster carries — and `svrn mesh offers` on any member's
+    /// hanging. Present means svrn registers it with cw-rails on `OFFER_ALPN`
+    /// (`sovereign_daemon::published_origins`), whose acceptor forwards to it
+    /// for a dialer the roster carries — and `svrn mesh offers` on any member's
     /// machine then shows what is here, with nobody holding a credential of
     /// this node's.
     ///
@@ -183,9 +186,9 @@ pub struct IrohSection {
     /// Its own key rather than an `[iroh.apps]` entry named `offers`,
     /// because it is its own TRUST class — see `offer_allow`.
     ///
-    /// A value that does not parse as a socket address refuses the boot
-    /// rather than being dropped, exactly as `media_origin` does: a node that
-    /// cannot parse what it would serve must not boot pretending to serve it.
+    /// It must be a loopback `host:port` (cw-rails forwards to this host
+    /// only); one that does not parse, or is not loopback, is not registered
+    /// and the daemon names why at warn.
     ///
     /// ```toml
     /// [iroh]

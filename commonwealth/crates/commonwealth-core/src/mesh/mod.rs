@@ -403,8 +403,8 @@ use crate::mesh_merge::{MemberOutcome, MergeArm, RefusalReason, SkipReason};
 /// — and one of the three sites was correct only by CONTAINING NO SUCH LINE
 /// (`mesh_admin.rs`, the join reply, where the joiner legitimately needs the
 /// secret). A rule spread across three sites, one of them an absence, is a
-/// rule that gets forgotten, and this one was: `routes_internal/gossip.rs`
-/// records that the credential rode the wire every 10s between two fully
+/// rule that gets forgotten, and this one was: the daemon's gossip route
+/// (cw-rails' `internal::gossip` since pb-mesh-exit-transport) recorded that the credential rode the wire every 10s between two fully
 /// upgraded nodes because "the request half of P4b stopped sending it and the
 /// reply half did not". Making it an argument is ARCH §7 / §10 —
 /// structural, not remembered.
@@ -578,7 +578,7 @@ impl Mesh {
             self.require_encryption = true;
         }
 
-        // Carry a rotation. `rotate_invite`'s doc says it mutates the live mesh
+        // Carry a rotation. cw-rails' `membership::rotate` mutates the live mesh
         // and lets "the ordinary gossip round carry it" — this is the line that
         // makes that true. Without it the claim was false: the round carried
         // the new hash on the wire and the merge dropped it on the floor.

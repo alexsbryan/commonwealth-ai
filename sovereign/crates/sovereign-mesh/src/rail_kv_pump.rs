@@ -77,8 +77,7 @@ pub struct PumpOutcome {
 }
 
 /// Handle to the spawned pump. Aborts the task on drop, matching
-/// [`RingSyncHandle`](crate::ring_sync::RingSyncHandle) so the daemon tears
-/// both down the same way.
+/// cw-rails' `ring_sync::RingSyncHandle`.
 pub struct RailKvPumpHandle {
     _task: tokio::task::JoinHandle<()>,
 }

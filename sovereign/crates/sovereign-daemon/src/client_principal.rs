@@ -258,22 +258,7 @@ mod tests {
     use super::*;
 
     fn state() -> AppState {
-        use commonwealth_core::mesh::Mesh;
-        use kernel_types::MeshId;
-        use kernel_types::NodeId;
-        use std::collections::HashMap;
-        let mesh = Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::from_u128(1),
-            name: "Principal Test".into(),
-            invite_key_hash: [0u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: HashMap::new(),
-            peers: vec![],
-        };
-        AppState::new(NodeId::from_u128(1), mesh)
+        AppState::new(kernel_types::NodeId::from_u128(1))
     }
 
     /// The one resolver on the daemon's own (trusting) listener.

@@ -305,8 +305,8 @@ async fn list() -> i32 {
 /// empty list on a failure: "the daemon did not answer" and "the daemon
 /// publishes nothing" are different facts.
 async fn live_listing() -> Option<Vec<commonwealth_media::PublishedApp>> {
-    let port = crate::mesh_cmd::daemon_client_port();
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/publish");
+    // cw-rails' app registry since pb-mesh-exit-transport.
+    let url = format!("{}/v1/mesh/publish", crate::mesh_cmd::rails_base());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()

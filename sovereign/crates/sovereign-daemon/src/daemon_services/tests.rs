@@ -45,7 +45,9 @@ fn each_assembling_launch_produces_its_variant() {
                 name: "mesh".into(),
                 args: vec!["create".into()],
             },
-            LaunchParts::Admin,
+            LaunchParts::Admin {
+                mesh: crate::hosted_mesh::MeshAccess::absent(),
+            },
             "mesh-admin",
         ),
     ];
@@ -74,9 +76,14 @@ fn a_launch_that_assembles_nothing_refuses() {
             args: vec!["run".into(), "--worker-mode".into()],
         },
     ] {
-        let err = assemble(&launch, LaunchParts::Admin)
-            .err()
-            .unwrap_or_else(|| panic!("{} must not assemble a daemon", launch.as_str()));
+        let err = assemble(
+            &launch,
+            LaunchParts::Admin {
+                mesh: crate::hosted_mesh::MeshAccess::absent(),
+            },
+        )
+        .err()
+        .unwrap_or_else(|| panic!("{} must not assemble a daemon", launch.as_str()));
         assert!(
             matches!(err, AssemblyRefusal::NotAnAssembler { .. }),
             "{} refused with the wrong reason: {err}",
@@ -120,7 +127,12 @@ fn every_illegal_pairing_refuses_and_names_both_sides() {
                 headless: None,
             },
         ),
-        (Launch::Desktop, LaunchParts::Admin),
+        (
+            Launch::Desktop,
+            LaunchParts::Admin {
+                mesh: crate::hosted_mesh::MeshAccess::absent(),
+            },
+        ),
     ];
     for (launch, parts) in cases {
         let name = launch.as_str();

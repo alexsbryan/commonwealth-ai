@@ -28,8 +28,8 @@
 //! the assembly root (`daemon`, `daemon_services`), the 21 route shells, the
 //! edge leaves (`local_only`, `loopback_guard`, `http_response`, `types`,
 //! `slot_manifest`), the MCP mount (`mcp_router`, `mcp_config_http`) and the
-//! four files carrying the daemon's `impl EmbeddedDaemon` (`media_reach`,
-//! `origin_fanout`, `roster_repair`, `venue_host`) — one strongly-connected
+//! files carrying the daemon's `impl EmbeddedDaemon` (`venue_host` remains;
+//! the media, fan-out and roster-repair copies left with the flip) — one strongly-connected
 //! component, so it moved in one commit (ralph/DECISIONS.md 2026-09-17).
 //! Its `jobs` family followed at `dm-daemon-mesh-jobs` and its two `adapters`
 //! (`newsworthy_host`, `work_atlas_broadcaster`) at `dm-daemon-mesh-adapters`
@@ -87,12 +87,16 @@ pub mod features_http;
 pub mod foreground_post;
 pub mod governance_http;
 pub mod guest_door;
+pub mod guest_origin;
 /// The code program as a distribution composes it into this process
 /// (pb-code-daemon-exit): what svrn mounts, and its absence when alone.
 pub mod hosted_code;
 /// Ingest's ports as a distribution composes them into this process
 /// (pb-ingest-dial-tools-close), and their named absence when alone.
 pub mod hosted_ingest;
+/// The node's mesh as a distribution composes it into this process
+/// (pb-mesh-exit-transport): cw-rails' roster and reach, or their absence.
+pub mod hosted_mesh;
 pub mod http_response;
 pub mod ingest_executor;
 /// The daemon's insight surface (sv-surface rung 6): clip/list/search/delete
@@ -109,7 +113,6 @@ pub mod loopback_guard;
 pub mod mcp_config_http;
 pub mod mcp_router;
 pub mod media_presence;
-pub mod media_reach;
 pub mod mesh_http;
 pub mod meshapp_http;
 /// `corpus-engine`'s `NewsworthyHost` implemented over the roster, the
@@ -119,20 +122,17 @@ pub mod newsworthy_host;
 pub mod notes_http;
 pub mod ocr_install;
 pub mod openai_http;
-pub mod origin_fanout;
 pub mod peer_origin;
 pub mod principal;
 #[cfg(feature = "treesitter")]
 pub mod process;
 pub mod provider;
-pub mod publish_http;
+pub mod published_origins;
 pub mod rails_client;
 pub mod reading_http;
 pub mod recipe_http;
 pub mod recipe_project_http;
 pub mod research_http;
-pub mod roster_repair;
-pub mod rpc_warm_http;
 pub mod serve_client;
 pub mod startup;
 /// Moved whole to the host kit (phase-b pb-notes-memory): the code program's
@@ -186,8 +186,6 @@ pub mod internal_principal;
 pub mod mesh_principal_gate;
 /// The test that keeps `x-mesh-proof` to one minter and one reader.
 pub mod mesh_proof_header_gate;
-/// The outbound half of the mesh proof: `AppState` → the one stamp.
-pub mod mesh_proof_outbound;
 pub mod reshaping;
 pub mod routes_completions;
 pub mod routes_guest_ask;
@@ -196,7 +194,6 @@ pub mod routes_inference;
 pub mod routes_internal;
 pub mod routes_kinds;
 pub mod routes_knowledge;
-pub mod routes_mesh_kv;
 pub mod routes_oicp;
 pub mod routes_oicp_ingest;
 pub mod routes_ollama;

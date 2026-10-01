@@ -340,20 +340,17 @@ async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<N
     });
 
     let transport = state.peer_transport();
-    let stamp = state.mesh_proof_stamp().await;
     let mut handles = Vec::with_capacity(peers.len());
     for peer in peers {
         let client = client.clone();
-        let stamp = stamp.clone();
         let body = forwarded_body.clone();
         let node = hex::encode(peer.node_id.as_bytes());
         let name = Some(peer.name.clone());
         let endpoints = transport
             .endpoints(&peer.dial, mesh_reach::TrafficClass::ControlPlane)
             .await;
-        let handle = tokio::spawn(async move {
-            ask_peer(&client, &body, &node, name, &endpoints, stamp.as_ref()).await
-        });
+        let handle =
+            tokio::spawn(async move { ask_peer(&client, &body, &node, name, &endpoints).await });
         handles.push(handle);
     }
 
@@ -379,18 +376,11 @@ async fn ask_peer(
     node: &str,
     name: Option<String>,
     endpoints: &[mesh_reach::PeerEndpoint],
-    // This node's proof of mesh membership, or `None` on a mesh with no
-    // credential. On a plain-IP hop it is the only thing that tells the
-    // peer's internal port a member is calling rather than a stranger.
-    stamp: Option<&commonwealth_transport::mesh_proof::MeshProofStamp>,
 ) -> NodePauseResult {
     let mut last_error = "no addresses advertised by peer".to_string();
     for ep in endpoints {
         let url = format!("{}/internal/pipeline/pause", ep.base_url);
-        let mut request = client.post(&url).json(body);
-        if let Some((name, value)) = stamp.map(|s| s.pair()) {
-            request = request.header(name, value);
-        }
+        let request = client.post(&url).json(body);
         match request.send().await {
             Ok(resp) if resp.status().is_success() => {
                 match resp.json::<PipelinePauseResponse>().await {

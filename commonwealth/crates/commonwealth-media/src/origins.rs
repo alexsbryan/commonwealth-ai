@@ -431,7 +431,7 @@ impl OriginRegistry {
         dialer: NodePubkey,
     ) -> Option<Forward> {
         if alpn == APP_ALPN {
-            return admit_app(who, dialer, &self.apps.snapshot(), &[]);
+            return admit_app(who, dialer, &self.apps.snapshot_for(who), &[]);
         }
         let alpn = String::from_utf8_lossy(alpn).into_owned();
         let entries: Vec<Entry> =

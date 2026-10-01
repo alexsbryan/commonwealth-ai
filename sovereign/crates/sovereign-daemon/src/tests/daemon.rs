@@ -8,42 +8,17 @@ use super::*;
 use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
 use std::path::PathBuf;
 
+/// The unauthenticated internal API binds loopback whatever `[daemon]
+/// internal_bind` names: cw-rails, the node's one mesh ingress, forwards a
+/// member's request over loopback (pb-mesh-exit-transport). Failing input:
+/// honour a configured routable interface.
 #[test]
-fn internal_bind_is_loopback_only_under_encryption() {
-    // WS-C receiver lockout: an encrypted mesh binds the internal
-    // router loopback-only (iroh acceptor is the sole network path);
-    // a plaintext mesh keeps the historical wildcard bind.
-    let net = crate::local_only::LocalOnlyProfile::default();
-    let encrypted = internal_bind_addr(net, true, "0.0.0.0", 9742);
-    assert!(
-        encrypted.ip().is_loopback(),
-        "encrypted mesh must bind internal router loopback-only, got {encrypted}"
-    );
-    assert_eq!(encrypted.port(), 9742);
-
-    let plaintext = internal_bind_addr(net, false, "0.0.0.0", 9742);
-    assert!(
-        plaintext.ip().is_unspecified(),
-        "plaintext mesh keeps the 0.0.0.0 internal bind, got {plaintext}"
-    );
-
-    // A configured private bind is honoured on a plaintext mesh...
-    let pinned = internal_bind_addr(net, false, "10.0.1.4", 9742);
-    assert_eq!(pinned.to_string(), "10.0.1.4:9742");
-    // ...but encryption still forces loopback, ignoring the config.
-    let pinned_encrypted = internal_bind_addr(net, true, "10.0.1.4", 9742);
-    assert!(pinned_encrypted.ip().is_loopback());
-
-    // ...and so does the local-only profile, on a plaintext mesh with an
-    // explicitly pinned routable interface: the unauthenticated internal
-    // API is not offered to a LAN this daemon will never talk to.
-    let local = crate::local_only::LocalOnlyProfile::decide(None, true);
-    assert!(internal_bind_addr(local, false, "10.0.1.4", 9742)
-        .ip()
-        .is_loopback());
-    assert!(internal_bind_addr(local, false, "0.0.0.0", 9742)
-        .ip()
-        .is_loopback());
+fn internal_bind_is_loopback_always() {
+    for configured in ["0.0.0.0", "10.0.1.4", "127.0.0.1"] {
+        let addr = internal_bind_addr(configured, 9742);
+        assert!(addr.ip().is_loopback(), "{configured} bound {addr}");
+        assert_eq!(addr.port(), 9742);
+    }
 }
 
 /// covers: UI-22
@@ -63,11 +38,11 @@ fn the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated
     let token = || Some("tok-abc".to_string());
     let no_token = || None;
 
-    // 1. THE DEFAULT. No marker, no encryption: loopback, no auth layer,
-    //    and — the part that is easy to lose — no credential minted at
-    //    all. A daemon nothing can reach has no use for one.
+    // 1. THE DEFAULT: loopback, no auth layer, and — the part that is easy
+    //    to lose — no credential minted at all. A daemon nothing can reach
+    //    has no use for one.
     for bind in ["127.0.0.1", "::1", "localhost", "LOCALHOST"] {
-        let p = resolve_client_bind_posture(bind, false, false, never);
+        let p = resolve_client_bind_posture(bind, never);
         assert!(p.loopback, "{bind} is loopback");
         assert!(p.token.is_none());
     }
@@ -78,7 +53,7 @@ fn the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated
     //    refuse every remote caller. A posture that shipped `Some(..)` of
     //    anything here, or that quietly fell back to loopback, would each
     //    be a different kind of lie about what is listening.
-    let p = resolve_client_bind_posture("0.0.0.0", false, false, no_token);
+    let p = resolve_client_bind_posture("0.0.0.0", no_token);
     assert_eq!(p.bind, "0.0.0.0");
     assert!(!p.loopback);
     assert!(
@@ -88,44 +63,14 @@ fn the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated
     );
 
     // 3. The same bind WITH a token: exposed, and guarded.
-    let p = resolve_client_bind_posture("0.0.0.0", false, false, token);
+    let p = resolve_client_bind_posture("0.0.0.0", token);
     assert_eq!(p.bind, "0.0.0.0");
     assert!(!p.loopback);
     assert_eq!(p.token.as_deref(), Some("tok-abc"));
 
-    // 4. THE OPT-OUT, and its exact scope. The `client-exposed` marker
-    //    promotes a loopback DEFAULT to 0.0.0.0 — and, because that is
-    //    now a non-loopback bind, it goes through the token requirement
-    //    like any other. The marker cannot open an unauthenticated port.
-    let p = resolve_client_bind_posture("127.0.0.1", true, false, token);
-    assert_eq!(p.bind, "0.0.0.0");
-    assert!(!p.loopback);
-    assert_eq!(p.token.as_deref(), Some("tok-abc"));
-
-    let p = resolve_client_bind_posture("127.0.0.1", true, false, no_token);
-    assert!(!p.loopback);
-    assert!(
-        p.token.is_none(),
-        "the marker must not be a route around the token requirement"
-    );
-
-    // 5. An ENCRYPTED mesh overrides everything back to loopback (WS-C
-    //    receiver lockout) — the marker above, and an explicit config
-    //    bind too. Remote peers arrive via the key-authenticated iroh
-    //    acceptor instead, so no plaintext token is minted.
-    let p = resolve_client_bind_posture("127.0.0.1", true, true, never);
-    assert_eq!(p.bind, "127.0.0.1");
-    assert!(p.loopback && p.token.is_none());
-
-    let p = resolve_client_bind_posture("10.0.1.4", false, true, never);
-    assert_eq!(p.bind, "127.0.0.1");
-    assert!(p.loopback && p.token.is_none());
-
-    // 6. And on a PLAINTEXT mesh an explicit routable bind is honoured
-    //    verbatim — the control for [5], so "forced loopback" is known to
-    //    be the encryption doing it rather than the function refusing
-    //    every non-loopback address.
-    let p = resolve_client_bind_posture("10.0.1.4", false, false, token);
+    // 4. An explicit routable bind is the operator's and is honoured
+    //    verbatim, token required.
+    let p = resolve_client_bind_posture("10.0.1.4", token);
     assert_eq!(p.bind, "10.0.1.4");
     assert!(!p.loopback);
     assert_eq!(p.token.as_deref(), Some("tok-abc"));
@@ -138,21 +83,9 @@ fn the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated
 #[tokio::test]
 async fn register_local_model_slots_writes_info_for_all_three_slots() {
     use crate::state::AppState;
-    use commonwealth_core::mesh::Mesh;
 
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: kernel_types::MeshId::generate(),
-        name: "test".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: Default::default(),
-        peers: vec![],
-    };
     let node_id = kernel_types::NodeId::generate();
-    let app_state = AppState::new(node_id, mesh);
+    let app_state = AppState::new(node_id);
 
     let cfg = SetupConfig {
         engine: Default::default(),

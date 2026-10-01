@@ -3,15 +3,14 @@
 //! requester's `X-Node-Id` reaching the peer's ledger, the served chat
 //! turn naming the peer, and a corpus read served while the inference
 //! slot is held. Fixtures live in `knowledge_fanout_e2e.rs`.
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use corpus_index::index::{CorpusIndex, InsertChunk};
 use corpus_index::types::EmbedFn;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use oicp_types::knowledge::CorpusShardInfo;
+use sovereign_contracts::daemon_wire::mesh::MemberStatus;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
 
@@ -65,17 +64,6 @@ async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
     let double_a = Arc::new(RecordingLedger::new(id_a));
     let state_a = AppState::new_with_seeds(
         id_a,
-        Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::from_u128(1),
-            name: "ledger-stamp-test".into(),
-            invite_key_hash: [0u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: HashMap::new(),
-            peers: vec![],
-        },
         Some(engine_a.clone()),
         None,
         Default::default(),
@@ -85,59 +73,26 @@ async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
     );
     let addr_a = spawn_router(internal_router(state_a.clone())).await;
 
-    // B's mesh: knows A as an Online peer hosting "sep".
-    let mut members_b = HashMap::new();
-    members_b.insert(
+    // B's roster: knows A as an Online peer hosting "sep".
+    let state_b = common::state_over_roster(
         id_b,
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
-            node_id: id_b,
-            name: "Joiner".into(),
-            invited_by: id_a,
-            joined_at: 0,
-            last_seen: 0,
-            status: NodeStatus::Online,
-            capabilities: caps_with_hosted(&[]),
-            addresses: vec!["127.0.0.1:0".parse().unwrap()],
-        },
-    );
-    members_b.insert(
-        id_a,
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
-            node_id: id_a,
-            name: "Founder".into(),
-            invited_by: id_a,
-            joined_at: 0,
-            last_seen: 0,
-            status: NodeStatus::Online,
-            capabilities: caps_with_hosted(&["sep"]),
-            addresses: vec![addr_a],
-        },
-    );
-    let state_b = AppState::new(
-        id_b,
-        Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::from_u128(1),
-            name: "ledger-stamp-test".into(),
-            invite_key_hash: [0u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: members_b,
-            peers: vec![],
-        },
+        "ledger-stamp-test",
+        vec![
+            common::peer_row(
+                id_b,
+                "Joiner",
+                MemberStatus::Online,
+                caps_with_hosted(&[]),
+                vec!["127.0.0.1:0".parse().unwrap()],
+            ),
+            common::peer_row(
+                id_a,
+                "Founder",
+                MemberStatus::Online,
+                caps_with_hosted(&["sep"]),
+                vec![addr_a],
+            ),
+        ],
     );
     let addr_b = spawn_router(client_router(state_b)).await;
 
@@ -170,5 +125,85 @@ async fn a_fan_out_hop_the_server_cannot_verify_is_served_and_not_attributed() {
         "a hop A cannot verify must be SERVED and attributed to nobody — \
          crediting the header would let any caller that can reach this port \
          spend another member's reciprocity. Got: {served:?}"
+    );
+}
+
+/// The attributed path since pb-mesh-exit-transport: cw-rails forwards a
+/// member's search to A's registered peer prefix with the verified triple
+/// and the live tie, and A's ledger credits that member — the dialer cw-rails
+/// verified, never the node an `X-Node-Id` claims. Successor of the daemon's
+/// iroh_verified_principal_e2e
+/// `the_knowledge_ledger_names_the_dialer_and_not_the_node_it_claimed_to_be`.
+/// Failing input: attribution read from `X-Node-Id`.
+#[tokio::test]
+async fn a_search_cw_rails_forwards_is_credited_to_the_verified_member() {
+    use axum::body::Body;
+    use axum::extract::ConnectInfo;
+    use tower::ServiceExt;
+    const MEMBER_KEY: [u8; 32] = [7u8; 32];
+
+    let tmp_a = tempfile::tempdir().unwrap();
+    let indexes_a = tmp_a.path().join("indexes");
+    std::fs::create_dir_all(&indexes_a).unwrap();
+    install_corpus(
+        &indexes_a,
+        "sep",
+        "Stanford Encyclopedia of Philosophy",
+        "Some philosophical content.",
+    )
+    .await;
+    let engine_a = Arc::new(crate::common::reading_double(indexes_a, mock_embed_fn()));
+    let id_a = NodeId::from_u128(0xA1_A1_A1_A1_A1_A1_A1_A1);
+    // Distinct HIGH bytes: a NodeId displays its first eight.
+    let member = NodeId::from_u128(0x7777_7777_7777_7777_0000_0000_0000_0077);
+    let claimed = NodeId::from_u128(0xC3C3_C3C3_C3C3_C3C3_C3C3_C3C3_C3C3_C3C3);
+    let (roster, seed) = common::roster_seed(id_a, "attribution");
+    common::name_member_with_key(&roster, member, "LittleMac", MEMBER_KEY);
+    let double_a = Arc::new(RecordingLedger::new(id_a));
+    let state_a = AppState::new_with_seeds(
+        id_a,
+        Some(engine_a),
+        None,
+        seed,
+        Default::default(),
+        Default::default(),
+        double_a.seed(),
+    );
+    let _tie = common::tie_as_cw_rails(&state_a, common::TIE);
+
+    let mut req = axum::http::Request::post("/internal/knowledge/search")
+        .header("content-type", "application/json")
+        .header("X-Mesh-Member", "LittleMac")
+        .header("X-Mesh-Node", member.to_string())
+        .header("X-Mesh-Pubkey", hex::encode(MEMBER_KEY))
+        .header(kernel_types::member::ORIGIN_TIE_HEADER, common::TIE)
+        .header("X-Node-Id", claimed.to_string())
+        .body(Body::from(
+            serde_json::json!({
+                "query_embedding": vec![0.0_f32; EMBED_DIM],
+                "query_text": "philosophy",
+                "corpora": ["sep"],
+                "limit": 5,
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    req.extensions_mut()
+        .insert(ConnectInfo(std::net::SocketAddr::from((
+            [127, 0, 0, 1],
+            51000,
+        ))));
+    let resp = internal_router(state_a).oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+
+    let served = served_records(&double_a);
+    assert_eq!(served.len(), 1, "one served query, recorded: {served:?}");
+    assert!(
+        served[0].contains(&format!("{member:?}")) || served[0].contains(&member.to_string()),
+        "the record credits the verified member {member}: {served:?}"
+    );
+    assert!(
+        !served[0].contains(&claimed.to_string()) && !served[0].contains(&format!("{claimed:?}")),
+        "the record credits the node the header claimed: {served:?}"
     );
 }

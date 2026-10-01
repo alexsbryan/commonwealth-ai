@@ -1,28 +1,35 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The records the daemon's seeds take, built for a test that drives a
-//! daemon route (pb-serve-ranks-tests-stock): roster members, a solo mesh,
-//! the bound router and a recording ledger. Behind `test-doubles`, so a
-//! composition root's tests (sovereign-stock) build them without naming
+//! daemon route (pb-serve-ranks-tests-stock): roster members, a roster
+//! reader, the bound router and a recording ledger. Behind `test-doubles`, so
+//! a composition root's tests (sovereign-stock) build them without naming
 //! commonwealth-core; the daemon's own test tree re-exports them from
 //! `tests/main/common`.
+//!
+//! The roster is cw-rails' after the flip (pb-mesh-exit-transport), read
+//! through the membership port, so a test hands the daemon a
+//! [`StaticRoster`] where it used to hand it a `Mesh`.
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use async_trait::async_trait;
 use axum::Router;
 
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use kernel_types::{MeshId, NodeId};
+use kernel_types::{NodeId, NodePubkey};
+use mesh_reach::PeerContact;
 use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+use oicp_types::FederatedMeshDescriptor;
+use sovereign_contracts::daemon_wire::mesh::MemberStatus;
+use sovereign_contracts::membership::{MembershipEntry, MembershipReader};
 
 pub mod ledger_double;
 
 // ── Capabilities + member helpers ───────────────────────────────
 
 /// A `NodeCapabilities` with every field zeroed / empty. Useful for
-/// constructing test `MemberRecord`s where the hardware profile
-/// doesn't matter.
+/// constructing test members where the hardware profile doesn't matter.
 pub fn empty_capabilities() -> NodeCapabilities {
     NodeCapabilities {
         hardware: HardwareProfile {
@@ -50,59 +57,120 @@ pub fn empty_capabilities() -> NodeCapabilities {
     }
 }
 
-/// Build a `MemberRecord` with a specified `last_seen`. Use when the
-/// test cares about the timestamp (e.g. gossip-decay scenarios).
-pub fn member_with_last_seen(
-    id: NodeId,
-    name: &str,
-    last_seen: u64,
-    addr: SocketAddr,
-) -> MemberRecord {
-    MemberRecord {
-        removed_at: None,
-        node_pubkey: None,
-        relay_url: None,
-        iroh_direct_addrs: Vec::new(),
-        dial_info_version: 0,
-        dial_info_sig: None,
+/// An online, active, dialable roster member with no key, as cw-rails'
+/// roster lists one (`last_seen = 0`).
+pub fn member(id: NodeId, name: &str) -> MembershipEntry<PeerContact> {
+    MembershipEntry {
         node_id: id,
         name: name.into(),
-        invited_by: id,
-        joined_at: 0,
-        last_seen,
-        status: NodeStatus::Online,
+        status: MemberStatus::Online,
+        active: true,
+        last_seen: 0,
+        dialable: true,
         capabilities: empty_capabilities(),
-        addresses: vec![addr],
+        dial: PeerContact {
+            node_id: id,
+            addresses: Vec::new(),
+            node_pubkey: None,
+            relay_url: None,
+            iroh_direct_addrs: Vec::new(),
+        },
     }
 }
 
-/// Build a `MemberRecord` with `last_seen = 0`. The common case in
-/// tests that don't exercise decay.
-pub fn member(id: NodeId, name: &str, addr: SocketAddr) -> MemberRecord {
-    member_with_last_seen(id, name, 0, addr)
+/// [`member`], signing with `key`: the verified key cw-rails forwards as
+/// `X-Mesh-Pubkey`.
+pub fn keyed_member(id: NodeId, name: &str, key: [u8; 32]) -> MembershipEntry<PeerContact> {
+    let mut m = member(id, name);
+    m.dial.node_pubkey = Some(NodePubkey(key));
+    m
 }
 
-/// Build a single-member `Mesh` rooted at `self_id`. The mesh_id is
-/// 1 and the invite_key_hash is `[0x77; 32]` — neither matters for
-/// tests that don't exercise the gossip auth boundary; for those
-/// tests, construct the mesh inline with the right values.
-pub fn solo_mesh(self_id: NodeId, name: &str) -> Mesh {
-    let mut members = HashMap::new();
-    members.insert(
-        self_id,
-        member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
-    );
-    Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: name.into(),
-        invite_key_hash: [0x77u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
+/// A roster row for `id` in `status`, advertising `capabilities`, dialled at
+/// `addresses` — the default seed's `IpTransport` dials them directly, as a
+/// test's bound routers need.
+pub fn peer_row(
+    id: NodeId,
+    name: &str,
+    status: MemberStatus,
+    capabilities: NodeCapabilities,
+    addresses: Vec<SocketAddr>,
+) -> MembershipEntry<PeerContact> {
+    let mut row = member(id, name);
+    row.status = status;
+    row.capabilities = capabilities;
+    row.dial.addresses = addresses;
+    row
+}
+
+/// A roster reader over a list the test owns and may change mid-test.
+pub struct StaticRoster {
+    name: String,
+    members: RwLock<Vec<MembershipEntry<PeerContact>>>,
+}
+
+impl StaticRoster {
+    /// A roster named `name` holding `members`.
+    pub fn new(name: &str, members: Vec<MembershipEntry<PeerContact>>) -> Self {
+        Self {
+            name: name.into(),
+            members: RwLock::new(members),
+        }
     }
+
+    /// Replace the members, as a roster change cw-rails would report.
+    pub fn set(&self, members: Vec<MembershipEntry<PeerContact>>) {
+        *self.members.write().unwrap_or_else(|e| e.into_inner()) = members;
+    }
+
+    /// Add `member`, replacing the row that carries its node id.
+    pub fn insert(&self, member: MembershipEntry<PeerContact>) {
+        let mut rows = self.members.write().unwrap_or_else(|e| e.into_inner());
+        rows.retain(|m| m.node_id != member.node_id);
+        rows.push(member);
+    }
+}
+
+/// Make `state` believe a request carrying `tie` in
+/// `kernel_types::member::ORIGIN_TIE_HEADER` is cw-rails' forward, as the
+/// register/renew loop does once cw-rails holds svrn's peer-origin
+/// registration (`crate::peer_origin`). Keep the sender for the test's
+/// length; a second call on one state installs nothing.
+pub fn tie_as_cw_rails(
+    state: &crate::state::AppState,
+    tie: &str,
+) -> tokio::sync::watch::Sender<Option<String>> {
+    let (tx, rx) = tokio::sync::watch::channel(Some(tie.to_string()));
+    let _ = state.inner.node.peer_origin_tie.install(rx);
+    tx
+}
+
+#[async_trait]
+impl MembershipReader for StaticRoster {
+    type Dial = PeerContact;
+
+    async fn mesh_name(&self) -> String {
+        self.name.clone()
+    }
+
+    async fn federated_meshes(&self) -> Vec<FederatedMeshDescriptor> {
+        Vec::new()
+    }
+
+    async fn members(&self) -> Vec<MembershipEntry<PeerContact>> {
+        self.members
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+}
+
+/// A [`StaticRoster`] as the port a `FabricSeed` takes.
+pub fn roster(
+    name: &str,
+    members: Vec<MembershipEntry<PeerContact>>,
+) -> Arc<dyn MembershipReader<Dial = PeerContact>> {
+    Arc::new(StaticRoster::new(name, members))
 }
 
 /// Hex-encode a `NodeId` for the `X-Node-Id` header. 32 hex chars,

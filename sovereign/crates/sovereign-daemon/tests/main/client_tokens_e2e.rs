@@ -16,15 +16,13 @@
 //! and a live listener makes the loopback-vs-remote split flaky on a box with
 //! no routable NIC.
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use commonwealth_core::mesh::Mesh;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_daemon::client_tokens::{ClientTokenStore, ClientTokens};
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, NodeSeed};
@@ -37,21 +35,9 @@ const SHARED: &str = "shared-deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
 /// `dir` — the three things this bar is about, and nothing else.
 fn state(dir: &std::path::Path, posture: ClientTokens) -> (AppState, Arc<ClientTokenStore>) {
     let node = NodeId::from_u128(1);
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(7),
-        name: "Test".into(),
-        invite_key_hash: [3u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
-    };
     let tokens = Arc::new(ClientTokenStore::load(Some(dir.to_path_buf())));
     let state = AppState::new_with_node(
         node,
-        mesh,
         NodeSeed {
             client_token: Some(Arc::<str>::from(SHARED)),
             client_tokens: posture,

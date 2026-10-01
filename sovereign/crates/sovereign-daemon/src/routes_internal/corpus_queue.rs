@@ -59,18 +59,6 @@ pub async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(
     urls
 }
 
-/// This node's mesh-proof header pair, owned so it can cross into
-/// `sovereign-grants`, which cannot name the minting type. `None` on a mesh
-/// with no credential — a reported absence: an unstamped request is refused by
-/// a peer running the default `internal_auth`, and that is the honest outcome
-/// for a node holding no mesh secret.
-async fn owned_mesh_proof(state: &AppState) -> Option<(String, String)> {
-    state.mesh_proof_stamp().await.map(|s| {
-        let (name, value) = s.pair();
-        (name.to_string(), value.to_string())
-    })
-}
-
 /// Gather the node-side inputs [`FoldRecovery`] carries, from the daemon
 /// state. `merge_from_fold_coverage` moved to `sovereign-grants`, which cannot
 /// name `AppState`, so the reads it used to make for itself are made here, on
@@ -84,7 +72,7 @@ pub async fn fold_recovery(state: &AppState) -> FoldRecovery {
         contribution_emitter: shard_transfer_ledger(state),
         local_node_id,
         peer_shard_base_urls,
-        mesh_proof: owned_mesh_proof(state).await,
+        mesh_proof: None,
     }
 }
 
@@ -167,7 +155,7 @@ pub async fn corpus_ingest_partition(
     let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
     // Resolved beside the URLs and for the same reason: `ShardManager` cannot
     // name `AppState`, so every read it needs is made here.
-    let merge_proof = owned_mesh_proof(&state).await;
+    let merge_proof: Option<(String, String)> = None;
 
     // Guard: insert into active_ingests BEFORE spawning so there is no
     // window between the 202 response and the task's first async yield
@@ -593,7 +581,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: kernel_types::HandoffId) {
         let mesh_store = Arc::clone(&state.inner.store.mesh_store);
         let local_node_id = state.inner.fabric.identity.current();
         let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
-        let merge_proof = owned_mesh_proof(&state).await;
+        let merge_proof: Option<(String, String)> = None;
 
         let shard_mgr = ShardManager::new(engine.clone(), mesh_store)
             .with_emitter(shard_transfer_ledger(&state))

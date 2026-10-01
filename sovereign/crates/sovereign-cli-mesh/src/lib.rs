@@ -2,6 +2,8 @@
 //! `cmnwlth`'s CLI verbs, lifted out of `sovereign-cli-llm` (FIVE_PROGRAMS §9).
 
 pub mod guest_route;
+pub mod identity_handover;
+pub mod iroh_config_migration;
 pub mod job_cmd;
 pub mod kv_export;
 pub mod mesh_app;

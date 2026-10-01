@@ -45,12 +45,10 @@ pub use sovereign_scheduler::decision_replay; // shim: moved by domains REVIEW-b
 pub use sovereign_scheduler::decision_trace; // shim: moved by domains REVIEW-build-sched-move
 pub mod deep_link;
 pub use deep_link::{parse_deep_link, DeepLink};
-pub mod gossip;
 /// The guest page's browser side — page prefix, `window.ring` shim and the
 /// bundle-escape guard — one implementation for the daemon's door and the
 /// CLI's dev servers (fp-30's de-embed).
 pub mod guest_pages;
-pub mod membership;
 pub use sovereign_serving_host::guest_lender; // shim: moved by domains REVIEW-build-serving-move-throughput-guest
 pub use sovereign_serving_host::guest_source; // shim: moved by pb-serve-ranks
 pub mod guest_tunnel;
@@ -81,8 +79,6 @@ pub mod rail_port;
 pub mod ring_checkpoint;
 pub use understanding_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod ring_roster;
-pub mod ring_sync;
-pub mod state;
 pub use sovereign_serving_host::worker_eligibility; // shim: moved by domains dm-serving-move-leaves
                                                     // Ephemeral worker pods — owner-initiated TLS-pinned transport that
                                                     // replaces the full-mesh-pod path. Pods become single-owner workers,
@@ -93,5 +89,3 @@ pub use sovereign_contracts::worker_pod; // shim: moved by domains REVIEW-build-
                                          // same load balancer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
 pub use sovereign_serving_host::pinned_pod_snapshot; // shim: moved by domains REVIEW-build-serving-move-peer
 pub use sovereign_serving_host::pinned_worker_source; // shim: moved by domains REVIEW-build-serving-move-peer
-
-pub use state::MeshState;

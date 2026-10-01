@@ -326,10 +326,24 @@ async fn run_terminal_join(raw: &str, opts: &Opts) -> i32 {
         );
         return 1;
     };
+    // The join goes through cw-rails, so the node runs it from here on: the
+    // same bring-up `svrn mesh create|join` run (phase-b-81 (1)).
+    let up = {
+        let data_dir = data_dir.clone();
+        tokio::task::spawn_blocking(move || join_child::bring_up_rails(&data_dir))
+            .await
+            .unwrap_or_else(|e| Err(format!("the cw-rails bring-up thread failed: {e}")))
+    };
+    if let Err(e) = up {
+        println!();
+        eprintln!("error: {e}");
+        return 1;
+    }
     let (join_child, mesh_name) = match join_child::join(
         std::process::Command::new(daemon_bin),
         &data_dir,
         client_port,
+        None,
         raw,
         &node_name,
     )

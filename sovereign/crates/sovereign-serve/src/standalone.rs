@@ -18,8 +18,7 @@ pub(crate) async fn serve(args: ServeArgs) -> i32 {
     // `[shared_model]` role binds this node's rpc worker and arms discovery,
     // as svrn's boot applies it for a stock node (pb-serve-distributes-
     // standalone). A config that does not load refuses in `assemble` below.
-    let config = SetupConfig::load_from(&config_path).ok();
-    if let Some(config) = &config {
+    if let Ok(config) = SetupConfig::load_from(&config_path) {
         crate::apply_shared_model_role_to_env(&config.shared_model);
     }
     let assembly = match assemble(&args.data_dir, &config_path).await {
@@ -29,13 +28,6 @@ pub(crate) async fn serve(args: ServeArgs) -> i32 {
             return 1;
         }
     };
-    // `assemble` loaded the same file, so a config that did not load has
-    // already refused above.
-    let Some(config) = config else {
-        error!(target: "serve", config = %config_path.display(), "the config did not load before the assembly");
-        return 1;
-    };
-    let rails_base = sovereign_turn_client::rails_kv::resolve_rails_base(&config.daemon);
 
     let listener = match host_kit::shell::bind_with_retry(args.listen, "serve").await {
         Ok(l) => l,
@@ -76,62 +68,33 @@ pub(crate) async fn serve(args: ServeArgs) -> i32 {
         run_lock: _run_lock,
         distribute,
         servable,
+        rails_base,
         ..
     } = assembly;
-    // On a mesh, through cw-rails alone: discovery and the warm orchestrator
-    // over its roster and reach, the worker's rpc-warm, and serve's origins
-    // in its origin table (pb-serve-distributes-standalone). With no cw-rails
-    // answering, every discovery tick scans nothing and the registrations
-    // retry; the OpenAI wire serves this node's own models.
     let local = cell as Arc<dyn InferenceProvider>;
-    let roster = crate::rails_mesh::RailsRoster::new(rails_base.clone());
-    info!(target: "serve", rails = %rails_base, "distribution over cw-rails' roster and reach");
     // serve ranks (pb-serve-ranks): the node's one router, over its cell and
     // cw-rails' roster's peers, and serve's OpenAI face answers through it.
-    // A peer's turn arrives on the member client below, over the cell, and
-    // is never re-ranked here.
-    let venues = Arc::new(crate::rails_mesh::RailsVenues::new(roster.clone()));
+    // A peer's turn arrives on the member client (`rails_mesh::join`), over
+    // the cell, and is never re-ranked here.
+    let venues = Arc::new(crate::rails_mesh::RailsVenues::new(
+        crate::rails_mesh::RailsRoster::new(rails_base.clone()),
+    ));
     let ranking = crate::rank(Arc::clone(&local), venues.clone(), venues).await;
     let before = routes.len();
     routes.retain(|b| b.name() != crate::OPENAI_BUNDLE);
     let replaced = before - routes.len();
     routes.push(crate::openai_face(Arc::clone(&ranking.provider)));
     info!(target: "serve", replaced, "serve's OpenAI face ranks over cw-rails' roster");
-    distribute(
-        crate::rails_mesh::mesh_ports(roster.clone(), bound_addr),
+    crate::rails_mesh::join(
+        &rails_base,
+        bound_addr,
+        local,
         ranking.router,
-    );
-    routes.push(crate::rpc_warm::bundle(
+        distribute,
         servable,
-        roster,
-        Arc::new(crate::MeshRpcShardWarmer::new()),
-    ));
-    // The member client on a loopback port of its own, registered whole on
-    // cw-rails' `cwth/client/0`: a member's router reaches this node's
-    // models there and nothing else of serve's. Without it serve still
-    // serves this host; members see no models here.
-    let member_addr = match tokio::net::TcpListener::bind(("127.0.0.1", 0)).await {
-        Ok(member) => match member.local_addr() {
-            Ok(addr) => {
-                info!(target: "serve", member = %addr, "member client listening for cw-rails' forwards");
-                tokio::spawn(host_kit::shell::serve(
-                    [member],
-                    vec![crate::openai_face(Arc::clone(&local))],
-                    std::future::pending(),
-                ));
-                Some(addr)
-            }
-            Err(e) => {
-                error!(target: "serve", error = %e, "the member client's port is unreadable; members reach no model here");
-                None
-            }
-        },
-        Err(e) => {
-            error!(target: "serve", error = %e, "the member client could not bind; members reach no model here");
-            None
-        }
-    };
-    crate::rails_mesh::spawn_registrations(&rails_base, bound_addr, member_addr);
+        &mut routes,
+    )
+    .await;
     match host_kit::shell::serve([listener], routes, shutdown).await {
         Ok(()) => 0,
         Err(e) => {

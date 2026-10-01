@@ -5,11 +5,10 @@
 //! the servable-model-files reader went to `sovereign_contracts::rpc_warm`,
 //! because serve and compute read it too.
 //!
-//! Three of Serving's twenty fields are held apart, in
+//! Two of Serving's fields are held apart, in
 //! `sovereign_daemon::state::store::StorePart`: `inference_store` and
-//! `peer_preferences` are backed by `commonwealth-state`, and
-//! `rpc_shard_warmer`'s trait method takes the daemon's `AppState`. The
-//! construction seed is `ServingSeed`, beside this module.
+//! `peer_preferences` are backed by `commonwealth-state`. The construction
+//! seed is `ServingSeed`, beside this module.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

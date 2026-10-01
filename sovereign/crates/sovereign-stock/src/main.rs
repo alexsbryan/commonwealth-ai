@@ -59,7 +59,8 @@ fn main() {
                     ))
                 }
             };
-            tracing::info!(target: "serve", listen = %assembly.listen, "hosted serve bound in the stock process");
+            let bound = listener.local_addr().unwrap_or(assembly.listen);
+            tracing::info!(target: "serve", listen = %bound, "hosted serve bound in the stock process");
             // serve ranks over its own cell, once: a reload swaps the cell
             // under the router (pb-serve-ranks).
             let ranking = sovereign_serve::rank(
@@ -68,16 +69,25 @@ fn main() {
                 ports.host,
             )
             .await;
-            // serve's distribution starts over svrn's mesh, whose ports are
-            // composed here (pb-serve-ranks-discovery), with serve's router.
-            let distribute = assembly.distribute;
-            let router = std::sync::Arc::clone(&ranking.router);
+            // serve on the node's mesh through cw-rails, exactly as a
+            // standalone serve is (pb-mesh-exit-transport): its distribution,
+            // rpc-warm, member client and origin registrations.
+            let mut routes = assembly.routes;
+            sovereign_serve::rails_mesh::join(
+                &assembly.rails_base,
+                bound,
+                std::sync::Arc::clone(&assembly.cell) as _,
+                std::sync::Arc::clone(&ranking.router),
+                assembly.distribute,
+                assembly.servable,
+                &mut routes,
+            )
+            .await;
             let parts = sovereign_daemon::process::HostedParts {
                 cell: assembly.cell,
                 ranked: ranked(ranking),
-                distribute: Box::new(move |daemon| distribute(mesh_ports(&daemon), router)),
             };
-            let (routes, run_lock) = (assembly.routes, assembly.run_lock);
+            let run_lock = assembly.run_lock;
             tokio::spawn(async move {
                 // serve's hold on the data root lives as long as its listener.
                 let _run_lock = run_lock;
@@ -98,13 +108,6 @@ fn main() {
     // The NER kind svrn's ingest and retrieval take their handle from, where
     // this process loads for itself (hosted, or a terminal).
     .ner(sovereign_serve::served_ner)
-    // The worker-side warmer svrn's `/internal/rpc-warm` hands each request.
-    .rpc_warmer(std::sync::Arc::new(
-        sovereign_serve::MeshRpcShardWarmer::new(),
-    ))
-    // The RPC-worker rows svrn's `/v1/mesh/status` reports: serve's view in
-    // this process (pb-serve-ranks-discovery).
-    .rpc_workers(sovereign_serve::rpc_worker_views)
     // Where serve is not hosted here (the dialing path, a terminal), its
     // router still ranks svrn's turns, over the provider svrn holds.
     .rank(|provider, ports| async move {
@@ -145,7 +148,17 @@ fn main() {
         })
     });
     let ingest = ingest::hosted();
-    let exit_code = sovereign_daemon::process::run(&args, Some(hosted), Some(code), Some(ingest));
+    // svrn reads the mesh through cw-rails, the node's one mesh endpoint:
+    // its roster and reach door, the pair serve reads (pb-mesh-exit-transport).
+    let mesh = sovereign_daemon::process::HostedMesh::new(|rails_base| {
+        let (membership, transport) = sovereign_serve::rails_mesh::rails_ports(rails_base);
+        sovereign_daemon::process::MeshAccess {
+            membership,
+            transport,
+        }
+    });
+    let exit_code =
+        sovereign_daemon::process::run(&args, Some(hosted), Some(code), Some(ingest), Some(mesh));
     // macOS: past `__cxa_finalize_ranges`, so the ggml-metal device sweeper
     // never asserts on still-resident resources; the loader's fast-exit,
     // through serve's face, where the daemon's `run` used to call it.
@@ -167,58 +180,5 @@ fn ranked(ranking: sovereign_serve::Ranking) -> sovereign_daemon::process::Ranke
         service: ranking.service,
         in_flight: Some(ranking.in_flight),
         slot_aliases: Some(ranking.slot_aliases),
-    }
-}
-
-/// svrn's mesh, as serve's discovery loop and warm orchestrator read it
-/// (compute's `distributed_discovery` and `distributed_warm`,
-/// pb-serve-distributes), composed here where both programs meet
-/// (pb-serve-ranks-discovery): the roster, transport and identity of a Running
-/// daemon, `None` otherwise; the host role published for `/v1/mesh/status`;
-/// the discovery memory the warm orchestrator resolves endpoints through, one
-/// per process; where this daemon serves model files (its internal port, and
-/// the reachable bases on it); and its mesh proof.
-fn mesh_ports(
-    daemon: &std::sync::Arc<sovereign_daemon::EmbeddedDaemon>,
-) -> sovereign_serve::MeshPorts {
-    use std::sync::Arc;
-    let reader = Arc::clone(daemon);
-    let origin = Arc::clone(daemon);
-    let prover = Arc::clone(daemon);
-    sovereign_serve::MeshPorts {
-        model_origin: Arc::new(move || {
-            let daemon = Arc::clone(&origin);
-            Box::pin(async move {
-                let (_client_port, internal_port) = daemon.resolved_ports().await;
-                sovereign_serve::ModelOrigin {
-                    internal_port,
-                    bases: sovereign_mesh::mesh_discovery::reachable_addresses(internal_port)
-                        .into_iter()
-                        .map(|a| format!("http://{a}"))
-                        .collect(),
-                }
-            })
-        }),
-        proof: Arc::new(move || {
-            let daemon = Arc::clone(&prover);
-            Box::pin(async move {
-                let stamp = daemon.app_state().await?.mesh_proof_stamp().await?;
-                let (name, value) = stamp.pair();
-                Some((name, value.to_string()))
-            })
-        }),
-        mesh: Arc::new(move || {
-            let daemon = Arc::clone(&reader);
-            Box::pin(async move {
-                let app = daemon.app_state().await?;
-                Some(sovereign_serve::MeshNow {
-                    roster: Arc::clone(&app.inner.fabric.membership),
-                    transport: app.peer_transport(),
-                    self_id: app.inner.fabric.identity.current(),
-                })
-            })
-        }),
-        on_host_role: Arc::new(sovereign_daemon::mesh_http::set_shared_model_host),
-        discovery: Arc::default(),
     }
 }

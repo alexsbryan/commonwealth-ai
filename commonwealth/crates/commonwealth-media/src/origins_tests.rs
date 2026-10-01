@@ -434,3 +434,63 @@ fn a_local_origin_is_listed_but_never_advertised_or_forwarded() {
         .forward_for(b"cwth/work/ingest:v1", Some(&member()), DIALER)
         .is_some());
 }
+
+/// The PROOF line "an app outside `app_allow` is refused" (phase-b-81 (3)):
+/// the publisher's list rides its claim, so a member it does not name is
+/// closed on `cwth/app/0` and one it names is forwarded. Failing input: the
+/// claim's list ignored at the acceptor (`snapshot()` in `forward_for`).
+#[test]
+fn an_app_outside_its_publishers_allow_list_is_refused() {
+    let r = OriginRegistry::new(PublishedApps::default());
+    r.apps()
+        .claim_allowing(
+            "films",
+            ([127, 0, 0, 1], 5000).into(),
+            Duration::from_secs(60),
+            vec!["Mira".into()],
+        )
+        .unwrap();
+    assert!(
+        r.forward_for(APP_ALPN, Some(&member()), DIALER).is_none(),
+        "LittleMac is outside films' allow list"
+    );
+    let mira = MemberIdentity {
+        name: "Mira".into(),
+        node_id: NodeId::from_u128(0x111),
+    };
+    let Some(Forward::HttpByName { apps, .. }) = r.forward_for(APP_ALPN, Some(&mira), DIALER)
+    else {
+        panic!("Mira is named by films' allow list");
+    };
+    assert!(apps.contains_key("films"));
+}
+
+/// A non-member dialing `cwth/client/0` goes to the registered fallback
+/// origin, and is closed while none is registered, as the daemon's acceptor
+/// closed when guest did not bind (pb-mesh-exit-transport, phase-b-76 fork 2).
+/// A member reaches the client origin either way.
+#[test]
+fn a_non_member_is_closed_while_the_fallback_origin_is_unregistered() {
+    let r = OriginRegistry::new(PublishedApps::default());
+    r.register(reg(
+        CLIENT_ALPN,
+        &[],
+        9748,
+        Admit::MembersElse("cwth/guest/0".into()),
+    ))
+    .unwrap();
+    assert!(r.forward_for(CLIENT_ALPN, None, DIALER).is_none());
+    assert!(r
+        .forward_for(CLIENT_ALPN, Some(&member()), DIALER)
+        .is_some());
+
+    let guest = r.register(reg(GUEST_ALPN, &[], 9744, Admit::Any)).unwrap();
+    let f = r.forward_for(CLIENT_ALPN, None, DIALER).unwrap();
+    assert_eq!(port_of(&f), Some(9744));
+
+    r.release(&guest.claim_id).unwrap();
+    assert!(
+        r.forward_for(CLIENT_ALPN, None, DIALER).is_none(),
+        "a released fallback closes the non-member again"
+    );
+}

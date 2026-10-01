@@ -8,20 +8,10 @@
 //! step 10: a mesh verb that embedded a daemon left its state in a
 //! process that exits when the command does).
 
-use std::time::Duration;
-
-use sovereign_cli_base::dirs::sovereign_root;
-use sovereign_contracts::setup_config::{client_daemon_base, client_daemon_base_for};
+use sovereign_contracts::setup_config::client_daemon_base_for;
 use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
 use sovereign_turn_client::reach::ServingHost;
 use sovereign_turn_client::TurnClient;
-
-/// How long `create`/`join` will wait for a daemon to come up before
-/// reporting that none is reachable. Not zero: an operator's concurrent
-/// `svrn daemon start` (or a service manager's) should be caught by the
-/// wait rather than raced by the user. Not minutes: a daemon that is not
-/// coming up is a fact to report, not a hang to sit through.
-const REACH_WINDOW: Duration = Duration::from_secs(5);
 
 /// Run a mesh subcommand. Returns the exit code.
 pub async fn run_mesh(args: &[String]) -> i32 {
@@ -116,7 +106,8 @@ async fn cmd_check_invariants(args: &[String]) -> i32 {
             "--help" | "-h" => {
                 eprintln!("Usage: svrn mesh check-invariants --nodes <a:port,b:port,...> [--expect-live <id,...>] [--json]");
                 eprintln!();
-                eprintln!("  Polls GET /v1/mesh/status on each node and asserts the mesh");
+                eprintln!("  Polls GET /v1/mesh/status on each node's cw-rails (its rails_base");
+                eprintln!("  host:port) and asserts the mesh");
                 eprintln!("  invariants: convergence (all agree on the member set), no-ghost");
                 eprintln!("  (no deliberately-downed node shown live; pair with --expect-live),");
                 eprintln!("  and liveness (every reachable node seen live by its peers).");
@@ -444,49 +435,27 @@ async fn cmd_create(args: &[String]) -> i32 {
         }
     }
 
-    // If a mesh already exists (e.g. the silent solo mesh created by
-    // `svrn setup`), the join-key hash is stored but its plaintext
-    // is gone — we can't re-show it. Direct the user to `mesh rotate`
-    // instead of blindly attempting another create_mesh (which errors
-    // with AlreadyRunning or leaves them confused).
-    if sovereign_mesh::persist::load(&sovereign_root())
-        .map(|opt| opt.is_some())
-        .unwrap_or(false)
-    {
-        eprintln!("A mesh already exists (created during `svrn setup`).");
-        eprintln!("To generate a new shareable join key, run:");
-        eprintln!();
-        eprintln!("  svrn mesh rotate");
-        eprintln!();
-        return 1;
-    }
-
     let mesh_name = name.unwrap_or_else(|| {
         let host = hostname().unwrap_or_else(|| "sovereign".to_string());
         format!("{host}'s Mesh")
     });
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
 
-    // The daemon this command drives must already be running — reached,
-    // never constructed here. An in-process `EmbeddedDaemon` built by a
-    // one-shot CLI evaporates with the process, taking the mesh it just
-    // founded with it; the daemon that survives is the one that answers.
-    // `ensure_reachable` probes and waits out a concurrent start; this
-    // build ships no backend it can bring up, and absence is REPORTED
-    // with the start guidance rather than papered over.
-    let base = client_daemon_base();
-    if let Err(why) = ServingHost::at(&base).ensure_reachable(REACH_WINDOW).await {
-        eprintln!("Cannot create a mesh without a running daemon: {why}");
-        eprintln!("Start it with `svrn daemon start`, then re-run.");
-        return 1;
-    }
-    // `mesh_create`, not a bare POST: the route defaults `name`/`node_name`
+    // The mesh, its key and its founding are cw-rails' (pb-mesh-exit-
+    // transport): bring it up the way `svrn mesh up` does, then ask its
+    // create door. A mesh this node already holds is cw-rails' to refuse,
+    // in its own words.
+    let base = match crate::rails_up::up().await {
+        Ok(base) => base,
+        Err(why) => {
+            eprintln!("Cannot create a mesh: {why}");
+            return 1;
+        }
+    };
+    // `mesh_create`, not a bare POST: the door defaults `name`/`node_name`
     // on the HOST side and carries `encrypt` — the one flag here whose
     // absence cannot be corrected afterwards (the help says the posture is
     // fixed for the life of the mesh), so it is passed through verbatim.
-    // The host also runs `expose_client_api()` as part of the create
-    // handler: an explicit create IS the opt-in to serving remote peers,
-    // and that decision is the daemon's, not a step this caller performs.
     match TurnClient::new(&base)
         .mesh_create::<CreatedMesh>(Some(&mesh_name), Some(&node_name), require_encryption)
         .await
@@ -501,7 +470,7 @@ async fn cmd_create(args: &[String]) -> i32 {
                 &result.mesh_name,
                 &result.join_key,
                 result.client_token.as_deref(),
-                Some(&result.join_link),
+                result.join_link.as_deref(),
             );
             if require_encryption {
                 println!(
@@ -518,16 +487,18 @@ async fn cmd_create(args: &[String]) -> i32 {
     }
 }
 
-/// `POST /v1/mesh/create`'s answer, as this CLIENT parses it. The
-/// daemon's `CreateResponse` is `Serialize`-only (it is the serving
-/// side's shape); the parse shape is the client's to own, and
-/// [`TurnClient::mesh_create`] is generic over it by design — the
-/// turn-client crate cannot name daemon types without linking a daemon.
+/// `POST /v1/mesh/create`'s answer, as this CLIENT parses it. cw-rails'
+/// answer is a JSON object (commonwealth-rails membership.rs `create`); the
+/// parse shape is the client's to own, and [`TurnClient::mesh_create`] is
+/// generic over it by design.
 #[derive(Debug, serde::Deserialize)]
 struct CreatedMesh {
     mesh_name: String,
     join_key: String,
-    join_link: String,
+    /// `None` when cw-rails could not build a link (`join_link_absent`
+    /// names why); the bare-key form prints instead.
+    #[serde(default)]
+    join_link: Option<String>,
     /// `None` when the daemon stayed loopback-only. Skipped on the wire
     /// rather than nulled, so the default must be here too.
     #[serde(default)]
@@ -631,42 +602,21 @@ async fn cmd_join(args: &[String]) -> i32 {
 
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
 
-    // The join goes to the RUNNING daemon over HTTP, always. Why never
-    // in-process: building a fresh `EmbeddedDaemon` from the CLI process
-    // creates a SEPARATE in-memory `AppState`. Its `start_daemon`
-    // fails silently to bind :9741/:9742 (the running daemon already
-    // owns them, the bind error is swallowed by a `warn!` + `return`
-    // inside an async block — not a hard failure), the handshake
-    // still completes on the founder's side, but only the CLI
-    // process's mesh state gets updated — never the long-running
-    // daemon's. CLI exits, in-memory join state evaporates, and the
-    // daemon keeps its solo-mesh `invite_key_hash`. Every subsequent
-    // gossip from peers mismatches and gets rejected.
-    //
-    // Routing through `POST /v1/mesh/join` makes the running daemon
-    // perform the join in-process, so the AppState that actually
-    // serves gossip is the one that gets the adopted mesh.
+    // The join goes to cw-rails' join door over HTTP, always: cw-rails is
+    // the node's one mesh endpoint and holds its key (pb-mesh-exit-
+    // transport), so the process that must adopt the mesh is the one that
+    // gossips. The base is `[daemon] rails_base` through its one reader,
+    // never a literal port (ARCH §10.6: a hardcoded port once POSTed a
+    // join to a different process than the one that gossips).
     println!();
     println!("Joining mesh...");
-    // `client_daemon_base()`, never a literal port. This file learned
-    // this the hard way (ARCH §10.6): on a box whose config names
-    // another port (a second daemon, a sandboxed data dir, the fleet's
-    // own `:9744` node) a probe against a hardcoded port answered for
-    // a DIFFERENT daemon, and the join was then POSTed to it: the wrong
-    // process adopts the mesh, parks the one it was in, and gossips
-    // the change. The decider honors the env override and the config's
-    // client port, as every other dial here must.
-    let base = client_daemon_base();
-    // Probe, and wait out a daemon that may be mid-start (an operator's
-    // concurrent `svrn daemon start`, a service manager). This build
-    // ships no backend it can bring up, so an absent daemon is REPORTED
-    // with start guidance — a one-shot in-process join is not a
-    // fallback this command offers, for the reason above.
-    if let Err(why) = ServingHost::at(&base).ensure_reachable(REACH_WINDOW).await {
-        eprintln!("Cannot join without a running daemon: {why}");
-        eprintln!("Start it with `svrn daemon start`, then re-run.");
-        return 1;
-    }
+    let base = match crate::rails_up::up().await {
+        Ok(base) => base,
+        Err(why) => {
+            eprintln!("Cannot join: {why}");
+            return 1;
+        }
+    };
     join_via_running_daemon(&TurnClient::new(&base), arg, &node_name).await
 }
 
@@ -693,11 +643,10 @@ pub(crate) async fn daemon_listening_on(port: u16) -> bool {
         .await
 }
 
-/// Ask the running daemon to join (`TurnClient::mesh_join` →
-/// `POST /v1/mesh/join`) and surface the response. The HOST parses
-/// `key_or_url` — any of the three invite forms — and performs the join
-/// in the AppState that actually serves gossip; this client holds no
-/// mesh state of its own.
+/// Ask cw-rails to join (`TurnClient::mesh_join` → `POST /v1/mesh/join`)
+/// and surface the response. The HOST parses `key_or_url` — any of the
+/// three invite forms — and performs the join in the process that gossips;
+/// this client holds no mesh state of its own.
 async fn join_via_running_daemon(client: &TurnClient, arg: &str, node_name: &str) -> i32 {
     match client.mesh_join::<JoinedMesh>(arg, Some(node_name)).await {
         Ok(result) => {
@@ -730,19 +679,11 @@ async fn cmd_rotate(args: &[String]) -> i32 {
     }
     let force = args.iter().any(|a| a == "--force");
 
-    // Rotation MUST go through the running daemon. It used to be an offline
-    // disk write, which is why it had to tell the user to restart: the daemon
-    // held the old hash in memory and re-persisted it over the new one on its
-    // next gossip round, silently reverting the rotation. There is no correct
-    // offline rotation — the live mesh is the thing that has to change.
-    if !daemon_listening_on(daemon_client_port()).await {
-        eprintln!(
-            "No daemon detected on :{} — rotation needs one.",
-            daemon_client_port()
-        );
-        eprintln!("Start it with `svrn daemon start`, then re-run.");
-        return 1;
-    }
+    // Rotation MUST go through the running mesh endpoint, cw-rails. It used
+    // to be an offline disk write, which the live process re-persisted over
+    // on its next gossip round, silently reverting the rotation. There is no
+    // correct offline rotation — the live mesh is the thing that has to
+    // change. An absent cw-rails is the request's error, naming the base.
     rotate_via_running_daemon(force).await
 }
 
@@ -754,9 +695,18 @@ pub(crate) fn daemon_client_port() -> u16 {
         .unwrap_or(9741)
 }
 
+/// cw-rails' base from `SetupConfig` through its one reader
+/// (`rails_kv::resolve_rails_base`): the membership doors and
+/// `/v1/mesh/status` are cw-rails' since pb-mesh-exit-transport, and svrn's
+/// copies answer 410 naming this base.
+pub(crate) fn rails_base() -> String {
+    let config = sovereign_contracts::setup_config::SetupConfig::load()
+        .unwrap_or_else(|_| sovereign_contracts::setup_config::SetupConfig::unconfigured());
+    sovereign_turn_client::rails_kv::resolve_rails_base(&config.daemon)
+}
+
 async fn rotate_via_running_daemon(force: bool) -> i32 {
-    let port = daemon_client_port();
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/rotate?force={force}");
+    let url = format!("{}/v1/mesh/rotate?force={force}", rails_base());
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -770,7 +720,7 @@ async fn rotate_via_running_daemon(force: bool) -> i32 {
     let resp = match client.post(&url).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Failed to reach running daemon at {url}: {e}");
+            eprintln!("Failed to reach cw-rails at {url}: {e}");
             return 1;
         }
     };
@@ -778,7 +728,7 @@ async fn rotate_via_running_daemon(force: bool) -> i32 {
     let payload: serde_json::Value = match resp.json().await {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("Daemon returned non-JSON response (status={status}): {e}");
+            eprintln!("cw-rails returned a non-JSON response (status={status}): {e}");
             return 1;
         }
     };
@@ -802,7 +752,7 @@ async fn rotate_via_running_daemon(force: bool) -> i32 {
             .and_then(|v| v.as_str())
             .unwrap_or("(no error message)");
         eprintln!();
-        eprintln!("Failed to rotate (daemon returned {status}): {err}");
+        eprintln!("Failed to rotate (cw-rails returned {status}): {err}");
         1
     }
 }
@@ -863,12 +813,8 @@ async fn cmd_status(args: &[String]) -> i32 {
         }
     }
 
-    // Fetch from the daemon. Use SetupConfig for the port so a custom
-    // client_port (set via `[daemon].client_port`) still works.
-    let port = sovereign_contracts::setup_config::SetupConfig::load()
-        .map(|c| c.daemon.client_port)
-        .unwrap_or(9741);
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
+    // Fetch from cw-rails, the mesh endpoint, at `[daemon] rails_base`.
+    let url = format!("{}/v1/mesh/status", rails_base());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -876,14 +822,17 @@ async fn cmd_status(args: &[String]) -> i32 {
     let resp = match client.get(&url).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("mesh status: daemon at {url} not reachable: {e}");
-            eprintln!("hint: `svrn daemon status` to check, `svrn daemon start` to launch.");
+            eprintln!("mesh status: cw-rails at {url} not reachable: {e}");
+            eprintln!(
+                "hint: `{}` brings it up.",
+                sovereign_turn_client::rails_kv::RAILS_BRING_UP_VERB
+            );
             return 1;
         }
     };
     if !resp.status().is_success() {
         eprintln!(
-            "mesh status: daemon returned HTTP {} from {url}",
+            "mesh status: cw-rails returned HTTP {} from {url}",
             resp.status()
         );
         return 1;
@@ -897,12 +846,12 @@ async fn cmd_status(args: &[String]) -> i32 {
     };
 
     let status: sovereign_contracts::daemon_wire::MeshStatusSummary =
-        match serde_json::from_str(&body) {
-            Ok(s) => s,
+        match serde_json::from_str::<sovereign_contracts::daemon_wire::RailsMeshStatus>(&body) {
+            Ok(s) => s.into(),
             Err(e) => {
-                // Daemon version drift — fall back to raw JSON pass-through
-                // so the operator at least sees the data even when our
-                // local DTO doesn't match.
+                // Version drift — fall back to raw JSON pass-through so the
+                // operator at least sees the data even when our local DTO
+                // doesn't match.
                 eprintln!("mesh status: response shape mismatch ({e}); printing raw JSON.");
                 println!("{body}");
                 return 1;
@@ -1056,10 +1005,7 @@ async fn cmd_transport(args: &[String]) -> i32 {
     }
     let json_out = args.iter().any(|a| a == "--json");
 
-    let port = sovereign_contracts::setup_config::SetupConfig::load()
-        .map(|c| c.daemon.client_port)
-        .unwrap_or(9741);
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
+    let url = format!("{}/v1/mesh/status", rails_base());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -1074,7 +1020,7 @@ async fn cmd_transport(args: &[String]) -> i32 {
         },
         Ok(r) => {
             eprintln!(
-                "mesh transport: daemon returned HTTP {} from {url}",
+                "mesh transport: cw-rails returned HTTP {} from {url}",
                 r.status()
             );
             return 1;
@@ -1085,8 +1031,8 @@ async fn cmd_transport(args: &[String]) -> i32 {
         }
     };
     let status: sovereign_contracts::daemon_wire::MeshStatusSummary =
-        match serde_json::from_str(&body) {
-            Ok(s) => s,
+        match serde_json::from_str::<sovereign_contracts::daemon_wire::RailsMeshStatus>(&body) {
+            Ok(s) => s.into(),
             Err(e) => {
                 eprintln!("mesh transport: response shape mismatch ({e}); printing raw JSON.");
                 println!("{body}");
@@ -1186,13 +1132,9 @@ async fn cmd_leave(args: &[String]) -> i32 {
         eprintln!("Parked meshes are untouched — use `svrn mesh forget` to drop those.");
         return 0;
     }
-    let port = daemon_client_port();
-    if !daemon_listening_on(port).await {
-        eprintln!("No daemon detected on :{port} — nothing to leave.");
-        eprintln!("Start it with `svrn daemon start` if the mesh should be running.");
-        return 1;
-    }
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/leave");
+    // cw-rails' leave door; an absent cw-rails is the request's error below,
+    // a non-zero exit naming the base.
+    let url = format!("{}/v1/mesh/leave", rails_base());
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -1207,17 +1149,17 @@ async fn cmd_leave(args: &[String]) -> i32 {
         Ok(r) if r.status().is_success() => {
             println!();
             println!("Left the mesh. This node is now its own solo mesh.");
-            println!("The daemon restarts to rebind; give it ~10s.");
+            println!("cw-rails re-solos in place; `svrn mesh status` shows the new roster.");
             0
         }
         Ok(r) => {
             let status = r.status();
             let body = r.text().await.unwrap_or_default();
-            eprintln!("Failed to leave (daemon returned {status}): {body}");
+            eprintln!("Failed to leave (cw-rails returned {status}): {body}");
             1
         }
         Err(e) => {
-            eprintln!("Failed to reach running daemon at {url}: {e}");
+            eprintln!("Failed to reach cw-rails at {url}: {e}");
             1
         }
     }
@@ -1225,9 +1167,8 @@ async fn cmd_leave(args: &[String]) -> i32 {
 
 /// `svrn mesh list` — every mesh this node has joined, active one marked.
 ///
-/// Reads disk directly rather than the daemon: the answer is the same either
-/// way, and an operator debugging a daemon that will not start still needs to
-/// see what it is a member of.
+/// Reads cw-rails' `/v1/mesh/status` `meshes`: the meshes, active and
+/// parked, are cw-rails' store since pb-mesh-exit-transport.
 async fn cmd_list(args: &[String]) -> i32 {
     if sovereign_cli_base::help::wants_help(args) {
         eprintln!("Usage: svrn mesh list [--json]");
@@ -1235,25 +1176,24 @@ async fn cmd_list(args: &[String]) -> i32 {
         eprintln!("Show every mesh this node has joined. The active one is marked '*'.");
         return 0;
     }
-    let root = sovereign_root();
-    let active = sovereign_mesh::persist::active_mesh_id(&root);
-    let known = sovereign_mesh::persist::list_known(&root);
+    let base = rails_base();
+    let status = match TurnClient::new(&base).mesh_status().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("mesh list: cw-rails at {base} did not answer: {e}");
+            eprintln!(
+                "hint: `{}` brings it up.",
+                sovereign_turn_client::rails_kv::RAILS_BRING_UP_VERB
+            );
+            return 1;
+        }
+    };
+    let known = status.meshes;
 
     if args.iter().any(|a| a == "--json") {
-        let rows: Vec<serde_json::Value> = known
-            .iter()
-            .map(|m| {
-                serde_json::json!({
-                    "mesh_id": m.mesh_id.to_hex(),
-                    "name": m.name,
-                    "members_total": m.members.len(),
-                    "is_active": active.as_ref() == Some(&m.mesh_id),
-                })
-            })
-            .collect();
         println!(
             "{}",
-            serde_json::to_string_pretty(&rows).unwrap_or_default()
+            serde_json::to_string_pretty(&known).unwrap_or_default()
         );
         return 0;
     }
@@ -1266,20 +1206,14 @@ async fn cmd_list(args: &[String]) -> i32 {
     }
     println!();
     for m in &known {
-        let mark = if active.as_ref() == Some(&m.mesh_id) {
-            "*"
+        let (mark, state) = if m.is_active {
+            ("*", "active")
         } else {
-            " "
-        };
-        let state = if active.as_ref() == Some(&m.mesh_id) {
-            "active"
-        } else {
-            "parked"
+            (" ", "parked")
         };
         println!(
             " {mark} {:<28} {:>3} member(s)  {state}",
-            m.name,
-            m.members.len()
+            m.name, m.members_total
         );
     }
     println!();
@@ -1299,12 +1233,8 @@ async fn cmd_switch(args: &[String]) -> i32 {
         return if args.is_empty() { 1 } else { 0 };
     }
     let target = args[0].clone();
-    let port = daemon_client_port();
-    if !daemon_listening_on(port).await {
-        eprintln!("No daemon detected on :{port} — switching needs one.");
-        return 1;
-    }
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/switch");
+    // cw-rails' switch door; an absent cw-rails is the request's error.
+    let url = format!("{}/v1/mesh/switch", rails_base());
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -1323,7 +1253,7 @@ async fn cmd_switch(args: &[String]) -> i32 {
     {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Failed to reach running daemon at {url}: {e}");
+            eprintln!("Failed to reach cw-rails at {url}: {e}");
             return 1;
         }
     };
@@ -1331,11 +1261,11 @@ async fn cmd_switch(args: &[String]) -> i32 {
     let body = resp.text().await.unwrap_or_default();
     if status.is_success() {
         println!();
-        println!("Switching to \"{target}\" — the daemon rebinds, give it ~10s.");
+        println!("Switched to \"{target}\".");
         println!("`svrn mesh status` will show the new roster.");
         0
     } else {
-        eprintln!("Failed to switch (daemon returned {status}): {body}");
+        eprintln!("Failed to switch (cw-rails returned {status}): {body}");
         1
     }
 }
@@ -1351,20 +1281,17 @@ async fn cmd_forget(args: &[String]) -> i32 {
         eprintln!("Rejoining afterwards needs a fresh invite, since the roster is gone.");
         return if args.is_empty() { 1 } else { 0 };
     }
-    let root = sovereign_root();
-    let known = sovereign_mesh::persist::list_known(&root);
-    let Some(found) = sovereign_mesh::persist::resolve_known(&known, &args[0]) else {
-        eprintln!("Not a member of any mesh matching '{}'.", args[0]);
-        eprintln!("`svrn mesh list` shows what is joined.");
-        return 1;
-    };
-    match sovereign_mesh::persist::forget(&root, &found.mesh_id) {
+    // cw-rails' forget door resolves the name or id against its own store
+    // and refuses the active mesh in its own words.
+    let base = rails_base();
+    match TurnClient::new(&base).mesh_forget(&args[0]).await {
         Ok(()) => {
-            println!("Forgot \"{}\".", found.name);
+            println!("Forgot \"{}\".", args[0]);
             0
         }
         Err(e) => {
-            eprintln!("Failed to forget \"{}\": {e}", found.name);
+            eprintln!("Failed to forget \"{}\": {e}", args[0]);
+            eprintln!("`svrn mesh list` shows what is joined.");
             1
         }
     }

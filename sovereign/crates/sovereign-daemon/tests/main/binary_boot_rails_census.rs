@@ -59,7 +59,19 @@ fn test_sources(dir: &Path, out: &mut Vec<PathBuf>) {
 fn boots_a_daemon(text: &str) -> bool {
     const ARGS_RUN: &str = concat!("[\"", "run\",");
     const ARG_RUN: &str = concat!(".arg(\"", "run\")");
-    text.contains("sovereign-daemon") && (text.contains(ARGS_RUN) || text.contains(ARG_RUN))
+    let runs =
+        text.contains("sovereign-daemon") && (text.contains(ARGS_RUN) || text.contains(ARG_RUN));
+    runs || boots_the_admin_join(text)
+}
+
+/// Spawns a daemon binary's admin-join launch through the setup wizard's
+/// join child (`join_child::join`, whose result is a `JoinFailure`): the
+/// child starts the daemon and joins through cw-rails at its `rails_base`,
+/// so it pins and groups like a `run` (pb-mesh-exit-transport, where the
+/// wizard test stopped booting a `run` founder).
+fn boots_the_admin_join(text: &str) -> bool {
+    text.contains(concat!("JoinFailure", "::"))
+        && (text.contains("sovereign-stock") || text.contains("sovereign-daemon"))
 }
 
 #[test]
@@ -103,16 +115,11 @@ fn every_test_that_boots_a_daemon_pins_its_cw_rails() {
     );
 }
 
-/// Boots a daemon in process: names `EmbeddedDaemon` and makes a call that
-/// reaches `start_daemon`. Needles built with `concat!`, as above.
+/// Boots a daemon in process: names `EmbeddedDaemon` and calls its `start()`,
+/// the one boot since pb-mesh-exit-transport. Needles built with `concat!`,
+/// as above.
 fn boots_in_process(text: &str) -> bool {
-    const CALLS: [&str; 4] = [
-        concat!(".create_", "mesh("),
-        concat!(".create_", "mesh_with("),
-        concat!(".join_", "mesh("),
-        concat!(".try_", "resume("),
-    ];
-    text.contains(concat!("Embedded", "Daemon")) && CALLS.iter().any(|c| text.contains(c))
+    text.contains(concat!("Embedded", "Daemon")) && text.contains(concat!(".start", "()"))
 }
 
 /// The filter clause that places one test file's tests: its test binary for

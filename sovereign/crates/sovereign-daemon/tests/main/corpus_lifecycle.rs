@@ -31,12 +31,11 @@ use std::time::Duration;
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
-use commonwealth_core::mesh::Mesh;
 use corpus_index::ingest_port::daemon::{
     ArticleStats, CorpusDiskStatus, IngestResult, InstallRefusal, PreparedInstall,
 };
 use corpus_index::ingest_port::double::IngestPortDouble;
-use kernel_types::{MeshId, NodeId};
+use kernel_types::NodeId;
 use sovereign_contracts::daemon_wire::IngestProgress;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::{fabric, node, serving, AppState};
@@ -202,33 +201,18 @@ impl Ingests {
     }
 }
 
-fn test_mesh() -> Mesh {
-    Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "Test Mesh".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
-    }
-}
-
 /// An `AppState` whose corpus handle is `engine`, and the handle itself so
 /// a test reads the port calls it made.
 fn test_state(engine: IngestPortDouble) -> (AppState, Arc<IngestPortDouble>) {
     let engine = Arc::new(engine);
-    (state_over_double(test_mesh(), Arc::clone(&engine)), engine)
+    (state_over_double(Arc::clone(&engine)), engine)
 }
 
 /// An AppState over the store-free recording double (five-programs fp-85).
-fn state_over_double(mesh: Mesh, engine: Arc<IngestPortDouble>) -> AppState {
+fn state_over_double(engine: Arc<IngestPortDouble>) -> AppState {
     let self_id = NodeId::from_u128(1);
     AppState::new_with_seeds(
         self_id,
-        mesh,
         Some(engine),
         None,
         fabric::FabricSeed::default(),

@@ -183,13 +183,13 @@ struct Neighbour {
 /// Read here rather than left to the fanout's own selection because the
 /// fanout with no `peers` targets only members that ADVERTISE the kind, and a
 /// neighbour publishing none would then be absent instead of a row.
-async fn neighbours(client: &reqwest::Client, port: u16) -> Result<Vec<Neighbour>, String> {
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
+async fn neighbours(client: &reqwest::Client) -> Result<Vec<Neighbour>, String> {
+    let url = format!("{}/v1/mesh/status", crate::mesh_cmd::rails_base());
     let resp = client
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("daemon at {url} not reachable: {e}"))?;
+        .map_err(|e| format!("cw-rails at {url} not reachable: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("{url} answered {}", resp.status()));
     }
@@ -245,7 +245,7 @@ async fn catalogue(
     why: bool,
     json_out: bool,
 ) -> i32 {
-    let neighbours = match neighbours(client, port).await {
+    let neighbours = match neighbours(client).await {
         Ok(n) => n,
         Err(e) => {
             eprintln!("mesh offers: {e}");
@@ -263,7 +263,7 @@ async fn catalogue(
     }
     let names: Vec<&str> = neighbours.iter().map(|n| n.name.as_str()).collect();
 
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/fanout");
+    let url = format!("{}/v1/mesh/fanout", crate::mesh_cmd::rails_base());
     let mut body = serde_json::json!({
         "path": path,
         "kind": "offer",
@@ -275,7 +275,7 @@ async fn catalogue(
     let resp = match client.post(&url).json(&body).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("mesh offers: daemon at {url} not reachable: {e}");
+            eprintln!("mesh offers: cw-rails at {url} not reachable: {e}");
             eprintln!("The bridges live in the running daemon — `svrn daemon start`.");
             return 1;
         }
@@ -485,11 +485,11 @@ fn warrant_of(
 /// `svrn mesh offers --who` — the gossip list. Nothing is dialed, so this
 /// answers "who says they publish one", never "who answers".
 async fn list_publishers(client: &reqwest::Client, port: u16, json_out: bool) -> i32 {
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/offers");
+    let url = format!("{}/v1/mesh/offers", crate::mesh_cmd::rails_base());
     let resp = match client.get(&url).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("mesh offers: daemon at {url} not reachable: {e}");
+            eprintln!("mesh offers: cw-rails at {url} not reachable: {e}");
             return 1;
         }
     };
@@ -546,11 +546,11 @@ async fn list_publishers(client: &reqwest::Client, port: u16, json_out: bool) ->
 /// `svrn mesh offers <peer>` — the loopback URL that reaches ONE member's
 /// offer origin, the shape `svrn mesh media <peer>` has.
 async fn reach_one(client: &reqwest::Client, port: u16, peer: &str, json_out: bool) -> i32 {
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/offers");
+    let url = format!("{}/v1/mesh/offers", crate::mesh_cmd::rails_base());
     let resp = match client.get(&url).query(&[("peer", peer)]).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("mesh offers: daemon at {url} not reachable: {e}");
+            eprintln!("mesh offers: cw-rails at {url} not reachable: {e}");
             return 1;
         }
     };

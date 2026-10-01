@@ -357,8 +357,6 @@ mod tests {
     use crate::state::AppState;
     use axum::routing::post;
     use axum::Router;
-    use commonwealth_core::mesh::Mesh;
-    use kernel_types::MeshId;
     use kernel_types::NodeId;
     use tower::ServiceExt;
 
@@ -366,19 +364,7 @@ mod tests {
     use axum::response::Response;
 
     fn fresh_state() -> AppState {
-        use std::collections::HashMap;
-        let mesh = Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::from_u128(1),
-            name: "Admission Test".into(),
-            invite_key_hash: [0u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: HashMap::new(),
-            peers: vec![],
-        };
-        AppState::new(NodeId::from_u128(1), mesh)
+        AppState::new(NodeId::from_u128(1))
     }
 
     use sovereign_time::unix_now;

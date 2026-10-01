@@ -111,7 +111,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use commonwealth_core::mesh::Mesh;
 use commonwealth_rail_core::{
     actor_of, body_json, sign_ring_op, Op, Person, RailAct, Roster, SignedOp, SigningKey,
 };
@@ -120,8 +119,8 @@ use corpus_index::ingest_port::double::IngestPortDouble;
 use corpus_index::ingest_port::merge::PartitionMergeReport;
 use kernel_types::judgement::Reason;
 use kernel_types::ActorKey;
+use kernel_types::HandoffId;
 use kernel_types::{ComputeAttribution, Judgement, NodeId, Server};
-use kernel_types::{HandoffId, MeshId};
 use oicp_types::work::projection::{WorkProjection, WorkUnitStatus};
 use oicp_types::work::{Completion, Submission, UnitRef, WorkAct};
 use oicp_types::work_queue::{HandoffPhase, WorkUnit};
@@ -629,31 +628,29 @@ pub(crate) fn node_state_with_seed(
     others: &[(NodeId, &str)],
     seed: sovereign_daemon::state::FabricSeed,
 ) -> AppState {
-    let mut members = HashMap::new();
-    members.insert(
+    use sovereign_contracts::daemon_wire::mesh::MemberStatus;
+    let mut rows = vec![common::peer_row(
         self_id,
-        common::member(self_id, "self", "127.0.0.1:9742".parse().expect("addr")),
-    );
+        "self",
+        MemberStatus::Online,
+        common::empty_capabilities(),
+        vec!["127.0.0.1:9742".parse().expect("addr")],
+    )];
     for (id, addr) in others {
-        members.insert(
+        rows.push(common::peer_row(
             *id,
-            common::member(*id, "donor", addr.parse().expect("peer addr")),
-        );
+            "donor",
+            MemberStatus::Online,
+            common::empty_capabilities(),
+            vec![addr.parse().expect("peer addr")],
+        ));
     }
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "cw-lift 5g part 2".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
+    let seed = sovereign_daemon::state::FabricSeed {
+        membership: Some(common::roster("cw-lift 5g part 2", rows)),
+        ..seed
     };
     AppState::new_with_seeds(
         self_id,
-        mesh,
         Some(Arc::clone(&node.port) as _),
         None,
         seed,

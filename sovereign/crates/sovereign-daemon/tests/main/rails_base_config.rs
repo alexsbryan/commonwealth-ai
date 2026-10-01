@@ -107,10 +107,7 @@ async fn a_booted_daemons_ring_rail_dials_the_declared_door() {
         cfg(Some(format!("http://{door}"))),
         mesh_admin_services(),
     );
-    daemon
-        .create_mesh("solo", "node")
-        .await
-        .expect("a local-only daemon boots its solo mesh");
+    daemon.start().await.expect("a local-only daemon boots");
     let addr = daemon
         .api_address()
         .await

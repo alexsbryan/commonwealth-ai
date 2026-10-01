@@ -197,7 +197,14 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
         results.push(cw::check_daemon_running().await);
         results.push(sov::check_daemon_memory(&client_url).await);
         results.push(cw::check_mesh_member(&client_url).await);
-        results.push(cw::check_iroh_egress(&client_url).await);
+        // The relay posture is cw-rails' (pb-mesh-exit-transport), read at
+        // `[daemon] rails_base` through its one reader.
+        let rails_url = sovereign_turn_client::rails_kv::resolve_rails_base(
+            &sovereign_contracts::setup_config::SetupConfig::load()
+                .unwrap_or_else(|_| sovereign_contracts::setup_config::SetupConfig::unconfigured())
+                .daemon,
+        );
+        results.push(cw::check_iroh_egress(&rails_url).await);
         results.push(cw::check_inference_capable(&client_url).await);
         results.push(cw::check_activity_reporting(&internal_url).await);
     }
@@ -496,14 +503,21 @@ mod tests {
         assert_eq!(enabled.status, CheckStatus::Passed, "{}", enabled.message);
         let disabled = cw::rails_boot_unit_result(Some(UnitState::Disabled("disabled".into())));
         assert_eq!(disabled.status, CheckStatus::Warning);
-        assert!(disabled.message.contains("off the mesh after a reboot"), "{}", disabled.message);
+        assert!(
+            disabled.message.contains("off the mesh after a reboot"),
+            "{}",
+            disabled.message
+        );
         assert!(matches!(&disabled.repair, Repair::Executable(c) if c == "svrn mesh up"));
         for other in [
             Some(UnitState::NotInstalled),
             Some(UnitState::Unknown("bus".into())),
             None,
         ] {
-            assert_ne!(cw::rails_boot_unit_result(other).status, CheckStatus::Passed);
+            assert_ne!(
+                cw::rails_boot_unit_result(other).status,
+                CheckStatus::Passed
+            );
         }
     }
 }

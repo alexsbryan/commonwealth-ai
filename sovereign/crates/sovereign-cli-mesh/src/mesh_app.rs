@@ -76,7 +76,7 @@ pub(crate) async fn cmd_app(args: &[String]) -> i32 {
     let app = positional.get(1).map(|s| s.as_str());
 
     let port = daemon_client_port();
-    let url = format!("http://127.0.0.1:{port}/v1/mesh/app");
+    let url = format!("{}/v1/mesh/app", crate::mesh_cmd::rails_base());
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
@@ -94,7 +94,7 @@ pub(crate) async fn cmd_app(args: &[String]) -> i32 {
     let resp = match client.get(&url).query(&[("peer", peer)]).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("mesh app: daemon at {url} not reachable: {e}");
+            eprintln!("mesh app: cw-rails at {url} not reachable: {e}");
             eprintln!("The bridge lives in the running daemon — `svrn daemon start`.");
             return 1;
         }
@@ -214,7 +214,7 @@ async fn list_publishers(client: &reqwest::Client, url: &str, port: u16, json_ou
     let resp = match client.get(url).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("mesh app: daemon at {url} not reachable: {e}");
+            eprintln!("mesh app: cw-rails at {url} not reachable: {e}");
             eprintln!("The roster lives in the running daemon — `svrn daemon start`.");
             return 1;
         }

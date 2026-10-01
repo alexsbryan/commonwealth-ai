@@ -205,10 +205,6 @@ pub struct ServingCore {
     /// `None` when the provider is not a router (fixtures, a `NullProvider`);
     /// the absence is what gossip publishes as `current_in_flight: None`.
     pub in_flight_gauge: Option<sovereign_core::in_flight::LocalInFlightGauge>,
-    /// The worker-side auto-warm hook (`POST /internal/rpc-warm`): the
-    /// loader's, handed in by the distribution (pb-serve-distributes). `None`
-    /// where none was, and the route answers that this node is no warmer.
-    pub rpc_shard_warmer: Option<Arc<dyn crate::state::RpcShardWarmer>>,
     /// The thing that ANSWERS — routing, retrieval, tools, synthesis.
     ///
     /// CORE, and the field `quality/TOPOLOGY.md` §3.5 turns on: "DAEMON — the
@@ -290,6 +286,10 @@ pub struct ServingProfile {
     /// otherwise fall back to a default model id and partition collaborative
     /// ingestion here anyway.
     pub advertise_embed: EmbedAdvertisement,
+    /// The node's mesh as svrn reads it: cw-rails' roster and reach door,
+    /// composed by the distribution (pb-mesh-exit-transport), or their
+    /// absence on svrn alone.
+    pub mesh: crate::hosted_mesh::MeshAccess,
 }
 
 /// Three handles `sovereign daemon run` must share with writers that live
@@ -350,8 +350,9 @@ pub enum DaemonServices {
     /// inference and no host routes — and that emptiness is the shape, not a
     /// set of holes.
     ///
-    /// The payload is a [`MeshAdminWitness`], which carries no data and exists
-    /// only so this variant cannot be *named into being* outside this crate.
+    /// The payload is a [`MeshAdminWitness`], which carries only the node's
+    /// mesh and exists so this variant cannot be *named into being* outside
+    /// this crate.
     /// See that type for why a bare variant was the last open door.
     MeshAdmin(MeshAdminWitness),
     /// The desktop's in-process daemon (`Local` bootstrap mode) — a
@@ -386,8 +387,17 @@ pub enum DaemonServices {
 /// not the hazard; *deciding* it outside the assembler is. So
 /// `matches!(services, DaemonServices::MeshAdmin(_))` compiles anywhere, and
 /// `DaemonServices::MeshAdmin(..)` cannot be built anywhere but here.
-#[derive(Debug)]
-pub struct MeshAdminWitness(());
+pub struct MeshAdminWitness {
+    /// The node's mesh as the distribution composed it, so the wizard's join
+    /// child reads cw-rails' roster for its venues (pb-mesh-exit-transport).
+    mesh: crate::hosted_mesh::MeshAccess,
+}
+
+impl std::fmt::Debug for MeshAdminWitness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("MeshAdminWitness")
+    }
+}
 
 impl DaemonServices {
     // `pub` -> `pub(crate)` (daemon-convergence Phase 4b). Nothing outside this
@@ -395,8 +405,8 @@ impl DaemonServices {
     // [`assemble`] and it decides the shape. Phase 7 closed the last door on
     // 2026-08-25: `MeshAdmin` now carries a [`MeshAdminWitness`] whose only
     // mint is [`assemble`], so all three variants are unreachable from outside.
-    pub(crate) fn mesh_admin() -> Self {
-        Self::MeshAdmin(MeshAdminWitness(()))
+    pub(crate) fn mesh_admin(mesh: crate::hosted_mesh::MeshAccess) -> Self {
+        Self::MeshAdmin(MeshAdminWitness { mesh })
     }
 
     pub(crate) fn desktop(serving: ServingProfile) -> Self {
@@ -445,6 +455,15 @@ impl DaemonServices {
     // The three below survive because each names a REAL fork a reader has to
     // know about. Callers now match once on one of them and read plain fields
     // off `&ServingProfile` / `&HeadlessRails`.
+
+    /// The node's mesh as the distribution composed it, on every shape.
+    pub fn mesh(&self) -> &crate::hosted_mesh::MeshAccess {
+        match self {
+            Self::MeshAdmin(w) => &w.mesh,
+            Self::Desktop(serving) => &serving.mesh,
+            Self::Headless(h) => &h.serving.mesh,
+        }
+    }
 
     pub fn serving(&self) -> Option<&ServingProfile> {
         match self {
@@ -514,8 +533,11 @@ impl DaemonServices {
 /// into, and only for the invocation this process actually is.
 pub enum LaunchParts {
     /// This invocation serves nothing. `svrn mesh create` / `svrn mesh join`
-    /// mutate membership, print, and exit — the emptiness is the shape.
-    Admin,
+    /// mutate membership, print, and exit — the emptiness is the shape. `mesh`
+    /// is the node's mesh as the distribution composed it.
+    Admin {
+        mesh: crate::hosted_mesh::MeshAccess,
+    },
     /// A serving daemon's parts. `headless` is `Some` exactly on the
     /// `sovereign daemon run` bootstrap, which is the only one that owns a
     /// `ProviderFactory`, a shared mesh store, a convergence recorder and a
@@ -613,7 +635,7 @@ pub fn assemble(
                 wanted: "a headless daemon (rails + knowledge-view)",
                 got: "a serving profile with no rails",
             }),
-            LaunchParts::Admin => Err(AssemblyRefusal::Mismatch {
+            LaunchParts::Admin { .. } => Err(AssemblyRefusal::Mismatch {
                 launch: name,
                 wanted: "a headless daemon",
                 got: "mesh-admin parts",
@@ -637,7 +659,7 @@ pub fn assemble(
                 wanted: "a serving profile",
                 got: "headless rails, which the desktop has never had",
             }),
-            LaunchParts::Admin => Err(AssemblyRefusal::Mismatch {
+            LaunchParts::Admin { .. } => Err(AssemblyRefusal::Mismatch {
                 launch: name,
                 wanted: "a serving profile",
                 got: "mesh-admin parts",
@@ -649,7 +671,7 @@ pub fn assemble(
         // membership and exits. `AdminJoin` is the setup wizard's join as a
         // child process: the same admin shape, serving until stopped.
         Launch::Verb { .. } | Launch::AdminJoin { .. } => match parts {
-            LaunchParts::Admin => Ok(DaemonServices::mesh_admin()),
+            LaunchParts::Admin { mesh } => Ok(DaemonServices::mesh_admin(mesh)),
             LaunchParts::Serving { .. } => Err(AssemblyRefusal::Mismatch {
                 launch: name,
                 wanted: "a mesh-admin one-shot",
