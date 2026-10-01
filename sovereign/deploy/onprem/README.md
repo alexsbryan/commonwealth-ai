@@ -1,7 +1,8 @@
 # On-prem grounded search — IT brief
 
 **For:** the firm's IT team.
-**Time to install:** about an hour, most of it waiting for files to copy.
+**Time to install:** about an hour, most of it waiting for files to copy
+and the first index of your document share.
 **Network required:** none. This box never contacts the internet — see
 `EGRESS.md`, which accounts for every outbound call in the source.
 
@@ -14,63 +15,61 @@ entirely on one machine you control. Lawyers ask questions in plain
 English; the system searches the documents, answers, and cites the exact
 passages it used. What makes it different from a chatbot is what it does
 when it *cannot* find the answer: it says so, rather than producing a
-plausible paragraph. That behaviour is the product, and step 6 of the
+plausible paragraph. That behaviour is the product, and step 4 of the
 install proves it on your hardware before anyone logs in.
 
 ---
 
 ## Security posture — the one page
 
-**No data leaves the building.** The two processes make no outbound
-connections. That is enforced three ways: by configuration, by which
-code was compiled into the binaries, and by `IPAddressDeny=any` in the
-systemd units — so if the first two are wrong somewhere, the kernel
+**No data leaves the building.** The process makes no outbound
+connections. That is enforced three ways: by which surfaces are composed
+into the binary, by configuration, and by `IPAddressDeny=any` in the
+systemd unit — so if the first two are wrong somewhere, the kernel
 refuses the connection and logs it. `EGRESS.md` is the line-by-line
-audit, including three tools that *did* reach the internet and were
-removed at compile time.
+audit, including the tools that *did* reach the internet and are not in
+this binary.
 
-**The API is not the whole program.** Lawyers reach nginx over TLS.
-nginx allowlists exactly thirteen routes and 404s everything else.
-Behind it, two services talk only over loopback.
+**One process, one front door.** Lawyers reach nginx over TLS. nginx
+allowlists exactly fourteen routes, each with the methods it takes, and
+404s everything else. Behind it, one process listens on loopback.
 
 ```
 lawyers ──TLS──▶ nginx :443            route allowlist, access log
                     │ loopback
                     ▼
-              sovereign-server :8080     searches, answers, cites.
-                    │                    Built --no-default-features.
-                    │ loopback
-                    ▼
-              svrn daemon :9741          owns the model files.
-                    :9742 → 127.0.0.1    (internal port: no auth, ever)
+              sovereign-onprem :9741   searches, answers, cites;
+                                       owns the model files and the index.
+                    :9742, :9748 → 127.0.0.1 only (internal, serve)
 ```
 
-**Routes that could reach a shell are not in the binary.** The general
-build of this software assumes one operator who is also the developer —
-it is the same program that runs on a laptop. Under that assumption
-several surfaces are reasonable that are not reasonable here:
+**Every caller presents a key — including loopback.** install.sh writes
+API keys into the daemon's key store. A daemon holding any key
+identifies EVERY caller by key, so nginx on the same host lends a remote
+caller no trust it does not have. Keys are bearer tokens over TLS; nginx
+passes the header through and the daemon decides.
 
-| Removed from this build | What it would have allowed |
+**Routes that could reach a shell or the web are not in the binary.**
+The general build of this software assumes one operator who is also the
+developer — it is the same program that runs on a laptop. The on-prem
+binary is built from a composition that leaves out what is reasonable
+there and not here:
+
+| Not in this binary | What it would have allowed |
 |---|---|
-| `POST /v1/solve`, `/v1/cycle/bdd` | A caller-supplied command reaching a shell, *inside* the authenticated API. Any valid key would be a shell on this box. |
-| `POST /v1/documents/upload`, `/v1/corpora/upload` | Ingesting any absolute path on the server — including the config file holding the API keys — into a searchable corpus. |
-| `/mcp`, `/mcp/message`, `/mcp/stats` | A developer control channel outside the authentication layer, guarded only by a same-host check that a reverse proxy satisfies for every remote caller. |
-| The `search` tool's web fallback, `web_fetch`, `wikipedia_fetch` | Outbound calls to DuckDuckGo, Google, Wikipedia, or any URL, on an ordinary question. |
+| The code program (`/v1/solve/jobs`, `/v1/projects`) | A caller-supplied command reaching a shell. It answers a 503 naming its absence. |
+| The MCP routes (`/mcp`, `/mcp/message`, `/mcp/stats`) | A developer control channel. They answer a 503: "this distribution does not serve MCP". |
+| The `search` tool's web fallback, `web_fetch`, `wikipedia_fetch`, `probe_url` | Outbound calls to DuckDuckGo, Google, Wikipedia, or any URL, on an ordinary question. |
 
-The last row is the one worth dwelling on: those three fired on normal
-turns, had no configuration switch, and were not removed by the same
-build flag that removed the others. We found them by auditing the source
-for this deployment. They are gone from this binary, and check 0c of the
-acceptance suite verifies that on your box.
-
-**Authentication** is a static bearer token per key, over TLS. `nginx`
-passes the header through; the application decides. Note the pilot's
-tenancy model below — one shared tenant — which is a real limit, not a
-detail.
+Ingesting a server-side path (`POST /v1/documents`, the corpus register
+routes) is still in the binary, because that is how IT indexes the
+document share — and it takes IT's key. A lawyer's key is refused it by
+name, and nginx does not proxy it. Acceptance check 0 proves all of this
+at the daemon's own port, not only through nginx.
 
 **Logging.** nginx records who reached what and when. It does not record
-question or answer text. The application journals to systemd. Questions
-and answers are stored in one SQLite file (see Backup).
+question or answer text. The process journals to systemd. Questions and
+answers are stored in one SQLite file (see Backup).
 
 ---
 
@@ -95,30 +94,35 @@ sudo ./install.sh --docs /srv/firm-docs --hostname firm-rag.example.com
 and never writes to them.
 
 `install.sh` creates a service account, stages the binaries, models and
-OCR assets, writes both configs, restores the prebuilt legal corpus,
-registers the document share, and enables both units. It is idempotent —
-re-running it will not overwrite your configs or regenerate keys.
+OCR assets, writes the config, and starts the process twice. First
+without keys, on loopback, to restore the prebuilt legal corpus and
+index the document share (the slow step on a large share). Then it
+issues two API keys, writes the corpus allow-list, and starts it with
+keys. It is idempotent — re-running it will not overwrite your config or
+regenerate keys.
 
 Then four things it cannot do for you:
 
 ```bash
-# 3. TLS certificates.
+# 1. TLS certificates.
 sudo install -D -m 0644 fullchain.pem /etc/ssl/firm-rag/fullchain.pem
 sudo install -D -m 0600 privkey.pem   /etc/ssl/firm-rag/privkey.pem
 sudo nginx -t && sudo systemctl reload nginx
 
-# 4. Fill in the three probes. See the comments in the file — they must
-#    come from your practice area and one of your own scans.
+# 2. Fill in the probes. See the comments in the file — they must come
+#    from your practice area and one of your own scans.
 sudo $EDITOR /etc/firm-rag/acceptance-probes.env
 
-# 5. Collect the API key (root-readable only) and hand it out.
+# 3. Collect the keys (root-readable only). 'firm' is the lawyers' key;
+#    'it' is yours.
 sudo cat /etc/firm-rag/issued-keys.txt
 
-# 6. Prove it. Against the TLS hostname, NOT localhost.
-sudo ./acceptance.sh; echo "exit=$?"
+# 4. Prove it. Against the daemon's port AND the TLS hostname.
+sudo BASE_URL=https://firm-rag.example.com \
+     API_KEY=<firm key> ADMIN_KEY=<it key> ./acceptance.sh; echo "exit=$?"
 ```
 
-**Step 6 is the install.** Gate on the exit code:
+**Step 4 is the install.** Gate on the exit code:
 
 | Exit | Meaning |
 |---|---|
@@ -126,46 +130,49 @@ sudo ./acceptance.sh; echo "exit=$?"
 | `1` | Something failed. The output names what and why. Do not proceed. |
 | `2` | Something could not be *judged* — a probe is missing, a service did not answer. **Not a pass.** Resolve and re-run. |
 
-The suite runs twelve checks in six groups: the dangerous routes are
-gone (0), an unauthenticated request is refused (0b), the outbound tools
-are not registered (0c), the models are loaded (1), the legal corpus is
-present (2), an answer carries real citations (3), an unanswerable
-question produces a refusal rather than a guess (4), and a scanned PDF
-produces searchable text (5).
-
-We built the suite to distinguish "failed" from "could not tell", and
-tested it against a dead box, a correctly-hardened stub, and a
-deliberately leaky one, to confirm it reports each correctly. An earlier
-version reported an unreachable service as "route is REACHABLE", which
-is the worst thing a security check can say.
+The suite checks, in order: the shell, upload and MCP routes are never
+served (0), a request with no key is refused on every client route (0b),
+no web tool is held (0c), every allow-listed corpus is listed (2), an
+answer carries real citations (3), an unanswerable question produces a
+refusal rather than a guess (4), the models are loaded (1, read after
+the questions, since the main model loads on first use), and a scanned
+PDF produces searchable text (5). Checks 0 and 0b run at the daemon's
+port and through nginx; without `BASE_URL` the nginx leg is reported as
+never run.
 
 ---
 
 ## Day-to-day
 
 ```bash
-systemctl status firm-rag-daemon firm-rag-server
-journalctl -u firm-rag-daemon -f
-journalctl -u firm-rag-server -f
+systemctl status firm-rag
+journalctl -u firm-rag -f
 
 # Is the system answering?
 curl -sf https://<host>/health          # expect: ok
 
-# What is in the index, and what did the last sweep skip?
-sudo -u firmrag /opt/firm-rag/bin/svrn corpus watch-status firm-docs
-sudo -u firmrag /opt/firm-rag/bin/svrn corpus watch-status firm-docs --failures
+# What is in the index, and what did the last sweep skip? (IT's key;
+# the corpus id is in [retrieval] corpora in /etc/firm-rag/daemon-config.toml)
+curl -s -H "Authorization: Bearer <it key>" \
+    http://127.0.0.1:9741/internal/corpus/watch/state/<corpus id> | jq
 ```
 
 That last command is the one to check after adding documents. Files the
-system could not read are listed there with a reason — encrypted PDFs,
-formats with no extractor, scans it could not OCR. Nothing is silently
-dropped, but nothing announces itself either: you have to look.
+system could not read are listed under `failed_files` with a reason —
+encrypted PDFs, formats with no extractor, scans it could not OCR.
+Nothing is silently dropped, but nothing announces itself either: you
+have to look.
 
 **Adding documents:** copy them into the watched share. A sweep runs
 every five minutes and picks up additions, edits and deletions.
 
-**Restarting:** `systemctl restart firm-rag-daemon` reloads the models
-and takes 30-90 seconds. The API returns errors during that window.
+**Keys:** `svrn daemon key --add <name>` (add `--group admin` for IT),
+`--revoke <name>`, `--list`, run as the service account with
+`SVRNMESH_DATA_DIR=/var/lib/firm-rag`. The process reads keys when it
+starts: `systemctl restart firm-rag` after a change.
+
+**Restarting:** `systemctl restart firm-rag` reloads the models and
+takes 30-90 seconds. The API returns errors during that window.
 
 ---
 
@@ -176,23 +183,43 @@ Everything that matters is in two places:
 | Path | What | Replaceable? |
 |---|---|---|
 | `/var/lib/firm-rag/sovereign.db` | **every conversation and answer** | No. This is the only irreplaceable file. |
+| `/var/lib/firm-rag/client-tokens/` | the API keys | Yes, but losing them means reissuing every key |
 | `/var/lib/firm-rag/indexes/` | the search index | Yes — rebuilt from the documents, slowly |
-| `/etc/firm-rag/` | both configs and the issued keys | Yes, but losing the keys means reissuing them |
+| `/etc/firm-rag/` | the config and the issued-keys record | Yes |
 | `/var/lib/firm-rag/models/` | model weights | Yes — from the kit |
 
 ```bash
-systemctl stop firm-rag-server firm-rag-daemon
+systemctl stop firm-rag
 tar -czf firm-rag-backup-$(date +%F).tar.gz \
-    /var/lib/firm-rag/sovereign.db /etc/firm-rag
-systemctl start firm-rag-daemon firm-rag-server
+    /var/lib/firm-rag/sovereign.db /var/lib/firm-rag/client-tokens /etc/firm-rag
+systemctl start firm-rag
 ```
 
-Stop the services first. SQLite is being written to while they run, and
-a copy taken mid-write may not restore.
+Stop the service first. SQLite is being written to while it runs, and a
+copy taken mid-write may not restore.
 
 Restore is the reverse, onto the same version of the software. The
 documents themselves are on your share and are never modified by this
 system, so they are covered by whatever already backs that share up.
+
+---
+
+## Settings that moved
+
+The kit used to run a second process, `sovereign-server`, with its own
+`server-config.toml`. Both are gone. Where each setting went:
+
+| server-config.toml | Now |
+|---|---|
+| `[auth] mode`, `[auth.keys]` | the daemon's key store, `svrn daemon key` (install.sh issues `firm` and `it`) |
+| `[retrieval] corpora` | `[retrieval] corpora` in `daemon-config.toml`, written by install.sh with the ids it installed |
+| `[server] bind` | `[daemon] client_bind` / `client_port` (`install.sh --port`) |
+| `[store] path` | `/var/lib/firm-rag/sovereign.db`, under `[data] dir` |
+| `[inference]`, `[[inference.backends]]` | dropped: one process owns the weights (`[models]`) |
+| `[server] max_concurrent_turns`, `max_per_user`, `max_queue_depth`, `retry_after_secs` | dropped: the daemon has no such keys |
+| `[server] cors`, `allow_unauthenticated_remote` | dropped: no daemon equivalent; nginx is the only remote door |
+| `[knowledge_view] enabled` | dropped: the daemon has no such key |
+| `[iroh]` | `[iroh]` in `daemon-config.toml` (and not started at all here: EGRESS.md §5) |
 
 ---
 
@@ -201,25 +228,21 @@ system, so they are covered by whatever already backs that share up.
 These are pilot constraints we chose, not defects to be discovered. Each
 is listed with what it would take to remove.
 
-**One shared tenant.** Every API key sees every document *and every
-conversation*. There is no per-user or per-matter access control. Two
-consequences:
+**One corpus scope for every key.** Each key owns its own conversations
+— a key cannot list or read another key's. But every key retrieves from
+the same `[retrieval] corpora`. There is no per-user or per-matter
+document access control:
 
 - **A matter under an ethical wall must not be ingested into this
-  system.** A conflicts screen is incompatible with one shared tenant.
-  This is the constraint most likely to matter to the firm, and it is
-  not a setting we can turn on.
-- Two practice groups cannot share this box. The conversation list is
-  filtered by tenant *after* the database limit is applied, so a busy
-  colleague's afternoon would make your own conversation list render
-  empty. **Hard blocker for a second group** — not a tuning problem.
+  system.** A conflicts screen needs per-matter corpus grants, which
+  this pilot does not have. This is the constraint most likely to matter
+  to the firm, and it is not a setting we can turn on.
 
-**No single sign-on.** Static bearer tokens, issued by hand, revoked by
-editing a config and restarting. Fine for a dozen pilot users; not fine
-for a firm.
+**No single sign-on.** Static bearer keys, issued and revoked with
+`svrn daemon key`, effective at the next restart. Fine for a dozen pilot
+users; not fine for a firm.
 
-**Concurrency.** Questions queue on one model. The box is configured for
-four at a time; beyond that, callers wait. The REST API gives no
+**Concurrency.** Questions queue on one model. The REST API gives no
 "you are third in line" signal while waiting — it simply takes longer.
 Roughly ten simultaneous users is where this becomes noticeable.
 
@@ -229,54 +252,54 @@ PDFs are handled via OCR. **Not supported: `.doc`, `.msg`, `.pst`,
 is not a small piece of work.
 
 **OCR quality.** Scanned pages are read by a recognition model and then
-cleaned up by the language model. It is good, not perfect. A misread
+cleaned up by the language model. On a keyed box the clean-up call is
+currently refused (EGRESS.md §4), so scans are indexed as raw
+recognised text, marked as such. It is good, not perfect. A misread
 digit in a damages figure is a real failure mode; treat OCR'd text as a
 finding aid pointing at the original page, not as the record.
 
 **No desktop app, no mesh, no mobile access.** All deliberately out of
 scope for the pilot.
 
-**Test coverage.** The API layer in this configuration has no automated
-tests in our CI, and no release job builds it. `acceptance.sh` exists
-because of that: it is the compensating control, and it runs on *your*
-box against the binaries you actually installed. We would rather tell
-you this than have you find it.
+**Test coverage.** The on-prem binary's composition and its key-scoped
+routes are tested in our CI on a model-free engine. Nothing there runs
+your models, your corpus or your nginx: `acceptance.sh` is the control
+for that, and it runs on *your* box against the binaries you actually
+installed.
 
 ---
 
 ## If something goes wrong
 
-**The daemon will not start.** It refuses to start rather than starting
+**The service will not start.** It refuses to start rather than starting
 degraded, so the journal names the reason:
-`journalctl -u firm-rag-daemon -n 100`. Most likely causes, in order:
+`journalctl -u firm-rag -n 100`. Most likely causes, in order:
 
 1. A model path in `daemon-config.toml` that does not exist. The startup
    check labels the slot `UNREADABLE` and prints a repair hint.
 2. A corrupt model file — copied incompletely from the kit. This one is
    not caught by the startup check; it fails later with
    `failed to load models`. Re-verify against `MANIFEST.sha256`.
-3. On a hardened or containerized host, a multicast socket bind. The
-   shipped config sets `[discovery] mdns = false` to avoid it; if you
-   edited that key, put it back.
+3. A port another process holds (9741, 9742 or 9748).
+
+**Every request gets 401.** That is right without a key. With one, the
+key may have been added after the process started — restart it — or
+revoked.
 
 **Answers have no citations.** Check that the corpus is listed
 (`curl -H "Authorization: Bearer <key>" https://<host>/v1/corpora`) and
-that `[retrieval] corpora` in `server-config.toml` names it. A typo
-there is silent — neither config file rejects unknown keys, which is why
-`acceptance.sh` re-reads values from the running system rather than
-trusting the file.
+that `[retrieval] corpora` in `daemon-config.toml` names it. On a keyed
+box an empty or misspelled allow-list grants nothing, silently — which
+is why `acceptance.sh` check 2 re-reads the list against the running
+system rather than trusting the file.
 
-**Scanned PDFs are not searchable.** Run
-`svrn corpus watch-status firm-docs --failures`. If they appear as
-`scanned_no_text`, OCR is not running; the daemon journal will carry an
-`ocr:unavailable` line naming every path it looked in for the OCR
-models. If they do *not* appear as failed but still are not searchable,
-OCR ran and produced poor text — check the journal for a
-`raw OCR (cleanup unavailable)` marker.
+**Scanned PDFs are not searchable.** Read the watched corpus's
+`failed_files` (Day-to-day, above). If they appear as `scanned_no_text`,
+OCR is not running; the journal will carry an `ocr:unavailable` line
+naming every path it looked in for the OCR models.
 
 **Everything is slow.** One model, one queue. Check for a re-index
-running against the document share
-(`svrn corpus watch-status firm-docs`) — a large addition can occupy the
+running against the document share — a large addition can occupy the
 box for a while.
 
 ---
@@ -285,10 +308,11 @@ box for a while.
 
 In the order we would build it, each tied to a limit above:
 
-1. **Per-matter access control.** Removes the ethical-wall constraint and
-   unblocks a second practice group. Largest piece of work here, and the
-   one that turns a pilot into something the firm can standardise on.
-2. **SSO** against the firm's identity provider.
+1. **Per-matter access control.** Removes the ethical-wall constraint.
+   Largest piece of work here, and the one that turns a pilot into
+   something the firm can standardise on.
+2. **SSO** against the firm's identity provider, producing the same
+   key-shaped identity the daemon already decides on.
 3. **`.msg` / `.pst` ingestion.** The litigation-specific gap.
 4. **Queue position and progress** on the REST path, so a slow answer
    looks like a slow answer rather than a broken system.
@@ -301,17 +325,17 @@ In the order we would build it, each tied to a limit above:
 
 | Path | What |
 |---|---|
-| `/opt/firm-rag/bin/` | four binaries |
-| `/var/lib/firm-rag/` | models, OCR assets, search index, **conversations** |
-| `/etc/firm-rag/daemon-config.toml` | model paths, ports, network switches |
-| `/etc/firm-rag/server-config.toml` | API keys, retrieval scope |
-| `/etc/firm-rag/issued-keys.txt` | generated keys, mode 0600 |
-| `/etc/firm-rag/acceptance-probes.env` | your three test probes |
-| `/etc/systemd/system/firm-rag-{daemon,server}.service` | the two units |
+| `/opt/firm-rag/bin/` | `sovereign-onprem`, and the `svrn` CLI with the two siblings its install verbs run |
+| `/var/lib/firm-rag/` | models, OCR assets, search index, keys, **conversations** |
+| `/var/lib/firm-rag/config.toml` | a link to the config, the path the `svrn` verbs read |
+| `/etc/firm-rag/daemon-config.toml` | model paths, ports, retrieval scope, network switches |
+| `/etc/firm-rag/issued-keys.txt` | the keys install.sh issued, mode 0600 |
+| `/etc/firm-rag/acceptance-probes.env` | your test probes |
+| `/etc/systemd/system/firm-rag.service` | the one unit |
 | `/etc/nginx/conf.d/firm-rag.conf` | TLS + the route allowlist |
 | `/etc/nginx/snippets/firm-rag-proxy.conf` | shared proxy settings |
 
-Both `.toml` files are commented in detail, including which keys are
-dangerous to change and why. They are worth reading before editing —
-neither rejects an unknown key, so a typo is silently ignored rather
-than reported.
+`daemon-config.toml` is commented in detail, including which keys are
+dangerous to change and why. It is worth reading before editing — it
+rejects no unknown key, so a typo is silently ignored rather than
+reported.

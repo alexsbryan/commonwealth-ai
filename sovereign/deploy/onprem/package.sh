@@ -11,21 +11,19 @@
 #   firm-rag-<version>.tar.zst
 #   firm-rag-<version>.tar.zst.sha256
 #
-# ── The two build flags that matter ──────────────────────────────────
-#   sovereign-server --no-default-features
-#       drops `dev-routes` (the shell-reaching and absolute-path-ingesting
-#       routes) AND `net-tools` (the three agent tools that reach the open
-#       internet on ordinary chat turns). Both are default-ON so every
-#       other build in the fleet is unchanged; this is the one build that
-#       asks for neither.
-#   sovereign-cli-daemon --features ocr
-#       compiles in the PaddleOCR engine. Without it a scanned PDF is
-#       reported as scanned_no_text and never indexed — and for a
+# ── What gets built ──────────────────────────────────────────────────
+#   sovereign-onprem --features ocr
+#       the on-prem distribution: ONE process composing svrn, serve and
+#       ingest, and nothing that reaches a shell, the web or an arbitrary
+#       server-side path. Those surfaces are not composed in the binary
+#       (docs/FIVE_PROGRAMS.md §2c; sovereign/crates/sovereign-onprem).
+#       `ocr` compiles in the PaddleOCR engine. Without it a scanned PDF
+#       is reported as scanned_no_text and never indexed — and for a
 #       litigation practice, scans ARE the corpus.
-#
-# `sovereign-server` is NOT in the standard release set
-# (scripts/release-cli-local.sh builds sovereign-cli, -cli-daemon,
-# -cli-llm). That is why this script builds it explicitly.
+#   sovereign-cli (installed as `svrn`), sovereign-cli-daemon, svrn-ingest
+#       the CLI siblings install.sh's verbs exec: `svrn daemon key` (the
+#       API keys) and `svrn corpus snapshot restore` (the legal corpus).
+#       The dispatcher is the default build — no dev-tools verbs.
 
 set -euo pipefail
 
@@ -34,7 +32,8 @@ KIT_SRC="$REPO_ROOT/sovereign/deploy/onprem"
 
 OUT_DIR=""
 VERSION=""
-TARGET="x86_64-unknown-linux-gnu"
+TARGET=""
+PROFILE="release"
 SKIP_CORPUS=0
 SKIP_MODELS=0
 MODELS_SRC="${MODELS_SRC:-$HOME/.svrnmesh/models}"
@@ -49,7 +48,12 @@ usage: ./package.sh --out <dir> --version <ver> [options]
   --out <dir>       where to write the archive
   --version <ver>   version string, e.g. 2026.08.03
 
-  --target <triple> default x86_64-unknown-linux-gnu
+  --target <triple> cross-compile target (default: the host, built into
+                    target/<profile>)
+  --profile <name>  cargo profile (default release). `dev` packages the
+                    debug build this repo's own nodes run, which is how
+                    the kit is proven on a dev host without a release
+                    build.
   --models <dir>    GGUF source dir (default $HOME/.svrnmesh/models,
                     override with MODELS_SRC)
   --skip-corpus     do not build/publish the us-code snapshot
@@ -62,6 +66,7 @@ while [ $# -gt 0 ]; do
         --out)     OUT_DIR="${2:-}"; shift 2 ;;
         --version) VERSION="${2:-}"; shift 2 ;;
         --target)  TARGET="${2:-}"; shift 2 ;;
+        --profile) PROFILE="${2:-}"; shift 2 ;;
         --models)  MODELS_SRC="${2:-}"; shift 2 ;;
         --skip-corpus) SKIP_CORPUS=1; shift ;;
         --skip-models) SKIP_MODELS=1; shift ;;
@@ -72,6 +77,7 @@ done
 
 [ -n "$OUT_DIR" ] || { usage; die "--out is required"; }
 [ -n "$VERSION" ] || { usage; die "--version is required"; }
+[ -n "$PROFILE" ] || { usage; die "--profile needs a value"; }
 command -v zstd >/dev/null || die "zstd is not installed"
 
 STAGE="$(mktemp -d)"
@@ -80,69 +86,81 @@ trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$KIT"/{bin,models,ocr,corpora,config,systemd,nginx}
 
 # ── 1. Binaries ──────────────────────────────────────────────────────
-# Release profile here, unlike day-to-day work in this repo: this is the
+# Release by default, unlike day-to-day work in this repo: this is the
 # artifact a firm runs for months, not an iteration.
-say "building binaries ($TARGET)"
+HOST_TRIPLE="$(rustc -vV | awk '/^host:/ { print $2 }')"
+case "$PROFILE" in
+    dev) PROFILE_DIR=debug ;;
+    *)   PROFILE_DIR="$PROFILE" ;;
+esac
+target_args=()
+if [ -n "$TARGET" ]; then
+    target_args=(--target "$TARGET")
+    BIN="$REPO_ROOT/target/$TARGET/$PROFILE_DIR"
+else
+    BIN="$REPO_ROOT/target/$PROFILE_DIR"
+fi
+say "building binaries (${TARGET:-host $HOST_TRIPLE}, profile $PROFILE)"
 cd "$REPO_ROOT"
+cargo build --profile "$PROFILE" "${target_args[@]}" \
+    -p sovereign-onprem --features sovereign-onprem/ocr \
+    -p sovereign-cli -p sovereign-cli-daemon \
+    -p sovereign-pipeline --bin svrn-ingest --bin sovereign-onprem \
+    --bin sovereign-cli --bin sovereign-cli-daemon
 
-say "  sovereign-server --no-default-features"
-cargo build --release --target "$TARGET" \
-    -p sovereign-server --no-default-features
-say "  sovereign-cli, -cli-daemon (--features ocr), -cli-llm"
-cargo build --release --target "$TARGET" \
-    -p sovereign-cli -p sovereign-cli-llm
-cargo build --release --target "$TARGET" \
-    -p sovereign-cli-daemon --features ocr
-
-BIN="$REPO_ROOT/target/$TARGET/release"
 # `svrn` IS sovereign-cli: the dispatcher resolves siblings by exact
-# filename next to its own path, so the other three keep their names.
+# filename next to its own path, so the others keep their names.
+install -m 0755 "$BIN/sovereign-onprem"     "$KIT/bin/sovereign-onprem"
 install -m 0755 "$BIN/sovereign-cli"        "$KIT/bin/svrn"
 install -m 0755 "$BIN/sovereign-cli-daemon" "$KIT/bin/sovereign-cli-daemon"
-install -m 0755 "$BIN/sovereign-cli-llm"    "$KIT/bin/sovereign-cli-llm"
-install -m 0755 "$BIN/sovereign-server"     "$KIT/bin/sovereign-server"
+install -m 0755 "$BIN/svrn-ingest"          "$KIT/bin/svrn-ingest"
 
 # Prove the hardening is in the artifact HERE, rather than discovering it
 # on their box.
 #
 # ── What this gate can and cannot see ────────────────────────────────
-# Measured on a real `--no-default-features` build, because the first
-# version of this gate was wrong twice and both failures were silent:
+#   * Substring, never whole-line: Rust packs string literals into one
+#     blob, so `strings` emits them glued to their neighbours and an
+#     exact-line match returns 0 whether the code is compiled in or not.
 #
-#   * `grep -qx` (whole-line match) NEVER matches. Rust packs string
-#     literals into one blob, so `strings` emits them glued to their
-#     neighbours; an exact-line match on any literal returns 0 whether
-#     the code is compiled in or not. The original gate always passed
-#     and therefore proved nothing. Substring matching is required.
+#   * These literals are carried ONLY by crates on-prem does not compose:
+#     code's solve-events route (sovereign-code solve_http.rs) and
+#     `probe_url`'s worked example (sovereign-recipe-author probe_url.rs).
+#     A hit means the binary links one of them. They are the list
+#     sovereign-onprem/tests/sealed_composition_e2e.rs's NOT_COMPOSED
+#     watches absent on-prem and present in stock (pinned equal by
+#     corpus-engine/xtask/tests/onprem_kit_allowlist.rs).
 #
-#   * The ROUTE literals genuinely disappear (`/v1/solve` and
-#     `/mcp/stats` → 0 substring matches; `/v1/conversations`, which IS
-#     registered, → 1). They live in this crate behind `#[cfg]`, so a
-#     hit is real evidence. That is a sound gate and it is enforced.
-#
-#   * The TOOL IDS do NOT disappear (`web_fetch` → 7 matches,
-#     `wikipedia_fetch` → 2, on a correctly hardened build). They come
-#     from `sovereign-tools`, which stays linked; `net-tools` gates the
-#     REGISTRATION, not the type. Grepping for them here would refuse to
-#     package a correct kit. That check is deliberately NOT made — the
-#     sound proof is `acceptance.sh` check 0c, which enumerates
-#     `GET /v1/tools` on the running server, and it runs on their box.
+#   * TOOL IDS are not checkable here. sovereign-contracts names
+#     `web_fetch`, `wikipedia_fetch` and `probe_url` as routing data in
+#     every build, so grepping for them would refuse a correct kit. The
+#     sound proof is acceptance.sh check 0c, which enumerates
+#     `GET /v1/tools` on the running daemon.
+NOT_COMPOSED=(
+    "/v1/solve/jobs/{id}/events"
+    "Confirm CourtListener v4 endpoint shape"
+)
 say "verifying the hardened build"
-for sym in /v1/solve /v1/cycle/bdd /mcp/stats; do
-    if LC_ALL=C strings -a "$KIT/bin/sovereign-server" 2>/dev/null | grep -q -- "$sym"; then
-        die "sovereign-server still contains the route literal '$sym'.
-     It was NOT built with --no-default-features. Refusing to package."
+# Read once and searched with here-strings, never `printf | grep -q`:
+# under pipefail grep's early exit SIGPIPEs the printf, and a HIT then
+# reads as a miss.
+ONPREM_STRINGS="$(LC_ALL=C strings -a "$KIT/bin/sovereign-onprem" 2>/dev/null)"
+for sym in "${NOT_COMPOSED[@]}"; do
+    if grep -qF -- "$sym" <<< "$ONPREM_STRINGS"; then
+        die "sovereign-onprem contains '$sym', a literal only sovereign-code or
+     sovereign-recipe-author carries. It links a surface on-prem must not
+     compose. Refusing to package."
     fi
 done
 # Positive control: if this literal is ALSO absent, `strings` did not
-# read the binary and the three checks above were vacuous. A gate that
-# cannot fail is not a gate.
-LC_ALL=C strings -a "$KIT/bin/sovereign-server" 2>/dev/null | grep -q -- "/v1/conversations" \
-    || die "the control literal '/v1/conversations' is missing too, which means this
-     check read nothing. Do not trust the three route assertions above."
-echo "    dev-routes route literals absent (control literal present)"
-echo "    net-tools: not checkable from the binary — acceptance.sh check 0c"
-echo "               proves it at runtime on the target box"
+# read the binary and the checks above were vacuous. A gate that cannot
+# fail is not a gate.
+grep -qF -- "/v1/conversations/{id}/messages" <<< "$ONPREM_STRINGS" \
+    || die "the control literal '/v1/conversations/{id}/messages' is missing too,
+     which means this check read nothing. Do not trust the assertions above."
+echo "    code-only and recipe-author-only literals absent (control literal present)"
+echo "    tool ids: not checkable from the binary — acceptance.sh check 0c"
+echo "              proves them at runtime on the target box"
 
 # ── 2. Models ────────────────────────────────────────────────────────
 if [ "$SKIP_MODELS" -eq 0 ]; then
@@ -174,7 +192,7 @@ fi
 say "OCR assets"
 FETCH="$REPO_ROOT/scripts/fetch-desktop-binaries.sh"
 if [ -x "$FETCH" ]; then
-    "$FETCH" "$TARGET" || die "fetch-desktop-binaries.sh failed"
+    "$FETCH" "${TARGET:-$HOST_TRIPLE}" || die "fetch-desktop-binaries.sh failed"
 fi
 DESKTOP_BIN="$REPO_ROOT/sovereign/crates/sovereign-desktop/src-tauri/binaries"
 if [ -d "$DESKTOP_BIN/paddle-ocr" ]; then
@@ -190,7 +208,7 @@ if [ -d "$DESKTOP_BIN/paddle-ocr" ]; then
     echo "    paddle-ocr (12.6 MB) + libpdfium.so (7.6 MB)"
 else
     die "no OCR assets at $DESKTOP_BIN/paddle-ocr. Run:
-     $FETCH $TARGET"
+     $FETCH ${TARGET:-$HOST_TRIPLE}"
 fi
 
 # ── 4. Corpus snapshot ───────────────────────────────────────────────
@@ -202,7 +220,7 @@ if [ "$SKIP_CORPUS" -eq 0 ]; then
     say "publishing the us-code snapshot"
     "$BIN/sovereign-cli" corpus snapshot publish us-code \
         || die "snapshot publish failed — is the us-code corpus built and the daemon up?"
-    snap="$(find "$HOME/.svrnmesh/snapshots" "$HOME/.svrnmesh/snapshots" \
+    snap="$(find "$HOME/.svrnmesh/snapshots" \
               -name 'us-code*.tar.zst' -newermt '-10 minutes' 2>/dev/null | head -n1)"
     [ -n "$snap" ] || die "published, but could not locate the archive"
     cp "$snap" "$KIT/corpora/us-code.tar.zst"
@@ -219,7 +237,6 @@ install -m 0755 "$KIT_SRC/acceptance.sh" "$KIT/acceptance.sh"
 install -m 0644 "$KIT_SRC/README.md"     "$KIT/README.md"
 install -m 0644 "$KIT_SRC/EGRESS.md"     "$KIT/EGRESS.md"
 install -m 0644 "$KIT_SRC/daemon-config.toml" "$KIT/config/daemon-config.toml"
-install -m 0644 "$KIT_SRC/server-config.toml" "$KIT/config/server-config.toml"
 install -m 0644 "$KIT_SRC/acceptance-probes.env.template" "$KIT/config/"
 install -m 0644 "$KIT_SRC/systemd/"*.service "$KIT/systemd/"
 install -m 0644 "$KIT_SRC/nginx/"*.conf     "$KIT/nginx/"

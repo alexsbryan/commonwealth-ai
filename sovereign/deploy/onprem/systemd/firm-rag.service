@@ -1,9 +1,8 @@
 [Unit]
-# The daemon owns the GGUFs. It is the ONLY process that loads model
-# weights; sovereign-server delegates inference to it over loopback via a
-# `type = "remote"` backend, so the weights are paid for once. Running
-# both with embedded engines would double VRAM and neither would fit.
-Description=firm-rag inference daemon (svrnmesh) — owns the model weights
+# ONE process: the on-prem distribution (sovereign-onprem) owns the model
+# weights, the index, the conversations and the client API nginx proxies
+# to. It composes no shell, web or MCP surface (docs/FIVE_PROGRAMS.md §2c).
+Description=firm-rag grounded search (sovereign-onprem) — the client API and the model weights
 Documentation=file:/opt/firm-rag/README.md
 After=network.target
 # NOT network-online.target: this box makes no outbound connections (see
@@ -12,7 +11,7 @@ After=network.target
 # A daemon that dies instantly on every start (bad config, missing GGUF,
 # held port) must not relaunch forever. Five failures in ten minutes and
 # it stays down until someone looks:
-#   systemctl reset-failed firm-rag-daemon
+#   systemctl reset-failed firm-rag
 StartLimitIntervalSec=600
 StartLimitBurst=5
 
@@ -21,9 +20,8 @@ Type=simple
 User=firmrag
 Group=firmrag
 
-# `daemon run` runs in the foreground. `daemon start` DETACHES and would
-# make systemd think the service exited immediately — the single most
-# common way to get this unit wrong.
+# `run` runs in the foreground; this binary takes the argv
+# `svrn daemon run` takes, and never detaches.
 #
 # `--config` is passed explicitly rather than relying on the canonical
 # `$HOME/.svrnmesh/config.toml`: that path is resolved through the
@@ -32,7 +30,7 @@ Group=firmrag
 # file. With --config the operator owns the path, and the first-boot
 # wizard is skipped — a missing file becomes a clean error instead of a
 # daemon waiting on a TTY that will never arrive.
-ExecStart=/opt/firm-rag/bin/svrn daemon run --config /etc/firm-rag/daemon-config.toml
+ExecStart=/opt/firm-rag/bin/sovereign-onprem run --config /etc/firm-rag/daemon-config.toml
 
 WorkingDirectory=/var/lib/firm-rag
 # HOME is set so that any home-derived fallback path inside the process
@@ -43,6 +41,9 @@ WorkingDirectory=/var/lib/firm-rag
 # SOVEREIGN_DATA_DIR. Keep the three in agreement by hand.
 Environment=HOME=/var/lib/firm-rag
 Environment=SOVEREIGN_DATA_DIR=/var/lib/firm-rag
+# serve, hosted in this process, binds this loopback port (it joins no
+# mesh). install.sh --port moves it with the client port.
+Environment=SOVEREIGN_SERVE_PORT=9748
 # OCR assets, staged by install.sh. Both are required on an air-gapped
 # box: paddle::models_root()'s built-in fallback is a hardcoded
 # ~/.svrnmesh path that a service user never has, and there is no system
@@ -84,24 +85,20 @@ LockPersonality=yes
 
 # ── Egress: denied by the kernel, not by configuration ───────────────
 # The config in /etc/firm-rag/daemon-config.toml switches off the
-# Wikipedia freshness poller, iroh/n0 relays, n0 DNS, and mDNS. This
-# enforces that independently of whether those keys are correct, whether
-# a future upgrade changes a default, or whether a key was silently
-# dropped — which this schema does without warning, since it sets no
-# `deny_unknown_fields`.
+# Wikipedia freshness poller, iroh/n0 relays, n0 DNS, and mDNS, and the
+# binary composes no web tool. This enforces that independently of
+# whether those keys are correct, whether a future upgrade changes a
+# default, or whether a key was silently dropped — which this schema does
+# without warning, since it sets no `deny_unknown_fields`. See EGRESS.md.
 #
-# The daemon's MCP surface still registers `wikipedia_fetch`, which has
-# no cargo feature to remove it (unlike the server's). This line is the
-# control for it. See EGRESS.md §1.
-#
-# Loopback only: the daemon serves :9741 to sovereign-server and binds
-# :9742 to 127.0.0.1. It has no peers.
+# Loopback only: the process serves :9741 to nginx and binds :9742 and
+# serve's :9748 to 127.0.0.1. It has no peers.
 IPAddressDeny=any
 IPAddressAllow=localhost
 
 ReadWritePaths=/var/lib/firm-rag
-# The config holds no secrets (the client token is auto-generated under
-# the data dir) but it is the deployment contract — read-only so a
+# The config holds no secrets (the API keys live under the data dir,
+# client-tokens/) but it is the deployment contract — read-only so a
 # compromised process cannot rewrite its own binds.
 ReadOnlyPaths=/etc/firm-rag
 # The mounted share holding the firm's documents. Read-only: this system
@@ -117,7 +114,7 @@ ReadOnlyPaths=/srv/firm-docs
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=firm-rag-daemon
+SyslogIdentifier=firm-rag
 
 [Install]
 WantedBy=multi-user.target
