@@ -1460,13 +1460,9 @@ whose `finish:` bullet names it. `target/ralph/phase-b/validate_queue.py` checks
 
 ```owners
 sovereign-cli-llm → sovereign-mesh | pb-mesh-dissolve
-sovereign-daemon → commonwealth-core | pb-mesh-exit-transport
-sovereign-daemon → commonwealth-media | pb-distribution
-sovereign-daemon → commonwealth-transport | pb-mesh-exit-transport
 sovereign-daemon → sovereign-mesh | pb-mesh-exit-mesh
 sovereign-mesh → corpus-engine | pb-mesh-dissolve
 sovereign-mesh → sovereign-work-atlas (dev) | pb-mesh-dissolve
-sovereign-daemon → commonwealth-discovery | pb-mesh-exit-transport
 ```
 
 ### Owner histogram (phase-b-30)
