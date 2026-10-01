@@ -124,7 +124,11 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // Re-keyed 2026-09-17 (REVIEW-audit-daemon-1): the mesh host cluster moved
     // to `sovereign-daemon` (domains dm-daemon-mesh-edge/jobs/adapters). Path
     // only — every count below is unchanged, the sites travelled with the file.
-    ("sovereign/crates/sovereign-daemon/src/mesh_http.rs", Class::Mesh, 16),
+    // Re-keyed again 2026-09-30: 6ce37cfe9 moved the trailing `#[cfg(test)]`
+    // module to `mesh_http_tests.rs` under `#[path]` (the file crossed its
+    // size slack) without re-running this census — every construction site
+    // travelled with the tests, path only, class unchanged.
+    ("sovereign/crates/sovereign-daemon/src/mesh_http_tests.rs", Class::Mesh, 17),
     // NEW (2026-09-04, cw-lift 2f, bc600f424): the ring rail's anti-entropy
     // sender. `exchange` POSTs a RingSyncRequest to `/internal/ring/sync` on
     // each online peer, plus the inline `#[cfg(test)]` module that binds a
