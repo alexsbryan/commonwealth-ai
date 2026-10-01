@@ -150,6 +150,67 @@ fn owning_package(root: &Path, bin: &str) -> String {
     panic!("no package under {CRATE_ROOTS:?} builds a binary named {bin}")
 }
 
+/// The text of the CI workflow step named `name`, up to the next step.
+fn workflow_step<'a>(workflow: &'a str, name: &str) -> &'a str {
+    let head = format!("- name: {name}\n");
+    let at = workflow
+        .find(&head)
+        .unwrap_or_else(|| panic!("cli-release.yml: no step `{name}`"))
+        + head.len();
+    let rest = &workflow[at..];
+    let end = ["- name: ", "- uses: "]
+        .iter()
+        .filter_map(|s| rest.find(s))
+        .min()
+        .unwrap_or(rest.len());
+    &rest[..end]
+}
+
+/// The words of `step` from `start` to `stop`, with `"${BINS[@]}"` expanded
+/// to the release script's BINS and `"${PKGS[@]}"` to `-p <pkg>` per PKGS,
+/// when the step reads them from it — the one list both release paths build
+/// from (pb-distribution-f5-release-ci).
+fn workflow_words(
+    step: &str,
+    start: &str,
+    stop: &str,
+    bins: &BTreeSet<String>,
+    pkgs: &BTreeSet<String>,
+) -> Vec<String> {
+    let reads_script = step.contains("scripts/release-cli-local.sh");
+    let at = step
+        .find(start)
+        .unwrap_or_else(|| panic!("cli-release.yml: no `{start}` in step:\n{step}"))
+        + start.len();
+    let body = &step[at..];
+    let body = &body[..body.find(stop).unwrap_or(body.len())];
+    let mut words = Vec::new();
+    for word in body.split_whitespace() {
+        let list: Option<Vec<String>> = if word.contains("${BINS[@]}") {
+            Some(bins.iter().cloned().collect())
+        } else if word.contains("${PKGS[@]}") {
+            Some(
+                pkgs.iter()
+                    .flat_map(|p| ["-p".to_string(), p.clone()])
+                    .collect(),
+            )
+        } else {
+            None
+        };
+        match list {
+            Some(list) => {
+                assert!(
+                    reads_script,
+                    "cli-release.yml expands `{word}` without reading scripts/release-cli-local.sh"
+                );
+                words.extend(list);
+            }
+            None => words.push(word.trim_matches('"').to_string()),
+        }
+    }
+    words
+}
+
 #[test]
 fn release_lists_carry_every_exec_d_binary() {
     let root = repo_root();
@@ -158,6 +219,29 @@ fn release_lists_carry_every_exec_d_binary() {
     let release = root.join("scripts/release-cli-local.sh");
     let release_bins = shell_list(&release, "BINS=(", ')');
     let release_pkgs = shell_list(&release, "PKGS=(", ')');
+    let workflow = std::fs::read_to_string(root.join(".github/workflows/cli-release.yml")).unwrap();
+    let build = workflow_words(
+        workflow_step(&workflow, "Build CLI binaries"),
+        "cargo build",
+        "\n\n",
+        &release_bins,
+        &release_pkgs,
+    );
+    let ci_pkgs: BTreeSet<String> = build
+        .iter()
+        .zip(build.iter().skip(1))
+        .filter(|(flag, _)| *flag == "-p")
+        .map(|(_, pkg)| pkg.clone())
+        .collect();
+    let ci_bins: BTreeSet<String> = workflow_words(
+        workflow_step(&workflow, "Package tarball"),
+        "for b in ",
+        "; do",
+        &release_bins,
+        &release_pkgs,
+    )
+    .into_iter()
+    .collect();
 
     let mut missing = Vec::new();
     for bin in &needed {
@@ -171,6 +255,14 @@ fn release_lists_carry_every_exec_d_binary() {
         if !release_pkgs.contains(&package) {
             missing.push(format!(
                 "{bin}: its package {package} is not in scripts/release-cli-local.sh PKGS"
+            ));
+        }
+        if !ci_bins.contains(bin) {
+            missing.push(format!("{bin}: not packaged by cli-release.yml"));
+        }
+        if !ci_pkgs.contains(&package) {
+            missing.push(format!(
+                "{bin}: its package {package} is not built by cli-release.yml"
             ));
         }
     }

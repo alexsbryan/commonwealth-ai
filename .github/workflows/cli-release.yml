@@ -1,9 +1,7 @@
 name: CLI release
 
-# Tag-driven release for the Sovereign CLI — the three product binaries a user
-# installs (`sovereign-cli` dispatcher + `sovereign-cli-daemon` +
-# `sovereign-cli-llm`). NOT `sovereign-cli-dev` (the developer workbench, gated
-# behind --features dev-tools).
+# Tag-driven release for the Sovereign CLI — the dispatcher and every sibling
+# its verbs exec, scripts/release-cli-local.sh's BINS.
 #
 # Trigger:
 #   git tag cli-v$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2) && git push --tags
@@ -11,7 +9,7 @@ name: CLI release
 #    the "Verify version matches the tag" step enforces it. Today: cli-v0.1.18.)
 #
 # What it does:
-#   1. Build the 3 binaries per platform, with `cargo build --release --locked`.
+#   1. Build the BINS per platform, with `cargo build --release --locked`.
 #   2. Package them as sovereign-<target>.tar.gz + a .sha256 sidecar.
 #   3. Upload everything to a DRAFT GitHub Release (+ a combined SHA256SUMS),
 #      which `landing/install.sh` downloads and verifies.
@@ -277,12 +275,17 @@ jobs:
 
       # `code-intel` is REQUIRED — without it `svrn code index` is absent from
       # the shipped binary, which is the defect it was added to fix
-      # (2026-08-06). Keep in step with scripts/release-cli-local.sh.
+      # (2026-08-06). The packages and binaries are scripts/release-cli-local.sh's
+      # PKGS and BINS, read here, so both release paths build one list
+      # (xtask's release_bins test pins it to the exec sites).
       - name: Build CLI binaries
-        run: >
-          cargo build --release --locked --target ${{ matrix.platform.target }}
-          --features sovereign-cli/code-intel
-          -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
+        shell: bash
+        run: |
+          set -euo pipefail
+          eval "$(grep -E '^(BINS|PKGS)=\(' scripts/release-cli-local.sh)"
+          cargo build --release --locked --target ${{ matrix.platform.target }} \
+            --features sovereign-cli/code-intel \
+            $(printf -- '-p %s ' "${PKGS[@]}")
 
       - name: Package tarball
         shell: bash
@@ -292,7 +295,8 @@ jobs:
           bindir="target/$triple/release"
           stage="dist/sovereign-$triple"
           mkdir -p "$stage"
-          for b in sovereign-cli sovereign-cli-daemon sovereign-cli-llm; do
+          eval "$(grep -E '^(BINS|PKGS)=\(' scripts/release-cli-local.sh)"
+          for b in "${BINS[@]}"; do
             cp "$bindir/$b" "$stage/"
             strip "$stage/$b" || true   # best-effort; trims the llama.cpp debug info
           done
