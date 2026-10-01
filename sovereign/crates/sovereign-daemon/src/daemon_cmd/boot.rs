@@ -379,11 +379,19 @@ pub(super) async fn run_daemon(
     // daemon resumes with mesh.json's id while the engine had been
     // minting a mismatched fresh one.
     let self_node_id = bootstrap::resolve_self_node_id(&data_dir);
+    // The node's mesh through cw-rails, as the distribution composed it; svrn
+    // alone reads none, named there. Composed here, ahead of the notes roster,
+    // because the roster reads members' names through its reader (seat
+    // phase-b-84).
+    let mesh_access = match mesh {
+        Some(m) => m.compose(&crate::rails_client::resolve_rails_base(&config.daemon)),
+        None => crate::hosted_mesh::MeshAccess::absent(),
+    };
     // Whose name a reader of code's notes sees on each author (including
-    // gossiped notes from peers). Built here because `persist::load` stays
-    // the single reader of mesh.json; code's notes rail wires it, with the
-    // origin id, onto code's store (pb-notes-memory).
-    let notes_roster = bootstrap::build_node_roster(&data_dir, self_node_id);
+    // gossiped notes from peers), from cw-rails' roster; code's notes rail
+    // wires it, with the origin id, onto code's store (pb-notes-memory).
+    let notes_roster =
+        bootstrap::build_node_roster(mesh_access.membership.as_ref(), self_node_id).await;
 
     // The served NER kind's handle (loaded once per process), shared by
     // ingest's tiered runner and folder driver, the NoteStore T2 hook and the
@@ -989,12 +997,8 @@ pub(super) async fn run_daemon(
                     ),
                 },
                 advertise_embed,
-                // The node's mesh through cw-rails, as the distribution
-                // composed it; svrn alone reads none, named here.
-                mesh: match mesh {
-                    Some(m) => m.compose(&crate::rails_client::resolve_rails_base(&config.daemon)),
-                    None => crate::hosted_mesh::MeshAccess::absent(),
-                },
+                // The node's mesh through cw-rails, composed above.
+                mesh: mesh_access,
             },
             headless: Some(crate::HeadlessExtras {
                 rails: crate::HeadlessRails {

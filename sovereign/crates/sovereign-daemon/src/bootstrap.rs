@@ -29,30 +29,34 @@ pub fn resolve_self_node_id(data_dir: &Path) -> NodeId {
     sovereign_contracts::node_identity::resolve_self_node_id(data_dir)
 }
 
-/// Project the persisted mesh into the roster the NoteStore uses to name
-/// note authors.
+/// Project the mesh's roster into the one the NoteStore uses to name note
+/// authors, read through the daemon's `MembershipReader`: cw-rails' roster,
+/// the one roster since the flip (phase-b-80; seat phase-b-84). svrn's own
+/// `mesh.json` is not read: nothing writes it since the flip, so its names
+/// would be frozen at cutover and a member who joined later would render as
+/// a raw id, silently.
 ///
-/// Returns `None` when there is no mesh (solo node) or `mesh.json` can't
-/// be read — attribution then degrades to raw node ids, which is honest,
-/// rather than to "assume it's us".
+/// Returns `None` when the reader names no member (cw-rails down, or a node
+/// composed with no roster reader) — attribution then degrades to raw node
+/// ids under a named warn, which is honest, rather than to "assume it's us".
 ///
 /// Ids are stored FULL (`NodeId::to_hex`, 32 chars) even though notes
 /// carry the truncated `Display` form, because the truncation is lossy
 /// and only the full id makes the prefix match unambiguous. Resolution
 /// and ambiguity handling live in `NodeRoster::resolve`.
-pub fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRoster> {
-    let members = match sovereign_contracts::node_identity::read_mesh_members(data_dir) {
-        Ok(Some(m)) => m,
-        Ok(None) => return None,
-        Err(e) => {
-            tracing::warn!(
-                target = "notes",
-                error = %e,
-                "notes: mesh.json unreadable — note authors will render as raw node ids"
-            );
-            return None;
-        }
-    };
+pub async fn build_node_roster<D: Clone + Send + Sync + 'static>(
+    membership: &dyn sovereign_contracts::membership::MembershipReader<Dial = D>,
+    self_node_id: NodeId,
+) -> Option<NodeRoster> {
+    let members = membership.members().await;
+    if members.is_empty() {
+        tracing::warn!(
+            target = "notes",
+            "notes: the mesh roster named no member (cw-rails unreachable, or no roster \
+             reader composed) — note authors will render as raw node ids"
+        );
+        return None;
+    }
 
     let mut self_node = None;
     let mut peers = Vec::new();
@@ -746,3 +750,7 @@ pub fn write_pidfile() -> (std::path::PathBuf, u32) {
 #[cfg(test)]
 #[path = "tests/bootstrap_advertise.rs"]
 mod advertise_tests;
+
+#[cfg(test)]
+#[path = "tests/bootstrap_roster.rs"]
+mod roster_tests;
