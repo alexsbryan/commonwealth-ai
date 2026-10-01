@@ -1577,7 +1577,7 @@ package = "svrn"
 krate = "sovereign-daemon"
 items = ["process::run", "process::HostedServe", "process::HostedParts", "process::Ranked", "process::Posture", "process::HostedIngest", "process::IngestMount", "process::IngestCalls", "process::RecipeAuthoringCompose"]
 [[distribution.face]]
-package = "cmnwlth"
+package = "serve"
 krate = "sovereign-serve"
 items = ["assemble", "rank", "Ranking", "child_launch", "tracing_filter", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner"]
 [[distribution.face]]

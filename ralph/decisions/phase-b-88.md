@@ -9,7 +9,7 @@
   - Principle 12. Composing programs is a distribution's job; the crate belongs to no program. The rejected homes each put the composition in a side that does not own it: svrn's daemon would link corpus-engine and the catalog (svrn's lift breaks), and an ingest face crate would name sovereign-daemon (an [ingest] -> [svrn] edge).
   - Principle 11. It reuses the distribution rule and its caps; no new row kind, no `uses` key, no exception. The intersection is the strictest semantics a shared crate could have.
   - Caps hold without a re-pin: on-prem 76 + 61 = 137 of 200, stock 137 + 6 + 61 = 204 of 300 (non-blank, non-comment lines, approximate).
-- REVIEW-AFTER: the landing on cut. Falsified if a PLANT that names `sovereign_recipe_author::port::compose` in sovereign-hosted-ingest's `src/`, or adds a sovereign-recipe-author edge to its manifest, does not go red under `[onprem]`; if BOUNDARY on cut after the landing is not the pre-landing count; or if the stock install's ingest journey changes.
+- REVIEW-AFTER: the landing on cut. Falsified if a PLANT that adds a sovereign-recipe-author edge to sovereign-hosted-ingest's manifest, or names a svrn item outside on-prem's face in its `src/`, does not go red under `[onprem]` alone; if BOUNDARY on cut after the landing is not the pre-landing count; or if the stock install's ingest journey changes. (Corrected at the landing: naming `sovereign_recipe_author::…` is kept out by the edge rule, since on-prem declares no recipe-author face for the item scan to read and the name cannot compile without the edge. Caught by the implementing worker.)
 
 <!-- appendix -->
 
