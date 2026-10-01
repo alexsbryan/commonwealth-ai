@@ -62,6 +62,9 @@ pub mod auto_resume;
 #[cfg(feature = "treesitter")]
 pub mod bootstrap;
 pub mod build;
+/// The notes-rail convergence recorder (`MeshConvergence`), moved from
+/// sovereign-mesh.
+pub mod convergence;
 /// The canonical-index pull client — svrn's member act of fetching a peer's
 /// canonical (HUMAN-fp7 (a)), unpacking it through ingest's port.
 pub mod canonical_pull;

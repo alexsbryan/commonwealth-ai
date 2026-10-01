@@ -550,7 +550,7 @@ pub(super) async fn run_daemon(
     // reports. A second copy would let the status section disagree with the
     // sink — never. With no code program here nothing stamps it, and
     // `/status` reports the rail as never having converged.
-    let convergence_recorder = Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new());
+    let convergence_recorder = Arc::new(crate::convergence::MeshConvergence::new());
 
     // ── The code program, when the distribution composes it ───────
     // The stock binary hands code's composition in (F2 (a), phase-b-30):

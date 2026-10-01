@@ -379,8 +379,8 @@ mod tests {
         assert!(link.starts_with("https://svrnme.sh/ring/"), "{link}");
         assert!(link.contains("token=tok"), "{link}");
         assert!(link.contains("iroh="), "{link}");
-        match sovereign_mesh::deep_link::parse_https_guest_link(&link) {
-            Some(sovereign_mesh::deep_link::DeepLink::Guest { token, dial, .. }) => {
+        match mesh_join_vocab::deep_link::parse_https_guest_link(&link) {
+            Some(mesh_join_vocab::deep_link::DeepLink::Guest { token, dial, .. }) => {
                 assert_eq!(token, "tok");
                 assert!(dial.is_some());
             }

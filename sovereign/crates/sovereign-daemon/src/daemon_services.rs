@@ -313,7 +313,7 @@ pub struct ServingProfile {
 pub struct HeadlessRails {
     pub provider_factory: Arc<dyn ProviderFactory>,
     pub mesh_store: Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
-    pub convergence_recorder: Arc<sovereign_mesh::peer_adapter::MeshConvergence>,
+    pub convergence_recorder: Arc<crate::convergence::MeshConvergence>,
 }
 
 // `DesktopServices` WAS HERE, and is deleted (daemon-convergence Phase 3).

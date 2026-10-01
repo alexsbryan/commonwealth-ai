@@ -177,7 +177,7 @@ fn headless_from(
             mesh_store: Arc::new(crate::rails_client::kv::RailsKv::new(
                 crate::rails_client::DEFAULT_RAILS_BASE,
             )),
-            convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),
+            convergence_recorder: Arc::new(crate::convergence::MeshConvergence::new()),
         },
         knowledge_view_http: axum::Router::new(),
     })
