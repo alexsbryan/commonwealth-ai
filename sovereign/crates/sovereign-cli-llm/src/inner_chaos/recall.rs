@@ -2092,7 +2092,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn bench_dir() -> PathBuf {
-        resolve_bench_dir(None).expect("bench/inner_work resolves from the checkout")
+        super::super::personas::committed_bench_dir()
     }
 
     #[test]

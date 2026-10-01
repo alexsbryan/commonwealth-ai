@@ -50,7 +50,7 @@ status = "shipped"
 name = "SOVEREIGN_BENCH_ROOT"
 cluster = "bench"
 default = "sovereign/bench (set by the workspace .cargo/config.toml)"
-purpose = "Root of the bank/baseline tree sovereign-eval reads; a lifted bench sets it."
+purpose = "Root of the bank/baseline tree sovereign-eval reads, and the fixture tree sovereign-cli-llm's inner-chaos and search-gym tests load; a lifted bench or svrn sets it."
 status = "shipped"
 
 [[flag]]

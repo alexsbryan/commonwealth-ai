@@ -101,6 +101,17 @@ pub fn resolve_bench_dir(explicit: Option<&PathBuf>) -> Result<PathBuf, String> 
     Err("could not find `bench/inner_work` walking up from CWD. Pass --bench-dir.".into())
 }
 
+/// The committed bank for this crate's tests: the bench tree the
+/// `SOVEREIGN_BENCH_ROOT` knob names (the workspace .cargo/config.toml sets it,
+/// the svrn lift carries the tree), never a walk from where the test stands.
+#[cfg(test)]
+pub(crate) fn committed_bench_dir() -> PathBuf {
+    let root = std::env::var_os("SOVEREIGN_BENCH_ROOT")
+        .expect("SOVEREIGN_BENCH_ROOT names the bench tree that carries inner_work");
+    resolve_bench_dir(Some(&PathBuf::from(root).join("inner_work")))
+        .expect("the bench tree carries inner_work")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,7 +120,7 @@ mod tests {
     /// file's shape to the loader for as long as both live in-tree.
     #[test]
     fn committed_personas_fixture_loads() {
-        let dir = resolve_bench_dir(None).expect("bench/inner_work resolves from the checkout");
+        let dir = committed_bench_dir();
         let personas = load_personas(&dir.join("personas.toml")).expect("personas.toml loads");
         assert!(personas.len() >= 6, "expected the full persona bank");
         let control: Vec<_> = personas.iter().filter(|p| p.control).collect();
@@ -125,7 +136,7 @@ mod tests {
 
     #[test]
     fn committed_memories_fixture_loads() {
-        let dir = resolve_bench_dir(None).expect("bench/inner_work resolves from the checkout");
+        let dir = committed_bench_dir();
         let memories = load_memories(&dir.join("memories.toml")).expect("memories.toml loads");
         assert!(memories.len() >= 4);
         // The theme-only grief memory is load-bearing for the
