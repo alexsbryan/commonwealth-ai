@@ -1947,6 +1947,14 @@ class Pool:
             wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy(),
                                    waiting | held)
             by = queue.by_id()
+            if wave and audit_due(self.paths, queue, by[wave[0]]):
+                # The queue's audit_every holds in the pool: the row goes in above
+                # the wave, and the next pass runs it serially as a review.
+                audit, refused = insert_audit(self.paths, queue, by[wave[0]])
+                if refused:
+                    return self._halt(f"audit row {audit.id} is in {self.paths.state} "
+                                      f"but git refused the commit: {refused}")
+                continue
             refused = [(u, r) for u, r in ((u, dispatch_refusal(self.paths, queue, by[u]))
                                            for u in wave) if r is not None]
             if refused:
@@ -2176,7 +2184,8 @@ class Pool:
             if queue is not None:
                 queue.set_status(unit, Status.DONE)
                 self._git("add", self.paths.state)
-                self._git("commit", "-q", "-m", f"{unit}: merged (pool)")
+                # The subject ralph-mark.sh writes: units_since_audit counts it.
+                self._git("commit", "-q", "-m", f"ralph: {unit} done")
             self._git("worktree", "remove", "--force", str(wt))
             self._git("branch", "-D", branch)
             say(f"pool: lane {unit} merged and marked [x]")

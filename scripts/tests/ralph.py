@@ -2524,6 +2524,38 @@ class PoolQueueTests(unittest.TestCase):
             self.assertIn("waits on the operator: q-b",
                           (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
 
+    def test_the_queues_audit_cadence_holds_in_the_pool(self):
+        # (11): audit_every = 2 inserts an audit after the first wave's two
+        # merges, and the review runs before the next wave.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "".join(f"- [ ] q-{u} — depends []\n" for u in "abcd"),
+                                toml="audit_every = 2\n")
+            order = []
+
+            class Review:
+                def __init__(self, cwd):
+                    self.cwd = cwd
+
+                def run(self, model_args, prompt, log):
+                    q = ralph.Queue(root / "ralph/next/q/STATE.md")
+                    unit = q.first_ready_review().id
+                    order.append(unit)
+                    q.set_status(unit, ralph.Status.DONE)
+                    commit_all(str(root), f"ralph: {unit} done")
+                    return 0
+
+            class Lane(QueueLane):
+                def run(self, model_args, prompt, log):
+                    order.append(self.cwd.name)
+                    return super().run(model_args, prompt, log)
+
+            def session_for(cwd, env=None):
+                return Lane(cwd) if pathlib.Path(cwd).parent.name == "wt" else Review(cwd)
+
+            self.assertEqual(self.make(root, session_for).run(), 0)
+            self.assertEqual((set(order[:2]), order[2], set(order[3:])),
+                             ({"q-a", "q-b"}, "REVIEW-audit-q-auto-1", {"q-c", "q-d"}))
+
     def test_the_legacy_pool_keeps_its_defaults(self):
         args = ralph.build_parser().parse_args(["pool", "--workdir", "."])
         with contextlib.redirect_stdout(io.StringIO()):
