@@ -4522,7 +4522,9 @@ noun`. One has two definitions:
   --verify` still fail; `size-gate` reports 75 keys grown (77 at auto-11);
   domains-census-self-test is could-not-judge. All advisory, outside this
   queue.
-## REVIEW-audit-pb-auto-12 (2026-10-01, range 392bbba94..d300552dd, since REVIEW-audit-pb-auto-11)
+## REVIEW-audit-pb-auto-12b (2026-10-01, worktree B, range 392bbba94..d300552dd, since REVIEW-audit-pb-auto-11)
+
+(Seat, at landing: worktree B ran its own audit after F8 under the same id as the main tree's REVIEW-audit-pb-auto-12 above, which it overlaps except for F8's commits; renamed `-12b`. Its clock fix, ce555092a, was not landed: the main tree's 3e75ab632 had fixed the same clock-gate red another way first.)
 
 113 commits: pb-mesh-dissolve, pb-distribution-svrn-lift and -svrn-lift-2,
 pb-serve-package, -release-bins, -onprem-identity, -onprem-compose,
@@ -4575,7 +4577,7 @@ ModWalk). `Caller` has two production definitions, finding 4.
 
 ### Findings
 
-- **ARCH 10, fixed in ce555092a** · host-kit/src/panic_hook.rs:143,
+- **ARCH 10, fixed on cut by 3e75ab632 (B's ce555092a not landed)** · host-kit/src/panic_hook.rs:143,
   host-kit/src/sibling.rs:102,109,115 (cfd10bbf0, 2b3fbe748): f11 moved
   four clock reads into host-kit that were baselined at their daemon
   paths, so clock-gate blocked the push. The hook asks
