@@ -348,6 +348,15 @@ def out_of_scope(paths, queue):
         and not any(r.id.startswith(f"{a}-") for a in allowed))
 
 
+def write_parked(paths, row_id, package, reason):
+    """The one spelling of a parked row's package: `<parked>/<row-id>.md`."""
+    dest = paths.p(paths.parked) / f"{row_id}.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(package + f"\n<!-- parked {row_id}: {reason}. Answer in the "
+                    f"row, then delete this file to unpark it. -->\n")
+    return dest
+
+
 def held_ids(paths, queue):
     """Every row that waits on the operator besides HUMAN- rows: parked rows
     and rows outside the frozen scope. The one set the planners skip."""
@@ -629,9 +638,9 @@ class Queue:
     def all_done(self):
         return all(r.status is Status.DONE for r in self.rows)
 
-    def first_ready_review(self):
+    def first_ready_review(self, held=frozenset()):
         for r in self.rows:
-            if (r.status in (Status.PENDING, Status.ACTIVE)
+            if (r.status in (Status.PENDING, Status.ACTIVE) and r.id not in held
                     and r.id.startswith("REVIEW-") and self.deps_met(r)):
                 return r
         return None
@@ -1626,10 +1635,7 @@ class Supervisor:
             say(f"supervisor: {self.parks_without_progress} rows parked with no unit done "
                 f"— not parking {row.id}; the stop stands")
             return None
-        dest = self.paths.p(self.paths.parked) / f"{row.id}.md"
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(pkg.read_text() + f"\n<!-- parked {row.id}: {reason}. Answer in the "
-                        f"row, then delete this file to unpark it. -->\n")
+        dest = write_parked(self.paths, row.id, pkg.read_text(), reason)
         pkg.unlink()
         stop = self.paths.p(self.paths.stop)
         if stop.exists() and stop.stat().st_size:
@@ -1786,6 +1792,7 @@ class Pool:
         self.max_lane_failures = max_lane_failures
         self.probe = probe or (lambda model: probe_model(model, paths))
         self._lane_failures = {}
+        self._held = frozenset()
 
     def _git(self, *args, cwd=None):
         return subprocess.run(["git", "-C", str(cwd or self.paths.workdir), *args],
@@ -1918,7 +1925,13 @@ class Pool:
             reason, waiting = self.poll_waiting_lanes()
             if reason is not None:
                 return self._halt(reason)
-            review = queue.first_ready_review()
+            # Parked rows and rows outside the frozen scope wait on the operator
+            # here as in the serial loop: the cleanup cut line holds in the pool.
+            held = held_ids(self.paths, queue)
+            if held != self._held:
+                say(f"pool: held for the operator: {', '.join(sorted(held)) or 'none'}")
+                self._held = held
+            review = queue.first_ready_review(held)
             if review is not None:
                 # A review with no REVIEW_MODEL of its own runs on the worker
                 # model (select_model_args routing) — probe that roster.
@@ -1929,15 +1942,23 @@ class Pool:
                 if result is not None:
                     return result
                 continue
-            wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy(), waiting)
+            wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy(),
+                                   waiting | held)
             by = queue.by_id()
-            refusal = next((r for r in (dispatch_refusal(self.paths, queue, by[u]) for u in wave)
-                            if r is not None), None)
-            if refusal is not None:
-                return self._halt(refusal)
-            if not wave and not waiting and queue.awaiting_operator():
+            refused = [(u, r) for u, r in ((u, dispatch_refusal(self.paths, queue, by[u]))
+                                           for u in wave) if r is not None]
+            if refused:
+                # A refused row waits on its census; the rows beside it do not.
+                for unit, refusal in refused:
+                    dest = write_parked(self.paths, unit, f"# {unit} refused at dispatch\n\n"
+                                        f"{refusal}\n", "refused at dispatch")
+                    say(f"pool: parked {unit} — {refusal}")
+                    self.notifier("OPERATOR — row parked, pool continues",
+                                  f"{unit}: {first_line(dest)}", self.notify_enabled)
+                continue
+            if not wave and not waiting and queue.awaiting_operator(held):
                 return self._halt("operator approval required — every ready row waits on the "
-                                  f"operator: {', '.join(queue.awaiting_operator())}")
+                                  f"operator: {', '.join(queue.awaiting_operator(held))}")
             if not wave:
                 say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
                 self.sleep(60)

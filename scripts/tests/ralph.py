@@ -2492,6 +2492,38 @@ class PoolQueueTests(unittest.TestCase):
                           (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
             self.assertFalse((root / "ralph/NEEDS_HUMAN.md").exists())
 
+    def test_rows_outside_the_scope_and_parked_rows_never_dispatch(self):
+        # (8): the cleanup cut line holds in the pool as in the serial loop.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n"
+                                     "- [ ] q-cut — depends []\n",
+                                toml='scope_file = "ralph/next/q/scope.txt"\n')
+            write(tmp, "ralph/next/q/scope.txt", "q-a\nq-b\n")
+            write(tmp, "ralph/next/q/ctl/parked/q-b.md", "# q-b waits\n")
+            QueueLane.prompts = []
+            pool = self.make(root, lambda cwd, env=None: QueueLane(cwd))
+            self.assertEqual(pool.run(), 3)
+            self.assertEqual(len(QueueLane.prompts), 1)
+            q = ralph.Queue(root / "ralph/next/q/STATE.md")
+            self.assertEqual([r.id for r in q.rows if r.status is ralph.Status.DONE], ["q-a"])
+            self.assertIn("q-b, q-cut", (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
+
+    def test_a_row_refused_at_dispatch_parks_and_the_pool_runs_on(self):
+        # (13): the refusal is the row's, not the pool's.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends [] — census\n  - trial: none\n"
+                                     "- [ ] q-b — depends [] — no census yet\n",
+                                toml='dispatch_requires = ["- trial"]\n')
+            pool = self.make(root, lambda cwd, env=None: QueueLane(cwd))
+            self.assertEqual(pool.run(), 3)             # q-b waits on the operator
+            q = ralph.Queue(root / "ralph/next/q/STATE.md")
+            self.assertIs(q.status_of("q-a"), ralph.Status.DONE)
+            self.assertIs(q.status_of("q-b"), ralph.Status.PENDING)
+            self.assertIn("'- trial'",
+                          (root / "ralph/next/q/ctl/parked/q-b.md").read_text())
+            self.assertIn("waits on the operator: q-b",
+                          (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
+
     def test_the_legacy_pool_keeps_its_defaults(self):
         args = ralph.build_parser().parse_args(["pool", "--workdir", "."])
         with contextlib.redirect_stdout(io.StringIO()):
