@@ -14,12 +14,12 @@
 requirement = "EV-28"
 test = "sovereign-cli-shared::cli_contract::tests::a_read_proves_itself_inline_and_a_mutation_is_proven_downstream"
 file = "sovereign/crates/sovereign-cli-shared/src/cli_contract.rs"
-line = 1294
+line = 1287
 asserts = 5
 
 [[claim]]
 requirement = "EV-28"
 test = "sovereign-cli-shared::cli_contract::tests::a_trailing_mutation_with_nothing_after_it_is_unproven"
 file = "sovereign/crates/sovereign-cli-shared/src/cli_contract.rs"
-line = 1332
+line = 1325
 asserts = 1
