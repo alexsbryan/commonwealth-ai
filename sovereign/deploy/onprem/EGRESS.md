@@ -2,243 +2,175 @@
 
 **Audience:** the firm's security reviewer.
 **Method:** a line-by-line audit of the source, not a claim about intent.
-Every row cites the file and line that makes the call. Where a claim in
-an earlier draft of our own plan turned out to be wrong, the correction
-is stated in place rather than quietly removed.
+Every row cites the file that makes the call. Where a claim in an earlier
+version of this document turned out to be wrong, the correction is stated
+in place rather than quietly removed.
 
-**Scope:** the two processes that run on the box — `svrn daemon run`
-(the daemon) and `sovereign-server --no-default-features` (the API). Code
-that ships in the tree but is not reachable from either is listed
-separately at the end, because "it is in the binary" and "it can run"
-are different facts and the reviewer is entitled to both.
+**Scope:** the one process that runs on the box — `sovereign-onprem`, the
+on-prem distribution (`sovereign/crates/sovereign-onprem`). It composes
+the answer service (svrn), model serving (serve) and document ingest, and
+nothing else. Code that is linked into the binary but never started by
+this composition is listed separately, because "it is in the binary" and
+"it can run" are different facts and the reviewer is entitled to both.
+
+(Until 2026-10 the kit ran two processes, `svrn daemon run` and
+`sovereign-server --no-default-features`. The second is gone; its
+section of this document went with it.)
 
 ---
 
 ## Bottom line
 
-With the shipped configuration, the deployed processes make **no
-outbound connections at all**. That required more than configuration:
-three agent tools reached the open internet unconditionally on ordinary
-chat turns and had no runtime switch. They are removed at compile time
-by the `--no-default-features` build this kit installs.
+With the shipped configuration, the process makes **no outbound
+connection off the box**. The surfaces that could reach the open internet
+on an ordinary question are not composed in the binary at all — the
+withholding is the composition, not a setting. Two IT-only admin routes
+can still start a download (§3); a lawyer's key cannot reach them and
+nginx does not proxy them.
 
-There is **no telemetry** anywhere in the tree, **no update check**
-reachable from either process, and **no HuggingFace reachability probe**
-in the daemon boot path. Those three are the easy claims. The rest of
-this document is the hard part.
+There is **no telemetry**, **no update check**, and **no HuggingFace
+reachability probe** in the boot path.
 
-**Defence in depth.** Config is the first control and the compile-time
-feature is the second, but neither is enforced by the kernel. Both
-systemd units therefore carry `IPAddressDeny=any` with an allowlist of
-loopback only. If any of the analysis below is wrong, that is what
-holds — and the denial appears in the audit log rather than as silent
-traffic.
+**Defence in depth.** The composition is the first control and the
+configuration the second, but neither is enforced by the kernel. The
+systemd unit therefore carries `IPAddressDeny=any` with an allowlist of
+loopback only. If any of the analysis below is wrong, that is what holds
+— and the denial appears in the audit log rather than as silent traffic.
 
 ---
 
-## 1. What was found and closed
+## 1. Not composed in this binary
 
-These three were the real finding of the audit, and they falsified the
-original plan's "zero egress is three config keys" claim.
+These were the real finding of the original audit: agent tools that
+reached the open internet on **any chat turn**, with no config key, no
+env var and no tool allowlist governing them. `Permission::Network` is
+not a control for them: it is consulted at one call site, the plan
+executor, and the chat path calls `tool.execute()` directly.
 
-| Tool id | Reaches | Trigger | Registered at |
-|---|---|---|---|
-| `search` (web fallback) | `html.duckduckgo.com`, then `www.google.com` when that bot-blocks, then `lite.duckduckgo.com` | **any chat turn** where the top LOCAL retrieval score is below `SCORE_SUFFICIENT` — i.e. precisely when the corpus is thin | `sovereign-server/src/main.rs`, `SearchTool::with_web(...)` |
-| `web_fetch` | **any URL the model emits.** Validation is scheme-only: no host allowlist, follows up to 5 redirects | any chat turn where the model chooses it | `sovereign-server/src/main.rs`, `WebFetchTool::new()` |
-| `wikipedia_fetch` | `en.wikipedia.org` | any chat turn; also the daemon's own MCP surface | `sovereign-server/src/main.rs` and `sovereign-cli-daemon/.../tool_registry.rs` |
+| Tool | Reaches | How this binary withholds it |
+|---|---|---|
+| `search` (web fallback) | `html.duckduckgo.com`, then `www.google.com`, then `lite.duckduckgo.com`, whenever the top LOCAL retrieval score is thin | `Posture::Sealed` (sovereign-onprem `main.rs`) withholds web reach: `search` is built over the installed corpora only, and the boot log reports `withheld search:web-fallback` |
+| `web_fetch` | any URL the model emits; scheme-only validation | the web bundle is withheld by the same posture and never registered |
+| `wikipedia_fetch` | `en.wikipedia.org` | the wikipedia bundle is withheld by the same posture |
+| `probe_url` | any URL a recipe author names | not linked: the binary has no sovereign-recipe-author edge (ingest composes without recipe authoring) |
 
-Three things about this are worth stating plainly:
-
-1. **They were not covered by any config key.** No TOML setting, no env
-   var, no tool allowlist. We searched for `disabled_tools`,
-   `tool_allowlist`, `deny_tools`, `SOVEREIGN_DISABLE_TOOLS` — no such
-   surface exists in a production binary.
-2. **`Permission::Network` is not a control.** `WebFetchTool` declares
-   it, and `sovereign-core/src/executor.rs` will skip a tool whose
-   permission is stored false — but that check exists at exactly one
-   call site, inside the plan executor. The chat and agent paths call
-   `tool.execute()` directly and never consult it.
-3. **`--no-default-features` did not remove them.** It removed
-   `ShellTool`, which sits three lines above them in the same function.
-   The adjacency is why this was easy to miss.
-
-**What we changed.** A `net-tools` cargo feature, default ON so every
-other build in the fleet is unchanged, removed by
-`--no-default-features`. Under the hardened build:
-
-- `web_fetch` and `wikipedia_fetch` are **not registered at all** — the
-  model cannot call a tool that does not exist in the registry.
-- `search` **is still registered**, over the installed corpora only. It
-  is constructed with `SearchTool::new` instead of
-  `SearchTool::with_web`, so the web fallback has no backend to fall
-  back to. Corpus search is the product; reaching the open web was a
-  separate capability sharing a tool id.
-
-`net-tools` is deliberately a different flag from `dev-routes`. Those
-gate developer surfaces whose risk is *privilege* (a shell, an arbitrary
-file read). These gate product features whose risk is *egress*. One flag
-for two unrelated decisions would make neither name true.
-
-**The daemon's `wikipedia_fetch` remains registered** (its MCP tool
-registry has no equivalent feature). It is reachable only from
-`127.0.0.1:9741`, which on this box only `sovereign-server` talks to,
-and `sovereign-server` does not drive the daemon's MCP surface. Anyone
-who could reach it already has a shell on the box. `IPAddressDeny` is
-the control; we are naming it rather than claiming it is absent.
+The type behind `web_fetch` (sovereign-tools `WebFetchTool`) is still
+linked, through sovereign-daemon; what the binary withholds is the
+REGISTRATION. That is why the proof is runtime, not a `strings` scan:
+`GET /v1/tools` lists what the turn runtime holds, and acceptance.sh
+check 0c fails if any of these is there. The binary's own test
+(`sovereign-onprem/tests/sealed_composition_e2e.rs`) boots it with every
+proxy variable pointed at a connection counter and asserts that a turn
+dials nothing.
 
 ---
 
 ## 2. Switched off by configuration
 
-Each of these is live by default and off in the shipped config. The
-config file comments explain each in place; this table is the index.
+Live by default in the daemon, off in the shipped
+`daemon-config.toml`. The config comments explain each in place.
 
-| # | Destination | Trigger | Key that stops it | Default |
-|---|---|---|---|---|
-| 1 | `en.wikipedia.org/w/api.php` (MediaWiki poller) | daemon startup, after 0-15 min jitter, then every 24 h | `[daemon] freshness_watchers_enabled = false` | **true** |
-| 2 | n0 public relays + n0 DNS/pkarr (`iroh.link`) | daemon startup, when iroh resolves on | `[iroh] enabled = false` | auto |
-| 3 | n0 relays + n0 DNS — **the join path** | `svrn mesh join`, or `POST :9742/internal/mesh/join` | `[iroh] discovery = "none"` — **`enabled` does NOT gate this** | n0 on |
-| 4 | mDNS multicast `224.0.0.251:5353` / `ff02::fb` | daemon startup, unconditional when enabled | `[discovery] mdns = false` | **true** |
-| 5 | Commonwealth activity reporting | server startup + a 60 s decay loop | leave `[commonwealth]` out of server-config.toml | unset |
-| 6 | Operator-declared MCP servers | server startup | leave `[[mcp.servers]]` empty | empty |
+| Destination | Trigger | Key that stops it | Default |
+|---|---|---|---|
+| `en.wikipedia.org/w/api.php` (MediaWiki freshness poller) | daemon startup, after 0-15 min jitter, then every 24 h | `[daemon] freshness_watchers_enabled = false` (the boot log says `freshness watchers skipped`) | **true** |
+| Operator-declared MCP servers | daemon startup: each `[[mcp_servers]]` entry is loaded into the tool registry | leave `[[mcp_servers]]` out | empty |
 
-### Corrections to our own earlier claims
-
-An earlier draft of the deployment plan made four assertions here. Two
-were wrong and one was half right. They are corrected rather than
-deleted, because a reviewer who reads both documents deserves to see
-which way the error went.
-
-- **"`[iroh] enabled = false` removes all relay and n0 DNS traffic" —
-  refuted.** The mesh-join path builds a relayed endpoint from
-  `relay_urls` + `discovery` without ever consulting `enabled`. Only
-  `discovery = "none"` closes it. That key is therefore load-bearing
-  *independently* of `enabled`, and the shipped config sets both. (A
-  second override exists: a mesh whose policy demands encryption turns
-  iroh on regardless of an explicit `false`. Not reachable here — this
-  box never creates or joins a mesh — but it is a real path and a
-  reviewer will find it.)
-- **"`freshness_watchers_enabled = true` spawns a Wikipedia poller AND a
-  Wikimedia SSE stream at startup" — half right.** The MediaWiki poller
-  is real. The Wikimedia `recentchange` SSE stream is **compiled-in dead
-  code**: its `spawn()` has no caller in any binary. Nothing dials
-  `stream.wikimedia.org`. Two further gates also apply to the poller: it
-  needs a corpus-engine handle, and every tick returns early unless the
-  `wikipedia-newsworthy` corpus is installed — which on this box it is
-  not. The flag is still the right switch, because it is the only one
-  that stops the task existing at all.
-- **"`mobile_host` defaults iroh on, tunnelling the local HTTP port via
-  third-party relays" — true of the *generator*, not of this
-  deployment.** `MobileHostConfig` does default it true, and the
-  resulting tunnel does forward accepted streams to the local HTTP port.
-  But that type is reached only from the desktop app and from
-  `svrn mobile serve`, neither of which runs here, and
-  `sovereign-server`'s own `[iroh] enabled` defaults to **false**. The
-  operational rule is "do not run `svrn mobile serve`, and do not use a
-  mobile-host-generated server config" — not "a live risk in this box".
-- **"`[discovery] mdns = false` is required because a multicast bind
-  failure is fatal at boot" — confirmed.** The error propagates with `?`
-  out of daemon startup and the process exits 1. On a hardened or
-  containerized host this is the most likely cause of a first-boot
-  failure.
-
-### One more, verified local
-
-`[knowledge_view]` defaults to `enabled = true` on the server and
-background-ingests conversations into corpora. It makes **no network
-call** — every file under the knowledge-view tree was searched for HTTP
-clients and URL literals and none exist. It is nonetheless switched off
-in the shipped config, for a confidentiality reason rather than an
-egress one: on a single-tenant box it would fold one matter's
-conversation into a corpus another matter can retrieve.
-
-One caveat: it takes an inference handle, which resolves to whatever
-`[[inference.backends]]` is configured. Ours is the loopback daemon. If
-that were ever pointed at a remote endpoint, this would become egress.
+The poller's `recentchange` SSE stream is compiled-in dead code: its
+`spawn()` has no caller. Nothing dials `stream.wikimedia.org`.
 
 ---
 
-## 3. Loops that run but send nothing
+## 3. IT-only routes that can reach the network
 
-Honest accounting: these background tasks start and tick. They have no
-peers to talk to, so they emit no packets — but a reviewer watching
-`ss -tnp` should know why the tasks exist.
+Reachable only with IT's key (group `admin`), from the box itself: the
+daemon refuses them to a lawyer's key (`sovereign-daemon api_keys.rs`,
+`KEY_SCOPE`), each also requires a loopback peer, and nginx proxies none
+of them (`nginx/firm-rag.conf`).
 
-| Loop | Behaviour with no mesh |
-|---|---|
-| Gossip (`/internal/gossip`) | targets come from `mesh.json` members; with none, zero packets |
-| Auto-ingest collaboration | only reaches `http://127.0.0.1:{port}/internal/corpus/collaborate` |
-| Peer inference / model fetch / worker control | all peer-address-driven; no peers, no calls |
+| Route | Reaches | Where |
+|---|---|---|
+| `POST /v1/admin/assets/download` | `huggingface.co` — a GGUF or the GLiNER model, fetched into the serving root as a job | sovereign-daemon `assets_http.rs` forwards it to serve; sovereign-compute `assets.rs` runs `setup_planner::download_gguf` / `gliner_ner::download_model` |
+| ingest's recipe routes (`/internal/corpus/recipes/*`) | whatever URLs a recipe's sources name (bulk corpora: `dumps.wikimedia.org`, `www.govinfo.gov`, …) | sovereign-daemon `recipe_http.rs` |
+
+Nothing in the install or the runbook calls either. `IPAddressDeny=any`
+refuses the connection if one is ever made.
+
+---
+
+## 4. Loopback only
+
+These calls stay on 127.0.0.1. They are listed because a reviewer
+watching `ss -tnp` will see them.
+
+| Call | Target | Where |
+|---|---|---|
+| cw-rails presence poll, work-atlas store, ring rail, model-slot registration | `[daemon] rails_base`, `http://127.0.0.1:9747` in the shipped config. **Nothing listens there** — this box runs no cw-rails — so each is refused on loopback and logged as an absence | sovereign-daemon `daemon.rs` (`media_presence::run`, `RailsKv::new`, `RailsRingRail::new`); the foreground-yield post (`foreground_post.rs`) sends nothing while the window is 0 |
+| hosted serve | `127.0.0.1:9748` (`SOVEREIGN_SERVE_PORT`) | serve runs in this process and binds loopback; the daemon forwards admin reads to it |
+| OCR cleanup | the daemon's own client port | the OCR context calls the daemon's chat route to clean recognised text. On a daemon holding API keys this call carries no key and is refused (401): the text is indexed RAW, marked `raw OCR (cleanup unavailable: daemon error 401)`, and acceptance check 5 reports it |
 
 `[daemon] max_peer_inflight = 0` additionally opts this node out of peer
-inference admission entirely.
+inference admission. With no mesh there are no peers, so the gossip,
+peer-inference and model-fetch loops have no target and send nothing.
 
 ---
 
-## 4. In the tree, not reachable here
+## 5. Linked, never started
 
-Present in the binary or the source, and not on any path either process
-takes. Listed so the reviewer who greps for hostnames finds the answer
-here instead of raising it.
+The binary links the mesh crates through sovereign-daemon → sovereign-mesh
+(commonwealth-discovery's mDNS, commonwealth-transport's iroh with its
+n0 relays and DNS). The on-prem composition passes **no mesh** to
+`process::run` (sovereign-onprem `main.rs`: the `mesh` argument is
+`None`, and serve is hosted without `rails_mesh::join`), so none of them
+is started: no multicast on `224.0.0.251:5353`, no relay, no n0 DNS.
 
-- **`huggingface.co`** — GGUF download and GLiNER model download. Reached
-  only from `svrn setup`, `svrn setup fim`, and
-  `svrn mesh fetch-ner`. This install runs
-  none of them: `install.sh` stages models from the tarball and writes
-  both configs by hand, precisely so `svrn setup` is never invoked. The
-  daemon's own boot path loads GLiNER from disk.
-- **Bulk corpus sources** — `dumps.wikimedia.org`, `www.gutenberg.org`,
-  `openalex.s3.amazonaws.com`, `www.courtlistener.com`, `www.sec.gov`,
-  `www.govinfo.gov`, `www.federalregister.gov`, `archive.org`,
-  `raw.githubusercontent.com` and others. These are URLs in *recipe TOML
-  data files*, reached only by corpus-build verbs. The `us-code` corpus
-  ships prebuilt as a snapshot; nothing on this box builds a corpus from
-  a recipe.
-- **`updates.sovereign.dev`** — a corpus index-manifest fetch. Its only
-  caller is the desktop app's health builder. Not linked into either
-  process here. This is the closest thing in the tree to an update
-  check, and it is not reachable.
-- **`registry.npmjs.org`** — an `npm install` subprocess in
-  `svrn setup fim`. Not run.
-- **CalDAV and SMTP** — `CalendarTool` and `EmailTool` exist and are
-  registered nowhere in the workspace. `EmailTool` additionally sits
-  behind a cargo feature neither binary enables.
-- **`github.com/.../releases`** — a string that is printed, never
-  fetched.
+`daemon-config.toml` still sets `[iroh] enabled = false`,
+`discovery = "none"` and `[discovery] mdns = false`. Those keys are not
+what keeps this box quiet any more; they are stated so that a binary that
+did start a mesh would still find relays and multicast off.
 
-No `git fetch`/`clone`/`pull`/`ls-remote` anywhere in scope; every `git`
-subprocess is a local read (`log`, `status`, `diff`, `rev-parse`). No
-`curl`, `wget`, `rsync`, `ssh`, or `scp` subprocesses. The one
-`tailscale` invocation is a local status query.
+**Correction to the earlier version of this document.** It listed iroh,
+n0 and mDNS as live-by-default and closed by those config keys. That was
+true of the two-process kit, whose daemon formed a solo mesh at boot. It
+is not the mechanism here.
+
+Also in the source and on no path this process takes:
+
+- `svrn setup`, `svrn setup fim`, `svrn mesh fetch-ner` (HuggingFace,
+  `registry.npmjs.org`): install.sh stages models from the tarball and
+  writes the config by hand, so none of them runs.
+- `updates.sovereign.dev` (a corpus index-manifest fetch): its only
+  caller is the desktop app.
+- CalDAV and SMTP (`CalendarTool`, `EmailTool`): registered nowhere.
+- `github.com/.../releases`: a string that is printed, never fetched.
 
 ---
 
-## 5. What to expect in the logs
+## 6. What to expect in the logs
 
 DNS resolution happens as part of an HTTP call, never on its own — so a
 box making no HTTP calls issues no DNS. If the firm's egress firewall
 logs a denial from this host, it is a finding, not noise, and these are
-the names to look for: `duckduckgo.com`, `google.com`,
-`en.wikipedia.org`, `huggingface.co`, and any n0 relay. Each maps to a
-row above; please send us the log line.
+the names to look for: `huggingface.co`, `en.wikipedia.org`,
+`duckduckgo.com`, `google.com`, and any n0 relay. Each maps to a row
+above; please send us the log line.
 
-## 6. How to verify this yourself
+## 7. How to verify this yourself
 
 Nothing here asks to be taken on trust:
 
 ```bash
-# 1. The hardened binary is the one installed (also acceptance.sh check 0)
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<host>/v1/solve   # expect 404
+# 1. The surfaces that could reach a shell or the web are not served
+#    (also acceptance.sh check 0, at the daemon's port and through nginx)
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<host>/v1/solve/jobs   # expect 404 (nginx)
+curl -s -H "Authorization: Bearer <it key>" -X POST http://127.0.0.1:9741/mcp   # expect 503, "does not serve MCP"
 
-# 2. The egress tools are gone from the registry
-curl -s -H "Authorization: Bearer <key>" https://<host>/v1/tools \
-  | jq -r '.[].name // .tools[].name' | sort
-# expect: no web_fetch, no wikipedia_fetch. `search` present = corpus search.
+# 2. No web tool is held (acceptance.sh check 0c)
+curl -s -H "Authorization: Bearer <firm key>" https://<host>/v1/tools | jq -r '.tools[].id' | sort
+# expect: no web_fetch, wikipedia_fetch or probe_url. `search` present = corpus search.
 
 # 3. Nothing is dialling out
 ss -tnp | grep -v '127.0.0.1'    # expect only inbound :443 from clients
 
 # 4. The kernel-level control is armed
-systemctl show firm-rag-server -p IPAddressDeny -p IPAddressAllow
-systemctl show firm-rag-daemon -p IPAddressDeny -p IPAddressAllow
+systemctl show firm-rag -p IPAddressDeny -p IPAddressAllow
 ```
