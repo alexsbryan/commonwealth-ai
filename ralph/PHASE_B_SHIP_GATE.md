@@ -46,6 +46,8 @@ introduced, so it is Phase B's to fix, not phase-c's.
 | F8 | (operator, phase-b-98, lands before the merge) a node upgraded across the flip sits off its mesh, and its donor stops, with no message until someone runs `svrn mesh up`. | Boot output and `svrn mesh status` name `svrn mesh up` on a main-era data dir, and not after the handover; one decider, the handover's own marker. Row pb-distribution-f8-upgrade-off-mesh-named. |
 | F9 | (operator, phase-b-98) collaborate ingest on the stock binary has never run end to end on cut. | An e2e completes it through ingest's port with a real cw-rails. Row pb-distribution-f9-stock-collaborate-e2e. |
 | F10 | (operator, phase-b-98) first-boot and handover moves keep no copy (media viewer id) or overwrite theirs on a second run (`config.toml.bak`), and none has a written rollback. | Every move keeps its first original; a RUNBOOK rollback section is run once in a sandbox. Row pb-distribution-f10-migration-backups. |
+| F11 | (operator, phase-b-99) the de-embed forked the daemon's panic hook, memory soft limit and staleness warning into two crates; only log_rotation was finished. | One implementation each in host-kit; clone-gate's count drops and is banked. Row pb-distribution-f11-daemon-twins. |
+| F12 | (operator, phase-b-99) a copy closes a forbidden edge and no gate sees it. | `xtask clone-gate` fails when duplicated production lines rise; blocking in `xtask quality` and the queue's BOUNDARY check; watched red on a planted copy, green on a move. Row pb-distribution-f12-clone-gate. |
 
 ## Tier 0: the build gate at C (about 50 min)
 
