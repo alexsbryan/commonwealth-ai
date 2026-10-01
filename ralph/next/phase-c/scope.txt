@@ -18,3 +18,4 @@ pc-solo-durable
 pc-pool-ready
 pc-cmnwlth-lift-flake
 pc-corpus-registry-live
+pc-rails-reseal-loop

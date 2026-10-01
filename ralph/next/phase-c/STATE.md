@@ -18,7 +18,7 @@ Projected waves at 3 lanes (ralph's conflict and heavy rules, simulated 2026-10-
 4. pc-split-deploy-honesty, pc-cli-config-load-silent-default, pc-rendezvous-stable-hash
 5. pc-atlas-highlight-determinism, pc-gk-rescue-fabrication, pc-solo-durable
 6. pc-gk-rescue-fabrication-measure (alone)
-7. pc-partial-decline-verdict, pc-cmnwlth-lift-flake, pc-corpus-registry-live (added after the simulation, phase-b-104 and -109; they fill wave 7's free lanes)
+7. pc-partial-decline-verdict, pc-cmnwlth-lift-flake, pc-corpus-registry-live, pc-rails-reseal-loop (added after the simulation, phase-b-104, -109, -110; wave 7's free lanes, then an extra wave)
 8. pc-partial-decline-verdict-measure (alone)
 
 ## Rows
@@ -65,6 +65,12 @@ Projected waves at 3 lanes (ralph's conflict and heavy rules, simulated 2026-10-
   - Census first: where an ingest completes in the running daemon (the folder watch, the API, collaborate's pull loop) and the one place a corpus_state row is written; the fix registers at that one decider, never a second writer. The turn that resolves to zero corpora says so (principle 6).
   - PROOF: an e2e ingests into a running daemon and the next grounded turn cites it; PLANT: drop the live registration, and the turn reads 0 corpora with the absence named.
   LIFT: census first. — read: sovereign-daemon daemon_cmd/corpus_registry.rs, sovereign-core context.rs build_context — check: CLEAN, LINT, TEST(sovereign-daemon), TEST(sovereign-core), PLANT, LAYER, BOUNDARY (expect 0)
+- [ ] pc-rails-reseal-loop — depends [pc-pool-ready] — OUTCOME: cw-rails' KV pump seals a namespace when its own ops warrant it, not on every tick, and a snapshot costs linear time. Found by phase-b's F13 (37208c988; recorded only in an untracked target file, filed by the seat, phase-b-110): `activity-private` re-seals on every tick that has a write because its live set (2,870 rows on the deployed node) sits above SEAL_AFTER_OWN_OPS (2,000) and the snapshot's own rows count toward that bar; each snapshot is O(n^2) in `RingJournal::append`. F13 moved the tick off the request path (the API no longer waits on it), so this is CPU spent continuously on any active node, not a stall. The deployed node's rails.log: 64 seals of activity-private since 14:47Z, one each for every other namespace.
+  - finish: none directly (a phase-c bug row; phase-c is done when every row above the cut line is [x]).
+  - trial: census first; NONE unless the census finds a rewrite it cannot make without one.
+  - Census first: the seal rule's intent (the bar counts what), whether the snapshot's own rows should count, and where the quadratic step is; instrument a tick's elapsed time at rails=debug (F13 made it visible) before and after.
+  - PROOF: on a sandbox pair at 2,870 live rows under the same driven activity, seals no longer follow every write-bearing tick and a tick's elapsed time drops; PLANT: count the snapshot's own rows again, and the re-seal loop returns.
+  LIFT: census first. — read: 37208c988's body, commonwealth-rails kv pump (seal/snapshot), commonwealth-rail journal (RingJournal::append) — check: CLEAN, LINT, TEST(commonwealth-rails), TEST(commonwealth-rail), PLANT
 - [ ] pc-fetch-model-peer-discovery — depends [pc-pool-ready] — OUTCOME: `svrn mesh fetch-model` finds peers that hold a model through cw-rails' roster and fetches over serve's registered model-files origin, or refuses by name; it never reads a file that does not exist and reports "No peer could serve" (found by the seat at phase-b-84).
   - finish: none directly (a phase-c bug row; phase-c is done when every row above the cut line is [x]).
   - trial: census first; NONE unless the census finds a rewrite it cannot make without one.
