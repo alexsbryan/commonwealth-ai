@@ -6,7 +6,6 @@ notifiers are injected, so every gate runs in milliseconds and its failing
 input is explicit.
 """
 import contextlib
-from dataclasses import replace as dataclasses_replace
 import io
 import os
 import pathlib
@@ -981,6 +980,19 @@ class RalphCheckTests(unittest.TestCase):
             self.assertIn("ralph/next/b/queue.toml", r.stderr)
 
 
+# The legacy queues' hand-made PROMPT.md files were factored from the base as
+# of 865cdc92b. five-programs-65 (1cc169511) moved the base on purpose, and
+# those files are their queues' to change, so the factoring proofs render
+# against the base they were factored from.
+FACTORED_BASE = "865cdc92b"
+
+
+def factored_base():
+    return subprocess.run(["git", "-C", str(REPO), "show",
+                           f"{FACTORED_BASE}:ralph/PROMPT.base.md"],
+                          capture_output=True, text=True, check=True).stdout
+
+
 class PromptRenderTests(unittest.TestCase):
     BASE = ("not rendered\n<!-- section: intro -->\n# {{queue}}\n"
             "<!-- section: checks -->\n| LINT |\n<!-- section: rules -->\n- mark {{state}}\n")
@@ -991,7 +1003,7 @@ class PromptRenderTests(unittest.TestCase):
         # Nothing was lost in the factoring: base + ring-room's addendum, with the
         # legacy control files, IS the PROMPT.md its launch line still reads.
         rendered = ralph.render_prompt(
-            (REPO / "ralph/PROMPT.base.md").read_text(),
+            factored_base(),
             (REPO / "ralph/next/ring-room/PROMPT.addendum.md").read_text(),
             {"queue": "ring-room", "state": "ralph/next/ring-room/STATE.md",
              "control_dir": "ralph", "log_dir": "target/ralph"})
@@ -1220,9 +1232,10 @@ class Ei7Stage0MigrationTests(unittest.TestCase):
     def test_the_rendered_prompt_keeps_every_line_of_the_hand_made_one(self):
         _, paths = self.paths()
         self.assertEqual(paths.prompt_addendum, "ralph/next/ei7-stage0/PROMPT.addendum.md")
-        legacy = dataclasses_replace(paths, **ralph.Paths.control_files("ralph"),
-                                     log_dir="target/ralph")
-        rendered = set(ralph.prompt_text(legacy)[0].splitlines())
+        rendered = set(ralph.render_prompt(
+            factored_base(), (REPO / paths.prompt_addendum).read_text(),
+            {"queue": paths.queue, "state": paths.state, "control_dir": "ralph",
+             "log_dir": "target/ralph"}).splitlines())
         # The two lines the render is MEANT to change: the mark call no longer needs the
         # third argument (RALPH_STATE), and a sed-made anecdote that never happened to e7.
         meant = ("ralph-mark.sh <unit-id> <short-hash> ralph/next/ei7-stage0/STATE.md",
