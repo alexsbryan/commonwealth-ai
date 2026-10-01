@@ -303,3 +303,119 @@ async fn the_member_client_mounts_the_openai_face_and_no_reload() {
         "a member must not reach serve's reload through cw-rails"
     );
 }
+
+/// Every route a standalone serve mounts: `assemble`'s, over the mock engine,
+/// plus the bundle `rails_mesh::join` adds, built as join builds it.
+async fn standalone_routes() -> (Vec<RouteBundle>, tempfile::TempDir) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let config_path = SetupConfig::path_in(dir.path());
+    std::fs::write(
+        &config_path,
+        "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"/nonexistent/mock.gguf\"\nembed = \"/nonexistent/mock-embed.gguf\"\n",
+    )
+    .expect("write config");
+    let ServeAssembly {
+        mut routes,
+        servable,
+        rails_base,
+        ..
+    } = assemble(dir.path(), &config_path).await.expect("assembled");
+    routes.push(crate::rpc_warm::bundle(
+        servable,
+        crate::rails_mesh::RailsRoster::new(rails_base),
+        Arc::new(crate::MeshRpcShardWarmer::new()),
+    ));
+    (routes, dir)
+}
+
+/// The census (pb-serve-package-guard): every `/internal/*` route a standalone
+/// serve mounts refuses a non-loopback caller with the loopback guard's 403,
+/// whatever `--listen` names. The paths are read from the mounted bundles, so
+/// an internal route added without `host_kit::shell::guard::loopback_only` is
+/// named here the moment it is mounted.
+#[tokio::test]
+async fn every_internal_route_serve_mounts_refuses_a_non_loopback_caller() {
+    use tower::ServiceExt;
+    let (routes, _dir) = standalone_routes().await;
+    let internal: Vec<String> = routes
+        .iter()
+        .flat_map(|b| b.routes())
+        .filter(|p| p.starts_with("/internal/"))
+        .cloned()
+        .collect();
+    for expected in [
+        crate::rails_mesh::RPC_WARM_PATH,
+        crate::guest_route::GUEST_ROUTE_PATH,
+    ] {
+        assert!(
+            internal.iter().any(|p| p == expected),
+            "the census does not see {expected}: {internal:?}"
+        );
+    }
+    let app = host_kit::shell::mount(routes);
+    let stranger: SocketAddr = "203.0.113.7:40000".parse().unwrap();
+    let mut unguarded = Vec::new();
+    for path in &internal {
+        let uri = path
+            .split('/')
+            .map(|s| if s.starts_with('{') { "x" } else { s })
+            .collect::<Vec<_>>()
+            .join("/");
+        for method in [axum::http::Method::GET, axum::http::Method::POST] {
+            let mut request = axum::http::Request::builder()
+                .method(method.clone())
+                .uri(&uri)
+                .body(axum::body::Body::empty())
+                .expect("request");
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(stranger));
+            let response = app.clone().oneshot(request).await.expect("infallible");
+            let status = response.status();
+            let body = axum::body::to_bytes(response.into_body(), 64 * 1024)
+                .await
+                .unwrap_or_default();
+            let body = String::from_utf8_lossy(&body);
+            if status != axum::http::StatusCode::FORBIDDEN || !body.contains("local-only") {
+                unguarded.push(format!("{method} {path} -> {status} {body}"));
+            }
+        }
+    }
+    assert!(
+        unguarded.is_empty(),
+        "internal routes answer a non-loopback caller without \
+         host_kit::shell::guard::loopback_only: {unguarded:?}"
+    );
+}
+
+/// The guard turns away no legitimate caller: serve bound on every interface
+/// still runs rpc-warm for a loopback caller, as cw-rails' forward is. `{}` is
+/// refused by the handler, past the guard, as a malformed body.
+#[tokio::test]
+async fn serve_on_every_interface_still_serves_rpc_warm_to_a_loopback_caller() {
+    let (routes, _dir) = standalone_routes().await;
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
+        .await
+        .expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    tokio::spawn(host_kit::shell::serve(
+        [listener],
+        routes,
+        std::future::pending(),
+    ));
+    let response = reqwest::Client::new()
+        .post(format!(
+            "http://127.0.0.1:{port}{}",
+            crate::rails_mesh::RPC_WARM_PATH
+        ))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .expect("answered");
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    assert!(
+        status != 403 && body.contains("malformed rpc-warm body"),
+        "a loopback caller did not reach the rpc-warm handler: {status} {body}"
+    );
+}

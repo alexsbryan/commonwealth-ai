@@ -9,9 +9,10 @@
 //! for a stock node.
 //!
 //! Peers reach it through cw-rails (`cwth/http/0`, registered by
-//! `rails_mesh::spawn_registrations`). serve listens on loopback, so a
-//! request reaches it from this host or through cw-rails, which admits
-//! members only.
+//! `rails_mesh::spawn_registrations`), whose forward arrives on loopback.
+//! The route is loopback-only (`host_kit::shell::guard::loopback_only`)
+//! whatever `--listen` names, so cw-rails, which admits members only, is the
+//! one door a peer has.
 
 use std::sync::Arc;
 
@@ -47,7 +48,12 @@ pub fn bundle(
     let transport: Arc<dyn PeerTransport> =
         Arc::new(mesh_reach::rails::RailsTransport::new(roster.base()));
     RouteBundle::new("serve_rpc_warm")
-        .route(RPC_WARM_PATH, post(rpc_warm))
+        .route(
+            RPC_WARM_PATH,
+            post(rpc_warm).layer(axum::middleware::from_fn(
+                host_kit::shell::guard::loopback_only,
+            )),
+        )
         .with_state(Warm {
             servable,
             roster,

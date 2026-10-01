@@ -68,11 +68,17 @@ pub fn bundle(
         ready,
         meta,
     };
+    // The native wire is loopback-only, whatever its host binds: its one
+    // caller is the supervisor on 127.0.0.1 (`ComputeChildClient::from_port`).
+    let guard = || axum::middleware::from_fn(host_kit::shell::guard::loopback_only);
     let bundle = RouteBundle::new("compute_child")
-        .route(ROUTE_COMPLETE, post(handle_complete))
-        .route(ROUTE_COMPLETE_STREAM, post(handle_complete_stream))
-        .route(ROUTE_EMBED, post(handle_embed))
-        .route(ROUTE_EMBED_BATCH, post(handle_embed_batch))
+        .route(ROUTE_COMPLETE, post(handle_complete).layer(guard()))
+        .route(
+            ROUTE_COMPLETE_STREAM,
+            post(handle_complete_stream).layer(guard()),
+        )
+        .route(ROUTE_EMBED, post(handle_embed).layer(guard()))
+        .route(ROUTE_EMBED_BATCH, post(handle_embed_batch).layer(guard()))
         .route(ROUTE_HEALTH, get(handle_health));
     // Each served kind answers on its own route path, from its registration,
     // so a child hosting a kind speaks the same wire as the public route.

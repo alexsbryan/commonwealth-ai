@@ -80,7 +80,14 @@ async fn spawn_server(provider: Arc<dyn InferenceProvider>, role: &str) -> u16 {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
-        axum::serve(listener, app).await.ok();
+        // With the peer address, as the shell serves it: the native wire's
+        // loopback guard fails closed without it.
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await
+        .ok();
     });
     port
 }

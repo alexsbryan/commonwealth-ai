@@ -54,6 +54,8 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# `oneshot`, so the internal-route census can name a non-loopback caller.
+tower = { workspace = true, features = ["util"] }
 # rail-core's signed-op fixtures, for the codec's read-side tests.
 commonwealth-rail-core = { workspace = true, features = ["test-support"] }
 

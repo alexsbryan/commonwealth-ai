@@ -7,9 +7,9 @@
 //! link's dial string names (`StoredGuestLink`, the one decider that turns a
 //! link into an address, which serve's serving-host holds), so a CLI dials
 //! this door rather than opening a tunnel of its own (§12 D6). Moved from the
-//! svrn daemon (pb-mesh-exit-mesh, ruling phase-b-83 (4)). Loopback-only: it
-//! is on serve's own router, which listens on loopback, and it is registered
-//! with no origin, so cw-rails never forwards it.
+//! svrn daemon (pb-mesh-exit-mesh, ruling phase-b-83 (4)). Loopback-only
+//! (`host_kit::shell::guard::loopback_only`) whatever `--listen` names, and
+//! registered with no origin, so cw-rails never forwards it.
 //!
 //! Absence is answered, never substituted (§18.3): no stored link is 412, a
 //! tunnel that will not open is 502, and neither falls back to a local base.
@@ -37,7 +37,12 @@ pub fn bundle() -> RouteBundle {
         Arc::new(MeshTunnelOpener),
     ));
     RouteBundle::new("serve_guest_route")
-        .route(GUEST_ROUTE_PATH, get(guest_route))
+        .route(
+            GUEST_ROUTE_PATH,
+            get(guest_route).layer(axum::middleware::from_fn(
+                host_kit::shell::guard::loopback_only,
+            )),
+        )
         .with_state(link)
 }
 
