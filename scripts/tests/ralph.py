@@ -2618,6 +2618,44 @@ class PoolQueueTests(unittest.TestCase):
             self.assertEqual((root / "target/ralph/q/q-a/q/lint.log").read_text(),
                              "exit=0 the lane's lint\n")
 
+    def test_a_new_lane_starts_from_a_clone_of_the_main_target(self):
+        # (1): the lane's target holds the main tree's artifacts, its evidence
+        # dir is not the main tree's, and every tracked file is newer than
+        # every cloned artifact, so cargo rebuilds the workspace crates once.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "target/debug/deps/libserde.rlib", "warm")
+            write(tmp, "target/ralph/q/lint.log", "the main tree's log")
+            seen = {}
+
+            class TargetLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    t = self.cwd / "target"
+                    seen["dep"] = (t / "debug/deps/libserde.rlib").read_text()
+                    seen["evidence"] = (t / "ralph").exists()
+                    seen["fresh"] = ((self.cwd / "seed.txt").stat().st_mtime
+                                     >= (t / "debug/deps/libserde.rlib").stat().st_mtime)
+                    return super().run(model_args, prompt, log)
+
+            pool = self.make(root, lambda cwd, env=None: TargetLane(cwd))
+            # /tmp is no btrfs, so a plain copy; and the main tree finishes a build
+            # between the lane's checkout and its clone (the race the touch closes).
+            pool.CLONE_TARGET = ("sh", "-c", 'sleep 0.05; touch "$0/debug/deps/libserde.rlib"; '
+                                 'cp -a "$0" "$1"')
+            self.assertEqual(pool.run(), 0)
+            self.assertEqual(seen, {"dep": "warm", "evidence": False, "fresh": True})
+
+    def test_a_target_that_cannot_be_cloned_is_named(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "target/debug/deps/libserde.rlib", "warm")
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
+            pool.CLONE_TARGET = ("false",)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            self.assertIn("target NOT cloned", out.getvalue())
+
     def test_the_legacy_pool_keeps_its_defaults(self):
         args = ralph.build_parser().parse_args(["pool", "--workdir", "."])
         with contextlib.redirect_stdout(io.StringIO()):

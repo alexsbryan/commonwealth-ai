@@ -2067,6 +2067,39 @@ class Pool:
         except OSError as e:
             say(f"pool: could not provision {dst} from {src}: {e}")
 
+    # A reflink clone shares the main tree's blocks until a lane rebuilds them
+    # (btrfs; 7s for 136G, measured 2026-09-01). Never one target shared across
+    # worktrees: cargo then ran another tree's build script (same date).
+    CLONE_TARGET = ("cp", "-a", "--reflink=always")
+
+    def _provision_target(self, unit, wt):
+        """A new lane's target/ is a clone of the main tree's, and every tracked
+        file in the lane is touched after it, so the workspace crates rebuild
+        once (~3-4 min) and external deps stay warm. Where the clone cannot be
+        made the lane builds from an empty target, and the log says so."""
+        src, dst = self.paths.workdir / "target", wt / "target"
+        if not src.is_dir() or dst.exists():
+            return
+        r = subprocess.run([*self.CLONE_TARGET, str(src), str(dst)],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            shutil.rmtree(dst, ignore_errors=True)
+            say(f"pool: lane {unit} target NOT cloned ({error_tail(r.stderr)}) — the lane "
+                "builds from an empty target")
+            return
+        # The lane's evidence directory starts empty: _keep_evidence copies it back.
+        shutil.rmtree(dst / "ralph", ignore_errors=True)
+        files = self._git("ls-files", "-z", cwd=wt).stdout.split("\0")
+        touched = 0
+        for rel in filter(None, files):
+            try:
+                os.utime(wt / rel)
+                touched += 1
+            except OSError:
+                pass          # a tracked path the checkout does not hold (a submodule)
+        say(f"pool: lane {unit} target cloned from {src}; {touched} tracked files touched "
+            "— the workspace crates rebuild once, external deps stay warm")
+
     def run_lane(self, unit, model=None):
         wt = self.paths.workdir / ".ralph" / "wt" / unit
         branch = f"ralph/{unit}"
@@ -2076,6 +2109,7 @@ class Pool:
                 say(f"pool: worktree add failed for {unit}: {r.stderr.strip()}")
                 return
             say(f"pool: lane start {unit} (worktree {wt})")
+            self._provision_target(unit, wt)
         else:
             say(f"pool: lane {unit} resuming in its existing worktree")
             # A lane worktree is created once from the base branch and kept
