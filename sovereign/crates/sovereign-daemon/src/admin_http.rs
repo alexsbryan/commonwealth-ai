@@ -199,6 +199,10 @@ pub struct ReloadResponse {
     /// non-empty. Clients can branch on this without inspecting the
     /// vector.
     pub restart_required: bool,
+    /// Keys that changed and that nothing in svrn reads, so neither a reload
+    /// nor a restart applies them (pb-distribution-f8).
+    #[serde(default)]
+    pub unread_fields: Vec<String>,
 }
 
 async fn admin_reload(
@@ -228,6 +232,8 @@ async fn admin_reload(
 pub(crate) struct ConfigDiff {
     pub models_changed: Vec<&'static str>,
     pub restart_required: Vec<&'static str>,
+    /// Keys that changed and that nothing in svrn reads.
+    pub unread: Vec<&'static str>,
 }
 
 impl ConfigDiff {
@@ -330,30 +336,33 @@ impl ConfigDiff {
         if old.data.dir != new.data.dir {
             d.restart_required.push("data.dir");
         }
-        if old.iroh.enabled != new.iroh.enabled {
-            // The iroh endpoint is bound (or not) during start_daemon;
-            // the acceptor + RoutedTransport install can't be hot-swapped.
-            d.restart_required.push("iroh.enabled");
+        // Nothing in svrn reads these four since cw-rails became the mesh
+        // endpoint (sovereign-cli-mesh `iroh_config_migration`), so a restart
+        // applies nothing: a change is reported as unread, never as
+        // restart-required, and never as no change (pb-distribution-f8).
+        for (key, changed) in [
+            ("iroh.enabled", old.iroh.enabled != new.iroh.enabled),
+            ("iroh.transport", old.iroh.transport != new.iroh.transport),
+            (
+                "iroh.media_origin",
+                old.iroh.media_origin != new.iroh.media_origin,
+            ),
+            (
+                "iroh.media_allow",
+                old.iroh.media_allow != new.iroh.media_allow,
+            ),
+        ] {
+            if changed {
+                d.unread.push(key);
+            }
         }
-        if old.iroh.transport != new.iroh.transport {
-            // Per-class routing is baked into the RoutedTransport
-            // installed at startup.
-            d.restart_required.push("iroh.transport");
-        }
-        // The FIVE below reached the acceptor the same way `iroh.enabled` does
-        // — read once while it is constructed, never re-read — and until
-        // 2026-09-12 none of them was compared here. A change to any one made
-        // `is_noop()` true, so `svrn daemon reload` printed "no config changes
-        // detected" over a config that had demonstrably changed and the daemon
-        // silently kept the old value (ARCH §18.3: absence is reported, never
-        // defaulted). Observed setting `media_origin` on this host: the verb
-        // said stored, reload said nothing changed, the fanout still 401'd.
-        if old.iroh.media_origin != new.iroh.media_origin {
-            d.restart_required.push("iroh.media_origin");
-        }
-        if old.iroh.media_allow != new.iroh.media_allow {
-            d.restart_required.push("iroh.media_allow");
-        }
+        // The THREE below are read once while the daemon boots, never re-read,
+        // and until 2026-09-12 none of them was compared here. A change to any
+        // one made `is_noop()` true, so `svrn daemon reload` printed "no config
+        // changes detected" over a config that had demonstrably changed and the
+        // daemon silently kept the old value (ARCH §18.3: absence is reported,
+        // never defaulted). Observed setting `media_origin` on this host: the
+        // verb said stored, reload said nothing changed, the fanout still 401'd.
         if old.iroh.apps != new.iroh.apps {
             // `[iroh.apps]` is the durable publish tier; the ephemeral one
             // (`svrn run`) goes through `PublishedApps` and needs no restart.
@@ -375,7 +384,7 @@ impl ConfigDiff {
     }
 
     pub(crate) fn is_noop(&self) -> bool {
-        self.models_changed.is_empty() && self.restart_required.is_empty()
+        self.models_changed.is_empty() && self.restart_required.is_empty() && self.unread.is_empty()
     }
 }
 

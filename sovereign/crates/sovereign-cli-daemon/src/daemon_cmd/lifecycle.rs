@@ -1042,7 +1042,22 @@ pub(super) async fn reload_daemon() -> i32 {
         .get("restart_required")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    let unread: Vec<&str> = body
+        .get("unread_fields")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    if !unread.is_empty() {
+        eprintln!(
+            "⚠ changed, but nothing in svrn reads these, so neither a reload nor a restart \
+             applies them: {}\n  cw-rails reads its relay and media from rails.toml.",
+            unread.join(", ")
+        );
+    }
     if reloaded.is_empty() && !restart_required {
+        if !unread.is_empty() {
+            return 0;
+        }
         eprintln!("✓ no config changes detected — nothing to reload");
         return 0;
     }

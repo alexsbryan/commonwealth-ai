@@ -627,6 +627,7 @@ impl EmbeddedDaemon {
                 reloaded_fields: vec![],
                 restart_required_fields: vec![],
                 restart_required: false,
+                unread_fields: vec![],
             });
         }
 
@@ -665,6 +666,9 @@ impl EmbeddedDaemon {
             .map(|s| (*s).to_string())
             .collect();
         let restart_required = !restart_required_fields.is_empty();
+        if !diff.unread.is_empty() {
+            info!(keys = ?diff.unread, "admin_reload: changed keys nothing in svrn reads");
+        }
 
         // Advance the baseline only after successful application.
         // Fields that require restart are still recorded here —
@@ -677,6 +681,7 @@ impl EmbeddedDaemon {
             reloaded_fields: reloaded,
             restart_required_fields,
             restart_required,
+            unread_fields: diff.unread.iter().map(|s| (*s).to_string()).collect(),
         })
     }
 
