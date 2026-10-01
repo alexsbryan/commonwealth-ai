@@ -2426,5 +2426,81 @@ class PathsForTests(unittest.TestCase):
             self.assertEqual(p.prompt, "ralph/PROMPT.md")
 
 
+class QueueLane(FakeLane):
+    """A lane that records the prompt it was handed."""
+
+    prompts = []
+
+    def run(self, model_args, prompt, log):
+        QueueLane.prompts.append(prompt)
+        return super().run(model_args, prompt, log)
+
+
+class PoolQueueTests(unittest.TestCase):
+    """`pool --queue <name>` runs that queue as `run`/`supervise` do: its
+    manifest, rendered prompt, heavy/conflict files and control files
+    (pc-pool-ready (5)-(9))."""
+
+    def fixture(self, tmp, rows, toml=""):
+        git_repo(tmp)
+        write(tmp, "ralph/PROMPT.base.md",
+              "<!-- section: intro -->\n# {{queue}} at {{state}}\n")
+        write(tmp, "ralph/next/q/PROMPT.addendum.md",
+              "<!-- section: intro append -->\nTHE-Q-ADDENDUM\n")
+        write(tmp, "ralph/next/q/queue.toml", toml)
+        write(tmp, "ralph/next/q/STATE.md", rows)
+        write(tmp, "seed.txt", "seed")
+        write(tmp, ".git/info/exclude", "ralph/next/q/ctl/\n.ralph/\n")
+        commit_all(tmp)
+        return pathlib.Path(tmp)
+
+    def make(self, root, session_for, **kwargs):
+        args = ralph.build_parser().parse_args(["pool", "--workdir", str(root), "--queue", "q"])
+        paths = ralph.paths_for(args)
+        return ralph.Pool(paths, session_for=session_for, notify_enabled=False, lanes=2,
+                          base_branch="main", sleep=lambda s: None, **kwargs)
+
+    def test_the_pool_runs_the_queue_it_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n")
+            write(tmp, "ralph/next/q/heavy.txt", "q-a\nq-b  # both move a crate\n")
+            QueueLane.prompts = []
+            pool = self.make(root, lambda cwd, env=None: QueueLane(cwd))
+            self.assertEqual(pool._heavy(), {"q-a", "q-b"})
+            self.assertEqual(pool.run(), 0)
+            self.assertEqual(len(QueueLane.prompts), 2)        # heavy: one per wave
+            for prompt in QueueLane.prompts:
+                self.assertIn("THE-Q-ADDENDUM", prompt)
+                self.assertIn("Do NOT edit ralph/next/q/STATE.md", prompt)
+                self.assertIn("ralph/next/q/ctl/NEEDS_HUMAN.md", prompt)
+            self.assertTrue(ralph.Queue(root / "ralph/next/q/STATE.md").all_done())
+            self.assertTrue((root / "ralph/next/q/ctl/DONE").exists())
+            self.assertFalse((root / "ralph/DONE").exists())
+
+    def test_a_lane_package_halts_into_the_queues_control_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+
+            class BlockedLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    write(self.cwd, "ralph/next/q/ctl/NEEDS_HUMAN.md", "# q-a is blocked\n")
+                    return 0
+
+            pool = self.make(root, lambda cwd, env=None: BlockedLane(cwd))
+            self.assertEqual(pool.run(), 3)
+            self.assertIn("q-a is blocked",
+                          (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
+            self.assertFalse((root / "ralph/NEEDS_HUMAN.md").exists())
+
+    def test_the_legacy_pool_keeps_its_defaults(self):
+        args = ralph.build_parser().parse_args(["pool", "--workdir", "."])
+        with contextlib.redirect_stdout(io.StringIO()):
+            paths = ralph.paths_for(args)
+        self.assertEqual((paths.state, paths.prompt, paths.conflicts, paths.heavy, paths.stop),
+                         ("ralph/STATE.md", "ralph/PROMPT.md", "ralph/conflicts.txt",
+                          "ralph/heavy.txt", "ralph/STOP"))
+        self.assertEqual((args.label, args.session_timeout), ("campaign", 3600))
+
+
 if __name__ == "__main__":
     unittest.main()

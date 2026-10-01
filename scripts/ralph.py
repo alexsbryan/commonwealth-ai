@@ -1766,8 +1766,7 @@ class Pool:
     in the main tree. Progress is the same file protocol as the serial flow."""
 
     def __init__(self, paths, *, session_for, notifier=notify, notify_enabled=True,
-                 lanes=2, base_branch="", conflicts="ralph/conflicts.txt",
-                 prompt="ralph/PROMPT.md", state="ralph/STATE.md",
+                 lanes=2, base_branch="",
                  marker_timeout=DEFAULT_WAIT_LIMIT_S, wait_poll=120, sleep=time.sleep,
                  model="", review_model="", variant="", max_review_attempts=3,
                  max_lane_failures=3, probe=None):
@@ -1777,9 +1776,6 @@ class Pool:
         self.notify_enabled = notify_enabled
         self.lanes = lanes
         self.base_branch = base_branch
-        self.conflicts = conflicts
-        self.prompt = prompt
-        self.state = state
         self.marker_timeout = marker_timeout
         self.wait_poll = wait_poll
         self.sleep = sleep
@@ -1797,17 +1793,17 @@ class Pool:
 
     def _queue(self):
         try:
-            return Queue(self.paths.p(self.state))
+            return Queue(self.paths.p(self.paths.state))
         except (OSError, ValueError):
             return None
 
     def _conflict_pairs(self):
-        p = self.paths.p(self.conflicts)
+        p = self.paths.p(self.paths.conflicts)
         return conflict_pairs(p.read_text()) if p.exists() else set()
 
     def _heavy(self):
-        """The heavy rows (ralph/heavy.txt): at most one per wave."""
-        p = self.paths.p("ralph/heavy.txt")
+        """The heavy rows (the queue's heavy.txt): at most one per wave."""
+        p = self.paths.p(self.paths.heavy)
         if not p.exists():
             return set()
         out = set()
@@ -1842,7 +1838,18 @@ class Pool:
                       + "; ".join(f"{m}: {c}" for m, c in causes.items()))
 
     def _prompt_text(self):
-        return self.paths.p(self.prompt).read_text()
+        """The rendered base + addendum for a queue, the file for a legacy run."""
+        return prompt_text(self.paths)[0]
+
+    def _lane_note(self):
+        """Where a session's own queue lives: another loop may own ralph/STOP and
+        ralph/NEEDS_HUMAN.md in this checkout (the serial loop says the same)."""
+        if not self.paths.queue:
+            return ""
+        return (f"This queue's state is {self.paths.state}; its control files are "
+                f"{self.paths.needs_human}, {self.paths.done} and {self.paths.waiting} "
+                "— never the files of those names directly under ralph/, which belong "
+                "to another loop.\n\n")
 
     def poll_waiting_lanes(self):
         """Each tick, every lane worktree whose `ralph/waiting` names a marker:
@@ -1855,7 +1862,7 @@ class Pool:
         if not wt_root.exists():
             return None, still
         for wt in sorted(wt_root.iterdir()):
-            parsed = waiting_marker(wt, "ralph/waiting")
+            parsed = waiting_marker(wt, self.paths.waiting)
             if parsed is None:
                 continue
             unit, waiting, marker = wt.name, parsed[0], parsed[1]
@@ -1872,7 +1879,7 @@ class Pool:
                 # committed waiting file that survives to the merge parks the
                 # main tree's loop on a marker that only ever existed in this
                 # worktree. The commit is a no-op when nothing is staged.
-                self._git("add", "-A", "--", "ralph/waiting", cwd=wt)
+                self._git("add", "-A", "--", self.paths.waiting, cwd=wt)
                 self._git("commit", "-q", "-m", f"{unit}: waiting ended — marker landed",
                           cwd=wt)
             else:
@@ -1886,7 +1893,9 @@ class Pool:
         # the completion marker could never be written.
         (self.paths.workdir / "ralph" / "lanes").mkdir(parents=True, exist_ok=True)
         (self.paths.workdir / ".ralph" / "wt").mkdir(parents=True, exist_ok=True)
-        say(f"pool: lanes={self.lanes} base={self.base_branch}")
+        self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
+        say(f"pool: lanes={self.lanes} base={self.base_branch}"
+            + (f" queue={self.paths.queue}" if self.paths.queue else ""))
         while True:
             if self.paths.p(self.paths.stop).exists():
                 say("pool: STOP")
@@ -1951,8 +1960,8 @@ class Pool:
         # (REVIEW-mint-mesh-rest, 3 attempts, worked other rows and never
         # marked itself [x]).
         note = (f"Your unit: {review.id} — the pool selected it as the ready review "
-                "row. Open only that row in ralph/STATE.md; do not scan the queue for "
-                "another.\n\n")
+                f"row. Open only that row in {self.paths.state}; do not scan the queue "
+                "for another.\n\n") + self._lane_note()
         for attempt in range(1, self.max_review_attempts + 1):
             if self.paths.p(self.paths.stop).exists():
                 say("pool: operator STOP — leaving the review")
@@ -1960,8 +1969,8 @@ class Pool:
             say(f"pool: serial review {review.id} (main tree) attempt {attempt}"
                 + (f" · model {effective}" if effective else ""))
             note = (f"Your unit: {review.id} — the pool selected it as the ready review "
-                    "row. Open only that row in ralph/STATE.md; do not scan the queue for "
-                    "another.\n\n")
+                    f"row. Open only that row in {self.paths.state}; do not scan the queue "
+                    "for another.\n\n") + self._lane_note()
             if attempt > 1:
                 # A retried review re-derived its whole analysis every attempt
                 # until 2026-09-17 (REVIEW-audit-daemon-1, four hours): the
@@ -2063,8 +2072,9 @@ class Pool:
         note = (f"POOL LANE: you are working unit {unit} in an isolated git worktree.\n"
                 f"Commit your work here. When the unit passes its OWN tests, write "
                 f"ralph/lanes/{unit}.done and commit it — the pool merges your branch then.\n"
-                "Do NOT edit ralph/STATE.md except to correct your own row's premises "
-                "(PROMPT §6); the pool marks the unit done after the merge.\n\n")
+                f"Do NOT edit {self.paths.state} except to correct your own row's premises "
+                "(PROMPT §6); the pool marks the unit done after the merge.\n\n"
+                + self._lane_note())
         if self._git("rev-parse", "-q", "--verify", "MERGE_HEAD", cwd=wt).returncode == 0:
             note = ("Your worktree has a MERGE IN PROGRESS: the pool merged the base "
                     "branch in and it conflicted. Resolve every conflict, `git add` the "
@@ -2094,7 +2104,7 @@ class Pool:
             branch = f"ralph/{unit}"
             if not wt.exists():
                 continue
-            lane_pkg = wt / "ralph" / "NEEDS_HUMAN.md"
+            lane_pkg = wt / self.paths.needs_human
             if lane_pkg.exists() and lane_pkg.stat().st_size:
                 # A lane writes its package in ITS worktree — the main-tree
                 # check never saw it, so the wave re-ran the row to the failure
@@ -2108,7 +2118,7 @@ class Pool:
                 self.notifier("auto — halt package, director next", first_line(lane_pkg), self.notify_enabled)
                 return 3
             if not (wt / "ralph" / "lanes" / f"{unit}.done").exists():
-                parsed = waiting_marker(wt, "ralph/waiting")
+                parsed = waiting_marker(wt, self.paths.waiting)
                 if parsed is not None:
                     # A waiting end is the lane's own protocol for a detached
                     # run outliving the session (r9-boundary-sweep, struck out
@@ -2142,7 +2152,7 @@ class Pool:
             queue = self._queue()
             if queue is not None:
                 queue.set_status(unit, Status.DONE)
-                self._git("add", self.state)
+                self._git("add", self.paths.state)
                 self._git("commit", "-q", "-m", f"{unit}: merged (pool)")
             self._git("worktree", "remove", "--force", str(wt))
             self._git("branch", "-D", branch)
@@ -2448,8 +2458,7 @@ def cmd_pool(args):
                        notify_enabled=args.notify, cwd=cwd, env=env)
 
     pool = Pool(paths, session_for=session_for, notify_enabled=args.notify,
-                lanes=args.lanes, base_branch=base, conflicts=args.conflicts,
-                prompt=args.prompt, state=args.state,
+                lanes=args.lanes, base_branch=base,
                 marker_timeout=resolve_wait_limit(args, paths),
                 model=models["MODEL"], review_model=models["REVIEW_MODEL"],
                 variant=models["VARIANT"])
@@ -2457,8 +2466,9 @@ def cmd_pool(args):
         ensure_excludes(paths.workdir, RUNTIME_MARKERS + (".ralph/",))
         inner = [sys.executable, str(pathlib.Path(__file__).resolve()), "pool",
                  "--workdir", str(paths.workdir), "--label", args.label,
-                 "--prompt", args.prompt, "--state", args.state,
-                 "--lanes", str(args.lanes)]
+                 *queue_flags(paths), "--lanes", str(args.lanes)]
+        if not paths.queue:
+            inner += ["--conflicts", paths.conflicts]
         if args.notify:
             inner.append("--notify")
         plist = install_job(f"dev.ralph.{paths.workdir.name}-{args.label}", inner,
@@ -2793,11 +2803,13 @@ def build_parser():
     p.set_defaults(fn=cmd_supervise)
 
     p = sub.add_parser("pool")
-    common(p, queue=False)          # another repo drives this verb; it stays on its flags
-    p.add_argument("--prompt", default="ralph/PROMPT.md")
-    p.add_argument("--state", default="ralph/STATE.md")
+    # --queue loads the manifest as run/supervise do; another repo drives this
+    # verb on the legacy flags, which keep their defaults (paths_for).
+    common(p)
+    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
+    p.add_argument("--state", default=None, help="default: ralph/STATE.md")
     p.add_argument("--lanes", type=int, default=2)
-    p.add_argument("--conflicts", default="ralph/conflicts.txt")
+    p.add_argument("--conflicts", default=None, help="default: ralph/conflicts.txt")
     p.add_argument("--base-branch", default="")
     p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
                    action="store_true", help="launchd on macOS, systemd-run --user on Linux")
