@@ -302,14 +302,20 @@ def tip() -> str:
     return r.stdout.strip()
 
 
-def stamp_built(build_args: list[str], sandbox: Path, target: Path, lift_id: str, at: str) -> list[str]:
-    """Record `at` against every executable this lift's build put in `target`.
-    A second, no-op build lists them: cargo names each artifact it would link."""
+def stamp_built(cargo_args: list[str], sandbox: Path, target: Path, lift_id: str, at: str) -> list[str]:
+    """Record `at` against every binary `cargo <cargo_args>` put in `target`.
+    A second, no-op run lists them: cargo names each artifact it would link.
+    Run after the build AND after the tests: cargo uplifts a binary as a hard
+    link of its deps/ artifact, and the test step relinks a bin its tests
+    spawn with dev-dependency features (the cmnwlth lift's cw-rails, watched
+    2026-10-01), so the binary a lift leaves behind is the test step's.
+    deps/ (test harnesses) is not stamped: nothing reads it as a sibling."""
     env = dict(os.environ, RUSTC_WRAPPER="", CARGO_TARGET_DIR=str(target))
-    r = subprocess.run(["cargo", "build", *build_args, "--message-format=json"], cwd=sandbox, env=env, capture_output=True, text=True)
+    r = subprocess.run(["cargo", *cargo_args, "--message-format=json"], cwd=sandbox, env=env, capture_output=True, text=True)
     if r.returncode != 0:
-        raise Verdict("could-not-judge", f"the build passed and listing its binaries did not: {r.stderr[-500:]}")
-    built = [Path(e) for e in (json.loads(l).get("executable") for l in r.stdout.splitlines() if l.startswith("{")) if e]
+        raise Verdict("could-not-judge", f"`cargo {cargo_args[0]}` passed and listing its binaries did not: {r.stderr[-500:]}")
+    listed = (json.loads(l).get("executable") for l in r.stdout.splitlines() if l.startswith("{"))
+    built = [Path(e) for e in listed if e and "deps" not in Path(e).relative_to(target).parts]
     path = target / STAMPS
     stamps = json.loads(path.read_text()) if path.exists() else {}
     for exe in built:
@@ -646,13 +652,16 @@ def lift(lift_id: str, spec: dict, sandbox: Path, target: Path, keep: bool, sets
     if binary is not None and not binary.exists():
         raise Verdict("failed", f"the build reported success and produced no {binary}")
     at = tip()
-    record["commit"], record["stamped"] = at, stamp_built(build, sandbox, target, lift_id, at)
+    record["commit"], record["stamped"] = at, stamp_built(["build", *build], sandbox, target, lift_id, at)
     judge_siblings(spec, target, sets, at, record)
 
     rule("4. the package's own tests, in isolation")
     features = ["--features", ",".join(spec["test_features"])] if "test_features" in spec else []
-    rc, _ = cargo(["test", *spec.get("test", seeds_args(seeds) + features)], sandbox, target, "test.log", r"^(error|test result|failures:)")
+    test = spec.get("test", seeds_args(seeds) + features)
+    rc, _ = cargo(["test", *test], sandbox, target, "test.log", r"^(error|test result|failures:)")
     say(f"test: rc={rc}")
+    if rc == 0:
+        record["stamped"] += stamp_built(["test", "--no-run", *test], sandbox, target, lift_id, at)
     if rc != 0:
         raise Verdict("failed", f"the lifted closure's own tests do not pass in isolation (see {sandbox}/test.log)")
     built = f"built in {record['build_s']}s and tested outside the monorepo"
