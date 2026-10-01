@@ -126,7 +126,7 @@ fn the_daemon_commissions_the_shared_skill_set_not_an_empty_registry() {
 fn the_daemon_pushes_the_recipe_authoring_bundle() {
     let src = daemon_cmd_source();
     assert_eq!(
-        src.match_indices("(ingest.calls().recipe_authoring)(")
+        src.match_indices("ingest.calls().recipe_authoring.as_ref().map(")
             .count(),
         1,
         "the daemon must compose ingest's recipe authoring — the one place \

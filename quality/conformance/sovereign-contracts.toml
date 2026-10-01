@@ -14,19 +14,19 @@
 requirement = "FE-99"
 test = "sovereign-contracts::principal::tests::a_non_hex_claim_is_unreadable"
 file = "sovereign/crates/sovereign-contracts/src/principal.rs"
-line = 325
+line = 340
 asserts = 1
 
 [[claim]]
 requirement = "FE-99"
 test = "sovereign-contracts::principal::tests::a_wrong_length_claim_is_unreadable_and_keeps_its_raw_value"
 file = "sovereign/crates/sovereign-contracts/src/principal.rs"
-line = 310
+line = 325
 asserts = 1
 
 [[claim]]
 requirement = "FE-99"
 test = "sovereign-contracts::principal::tests::either_header_spelling_reads_the_one_wire_form"
 file = "sovereign/crates/sovereign-contracts/src/principal.rs"
-line = 283
+line = 298
 asserts = 1

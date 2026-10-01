@@ -124,8 +124,13 @@ fn local_models(port: u16) -> Vec<String> {
     ids
 }
 
-/// Pids whose command line runs a `sovereign-serve` binary.
-fn serve_processes() -> Vec<String> {
+/// Pids whose command line runs a `sovereign-serve` binary for THIS root:
+/// its environment carries the `SVRNMESH_DATA_DIR` the test handed the stock
+/// process, which any child inherits. Host-wide, a full workspace run's other
+/// tests' serves appeared here and failed a one-process install (auto-11).
+fn serve_processes(data_dir: &Path) -> Vec<String> {
+    let mut marker = b"SVRNMESH_DATA_DIR=".to_vec();
+    marker.extend_from_slice(data_dir.as_os_str().as_encoded_bytes());
     std::fs::read_dir("/proc")
         .into_iter()
         .flatten()
@@ -135,7 +140,9 @@ fn serve_processes() -> Vec<String> {
             let cmd = std::fs::read(e.path().join("cmdline")).ok()?;
             let argv0 = cmd.split(|b| *b == 0).next()?;
             let name = Path::new(std::str::from_utf8(argv0).ok()?).file_name()?;
-            (name == "sovereign-serve").then(|| e.file_name().to_string_lossy().into_owned())
+            let env = std::fs::read(e.path().join("environ")).ok()?;
+            (name == "sovereign-serve" && env.split(|b| *b == 0).any(|v| v == marker.as_slice()))
+                .then(|| e.file_name().to_string_lossy().into_owned())
         })
         .collect()
 }
@@ -164,7 +171,7 @@ fn the_stock_install_serves_both_ports_from_one_process_and_one_engine() {
         config_text(root.path(), svrn, internal, dead_rails, "mock.gguf"),
     )
     .expect("config");
-    let serve_before = serve_processes();
+    let serve_before = serve_processes(&root.path().join("svrnmesh"));
     let log = root.path().join("stock.stderr.log");
     let mut stock = Killed(
         Command::new(BIN)
@@ -239,7 +246,7 @@ fn the_stock_install_serves_both_ports_from_one_process_and_one_engine() {
         get_json(&format!("http://127.0.0.1:{serve}/v1/models")).unwrap_or_default()
     );
     assert_eq!(
-        serve_processes(),
+        serve_processes(&root.path().join("svrnmesh")),
         serve_before,
         "a sovereign-serve process appeared: the stock install is one process"
     );
