@@ -119,17 +119,18 @@ deleted (1c120f23d). Serve's own route is the one to check, in phase-c.
 
 ## Operator decisions, with the seat's recommendation
 
-- **O1, merge timing.** Hold the merge until pb-distribution and F1 land: the interim release install
-  cannot start the daemon.
+- **O1, merge timing: ruled by the operator 2026-10-01 (phase-b-93), as recommended.** Hold the merge until
+  pb-distribution and F1 land: the interim release install cannot start the daemon.
 - **O2, on-prem: ruled by the operator 2026-10-01 (phase-b-86).** On-prem works at the end of Phase B: API keys
   resolving to `Asserted`, the daemon's API, and its own hardened distribution (rows pb-distribution-onprem-*).
   Mobile stays retired.
-- **O3, test deletions.** Restore `containment_guard_e2e` against the stock binary; the boot guard is a
-  safety property. For a546a456b, name a successor for each of its 15 tests or rule them out.
-- **O4, debug first token.** Accept the debug-profile x1.09-1.13 first token on debug hosts. Release
-  bars bind (phase-b-25).
-- **O5, what lands on main.** As the review proposed: FIVE_PROGRAMS.md, the code-binding decisions and
-  this file land; `ralph/next/*` stays off main.
+- **O3, test deletions: ruled by the operator 2026-10-01 (phase-b-93), as recommended.** Restore
+  `containment_guard_e2e` against the stock binary; the boot guard is a safety property. For a546a456b,
+  name a successor for each of its 15 tests or write one. Row pb-distribution-o3-tests.
+- **O4, debug first token: ruled by the operator 2026-10-01 (phase-b-93), as recommended.** Accept the
+  debug-profile x1.09-1.13 first token on debug hosts. Release bars bind (phase-b-25).
+- **O5, what lands on main: ruled by the operator 2026-10-01 (phase-b-93), as recommended.** As the review
+  proposed: FIVE_PROGRAMS.md, the code-binding decisions and this file land; `ralph/next/*` stays off main.
 
 ## Readings
 
