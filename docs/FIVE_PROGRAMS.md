@@ -271,7 +271,8 @@ never defaulted (ARCH principle 6).
      - it measures the node's hardware and live load itself, through the
        one detector (`commonwealth_discovery::hardware`): the machine is the
        node's, not any origin's, and an origin declares only what it owns
-       (svrn's storage budget clamps the advertised free storage; serve
+       (svrn's storage budget clamps the advertised free storage, declared
+       as `storage_remaining_bytes` and never gossiped (phase-b-91); serve
        declares VRAM) (phase-b-83);
      - it hands a local caller a loopback bridge to a peer's origin.
    - Who a peer is, is cw-rails' question. What that principal may see is
