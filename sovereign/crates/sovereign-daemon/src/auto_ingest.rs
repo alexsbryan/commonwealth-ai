@@ -885,23 +885,36 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
             tracing::debug!(handoff = %handoff.handoff_id, "pull_loops: handoff has no merge_leader");
             continue;
         };
-        let coordinator_contact = state
-            .membership()
-            .member(coordinator_id)
-            .await
-            .map(|m| m.dial);
-        // Best transport candidate (ranked by `peer_addr::rank`, so
-        // this matches the order used by gossip and inference
-        // fallback) — the pull loop pins one coordinator URL.
-        let coordinator_url = match &coordinator_contact {
-            Some(contact) => state
-                .peer_transport()
-                .endpoints(contact, mesh_reach::TrafficClass::ControlPlane)
+        // The coordinator is this node: its queue is on our own internal
+        // port. cw-rails resolves no reach for its own node (409 "is this
+        // node"), so asking the transport would leave the self-pull with no
+        // address (pb-distribution-f9-stock-collaborate-e2e).
+        let coordinator_url = if coordinator_id == self_id {
+            tracing::debug!(
+                handoff = %handoff.handoff_id,
+                daemon_port,
+                "pull_loops: this node coordinates — pulling over its own loopback"
+            );
+            Some(format!("http://127.0.0.1:{daemon_port}"))
+        } else {
+            let coordinator_contact = state
+                .membership()
+                .member(coordinator_id)
                 .await
-                .into_iter()
-                .next()
-                .map(|ep| ep.base_url),
-            None => None,
+                .map(|m| m.dial);
+            // Best transport candidate (ranked by `peer_addr::rank`, so
+            // this matches the order used by gossip and inference
+            // fallback) — the pull loop pins one coordinator URL.
+            match &coordinator_contact {
+                Some(contact) => state
+                    .peer_transport()
+                    .endpoints(contact, mesh_reach::TrafficClass::ControlPlane)
+                    .await
+                    .into_iter()
+                    .next()
+                    .map(|ep| ep.base_url),
+                None => None,
+            }
         };
         let Some(coordinator_url) = coordinator_url else {
             tracing::warn!(
