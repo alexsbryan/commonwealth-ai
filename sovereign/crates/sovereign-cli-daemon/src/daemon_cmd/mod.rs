@@ -26,6 +26,7 @@ use std::io::IsTerminal as _;
 use sovereign_contracts::launch::Launch;
 use sovereign_core::setup_config::SetupConfig;
 
+mod key;
 mod serving_status;
 // `pub(crate)` so `setup_cmd::fim` can reach `restart_daemon` directly.
 // `svrn setup --fim` rewrites the model config and must bounce the
@@ -69,6 +70,7 @@ pub async fn run(launch: &Launch, args: &[String]) -> i32 {
         Some("restart") => restart_daemon(&args[1..]).await,
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
+        Some("key") => key::cmd_key(&args[1..]),
         // Sizing, not lifecycle: what VRAM would a loadout need, and which
         // card holds it. Lives under `daemon` because it answers the same
         // question the serving boot's preflight asks (`sovereign_compute::preflight`),
@@ -127,6 +129,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ("stop",    "Stop the daemon cleanly (SIGTERM). Tries the PID file first, then looks up the listener on :9741 via lsof/ss, then falls back to launchctl / systemctl."),
             ("reload",  "Apply config changes without a restart (POST /v1/admin/reload)."),
             ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests."),
+            ("key",     "Add, revoke or list on-prem API keys (`svrn daemon key --help`). A daemon holding any key identifies every caller by key."),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
             "Logs: ~/.svrnmesh/logs/daemon.log. To register as a launchd/systemd service, run `svrn install-service`.",
