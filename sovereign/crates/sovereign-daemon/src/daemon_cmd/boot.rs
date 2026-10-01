@@ -445,18 +445,20 @@ pub(super) async fn run_daemon(
             // features.db — the recipe-author project layer, ingest's
             // (pb-ingest-rehome-daemon), composed over svrn's notes (the
             // store opened above; no second handle) and the mount's seams.
-            let recipe_authoring = (ingest.calls().recipe_authoring)(
-                &data_dir.join("features.db"),
-                state_store_concrete.clone()
-                    as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>,
-                mount.recipe_author.clone(),
+            // `None`: the distribution composed ingest without it (phase-b-87).
+            let recipe_authoring = ingest.calls().recipe_authoring.as_ref().map(|compose| {
+                compose(
+                    &data_dir.join("features.db"),
+                    state_store_concrete.clone()
+                        as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>,
+                    mount.recipe_author.clone(),
+                )
+            });
+            tracing::info!(
+                recipe_authoring = recipe_authoring.is_some(),
+                "daemon: the ingest program is composed in this process"
             );
-            tracing::info!("daemon: the ingest program is composed in this process");
-            (
-                Some(enrich_config),
-                Some((mount, atlas)),
-                Some(recipe_authoring),
-            )
+            (Some(enrich_config), Some((mount, atlas)), recipe_authoring)
         }
         None => {
             tracing::info!(
@@ -728,7 +730,11 @@ pub(super) async fn run_daemon(
             (projects, Some(authoring.tools))
         }
         None => (
-            Err(crate::hosted_ingest::NO_RECIPE_PROJECTS.to_string()),
+            Err(match ingest_ports {
+                Some(_) => crate::hosted_ingest::NO_RECIPE_AUTHORING,
+                None => crate::hosted_ingest::NO_RECIPE_PROJECTS,
+            }
+            .to_string()),
             None,
         ),
     };
@@ -826,6 +832,12 @@ pub(super) async fn run_daemon(
                 // DEGRADATION the bundle's report names.
                 b.push(match recipe_tools {
                     Some(recipe_authoring_bundle) => recipe_authoring_bundle,
+                    None if ingest_ports.is_some() => {
+                        Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+                            "recipe-authoring",
+                            crate::hosted_ingest::NO_RECIPE_AUTHORING,
+                        ))
+                    }
                     None => Box::new(sovereign_contracts::tool_bundle::Withheld::new(
                         "recipe-authoring",
                         "no ingest program is composed in this process, and recipe \

@@ -100,20 +100,24 @@ pub struct IngestCalls {
             + Send
             + Sync,
     >,
-    /// Ingest's recipe authoring over svrn's notes (pb-ingest-rehome-daemon):
-    /// the recipe-project store at the given `features.db` behind its port,
-    /// and the recipe-authoring tool bundle over it and the mount's seams.
-    #[allow(clippy::type_complexity)]
-    pub recipe_authoring: Box<
-        dyn Fn(
-                &std::path::Path,
-                Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>,
-                sovereign_contracts::recipe::testing::RecipeAuthorSeams,
-            ) -> sovereign_contracts::recipe::project::RecipeAuthoring
-            + Send
-            + Sync,
-    >,
+    /// Ingest's recipe authoring over svrn's notes (pb-ingest-rehome-daemon).
+    /// `None`: the distribution composes ingest without it (on-prem,
+    /// phase-b-87), and the recipe-authoring family is withheld by name.
+    pub recipe_authoring: Option<RecipeAuthoringCompose>,
 }
+
+/// Ingest's recipe authoring: the recipe-project store at the given
+/// `features.db` behind its port, and the recipe-authoring tool bundle over it
+/// and the mount's seams.
+pub type RecipeAuthoringCompose = Box<
+    dyn Fn(
+            &std::path::Path,
+            Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>,
+            sovereign_contracts::recipe::testing::RecipeAuthorSeams,
+        ) -> sovereign_contracts::recipe::project::RecipeAuthoring
+        + Send
+        + Sync,
+>;
 
 /// The distribution's composition of ingest.
 pub struct HostedIngest {
@@ -187,6 +191,11 @@ pub const NO_INGEST: &str = "no corpus engine available on this node: no ingest 
 pub const NO_RECIPE_PROJECTS: &str = "this daemon has no recipe-author store: no ingest program \
                                       is composed in this process (the stock binary, `svrn \
                                       daemon`, composes it)";
+
+/// Why the recipe-project routes and the recipe-authoring family refuse where
+/// ingest is composed without recipe authoring (phase-b-87).
+pub const NO_RECIPE_AUTHORING: &str = "this distribution composes ingest without recipe \
+                                       authoring (the stock binary, `svrn daemon`, composes it)";
 
 /// A route ingest serves, answered on svrn alone: 503 naming the program.
 async fn absent(uri: axum::http::Uri) -> axum::response::Response {

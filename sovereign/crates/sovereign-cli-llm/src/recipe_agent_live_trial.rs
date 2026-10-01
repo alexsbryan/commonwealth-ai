@@ -1296,11 +1296,14 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     seams.probe_parameters = Some(Arc::new(probe_params));
     // Ingest's recipe authoring over svrn's notes: the project store behind
     // its port, and the recipe-authoring tools (pb-ingest-rehome).
-    let authoring = (ingest_calls.recipe_authoring)(
-        &dotsovereign.join("features.db"),
-        Arc::clone(&notes),
-        seams,
-    );
+    let Some(compose) = ingest_calls.recipe_authoring.as_ref() else {
+        eprintln!(
+            "live-trial: {}",
+            sovereign_daemon::hosted_ingest::NO_RECIPE_AUTHORING
+        );
+        return 2;
+    };
+    let authoring = compose(&dotsovereign.join("features.db"), Arc::clone(&notes), seams);
     let projects = match authoring.projects {
         Ok(p) => p,
         Err(e) => {

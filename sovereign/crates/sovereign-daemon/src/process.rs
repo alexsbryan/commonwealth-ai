@@ -7,7 +7,9 @@
 
 use crate::daemon_cmd;
 pub use crate::hosted_code::{CodeHost, CodeMount, HostedCode};
-pub use crate::hosted_ingest::{HostedIngest, IngestCalls, IngestHost, IngestMount};
+pub use crate::hosted_ingest::{
+    HostedIngest, IngestCalls, IngestHost, IngestMount, RecipeAuthoringCompose,
+};
 pub use crate::hosted_mesh::{HostedMesh, MeshAccess};
 pub use crate::serve_client::{HostedParts, HostedServe, RankPorts, Ranked};
 use sovereign_contracts::launch::Launch;

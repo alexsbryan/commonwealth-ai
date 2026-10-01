@@ -310,7 +310,14 @@ fn open_projects() -> std::result::Result<Arc<dyn RecipeProjectPort>, i32> {
             return Err(2);
         }
     };
-    match (calls.recipe_authoring)(&features_path, notes, seams).projects {
+    let Some(compose) = calls.recipe_authoring.as_ref() else {
+        eprintln!(
+            "recipe-agent: {}",
+            sovereign_daemon::hosted_ingest::NO_RECIPE_AUTHORING
+        );
+        return Err(2);
+    };
+    match compose(&features_path, notes, seams).projects {
         Ok(projects) => Ok(projects),
         Err(e) => {
             tracing::warn!(target: "sovereign_cli_llm::recipe_agent", path = %features_path.display(), error = %e, "recipe-project store did not open");
