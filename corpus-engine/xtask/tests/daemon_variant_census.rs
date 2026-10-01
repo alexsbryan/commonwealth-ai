@@ -44,6 +44,7 @@
 //! failing inputs here are "add a fourth variant and build it nowhere" and
 //! "delete the last host that builds `Desktop`".
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 #[path = "shared/repo_root.rs"]
@@ -344,5 +345,278 @@ fn no_host_installs_a_router_on_the_daemon() {
                  daemon-convergence Phase 2 removed; name it in DaemonServices instead"
             );
         }
+    }
+}
+
+/// The construction census (pb-distribution; FIVE_PROGRAMS §12 "Done",
+/// phase-b-30): `EmbeddedDaemon::new` is called in non-test code only by the
+/// process entries `LIVE_CONSTRUCTION_SITES` names. The list above was the
+/// whole claim until now and a list cannot see a site it does not name, so
+/// this scan decides the file set and the list must equal it.
+///
+/// A grep cannot pass (26 files name the type in comments) and a line filter
+/// cannot tell a `#[cfg(test)] mod tests;` file from production, so the scan
+/// PARSES: it walks every workspace member's module tree from its lib and bin
+/// roots, skips `#[cfg(test)]` items and `#[test]` fns, and matches the call
+/// in the token stream, where comments and doc strings are already gone.
+#[test]
+fn only_the_process_entries_construct_a_daemon() {
+    let root = repo_root();
+    let mut walk = ModWalk::default();
+    for krate in workspace_member_dirs(&root) {
+        for entry in target_roots(&krate) {
+            let dir = entry
+                .parent()
+                .expect("a target root has a dir")
+                .to_path_buf();
+            walk.file(&root, &entry, &dir);
+        }
+    }
+    assert!(
+        walk.visited.len() > 1000,
+        "the census parsed only {} files; the module walk has drifted from the workspace",
+        walk.visited.len()
+    );
+    assert!(
+        walk.broken.is_empty(),
+        "the census could not read these modules, so it cannot claim them: {:?}",
+        walk.broken
+    );
+    let listed: BTreeSet<String> = LIVE_CONSTRUCTION_SITES
+        .iter()
+        .map(|(rel, _, _)| rel.to_string())
+        .collect();
+    let found: BTreeSet<String> = walk.hits.keys().cloned().collect();
+    assert_eq!(
+        found, listed,
+        "`EmbeddedDaemon::new` in non-test code ({:?}) differs from \
+         LIVE_CONSTRUCTION_SITES. A daemon is constructed only by the stock/svrn \
+         process entry: spawn that process instead, or, if this is a new entry, \
+         list it with the variant it reaches",
+        walk.hits
+    );
+}
+
+/// Directories of the root `Cargo.toml`'s `[workspace] members`.
+fn workspace_member_dirs(root: &Path) -> Vec<PathBuf> {
+    let manifest: toml::Value = std::fs::read_to_string(root.join("Cargo.toml"))
+        .expect("root Cargo.toml")
+        .parse()
+        .expect("root Cargo.toml parses");
+    manifest["workspace"]["members"]
+        .as_array()
+        .expect("[workspace] members")
+        .iter()
+        .map(|m| root.join(m.as_str().expect("member is a path")))
+        .collect()
+}
+
+/// A crate's non-test target roots: its lib, its bins and its build script.
+/// Tests, benches and examples are not production and are not walked.
+fn target_roots(krate: &Path) -> Vec<PathBuf> {
+    let manifest: toml::Value = std::fs::read_to_string(krate.join("Cargo.toml"))
+        .unwrap_or_else(|e| panic!("{}/Cargo.toml: {e}", krate.display()))
+        .parse()
+        .expect("member Cargo.toml parses");
+    let path_of = |t: &toml::Value| {
+        t.get("path")
+            .and_then(|p| p.as_str())
+            .map(|p| krate.join(p))
+    };
+    let mut roots = vec![
+        krate.join("src/lib.rs"),
+        krate.join("src/main.rs"),
+        krate.join("build.rs"),
+    ];
+    roots.extend(manifest.get("lib").and_then(path_of));
+    for bin in manifest
+        .get("bin")
+        .and_then(|b| b.as_array())
+        .into_iter()
+        .flatten()
+    {
+        roots.extend(path_of(bin));
+    }
+    if let Ok(entries) = std::fs::read_dir(krate.join("src/bin")) {
+        for e in entries.flatten() {
+            let p = e.path();
+            roots.push(if p.is_dir() { p.join("main.rs") } else { p });
+        }
+    }
+    roots.retain(|p| p.extension().is_some_and(|e| e == "rs") && p.is_file());
+    roots.sort();
+    roots.dedup();
+    roots
+}
+
+#[derive(Default)]
+struct ModWalk {
+    visited: BTreeSet<PathBuf>,
+    /// repo-relative file -> the items in it that construct a daemon
+    hits: BTreeMap<String, Vec<String>>,
+    broken: Vec<String>,
+}
+
+impl ModWalk {
+    /// Parse `file`, whose out-of-line child modules resolve under `mod_dir`.
+    fn file(&mut self, root: &Path, file: &Path, mod_dir: &Path) {
+        if !self.visited.insert(file.to_path_buf()) {
+            return;
+        }
+        let parsed = std::fs::read_to_string(file)
+            .map_err(|e| e.to_string())
+            .and_then(|s| syn::parse_file(&s).map_err(|e| e.to_string()));
+        match parsed {
+            Ok(ast) => {
+                let dir = file.parent().expect("a source file has a dir");
+                self.items(root, file, &ast.items, dir, mod_dir, false);
+            }
+            Err(e) => self.broken.push(format!("{}: {e}", file.display())),
+        }
+    }
+
+    fn items(
+        &mut self,
+        root: &Path,
+        file: &Path,
+        items: &[syn::Item],
+        file_dir: &Path,
+        mod_dir: &Path,
+        inline: bool,
+    ) {
+        for item in items {
+            match item {
+                syn::Item::Mod(m) if !is_test_only(&m.attrs) => {
+                    let name = m.ident.to_string();
+                    let name = name.trim_start_matches("r#");
+                    let path_attr = path_attr(&m.attrs);
+                    if let Some((_, inner)) = &m.content {
+                        let child = mod_dir.join(path_attr.as_deref().unwrap_or(name));
+                        self.items(root, file, inner, file_dir, &child, true);
+                        continue;
+                    }
+                    // rustc: a `#[path]` outside an inline block is relative to
+                    // the declaring file's dir, inside one to the module dir; a
+                    // `#[path]` or `mod.rs` file owns its own dir for children.
+                    let (target, child_dir) = match path_attr {
+                        Some(p) => {
+                            let t = if inline {
+                                mod_dir.join(p)
+                            } else {
+                                file_dir.join(p)
+                            };
+                            let d = t.parent().expect("module file has a dir").to_path_buf();
+                            (t, d)
+                        }
+                        None if mod_dir.join(format!("{name}.rs")).is_file() => {
+                            (mod_dir.join(format!("{name}.rs")), mod_dir.join(name))
+                        }
+                        None => (mod_dir.join(name).join("mod.rs"), mod_dir.join(name)),
+                    };
+                    if target.is_file() {
+                        self.file(root, &target, &child_dir);
+                    } else {
+                        self.broken.push(format!(
+                            "{}: `mod {name};` resolves to no file ({})",
+                            file.display(),
+                            target.display()
+                        ));
+                    }
+                }
+                syn::Item::Mod(_) => {}
+                syn::Item::Impl(imp) if !is_test_only(&imp.attrs) => {
+                    for inner in &imp.items {
+                        let attrs = match inner {
+                            syn::ImplItem::Fn(f) => &f.attrs,
+                            syn::ImplItem::Const(c) => &c.attrs,
+                            _ => continue,
+                        };
+                        if !is_test_only(attrs) {
+                            let label =
+                                format!("impl {}", quote::ToTokens::to_token_stream(&imp.self_ty));
+                            self.scan(root, file, inner, label);
+                        }
+                    }
+                }
+                other => {
+                    if !item_attrs(other).is_some_and(is_test_only) {
+                        let label = item_label(other);
+                        self.scan(root, file, other, label);
+                    }
+                }
+            }
+        }
+    }
+
+    fn scan(&mut self, root: &Path, file: &Path, node: &impl quote::ToTokens, label: String) {
+        // Token spacing is the printer's: `EmbeddedDaemon :: new (`.
+        let tokens = node.to_token_stream().to_string();
+        if tokens.contains("EmbeddedDaemon :: new (") {
+            let rel = file
+                .strip_prefix(root)
+                .unwrap_or(file)
+                .to_string_lossy()
+                .to_string();
+            self.hits.entry(rel).or_default().push(label);
+        }
+    }
+}
+
+/// `#[cfg(test)]` (or a `cfg` that needs `test` and does not negate it), and
+/// `#[test]` / `#[tokio::test]`: compiled only into a test binary.
+fn is_test_only(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|a| {
+        let last = a.path().segments.last().map(|s| s.ident.to_string());
+        if last.as_deref() == Some("test") {
+            return true;
+        }
+        if !a.path().is_ident("cfg") {
+            return false;
+        }
+        let syn::Meta::List(list) = &a.meta else {
+            return false;
+        };
+        let cfg = list.tokens.to_string();
+        let idents: Vec<&str> = cfg
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
+            .collect();
+        idents.contains(&"test") && !idents.contains(&"not") && !idents.contains(&"any")
+    })
+}
+
+fn path_attr(attrs: &[syn::Attribute]) -> Option<String> {
+    attrs.iter().find_map(|a| match &a.meta {
+        syn::Meta::NameValue(nv) if nv.path.is_ident("path") => match &nv.value {
+            syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(s),
+                ..
+            }) => Some(s.value()),
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
+fn item_attrs(item: &syn::Item) -> Option<&[syn::Attribute]> {
+    Some(match item {
+        syn::Item::Fn(i) => &i.attrs,
+        syn::Item::Const(i) => &i.attrs,
+        syn::Item::Static(i) => &i.attrs,
+        syn::Item::Trait(i) => &i.attrs,
+        syn::Item::Macro(i) => &i.attrs,
+        syn::Item::Struct(i) => &i.attrs,
+        syn::Item::Enum(i) => &i.attrs,
+        syn::Item::Use(i) => &i.attrs,
+        _ => return None,
+    })
+}
+
+fn item_label(item: &syn::Item) -> String {
+    match item {
+        syn::Item::Fn(i) => format!("fn {}", i.sig.ident),
+        syn::Item::Const(i) => format!("const {}", i.ident),
+        syn::Item::Static(i) => format!("static {}", i.ident),
+        syn::Item::Trait(i) => format!("trait {}", i.ident),
+        _ => "item".to_string(),
     }
 }
