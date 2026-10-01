@@ -46,8 +46,9 @@
 //! daemon binds no mesh endpoint, advertises no mDNS and runs no gossip or
 //! ring round at all — those are cw-rails', and `svrn mesh up` hands this
 //! profile to it (`--local-only`). What the profile removes here is the
-//! daemon's own mesh-facing loops: no peer-assisted ingest handoff, no rail KV
-//! pump, and no origin registered with cw-rails.
+//! daemon's own mesh-facing loops: no peer-assisted ingest handoff and no
+//! origin registered with cw-rails. (The plane-seal pump left for cw-rails at
+//! pb-mesh-exit-mesh.)
 
 pub use sovereign_contracts::local_only::{LocalOnlyProfile, LocalOnlySource, ENV_VAR};
 
@@ -60,8 +61,6 @@ pub use sovereign_contracts::local_only::{LocalOnlyProfile, LocalOnlySource, ENV
 pub enum MeshService {
     /// The peer-assisted ingest handoff loop (`auto_ingest`).
     AutoIngestCollaborate,
-    /// The mesh-store outbox pump that signs local writes onto their rings.
-    RailKvPump,
     /// The `ingest:v1` execute origin (`crate::work_origin`), served on
     /// loopback and registered with cw-rails, whose donor forwards units to
     /// it. Spawned only on a node with a corpus engine.
@@ -79,7 +78,6 @@ impl MeshService {
     pub fn as_str(self) -> &'static str {
         match self {
             MeshService::AutoIngestCollaborate => "auto_ingest_collaborate",
-            MeshService::RailKvPump => "rail_kv_pump",
             MeshService::WorkOrigin => "work_origin",
             MeshService::PeerOrigin => "peer_origin",
             MeshService::GuestOrigin => "guest_origin",
@@ -90,7 +88,6 @@ impl MeshService {
     /// NOT spawned, which is the half a log of spawns cannot show.
     pub const ALL: &'static [MeshService] = &[
         MeshService::AutoIngestCollaborate,
-        MeshService::RailKvPump,
         MeshService::WorkOrigin,
         MeshService::PeerOrigin,
         MeshService::GuestOrigin,
@@ -172,6 +169,6 @@ mod tests {
         assert!(svc.contains(MeshService::PeerOrigin));
         assert!(!svc.contains(MeshService::GuestOrigin));
         assert_eq!(svc.names(), vec!["auto_ingest_collaborate", "peer_origin"]);
-        assert!(svc.skipped_names().contains(&"rail_kv_pump"));
+        assert!(svc.skipped_names().contains(&"guest_origin"));
     }
 }

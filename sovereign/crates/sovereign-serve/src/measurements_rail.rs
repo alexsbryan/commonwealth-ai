@@ -334,7 +334,7 @@ pub async fn republish(
 }
 
 /// How often [`reconcile_loop`] reads the journal's digest: the seal pump's
-/// cadence (sovereign-mesh `rail_kv_pump::RAIL_KV_PUMP_INTERVAL`, 2 s), so a
+/// cadence (cw-rails' `kv::PUMP_INTERVAL`, 2 s, which runs the seal), so a
 /// seal leaves no gap longer than one of its own ticks.
 pub const RECONCILE_INTERVAL: Duration = Duration::from_secs(2);
 

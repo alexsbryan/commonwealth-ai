@@ -71,7 +71,7 @@ const OWNERS: &[(&str, &str)] = &[
         "the fold: it reads a Lease act back, and leases nothing",
     ),
     (
-        "sovereign/crates/sovereign-mesh/src/rail_kv_pump.rs",
+        "commonwealth/crates/commonwealth-rails/src/plane_seal.rs",
         "the seal's snapshot: it re-appends a lease this node already holds, and takes nothing",
     ),
 ];

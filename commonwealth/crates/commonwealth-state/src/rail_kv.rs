@@ -118,8 +118,9 @@ const F_SNAPSHOT: &str = "snap";
 /// pump seals again.
 ///
 /// ONE constant for every namespace a pump seals, KV and measurements alike,
-/// read by both sealers — the daemon's (`sovereign_mesh::rail_kv_pump`) and
-/// cw-rails' (ARCH §10.6). Two thousand ops is roughly 1.2 MB of journal at
+/// read by both of cw-rails' sealers — the kv pump's and the plane seal's
+/// (`commonwealth_rails::plane_seal`, the daemon's until pb-mesh-exit-mesh)
+/// (ARCH §10.6). Two thousand ops is roughly 1.2 MB of journal at
 /// the measured ~594-byte line, held by every node in the mesh — small enough
 /// that a seal is rare (a household writes on the order of 3,500 ops a year)
 /// and large enough that the seal's own cost, one admission plus one

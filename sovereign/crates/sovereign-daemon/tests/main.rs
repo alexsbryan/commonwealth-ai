@@ -118,8 +118,6 @@ mod no_engine_census;
 mod openai_wire_fidelity;
 #[path = "main/port_config.rs"]
 mod port_config;
-#[path = "main/rail_kv_pump_loop_tests.rs"]
-mod rail_kv_pump_loop_tests;
 #[path = "main/rails_base_config.rs"]
 mod rails_base_config;
 #[path = "main/reading_http_e2e.rs"]

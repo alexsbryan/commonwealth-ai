@@ -84,6 +84,8 @@ pub mod lan;
 pub mod ledger;
 pub mod membership;
 pub mod origins;
+/// The `mesh-measurements` and `work` seal arms, run on the kv pump's tick.
+pub mod plane_seal;
 pub mod presence;
 pub mod rail;
 pub mod ring_routes;

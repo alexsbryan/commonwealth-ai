@@ -522,14 +522,19 @@ impl KvHost {
     }
 }
 
-/// Drain the store forever. Spawned by [`crate::RailsDaemon::run`] after it
-/// has projected the store; aborted with it.
+/// Drain the store forever, and run the two plane seal arms
+/// ([`crate::plane_seal::seal_once`]) on the same tick. Spawned by
+/// [`crate::RailsDaemon::run`] after it has projected the store; aborted with
+/// it.
 pub async fn run_forever(host: Arc<KvHost>) {
     info!(target: "rails", interval_secs = PUMP_INTERVAL.as_secs(),
           seal_after_own_ops = SEAL_AFTER_OWN_OPS, "kv pump: started");
     loop {
         host.project_dirty().await;
-        let out = host.pump_once().await;
+        let mut out = host.pump_once().await;
+        let planes = crate::plane_seal::seal_once(&host.rail).await;
+        out.sealed += planes.sealed;
+        out.snapshot_rows += planes.snapshot_rows;
         if out != PumpOutcome::default() {
             debug!(target: "rails", appended = out.appended, deferred = out.deferred,
                    refused = out.refused, sealed = out.sealed, snapshot_rows = out.snapshot_rows,

@@ -1161,9 +1161,9 @@ on the next round. The node's replicated store and its pump are `cw-rails`'
 (`commonwealth-rails/src/kv.rs`): the store is `in_memory()`, so the pump's
 first act at start is to rebuild it from the journals or hold nothing at all,
 and a peer's ops reach it through the `/v1/rail/ingest` door and are folded on
-the next pump tick, not at a ring round. The daemon's
-`sovereign-mesh/src/rail_kv_pump.rs` keeps only the `mesh-measurements` and
-`work` seal arms; the measurements live set is serve's, whose reconcile loop
+the next pump tick, not at a ring round. The `mesh-measurements` and `work`
+seal arms run on the same tick (`commonwealth-rails/src/plane_seal.rs`, the
+daemon's until pb-mesh-exit-mesh); the measurements live set is serve's, whose reconcile loop
 (`sovereign-serve/src/measurements_rail.rs`) re-appends it when the journal's
 digest moves.
 Which namespaces replicate is DECLARED in `DAEMON_OWN_NAMESPACES`; no property

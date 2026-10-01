@@ -205,7 +205,6 @@ async fn the_control_a_networked_daemon_spawns_every_gated_loop() {
 
     for service in [
         MeshService::AutoIngestCollaborate,
-        MeshService::RailKvPump,
         MeshService::PeerOrigin,
         MeshService::GuestOrigin,
     ] {

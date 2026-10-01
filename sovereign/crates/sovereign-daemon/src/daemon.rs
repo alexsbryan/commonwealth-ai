@@ -219,10 +219,6 @@ enum DaemonState {
         /// three-line diff and stay silent about it for five weeks
         /// (`ec7ca66c`, 2026-07-21 — see `auto_ingest::CollaborateHandle`).
         _collaborate_handle: Option<crate::auto_ingest::CollaborateHandle>,
-        /// Aborts the plane-seal pump on Drop — the loop that seals the
-        /// daemon's own namespaces. Same pattern and the same reason as
-        /// `_collaborate_handle`.
-        _rail_kv_pump_handle: Option<sovereign_mesh::rail_kv_pump::RailKvPumpHandle>,
         /// Stops the `ingest:v1` execute origin and its registration with
         /// cw-rails on Drop (pb-work-donor). `None` on a local-only daemon and
         /// on a node with no corpus engine.
@@ -1727,24 +1723,19 @@ impl EmbeddedDaemon {
         // Each is recorded in `running_services` at its spawn site, so the
         // boot assertion reads what happened rather than re-deriving what
         // should have.
-        let (collaborate_handle, rail_kv_pump_handle) = if local_only.is_local_only() {
+        let collaborate_handle = if local_only.is_local_only() {
             // Every one of these is a conversation with a peer, and a
             // local-only node has no other side (see `crate::local_only`'s
             // "skips the NETWORK, never the model").
-            (None, None)
+            None
         } else {
             let collaborate_handle =
                 crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), internal_port);
             running_services.record(crate::local_only::MeshService::AutoIngestCollaborate);
 
-            // The KV drain and KV seal are cw-rails' since fp-77/fp-78 —
-            // the node's KV lives there (fp-88). The `mesh-measurements`
-            // and `work` seal arms stay here (five-programs-40).
-            let rail_kv_pump_handle = sovereign_mesh::rail_kv_pump::spawn_plane_seal(
-                app_state.inner.fabric.clone(),
-                sovereign_mesh::rail_kv_pump::RAIL_KV_PUMP_INTERVAL,
-            );
-            running_services.record(crate::local_only::MeshService::RailKvPump);
+            // The KV drain and both seals (the store namespaces, and the
+            // `mesh-measurements` and `work` planes) are cw-rails' own pump's
+            // (fp-77/fp-78; the planes at pb-mesh-exit-mesh).
 
             // The `ingest:v1` execute origin (pb-work-donor): served and
             // registered with cw-rails on the SAME networked branch the
@@ -1795,7 +1786,7 @@ impl EmbeddedDaemon {
                 }
             }
 
-            (Some(collaborate_handle), Some(rail_kv_pump_handle))
+            Some(collaborate_handle)
         };
 
         // Re-spawn any solo corpus ingest the daemon was running before
@@ -1981,7 +1972,6 @@ impl EmbeddedDaemon {
             app_state,
             client_addr,
             _collaborate_handle: collaborate_handle,
-            _rail_kv_pump_handle: rail_kv_pump_handle,
             _work_origin_handle: work_origin_handle,
             _peer_origin_handle: peer_origin_handle,
             _guest_origin_handle: guest_origin_handle,
