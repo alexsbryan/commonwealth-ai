@@ -310,6 +310,10 @@ pub struct LandscapeDigestResponse {
 // Tests
 // -----------------------------------------------------------------
 
+/// The ring namespace the newsworthy watcher's tracked articles replicate on.
+/// Federation wire, re-exported at corpus-index's `ingest_port::newsworthy`.
+pub const APP_ID_TRACKED: &str = "wikipedia-newsworthy-tracked";
+
 #[cfg(test)]
 mod tests {
     use super::*;

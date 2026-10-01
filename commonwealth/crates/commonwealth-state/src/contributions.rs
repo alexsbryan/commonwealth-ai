@@ -31,7 +31,7 @@ use crate::store::MeshStore;
 /// `app_id` namespace used for ledger events inside `MeshStore`.
 /// Distinct from peer-preference state (which is local-only and
 /// excluded from gossip — see `peer_preferences` module in commit 3).
-pub const CONTRIBUTIONS_APP_ID: &str = "contributions";
+pub use oicp_types::contributions::CONTRIBUTIONS_APP_ID;
 
 /// Per-process monotonic counter that nudges the unique suffix on
 /// rapid-fire emits. Without it, two events emitted in the same

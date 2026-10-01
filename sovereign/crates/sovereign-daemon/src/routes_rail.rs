@@ -157,7 +157,7 @@ fn resolve_wall(pages: &GuestPages, requested: Option<&str>) -> Result<String, R
              — name one with ?namespace=<id>",
         ));
     };
-    if sovereign_mesh::ring_roster::is_daemon_owned(asked) {
+    if sovereign_contracts::ring_namespaces::is_daemon_owned(asked) {
         tracing::warn!(
             namespace = asked,
             "rail: refused a wall grant on one of this daemon's own rings"

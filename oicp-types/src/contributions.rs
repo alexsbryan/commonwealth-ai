@@ -210,3 +210,7 @@ pub struct NodeContributions {
 /// who joined yesterday isn't drowned out by historical totals,
 /// long enough that day-to-day variance smooths out.
 pub const DEFAULT_WINDOW_DAYS: u32 = 30;
+
+/// The ring namespace contribution ledger events replicate on. Federation
+/// wire, re-exported at `commonwealth_state::contributions`.
+pub const CONTRIBUTIONS_APP_ID: &str = "contributions";

@@ -214,7 +214,7 @@ pub struct PortalMarker {
 /// `run_leader_step` re-derives a `TrackedArticle` from the next daily portal
 /// page, so the cost is one tick of `first_seen_at`, and in the shipped daemon
 /// `MeshStore` is `in_memory()` and loses them on every restart anyway.
-pub const APP_ID_TRACKED: &str = "wikipedia-newsworthy-tracked";
+pub use sovereign_contracts::oicp::knowledge::APP_ID_TRACKED;
 
 /// KV namespace for daily portal-page idempotency markers. Keyed by
 /// `portal:<YYYY-MM-DD>`. Written and read only inside

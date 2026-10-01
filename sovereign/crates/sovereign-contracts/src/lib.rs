@@ -75,6 +75,8 @@ pub mod git;
 /// A guest grant the holder has accepted — `guest.json`, read by both the CLI and the daemon.
 pub mod guest_link;
 pub mod guest_pages;
+/// The daemon's own rings and the one decider over them (`is_daemon_owned`).
+pub mod ring_namespaces;
 pub mod health;
 /// This node's identity, published as a watch over `kernel_types::NodeId` —
 /// a reader a consumer holds rather than a value it copies, because

@@ -119,7 +119,7 @@ impl GuestPages {
         published: &std::collections::BTreeMap<String, String>,
     ) -> Result<Self, String> {
         for ns in d.guest_pages.keys() {
-            if sovereign_mesh::ring_roster::is_daemon_owned(ns) {
+            if sovereign_contracts::ring_namespaces::is_daemon_owned(ns) {
                 return Err(format!(
                     "[daemon.guest_pages] declares '{ns}' open to guests, but that is one of \
                      this daemon's OWN rings — its roster is the mesh's membership and its \

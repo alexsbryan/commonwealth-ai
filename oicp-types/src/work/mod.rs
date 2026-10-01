@@ -40,3 +40,7 @@ pub const MAX_UNIT_ATTEMPTS: u32 = 3;
 /// Default lease duration in milliseconds (5 minutes). Heartbeats refresh
 /// the lease every `LEASE_MS / 3` on the peer side.
 pub const LEASE_MS: u64 = 300_000;
+
+/// The ring namespace the work plane writes. Federation wire, re-exported at
+/// `commonwealth_work::WORK_NAMESPACE`.
+pub const WORK_NAMESPACE: &str = "work";

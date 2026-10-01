@@ -58,6 +58,10 @@ impl LayerRange {
     }
 }
 
+/// The ring namespace inference plans and model rows replicate on. Federation
+/// wire (§12 3a rung 2), re-exported at `commonwealth_state::store_adapter`.
+pub const INFERENCE_APP_ID: &str = "inference";
+
 #[cfg(test)]
 mod tests {
     use super::*;
