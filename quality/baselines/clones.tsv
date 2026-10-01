@@ -3,7 +3,7 @@
 #   cargo run -p xtask -- clone-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clone-gate --tighten
-14054	(total covered lines)
+13826	(total covered lines)
 37	commonwealth/crates/commonwealth-core/src/mesh/mod.rs <-> sovereign/crates/sovereign-cli-mesh/src/daemon_store.rs
 60	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs
 32	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs <-> sovereign/crates/sovereign-serve/src/rails_mesh.rs
@@ -167,8 +167,6 @@
 100	sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/chat_ask.rs <-> sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/throughput.rs
 20	sovereign/crates/sovereign-cli-daemon/src/daemon_bin.rs <-> sovereign/crates/sovereign-cli/src/sibling.rs
 16	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_omo.rs <-> sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_sovereign.rs
-70	sovereign/crates/sovereign-cli-daemon/src/memory_watch.rs <-> sovereign/crates/sovereign-daemon/src/daemon_cmd/memory_watch.rs
-158	sovereign/crates/sovereign-cli-daemon/src/panic_hook.rs <-> sovereign/crates/sovereign-daemon/src/daemon_cmd/panic_hook.rs
 24	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/finish.rs <-> sovereign/crates/sovereign-cli-daemon/src/setup_cmd/terminal.rs
 32	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/finish.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/state/config.rs
 16	sovereign/crates/sovereign-cli-dev/src/arch_report_cmd.rs <-> sovereign/crates/sovereign-cli-dev/src/code_cmd.rs
