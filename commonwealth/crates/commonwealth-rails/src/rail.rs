@@ -204,9 +204,26 @@ fn namespace_of(q: &RailQuery) -> Result<String, Response> {
     })
 }
 
+/// A namespace that is not one is refused with `kind: "bad_namespace"`
+/// beside the sentence, so a dialing client hands its caller the same typed
+/// refusal a local rail would (`RailError::BadNamespace`), never prose to
+/// match (ARCH principle 9).
 fn journal_of(rail: &RingRail, namespace: &str) -> Result<Arc<RingJournal>, Response> {
-    rail.journal(namespace)
-        .map_err(|e| err(StatusCode::BAD_REQUEST, e.to_string()))
+    rail.journal(namespace).map_err(|e| match e {
+        RailError::BadNamespace(ns) => {
+            tracing::debug!(target: "rails", namespace = %ns, "rail: refused a namespace that is not one");
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": RailError::BadNamespace(ns.clone()).to_string(),
+                    "kind": "bad_namespace",
+                    "namespace": ns,
+                })),
+            )
+                .into_response()
+        }
+        e => err(StatusCode::BAD_REQUEST, e.to_string()),
+    })
 }
 
 /// POST /v1/rail/append — sign and append one act to the named namespace.

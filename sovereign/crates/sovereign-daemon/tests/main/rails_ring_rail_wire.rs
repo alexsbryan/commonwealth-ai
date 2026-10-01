@@ -137,3 +137,16 @@ async fn a_refused_attestation_comes_back_typed() {
     );
     assert!(local.journal_read(NS).await.unwrap().is_empty());
 }
+
+/// A namespace that is not one comes back typed across the dial, so the
+/// daemon's rail routes refuse it with a 400, as they would a local rail's.
+/// Failing input: cw-rails' refusal without its `kind`, read as `Rejected`.
+#[tokio::test]
+async fn a_bad_namespace_comes_back_typed() {
+    let (rail, _base) = door(Seen::default()).await;
+    let refused = rail.journal_read("../../etc").await.unwrap_err();
+    assert!(
+        matches!(&refused, RailError::BadNamespace(ns) if ns == "../../etc"),
+        "{refused:?}"
+    );
+}

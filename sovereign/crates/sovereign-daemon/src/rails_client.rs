@@ -248,6 +248,16 @@ fn refused_error(
                 .to_string(),
         };
     }
+    // A namespace that is not one keeps its type across the dial, so the
+    // rail routes answer 400 for it as they do for a local rail, not 500.
+    if body.get("kind").and_then(|k| k.as_str()) == Some("bad_namespace") {
+        return RailError::BadNamespace(
+            body.get("namespace")
+                .and_then(|n| n.as_str())
+                .unwrap_or_default()
+                .to_string(),
+        );
+    }
     // A refused guest attestation keeps its name across the dial, so the
     // door hands the caller the rails daemon's own verdict (principle 6).
     if let Some(refusal) = body
