@@ -2556,6 +2556,53 @@ class PoolQueueTests(unittest.TestCase):
             self.assertEqual((set(order[:2]), order[2], set(order[3:])),
                              ({"q-a", "q-b"}, "REVIEW-audit-q-auto-1", {"q-c", "q-d"}))
 
+    def decisions_fixture(self, tmp):
+        root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n")
+        install_script(tmp, "ralph-decisions.py")
+        for part in ("_header.md", "_archive-ledger.md", "_flags.md", "_archive-appendices.md"):
+            write(tmp, f"ralph/decisions/{part}", f"{part}\n")
+        subprocess.run([sys.executable, "scripts/ralph-decisions.py", "--write"], cwd=tmp,
+                       check=True, capture_output=True)
+        commit_all(tmp, "decisions")
+        return root
+
+    class MintingLane(FakeLane):
+        """Each lane records a decision, as PROMPT's pool-lane section says: the
+        entry file only, minted in its own tree."""
+
+        def run(self, model_args, prompt, log):
+            subprocess.run([sys.executable, "scripts/ralph-decisions.py", "new", "q",
+                            "--subject", self.cwd.name, "--who", "worker",
+                            "--date", "2026-10-01"], cwd=self.cwd, check=True,
+                           capture_output=True)
+            return super().run(model_args, prompt, log)
+
+    def test_two_lanes_minting_one_id_both_merge_and_the_ledger_is_current(self):
+        # (3) and (10): both lanes mint q-1 from the same base.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.decisions_fixture(tmp)
+            pool = self.make(root, lambda cwd, env=None: self.MintingLane(cwd))
+            self.assertEqual(pool.run(), 0)
+            names = sorted(p.name for p in (root / "ralph/decisions").glob("q-*.md"))
+            self.assertEqual(names, ["q-1.md", "q-2.md"])
+            subjects = {(root / "ralph/decisions" / n).read_text().split(" · ")[2] for n in names}
+            self.assertEqual(subjects, {"q-a", "q-b"})
+            check = subprocess.run([sys.executable, "scripts/ralph-decisions.py", "--check"],
+                                   cwd=tmp, capture_output=True, text=True)
+            self.assertEqual(check.returncode, 0, check.stderr)
+            self.assertEqual(subprocess.run(["git", "-C", tmp, "status", "--porcelain",
+                                             "--untracked-files=no"],
+                                            capture_output=True, text=True).stdout, "")
+
+    def test_without_the_renumber_the_second_merge_halts(self):
+        # The failing input the renumber exists for (its PLANT, kept as a test).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.decisions_fixture(tmp)
+            pool = self.make(root, lambda cwd, env=None: self.MintingLane(cwd))
+            with mock.patch.object(pool, "_renumber_decisions", return_value=None):
+                self.assertEqual(pool.run(), 3)
+            self.assertIn("merge conflict", (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
+
     def test_the_legacy_pool_keeps_its_defaults(self):
         args = ralph.build_parser().parse_args(["pool", "--workdir", "."])
         with contextlib.redirect_stdout(io.StringIO()):

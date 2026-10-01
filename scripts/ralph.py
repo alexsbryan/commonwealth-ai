@@ -1768,6 +1768,12 @@ def conflict_pairs(text):
     return pairs
 
 
+# ralph/DECISIONS.md is rendered from one file per decision (ralph-decisions.py).
+DECISIONS_DIR = "ralph/decisions"
+DECISIONS_RENDERED = "ralph/DECISIONS.md"
+DECISIONS_SCRIPT = "scripts/ralph-decisions.py"
+
+
 class Pool:
     """The parallel driver: waves of ready units in git worktrees, serial
     merges, a conflict halts (never auto-resolved). REVIEW rows run serially
@@ -2120,6 +2126,49 @@ class Pool:
         session.run(model_args, note + self._prompt_text(),
                     str(self.paths.workdir / "target" / "ralph" / f"lane-{unit}.out"))
 
+    def _renumber_decisions(self, unit, wt, branch):
+        """Lanes in one wave each mint `<campaign>-<max+1>` from the same tree,
+        so the second merge is an add/add conflict. Before merging, give every
+        decision the lane added whose path the main tree already holds the next
+        free id (ralph-decisions.py renumber, the one minting rule), on the
+        lane's branch. Returns a halt reason or None."""
+        entries = self.paths.p(DECISIONS_DIR)
+        if not entries.is_dir():
+            return None
+        added = self._git("diff", "--name-only", "--diff-filter=A", f"HEAD...{branch}",
+                          "--", DECISIONS_DIR)
+        clashes = [rel for rel in added.stdout.split() if self.paths.p(rel).exists()]
+        for rel in clashes:
+            r = subprocess.run([sys.executable, str(self.paths.p(DECISIONS_SCRIPT)), "renumber",
+                                str(wt / rel), "--against", str(entries)],
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                return f"lane {unit}: could not renumber {rel}: {error_tail(r.stderr)}"
+            say(f"pool: lane {unit} decision {rel} is taken on the base — renumbered "
+                f"{pathlib.Path(r.stdout.strip()).name}")
+        if clashes:
+            self._git("add", "-A", "--", DECISIONS_DIR, cwd=wt)
+            c = self._git("commit", "-q", "-m", f"{unit}: decision ids renumbered at merge (pool)",
+                          cwd=wt)
+            if c.returncode != 0:
+                return f"lane {unit}: the renumber commit failed: {error_tail(c.stderr)}"
+        return None
+
+    def _regenerate_decisions(self, unit):
+        """Lanes write ralph/decisions/<id>.md only; the rendered ledger is
+        regenerated here, once per merge, and lands in the mark commit. Returns
+        a halt reason or None."""
+        if not self.paths.p(DECISIONS_DIR).is_dir():
+            return None
+        r = subprocess.run([sys.executable, str(self.paths.p(DECISIONS_SCRIPT)), "--write"],
+                           cwd=str(self.paths.workdir), capture_output=True, text=True)
+        if r.returncode != 0:
+            return (f"merged {unit}, but {DECISIONS_SCRIPT} --write failed: "
+                    f"{error_tail(r.stderr or r.stdout)}")
+        say(f"pool: {r.stdout.strip()}")
+        self._git("add", "--", DECISIONS_RENDERED)
+        return None
+
     def run_wave(self, wave, model=None):
         # The chosen model is stamped on the wave line: one glance at
         # launchd.log says which provider served the wave (order
@@ -2174,18 +2223,25 @@ class Pool:
                                           / f"lane-{unit}.out"))
                 continue
             self._lane_failures.pop(unit, None)
+            refused = self._renumber_decisions(unit, wt, branch)
+            if refused is not None:
+                return self._halt(refused)
             say(f"pool: lane {unit} finished — merging {branch}")
             r = self._git("merge", "--no-ff", "-m", f"merge {unit}", branch)
             if r.returncode != 0:
                 self._git("merge", "--abort")
                 return self._halt(f"merge conflict merging {branch} — resolve in the "
                                   "main tree, then resume")
+            refused = self._regenerate_decisions(unit)
             queue = self._queue()
             if queue is not None:
                 queue.set_status(unit, Status.DONE)
                 self._git("add", self.paths.state)
-                # The subject ralph-mark.sh writes: units_since_audit counts it.
-                self._git("commit", "-q", "-m", f"ralph: {unit} done")
+            # The subject ralph-mark.sh writes: units_since_audit counts it.
+            self._git("commit", "-q", "-m", f"ralph: {unit} done" if queue is not None
+                      else f"ralph: {DECISIONS_RENDERED} after merging {unit}")
+            if refused is not None:
+                return self._halt(refused)
             self._git("worktree", "remove", "--force", str(wt))
             self._git("branch", "-D", branch)
             say(f"pool: lane {unit} merged and marked [x]")
