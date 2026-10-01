@@ -1768,6 +1768,26 @@ def conflict_pairs(text):
     return pairs
 
 
+# The one cargo budget (lib/cargo-jobs.sh), split across the lanes of a wave.
+CARGO_JOBS_LIB = pathlib.Path(__file__).resolve().parent / "lib" / "cargo-jobs.sh"
+# Where a lane reads its share: a file, because `toolbox run` forwards no env.
+LANE_JOBS_FILE = "target/ralph/lane.env"
+LANE_JOBS_VARS = ("SOVEREIGN_LINT_JOBS", "SOVEREIGN_TEST_JOBS")
+
+
+def cargo_jobs_share(lanes):
+    """(jobs per lane, reason) from lib/cargo-jobs.sh `cargo_jobs_share`; 0 jobs
+    = free memory is under the floor for that many lanes. (None, error) when
+    the decider could not be read."""
+    r = subprocess.run(["bash", "-c", 'source "$0" && cargo_jobs_share "$1" && '
+                        'printf "%s\\n%s\\n" "$CARGO_JOBS_SHARE" "$CARGO_JOBS_SHARE_REASON"',
+                        str(CARGO_JOBS_LIB), str(lanes)], capture_output=True, text=True)
+    lines = r.stdout.splitlines()
+    if r.returncode != 0 or len(lines) < 2 or not lines[0].isdigit():
+        return None, error_tail(r.stderr) or r.stderr.strip()[-200:] or f"exit {r.returncode}"
+    return int(lines[0]), lines[1]
+
+
 # ralph/DECISIONS.md is rendered from one file per decision (ralph-decisions.py).
 DECISIONS_DIR = "ralph/decisions"
 DECISIONS_RENDERED = "ralph/DECISIONS.md"
@@ -1783,7 +1803,7 @@ class Pool:
                  lanes=2, base_branch="",
                  marker_timeout=DEFAULT_WAIT_LIMIT_S, wait_poll=120, sleep=time.sleep,
                  model="", review_model="", variant="", max_review_attempts=3,
-                 max_lane_failures=3, probe=None):
+                 max_lane_failures=3, probe=None, jobs_share=None):
         self.paths = paths
         self.session_for = session_for
         self.notifier = notifier
@@ -1801,6 +1821,8 @@ class Pool:
         self.probe = probe or (lambda model: probe_model(model, paths))
         self._lane_failures = {}
         self._held = frozenset()
+        self.jobs_share = jobs_share or cargo_jobs_share
+        self._jobs = None
 
     def _git(self, *args, cwd=None):
         return subprocess.run(["git", "-C", str(cwd or self.paths.workdir), *args],
@@ -1979,6 +2001,17 @@ class Pool:
                 say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
                 self.sleep(60)
                 continue
+            jobs, why = self.jobs_share(len(wave))
+            if jobs is None:
+                return self._halt(f"the cargo budget could not be read ({CARGO_JOBS_LIB}): {why}")
+            if jobs == 0:
+                # Lanes started into this would each size their builds from the
+                # same free memory: the shape of the 2026-10-01 OOM.
+                say(f"pool: wave {', '.join(wave)} not started — {why}")
+                self.sleep(60)
+                continue
+            say(f"pool: {jobs} cargo jobs per lane — {why}")
+            self._jobs = jobs
             model, park = self._dispatch_model(self.model)
             if park is not None:
                 return self._halt(park)
@@ -2084,7 +2117,8 @@ class Pool:
                            capture_output=True, text=True)
         if r.returncode != 0:
             shutil.rmtree(dst, ignore_errors=True)
-            say(f"pool: lane {unit} target NOT cloned ({error_tail(r.stderr)}) — the lane "
+            say(f"pool: lane {unit} target NOT cloned "
+                f"({error_tail(r.stderr) or r.stderr.strip()[-200:]}) — the lane "
                 "builds from an empty target")
             return
         # The lane's evidence directory starts empty: _keep_evidence copies it back.
@@ -2156,7 +2190,14 @@ class Pool:
         # shared /tmp lock would only serialize lanes against each other and
         # against other campaigns (2026-09-16 speed order).
         lock_dir = f"/tmp/svrn-cargo-lock.{os.getuid()}.lane-{unit}"
-        session = self.session_for(wt, env={"SVRN_CARGO_LOCK_DIR": lock_dir})
+        env = {"SVRN_CARGO_LOCK_DIR": lock_dir}
+        if self._jobs:
+            share = {var: str(self._jobs) for var in LANE_JOBS_VARS}
+            env.update(share)
+            jobs_file = wt / LANE_JOBS_FILE
+            jobs_file.parent.mkdir(parents=True, exist_ok=True)
+            jobs_file.write_text("".join(f"{k}={v}\n" for k, v in share.items()))
+        session = self.session_for(wt, env=env)
         session.run(model_args, note + self._prompt_text(),
                     str(self.paths.workdir / "target" / "ralph" / f"lane-{unit}.out"))
 
@@ -2177,7 +2218,8 @@ class Pool:
                                 str(wt / rel), "--against", str(entries)],
                                capture_output=True, text=True)
             if r.returncode != 0:
-                return f"lane {unit}: could not renumber {rel}: {error_tail(r.stderr)}"
+                return (f"lane {unit}: could not renumber {rel}: "
+                        f"{error_tail(r.stderr) or r.stderr.strip()[-200:]}")
             say(f"pool: lane {unit} decision {rel} is taken on the base — renumbered "
                 f"{pathlib.Path(r.stdout.strip()).name}")
         if clashes:
@@ -2185,7 +2227,8 @@ class Pool:
             c = self._git("commit", "-q", "-m", f"{unit}: decision ids renumbered at merge (pool)",
                           cwd=wt)
             if c.returncode != 0:
-                return f"lane {unit}: the renumber commit failed: {error_tail(c.stderr)}"
+                return (f"lane {unit}: the renumber commit failed: "
+                        f"{error_tail(c.stderr) or c.stderr.strip()[-200:]}")
         return None
 
     def _regenerate_decisions(self, unit):
@@ -2198,7 +2241,7 @@ class Pool:
                            cwd=str(self.paths.workdir), capture_output=True, text=True)
         if r.returncode != 0:
             return (f"merged {unit}, but {DECISIONS_SCRIPT} --write failed: "
-                    f"{error_tail(r.stderr or r.stdout)}")
+                    f"{error_tail(r.stderr) or (r.stderr or r.stdout).strip()[-200:]}")
         say(f"pool: {r.stdout.strip()}")
         self._git("add", "--", DECISIONS_RENDERED)
         return None

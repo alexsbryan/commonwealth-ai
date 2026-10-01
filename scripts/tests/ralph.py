@@ -21,6 +21,14 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import ralph  # noqa: E402
 
 
+def setUpModule():
+    # A pool test does not wait on this host's free memory; the split itself is
+    # tested against stubbed probes (PoolQueueTests.share).
+    patcher = mock.patch.object(ralph, "cargo_jobs_share", lambda lanes: (2, "test budget"))
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+
+
 def write(root, rel, text):
     p = pathlib.Path(root) / rel
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -970,6 +978,22 @@ class RalphCheckTests(unittest.TestCase):
                 r = self.check(tmp, queue, "red")
                 self.assertEqual(r.returncode, 2, (queue, r.stdout, r.stderr))
                 self.assertIn("usage:", r.stderr)
+
+    def test_a_pool_lanes_share_reaches_its_checks_without_the_env(self):
+        # `toolbox run` forwards no env, so the share is read from the lane's file.
+        with tempfile.TemporaryDirectory() as tmp:
+            self.fixture(tmp)
+            write(tmp, "ralph/next/a/queue.toml",
+                  '[checks]\njobs = ["sh", "-c", "echo $SOVEREIGN_LINT_JOBS/$SOVEREIGN_TEST_JOBS"]\n')
+            write(tmp, ralph.LANE_JOBS_FILE, "SOVEREIGN_LINT_JOBS=3\nSOVEREIGN_TEST_JOBS=3\n")
+            with mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("SOVEREIGN_LINT_JOBS", None)
+                os.environ.pop("SOVEREIGN_TEST_JOBS", None)
+                r = self.check(tmp, "a", "jobs")
+                self.assertIn("exit=0\n3/3\n", r.stdout)
+                os.environ["SOVEREIGN_LINT_JOBS"] = "1"        # an explicit value wins
+                r = self.check(tmp, "a", "jobs")
+                self.assertIn("exit=0\n1/3\n", r.stdout)
 
     def test_a_refused_manifest_fails_the_check_by_name(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2632,7 +2656,7 @@ class PoolQueueTests(unittest.TestCase):
                 def run(self, model_args, prompt, log):
                     t = self.cwd / "target"
                     seen["dep"] = (t / "debug/deps/libserde.rlib").read_text()
-                    seen["evidence"] = (t / "ralph").exists()
+                    seen["evidence"] = (t / "ralph/q/lint.log").exists()
                     seen["fresh"] = ((self.cwd / "seed.txt").stat().st_mtime
                                      >= (t / "debug/deps/libserde.rlib").stat().st_mtime)
                     return super().run(model_args, prompt, log)
@@ -2655,6 +2679,46 @@ class PoolQueueTests(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 self.assertEqual(pool.run(), 0)
             self.assertIn("target NOT cloned", out.getvalue())
+
+    def share(self, lanes, avail_gb, cores=32):
+        """lib/cargo-jobs.sh's split with the machine's probes stubbed."""
+        r = subprocess.run(
+            ["bash", "-c", 'source "$0"; stub_gb="$2" stub_cores="$3"; '
+             'cargo_jobs_available_gb() { echo "$stub_gb"; }; '
+             'cargo_jobs_cores() { echo "$stub_cores"; }; cargo_jobs_share "$1"; '
+             'echo "$CARGO_JOBS_SHARE"', str(ralph.CARGO_JOBS_LIB), str(lanes), str(avail_gb),
+             str(cores)], capture_output=True, text=True, check=True)
+        return int(r.stdout.split()[-1])
+
+    def test_one_budget_is_split_across_the_lanes_with_a_floor(self):
+        # (2) and (4): 4 GB a job, 2 jobs a lane at least, half the cores at most.
+        self.assertEqual(self.share(3, 41), 3)     # 10 jobs by memory, three lanes
+        self.assertEqual(self.share(3, 100), 5)    # 16 by the cores, three lanes
+        self.assertEqual(self.share(3, 24), 2)     # the floor exactly
+        self.assertEqual(self.share(3, 23), 0)     # under it: no wave
+        self.assertEqual(self.share(1, 8), 2)
+        self.assertEqual(self.share(2, 64, cores=4), 2)   # core-capped, never under the floor
+
+    def test_a_wave_waits_out_the_memory_floor_then_lanes_get_their_share(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n")
+            readings = iter([(0, "20GB available, under the 16GB floor"), (4, "8 jobs split")])
+            seen = {}
+
+            class JobsLane(FakeLane):
+                def __init__(self, cwd, env):
+                    super().__init__(cwd)
+                    seen[self.cwd.name] = (env.get("SOVEREIGN_TEST_JOBS"),
+                                           (self.cwd / ralph.LANE_JOBS_FILE).read_text())
+
+            pool = self.make(root, lambda cwd, env=None: JobsLane(cwd, env or {}),
+                             jobs_share=lambda lanes: next(readings))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            self.assertIn("pool: wave q-a, q-b not started — 20GB available", out.getvalue())
+            want = ("4", "SOVEREIGN_LINT_JOBS=4\nSOVEREIGN_TEST_JOBS=4\n")
+            self.assertEqual(seen, {"q-a": want, "q-b": want})
 
     def test_the_legacy_pool_keeps_its_defaults(self):
         args = ralph.build_parser().parse_args(["pool", "--workdir", "."])
