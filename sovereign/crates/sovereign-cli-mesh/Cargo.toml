@@ -15,7 +15,6 @@ host-kit = { workspace = true, features = ["shell", "service"] }
 sovereign-time = { workspace = true }
 commonwealth-media = { workspace = true }
 oicp-types = { workspace = true }
-sovereign-mesh = { workspace = true }
 mesh-join-vocab = { workspace = true }
 mesh-reach = { workspace = true, features = ["guest"] }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }

@@ -165,10 +165,10 @@ members = [
     # MeshApp explorer ops — pure path-in/DTO-out projections shared by the
     # desktop Tauri host and the `sovereign meshapp dev` CLI server.
     "sovereign/crates/sovereign-meshapp",
-    "sovereign/crates/sovereign-mesh",
-    # The node's host crate (DAEMON_CORE.md §4.1), beside sovereign-mesh in the
-    # `mesh-api` layer. Created as a stub so the boundary has a crate to name;
-    # receives sovereign-mesh's host modules and sovereign-api's host cluster.
+    # The node's host crate (DAEMON_CORE.md §4.1), in the `mesh-api` layer.
+    # Created as a stub so the boundary has a crate to name; it received
+    # sovereign-mesh's host modules (pb-mesh-dissolve deleted that crate) and
+    # sovereign-api's host cluster.
     "sovereign/crates/sovereign-daemon",
     # The daemon-to-daemon wire types both ends of an internal exchange must
     # spell the same way (domains dm-daemon-api-edge (a)): the receiving route
@@ -386,7 +386,6 @@ sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
 sovereign-workflow = { path = "studio/crates/sovereign-workflow" }
 sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
-sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
 sovereign-peer-wire = { path = "sovereign/crates/sovereign-peer-wire" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }

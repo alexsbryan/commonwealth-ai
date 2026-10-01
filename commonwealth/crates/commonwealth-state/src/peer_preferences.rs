@@ -433,13 +433,17 @@ mod tests {
         );
     }
 
-    /// **Structural invariant pin** for the work atlas privacy model.
-    /// Mirrored by a test in `sovereign-work-atlas` that asserts the
-    /// other half — `Privacy::Private.app_id()` returns this exact
-    /// literal. If either side drifts, one test fails.
+    /// **Structural invariant pin** for the work atlas privacy model, over
+    /// the constants both sides name: the atlas's `Privacy::app_id()`
+    /// returns `sovereign_contracts::peer::WORK_ATLAS_APP_ID_*`
+    /// (sovereign-work-atlas model.rs), and this list must exclude the
+    /// private one and carry the public one. `store/work_atlas_tests.rs`
+    /// drives both through the outbox and the projection.
     #[test]
     fn gossip_excludes_work_atlas_private_app_id() {
-        assert!(is_gossip_excluded("work-atlas-private"));
+        use sovereign_contracts::peer::{WORK_ATLAS_APP_ID_PRIVATE, WORK_ATLAS_APP_ID_PUBLIC};
+        assert!(is_gossip_excluded(WORK_ATLAS_APP_ID_PRIVATE));
+        assert!(!is_gossip_excluded(WORK_ATLAS_APP_ID_PUBLIC));
     }
 
     /// **Structural invariant pin** for the NoteStore mesh

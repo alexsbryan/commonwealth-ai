@@ -2057,6 +2057,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sovereign-contracts",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -12499,7 +12500,6 @@ dependencies = [
  "sha2 0.10.9",
  "sovereign-cli-base",
  "sovereign-contracts",
- "sovereign-mesh",
  "sovereign-pods",
  "sovereign-time",
  "sovereign-turn-client",
@@ -12939,22 +12939,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
- "workspace-hack",
-]
-
-[[package]]
-name = "sovereign-mesh"
-version = "0.8.0"
-dependencies = [
- "bytes",
- "commonwealth-core",
- "commonwealth-rail-core",
- "commonwealth-state",
- "kernel-types",
- "serde_json",
- "sovereign-contracts",
- "sovereign-work-atlas",
- "uuid",
  "workspace-hack",
 ]
 

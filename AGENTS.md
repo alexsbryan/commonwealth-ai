@@ -447,7 +447,7 @@ single root `Cargo.toml`" — and used it to explain why the `scripts/` wrappers
 are the gate. The practice is right and the reason was not. **The scripts are
 the gate because they resolve the repo's real feature contract**
 (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus
-`sovereign-mesh/mesh-sim` on the lint side) **and carry guards bare cargo has
+the per-crate flags `cargo-scope.sh` adds) **and carry guards bare cargo has
 no equivalent of** — the zero-test exit 4, the unattributable-run exit 5, the
 build-failure-is-a-failure rule. See "Compilation and test feedback" above.
 Believing the old claim sends you looking for manifests that do not exist and

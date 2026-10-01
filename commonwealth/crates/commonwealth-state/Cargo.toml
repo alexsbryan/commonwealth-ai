@@ -43,6 +43,12 @@ sqlite = ["dep:rusqlite"]
 # projection tests fold REAL signed ops through REAL admission, so what they
 # prove is the fold and not a hand-built `Admission` that agrees with itself.
 commonwealth-rail-core = { workspace = true, features = ["test-support"] }
+# The work atlas's two app ids (`peer::WORK_ATLAS_APP_ID_*`), which
+# `store/work_atlas_tests.rs` drives through the outbox and the projection: the
+# one joint the atlas and this store share (pb-mesh-dissolve, phase-b-92). A
+# global `[[package_leaf]]`, and the one `sovereign-*` crate the layer forbid on
+# this crate excepts.
+sovereign-contracts = { workspace = true }
 
 
 [lints]

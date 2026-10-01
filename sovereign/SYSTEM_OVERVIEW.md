@@ -78,8 +78,11 @@ there because they read the repo root and so cannot sit in a liftable crate.
 | `sovereign` | Local agent runtime | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
 | `commonwealth` | Symmetric mesh daemon | `corpus-engine`, `oicp-types`, `kernel-types` |
 
-Dependency direction is one-way. Sovereign optionally embeds cmnwlth
-in-process via `sovereign-mesh` — the only place the two upper projects meet.
+Dependency direction is one-way. Sovereign and cmnwlth meet at the contracts
+seam (`sovereign-contracts`, a shared leaf) and over cw-rails' HTTP doors.
+`sovereign-mesh`, the in-process embed that was once the only place they met,
+is gone (pb-mesh-dissolve, phase-b-92); the stock distribution composes the
+programs in one process through their faces (docs/FIVE_PROGRAMS.md §2c).
 
 ```
        oicp-types          sovereign-recipes
@@ -92,7 +95,7 @@ in-process via `sovereign-mesh` — the only place the two upper projects meet.
         Sovereign       │      both call          cmnwlth
        (sovereign/)     │   identical APIs        (commonwealth/)
             │           │                              │
-            └─ sovereign-mesh (in-process embed) ──────┘
+            └─ contracts seam · cw-rails HTTP doors ───┘
 ```
 
 Two protocols cross that boundary. **OICP** is declared in
@@ -162,8 +165,7 @@ crates/
 ├── sovereign-enrichment-build   # The enrichment orchestrator, outside the inference stack
 ├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime` — all four hosts are on it
 ├── sovereign-turn-client    # THE client half of the turn protocol + reachability (`ServingHost`)
-├── sovereign-mesh           # In-process cmnwlth embed; roster, rail, identity, gossip/ring loops
-├── sovereign-daemon         # The node's host crate — assembly, surface shells, edge, adapters; cross-package MeshStore/work-atlas integration tests
+├── sovereign-daemon         # The node's host crate — assembly, surface shells, edge, adapters
 ├── sovereign-peer-wire      # Wire types both ends of an internal exchange must spell alike
 ├── sovereign-compute        # Supervised compute-child boundary — crash isolation, not parallelism
 ├── sovereign-pods           # Compute's remote isolation — leasing a rented machine; `sovereign-pod-worker`, the pod's worker-mode binary
@@ -1323,9 +1325,9 @@ so a one-line change costs seconds instead of ~7.5 minutes. A custom cargo
 profile cannot do this — `llama-cpp-sys-4`'s build script panics under any.
 
 **The gate is the two scripts**, not bare cargo — they resolve the repo's real
-feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus
-`sovereign-mesh/mesh-sim` on the lint side) and carry guards bare cargo has no
-equivalent of.
+feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, and
+the per-crate flags `scripts/lib/cargo-scope.sh` resolves) and carry guards
+bare cargo has no equivalent of.
 
 ```sh
 ./scripts/sovereign-lint.sh --human [--full]   # scoped to your diff, or the workspace

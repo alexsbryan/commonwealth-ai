@@ -146,8 +146,7 @@ crates = [
     # The serving package's ranker (SERVING_BOUNDARY.md "The two tiers"). Here
     # for the same reason serving-policy is: rule 1 lets it name `oicp-types`
     # and nothing else in this repo, so any layer above this one would put a
-    # cross-family edge back. A stub until the scheduler half of sovereign-mesh
-    # moves in.
+    # cross-family edge back.
     "sovereign-scheduler",
     # The append-only journal. Tier-0 for a sharper reason than the others:
     # `OpId` is content-addressed AND GOSSIPED, so a second derivation is a
@@ -377,10 +376,9 @@ crates = [
 name = "mesh-api"
 crates = [
     # The node's host crate (DAEMON_CORE.md §4.1): assembly, the surface
-    # shells, the edge and the adapters. A stub until the host modules move in;
-    # the two [[forbid]] rows below land with it.
+    # shells, the edge and the adapters. sovereign-mesh sat here beside it until
+    # pb-mesh-dissolve deleted it (phase-b-92).
     "sovereign-daemon",
-    "sovereign-mesh",
 ]
 
 # Binaries and end-user surfaces. Nothing may depend on a host.
@@ -514,26 +512,12 @@ from = "sovereign-scheduler"
 to = "commonwealth-*"
 reason = "the ranker is arithmetic over the published language and must stay liftable without either family's foundation — naming commonwealth-* is the mesh leaking back into a decision that has to rank a candidate which is not a mesh member"
 
-# Rule 2 — not `sovereign-mesh`: the edge Phase C exists to delete. It is why a
-# CLI wanting a roster inherits llama-cpp.
-[[forbid]]
-from = "sovereign-scheduler"
-to = "sovereign-mesh"
-reason = "sovereign-mesh is the edge Phase C exists to delete; a ranker that names it is why a CLI wanting a roster inherits llama-cpp (DAEMON_CORE.md §4)"
-
 # Rule 3 — not `sovereign-inference`: ranking is not executing; only the host
 # connects.
 [[forbid]]
 from = "sovereign-scheduler"
 to = "sovereign-inference"
 reason = "ranking is not executing — only the host connects, so the ranker must never name the inference stack"
-
-# Rule 4 — the host may name inference; it may NOT name `sovereign-mesh`: it
-# receives candidates through a port, never an `EmbeddedDaemon`.
-[[forbid]]
-from = "sovereign-serving-host"
-to = "sovereign-mesh"
-reason = "the host receives candidates through a port, never an EmbeddedDaemon — a sovereign-mesh dep here is the kill clause, because it would rebuild the knot the package exists to cut"
 
 # oplog was minted 2026-09-04 by moving `corpus-engine/src/oplog.rs` out. The
 # rail in commonwealth-knowledge named five of its types and took a dep on
@@ -729,8 +713,8 @@ reason = "mesh foundation must stay consumable without the agent runtime"
 [[forbid]]
 from = "commonwealth-state"
 to = "sovereign-*"
-except = ["sovereign-contracts", "sovereign-work-atlas"]
-reason = "mesh foundation must stay consumable without the agent runtime; it meets sovereign at the contracts seam only. sovereign-work-atlas joins the exception for the relocated work-atlas acceptance tests ONLY (FIVE_PROGRAMS fp-22, 2026-09-22 — decision 6's relocate-don't-fake pattern): a dev/test edge that is not in the published closure, never a runtime dep"
+except = ["sovereign-contracts"]
+reason = "mesh foundation must stay consumable without the agent runtime; it meets sovereign at the contracts seam only. Its one contracts edge is a dev edge: the work atlas's two app ids, driven through the outbox and the projection (store/work_atlas_tests.rs). sovereign-work-atlas was excepted for the composed replication test (fp-22) until pb-mesh-dissolve split that test by subject (phase-b-92)"
 
 [[forbid]]
 from = "commonwealth-transport"
@@ -748,17 +732,6 @@ to = "sovereign-*"
 except = ["sovereign-contracts"]
 reason = "must stay consumable without the agent runtime — it names NO sovereign-* crate bar the contracts seam (measured at the domains-1 move, 2026-09-11) and this rule keeps it that way. sovereign-contracts joins the exception for `ReplicatedKv` + the `ShardTransferLedger` fact port ONLY (FIVE_PROGRAMS fp-94, operator decision five-programs-53). The reason read \"mesh foundation must stay…\" until that move, when the crate left commonwealth/crates/ for sovereign/crates/; the PROPERTY is unchanged, only the family it sits in changed"
 
-
-# The daemon crate's two rows, landing with the crate (DAEMON_CORE.md §4.1;
-# domains dm-daemon-crate). Layer ordering already forbids a lower tier
-# reaching tier 5; the rows are named because of two things no gate sees: a
-# struct in `sovereign-daemon` that carries every part and is handed to every
-# handler passes all of them while restoring `AppState` under a new name, and
-# a decider can land in the crate green.
-[[forbid]]
-from = "sovereign-mesh"
-to = "sovereign-daemon"
-reason = "Fabric observes membership through readers, never the reverse (DAEMON_CORE.md §4.1) — a mesh dependency on the host crate rebuilds the orchestration Fabric's ownership removes"
 
 # ── Extractable packages ─────────────────────────────────────────────────────
 # A PACKAGE is a crate set that must stay liftable out of this monorepo and
@@ -1357,8 +1330,10 @@ doc = "docs/FIVE_PROGRAMS.md"
 # zero exceptions on the day, and green every day since). Their internal
 # surface is `commonwealth-core` plus the `oplog` / `kernel-types` /
 # `oicp-types` leaves, so folding them into a wider package does not introduce
-# a single new edge among them — what it DOES do is admit `sovereign-mesh` and
-# the serving cluster as siblings, and those two are where the red is.
+# a single new edge among them — what it DOES do is admit the serving cluster
+# as a sibling, and that is where the red was. (`sovereign-mesh` was the other
+# sibling until pb-mesh-dissolve moved its abilities to their owners and
+# deleted it, phase-b-92.)
 #
 # THE SERVING CLUSTER IS HERE BECAUSE INFERENCE IS. §2 gives `cmnwlth` "the
 # serving cluster", and a router with a roster that cannot run a model is a
@@ -1368,11 +1343,6 @@ doc = "docs/FIVE_PROGRAMS.md"
 # `sovereign-compute` (one supervised child per slot). The consequence is the
 # largest single red edge in this table and it is the correct one: `svrn` reads
 # `sovereign-inference` today and under the design it dials `/v1/*` instead.
-#
-# `sovereign-mesh` holds substrate-shaped code whose external consumers are ~15
-# of ~234 crossing references (the `commonwealth` block's own finding, kept
-# here). It is a member rather than a peer package for exactly that reason —
-# extracting it as a peer would fork the deciders this package owns.
 crates = [
     "commonwealth-core",
     "commonwealth-transport",
@@ -1382,7 +1352,6 @@ crates = [
     "commonwealth-work",
     "commonwealth-media",
     "commonwealth-rails",
-    "sovereign-mesh",
     "sovereign-scheduler",
     "sovereign-serving-host",
     "serving-policy",

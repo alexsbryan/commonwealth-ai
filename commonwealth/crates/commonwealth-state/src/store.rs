@@ -641,3 +641,9 @@ fn node_id_from_bytes(bytes: &[u8]) -> Result<NodeId> {
 #[cfg(test)]
 #[path = "store/tests.rs"]
 mod tests;
+
+// The work atlas's namespaces through the outbox and the projection, over the
+// contract constants both sides name (pb-mesh-dissolve, phase-b-92).
+#[cfg(test)]
+#[path = "store/work_atlas_tests.rs"]
+mod work_atlas_tests;

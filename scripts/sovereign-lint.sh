@@ -347,13 +347,6 @@ cargo_args+=(--all-targets)
 # gap: cargo fingerprints on features, so alternating lint and test would
 # rebuild the affected crates on every switch.
 #
-# `sovereign-mesh/mesh-sim` (the Tier-1 scheduler simulator,
-# SCHEDULER_QUALITY.md §5) rides along on the same rule. It is
-# off-by-default so production never links a measurement harness, but
-# a harness nothing compiles is a harness that silently rots — and
-# this one is pure compute with no extra dependencies, so checking it
-# costs a few seconds. Same leaf-crate conditional as dev-tools.
-#
 # `sovereign-cli/code-intel` (2026-08-06) is the `svrn code index` / `svrn
 # refresh` surface that ships in the release binary
 # (scripts/release-cli-local.sh passes it). Without it here the gate would

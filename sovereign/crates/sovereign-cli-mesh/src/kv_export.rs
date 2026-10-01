@@ -12,11 +12,9 @@
 //! would create one.
 
 use std::path::Path;
-use std::sync::Arc;
 
 use commonwealth_state::MeshStore;
-use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry};
-use sovereign_mesh::peer_adapter::MeshReplicatedKv;
+use sovereign_contracts::peer::ReplicatedKvEntry;
 
 /// Every row of `app_ids` in the legacy store at `path`.
 pub fn export(path: &Path, app_ids: &[String]) -> Result<Vec<ReplicatedKvEntry>, String> {
@@ -26,14 +24,22 @@ pub fn export(path: &Path, app_ids: &[String]) -> Result<Vec<ReplicatedKvEntry>,
     }
     let store =
         MeshStore::open(path).map_err(|e| format!("open legacy store {}: {e}", path.display()))?;
-    let kv = MeshReplicatedKv::over(Arc::new(store));
     let mut rows = Vec::new();
     for app_id in app_ids {
-        let found = kv
+        let found = store
             .scan(app_id, "")
             .map_err(|e| format!("scan {app_id} in {}: {e}", path.display()))?;
         tracing::debug!(path = %path.display(), app_id, rows = found.len(), "kv-export: scanned");
-        rows.extend(found);
+        // The store's row as the port's wire row, field for field: what
+        // sovereign-mesh's `MeshReplicatedKv::scan` did before the crate went
+        // (pb-mesh-dissolve), and the only part of it anything read.
+        rows.extend(found.into_iter().map(|e| ReplicatedKvEntry {
+            app_id: e.app_id,
+            key: e.key,
+            value: e.value,
+            timestamp: e.timestamp,
+            origin: e.origin,
+        }));
     }
     Ok(rows)
 }
