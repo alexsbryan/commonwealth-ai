@@ -23,6 +23,10 @@ more runs only when a cheaper reading alarms.
     local-only on its own port, and the lanes are pointed at it with `SOVEREIGN_DAEMON_URL`. B never
     joins the mesh: the node's key now lives in cw-rails, and a second endpoint must never hold it.
 - Linux on this host is the platform of record. macOS and Windows are owed rows, named below.
+- Tier 2 runs on a quiet host: no cargo build or test from any session while its lanes run (Tier 0 finishes
+  first, and the seat holds other loops), with the 1-minute load recorded. This was fixed after the early
+  screen below. It ran beside a worker's compile at load ~5.9 against the baseline's 3.4, and on this
+  unified-memory APU a compile competes with decode for memory bandwidth.
 - Every reading records hash C, n, host load and the path to its raw output.
 
 ## Fixes that land before the gate
@@ -129,4 +133,5 @@ deleted (1c120f23d). Serve's own route is the one to check, in phase-c.
 
 | row | hash C | n | verdict | raw |
 |---|---|---|---|---|
-| P2 early screen (the flip, pre-gate) | daemon built from 1c120f23d, running since 2026-09-30 20:42 PDT | 1 | | target/quality-check/20260930-211826 |
+| P2 early screen (the flip, pre-gate) | daemon built from 1c120f23d, running since 2026-09-30 20:42 PDT | 1 | 6 of 8 passed: routing, retrieval-prod, enrichment-f1, chaos-monkey (7/7: no leak, no ungrounded assertion, no refused answerable probe), knowledge-gym, synth. chat-ask could-not-judge (15/19 passed; useful median 0.992-0.998; the 4 open checks are per-stage ceilings with no table for model stem Qwen3.6-35B-A3B-MTP-UD-Q6_K in sovereign/bench/quality-check/chat-ask.toml). throughput could-not-judge (no primary/short bars for that stem in throughput.toml). Against the 09-13 baseline (same model): decode -8 to -14% at load ~5.9 with a worker compiling, confounded. e2e runs 35,112 and 12,261 ms against a 13,397 baseline; the lane reports the larger of two as the median, so the warm run is 8% faster. | target/quality-check/20260930-211826 |
+| owed before the gate | | | Declare per-stage ceilings and throughput bars for model stem Qwen3.6-35B-A3B-MTP-UD-Q6_K, from a quiet-host reading at main and never tuned toward the candidate (principle 7); otherwise chat-ask and throughput stay could-not-judge. A median of an even n reporting its larger value is an instrument finding for phase-c. | |
