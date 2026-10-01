@@ -43,6 +43,9 @@ introduced, so it is Phase B's to fix, not phase-c's.
 | F5 | .github/workflows/cli-release.yml still builds and packages the three old binaries; F1's census reads the other two lists only. | The census reads the workflow's lists too, watched red today. Row pb-distribution-f5-release-ci. |
 | F6 | the guest door's TCP listener serves `door_router` without `api_keys::seal` (guest_door.rs:429); its ALPN twin is sealed (daemon.rs:1650). | A keyed daemon's door refuses an out-of-scope key on every listener; an e2e exercises it. Row pb-distribution-f6-guest-door-seal. |
 | F7 | the on-prem kit renamed main's firm-rag-daemon.service and does not retire it, so an upgrade runs two daemon units. | install.sh retires every main-era unit name; a test names a leftover. Row pb-distribution-f7-onprem-upgrade-unit. |
+| F8 | (operator, phase-b-98, lands before the merge) a node upgraded across the flip sits off its mesh, and its donor stops, with no message until someone runs `svrn mesh up`. | Boot output and `svrn mesh status` name `svrn mesh up` on a main-era data dir, and not after the handover; one decider, the handover's own marker. Row pb-distribution-f8-upgrade-off-mesh-named. |
+| F9 | (operator, phase-b-98) collaborate ingest on the stock binary has never run end to end on cut. | An e2e completes it through ingest's port with a real cw-rails. Row pb-distribution-f9-stock-collaborate-e2e. |
+| F10 | (operator, phase-b-98) first-boot and handover moves keep no copy (media viewer id) or overwrite theirs on a second run (`config.toml.bak`), and none has a written rollback. | Every move keeps its first original; a RUNBOOK rollback section is run once in a sandbox. Row pb-distribution-f10-migration-backups. |
 
 ## Tier 0: the build gate at C (about 50 min)
 
@@ -91,6 +94,7 @@ node is also the existing-state test.
 | P5 restart | `sovereign daemon stop && sovereign daemon start` (CLI, toolbox) | the node answers and is still on the mesh, and cw-rails is untouched by the daemon's restart |
 | P3 idle | stock idle and cw-rails idle with their existing instruments | ≤ 2.004% (e098d2112) and ≤ 2% (8dc4ff1f6) |
 | P3 latency | the throughput lane inside P2 | NEUTRAL. A release first-token re-read against 74fad65d4's bars runs only if this alarms |
+| P6 upgrade (added 2026-10-01, phase-b-98) | the cut daemon booted on a sandbox data dir seeded as main left it, before and after `svrn mesh up`'s handover (F8's e2e, re-run at C) | names `svrn mesh up` before, not after; the handover keeps its originals (F10). The live node crossed the flip on 09-30, so it cannot read this path. |
 | P8 on-prem | sovereign/deploy/onprem: package.sh, install.sh into a sandbox prefix on sandbox ports, then acceptance.sh (pb-distribution-onprem-kit's instrument) | every acceptance check passes against the daemon's port. The nginx leg passes or is named owed. `strings` on the onprem binary finds no withheld surface |
 
 Not re-run, with the reason:
