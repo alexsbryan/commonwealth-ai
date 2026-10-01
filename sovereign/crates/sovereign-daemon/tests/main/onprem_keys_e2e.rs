@@ -370,7 +370,10 @@ async fn get(d: &Daemon, key: Option<&str>, path: &str) -> reqwest::Response {
 #[tokio::test]
 async fn the_granted_reads_answer_under_a_key_and_refuse_without_one() {
     let d = daemon(&keyed_set()).await;
-    let window = format!("/v1/corpora/firm-docs/chunks/{}", chunk_id(&d, "firm-docs").await);
+    let window = format!(
+        "/v1/corpora/firm-docs/chunks/{}",
+        chunk_id(&d, "firm-docs").await
+    );
     for path in ["/v1/corpora", window.as_str(), "/v1/tools"] {
         assert_eq!(
             get(&d, None, path).await.status(),
@@ -378,7 +381,11 @@ async fn the_granted_reads_answer_under_a_key_and_refuse_without_one() {
             "{path} without a key"
         );
         let resp = get(&d, Some(ALICE), path).await;
-        assert_eq!(resp.status(), reqwest::StatusCode::OK, "{path} under a lawyer key");
+        assert_eq!(
+            resp.status(),
+            reqwest::StatusCode::OK,
+            "{path} under a lawyer key"
+        );
     }
 
     let corpora = body(get(&d, Some(ALICE), "/v1/corpora").await).await;
@@ -388,35 +395,61 @@ async fn the_granted_reads_answer_under_a_key_and_refuse_without_one() {
         .iter()
         .map(|c| c["id"].as_str().unwrap())
         .collect();
-    assert_eq!(ids, ["firm-docs"], "only the grant, never `secret`: {corpora}");
+    assert_eq!(
+        ids,
+        ["firm-docs"],
+        "only the grant, never `secret`: {corpora}"
+    );
 
     let tools = body(get(&d, Some(ALICE), "/v1/tools").await).await;
     // The stub Runtime registers no tools; the onprem binary's e2e reads a
     // real registry.
     let tools = tools["tools"].as_array().expect("a `tools` array");
     assert!(
-        tools.iter().all(|t| t["requires_approval"].is_boolean() && t["id"].is_string()),
+        tools
+            .iter()
+            .all(|t| t["requires_approval"].is_boolean() && t["id"].is_string()),
         "{tools:?}"
     );
 
     let health = get(&d, None, "/health").await;
-    assert_eq!(health.status(), reqwest::StatusCode::OK, "liveness needs no key");
+    assert_eq!(
+        health.status(),
+        reqwest::StatusCode::OK,
+        "liveness needs no key"
+    );
     assert_eq!(health.text().await.unwrap(), "ok");
 }
 
 #[tokio::test]
 async fn the_reading_window_refuses_a_corpus_outside_the_grant() {
     let d = daemon(&keyed_set()).await;
-    let (firm, secret) = (chunk_id(&d, "firm-docs").await, chunk_id(&d, "secret").await);
+    let (firm, secret) = (
+        chunk_id(&d, "firm-docs").await,
+        chunk_id(&d, "secret").await,
+    );
     let window = body(
-        get(&d, Some(ALICE), &format!("/v1/corpora/firm-docs/chunks/{firm}?radius=2")).await,
+        get(
+            &d,
+            Some(ALICE),
+            &format!("/v1/corpora/firm-docs/chunks/{firm}?radius=2"),
+        )
+        .await,
     )
     .await;
     assert_eq!(window["center"]["content"], "one chunk", "{window}");
     assert_eq!(window["center"]["corpus_id"], "firm-docs", "{window}");
-    assert!(window["prev"].is_array() && window["next"].is_array(), "{window}");
+    assert!(
+        window["prev"].is_array() && window["next"].is_array(),
+        "{window}"
+    );
 
-    let resp = get(&d, Some(ALICE), &format!("/v1/corpora/secret/chunks/{secret}")).await;
+    let resp = get(
+        &d,
+        Some(ALICE),
+        &format!("/v1/corpora/secret/chunks/{secret}"),
+    )
+    .await;
     assert_eq!(resp.status(), reqwest::StatusCode::FORBIDDEN);
     let err = body(resp).await["error"].as_str().unwrap_or("").to_string();
     assert!(
@@ -436,11 +469,19 @@ async fn an_unkeyed_daemon_serves_the_granted_reads_to_loopback() {
         .map(|c| c["id"].as_str().unwrap())
         .collect();
     ids.sort();
-    assert_eq!(ids, ["firm-docs", "secret"], "the local owner's grant is every corpus");
     assert_eq!(
-        get(&d, None, &format!("/v1/corpora/secret/chunks/{}", chunk_id(&d, "secret").await))
-            .await
-            .status(),
+        ids,
+        ["firm-docs", "secret"],
+        "the local owner's grant is every corpus"
+    );
+    assert_eq!(
+        get(
+            &d,
+            None,
+            &format!("/v1/corpora/secret/chunks/{}", chunk_id(&d, "secret").await)
+        )
+        .await
+        .status(),
         reqwest::StatusCode::OK
     );
 }

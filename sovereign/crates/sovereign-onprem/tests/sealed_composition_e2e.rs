@@ -273,7 +273,10 @@ fn the_onprem_binary_composes_no_shell_web_or_mcp_surface() {
     let status = resp.status();
     let body = resp.text().unwrap_or_default();
     assert_eq!(status, 403, "{body}");
-    assert!(body.contains("'firm-docs'"), "the refusal names the corpus: {body}");
+    assert!(
+        body.contains("'firm-docs'"),
+        "the refusal names the corpus: {body}"
+    );
     // The hardening probe: the turn runtime holds no web, wikipedia or
     // recipe-authoring tool, and no tool the approval gate would stop on
     // (REST turns auto-approve, so such a tool would need an approve route).

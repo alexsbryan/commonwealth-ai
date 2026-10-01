@@ -95,6 +95,7 @@ pub mod features_http;
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod foreground_post;
 pub mod governance_http;
+pub mod granted_http;
 pub mod guest_door;
 pub mod guest_origin;
 /// The code program as a distribution composes it into this process
@@ -150,7 +151,6 @@ pub mod rail_bind;
 /// implementation, `rails_client::RailsRingRail` (pb-mesh-exit-mesh).
 pub mod rail_port;
 pub mod rails_client;
-pub mod granted_http;
 pub mod reading_http;
 pub mod recipe_http;
 pub mod recipe_project_http;
