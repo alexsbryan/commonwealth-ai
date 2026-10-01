@@ -1080,7 +1080,7 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
 "#;
         assert!(scan_runtime_escapes(embed).is_empty());
 
-        // corpus-mcp/tests/no_inference_stack.rs — the manifest dir with no
+        // corpus-engine/xtask/tests/no_inference_stack.rs — the manifest dir with no
         // climb. The crate's own root is not an escape.
         let own_root = r#"
     let out = Command::new(env!("CARGO"))

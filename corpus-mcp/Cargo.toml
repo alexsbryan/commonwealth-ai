@@ -11,7 +11,7 @@ description = "A corpus-index MCP host that needs nothing but an OpenAI-compatib
 # through the read leaves (`corpus-index`, `corpus-engine-atlas-reader`,
 # `understanding-vocab`) + an HTTP `EmbedFn`, and links NOTHING that carries
 # llama.cpp, ort or iroh — nor, since pb-corpus-mcp-reads, `corpus-engine`
-# itself. `tests/no_inference_stack.rs` asserts both against `cargo tree`;
+# itself. `corpus-engine/xtask/tests/no_inference_stack.rs` asserts both against `cargo tree`;
 # `quality/ARCH_LAYERS.toml` declares the closure as a `[[package]]` so
 # boundary-gate keeps it honest.
 #
