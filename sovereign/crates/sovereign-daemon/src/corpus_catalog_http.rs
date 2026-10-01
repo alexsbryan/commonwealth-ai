@@ -397,7 +397,16 @@ async fn catalog(
     _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> Result<Response, Absence> {
-    let engine = engine_for(&daemon)?;
+    let corpora = catalog_entries(&daemon).await?;
+    Ok(Json(CatalogResponse { corpora }).into_response())
+}
+
+/// The catalogue's rows — [`catalog`]'s answer, and the one source
+/// `granted_http`'s `GET /v1/corpora` filters to a caller's grant.
+pub(crate) async fn catalog_entries(
+    daemon: &Arc<EmbeddedDaemon>,
+) -> Result<Vec<CatalogEntry>, Absence> {
+    let engine = engine_for(daemon)?;
     let builtins = engine.builtin_corpora();
     // Non-fatal, deliberately: the picker still renders so the user
     // can choose what to INSTALL when the indexes dir is unreadable.
@@ -498,7 +507,7 @@ async fn catalog(
         rows = corpora.len(),
         "corpus_catalog_http: catalogue ∪ installed served"
     );
-    Ok(Json(CatalogResponse { corpora }).into_response())
+    Ok(corpora)
 }
 
 /// GET `/internal/corpus/notebooks` — the unified Library shelf.

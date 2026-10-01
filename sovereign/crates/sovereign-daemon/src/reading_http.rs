@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use axum::extract::{Extension, Path, Query};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
@@ -496,7 +496,19 @@ async fn get_neighbors(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, chunk_id)): Path<(String, u64)>,
     Query(NeighborQuery { radius }): Query<NeighborQuery>,
-) -> impl IntoResponse {
+) -> Response {
+    neighbor_window(&daemon, &corpus, chunk_id, radius).await
+}
+
+/// The reading window: `chunk_id` with up to `radius` (clamped to 5)
+/// neighbours each side. Served here and, grant-checked, by
+/// `granted_http`'s `/v1/corpora/{corpus}/chunks/{chunk_id}`.
+pub(crate) async fn neighbor_window(
+    daemon: &Arc<EmbeddedDaemon>,
+    corpus: &str,
+    chunk_id: u64,
+    radius: usize,
+) -> Response {
     let radius = radius.min(5);
     let (engine, atlas) = match (daemon.corpus_engine(), daemon.atlas()) {
         (Some(e), Some(a)) => (e, a.as_ref()),
