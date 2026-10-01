@@ -329,6 +329,49 @@ mod local_corpus_port_double;
     assert!(scan_path_mounts("#[path = \"main/x.rs\"]\n", Path::new("tests")).is_empty());
 }
 
+/// The two shapes pb-distribution-svrn-lift-2 priced. A `.git` lookup from the
+/// manifest dir, verbatim from sovereign-daemon's mesh_principal_gate.rs; and a
+/// walk up from the CWD, which is a climb in test code and the invoker's
+/// business in production code (inner_chaos/personas.rs `resolve_bench_dir`).
+#[test]
+fn checkout_lookups_and_test_walks_are_climbs() {
+    let git = r#"
+    fn repo_root() -> PathBuf {
+        let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        while !dir.join(".git").exists() {
+            assert!(dir.pop(), "no .git above {}", env!("CARGO_MANIFEST_DIR"));
+        }
+        dir
+    }
+"#;
+    let hits = scan_runtime_escapes(git);
+    assert_eq!(hits.len(), 1, "one statement, one report");
+    assert!(hits[0].evidence.contains("\".git\""));
+
+    let walk = r#"
+    let mut here = std::env::current_dir().unwrap();
+    loop {
+        if here.join("bench/inner_work").is_dir() {
+            break;
+        }
+        if !here.pop() {
+            panic!("no bench");
+        }
+    }
+"#;
+    let hits = scan_checkout_walks(walk, true);
+    assert_eq!(hits.len(), 1);
+    assert!(matches!(hits[0].kind, EscapeKind::CheckoutWalk));
+    assert!(hits[0].describe().contains("env knob the lift"));
+    // The same walk in production code, and after a `#[cfg(test)]` line.
+    assert!(scan_checkout_walks(walk, false).is_empty());
+    let in_mod = format!("fn f() {{}}\n#[cfg(test)]\nmod tests {{\n{walk}\n}}\n");
+    assert_eq!(scan_checkout_walks(&in_mod, false).len(), 1);
+    // A stack's pop is not a climb.
+    let stack = "let cwd = std::env::current_dir().unwrap();\nwhile let Some(d) = stack.pop() {}\n";
+    assert!(scan_checkout_walks(stack, true).is_empty());
+}
+
 /// The ambient-`git` clause: no `current_dir(…)` means the harness's CWD,
 /// and a lifted source tarball has no `.git`.
 #[test]

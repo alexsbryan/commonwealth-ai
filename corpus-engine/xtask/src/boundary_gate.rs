@@ -452,7 +452,14 @@ pub(crate) fn runtime_root_escapes(
                 .to_string();
             let rel_dir = path.parent().and_then(|p| p.strip_prefix(dir).ok());
             let mounts = scan_path_mounts(&text, rel_dir.unwrap_or(Path::new("")));
-            for e in scan_runtime_escapes(&text).into_iter().chain(mounts) {
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            let test_file = sub != "src" || stem == "tests" || stem.ends_with("_tests");
+            let walks = scan_checkout_walks(&text, test_file);
+            for e in scan_runtime_escapes(&text)
+                .into_iter()
+                .chain(mounts)
+                .chain(walks)
+            {
                 fails.push(format!(
                     "[{scope}] {crate_name}: {rel}:{} {}",
                     e.line,
@@ -496,6 +503,9 @@ enum EscapeKind {
     /// A `#[path = "…"]` whose file resolves outside the crate root: the
     /// module is another crate's source, mounted by where the two happen to sit.
     PathMount,
+    /// TEST code that walks up from the current directory: under `cargo test`
+    /// that is the crate root, so the walk leaves it for the checkout.
+    CheckoutWalk,
 }
 
 impl RuntimeEscape {
@@ -524,8 +534,55 @@ impl RuntimeEscape {
                  depend on (a leaf's test-doubles feature) and import it",
                 self.evidence
             ),
+            EscapeKind::CheckoutWalk => format!(
+                "walks up from the current directory in TEST code (`{}`) — `cargo test` \
+                 stands at the crate root, so this reads the checkout above it, which a \
+                 lifted package does not have. Name the data with an env knob the lift \
+                 carries, or move the check to a crate in NO package",
+                self.evidence
+            ),
         }
     }
+}
+
+/// Rule 3c's fourth shape: a `current_dir()` read that climbs within the same
+/// [-2, +8] window as the manifest clause, in test code only. Production CLIs
+/// walk up from the INVOKER's directory by design (`svrn eval inner-chaos`
+/// finding `bench/inner_work`), which lifts fine; a test doing it stands at
+/// the crate root and lands in the monorepo. Test code is a file under
+/// `tests/`, `benches/` or `examples/`, a `tests.rs` / `*_tests.rs`, or
+/// anything from a file's first `#[cfg(test)]` on.
+fn scan_checkout_walks(text: &str, test_file: bool) -> Vec<RuntimeEscape> {
+    let lines: Vec<&str> = text.lines().collect();
+    let test_from = if test_file {
+        0
+    } else {
+        lines
+            .iter()
+            .position(|l| l.trim_start().starts_with("#[cfg(test)]"))
+            .unwrap_or(lines.len())
+    };
+    let mut out = Vec::new();
+    let mut reported_through: Option<usize> = None;
+    for (i, line) in lines.iter().enumerate().skip(test_from) {
+        if !line.contains("current_dir()") || reported_through.is_some_and(|t| i <= t) {
+            continue;
+        }
+        let window = &lines[i.saturating_sub(2)..(i + 9).min(lines.len())];
+        // A PathBuf's `pop()` is a climb; a stack's `while let Some(_) =
+        // stack.pop()` is not.
+        let climb =
+            |l: &&&str| climbs_out_of_crate(l) || (l.contains(".pop()") && !l.contains("Some("));
+        if let Some(hop) = window.iter().find(climb) {
+            out.push(RuntimeEscape {
+                line: i + 1,
+                kind: EscapeKind::CheckoutWalk,
+                evidence: hop.trim().to_string(),
+            });
+            reported_through = Some(i + 8);
+        }
+    }
+    out
 }
 
 /// Rule 3c's third shape: `#[path = "…"]` resolved against the directory of
@@ -659,7 +716,11 @@ fn climbs_out_of_crate(line: &str) -> bool {
     // `.parent()`, `.ancestors()` (`.nth(3)` to the repo, svrn's censuses until
     // pb-distribution-svrn-lift), `join("..")`, `join("../x")`, and a `..`
     // segment inside any path literal — `"/.."`, `"../"`, or a bare `".."`.
+    // And a `".git"` lookup: no lifted crate root holds one, so seeking it is
+    // seeking the checkout (sovereign-daemon's mesh gates until
+    // pb-distribution-svrn-lift-2).
     line.contains(".parent()")
+        || line.contains("\".git\"")
         || line.contains(".ancestors()")
         || line.contains("join(\"..")
         || line.contains("\"/..")
