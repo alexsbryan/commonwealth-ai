@@ -111,6 +111,8 @@ mod models_http_e2e;
 mod ner_one_load_census;
 #[path = "main/no_engine_census.rs"]
 mod no_engine_census;
+#[path = "main/onprem_keys_e2e.rs"]
+mod onprem_keys_e2e;
 #[path = "main/openai_wire_fidelity.rs"]
 mod openai_wire_fidelity;
 #[path = "main/port_config.rs"]

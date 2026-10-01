@@ -40,7 +40,7 @@ fn serving_daemon(
 /// Install a corpus at `<indexes>/<id>` with one chunk, marked complete so
 /// the port's `installed_indexes()` reports it — the same fixture
 /// `knowledge_served_e2e` uses.
-async fn install_corpus(indexes_dir: &std::path::Path, id: &str) {
+pub(crate) async fn install_corpus(indexes_dir: &std::path::Path, id: &str) {
     use corpus_index::index::{CorpusIndex, InsertChunk};
     let index = CorpusIndex::create(
         &indexes_dir.join(id),

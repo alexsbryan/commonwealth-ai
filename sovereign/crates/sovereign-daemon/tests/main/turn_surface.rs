@@ -42,7 +42,7 @@
 // for a `#[path]`-loaded module a child `mod` resolves against the
 // CONTAINING directory, not a file-stem directory.
 #[path = "turn_surface/corpus_scoping.rs"]
-mod corpus_scoping;
+pub(crate) mod corpus_scoping;
 #[path = "turn_surface/parked_turn.rs"]
 mod parked_turn;
 #[path = "turn_surface/rerank_pins.rs"]
