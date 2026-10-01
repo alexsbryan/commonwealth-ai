@@ -334,6 +334,7 @@ In the order we would build it, each tied to a limit above:
 | `/etc/systemd/system/firm-rag.service` | the one unit |
 | `/etc/nginx/conf.d/firm-rag.conf` | TLS + the route allowlist |
 | `/etc/nginx/snippets/firm-rag-proxy.conf` | shared proxy settings |
+| `/etc/nginx/snippets/firm-rag-proxy-headers.conf` | the forwarding headers, which the stream route takes alone |
 
 `daemon-config.toml` is commented in detail, including which keys are
 dangerous to change and why. It is worth reading before editing — it

@@ -9,13 +9,15 @@
 //!   so nginx never fronts a route the daemon refuses the key nginx forwards;
 //! - package.sh's hardening gate refuses the same literals
 //!   sovereign-onprem's sealed composition e2e watches absent on-prem and
-//!   present in stock.
+//!   present in stock;
+//! - nginx would load the config at all: no one-shot directive is set twice
+//!   in one block once its `include`s are expanded.
 //!
 //! It lives here, in no package, because it reads a deploy tree and three
 //! crates: in sovereign-onprem it would climb out of the crate root, which
 //! boundary-gate refuses of a test a lifted package carries.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[path = "shared/repo_root.rs"]
 mod repo_root;
@@ -225,4 +227,101 @@ fn the_nginx_parser_sees_a_proxied_location() {
         .collect();
     assert_eq!(routes, expected);
     assert!(repo_root().join(KIT).is_dir());
+}
+
+/// Directives nginx accepts once per block. A second one, including one an
+/// `include`d snippet brings in, is `[emerg] "…" directive is duplicate` and
+/// nginx does not start. The kit's config shipped that way from 2026-08-03
+/// until its nginx leg first ran (phase-b-95's seat run): the stream location
+/// included the shared snippet and then re-set the http version, both
+/// timeouts and buffering. No test runs nginx, so this reads the config the
+/// way nginx does.
+const ONE_SHOT: &[&str] = &[
+    "proxy_pass",
+    "proxy_http_version",
+    "proxy_connect_timeout",
+    "proxy_send_timeout",
+    "proxy_read_timeout",
+    "proxy_buffering",
+];
+
+/// The kit file an `include` names by its installed snippet path.
+fn kit_snippet(include: &str) -> String {
+    let name = include.rsplit('/').next().unwrap_or(include);
+    read(&format!("{KIT}/nginx/{name}"))
+}
+
+type Block = (String, BTreeMap<String, usize>);
+
+/// Every one-shot directive set more than once in one block after includes
+/// are expanded, as `"<block>: <directive> x<n>"`.
+fn duplicated_one_shots(conf: &str, expand: &dyn Fn(&str) -> String) -> Vec<String> {
+    let mut stack: Vec<Block> = vec![("(top)".to_string(), BTreeMap::new())];
+    let mut out = Vec::new();
+    scan_block_text(conf, expand, &mut stack, &mut out);
+    out
+}
+
+fn scan_block_text(
+    text: &str,
+    expand: &dyn Fn(&str) -> String,
+    stack: &mut Vec<Block>,
+    out: &mut Vec<String>,
+) {
+    let stripped: Vec<&str> = text
+        .lines()
+        .map(|l| l.split('#').next().unwrap_or(""))
+        .collect();
+    let mut stmt = String::new();
+    for c in stripped.join("\n").chars() {
+        match c {
+            '{' => {
+                stack.push((stmt.trim().to_string(), BTreeMap::new()));
+                stmt.clear();
+            }
+            '}' => {
+                let (name, seen) = stack.pop().expect("nginx braces balance");
+                out.extend(
+                    seen.into_iter()
+                        .filter(|(_, n)| *n > 1)
+                        .map(|(d, n)| format!("{name}: {d} x{n}")),
+                );
+                stmt.clear();
+            }
+            ';' => {
+                let s = std::mem::take(&mut stmt);
+                let mut words = s.split_whitespace();
+                match words.next() {
+                    Some("include") => {
+                        let path = words.next().expect("include names a file");
+                        scan_block_text(&expand(path), expand, stack, out);
+                    }
+                    Some(d) if ONE_SHOT.contains(&d) => {
+                        let top = stack.last_mut().expect("a block is open");
+                        *top.1.entry(d.to_string()).or_default() += 1;
+                    }
+                    _ => {}
+                }
+            }
+            _ => stmt.push(c),
+        }
+    }
+}
+
+#[test]
+fn the_kit_nginx_config_sets_no_one_shot_directive_twice_in_a_block() {
+    let dups = duplicated_one_shots(&read(&format!("{KIT}/nginx/firm-rag.conf")), &kit_snippet);
+    assert!(
+        dups.is_empty(),
+        "nginx would refuse to load nginx/firm-rag.conf (`directive is duplicate`): {dups:?}"
+    );
+}
+
+/// The scan is the instrument: it must see a directive repeated through an
+/// include, or the clean result above could be vacuous.
+#[test]
+fn the_duplicate_scan_sees_a_directive_repeated_through_an_include() {
+    let conf = "server {\n  location /x {\n    include /etc/nginx/snippets/s.conf;\n    proxy_http_version 1.1; # again\n  }\n  location = /y { return 404; }\n}\n";
+    let dups = duplicated_one_shots(conf, &|_| "proxy_http_version 1.1;\n".to_string());
+    assert_eq!(dups, vec!["location /x: proxy_http_version x2".to_string()]);
 }

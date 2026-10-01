@@ -303,10 +303,15 @@ else
     NGINX_SNIPPETS=/etc/nginx/snippets; NGINX_CONF=/etc/nginx/conf.d
 fi
 install -d -m 0755 "$NGINX_SNIPPETS" "$NGINX_CONF"
-install -m 0644 "$KIT_DIR/nginx/firm-rag-proxy.conf" "$NGINX_SNIPPETS/firm-rag-proxy.conf"
+# The snippets name each other by their installed path; one rewrite serves
+# every file, so a sandbox prefix never includes a snippet under /etc.
+snippet_paths=(-e "s|/etc/nginx/snippets/|$NGINX_SNIPPETS/|g")
+install -m 0644 "$KIT_DIR/nginx/firm-rag-proxy-headers.conf" "$NGINX_SNIPPETS/firm-rag-proxy-headers.conf"
+sed "${snippet_paths[@]}" "$KIT_DIR/nginx/firm-rag-proxy.conf" > "$NGINX_SNIPPETS/firm-rag-proxy.conf"
+chmod 0644 "$NGINX_SNIPPETS/firm-rag-proxy.conf"
 sed -e "s|firm-rag\.example\.com|$HOSTNAME_FQDN|g" \
     -e "s|server 127\.0\.0\.1:9741;|server 127.0.0.1:$PORT;|" \
-    -e "s|/etc/nginx/snippets/firm-rag-proxy.conf|$NGINX_SNIPPETS/firm-rag-proxy.conf|" \
+    "${snippet_paths[@]}" \
     "$KIT_DIR/nginx/firm-rag.conf" > "$NGINX_CONF/firm-rag.conf"
 echo "    $NGINX_CONF/firm-rag.conf (server_name $HOSTNAME_FQDN, upstream :$PORT)"
 echo "    certs are NOT installed by this script — see step 1 below"
