@@ -90,10 +90,6 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
-[dev-dependencies]
-# tests/pod_worker_e2e.rs mints the owner-signed bootstrap blob.
-ed25519-dalek = { workspace = true }
-
 [features]
 # No Windows GPU selectors: this binary loads no model. They moved to the
 # loader, sovereign-stock (forwarded through sovereign-serve), which

@@ -7,7 +7,10 @@
 //! daemon may hold 127.0.0.1:9742, so the run happens in a private network
 //! namespace (`unshare -rn`): it never touches the host's daemon. Linux only.
 //! `SOVEREIGN_POD_WORKER_BIN`, else `sovereign-pod-worker` beside the binary
-//! under test; absent is a FAILURE naming the build, never a skip.
+//! under test; absent is a FAILURE naming the build, never a skip. Two
+//! programs' binaries side by side, so the test is the distribution's (moved
+//! from sovereign-cli-daemon by pb-distribution-svrn-lift-2: a lifted svrn
+//! has no pod worker to exec).
 #![cfg(target_os = "linux")]
 
 use std::collections::BTreeMap;
@@ -17,13 +20,24 @@ use std::process::Command;
 use ed25519_dalek::SigningKey;
 use sovereign_contracts::worker_pod::{encode_bootstrap, mint_bootstrap, BootstrapInputs};
 
-const BIN: &str = env!("CARGO_BIN_EXE_sovereign-cli-daemon");
+/// The binary under test, `svrn daemon`'s: sovereign-cli-daemon, which a stock
+/// install puts beside this package's binary.
+fn cli_daemon() -> PathBuf {
+    let bin =
+        Path::new(env!("CARGO_BIN_EXE_sovereign-stock")).with_file_name("sovereign-cli-daemon");
+    assert!(
+        bin.is_file(),
+        "{} is missing: build it with `cargo build -p sovereign-cli-daemon`",
+        bin.display()
+    );
+    bin
+}
 
 fn pod_worker_bin() -> PathBuf {
     if let Some(p) = std::env::var_os("SOVEREIGN_POD_WORKER_BIN") {
         return PathBuf::from(p);
     }
-    let beside = Path::new(BIN).with_file_name("sovereign-pod-worker");
+    let beside = cli_daemon().with_file_name("sovereign-pod-worker");
     assert!(
         beside.is_file(),
         "{} is missing: build it with `cargo build -p sovereign-pods`, or set SOVEREIGN_POD_WORKER_BIN",
@@ -69,7 +83,7 @@ fn worker_mode_verb_execs_pod_worker_and_health_answers() {
 
     let out = Command::new("unshare")
         .args(["-rn", "sh", "-c", SCRIPT])
-        .env("BIN", BIN)
+        .env("BIN", cli_daemon())
         .env("BLOB", &blob_path)
         .env("TOKEN", &blob.worker_token)
         .env("LOG", &log)

@@ -48,6 +48,8 @@ tracing = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
+# tests/pod_worker_e2e.rs mints the owner-signed bootstrap blob.
+ed25519-dalek = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
@@ -69,6 +71,11 @@ corpus-index = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 serde = { workspace = true }
+# svrn_memory_without_code_e2e (moved from sovereign-daemon,
+# pb-distribution-svrn-lift-2): the lesson read back from svrn's store through
+# the turn path's reader, the empty-items faces below svrn's process face.
+sovereign-core = { workspace = true }
+sovereign-store = { workspace = true }
 
 [features]
 # `svrn awareness`, served by `sovereign-cli-llm-stock` since

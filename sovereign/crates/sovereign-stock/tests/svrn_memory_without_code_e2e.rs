@@ -22,19 +22,34 @@ use std::time::{Duration, Instant};
 
 use sovereign_turn_client::reach::locate_sibling;
 
-const BIN: &str = env!("CARGO_BIN_EXE_sovereign-daemon");
+/// This package's binary, beside which a stock install puts the others.
+const STOCK: &str = env!("CARGO_BIN_EXE_sovereign-stock");
 
 /// What the lesson says; searched for in code's answer.
 const LESSON: &str = "Answer the quarterly questions in one sentence.";
 
-/// `env`, else `name` beside the sovereign-daemon this test was built with.
+/// svrn alone, the binary under test. The test is the distribution's because
+/// it boots two programs' binaries side by side (moved from sovereign-daemon by
+/// pb-distribution-svrn-lift-2: a lifted svrn has no serve or stock binary).
+/// Absent is a FAILURE naming the build, never a skip (five-programs-62).
+fn svrn() -> PathBuf {
+    let bin = Path::new(STOCK).with_file_name("sovereign-daemon");
+    assert!(
+        bin.is_file(),
+        "{} is missing: build it with `cargo build -p sovereign-daemon --bin sovereign-daemon --features treesitter`",
+        bin.display()
+    );
+    bin
+}
+
+/// `env`, else `name` beside this package's binary.
 /// Absent is a FAILURE naming the build, never a skip (five-programs-62).
 fn sibling(name: &str, env: &str, package: &str) -> PathBuf {
     if std::env::var_os(env).is_some() {
         return locate_sibling(name, env)
             .unwrap_or_else(|| panic!("{env} is set but names no file"));
     }
-    let beside = Path::new(BIN).with_file_name(name);
+    let beside = Path::new(STOCK).with_file_name(name);
     assert!(
         beside.is_file(),
         "{} is missing: build it with `cargo build -p {package}`, or set {env}",
@@ -238,7 +253,7 @@ fn svrn_keeps_a_lesson_with_no_code_program_and_codes_notes_do_not_see_it() {
     );
 
     // svrn alone: it chats, and it names the code program for code's tools.
-    let daemon = boot(Path::new(BIN), &r, serve_port, "svrn-1.log");
+    let daemon = boot(&svrn(), &r, serve_port, "svrn-1.log");
     let (code, turn) = json(
         r.client,
         "POST",
@@ -282,7 +297,7 @@ fn svrn_keeps_a_lesson_with_no_code_program_and_codes_notes_do_not_see_it() {
         &serve_log,
         || request(r.client, "GET", "/v1/models", None).is_none(),
     );
-    let daemon = boot(Path::new(BIN), &r, serve_port, "svrn-2.log");
+    let daemon = boot(&svrn(), &r, serve_port, "svrn-2.log");
     assert!(
         lesson_ids(r.client).contains(&id),
         "the lesson did not survive svrn's restart"

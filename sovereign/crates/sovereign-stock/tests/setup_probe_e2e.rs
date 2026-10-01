@@ -1,20 +1,36 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! First-run setup plans and probes through the program that loads the model
-//! (pb-distribution-setup; five-programs fp-25). This binary links no planner
-//! and no hardware probe: `svrn setup` execs the loader, the stock binary
-//! `daemon run` execs, on `--setup-probe`, on a fresh root with no config.
+//! (pb-distribution-setup; five-programs fp-25). sovereign-cli-daemon links no
+//! planner and no hardware probe: `svrn setup` execs the loader, the stock
+//! binary `daemon run` execs, on `--setup-probe`, on a fresh root with no
+//! config. Two programs side by side, so the test is the distribution's
+//! (moved from sovereign-cli-daemon by pb-distribution-svrn-lift-2: a lifted
+//! svrn has no loader to exec).
 //!
 //! Failing inputs: take the loader away and setup refuses naming it (the
-//! third test); link the planner back into this crate and boundary-gate goes
-//! red on `sovereign-cli-daemon -> sovereign-inference`.
+//! third test); link the planner back into sovereign-cli-daemon and
+//! boundary-gate goes red on `sovereign-cli-daemon -> sovereign-inference`.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const BIN: &str = env!("CARGO_BIN_EXE_sovereign-cli-daemon");
+/// This package's binary: the loader `svrn setup` execs.
+const STOCK: &str = env!("CARGO_BIN_EXE_sovereign-stock");
 
-/// `SOVEREIGN_DAEMON_BIN`, else `sovereign-stock` beside this binary. Absent
-/// is a FAILURE naming the build, never a skip (five-programs-62).
+/// The binary under test, `svrn setup`'s: sovereign-cli-daemon, which a stock
+/// install puts beside the loader. Absent is a FAILURE naming the build,
+/// never a skip (five-programs-62).
+fn cli_daemon() -> PathBuf {
+    let bin = Path::new(STOCK).with_file_name("sovereign-cli-daemon");
+    assert!(
+        bin.is_file(),
+        "{} is missing: build it with `cargo build -p sovereign-cli-daemon`",
+        bin.display()
+    );
+    bin
+}
+
+/// `SOVEREIGN_DAEMON_BIN`, else this package's `sovereign-stock`.
 fn loader() -> PathBuf {
     if let Some(p) = std::env::var_os("SOVEREIGN_DAEMON_BIN") {
         let p = PathBuf::from(p);
@@ -25,18 +41,12 @@ fn loader() -> PathBuf {
         );
         return p;
     }
-    let beside = Path::new(BIN).with_file_name("sovereign-stock");
-    assert!(
-        beside.is_file(),
-        "{} is missing: build it with `cargo build -p sovereign-stock`",
-        beside.display()
-    );
-    beside
+    PathBuf::from(STOCK)
 }
 
-/// A scratch dir beside the binaries, so a hard link of this binary works.
+/// A scratch dir beside the binaries, so a hard link of the binary works.
 fn scratch() -> tempfile::TempDir {
-    tempfile::tempdir_in(Path::new(BIN).parent().expect("binary dir")).expect("scratch dir")
+    tempfile::tempdir_in(Path::new(STOCK).parent().expect("binary dir")).expect("scratch dir")
 }
 
 /// `svrn setup <args>` from `bin`, on a fresh HOME with no config and no
@@ -90,7 +100,7 @@ fn seed_gguf(path: &Path, size_gb: f64) {
 fn a_fresh_root_plans_through_the_loader() {
     let home = scratch();
     let out = setup(
-        Path::new(BIN),
+        &cli_daemon(),
         home.path(),
         Some(&loader()),
         &["--plan", "--json"],
@@ -124,7 +134,7 @@ fn a_fresh_root_sets_up_through_the_loader() {
     let home = scratch();
     let loader = loader();
     let plan = last_json_line(&setup(
-        Path::new(BIN),
+        &cli_daemon(),
         home.path(),
         Some(&loader),
         &["--plan", "--json"],
@@ -144,7 +154,7 @@ fn a_fresh_root_sets_up_through_the_loader() {
     seed_gguf(&primary, 0.01);
 
     let out = setup(
-        Path::new(BIN),
+        &cli_daemon(),
         home.path(),
         Some(&loader),
         &[
@@ -173,8 +183,9 @@ fn a_fresh_root_sets_up_through_the_loader() {
 fn without_the_loader_setup_refuses_naming_it() {
     let alone = scratch();
     let bin = alone.path().join("sovereign-cli-daemon");
-    std::fs::hard_link(BIN, &bin)
-        .or_else(|_| std::fs::copy(BIN, &bin).map(|_| ()))
+    let src = cli_daemon();
+    std::fs::hard_link(&src, &bin)
+        .or_else(|_| std::fs::copy(&src, &bin).map(|_| ()))
         .expect("place the binary alone");
     let home = scratch();
     let out = setup(&bin, home.path(), None, &["--plan", "--json"]);

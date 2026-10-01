@@ -1510,6 +1510,18 @@ items = ["bundles", "assemble", "rank", "Ranking", "child_launch", "tracing_filt
 package = "serve"
 krate = "sovereign-serving-host"
 items = []
+# svrn's store and the turn path's lesson reader, for the composition's tests
+# alone (pb-distribution-svrn-lift-2): svrn_memory_without_code_e2e moved here
+# from sovereign-daemon and reads the lesson back from svrn's store. Empty
+# items keep stock's `src/` from naming any of it.
+[[distribution.face]]
+package = "svrn"
+krate = "sovereign-core"
+items = []
+[[distribution.face]]
+package = "svrn"
+krate = "sovereign-store"
+items = []
 # Code's face (pb-code-daemon-exit; F2 (a), phase-b-30; phase-b-33): the one
 # composition `svrn code mcp` serves, mounted on svrn's `:9741/mcp`. In
 # code's library, sovereign-code: sovereign-cli-dev is `backstage` above, and
