@@ -393,24 +393,19 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // Capture token expiry before `blob` is moved into the snapshot —
     // we re-print it at the end of this command for operator visibility.
     let expires_unix = blob.expires_unix;
-    if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
-        let capabilities = capabilities_for_gpu(&instance.gpu_name);
-        let snapshot = sovereign_mesh::pinned_pod_snapshot::PinnedPodSnapshot::new(
-            instance.instance_id.clone(),
-            handle.host(),
-            handle.port(),
-            blob,
-            capabilities,
-        );
-        match sovereign_mesh::pinned_pod_snapshot::save_snapshot(&dir, &snapshot) {
-            Ok(p) => println!(
-                "wrote snapshot at {} (inference routing enabled)",
-                p.display()
-            ),
-            Err(e) => {
-                eprintln!("warning: snapshot write failed ({e}) — inference routing disabled")
-            }
-        }
+    let request = sovereign_contracts::worker_pod::PodSnapshotRequest {
+        vast_id: instance.instance_id.clone(),
+        host: handle.host().to_string(),
+        port: handle.port(),
+        bootstrap_blob: blob,
+        system_ram_gb: system_ram_gb_for_gpu(&instance.gpu_name),
+    };
+    let recorded = serde_json::to_string(&request)
+        .map_err(|e| e.to_string())
+        .and_then(|body| ask_serve_pod_snapshot(&["record"], Some(&body)));
+    if let Err(e) = recorded {
+        tracing::warn!(vast_id = %instance.instance_id, error = %e, "pod up: serve did not record the pinned-pod snapshot");
+        eprintln!("warning: snapshot not recorded ({e}) — inference routing disabled");
     }
 
     let rec = ledger::PodRecord {
@@ -539,12 +534,9 @@ fn cmd_pod_down(args: &[String]) -> i32 {
     // never wrote a snapshot (older pod-up before the inference
     // wiring shipped) just returns false here.
     // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md §3.6.
-    if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
-        match sovereign_mesh::pinned_pod_snapshot::delete_snapshot(&dir, &vast_id) {
-            Ok(true) => println!("removed pinned-pod snapshot for {vast_id}"),
-            Ok(false) => {}
-            Err(e) => eprintln!("warning: snapshot delete failed: {e}"),
-        }
+    if let Err(e) = ask_serve_pod_snapshot(&["drop", &vast_id], None) {
+        tracing::warn!(vast_id = %vast_id, error = %e, "pod down: serve did not drop the pinned-pod snapshot");
+        eprintln!("warning: snapshot delete failed: {e}");
     }
     match ledger::close(&path, &vast_id) {
         Ok(rec) => {
@@ -582,7 +574,8 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
-/// Operator-stamped capabilities for a rented GPU. Best-effort:
+/// Operator-stamped host RAM for a rented GPU, which serve records as the
+/// pinned worker's capability. Best-effort:
 /// covers the GPU families we routinely rent on Vast (L40S, A6000,
 /// H100, RTX 4090) with a default fallback. Tuning these tighter is
 /// future work; the inference scheduler's throughput-observation
@@ -591,18 +584,51 @@ fn truncate(s: &str, max: usize) -> String {
 /// `system_ram_gb` is the Vast offer's *host* RAM — the pod's child
 /// daemon reads this for slot sizing. A miscalibration just biases
 /// routing, no correctness risk.
-fn capabilities_for_gpu(gpu_name: &str) -> sovereign_mesh::pinned_worker_source::PodCapabilities {
+fn system_ram_gb_for_gpu(gpu_name: &str) -> u32 {
     let upper = gpu_name.to_ascii_uppercase();
-    let system_ram_gb = if upper.contains("H100") {
+    if upper.contains("H100") {
         192
     } else if upper.contains("L40S") || upper.contains("A6000") || upper.contains("L40") {
         128
     } else {
         64
-    };
-    sovereign_mesh::pinned_worker_source::PodCapabilities {
-        system_ram_gb,
-        benchmark: None,
-        current_in_flight: None,
+    }
+}
+
+/// Ask serve, the pinned-pod snapshot's one writer, to `record` (the request
+/// JSON on stdin) or `drop <vast-id>` it: `sovereign-serve pod-snapshot`
+/// (pb-mesh-dissolve, phase-b-51). serve's own lines (the path it wrote, or
+/// the snapshot it removed) reach this terminal unchanged.
+fn ask_serve_pod_snapshot(args: &[&str], stdin: Option<&str>) -> Result<(), String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    const SERVE: &str = "sovereign-serve";
+    let bin = sovereign_turn_client::reach::locate_sibling(SERVE, "SOVEREIGN_SERVE_BIN")
+        .ok_or_else(|| {
+            format!(
+                "serve's binary '{SERVE}' was not found; build it with \
+                 `cargo build -p sovereign-serve`, or set SOVEREIGN_SERVE_BIN"
+            )
+        })?;
+    let mut child = Command::new(&bin)
+        .arg("pod-snapshot")
+        .args(args)
+        .stdin(if stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .spawn()
+        .map_err(|e| format!("{}: {e}", bin.display()))?;
+    if let (Some(body), Some(mut pipe)) = (stdin, child.stdin.take()) {
+        pipe.write_all(body.as_bytes())
+            .map_err(|e| format!("could not hand serve the request: {e}"))?;
+    }
+    let status = child.wait().map_err(|e| e.to_string())?;
+    tracing::info!(?args, %status, "pod: asked serve for the pinned-pod snapshot");
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("serve's pod-snapshot exited {status}"))
     }
 }

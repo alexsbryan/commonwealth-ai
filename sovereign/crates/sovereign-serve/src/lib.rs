@@ -79,6 +79,7 @@ pub mod mesh_measurements;
 mod mesh_plan;
 /// The CLI's side of measurement travel: publish a run, read peers' runs.
 mod mesh_travel;
+mod pod_snapshot_cmd;
 pub mod rails_mesh;
 /// serve ranks inference venues: the node's one router (pb-serve-ranks).
 mod rank;
@@ -266,7 +267,9 @@ pub fn child_launch(args: &[String]) -> Option<i32> {
 /// The subcommands `run` routes before the server's arguments. The dispatcher
 /// sends `svrn mesh <verb>` here for exactly these.
 /// `plan` and `bench` are placement measurement's (pb-serve-placement);
-/// `vram-plan` is sizing, which `svrn daemon vram-plan` execs here.
+/// `vram-plan` is sizing, which `svrn daemon vram-plan` execs here;
+/// `pod-snapshot` records or drops the pinned-pod snapshot `svrn pod up` and
+/// `svrn pod down` ask serve for (pb-mesh-dissolve).
 pub const WEIGHT_VERBS: &[&str] = &[
     "warm-cache",
     "fetch-model",
@@ -274,6 +277,7 @@ pub const WEIGHT_VERBS: &[&str] = &[
     "plan",
     "bench",
     "vram-plan",
+    "pod-snapshot",
 ];
 
 fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
@@ -294,6 +298,7 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
             "plan" => mesh_plan::cmd_plan(rest).await,
             "bench" => mesh_bench::cmd_bench(rest).await,
             "vram-plan" => vram_plan::run(rest),
+            "pod-snapshot" => pod_snapshot_cmd::run(rest),
             _ => fetch_model::cmd_fetch_model(rest).await,
         }
     })

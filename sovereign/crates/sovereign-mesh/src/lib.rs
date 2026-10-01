@@ -58,12 +58,12 @@ pub use sovereign_serving_host::model_fetch; // shim: moved by domains dm-servin
 /// The mesh implementations of `sovereign-contracts::peer`'s two ports — the
 /// N>1 half of what the daemon speaks to its peers through (cw-lift 3b).
 pub mod peer_adapter;
-pub use sovereign_serving_host::peer_inference; // shim: moved by domains REVIEW-build-serving-move-peer
 /// The §4.1 candidate objective — rank on predicted time-to-answer
 /// rather than on a product of dimensionless multipliers
 /// (`SCHEDULER_QUALITY.md` §4.1). Public because it is scored from a
 /// capture as well as from the live path.
-pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-build-sched-move // shim: moved by domains REVIEW-build-mesh-workbench-deferred
+pub use sovereign_scheduler::predicted_time;
+pub use sovereign_serving_host::peer_inference; // shim: moved by domains REVIEW-build-serving-move-peer // shim: moved by domains REVIEW-build-sched-move // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod rail_kv_pump;
 pub mod ring_checkpoint;
 pub use understanding_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters // shim: moved by domains REVIEW-build-mesh-workbench-deferred

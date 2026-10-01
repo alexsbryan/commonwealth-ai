@@ -33,10 +33,10 @@
 //! rather than reading config, and the link never carries a preference order
 //! for the guest to resolve.
 
+use crate::wall_link::wall_https_link;
 use mesh_join_vocab::deep_link::{build_guest_link, parse_deep_link, DeepLink};
 use sovereign_cli_base::help::{Help, HelpSection};
 use sovereign_contracts::guest_pages::PAGE_PREFIX;
-use crate::wall_link::wall_https_link;
 
 use crate::mesh_guest_link::{guest_bind_url, print_qr_blocks, write_qr_svg};
 use sovereign_cli_base::guest_link::{self, GuestLink};
