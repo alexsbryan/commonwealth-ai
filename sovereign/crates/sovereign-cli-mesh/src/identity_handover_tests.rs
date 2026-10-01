@@ -27,6 +27,27 @@ fn daemon_store(
     (key, active, parked)
 }
 
+/// A main-era data dir is told to run `svrn mesh up`, donor included, and the
+/// handover itself is what stops it (pb-distribution-f8): one decider, the
+/// handover's own marker. Failing input: a notice keyed on anything the
+/// handover does not change keeps naming the verb after it ran.
+#[test]
+fn the_upgrade_notice_names_mesh_up_until_the_handover_runs() {
+    use sovereign_contracts::node_identity::mesh_handover_notice;
+    let svrn = tempfile::tempdir().unwrap();
+    let rails = tempfile::tempdir().unwrap();
+    assert_eq!(mesh_handover_notice(svrn.path(), true), None, "a fresh dir");
+    daemon_store(svrn.path());
+
+    let before = mesh_handover_notice(svrn.path(), true).expect("a main-era dir");
+    assert!(
+        before.contains("`svrn mesh up`") && before.contains("[compute.work_offer]"),
+        "{before}"
+    );
+    hand_over(svrn.path(), rails.path(), false).unwrap();
+    assert_eq!(mesh_handover_notice(svrn.path(), true), None);
+}
+
 /// The daemon's key, node id and meshes become cw-rails', over a solo key
 /// cw-rails minted for itself. Failing input: skip the handover, and
 /// cw-rails keeps its solo key and an empty store.

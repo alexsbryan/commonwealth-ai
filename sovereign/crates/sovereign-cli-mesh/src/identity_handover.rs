@@ -43,8 +43,9 @@ pub fn hand_over(
     rails_dir: &Path,
     rails_answering: bool,
 ) -> Result<Handover, String> {
-    let svrn_key = svrn_dir.join(NODE_KEY_FILE);
-    if !svrn_key.exists() {
+    use sovereign_contracts::node_identity::{mesh_handover_pending, PRE_HANDOVER_KEY_FILE};
+    let svrn_key = svrn_dir.join(PRE_HANDOVER_KEY_FILE);
+    if !mesh_handover_pending(svrn_dir) {
         return Ok(Handover::NothingToMove);
     }
     if rails_answering {

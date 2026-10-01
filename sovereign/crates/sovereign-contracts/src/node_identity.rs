@@ -277,6 +277,43 @@ struct MeshFileMember {
     node_id: NodeId,
 }
 
+/// `<data_dir>/node_key` — the daemon's own node key, which a data dir from
+/// before cw-rails held the node's identity carries. `svrn mesh up`'s
+/// identity handover (sovereign-cli-mesh `identity_handover`) copies it to
+/// cw-rails and renames it away, so its presence is the handover's own
+/// marker (pb-distribution-f8).
+pub const PRE_HANDOVER_KEY_FILE: &str = "node_key";
+
+/// Has `svrn mesh up` still to hand this data dir's identity to cw-rails?
+/// The one decider: the handover's first check and every surface that tells
+/// the operator so call it.
+pub fn mesh_handover_pending(data_dir: &Path) -> bool {
+    data_dir.join(PRE_HANDOVER_KEY_FILE).exists()
+}
+
+/// What the operator is told while the handover waits; `None` once it ran,
+/// and on a data dir that never held a key. `work_offer` is whether svrn's
+/// config still declares `[compute.work_offer]`, which no donor reads now.
+pub fn mesh_handover_notice(data_dir: &Path, work_offer: bool) -> Option<String> {
+    let pending = mesh_handover_pending(data_dir);
+    tracing::debug!(data_dir = %data_dir.display(), pending, work_offer, "mesh handover: pending?");
+    if !pending {
+        return None;
+    }
+    let mut notice = format!(
+        "{} is this node's key from before cw-rails: until `svrn mesh up` hands it over, \
+         this node is on none of its meshes",
+        data_dir.join(PRE_HANDOVER_KEY_FILE).display()
+    );
+    if work_offer {
+        notice.push_str(
+            ", and `[compute.work_offer]` offers nothing: the donor runs in cw-rails and \
+             reads `[work_offer]` from rails.toml, which `svrn mesh up` writes",
+        );
+    }
+    Some(notice)
+}
+
 /// The projection the resolver consumes: the mesh's own id plus every
 /// member id (the collision tie-break's membership test).
 struct MeshIdentity {
