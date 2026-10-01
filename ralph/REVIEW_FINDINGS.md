@@ -4346,3 +4346,109 @@ are test code. Of the seven with more than one:
   `size-gate` reports 75 keys grown (72 at auto-10);
   commonwealth-rails::tests +3594 is the ring tests the flip moved in.
   All advisory, outside this queue.
+
+## REVIEW-audit-pb-auto-11, from worktree B (2026-10-01, range c4ce30e2a..81e6ec3ac, since REVIEW-audit-pb-auto-10)
+
+The same audit id ran in both trees; the section above is the main tree's.
+This one was run in worktree B and landed on cut with B's rows. Hashes
+below are B's: 5e70e25e8 landed as 28c4b28c8 without its F26 rows, which
+cut already held (d79f29459); b22cb09d1 made the same repair as cut's
+3d970c7ff and was not landed.
+
+165 commits from pb-mesh-exit-transport (and -claims), pb-mesh-exit-mesh,
+pb-serve-ranks, pb-cli-llm-ingest-move (and -remainder), pb-ingest-rehome
+(and -daemon), pb-meshapp-solve, pb-distribution-setup, -release-bins,
+-onprem-identity and -onprem-compose, plus director rulings phase-b-76..87.
+Run in the parallel worktree pb-par-onprem; all checks in the
+sovereign-vulkan toolbox.
+
+TESTALL at 81e6ec3ac: 13,701 passed, 5 failed. Four were drift from moves
+and one a test reading the host; repaired in 5e70e25e8 and b22cb09d1
+(below). TESTALL at b22cb09d1: 13,706 passed, 0 failed. PREPUSH at
+b22cb09d1 blocks on boundary-gate alone, at 4 violations, the declared
+burn-down (17 at auto-10). LINT at b22cb09d1: exit 0, arch-gate green.
+
+### (1) Per-unit net-line ledger, `.rs/.ts/.mjs`; tests = a `tests/` segment, a `*_tests.rs`/`tests.rs` file or `test_support`
+
+| unit | src net (+/−) | tests net |
+|---|---|---|
+| pb-distribution-onprem-identity | +955 (+1028/−73) | +348 |
+| pb-serve-ranks | +953 (+1542/−589) | +672 |
+| pb-ingest-rehome-daemon | +596 (+957/−361) | +155 |
+| pb-cli-llm-ingest-move-remainder | +436 (+981/−545) | +313 |
+| pb-cli-llm-ingest-move | +398 (+1591/−1193) | +24 |
+| pb-distribution-onprem-compose | +281 (+340/−59) | +304 |
+| pb-distribution-setup | +215 (+735/−520) | +590 |
+| pb-mesh-exit-transport-claims | +72 (+98/−26) | +237 |
+| pb-ingest-rehome | +25 (+189/−164) | +0 |
+| phase-b-76 | +2 | +1 |
+| pb-distribution-release-bins | +0 | +184 |
+| seat | −3 | +2 |
+| pb-meshapp-solve | −228 (+172/−400) | +650 |
+| pb-mesh-exit-mesh | −234 (+755/−989) | −188 |
+| pb-mesh-exit-transport | −6562 (+4549/−11111) | −11143 |
+| TOTAL | −3094 | −7851 |
+
+The flip (pb-mesh-exit-transport) is the range: −6.6k src and −11.1k
+tests as sovereign-mesh's gossip, membership and ring round and the
+daemon's iroh endpoint left for cw-rails, whose own tests are the
+successors in 1c120f23d's retired-test ledger. onprem-identity's +955 is
+the API-key store, the keyed auth layer and `svrn daemon key`.
+
+### (2) dry-report over the 39 touched crate dirs
+
+Clone members keyed by (fn name, file) against the 741 `fn` sites the
+range added (`git diff -M`). No exact group and no near cluster has an
+added member. The only code index on this host is the `cut` checkout
+(`--corpus-id commonwealth-ai`), which holds the range except this lane's
+17 on-prem commits (3f0fd27f2..81e6ec3ac); it is current for the rest
+(pb-mesh-exit-mesh's `rail_bind.rs` resolves). The on-prem commits were
+read by hand: finding 3 below is the clone the index could not see.
+
+### (3) converge noun over the 52 nouns the range added (and did not remove)
+
+Every one has exactly one definition in this tree (`git grep` of
+struct/enum/trait at HEAD). converge reports 45 with one production
+definition; the seven at zero are this lane's on-prem nouns, which the cut
+index has not seen (ApiKey, ApiKeyRow, KeyedOwners, Posture,
+RetrievalSection), and two test structs (Daemon in onprem_keys_e2e.rs,
+DeltaRecorder in tiered_entity_extractor_seam.rs).
+
+### Findings
+
+- **ARCH 5, fixed in b22cb09d1** · sovereign-cli-mesh/src/mesh_skew.rs:217
+  (1c120f23d) pointed `probe_known_kind` at the host config's
+  `rails_base()` while its test named a dead :1. Since the live cutover
+  this host runs cw-rails, so the could-not-judge test got a verdict.
+  The probe now takes the fan-out URL its one caller
+  (mesh_offers.rs:266) just POSTed to: derivations 2 → 1.
+- **ARCH 5, fixed in 5e70e25e8** · sovereign-stock/tests/one_process_e2e.rs:131
+  counted every `sovereign-serve` on the host, so a full run's other
+  serves failed it; scoped to this root's SVRNMESH_DATA_DIR, PLANT red.
+- **ARCH 4, fixed in 5e70e25e8** · drift: conformance line shifts
+  (sovereign-contracts, sovereign-daemon); F26 rows for cw-rails'
+  ring_routes/tests.rs, ring_sync/tests.rs, ring_sync/tests/round_tests.rs
+  (moved into src/ by 1c120f23d; TestOnly 2/11/1); skills_one_home_census
+  reads boot.rs:447's optional composition (b6f232797).
+- **ARCH 6, recorded, not fixed** · sovereign-daemon/src/client_tokens/keys.rs:88
+  (c998ec441): a key directory that exists but cannot be read logs a warn
+  and returns no keys, and `api_keys::seal` (api_keys.rs:98) then serves
+  the client surface UNKEYED, with loopback trusted. The same holds when
+  every key file is unreadable or empty (keys.rs:112-113). On a
+  distribution whose posture is identity-by-key this fails open; refusing
+  to boot is a behaviour change, so it belongs to a row, not an audit.
+- **ARCH 8, recorded, not fixed** · the hosted-serve composition
+  (`HostedServe::new` … `.rank`, and `fn ranked`) is written out twice:
+  sovereign-stock/src/main.rs:44-120,184 and
+  sovereign-onprem/src/main.rs:27-75,93 (326a60fdb). They differ only in
+  stock's `rails_mesh::join` and `measurements_rail::spawn_reconcile`.
+  On-prem also compiles stock's ingest.rs through
+  `#[path = "../../sovereign-stock/src/ingest.rs"]`
+  (sovereign-onprem/src/main.rs:17), a cross-crate source include that
+  layer-gate cannot see. Collapsing needs a home both binaries depend on.
+  That is phase-c's drive collapse (phase-b-32), not small.
+- **advisory lanes, recorded** · `hakari-verify` and `deletion-manifest
+  --verify` still fail as at auto-10 (p0-root-junk 323069 > 113934).
+  `size-gate` reports 77 keys grown (72 at auto-10). concept-gate and
+  domains-census-self-test are could-not-judge, as before. All advisory,
+  outside this queue.
