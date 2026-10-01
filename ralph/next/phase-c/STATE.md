@@ -7,7 +7,7 @@ Three groups, in this order:
 2. Bugs found during Phase B that main has too (8): each row cites the evidence that the baseline shares it.
 3. Cleanup, tooling and lost coverage (7 rows, 10 items): second copies, dead arms, gate blind spots, the gossip fault-injection pack deleted with sovereign-mesh.
 
-Nothing runs this queue until the operator launches it, after phase-b's ship gate. At launch, write CHARTER.md, PROMPT.addendum.md and queue.toml from phase-b's (prefix `pc`), and re-verify every premise against the tree of that day.
+Nothing runs this queue until the operator launches it, after phase-b's ship gate. At launch, write CHARTER.md, PROMPT.addendum.md and queue.toml from phase-b's (prefix `pc`), with `scope_file = "ralph/next/phase-c/scope.txt"` so the cleanup cut line below holds, and re-verify every premise against the tree of that day.
 
 phase-b-101 (operator, 2026-10-01) consolidated 28 rows to 20 with no content dropped: pc-onprem-followups holds the four on-prem rows, pc-split-deploy-honesty three split-deployment rows (pc-rpc-probe-identity, a security finding, stays its own), and pc-cli-base-residue absorbs pc-cli-dev-probe-twin, pc-nudge-dismiss-recipe-publish and pc-serving-lift-script. Each merged item keeps its own bullet under its old id.
 
@@ -39,6 +39,10 @@ phase-b-101 (operator, 2026-10-01) consolidated 28 rows to 20 with no content dr
   - The shape is the row's to choose: append before the ack in solo mode, or ack only what the pump has appended. The cost goes in the body as write latency measured against today's.
   - PROOF: a commonwealth-rails test writes through the door, kills cw-rails with SIGKILL at once, restarts it, and reads the row back. PLANT: restore today's ack-before-append in solo mode → red.
   LIFT ~300 lines. — read: commonwealth-rails/src/kv.rs, commonwealth-rails/src/kv/tests.rs, sovereign-daemon/tests/solo_rails_e2e.rs (its wait-for-append), ralph/decisions/five-programs-66.md — check: CLEAN, LINT, TEST(commonwealth-rails), PLANT, LAYER, BOUNDARY
+## Cut line: cleanup (operator, 2026-10-01, phase-b-102)
+
+Everything below this heading is cleanup, tooling and lost coverage: second copies, dead arms, gate blind spots, the gossip fault-injection pack. No row below changes what a user can do. It is a cut line: at launch these rows are outside phase-c's frozen scope (ralph/next/phase-c/scope.txt lists only the 13 rows above), so they wait on the operator as a parked row does, and phase-c can finish at this line. Moving the line is adding the ids to scope.txt.
+
 - [ ] pc-rails-gossip-dst — depends [] — OUTCOME: cw-rails' gossip round has a deterministic fault-injection pack (staged by phase-b's pb-mesh-dissolve, which deletes sovereign-mesh's DST pack with its subject).
   - sovereign-mesh's dst.rs and dst_scenarios.rs (1,161 + 305 lines) test the gossip round the svrn daemon runs, which retires with the crate; ci.yml's mesh-dst block (:598-601) already calls itself superseded. A pack for cw-rails' gossip advances no Phase B finish item (target/ralph/phase-b/census/pb-mesh-dissolve.md).
   LIFT: census first. — read: target/ralph/phase-b/census/pb-mesh-dissolve.md, commonwealth-rails/src/gossip.rs, .github/workflows/ci.yml:588-610 — check: CLEAN, LINT, TEST(commonwealth-rails), PLANT, LAYER, BOUNDARY

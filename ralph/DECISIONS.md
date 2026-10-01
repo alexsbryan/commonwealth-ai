@@ -1977,6 +1977,12 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose (operator: "yes, consolidate to 20"): pc-onprem-followups holds pc-onprem-ocr-cleanup-key, pc-cli-client-credential, pc-sealed-posture-web-offer and pc-onprem-absence-messages; pc-split-deploy-honesty holds pc-admin-reload-checks-serve, pc-serve-restart-self-report and pc-mesh-status-serve-down (pc-rpc-probe-identity, a security finding, stays its own row); pc-cli-base-residue absorbs pc-cli-dev-probe-twin, pc-nudge-dismiss-recipe-publish and pc-serving-lift-script. Each merged item keeps its full text as a bullet tagged with its old id, so earlier ledgers' references resolve, and each is judged on its own bullet. The ship gate's live text names the new ids.
 - Because: row count was being read as size; the merge changes neither scope nor content.
 
+**phase-b-102 · 2026-10-01 · phase-c · operator, putting phase-c's cleanup rows last behind a cut line** — this commit
+- Needed: the operator: "I want the cleanup rows last and demarcated as such (it could be another cut line)."
+- Chose: the 7 cleanup rows (pc-rails-gossip-dst, pc-test-gate-watchers-treesitter, pc-notes-sql-twin, pc-cli-base-residue, pc-notes-db-opens, pc-tiered-classify-back, pc-docs-after-cut) sit last under a `## Cut line: cleanup` heading, and the line is structural, not only typographic: ralph/next/phase-c/scope.txt lists the 13 rows above it, and phase-c's queue.toml, written at launch, sets `scope_file` to it. ralph's frozen-scope rule (`out_of_scope`, scripts/ralph.py) then holds the 7 as waiting on the operator, and phase-c can finish at the line. Moving the line is adding ids to scope.txt.
+- Verified with ralph's own queue parser and the scope rule it applies: 20 rows, 13 in scope, exactly the 7 cleanup rows held; the heading ends the last in-scope row's block, so no worker reads it as part of that row.
+- Because: no cleanup row changes what a user can do; the operator can ship at the line.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.

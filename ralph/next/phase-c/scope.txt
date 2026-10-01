@@ -1,0 +1,16 @@
+# phase-c's frozen scope (operator, 2026-10-01, phase-b-102). queue.toml `scope_file` reads it at launch.
+# The 13 rows above the cleanup cut line in STATE.md. The 7 cleanup rows below it are deliberately absent:
+# they wait on the operator until their ids are added here. A split `<id>-<suffix>` of a listed row is in scope.
+pc-removed-env-warn
+pc-bare-404s
+pc-onprem-followups
+pc-rpc-probe-identity
+pc-split-deploy-honesty
+pc-fetch-model-peer-discovery
+pc-rejoin-tombstone
+pc-cli-config-load-silent-default
+pc-rendezvous-stable-hash
+pc-atlas-highlight-determinism
+pc-gk-rescue-fabrication
+pc-partial-decline-verdict
+pc-solo-durable
