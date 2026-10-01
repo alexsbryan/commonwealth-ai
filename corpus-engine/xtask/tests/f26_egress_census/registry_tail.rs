@@ -82,14 +82,6 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-daemon/src/setup_cmd/finish.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-daemon/src/model_cmd.rs", Class::LocalDaemon, 1),
-    // NEW (fp-cond2-c, a1aaa0463): the terminal-join tests spawn a founder
-    // daemon and poll it, then hand `find_holders` a probe client — both
-    // loopback to the child the test itself started. Test fixtures.
-    (
-        "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/terminal/join_child/tests.rs",
-        Class::TestOnly,
-        2,
-    ),
 
     // ---- sovereign-cli ----
     ("sovereign/crates/sovereign-cli/src/project_registry.rs", Class::LocalDaemon, 2),

@@ -8,7 +8,8 @@
 //! minted this. A test that pins neither still writes into the developer's
 //! real store when their own cw-rails serves 9747. So hermeticity is a census over test source, not a
 //! convention: a file that spawns a sovereign-daemon binary with `run` must
-//! name both `rails_base` and `CW_RAILS_DIR`.
+//! name both `rails_base` and `CW_RAILS_DIR` (or run in a private network
+//! namespace, whose default base is its own, and name `CW_RAILS_DIR`).
 //!
 //! The failing input: delete `rails_base` from any file below. The scan also
 //! fails if it finds none of the files it is known to cover, so an empty
@@ -60,14 +61,23 @@ fn boots_a_daemon(text: &str) -> bool {
     runs || boots_the_admin_join(text)
 }
 
-/// Spawns a daemon binary's admin-join launch through the setup wizard's
-/// join child (`join_child::join`, whose result is a `JoinFailure`): the
-/// child starts the daemon and joins through cw-rails at its `rails_base`,
-/// so it pins and groups like a `run` (pb-mesh-exit-transport, where the
-/// wizard test stopped booting a `run` founder).
+/// Spawns a daemon binary's admin-join launch through the setup wizard
+/// (`svrn setup --terminal <link>`): the wizard's join child starts the
+/// daemon and joins through cw-rails, so it pins and groups like a `run`
+/// (pb-mesh-exit-transport, where the wizard test stopped booting a `run`
+/// founder). Until pb-distribution-svrn-lift-2 the test called
+/// `join_child::join` in process; it now drives the wizard's binary from
+/// sovereign-stock's tests.
 fn boots_the_admin_join(text: &str) -> bool {
-    text.contains(concat!("JoinFailure", "::"))
-        && (text.contains("sovereign-stock") || text.contains("sovereign-daemon"))
+    text.contains(concat!("setup", " --terminal")) && text.contains("sovereign-stock")
+}
+
+/// Boots inside a private network namespace (`unshare -rn`), where the
+/// default base 127.0.0.1:9747 is the namespace's own: the base is pinned by
+/// the namespace rather than by `[daemon] rails_base`. `CW_RAILS_DIR` is a
+/// path on the shared filesystem and is still required.
+fn in_private_netns(text: &str) -> bool {
+    text.contains(concat!("\"un", "share\"")) && text.contains(concat!("\"-", "rn\""))
 }
 
 #[test]
@@ -89,7 +99,7 @@ fn every_test_that_boots_a_daemon_pins_its_cw_rails() {
     for known in [
         "sovereign/crates/sovereign-daemon/tests/main/admin_join_serves_venues_e2e.rs",
         "sovereign/crates/sovereign-daemon/tests/solo_rails_e2e.rs",
-        "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/terminal/join_child/tests.rs",
+        "sovereign/crates/sovereign-stock/tests/setup_join_e2e.rs",
     ] {
         assert!(
             booting.iter().any(|(rel, _)| rel == known),
@@ -100,7 +110,10 @@ fn every_test_that_boots_a_daemon_pins_its_cw_rails() {
     }
     let unpinned: Vec<&str> = booting
         .iter()
-        .filter(|(_, text)| !(text.contains("rails_base") && text.contains("CW_RAILS_DIR")))
+        .filter(|(_, text)| {
+            !((text.contains("rails_base") || in_private_netns(text))
+                && text.contains("CW_RAILS_DIR"))
+        })
         .map(|(rel, _)| rel.as_str())
         .collect();
     assert!(

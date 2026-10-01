@@ -202,6 +202,3 @@ pub(super) async fn join(
         }
     }
 }
-
-#[cfg(test)]
-mod tests;
