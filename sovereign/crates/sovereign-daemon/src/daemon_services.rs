@@ -307,7 +307,7 @@ pub struct ServingProfile {
 ///   would let the status section disagree with the sink.
 ///
 /// Both are held as ports — the dial, and the mesh ADAPTER from
-/// [`sovereign_mesh::peer_adapter`] — never the commonwealth types: the daemon
+/// `sovereign_mesh::peer_adapter` — never the commonwealth types: the daemon
 /// builds them, hands them here, and talks to them through `sovereign-contracts::peer`'s ports, so its own
 /// bootstrap names no `commonwealth-*` type at all (cw-lift 3b).
 pub struct HeadlessRails {

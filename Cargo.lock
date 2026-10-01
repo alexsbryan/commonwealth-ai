@@ -12724,7 +12724,6 @@ dependencies = [
  "sovereign-core",
  "sovereign-daemon",
  "sovereign-grants",
- "sovereign-mesh",
  "sovereign-meshapp",
  "sovereign-peer-wire",
  "sovereign-runtime-recipe",

@@ -18,7 +18,7 @@
 //!
 //! The mesh holds what a BROWSER (or the dev server standing in for one)
 //! touches — the page prefix, the `window.ring` shim and the
-//! served-from-inside-the-bundle guard ([`sovereign_mesh::guest_pages`],
+//! served-from-inside-the-bundle guard (`sovereign_mesh::guest_pages`,
 //! re-exported below so the door's paths keep resolving) — because the CLI's
 //! dev servers need the same three without linking this crate.
 
@@ -111,7 +111,7 @@ impl GuestPages {
     /// declines to start rather than serving a door that is wrong — and
     /// refused AGAIN at the rail route, because a registry that was wrong must
     /// not be the only guard (ARCH 5). The membership question is
-    /// [`is_daemon_owned`](sovereign_mesh::ring_roster::is_daemon_owned),
+    /// `sovereign_mesh::ring_roster::is_daemon_owned`,
     /// which is the decider that already knows; this only says what to do
     /// about the answer.
     pub fn from_config(

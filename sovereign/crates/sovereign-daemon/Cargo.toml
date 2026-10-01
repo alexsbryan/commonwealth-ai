@@ -26,10 +26,6 @@ mesh-reach = { workspace = true, features = ["fanout"] }
 # Admission, RailAct) and dials `/v1/rail/*` through the port
 # (`rails_client::RailsRingRail`) — no journal crate.
 commonwealth-rail-core = { workspace = true }
-# Fabric's own crate — the host cluster names it for the state and the loops
-# that stay behind (DC §4.1; `[[forbid]] sovereign-mesh -> sovereign-daemon`
-# keeps the arrow one-way).
-sovereign-mesh = { workspace = true }
 # The daemon-to-daemon wire bodies the ring-sync route receives and the loops
 # send; a leaf both may name (domains dm-daemon-api-edge (a)).
 sovereign-peer-wire = { workspace = true }
@@ -131,7 +127,6 @@ default = []
 # tree-sitter surfaces they reach. (It enabled `project_http`, the SCIP-graph
 # route shell, until that left with the code program at pb-code-daemon-exit.)
 treesitter = [
-    "sovereign-mesh/treesitter",
     "sovereign-tools/treesitter",
 ]
 # The headless OCR installer. The cfg gate moved here with the composition

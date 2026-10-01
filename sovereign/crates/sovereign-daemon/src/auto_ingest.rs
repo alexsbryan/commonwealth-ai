@@ -39,7 +39,7 @@ const COOLDOWN: Duration = Duration::from_secs(30 * 60);
 /// called. That handler checks `active_ingests` itself and skips the
 /// local partition spawn while still dispatching work to the new peer.
 /// Handle to the spawned auto-collaborate task. Aborts the task when dropped,
-/// exactly like [`sovereign_mesh::gossip::GossipHandle`] beside it, so stopping the
+/// exactly like `sovereign_mesh::gossip::GossipHandle` beside it, so stopping the
 /// daemon tears this loop down with everything else.
 ///
 /// # Why this function returns a value at all

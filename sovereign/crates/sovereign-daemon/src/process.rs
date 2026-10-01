@@ -198,7 +198,6 @@ pub(crate) fn compose_filter(
 /// pins this list so the surface cannot silently go dark a fourth time.
 pub const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      sovereign_core=info,\
-     sovereign_mesh=info,\
      sovereign_inference=info,\
      corpus_engine=info,\
      commonwealth_discovery=info,\
