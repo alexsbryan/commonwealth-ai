@@ -450,7 +450,9 @@ pub(crate) fn runtime_root_escapes(
                 .unwrap_or(&path)
                 .display()
                 .to_string();
-            for e in scan_runtime_escapes(&text) {
+            let rel_dir = path.parent().and_then(|p| p.strip_prefix(dir).ok());
+            let mounts = scan_path_mounts(&text, rel_dir.unwrap_or(Path::new("")));
+            for e in scan_runtime_escapes(&text).into_iter().chain(mounts) {
                 fails.push(format!(
                     "[{scope}] {crate_name}: {rel}:{} {}",
                     e.line,
@@ -491,6 +493,9 @@ enum EscapeKind {
     /// A `git` subprocess with no `current_dir(…)`, so it runs wherever the
     /// harness happens to stand.
     AmbientGit,
+    /// A `#[path = "…"]` whose file resolves outside the crate root: the
+    /// module is another crate's source, mounted by where the two happen to sit.
+    PathMount,
 }
 
 impl RuntimeEscape {
@@ -513,8 +518,52 @@ impl RuntimeEscape {
                  move the check to a crate in NO package",
                 self.evidence
             ),
+            EscapeKind::PathMount => format!(
+                "mounts a module from outside the crate root (`{}`) — a lift carries this \
+                 crate's tree, not its neighbour's. Put the shared code in a crate both \
+                 depend on (a leaf's test-doubles feature) and import it",
+                self.evidence
+            ),
         }
     }
+}
+
+/// Rule 3c's third shape: `#[path = "…"]` resolved against the directory of
+/// the file that carries it (`rel_dir`, relative to the crate root) and
+/// normalised lexically. A `..` that pops past the crate root is the escape;
+/// one that stays inside (`tests/rail_e2e` → `../main/common`) is not.
+fn scan_path_mounts(text: &str, rel_dir: &Path) -> Vec<RuntimeEscape> {
+    let mut out = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        let Some(lit) = line
+            .trim_start()
+            .strip_prefix("#[path = \"")
+            .and_then(|r| r.split('"').next())
+        else {
+            continue;
+        };
+        let mut depth = rel_dir.components().count();
+        let escapes = Path::new(lit).components().any(|c| match c {
+            std::path::Component::ParentDir if depth == 0 => true,
+            std::path::Component::ParentDir => {
+                depth -= 1;
+                false
+            }
+            std::path::Component::Normal(_) => {
+                depth += 1;
+                false
+            }
+            _ => false,
+        });
+        if escapes {
+            out.push(RuntimeEscape {
+                line: i + 1,
+                kind: EscapeKind::PathMount,
+                evidence: line.trim().to_string(),
+            });
+        }
+    }
+    out
 }
 
 /// Scan one file's text for the two runtime-escape shapes. Grep-level and
@@ -607,9 +656,11 @@ fn scan_runtime_escapes(text: &str) -> Vec<RuntimeEscape> {
 /// narrow: `..` also appears in ranges (`0..3`) and struct-update syntax
 /// (`..Default::default()`), neither of which is a path.
 fn climbs_out_of_crate(line: &str) -> bool {
-    // `.parent()`, `join("..")`, `join("../x")`, and a `..` segment inside any
-    // path literal — `"/.."`, `"../"`, or a bare `".."`.
+    // `.parent()`, `.ancestors()` (`.nth(3)` to the repo, svrn's censuses until
+    // pb-distribution-svrn-lift), `join("..")`, `join("../x")`, and a `..`
+    // segment inside any path literal — `"/.."`, `"../"`, or a bare `".."`.
     line.contains(".parent()")
+        || line.contains(".ancestors()")
         || line.contains("join(\"..")
         || line.contains("\"/..")
         || line.contains("\"../")
@@ -914,6 +965,38 @@ fn tracked_rs_files() -> Vec<PathBuf> {
             "the climb, once — not the caller-directed git"
         );
         assert!(matches!(hits[0].kind, EscapeKind::ManifestClimb));
+
+        // sovereign-daemon/tests/main/daemon_variant_census.rs — the
+        // ancestor walk to the repo root.
+        let ancestors = r#"
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(3)
+        .expect("sovereign-daemon lives three levels under the repo root")
+        .to_path_buf()
+}
+"#;
+        assert_eq!(scan_runtime_escapes(ancestors).len(), 1);
+    }
+
+    /// `#[path]` mounts: sovereign-daemon/tests/main.rs mounted
+    /// sovereign-tools' test double by climbing into it; tests/rail_e2e/main.rs
+    /// mounts a sibling test dir of its own crate, which lifts.
+    #[test]
+    fn path_mounts_are_judged_against_the_crate_root() {
+        let neighbour = r#"
+#[path = "../../sovereign-tools/tests/main/local_corpus_port_double.rs"]
+mod local_corpus_port_double;
+"#;
+        let hits = scan_path_mounts(neighbour, Path::new("tests"));
+        assert_eq!(hits.len(), 1);
+        assert!(matches!(hits[0].kind, EscapeKind::PathMount));
+        assert!(hits[0].line == 2 && hits[0].describe().contains("test-doubles"));
+
+        let own = "#[path = \"../main/common/work_rails.rs\"]\nmod work_rails;\n";
+        assert!(scan_path_mounts(own, Path::new("tests/rail_e2e")).is_empty());
+        assert!(scan_path_mounts("#[path = \"main/x.rs\"]\n", Path::new("tests")).is_empty());
     }
 
     /// The ambient-`git` clause: no `current_dir(…)` means the harness's CWD,
