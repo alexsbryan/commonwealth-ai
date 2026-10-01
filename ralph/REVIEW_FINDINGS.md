@@ -4522,3 +4522,82 @@ noun`. One has two definitions:
   --verify` still fail; `size-gate` reports 75 keys grown (77 at auto-11);
   domains-census-self-test is could-not-judge. All advisory, outside this
   queue.
+## REVIEW-audit-pb-auto-12 (2026-10-01, range 392bbba94..d300552dd, since REVIEW-audit-pb-auto-11)
+
+113 commits: pb-mesh-dissolve, pb-distribution-svrn-lift and -svrn-lift-2,
+pb-serve-package, -release-bins, -onprem-identity, -onprem-compose,
+-onprem-routes, -onprem-kit, -o3-tests, pb-distribution, -f12-clone-gate,
+-f11-daemon-twins, -f8-upgrade-off-mesh-named, and director rulings
+phase-b-93..105. The on-prem lane's commits up to 81e6ec3ac were also
+read by worktree B's auto-11 above. Run in worktree pb-par-onprem; all
+checks in the sovereign-vulkan toolbox.
+
+TESTALL at d300552dd: exit=0, 13,677 passed, 0 failed. PREPUSH at
+d300552dd: exit=1, two blocking lanes (rustfmt, clock-gate), both from the
+range and fixed below. boundary-gate exit 0 (0 violations); clone-gate
+13826 = baseline.
+
+### (1) net lines, product .rs, by unit (src | tests)
+
+    pb-mesh-dissolve                       src -6960 (+409/-7369)   tests +1637
+    pb-distribution-svrn-lift-2            src  -644 (+97/-741)     tests  +802
+    pb-distribution-f11-daemon-twins       src  -465 (+175/-640)    tests    +0
+    pb-distribution-onprem-kit             src    +0                tests  +327
+    pb-distribution-release-bins           src    +0                tests  +182
+    REVIEW-audit-pb-auto-11                src    +0                tests    +7
+    pb-serve-package                       src    +0                tests   +18
+    pb-distribution                        src    +1 (+3/-2)        tests  +236
+    pb-distribution-o3-tests               src   +15 (+17/-2)       tests  +565
+    pb-distribution-svrn-lift              src   +78 (+93/-15)      tests   -65
+    pb-distribution-f8-upgrade-off-mesh-named src +113 (+141/-28)   tests   +89
+    pb-distribution-onprem-routes          src  +189 (+199/-10)     tests  +197
+    pb-distribution-onprem-compose         src  +349 (+463/-114)    tests  +304
+    pb-distribution-f12-clone-gate         src  +388 (+395/-7)      tests  +123
+    pb-distribution-onprem-identity        src  +955 (+1028/-73)    tests  +348
+    TOTAL                                  src -5981 (+3020/-9001)  tests +4770
+
+The test growth is mostly moves, not new tests: mesh-dissolve and
+svrn-lift-2 carried tests out of deleted or lifted crates into their
+owners' test trees (sovereign-serving-host, sovereign-stock, xtask/tests).
+
+### (2) dry-report over the 22 touched crate dirs
+
+738 clone members across the 22 reports (`--corpus-id commonwealth-ai`,
+the cut checkout's index); none is one of the 340 `fn` sites the range
+added (matched by name and file, `git diff -M`). The index holds the range
+through f11 (host_kit::memory::derived_soft_limit_mb resolves); f8's four
+commits are not indexed and were read by hand: one near clone, finding 3.
+
+### (3) converge noun over the 14 nouns the range added
+
+Thirteen have one definition (three of them test-only: Booted, Daemon,
+ModWalk). `Caller` has two production definitions, finding 4.
+
+### Findings
+
+- **ARCH 10, fixed in ce555092a** · host-kit/src/panic_hook.rs:143,
+  host-kit/src/sibling.rs:102,109,115 (cfd10bbf0, 2b3fbe748): f11 moved
+  four clock reads into host-kit that were baselined at their daemon
+  paths, so clock-gate blocked the push. The hook asks
+  `sovereign_time::unix_now_u64()` (optional dep behind `panic_hook`,
+  host-kit's ARCH_LAYERS allow names it); the sibling tests take a fixed
+  instant. Hand-read clocks 104 -> 100.
+- **ARCH 5, fixed in e1d4d1b0f** · sovereign-daemon/src/admin_http/tests.rs:134
+  (3dde3b285) was committed unformatted; pre-push's rustfmt lane blocked.
+- **ARCH 8, recorded, not fixed** · the handover notice is read through
+  the same load-config / derive-work_offer / print block twice:
+  sovereign-cli-daemon/src/daemon_cmd/mod.rs:105-120 (`after_ready`) and
+  sovereign-cli-mesh/src/mesh_cmd.rs:816-829 (`cmd_status`), both from
+  a8f4fefb7. The decider (`node_identity::mesh_handover_notice`) is one;
+  the `c.compute.work_offer.is_some()` derivation is the copy. Folding it
+  into a `&SetupConfig` door is a signature on contracts' public surface,
+  so it goes with the next row that edits node_identity.rs.
+- **ARCH 8, recorded, not fixed** · `Caller` names two concepts:
+  corpus-engine-scip/src/scip_graph.rs:163 (a call-graph caller row) and
+  sovereign-daemon/src/api_keys.rs:208 (the request's owner extractor,
+  ad84995ab). Distinct, not a twin; renaming the daemon's is a public
+  rename (converge counts 54 reference sites for the noun across 3 crates), a row's call, not an audit's.
+- **advisory lanes, recorded** · `hakari-verify` and `deletion-manifest
+  --verify` fail as at auto-11 (p0-root-junk 323069 > 113934).
+  `size-gate` reports 75 keys grown (77 at auto-11). concept-gate and
+  domains-census-self-test are could-not-judge, as before.
