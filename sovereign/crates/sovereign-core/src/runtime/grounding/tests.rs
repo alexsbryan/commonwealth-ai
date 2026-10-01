@@ -102,6 +102,28 @@ use crate::types::{Depth, ProviderCapabilities};
 use futures::Stream;
 use std::pin::Pin;
 
+/// The gate reads its experiment knobs (`SOVEREIGN_GATE_BATCH_VERIFY`,
+/// `SOVEREIGN_GATE_LONGFORM_REPAIR`) from the process env, and two tests here
+/// set them. Under plain `cargo test` every test shares one process, so a set
+/// knob leaked into a concurrent gate run (the fan-out tests saw a batched
+/// call, svrn's lift at 3c08179cc). A test that sets a knob holds this for
+/// write; every gate run below holds it for read through the wrapper.
+static GATE_ENV: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
+
+/// `gate::gate_answer` under a read hold on [`GATE_ENV`]; it shadows the glob
+/// import, so every test in this module goes through it.
+async fn gate_answer(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    draft: String,
+    evidence: &EvidenceContext,
+    base_request: &CompletionRequest,
+    profile: &GroundingProfile,
+) -> GateOutcome {
+    let _env = GATE_ENV.read().await;
+    super::gate_answer(inference, question, draft, evidence, base_request, profile).await
+}
+
 fn chunk_with(corpus_id: &str, chunk_id: Option<u64>) -> corpus_index::types::ScoredChunk {
     corpus_index::types::ScoredChunk {
         content: "text".into(),
@@ -1499,6 +1521,7 @@ impl crate::traits::InferenceProvider for IncrementalMock {
 /// itself against a set knob.
 #[tokio::test]
 async fn surgical_repair_takes_the_incremental_reaudit_and_keeps_the_holistic_floor() {
+    let _env = GATE_ENV.write().await;
     std::env::set_var("SOVEREIGN_GATE_LONGFORM_REPAIR", "1");
     let mock = Arc::new(IncrementalMock {
         extractions: std::sync::atomic::AtomicUsize::new(0),
@@ -1515,7 +1538,7 @@ async fn surgical_repair_takes_the_incremental_reaudit_and_keeps_the_holistic_fl
         "{} The shop is located on Crescent Lane.",
         longform_draft(&profile)
     );
-    let outcome = gate_answer(
+    let outcome = super::gate_answer(
         &inference,
         "Tell me about the shop.",
         draft,
@@ -1683,6 +1706,7 @@ impl crate::traits::InferenceProvider for AsymmetricBatchMock {
 /// process-per-test model.
 #[tokio::test]
 async fn batch_unsupported_falls_through_to_the_calibrated_judge() {
+    let _env = GATE_ENV.write().await;
     std::env::set_var("SOVEREIGN_GATE_BATCH_VERIFY", "1");
     let mock = Arc::new(AsymmetricBatchMock {
         batch_calls: std::sync::atomic::AtomicUsize::new(0),
@@ -1697,7 +1721,7 @@ async fn batch_unsupported_falls_through_to_the_calibrated_judge() {
     while draft.len() < 3_700 {
         draft.push_str("The shop sits on Harbour Row, by the quay. ");
     }
-    let outcome = gate_answer(
+    let outcome = super::gate_answer(
         &inference,
         "Tell me about the shop.",
         draft,
