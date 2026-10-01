@@ -2024,6 +2024,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   - The absent-embed coverage gap is a finding, not this bar: phase-c row pc-idle-embed-boot (Phase B is frozen, phase-b-106).
 - Because: the grant covers the restart (phase-b-34), and a bar is read only by the instrument and profile that minted it (principle 7); re-scoping it after the debug data would be tuning it.
 
+**phase-b-108 · 2026-10-01 · pb-distribution-ship-gate · operator, fixing the cw-rails stall the gate found before the merge** — this commit
+- Needed: the ship gate's Tier 2 (e5d493486) on the deployed node at C: under use, the daemon's /status (6.0 s vs 20 ms) and /v1/models (3.0 s vs 5 ms) block on cw-rails; 3 of 6 fan-out plans read an empty roster with no absence named; two P2 lanes saw "daemon unreachable". The seat confirmed the cycle in ~/.commonwealth-rails/rails.log: `activity-private` sealed 64 times since 14:47Z (every other namespace once), every ~85 s under the gate's lanes, each seal followed 80-100 s later by its snapshot; idle, /status reads 25 ms. Main embedded the mesh store until the flip, so this is the cut's regression on the stock path, which the freeze (phase-b-106) leaves to the operator.
+- Chose (operator: "Fix before merge"): pre-gate row pb-distribution-f13-rails-stall, the daemon half (one bounded-wait decider, absence named, no status from a blocking call) and the cw-rails half (the pump holds nothing the API needs across a cycle), instrumented first on a sandbox pair. The ship gate depends on it and, after it, re-reads only P2's alarmed lanes, P3 latency and P5 mesh; its other readings stand.
+- Also from Tier 2, not F13's: chat-ask's alarm is an instrument artifact (the seat's phase-b-94 moved the stack fingerprint, and a new corpus id has no corpus_state row until the daemon's next boot, as on main); knowledge-gym's 05_noresults_honesty reads 0/3 vs 1/3 at the flip, its escalation against main still owed by the gate.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.

@@ -48,6 +48,7 @@ introduced, so it is Phase B's to fix, not phase-c's.
 | F10 | (operator, phase-b-98) first-boot and handover moves keep no copy (media viewer id) or overwrite theirs on a second run (`config.toml.bak`), and none has a written rollback. | Every move keeps its first original; a RUNBOOK rollback section is run once in a sandbox. Row pb-distribution-f10-migration-backups. |
 | F11 | (operator, phase-b-99) the de-embed forked the daemon's panic hook, memory soft limit and staleness warning into two crates; only log_rotation was finished. | One implementation each in host-kit; clone-gate's count drops and is banked. Row pb-distribution-f11-daemon-twins. |
 | F12 | (operator, phase-b-99) a copy closes a forbidden edge and no gate sees it. | `xtask clone-gate` fails when duplicated production lines rise; blocking in `xtask quality` and the queue's BOUNDARY check; watched red on a planted copy, green on a move. Row pb-distribution-f12-clone-gate. |
+| F13 | (operator, phase-b-108, found by this gate's Tier 2) under use cw-rails' KV pump seals and snapshots activity-private every ~85 s, and the daemon's /status (6 s) and /v1/models (3 s) block on it; fan-out reads an empty roster with no absence named. | The daemon never blocks those paths on cw-rails and names a slow/absent cw-rails; the pump holds nothing the API needs across a cycle; a sandbox reproduction under driven activity shows p95 within 2x idle. Then P2's alarmed lanes, P3 latency and P5 mesh are re-read. Row pb-distribution-f13-rails-stall. |
 
 ## Tier 0: the build gate at C (about 50 min)
 
