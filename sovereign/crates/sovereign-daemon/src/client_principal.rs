@@ -36,6 +36,8 @@
 //! 1. **A live guest grant** presented as `Authorization: Bearer` →
 //!    [`Principal::Guest`]. The grant is what bounds the caller's routes, so
 //!    nothing a guest also types may outrank it.
+//!    An on-prem API key (`crate::client_tokens::keys`) is read beside it →
+//!    [`Principal::Asserted`], for the same reason.
 //! 2. **`X-Node-Id`** → [`Principal::Member`], or [`Principal::Unverified`]
 //!    when it is present and not the canonical wire form. Read *before* the
 //!    loopback branch: a mesh peer arrives on the trusting listener over
@@ -182,6 +184,12 @@ impl AppState {
                 return Principal::Guest {
                     grant: fingerprint(token),
                 };
+            }
+            // 1b. An on-prem API key: an asserted subject. Like a grant, the
+            //     key is the caller's whole identity, so nothing it also
+            //     types (a node claim, `X-Principal`) may outrank it.
+            if let Some((sub, groups)) = self.inner.node.named_client_tokens.asserted_for(token) {
+                return Principal::Asserted { sub, groups };
             }
         }
 

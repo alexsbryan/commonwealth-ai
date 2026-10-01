@@ -187,6 +187,8 @@ pub mod workspace;
 // (the corpus-ceiling resolver from the cli-composition move), so the HTTP
 // edge resolver landed beside it as `client_principal`.
 pub mod admission;
+/// The keyed daemon: identity by on-prem API key, loopback granting nothing.
+pub mod api_keys;
 pub mod client_auth;
 /// The HTTP edge's one request-to-principal resolver. Named apart from
 /// [`principal`] because the daemon already had a module by that name; the

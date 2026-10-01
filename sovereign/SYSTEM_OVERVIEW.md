@@ -1039,6 +1039,12 @@ revocable, bound to a closed `Scope` enum whose `paths()` is the only route
 allowlist there is. A guest is not a mesh member and cannot mint further
 grants, because no `Scope` variant names `/internal/*`.
 
+A daemon holding on-prem API keys (`<data_dir>/client-tokens/<sub>.key`)
+is KEYED: `api_keys::seal` wraps every client
+listener, loopback grants nothing, a key resolves to `Principal::Asserted`,
+conversations are stored `{sub}:{id}`, a non-`admin` key reaches only
+`api_keys::KEY_SCOPE`, and `[retrieval] corpora` is every key's corpus grant.
+
 | Path | Notes |
 |---|---|
 | `POST /v1/chat/completions` | OpenAI-compatible; `LocalOnly` privacy → 400 |

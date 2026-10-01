@@ -46,6 +46,17 @@
 //! the next daemon restart — and a credential you can only withdraw by
 //! restarting the node is the gap this module closes rather than a smaller
 //! version of it.
+//!
+//! ## API keys: the same directory, an asserted identity
+//!
+//! An on-prem API key (`<sub>.key`, see [`keys`]) is the other credential this
+//! store answers "who is this bearer" for, and the one that carries WHO rather
+//! than which device: it resolves to `Principal::Asserted { sub, groups }`. A
+//! store that loaded at least one key makes the daemon KEYED for its lifetime
+//! (loopback grants nothing, `crate::api_keys`). Keys are read once at load,
+//! unlike named tokens, because keyed is a boot-time posture the turn's
+//! resolver is commissioned from; `svrn daemon key` writes the file and the
+//! next start reads it.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -54,6 +65,16 @@ use std::sync::Mutex;
 use subtle::ConstantTimeEq;
 
 use crate::client_principal::fingerprint;
+
+pub mod keys;
+pub use keys::{ApiKeyRow, KEY_ADMIN_GROUP};
+
+/// `<data_dir>/client-tokens` — the one spelling of where named tokens and
+/// API keys live, read by the node seed, the boot's keyed check and
+/// `svrn daemon key`.
+pub fn client_tokens_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("client-tokens")
+}
 
 /// What the client API accepts as a remote credential. **CLOSED SET**,
 /// resolved once from `[daemon] client_tokens` and carried on the node part —
@@ -169,6 +190,9 @@ pub struct ClientTokenStore {
     /// credential that would vanish with the process.
     dir: Option<PathBuf>,
     by_fingerprint: Mutex<HashMap<String, Named>>,
+    /// The API keys read at load, by fingerprint. Never mutated: a non-empty
+    /// map is what makes this daemon keyed, and that is decided once.
+    keys: HashMap<String, keys::ApiKey>,
 }
 
 /// A label must be a file name and nothing else: the store's whole on-disk
@@ -212,15 +236,39 @@ impl ClientTokenStore {
                 map.insert(fingerprint(&token), Named { label, token });
             }
         }
+        let keys: HashMap<String, keys::ApiKey> = dir
+            .as_deref()
+            .map(keys::read_dir_keys)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|k| (fingerprint(&k.token), k))
+            .collect();
         tracing::debug!(
             dir = ?dir,
             named_tokens = map.len(),
-            "client_tokens: loaded the named client-token set"
+            api_keys = keys.len(),
+            "client_tokens: loaded the named client-token set and the API keys"
         );
         Self {
             dir,
             by_fingerprint: Mutex::new(map),
+            keys,
         }
+    }
+
+    /// Whether this daemon identifies every caller by API key: true when the
+    /// load found at least one `<sub>.key`. Fixed for the store's lifetime.
+    pub fn is_keyed(&self) -> bool {
+        !self.keys.is_empty()
+    }
+
+    /// The `(sub, groups)` an API key asserts, or `None` when `presented` is
+    /// not a key. Bucket by fingerprint, admit by constant-time compare, as
+    /// [`Self::label_for`] does.
+    pub fn asserted_for(&self, presented: &str) -> Option<(String, Vec<String>)> {
+        let key = self.keys.get(&fingerprint(presented))?;
+        bool::from(presented.as_bytes().ct_eq(key.token.as_bytes()))
+            .then(|| (key.sub.clone(), key.groups.clone()))
     }
 
     /// The label admitting `presented`, or `None`.

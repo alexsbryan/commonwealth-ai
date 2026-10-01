@@ -115,8 +115,9 @@ impl NodeSeed {
             None => ClientTokens::default(),
             Some(raw) => ClientTokens::parse(raw)?,
         };
-        let named_client_tokens =
-            Arc::new(ClientTokenStore::load(Some(data_dir.join("client-tokens"))));
+        let named_client_tokens = Arc::new(ClientTokenStore::load(Some(
+            crate::client_tokens::client_tokens_dir(data_dir),
+        )));
         if client_tokens == ClientTokens::NamedOnly && named_client_tokens.list().is_empty() {
             // Said at the moment it is chosen, not discovered by a device that
             // stopped being admitted: under this posture the shared token no

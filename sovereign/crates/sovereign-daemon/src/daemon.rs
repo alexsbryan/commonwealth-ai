@@ -1109,6 +1109,24 @@ impl EmbeddedDaemon {
         let mut node_seed = NodeSeed::resolved(posture.token, &self.data_dir, &self.setup_config)
             .await
             .map_err(|e| MeshError::Config(e.to_string()))?;
+        // The seal (`api_keys::seal`, from this store) and the turn's resolver
+        // (`KeyedOwners`, from the boot's read of the same directory) must
+        // agree; a key written between the two reads would leave keyed callers
+        // on the owner's unbounded ceiling. Refuse rather than serve that.
+        if node_seed.named_client_tokens.is_keyed() {
+            let granted = self.runtime().map(|r| {
+                r.corpus_principal
+                    .as_ref()
+                    .is_some_and(|p| p.corpus_grant().is_some())
+            });
+            if granted == Some(false) {
+                return Err(MeshError::Config(
+                    "this daemon holds API keys but its turn runtime was commissioned \
+                     unkeyed (a key was added while it booted) — restart it"
+                        .into(),
+                ));
+            }
+        }
         // Code's editor door, when the distribution composed code here
         // (pb-meshapp-rest); every general client surface mounts it.
         node_seed.edit_door = self
@@ -1598,6 +1616,9 @@ impl EmbeddedDaemon {
             for router in mounted {
                 client_router = client_router.merge(router);
             }
+            // After EVERY merge: a layer wraps only the routes present when it
+            // is applied, so the keyed gate goes on the finished router.
+            let client_router = crate::api_keys::seal(client_router, &app_state_clone);
             // ConnectInfo: `internal_principal_layer` reads the peer address as
             // half the "is this my own acceptor's hop" tie, and fails closed
             // without it. Same requirement the client listeners document above.
@@ -1613,14 +1634,22 @@ impl EmbeddedDaemon {
             // the LAN. `door_router` is the one owner of that merge; the
             // pages are grant-filtered by the index itself, exactly as they
             // are on the door's own bind.
-            let guest_router = crate::guest_door::door_router(
-                app_state_clone.clone(),
-                guest_pages.clone(),
-                turn_host,
+            // Sealed like the client router, so a keyed daemon has no
+            // listener where a key bypasses its scope.
+            let guest_router = crate::api_keys::seal(
+                crate::guest_door::door_router(
+                    app_state_clone.clone(),
+                    guest_pages.clone(),
+                    turn_host,
+                ),
+                &app_state_clone,
             );
-            let rail_router = crate::server::client_router_for(
-                app_state_clone,
-                crate::server::ClientSurface::Rail,
+            let rail_router = crate::api_keys::seal(
+                crate::server::client_router_for(
+                    app_state_clone.clone(),
+                    crate::server::ClientSurface::Rail,
+                ),
+                &app_state_clone,
             );
 
             // A standalone code server (`svrn code mcp`) holding `:9741` is

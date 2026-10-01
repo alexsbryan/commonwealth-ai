@@ -31,7 +31,9 @@
 //!   `ConnectInfo<SocketAddr>` peer address — NOT a request header.
 //!   (The old local-vs-peer split keyed off the *presence* of the
 //!   spoofable `X-Node-Id` header, which meant "omit the header" was a
-//!   full-trust bypass. That footgun dies here.)
+//!   full-trust bypass. That footgun dies here.) Not on a KEYED daemon:
+//!   there [`crate::api_keys`] wraps every client listener and admits only an
+//!   API key, so loopback grants nothing.
 //! - **Remote caller** → must present `Authorization: Bearer <token>`
 //!   matching a NAMED token ([`crate::client_tokens`], one per device and
 //!   revocable alone) or the daemon's configured token (constant-time compare
@@ -355,6 +357,10 @@ pub async fn client_auth_layer(
                 }
             }
         }
+        // An API key. Only a keyed daemon holds keys, and there
+        // `crate::api_keys::seal` wraps every client listener, so the key was
+        // already admitted and scoped by the time it reaches this layer.
+        Principal::Asserted { .. } => return next.run(request).await,
         // A member, a local owner or an anonymous caller is not admitted on a
         // remote gated path by this layer.
         _ => {}
