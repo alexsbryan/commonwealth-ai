@@ -154,7 +154,7 @@ async fn apply_v04_enrichment(
     state: &AppState,
     embedded: bool,
     manifest: &mut ProviderManifest,
-) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
+) -> Result<(), crate::ledger_port::LedgerAbsent> {
     // §2 features.
     let mut feats: Vec<String> = if embedded {
         EMBEDDED_FEATURES
@@ -223,7 +223,7 @@ async fn apply_v04_enrichment(
 
 /// The inference state did not answer: a named 503 in place of a manifest
 /// that would advertise nothing (principle 6).
-fn inference_state_absent(e: &sovereign_mesh::ledger_port::LedgerAbsent) -> Response {
+fn inference_state_absent(e: &crate::ledger_port::LedgerAbsent) -> Response {
     tracing::warn!(error = %e, "capabilities: inference state unread");
     (
         StatusCode::SERVICE_UNAVAILABLE,
@@ -287,7 +287,7 @@ pub async fn capabilities(
                 addressed.insert(*id);
             }
         }
-        Ok::<_, sovereign_mesh::ledger_port::LedgerAbsent>((models, plan, addressed))
+        Ok::<_, crate::ledger_port::LedgerAbsent>((models, plan, addressed))
     };
     let (models, plan, addressed) = match read.await {
         Ok(r) => r,
@@ -418,10 +418,10 @@ fn fmt_requester(id: &NodeId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oicp_types::peer_preference::PeerPreference;
     use oicp_types::{
         CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
     };
-    use oicp_types::peer_preference::PeerPreference;
 
     fn peer_preference(multiplier: f64) -> PeerPreference {
         PeerPreference::new(multiplier, None, sovereign_time::unix_now_u64()).unwrap()

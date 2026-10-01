@@ -521,6 +521,7 @@ impl AppState {
         self.inner.fabric.membership.as_ref()
     }
 
+    #[cfg(feature = "test-doubles")]
     pub fn new(self_node_id: NodeId) -> Self {
         // Test-support constructor (callers in tests/ + the test-harness).
         Self::new_with_platform(self_node_id)
@@ -529,6 +530,7 @@ impl AppState {
     /// [`Self::new`] with Serving's construction seed — the test-support shape
     /// for an integration test that serves local chat (DC §4.2 "Construction
     /// is staged, and parts are total").
+    #[cfg(feature = "test-doubles")]
     pub fn new_with_serving(self_node_id: NodeId, serving_seed: serving::ServingSeed) -> Self {
         Self::new_with_platform_and_engine_and_serving(self_node_id, None, serving_seed)
     }
@@ -536,6 +538,7 @@ impl AppState {
     /// [`Self::new`] with the node's construction seed — the test-support shape
     /// for a test that configures a client token (DC §4.2 "Construction is
     /// staged, and parts are total").
+    #[cfg(feature = "test-doubles")]
     pub fn new_with_node(self_node_id: NodeId, node_seed: node::NodeSeed) -> Self {
         Self::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
             self_node_id,
@@ -548,6 +551,7 @@ impl AppState {
     }
 
     /// Create state with explicit platform components (used by the daemon).
+    #[cfg(feature = "test-doubles")]
     pub fn new_with_platform(self_node_id: NodeId) -> Self {
         Self::new_with_platform_and_engine(self_node_id, None)
     }
@@ -566,6 +570,7 @@ impl AppState {
     /// must be the same handle the provider increments (`quality/DAEMON_CORE.md`
     /// §4.2 "Where an install slot breaks a cycle"). Tests and storage-only
     /// nodes take the absent form.
+    #[cfg(feature = "test-doubles")]
     pub fn new_with_platform_and_engine(
         self_node_id: NodeId,
         corpus_engine: Option<Arc<dyn IngestPort>>,
@@ -580,6 +585,7 @@ impl AppState {
     /// through [`Self::current_local_in_flight`]. A node that has no provider
     /// passes `None`; the absence is what gossip publishes as "no signal",
     /// never a zeroed default (ARCH 6).
+    #[cfg(feature = "test-doubles")]
     pub fn new_with_platform_and_engine_and_gauge(
         self_node_id: NodeId,
         corpus_engine: Option<Arc<dyn IngestPort>>,
@@ -600,6 +606,7 @@ impl AppState {
     /// [`fabric::FabricSeed`] and passes it here rather than installing them
     /// afterwards. Tests take [`fabric::FabricSeed::default`] through the
     /// shorter constructors.
+    #[cfg(feature = "test-doubles")]
     pub fn new_with_platform_and_engine_and_gauge_and_fabric(
         self_node_id: NodeId,
         corpus_engine: Option<Arc<dyn IngestPort>>,
@@ -621,6 +628,7 @@ impl AppState {
     /// the part is built, so a caller that has them passes them here rather
     /// than installing them afterwards (DC §4.2 "Construction is staged, and
     /// parts are total"). Tests that serve local chat take this form.
+    #[cfg(feature = "test-doubles")]
     pub fn new_with_platform_and_engine_and_serving(
         self_node_id: NodeId,
         corpus_engine: Option<Arc<dyn IngestPort>>,
@@ -642,6 +650,7 @@ impl AppState {
     /// provider and warmer exist before the part is built, so the daemon
     /// gathers them into a [`serving::ServingSeed`] and passes it here rather
     /// than installing them afterwards.
+    #[cfg(feature = "test-doubles")]
     pub fn new_with_platform_and_engine_and_gauge_and_fabric_and_serving(
         self_node_id: NodeId,
         corpus_engine: Option<Arc<dyn IngestPort>>,
@@ -666,6 +675,7 @@ impl AppState {
     /// is resolved before the listeners bind, so the daemon gathers it into a
     /// [`node::NodeSeed`] and passes it here rather than installing it into the
     /// part afterwards.
+    #[cfg(feature = "test-doubles")]
     pub fn new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
         self_node_id: NodeId,
         corpus_engine: Option<Arc<dyn IngestPort>>,
@@ -681,9 +691,13 @@ impl AppState {
         // `Arc` it holds; this seed-shaped entry point builds one for the
         // callers (tests, the rail harness) that have no daemon.
         let fabric = Arc::new(fabric::FabricPart::new(self_node_id, fabric_seed));
-        // Every test keeps ONE store: the ports seed over Fabric's own
-        // (five-programs fp-111).
-        let store_seed = store::StoreSeed::local(&fabric, self_node_id);
+        // Every test keeps ONE store: the recording double's (the in-process
+        // `LocalLedger` over Fabric's private store retired at
+        // pb-mesh-exit-mesh; its key schemes are commonwealth-state's).
+        let store_seed = Arc::new(crate::double::ledger_double::RecordingLedger::new(
+            self_node_id,
+        ))
+        .seed();
         Self::assemble_with_fabric(
             self_node_id,
             fabric,
@@ -928,7 +942,7 @@ impl AppState {
     pub async fn register_model(
         &self,
         model: oicp_types::model_catalog::ModelInfo,
-    ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
+    ) -> Result<(), crate::ledger_port::LedgerAbsent> {
         self.inner
             .store
             .inference_store
@@ -941,7 +955,7 @@ impl AppState {
         &self,
         model_id: kernel_types::ModelId,
         address: String,
-    ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
+    ) -> Result<(), crate::ledger_port::LedgerAbsent> {
         self.inner
             .store
             .inference_store
@@ -953,7 +967,7 @@ impl AppState {
     pub async fn get_llama_server_address(
         &self,
         model_id: kernel_types::ModelId,
-    ) -> Result<Option<String>, sovereign_mesh::ledger_port::LedgerAbsent> {
+    ) -> Result<Option<String>, crate::ledger_port::LedgerAbsent> {
         self.inner
             .store
             .inference_store
@@ -964,7 +978,7 @@ impl AppState {
     /// Get the default model (first in the inference plan).
     pub async fn default_model_id(
         &self,
-    ) -> Result<Option<kernel_types::ModelId>, sovereign_mesh::ledger_port::LedgerAbsent> {
+    ) -> Result<Option<kernel_types::ModelId>, crate::ledger_port::LedgerAbsent> {
         Ok(self
             .inference_plan()
             .await?
@@ -977,18 +991,15 @@ impl AppState {
     /// The inference plan.
     pub async fn inference_plan(
         &self,
-    ) -> Result<
-        Option<sovereign_mesh::ledger_port::InferencePlan>,
-        sovereign_mesh::ledger_port::LedgerAbsent,
-    > {
+    ) -> Result<Option<crate::ledger_port::InferencePlan>, crate::ledger_port::LedgerAbsent> {
         self.inner.store.inference_store.get_plan().await
     }
 
     /// Store a peer's inference plan.
     pub async fn set_inference_plan(
         &self,
-        plan: &sovereign_mesh::ledger_port::InferencePlan,
-    ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
+        plan: &crate::ledger_port::InferencePlan,
+    ) -> Result<(), crate::ledger_port::LedgerAbsent> {
         self.inner.store.inference_store.set_plan(plan).await
     }
 
@@ -996,7 +1007,7 @@ impl AppState {
     pub async fn remove_model_info(
         &self,
         model_id: kernel_types::ModelId,
-    ) -> Result<bool, sovereign_mesh::ledger_port::LedgerAbsent> {
+    ) -> Result<bool, crate::ledger_port::LedgerAbsent> {
         self.inner
             .store
             .inference_store
@@ -1008,10 +1019,8 @@ impl AppState {
     pub async fn model_info(
         &self,
         model_id: kernel_types::ModelId,
-    ) -> Result<
-        Option<oicp_types::model_catalog::ModelInfo>,
-        sovereign_mesh::ledger_port::LedgerAbsent,
-    > {
+    ) -> Result<Option<oicp_types::model_catalog::ModelInfo>, crate::ledger_port::LedgerAbsent>
+    {
         self.inner
             .store
             .inference_store
@@ -1024,7 +1033,7 @@ impl AppState {
         &self,
     ) -> Result<
         HashMap<kernel_types::ModelId, oicp_types::model_catalog::ModelInfo>,
-        sovereign_mesh::ledger_port::LedgerAbsent,
+        crate::ledger_port::LedgerAbsent,
     > {
         Ok(self
             .list_models_with_origins()
@@ -1037,10 +1046,8 @@ impl AppState {
     /// Every registered model with the node that wrote it.
     pub async fn list_models_with_origins(
         &self,
-    ) -> Result<
-        Vec<(NodeId, oicp_types::model_catalog::ModelInfo)>,
-        sovereign_mesh::ledger_port::LedgerAbsent,
-    > {
+    ) -> Result<Vec<(NodeId, oicp_types::model_catalog::ModelInfo)>, crate::ledger_port::LedgerAbsent>
+    {
         self.inner
             .store
             .inference_store
@@ -1051,7 +1058,7 @@ impl AppState {
     /// This node's embed model, as published at bootstrap.
     pub async fn local_embed_model(
         &self,
-    ) -> Result<Option<oicp_types::EmbedModelInfo>, sovereign_mesh::ledger_port::LedgerAbsent> {
+    ) -> Result<Option<oicp_types::EmbedModelInfo>, crate::ledger_port::LedgerAbsent> {
         self.inner
             .store
             .inference_store
@@ -1063,7 +1070,7 @@ impl AppState {
     pub async fn set_local_embed_model(
         &self,
         info: &oicp_types::EmbedModelInfo,
-    ) -> Result<(), sovereign_mesh::ledger_port::LedgerAbsent> {
+    ) -> Result<(), crate::ledger_port::LedgerAbsent> {
         self.inner
             .store
             .inference_store

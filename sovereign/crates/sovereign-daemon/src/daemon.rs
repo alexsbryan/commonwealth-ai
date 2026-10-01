@@ -1827,7 +1827,7 @@ impl EmbeddedDaemon {
         let (snapshot_shutdown_tx, snapshot_shutdown_rx) = tokio::sync::watch::channel(false);
         tokio::spawn(async move {
             let _hold_shutdown_tx = snapshot_shutdown_tx;
-            sovereign_mesh::ledger_port::run_storage_snapshot_loop(
+            crate::ledger_port::run_storage_snapshot_loop(
                 snapshot_emitter,
                 move || {
                     let engine = snapshot_engine.clone();

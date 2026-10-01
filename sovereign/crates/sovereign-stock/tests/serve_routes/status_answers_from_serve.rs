@@ -24,7 +24,7 @@ use sovereign_daemon::serve_client::{
 };
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, FabricSeed, LocalInferenceService, ServingSeed};
-use sovereign_mesh::ledger_port::{InferencePlan, ShardPlan};
+use sovereign_daemon::ledger_port::{InferencePlan, ShardPlan};
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 

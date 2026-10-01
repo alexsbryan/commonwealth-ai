@@ -2,7 +2,7 @@
 //!
 //! DC §4.2 assigns all twenty of Serving's fields to `sovereign-serving-host`,
 //! and seventeen went there at `REVIEW-build-daemon-parts`. `inference_store`
-//! (`sovereign_mesh::ledger_port::InferenceStatePort` since fp-93) and
+//! (`crate::ledger_port::InferenceStatePort` since fp-93) and
 //! `peer_preferences` (`PeerPreferencesPort` since fp-90) cannot cross the
 //! crate line: they are backed by `commonwealth-state`, which is not a shared
 //! leaf of the `serving` package — a dep would be a third `[[exception]]`, and
@@ -15,19 +15,20 @@
 
 use std::sync::Arc;
 
-use corpus_index::ingest_port::daemon::IngestPort;
-use kernel_types::NodeId;
-use sovereign_contracts::peer::ReplicatedKv;
-use sovereign_mesh::ledger_port::{
+use crate::ledger_port::{
     ActivityLedgerPort, ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,
     ProcessedShardsPort,
 };
+use corpus_index::ingest_port::daemon::IngestPort;
+use kernel_types::NodeId;
+use sovereign_contracts::peer::ReplicatedKv;
 
 use super::{fabric, node, serving, AppState};
 
 /// The store ports `AppState` is assembled over — the one seam every backing
 /// enters through (five-programs fp-97): [`StoreSeed::rails`] in production
-/// (fp-88), [`StoreSeed::local`] and a recording double in tests.
+/// (fp-88), `RecordingLedger::seed` in tests (`StoreSeed::local` and its
+/// in-process `LocalLedger` retired at pb-mesh-exit-mesh).
 pub struct StoreSeed {
     pub kv: Arc<dyn ReplicatedKv>,
     pub contributions: Arc<dyn ContributionLedgerPort>,
@@ -54,29 +55,6 @@ impl StoreSeed {
             peer_preferences: ledger.clone(),
             inference: ledger.clone(),
             processed_shards: ledger,
-        }
-    }
-
-    /// Every port over Fabric's private store through `LocalLedger`.
-    pub fn local(fabric: &fabric::FabricPart, self_node_id: NodeId) -> Self {
-        let (kv_port, local_ledger) = fabric.local_store_backings(self_node_id);
-        let activity_emitter: Arc<dyn sovereign_mesh::ledger_port::ActivityLedgerPort> =
-            local_ledger.clone();
-        let peer_preferences: Arc<dyn sovereign_mesh::ledger_port::PeerPreferencesPort> =
-            local_ledger.clone();
-        let inference_store: Arc<dyn sovereign_mesh::ledger_port::InferenceStatePort> =
-            local_ledger.clone();
-        let contribution_port: Arc<dyn sovereign_mesh::ledger_port::ContributionLedgerPort> =
-            local_ledger.clone();
-        let processed_shards: Arc<dyn sovereign_mesh::ledger_port::ProcessedShardsPort> =
-            local_ledger;
-        Self {
-            kv: kv_port,
-            contributions: contribution_port,
-            activity: activity_emitter,
-            peer_preferences,
-            inference: inference_store,
-            processed_shards,
         }
     }
 }
@@ -115,7 +93,7 @@ pub struct StorePart {
     pub inference_store: Arc<dyn InferenceStatePort>,
     /// Per-peer preference store (Ostrom sanctions). Local-only,
     /// never gossiped — see
-    /// `sovereign_mesh::ledger_port::PeerPreference` for the structural
+    /// `oicp_types::peer_preference::PeerPreference` for the structural
     /// invariants. The manifest endpoint reads this on every
     /// fetch to apply per-requester affinity multipliers. Held as a port
     /// (five-programs fp-90), dialed to cw-rails since fp-88.

@@ -7,6 +7,10 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use crate::ledger_port::{
+    ActivityLedgerPort, ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,
+    ProcessedShardsPort,
+};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -15,10 +19,6 @@ use kernel_types::NodeId;
 use oicp_types::activity::ActivityEventKind;
 use oicp_types::contributions::LedgerEventKind;
 use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
-use sovereign_mesh::ledger_port::{
-    ActivityLedgerPort, ContributionLedgerPort, InferenceStatePort, PeerPreferencesPort,
-    ProcessedShardsPort,
-};
 
 use super::{InferenceCache, NeverFilled, RailsLedger};
 
@@ -48,7 +48,7 @@ fn model(id: u128) -> ModelInfo {
     }
 }
 
-fn assert_absent<T: std::fmt::Debug>(r: Result<T, sovereign_mesh::ledger_port::LedgerAbsent>) {
+fn assert_absent<T: std::fmt::Debug>(r: Result<T, crate::ledger_port::LedgerAbsent>) {
     let e = r.expect_err("a dead dial has no answer");
     assert!(
         e.0.contains("not reachable at http://127.0.0.1:1"),

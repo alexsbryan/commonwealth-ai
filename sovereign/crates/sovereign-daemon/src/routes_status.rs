@@ -17,8 +17,8 @@ use crate::types::MemberStatus;
 async fn loaded_model_rows(
     state: &AppState,
 ) -> Result<
-    Vec<(sovereign_mesh::ledger_port::ShardPlan, Option<String>, bool)>,
-    sovereign_mesh::ledger_port::LedgerAbsent,
+    Vec<(crate::ledger_port::ShardPlan, Option<String>, bool)>,
+    crate::ledger_port::LedgerAbsent,
 > {
     let plan = state.inference_plan().await?.unwrap_or_default();
     let mut rows = Vec::with_capacity(plan.model_plans.len());

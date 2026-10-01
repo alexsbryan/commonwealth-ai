@@ -13,7 +13,6 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 
 use commonwealth_core::ids::NodeId;
-use commonwealth_state::MeshStore;
 
 use commonwealth_transport::{PeerContact, PeerTransport};
 use sovereign_contracts::identity::IdentityReader;
@@ -94,8 +93,6 @@ pub struct FabricPart {
     /// True when an RPC route over the mesh tunnel reaches this node's ggml
     /// rpc-server. Drives the additive `rpc_worker.iroh` flag on `/status`.
     pub rpc_iroh_accept: std::sync::atomic::AtomicBool,
-    /// Distributed KV store for mesh apps.
-    pub mesh_store: Arc<MeshStore>,
     /// Concurrent **outbound** peer knowledge fan-out requests in flight from
     /// this node. Maintained by `commonwealth_transport::fanout`'s guard,
     /// which holds this same `Arc`. Read via
@@ -110,11 +107,6 @@ impl FabricPart {
     /// Assemble Fabric's part from values that all exist before it (DC §4.2
     /// "Construction is staged, and parts are total").
     pub fn new(self_node_id: NodeId, seed: FabricSeed) -> Self {
-        // Fabric's own store, private to it: the node's replicated KV is
-        // cw-rails' (five-programs fp-88, fp-111). In-memory creation is
-        // infallible — fail-fast is correct.
-        #[allow(clippy::expect_used)]
-        let mesh_store = Arc::new(MeshStore::in_memory().expect("in-memory MeshStore failed"));
         let membership = seed.membership.unwrap_or_else(|| {
             Arc::new(NoMembership::<PeerContact>::default())
                 as Arc<dyn MembershipReader<Dial = PeerContact>>
@@ -126,30 +118,9 @@ impl FabricPart {
             ring_write_nudge: Arc::new(tokio::sync::Notify::new()),
             peer_transport: seed.peer_transport,
             rpc_iroh_accept: std::sync::atomic::AtomicBool::new(false),
-            mesh_store,
             fanout_inflight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             convergence: seed.convergence,
         }
-    }
-
-    /// The two backings over Fabric's own private store — the replicated KV
-    /// and the `LocalLedger` — so a caller builds store ports without naming
-    /// the store (five-programs fp-87, decision five-programs-60).
-    pub fn local_store_backings(
-        &self,
-        self_node_id: NodeId,
-    ) -> (
-        Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
-        Arc<crate::ledger_port::LocalLedger>,
-    ) {
-        let kv: Arc<dyn sovereign_contracts::peer::ReplicatedKv> = Arc::new(
-            crate::peer_adapter::MeshReplicatedKv::over(Arc::clone(&self.mesh_store)),
-        );
-        let ledger = Arc::new(crate::ledger_port::LocalLedger::new(
-            Arc::clone(&self.mesh_store),
-            self_node_id,
-        ));
-        (kv, ledger)
     }
 
     /// The ring rail's storage, or `None` if the daemon has none.

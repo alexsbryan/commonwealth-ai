@@ -31,7 +31,7 @@ use crate::state::AppState;
 /// current runtime and its failure is traced — the shape of
 /// `InferenceCache::set_model_info` (rails_client/ledger.rs).
 struct DaemonLedger {
-    emitter: Arc<dyn sovereign_mesh::ledger_port::ContributionLedgerPort>,
+    emitter: Arc<dyn crate::ledger_port::ContributionLedgerPort>,
 }
 
 impl LedgerEmitter for DaemonLedger {

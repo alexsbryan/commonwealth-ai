@@ -269,7 +269,7 @@ async fn register_extras_in_store(
 async fn deregister_extras_from_store(
     state: &AppState,
     model_id_str: &str,
-) -> Result<bool, sovereign_mesh::ledger_port::LedgerAbsent> {
+) -> Result<bool, crate::ledger_port::LedgerAbsent> {
     // Look up the existing entry by advertised name, then remove
     // by ModelId. We don't have the original path here (the
     // `unload` request only carries the slot name), so we can't

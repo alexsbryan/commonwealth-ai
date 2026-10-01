@@ -1221,7 +1221,7 @@ writes — so neither the daemon nor cli-llm names commonwealth-state). Since fp
 peer preferences, processed shards, inference state — each the
 commonwealth-state writer over that store, the writer's node id in the body)
 and runs the contributions `RetentionGc`; the daemon's dialing side is
-`sovereign_mesh::ledger_port` + `rails_client/ledger.rs`, not yet wired. Since pb-rails-untether
+the daemon's own `ledger_port` + `rails_client/ledger.rs` (moved in from sovereign-mesh at pb-mesh-exit-mesh). Since pb-rails-untether
 (phase-b-31) svrn's boot and cli-llm's `rails_kv()` only dial it, and an absent one is a named
 absence; ONE opt-in verb brings it up, `svrn mesh up` (sovereign-cli-mesh `rails_up::ensure_rails`),
 a `ServingHost` bring-up of the binary `CW_RAILS_BIN`/sibling/PATH names, logging to `<data dir>/rails.log`;

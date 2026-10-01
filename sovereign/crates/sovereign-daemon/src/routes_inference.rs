@@ -27,7 +27,7 @@ const LOCAL_HOLDER: &str = "local";
 
 /// The inference state did not answer: a named 503, never a routing miss
 /// or an empty list (principle 6).
-fn inference_state_absent(e: &sovereign_mesh::ledger_port::LedgerAbsent) -> Response {
+fn inference_state_absent(e: &crate::ledger_port::LedgerAbsent) -> Response {
     warn!(error = %e, "inference state unread");
     (
         StatusCode::SERVICE_UNAVAILABLE,
@@ -397,7 +397,7 @@ pub async fn chat_completions(
 async fn route_with_oicp(
     state: &AppState,
     req: &InferenceRequirements,
-) -> Result<Option<ModelId>, sovereign_mesh::ledger_port::LedgerAbsent> {
+) -> Result<Option<ModelId>, crate::ledger_port::LedgerAbsent> {
     let models = state.list_models().await?;
     let plan = state.inference_plan().await?.unwrap_or_default();
 
@@ -469,7 +469,7 @@ fn synthesize_claims_for_model_info(
 async fn find_model_by_name(
     state: &AppState,
     name: &str,
-) -> Result<Option<ModelId>, sovereign_mesh::ledger_port::LedgerAbsent> {
+) -> Result<Option<ModelId>, crate::ledger_port::LedgerAbsent> {
     let models = state.list_models().await?;
     let name_lower = name.to_lowercase();
     Ok(models
@@ -743,7 +743,7 @@ pub async fn list_models(
 /// nothing advertises produces a link that looks fine and 403s on first use.
 pub(crate) async fn dispatchable_ids(
     state: &AppState,
-) -> Result<Vec<String>, sovereign_mesh::ledger_port::LedgerAbsent> {
+) -> Result<Vec<String>, crate::ledger_port::LedgerAbsent> {
     Ok(match manifest_rows(state).await {
         Some(rows) => rows,
         None => store_rows(state).await?,
@@ -841,7 +841,7 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
 /// manifest path, so the duplicate-row bug is fixed on both.
 async fn store_rows(
     state: &AppState,
-) -> Result<Vec<ModelObject>, sovereign_mesh::ledger_port::LedgerAbsent> {
+) -> Result<Vec<ModelObject>, crate::ledger_port::LedgerAbsent> {
     let local_id = state.self_node_id();
     let members = state.membership().members().await;
     let live_nodes: HashSet<NodeId> = std::iter::once(local_id)

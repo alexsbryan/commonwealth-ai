@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! A RECORDING double of the store ports AppState holds (five-programs fp-80,
 //! for fp-83..fp-86): every call is appended to [`RecordingLedger::calls`] and
-//! answered empty, save `list_models_with_origins`, which answers the rows a
-//! test seeds with [`RecordingLedger::with_models`] (fp-84). It implements no
-//! key scheme — the writers in commonwealth-state are the one decider of
-//! those (ARCH 8).
+//! answered empty, save two port contracts it keeps in memory: the model rows
+//! (seeded with [`RecordingLedger::with_models`], fp-84, and written by
+//! `set_model_info`/`remove_model_info` as this node's) and the peer
+//! preferences (`set` then `get`/`list`/`clear`). Those two are what the
+//! in-process `LocalLedger` answered for the daemon's own round-trip tests
+//! before it retired (pb-mesh-exit-mesh). It implements no key scheme — the
+//! writers in commonwealth-state are the one decider of those (ARCH 8).
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
+use crate::ledger_port::{
+    ActivityLedgerPort, ContributionLedgerPort, InferencePlan, InferenceStatePort, LedgerFut,
+    PeerPreference, PeerPreferencesPort, ProcessedShardsPort,
+};
 use crate::state::store::StoreSeed;
 use bytes::Bytes;
 use kernel_types::{ModelId, NodeId};
@@ -18,10 +25,6 @@ use oicp_types::contributions::{LedgerEvent, LedgerEventKind, NodeContributions}
 use oicp_types::model_catalog::ModelInfo;
 use oicp_types::EmbedModelInfo;
 use sovereign_contracts::peer::{ReplicatedKv, ReplicatedKvEntry, ReplicatedKvError};
-use sovereign_mesh::ledger_port::{
-    ActivityLedgerPort, ContributionLedgerPort, InferencePlan, InferenceStatePort, LedgerFut,
-    PeerPreference, PeerPreferencesPort, ProcessedShardsPort,
-};
 
 /// One recorded call: the port method and its arguments, `Debug`-rendered.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,7 +38,8 @@ pub struct RecordingLedger {
     self_node_id: NodeId,
     calls: Arc<Mutex<Vec<LedgerCall>>>,
     recorded: Arc<Mutex<Vec<LedgerEventKind>>>,
-    models: Vec<(NodeId, ModelInfo)>,
+    models: Arc<Mutex<Vec<(NodeId, ModelInfo)>>>,
+    preferences: Arc<Mutex<Vec<(NodeId, PeerPreference)>>>,
 }
 
 impl RecordingLedger {
@@ -44,14 +48,15 @@ impl RecordingLedger {
             self_node_id,
             calls: Arc::default(),
             recorded: Arc::default(),
-            models: Vec::new(),
+            models: Arc::default(),
+            preferences: Arc::default(),
         }
     }
 
     /// The `(origin, model)` rows `list_models_with_origins` answers — handed
     /// back verbatim, as a peer's gossiped rows would arrive.
-    pub fn with_models(mut self, rows: Vec<(NodeId, ModelInfo)>) -> Self {
-        self.models = rows;
+    pub fn with_models(self, rows: Vec<(NodeId, ModelInfo)>) -> Self {
+        *self.models.lock().unwrap() = rows;
         self
     }
 
@@ -170,19 +175,37 @@ impl ActivityLedgerPort for RecordingLedger {
 
 impl PeerPreferencesPort for RecordingLedger {
     fn list(&self) -> LedgerFut<'_, Vec<(NodeId, PeerPreference)>> {
-        self.answer("peer_preferences.list", String::new(), Vec::new())
+        let rows = self.preferences.lock().unwrap().clone();
+        self.answer("peer_preferences.list", String::new(), rows)
     }
 
     fn get(&self, peer: &NodeId) -> LedgerFut<'_, Option<PeerPreference>> {
-        self.answer("peer_preferences.get", peer.to_string(), None)
+        let found = self
+            .preferences
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(p, _)| p == peer)
+            .map(|(_, pref)| pref.clone());
+        self.answer("peer_preferences.get", peer.to_string(), found)
     }
 
     fn set(&self, peer: &NodeId, pref: PeerPreference) -> LedgerFut<'_, ()> {
-        self.answer("peer_preferences.set", format!("{peer} {pref:?}"), ())
+        let args = format!("{peer} {pref:?}");
+        let mut rows = self.preferences.lock().unwrap();
+        rows.retain(|(p, _)| p != peer);
+        rows.push((*peer, pref));
+        drop(rows);
+        self.answer("peer_preferences.set", args, ())
     }
 
     fn clear(&self, peer: &NodeId) -> LedgerFut<'_, bool> {
-        self.answer("peer_preferences.clear", peer.to_string(), false)
+        let mut rows = self.preferences.lock().unwrap();
+        let before = rows.len();
+        rows.retain(|(p, _)| p != peer);
+        let was_there = rows.len() != before;
+        drop(rows);
+        self.answer("peer_preferences.clear", peer.to_string(), was_there)
     }
 }
 
@@ -214,27 +237,40 @@ impl InferenceStatePort for RecordingLedger {
     }
 
     fn get_model_info(&self, model_id: ModelId) -> LedgerFut<'_, Option<ModelInfo>> {
-        self.answer("inference.get_model_info", format!("{model_id:?}"), None)
+        let found = self
+            .models
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(_, m)| m.id == model_id)
+            .map(|(_, m)| m.clone());
+        self.answer("inference.get_model_info", format!("{model_id:?}"), found)
     }
 
     fn set_model_info(&self, info: &ModelInfo) -> LedgerFut<'_, ()> {
+        let mut rows = self.models.lock().unwrap();
+        rows.retain(|(origin, m)| !(*origin == self.self_node_id && m.id == info.id));
+        rows.push((self.self_node_id, info.clone()));
+        drop(rows);
         self.answer("inference.set_model_info", format!("{:?}", info.id), ())
     }
 
     fn remove_model_info(&self, model_id: ModelId) -> LedgerFut<'_, bool> {
+        let mut rows = self.models.lock().unwrap();
+        let before = rows.len();
+        rows.retain(|(origin, m)| !(*origin == self.self_node_id && m.id == model_id));
+        let was_there = rows.len() != before;
+        drop(rows);
         self.answer(
             "inference.remove_model_info",
             format!("{model_id:?}"),
-            false,
+            was_there,
         )
     }
 
     fn list_models_with_origins(&self) -> LedgerFut<'_, Vec<(NodeId, ModelInfo)>> {
-        self.answer(
-            "inference.list_models_with_origins",
-            String::new(),
-            self.models.clone(),
-        )
+        let rows = self.models.lock().unwrap().clone();
+        self.answer("inference.list_models_with_origins", String::new(), rows)
     }
 
     fn get_llama_address(&self, model_id: ModelId) -> LedgerFut<'_, Option<String>> {

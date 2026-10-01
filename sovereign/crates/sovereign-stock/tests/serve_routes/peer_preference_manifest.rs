@@ -32,15 +32,21 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use kernel_types::NodeId;
+use oicp_types::peer_preference::PeerPreference;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, FabricSeed, LocalInferenceService, ServingSeed};
-use sovereign_mesh::ledger_port::peer_preference;
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 
 use crate::common;
 use crate::common::{id_to_hex, member, roster, spawn_router, TestProvider};
+
+/// A preference stamped now (the constructor the retired
+/// `peer_preference` helper wrapped).
+fn peer_preference(multiplier: f64, reason: Option<String>) -> Result<PeerPreference, String> {
+    PeerPreference::new(multiplier, reason, 1_700_000_000)
+}
 
 /// Build an AppState with the manifest-producing adapter wired in.
 fn build_state(self_id: NodeId) -> AppState {

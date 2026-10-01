@@ -11,10 +11,10 @@
 
 use std::sync::Arc;
 
+use crate::ledger_port::ActivityLedgerPort;
 use corpus_engine_atlas_reader::ports::AtlasPort;
 use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_grants::{GuestGrantStore, GuestSessionBinding, GuestSessionStore};
-use sovereign_mesh::ledger_port::ActivityLedgerPort;
 
 use crate::client_tokens::{ClientTokenStore, ClientTokens};
 use crate::internal_gate::InternalAuth;

@@ -9,7 +9,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use sovereign_mesh::ledger_port::InferencePlan;
+use crate::ledger_port::InferencePlan;
 
 use crate::state::AppState;
 

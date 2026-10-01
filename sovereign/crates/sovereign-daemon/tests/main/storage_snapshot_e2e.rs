@@ -37,7 +37,7 @@ use kernel_types::NodeId;
 use oicp_types::contributions::LedgerEventKind;
 use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_daemon::daemon::EmbeddedDaemon;
-use sovereign_mesh::ledger_port::ContributionLedgerPort;
+use sovereign_daemon::ledger_port::ContributionLedgerPort;
 
 const EMBED_DIM: usize = 8;
 

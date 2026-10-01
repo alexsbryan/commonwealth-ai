@@ -124,7 +124,7 @@ async fn served_knowledge_query_records_through_the_store_seed() {
 /// cw-rails' `/v1/ledger/contributions` door, which hands it to the double.
 #[tokio::test]
 async fn a_contribution_write_lands_on_the_rails_door() {
-    use sovereign_mesh::ledger_port::ContributionLedgerPort;
+    use sovereign_daemon::ledger_port::ContributionLedgerPort;
 
     let self_id = NodeId::from_u128(0x5EED_0088);
     let peer = NodeId::from_u128(0xBBBB_0088);

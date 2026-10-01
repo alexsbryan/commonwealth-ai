@@ -110,6 +110,9 @@ pub mod insight_http;
 pub mod job_registry;
 pub mod landscape_digest_http;
 pub mod lc_http;
+/// The typed ledger ports the daemon's store fields hold (moved from
+/// sovereign-mesh beside their `rails_client::ledger` implementation).
+pub mod ledger_port;
 pub mod listener_watch;
 pub mod local_only;
 pub mod loopback_guard;

@@ -11,6 +11,10 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
 
+use crate::ledger_port::{
+    ActivityLedgerPort, ContributionLedgerPort, InferencePlan, InferenceStatePort, LedgerAbsent,
+    LedgerFut, PeerPreference, PeerPreferencesPort, ProcessedShardsPort,
+};
 use kernel_types::ModelId;
 use kernel_types::NodeId;
 use oicp_types::activity::{ActivityEvent, ActivityEventKind, ActivitySummary};
@@ -20,10 +24,6 @@ use oicp_types::model_catalog::ModelInfo;
 use oicp_types::EmbedModelInfo;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
-use sovereign_mesh::ledger_port::{
-    ActivityLedgerPort, ContributionLedgerPort, InferencePlan, InferenceStatePort, LedgerAbsent,
-    LedgerFut, PeerPreference, PeerPreferencesPort, ProcessedShardsPort,
-};
 
 use super::{get_answer, post_answer, RailsDial};
 
