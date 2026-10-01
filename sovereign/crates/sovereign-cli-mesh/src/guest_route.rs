@@ -29,7 +29,7 @@ pub async fn open_route(link: &GuestLink) -> Result<String, String> {
         .map(|c| (c.iroh.relay_urls.clone(), c.iroh.discovery.clone()))
         .unwrap_or_default();
     let tunnel =
-        sovereign_mesh::guest_tunnel::GuestTunnel::open(dial, relay_urls, discovery.as_deref())
+        mesh_reach::guest::GuestTunnel::open(dial, relay_urls, discovery.as_deref())
             .await
             .map_err(|e| {
                 format!(
@@ -44,7 +44,7 @@ pub async fn open_route(link: &GuestLink) -> Result<String, String> {
 }
 
 /// The one live tunnel this process holds. See [`open_route`].
-static TUNNEL: std::sync::OnceLock<sovereign_mesh::guest_tunnel::GuestTunnel> =
+static TUNNEL: std::sync::OnceLock<mesh_reach::guest::GuestTunnel> =
     std::sync::OnceLock::new();
 
 #[cfg(test)]

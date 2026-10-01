@@ -9,7 +9,7 @@
 //! process that exits when the command does).
 
 use sovereign_contracts::setup_config::client_daemon_base_for;
-use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
+use mesh_join_vocab::deep_link::{build_https_join_link, parse_join_argument};
 use sovereign_turn_client::reach::ServingHost;
 use sovereign_turn_client::TurnClient;
 
@@ -521,7 +521,7 @@ fn print_mesh_share(
     join_link: Option<&str>,
 ) {
     let app_link = match join_link.and_then(parse_join_argument) {
-        Some(sovereign_mesh::deep_link::DeepLink::Join {
+        Some(mesh_join_vocab::deep_link::DeepLink::Join {
             relay_hint,
             iroh_dial,
             encrypted,
@@ -539,7 +539,7 @@ fn print_mesh_share(
         // reach here — it is spelled out rather than folded into `_` so that a
         // third `DeepLink` variant breaks this build instead of silently
         // rendering an invite from something that is not one.
-        Some(sovereign_mesh::deep_link::DeepLink::Guest { .. }) | None => {
+        Some(mesh_join_vocab::deep_link::DeepLink::Guest { .. }) | None => {
             build_https_join_link(join_key, None, Some(mesh_name), None, false, None)
         }
     };

@@ -250,7 +250,7 @@ pub(crate) fn run_verify(args: &[String]) -> i32 {
 mod tests {
     use super::*;
     use commonwealth_rail::{body_json, sign_ring_op, Payload, Person, RailAct, RingSigner};
-    use sovereign_mesh::ring_checkpoint::checkpoint_document;
+    use commonwealth_rail::ring_checkpoint::checkpoint_document;
 
     const NS: &str = "house-expenses";
 

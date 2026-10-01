@@ -135,7 +135,7 @@ fn ring_journal(namespace: &str) -> Result<commonwealth_rail::RingJournal, Strin
 /// Only a REGISTERED namespace outranks the file, so only those refuse, read
 /// from the one list the daemon registers from.
 fn refuse_derived_roster(namespace: &str) -> Option<String> {
-    if !sovereign_mesh::ring_roster::REGISTERED_NAMESPACES.contains(&namespace) {
+    if !sovereign_contracts::ring_namespaces::REGISTERED_NAMESPACES.contains(&namespace) {
         return None;
     }
     Some(format!(

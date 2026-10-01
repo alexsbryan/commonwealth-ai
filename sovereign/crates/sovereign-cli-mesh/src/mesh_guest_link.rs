@@ -71,7 +71,7 @@ pub(crate) fn guest_bind_url() -> Option<String> {
     // 100.104.36.28 while the room's phones needed 192.168.1.7. Prefer the
     // LAN candidate; fall back to the mesh order (a remote guest with the
     // tailnet, or a host with no LAN interface). `--url` overrides both.
-    let cands = sovereign_mesh::mesh_discovery::relay_candidates(port);
+    let cands = commonwealth_discovery::mesh_discovery::relay_candidates(port);
     let best = cands
         .iter()
         .find(|c| c.kind == "lan")
@@ -175,7 +175,7 @@ pub(crate) fn wall_qr_blocks(link: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_mesh::deep_link::build_https_guest_link;
+    use mesh_join_vocab::deep_link::build_https_guest_link;
 
     /// The rule this module exists for: a concrete bind is advertised as
     /// written; a wildcard or loopback bind (a LISTEN address) is replaced by

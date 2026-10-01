@@ -59,9 +59,9 @@ pub(super) fn run_host(args: &[String]) -> i32 {
     // of the daemon's own rings, whatever any config says). Refuse it here
     // rather than write an entry the door drops at load: the config failure
     // would read as "the room cannot reach it", not as "this was never
-    // allowed" (ARCH §6). The decision lives in one place — the mesh crate's
-    // roster — and this verb asks it (ARCH §10.6).
-    if !clear && sovereign_mesh::ring_roster::is_daemon_owned(&ns) {
+    // allowed" (ARCH §6). The decision lives in one place — the contracts crate's
+    // namespace list — and this verb asks it (ARCH §10.6).
+    if !clear && sovereign_contracts::ring_namespaces::is_daemon_owned(&ns) {
         eprintln!(
             "ring host: `{ns}` is one of this daemon's own rings and is never open to \
              guests, whatever a page registry says."
@@ -183,7 +183,7 @@ pub(super) fn run_host(args: &[String]) -> i32 {
 /// nothing can be derived (no candidate, no port).
 fn advertised_here(bind: &str) -> Option<String> {
     let port = port_of_bind(bind)?;
-    let best = sovereign_mesh::mesh_discovery::relay_candidates(port)
+    let best = commonwealth_discovery::mesh_discovery::relay_candidates(port)
         .into_iter()
         .find(|c| c.recommended)
         .map(|c| c.ip);
@@ -441,9 +441,9 @@ primary = \"/models/a.gguf\"
 
     #[test]
     fn a_daemon_owned_namespace_is_never_servable() {
-        // The one decider is the mesh crate's roster, asked here — this test
+        // The one decider is the contracts crate's namespace list, asked here — this test
         // names the refusal, not a second copy of the list.
-        assert!(sovereign_mesh::ring_roster::is_daemon_owned(
+        assert!(sovereign_contracts::ring_namespaces::is_daemon_owned(
             "mesh-measurements"
         ));
     }

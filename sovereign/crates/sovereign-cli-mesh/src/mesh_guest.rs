@@ -35,7 +35,8 @@
 
 use sovereign_cli_base::help::{Help, HelpSection};
 use sovereign_contracts::guest_pages::PAGE_PREFIX;
-use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, wall_https_link, DeepLink};
+use mesh_join_vocab::deep_link::{build_guest_link, parse_deep_link, DeepLink};
+use sovereign_mesh::deep_link::wall_https_link;
 
 use crate::mesh_guest_link::{guest_bind_url, print_qr_blocks, write_qr_svg};
 use sovereign_cli_base::guest_link::{self, GuestLink};
@@ -149,12 +150,12 @@ fn guest_base_url(explicit: Option<&str>, client_port: u16) -> Result<String, St
     if let Some(u) = explicit {
         return Ok(normalise_base(u));
     }
-    if let Some(addr) = sovereign_mesh::mesh_discovery::read_advertise_addr_override(client_port)
+    if let Some(addr) = commonwealth_discovery::mesh_discovery::read_advertise_addr_override(client_port)
         .and_then(|addrs| addrs.into_iter().next())
     {
         return Ok(format!("http://{addr}"));
     }
-    let candidates = sovereign_mesh::mesh_discovery::relay_candidates(client_port);
+    let candidates = commonwealth_discovery::mesh_discovery::relay_candidates(client_port);
     let picked = candidates
         .iter()
         .find(|c| c.recommended)

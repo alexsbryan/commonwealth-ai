@@ -16,6 +16,9 @@ sovereign-time = { workspace = true }
 commonwealth-media = { workspace = true }
 oicp-types = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
+mesh-join-vocab = { workspace = true }
+mesh-reach = { workspace = true, features = ["guest"] }
+commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
 # The client half of the daemon's HTTP surface: `ServingHost` decides "is a
 # daemon answering", `TurnClient` speaks `/v1/mesh/*` (create/join). Added
 # when the last in-process daemon constructions left this crate.

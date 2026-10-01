@@ -12488,6 +12488,8 @@ dependencies = [
  "host-kit",
  "hostname",
  "libc",
+ "mesh-join-vocab",
+ "mesh-reach",
  "oicp-types",
  "rand 0.9.4",
  "reqwest 0.12.28",
