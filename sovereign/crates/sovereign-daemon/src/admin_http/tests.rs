@@ -134,7 +134,10 @@ fn config_diff_reports_unread_iroh_changes_as_unread() {
     let mut enabled_flipped = base.clone();
     enabled_flipped.iroh.enabled = Some(true);
     let d = ConfigDiff::diff(&base, &enabled_flipped);
-    assert!(d.restart_required.is_empty(), "no reader, so a restart applies nothing");
+    assert!(
+        d.restart_required.is_empty(),
+        "no reader, so a restart applies nothing"
+    );
     assert_eq!(d.unread, vec!["iroh.enabled"]);
     assert!(d.models_changed.is_empty());
 
