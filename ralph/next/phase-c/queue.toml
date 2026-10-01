@@ -13,9 +13,11 @@
 #    Stop it at `ralph: pc-pool-ready done` (`ralph.py stop --queue phase-c`
 #    between rows; an empty ctl/STOP kills an in-flight worker).
 # 2. The pool at 3 lanes (phase-b-103: 8 waves; 4 lanes saves one and the
-#    measured memory headroom does not carry it). Today's `pool` verb takes no
-#    --queue (build_parser: `common(p, queue=False)`), so it would read none of
-#    this file; its launch line lands with pc-pool-ready.
+#    measured memory headroom does not carry it):
+#
+#   nohup python3 scripts/ralph.py supervise --workdir . --queue phase-c \
+#     -- python3 scripts/ralph.py pool --workdir . --queue phase-c --lanes 3 \
+#     >> ralph/log-phase-c.txt 2>&1 &
 #
 # The worker prompt is ralph/PROMPT.base.md + this directory's addendum
 # (print it: python3 scripts/ralph.py prompt --queue phase-c).
@@ -39,9 +41,8 @@ scope_file = "ralph/next/phase-c/scope.txt"
 # conflicts.txt and heavy.txt (phase-b-103) are not declared here:
 # load_manifest derives every MANIFEST_PATH_KEYS path from this directory
 # (ralph/next/phase-c/conflicts.txt, heavy.txt, ctl/, CHARTER.md), and naming
-# them would be a second spelling of that default. The pool does not read
-# either from a manifest yet (`Pool._heavy` opens ralph/heavy.txt; `cmd_pool`
-# takes --conflicts from its flag): pc-pool-ready's.
+# them would be a second spelling of that default. `pool --queue` reads both
+# from there (pc-pool-ready).
 worker_bin = "scripts/ralph-claude-shim.sh"
 settings = "ralph/claude-settings.json"
 
