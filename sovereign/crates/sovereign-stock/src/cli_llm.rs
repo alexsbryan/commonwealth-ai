@@ -8,5 +8,7 @@
 mod ingest;
 
 fn main() {
-    sovereign_cli_llm::bin_main_with(Some(ingest::hosted()))
+    sovereign_cli_llm::bin_main_with(Some(ingest::hosted(Some(Box::new(
+        sovereign_recipe_author::port::compose,
+    )))))
 }

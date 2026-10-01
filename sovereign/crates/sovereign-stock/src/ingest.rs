@@ -2,13 +2,19 @@
 //! Ingest, composed for svrn: the one composition both of this distribution's
 //! binaries hand svrn (the daemon's `process::run` and cli-llm's
 //! `bin_main_with`, pb-cli-llm-ingest-move-compose), so the stock install
-//! builds ingest's engine one way.
+//! builds ingest's engine one way. The on-prem distribution compiles this
+//! same file (`#[path]`) and passes no recipe authoring (phase-b-87), so the
+//! two distributions build ingest one way too and this file names no
+//! sovereign-recipe-author.
 
 /// Ingest's enrichment-config port from ingest's catalog
 /// (pb-ingest-dial-tools-close), its atlas port, its engine-free calls
 /// (pb-cli-llm-ingest-move-remainder), and the engine built by ingest's face
-/// for what svrn hands it (pb-ingest-dial-daemon).
-pub fn hosted() -> sovereign_daemon::process::HostedIngest {
+/// for what svrn hands it (pb-ingest-dial-daemon). `recipe_authoring` is the
+/// distribution's: `None` composes ingest without it.
+pub fn hosted(
+    recipe_authoring: Option<sovereign_daemon::process::RecipeAuthoringCompose>,
+) -> sovereign_daemon::process::HostedIngest {
     sovereign_daemon::process::HostedIngest::new(
         std::sync::Arc::new(sovereign_enrichment_catalog::port::CatalogEnrichConfig),
         corpus_engine::face::atlas(),
@@ -40,7 +46,7 @@ pub fn hosted() -> sovereign_daemon::process::HostedIngest {
                 })
             }),
             gliner_chunk_extractor: Box::new(corpus_engine::face::gliner_chunk_extractor),
-            recipe_authoring: Some(Box::new(sovereign_recipe_author::port::compose)),
+            recipe_authoring,
         },
         |host| {
             let face = corpus_engine::face::compose(corpus_engine::face::IngestParts {

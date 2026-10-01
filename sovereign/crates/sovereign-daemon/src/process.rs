@@ -286,7 +286,11 @@ mod tests {
             vec!["--rpc-worker"],
         ] {
             let argv: Vec<String> = argv.into_iter().map(str::to_string).collect();
-            assert_eq!(run(&argv, None, None, None, None, Posture::Open), 2, "{argv:?}");
+            assert_eq!(
+                run(&argv, None, None, None, None, Posture::Open),
+                2,
+                "{argv:?}"
+            );
         }
     }
 

@@ -147,7 +147,7 @@ fn main() {
             hold: Box::new(face.runtime),
         })
     });
-    let ingest = ingest::hosted();
+    let ingest = ingest::hosted(Some(Box::new(sovereign_recipe_author::port::compose)));
     // svrn reads the mesh through cw-rails, the node's one mesh endpoint:
     // its roster and reach door, the pair serve reads (pb-mesh-exit-transport).
     let mesh = sovereign_daemon::process::HostedMesh::new(|rails_base| {
