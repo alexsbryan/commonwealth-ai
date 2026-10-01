@@ -744,7 +744,7 @@ fn build_atom_card(
     }
 }
 
-use sovereign_mesh::reading_formatters::atom_surface_fields;
+use understanding_vocab::reading_formatters::atom_surface_fields;
 
 fn cross_corpus_links_for_atom(
     atom_id: &AtomId,

@@ -46,8 +46,8 @@ use crate::state::AppState;
 // crates must agree) and re-exported so every existing
 // `sovereign_daemon::guest_door::PAGE_PREFIX` still resolves.
 pub use host_kit::shell::serve_under;
+pub use sovereign_contracts::guest_pages::ring_shim;
 pub use sovereign_contracts::guest_pages::PAGE_PREFIX;
-pub use sovereign_mesh::guest_pages::ring_shim;
 
 /// The shim's file name, beside each page so the page's relative imports
 /// resolve. One name, two homes: `/ring/__ring.js` for the un-namespaced page

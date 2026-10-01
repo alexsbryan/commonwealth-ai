@@ -19,12 +19,12 @@ use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
 use serde_json::Value;
 use sovereign_contracts::engine_state::ServedSelf;
 use sovereign_contracts::oicp::ResidentSlot;
+use sovereign_daemon::ledger_port::{InferencePlan, ShardPlan};
 use sovereign_daemon::serve_client::{
     loopback_provider, served_slot_aliases, ServeBase, ServeBaseSource,
 };
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, FabricSeed, LocalInferenceService, ServingSeed};
-use sovereign_daemon::ledger_port::{InferencePlan, ShardPlan};
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 

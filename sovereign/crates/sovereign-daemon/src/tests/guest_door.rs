@@ -8,7 +8,7 @@ use super::*;
 use std::path::Path;
 // The shim's text lives in `sovereign_mesh::guest_pages` (fp-30's de-embed);
 // these pins read the same const the door and the dev servers serve.
-use sovereign_mesh::guest_pages::RING_SHIM;
+use sovereign_contracts::guest_pages::RING_SHIM;
 
 fn pages(default_dir: Option<&str>, named: &[(&str, &str)]) -> GuestPages {
     GuestPages::new(

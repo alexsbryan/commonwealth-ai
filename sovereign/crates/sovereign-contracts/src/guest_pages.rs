@@ -21,7 +21,7 @@
 //!
 //! It is the declaration's *shape*, not its authority. Which namespaces a
 //! daemon owns and may therefore never declare guest-open is
-//! `sovereign_mesh::ring_roster::is_daemon_owned`, and the one reader that
+//! `crate::ring_namespaces::is_daemon_owned`, and the one reader that
 //! turns these entries into the door's page surface is
 //! `sovereign_daemon::guest_door::GuestPages::from_config`. Keeping the type
 //! here and both decisions there is what stops a second answer growing next to
@@ -126,6 +126,9 @@ impl GuestPage {
         }
     }
 }
+
+mod shim;
+pub use shim::{ring_shim, RING_SHIM};
 
 #[cfg(test)]
 mod tests {
