@@ -1,0 +1,6 @@
+<!-- ledger -->
+
+**phase-b-104 · 2026-10-01 · pb-distribution · seat, filing LIFT(cmnwlth)'s nondeterminism as a phase-c row** — this commit
+- Needed: pb-distribution's proof (5d529cf1e) names LIFT(cmnwlth)'s test phase red once in seven runs at 327a8097b, with the sandbox wiped before its log could be read, and says it is "recorded … for phase-c" in target/ralph/phase-b/preflight-forks.md, an untracked file no queue reads: the same "filed but not filed" shape phase-b-97 corrected.
+- Chose: pc-cmnwlth-lift-flake, above phase-c's cut line (a gate that sometimes fails for no named reason is a bug, not cleanup): first the instrument keeps a red run's log before any wipe, then the flake is caught and fixed at its shared state, as pb-distribution fixed svrn's. It fills wave 7's free lanes in the projected plan.
+- Seat fact-check of pb-distribution's finish (5d529cf1e): all six LIFTs passed at 327a8097b with stamped siblings; BOUNDARY 0; no `package = "svrn"` [[exception]] (the five matches are [[distribution.face]] rows); lint --full exit 0 at cabcd6fef; TESTALL 13,670 passed with one failure, the conformance-tags drift cabcd6fef repairs, re-run green alone (the whole suite was not re-run after; the ship gate's Tier 0 runs it at C); the construction census watched red on a planted construction.

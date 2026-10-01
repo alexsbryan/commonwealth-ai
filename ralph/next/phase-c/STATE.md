@@ -18,7 +18,7 @@ Projected waves at 3 lanes (ralph's conflict and heavy rules, simulated 2026-10-
 4. pc-split-deploy-honesty, pc-cli-config-load-silent-default, pc-rendezvous-stable-hash
 5. pc-atlas-highlight-determinism, pc-gk-rescue-fabrication, pc-solo-durable
 6. pc-gk-rescue-fabrication-measure (alone)
-7. pc-partial-decline-verdict
+7. pc-partial-decline-verdict, pc-cmnwlth-lift-flake (added after the simulation, phase-b-104; it fills wave 7's free lanes)
 8. pc-partial-decline-verdict-measure (alone)
 
 ## Rows
@@ -42,6 +42,10 @@ Projected waves at 3 lanes (ralph's conflict and heavy rules, simulated 2026-10-
   - (was pc-admin-reload-checks-serve) an admin reload reports success only when serve's resident models are the ones asked for, and names what did not load. Split deployments only. Same source (ralph/PHASE_B_SHIP_GATE.md "Not blocking"): the reload answers success without checking serve. Census first.
   - (was pc-serve-restart-self-report) svrn's self-report follows serve across a serve restart. Split deployments only. Same source: svrn's self-report stays stale after serve restarts. Census first.
   - (was pc-mesh-status-serve-down) `/v1/mesh/status` tells "serve down" from "serve slow" (principle 6). Split deployments only. Same source. Census first.
+- [ ] pc-cmnwlth-lift-flake — depends [pc-pool-ready] — OUTCOME: LIFT(cmnwlth)'s test phase is deterministic, and a red lift run keeps the evidence that explains it. Found by pb-distribution's closing sweep (5d529cf1e): at 327a8097b the cmnwlth lift's test phase went red once in seven runs, and the lift instrument wiped the sandbox before the log could be read; the commit recorded it only in an untracked target file. Two parts, in order: (1) the instrument (scripts/lib/program_lift.py) keeps a red run's sandbox log, or copies it out, before any wipe (principle 5: a failure that leaves nothing to read is never-ran, not a finding); (2) loop the lift until a red run is caught, then fix the test's shared state as pb-distribution fixed svrn's (3c08179cc, 327a8097b), never by retrying to green.
+  - PROOF: the instrument keeps the log of a planted red test run; then N=10 consecutive LIFT(cmnwlth) runs green, with host load recorded.
+  - trial: NONE.
+  LIFT: census first. — read: 5d529cf1e's body, scripts/lib/program_lift.py, target/ralph/phase-b/lift-cmnwlth-loop*.log — check: CLEAN, LINT, LIFT(cmnwlth) x10, PLANT
 - [ ] pc-fetch-model-peer-discovery — depends [pc-pool-ready] — OUTCOME: `svrn mesh fetch-model` finds peers that hold a model through cw-rails' roster and fetches over serve's registered model-files origin, or refuses by name; it never reads a file that does not exist and reports "No peer could serve" (found by the seat at phase-b-84).
   - sovereign-serve fetch_model.rs:220 `collect_peer_internal_urls` reads `sovereign_root()/mesh.json`. That path does not exist on RuggedFox (the live file has been meshes/<id>/mesh.json since before phase B), and nothing has written svrn's copy since the flip (b71fdd08b). It dials each member's `addresses`, the `:9742` internal endpoints the flip retired. So peer discovery fails before and after the flip. Whether the I/O error surfaces or degrades into "No peer could serve" is read at :117.
   LIFT: census first. — read: sovereign-serve/src/fetch_model.rs, sovereign-contracts/src/membership.rs, the model-files origin serve registers (pb-serve-distributes) — check: CLEAN, LINT, TEST(sovereign-serve), PLANT, LAYER, BOUNDARY

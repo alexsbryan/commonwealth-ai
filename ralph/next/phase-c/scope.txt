@@ -15,3 +15,4 @@ pc-gk-rescue-fabrication
 pc-partial-decline-verdict
 pc-solo-durable
 pc-pool-ready
+pc-cmnwlth-lift-flake
