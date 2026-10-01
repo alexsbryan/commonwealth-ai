@@ -4234,3 +4234,115 @@ rpc_discovery/endpoint.rs), Nowhere, OnePeer, ProviderService, Rails.
   --verify` still fail as at auto-9 (p0-root-junk 323069 > 113934).
   `size-gate` reports 72 keys grown (73 at auto-9). All advisory, outside
   this queue.
+
+## REVIEW-audit-pb-auto-11 (2026-10-01, range c4ce30e2a..3787242de, since REVIEW-audit-pb-auto-10)
+
+170 commits, 148 of them outside `ralph:`, from the pb-serve-ranks,
+pb-cli-llm-ingest-move(-remainder), pb-ingest-rehome(-daemon),
+pb-mesh-exit-transport(-claims), pb-meshapp-solve, pb-distribution-setup,
+pb-serve-package-guard and pb-mesh-exit-mesh(-join-save) rows. All checks
+ran in the sovereign-vulkan toolbox.
+
+TESTALL at 3787242de exited 100: 13,697 passed, 3 failed. Two were drift
+from moves (F26 registry, conformance line shifts), repaired in d79f29459;
+one was a test reading host state since the flip, repaired in 3d970c7ff.
+PREPUSH at 8928e6139 blocked on boundary-gate and rustfmt; after a363d866e
+it blocks on boundary-gate alone, at 3 violations, the declared burn-down
+(17 at auto-10). LINT at a363d866e: exit 0, workspace, 0 errors,
+arch-gate green.
+
+### (1) Per-unit net-line ledger, `.rs/.py/.sh/.mjs/.ts` outside `ralph/`; tests = a `tests/` segment or a `*tests.rs`/`test.rs` file
+
+| unit | src net (+/−) | tests net |
+|---|---|---|
+| pb-serve-ranks | +953 (+1542/−589) | +672 |
+| pb-ingest-rehome-daemon | +596 (+957/−361) | +155 |
+| pb-cli-llm-ingest-move-remainder | +440 (+993/−553) | +313 |
+| pb-cli-llm-ingest-move | +398 (+1591/−1193) | +24 |
+| pb-distribution-setup | +206 (+774/−568) | +611 |
+| pb-mesh-exit-transport-claims | +73 (+100/−27) | +237 |
+| pb-mesh-exit-mesh-join-save | +58 (+62/−4) | +0 |
+| pb-ingest-rehome | +25 (+189/−164) | +0 |
+| pb-serve-package-guard | +17 (+29/−12) | +123 |
+| phase-b-76 | +2 (+14/−12) | +1 |
+| seat | −3 (+1/−4) | +2 |
+| pb-meshapp-solve | −228 (+172/−400) | +650 |
+| pb-mesh-exit-mesh | −599 (+2142/−2741) | +215 |
+| pb-mesh-exit-transport | −6564 (+4566/−11130) | −11143 |
+| TOTAL | −4626 | −8140 |
+
+The flip (1c120f23d) carries the range: sovereign-mesh's gossip,
+membership, ring_sync, publish_http, media_reach and origin_fanout went,
+with their tests, and cw-rails' existing copies took the traffic.
+
+### (2) dry-report over the 40 touched crate dirs
+
+Clone members keyed by (fn name, file) against the 704 `fn` sites the
+range added (`git diff -M`). No exact group and no near cluster has an
+added member. The index is current: `merge_declared` (origins.rs:188,
+5d12b5862, the range's last code commit) resolves with its new body.
+
+### (3) converge noun over the 59 nouns the range added (and did not remove)
+
+49 have one production definition; Budgeted, DeltaRecorder and HeldRail
+are test code. Of the seven with more than one:
+
+- `TextChunk`/`TextChoice` (oicp-client openai_passthrough.rs:161/173 and
+  serve_loopback.rs:121/131): one wire, one crate, two decoders. Fixed.
+- `ChatChoice` (openai_passthrough.rs:142): a streaming `delta` shape; the
+  other seven are `message` shapes or other crates' wires. Name only.
+- `ForgottenMember` (sovereign-cli-mesh/src/mesh_member_cmd.rs:19 and
+  commonwealth-core/src/mesh_identity.rs:35): recorded below.
+- `Joined` (sovereign-daemon/src/daemon_cmd/admin_join.rs:21, a one-field
+  decode of cw-rails' join answer; commonwealth-rails/src/join.rs:81 is
+  the pre-persist join result), `Ranked` (serve_client.rs:135 vs
+  atlas_postinstall.rs:445), `Server` (kernel-types origin.rs:170 vs
+  corpus-mcp tools.rs:76): different concepts, name only.
+
+### Findings
+
+- **ARCH 8, fixed in 8928e6139** · oicp-client/src/serve_loopback.rs:121
+  decoded serve's `text_completion` SSE chunk with four private structs;
+  32bb79a1e added the same decoder at openai_passthrough.rs:161. One now,
+  `TextUsage` was `openai_types::StreamUsage` field for field. −33 lines.
+- **ARCH 5, fixed in 3d970c7ff** · sovereign-cli-mesh/src/mesh_skew.rs:216:
+  the flip pointed the kind-refusal control probe at
+  `mesh_cmd::rails_base()`, read from host config inside the renderer, so
+  `an_unprobeable_daemon_reports_unknown_rather_than_blaming_skew` (port
+  1, "nothing answers") dialed this host's live cw-rails, got 200 and
+  reported skew. The caller (mesh_offers.rs:266) now hands the renderer
+  the base its failed request used; production answers are unchanged.
+- **ARCH 5, fixed in d79f29459** · F26 registry
+  (sovereign-core/tests/main/f26_egress_census/registry_tail.rs): 4bf702b69
+  added a loopback client to sovereign-serve/src/lib_tests.rs (4 -> 5); the
+  flip brought three unregistered cw-rails ring test modules (14 sites,
+  TestOnly).
+- **ARCH 4, fixed in d79f29459** · quality/conformance/commonwealth-core.toml
+  and sovereign-mesh.toml: line shifts from 5d12b5862.
+- **ARCH 3, fixed in a363d866e** · rustfmt drift in eight sovereign-daemon
+  and sovereign-mesh files pb-mesh-exit-mesh committed.
+- **ARCH 8, recorded, not fixed** · `ForgottenMember` is decoded client
+  side in sovereign-cli-mesh/src/mesh_member_cmd.rs:19 because svrn cannot
+  name commonwealth-core/src/mesh_identity.rs:35. The answer's schema has
+  two owners; the home both can name is a vocabulary leaf
+  (`sovereign_contracts::daemon_wire` holds `MemberDto` beside it, but
+  commonwealth-core cannot depend on contracts). A move across the
+  boundary, not small.
+- **ARCH 6, recorded, not fixed** ·
+  sovereign-cli-mesh/src/identity_handover.rs:107 (1c120f23d) reads a
+  parked mesh's join key with `.ok()`, so a permission error parks the
+  mesh in cw-rails with no key, the same as a mesh that never had one. The
+  file stays in the daemon's directory, so nothing is lost, but the
+  handover reports success. Telling NotFound from other errors and
+  refusing the rest is a behaviour change; it belongs to the next row that
+  touches the handover.
+- **ARCH 1, reviewed, no change** · commonwealth-rails/src/plane_seal.rs:103
+  `journal_and_roster` folds both `Err`s into "do not seal" without a
+  trace. Documented at :89-94 as deliberate (no work plane, no roster is
+  not a failure), and the reads that can fail after it still warn
+  (:156, :168), as they did in sovereign-mesh's rail_kv_pump.
+- **advisory lanes, recorded** · `hakari-verify` and `deletion-manifest
+  --verify` still fail as at auto-10 (p0-root-junk 323069 > 113934).
+  `size-gate` reports 75 keys grown (72 at auto-10);
+  commonwealth-rails::tests +3594 is the ring tests the flip moved in.
+  All advisory, outside this queue.
