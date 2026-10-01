@@ -91,6 +91,7 @@ Everything below this heading is cleanup, tooling and lost coverage: second copi
   - the atlas commands forked between sovereign-cli-llm atlas_cmd (budget.rs, status.rs) and sovereign-pipeline enrich_cmd and sovereign-enrichment-build (280, 64, 64).
   - bench: sovereign-cli-bench bench_cmd/uap.rs vs sovereign-pipeline bench_atlas.rs (84); bench_cmd's five judges vs sovereign-cli-llm judge_replay.rs (99).
   - sovereign-cli project_registry.rs vs sovereign-cli-dev project_cmd/mod.rs (82); sovereign-agent-bench runners/shared.rs vs sovereign-tdd shared/apply.rs (86); sovereign-recipe-author write_structured.rs vs sovereign-workflow-host author.rs (78); sovereign-contracts daemon_wire/workflows.rs vs sovereign-desktop workflow_commands.rs vs sovereign-workflow progress.rs (66); sovereign-daemon routes_internal/pipeline_pause.rs vs sovereign-pipeline pipeline_cmd.rs (60).
+  - the two daemon-adjacent families phase-b's f11 did not take (f11 landed at 88256d21b, clone count 14,054 -> 13,826): sovereign-cli-base help.rs vs sovereign-daemon daemon_cmd/help.rs (114), commonwealth-discovery membership.rs vs sovereign-daemon double/mod.rs (60, a cross-package copy into a test double).
   - the 140 families under 60 lines: census, then the same rule.
   - Each collapse is its own commit, behaviour preserved, and banks its drop with `clone-gate --tighten`. A copy that must stay (a lift would otherwise take a new edge) is named here with the edge it avoids, and is a phase-d question.
   - trial: NONE.
