@@ -168,6 +168,7 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
     // A's roster contains only A — that's fine, only B needs to know
     // about A for fan-out to work.
     let seed_a = sovereign_daemon::state::FabricSeed {
+        peer_transport: sovereign_daemon::double::address_transport(),
         membership: Some(common::roster(
             "fanout-test",
             vec![common::peer_row(

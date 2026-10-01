@@ -742,7 +742,7 @@ pub fn fold_coverage_for(
 pub(crate) async fn fold_now(
     app_state: &crate::state::AppState,
 ) -> Option<(
-    Arc<dyn sovereign_mesh::rail_port::RingRailPort>,
+    Arc<dyn crate::rail_port::RingRailPort>,
     WorkProjection,
     ActorKey,
     u64,

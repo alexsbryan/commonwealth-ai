@@ -24,7 +24,7 @@ async fn an_app_seals_through_the_append_door_and_the_journal_shrinks() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let post = |body: serde_json::Value| {

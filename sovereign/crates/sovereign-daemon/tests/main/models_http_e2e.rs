@@ -80,6 +80,7 @@ fn empty_model_info(id: u128, name: &str) -> ModelInfo {
 /// is its only member.
 fn build_roster(self_id: NodeId) -> FabricSeed {
     FabricSeed {
+        peer_transport: sovereign_daemon::double::address_transport(),
         membership: Some(common::roster(
             "models-http test",
             vec![member(self_id, "self")],

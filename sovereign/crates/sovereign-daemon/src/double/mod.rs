@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use axum::Router;
 
 use kernel_types::{NodeId, NodePubkey};
-use mesh_reach::PeerContact;
+use mesh_reach::{PeerContact, PeerEndpoint, PeerTransport, TrafficClass};
 use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
 use oicp_types::FederatedMeshDescriptor;
 use sovereign_contracts::daemon_wire::mesh::MemberStatus;
@@ -87,8 +87,8 @@ pub fn keyed_member(id: NodeId, name: &str, key: [u8; 32]) -> MembershipEntry<Pe
 }
 
 /// A roster row for `id` in `status`, advertising `capabilities`, dialled at
-/// `addresses` — the default seed's `IpTransport` dials them directly, as a
-/// test's bound routers need.
+/// `addresses` — [`AddressTransport`] dials them directly, as a test's bound
+/// routers need.
 pub fn peer_row(
     id: NodeId,
     name: &str,
@@ -171,6 +171,36 @@ pub fn roster(
     members: Vec<MembershipEntry<PeerContact>>,
 ) -> Arc<dyn MembershipReader<Dial = PeerContact>> {
     Arc::new(StaticRoster::new(name, members))
+}
+
+/// A transport that dials each roster row's `addresses` verbatim, as
+/// `http://<addr>` — what a test's bound routers need. A seed's default
+/// transport resolves no peer (`crate::fabric::TransportReader`'s default,
+/// svrn composed with no mesh), and a production node reaches peers through
+/// cw-rails' reach door, so this exists for tests only.
+#[derive(Debug, Default)]
+pub struct AddressTransport;
+
+#[async_trait]
+impl PeerTransport for AddressTransport {
+    fn name(&self) -> &'static str {
+        "addresses"
+    }
+
+    async fn endpoints(&self, peer: &PeerContact, _class: TrafficClass) -> Vec<PeerEndpoint> {
+        peer.addresses
+            .iter()
+            .map(|addr| PeerEndpoint {
+                base_url: format!("http://{addr}"),
+                label: format!("addr:{addr}"),
+            })
+            .collect()
+    }
+}
+
+/// [`AddressTransport`] as the reader a `FabricSeed` takes.
+pub fn address_transport() -> crate::fabric::TransportReader {
+    crate::fabric::TransportReader::new(Arc::new(AddressTransport))
 }
 
 /// Hex-encode a `NodeId` for the `X-Node-Id` header. 32 hex chars,

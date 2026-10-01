@@ -34,8 +34,13 @@ use kernel_types::NodeId;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use sovereign_grants::Scope;
-use sovereign_mesh::rail_port::LocalRingRail;
 use tower::ServiceExt;
+
+#[allow(dead_code)]
+#[path = "../main/common/work_rails.rs"]
+mod work_rails;
+
+use work_rails::WorkRails;
 
 const LOOPBACK: &str = "127.0.0.1:55001";
 const LAN_PEER: &str = "192.168.1.50:44444";
@@ -114,22 +119,24 @@ fn attest_door(key: &SigningKey) -> String {
     format!("http://{addr}")
 }
 
-/// A daemon with ring storage under `root`, signing as `key`, and a roster
-/// that says that key is Alex. Its door binds guest sessions the default way:
+/// A daemon whose ring rail is a real cw-rails on `root`, signing as `key`,
+/// and a roster that says that key is Alex. A second state on the same root
+/// reads the same journals, as a restarted daemon would. Its door binds guest sessions the default way:
 /// a name claimed on one of this wall's links is the same person on the next.
-fn state_with_rail(root: &std::path::Path, key: &SigningKey) -> AppState {
+async fn state_with_rail(root: &std::path::Path, key: &SigningKey) -> AppState {
     state_with_rail_sessions(
         root,
         key,
         sovereign_grants::GuestSessionBinding::Door,
         Default::default(),
     )
+    .await
 }
 
 /// [`state_with_rail`] on a wall whose owner DECLARED `pages` — what a wall
 /// grant is scoped by. A test that mints `Scope::Wall` against a state with no
 /// registry is testing a door with nothing on it.
-fn state_with_wall(
+async fn state_with_wall(
     root: &std::path::Path,
     key: &SigningKey,
     pages: &[(&str, sovereign_core::guest_pages::GuestPage)],
@@ -147,43 +154,41 @@ fn state_with_wall(
             Default::default(),
         ),
     )
+    .await
 }
 
 /// [`state_with_rail`] with the session binding named — the `[daemon]
 /// guest_sessions` knob, so both settings are driven by a test.
-fn state_with_rail_sessions(
+async fn state_with_rail_sessions(
     root: &std::path::Path,
     key: &SigningKey,
     sessions: sovereign_grants::GuestSessionBinding,
     pages: sovereign_daemon::guest_door::GuestPages,
 ) -> AppState {
-    state_with_rail_attested_by(root, key, key, sessions, pages)
+    state_with_rail_attested_by(root, key, key, sessions, pages).await
 }
 
 /// [`state_with_rail_sessions`] whose guest door attests with `attest_key`
 /// rather than the rail's own key — a door the roster may not admit.
-fn state_with_rail_attested_by(
+async fn state_with_rail_attested_by(
     root: &std::path::Path,
     key: &SigningKey,
     attest_key: &SigningKey,
     sessions: sovereign_grants::GuestSessionBinding,
     pages: sovereign_daemon::guest_door::GuestPages,
 ) -> AppState {
-    let rail = LocalRingRail::new(root, Arc::new(key.clone()));
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
     members.insert(
         Person::from("bo"),
         vec!["bo-has-not-joined-yet".to_string()],
     );
-    rail.inner()
-        .journal(NS)
-        .unwrap()
-        .set_roster(&Roster::new(members))
-        .unwrap();
+    let rails = Arc::new(
+        WorkRails::spawn_keyed(Some(root), Some(key), &[(NS, &Roster::new(members))], "").await,
+    );
     bare_state_with_seed(
         sovereign_daemon::state::FabricSeed {
-            ring_rail: Some(Arc::new(rail)),
+            ring_rail: Some(rails.ring_rail()),
             ..Default::default()
         },
         sessions,
@@ -265,7 +270,7 @@ async fn a_ring_app_appends_an_act_and_reads_it_back_attributed_to_a_person() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
 
@@ -316,7 +321,7 @@ async fn the_journal_outlives_the_state_that_wrote_it() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     for _ in 0..2 {
         let state = with_guest(
-            state_with_rail(dir.path(), &key),
+            state_with_rail(dir.path(), &key).await,
             vec![Scope::Rails(NS.into())],
         );
         let (status, body) = call(
@@ -333,7 +338,7 @@ async fn the_journal_outlives_the_state_that_wrote_it() {
         assert_eq!(status, StatusCode::OK, "{body}");
     }
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (_, log) = call(
@@ -355,7 +360,7 @@ async fn an_app_cannot_reach_another_apps_namespace() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (status, body) = call(
@@ -386,7 +391,7 @@ async fn the_rail_token_is_refused_on_every_privileged_path() {
         "/v1/chat/completions",
     ] {
         let state = with_guest(
-            state_with_rail(dir.path(), &key),
+            state_with_rail(dir.path(), &key).await,
             vec![Scope::Rails(NS.into())],
         );
         let (status, _) = call(
@@ -407,7 +412,7 @@ async fn a_revoked_rail_grant_fails_closed_on_the_next_call() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (before, _) = call(
@@ -454,7 +459,7 @@ async fn a_payload_with_no_canonical_form_is_refused_in_a_sentence() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (status, body) = call(
@@ -496,7 +501,7 @@ async fn an_act_the_app_would_refuse_is_still_the_apps_problem_not_the_rails() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (status, body) = call(
@@ -530,7 +535,7 @@ async fn an_act_the_app_would_refuse_is_still_the_apps_problem_not_the_rails() {
 async fn an_operator_names_the_namespace_and_is_refused_without_one() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let state = state_with_rail(dir.path(), &key);
+    let state = state_with_rail(dir.path(), &key).await;
 
     let (named, body) = call(
         state.clone(),
@@ -556,7 +561,7 @@ async fn an_operator_names_the_namespace_and_is_refused_without_one() {
 async fn a_namespace_that_is_a_path_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let state = state_with_rail(dir.path(), &key);
+    let state = state_with_rail(dir.path(), &key).await;
     let (status, body) = call(
         state,
         request(

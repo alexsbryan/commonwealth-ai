@@ -88,6 +88,9 @@ pub mod documents_http;
 pub mod double;
 pub mod enrich_http;
 pub mod features_http;
+/// Fabric's part of the node's state (DC §4.2), moved from sovereign-mesh
+/// (pb-mesh-exit-mesh): the daemon is its only holder.
+pub mod fabric;
 /// The `ingest:v1` `JobExecutor` — one corpus partition per unit
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod foreground_post;
@@ -140,6 +143,9 @@ pub mod published_origins;
 /// The ring rail's listener — the client router's fourth, untrusted-loopback
 /// bind (moved from sovereign-mesh).
 pub mod rail_bind;
+/// The ring rail's port, moved from sovereign-mesh beside its one
+/// implementation, `rails_client::RailsRingRail` (pb-mesh-exit-mesh).
+pub mod rail_port;
 pub mod rails_client;
 pub mod reading_http;
 pub mod recipe_http;

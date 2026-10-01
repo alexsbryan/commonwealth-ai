@@ -69,10 +69,10 @@ async fn the_wall_bearer_reaches_the_page_and_the_rail_on_a_and_nothing_else() {
     let dir_b = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
-        state_with_rail(dir_a.path(), &key),
+        state_with_rail(dir_a.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
-    let b = state_with_rail(dir_b.path(), &key);
+    let b = state_with_rail(dir_b.path(), &key).await;
     let (_root, page) = page_dir();
 
     // The page, with no bearer: a browser navigating cannot send one, and the
@@ -239,7 +239,7 @@ async fn the_door_mounts_no_operator_route() {
 async fn an_expired_wall_bearer_is_refused_at_the_door() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let state = state_with_rail(dir.path(), &key);
+    let state = state_with_rail(dir.path(), &key).await;
     let now = sovereign_time::unix_millis();
     // Issued ten seconds ago for one second.
     state.inner.node.guest_grants.issue(
@@ -265,7 +265,7 @@ async fn an_expired_wall_bearer_is_refused_at_the_door() {
 async fn the_door_opens_at_the_first_rail_grant_and_closes_at_the_last_expiry() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let state = state_with_rail(dir.path(), &key);
+    let state = state_with_rail(dir.path(), &key).await;
     let addr = {
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         l.local_addr().unwrap()
@@ -342,7 +342,7 @@ async fn the_door_claims_a_name_once_and_refuses_the_three_collisions() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (_root, page) = page_dir();
@@ -416,7 +416,7 @@ async fn the_door_stamps_the_guest_and_the_page_cannot() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (_root, page) = page_dir();
@@ -455,7 +455,8 @@ async fn a_door_the_roster_does_not_name_is_refused_by_name() {
             &stranger,
             sovereign_grants::GuestSessionBinding::Door,
             Default::default(),
-        ),
+        )
+        .await,
         vec![Scope::Rails(NS.into())],
     );
     let (_root, page) = page_dir();
@@ -518,23 +519,16 @@ const DOC_TOKEN: &str = "1a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4
 const DOC_NS: &str = "ring-doc";
 
 /// Put a second app's namespace on the same wall: a roster it can admit
-/// against, and a live grant of its own.
-fn second_app(state: &AppState, key: &SigningKey) {
+/// against, written where the wall's cw-rails (on `root`) reads it, and a
+/// live grant of its own.
+fn second_app(state: &AppState, root: &std::path::Path, key: &SigningKey) {
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
     members.insert(
         Person::from("bo"),
         vec!["bo-has-not-joined-yet".to_string()],
     );
-    state
-        .ring_rail()
-        .expect("a rail")
-        .as_local()
-        .expect("the test rail is the local implementation")
-        .journal(DOC_NS)
-        .unwrap()
-        .set_roster(&Roster::new(members))
-        .unwrap();
+    work_rails::write_roster(root, DOC_NS, &Roster::new(members));
     state.inner.node.guest_grants.issue(
         DOC_TOKEN,
         vec![Scope::Rails(DOC_NS.into())],
@@ -595,10 +589,10 @@ async fn a_name_claimed_on_one_app_is_the_same_person_on_the_next() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
-    second_app(&a, &key);
+    second_app(&a, dir.path(), &key);
     let (_root, page) = page_dir();
 
     let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
@@ -669,10 +663,11 @@ async fn under_the_strict_binding_the_second_app_asks_again() {
             &key,
             sovereign_grants::GuestSessionBinding::Grant,
             Default::default(),
-        ),
+        )
+        .await,
         vec![Scope::Rails(NS.into())],
     );
-    second_app(&a, &key);
+    second_app(&a, dir.path(), &key);
     let (_root, page) = page_dir();
 
     let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
@@ -732,10 +727,11 @@ async fn one_wall_bearer_reaches_every_declared_app_and_is_refused_the_rest() {
                     sovereign_core::guest_pages::GuestPage::Open("/srv/c".into()),
                 ),
             ],
-        ),
+        )
+        .await,
         vec![Scope::Wall],
     );
-    second_app(&a, &key);
+    second_app(&a, dir.path(), &key);
     let (_root, page) = page_dir();
     let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
 

@@ -284,6 +284,7 @@ async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
         None,
         Some(gauge),
         sovereign_daemon::state::FabricSeed {
+            peer_transport: sovereign_daemon::double::address_transport(),
             membership: Some(roster("inbound-load-test", vec![me])),
             ..Default::default()
         },

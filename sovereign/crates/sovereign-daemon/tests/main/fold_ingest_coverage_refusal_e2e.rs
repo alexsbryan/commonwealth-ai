@@ -55,7 +55,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use crate::common::work_rails::WORK_NAMESPACE;
+use crate::common::work_rails::{WorkRails, WORK_NAMESPACE};
 use commonwealth_rail_core::SigningKey;
 use corpus_index::corpus::Corpus;
 use corpus_index::index::CorpusIndex;
@@ -64,7 +64,6 @@ use sovereign_daemon::state::AppState;
 use sovereign_grants::auto_recover::{
     merge_from_fold_coverage, try_recover_stranded_partitions, RecoveryOutcome,
 };
-use sovereign_mesh::rail_port::LocalRingRail;
 use tempfile::TempDir;
 
 use crate::common::corpus_at;
@@ -360,31 +359,30 @@ impl tracing_subscriber::fmt::MakeWriter<'_> for BufWriter {
 /// other reading in this campaign uses.
 ///
 /// The ops are `terminal_handoff_ops`' verbatim, ingested the way a peer's
-/// ops arrive (`RingJournal::ingest_all`, no re-signing), and the roster is
-/// the fixture ring written to the namespace's `roster.json`. The signer is
-/// `key(1)` because `fold_coverage_for` compares the handoff's submitter
-/// against `rail.signer().actor()`: this node has to BE the leader for the
-/// arm under test to be reached at all.
-/// Build the fixture rail — the signer is `key(1)` because `fold_coverage_for`
-/// compares the handoff's submitter against `rail.signer().actor()`: this node
-/// has to BE the leader for the arm under test to be reached at all — and
-/// return it as a construction seed, since the rail is a construction argument
-/// now (DC §4.2 "Construction is staged, and parts are total").
-async fn fold_seed(
-    rail_dir: &std::path::Path,
-    corpus: &str,
-) -> sovereign_daemon::state::FabricSeed {
+/// ops arrive (`journal_ingest_all`, no re-signing), and the roster is the
+/// fixture ring written to the namespace's `roster.json`. The rail is a real
+/// cw-rails signing as `key(1)`, because `fold_coverage_for` compares the
+/// handoff's submitter against the rail's `actor()`: this node has to BE the
+/// leader for the arm under test to be reached at all. Returned as a
+/// construction seed, since the rail is a construction argument now (DC §4.2
+/// "Construction is staged, and parts are total").
+async fn fold_seed(corpus: &str) -> sovereign_daemon::state::FabricSeed {
     let signer: SigningKey = key(1);
-    let local = LocalRingRail::new(rail_dir, Arc::new(signer));
-    let journal = local
-        .inner()
-        .journal(WORK_NAMESPACE)
-        .expect("the work journal");
-    journal.set_roster(&ring()).expect("write the roster");
-    // Sealed by a cw-rails of the same ring; the daemon links no rail.
-    let rails = crate::fold_ingest_cross_node_merge_e2e::work_rails().await;
+    let rails = Arc::new(
+        WorkRails::spawn_keyed(
+            None,
+            Some(&signer),
+            &[(WORK_NAMESPACE, &ring())],
+            "",
+        )
+        .await,
+    );
     let (ops, _handoff) = terminal_handoff_ops(&rails, corpus).await;
-    let appended = journal.ingest_all(&ops).expect("ingest the fixture ops");
+    let rail = rails.ring_rail();
+    let appended = rail
+        .journal_ingest_all(WORK_NAMESPACE, &ops)
+        .await
+        .expect("ingest the fixture ops");
     assert_eq!(
         appended,
         ops.len(),
@@ -392,7 +390,7 @@ async fn fold_seed(
          different handoff than the one this test is about",
     );
     sovereign_daemon::state::FabricSeed {
-        ring_rail: Some(Arc::new(local)),
+        ring_rail: Some(rail),
         ..Default::default()
     }
 }
@@ -450,8 +448,7 @@ async fn the_folds_refusal_is_final_and_the_disk_path_never_runs() {
     // A port nothing serves, for the loop's own `corpus_collaborate` POST.
     let daemon_port = dead_peer_addr().await.port();
 
-    let rail_home = TempDir::new().expect("rail tempdir");
-    let seed = fold_seed(rail_home.path(), CORPUS).await;
+    let seed = fold_seed(CORPUS).await;
     let (_home, _dir, state, leader) = leader_alone_with_seed(CORPUS, seed).await;
 
     let buf = Arc::new(Mutex::new(Vec::new()));

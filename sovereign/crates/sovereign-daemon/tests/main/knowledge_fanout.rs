@@ -177,6 +177,7 @@ fn make_state(
         vec![],
     );
     let fabric = sovereign_daemon::state::FabricSeed {
+        peer_transport: sovereign_daemon::double::address_transport(),
         membership: Some(crate::common::roster("Test", vec![self_record, peer])),
         ..Default::default()
     };

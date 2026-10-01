@@ -120,6 +120,8 @@ mod openai_wire_fidelity;
 mod port_config;
 #[path = "main/rails_base_config.rs"]
 mod rails_base_config;
+#[path = "main/rails_ring_rail_wire.rs"]
+mod rails_ring_rail_wire;
 #[path = "main/reading_http_e2e.rs"]
 mod reading_http_e2e;
 #[path = "main/recipe_surface_e2e.rs"]

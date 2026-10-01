@@ -22,11 +22,6 @@
 //! the host observes them through readers.
 
 pub mod capabilities;
-/// Fabric's own part of the node's state, moved here from `sovereign-api`'s
-/// `state` at domains `dm-daemon-api-edge` (b): DC §4.2 names `sovereign-mesh`
-/// as its home, and the three loops take a handle to it rather than the
-/// daemon's `AppState` (which this crate may not name).
-pub mod fabric;
 /// Routing decision records — Phase 0 (P1/P2) of
 /// `docs/specs/SCHEDULER_QUALITY.md`. One structured record per
 /// routing decision (full candidate set, every scorer input stamped
@@ -72,7 +67,6 @@ pub mod persist;
 /// capture as well as from the live path.
 pub use sovereign_scheduler::predicted_time; // shim: moved by domains REVIEW-build-sched-move // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod rail_kv_pump;
-pub mod rail_port;
 pub mod ring_checkpoint;
 pub use understanding_vocab::reading_formatters; // shim: moved by domains dm-mesh-move-reading-formatters // shim: moved by domains REVIEW-build-mesh-workbench-deferred
 pub mod ring_roster;

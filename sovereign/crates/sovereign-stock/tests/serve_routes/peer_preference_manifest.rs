@@ -61,6 +61,7 @@ fn build_state(self_id: NodeId) -> AppState {
         None,
         None,
         FabricSeed {
+            peer_transport: sovereign_daemon::double::address_transport(),
             membership: Some(roster("preference-test", vec![member(self_id, "self")])),
             ..Default::default()
         },

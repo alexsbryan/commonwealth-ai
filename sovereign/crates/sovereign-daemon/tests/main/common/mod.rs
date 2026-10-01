@@ -62,6 +62,7 @@ pub fn roster_seed(
 ) -> (Arc<StaticRoster>, sovereign_daemon::state::FabricSeed) {
     let owned = Arc::new(StaticRoster::new(mesh_name, vec![member(self_id, "self")]));
     let seed = sovereign_daemon::state::FabricSeed {
+        peer_transport: sovereign_daemon::double::address_transport(),
         membership: Some(owned.clone()),
         ..Default::default()
     };
@@ -79,6 +80,7 @@ pub fn state_over_roster(
         None,
         None,
         sovereign_daemon::state::FabricSeed {
+            peer_transport: sovereign_daemon::double::address_transport(),
             membership: Some(roster(mesh_name, rows)),
             ..Default::default()
         },

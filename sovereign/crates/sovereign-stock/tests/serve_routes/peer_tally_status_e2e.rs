@@ -128,6 +128,7 @@ fn build_state(peer_name: &str) -> (AppState, NodeId) {
         None,
         None,
         FabricSeed {
+            peer_transport: sovereign_daemon::double::address_transport(),
             membership: Some(roster("tally-e2e", rows)),
             ..Default::default()
         },

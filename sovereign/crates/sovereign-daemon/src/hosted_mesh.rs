@@ -65,7 +65,7 @@ impl HostedMesh {
 
 /// The transport of a svrn composed with no mesh: no peer resolves.
 #[derive(Debug)]
-struct NoReach;
+pub(crate) struct NoReach;
 
 #[async_trait]
 impl PeerTransport for NoReach {

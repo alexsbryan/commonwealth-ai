@@ -27,7 +27,7 @@ use sovereign_contracts::daemon_wire::MemberStatus;
 use sovereign_contracts::membership::{MembershipEntry, MembershipReader};
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{test_app_state_with_seed, AppState};
-use sovereign_mesh::fabric::FabricSeed;
+use sovereign_daemon::state::FabricSeed;
 use tower::ServiceExt;
 
 /// The files that may still read `fabric.mesh`, and how many lines each:
@@ -132,6 +132,7 @@ fn entry(
 /// and whose membership port is `double`.
 fn state_over(double: RosterDouble) -> AppState {
     test_app_state_with_seed(FabricSeed {
+        peer_transport: sovereign_daemon::double::address_transport(),
         membership: Some(Arc::new(double)),
         ..Default::default()
     })

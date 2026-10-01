@@ -14,14 +14,14 @@
 //! implementation ([`RailsRingRail`]): the journals moved to the rails
 //! daemon, so every rail read and write the round, the pump, the donor and
 //! the rail routes make goes over `cw-rails`' `/v1/rail/*` doors through
-//! [`sovereign_mesh::rail_port::RingRailPort`]. A rail that is not reachable
+//! [`crate::rail_port::RingRailPort`]. A rail that is not reachable
 //! is an ABSENCE every caller already handles (the port returns `RailError`),
 //! never an empty journal.
 
 use std::sync::OnceLock;
 
 use kernel_types::NodePubkey;
-use sovereign_mesh::rail_port::{RailFut, RingRailPort};
+use crate::rail_port::{RailFut, RingRailPort};
 
 /// The typed ledger ports' dialing implementation (fp-78).
 pub mod ledger;
@@ -648,7 +648,3 @@ impl RingRailPort for RailsRingRail {
         Box::pin(async move { dial_json(&base, "/v1/work/projection").await })
     }
 }
-
-#[cfg(test)]
-#[path = "rails_client/tests.rs"]
-mod tests;

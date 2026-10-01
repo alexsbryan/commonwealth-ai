@@ -1,71 +1,66 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! What the dialing rail puts on the wire for a guest's append (decision
-//! five-programs-34), against a stand-in for cw-rails' append door that
-//! records each body and then does what the door does with it.
+//! five-programs-34), against a recorder in front of a real cw-rails' append
+//! door: it keeps each body and forwards it, so the door does what it does.
+//! Moved from `src/rails_client/tests.rs` with the port (pb-mesh-exit-mesh):
+//! the journal behind the door is cw-rails', not a local one.
 
 use std::sync::{Arc, Mutex};
 
+use axum::extract::RawQuery;
 use axum::http::StatusCode;
 use axum::Json;
 use commonwealth_rail_core::{
     AttestRefusal, GuestAttestation, Payload, Person, RailAct, RailError, RingSigner, Roster,
     SigningKey,
 };
-use sovereign_mesh::rail_port::{LocalRingRail, RingRailPort};
+use sovereign_daemon::rail_port::RingRailPort;
+use sovereign_daemon::rails_client::RailsRingRail;
 
-use super::RailsRingRail;
+use crate::common::work_rails::WorkRails;
 
 const NS: &str = "house";
 
 type Seen = Arc<Mutex<Vec<serde_json::Value>>>;
 
-/// A rail whose `house` roster names key 1 as alex, and the base URL of an
-/// append door over it.
-async fn door(root: &std::path::Path, seen: Seen) -> (Arc<LocalRingRail>, String) {
+/// A cw-rails signing as key 1, whose `house` roster names key 1 as alex,
+/// and the base URL of a recorder in front of its append door. The rail it
+/// returns dials cw-rails directly.
+async fn door(seen: Seen) -> (Arc<dyn RingRailPort>, String) {
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let rail = Arc::new(LocalRingRail::new(root, Arc::new(key.clone())));
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
-    rail.inner()
-        .journal(NS)
-        .unwrap()
-        .set_roster(&Roster::new(members))
-        .unwrap();
-    let served = Arc::clone(&rail);
+    let rails =
+        Arc::new(WorkRails::spawn_keyed(None, Some(&key), &[(NS, &Roster::new(members))], "").await);
+    let upstream = format!("{}/v1/rail/append", rails.base);
     let app = axum::Router::new().route(
         "/v1/rail/append",
-        axum::routing::post(move |Json(body): Json<serde_json::Value>| {
-            let rail = Arc::clone(&served);
-            let seen = Arc::clone(&seen);
-            async move {
-                seen.lock().unwrap().push(body.clone());
-                let roster = rail.roster(NS).await.unwrap();
-                let attestation = body
-                    .get("attestation")
-                    .map(|v| serde_json::from_value::<GuestAttestation>(v.clone()).unwrap());
-                let act = RailAct::from_json(body).unwrap();
-                let appended = match &attestation {
-                    Some(a) => rail.journal_append_attested(NS, act, &roster, a).await,
-                    None => rail.journal_append(NS, act, &roster).await,
+        axum::routing::post(
+            move |RawQuery(query): RawQuery, Json(body): Json<serde_json::Value>| {
+                let seen = Arc::clone(&seen);
+                let url = match query {
+                    Some(q) => format!("{upstream}?{q}"),
+                    None => upstream.clone(),
                 };
-                match appended {
-                    Ok(op) => (StatusCode::OK, Json(serde_json::json!({ "op": op }))),
-                    Err(RailError::AttestRefused(r)) => (
-                        StatusCode::FORBIDDEN,
-                        Json(serde_json::json!({ "error": r.to_string(), "kind": r.name() })),
-                    ),
-                    Err(e) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({ "error": e.to_string() })),
-                    ),
+                async move {
+                    seen.lock().unwrap().push(body.clone());
+                    let answer = reqwest::Client::new()
+                        .post(url)
+                        .json(&body)
+                        .send()
+                        .await
+                        .expect("cw-rails' append door answers");
+                    let status = StatusCode::from_u16(answer.status().as_u16()).unwrap();
+                    let json: serde_json::Value = answer.json().await.expect("a JSON answer");
+                    (status, Json(json))
                 }
-            }
-        }),
+            },
+        ),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    (rail, format!("http://{addr}"))
+    (rails.ring_rail(), format!("http://{addr}"))
 }
 
 fn act() -> RailAct {
@@ -80,9 +75,8 @@ fn in_an_hour() -> i64 {
 
 #[tokio::test]
 async fn a_stamped_append_reaches_rails_with_an_attestation_that_verifies() {
-    let dir = tempfile::tempdir().unwrap();
     let seen = Seen::default();
-    let (local, base) = door(dir.path(), Arc::clone(&seen)).await;
+    let (local, base) = door(Arc::clone(&seen)).await;
     let roster = local.roster(NS).await.unwrap();
     let signed =
         GuestAttestation::sign(&SigningKey::from_bytes(&[1u8; 32]), "ana", NS, in_an_hour());
@@ -102,9 +96,8 @@ async fn a_stamped_append_reaches_rails_with_an_attestation_that_verifies() {
 
 #[tokio::test]
 async fn an_unstamped_append_sends_no_attestation() {
-    let dir = tempfile::tempdir().unwrap();
     let seen = Seen::default();
-    let (local, base) = door(dir.path(), Arc::clone(&seen)).await;
+    let (local, base) = door(Arc::clone(&seen)).await;
     let roster = local.roster(NS).await.unwrap();
 
     let op = RailsRingRail::new(base)
@@ -121,8 +114,7 @@ async fn an_unstamped_append_sends_no_attestation() {
 /// it to the caller verbatim instead of a 422 of prose.
 #[tokio::test]
 async fn a_refused_attestation_comes_back_typed() {
-    let dir = tempfile::tempdir().unwrap();
-    let (local, base) = door(dir.path(), Seen::default()).await;
+    let (local, base) = door(Seen::default()).await;
     let roster = local.roster(NS).await.unwrap();
     let stranger = GuestAttestation::sign(
         &SigningKey::from_bytes(&[42u8; 32]),

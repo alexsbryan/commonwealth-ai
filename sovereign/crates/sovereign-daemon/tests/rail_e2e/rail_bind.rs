@@ -36,7 +36,7 @@ async fn on_the_rail_bind_a_loopback_caller_without_a_grant_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
 
@@ -85,7 +85,7 @@ async fn the_rail_bind_serves_nothing_but_the_rail() {
     ];
     for path in elsewhere {
         let state = with_guest(
-            state_with_rail(dir.path(), &key),
+            state_with_rail(dir.path(), &key).await,
             vec![Scope::Rails(NS.into())],
         );
         let (scoped, _) = call_rail(
@@ -115,7 +115,7 @@ async fn the_rail_bind_serves_nothing_but_the_rail() {
     // spend the afternoon on a credential that was never the problem.
     for bearer in [GUEST_TOKEN, TOKEN] {
         let state = with_guest(
-            state_with_rail(dir.path(), &key),
+            state_with_rail(dir.path(), &key).await,
             vec![Scope::Rails(NS.into())],
         );
         let (status, _) = call_rail(
@@ -129,7 +129,7 @@ async fn the_rail_bind_serves_nothing_but_the_rail() {
     // And the rail itself is served on this bind, so the assertions above are
     // not passing because the whole router is empty.
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (ok, _) = call_rail(

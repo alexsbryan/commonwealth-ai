@@ -30,15 +30,13 @@ pub mod node;
 pub mod serving;
 pub mod store;
 
-// Fabric's part moved to its owner, `sovereign-mesh`, at domains
-// `dm-daemon-api-edge` (b) — DC §4.2 names `sovereign-mesh` as its home, and
-// `sovereign-mesh` may not name this crate's `AppState`
-// (`[[forbid]] sovereign-mesh -> sovereign-daemon`), so the part had to be in
-// mesh before the three loops could stop taking `AppState`. Re-exported here
-// so the daemon and the test harnesses name them at `state::*` (the same
-// surface the constructors take).
-pub use sovereign_mesh::fabric;
-pub use sovereign_mesh::fabric::{FabricPart, FabricSeed, TransportReader};
+// Fabric's part lives in `crate::fabric` since pb-mesh-exit-mesh (it was
+// sovereign-mesh's from domains `dm-daemon-api-edge` (b), while the mesh
+// loops that took it still ran in this process). Re-exported here so the
+// daemon and the test harnesses name them at `state::*` (the same surface
+// the constructors take).
+pub use crate::fabric;
+pub use crate::fabric::{FabricPart, FabricSeed, TransportReader};
 // Serving's construction seed, its readers and the two tally types, for the
 // same reason.
 pub use serving::{
@@ -452,7 +450,7 @@ impl AppState {
     }
 
     /// The ring rail's storage, or `None` if the daemon has none.
-    pub fn ring_rail(&self) -> Option<Arc<dyn sovereign_mesh::rail_port::RingRailPort>> {
+    pub fn ring_rail(&self) -> Option<Arc<dyn crate::rail_port::RingRailPort>> {
         self.inner.fabric.ring_rail.clone()
     }
 

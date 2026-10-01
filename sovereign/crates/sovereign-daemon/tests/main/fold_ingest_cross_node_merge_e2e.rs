@@ -646,6 +646,7 @@ pub(crate) fn node_state_with_seed(
         ));
     }
     let seed = sovereign_daemon::state::FabricSeed {
+        peer_transport: sovereign_daemon::double::address_transport(),
         membership: Some(common::roster("cw-lift 5g part 2", rows)),
         ..seed
     };

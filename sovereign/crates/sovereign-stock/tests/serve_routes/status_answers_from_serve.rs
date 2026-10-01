@@ -80,6 +80,7 @@ fn node_over(adapter: Arc<dyn LocalInferenceService>) -> AppState {
         None,
         None,
         FabricSeed {
+            peer_transport: sovereign_daemon::double::address_transport(),
             membership: Some(roster("status-from-serve", vec![me])),
             ..Default::default()
         },

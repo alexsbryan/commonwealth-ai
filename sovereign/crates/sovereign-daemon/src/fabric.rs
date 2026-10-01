@@ -7,14 +7,16 @@
 //! and every peer is reached through the transport the distribution composed.
 //! Nothing here holds a key, a roster copy, a liveness map or a gossip clock;
 //! gossip, admission and the ring round are cw-rails'.
+//!
+//! Moved from sovereign-mesh (pb-mesh-exit-mesh): the daemon is its only
+//! holder, and every type it names is a leaf's or the daemon's own.
 
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 
-use commonwealth_core::ids::NodeId;
-
-use commonwealth_transport::{PeerContact, PeerTransport};
+use kernel_types::NodeId;
+use mesh_reach::{PeerContact, PeerTransport};
 use sovereign_contracts::identity::IdentityReader;
 use sovereign_contracts::membership::{MembershipReader, NoMembership};
 use sovereign_contracts::peer::ConvergenceRecord;
@@ -43,9 +45,12 @@ impl TransportReader {
     }
 }
 
+/// A reader nobody seeded resolves no peer — svrn composed with no mesh
+/// (`crate::hosted_mesh::MeshAccess::absent`), the transport beside the
+/// membership default's empty roster. A test that dials peers seeds its own.
 impl Default for TransportReader {
     fn default() -> Self {
-        Self::new(Arc::new(commonwealth_transport::IpTransport::default()))
+        Self::new(Arc::new(crate::hosted_mesh::NoReach))
     }
 }
 
@@ -94,10 +99,10 @@ pub struct FabricPart {
     /// rpc-server. Drives the additive `rpc_worker.iroh` flag on `/status`.
     pub rpc_iroh_accept: std::sync::atomic::AtomicBool,
     /// Concurrent **outbound** peer knowledge fan-out requests in flight from
-    /// this node. Maintained by `commonwealth_transport::fanout`'s guard,
+    /// this node. Maintained by `mesh_reach::fanout`'s guard,
     /// which holds this same `Arc`. Read via
     /// [`crate::state::AppState::fanout_inflight_count`].
-    pub fanout_inflight: commonwealth_transport::fanout::InflightGauge,
+    pub fanout_inflight: mesh_reach::fanout::InflightGauge,
     /// The notes-rail convergence recorder (order commons-fluency fix 9).
     /// `None` when the boot has no rails.
     pub convergence: Option<Arc<ConvergenceRecord>>,

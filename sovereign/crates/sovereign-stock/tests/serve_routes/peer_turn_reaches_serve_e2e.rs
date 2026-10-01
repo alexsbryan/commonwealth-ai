@@ -102,6 +102,7 @@ fn node_a(serve_base: String) -> (AppState, NodeId) {
         None,
         None,
         FabricSeed {
+            peer_transport: sovereign_daemon::double::address_transport(),
             membership: Some(roster("peer-to-serve", rows)),
             ..Default::default()
         },

@@ -176,7 +176,7 @@ pub struct EmbeddedDaemon {
     inference_provider: RwLock<Option<Arc<dyn InferenceProvider>>>,
     /// Fabric's part, held on the daemon once `start` builds it (DC §4.2
     /// "Construction is staged, and parts are total").
-    fabric: std::sync::RwLock<Option<Arc<sovereign_mesh::fabric::FabricPart>>>,
+    fabric: std::sync::RwLock<Option<Arc<crate::fabric::FabricPart>>>,
 }
 
 /// What became of the API listeners the serve task binds.
@@ -736,7 +736,7 @@ impl EmbeddedDaemon {
     /// answer while the daemon is `Stopped` read it here rather than through
     /// `AppStateInner.fabric`, which only exists while running (DC §4.1; DC
     /// §4.2 "Construction is staged, and parts are total").
-    pub fn fabric(&self) -> Option<Arc<sovereign_mesh::fabric::FabricPart>> {
+    pub fn fabric(&self) -> Option<Arc<crate::fabric::FabricPart>> {
         self.fabric
             .read()
             .unwrap_or_else(|e| e.into_inner())
@@ -1023,7 +1023,7 @@ impl EmbeddedDaemon {
         // signs with its own node key (its own data dir), and a line verifies
         // because rails joined the mesh as a member with that key — see
         // commonwealth-rails' `rails_and_the_daemon_sign_with_two_keys_under_one_person`.
-        let ring_rail: Option<Arc<dyn sovereign_mesh::rail_port::RingRailPort>> =
+        let ring_rail: Option<Arc<dyn crate::rail_port::RingRailPort>> =
             Some(Arc::new(crate::rails_client::RailsRingRail::new(
                 crate::rails_client::resolve_rails_base(&self.setup_config.read().await.daemon),
             )));
@@ -1127,7 +1127,7 @@ impl EmbeddedDaemon {
         // is staged, and parts are total"). The membership operations that
         // answer while the daemon is `Stopped` read this part rather than
         // `AppStateInner.fabric`.
-        let fabric = Arc::new(sovereign_mesh::fabric::FabricPart::new(
+        let fabric = Arc::new(crate::fabric::FabricPart::new(
             node_id,
             fabric_seed,
         ));

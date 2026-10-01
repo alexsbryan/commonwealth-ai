@@ -9,7 +9,6 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_rail_core::SigningKey;
 use sovereign_contracts::identity::IdentityReader;
 use sovereign_mesh::rail_kv_pump::*;
-use sovereign_mesh::rail_port::LocalRingRail;
 use sovereign_mesh::ring_roster::tests::{member, mesh_of, pubkey_of};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -50,12 +49,12 @@ async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {
         "me",
         Some(pubkey_of(&key)),
     )])));
-    let rail = LocalRingRail::new(dir.path(), Arc::new(key.clone()));
+    let rail = commonwealth_rail::RingRail::new(dir.path(), Arc::new(key.clone()));
 
     // The charset check lives in `derive_roster`, so a namespace the rail
     // would refuse to open cannot be installed either.
     sovereign_mesh::ring_roster::MeshRosterSource::install(
-        rail.inner(),
+        &rail,
         &mesh,
         &IdentityReader::new(me),
         Some(pubkey_of(&key)),
@@ -66,11 +65,10 @@ async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {
     for ns in DAEMON_OWN_NAMESPACES {
         assert!(seen.insert(*ns), "{ns} is declared twice");
         // The charset check: a namespace the rail would refuse to open.
-        rail.inner()
-            .journal(ns)
+        rail.journal(ns)
             .unwrap_or_else(|e| panic!("{ns}: {e}"));
         assert_eq!(
-            rail.inner().roster_origin(ns),
+            rail.roster_origin(ns),
             commonwealth_rail_core::RosterOrigin::Derived,
             "{ns} still reads a roster file"
         );
