@@ -586,7 +586,8 @@ def lift(lift_id: str, spec: dict, sandbox: Path, target: Path, keep: bool, sets
         raise Verdict("failed", f"the build reported success and produced no {binary}")
 
     rule("4. the package's own tests, in isolation")
-    rc, _ = cargo(["test", *spec.get("test", seeds_args(seeds))], sandbox, target, "test.log", r"^(error|test result|failures:)")
+    features = ["--features", ",".join(spec["test_features"])] if "test_features" in spec else []
+    rc, _ = cargo(["test", *spec.get("test", seeds_args(seeds) + features)], sandbox, target, "test.log", r"^(error|test result|failures:)")
     say(f"test: rc={rc}")
     if rc != 0:
         raise Verdict("failed", f"the lifted closure's own tests do not pass in isolation (see {sandbox}/test.log)")

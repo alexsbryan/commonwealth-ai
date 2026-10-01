@@ -13,6 +13,8 @@
 #            the package declares. Each must be a member of `package`.
 #   build    `cargo build` args; absent = `-p <seed>` for each seed.
 #   test     `cargo test` args; absent = `-p <seed>` for each seed.
+#   test_features  `--features` for that default, so the seed list stays
+#            the package's and is never restated here.
 #   binary   the built artifact the RUN step starts, relative to the target dir.
 #   carry    { ENV_VAR = "<repo-relative dir or file>" }: data the program ships,
 #            copied into the sandbox and named by ENV_VAR for the build, tests
@@ -64,6 +66,10 @@
 [lift.svrn]
 package = "svrn"
 build = ["-p", "sovereign-daemon", "--bin", "sovereign-daemon", "--features", "treesitter"]
+# The tests take the feature the build names: without it sovereign-daemon's
+# `process` (lib.rs, `#[cfg(feature = "treesitter")]`) is configured out and
+# its test target does not compile.
+test_features = ["sovereign-daemon/treesitter"]
 binary = "debug/sovereign-daemon"
 # The CLI contract sovereign-cli-shared's `manifest_path` fixes at compile time.
 carry = { SOVEREIGN_CLI_CONTRACT = "sovereign/docs/cli-contract.toml" }
