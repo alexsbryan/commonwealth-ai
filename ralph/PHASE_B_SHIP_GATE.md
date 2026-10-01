@@ -122,6 +122,11 @@ deleted (1c120f23d). Serve's own route is the one to check, in phase-c.
 
 ## Merge preparation: the operator's, after the gate
 
+- Re-register this repo with the deployed node's code watcher: `svrn project register` in the repo. The seat
+  unregistered it on 2026-10-01 at ~19:55Z (`svrn project unregister commonwealth-ai`): with three loops
+  committing, its SCIP rebuilds ran nearly back to back at 13-16 GB each (watch-commonwealth-ai-scip.log),
+  and host memory fell to 6-7 GB available. The index on disk keeps answering, unrefreshed, until then.
+
 - Re-derive the baselines at origin/main (AGENTS.md re-pin recipe; a file over its ceiling is split).
 - Correction commits for the two mis-subjected commits, e86a91f5a and f747b311c.
 - Remove the ATOS dangling links.
