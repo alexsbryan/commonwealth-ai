@@ -10,8 +10,9 @@
 //!
 //! Composing a guest link means the door's page path, the token, and — for a
 //! guest who shares no network with this machine — the node's own iroh dial
-//! string. That is one rule, and it lives in `sovereign_mesh::deep_link`
-//! (`wall_page_base` / `wall_https_link`). This app is an HTTP client of the
+//! string. That is one rule: the page decision is
+//! `sovereign_contracts::guest_pages::wall_page` and the fragment grammar
+//! `mesh_join_vocab::deep_link` (phase-b-90). This app is an HTTP client of the
 //! daemon by design and does not link the mesh crates (see `src-tauri/Cargo.toml`),
 //! so it asks the daemon: the mint request carries the base `url` and the
 //! response carries the composed `link`. The desktop renders it with the same

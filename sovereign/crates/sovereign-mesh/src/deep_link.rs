@@ -15,7 +15,7 @@
 pub use commonwealth_discovery::deep_link::*;
 
 use sovereign_contracts::daemon_wire::JoinConfirmation;
-use sovereign_contracts::guest_pages::PAGE_PREFIX;
+use sovereign_contracts::guest_pages::wall_page;
 
 /// Build a join confirmation from a parsed deep link.
 pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> {
@@ -45,43 +45,9 @@ pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> 
     }
 }
 
-/// True when `base` already spells a page path — a runtime page origin the
-/// operator is pinning the link to (`https://svrnme.sh/ring/`) rather than a
-/// door origin the URL itself can address (`http://192.168.1.10:9744`).
-///
-/// Accepted with or without the trailing slash: the stripped form is exactly
-/// what a host with `trailingSlash: false` serves, so it must not be read as
-/// "no page path" (the 2026-09-22 wall outage, where that reading composed a
-/// 404 landing).
-fn spells_a_page(base: &str) -> bool {
-    base.contains(PAGE_PREFIX) || base.trim_end_matches('/').ends_with("/ring")
-}
-
-/// The address a phone opens: the door `--url` names, plus the page path of
-/// whatever this grant reaches — the app `--rail` names, or the door's own
-/// index under `--wall`, which lists every app the owner declared. Either way
-/// the namespace is typed once rather than twice.
-///
-/// A base already spelling a page path is kept, with its directory slash
-/// ensured (`…/ring` → `…/ring/`): that form addresses the runtime page, and
-/// the door route the page should fetch rides the link as `path=` instead —
-/// see [`wall_https_link`].
-///
-/// ONE composer for the three callers that must agree: the CLI (the QR it
-/// writes), the daemon (the `link` its grant response returns), and the
-/// desktop, which displays that link rather than owning this rule (it does not
-/// link this crate — it is an HTTP client of the daemon).
-pub fn wall_page_base(base: &str, rail: Option<&str>, wall: bool) -> String {
-    if spells_a_page(base) {
-        return format!("{}/", base.trim_end_matches('/'));
-    }
-    let root = base.trim_end_matches('/');
-    match rail {
-        Some(ns) => format!("{root}{PAGE_PREFIX}{ns}/"),
-        None if wall => format!("{root}{PAGE_PREFIX}"),
-        None => base.to_string(),
-    }
-}
+/// The page decisions moved to `sovereign_contracts::guest_pages`
+/// (pb-mesh-exit-mesh, phase-b-90); re-exported so every name still resolves.
+pub use sovereign_contracts::guest_pages::wall_page_base;
 
 /// The wall QR's https link: the page base, plus the DIAL STRING when the
 /// guest must tunnel in.
@@ -92,7 +58,7 @@ pub fn wall_page_base(base: &str, rail: Option<&str>, wall: bool) -> String {
 /// an iroh endpoint"; `docs/THE_LINK.md`). Absent on a direct (plain-HTTP)
 /// grant, where the base URL IS the address and there is nothing to dial.
 ///
-/// When the base is a runtime PAGE (`spells_a_page`), the link cannot also
+/// When the base is a runtime PAGE (`guest_pages::spells_a_page`), the link cannot also
 /// spell the door route in the path: the two would collide (`/ring/ring-doc/`
 /// under `https://svrnme.sh/` is a 404 on the static origin — this shipped
 /// until 2026-09-22). So the page URL stays the runtime page and the door
@@ -107,18 +73,10 @@ pub fn wall_https_link(
     summary: Option<&str>,
     dial: Option<&str>,
 ) -> String {
-    let path = if spells_a_page(base) {
-        match rail {
-            Some(ns) => Some(format!("{PAGE_PREFIX}{ns}/")),
-            None if wall => Some(PAGE_PREFIX.to_string()),
-            None => None,
-        }
-    } else {
-        None
-    };
+    let (page, path) = wall_page(base, rail, wall);
     build_https_guest_link(
         token,
-        &wall_page_base(base, rail, wall),
+        &page,
         expires_at_secs,
         summary,
         None,
