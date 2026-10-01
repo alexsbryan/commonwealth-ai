@@ -56,7 +56,7 @@ for arg in "$@"; do
 done
 
 # Every binary the release dispatcher's verbs exec, and the packages that
-# build them; sovereign-cli's release_bins test pins both to the exec sites.
+# build them; xtask's release_bins test pins both to the exec sites.
 BINS=(sovereign-cli sovereign-cli-daemon sovereign-cli-llm sovereign-cli-dev sovereign-cli-mesh sovereign-cli-bench sovereign-stock sovereign-cli-llm-stock sovereign-serve svrn-ingest sovereign-pod-worker cw-rails)
 PKGS=(sovereign-cli sovereign-cli-daemon sovereign-cli-llm sovereign-cli-dev sovereign-cli-mesh sovereign-cli-bench sovereign-stock sovereign-serve sovereign-pipeline sovereign-pods commonwealth-rails)
 PKG_FLAGS=()

@@ -13,7 +13,7 @@
 #
 # The CLI is `sovereign-cli` (the dispatcher you run as `svrn`) plus every
 # sibling its verbs exec() — BINS below, pinned to the exec sites by
-# sovereign-cli's release_bins test. They install together; `svrn` is
+# xtask's release_bins test. They install together; `svrn` is
 # symlinked to the dispatcher (a transitional `sovereign` alias is also
 # installed for one release).
 

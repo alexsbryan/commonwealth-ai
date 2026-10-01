@@ -9,9 +9,18 @@
 //! lists — `landing/install.sh`'s `BINS` and `scripts/release-cli-local.sh`'s
 //! `BINS` — and its owning package in the latter's `PKGS`, or a release
 //! install answers the verb with "cannot find sibling binary".
+//!
+//! A monorepo-wide census (it reads three crates' sources and two shell
+//! scripts), so it lives here in xtask, in no package: in sovereign-cli it
+//! climbed out of the crate root, which boundary-gate rule 3c refuses of a
+//! test a lifted package carries (pb-distribution-svrn-lift).
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root;
 
 /// The packages whose exec sites a release install reaches.
 const DISPATCHING: &[&str] = &[
@@ -28,15 +37,6 @@ const DEV_ONLY: &[(&str, &str)] = &[(
 
 /// Where cargo puts the packages that own the binaries.
 const CRATE_ROOTS: &[&str] = &["sovereign/crates", "commonwealth/crates"];
-
-fn repo_root() -> PathBuf {
-    // CARGO_MANIFEST_DIR = .../sovereign/crates/sovereign-cli
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(3)
-        .expect("repo root above sovereign/crates/sovereign-cli")
-        .to_path_buf()
-}
 
 fn rust_sources(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display())) {

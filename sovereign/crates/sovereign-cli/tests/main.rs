@@ -42,5 +42,3 @@ mod phase3_serve_lifecycle;
 mod phase4_daemon_setup;
 #[path = "main/phase6_retired_ceremony.rs"]
 mod phase6_retired_ceremony;
-#[path = "main/release_bins.rs"]
-mod release_bins;
