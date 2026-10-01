@@ -1273,7 +1273,7 @@ party can implement OICP without `kernel-types`, and `Custody::parse_wire` /
 boundary into a typed `MeshScoredChunk`.
 
 The declared door set is ratcheted by
-`sovereign-core/tests/chunk_provenance_census.rs`, which also holds the
+`corpus-engine/xtask/tests/chunk_provenance_census.rs`, which also holds the
 manufacturer list — five, and every one of them content this process genuinely
 builds (atlas entities and atoms, atlas claim atoms, conversation turns, RAPTOR
 rollups).
