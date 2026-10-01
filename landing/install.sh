@@ -11,10 +11,11 @@
 #   SVRNMESH_VERSION       a release tag, e.g. cli-v0.1.0 (default: latest)
 #   SVRNMESH_REPO          owner/name to install from (default: the source repo)
 #
-# The CLI is three binaries: `sovereign-cli` (the dispatcher you run as
-# `svrn`) plus the `sovereign-cli-daemon` and `sovereign-cli-llm` siblings
-# it exec()s. They install together; `svrn` is symlinked to the dispatcher
-# (a transitional `sovereign` alias is also installed for one release).
+# The CLI is `sovereign-cli` (the dispatcher you run as `svrn`) plus every
+# sibling its verbs exec() — BINS below, pinned to the exec sites by
+# sovereign-cli's release_bins test. They install together; `svrn` is
+# symlinked to the dispatcher (a transitional `sovereign` alias is also
+# installed for one release).
 
 set -eu
 
@@ -29,7 +30,7 @@ set -eu
 # a cli-v* release exists on commonwealth-ai.
 REPO="${SVRNMESH_REPO:-alexsbryan/commonwealth-ai}"
 SHELF_REPO="${SVRNMESH_FALLBACK_REPO-alexsbryan/svrnmesh-releases}"
-BINS="sovereign-cli sovereign-cli-daemon sovereign-cli-llm"
+BINS="sovereign-cli sovereign-cli-daemon sovereign-cli-llm sovereign-cli-dev sovereign-cli-mesh sovereign-cli-bench sovereign-stock sovereign-cli-llm-stock sovereign-serve svrn-ingest sovereign-pod-worker cw-rails"
 INSTALL_DIR="${SVRNMESH_INSTALL_DIR:-${SOVEREIGN_INSTALL_DIR:-$HOME/.local/bin}}"
 
 say() { printf '  %s\n' "$1"; }

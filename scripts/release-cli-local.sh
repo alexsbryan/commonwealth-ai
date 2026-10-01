@@ -16,9 +16,8 @@
 # assets on the RELEASE and therefore sees both halves. See
 # scripts/lib/release-host.sh.
 #
-# Packaging follows .github/workflows/cli-release.yml exactly: the three
-# binaries (sovereign-cli, sovereign-cli-daemon, sovereign-cli-llm) built
-# --release --locked, staged under dist/sovereign-<triple>/, stripped,
+# Packaging follows .github/workflows/cli-release.yml: the BINS below
+# built --release --locked, staged under dist/sovereign-<triple>/, stripped,
 # tarred, sha256'd. SHA256SUMS is regenerated from ALL sidecars on the
 # release (existing CI-built assets included) so mixed CI/local releases
 # stay consistent.
@@ -56,7 +55,12 @@ for arg in "$@"; do
     esac
 done
 
-BINS=(sovereign-cli sovereign-cli-daemon sovereign-cli-llm)
+# Every binary the release dispatcher's verbs exec, and the packages that
+# build them; sovereign-cli's release_bins test pins both to the exec sites.
+BINS=(sovereign-cli sovereign-cli-daemon sovereign-cli-llm sovereign-cli-dev sovereign-cli-mesh sovereign-cli-bench sovereign-stock sovereign-cli-llm-stock sovereign-serve svrn-ingest sovereign-pod-worker cw-rails)
+PKGS=(sovereign-cli sovereign-cli-daemon sovereign-cli-llm sovereign-cli-dev sovereign-cli-mesh sovereign-cli-bench sovereign-stock sovereign-serve sovereign-pipeline sovereign-pods commonwealth-rails)
+PKG_FLAGS=()
+for p in "${PKGS[@]}"; do PKG_FLAGS+=(-p "$p"); done
 
 # ─── Pre-flight ───────────────────────────────────────────────────────
 VERSION="$(python3 -c "
@@ -153,7 +157,7 @@ build_mac() {  # build_mac <triple>
     # embed client; no llama.cpp, no LanceDB.
     cargo build --release --locked --target "$triple" \
         --features sovereign-cli/code-intel \
-        -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
+        "${PKG_FLAGS[@]}"
     package "$triple" "target/$triple/release"
 }
 
@@ -205,7 +209,7 @@ if ! (( SKIP_LINUX )); then
         --entrypoint /bin/bash "$IMAGE" -c \
         "cd /work && taskset -c 0-$((LINUX_BUILD_CPUS - 1)) cargo build --release --locked --target x86_64-unknown-linux-gnu \
              --features sovereign-cli/code-intel \
-             -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm"
+             ${PKG_FLAGS[*]}"
     package x86_64-unknown-linux-gnu "target-container-linux/x86_64-unknown-linux-gnu/release"
 fi
 
