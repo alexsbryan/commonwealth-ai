@@ -187,11 +187,17 @@ name a program's library reaches it through a declared face with empty
 `items`: the face-item scan reads `src/` only, so the root's wiring still
 names none of it (phase-b-72, stock's face on `sovereign-serving-host`).
 Phase B enrols two, the stock binary (cap 300) and the on-prem binary (cap
-200, phase-b-86; it compiles stock's ingest composition by `#[path]`, so the
-two build ingest one way); the dispatcher, the setup
-verbs and service install stay `svrn` members until the follow-on queue carves
-their wiring out, so their edges keep counting (phase-b-30). A distribution
-never excuses a program from building and running alone.
+200, phase-b-86). Both call ingest's one hosting composition, the library
+`sovereign-hosted-ingest`, so the two build ingest one way. Both rows list it
+in `crates`, and a crate several rows claim answers to EVERY row that claims
+it: its edges and its `src/` are judged against each row's faces, and its
+lines count against each row's cap (phase-b-88). That intersection is the
+strictest reading a shared crate can have, so sharing never widens a row; it
+replaces the `#[path]` mount of stock's file that rule 3c refuses. The
+dispatcher, the setup verbs and service install stay `svrn` members until the
+follow-on queue carves their wiring out, so their edges keep counting
+(phase-b-30). A distribution never excuses a program from building and running
+alone.
 
 A distribution also chooses svrn's posture: which of svrn's own surfaces it
 serves (web reach, the wikipedia bundle, the `/mcp` route), handed down as one

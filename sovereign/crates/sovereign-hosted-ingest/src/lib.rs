@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Ingest, composed for svrn: the one composition both of this distribution's
-//! binaries hand svrn (the daemon's `process::run` and cli-llm's
-//! `bin_main_with`, pb-cli-llm-ingest-move-compose), so the stock install
-//! builds ingest's engine one way. The on-prem distribution compiles this
-//! same file (`#[path]`) and passes no recipe authoring (phase-b-87), so the
-//! two distributions build ingest one way too and this file names no
-//! sovereign-recipe-author.
+//! Ingest, composed for svrn: the one composition both distributions hand
+//! svrn (phase-b-88). The stock distribution's two binaries hand it to the
+//! daemon's `process::run` and to cli-llm's `bin_main_with`
+//! (pb-cli-llm-ingest-move-compose); the on-prem distribution hands it to
+//! `process::run` with no recipe authoring (phase-b-87). So the stock install
+//! and the on-prem one build ingest's engine one way (principle 8).
+//!
+//! A crate in no package and no leaf, listed in BOTH the `stock` and `onprem`
+//! `[[distribution]]` rows of quality/ARCH_LAYERS.toml, so it answers to each
+//! row's faces: this file names no sovereign-recipe-author, and on-prem's row
+//! is what holds it to that (recipe authoring is the caller's, handed in as
+//! `process::RecipeAuthoringCompose`).
 
 /// Ingest's enrichment-config port from ingest's catalog
 /// (pb-ingest-dial-tools-close), its atlas port, its engine-free calls

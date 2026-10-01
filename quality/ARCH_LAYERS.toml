@@ -401,6 +401,8 @@ crates = [
     "sovereign-stock",
     # The on-prem distribution (phase-b-86, -87).
     "sovereign-onprem",
+    # Ingest's hosting composition both distributions call (phase-b-88).
+    "sovereign-hosted-ingest",
     "xtask",
 ]
 
@@ -1480,10 +1482,11 @@ leaf_budget = ["oicp-types", "sovereign-contracts", "kernel-types", "sovereign-t
 # in-process and handed to svrn through the `InferenceProvider` port, serve's
 # router bound on serve's port. Code's face joined at pb-code-daemon-exit,
 # ingest's joins at pb-ingest-dial-tools; serve's face moved to package `serve` at
-# pb-serve-package.
+# pb-serve-package. `sovereign-hosted-ingest`, ingest's hosting composition, is
+# claimed by the onprem row too and answers to both (phase-b-88).
 [[distribution]]
 name = "stock"
-crates = ["sovereign-stock"]
+crates = ["sovereign-stock", "sovereign-hosted-ingest"]
 doc = "docs/FIVE_PROGRAMS.md"
 max_code_lines = 300
 [[distribution.face]]
@@ -1559,11 +1562,14 @@ items = ["port::compose"]
 # no `probe_url`. The closure is NOT free of a cw-rails crate or a web-tool
 # crate: sovereign-daemon links commonwealth-rail-core and sovereign-tools
 # (WebFetchTool, wikipedia_fetch). What it withholds is the registration and
-# the route (`Posture::Sealed`, `mesh: None`), not the type. Ingest is composed
-# by stock's one file (`#[path]`), so its items are listed here too.
+# the route (`Posture::Sealed`, `mesh: None`), not the type. Ingest is
+# composed by `sovereign-hosted-ingest`, the crate stock's row claims too
+# (phase-b-88): a crate several rows claim answers to EVERY row that claims it,
+# so its edges and its `src/` are held to these faces as well as stock's, and
+# its lines count against both caps. Ingest's items are listed here for it.
 [[distribution]]
 name = "onprem"
-crates = ["sovereign-onprem"]
+crates = ["sovereign-onprem", "sovereign-hosted-ingest"]
 doc = "docs/FIVE_PROGRAMS.md"
 max_code_lines = 200
 [[distribution.face]]

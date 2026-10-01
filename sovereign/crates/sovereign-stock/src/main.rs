@@ -9,16 +9,15 @@
 //! decides whether serve is hosted here (`ServingPath::decide`); this binary
 //! only hands it the composition. Code is composed over svrn's data root and
 //! mounted on svrn's one `:9741/mcp` and client surface (pb-code-daemon-exit;
-//! F2 (a), phase-b-30; phase-b-33). Ingest is composed here too: its
-//! enrichment-config port from ingest's catalog (pb-ingest-dial-tools-close),
-//! and the engine svrn's daemon holds, built by ingest's face for what svrn
-//! hands it (pb-ingest-dial-daemon); svrn links neither. boundary-gate holds
-//! the face items: every `sovereign_serve::`, `sovereign_daemon::`,
-//! `sovereign_code::`, `sovereign_enrichment_catalog::`, `corpus_engine::`
-//! and `sovereign_authoring_harness::` path below is on the
-//! `[[distribution]] stock` row, spelled in full.
-
-mod ingest;
+//! F2 (a), phase-b-30; phase-b-33). Ingest is composed by
+//! `sovereign_hosted_ingest::hosted`, the one composition on-prem calls too
+//! (phase-b-88): its enrichment-config port from ingest's catalog
+//! (pb-ingest-dial-tools-close), and the engine svrn's daemon holds, built by
+//! ingest's face for what svrn hands it (pb-ingest-dial-daemon); svrn links
+//! neither. This binary adds recipe authoring to it. boundary-gate holds the
+//! face items: every `sovereign_serve::`, `sovereign_daemon::`,
+//! `sovereign_code::`, `corpus_engine::` and `sovereign_recipe_author::` path
+//! below is on the `[[distribution]] stock` row, spelled in full.
 
 /// Code's editor door takes its grammar lookup from the host (pb-meshapp-rest):
 /// corpus-engine's registry, the one that routes `.tsx` apart from `.ts`,
@@ -147,7 +146,8 @@ fn main() {
             hold: Box::new(face.runtime),
         })
     });
-    let ingest = ingest::hosted(Some(Box::new(sovereign_recipe_author::port::compose)));
+    let ingest =
+        sovereign_hosted_ingest::hosted(Some(Box::new(sovereign_recipe_author::port::compose)));
     // svrn reads the mesh through cw-rails, the node's one mesh endpoint:
     // its roster and reach door, the pair serve reads (pb-mesh-exit-transport).
     let mesh = sovereign_daemon::process::HostedMesh::new(|rails_base| {

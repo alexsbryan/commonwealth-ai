@@ -127,6 +127,7 @@
 1624	sovereign/crates/sovereign-gliner::tests
 1976	sovereign/crates/sovereign-grants
 1888	sovereign/crates/sovereign-grants::tests
+61	sovereign/crates/sovereign-hosted-ingest
 8015	sovereign/crates/sovereign-inference
 20112	sovereign/crates/sovereign-inference::tests
 6945	sovereign/crates/sovereign-mesh

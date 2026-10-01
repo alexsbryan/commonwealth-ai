@@ -21,13 +21,10 @@ path = "src/main.rs"
 # `treesitter`: the daemon's process entry mounts `daemon_cmd`, gated on it.
 sovereign-daemon = { workspace = true, features = ["treesitter"] }
 sovereign-serve = { workspace = true }
-# Ingest, composed by the stock distribution's one file (`#[path]` in main.rs):
-# its enrichment-config port, enrichment client, engine face and authoring
-# harness. `treesitter` matches the workspace's resolution of corpus-engine.
-sovereign-enrichment-catalog = { workspace = true }
-sovereign-enrichment-build = { workspace = true }
-corpus-engine = { workspace = true, features = ["treesitter"] }
-sovereign-authoring-harness = { workspace = true }
+# Ingest, composed for svrn (`hosted`, called with no recipe authoring): the
+# one composition stock calls too (phase-b-88). Both distribution rows claim
+# that crate, so it answers to this row's faces.
+sovereign-hosted-ingest = { workspace = true }
 host-kit = { workspace = true, features = ["shell"] }
 tokio = { workspace = true }
 tracing = { workspace = true }

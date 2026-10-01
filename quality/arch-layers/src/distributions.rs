@@ -300,8 +300,14 @@ items = ["process::run"]
         let v = evaluate_distributions(&map, &[edge("shared", "inference")]);
         let named: Vec<String> = v.iter().map(|v| v.describe()).collect();
         assert_eq!(named.len(), 2, "{named:?}");
-        assert!(named[0].starts_with("[stock] shared → inference"), "{named:?}");
-        assert!(named[1].starts_with("[onprem] shared → inference"), "{named:?}");
+        assert!(
+            named[0].starts_with("[stock] shared → inference"),
+            "{named:?}"
+        );
+        assert!(
+            named[1].starts_with("[onprem] shared → inference"),
+            "{named:?}"
+        );
     }
 
     #[test]

@@ -10,12 +10,10 @@
 //! posture is `Sealed`: web reach, the wikipedia bundle and the `/mcp` route
 //! are withheld, each by name. The withholding is the composition, not a
 //! config switch (principle 10). boundary-gate holds the face items on the
-//! `[[distribution]] onprem` row.
-
-/// Ingest, composed by the stock distribution's one file, so the two
-/// distributions build ingest one way (principle 8).
-#[path = "../../sovereign-stock/src/ingest.rs"]
-mod ingest;
+//! `[[distribution]] onprem` row. Ingest is `sovereign_hosted_ingest::hosted`,
+//! the one composition stock calls too, so the two distributions build ingest
+//! one way (principle 8); that crate is on this row as well, so it answers to
+//! these faces (phase-b-88).
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -74,7 +72,7 @@ fn main() {
         &args,
         Some(hosted),
         None,
-        Some(ingest::hosted(None)),
+        Some(sovereign_hosted_ingest::hosted(None)),
         None,
         sovereign_daemon::process::Posture::Sealed,
     );

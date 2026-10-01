@@ -201,6 +201,9 @@ members = [
     # svrn, serve and ingest in one process, with no code, no mesh, and svrn's
     # open-web surfaces and `/mcp` withheld.
     "sovereign/crates/sovereign-onprem",
+    # Ingest's hosting composition for svrn, the one `hosted()` both
+    # distributions call (docs/FIVE_PROGRAMS.md §2c; phase-b-88).
+    "sovereign/crates/sovereign-hosted-ingest",
     "sovereign/crates/sovereign-service",
     "sovereign/crates/sovereign-desktop/src-tauri",
     "sovereign-mobile/src-tauri",
@@ -403,6 +406,7 @@ sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "sovereign/crates/sovereign-agent-bench" }
 sovereign-eval = { path = "sovereign/crates/sovereign-eval" }
 sovereign-authoring-harness = { path = "sovereign/crates/sovereign-authoring-harness" }
+sovereign-hosted-ingest = { path = "sovereign/crates/sovereign-hosted-ingest" }
 sovereign-agent-tools = { path = "sovereign/crates/sovereign-agent-tools" }
 sovereign-tdd = { path = "sovereign/crates/sovereign-tdd" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
