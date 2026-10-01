@@ -1434,6 +1434,10 @@ impl IgnoreFilter {
             "__pycache__",
             ".venv",
             "venv",
+            // VCS state: scripts/ralph.py's pool keeps whole lane checkouts
+            // of the watched repo under `.ralph/wt/`. Their saves re-parsed
+            // every symbol a second time and drove the full export.
+            ".ralph",
         ];
         let below_root = path.strip_prefix(&self.root).unwrap_or(path);
         if below_root.components().any(|c| {

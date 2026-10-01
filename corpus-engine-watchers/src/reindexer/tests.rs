@@ -146,6 +146,7 @@ fn ignore_filter_excludes_hard_excludes_and_non_source_extensions() {
     assert!(filter.is_ignored(&tmp.path().join("node_modules/x/index.js")));
     assert!(filter.is_ignored(&tmp.path().join("README.md")));
     assert!(filter.is_ignored(&tmp.path().join("docs/.git/HEAD")));
+    assert!(filter.is_ignored(&tmp.path().join(".ralph/wt/pc-a/src/main.rs")));
     // .sovereign is NOT in HARD_EXCLUDE — it's a deployment convention,
     // not universal noise. The project registry seeds it as a default
     // ignore_path so it's still filtered for newly-registered projects.
