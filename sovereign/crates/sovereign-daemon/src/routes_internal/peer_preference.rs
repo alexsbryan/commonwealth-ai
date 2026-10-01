@@ -32,8 +32,8 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 use kernel_types::NodeId;
+use oicp_types::peer_preference::PeerPreference;
 use serde::{Deserialize, Serialize};
-use sovereign_mesh::ledger_port::peer_preference;
 
 use crate::state::AppState;
 
@@ -147,8 +147,8 @@ pub async fn peer_preference_set(
     Json(req): Json<SetVenuePreferenceRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     let target = parse_node_id_hex(&req.node_id)?;
-    let pref = peer_preference(req.multiplier, req.reason)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("{e}")))?;
+    let pref = PeerPreference::new(req.multiplier, req.reason, sovereign_time::unix_now_u64())
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     state
         .inner
         .store

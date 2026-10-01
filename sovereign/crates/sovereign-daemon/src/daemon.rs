@@ -1851,7 +1851,7 @@ impl EmbeddedDaemon {
                         }
                     }
                 },
-                sovereign_mesh::ledger_port::STORAGE_SNAPSHOT_INTERVAL,
+                oicp_types::contributions::STORAGE_SNAPSHOT_INTERVAL,
                 snapshot_shutdown_rx,
             )
             .await;

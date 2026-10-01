@@ -421,7 +421,11 @@ mod tests {
     use oicp_types::{
         CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
     };
-    use sovereign_mesh::ledger_port::peer_preference;
+    use oicp_types::peer_preference::PeerPreference;
+
+    fn peer_preference(multiplier: f64) -> PeerPreference {
+        PeerPreference::new(multiplier, None, sovereign_time::unix_now_u64()).unwrap()
+    }
 
     fn nid(byte: u8) -> NodeId {
         NodeId::from_u128(byte as u128)
@@ -505,7 +509,7 @@ mod tests {
             .inner
             .store
             .peer_preferences
-            .set(&target, peer_preference(0.5, None).unwrap())
+            .set(&target, peer_preference(0.5))
             .await
             .unwrap();
         let mut manifest = manifest_with_affinity(0.8);
@@ -522,7 +526,7 @@ mod tests {
             .inner
             .store
             .peer_preferences
-            .set(&nid(0x11), peer_preference(0.5, None).unwrap())
+            .set(&nid(0x11), peer_preference(0.5))
             .await
             .unwrap();
         let mut manifest = manifest_with_affinity(0.8);
@@ -538,7 +542,7 @@ mod tests {
             .inner
             .store
             .peer_preferences
-            .set(&nid(0x11), peer_preference(0.5, None).unwrap())
+            .set(&nid(0x11), peer_preference(0.5))
             .await
             .unwrap();
         let mut manifest = manifest_with_affinity(0.8);
@@ -564,7 +568,7 @@ mod tests {
             .inner
             .store
             .peer_preferences
-            .set(&nid(0x33), peer_preference(0.25, None).unwrap())
+            .set(&nid(0x33), peer_preference(0.25))
             .await
             .unwrap();
         let app = crate::server::mock_router(state);

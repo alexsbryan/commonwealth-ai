@@ -160,8 +160,9 @@ pub fn current_contributions(
 
 /// Default cadence for the hourly `StorageSnapshot` background
 /// task. Aligned with `RetentionGc::DEFAULT_INTERVAL` so a single
-/// daemon clock tick handles both rollups.
-pub const STORAGE_SNAPSHOT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3_600);
+/// daemon clock tick handles both rollups. Moved to oicp-types
+/// (pb-mesh-exit-mesh); re-exported at its historical path.
+pub use oicp_types::contributions::STORAGE_SNAPSHOT_INTERVAL;
 
 use commonwealth_core::clock::unix_now_secs as now_secs;
 

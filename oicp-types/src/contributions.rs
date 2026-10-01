@@ -211,6 +211,11 @@ pub struct NodeContributions {
 /// long enough that day-to-day variance smooths out.
 pub const DEFAULT_WINDOW_DAYS: u32 = 30;
 
+/// Default cadence for the hourly `StorageSnapshot` record. Read by two
+/// programs (cw-rails' ledger and svrn's snapshot loop), so it is federation
+/// vocabulary; re-exported at `commonwealth_state::contributions`.
+pub const STORAGE_SNAPSHOT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3_600);
+
 /// The ring namespace contribution ledger events replicate on. Federation
 /// wire, re-exported at `commonwealth_state::contributions`.
 pub const CONTRIBUTIONS_APP_ID: &str = "contributions";
