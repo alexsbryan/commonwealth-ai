@@ -208,16 +208,33 @@ impl RailsRoster {
             .get(&url)
             .send()
             .await
-            .map_err(|e| format!("cw-rails did not answer at {url}: {e}"))?;
+            .map_err(|e| unanswered(&url, &e))?;
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
             return Err(format!("cw-rails refused {url}: {status}: {body}"));
         }
         let doc: StatusDoc = resp.json().await.map_err(|e| {
-            format!("cw-rails' roster at {url} is a shape this build cannot read: {e}")
+            if e.is_timeout() {
+                unanswered(&url, &e)
+            } else {
+                format!("cw-rails' roster at {url} is a shape this build cannot read: {e}")
+            }
         })?;
         parse(doc)
+    }
+}
+
+/// Why cw-rails gave no roster: slow (it holds the port and did not answer
+/// inside [`STATUS_TIMEOUT`], the one bound on a roster read) or absent
+/// (nothing answers). Never an empty roster (F13, principle 6).
+fn unanswered(url: &str, e: &reqwest::Error) -> String {
+    if e.is_timeout() {
+        format!("cw-rails slow: no roster within {STATUS_TIMEOUT:?} at {url}")
+    } else if e.is_connect() {
+        format!("cw-rails absent: nothing answers at {url}: {e}")
+    } else {
+        format!("cw-rails did not answer at {url}: {e}")
     }
 }
 
@@ -238,6 +255,14 @@ impl MembershipReader for RailsRoster {
     /// cw-rails serves no federation list; serve advertises none.
     async fn federated_meshes(&self) -> Vec<FederatedMeshDescriptor> {
         Vec::new()
+    }
+
+    async fn read_roster(&self) -> Result<(String, Vec<MembershipEntry<PeerContact>>), String> {
+        let reading = self.read().await;
+        if let Err(e) = &reading {
+            debug!(target: TARGET, error = %e, "rails roster: no answer, named");
+        }
+        reading.map(|r| (r.mesh_name, r.members))
     }
 
     async fn members(&self) -> Vec<MembershipEntry<PeerContact>> {

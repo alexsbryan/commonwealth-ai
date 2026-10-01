@@ -116,6 +116,14 @@ pub trait MembershipReader: Send + Sync {
     /// the roster's own order.
     async fn members(&self) -> Vec<MembershipEntry<Self::Dial>>;
 
+    /// The mesh name and every member from ONE read, or why the roster has
+    /// no answer (F13): a reader across a process boundary names a slow or
+    /// absent owner here, where [`Self::members`] can only answer empty. An
+    /// in-process reader always answers, which is the default.
+    async fn read_roster(&self) -> Result<(String, Vec<MembershipEntry<Self::Dial>>), String> {
+        Ok((self.mesh_name().await, self.members().await))
+    }
+
     /// The member with this id, if the roster holds one.
     async fn member(&self, id: NodeId) -> Option<MembershipEntry<Self::Dial>> {
         self.members().await.into_iter().find(|m| m.node_id == id)

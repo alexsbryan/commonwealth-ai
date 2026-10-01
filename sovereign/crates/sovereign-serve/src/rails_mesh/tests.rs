@@ -231,3 +231,50 @@ async fn rails_venues_with_no_cw_rails_rank_no_peer() {
     assert!(venues.candidates().await.is_empty());
     assert!(venues.local_node_id().await.is_none());
 }
+
+/// F13: a cw-rails that holds its port and does not answer is named slow,
+/// inside the one bound, never read as a mesh of nobody. Failing inputs: an
+/// `Ok` empty roster, or a read that waits past `STATUS_TIMEOUT`.
+#[tokio::test]
+async fn a_cw_rails_that_does_not_answer_is_named_slow_within_the_bound() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    // Accept and hold every connection without a byte back: a stalled API.
+    tokio::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((sock, _)) = listener.accept().await {
+            held.push(sock);
+        }
+    });
+    let started = std::time::Instant::now();
+    let got = RailsRoster::new(base).read_roster().await;
+    let waited = started.elapsed();
+    let why = got.expect_err("a stalled cw-rails has no roster");
+    assert!(why.starts_with("cw-rails slow"), "{why}");
+    assert!(
+        waited < STATUS_TIMEOUT + Duration::from_secs(1),
+        "the read is bounded: {waited:?}"
+    );
+}
+
+/// F13: a stopped cw-rails is named absent; `members()` alone could only
+/// answer an empty roster.
+#[tokio::test]
+async fn a_stopped_cw_rails_is_named_absent() {
+    let why = RailsRoster::new("http://127.0.0.1:9")
+        .read_roster()
+        .await
+        .expect_err("nothing listens on port 9");
+    assert!(why.starts_with("cw-rails absent"), "{why}");
+}
+
+/// One read answers both the name and the members.
+#[tokio::test]
+async fn read_roster_answers_name_and_members_from_one_read() {
+    let (name, members) = RailsRoster::new(stub_rails().await)
+        .read_roster()
+        .await
+        .expect("the stub answers");
+    assert_eq!(name, "lift-mesh");
+    assert_eq!(members.len(), 2, "{members:?}");
+}
