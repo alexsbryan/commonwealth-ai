@@ -2,24 +2,48 @@
 //! `GET /internal/guest/route` — the base URL a request under this node's
 //! stored guest link must be sent to.
 //!
-//! The HOLDER's side of a guest link, where `/internal/guest/grant` is the
-//! lender's. The daemon owns the mesh tunnel a link's dial string names
-//! (`StoredGuestLink`, the one decider that turns a link into an address), so
-//! a CLI dials this door rather than opening a tunnel of its own (§12 D6).
-//! Operator-only, like the grant routes beside it.
+//! The HOLDER's side of a guest link, where the daemon's
+//! `/internal/guest/grant` is the lender's. serve owns the mesh tunnel a
+//! link's dial string names (`StoredGuestLink`, the one decider that turns a
+//! link into an address, which serve's serving-host holds), so a CLI dials
+//! this door rather than opening a tunnel of its own (§12 D6). Moved from the
+//! svrn daemon (pb-mesh-exit-mesh, ruling phase-b-83 (4)). Loopback-only: it
+//! is on serve's own router, which listens on loopback, and it is registered
+//! with no origin, so cw-rails never forwards it.
 //!
 //! Absence is answered, never substituted (§18.3): no stored link is 412, a
 //! tunnel that will not open is 502, and neither falls back to a local base.
 
+use std::sync::Arc;
+
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use axum::routing::get;
 use axum::Json;
+use host_kit::shell::RouteBundle;
 use serde::{Deserialize, Serialize};
-use sovereign_mesh::guest_lender::{GuestRouteAbsence, StoredGuestLink};
+use sovereign_serving_host::guest_lender::{GuestRouteAbsence, StoredGuestLink};
+use sovereign_serving_host::guest_source::{GuestLinkFileReader, MeshTunnelOpener};
 
-use crate::http_response::json_error;
-use crate::state::AppState;
+/// Where this door answers.
+pub const GUEST_ROUTE_PATH: &str = "/internal/guest/route";
+
+/// The door over this host's stored guest link and the mesh tunnel it opens,
+/// held for serve's lifetime so the tunnel stays up across requests.
+pub fn bundle() -> RouteBundle {
+    let link = Arc::new(StoredGuestLink::new(
+        Arc::new(GuestLinkFileReader::new()),
+        Arc::new(MeshTunnelOpener),
+    ));
+    RouteBundle::new("serve_guest_route")
+        .route(GUEST_ROUTE_PATH, get(guest_route))
+        .with_state(link)
+}
+
+fn json_error(status: StatusCode, message: String) -> Response {
+    (status, Json(serde_json::json!({ "error": message }))).into_response()
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GuestRouteResponse {
@@ -29,8 +53,8 @@ pub struct GuestRouteResponse {
 }
 
 /// GET /internal/guest/route
-pub async fn guest_route(State(state): State<AppState>) -> Response {
-    answer(&state.inner.node.guest_route).await
+async fn guest_route(State(link): State<Arc<StoredGuestLink>>) -> Response {
+    answer(&link).await
 }
 
 async fn answer(link: &StoredGuestLink) -> Response {
@@ -52,11 +76,9 @@ async fn answer(link: &StoredGuestLink) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use async_trait::async_trait;
     use axum::body::to_bytes;
-    use sovereign_mesh::guest_lender::{
+    use sovereign_serving_host::guest_lender::{
         GuestLinkReader, GuestTunnelHandle, GuestTunnelOpener, LiveGuestLink, NoGuestLinks,
         NoTunnels,
     };

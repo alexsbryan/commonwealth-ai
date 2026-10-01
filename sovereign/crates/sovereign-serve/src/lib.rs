@@ -60,6 +60,8 @@ use tracing::{debug, error, info, warn};
 mod engine_state;
 mod fetch_model;
 mod fetch_ner;
+/// The holder's guest-link door (moved from the svrn daemon, pb-mesh-exit-mesh).
+pub mod guest_route;
 /// The live mesh `mesh plan|bench` read: cw-rails' roster beside serve's
 /// engine rows (pb-mesh-exit-transport).
 mod live_mesh;
@@ -446,6 +448,9 @@ pub async fn assemble(
     routes.push(sovereign_compute::assets::bundle(data_dir.join("models")));
     // Model transfer: peers fetch the files above, whole or by byte range.
     routes.push(sovereign_compute::model_transfer::bundle(servable.clone()));
+    // The holder's side of a stored guest link: the base URL it reaches, over
+    // the mesh tunnel serve opens and holds (`svrn chat` dials it).
+    routes.push(guest_route::bundle());
     // The engine the discovery loop redistributes, read through the cell a
     // reload swaps (pb-serving-proofs (b)).
     let engine = sovereign_compute::distributed_discovery::engine_cell(parts.llama);

@@ -114,7 +114,6 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
                 "/internal/guest/grant/list",
                 get(routes_internal::guest_grant_list),
             )
-            .route("/internal/guest/route", get(routes_internal::guest_route))
     } else {
         Router::new()
     };

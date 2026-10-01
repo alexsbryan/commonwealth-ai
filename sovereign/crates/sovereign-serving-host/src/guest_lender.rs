@@ -531,7 +531,7 @@ impl std::fmt::Display for GuestRouteAbsence {
 impl StoredGuestLink {
     /// The base URL every request under the stored link must be sent to —
     /// opening, or reusing, the mesh tunnel when the link names an iroh
-    /// endpoint. The daemon's `/internal/guest/route` door serves this, so a
+    /// endpoint. serve's `/internal/guest/route` door serves this, so a
     /// CLI reaches the lender through this one decider instead of opening a
     /// tunnel of its own (§12 D6).
     pub async fn route(&self) -> Result<String, GuestRouteAbsence> {

@@ -231,10 +231,6 @@ pub struct NodePart {
     pub edit_door: Option<axum::Router>,
     /// Ingest's atlas port; `None` is svrn alone ([`NodeSeed::atlas`]).
     pub atlas: Option<Arc<dyn AtlasPort>>,
-    /// The holder's stored guest link and the mesh tunnel it opens, for the
-    /// daemon's lifetime — served at `/internal/guest/route` so a CLI dials
-    /// this instead of holding a tunnel itself (§12 D6).
-    pub guest_route: Arc<sovereign_mesh::guest_lender::StoredGuestLink>,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the
     /// initial state at boot. Bumped via

@@ -564,9 +564,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // probe_or_bail and resolve_model_ids moved with build_inference to
     // oicp-client (pb-cli-llm-bench-move); the two sites travelled with them.
     ("oicp-client/src/daemon_inference.rs", Class::LocalDaemon, 2),
-    // fp-26 (7e21df175): `svrn chat` asks the local daemon's
-    // `GET /internal/guest/route` for the guest link's base; the daemon owns
-    // the tunnel, so this client never leaves the machine.
+    // fp-26 (7e21df175): `svrn chat` asks this host's serve's
+    // `GET /internal/guest/route` for the guest link's base (the daemon's
+    // until pb-mesh-exit-mesh); serve owns the tunnel, so this client never
+    // leaves the machine.
     ("sovereign/crates/sovereign-cli-llm/src/chat_cmd/config.rs", Class::LocalDaemon, 1),
     // 1 -> 2 (2026-09-09, sv-surface rung 5): `workflow run` and `corpus
     // ingest`'s notebook path became job-submission clients of the daemon's

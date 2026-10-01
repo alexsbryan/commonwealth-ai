@@ -47,7 +47,6 @@ mod corpus_queue;
 mod corpus_sync;
 mod enrichment_status;
 mod guest_grant;
-mod guest_route;
 mod knowledge;
 mod mesh_admin;
 mod newsworthy_status;
@@ -67,7 +66,6 @@ pub use corpus_ingest::{
     ProgressSnapshotResponse,
 };
 pub use guest_grant::{guest_grant_issue, guest_grant_list, guest_grant_revoke};
-pub use guest_route::{guest_route, GuestRouteResponse};
 // The ring-sync wire body lives in the shared leaf both ends can name
 // (domains dm-daemon-api-edge (a)); re-exported here so the routes' existing
 // `super::RingSyncRequest` paths keep resolving.

@@ -1048,7 +1048,7 @@ grants, because no `Scope` variant names `/internal/*`.
 | `GET /oicp/v1/capabilities` | Provider manifest + federation info |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | Ollama-native compatibility shim, pure translation over the OpenAI handlers |
 | `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, and the LIVE lane (delivery, not record — nothing reaches a store or a disk). The journals live at `cw-rails` since fp-54: `/v1/rail/*` dials the rails daemon's doors through the rail port, and a guest's WRITE carries a `GuestAttestation` the daemon signs with its node key for the session's lifetime (`AppState::attest_guest`); rails verifies it against the namespace's roster and a refusal comes back by name (`signer_not_in_roster`, `expired`, …, 403) |
-| `/internal/guest/grant`, `…/revoke`, `…/list`; `GET /internal/guest/route` | Mint / kill / list guest grants; the holder's side answers the base URL its stored link reaches (opening the mesh tunnel), 412/502 named absence otherwise. On the Operator bind ONLY |
+| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list guest grants. On the Operator bind ONLY. The holder's side, `GET /internal/guest/route` (the base URL its stored link reaches, opening the mesh tunnel; 412/502 named absence otherwise), is serve's loopback router since pb-mesh-exit-mesh (`sovereign_serve::guest_route`) |
 | `/v1/mesh/*`, `/v1/admin/*`, `/mcp/*` | Loopback-only |
 
 **Which listener serves a route is the guard; "is the caller loopback" is
