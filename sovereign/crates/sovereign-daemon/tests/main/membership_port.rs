@@ -26,8 +26,8 @@ use oicp_types::FederatedMeshDescriptor;
 use sovereign_contracts::daemon_wire::MemberStatus;
 use sovereign_contracts::membership::{MembershipEntry, MembershipReader};
 use sovereign_daemon::server::client_router;
-use sovereign_daemon::state::{test_app_state_with_seed, AppState};
 use sovereign_daemon::state::FabricSeed;
+use sovereign_daemon::state::{test_app_state_with_seed, AppState};
 use tower::ServiceExt;
 
 /// The files that may still read `fabric.mesh`, and how many lines each:

@@ -51,7 +51,11 @@ impl SelfMeasurement {
 /// entry stands in when none was measured. Storage: free storage, static and
 /// live, is clamped to the smallest declared `storage_remaining_bytes`,
 /// floored to whole GiB. The field itself is never copied onto `caps`.
-pub fn apply(caps: &mut NodeCapabilities, measured: &SelfMeasurement, declared: &[NodeCapabilities]) {
+pub fn apply(
+    caps: &mut NodeCapabilities,
+    measured: &SelfMeasurement,
+    declared: &[NodeCapabilities],
+) {
     let mut hw = measured.hardware.clone();
     let detected: u32 = hw.gpus.iter().map(|g| g.vram_gb).sum();
     match declared.iter().find(|d| !d.hardware.gpus.is_empty()) {
@@ -72,7 +76,10 @@ pub fn apply(caps: &mut NodeCapabilities, measured: &SelfMeasurement, declared: 
     }
 
     let mut free_disk_gb = measured.free_disk_gb;
-    let ceiling = declared.iter().filter_map(|d| d.storage_remaining_bytes).min();
+    let ceiling = declared
+        .iter()
+        .filter_map(|d| d.storage_remaining_bytes)
+        .min();
     if let Some(remaining) = ceiling {
         let remaining_gb = (remaining / GIB) as u32;
         if remaining_gb < hw.free_storage_gb {
@@ -84,9 +91,10 @@ pub fn apply(caps: &mut NodeCapabilities, measured: &SelfMeasurement, declared: 
                "self measure: free storage clamped to the declared budget");
     }
 
-    let (gpu_utilization, free_vram_gb) = measured
-        .nvidia
-        .unwrap_or((0.0, hw.gpus.first().map(|g| g.vram_gb as f32).unwrap_or(0.0)));
+    let (gpu_utilization, free_vram_gb) = measured.nvidia.unwrap_or((
+        0.0,
+        hw.gpus.first().map(|g| g.vram_gb as f32).unwrap_or(0.0),
+    ));
     caps.available = AvailableResources {
         free_vram_gb,
         free_ram_gb: measured.free_ram_gb,

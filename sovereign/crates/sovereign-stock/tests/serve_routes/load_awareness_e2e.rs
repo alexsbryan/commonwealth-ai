@@ -41,9 +41,9 @@ use std::sync::Arc;
 use kernel_types::NodeId;
 use sovereign_contracts::in_flight::LocalInFlightGauge;
 use sovereign_contracts::traits::InferenceProvider;
+use sovereign_daemon::peer_origin::claims_source;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
-use sovereign_daemon::peer_origin::claims_source;
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 
