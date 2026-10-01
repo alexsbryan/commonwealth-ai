@@ -343,7 +343,7 @@ fn source_file_progress_counts_the_manifests_complete_entries() {
 /// **canonical_pull_e2e's round trip, engine half.** The daemon's canonical
 /// route streams whatever `pack_canonical` writes, headed by the canonical's
 /// stamped fingerprint (pb-ingest-dial-daemon-tests-merge). What the port
-/// writes, unpacked the way the pull side unpacks it, is a canonical that
+/// writes, unpacked through the port the way the pull side unpacks it, is a canonical that
 /// recomputes the same fingerprint: the on-disk state is byte-faithful.
 /// Over canonical_pull's fixture: three chunks with explicit content hashes.
 ///
@@ -404,11 +404,9 @@ async fn a_canonical_packed_through_the_port_unpacks_to_its_own_fingerprint() {
     assert!(packed > 0, "the pack streamed the canonical's files");
 
     let pulled = tmp.path().join("pulled").join("wiki-mini");
-    corpus_engine::canonical_sync::unpack_canonical(
-        std::fs::File::open(&archive).unwrap(),
-        &pulled,
-    )
-    .expect("the pull side unpacks what the port packed");
+    port(&engine)
+        .unpack_canonical(Box::new(std::fs::File::open(&archive).unwrap()), &pulled)
+        .expect("the pull side unpacks, through the port, what the port packed");
     let recomputed = CorpusIndex::open(&pulled)
         .await
         .expect("the unpacked canonical opens")

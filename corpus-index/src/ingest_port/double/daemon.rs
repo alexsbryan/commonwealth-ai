@@ -33,6 +33,8 @@ pub(super) type RecipeTextFn<T> = dyn Fn(&str) -> Result<T> + Send + Sync;
 pub(super) type DryRunFn = dyn Fn(&Path, usize, bool) -> Result<RecipeDryRunReport> + Send + Sync;
 pub(super) type PackCanonicalFn =
     dyn Fn(&Path, Box<dyn std::io::Write + Send>, i32) -> Result<u64> + Send + Sync;
+pub(super) type UnpackCanonicalFn =
+    dyn Fn(Box<dyn std::io::Read + Send>, &Path) -> Result<u64> + Send + Sync;
 pub(super) type PrepareInstallFn =
     dyn Fn(&str) -> std::result::Result<PreparedInstall, InstallRefusal> + Send + Sync;
 pub(super) type SliceIngestFn =
@@ -126,6 +128,15 @@ impl IngestPortDouble {
         f: impl Fn(&Path, Box<dyn std::io::Write + Send>, i32) -> Result<u64> + Send + Sync + 'static,
     ) -> Self {
         self.pack_canonical = Some(Box::new(f));
+        self
+    }
+
+    /// Program `unpack_canonical`; `f` gets the reader and the destination.
+    pub fn on_unpack_canonical(
+        mut self,
+        f: impl Fn(Box<dyn std::io::Read + Send>, &Path) -> Result<u64> + Send + Sync + 'static,
+    ) -> Self {
+        self.unpack_canonical = Some(Box::new(f));
         self
     }
 
@@ -341,6 +352,14 @@ impl IngestPort for IngestPortDouble {
         match &self.pack_canonical {
             Some(f) => f(canonical_path, writer, compression_level),
             None => Err(refuse("pack_canonical")),
+        }
+    }
+
+    fn unpack_canonical(&self, reader: Box<dyn std::io::Read + Send>, dest: &Path) -> Result<u64> {
+        self.record("unpack_canonical");
+        match &self.unpack_canonical {
+            Some(f) => f(reader, dest),
+            None => Err(refuse("unpack_canonical")),
         }
     }
 

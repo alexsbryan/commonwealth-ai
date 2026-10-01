@@ -330,6 +330,9 @@ pub trait IngestPort: LocalCorpusPort + CatalogIngestPort + PartitionMergePort {
         writer: Box<dyn std::io::Write + Send>,
         compression_level: i32,
     ) -> Result<u64>;
+    /// Unpack a stream `pack_canonical` wrote into `dest`, which must not
+    /// exist; the bytes written.
+    fn unpack_canonical(&self, reader: Box<dyn std::io::Read + Send>, dest: &Path) -> Result<u64>;
 
     // ── Foreground ──
     /// Install the hook ingest yields to between batches.

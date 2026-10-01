@@ -461,6 +461,14 @@ impl IngestPort for CorpusEngine {
         crate::canonical_sync::pack_canonical(canonical_path, writer, compression_level)
     }
 
+    fn unpack_canonical(
+        &self,
+        reader: Box<dyn std::io::Read + Send>,
+        dest: &Path,
+    ) -> crate::error::Result<u64> {
+        crate::canonical_sync::unpack_canonical(reader, dest)
+    }
+
     fn set_yield_hook(&self, hook: Arc<dyn YieldHook>) {
         CorpusEngine::set_yield_hook(self, hook)
     }
