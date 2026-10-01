@@ -12,11 +12,11 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_index::index::{CorpusIndex, InsertChunk};
-use corpus_index::ingest_port::double::IngestPortDouble;
-use corpus_index::ingest_port::{RecipeIngested, WatchedUpdate};
-use corpus_index::types::EmbedFn;
-use corpus_index::{Error, Result};
+use super::IngestPortDouble;
+use crate::index::{CorpusIndex, InsertChunk};
+use crate::ingest_port::{RecipeIngested, WatchedUpdate};
+use crate::types::EmbedFn;
+use crate::{Error, Result};
 
 /// The double over `index_dir`, embedding with `embed`.
 pub fn leaf_backed_double(index_dir: PathBuf, embed: EmbedFn) -> IngestPortDouble {
@@ -91,7 +91,7 @@ impl RecipeHead {
 
 async fn open_or_create(dir: &Path, embed: &EmbedFn, head: &RecipeHead) -> Result<CorpusIndex> {
     let path = dir.join(&head.corpus_id);
-    if corpus_index::corpus::Corpus::meta_in(&path).is_file() {
+    if crate::corpus::Corpus::meta_in(&path).is_file() {
         return CorpusIndex::open(&path).await;
     }
     let dim = embed("dimension probe").await?.len();
@@ -158,7 +158,7 @@ async fn apply(
     dir: &Path,
     embed: &EmbedFn,
     update: &WatchedUpdate,
-    fetch: corpus_index::ingest_port::DocFetchFn,
+    fetch: crate::ingest_port::DocFetchFn,
 ) -> Result<()> {
     let index = CorpusIndex::open(&dir.join(&update.corpus_id)).await?;
     for doc in update

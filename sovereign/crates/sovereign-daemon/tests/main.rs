@@ -90,10 +90,11 @@ mod knowledge_served_e2e;
 mod landscape_digest_http_e2e;
 #[path = "main/lc_surface_e2e.rs"]
 mod lc_surface_e2e;
-// sovereign-tools' leaf-backed `LocalCorpusPort` double, shared rather
-// than copied: the local-corpus routes drive the same manager over it.
-#[path = "../../sovereign-tools/tests/main/local_corpus_port_double.rs"]
-mod local_corpus_port_double;
+// corpus-index's leaf-backed `LocalCorpusPort` double, shared with
+// sovereign-tools: the local-corpus routes drive the same manager over it.
+mod local_corpus_port_double {
+    pub use corpus_index::ingest_port::double::leaf_backed_double;
+}
 #[path = "main/local_only_boot.rs"]
 mod local_only_boot;
 #[path = "main/local_only_corpus_locality.rs"]

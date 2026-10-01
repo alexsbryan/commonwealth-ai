@@ -39,6 +39,8 @@ use sovereign_contracts::daemon_wire::RecipeParameterSchema;
 
 mod daemon;
 pub use daemon::{RecipeHarnessDouble, SliceIngest};
+mod leaf_backed;
+pub use leaf_backed::leaf_backed_double;
 
 fn unprogrammed(method: &str) -> String {
     format!("IngestPortDouble::{method}: not programmed by this test")
