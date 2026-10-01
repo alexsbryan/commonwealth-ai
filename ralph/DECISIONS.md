@@ -1760,6 +1760,25 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   - Trial (3): COMPILE green, LAYER pass, BOUNDARY 4 → 4 (no new edge). The other five rest on manifests read at ff3693c12 (appendix).
 - REVIEW-AFTER: pb-mesh-exit-mesh's landing. Falsified if the advertised hardware or free storage on this host differs before and after (1), if `svrn chat` with a stored guest link stops answering on the stock install (4), or if any ruling's move turns BOUNDARY or LAYER red where the trial and manifests said it would not.
 
+**phase-b-87 · 2026-09-30 · pb-distribution-onprem-compose · director** — this commit
+- Needed: the worker stopped at census with four false premises in the row's PROOF, each reproduced at b1fe73dcd:
+  - Tool ids are routing data in crates every svrn daemon links (sovereign-contracts routing.rs:300-357, intent_policy.rs:365-482, tool_bundle.rs:133-151), and WebFetchTool lives in sovereign-tools, which sovereign-daemon links (Cargo.toml:51). A `strings` check for `web_fetch` cannot pass on a correct build; package.sh:118-129 already recorded this for the old server.
+  - `/mcp` is svrn's own route, merged whenever `McpSurface::Mounted` (daemon.rs:1613-1621); `code: None` only removes code's tools from it.
+  - `/v1/solve/jobs` with `code: None` answers the named 503 of `solve_absent_router` (hosted_code.rs:118-122, FIVE_PROGRAMS §4 rule 3), not 404.
+  - `IngestCalls.recipe_authoring` (hosted_ingest.rs:107) is required, so a root composing ingest must link sovereign-recipe-author and its ProbeUrlTool.
+- Chose: rewrite the row, keeping its outcome.
+  - Tool absence is proven by the running registry, never by `strings`. `strings` checks only literals that sovereign-code or sovereign-recipe-author alone carry (`/v1/solve/jobs/{id}/events`, solve_http.rs:767), on onprem (absent) and stock (present, watched red).
+  - One posture value through `process::run` carries web reach, the wikipedia bundle and the `/mcp` ROUTE. Withheld `/mcp` answers a named 503. The `McpMount` stays, because its notes store backs the notes routes (daemon.rs:544-554).
+  - `/v1/solve/jobs` keeps its named 503.
+  - `IngestCalls.recipe_authoring` becomes an `Option`, with five sites in the census. Only sovereign-stock links sovereign-recipe-author, so the onprem closure holds no ProbeUrlTool.
+  - The ARCH_LAYERS row holds direct edges only. The closure keeps commonwealth-rail-core and sovereign-tools through sovereign-daemon, and the row now says so.
+  - pb-distribution-onprem-kit's acceptance check 0 reads "never 2xx" (404 or a named 503), and its package.sh gate uses the same literals. FIVE_PROGRAMS §2c gains the posture paragraph.
+- Because:
+  - A check that cannot pass on a correct build is not a gate (principle 5).
+  - Absence is named, never a bare 404 (principle 6, §4 rule 3).
+  - The withholding is structural: the registration and the route are never built (principle 10). The existing seams are reused: `Option` parts, `Withheld`, `solve_absent_router` (principle 11).
+- Falsified if: the onprem registry census lists any withheld tool; `/mcp` on onprem answers 2xx; the solve-events literal is found in the onprem binary; or making recipe authoring optional changes what stock or cli-llm-stock does. This entry also amends phase-b-86's falsifier: "contains a withheld tool's strings" now means the code-only and recipe-author-only literals, not the tool ids.
+
 **phase-b-82 · 2026-10-01 · pb-mesh-exit-transport (the flip) · seat, amending phase-b-81 fork 4** — this commit
 - Needed: phase-b-81 ruled that the DST fault pack is ported onto cw-rails' gossip inside the flip, before landing. It reasoned that the seat's landing condition (a5ff24788) forbids landing while a surviving behaviour has no successor. That pulls ~1,500 test lines and a transport seam into the flip. It also contradicts an existing placement: phase-c's pc-rails-gossip-dst (ralph/next/phase-c/STATE.md:78), staged by pb-mesh-dissolve because "a pack for cw-rails' gossip advances no Phase B finish item".
 - Chose:
@@ -1823,6 +1842,17 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   - The README's promise ("routes that could reach a shell are not in the binary") is kept structurally by a distribution that does not link them (principle 10). Config or nginx alone would leave it remembered.
   - The keyed mode is off on a daemon with no keys, so the desktop and local users see nothing change (principle 6). The one key store and the one `Asserted` decider follow principle 8. Reusing `process::run`'s `Option` seams and the `Withheld` record follows principle 11.
 - REVIEW-AFTER: pb-distribution-onprem-kit. This decision is falsified if acceptance.sh cannot pass without restoring an old route shape, which would mean a client did depend on them, or if the onprem binary still contains a withheld tool's strings.
+
+**phase-b-88 · 2026-10-01 · pb-distribution-onprem-compose · seat, ruling where ingest's hosting composition lives once rule 3c reads `#[path]`** — this commit
+- Needed: B's on-prem rows cannot land on cut. sovereign-onprem/src/main.rs:17 mounts `#[path = "../../sovereign-stock/src/ingest.rs"]`, and cut's rule 3c (4dd8f5a7b, `EscapeKind::PathMount`) reports a mount out of the crate root, so BOUNDARY 1 -> 2 on landing. `hosted()` names svrn's `process::HostedIngest`/`IngestCalls`/`IngestMount` and ingest's face items together, so only a crate outside every package can hold it, and `arch_layers::distributions::validate` refuses a crate claimed by two `[[distribution]]` rows ("a composition root has one row"). Checked at f38d9f24c.
+- Chose: a library crate `sovereign-hosted-ingest`, in no package and no leaf, holding `hosted()` moved verbatim from sovereign-stock/src/ingest.rs. BOTH distribution rows list it in `crates`, and a crate several rows claim answers to EVERY row that claims it: its direct edges are judged per claiming row (`evaluate_distributions` iterates the claiming rows instead of taking the first), its `src/` face-item scan runs once per row, and its code lines count against each row's fixed cap. The two-row refusal in `validate` goes; the package-member and leaf refusals stay. sovereign-stock (both bins) and sovereign-onprem call `sovereign_hosted_ingest::hosted(..)`; the `#[path]` mount is gone.
+- Because:
+  - Principle 8. One composition of ingest for svrn, never a copy. A copy in sovereign-onprem would compile-track the struct fields but not the choices (which extractor, which client), which is exactly the drift one decider prevents.
+  - Principle 10. On-prem's withholding becomes structural for the shared code too: the crate is judged against on-prem's faces, so naming `sovereign_recipe_author` or `sovereign_code` there is a violation under on-prem's name. Today that property is a sentence in ingest.rs's doc comment.
+  - Principle 12. Composing programs is a distribution's job; the crate belongs to no program. The rejected homes each put the composition in a side that does not own it: svrn's daemon would link corpus-engine and the catalog (svrn's lift breaks), and an ingest face crate would name sovereign-daemon (an [ingest] -> [svrn] edge).
+  - Principle 11. It reuses the distribution rule and its caps; no new row kind, no `uses` key, no exception. The intersection is the strictest semantics a shared crate could have.
+  - Caps hold without a re-pin: on-prem 76 + 61 = 137 of 200, stock 137 + 6 + 61 = 204 of 300 (non-blank, non-comment lines, approximate).
+- REVIEW-AFTER: the landing on cut. Falsified if a PLANT that adds a sovereign-recipe-author edge to sovereign-hosted-ingest's manifest, or names a svrn item outside on-prem's face in its `src/`, does not go red under `[onprem]` alone; if BOUNDARY on cut after the landing is not the pre-landing count; or if the stock install's ingest journey changes. (Corrected at the landing: naming `sovereign_recipe_author::…` is kept out by the edge rule, since on-prem declares no recipe-author face for the item scan to read and the name cannot compile without the edge. Caught by the implementing worker.)
 
 **phase-b-90 · 2026-10-01 · pb-mesh-exit-mesh · seat, ruling the parked package's two forks; amends the row's wall-link bullet and phase-b-83 ruling (1)'s VRAM sentence** — this commit
 - Needed: the worker parked pb-mesh-exit-mesh (ctl/parked/pb-mesh-exit-mesh.md) on two rulings that cannot land as written. Each premise was checked in the tree at 0390e5366.
@@ -13034,6 +13064,32 @@ trial (ff3693c12, compile, reverted): ruling (3) applied: four consts moved to o
 Why no split: the worker proposed -a (stated moves, BOUNDARY 0) and -b (leftovers and the delete). Both serve one outcome with one proof (the daemon links no sovereign-mesh, PLANT re-adds it), and the charter splits only when proofs differ. -a would also land a BOUNDARY-0 row that advances no finish item on its own.
 
 Why (1) is not end-user-observable: peers see the same hardware and clamped storage, measured by the same function, now from cw-rails. The row requires a test that pins both.
+
+</details>
+
+## phase-b-87 · 2026-09-30 — on-prem compose: prove absence by registry and route, not by tool-id strings
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced commands (the main checkout at b1fe73dcd):
+
+- `git grep -n '"web_fetch"\|"wikipedia_fetch"\|"probe_url"' -- sovereign/crates/sovereign-contracts/src` gave 18 non-test hits across intent_policy.rs, tool_bundle.rs, types/routing.rs and skills_data/recipe-author.toml.
+- `grep -ln sovereign-recipe-author sovereign/crates/*/Cargo.toml corpus-engine/Cargo.toml` matched only sovereign-stock/Cargo.toml.
+- sovereign-daemon/Cargo.toml:28 is commonwealth-rail-core and :51 is sovereign-tools. Its `ocr` feature (:140) forwards sovereign-tools/paddle-ocr.
+- `McpSurface` (daemon_services.rs:121-138) has `Mounted` and `Unavailable`. `Unavailable` means "could not build", which is a different fact from a distribution's choice. That is why the posture gates the route merge and leaves the mount alone: `notes_store()` reads through the mount.
+- I did not re-run the worker's `strings` counts (43/45/57 on debug stock). The source census above is enough to decide the fork.
+
+Options considered for `/mcp`: (A) a posture on the route, chosen; (B) leave it mounted and rely on nginx not proxying it, rejected because it is remembered, not structural (principle 10). For `/v1/solve/jobs`: an on-prem-only 404 was rejected, because it would be a second answer to the absent-code question, against §4 rule 3.
+
+</details>
+
+## phase-b-88 · 2026-10-01 — ingest's hosting composition is a crate both distribution rows claim
+
+<details><summary>reasoning, evidence</summary>
+
+The gate's own fix text for a `PathMount` is "put the shared code in a crate both depend on". For distributions that crate could not exist: `validate` refused it by name. The refusal was written when every distribution was one binary crate, and it protected against one crate being judged under two inconsistent rule sets. Judging it under both, and failing it under either, keeps that protection and admits the shared crate.
+
+Rejected: an ingest-package face item (the seat's earlier lean in frame c06eb471) — `hosted()` must name `sovereign_daemon::process::HostedIngest`, and an ingest crate may not reach svrn. Merging on-prem into the stock row loses on-prem's narrower face list. A `uses = [..]` key on the row is a second mechanism for the same reachability question.
 
 </details>
 
