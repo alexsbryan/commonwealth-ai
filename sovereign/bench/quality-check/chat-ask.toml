@@ -188,6 +188,23 @@ audit_median_ms = 8954
 audit_calls = 12
 total_median_ms = 31728
 
+# Qwen3.6-35B-A3B-MTP-UD-Q6_K, the stem the deployed node serves since 09-13
+# (phase-b-94). Medians from the committed main-era baseline, stack
+# 2ce389007280 (sovereign/bench/quality-check/baselines/chat-ask/, captured
+# 2026-09-13, host load 2.37, committed in ef21e3a08, an ancestor of main
+# 18f783f44): per stage the larger of q1/q2, as above. q1 232/16,489/9,639/
+# 16,632 (+625 unattributed), q2 142/27,688/—/15,286 (+26). Total is q1's sum,
+# 43,617. The calls stay at the order's values. Same 1.5x rule; nothing here
+# was read from the candidate.
+[ceilings."Qwen3.6-35B-A3B-MTP-UD-Q6_K"]
+retrieval_median_ms = 232
+draft_median_ms = 27688
+draft_calls = 1
+citation_median_ms = 9639
+audit_median_ms = 16632
+audit_calls = 12
+total_median_ms = 43617
+
 # ── The two questions ───────────────────────────────────────────────
 
 [[question]]
