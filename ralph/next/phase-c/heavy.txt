@@ -1,0 +1,5 @@
+# phase-c heavy rows (operator, phase-b-103): at most ONE per wave. Each loads models or a sandbox daemon
+# beside the deployed node's, so two at once is the memory shape of the 2026-10-01 OOM.
+pc-onprem-followups           # the on-prem sandbox daemon with its models, acceptance.sh
+pc-atlas-highlight-determinism  # repeated retrieval runs on one corpus state
+pc-split-deploy-honesty       # serve split from svrn, two processes with models
