@@ -1,4 +1,3 @@
-#![cfg(feature = "dst")]
 //! The ring-room fleet in the Tier-1 simulator, and the two directions any
 //! change to its deciding term must be measured in (ralph A35).
 //!
@@ -6,9 +5,9 @@
 //! the sweep helpers there are `pub(crate)` so there is ONE implementation of
 //! "run every arm and score it", not two.
 
-use sovereign_mesh_test_harness::mesh_sim::scenario;
-use sovereign_mesh_test_harness::mesh_sim::scoreboard::render;
-use sovereign_mesh_test_harness::mesh_sim::{Arm, RunReport};
+use crate::mesh_sim::scenario;
+use crate::mesh_sim::scoreboard::render;
+use crate::mesh_sim::{Arm, RunReport};
 
 use super::mesh_sim_scoreboard::{assert_hard_invariants, print_candidate_breakdown, sweep, SEED};
 
@@ -32,7 +31,7 @@ use super::mesh_sim_scoreboard::{assert_hard_invariants, print_candidate_breakdo
 /// — and prints the rest. Run it with:
 ///
 /// ```text
-/// ./scripts/sovereign-test.sh --human --package sovereign-mesh \
+/// ./scripts/sovereign-test.sh --human --package sovereign-serving-host \
 ///   --filter the_ring_room_fleet_before_any_ranking_change -- --nocapture
 /// ```
 #[test]
@@ -137,7 +136,7 @@ fn write_ralph_artifact(name: &str, body: &str) {
 /// [`print_candidate_breakdown`]'s text, for the artifact. One renderer, two
 /// sinks — the printed and the written form cannot disagree.
 fn candidate_breakdown_text(report: &RunReport, n: usize) -> String {
-    use sovereign_mesh::decision_log::{deciding_term, DecisionEvent};
+    use sovereign_scheduler::decision_log::{deciding_term, DecisionEvent};
     let mut out = String::from("\n── what the scorer saw ──\n");
     let mut shown = 0;
     for ev in &report.records {
@@ -176,13 +175,16 @@ fn candidate_breakdown_text(report: &RunReport, n: usize) -> String {
         // Same rule as the production recorder: a `StayLocal` verdict marks no
         // candidate `selected`, and local is the one it chose.
         let winner = d.candidates.iter().find(|c| c.selected).or_else(|| {
-            matches!(d.verdict, sovereign_mesh::decision_log::Verdict::StayLocal)
-                .then(|| {
-                    d.candidates
-                        .iter()
-                        .find(|c| c.kind == sovereign_mesh::decision_log::CandidateKind::Local)
-                })
-                .flatten()
+            matches!(
+                d.verdict,
+                sovereign_scheduler::decision_log::Verdict::StayLocal
+            )
+            .then(|| {
+                d.candidates
+                    .iter()
+                    .find(|c| c.kind == sovereign_scheduler::decision_log::CandidateKind::Local)
+            })
+            .flatten()
         });
         if let Some(win) = winner {
             let rival = d

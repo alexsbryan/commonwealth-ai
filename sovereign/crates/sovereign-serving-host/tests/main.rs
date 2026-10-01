@@ -22,11 +22,29 @@
 #[path = "main/manifest_fanout_concurrency.rs"]
 mod manifest_fanout_concurrency;
 
+// The Tier-1 scheduler simulator (moved from sovereign-mesh-test-harness,
+// pb-mesh-dissolve): the ranker's own instrument, so it lives beside the
+// ranker's tests and no build links it. It was a library, and five of its
+// report accessors are read by no test here; they are the instrument's
+// surface, kept as moved.
+#[allow(dead_code)]
+#[path = "main/mesh_sim/mod.rs"]
+mod mesh_sim;
+
+#[path = "main/mesh_sim_ring_room.rs"]
+mod mesh_sim_ring_room;
+
+#[path = "main/mesh_sim_scoreboard.rs"]
+mod mesh_sim_scoreboard;
+
 #[path = "main/openai_finish_reason.rs"]
 mod openai_finish_reason;
 
 #[path = "main/scheduler_decision_records.rs"]
 mod scheduler_decision_records;
+
+#[path = "main/scheduler_replay_agreement.rs"]
+mod scheduler_replay_agreement;
 
 #[path = "main/serving_lift_harness.rs"]
 mod serving_lift_harness;

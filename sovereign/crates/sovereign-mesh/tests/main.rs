@@ -25,14 +25,8 @@
 // would put two builds of `sovereign-mesh` in the graph (a dev-dependency
 // cycle) so the `FabricPart` types would not unify. An integration test
 // resolves both to one build.
-#[path = "main/mesh_sim_ring_room.rs"]
-mod mesh_sim_ring_room;
-#[path = "main/mesh_sim_scoreboard.rs"]
-mod mesh_sim_scoreboard;
 #[path = "main/rail_kv_pump_namespaces.rs"]
 mod rail_kv_pump_namespaces;
-#[path = "main/scheduler_replay_agreement.rs"]
-mod scheduler_replay_agreement;
 #[path = "main/work_atlas_store.rs"]
 mod work_atlas_store;
 

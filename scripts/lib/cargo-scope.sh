@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli-llm/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task,host-kit/jobs,host-kit/service"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli-llm/awareness,sovereign-daemon/treesitter,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task,host-kit/jobs,host-kit/service"
         return 0
     fi
 
@@ -184,16 +184,6 @@ if "sovereign-daemon" in seen:
     # gates, so no fingerprint flip.
     want.append("sovereign-daemon/treesitter")
 if "sovereign-mesh" in seen:
-    # `dst` compiles the fault-injection harness and, through it, the Tier-1
-    # scheduler simulator that moved to `sovereign-mesh-test-harness` (domains
-    # dm-mesh-sim-move) — both off by default so a production build never links
-    # them. tests/main/mesh_sim_scoreboard.rs (24) and scheduler_replay_agreement.rs
-    # (8) run under it; dst_scenarios.rs (7 — the mesh invariant pack under
-    # seeded fault injection) was in the same position with its CI job shelved
-    # since 2026-07-14. A harness nobody has watched fail is not a gate
-    # (ARCH_PRINCIPLES §18.1). Both are pure in-process compute — no GPU, no
-    # network, no weights (§12.4).
-    want.append("sovereign-mesh/dst")
     # `treesitter` gates 30+ integration files of sovereign-mesh
     # (the `#![cfg(feature = "treesitter")]` crate-gate: turn_surface.rs, knowledge_*,
     # reading_http_e2e.rs, ...). A --workspace run gets it by unification
