@@ -1234,7 +1234,8 @@ plus `--local-only` (`[relay] discovery = "none"`) on a local-only node, which a
 running cw-rails whose `/v1/mesh/status` `relay.n0_services` is true; and `run` exits when its `rails.lock`
 is unlinked or replaced. Since phase-b pb-membership it founds (`cw-rails found`), serves its invite as
 `join_link` on `/v1/mesh/status`, admits at `/internal/join` through commonwealth-discovery's
-`accept_join_with_identity`, and speaks mDNS by key (`run --mdns`; a dial-less join browses for a keyed
+`accept_join_with_identity` (an admission it cannot persist is refused with a 500 naming the data dir,
+and rolled back), and speaks mDNS by key (`run --mdns`; a dial-less join browses for a keyed
 founder), all keyed by its own node key; its closure did not grow (319 crates vs 743 at the 2026-09-11
 measure; the rail doors cost three more). Since phase-b pb-rails-membership a running cw-rails also
 serves the daemon's membership doors (`/v1/mesh/{create,join,join/preview,rotate,leave,switch,forget}`,

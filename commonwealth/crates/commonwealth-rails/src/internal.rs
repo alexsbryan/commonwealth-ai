@@ -250,6 +250,8 @@ pub async fn join(
                        expires_at = ?mesh.invite_expires_at, "join: REFUSED — the invite has expired");
         return Err(rejected("invite link has expired"));
     }
+    // Admission and persist are one act: a failed save restores this.
+    let before = mesh.clone();
     let new_id = match commonwealth_discovery::membership::accept_join_with_identity(
         &mut mesh,
         &req.join_key,
@@ -266,12 +268,23 @@ pub async fn join(
             return Err(rejected(&e.to_string()));
         }
     };
-    note_contact(&state.contacts, new_id, now).await;
-    // Persist before answering: a founder that restarts inside a gossip
-    // interval must not forget the member it just admitted.
+    // Persist before answering: a founder that restarts must not forget a
+    // member it answered 200 to, so a failed save un-admits and refuses.
     if let Err(e) = identity::save_mesh(&state.data_dir, &mesh) {
-        tracing::warn!(target: "rails", error = %e, "join: could not persist the mesh");
+        *mesh = before;
+        let reason = format!(
+            "the founder could not persist the admission under {}: {e}",
+            state.data_dir.display()
+        );
+        tracing::warn!(target: "rails", joining = %req.joining_node_name, error = %e,
+                       data_dir = %state.data_dir.display(),
+                       "join: REFUSED — the mesh could not be persisted; admission rolled back");
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(JoinRejection { reason }),
+        ));
     }
+    note_contact(&state.contacts, new_id, now).await;
     tracing::info!(target: "rails", new_node = %new_id, joining = %req.joining_node_name,
                    members = mesh.members.len(), "join: admitted a member");
     // Disclose: a joiner has no other channel to learn the gossip credential.
@@ -564,5 +577,50 @@ mod tests {
             .await
             .expect_err("expired");
         assert!(err.1.reason.contains("expired"), "{}", err.1.reason);
+    }
+
+    /// **The failing input.** A data dir the store cannot write refuses the
+    /// join by name, and the roster does not keep the joiner.
+    #[tokio::test]
+    async fn an_unpersistable_admission_is_refused_and_rolled_back() {
+        let (mesh, key) =
+            commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let blocker = tmp.path().join("not-a-dir");
+        std::fs::write(&blocker, b"a file").expect("plant a file");
+        let mut st = state(mesh);
+        st.data_dir = blocker.join("data");
+        let req = join_req(&key, "joiner");
+        let proposed = req.proposed_node_id.unwrap();
+        let err = join(State(st.clone()), Json(req))
+            .await
+            .expect_err("an admission the store refused must not answer 200");
+        assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(
+            err.1.reason.contains(&st.data_dir.display().to_string()),
+            "{}",
+            err.1.reason
+        );
+        assert!(!st.mesh.read().await.members.contains_key(&proposed));
+        assert_eq!(st.mesh.read().await.members.len(), 1);
+        assert!(!st.contacts.lock().await.contains_key(&proposed));
+    }
+
+    /// With a writable data dir the joiner survives a restart: the mesh a
+    /// fresh process loads from disk lists it.
+    #[tokio::test]
+    async fn an_admitted_joiner_is_listed_after_a_restart() {
+        let (mesh, key) =
+            commonwealth_discovery::membership::init_mesh("Lab", "founder", Vec::new());
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut st = state(mesh);
+        st.data_dir = tmp.path().to_path_buf();
+        let req = join_req(&key, "joiner");
+        let proposed = req.proposed_node_id.unwrap();
+        join(State(st.clone()), Json(req)).await.expect("admitted");
+        let reloaded = identity::load_mesh(tmp.path())
+            .expect("the mesh file reads")
+            .expect("the mesh file exists");
+        assert!(reloaded.members.contains_key(&proposed));
     }
 }
