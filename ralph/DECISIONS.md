@@ -1963,6 +1963,15 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Because: principle 8 held as prose only when a worker stopped to think about it (the ledger shows the twin option weighed and refused when it did, e.g. phase-b-56's SamplingOverrides); a ratchet makes it structural (principle 10). Collapsing the existing twins without the ratchet would leave the incentive that made them.
 - REVIEW-AFTER: f12's first census. If it shows twins beyond the daemon's, each family is either collapsed in f11's shape (a home that takes no new edge) or filed with its reason, never left uncounted.
 
+**phase-b-100 · 2026-10-01 · pb-distribution · operator, ruling the svrn lift's test failures (the seat's lean)** — this commit
+- Needed: pb-distribution's NEEDS_HUMAN of 2026-10-01. Finish items true at 02543fd9f: boundary 0, no `package = "svrn"` exception, LIFTs serve/ingest/cmnwlth/code/bench on file as passed. LIFT(svrn) failed 18 tests in its sandbox: 11 read the monorepo checkout (a CWD walk or `.git`), 5 spawn `sovereign-stock` or `sovereign-pod-worker`, 2 read a cw-rails left in the shared target by the Sep-30 cmnwlth lift.
+- Chose (operator: "go with your lean on the svrn lift"):
+  - A split row, pb-distribution-svrn-lift-2, ahead of pb-distribution: the 11 checkout readers move to corpus-engine/xtask/tests (4174a6e59's precedent), and boundary rule 3c learns the CWD-walk and `.git` shapes; the 5 binary spawners move to sovereign-stock's tests, driven through binaries (no `pub` widening of cli-daemon privates for a test; a needed item is a face item); the lift instrument records the commit that built each shared-target binary and reports a sibling built at another commit as could-not-judge.
+  - Not option (c), a `--lib`-only svrn test phase: it would make the lift prove less than it claims.
+  - pb-distribution is reset from `[~]` to `[ ]` and depends on the split (a `[~]` row resumes before any other); it resumes for the closing sweep only, lifts in the order cmnwlth, serve, svrn, ingest, code, bench at one tip.
+- Process: the supervisor had dispatched a director resolution session; the seat paused it, kept its uncommitted trial of the stock move (target/ralph/phase-b/trials/svrn-lift-2-director/) for the row's worker, reverted the trial, wrote this ruling, and ended the session, so one ruling stands.
+- Because: principle 12 (a test whose subject is the composition lives at the composition root; a census of the monorepo lives in no package), principle 8 (one escape census, extended, not a second), principle 6 (a stale sibling is named, not read as a red).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
