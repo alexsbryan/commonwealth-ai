@@ -59,6 +59,62 @@ impl MembershipReader for RosterDouble {
     }
 }
 
+/// A port whose owner did not answer (F13): `members()` can only say empty,
+/// `read_roster()` says why.
+struct UnreadRoster;
+
+#[async_trait]
+impl MembershipReader for UnreadRoster {
+    type Dial = PeerContact;
+
+    async fn mesh_name(&self) -> String {
+        String::new()
+    }
+
+    async fn federated_meshes(&self) -> Vec<FederatedMeshDescriptor> {
+        Vec::new()
+    }
+
+    async fn members(&self) -> Vec<MembershipEntry<PeerContact>> {
+        Vec::new()
+    }
+
+    async fn read_roster(&self) -> Result<(String, Vec<MembershipEntry<PeerContact>>), String> {
+        Err("cw-rails slow: no roster within 3s".into())
+    }
+}
+
+/// F13: `/status` over a roster with no answer names it on `mesh`, so its
+/// zero counts read as unknown rather than as a mesh of nobody. Failing
+/// input: a `mesh` with no `roster_absent`.
+#[tokio::test]
+async fn status_names_an_unread_roster_instead_of_counting_nobody() {
+    let state = test_app_state_with_seed(FabricSeed {
+        peer_transport: sovereign_daemon::double::address_transport(),
+        membership: Some(Arc::new(UnreadRoster)),
+        ..Default::default()
+    });
+    let (status, body) = call(state, Request::get("/status").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let mesh = &body["mesh"];
+    assert_eq!(
+        mesh["roster_absent"], "cw-rails slow: no roster within 3s",
+        "{mesh}"
+    );
+    assert_eq!(mesh["members_total"], 0, "{mesh}");
+}
+
+/// A roster that read carries no `roster_absent` key at all.
+#[tokio::test]
+async fn status_omits_roster_absent_when_the_roster_read() {
+    let state = state_over(RosterDouble {
+        name: "Double Mesh",
+        members: vec![],
+    });
+    let (_, body) = call(state, Request::get("/status").body(Body::empty()).unwrap()).await;
+    assert!(body["mesh"].get("roster_absent").is_none(), "{body}");
+}
+
 fn entry(
     id: u128,
     name: &str,

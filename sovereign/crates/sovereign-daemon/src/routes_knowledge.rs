@@ -129,8 +129,12 @@ pub async fn knowledge_search(
     // federate because no complete corpora are published from that
     // side. If they're missing from the roster entirely, gossip
     // hasn't converged yet.
+    // A roster miss is named in the plan below, never read as no peers (F13).
+    let (members, roster_absent) = match state.membership().read_roster().await {
+        Ok((_, members)) => (members, None),
+        Err(why) => (Vec::new(), Some(why)),
+    };
     let (peer_offerings, target_corpora_if_unconstrained, peer_roster) = {
-        let members = state.membership().members().await;
         let mut offerings: Vec<PeerOffering> = Vec::new();
         let mut union: HashSet<String> = local_corpora.clone();
         let mut roster: Vec<(String, String, Vec<String>)> = Vec::new();
@@ -167,12 +171,19 @@ pub async fn knowledge_search(
         (offerings, union, roster)
     };
 
-    tracing::info!(
-        local_corpora = ?local_corpora,
-        peer_roster = ?peer_roster,
-        offerings = peer_offerings.len(),
-        "knowledge: fan-out plan — peer roster & local view"
-    );
+    match &roster_absent {
+        None => tracing::info!(
+            local_corpora = ?local_corpora,
+            peer_roster = ?peer_roster,
+            offerings = peer_offerings.len(),
+            "knowledge: fan-out plan — peer roster & local view"
+        ),
+        Some(why) => tracing::warn!(
+            local_corpora = ?local_corpora,
+            roster_absent = %why,
+            "knowledge: fan-out plan — local view only; the peer roster is absent"
+        ),
+    }
 
     // Step 3: resolve the actual target set. If the caller passed
     // `corpora`, honour it; otherwise search every corpus reachable

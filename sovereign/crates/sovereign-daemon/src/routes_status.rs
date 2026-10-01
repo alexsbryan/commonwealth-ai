@@ -87,9 +87,15 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         Some(_) => Ok(Vec::new()),
         None => loaded_model_rows(&state).await,
     };
-    let membership = state.membership();
-    let mesh_name = membership.mesh_name().await;
-    let members = membership.members().await;
+    // One roster read, bounded by its reader; a miss is named on `mesh`
+    // rather than read as a mesh of nobody (F13).
+    let (mesh_name, members, roster_absent) = match state.membership().read_roster().await {
+        Ok((name, members)) => (name, members, None),
+        Err(why) => {
+            tracing::warn!(reason = %why, "status: roster unread; mesh members absent");
+            (String::new(), Vec::new(), Some(why))
+        }
+    };
 
     let members_online = members
         .iter()
@@ -192,6 +198,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             members_total: members.iter().filter(|m| m.active).count(),
             pooled_vram_gb,
             pooled_storage_gb,
+            roster_absent,
         },
         inference: InferenceStatus {
             loaded_models,
@@ -466,6 +473,10 @@ pub struct MeshStatus {
     pub members_total: usize,
     pub pooled_vram_gb: f32,
     pub pooled_storage_gb: f32,
+    /// Why the roster has no answer (cw-rails slow or absent), so the zero
+    /// counts above read as unknown, not as no peers. Omitted when it read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roster_absent: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
