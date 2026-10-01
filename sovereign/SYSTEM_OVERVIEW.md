@@ -421,8 +421,9 @@ assembled (`prepare_document` / `prepare_query`).
 
 `index_stats`, `extract_shard`, `merge_shards`; shards are structurally
 identical to full indexes. The per-node ceiling set in Settings → Knowledge is
-enforced once, at `build_local_capabilities`, which clamps published
-`free_storage_gb`; every scheduler reads that one value.
+enforced once, in cw-rails' gossip merge (commonwealth-rails `self_measure::apply`),
+which clamps the free storage it measures to the budget left svrn declares
+(`NodeCapabilities.storage_remaining_bytes`, never gossiped); every scheduler reads that one value.
 
 **Blanket** hands a chosen subset of peers a one-time, revocable, ephemeral
 grant to shoulder compute for a personal source, riding the existing

@@ -94,6 +94,7 @@ pub(crate) fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
             benchmark: None,
             current_in_flight: None,
             anchor: None,
+            storage_remaining_bytes: None,
         },
         addresses: vec![],
     }

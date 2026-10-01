@@ -21,7 +21,6 @@
 //! `dm-daemon-mesh-adapters` (2026-09-17). Fabric keeps its own modules here;
 //! the host observes them through readers.
 
-pub mod capabilities;
 /// Routing decision records — Phase 0 (P1/P2) of
 /// `docs/specs/SCHEDULER_QUALITY.md`. One structured record per
 /// routing decision (full candidate set, every scorer input stamped

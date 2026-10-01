@@ -50,6 +50,7 @@ pub fn member(node_id: NodeId, name: &str, pubkey: Option<NodePubkey>) -> Member
             benchmark: None,
             current_in_flight: None,
             anchor: None,
+            storage_remaining_bytes: None,
         },
         addresses: vec![],
         node_pubkey: pubkey,

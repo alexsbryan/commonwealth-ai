@@ -182,18 +182,18 @@ fn hold_namespaces(daemon: &RailsDaemon, namespaces: &[String]) -> Result<(), St
 ///
 /// Lists concatenate, flags OR, availability takes the highest, and a
 /// single-valued field takes the first declaration that sets it. Hardware
-/// comes from the first registration that reports any — every program on a
-/// node reports the same machine.
-pub fn merge_declared(caps: &mut NodeCapabilities, declared: &[NodeCapabilities]) {
-    let mut hardware_set = false;
+/// and live load are the node's, measured by cw-rails (`measured`, read when
+/// any registration declares); a declaration only adjusts them, through
+/// [`crate::self_measure::apply`].
+pub fn merge_declared(
+    caps: &mut NodeCapabilities,
+    measured: Option<&crate::self_measure::SelfMeasurement>,
+    declared: &[NodeCapabilities],
+) {
+    if let Some(measured) = measured {
+        crate::self_measure::apply(caps, measured, declared);
+    }
     for d in declared {
-        let reports_hardware =
-            d.hardware.system_ram_gb > 0 || d.hardware.cpu_cores > 0 || !d.hardware.gpus.is_empty();
-        if reports_hardware && !hardware_set {
-            caps.hardware = d.hardware.clone();
-            caps.available = d.available.clone();
-            hardware_set = true;
-        }
         caps.active_processes
             .extend(d.active_processes.iter().cloned());
         caps.hosted_corpora.extend(d.hosted_corpora.iter().cloned());

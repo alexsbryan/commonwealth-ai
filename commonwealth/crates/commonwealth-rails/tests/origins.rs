@@ -335,7 +335,9 @@ async fn a_registered_origin_is_reached_by_a_member_with_its_verified_identity()
                 if let Some(caps) = seen {
                     if caps.loaded_models.iter().any(|m| m == "fixture-model") {
                         assert!(caps.inference_capable);
-                        assert_eq!(caps.hardware.system_ram_gb, 128);
+                        // Hardware is the founder's own measurement, not
+                        // the declaration's 128 (phase-b-83 (1)).
+                        assert!(caps.hardware.system_ram_gb > 0);
                         break;
                     }
                 }

@@ -597,8 +597,8 @@ pub fn internal_router(state: AppState) -> Router {
         // usage, raw free disk, and a recommended baseline; POST
         // accepts `{ "budget_bytes": <≥1 GiB | null> }`. The
         // enforcement point is the gossip-tick capabilities builder
-        // (`sovereign-mesh::capabilities::build_local_capabilities`)
-        // which clamps the published `free_storage_gb` to budget
+        // (commonwealth-rails `self_measure::apply`, over the budget left
+        // `peer_origin::claims_source` declares) which clamps the published `free_storage_gb` to budget
         // remaining — every existing scheduler picks up the cap
         // automatically.
         .route(

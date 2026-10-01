@@ -11,7 +11,7 @@
 //!    property is now structural, ARCH 10).
 //! 2. `AppState::current_local_in_flight` reads that same atomic. Bump on the
 //!    router-side handle, observe through `AppState`.
-//! 3. `build_local_capabilities` pulls
+//! 3. svrn's declaration (`sovereign_daemon::peer_origin::claims_source`) pulls
 //!    `current_local_in_flight` into the gossiped
 //!    `NodeCapabilities.current_in_flight` field — and survives a
 //!    serde round-trip, which is what an actual peer would see.
@@ -43,7 +43,7 @@ use sovereign_contracts::in_flight::LocalInFlightGauge;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::{AppState, LocalInferenceService, ServingSeed};
-use sovereign_mesh::capabilities::build_local_capabilities;
+use sovereign_daemon::peer_origin::claims_source;
 use sovereign_serving_host::inference_adapter::SovereignInferenceAdapter;
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 
@@ -98,12 +98,7 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
     // router side.
     gauge.set(5);
 
-    let caps = build_local_capabilities(
-        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>, // no corpus handle — irrelevant for this assertion
-        100,                                                    // reported_at
-        &state,
-    )
-    .await;
+    let caps = claims_source(state.clone())().await;
 
     assert_eq!(
         caps.current_in_flight,
@@ -114,12 +109,7 @@ async fn build_local_capabilities_publishes_in_flight_through_appstate() {
     // Drain back to zero and rebuild — the next gossip tick must
     // see the drop, not a stale snapshot.
     gauge.set(0);
-    let caps_after = build_local_capabilities(
-        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>,
-        101,
-        &state,
-    )
-    .await;
+    let caps_after = claims_source(state.clone())().await;
     assert_eq!(
         caps_after.current_in_flight,
         Some(0),
@@ -137,12 +127,7 @@ async fn capabilities_payload_survives_serde_roundtrip() {
     let state = app_state_with_gauge(NodeId::from_u128(3), gauge.clone());
     gauge.set(11);
 
-    let caps = build_local_capabilities(
-        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>,
-        200,
-        &state,
-    )
-    .await;
+    let caps = claims_source(state.clone())().await;
     let json = serde_json::to_string(&caps).expect("serialize");
     assert!(
         json.contains("\"current_in_flight\":11"),
@@ -161,12 +146,7 @@ async fn no_publisher_yields_none_in_gossip_payload() {
     // None`. Older peers without the field deserialize that as
     // None too, so scoring falls back to the founder's local view.
     let state = AppState::new(NodeId::from_u128(4));
-    let caps = build_local_capabilities(
-        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>,
-        300,
-        &state,
-    )
-    .await;
+    let caps = claims_source(state.clone())().await;
     assert_eq!(
         caps.current_in_flight, None,
         "no publisher → None in gossip (legacy-compatible)"
@@ -200,12 +180,7 @@ async fn self_claims_publishes_storage_remaining_from_the_budget() {
 
     // And the builder clamps the published free storage to that remaining
     // budget — the behaviour the port replaced a direct `AppState` read for.
-    let caps = build_local_capabilities(
-        None::<&Arc<dyn corpus_index::source::CorpusReadPort>>,
-        500,
-        &state,
-    )
-    .await;
+    let caps = claims_source(state.clone())().await;
     assert!(
         caps.hardware.free_storage_gb <= 10,
         "budget remaining of 10 GiB must clamp published free_storage_gb, got {}",

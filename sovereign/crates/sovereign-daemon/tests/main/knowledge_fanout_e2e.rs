@@ -145,6 +145,7 @@ pub(super) fn caps_with_hosted(corpora: &[&str]) -> NodeCapabilities {
         benchmark: None,
         current_in_flight: None,
         anchor: None,
+        storage_remaining_bytes: None,
     }
 }
 

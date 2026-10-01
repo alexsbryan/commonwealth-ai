@@ -21,15 +21,15 @@
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use oicp_types::capabilities::NodeCapabilities;
 use oicp_types::origin::{Admit, Framing, OriginRegistration};
-use sovereign_mesh::capabilities::build_local_capabilities;
 use sovereign_turn_client::rails_origins::ClaimsSource;
 use subtle::ConstantTimeEq;
 use tokio::sync::watch;
 use tracing::{debug, info};
 
 use crate::state::AppState;
+
+mod claims;
 
 /// The trace target of every event here.
 pub const TRACE_TARGET: &str = "peer_origin";
@@ -73,34 +73,27 @@ pub fn registration(internal_port: u16) -> OriginRegistration {
     }
 }
 
-/// What this registration declares at every register and renew: the
-/// capabilities the gossip round builds (`sovereign_mesh::capabilities::
-/// build_local_capabilities` — hosted corpora, embed model, budgeted
-/// storage, availability, in-flight), read from `state` at that moment, so
-/// cw-rails advertises this node's corpora once it is the node's endpoint.
-/// The anchor tier is left out: serve declares it through its rpc
-/// registration (sovereign-serve rails_mesh.rs `anchor_claims`), and
-/// cw-rails keeps the first anchor it merges (`origins::merge_declared`).
+/// What this registration declares at every register and renew: svrn's own
+/// answers ([`claims::svrn_claims`] — hosted corpora, embed model,
+/// availability, in-flight and the storage budget left), read from `state`
+/// at that moment. The hardware is cw-rails' to measure, and the anchor tier
+/// serve's to declare (sovereign-serve rails_mesh.rs `anchor_claims`).
 pub fn claims_source(state: AppState) -> ClaimsSource {
     Arc::new(move || {
         let state = state.clone();
         Box::pin(async move {
             let engine = state.inner.node.corpus_engine.clone();
+            let atlas = state.inner.node.atlas.clone();
             let now = sovereign_time::unix_now_u64();
-            let caps = without_anchor(build_local_capabilities(engine.as_ref(), now, &state).await);
+            let caps = claims::svrn_claims(engine.as_ref(), atlas.as_ref(), now, &state).await;
             debug!(target: TRACE_TARGET, hosted_corpora = caps.hosted_corpora.len(),
                    embed_model = caps.embed_model.is_some(),
                    availability = caps.inference_availability,
-                   "peer origin: declaring this node's capabilities");
+                   storage_remaining_bytes = ?caps.storage_remaining_bytes,
+                   "peer origin: declaring svrn's answers about this node");
             caps
         })
     })
-}
-
-/// `caps` with the anchor tier cleared: serve's to declare, never svrn's.
-fn without_anchor(mut caps: NodeCapabilities) -> NodeCapabilities {
-    caps.anchor = None;
-    caps
 }
 
 /// The live claim's tie, as the register/renew loop publishes it. Empty
@@ -217,21 +210,6 @@ mod tests {
         let second = source().await;
         assert_eq!(first.inference_availability, 0.25);
         assert_eq!(second.inference_availability, 0.75);
-    }
-
-    /// svrn never declares the anchor tier, whatever the builder read.
-    /// Failing input: declare the builder's output as it is.
-    #[tokio::test]
-    async fn the_declaration_carries_no_anchor() {
-        let mut caps = claims_source(crate::state::test_app_state())().await;
-        caps.anchor = Some(oicp_types::capabilities::AnchorProfile {
-            can_anchor: true,
-            vram_gb: 24,
-            model_resident: None,
-            rpc_port: Some(50052),
-            rpc_iroh: false,
-        });
-        assert_eq!(without_anchor(caps).anchor, None);
     }
 
     /// A second install is refused: one daemon, one registration.

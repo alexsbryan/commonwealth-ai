@@ -100,7 +100,7 @@ code paths:
 
 | Flag | Question it answers | Enforced at |
 |---|---|---|
-| `query_sharing` | may mesh peers run federated searches and receive cited snippets? | capability advertising (`sovereign-mesh/src/capabilities.rs`) |
+| `query_sharing` | may mesh peers run federated searches and receive cited snippets? | capability advertising (`sovereign-daemon/src/peer_origin/claims.rs`) |
 | `mesh_sharing` | may the index *bytes* replicate to peers? | storage-snapshot replication + index transfer |
 | `scope = "local"` | keep this corpus off-mesh entirely | both |
 

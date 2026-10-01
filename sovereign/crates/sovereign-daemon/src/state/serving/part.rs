@@ -306,8 +306,7 @@ pub struct ServingPart {
     /// handle to both — a signal object created first, never a slot filled
     /// later (`quality/DAEMON_CORE.md` §4.2 "Where an install slot breaks a
     /// cycle"). Read by the gossip emitter
-    /// (`sovereign-mesh::capabilities::build_local_capabilities`) on
-    /// every tick to populate
+    /// (`crate::peer_origin::claims_source`) at every register and renew, to populate
     /// commonwealth-core's `NodeCapabilities::current_in_flight`.
     ///
     /// Lifecycle:

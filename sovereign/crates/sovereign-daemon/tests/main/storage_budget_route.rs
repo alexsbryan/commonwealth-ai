@@ -214,6 +214,7 @@ fn planner_member(id: u128, free_storage_gb: u32) -> MembershipEntry<()> {
             benchmark: None,
             current_in_flight: None,
             anchor: None,
+            storage_remaining_bytes: None,
         },
         dial: (),
     }

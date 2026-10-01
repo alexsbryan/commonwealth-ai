@@ -203,7 +203,7 @@ pub struct DesktopConfig {
     /// daemon in sync.
     ///
     /// The actual enforcement happens in
-    /// `sovereign-mesh::capabilities::build_local_capabilities` —
+    /// cw-rails' merge (commonwealth-rails `self_measure::apply`) —
     /// this field is the persistence layer; the runtime control is
     /// the AppState atomic the daemon owns.
     #[serde(default)]

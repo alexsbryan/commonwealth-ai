@@ -63,7 +63,10 @@ pub struct OriginRegistration {
     /// How long the claim holds unrenewed; the endpoint's default when absent.
     #[serde(default)]
     pub ttl_secs: Option<u64>,
-    /// What this origin's program declares about the node, gossiped as-is.
+    /// What this origin's program declares about the node. The endpoint
+    /// merges it over the hardware it measures itself: a declared GPU's VRAM
+    /// and `storage_remaining_bytes` adjust that measurement and are not
+    /// gossiped as declared.
     #[serde(default)]
     pub claims: Option<NodeCapabilities>,
     /// Ring namespaces this program writes on its own behalf. No

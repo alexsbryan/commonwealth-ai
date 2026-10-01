@@ -30,7 +30,7 @@ use kernel_types::NodeId;
 use mesh_reach::rails::RailsTransport;
 use mesh_reach::{PeerContact, PeerTransport};
 use oicp_types::capabilities::{
-    AnchorProfile, AvailableResources, HardwareProfile, NodeCapabilities,
+    AnchorProfile, AvailableResources, ComputeType, GpuInfo, HardwareProfile, NodeCapabilities,
 };
 use oicp_types::origin::{Admit, Framing, OriginRegistration};
 use oicp_types::FederatedMeshDescriptor;
@@ -419,11 +419,13 @@ fn origin_addr(listen: SocketAddr) -> SocketAddr {
 /// and, when
 /// this node lends a GPU (`SOVEREIGN_RPC_SERVE` names a bind), its ggml rpc
 /// worker on `cwth/rpc/0`, declaring the anchor record peers' discovery reads.
+/// The `cwth/http/0` one declares the loader's VRAM figure ([`vram_claims`]).
 pub fn registrations(listen: SocketAddr, member: Option<SocketAddr>) -> Vec<OriginRegistration> {
     registrations_for(
         listen,
         member,
         sovereign_contracts::launch::RpcServe::from_env(),
+        sovereign_inference::embedded::local_gpu_total_vram_gb(),
     )
 }
 
@@ -431,6 +433,7 @@ fn registrations_for(
     listen: SocketAddr,
     member: Option<SocketAddr>,
     rpc: sovereign_contracts::launch::RpcServe,
+    vram_gb: Option<u32>,
 ) -> Vec<OriginRegistration> {
     let mut out = vec![OriginRegistration {
         alpn: String::from_utf8_lossy(mesh_reach::alpn::ALPN).into_owned(),
@@ -439,7 +442,7 @@ fn registrations_for(
         admit: Admit::Members(Vec::new()),
         framing: Framing::Http,
         ttl_secs: Some(ORIGIN_TTL_SECS),
-        claims: None,
+        claims: Some(vram_claims(vram_gb)),
         namespaces: Vec::new(),
     }];
     match member {
@@ -481,11 +484,48 @@ fn registrations_for(
     out
 }
 
+/// The VRAM figure serve's loader sees (`local_gpu_total_vram_gb`, the ggml
+/// device total), declared as the one GPU entry cw-rails applies over the
+/// VRAM it measured (phase-b-90 (B)): sysfs sees only the carveout on a
+/// unified-memory APU. No figure, no entry; every other number is zero.
+fn vram_claims(vram_gb: Option<u32>) -> NodeCapabilities {
+    let mut claims = zero_claims();
+    claims.hardware.gpus = vram_gb
+        .map(|vram_gb| GpuInfo {
+            name: "GPU".to_string(),
+            vram_gb,
+            compute_type: ComputeType::Vulkan,
+            estimated_tflops: 0.0,
+        })
+        .into_iter()
+        .collect();
+    claims
+}
+
 /// The anchor record this node declares through its rpc registration, which
 /// cw-rails merges into its gossiped capabilities (`origins::merge_declared`).
 /// Every other number is zero, as cw-rails' own report is: this declaration
 /// claims the anchor tier and nothing about inference.
 fn anchor_claims(rpc_port: u16) -> NodeCapabilities {
+    NodeCapabilities {
+        anchor: Some(AnchorProfile {
+            can_anchor: true,
+            // `0` for a CPU-only anchor, the field's documented reading.
+            vram_gb: sovereign_inference::embedded::local_gpu_total_vram_gb().unwrap_or(0),
+            model_resident: sovereign_contracts::launch::SharedModelFleet::from_env()
+                .model_id()
+                .map(str::to_string),
+            rpc_port: Some(rpc_port),
+            // cw-rails forwards `cwth/rpc/0` to the worker: a host bridges to
+            // it when no direct address answers.
+            rpc_iroh: true,
+        }),
+        ..zero_claims()
+    }
+}
+
+/// A declaration with every number zero and no anchor.
+fn zero_claims() -> NodeCapabilities {
     NodeCapabilities {
         hardware: HardwareProfile {
             gpus: Vec::new(),
@@ -515,18 +555,8 @@ fn anchor_claims(rpc_port: u16) -> NodeCapabilities {
         embed_model: None,
         benchmark: None,
         current_in_flight: None,
-        anchor: Some(AnchorProfile {
-            can_anchor: true,
-            // `0` for a CPU-only anchor, the field's documented reading.
-            vram_gb: sovereign_inference::embedded::local_gpu_total_vram_gb().unwrap_or(0),
-            model_resident: sovereign_contracts::launch::SharedModelFleet::from_env()
-                .model_id()
-                .map(str::to_string),
-            rpc_port: Some(rpc_port),
-            // cw-rails forwards `cwth/rpc/0` to the worker: a host bridges to
-            // it when no direct address answers.
-            rpc_iroh: true,
-        }),
+        anchor: None,
+        storage_remaining_bytes: None,
     }
 }
 
@@ -585,18 +615,37 @@ pub async fn join(
 }
 
 /// Keep every registration in cw-rails' origin table for as long as serve
-/// runs, through the one register/renew loop.
+/// runs, through the one register/renew loop. The `cwth/http/0` one
+/// re-reads the loader's VRAM figure at every register and renew.
 pub fn spawn_registrations(rails_base: &str, listen: SocketAddr, member: Option<SocketAddr>) {
+    let http = String::from_utf8_lossy(mesh_reach::alpn::ALPN).into_owned();
     for registration in registrations(listen, member) {
         info!(target: TARGET, slot = %registration.alpn, prefixes = ?registration.prefixes,
               port = registration.port, rails = %rails_base,
               "registering an origin with cw-rails");
-        tokio::spawn(sovereign_turn_client::rails_origins::keep_registered(
-            rails_base.to_string(),
-            registration,
-            ORIGIN_TTL_SECS,
-            ORIGIN_RENEW_EVERY,
-        ));
+        let claims: Option<sovereign_turn_client::rails_origins::ClaimsSource> =
+            (registration.alpn == http).then(|| {
+                Arc::new(|| {
+                    Box::pin(async {
+                        let vram_gb = sovereign_inference::embedded::local_gpu_total_vram_gb();
+                        debug!(target: TARGET, ?vram_gb, "declaring the loader's VRAM figure");
+                        vram_claims(vram_gb)
+                    })
+                        as std::pin::Pin<
+                            Box<dyn std::future::Future<Output = NodeCapabilities> + Send>,
+                        >
+                }) as sovereign_turn_client::rails_origins::ClaimsSource
+            });
+        tokio::spawn(
+            sovereign_turn_client::rails_origins::keep_registered_declaring(
+                rails_base.to_string(),
+                registration,
+                ORIGIN_TTL_SECS,
+                ORIGIN_RENEW_EVERY,
+                None,
+                claims,
+            ),
+        );
     }
 }
 

@@ -532,8 +532,8 @@ pub async fn ingest_budget_set(
 // User-set ceiling on how much disk Sovereign is allowed to use for
 // corpus storage. The desktop's Settings → Knowledge tab is the
 // primary writer. Enforcement happens in
-// `sovereign-mesh::capabilities::build_local_capabilities`, which
-// clamps the published `free_storage_gb` to the budget remaining —
+// cw-rails' merge (commonwealth-rails `self_measure::apply`) over the
+// budget left `peer_origin::claims_source` declares, which clamps the published `free_storage_gb` to the budget remaining —
 // every existing scheduler then refuses work that would push us
 // over without needing to know the budget exists.
 

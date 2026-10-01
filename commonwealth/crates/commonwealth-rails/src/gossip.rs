@@ -91,6 +91,7 @@ pub fn minimal_capabilities(
         benchmark: None,
         current_in_flight: None,
         anchor: None,
+        storage_remaining_bytes: None,
     }
 }
 
@@ -159,6 +160,21 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
     // every live registration declares — never a guess of cw-rails' own.
     let origins = daemon.origins.advertised_kinds();
     let declared = daemon.origins.declared_claims();
+    // The node's own hardware, read once a registrant declares (a bare
+    // endpoint takes no job and keeps its zeroed report). Off the runtime:
+    // the detector walks disks and may spawn `nvidia-smi`.
+    let measured = if declared.is_empty() {
+        None
+    } else {
+        match tokio::task::spawn_blocking(crate::self_measure::SelfMeasurement::now).await {
+            Ok(m) => Some(m),
+            Err(e) => {
+                tracing::warn!(target: "gossip", round, error = %e,
+                               "gossip: the hardware reading failed; this round advertises no hardware");
+                None
+            }
+        }
+    };
 
     // Step 1 + 2 + 3's selection, in ONE write-lock window. Nothing awaits a
     // network inside it. The presence reading is read here (never inside the
@@ -180,7 +196,7 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
         );
         // Absent self is already warned by `self_stamp`.
         if let Some(me) = mesh.members.get_mut(&self_id) {
-            crate::origins::merge_declared(&mut me.capabilities, &declared);
+            crate::origins::merge_declared(&mut me.capabilities, measured.as_ref(), &declared);
             tracing::debug!(
                 target: "gossip",
                 round,

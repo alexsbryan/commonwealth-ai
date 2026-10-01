@@ -161,6 +161,14 @@ pub struct NodeCapabilities {
     /// live ggml-device VRAM. See `docs/RUN_GLM_5_2_ON_THE_MESH.md`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anchor: Option<AnchorProfile>,
+
+    /// A registrant's storage budget left, in bytes: a declaration cw-rails
+    /// consumes and never gossips. Its merge clamps the free storage it
+    /// measured to the smallest declared ceiling, and the gossiped self row
+    /// always carries `None`. `Some(0)` is an exhausted budget; only `None`
+    /// is "no budget declared" (phase-b-91).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_remaining_bytes: Option<u64>,
 }
 
 /// A kind of local origin a node can serve to members over the mesh.
@@ -491,6 +499,7 @@ mod tests {
             benchmark: None,
             current_in_flight: None,
             anchor: None,
+            storage_remaining_bytes: None,
         };
         let json = serde_json::to_string(&caps).unwrap();
         let back: NodeCapabilities = serde_json::from_str(&json).unwrap();

@@ -91,6 +91,7 @@ pub mod rail;
 pub mod ring_routes;
 pub mod ring_sync;
 pub mod self_heal;
+pub mod self_measure;
 pub mod work;
 
 pub use config::Config;

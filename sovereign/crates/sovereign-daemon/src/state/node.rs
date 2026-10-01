@@ -262,8 +262,9 @@ pub struct NodePart {
     /// boot (computed from free disk on first launch, then persisted
     /// in `desktop.toml`) and via `POST /internal/storage/budget`.
     ///
-    /// The enforcement point is `sovereign-mesh::capabilities::
-    /// build_local_capabilities`, which clamps the gossiped
+    /// The enforcement point is cw-rails' merge (commonwealth-rails
+    /// `self_measure::apply`) over the budget left
+    /// `crate::peer_origin::claims_source` declares, which clamps the gossiped
     /// `free_storage_gb` (both the static `HardwareProfile` field and
     /// the live `AvailableResources` reading) to
     /// `min(actual_free, max(0, budget − used))`. The live planner

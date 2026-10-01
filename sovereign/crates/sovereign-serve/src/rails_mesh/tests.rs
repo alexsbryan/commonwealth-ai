@@ -87,7 +87,7 @@ fn a_cw_rails_without_full_ids_is_named_not_an_empty_roster() {
 fn serve_registers_its_peer_prefixes_and_its_rpc_worker_only_when_it_binds() {
     let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
     let member: Option<SocketAddr> = Some("127.0.0.1:18001".parse().unwrap());
-    let off = registrations_for(listen, member, RpcServe::resolve(None, false));
+    let off = registrations_for(listen, member, RpcServe::resolve(None, false), None);
     assert_eq!(off.len(), 2, "no worker bind, no rpc origin: {off:?}");
     assert_eq!(off[0].alpn, "cwth/http/0");
     assert_eq!(off[0].port, 18000);
@@ -111,6 +111,7 @@ fn serve_registers_its_peer_prefixes_and_its_rpc_worker_only_when_it_binds() {
         listen,
         member,
         RpcServe::resolve(Some("127.0.0.1:50060"), false),
+        None,
     );
     let rpc = on
         .iter()
@@ -124,6 +125,37 @@ fn serve_registers_its_peer_prefixes_and_its_rpc_worker_only_when_it_binds() {
         .expect("the rpc origin declares the anchor record");
     assert!(anchor.can_anchor);
     assert_eq!((anchor.rpc_port, anchor.rpc_iroh), (Some(50060), true));
+}
+
+/// The `cwth/http/0` registration declares the VRAM figure it was handed as
+/// one GPU entry, and nothing else; no figure declares no GPU (phase-b-90
+/// (B)). Failing input: declare no claims there.
+#[test]
+fn the_peer_registration_declares_the_loaders_vram_figure() {
+    let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
+    let declared = |vram| {
+        registrations_for(listen, None, RpcServe::resolve(None, false), vram)[0]
+            .claims
+            .clone()
+            .expect("the peer registration declares")
+    };
+    let with = declared(Some(124));
+    let gpus: Vec<(String, u32)> = with
+        .hardware
+        .gpus
+        .iter()
+        .map(|g| (g.name.clone(), g.vram_gb))
+        .collect();
+    assert_eq!(gpus, vec![("GPU".to_string(), 124)]);
+    assert_eq!(
+        (
+            with.hardware.system_ram_gb,
+            with.anchor,
+            with.storage_remaining_bytes
+        ),
+        (0, None, None)
+    );
+    assert!(declared(None).hardware.gpus.is_empty());
 }
 
 #[test]
