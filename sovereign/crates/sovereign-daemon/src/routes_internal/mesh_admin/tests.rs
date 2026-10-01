@@ -42,6 +42,18 @@ async fn hot_level_returns_204_no_content() {
     assert_eq!(status, HttpStatus::NO_CONTENT);
 }
 
+/// Every canonical level is accepted with 204, not only `hot`. Successor of
+/// the harness's `node_activity_endpoint_returns_204_for_all_known_levels`
+/// (a546a456b; pb-distribution-o3-tests).
+#[tokio::test]
+async fn every_known_level_returns_204_no_content() {
+    for level in ["hot", "warm", "cool", "idle"] {
+        let (_, app) = activity_router();
+        let status = post_activity(app, level, "o3_successor").await;
+        assert_eq!(status, HttpStatus::NO_CONTENT, "level '{level}'");
+    }
+}
+
 #[tokio::test]
 async fn hot_level_sets_availability_to_020() {
     let (state, app) = activity_router();

@@ -1270,3 +1270,7 @@ mod shed_rendering_tests;
 #[cfg(test)]
 #[path = "routes_inference/list_models_tests.rs"]
 mod list_models_tests;
+
+#[cfg(test)]
+#[path = "routes_inference/forward_tests.rs"]
+mod forward_tests;
