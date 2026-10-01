@@ -2029,6 +2029,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose (operator: "Fix before merge"): pre-gate row pb-distribution-f13-rails-stall, the daemon half (one bounded-wait decider, absence named, no status from a blocking call) and the cw-rails half (the pump holds nothing the API needs across a cycle), instrumented first on a sandbox pair. The ship gate depends on it and, after it, re-reads only P2's alarmed lanes, P3 latency and P5 mesh; its other readings stand.
 - Also from Tier 2, not F13's: chat-ask's alarm is an instrument artifact (the seat's phase-b-94 moved the stack fingerprint, and a new corpus id has no corpus_state row until the daemon's next boot, as on main); knowledge-gym's 05_noresults_honesty reads 0/3 vs 1/3 at the flip, its escalation against main still owed by the gate.
 
+**phase-b-109 · 2026-10-01 · pb-distribution-ship-gate · seat, filing the gate's registry-lag finding to phase-c** — this commit
+- Needed: the ship gate's release-note commit (0e216923b) names a finding "no row owns" and records it only in target/ralph/phase-b/preflight-forks.md, an untracked file: a corpus ingested while the daemon runs has no corpus_state row until the next boot, so a grounded turn searches 0 corpora with no absence named. Pre-existing on main (cli-daemon daemon_cmd/mod.rs:909 at 18f783f44).
+- Chose: pc-corpus-registry-live, above phase-c's cut line with the bugs main shares; in scope.txt; it fills wave 7's free lanes.
+- Because: it is a user-visible correctness bug (a fresh corpus is silently unsearched), and a finding in an untracked file is filed nowhere (the shape phase-b-97 and -104 corrected).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.

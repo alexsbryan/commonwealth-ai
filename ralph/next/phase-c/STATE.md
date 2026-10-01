@@ -18,7 +18,7 @@ Projected waves at 3 lanes (ralph's conflict and heavy rules, simulated 2026-10-
 4. pc-split-deploy-honesty, pc-cli-config-load-silent-default, pc-rendezvous-stable-hash
 5. pc-atlas-highlight-determinism, pc-gk-rescue-fabrication, pc-solo-durable
 6. pc-gk-rescue-fabrication-measure (alone)
-7. pc-partial-decline-verdict, pc-cmnwlth-lift-flake (added after the simulation, phase-b-104; it fills wave 7's free lanes)
+7. pc-partial-decline-verdict, pc-cmnwlth-lift-flake, pc-corpus-registry-live (added after the simulation, phase-b-104 and -109; they fill wave 7's free lanes)
 8. pc-partial-decline-verdict-measure (alone)
 
 ## Rows
@@ -59,6 +59,12 @@ Projected waves at 3 lanes (ralph's conflict and heavy rules, simulated 2026-10-
   - PROOF: the instrument keeps the log of a planted red test run; then N=10 consecutive LIFT(cmnwlth) runs green, with host load recorded.
   - trial: NONE.
   LIFT: census first. — read: 5d529cf1e's body, scripts/lib/program_lift.py, target/ralph/phase-b/lift-cmnwlth-loop*.log — check: CLEAN, LINT, LIFT(cmnwlth) x10, PLANT
+- [ ] pc-corpus-registry-live — depends [pc-pool-ready] — OUTCOME: a corpus ingested while the daemon runs is searchable by the next grounded turn, and a turn that searches no corpus names why. Found by the ship gate's Tier 2 (0e216923b; recorded only in an untracked target file, filed by the seat, phase-b-109): the daemon writes corpus_state rows at boot only (sovereign-daemon daemon_cmd/corpus_registry.rs; the same at 18f783f44, cli-daemon daemon_cmd/mod.rs:909), so build_context's ceiling (sovereign-core context.rs, LocalOwnerPrincipal -> Resolved) leaves a grounded turn searching 0 corpora with no absence named until the next boot. Read via chat-ask on a new stack fingerprint (target/quality-check/20261001-150327). Pre-existing on main.
+  - finish: none directly (a phase-c bug row; phase-c is done when every row above the cut line is [x]).
+  - trial: census first; NONE unless the census finds a rewrite it cannot make without one.
+  - Census first: where an ingest completes in the running daemon (the folder watch, the API, collaborate's pull loop) and the one place a corpus_state row is written; the fix registers at that one decider, never a second writer. The turn that resolves to zero corpora says so (principle 6).
+  - PROOF: an e2e ingests into a running daemon and the next grounded turn cites it; PLANT: drop the live registration, and the turn reads 0 corpora with the absence named.
+  LIFT: census first. — read: sovereign-daemon daemon_cmd/corpus_registry.rs, sovereign-core context.rs build_context — check: CLEAN, LINT, TEST(sovereign-daemon), TEST(sovereign-core), PLANT, LAYER, BOUNDARY (expect 0)
 - [ ] pc-fetch-model-peer-discovery — depends [pc-pool-ready] — OUTCOME: `svrn mesh fetch-model` finds peers that hold a model through cw-rails' roster and fetches over serve's registered model-files origin, or refuses by name; it never reads a file that does not exist and reports "No peer could serve" (found by the seat at phase-b-84).
   - finish: none directly (a phase-c bug row; phase-c is done when every row above the cut line is [x]).
   - trial: census first; NONE unless the census finds a rewrite it cannot make without one.
