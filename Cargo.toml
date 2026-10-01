@@ -197,6 +197,10 @@ members = [
     # The stock distribution (docs/FIVE_PROGRAMS.md §2c; pb-stock-binary): svrn
     # with serve hosted in one process, what `svrn daemon run` execs.
     "sovereign/crates/sovereign-stock",
+    # The on-prem distribution (docs/FIVE_PROGRAMS.md §2c; phase-b-86, -87):
+    # svrn, serve and ingest in one process, with no code, no mesh, and svrn's
+    # open-web surfaces and `/mcp` withheld.
+    "sovereign/crates/sovereign-onprem",
     "sovereign/crates/sovereign-service",
     "sovereign/crates/sovereign-desktop/src-tauri",
     "sovereign-mobile/src-tauri",

@@ -399,6 +399,8 @@ crates = [
     # The stock distribution (pb-stock-binary), named because `sovereign-cli*`
     # does not match it.
     "sovereign-stock",
+    # The on-prem distribution (phase-b-86, -87).
+    "sovereign-onprem",
     "xtask",
 ]
 
@@ -1550,6 +1552,44 @@ items = ["EngineHarness"]
 package = "ingest"
 krate = "sovereign-recipe-author"
 items = ["port::compose"]
+
+# The on-prem install (phase-b-86, -87): svrn, serve and ingest in ONE process,
+# svrn's posture `Sealed`. Its direct edges name no sovereign-code and no
+# sovereign-recipe-author, so the binary holds no code tool, no solve job and
+# no `probe_url`. The closure is NOT free of a cw-rails crate or a web-tool
+# crate: sovereign-daemon links commonwealth-rail-core and sovereign-tools
+# (WebFetchTool, wikipedia_fetch). What it withholds is the registration and
+# the route (`Posture::Sealed`, `mesh: None`), not the type. Ingest is composed
+# by stock's one file (`#[path]`), so its items are listed here too.
+[[distribution]]
+name = "onprem"
+crates = ["sovereign-onprem"]
+doc = "docs/FIVE_PROGRAMS.md"
+max_code_lines = 200
+[[distribution.face]]
+package = "svrn"
+krate = "sovereign-daemon"
+items = ["process::run", "process::HostedServe", "process::HostedParts", "process::Ranked", "process::Posture", "process::HostedIngest", "process::IngestMount", "process::IngestCalls", "process::RecipeAuthoringCompose"]
+[[distribution.face]]
+package = "cmnwlth"
+krate = "sovereign-serve"
+items = ["assemble", "rank", "Ranking", "child_launch", "tracing_filter", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner"]
+[[distribution.face]]
+package = "ingest"
+krate = "sovereign-enrichment-catalog"
+items = ["port::CatalogEnrichConfig"]
+[[distribution.face]]
+package = "ingest"
+krate = "corpus-engine"
+items = ["face::compose", "face::IngestParts", "face::atlas", "face::recipe_author", "face::run_folder_tiered", "face::gliner_chunk_extractor"]
+[[distribution.face]]
+package = "ingest"
+krate = "sovereign-enrichment-build"
+items = ["inference_client::DaemonInferenceClient"]
+[[distribution.face]]
+package = "ingest"
+krate = "sovereign-authoring-harness"
+items = ["EngineHarness"]
 
 # ── THE THIN-SURFACE RULE — can this client BECOME what it talks to? ─────────
 #

@@ -173,6 +173,7 @@ crates/
 ├── sovereign-serving-host   # Serving's host tier — peer_inference, admission, turn_admission, entry_endpoint
 ├── sovereign-serve          # `serve`, the model server binary — the OpenAI wire alone (no mesh, no cw-rails) over the one serving assembly
 ├── sovereign-stock          # The stock distribution: svrn with serve, code and ingest hosted (ingest's engine built by `corpus_engine::face` and handed in through `HostedIngest`; svrn links no corpus-engine), ONE process, what `svrn daemon run` execs (`[[distribution]] stock`); its second bin `sovereign-cli-llm-stock` hands cli-llm the same ingest composition and is what the dispatcher execs for the LLM verbs (bare `sovereign-cli-llm` names ingest absent)
+├── sovereign-onprem         # The on-prem distribution: svrn with serve and ingest hosted, ONE process; no code, no mesh, no recipe authoring, and `Posture::Sealed` withholds web reach, the wikipedia bundle and the `/mcp` route by name (`[[distribution]] onprem`; phase-b-86, -87)
 ├── sovereign-grants         # GuestGrant, EphemeralGrantStore, `Scope` — per-turn authorization
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries

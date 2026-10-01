@@ -437,7 +437,8 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
             .env("CW_RAILS_BIN", root.path().join("no-cw-rails"))
             .env("SOVEREIGN_SERVE_PORT", serve.to_string())
             .env_remove("SOVEREIGN_WORKSPACE_DIR")
-            .env_remove("RUST_LOG")
+            // The per-family registry report is the `runtime_recipe` target's.
+            .env("RUST_LOG", "runtime_recipe=info")
             .stdout(Stdio::null())
             .stderr(Stdio::from(std::fs::File::create(&log).expect("log")))
             .spawn()
@@ -467,6 +468,16 @@ fn the_stock_install_serves_code_on_its_one_mcp() {
         "the stock process did not compose ingest's port:\n{}",
         log_tail(&log)
     );
+    // svrn's open posture (phase-b-87): the turn registry holds web reach
+    // and search's web fallback; the on-prem binary's census is the inverse.
+    for (family, want) in [("web", "web: 1 tools"), ("core-turn", "core-turn: ")] {
+        let line = boot
+            .lines()
+            .find(|l| l.contains(&format!("Tools:       {family}: ")))
+            .unwrap_or_else(|| panic!("no `{family}` family report:\n{}", log_tail(&log)));
+        assert!(line.contains(want), "{line}");
+        assert!(!line.contains("web-fallback"), "{line}");
+    }
 
     let list = mcp(svrn, 1, "tools/list", serde_json::json!({}));
     let names: Vec<String> = list["result"]["tools"]
