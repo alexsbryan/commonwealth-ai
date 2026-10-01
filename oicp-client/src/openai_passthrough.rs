@@ -156,30 +156,30 @@ struct ChatDelta {
 }
 
 /// One FIM stream chunk as `sovereign_contracts::fim_http::fim_sse_items`
-/// renders it.
+/// renders it. The loopback raw completion (`serve_loopback`) reads it too.
 #[derive(Deserialize)]
-struct TextChunk {
+pub(crate) struct TextChunk {
     #[serde(default)]
-    choices: Vec<TextChoice>,
+    pub(crate) choices: Vec<TextChoice>,
     #[serde(default)]
-    usage: Option<WireUsage>,
+    pub(crate) usage: Option<WireUsage>,
     #[serde(default)]
-    error: Option<ChunkError>,
+    pub(crate) error: Option<ChunkError>,
     #[serde(default)]
     sovereign_debug: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
-struct TextChoice {
+pub(crate) struct TextChoice {
     #[serde(default)]
-    text: String,
+    pub(crate) text: String,
     #[serde(default)]
-    finish_reason: Option<String>,
+    pub(crate) finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
-struct ChunkError {
-    message: String,
+pub(crate) struct ChunkError {
+    pub(crate) message: String,
 }
 
 /// The frames one chat chunk carries, in the order `sse_item` emits them.

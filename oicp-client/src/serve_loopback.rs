@@ -17,7 +17,6 @@
 use std::pin::Pin;
 
 use futures::Stream;
-use serde::Deserialize;
 use sovereign_contracts::engine_state::ServedSelf;
 use sovereign_contracts::error::Result;
 use sovereign_contracts::traits::ResidentSlot;
@@ -25,6 +24,7 @@ use sovereign_contracts::types::{
     CompletionRequest, EditSlotInfo, FinishReason, PromptShape, Speed, StreamFrame, StreamUsage,
 };
 
+use crate::openai_passthrough::TextChunk;
 use crate::{RemoteApiProvider, SplitInferenceProvider};
 
 impl SplitInferenceProvider {
@@ -113,38 +113,6 @@ pub(crate) fn wants_raw_completion(
     request: &CompletionRequest,
 ) -> bool {
     served.is_some() && request.prompt_shape == Some(PromptShape::Raw)
-}
-
-/// One `text_completion` SSE chunk as serve renders it
-/// (`sovereign_serving_host::fim_http`).
-#[derive(Deserialize)]
-struct TextChunk {
-    #[serde(default)]
-    choices: Vec<TextChoice>,
-    #[serde(default)]
-    usage: Option<TextUsage>,
-    #[serde(default)]
-    error: Option<TextError>,
-}
-
-#[derive(Deserialize)]
-struct TextChoice {
-    #[serde(default)]
-    text: String,
-    #[serde(default)]
-    finish_reason: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct TextUsage {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    total_tokens: u32,
-}
-
-#[derive(Deserialize)]
-struct TextError {
-    message: String,
 }
 
 impl RemoteApiProvider {
