@@ -263,7 +263,8 @@ async fn catalogue(
     }
     let names: Vec<&str> = neighbours.iter().map(|n| n.name.as_str()).collect();
 
-    let url = format!("{}/v1/mesh/fanout", crate::mesh_cmd::rails_base());
+    let base = crate::mesh_cmd::rails_base();
+    let url = format!("{base}/v1/mesh/fanout");
     let mut body = serde_json::json!({
         "path": path,
         "kind": "offer",
@@ -288,6 +289,7 @@ async fn catalogue(
             crate::mesh_skew::render_kind_refusal(
                 client,
                 port,
+                &base,
                 "POST /v1/mesh/fanout",
                 "offer",
                 status,

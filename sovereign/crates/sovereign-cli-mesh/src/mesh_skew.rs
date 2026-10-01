@@ -138,6 +138,7 @@ pub(crate) async fn render_failure(
 pub(crate) async fn render_kind_refusal(
     client: &reqwest::Client,
     port: u16,
+    base: &str,
     route: &str,
     kind: &str,
     status: reqwest::StatusCode,
@@ -151,7 +152,7 @@ pub(crate) async fn render_kind_refusal(
     {
         return format!("{msg}\n");
     }
-    let route_works = probe_known_kind(client).await;
+    let route_works = probe_known_kind(client, base).await;
     let local = sovereign_contracts::run_identity::stamp(env!("CARGO_PKG_VERSION"));
     let remote = daemon_stamp(client, port).await.ok().flatten();
     let builds = format!(
@@ -212,8 +213,8 @@ pub(crate) async fn render_kind_refusal(
 /// origin — it costs one loopback round trip and has no effect any neighbour
 /// could observe. `Some(true)` means the route answered; `Some(false)` that
 /// it refused this too; `None` that the question could not be put.
-async fn probe_known_kind(client: &reqwest::Client) -> Option<bool> {
-    let url = format!("{}/v1/mesh/fanout", crate::mesh_cmd::rails_base());
+async fn probe_known_kind(client: &reqwest::Client, base: &str) -> Option<bool> {
+    let url = format!("{base}/v1/mesh/fanout");
     let body = serde_json::json!({ "path": "/", "kind": "media", "peers": [] });
     let resp = client.post(&url).json(&body).send().await.ok()?;
     Some(resp.status().is_success())
@@ -267,6 +268,7 @@ mod tests {
         let out = render_kind_refusal(
             &client,
             1, // never dialed: the error body short-circuits before any probe
+            "http://127.0.0.1:1",
             "POST /v1/mesh/fanout",
             "offer",
             reqwest::StatusCode::BAD_REQUEST,
@@ -302,6 +304,7 @@ mod tests {
         let out = render_kind_refusal(
             &client,
             1,
+            "http://127.0.0.1:1",
             "POST /v1/mesh/fanout",
             "offer",
             reqwest::StatusCode::UNPROCESSABLE_ENTITY,
