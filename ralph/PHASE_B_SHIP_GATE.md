@@ -108,8 +108,8 @@ Not re-run, with the reason:
 ## Not blocking: filed to phase-c
 
 These come from the review and are true of split deployments rather than the stock path. Until phase-b-97
-(2026-10-01) four of them had no phase-c row despite this list; they are now pc-rpc-probe-identity,
-pc-admin-reload-checks-serve, pc-serve-restart-self-report and pc-mesh-status-serve-down:
+(2026-10-01) four of them had no phase-c row despite this list; they are now pc-rpc-probe-identity and
+pc-split-deploy-honesty (phase-b-101 merged the other three):
 - admin reload reporting success without checking serve's resident models;
 - svrn's self-report staying stale after serve restarts;
 - `/v1/mesh/status` not telling "serve down" from "serve slow";
@@ -148,6 +148,6 @@ deleted (1c120f23d). Serve's own route is the one to check, in phase-c.
 | row | hash C | n | verdict | raw |
 |---|---|---|---|---|
 | P2 early screen (the flip, pre-gate) | daemon built from 1c120f23d, running since 2026-09-30 20:42 PDT | 1 | 6 of 8 passed: routing, retrieval-prod, enrichment-f1, chaos-monkey (7/7: no leak, no ungrounded assertion, no refused answerable probe), knowledge-gym, synth. chat-ask could-not-judge (15/19 passed; useful median 0.992-0.998; the 4 open checks are per-stage ceilings with no table for model stem Qwen3.6-35B-A3B-MTP-UD-Q6_K in sovereign/bench/quality-check/chat-ask.toml). throughput could-not-judge (no primary/short bars for that stem in throughput.toml). Against the 09-13 baseline (same model): decode -8 to -14% at load ~5.9 with a worker compiling, confounded. e2e runs 35,112 and 12,261 ms against a 13,397 baseline; the lane reports the larger of two as the median, so the warm run is 8% faster. | target/quality-check/20260930-211826 |
-| P8 check 4, pre-gate (35B) | 2cd4828d1 | 3 | FAIL by the bar, closed by operator ruling phase-b-95. acceptance 32/33; check 4 verdict=unverified; re-asks cannot_know_from_here 1, unverified 1. Prose honest 3/3. Primary Qwen3.6-35B-A3B-MTP-UD-Q6_K (the kit's Q4_K_M is not on this host, named). Filed: pc-partial-decline-verdict, pc-sealed-posture-web-offer. | pb-par-onprem target/ralph/phase-b/onprem-proof/prove35.log |
+| P8 check 4, pre-gate (35B) | 2cd4828d1 | 3 | FAIL by the bar, closed by operator ruling phase-b-95. acceptance 32/33; check 4 verdict=unverified; re-asks cannot_know_from_here 1, unverified 1. Prose honest 3/3. Primary Qwen3.6-35B-A3B-MTP-UD-Q6_K (the kit's Q4_K_M is not on this host, named). Filed: pc-partial-decline-verdict, pc-sealed-posture-web-offer (now a bullet of pc-onprem-followups, phase-b-101). | pb-par-onprem target/ralph/phase-b/onprem-proof/prove35.log |
 | P8 nginx leg, pre-gate | 30aa81286 | 1 | PASSED, with check 4 under phase-b-95. The leg's first run found the kit's nginx config never loaded (`proxy_http_version` duplicate, firm-rag.conf:131, since 2026-08-03); fixed in 30aa81286 with a structural xtask scan watched red. Then nginx 1.30.5 (toolbox) `-t` successful on the kit's installed config, changed only in cert (self-signed), ports (19080/19443) and log paths for a rootless sandbox; acceptance through BASE_URL=https://127.0.0.1:19443 (ACCEPTANCE_INSECURE=1): 58 checks, 57 pass, 25 of them at the front door, 1 FAIL (check 4), 0 UNSURE. | pb-par-onprem target/ralph/phase-b/onprem-proof/{nginxleg.out,nginxleg-acceptance.log,nginx-leg/} |
 | owed before the gate: DONE (phase-b-94) | | | Per-stage ceilings and primary/short throughput bars for Qwen3.6-35B-A3B-MTP-UD-Q6_K declared from the committed main-era reading, stack 2ce389007280 (2026-09-13, ef21e3a08 is an ancestor of main 18f783f44), by each file's existing rule. A median of an even n reporting its larger value is an instrument finding for phase-c. | sovereign/bench/quality-check/baselines/*/2ce389007280 |

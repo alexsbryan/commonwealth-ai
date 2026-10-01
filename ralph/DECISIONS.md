@@ -1972,6 +1972,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Process: the supervisor had dispatched a director resolution session; the seat paused it, kept its uncommitted trial of the stock move (target/ralph/phase-b/trials/svrn-lift-2-director/) for the row's worker, reverted the trial, wrote this ruling, and ended the session, so one ruling stands.
 - Because: principle 12 (a test whose subject is the composition lives at the composition root; a census of the monorepo lives in no package), principle 8 (one escape census, extended, not a second), principle 6 (a stale sibling is named, not read as a red).
 
+**phase-b-101 · 2026-10-01 · phase-c · operator, consolidating phase-c from 28 rows to 20 with no content dropped** — this commit
+- Needed: the operator expected about 20 rows; phase-c held 28 (10 cut-introduced, 8 bugs main shares, 10 cleanup), several of them a few lines each and filed one per finding.
+- Chose (operator: "yes, consolidate to 20"): pc-onprem-followups holds pc-onprem-ocr-cleanup-key, pc-cli-client-credential, pc-sealed-posture-web-offer and pc-onprem-absence-messages; pc-split-deploy-honesty holds pc-admin-reload-checks-serve, pc-serve-restart-self-report and pc-mesh-status-serve-down (pc-rpc-probe-identity, a security finding, stays its own row); pc-cli-base-residue absorbs pc-cli-dev-probe-twin, pc-nudge-dismiss-recipe-publish and pc-serving-lift-script. Each merged item keeps its full text as a bullet tagged with its old id, so earlier ledgers' references resolve, and each is judged on its own bullet. The ship gate's live text names the new ids.
+- Because: row count was being read as size; the merge changes neither scope nor content.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
