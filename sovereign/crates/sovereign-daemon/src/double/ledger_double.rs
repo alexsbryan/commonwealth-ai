@@ -40,6 +40,8 @@ pub struct RecordingLedger {
     recorded: Arc<Mutex<Vec<LedgerEventKind>>>,
     models: Arc<Mutex<Vec<(NodeId, ModelInfo)>>>,
     preferences: Arc<Mutex<Vec<(NodeId, PeerPreference)>>>,
+    plan: Arc<Mutex<Option<InferencePlan>>>,
+    llama_addresses: Arc<Mutex<HashMap<ModelId, String>>>,
 }
 
 impl RecordingLedger {
@@ -50,6 +52,8 @@ impl RecordingLedger {
             recorded: Arc::default(),
             models: Arc::default(),
             preferences: Arc::default(),
+            plan: Arc::default(),
+            llama_addresses: Arc::default(),
         }
     }
 
@@ -229,10 +233,12 @@ impl ProcessedShardsPort for RecordingLedger {
 
 impl InferenceStatePort for RecordingLedger {
     fn get_plan(&self) -> LedgerFut<'_, Option<InferencePlan>> {
-        self.answer("inference.get_plan", String::new(), None)
+        let plan = self.plan.lock().unwrap().clone();
+        self.answer("inference.get_plan", String::new(), plan)
     }
 
     fn set_plan(&self, plan: &InferencePlan) -> LedgerFut<'_, ()> {
+        *self.plan.lock().unwrap() = Some(plan.clone());
         self.answer("inference.set_plan", format!("{plan:?}"), ())
     }
 
@@ -274,10 +280,15 @@ impl InferenceStatePort for RecordingLedger {
     }
 
     fn get_llama_address(&self, model_id: ModelId) -> LedgerFut<'_, Option<String>> {
-        self.answer("inference.get_llama_address", format!("{model_id:?}"), None)
+        let addr = self.llama_addresses.lock().unwrap().get(&model_id).cloned();
+        self.answer("inference.get_llama_address", format!("{model_id:?}"), addr)
     }
 
     fn set_llama_address(&self, model_id: ModelId, addr: &str) -> LedgerFut<'_, ()> {
+        self.llama_addresses
+            .lock()
+            .unwrap()
+            .insert(model_id, addr.to_string());
         self.answer(
             "inference.set_llama_address",
             format!("{model_id:?} {addr:?}"),
