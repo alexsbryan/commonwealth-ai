@@ -4452,3 +4452,73 @@ DeltaRecorder in tiered_entity_extractor_seam.rs).
   `size-gate` reports 77 keys grown (72 at auto-10). concept-gate and
   domains-census-self-test are could-not-judge, as before. All advisory,
   outside this queue.
+
+## REVIEW-audit-pb-auto-12 (2026-10-01, range 392bbba94..7057e2bf5, since REVIEW-audit-pb-auto-11)
+
+112 commits, from pb-mesh-dissolve, pb-distribution-svrn-lift(-2),
+pb-serve-package, pb-distribution-onprem-{identity,compose,routes,kit},
+pb-distribution-release-bins, pb-distribution-o3-tests, pb-distribution,
+pb-distribution-f12-clone-gate, pb-distribution-f11-daemon-twins and
+pb-distribution-f4-retired-verbs. Checks ran in the sovereign-vulkan toolbox.
+
+TESTALL at 7057e2bf5: exit 0, 13,677 passed, 0 failed (712 s, 224 s of it
+build). PREPUSH at 7057e2bf5 blocked on clock-gate alone; repaired in
+3e75ab632, after which PREPUSH exits 0. BOUNDARY: 0 violations. LINT at
+3e75ab632: exit 0, arch-gate green.
+
+### (1) Per-unit net-line ledger, `.rs` only; tests = a `tests/` segment, `tests.rs`, `*_tests.rs`, `test_*`, test doubles or an `e2e` file name
+
+| unit | src + | src − | src net | tests net |
+|---|---|---|---|---|
+| pb-mesh-dissolve | 409 | 7369 | −6960 | +1637 |
+| pb-distribution-svrn-lift-2 | 97 | 741 | −644 | +802 |
+| pb-distribution-f11-daemon-twins | 175 | 640 | −465 | 0 |
+| pb-distribution-onprem-identity | 1028 | 73 | +955 | +348 |
+| pb-distribution-f12-clone-gate | 395 | 7 | +388 | +123 |
+| pb-distribution-onprem-compose | 463 | 114 | +349 | +304 |
+| pb-distribution-onprem-routes | 199 | 10 | +189 | +197 |
+| pb-distribution-f4-retired-verbs | 110 | 7 | +103 | +76 |
+| pb-distribution-svrn-lift | 93 | 15 | +78 | −65 |
+| pb-distribution-o3-tests | 17 | 2 | +15 | +565 |
+| pb-distribution | 3 | 2 | +1 | +236 |
+| pb-distribution-onprem-kit | 0 | 0 | 0 | +327 |
+| pb-distribution-release-bins | 0 | 0 | 0 | +182 |
+| pb-serve-package | 0 | 0 | 0 | +18 |
+| REVIEW-audit-pb-auto-11 | 0 | 0 | 0 | +7 |
+| total | 2989 | 8980 | −5991 | +4757 |
+
+### (2) dry-report clones with a side ADDED in the range
+
+`code dry-report --scope <dir>` over the 24 crate dirs the range touched
+that still exist (sovereign-mesh and sovereign-mesh-test-harness were
+deleted by pb-mesh-dissolve). Each group was crossed with the 341 `fn`
+definitions the range's diff adds, matched by name within 6 lines of the
+reported start: **no exact or near clone has a side added in the range.**
+Could-not-judge, not clean: sovereign-stock, sovereign-onprem and
+sovereign-hosted-ingest loaded 0 symbols from the index, so the hosted-serve
+composition auto-11 recorded (stock/src/main.rs vs onprem/src/main.rs) is
+invisible to this instrument; clone-gate (13826 lines, baseline 13826)
+does not flag it either.
+
+### (3) New nouns with more than one definition
+
+30 struct/enum/trait names added in the range, each through `code converge
+noun`. One has two definitions:
+
+- **Caller** · sovereign/crates/sovereign-daemon/src/api_keys.rs:209 (the
+  owner of a turn or document request, Local | Keyed) and
+  corpus-engine-scip/src/scip_graph.rs:163 (an SCIP call site). A homonym,
+  two concepts; no convergence.
+
+### Findings
+
+- **ARCH 8 / 10, fixed in 3e75ab632** · host-kit/src/panic_hook.rs:143 and
+  host-kit/src/sibling.rs:102,109,115. f11 (cfd10bbf0, 2b3fbe748) kept
+  cli-daemon's copies, which read `SystemTime::now()` by hand, while the
+  daemon's copy had asked `sovereign_core::time::unix_now_u64`. clock-gate
+  (hard) blocked PREPUSH. `install` now takes the caller's clock; the
+  sibling tests use a fixed instant.
+- **advisory lanes, recorded** · `hakari-verify` and `deletion-manifest
+  --verify` still fail; `size-gate` reports 75 keys grown (77 at auto-11);
+  domains-census-self-test is could-not-judge. All advisory, outside this
+  queue.
