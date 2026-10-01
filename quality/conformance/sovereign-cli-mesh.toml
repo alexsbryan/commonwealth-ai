@@ -1,4 +1,4 @@
-# Conformance tags in `sovereign-mesh` — GENERATED. DO NOT EDIT BY HAND.
+# Conformance tags in `sovereign-cli-mesh` — GENERATED. DO NOT EDIT BY HAND.
 #
 #   UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
 #
@@ -12,7 +12,7 @@
 
 [[claim]]
 requirement = "FE-8"
-test = "sovereign-mesh::persist::tests::save_writes_into_the_meshs_own_directory_without_moving_the_pointer"
-file = "sovereign/crates/sovereign-mesh/src/persist.rs"
-line = 909
+test = "sovereign-cli-mesh::daemon_store::tests::save_writes_into_the_meshs_own_directory_without_moving_the_pointer"
+file = "sovereign/crates/sovereign-cli-mesh/src/daemon_store.rs"
+line = 642
 asserts = 3

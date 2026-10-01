@@ -301,7 +301,6 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // unchanged — the one `reqwest::Client` that fetches the lender's
     // `/v1/models` is still the only construction site.
     ("sovereign/crates/sovereign-serving-host/src/guest_lender.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-mesh/src/join.rs", Class::Mesh, 2),
     // 2 -> 1 at d413b052b: the newsworthy watcher's MediaWiki client moved
     // into corpus-engine's daemon port (registered there, InboundOnly).
     // Re-keyed at pb-serve-distributes: the one left, RPC-worker discovery's
