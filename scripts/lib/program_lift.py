@@ -161,6 +161,10 @@ def plan(lift_id: str, lift: dict, sandbox: Path) -> tuple[list[str], list[str]]
                             fails.append(f"{why} ({table})")
                         else:
                             queue.append((dep, REPO / entry["path"]))
+                elif "path" in spec and dep == name:
+                    # The crate naming itself (a dev-dep enabling its own
+                    # test features): it resolves wherever the crate does.
+                    continue
                 elif "path" in spec:
                     # Dies at `cargo metadata` outside this tree; boundary-gate
                     # checks that an edge is legal, never how it is spelled.
@@ -416,7 +420,7 @@ class Smoke:
 
     def do_exists(self, s):
         if not Path(self.sub(s["path"])).exists():
-            self.stop(s, "fail")
+            self.stop(s, "abstain" if "abstain" in s else "fail")
 
     def do_poll(self, s):
         url, body = self.sub(s["url"]), ""

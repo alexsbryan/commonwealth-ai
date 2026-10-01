@@ -36,7 +36,7 @@
 #   exec     run `argv`; rc 0 continues, rc 3 abstains, any other rc is `fail`
 #            (or `abstain` when `on_error = "abstain"`); `expect = "fail"`
 #            inverts it, for a control that must fail on the bare host
-#   exists   `path` exists, else `fail`
+#   exists   `path` exists, else `abstain` or `fail`
 #   poll     GET `url` each second up to `timeout` until `path` yields a value;
 #            stores it in `var` and the document as `doc`; `alive` names a spawn
 #            that must stay up. On timeout, `second` reads another route: empty
@@ -75,15 +75,16 @@ carry = { SOVEREIGN_CLI_CONTRACT = "sovereign/docs/cli-contract.toml" }
 # (sovereign_contracts::venue::serve_port, the one reader both programs call),
 # so a host whose own serve holds 9748 still judges the default-base loopback
 # mode rather than borrowing that serve. The serve binary comes from
-# SOVEREIGN_SERVE_BIN or `--set SERVE_BIN=<path>`, and the smoke abstains
-# without one. The stock install (serve hosted in svrn's process) is proven
+# SOVEREIGN_SERVE_BIN or `--set SERVE_BIN=<path>`, else the one the serve
+# lift built into the same --target-dir (pb-distribution: the queue's lift
+# check shares one), and the smoke abstains when none is there. The stock install (serve hosted in svrn's process) is proven
 # by sovereign-stock's own e2e, not here. The mock engine loads no weights,
 # and cw-rails is pointed at a closed port. FIM needs an edit model, so it is
 # not asserted here. `--features treesitter`: the daemon's bin requires it.
 pass = "booted on a temp root, dialed the serve the smoke started (status 'serving: ${SERVING}'), answered a chat turn ('${CHAT}') and a rerank (score ${SCORE}) through it, with cw-rails pointed at a closed port; with serve stopped, a turn reported the absence (HTTP ${ABSENT})"
 steps = [
-  { do = "input", var = "SERVE_BIN", env = "SOVEREIGN_SERVE_BIN", value = "${SERVE_BIN}", abstain = "svrn dials serve: set SOVEREIGN_SERVE_BIN, or --set SERVE_BIN=<path>, to a sovereign-serve binary" },
-  { do = "exists", path = "${SERVE_BIN}", fail = "no sovereign-serve at ${SERVE_BIN}" },
+  { do = "input", var = "SERVE_BIN", env = "SOVEREIGN_SERVE_BIN", value = "${SERVE_BIN}", default = "${TARGET}/debug/sovereign-serve" },
+  { do = "exists", path = "${SERVE_BIN}", abstain = "svrn dials serve and no sovereign-serve is at ${SERVE_BIN}: run the serve lift into the same --target-dir first, or set SOVEREIGN_SERVE_BIN / --set SERVE_BIN=<path>" },
   { do = "ports", vars = ["PORT", "INTERNAL_PORT", "DEAD_RAILS_PORT", "SERVE_PORT"] },
   { do = "write", path = "${SANDBOX}/root/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/root/mock.gguf\"\nembed = \"${SANDBOX}/root/mock-embed.gguf\"\n\n[daemon]\nclient_port = ${PORT}\ninternal_port = ${INTERNAL_PORT}\nrails_base = \"http://127.0.0.1:${DEAD_RAILS_PORT}\"\n\n[data]\ndir = \"${SANDBOX}/root\"\n" },
   { do = "spawn", id = "serve", argv = ["${SERVE_BIN}", "--data-dir", "${SANDBOX}/root", "--listen", "127.0.0.1:${SERVE_PORT}"], log = "serve.log", env = { RUST_LOG = "info" } },
