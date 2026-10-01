@@ -45,6 +45,9 @@ use commonwealth_rail::{Admission, AdmittedOp, RailAct, RailGap};
 pub const RAIL_LOG_PATH: &str = "/v1/rail/log";
 /// See [`RAIL_LOG_PATH`].
 pub const RAIL_APPEND_PATH: &str = "/v1/rail/append";
+/// See [`RAIL_LOG_PATH`]. The one membership walk, read-only: who is in,
+/// per the record.
+pub const RAIL_MEMBERSHIP_PATH: &str = "/v1/rail/membership";
 /// See [`RAIL_LOG_PATH`]. One path, both directions: POST sends one ephemeral
 /// payload, GET drains what peers sent.
 pub const RAIL_LIVE_PATH: &str = "/v1/rail/live";
@@ -93,6 +96,24 @@ fn url(path: &str, namespace: &str) -> String {
 /// gone.
 pub async fn rail_log(namespace: &str) -> Result<serde_json::Value, String> {
     let url = url(RAIL_LOG_PATH, namespace);
+    let resp = client()?
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("cannot reach the daemon at {url}: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(error_text(resp).await);
+    }
+    resp.json().await.map_err(|e| format!("bad response: {e}"))
+}
+
+/// Who is in a namespace, per the record: the seed beside the ONE membership
+/// walk the daemon's own fold ran. Read through the daemon and never
+/// re-derived here, for [`rail_log`]'s reason — a second walk is a second
+/// answer to who is in, and it would disagree with the log on exactly the
+/// ring where membership is the question.
+pub async fn rail_membership(namespace: &str) -> Result<serde_json::Value, String> {
+    let url = url(RAIL_MEMBERSHIP_PATH, namespace);
     let resp = client()?
         .get(&url)
         .send()
@@ -219,6 +240,9 @@ pub fn admission_from_wire(v: &serde_json::Value) -> Result<Admission, String> {
         gaps,
         held,
         floors: BTreeMap::new(),
+        // A wire rebuild from before the field existed — the fold this
+        // caller runs reads neither it nor anything it implies.
+        membership: None,
     })
 }
 

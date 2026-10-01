@@ -17,6 +17,7 @@ pub(super) fn print() {
          \x20 svrn ring show <ns> [--dir <bundle-dir>] [--port <n>]\n\
          \x20 svrn ring host <ns> --dir <bundle-dir> [--bind <addr:port>] [--read]\n\
          \x20 svrn ring log <ns> [--json]\n\
+         \x20 svrn ring membership <ns> [--json]\n\
          \x20 svrn ring checkpoint <ns> [--out <file>]\n\
          \x20 svrn ring checkpoint --verify <file> [--roster <file>]\n\
          \x20 svrn ring seal <ns>\n\n\
@@ -33,6 +34,10 @@ pub(super) fn print() {
          \x20       derived per host, so a wildcard is never advertised.\n\
          log     the acts on this journal, in the order every node applies them,\n\
          \x20       and everything the rail could not account for.\n\
+         membership\n\
+         \x20       who is in, per the record: the one membership walk, with the\n\
+         \x20       seed beside it — the difference is who stands through an\n\
+         \x20       `Admit`, and voiding that act is the undo.\n\
          checkpoint\n\
          \x20       the ring's record, frozen: the journal verbatim, the roster it\n\
          \x20       was admitted under, and the digest that vouches it is complete.\n\

@@ -600,6 +600,65 @@ pub async fn log(
     .into_response()
 }
 
+/// GET /v1/rail/membership — who is in this ring, per the record.
+///
+/// The answer the ONE membership walk gives, carried out on [`Admission`] so
+/// this route and the log cannot disagree about the same journal: `bindings`
+/// (key → person, cumulative — a name stays when standing goes), `standing`
+/// (who counts now), and the acts that counted and voided. The seed ships
+/// beside it, because the DIFFERENCE is the question — a key standing here
+/// and absent from the seed stands through an `Admit`, and voiding that one
+/// act is the leak-undo (`RING_APPLICATIONS.md` amendment's first recovery).
+///
+/// Like [`log`], this is a read of the whole journal in one pass. An app
+/// page reaches for `log`; this surface is the operator's `svrn ring
+/// membership` and the demo that watches three nodes agree.
+pub async fn membership(
+    State(state): State<AppState>,
+    guest: Option<axum::Extension<Guest>>,
+    Query(q): Query<RailQuery>,
+) -> Response {
+    let guest = guest.as_ref().map(|e| &e.0);
+    let (rail, journal) = match journal_for(&state, guest, q.namespace.as_deref()) {
+        Ok(pair) => pair,
+        Err(refusal) => return refusal,
+    };
+    let roster = match rail.roster(&journal).await {
+        Ok(r) => r,
+        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    };
+    let (ops, skipped) = match journal.read() {
+        Ok(pair) => pair,
+        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    };
+    let admission = commonwealth_rail::admit(
+        &ops,
+        &skipped,
+        &roster,
+        journal.namespace(),
+        &commonwealth_rail::Ed25519Verifier,
+    );
+    // `None` is a this-build impossibility — the fold ran HERE — so it is
+    // named rather than rendered as an empty membership, which would read as
+    // "nobody is in this ring" (ARCH §18.3).
+    let Some(membership) = admission.membership else {
+        return err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the fold returned no membership walk — this daemon and this route \
+             disagree on the shape of Admission",
+        );
+    };
+    // As with `gaps` below in `log`: serialization over strings and sets has
+    // no failing input.
+    let membership = serde_json::to_value(membership).unwrap_or_default();
+    Json(serde_json::json!({
+        "namespace": journal.namespace(),
+        "roster": roster,
+        "membership": membership,
+    }))
+    .into_response()
+}
+
 // Moved to a sibling file: inline, these put this file into the 800-1200
 // approach band (ARCH §3.1). `#[path]`, so the names are unchanged.
 #[cfg(test)]

@@ -312,6 +312,15 @@ pub struct Admission {
     /// trusts has to be the floor admission trusted, or the destructive path
     /// gets its own second reading of the seals (ARCH §10.6, §18.3).
     pub floors: crate::sync::Floors,
+    /// The fold's own conclusion about who is in: the one `membership`
+    /// walk, carried out rather than re-derivable, so a reader asking the
+    /// membership question cannot reach a second answer (ARCH §10.6). The
+    /// seed, the act-admitted bindings and standing all live here.
+    ///
+    /// `None` only where the answer was rebuilt from a wire shape that
+    /// predates the field — absence reported, never a default walk
+    /// (ARCH §18.3).
+    pub membership: Option<crate::membership::Membership>,
 }
 
 impl Admission {
@@ -483,7 +492,10 @@ pub fn admit(
     // targets and everything that target admitted. This pass only NAMES the
     // corrections whose target nobody here holds: the ask, never a hole
     // (GapClass::Contradiction).
-    let voided = m.voided;
+    // Cloned, not moved: the whole walk — voided set included — is carried
+    // out on `Admission` below, so the membership a reader sees is the one
+    // this fold applied.
+    let voided = m.voided.clone();
     for a in admitted.values() {
         if let RailAct::Correct { corrects, .. } = &a.op.kind.act {
             if !admitted.contains_key(corrects) {
@@ -617,6 +629,7 @@ pub fn admit(
         gaps,
         held: ops.len(),
         floors,
+        membership: Some(m),
     }
 }
 

@@ -369,6 +369,169 @@ async fn a_guest_append_with_no_name_is_refused_by_name() {
     assert!(ops.is_empty(), "a refused write leaves no trace: {ops:?}");
 }
 
+/// The rail's own key, for tests that need signatures admission accepts.
+fn member_key(seed: u8) -> commonwealth_rail::SigningKey {
+    commonwealth_rail::SigningKey::from_bytes(&[seed; 32])
+}
+
+/// One rail whose seed names Ada alone, on a namespace the tests below own.
+async fn ada_rail(dir: &std::path::Path) -> (Arc<RingRail>, commonwealth_rail::SigningKey) {
+    let ada = member_key(1);
+    let rail = Arc::new(RingRail::new(dir, Arc::new(ada.clone())));
+    let mut members = std::collections::BTreeMap::new();
+    members.insert(
+        commonwealth_rail::Person::from("Ada"),
+        vec![commonwealth_rail::actor_of(&ada)],
+    );
+    rail.journal(HOUSE)
+        .unwrap()
+        .set_roster(&Roster::new(members))
+        .unwrap();
+    (rail, ada)
+}
+
+/// The namespace the membership tests write into. Its roster is the file,
+/// so the contrast under test — standing the file does not carry — is real.
+const HOUSE: &str = "house-ring";
+
+/// The membership route answers from ACTS, not the roster file: a stranger
+/// holds standing through an `Admit` the seed never names, which is the
+/// read demo 5 (ra-5) does on three nodes. Failing input: a route that
+/// renders `roster.json` back — the stranger is absent there, and the
+/// leak-undo sitting would have nothing to watch fall.
+#[tokio::test]
+async fn membership_reads_standing_from_acts_not_the_roster_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rail, ada) = ada_rail(dir.path()).await;
+    let stranger = member_key(7);
+    let j = rail.journal(HOUSE).unwrap();
+    let roster = rail.roster(&j).await.unwrap();
+    j.append(
+        commonwealth_rail::RailAct::Admit {
+            person: commonwealth_rail::Person::from("Sam"),
+            key: commonwealth_rail::actor_of(&stranger),
+        },
+        &ada,
+        &roster,
+        None,
+        &commonwealth_rail::Ed25519Verifier,
+    )
+    .unwrap();
+
+    let state = crate::state::test_app_state_with_seed(crate::state::fabric::FabricSeed {
+        ring_rail: Some(rail.clone()),
+        ..Default::default()
+    });
+    let resp = membership(
+        State(state),
+        None,
+        Query(RailQuery {
+            namespace: Some(HOUSE.into()),
+        }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let m = &v["membership"];
+    let standing = m["standing"].as_array().expect("standing is a list");
+    let stranger_hex = commonwealth_rail::actor_of(&stranger);
+    assert!(
+        standing
+            .iter()
+            .any(|s| s.as_str() == Some(stranger_hex.as_str())),
+        "the stranger stands through the Admit: {v}"
+    );
+    // The contrast that makes this a test of ACTS: the file does not carry
+    // them, and the same response shows it.
+    assert!(
+        j.roster_file()
+            .expect("the seed roster reads back")
+            .person_for(&stranger_hex)
+            .is_none(),
+        "the fixture lost its point: the seed names the stranger"
+    );
+    assert_eq!(m["bindings"][stranger_hex.as_str()], "Sam");
+    // The seed ships beside the walk, so a reader can see the difference.
+    assert!(
+        !v["roster"]["members"]["Sam"].is_array(),
+        "the roster half must not carry the stranger: {v}"
+    );
+}
+
+/// Voiding one `Admit` is the leak-undo: standing falls, and because a
+/// voided op never enters the walk, no binding is created either — the
+/// stranger was never in (the cumulative-binding rule belongs to the
+/// `Remove` cut, leg 4).
+#[tokio::test]
+async fn voiding_the_admit_drops_standing_and_keeps_the_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rail, ada) = ada_rail(dir.path()).await;
+    let stranger = member_key(7);
+    let j = rail.journal(HOUSE).unwrap();
+    let roster = rail.roster(&j).await.unwrap();
+    let admit = j
+        .append(
+            commonwealth_rail::RailAct::Admit {
+                person: commonwealth_rail::Person::from("Sam"),
+                key: commonwealth_rail::actor_of(&stranger),
+            },
+            &ada,
+            &roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        )
+        .unwrap();
+    j.append(
+        commonwealth_rail::RailAct::Correct {
+            corrects: admit.id.clone(),
+            replacement: None,
+        },
+        &ada,
+        &roster,
+        None,
+        &commonwealth_rail::Ed25519Verifier,
+    )
+    .unwrap();
+
+    let state = crate::state::test_app_state_with_seed(crate::state::fabric::FabricSeed {
+        ring_rail: Some(rail.clone()),
+        ..Default::default()
+    });
+    let resp = membership(
+        State(state),
+        None,
+        Query(RailQuery {
+            namespace: Some(HOUSE.into()),
+        }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let m = &v["membership"];
+    let stranger_hex = commonwealth_rail::actor_of(&stranger);
+    let standing = m["standing"].as_array().expect("standing is a list");
+    assert!(
+        !standing
+            .iter()
+            .any(|s| s.as_str() == Some(stranger_hex.as_str())),
+        "the void dropped the stranger: {v}"
+    );
+    // A voided `Admit` never happened: no binding was ever created (the walk
+    // filters voided ops out before it runs), so the name is ABSENT — not
+    // kept. The cumulative-binding rule is the OTHER cut: a `Remove`-cut key
+    // keeps its binding and only loses standing (leg 4).
+    assert!(
+        m["bindings"][stranger_hex.as_str()].is_null(),
+        "a voided Admit leaves no binding: {v}"
+    );
+}
+
 /// **C3b: a replayed append yields one act** (ROOT_CAUSE_FIXES C3b). The
 /// key rides OUTSIDE the act — door state, never the permanent journal —
 /// and the door replays the recorded answer. Watched failing first: two
