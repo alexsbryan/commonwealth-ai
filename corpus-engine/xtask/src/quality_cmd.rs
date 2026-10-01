@@ -26,7 +26,7 @@
 //! every landing verdict call `svrn code converge status` and gate on its exit.
 
 use crate::{
-    arch_gate, boundary_gate, clock_gate, concept_gate, docs_gate, env_gate, instrument_gate,
+    arch_gate, boundary_gate, clock_gate, clone_gate, concept_gate, docs_gate, env_gate, instrument_gate,
     judge_funnel_gate, layer_gate, layout_gate, lifecycle_gate, lock_gate,
 };
 
@@ -93,6 +93,12 @@ pub fn run() -> i32 {
         // register.
         ("judge-funnel-gate", Enforcement::Hard, &|| {
             judge_funnel_gate::run(&no_args)
+        }),
+        // Hard, and it reads the working tree: a copy that closes a forbidden
+        // edge lowers boundary-gate's count, and this is the gate that sees
+        // the copy (phase-b-99).
+        ("clone-gate", Enforcement::Hard, &|| {
+            clone_gate::run(&no_args)
         }),
         ("concept-gate", Enforcement::Advisory, &|| {
             concept_gate::run(&no_args)

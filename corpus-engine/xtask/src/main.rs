@@ -6,6 +6,7 @@
 //!   cargo xtask arch-gate [--update-baseline|--tighten]   ARCH §3.1 size ratchet + §1 doc-contract
 //!   cargo xtask docs-gate                          Every repo path the narrative docs cite must resolve
 //!   cargo xtask boundary-gate                      The studio package depends only on itself + shared leaves
+//!   cargo xtask clone-gate [--update-baseline|--tighten]    Production lines living in 2+ files may only shrink
 //!   cargo xtask concept-gate [--update-baseline|--tighten]  One noun, one owner — no NEW duplicated type name
 //!   cargo xtask layer-gate [--update-baseline|--tighten]  Cargo-declared deps obey quality/ARCH_LAYERS.toml + fan-in ratchet
 //!   cargo xtask lifecycle-gate                            No thin surface retains a process handle or tracks a lifecycle
@@ -25,6 +26,7 @@ mod api_gate;
 mod arch_gate;
 mod boundary_gate;
 mod clock_gate;
+mod clone_gate;
 mod common;
 mod concept_gate;
 mod distribution_gate;
@@ -56,6 +58,7 @@ fn main() {
         "docs-gate" => docs_gate::run(),
         "boundary-gate" => boundary_gate::run(),
         "clock-gate" => clock_gate::run(&args[1..]),
+        "clone-gate" => clone_gate::run(&args[1..]),
         "concept-gate" => concept_gate::run(&args[1..]),
         "api-gate" => api_gate::run(&args[1..]),
         "env-gate" => env_gate::run(&args[1..]),
@@ -104,6 +107,9 @@ fn print_usage() {
     );
     eprintln!(
         "  boundary-gate                  Enforce the studio-package dependency boundary (studio/BOUNDARY.md)"
+    );
+    eprintln!(
+        "  clone-gate [--update-baseline|--tighten]  Production lines covered by an 8-line window in 2+ files may only shrink"
     );
     eprintln!(
         "  concept-gate [--update-baseline|--tighten]  One noun, one owner — no NEW name defined as a type in 2+ crates"

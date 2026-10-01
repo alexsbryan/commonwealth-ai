@@ -387,8 +387,9 @@ fn count(text: &str, whole_file_is_test: bool) -> (usize, usize) {
     (code, tests)
 }
 
-/// Blank, line comment, doc comment, or inside a block comment.
-fn is_noise(t: &str, in_block: &mut bool) -> bool {
+/// Blank, line comment, doc comment, or inside a block comment. clone-gate
+/// reads it too, so the two gates agree on what a comment is.
+pub(crate) fn is_noise(t: &str, in_block: &mut bool) -> bool {
     if *in_block {
         if t.contains("*/") {
             *in_block = false;
