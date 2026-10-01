@@ -60,7 +60,6 @@ use sovereign_daemon::daemon::EmbeddedDaemon;
 use crate::common::{
     desktop_services_with_engine, mesh_admin_services, reading_double, spawn_router,
 };
-use crate::local_corpus_port_double::leaf_backed_double;
 
 /// One installed corpus on disk, in the shape `installed_indexes()`
 /// reads.
@@ -354,42 +353,10 @@ async fn catalog_without_a_corpus_engine_is_the_named_503() {
     }
 }
 
-/// Install a local-corpus manager if the process has none yet.
-/// `install` is a `OnceLock::set`, so this is a no-op when
-/// `lc_surface_e2e` got there first — which is the point.
+/// Install a local-corpus manager if the process has none yet, through
+/// the binary's one installer (`watch_runtime`).
 async fn install_a_manager_if_none() {
-    use sovereign_daemon::watched_folder_runtime;
-    if watched_folder_runtime::manager().is_some() {
-        return;
-    }
-    let tmp = tempfile::tempdir().unwrap();
-    let data_dir = tmp.path().to_path_buf();
-    std::fs::create_dir_all(data_dir.join("indexes")).unwrap();
-    std::fs::create_dir_all(data_dir.join("recipes")).unwrap();
-    // The singleton holds paths into this dir for the process
-    // lifetime; dropping the guard would pull them out from under it.
-    std::mem::forget(tmp);
-    let store: Arc<dyn sovereign_contracts::traits::StateStore> =
-        Arc::new(sovereign_store::memory::InMemoryStateStore::new());
-    let engine = Arc::new(leaf_backed_double(
-        data_dir.join("indexes"),
-        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) })),
-    ));
-    let manager = Arc::new(
-        sovereign_tools::local_corpus::LocalCorpusManager::init(
-            engine,
-            store,
-            None,
-            data_dir.clone(),
-            data_dir.join("vault-snapshots"),
-        )
-        .await
-        .expect("manager init"),
-    );
-    watched_folder_runtime::install(
-        manager,
-        Arc::new(sovereign_tools::local_corpus::watched::registry::WatchedFolderRegistry::new()),
-    );
+    crate::watch_runtime::installed().await;
 }
 
 /// The index build as a JOB: accepted with the ingest job's ack shape,

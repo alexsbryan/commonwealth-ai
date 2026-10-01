@@ -143,6 +143,8 @@ mod svrn_alone_names_ingest_absent_e2e;
 mod turn_reshape_fidelity;
 #[path = "main/turn_surface.rs"]
 mod turn_surface;
+#[path = "main/watch_runtime.rs"]
+mod watch_runtime;
 #[path = "main/wikipedia_fetch_e2e.rs"]
 mod wikipedia_fetch_e2e;
 #[path = "main/wire_view_drift.rs"]

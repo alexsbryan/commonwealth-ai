@@ -11,10 +11,10 @@
 //! Singleton constraint: `watched_folder_runtime` keeps the
 //! `LocalCorpusManager` + `WatchedFolderRegistry` in process-global
 //! `OnceLock`s. Each test binary gets a fresh process so the
-//! singleton is clean at start, but **all tests in this file MUST
-//! share the same install** — re-installing across tests is a
-//! silent no-op. So this file installs the singleton exactly once and
-//! spawns a fresh listener per test (see `install_singleton_and_spawn`).
+//! singleton is clean at start, but **every test in this binary MUST
+//! share the same install** — re-installing is a silent no-op. So the
+//! singleton comes from `watch_runtime::installed` (the binary's one
+//! installer) and each test spawns a fresh listener.
 //!
 //! Five assertions (one per route, exercising the
 //! register → list → status → pause → resume → remove arc):
@@ -34,83 +34,21 @@
 //!    `/{id}` → 200; GET `/status/{id}` → 404 (the corpus is gone).
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
 
-use corpus_index::ingest_port::double::IngestPortDouble;
-use corpus_index::types::EmbedFn;
-use sovereign_contracts::traits::StateStore;
 use sovereign_daemon::corpus_watch_http::corpus_watch_router;
-use sovereign_daemon::watched_folder_runtime;
-use sovereign_store::memory::InMemoryStateStore;
-use sovereign_tools::local_corpus::watched::registry::WatchedFolderRegistry;
-use sovereign_tools::local_corpus::LocalCorpusManager;
 
 use crate::common;
 use crate::common::spawn_router;
-use crate::local_corpus_port_double::leaf_backed_double;
+use crate::watch_runtime;
 
-const EMBED_DIM: usize = 8;
-
-fn mock_embed_fn() -> EmbedFn {
-    Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; EMBED_DIM]) }))
-}
-
-/// The singleton manager's port, so a test can read the calls it made.
-static ENGINE: OnceLock<Arc<IngestPortDouble>> = OnceLock::new();
-
-/// One-shot harness builder. The singleton is filled the first time
-/// any test calls `install_singleton`; subsequent calls reuse the
-/// same handles. Returns the data_dir (so tests can compute folder
-/// paths under it) and the listener address.
+/// The installed runtime's data dir and a FRESH listener per test, the
+/// lc_surface_e2e shape: `spawn_router`'s accept loop lives on the calling
+/// test's tokio runtime, and `#[tokio::test]` drops that runtime when the
+/// test returns — a cached address was connection-refused for every test
+/// after the first (13,233/4 on 4f736f4db, all four in this file). The router
+/// is stateless (it reads the singleton), so re-spawning costs a port.
 async fn install_singleton_and_spawn() -> (PathBuf, SocketAddr) {
-    static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
-    if let Some(data_dir) = DATA_DIR.get() {
-        // A FRESH listener per test, the lc_surface_e2e shape: `spawn_router`'s
-        // accept loop lives on the calling test's tokio runtime, and
-        // `#[tokio::test]` drops that runtime when the test returns — a
-        // cached address was connection-refused for every test after the
-        // first (13,233/4 on 4f736f4db, all four in this file). The router
-        // is stateless (it reads the singleton), so re-spawning costs a port.
-        let addr = spawn_router(corpus_watch_router()).await;
-        return (data_dir.clone(), addr);
-    }
-    // Build the manager + registry once and install into the runtime
-    // singleton. Subsequent calls race the OnceLock initialisation
-    // harmlessly; only the data dir is cached, never the listener.
-    let tmp = tempfile::tempdir().unwrap();
-    let data_dir = tmp.path().to_path_buf();
-    std::fs::create_dir_all(data_dir.join("indexes")).unwrap();
-    std::fs::create_dir_all(data_dir.join("recipes")).unwrap();
-    // Leak the TempDir so its lifetime equals the process — the
-    // singleton's manager holds paths into it indefinitely.
-    std::mem::forget(tmp);
-
-    let store: Arc<InMemoryStateStore> = Arc::new(InMemoryStateStore::new());
-    // Ingest's port double (pb-ingest-dial-daemon-tests): what the engine
-    // does with a register/remove is proven on `impl LocalCorpusPort for
-    // CorpusEngine`, corpus-engine's local_corpus_port_parity.
-    let engine = Arc::new(
-        leaf_backed_double(data_dir.join("indexes"), mock_embed_fn())
-            .on_source_file_progress(|_| None),
-    );
-    let _ = ENGINE.set(Arc::clone(&engine));
-
-    let manager = Arc::new(
-        LocalCorpusManager::init(
-            engine,
-            store.clone() as Arc<dyn StateStore>,
-            None,
-            data_dir.clone(),
-            data_dir.join("vault-snapshots"),
-        )
-        .await
-        .expect("manager init"),
-    );
-    let registry = Arc::new(WatchedFolderRegistry::new());
-
-    watched_folder_runtime::install(manager, registry);
-
-    let _ = DATA_DIR.set(data_dir.clone());
+    let (data_dir, _engine) = watch_runtime::installed().await;
     let addr = spawn_router(corpus_watch_router()).await;
     (data_dir, addr)
 }
@@ -292,7 +230,7 @@ async fn delete_unregisters_corpus_and_subsequent_status_404s() {
     // The delete reached ingest: the manager asked the port to remove the
     // corpus (what that removes is local_corpus_port_parity's
     // `remove_after_cancel_leaves_no_index_dir`).
-    let calls = ENGINE.get().expect("the singleton's port").calls();
+    let calls = watch_runtime::installed().await.1.calls();
     assert!(
         calls.contains(&"remove_corpus_everything"),
         "delete MUST remove the corpus through ingest's port; calls: {calls:?}"

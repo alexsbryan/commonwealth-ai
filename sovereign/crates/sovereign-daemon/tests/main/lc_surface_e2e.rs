@@ -57,57 +57,17 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_index::types::EmbedFn;
-use sovereign_contracts::traits::StateStore;
 use sovereign_daemon::lc_http::lc_router;
 use sovereign_daemon::watched_folder_runtime;
-use sovereign_store::memory::InMemoryStateStore;
 use sovereign_tools::local_corpus::config::LocalCorpusConfig;
-use sovereign_tools::local_corpus::watched::registry::WatchedFolderRegistry;
 use sovereign_tools::local_corpus::LocalCorpusManager;
 
 use crate::common::spawn_router;
-use crate::local_corpus_port_double::leaf_backed_double;
 
-const EMBED_DIM: usize = 8;
-
-fn mock_embed_fn() -> EmbedFn {
-    Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; EMBED_DIM]) }))
-}
-
-/// Install the singleton if it is still empty, then hand back the
+/// The binary's one installed singleton (`watch_runtime`), then the
 /// manager the HANDLERS will read plus the router's address.
-#[allow(clippy::unwrap_used)]
 async fn harness() -> (Arc<LocalCorpusManager>, SocketAddr) {
-    if watched_folder_runtime::manager().is_none() {
-        let tmp = tempfile::tempdir().unwrap();
-        let data_dir = tmp.path().to_path_buf();
-        std::fs::create_dir_all(data_dir.join("indexes")).unwrap();
-        std::fs::create_dir_all(data_dir.join("recipes")).unwrap();
-        // The singleton holds paths into this dir for the process
-        // lifetime; dropping the guard would pull them out from under
-        // it (`corpus_watch_http_e2e`'s reason, same fix).
-        std::mem::forget(tmp);
-        let store: Arc<InMemoryStateStore> = Arc::new(InMemoryStateStore::new());
-        // The leaf-backed ingest writes no source-file manifest, so no
-        // corpus dir has one — the engine's answer for such a dir.
-        let engine = Arc::new(
-            leaf_backed_double(data_dir.join("indexes"), mock_embed_fn())
-                .on_source_file_progress(|_| None),
-        );
-        let manager = Arc::new(
-            LocalCorpusManager::init(
-                engine,
-                store as Arc<dyn StateStore>,
-                None,
-                data_dir.clone(),
-                data_dir.join("vault-snapshots"),
-            )
-            .await
-            .expect("manager init"),
-        );
-        watched_folder_runtime::install(manager, Arc::new(WatchedFolderRegistry::new()));
-    }
+    crate::watch_runtime::installed().await;
     let manager = watched_folder_runtime::manager().expect("the singleton is installed by now");
     // A FRESH listener per test. `spawn_router`'s accept loop lives on
     // the calling test's tokio runtime, and `#[tokio::test]` drops that
