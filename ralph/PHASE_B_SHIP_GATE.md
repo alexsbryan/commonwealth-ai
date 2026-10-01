@@ -87,6 +87,7 @@ node is also the existing-state test.
 | P5 restart | `sovereign daemon stop && sovereign daemon start` (CLI, toolbox) | the node answers and is still on the mesh, and cw-rails is untouched by the daemon's restart |
 | P3 idle | stock idle and cw-rails idle with their existing instruments | ≤ 2.004% (e098d2112) and ≤ 2% (8dc4ff1f6) |
 | P3 latency | the throughput lane inside P2 | NEUTRAL. A release first-token re-read against 74fad65d4's bars runs only if this alarms |
+| P8 on-prem | sovereign/deploy/onprem: package.sh, install.sh into a sandbox prefix on sandbox ports, then acceptance.sh (pb-distribution-onprem-kit's instrument) | every acceptance check passes against the daemon's port. The nginx leg passes or is named owed. `strings` on the onprem binary finds no withheld surface |
 
 Not re-run, with the reason:
 - **Tensor split.** pb-serve-distributes-bar passed at ab64e8dac (decode 103.5%, first token 100%), and the
@@ -120,8 +121,9 @@ deleted (1c120f23d). Serve's own route is the one to check, in phase-c.
 
 - **O1, merge timing.** Hold the merge until pb-distribution and F1 land: the interim release install
   cannot start the daemon.
-- **O2, sovereign-server, on-prem and mobile.** Retire with a note. 5cb09f22b already deleted the server,
-  and porting it is a project of its own.
+- **O2, on-prem: ruled by the operator 2026-10-01 (phase-b-86).** On-prem works at the end of Phase B: API keys
+  resolving to `Asserted`, the daemon's API, and its own hardened distribution (rows pb-distribution-onprem-*).
+  Mobile stays retired.
 - **O3, test deletions.** Restore `containment_guard_e2e` against the stock binary; the boot guard is a
   safety property. For a546a456b, name a successor for each of its 15 tests or rule them out.
 - **O4, debug first token.** Accept the debug-profile x1.09-1.13 first token on debug hosts. Release
