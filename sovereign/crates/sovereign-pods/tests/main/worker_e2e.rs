@@ -23,7 +23,7 @@ use std::time::Duration;
 
 use ed25519_dalek::SigningKey;
 use sha2::{Digest, Sha256};
-use sovereign_mesh::worker_pod::{
+use sovereign_contracts::worker_pod::{
     encode_bootstrap, mint_bootstrap, self_signed_cert, BootstrapBlob, BootstrapInputs,
 };
 use sovereign_pods::worker_controller::{
@@ -170,7 +170,7 @@ async fn full_lifecycle_against_real_tls_pod() {
     let mut expected_uploads = BTreeMap::new();
     expected_uploads.insert(
         "primary.gguf".to_string(),
-        sovereign_mesh::worker_pod::UploadEntry::local(sha),
+        sovereign_contracts::worker_pod::UploadEntry::local(sha),
     );
     let (blob, _) = mint_bootstrap(BootstrapInputs {
         job_id: "e2e-1".into(),
@@ -207,7 +207,7 @@ async fn full_lifecycle_against_real_tls_pod() {
     // the pod into running, completed polling advances the cursor,
     // destroy sends DELETE.
     let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).expect("pinned");
-    let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
+    let handle = sovereign_contracts::worker_pod::WorkerHandle::new(
         bound.ip().to_string(),
         bound.port(),
         blob.pod_pubkey_thumbprint(),
@@ -288,14 +288,14 @@ async fn wrong_owner_key_cannot_drive_a_pinned_pod() {
     let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).expect("pinned");
     // Mint an owner-B-signed token for the same pod thumbprint —
     // mimics what a hostile second owner would try.
-    let claims = sovereign_mesh::worker_pod::TokenClaims {
+    let claims = sovereign_contracts::worker_pod::TokenClaims {
         job_id: "j".into(),
         owner_pubkey_thumbprint: [0u8; 32],
         pod_pubkey_thumbprint: blob.pod_pubkey_thumbprint(),
         expires_unix: u64::MAX / 2,
     };
-    let bad_token = sovereign_mesh::worker_pod::sign_worker_token(&owner_b, &claims).unwrap();
-    let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
+    let bad_token = sovereign_contracts::worker_pod::sign_worker_token(&owner_b, &claims).unwrap();
+    let handle = sovereign_contracts::worker_pod::WorkerHandle::new(
         bound.ip().to_string(),
         bound.port(),
         blob.pod_pubkey_thumbprint(),
@@ -353,21 +353,22 @@ async fn url_backed_upload_fetched_by_pod_in_background() {
     let fetch_url = format!("http://{}/primary.gguf", staging_addr);
 
     // Mint a blob with a URL-backed manifest entry.
-    use sovereign_mesh::worker_pod::UploadEntry;
+    use sovereign_contracts::worker_pod::UploadEntry;
     let mut expected = std::collections::BTreeMap::new();
     expected.insert(
         "primary.gguf".to_string(),
         UploadEntry::from_url(sha, fetch_url.clone()),
     );
-    let (blob, _) =
-        sovereign_mesh::worker_pod::mint_bootstrap(sovereign_mesh::worker_pod::BootstrapInputs {
+    let (blob, _) = sovereign_contracts::worker_pod::mint_bootstrap(
+        sovereign_contracts::worker_pod::BootstrapInputs {
             job_id: "url-job".into(),
             owner_signing: &owner,
             expected_uploads: expected,
             ttl_seconds: 600,
             seed_override: Some([23u8; 32]),
-        })
-        .unwrap();
+        },
+    )
+    .unwrap();
 
     let bound = spawn_worker_daemon(blob.clone()).await;
 
@@ -404,7 +405,7 @@ async fn url_backed_upload_fetched_by_pod_in_background() {
     };
 
     let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).expect("pinned");
-    let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
+    let handle = sovereign_contracts::worker_pod::WorkerHandle::new(
         bound.ip().to_string(),
         bound.port(),
         blob.pod_pubkey_thumbprint(),
@@ -452,20 +453,21 @@ async fn url_backed_upload_rejects_manual_upload() {
         "primary.gguf".to_string(),
         // URL doesn't have to resolve — we never let the fetch
         // complete in this test.
-        sovereign_mesh::worker_pod::UploadEntry::from_url(
+        sovereign_contracts::worker_pod::UploadEntry::from_url(
             [9u8; 32],
             "http://127.0.0.1:1/never-resolves",
         ),
     );
-    let (blob, _) =
-        sovereign_mesh::worker_pod::mint_bootstrap(sovereign_mesh::worker_pod::BootstrapInputs {
+    let (blob, _) = sovereign_contracts::worker_pod::mint_bootstrap(
+        sovereign_contracts::worker_pod::BootstrapInputs {
             job_id: "conflict-job".into(),
             owner_signing: &owner,
             expected_uploads: expected,
             ttl_seconds: 60,
             seed_override: Some([24u8; 32]),
-        })
-        .unwrap();
+        },
+    )
+    .unwrap();
 
     let bound = spawn_worker_daemon(blob.clone()).await;
     let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).expect("pinned");
@@ -584,7 +586,7 @@ async fn multi_pod_pool_poll_drains_partitioned_units() {
         let bound = spawn_worker_daemon(blob.clone()).await;
         let client =
             sovereign_pods::worker_controller::build_pinned_client_for(&blob).expect("pinned");
-        let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
+        let handle = sovereign_contracts::worker_pod::WorkerHandle::new(
             bound.ip().to_string(),
             bound.port(),
             blob.pod_pubkey_thumbprint(),

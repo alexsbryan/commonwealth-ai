@@ -70,9 +70,6 @@ tracing-subscriber = { workspace = true }
 # paths through the empty-items face (phase-b-72), the daemon's seed records
 # from its `double`, ids from kernel-types and the manifest from oicp-types.
 sovereign-serving-host = { path = "../sovereign-serving-host" }
-# The mesh crate's ledger records, guest source and capability builder, by
-# its empty-items face, until pb-mesh-exit-mesh re-homes them.
-sovereign-mesh = { workspace = true }
 sovereign-daemon = { workspace = true, features = ["treesitter", "test-doubles"] }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }

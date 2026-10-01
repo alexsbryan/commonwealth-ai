@@ -22,7 +22,7 @@
 //! at `scripts/pod`, and (b) it spins up a real container each run.
 //! Trigger manually:
 //!
-//!     cargo test --package sovereign-mesh --test main local_pod_smoke -- --ignored --nocapture
+//!     cargo test --package sovereign-pods --test main local_pod_smoke -- --ignored --nocapture
 //!
 //! Prereqs:
 //! - `target/release/sovereign-cli` must exist (the image COPYs it)
@@ -36,7 +36,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ed25519_dalek::SigningKey;
-use sovereign_mesh::worker_pod::{encode_bootstrap, mint_bootstrap, BootstrapInputs};
+use sovereign_contracts::worker_pod::{encode_bootstrap, mint_bootstrap, BootstrapInputs};
 use sovereign_pods::worker_controller::{
     ControllerConfig, JobSpec, ProviderError, ProviderInstance, ProviderResult, PublicAddress,
     WorkerController, WorkerProvider,
@@ -329,7 +329,7 @@ async fn local_pod_smoke_full_lifecycle() {
 
     let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob)
         .expect("build_pinned_client_for");
-    let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
+    let handle = sovereign_contracts::worker_pod::WorkerHandle::new(
         "127.0.0.1".to_string(),
         host_port,
         blob.pod_pubkey_thumbprint(),
@@ -457,16 +457,16 @@ async fn local_pod_rejects_impostor_owner() {
     // Mint a token signed by owner B — pinned cert still works (seed
     // is shared), but the bearer signature won't verify against the
     // owner verifying key embedded in the blob.
-    let claims = sovereign_mesh::worker_pod::TokenClaims {
+    let claims = sovereign_contracts::worker_pod::TokenClaims {
         job_id: "impostor-test".into(),
         owner_pubkey_thumbprint: [0u8; 32],
         pod_pubkey_thumbprint: blob.pod_pubkey_thumbprint(),
         expires_unix: u64::MAX / 2,
     };
-    let bad_token = sovereign_mesh::worker_pod::sign_worker_token(&owner_b, &claims).unwrap();
+    let bad_token = sovereign_contracts::worker_pod::sign_worker_token(&owner_b, &claims).unwrap();
 
     let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).unwrap();
-    let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
+    let handle = sovereign_contracts::worker_pod::WorkerHandle::new(
         "127.0.0.1".to_string(),
         host_port,
         blob.pod_pubkey_thumbprint(),
@@ -581,7 +581,7 @@ async fn local_pod_pool_three_containers_drain() {
             );
         }
         let client = sovereign_pods::worker_controller::build_pinned_client_for(&blob).unwrap();
-        let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
+        let handle = sovereign_contracts::worker_pod::WorkerHandle::new(
             "127.0.0.1".to_string(),
             host_port,
             blob.pod_pubkey_thumbprint(),

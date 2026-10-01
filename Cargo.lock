@@ -13277,7 +13277,6 @@ dependencies = [
  "sovereign-daemon",
  "sovereign-enrichment-build",
  "sovereign-enrichment-catalog",
- "sovereign-mesh",
  "sovereign-recipe-author",
  "sovereign-serve",
  "sovereign-serving-host",

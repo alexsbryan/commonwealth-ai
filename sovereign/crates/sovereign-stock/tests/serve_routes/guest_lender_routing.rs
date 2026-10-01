@@ -28,7 +28,7 @@ use sovereign_contracts::guest_link::{save_in, GuestLink};
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::CompletionRequest;
 use sovereign_daemon::daemon::InferenceVenue;
-use sovereign_mesh::guest_source::stored_guest_source_in;
+use sovereign_serving_host::guest_source::stored_guest_source_in;
 use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
 
 use crate::common;

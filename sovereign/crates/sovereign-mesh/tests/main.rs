@@ -25,8 +25,6 @@
 // would put two builds of `sovereign-mesh` in the graph (a dev-dependency
 // cycle) so the `FabricPart` types would not unify. An integration test
 // resolves both to one build.
-#[path = "main/local_pod_smoke.rs"]
-mod local_pod_smoke;
 #[path = "main/mesh_sim_ring_room.rs"]
 mod mesh_sim_ring_room;
 #[path = "main/mesh_sim_scoreboard.rs"]
@@ -37,8 +35,6 @@ mod rail_kv_pump_namespaces;
 mod scheduler_replay_agreement;
 #[path = "main/work_atlas_store.rs"]
 mod work_atlas_store;
-#[path = "main/worker_e2e.rs"]
-mod worker_e2e;
 
 // ─── The wiring of this file is itself a gate ────────────────────────────────
 //
