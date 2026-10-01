@@ -737,6 +737,41 @@ def audit_row(row_id, after):
     return f"- [ ] {row_id} — depends [{after}] — {AUDIT_ROW_BODY}"
 
 
+def audit_due(paths, queue, unit):
+    """`audit_every`, enforced where rows are dispatched: a 22-row queue ran
+    ~60 commits on one closing audit because a cadence was its author's to
+    remember. A [~] row is finished first — `current()` returns it until it
+    closes, so a row inserted above it would be inserted again every pass."""
+    every = paths.manifest.audit_every if paths.manifest else None
+    return bool(every and unit.status is Status.PENDING
+                and not unit.id.startswith(AUDIT_PREFIX)
+                and units_since_audit(paths, queue) >= every)
+
+
+def insert_audit(paths, queue, unit):
+    """(the inserted row, git's refusal or ""). The id's <prefix> is the
+    addendum's `prefix` var, else the queue's name."""
+    prefix = paths.queue
+    if paths.prompt_addendum:
+        for name, _, _, body in prompt_sections(
+                paths.p(paths.prompt_addendum).read_text(), "addendum"):
+            if name == "vars":
+                prefix = section_vars(body).get("prefix", prefix)
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", prefix):
+        say(f"prefix var {prefix!r} cannot be part of a row id; using the queue name")
+        prefix = paths.queue
+    stem = f"{AUDIT_PREFIX}{prefix}-auto-"
+    row_id = f"{stem}{1 + sum(r.id.startswith(stem) for r in queue.rows)}"
+    n = units_since_audit(paths, queue)
+    last_done = [r.id for r in queue.rows if r.status is Status.DONE][-1]
+    queue.insert_before(unit.id, audit_row(row_id, last_done))
+    subject = f"ralph: audit due after {n} units — {row_id}"
+    say(subject)
+    r = commit_state(paths, subject)
+    refused = "" if r.returncode == 0 else (r.stderr.strip() or f"exit {r.returncode}")
+    return Queue(queue.path).by_id()[row_id], refused
+
+
 MODEL_KEYS = ("MODEL", "REVIEW_MODEL", "RESOLVE_MODEL", "VARIANT")
 WAIT_LIMIT_KEY = "WAIT_LIMIT_S"
 # Raised from 7200 (2h) on order ralph-model-roster: full gates legitimately
@@ -1442,8 +1477,8 @@ class Campaign:
             refusal = dispatch_refusal(self.paths, queue, unit)
             if refusal is not None:
                 return self.halt(refusal)
-            if self._audit_due(queue, unit):
-                unit, refused = self._insert_audit(queue, unit)
+            if audit_due(self.paths, queue, unit):
+                unit, refused = insert_audit(self.paths, queue, unit)
                 if refused:
                     return self.halt(f"audit row {unit.id} is in {self.paths.state} "
                                      f"but git refused the commit: {refused}")
@@ -1481,39 +1516,6 @@ class Campaign:
                 if stall >= self.max_stall:
                     return self.halt(f"{self.max_stall} iterations without a commit")
         return self.halt(f"MAX_ITER={self.max_iter} reached")
-
-    def _audit_due(self, queue, unit):
-        """`audit_every`, enforced where rows are dispatched: a 22-row queue ran
-        ~60 commits on one closing audit because a cadence was its author's to
-        remember. A [~] row is finished first — `current()` returns it until it
-        closes, so a row inserted above it would be inserted again every pass."""
-        every = self.paths.manifest.audit_every if self.paths.manifest else None
-        return bool(every and unit.status is Status.PENDING
-                    and not unit.id.startswith(AUDIT_PREFIX)
-                    and units_since_audit(self.paths, queue) >= every)
-
-    def _insert_audit(self, queue, unit):
-        """(the inserted row, git's refusal or ""). The id's <prefix> is the
-        addendum's `prefix` var, else the queue's name."""
-        prefix = self.paths.queue
-        if self.paths.prompt_addendum:
-            for name, _, _, body in prompt_sections(
-                    self.paths.p(self.paths.prompt_addendum).read_text(), "addendum"):
-                if name == "vars":
-                    prefix = section_vars(body).get("prefix", prefix)
-        if not re.fullmatch(r"[A-Za-z0-9._-]+", prefix):
-            say(f"prefix var {prefix!r} cannot be part of a row id; using the queue name")
-            prefix = self.paths.queue
-        stem = f"{AUDIT_PREFIX}{prefix}-auto-"
-        row_id = f"{stem}{1 + sum(r.id.startswith(stem) for r in queue.rows)}"
-        n = units_since_audit(self.paths, queue)
-        last_done = [r.id for r in queue.rows if r.status is Status.DONE][-1]
-        queue.insert_before(unit.id, audit_row(row_id, last_done))
-        subject = f"ralph: audit due after {n} units — {row_id}"
-        say(subject)
-        r = commit_state(self.paths, subject)
-        refused = "" if r.returncode == 0 else (r.stderr.strip() or f"exit {r.returncode}")
-        return Queue(queue.path).by_id()[row_id], refused
 
     def _beat(self, context):
         try:
