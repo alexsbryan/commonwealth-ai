@@ -1246,7 +1246,9 @@ a refused dial never re-ensures, and nothing starts it by default; since pb-mesh
 then enables a `cw-rails.service` user unit running the same argv (`rails_unit.rs`, through host-kit's `service`
 writer that `svrn install-service` also uses), and doctor's `rails_boot_unit` reads its state. Since phase-b-3 `ensure_rails` runs the daemon's one-time journal
 handover (`rail_migration::hand_over`) first, before any bring-up; with a cw-rails already answering it
-moves nothing and warns with the namespaces that wait. Since fp-solo-hermetic the bring-up is `run --listen <rails_base port>`,
+moves nothing and warns with the namespaces that wait. Until the handover runs, the daemon's boot log,
+`svrn daemon start|restart` and `svrn mesh status` name `svrn mesh up` (`node_identity::mesh_handover_notice`,
+keyed on the pre-handover `node_key` the identity handover renames; pb-distribution-f8). Since fp-solo-hermetic the bring-up is `run --listen <rails_base port>`,
 plus `--local-only` (`[relay] discovery = "none"`) on a local-only node, which also refuses an already
 running cw-rails whose `/v1/mesh/status` `relay.n0_services` is true; and `run` exits when its `rails.lock`
 is unlinked or replaced. Since phase-b pb-membership it founds (`cw-rails found`), serves its invite as

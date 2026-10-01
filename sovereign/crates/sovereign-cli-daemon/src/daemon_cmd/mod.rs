@@ -65,9 +65,9 @@ pub async fn run(launch: &Launch, args: &[String]) -> i32 {
     }
     match args.first().map(String::as_str) {
         Some("run") => run_daemon(launch, args).await,
-        Some("start") => start_daemon(&args[1..]).await,
+        Some("start") => after_ready(start_daemon(&args[1..]).await),
         Some("stop") => stop_daemon().await,
-        Some("restart") => restart_daemon(&args[1..]).await,
+        Some("restart") => after_ready(restart_daemon(&args[1..]).await),
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
         Some("key") => key::cmd_key(&args[1..]),
@@ -97,6 +97,27 @@ pub async fn run(launch: &Launch, args: &[String]) -> i32 {
             run_daemon(launch, args).await
         }
     }
+}
+
+/// The line under "daemon ready" for a data dir upgraded across the flip and
+/// not yet handed over by `svrn mesh up` (pb-distribution-f8). `rc` passes
+/// through.
+fn after_ready(rc: i32) -> i32 {
+    if rc != 0 {
+        return rc;
+    }
+    match SetupConfig::load() {
+        Ok(c) => {
+            let work_offer = c.compute.work_offer.is_some();
+            if let Some(notice) =
+                sovereign_contracts::node_identity::mesh_handover_notice(&c.data.dir, work_offer)
+            {
+                eprintln!("⚠ {notice}");
+            }
+        }
+        Err(e) => tracing::debug!(error = %e, "daemon start: no config, no handover check"),
+    }
+    rc
 }
 
 /// Public entry for `svrn setup` (Phase 4 shim). Runs only the

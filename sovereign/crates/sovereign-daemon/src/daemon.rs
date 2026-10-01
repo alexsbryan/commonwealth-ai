@@ -1012,6 +1012,17 @@ impl EmbeddedDaemon {
         // and reach door (`ServingProfile::mesh`). Every peer dial resolves
         // through that transport; svrn holds no key and no endpoint.
         let mesh_access = self.services.mesh().clone();
+        // A data dir upgraded across the flip sits off its meshes until
+        // `svrn mesh up` runs; say so rather than nothing (pb-distribution-f8).
+        {
+            let cfg = self.setup_config.read().await;
+            let work_offer = cfg.compute.work_offer.is_some();
+            if let Some(notice) =
+                sovereign_contracts::node_identity::mesh_handover_notice(&cfg.data.dir, work_offer)
+            {
+                warn!("daemon: {notice}");
+            }
+        }
         // The ring rail's journals moved to the rails daemon's data root
         // (fp-54, §4 rule 1 — one data directory, one owner). The one-time
         // handover runs in `svrn mesh up`, before it brings cw-rails up

@@ -5,6 +5,8 @@
 //! cw-rails runs and no `rails.lock` exists afterwards; a ring read names the
 //! absence and the verb that ends it. cw-rails is brought
 //! up by `svrn mesh up` alone (sovereign-cli-mesh tests/rails_up_e2e.rs).
+//! A second boot, on a data dir seeded as main left it, names that verb
+//! (pb-distribution-f8).
 //!
 //! The file keeps its name so nextest's `daemon-boot` group
 //! (.config/nextest.toml) still serializes its boot. Linux only: the holder
@@ -122,27 +124,31 @@ fn wait_until(what: &str, within: Duration, see: &Path, mut done: impl FnMut() -
     }
 }
 
-/// PROOF (pb-rails-untether): svrn boots, dials the serve it is pointed at,
-/// answers a chat turn, and starts no cw-rails, although a real one is on
-/// `CW_RAILS_BIN` and nothing answers on `rails_base`. PLANT: put
-/// `ensure_rails` back in the boot and a cw-rails holds `rails.lock`.
-#[test]
-fn svrn_boots_and_answers_a_turn_and_starts_no_cw_rails() {
+/// One svrn on the mock engine, its serve answering and nothing on its
+/// `rails_base`, up to 200 on `/v1/models`. `extra_config` is appended to its
+/// config.toml and `seed` runs on its data dir before the boot.
+struct Booted {
+    _daemon: Killed,
+    _serve: Killed,
+    _reaper: Reaper,
+    client: u16,
+    rails_port: u16,
+    lock: PathBuf,
+    data: PathBuf,
+    stderr: PathBuf,
+}
+
+fn boot(root: &Path, extra_config: &str, seed: impl FnOnce(&Path)) -> Booted {
     let rails_bin = sibling("cw-rails", "CW_RAILS_BIN", "commonwealth-rails");
     let serve_bin = sibling("sovereign-serve", "SOVEREIGN_SERVE_BIN", "sovereign-serve");
-    let root = tempfile::tempdir().expect("tempdir");
-    let (home, data, rails_dir) = (
-        root.path().join("home"),
-        root.path().join("data"),
-        root.path().join("rails"),
-    );
+    let (home, data, rails_dir) = (root.join("home"), root.join("data"), root.join("rails"));
     for d in [&home, &data, &rails_dir] {
         std::fs::create_dir_all(d).expect("dir");
     }
     let (client, internal, rails_port, serve_port) =
         (free_port(), free_port(), free_port(), free_port());
     let lock = rails_dir.join("rails.lock");
-    let _reaper = Reaper(lock.clone());
+    let reaper = Reaper(lock.clone());
     // The mock engine loads no weights (scripts/program-lift.toml, svrn's smoke).
     let config = data.join("config.toml");
     std::fs::write(
@@ -151,14 +157,15 @@ fn svrn_boots_and_answers_a_turn_and_starts_no_cw_rails() {
             "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"{r}/mock.gguf\"\n\
              embed = \"{r}/mock-embed.gguf\"\n\n[daemon]\nclient_port = {client}\n\
              internal_port = {internal}\nrails_base = \"http://127.0.0.1:{rails_port}\"\n\n\
-             [data]\ndir = \"{d}\"\n",
+             [data]\ndir = \"{d}\"\n{extra_config}",
             r = data.display(),
             d = data.display()
         ),
     )
     .expect("config");
-    let serve_log = root.path().join("serve.log");
-    let _serve = Killed(
+    seed(&data);
+    let serve_log = root.join("serve.log");
+    let serve = Killed(
         Command::new(&serve_bin)
             .arg("--data-dir")
             .arg(&data)
@@ -176,13 +183,13 @@ fn svrn_boots_and_answers_a_turn_and_starts_no_cw_rails() {
         || request(serve_port, "GET", "/health", None).is_some_and(|(s, _)| s == 200),
     );
 
-    let stderr = root.path().join("daemon.stderr.log");
-    let _daemon = Killed(
+    let stderr = root.join("daemon.stderr.log");
+    let daemon = Killed(
         Command::new(BIN)
             .args(["run", "--config"])
             .arg(&config)
             .env("HOME", &home)
-            .env("SVRNMESH_DATA_DIR", root.path().join("svrnmesh"))
+            .env("SVRNMESH_DATA_DIR", root.join("svrnmesh"))
             .env("CW_RAILS_DIR", &rails_dir)
             .env("CW_RAILS_BIN", &rails_bin)
             .env("SOVEREIGN_SERVE_PORT", serve_port.to_string())
@@ -199,6 +206,27 @@ fn svrn_boots_and_answers_a_turn_and_starts_no_cw_rails() {
         || request(client, "GET", "/v1/models", None).is_some_and(|(s, _)| s == 200),
     );
 
+    Booted {
+        _daemon: daemon,
+        _serve: serve,
+        _reaper: reaper,
+        client,
+        rails_port,
+        lock,
+        data,
+        stderr,
+    }
+}
+
+/// PROOF (pb-rails-untether): svrn boots, dials the serve it is pointed at,
+/// answers a chat turn, and starts no cw-rails, although a real one is on
+/// `CW_RAILS_BIN` and nothing answers on `rails_base`. PLANT: put
+/// `ensure_rails` back in the boot and a cw-rails holds `rails.lock`.
+#[test]
+fn svrn_boots_and_answers_a_turn_and_starts_no_cw_rails() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let svrn = boot(root.path(), "", |_| {});
+    let (client, rails_port, lock) = (svrn.client, svrn.rails_port, &svrn.lock);
     let turn = r#"{"messages":[{"role":"user","content":"hello"}]}"#;
     let (code, answer) = request(client, "POST", "/v1/chat/completions", Some(turn))
         .expect("the daemon answers a chat turn");
@@ -229,5 +257,40 @@ fn svrn_boots_and_answers_a_turn_and_starts_no_cw_rails() {
     assert!(
         request(rails_port, "GET", "/v1/mesh/status", None).is_none(),
         "something answers on rails_base :{rails_port}; svrn brings nothing up"
+    );
+    // A data dir that never held the daemon's key is told nothing about a
+    // handover (pb-distribution-f8).
+    let log = std::fs::read_to_string(&svrn.stderr).expect("the daemon's stderr log");
+    assert!(
+        !log.contains("until `svrn mesh up` hands it over"),
+        "a fresh data dir was told to hand over: {log}"
+    );
+}
+
+/// PROOF (pb-distribution-f8, ship gate P6): a data dir seeded as main left
+/// it, the daemon's own `node_key` and a `[compute.work_offer]`, boots and
+/// says at boot that it is off its meshes and offers nothing until
+/// `svrn mesh up`. That the handover ends it is
+/// sovereign-cli-mesh's `the_upgrade_notice_names_mesh_up_until_the_handover_runs`.
+/// PLANT: drop the boot's notice and the log never names the verb.
+#[test]
+fn a_main_era_data_dir_boots_naming_svrn_mesh_up() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let svrn = boot(
+        root.path(),
+        "\n[compute.work_offer]\nimage = \"localhost/sovereign-work:latest\"\n",
+        |data| {
+            let key = data.join(sovereign_contracts::node_identity::PRE_HANDOVER_KEY_FILE);
+            std::fs::write(key, [7u8; 32]).expect("seed node_key");
+        },
+    );
+    let notice = sovereign_contracts::node_identity::mesh_handover_notice(&svrn.data, true)
+        .expect("the seeded dir is pending");
+    assert!(notice.contains("[compute.work_offer]"), "{notice}");
+    wait_until(
+        "the boot named `svrn mesh up`",
+        Duration::from_secs(30),
+        &svrn.stderr,
+        || std::fs::read_to_string(&svrn.stderr).is_ok_and(|l| l.contains(&notice)),
     );
 }

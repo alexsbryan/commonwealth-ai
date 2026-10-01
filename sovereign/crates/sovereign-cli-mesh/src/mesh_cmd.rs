@@ -813,6 +813,20 @@ async fn cmd_status(args: &[String]) -> i32 {
         }
     }
 
+    // An upgraded node not yet handed over is on none of its meshes, whatever
+    // cw-rails answers below (pb-distribution-f8).
+    match sovereign_contracts::setup_config::SetupConfig::load() {
+        Ok(c) => {
+            let work_offer = c.compute.work_offer.is_some();
+            if let Some(notice) =
+                sovereign_contracts::node_identity::mesh_handover_notice(&c.data.dir, work_offer)
+            {
+                eprintln!("mesh status: {notice}");
+            }
+        }
+        Err(e) => tracing::debug!(error = %e, "mesh status: no config, no handover check"),
+    }
+
     // Fetch from cw-rails, the mesh endpoint, at `[daemon] rails_base`.
     let url = format!("{}/v1/mesh/status", rails_base());
     let client = reqwest::Client::builder()
