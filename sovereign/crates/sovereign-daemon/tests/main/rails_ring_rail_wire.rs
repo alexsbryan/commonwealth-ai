@@ -30,8 +30,9 @@ async fn door(seen: Seen) -> (Arc<dyn RingRailPort>, String) {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
-    let rails =
-        Arc::new(WorkRails::spawn_keyed(None, Some(&key), &[(NS, &Roster::new(members))], "").await);
+    let rails = Arc::new(
+        WorkRails::spawn_keyed(None, Some(&key), &[(NS, &Roster::new(members))], "").await,
+    );
     let upstream = format!("{}/v1/rail/append", rails.base);
     let app = axum::Router::new().route(
         "/v1/rail/append",

@@ -28,11 +28,11 @@ use commonwealth_rail_core::{
     Admission, Compaction, Digest, GuestAttestation, Op, Payload, RailAct, RailError, Roster,
     RosterOrigin, SignedOp, SigningKey,
 };
-use sovereign_daemon::rail_port::{RailFut, RingRailPort};
-use sovereign_daemon::rails_client::RailsRingRail;
 use oicp_types::work::projection::WorkProjection;
 use oicp_types::work::WorkAct;
 use oicp_types::{JobKind, JobRequirements, JobUnit};
+use sovereign_daemon::rail_port::{RailFut, RingRailPort};
+use sovereign_daemon::rails_client::RailsRingRail;
 use tempfile::TempDir;
 
 /// The ring namespace every work act rides on — the literal cw-rails' doors
@@ -192,8 +192,7 @@ impl WorkRails {
 
     /// The last lines cw-rails wrote, for a failure message.
     pub fn log(&self) -> String {
-        let text =
-            std::fs::read_to_string(self.root.join("cw-rails.log")).unwrap_or_default();
+        let text = std::fs::read_to_string(self.root.join("cw-rails.log")).unwrap_or_default();
         let tail: Vec<&str> = text.lines().rev().take(40).collect();
         tail.into_iter().rev().collect::<Vec<_>>().join("\n")
     }

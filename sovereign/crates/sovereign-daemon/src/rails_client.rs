@@ -20,8 +20,8 @@
 
 use std::sync::OnceLock;
 
-use kernel_types::NodePubkey;
 use crate::rail_port::{RailFut, RingRailPort};
+use kernel_types::NodePubkey;
 
 /// The typed ledger ports' dialing implementation (fp-78).
 pub mod ledger;

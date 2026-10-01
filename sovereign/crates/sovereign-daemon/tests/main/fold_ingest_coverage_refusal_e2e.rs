@@ -369,13 +369,7 @@ impl tracing_subscriber::fmt::MakeWriter<'_> for BufWriter {
 async fn fold_seed(corpus: &str) -> sovereign_daemon::state::FabricSeed {
     let signer: SigningKey = key(1);
     let rails = Arc::new(
-        WorkRails::spawn_keyed(
-            None,
-            Some(&signer),
-            &[(WORK_NAMESPACE, &ring())],
-            "",
-        )
-        .await,
+        WorkRails::spawn_keyed(None, Some(&signer), &[(WORK_NAMESPACE, &ring())], "").await,
     );
     let (ops, _handoff) = terminal_handoff_ops(&rails, corpus).await;
     let rail = rails.ring_rail();

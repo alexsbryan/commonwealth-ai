@@ -65,8 +65,7 @@ async fn every_declared_namespace_is_one_the_rail_and_the_store_agree_about() {
     for ns in DAEMON_OWN_NAMESPACES {
         assert!(seen.insert(*ns), "{ns} is declared twice");
         // The charset check: a namespace the rail would refuse to open.
-        rail.journal(ns)
-            .unwrap_or_else(|e| panic!("{ns}: {e}"));
+        rail.journal(ns).unwrap_or_else(|e| panic!("{ns}: {e}"));
         assert_eq!(
             rail.roster_origin(ns),
             commonwealth_rail_core::RosterOrigin::Derived,

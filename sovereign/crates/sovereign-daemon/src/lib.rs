@@ -87,10 +87,10 @@ pub mod documents_http;
 #[cfg(feature = "test-doubles")]
 pub mod double;
 pub mod enrich_http;
-pub mod features_http;
 /// Fabric's part of the node's state (DC §4.2), moved from sovereign-mesh
 /// (pb-mesh-exit-mesh): the daemon is its only holder.
 pub mod fabric;
+pub mod features_http;
 /// The `ingest:v1` `JobExecutor` — one corpus partition per unit
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod foreground_post;

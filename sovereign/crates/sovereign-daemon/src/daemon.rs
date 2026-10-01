@@ -1127,10 +1127,7 @@ impl EmbeddedDaemon {
         // is staged, and parts are total"). The membership operations that
         // answer while the daemon is `Stopped` read this part rather than
         // `AppStateInner.fabric`.
-        let fabric = Arc::new(crate::fabric::FabricPart::new(
-            node_id,
-            fabric_seed,
-        ));
+        let fabric = Arc::new(crate::fabric::FabricPart::new(node_id, fabric_seed));
         *self.fabric.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&fabric));
         // The headless daemon hands in the ONE `RailsKv` its work atlas and
         // notes write through; the desktop and the mesh-admin one-shot dial
