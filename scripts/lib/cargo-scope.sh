@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli-llm/awareness,sovereign-daemon/treesitter,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task,host-kit/jobs,host-kit/service"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli-llm/awareness,sovereign-daemon/treesitter,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task,host-kit/jobs,host-kit/service,host-kit/panic_hook,host-kit/memory,host-kit/sibling"
         return 0
     fi
 
@@ -221,6 +221,12 @@ if "host-kit" in seen:
     # the same reason: sovereign-service and cli-mesh turn it on, a solo run
     # would compile it and its install test to nothing. std only.
     want.append("host-kit/service")
+    # `panic_hook`, `memory` and `sibling` (pb-distribution-f11-daemon-twins),
+    # for the same reason: the two daemon crates and the dispatcher turn them
+    # on, a solo run would compile the moved tests to nothing.
+    want.append("host-kit/panic_hook")
+    want.append("host-kit/memory")
+    want.append("host-kit/sibling")
 legal = [f for f in want if f.split("/", 1)[0] in nameable]
 dropped = [f for f in want if f not in legal]
 if dropped:
