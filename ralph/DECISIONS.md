@@ -2015,6 +2015,15 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   - The 14 in-scope rows that lacked `- finish`/`- trial` gained them (a refused row halts every lane).
 - Because: two days is enough only if the fixes, the gate and phase-c's waves overlap where the host allows; memory (25-37 GB free with two loops) sets the overlap, a 10 GB floor watched by the seat.
 
+**phase-b-107 · 2026-10-01 · pb-distribution-ship-gate · director** — this commit
+- Needed: the ship gate's Tier 2 needs the deployed node on C, and the worker's chained `sovereign daemon stop && sovereign daemon start` was refused by its permission layer; P3 idle had only a debug screen against release-profile bars.
+- Chose:
+  - The director ran the restart under phase-b-34's standing grant, as two separate calls. The node is now sovereign-stock pid 2214681 (target/debug, built 14:20, after C at 14:06), started by sovereign.service with the env the old pid carried (decision log decisions-EXP.jsonl, peer inference off, the same RUST_LOG); `/health` ok; cw-rails 1090860 untouched.
+  - The dispatcher had been relinked without dev-tools at 14:23 (its own warning; `tools list` refused). Rebuilt with `-p sovereign-cli -p corpus-engine --features sovereign-cli/dev-tools,corpus-engine/treesitter`; `tools list` answers.
+  - P3 idle is read by re-running e098d2112's and 8dc4ff1f6's instruments at C as minted, release, into their private target/ralph/idle-target. The debug screen stays beside, gating nothing.
+  - The absent-embed coverage gap is a finding, not this bar: phase-c row pc-idle-embed-boot (Phase B is frozen, phase-b-106).
+- Because: the grant covers the restart (phase-b-34), and a bar is read only by the instrument and profile that minted it (principle 7); re-scoping it after the debug data would be tuning it.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13211,5 +13220,20 @@ Package: ralph/next/phase-b/ctl/parked/pb-mesh-dissolve.md (worker and director,
 Gates at the commit: lint --human exit 0 (workspace scope, all targets); TEST(commonwealth-state) + TEST(sovereign-cli-mesh) 266 pass, 0 fail, with the five new or changed tests in the JUnit report; boundary-gate exit 0 ("every declared package reaches only itself + the shared leaves"); layer, docs, concept, lock, env, layout and arch gates exit 0. `cargo metadata` lists no sovereign-mesh.
 
 PLANT (reverted): "work-atlas-private" removed from `LOCAL_ONLY_NAMESPACES` and tombstones skipped in `apply_projection`. Red: `gossip_excludes_work_atlas_private_app_id`, `the_work_atlas_app_ids_are_classified_by_the_contract_constants`, `a_private_work_atlas_row_is_never_offered_and_never_lands`, `a_released_work_atlas_row_crosses_as_a_tombstone` (and the existing `a_tombstone_does_not_take_a_row_written_after_it`). The public-row test stayed green, the control.
+
+</details>
+
+## phase-b-107 · 2026-10-01 — ship gate: restart done by the director; P3 read on its minting release instruments; embed gap to phase-c
+
+<details><summary>reasoning, evidence, package</summary>
+
+Package: ralph/next/phase-b/ctl/NEEDS_HUMAN.md, four items.
+
+1. Restart. Verified: old pid 2957503 ran `target/debug/sovereign-stock (deleted)`, started 01:54, launched by `toolbox run ... sovereign-cli daemon run` with an experiment env. The decision log showed 5 outcomes in the last 10 min, all light session-hook traffic. `daemon stop` then `daemon start` (two calls) went through sovereign.service; the new pid's /proc environ carries the same SOVEREIGN_* and RUST_LOG values. The worker should not restart again unless the node died.
+2. P3 idle. e098d2112 built `cargo build --release -p sovereign-stock` with CARGO_TARGET_DIR=target/ralph/idle-target; 8dc4ff1f6 a release cw-rails. Both binaries are still in that private target, so the rebuild at C is incremental and does not thrash the debug target. AGENTS.md permits --release where a path genuinely requires it; a release-minted bar is that path.
+3. Embed finding. vendor/llama-cpp-4/src/model.rs:1880 is `debug_assert!(Path::new(path).exists(), ...)`, confirmed. The release instrument's absent embed never exercises the boot-time embed work (~1,600 calls in 3.5 min, debug). Moved to phase-c as pc-idle-embed-boot with its own pre-registered reading.
+4. Release note: already owed by the row; unchanged.
+
+Falsified if: the release idle readings at C exceed 2.004% / 2% (then NEEDS_HUMAN with the numbers, per the charter, never a re-tune); or the restarted node is found to lack a setting the old launch carried that a Tier 2 reading depends on.
 
 </details>
