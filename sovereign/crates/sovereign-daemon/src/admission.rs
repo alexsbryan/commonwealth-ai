@@ -264,6 +264,7 @@ impl Admission for AppState {
             Principal::LocalOwner { .. }
             | Principal::RemoteClient { .. }
             | Principal::Guest { .. }
+            | Principal::Asserted { .. }
             | Principal::Anonymous
             | Principal::Unverified => admit_client(self, who),
         }

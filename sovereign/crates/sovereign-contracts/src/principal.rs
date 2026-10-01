@@ -18,7 +18,7 @@
 //!
 //! # The shape is the union, never a narrowing
 //!
-//! The six identities today's resolvers distinguish, each an arm here:
+//! The seven identities today's resolvers distinguish, each an arm here:
 //!
 //! - [`Principal::LocalOwner`] — a caller on this machine, carrying the
 //!   declared sub-identity the client fairness gate buckets on;
@@ -26,6 +26,8 @@
 //!   presented;
 //! - [`Principal::Member`] — a verified mesh member, by node id;
 //! - [`Principal::Guest`] — a caller holding a live guest grant;
+//! - [`Principal::Asserted`] — a subject and groups an issuer asserted (an
+//!   on-prem API key today);
 //! - [`Principal::Anonymous`] — nothing was presented;
 //! - [`Principal::Unverified`] — an identity was presented and could not be
 //!   verified, which is not the same absence.
@@ -58,7 +60,7 @@ pub use kernel_types::NodeId;
 ///
 /// The key of `DAEMON_CORE.md` §1's one table `principal -> Scope` and of
 /// admission's inflight guard and tally. `Eq + Hash` because a peer's row and
-/// a local caller's row are the same shape: one key type, six arms, never a
+/// a local caller's row are the same shape: one key type, seven arms, never a
 /// parallel identity scheme (ARCH principle 8).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Principal {
@@ -107,6 +109,17 @@ pub enum Principal {
         /// the grant, not from here.
         grant: String,
     },
+    /// A caller whose identity an issuer asserted: today an on-prem API key
+    /// (`sub` is the key's name), later a validated SSO token producing the
+    /// same arm (docs/FIVE_PROGRAMS.md §2b). On a daemon that holds keys,
+    /// loopback grants nothing and this is the only arm admitted.
+    Asserted {
+        /// The asserted subject. Conversations are owned by it.
+        sub: String,
+        /// The asserted group claims; `admin` reaches the ingest and admin
+        /// routes.
+        groups: Vec<String>,
+    },
     /// Nothing was presented. Every such caller shares this one bucket, which
     /// is what they are today: the no-change arm, not a new grouping.
     Anonymous,
@@ -144,6 +157,7 @@ impl Principal {
             Self::LocalOwner { .. }
             | Self::RemoteClient { .. }
             | Self::Guest { .. }
+            | Self::Asserted { .. }
             | Self::Anonymous
             | Self::Unverified => None,
         }
@@ -163,6 +177,7 @@ impl Principal {
             Self::RemoteClient { credential } => format!("cred:{credential}"),
             Self::Member { node_id } => format!("member:{}", node_id.to_hex()),
             Self::Guest { grant } => format!("guest:{grant}"),
+            Self::Asserted { sub, .. } => format!("asserted:{sub}"),
             Self::Anonymous => "anon".to_string(),
             Self::Unverified => "unverified".to_string(),
         }
@@ -330,11 +345,11 @@ mod tests {
         );
     }
 
-    /// The six arms are six distinct keys — the union, never a collapse.
+    /// The seven arms are seven distinct keys — the union, never a collapse.
     /// A narrowing here is exactly the defect `DAEMON_CORE.md` §3.3 measured:
     /// ten callers treated as one.
     #[test]
-    fn the_six_identities_are_six_distinct_keys() {
+    fn the_seven_identities_are_seven_distinct_keys() {
         let all = [
             Principal::LocalOwner {
                 sub_identity: Some("desktop".into()),
@@ -345,6 +360,10 @@ mod tests {
             Principal::Member { node_id: node(7) },
             Principal::Guest {
                 grant: "cafef00dcafef00d".into(),
+            },
+            Principal::Asserted {
+                sub: "alice".into(),
+                groups: Vec::new(),
             },
             Principal::Anonymous,
             Principal::Unverified,
