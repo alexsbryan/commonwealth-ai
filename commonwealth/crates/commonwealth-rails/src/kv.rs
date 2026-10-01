@@ -526,22 +526,47 @@ impl KvHost {
 /// ([`crate::plane_seal::seal_once`]) on the same tick. Spawned by
 /// [`crate::RailsDaemon::run`] after it has projected the store; aborted with
 /// it.
+///
+/// Each tick runs on the blocking pool: every journal append re-reads the
+/// journal, so a seal's snapshot is tens of seconds of synchronous I/O, and
+/// on an async worker it held the API's requests queued behind it (F13: a
+/// sandbox `/v1/mesh/status` p95 of 5.3 s through a 2,500-row cycle).
 pub async fn run_forever(host: Arc<KvHost>) {
     info!(target: "rails", interval_secs = PUMP_INTERVAL.as_secs(),
           seal_after_own_ops = SEAL_AFTER_OWN_OPS, "kv pump: started");
+    let runtime = tokio::runtime::Handle::current();
     loop {
-        host.project_dirty().await;
-        let mut out = host.pump_once().await;
-        let planes = crate::plane_seal::seal_once(&host.rail).await;
-        out.sealed += planes.sealed;
-        out.snapshot_rows += planes.snapshot_rows;
+        let started = std::time::Instant::now();
+        let tick = {
+            let host = Arc::clone(&host);
+            let runtime = runtime.clone();
+            tokio::task::spawn_blocking(move || runtime.block_on(tick_once(&host)))
+        };
+        let out = match tick.await {
+            Ok(out) => out,
+            Err(e) => {
+                warn!(target: "rails", error = %e, "kv pump: a tick did not finish; the next one retries");
+                PumpOutcome::default()
+            }
+        };
         if out != PumpOutcome::default() {
             debug!(target: "rails", appended = out.appended, deferred = out.deferred,
                    refused = out.refused, sealed = out.sealed, snapshot_rows = out.snapshot_rows,
-                   "kv pump: tick");
+                   elapsed_ms = started.elapsed().as_millis() as u64,
+                   "kv pump: tick (blocking pool)");
         }
         tokio::time::sleep(PUMP_INTERVAL).await;
     }
+}
+
+/// One tick: fold what peers sent, drain the outbox, run the plane seals.
+async fn tick_once(host: &KvHost) -> PumpOutcome {
+    host.project_dirty().await;
+    let mut out = host.pump_once().await;
+    let planes = crate::plane_seal::seal_once(&host.rail).await;
+    out.sealed += planes.sealed;
+    out.snapshot_rows += planes.snapshot_rows;
+    out
 }
 
 // ── The doors ────────────────────────────────────────────────
