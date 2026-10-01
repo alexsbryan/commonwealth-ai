@@ -1257,12 +1257,12 @@ def session_env(paths):
     """What every worker session is told about the loop that spawned it, so
     ralph-mark.sh and ralph-check.sh need no per-campaign default. RALPH_QUEUE
     is set even when empty: a legacy loop launched from inside a queue's
-    session must not inherit that queue."""
-    env = {"RALPH_QUEUE": paths.queue, "RALPH_STATE": paths.state,
-           "RALPH_CONTROL_DIR": paths.control_dir}
-    if paths.manifest and paths.manifest.settings:
-        env["RALPH_CLAUDE_SETTINGS"] = str(paths.p(paths.manifest.settings))
-    return env
+    session must not inherit that queue. RALPH_CLAUDE_SETTINGS likewise (the
+    shim reads empty as its default)."""
+    settings = paths.manifest.settings if paths.manifest else ""
+    return {"RALPH_QUEUE": paths.queue, "RALPH_STATE": paths.state,
+            "RALPH_CONTROL_DIR": paths.control_dir,
+            "RALPH_CLAUDE_SETTINGS": str(paths.p(settings)) if settings else ""}
 
 
 def worker_bin(paths):
