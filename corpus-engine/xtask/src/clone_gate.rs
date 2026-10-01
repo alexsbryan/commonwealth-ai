@@ -122,13 +122,19 @@ pub fn run(args: &[String]) -> i32 {
     );
     if total <= cap {
         if total < cap {
-            eprintln!("  ✓ no new clone — {} lines beatable, bank with --tighten", cap - total);
+            eprintln!(
+                "  ✓ no new clone — {} lines beatable, bank with --tighten",
+                cap - total
+            );
         } else {
             eprintln!("  ✓ no new clone");
         }
         return 0;
     }
-    eprintln!("  ✗ {cap} → {total} (+{}). New or grown families:", total - cap);
+    eprintln!(
+        "  ✗ {cap} → {total} (+{}). New or grown families:",
+        total - cap
+    );
     let mut shown = 0;
     for (key, family) in &families {
         let n = family_lines(family);
