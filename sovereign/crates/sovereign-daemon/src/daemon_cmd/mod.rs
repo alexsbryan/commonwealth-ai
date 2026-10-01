@@ -234,12 +234,3 @@ async fn shutdown_daemon(
 pub fn install_panic_hook(data_dir: std::path::PathBuf) {
     host_kit::panic_hook::install(data_dir);
 }
-
-/// Branded per-user data root (rebrand-aware path SSOT). Twin of
-/// `sovereign_cli_shared::dirs::sovereign_root`, which is itself a
-/// pass-through to the SSOT named below — the daemon crate may not
-/// take a cli-shared (svrn-package) edge, so it names the SSOT
-/// directly.
-pub(crate) fn sovereign_root() -> std::path::PathBuf {
-    sovereign_contracts::rebrand::svrnmesh_root()
-}

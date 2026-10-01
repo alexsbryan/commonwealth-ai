@@ -995,7 +995,7 @@ fn build_vsix(dir: &Path) -> Option<PathBuf> {
 /// into a second answer (ARCH §10.6) — if this ever needs more than a
 /// boolean, call into that check rather than growing a rival.
 async fn any_scip_graph_populated() -> bool {
-    let dir = crate::daemon_cmd::sovereign_root().join("indexes");
+    let dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
     let Ok(entries) = std::fs::read_dir(&dir) else {
         return false;
     };

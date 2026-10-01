@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Twin of `sovereign-cli-daemon/src/log_rotation.rs` (moved whole, unmodified)
-//! — the run path owns log rotation and the daemon crate may not take a
-//! cli-daemon edge. The cli-daemon copy retires with its `daemon_cmd`.
+//! Moved whole from `sovereign-cli-daemon` at the de-embed (c23f3b4c0),
+//! which deleted the original in the same commit: this is the one copy.
 //!
 //! Size-based daemon log rotation.
 //!

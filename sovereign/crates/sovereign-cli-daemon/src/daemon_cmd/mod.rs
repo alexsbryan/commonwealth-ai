@@ -17,7 +17,7 @@
 //!    the exec, because the wizard lives in this crate's `setup_cmd`
 //!    and the sibling cannot run it. `--setup-only` returns without
 //!    exec'ing at all.
-//! 3. The pidfile + `sovereign_root` accessors the other verbs share
+//! 3. The pidfile accessors the other verbs share
 //!    (`read_daemon_pid` is consumed by `install-service`'s
 //!    double-start guard and `setup --fim`'s restart ladder).
 
@@ -246,10 +246,4 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // manager's child, and the desktop's supervised `--daemon-child`
     // all keep pointing at the process that now runs the daemon.
     crate::daemon_bin::exec(args)
-}
-
-/// Branded per-user data root (rebrand-aware path SSOT) — the daemon's
-/// pidfile, workspace pointer, and logs all hang off it.
-pub(crate) fn sovereign_root() -> std::path::PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
 }

@@ -13,7 +13,6 @@ use super::log_rotation;
 use super::memory_watch;
 use super::rlimit;
 use super::shutdown_daemon;
-use super::sovereign_root;
 use super::start::start;
 
 use crate::bootstrap;
@@ -100,7 +99,7 @@ pub(super) async fn run_daemon(
     // Ordered FIRST so a daemon that's been running for days and
     // produced a 5-GB log doesn't make the operator's `tail -f` drop
     // dead before the new daemon prints its first useful line.
-    let log_dir = sovereign_root().join("logs");
+    let log_dir = sovereign_contracts::rebrand::svrnmesh_root().join("logs");
     log_rotation::rotate_daemon_logs(
         &log_dir,
         log_rotation::DEFAULT_SIZE_CAP_BYTES,
