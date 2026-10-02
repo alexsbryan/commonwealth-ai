@@ -183,7 +183,8 @@ async fn svrn_alone_points_a_code_tool_at_the_code_server() {
 
     let projects = spawn(sovereign_daemon::hosted_code::projects_absent_router(
         sovereign_daemon::process::Posture::Open,
-    )).await;
+    ))
+    .await;
     let resp = reqwest::get(format!("{projects}/v1/projects"))
         .await
         .unwrap();

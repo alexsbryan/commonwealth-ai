@@ -64,12 +64,18 @@ fn code_notes(posture: crate::posture::Posture, open: String) -> String {
 
 /// The named absence for a kind svrn does not keep.
 fn code_kind(kind: &str, posture: crate::posture::Posture) -> Absence {
-    tracing::debug!(kind, ?posture, "notes_http: a code kind was asked of svrn's memory");
+    tracing::debug!(
+        kind,
+        ?posture,
+        "notes_http: a code kind was asked of svrn's memory"
+    );
     Absence::missing(format!(
         "kind `{kind}` is not one svrn's memory keeps ({MEMORY_NOTE_KINDS:?}); {}",
         code_notes(
             posture,
-            format!("the code program's decision notes are in its notes.db, served by {CODE_NOTES}")
+            format!(
+                "the code program's decision notes are in its notes.db, served by {CODE_NOTES}"
+            )
         )
     ))
 }
