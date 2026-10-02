@@ -1990,10 +1990,12 @@ async fn unjudged_claims_exit_judge_failed_open_never_released() {
     );
     // F2(a): a fail-open exit that does not say WHY cannot be fixed. The
     // reason is classified off the error VARIANT the provider returned
-    // (`Error::QueueShed`), and the two counts make it checkable: eight
-    // judging calls (one claim-list extraction + six per-claim judges +
-    // the holistic specifics scan), two of them answered — the two that
-    // are not forced-choice.
+    // (`Error::QueueShed`), and the two counts make it checkable: fourteen
+    // judging calls (one claim-list extraction + six per-claim judges + six
+    // per-claim value extractions + the holistic specifics scan), eight of
+    // them answered — the eight that are not forced-choice. The value
+    // extractions were made before pc-value-presence-admission too; they
+    // were not counted.
     let jf = outcome.meta.get("judge_failure").unwrap_or_else(|| {
         panic!(
             "every judge_failed_open exit carries a reason; meta={}",
@@ -2006,8 +2008,8 @@ async fn unjudged_claims_exit_judge_failed_open_never_released() {
         "the admission queue shed the calls and the ledger must name that, not \
          'the judge failed'; judge_failure={jf}"
     );
-    assert_eq!(jf.get("calls_attempted").and_then(|v| v.as_u64()), Some(8));
-    assert_eq!(jf.get("calls_answered").and_then(|v| v.as_u64()), Some(2));
+    assert_eq!(jf.get("calls_attempted").and_then(|v| v.as_u64()), Some(14));
+    assert_eq!(jf.get("calls_answered").and_then(|v| v.as_u64()), Some(8));
 }
 
 /// CHANGE 3'S REGRESSION GUARD (issue #57, 2026-09-02). `claims x corpora`

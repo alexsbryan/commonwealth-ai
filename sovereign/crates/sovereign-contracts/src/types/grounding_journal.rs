@@ -117,6 +117,10 @@ pub enum GateJudgeVerdict {
 pub enum GateCallMechanism {
     /// The short path's single-claim extractor (`judge::verify_grounding`).
     ClaimExtraction,
+    /// The value-presence veto's extractor
+    /// (`value_presence::extract_answer_value`): one 24-token call naming the
+    /// specific an answer or claim asserts, before the substring veto runs.
+    ValueExtraction,
     /// The long-form path's multi-claim extractor
     /// (`judge::extract_claim_list`).
     ClaimList,
@@ -198,6 +202,7 @@ impl GateCallMechanism {
     pub fn label(self) -> &'static str {
         match self {
             GateCallMechanism::ClaimExtraction => "claim_extraction",
+            GateCallMechanism::ValueExtraction => "value_extraction",
             GateCallMechanism::ClaimList => "claim_list",
             GateCallMechanism::PerClaimJudge => "per_claim_judge",
             GateCallMechanism::ChunkJudge => "chunk_judge",
@@ -721,6 +726,7 @@ mod tests {
         use std::collections::HashSet;
         let all = [
             GateCallMechanism::ClaimExtraction,
+            GateCallMechanism::ValueExtraction,
             GateCallMechanism::ClaimList,
             GateCallMechanism::PerClaimJudge,
             GateCallMechanism::ChunkJudge,

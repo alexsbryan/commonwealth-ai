@@ -57,6 +57,9 @@ use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
+use sovereign_contracts::types::GateCallMechanism;
+
+use super::call_census::gate_call;
 use super::config::dbg;
 use super::judge::CHUNK_JUDGE_PASSAGE_CHARS;
 
@@ -442,7 +445,7 @@ async fn extract_answer_value(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    match gate_call(inference, &req, GateCallMechanism::ValueExtraction).await {
         Ok(resp) => {
             let v = resp.text.trim().trim_matches('"').trim();
             let low = v.to_lowercase();
@@ -756,6 +759,101 @@ mod tests {
         )
         .await;
         assert_eq!(v, AssertedValue::NoValue);
+    }
+
+    /// An extractor that names "Mrs Neale", or fails, and records the
+    /// admission each request reached it with.
+    struct Extractor {
+        fail: bool,
+        seen: std::sync::Mutex<Vec<Option<crate::types::TurnAdmission>>>,
+    }
+
+    impl Extractor {
+        fn new(fail: bool) -> Self {
+            Self {
+                fail,
+                seen: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::traits::InferenceProvider for Extractor {
+        async fn complete(
+            &self,
+            r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<crate::types::CompletionResponse> {
+            self.seen.lock().unwrap().push(r.admission.clone());
+            if self.fail {
+                return Err(crate::error::Error::Inference("host busy".into()));
+            }
+            Ok(crate::types::CompletionResponse {
+                text: "Mrs Neale".into(),
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "extractor".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<
+            std::pin::Pin<Box<dyn futures::Stream<Item = crate::error::Result<String>> + Send>>,
+        > {
+            unimplemented!("no stream in the extractor probe")
+        }
+        async fn embed(&self, _t: &str) -> crate::error::Result<Vec<f32>> {
+            unimplemented!("no embed in the extractor probe")
+        }
+        fn capabilities(&self) -> crate::types::ProviderCapabilities {
+            crate::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: crate::types::Depth::Moderate,
+            }
+        }
+    }
+
+    /// The extraction is a gate call: inside an admitted turn it reaches the
+    /// provider carrying the turn's token, so the slot queue parks it
+    /// (`model_slot::an_admitted_continuation_parks_where_a_fresh_request_sheds`)
+    /// instead of shedding it, and it lands in the turn's census.
+    ///
+    /// FAILS IF `extract_answer_value` calls the provider directly again: the
+    /// request arrives unstamped and the census holds no row.
+    #[tokio::test]
+    async fn the_value_extraction_carries_the_turns_admission_into_the_census() {
+        use crate::runtime::grounding::call_census::CallCensus;
+        use sovereign_contracts::types::GateCallMechanism;
+
+        let inf = Extractor::new(false);
+        let token = crate::types::TurnAdmission::new("turn-under-test");
+        let census = CallCensus::new();
+        let (rows, _) = crate::runtime::admission::scope(Some(token.clone()), async {
+            census
+                .clone()
+                .scope(async {
+                    let _ = super::value_presence_of(
+                        &inf,
+                        CHARWOMAN_Q,
+                        "Mrs Neale",
+                        &neale_chunks(),
+                        ShardingPrivacy::LocalOnly,
+                    )
+                    .await;
+                    census.clone().take()
+                })
+                .await
+        })
+        .await;
+        assert_eq!(*inf.seen.lock().unwrap(), vec![Some(token)]);
+        assert_eq!(rows.len(), 1, "the extraction is a census row");
+        assert_eq!(rows[0].mechanism, GateCallMechanism::ValueExtraction);
     }
 
     /// The probe is shown a window from EVERY chunk that carries the value,

@@ -135,6 +135,7 @@ impl JudgeCall {
 const fn is_judging(m: GateCallMechanism) -> bool {
     match m {
         GateCallMechanism::ClaimExtraction
+        | GateCallMechanism::ValueExtraction
         | GateCallMechanism::ClaimList
         | GateCallMechanism::PerClaimJudge
         | GateCallMechanism::ChunkJudge
