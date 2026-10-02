@@ -19,7 +19,7 @@ use crate::common;
 /// unless it is listed below.
 const PATH: &[&str] = &[
     "shared/crates/commonwealth-rail-core/src/admit.rs",
-    "oplog-types/src/lib.rs",
+    "shared/crates/oplog-types/src/lib.rs",
     "cmnwlth/crates/commonwealth-rail/src/journal.rs",
 ];
 

@@ -35,7 +35,7 @@ commonwealth-ai/
 ├── shared/crates/oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── cmnwlth/crates/oicp-conformance/          # Standalone OICP v0.4 host conformance tester
 ├── shared/crates/oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
-├── oplog-types/               # The pure envelope (Op/OpId/SkippedLine) split from oplog — zero I/O, the closure rail-core links (2026-09-23, ROOT_CAUSE_FIXES B4)
+├── shared/crates/oplog-types/               # The pure envelope (Op/OpId/SkippedLine) split from oplog — zero I/O, the closure rail-core links (2026-09-23, ROOT_CAUSE_FIXES B4)
 ├── serve/crates/serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
 ├── shared/crates/serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
 ├── shared/crates/mesh-reach/                # Peer dial vocabulary + PeerTransport; RailsTransport (`rails`), the guest dialer + one iroh HTTP bridge (`guest`)

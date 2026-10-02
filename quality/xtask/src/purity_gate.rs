@@ -32,7 +32,7 @@ use crate::common;
 /// The trees that must stay pure: the fold and its envelope.
 const PURE_TREES: &[&str] = &[
     "shared/crates/commonwealth-rail-core/src",
-    "oplog-types/src",
+    "shared/crates/oplog-types/src",
 ];
 
 /// Tokens that mean "this file talks to the machine". A line in a comment

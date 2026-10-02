@@ -62,7 +62,7 @@
 5224	shared/crates/oicp-types
 2545	shared/crates/oicp-types::tests
 317	shared/crates/oplog
-62	oplog-types
+62	shared/crates/oplog-types
 239	shared/crates/oplog::tests
 831	quality/arch-layers
 927	quality/arch-layers::tests

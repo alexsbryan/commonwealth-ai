@@ -31,7 +31,7 @@ members = [
     # seven references into it. Tier-0 because op ids are GOSSIPED, so the one
     # content-hash derivation must sit below everyone who writes a log.
     "shared/crates/oplog",
-    "oplog-types",
+    "shared/crates/oplog-types",
     # Mesh join-key + deep-link FORMAT vocabulary (fp-9/fp-24, 2026-09-23):
     # `hash_join_key`/`validate_join_key_format` and the deep_link URL grammar
     # both ends of a mesh join must spell the same way. Deliberately NOT named
@@ -357,7 +357,7 @@ kernel-types = { path = "shared/crates/kernel-types" }
 serving-policy = { path = "serve/crates/serving-policy" }
 serving-policy-core = { path = "shared/crates/serving-policy-core" }
 oplog = { path = "shared/crates/oplog" }
-oplog-types = { path = "oplog-types" }
+oplog-types = { path = "shared/crates/oplog-types" }
 mesh-join-vocab = { path = "shared/crates/mesh-join-vocab" }
 host-kit = { path = "shared/crates/host-kit" }
 mesh-reach = { path = "shared/crates/mesh-reach" }
