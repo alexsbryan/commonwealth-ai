@@ -621,7 +621,7 @@ pub async fn join(
                 info!(target: TARGET, member = %addr, "member client listening for cw-rails' forwards");
                 tokio::spawn(host_kit::shell::serve(
                     [member],
-                    vec![crate::openai_face(local)],
+                    vec![crate::openai_face(local), member_client_absence()],
                     std::future::pending(),
                 ));
                 Some(addr)
@@ -637,6 +637,57 @@ pub async fn join(
         }
     };
     spawn_registrations(rails_base, listen, member_addr);
+}
+
+/// What a member reached on `cwth/client/0` until the flip
+/// (pb-mesh-exit-transport), when that protocol led to svrn's whole client
+/// router, and does not reach on serve's member client now. A trailing `/`
+/// is a prefix.
+pub const MEMBER_CLIENT_LOST: [&str; 5] = [
+    "/v1/responses",
+    "/v1/knowledge/search",
+    "/status",
+    "/api/",
+    "/oicp/v1/corpus/",
+];
+
+/// The member client's answer for every path `crate::openai_face` does not
+/// serve: 410 for one a member reached before the flip, 404 otherwise, both
+/// naming what the member client serves, so a member reads why and not a
+/// bare 404 (FIVE_PROGRAMS §4 rule 3).
+fn member_client_absence() -> host_kit::shell::RouteBundle {
+    host_kit::shell::RouteBundle::new("serve_member_absence").fallback(member_absence)
+}
+
+async fn member_absence(uri: axum::http::Uri) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let path = uri.path();
+    let lost = MEMBER_CLIENT_LOST
+        .iter()
+        .any(|p| match p.strip_suffix('/') {
+            Some(prefix) => path.starts_with(*p) || path == prefix,
+            None => path == *p,
+        });
+    debug!(target: TARGET, %path, lost, "member client: a path it does not serve");
+    let serves = "serve's member client answers a member with this node's models only: \
+                  /v1/chat/completions, /v1/embeddings, /v1/completions, /v1/models and \
+                  /oicp/v1/capabilities";
+    let (status, error) = if lost {
+        (
+            axum::http::StatusCode::GONE,
+            format!(
+                "{path} is not served to mesh members since the flip \
+                 (pb-mesh-exit-transport): {serves}. Knowledge between members travels \
+                 as /internal/knowledge/search on cwth/http/0"
+            ),
+        )
+    } else {
+        (
+            axum::http::StatusCode::NOT_FOUND,
+            format!("{path} is not a member route: {serves}"),
+        )
+    };
+    (status, axum::Json(serde_json::json!({ "error": error }))).into_response()
 }
 
 /// Keep every registration in cw-rails' origin table for as long as serve
