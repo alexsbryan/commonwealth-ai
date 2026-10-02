@@ -325,7 +325,9 @@ impl GlinerExtractor {
             return Ok(Vec::new());
         }
         let mut out = self.infer_windowed(&[processed], labels, threshold)?;
-        Ok(out.pop().expect("infer_windowed returns one result per text"))
+        Ok(out
+            .pop()
+            .expect("infer_windowed returns one result per text"))
     }
 
     /// One inference call over every window of every text, mentions mapped
