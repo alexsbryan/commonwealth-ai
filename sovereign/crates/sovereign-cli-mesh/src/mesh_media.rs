@@ -75,8 +75,13 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
     let probe = !args.iter().any(|a| a == "--no-probe");
     let peer = args.iter().find(|a| !a.starts_with("--"));
 
-    let port = daemon_client_port();
-    let url = format!("{}/v1/mesh/media", crate::mesh_cmd::rails_base());
+    let Ok(port) = daemon_client_port().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let Ok(base) = crate::mesh_cmd::rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let url = format!("{base}/v1/mesh/media");
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
@@ -88,7 +93,7 @@ pub(crate) async fn cmd_media(args: &[String]) -> i32 {
         }
     };
     let Some(peer) = peer else {
-        return list_offers(&client, &url, json_out).await;
+        return list_offers(&client, port, &url, json_out).await;
     };
     let resp = match client.get(&url).query(&[("peer", peer)]).send().await {
         Ok(r) => r,
@@ -211,7 +216,7 @@ struct ProbeOutcome {
 /// `svrn mesh media` with no peer: the members offering a media origin, from
 /// gossip. One line per member — name, node id, status, path — so a person
 /// can pick one and run the verb again with it.
-async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32 {
+async fn list_offers(client: &reqwest::Client, port: u16, url: &str, json_out: bool) -> i32 {
     let resp = match client.get(url).send().await {
         Ok(r) => r,
         Err(e) => {
@@ -225,14 +230,8 @@ async fn list_offers(client: &reqwest::Client, url: &str, json_out: bool) -> i32
     if !status.is_success() {
         eprint!(
             "{}",
-            crate::mesh_skew::render_failure(
-                client,
-                daemon_client_port(),
-                "GET /v1/mesh/media",
-                status,
-                body
-            )
-            .await
+            crate::mesh_skew::render_failure(client, port, "GET /v1/mesh/media", status, body)
+                .await
         );
         return 1;
     }
@@ -382,10 +381,15 @@ pub(crate) async fn cmd_fanout(app: Option<&str>, args: &[String]) -> i32 {
         }
         return 1;
     };
-    let port = daemon_client_port();
+    let Ok(port) = daemon_client_port().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let Ok(base) = crate::mesh_cmd::rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
     // The generic route. `svrn mesh media fanout` reaches the same handler
     // with `kind` left out, so the two verbs cannot drift.
-    let url = format!("{}/v1/mesh/fanout", crate::mesh_cmd::rails_base());
+    let url = format!("{base}/v1/mesh/fanout");
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(60))
         .build()

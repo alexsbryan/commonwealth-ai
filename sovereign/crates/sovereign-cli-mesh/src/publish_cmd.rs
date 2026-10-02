@@ -243,7 +243,10 @@ async fn list() -> i32 {
             return 1;
         }
     };
-    let live = live_listing().await;
+    let live = live_listing(&sovereign_turn_client::rails_kv::resolve_rails_base(
+        &cfg.daemon,
+    ))
+    .await;
     let apps: Vec<(String, String, String)> = match &live {
         Some(rows) => rows
             .iter()
@@ -304,9 +307,9 @@ async fn list() -> i32 {
 /// The daemon's own answer, or `None` when it is not reachable. Never an
 /// empty list on a failure: "the daemon did not answer" and "the daemon
 /// publishes nothing" are different facts.
-async fn live_listing() -> Option<Vec<commonwealth_media::PublishedApp>> {
+async fn live_listing(rails: &str) -> Option<Vec<commonwealth_media::PublishedApp>> {
     // cw-rails' app registry since pb-mesh-exit-transport.
-    let url = format!("{}/v1/mesh/publish", crate::mesh_cmd::rails_base());
+    let url = format!("{rails}/v1/mesh/publish");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()

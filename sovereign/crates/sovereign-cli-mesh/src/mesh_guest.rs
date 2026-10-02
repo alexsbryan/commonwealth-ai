@@ -41,14 +41,7 @@ use sovereign_contracts::guest_pages::PAGE_PREFIX;
 use crate::mesh_guest_link::{guest_bind_url, print_qr_blocks, write_qr_svg};
 use sovereign_cli_base::guest_link::{self, GuestLink};
 
-/// Read the daemon's client port from `SetupConfig` rather than hardcoding
-/// 9741 — a sandbox pointed at its own daemon must not mint against the
-/// operator's.
-pub(crate) fn daemon_client_port() -> u16 {
-    sovereign_contracts::setup_config::SetupConfig::load()
-        .map(|c| c.daemon.client_port)
-        .unwrap_or(9741)
-}
+pub(crate) use crate::mesh_cmd::daemon_client_port;
 
 /// What `[daemon] client_bind` resolves to. Loopback here means no guest can
 /// reach this node no matter what address the link carries.
@@ -191,10 +184,10 @@ enum GuestPath {
 /// the live endpoint (pb-mesh-exit-transport) and already publishes exactly
 /// this string for invites. A second assembler would be a second answer to
 /// "how is this node dialled" (§10.6), and it would be the stale one.
-async fn node_dial_string() -> Option<String> {
+async fn node_dial_string(rails: &str) -> Option<String> {
     let client = http_client(5).ok()?;
     let resp = client
-        .get(format!("{}/v1/mesh/status", crate::mesh_cmd::rails_base()))
+        .get(format!("{rails}/v1/mesh/status"))
         .send()
         .await
         .ok()?;
@@ -230,7 +223,11 @@ async fn node_dial_string() -> Option<String> {
 /// every cause — encrypted-mesh forcing, a daemon not restarted since the
 /// config changed, a firewall, a wrong advertised interface — rather than
 /// enumerating the ones we thought of.
-async fn resolve_guest_path(url_override: Option<&str>, port: u16) -> Result<GuestPath, String> {
+async fn resolve_guest_path(
+    url_override: Option<&str>,
+    port: u16,
+    rails: &str,
+) -> Result<GuestPath, String> {
     // Why the direct arm could not be taken, kept so the refusal at the bottom
     // can name the real cause instead of the last one.
     let mut direct_refusal: Option<String> = None;
@@ -256,7 +253,7 @@ async fn resolve_guest_path(url_override: Option<&str>, port: u16) -> Result<Gue
         ));
     }
 
-    if let Some(dial) = node_dial_string().await {
+    if let Some(dial) = node_dial_string(rails).await {
         // No probe here, and deliberately: dialing our own endpoint from this
         // process would prove nothing about a guest's ability to reach it, and
         // a self-dial that succeeded on loopback would be the instrument
@@ -496,7 +493,12 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         models.push("primary".to_string());
     }
 
-    let port = daemon_client_port();
+    let Ok(port) = daemon_client_port().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let Ok(rails) = crate::mesh_cmd::rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
     // One probe through the one decider, with its reason: "no daemon" is the
     // wrong sentence for a refused connection or a daemon answering late
     // (busy loading a model — hence 3 s, not the 2 s default).
@@ -518,7 +520,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     }
 
     // Which way in — asked, not inferred. See `resolve_guest_path`.
-    let path = match resolve_guest_path(url_override.as_deref(), port).await {
+    let path = match resolve_guest_path(url_override.as_deref(), port, &rails).await {
         Ok(p) => p,
         Err(why) => {
             eprintln!("No guest could reach this node, so any link would be inert.");
@@ -665,7 +667,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         .is_some_and(|base| base.contains(PAGE_PREFIX));
     let dial_for_link: Option<String> = match (&dial, wall || runtime_origin) {
         (Some(d), _) => Some(d.clone()),
-        (None, true) => node_dial_string().await,
+        (None, true) => node_dial_string(&rails).await,
         (None, false) => None,
     };
     let https = url_override.as_deref().map(|base| {

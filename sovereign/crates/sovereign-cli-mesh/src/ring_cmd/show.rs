@@ -77,7 +77,10 @@ pub(super) async fn run_show(args: &[String]) -> i32 {
     // the namespace scoping would be decorative, and a guard nobody can watch
     // fail is not a guard (ARCH §18.1). The rail bind carries
     // `UNTRUSTED_LOOPBACK`: the token is the only way in.
-    let rail = sovereign_contracts::guest_pages::rail_port(daemon_client_port());
+    let Ok(client_port) = daemon_client_port().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let rail = sovereign_contracts::guest_pages::rail_port(client_port);
     let ctx = Arc::new(RingCtx {
         bundle_dir,
         base: format!("http://127.0.0.1:{rail}"),

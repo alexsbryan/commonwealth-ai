@@ -98,7 +98,10 @@ pub(crate) async fn cmd_forget_member(args: &[String]) -> i32 {
 
     // The roster is cw-rails' (pb-mesh-exit-transport); an absent cw-rails
     // is the request's error below, naming the base.
-    let url = format!("{}/v1/mesh/forget-member", crate::mesh_cmd::rails_base());
+    let Ok(base) = crate::mesh_cmd::rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let url = format!("{base}/v1/mesh/forget-member");
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
