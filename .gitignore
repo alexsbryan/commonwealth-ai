@@ -63,8 +63,9 @@ target-xwin/
 # Ephemeral dev-process notes (HANDOFF*.md, RPC_*_HANDOFF, *_INVESTIGATION).
 # Relocated here for the open-source launch so they stay on the author's box
 # but never ship to the public repo. Already-tracked copies removed in the
-# same commit.
-docs/internal/
+# same commit. No trailing slash: on a host where docs/internal is a symlink to
+# the private svrn-docs repo, a directory-only pattern would not match it.
+docs/internal
 
 # ── Personal corpora/benches (kept local, never published) ────────────────
 # Untracked for the open-source launch: the Obsidian-vault bench answer-keys
