@@ -341,7 +341,13 @@ async fn run_calibrate_mode(flags: &Parsed, bench_dir: Option<PathBuf>) -> i32 {
             return 1;
         }
     };
-    let mut globals = crate::chat_cmd::config::default_globals_for_voice_eval();
+    let mut globals = match crate::chat_cmd::config::default_globals_for_voice_eval() {
+        Ok(globals) => globals,
+        Err(e) => {
+            eprintln!("inner-chaos: {e}");
+            return 1;
+        }
+    };
     if let Some(base) = flags
         .value("daemon")
         .filter(|s| !s.is_empty())
@@ -720,7 +726,13 @@ async fn run_recall_calibrate_mode(flags: &Parsed, bench_dir: Option<PathBuf>) -
             return 1;
         }
     };
-    let mut globals = crate::chat_cmd::config::default_globals_for_voice_eval();
+    let mut globals = match crate::chat_cmd::config::default_globals_for_voice_eval() {
+        Ok(globals) => globals,
+        Err(e) => {
+            eprintln!("inner-chaos: {e}");
+            return 1;
+        }
+    };
     if let Some(base) = flags
         .value("daemon")
         .filter(|s| !s.is_empty())

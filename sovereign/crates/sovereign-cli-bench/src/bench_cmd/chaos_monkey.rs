@@ -208,7 +208,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     // Critic role's model comes from svrn's Critic RoleProfile (preferred_tier
     // → primary), which svrn's probe reports. Override with `--critic-model`.
     let mut critic_model: Option<String> = None;
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
     let mut manifest = None;
     let mut out = PathBuf::from("target/chaos-monkey/results.jsonl");
     let mut transcripts: Option<PathBuf> = None;
@@ -243,7 +243,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--corpus" => corpus = Some(val!("--corpus")),
             "--judge-model" => judge_model = val!("--judge-model"),
             "--critic-model" => critic_model = Some(val!("--critic-model")),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--manifest" => manifest = Some(PathBuf::from(val!("--manifest"))),
             "--out" => out = PathBuf::from(val!("--out")),
             "--transcripts" => transcripts = Some(PathBuf::from(val!("--transcripts"))),
@@ -299,6 +299,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         }
         i += 1;
     }
+    let base_url =
+        base_url.map_or_else(sovereign_contracts::setup_config::client_daemon_base, Ok)?;
     let transcripts = transcripts.unwrap_or_else(|| {
         let stem = out
             .file_stem()
@@ -1214,7 +1216,7 @@ async fn rescore(rest: &[String]) -> i32 {
     let mut transcripts: Option<PathBuf> = None;
     let mut judge_model = "fast".to_string();
     let mut critic_model: Option<String> = None;
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
     let mut manifest: Option<PathBuf> = None;
     let mut out = PathBuf::from("target/chaos-monkey/rescored.jsonl");
     let mut grounding_verify = false;
@@ -1240,7 +1242,7 @@ async fn rescore(rest: &[String]) -> i32 {
             "--transcripts" => transcripts = Some(PathBuf::from(val!("--transcripts"))),
             "--judge-model" => judge_model = val!("--judge-model"),
             "--critic-model" => critic_model = Some(val!("--critic-model")),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--manifest" => manifest = Some(PathBuf::from(val!("--manifest"))),
             "--out" => out = PathBuf::from(val!("--out")),
             "--grounding-verify" => grounding_verify = true,
@@ -1261,6 +1263,9 @@ async fn rescore(rest: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(base_url) = sovereign_cli_base::urls::daemon_base_or_refuse(base_url) else {
+        return 1;
+    };
     let (Some(bank_path), Some(transcripts_path)) = (bank_path, transcripts) else {
         eprintln!("error: --bank and --transcripts are required");
         return 2;
@@ -1447,7 +1452,7 @@ async fn score_answer(rest: &[String]) -> i32 {
     let mut input: Option<PathBuf> = None;
     let mut judge_model = "fast".to_string();
     let mut critic_model: Option<String> = None;
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
 
     let mut i = 0;
     macro_rules! val {
@@ -1467,7 +1472,7 @@ async fn score_answer(rest: &[String]) -> i32 {
             "--input" => input = Some(PathBuf::from(val!("--input"))),
             "--judge-model" => judge_model = val!("--judge-model"),
             "--critic-model" => critic_model = Some(val!("--critic-model")),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--help" | "-h" => {
                 eprintln!("usage: svrn bench chaos-monkey score-answer [--input <file>] [--judge-model <stem>] [--critic-model <stem>] [--base-url <url>]");
                 eprintln!("  reads {{\"question\",\"answer\",\"chunks\":[..]}} JSON from --input or stdin; writes a JSON verdict to stdout");
@@ -1480,6 +1485,9 @@ async fn score_answer(rest: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(base_url) = sovereign_cli_base::urls::daemon_base_or_refuse(base_url) else {
+        return 1;
+    };
 
     // Read the (question, answer, chunks) triple from --input or stdin. Stdin
     // is the default so the node caller can pipe long answers without hitting

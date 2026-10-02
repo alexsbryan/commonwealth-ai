@@ -408,7 +408,7 @@ async fn fetch_alignment_progress() -> Result<Option<IngestProgress>, String> {
     // reaches this path too — they talk to the same daemon.
     let url = format!(
         "{}/internal/corpus/progress",
-        sovereign_contracts::setup_config::internal_daemon_base()
+        sovereign_contracts::setup_config::internal_daemon_base()?
     );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))

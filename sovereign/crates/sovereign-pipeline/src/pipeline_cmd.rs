@@ -605,7 +605,7 @@ async fn mesh_pause_via_daemon(
 
     let url = format!(
         "{}/internal/pipeline/pause",
-        sovereign_contracts::setup_config::internal_daemon_base()
+        sovereign_contracts::setup_config::internal_daemon_base().map_err(MeshPauseError::Other)?
     );
     let resp = match client.post(&url).json(&body).send().await {
         Ok(r) => r,

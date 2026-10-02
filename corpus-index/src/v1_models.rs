@@ -97,15 +97,18 @@ pub async fn resolve_default_models(base_url: &str) -> (Option<String>, Option<S
     // The CONFIGURED client port when the caller supplied no base — the
     // compiled default reached the wrong daemon (or the operator's) on any
     // host that moved `client_port`.
-    let url = format!(
-        "{}/v1/models",
-        sovereign_contracts::setup_config::client_daemon_base()
-    );
-    // If caller gave us a non-default base, use their URL.
+    // If caller gave us a non-default base, use their URL. A config that
+    // exists and does not load is no answer, never the default port.
     let url = if base_url.contains("://") && !base_url.ends_with("/v1/models") {
         format!("{}/v1/models", base_url.trim_end_matches('/'))
     } else {
-        url
+        match sovereign_contracts::setup_config::client_daemon_base() {
+            Ok(base) => format!("{base}/v1/models"),
+            Err(e) => {
+                tracing::warn!(error = %e, "resolve_default_models: no daemon base");
+                return (None, None);
+            }
+        }
     };
     let Ok(resp) = client.get(&url).send().await else {
         return (None, None);

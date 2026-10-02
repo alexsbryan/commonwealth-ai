@@ -108,7 +108,7 @@ async fn cmd_align(args: &[String]) -> i32 {
     let mut k = 20usize;
     let mut model = "primary".to_string();
     // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
-    let mut base = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base: Option<String> = None;
     let mut bank_path = "sovereign/bench/sep/questions.toml".to_string();
     let mut right_corpus = "wikipedia".to_string();
 
@@ -130,7 +130,7 @@ async fn cmd_align(args: &[String]) -> i32 {
         } else if let Some(v) = a.strip_prefix("--model=") {
             model = v.to_string();
         } else if let Some(v) = a.strip_prefix("--base=") {
-            base = v.to_string();
+            base = Some(v.to_string());
         } else if let Some(v) = a.strip_prefix("--bank=") {
             bank_path = v.to_string();
         } else {
@@ -138,6 +138,9 @@ async fn cmd_align(args: &[String]) -> i32 {
             return 1;
         }
     }
+    let Some(base) = sovereign_cli_base::urls::daemon_base_or_refuse(base) else {
+        return 1;
+    };
 
     let indexes_dir = sovereign_contracts::rebrand::data_dir().join("indexes");
 

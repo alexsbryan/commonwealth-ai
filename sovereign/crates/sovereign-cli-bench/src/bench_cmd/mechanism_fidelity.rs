@@ -134,7 +134,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut n_cases: usize = 200;
     let mut seed: u64 = 0;
     let mut concurrency: usize = 8;
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
     let mut api_key_env: Option<String> = None;
     let mut manifest = PathBuf::from("sovereign/bench/mechanism_fidelity/manifest.toml");
     let mut out: Option<PathBuf> = None;
@@ -193,7 +193,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                     .map_err(|_| "--concurrency must be a usize")?
                     .max(1);
             }
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--api-key-env" => api_key_env = Some(val!("--api-key-env")),
             "--manifest" => manifest = PathBuf::from(val!("--manifest")),
             "--out" => out = Some(PathBuf::from(val!("--out"))),
@@ -203,6 +203,8 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         }
         i += 1;
     }
+    let base_url =
+        base_url.map_or_else(sovereign_contracts::setup_config::client_daemon_base, Ok)?;
 
     if models.is_empty() {
         return Err("--models is required (comma-separated daemon model stems)".into());

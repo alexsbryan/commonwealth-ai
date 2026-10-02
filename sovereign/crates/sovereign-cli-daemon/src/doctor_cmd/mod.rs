@@ -206,7 +206,16 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
         );
         results.push(cw::check_iroh_egress(&rails_url).await);
         results.push(cw::check_inference_capable(&client_url).await);
-        results.push(cw::check_activity_reporting(&internal_url).await);
+        results.push(match &internal_url {
+            Ok(url) => cw::check_activity_reporting(url).await,
+            Err(e) => CheckResult {
+                name: "activity_reporting",
+                layer: Layer::Commonwealth,
+                status: CheckStatus::Failed,
+                message: e.clone(),
+                repair: Repair::None,
+            },
+        });
     }
     // else: daemon not running — skip layer silently
 

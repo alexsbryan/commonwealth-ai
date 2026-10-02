@@ -149,7 +149,7 @@ async fn run(rest: &[String]) -> i32 {
     // judgement under; svrn's probe resolves it below.
     let mut model: Option<String> = None;
     // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
     let mut max_claims: usize = 4;
     let mut rate: f64 = 0.12;
     let mut full_threshold: usize = 1500;
@@ -174,7 +174,7 @@ async fn run(rest: &[String]) -> i32 {
             "--corpus" => corpus_arg = Some(val!("--corpus")),
             "--out" => out = Some(PathBuf::from(val!("--out"))),
             "--model" => model = Some(val!("--model")),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--max-claims" => match val!("--max-claims").parse() {
                 Ok(v) if v > 0 => max_claims = v,
                 _ => {
@@ -221,6 +221,9 @@ async fn run(rest: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(base_url) = sovereign_cli_base::urls::daemon_base_or_refuse(base_url) else {
+        return 1;
+    };
     let Some(corpus_arg) = corpus_arg else {
         eprintln!("error: --corpus <id> is required");
         return 2;
@@ -249,7 +252,13 @@ async fn run(rest: &[String]) -> i32 {
         assess: None,
         judge: None,
     };
-    let globals = sovereign_cli_base::chat_globals::default_globals_for_voice_eval();
+    let globals = match sovereign_cli_base::chat_globals::default_globals_for_voice_eval() {
+        Ok(globals) => globals,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
     let (db_path, nodes) = match crate::eval_cmd::run_probe(&globals, &request) {
         Ok(ProbeEvidence::RaptorNodes(ev)) => (ev.db_path, ev.nodes),
         Ok(other) => {

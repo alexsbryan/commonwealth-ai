@@ -75,7 +75,7 @@ async fn extract_claims(rest: &[String]) -> i32 {
     // `None` = svrn's Critic profile's model, the role the gate routes
     // extraction under; svrn's probe resolves it.
     let mut model: Option<String> = None;
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
     let mut max_claims: usize = 10;
 
     let mut i = 0;
@@ -95,7 +95,7 @@ async fn extract_claims(rest: &[String]) -> i32 {
         match rest[i].as_str() {
             "--input" => input = Some(PathBuf::from(val!("--input"))),
             "--model" => model = Some(val!("--model")),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--max-claims" => match val!("--max-claims").parse::<usize>() {
                 Ok(n) if n > 0 => max_claims = n,
                 _ => {
@@ -115,6 +115,9 @@ async fn extract_claims(rest: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(base_url) = sovereign_cli_base::urls::daemon_base_or_refuse(base_url) else {
+        return 1;
+    };
 
     let raw = match &input {
         Some(p) => match std::fs::read_to_string(p) {
@@ -187,7 +190,7 @@ async fn harvest(rest: &[String]) -> i32 {
     // `None` = svrn's Critic profile's model, the role the gate routes
     // extraction under; svrn's probe resolves it.
     let mut model: Option<String> = None;
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
     let mut max_claims: usize = 8;
     let mut window: usize = 2;
     let mut limit: usize = 0;
@@ -213,7 +216,7 @@ async fn harvest(rest: &[String]) -> i32 {
             "--corpus" => corpus = Some(val!("--corpus")),
             "--out" => out = PathBuf::from(val!("--out")),
             "--model" => model = Some(val!("--model")),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--max-claims" => match val!("--max-claims").parse::<usize>() {
                 Ok(n) if n > 0 => max_claims = n,
                 _ => {
@@ -260,6 +263,9 @@ async fn harvest(rest: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(base_url) = sovereign_cli_base::urls::daemon_base_or_refuse(base_url) else {
+        return 1;
+    };
     let Some(corpus_id) = corpus else {
         eprintln!(
             "error: --corpus <id> is required (an installed bench corpus, e.g. chaos-saltgrass)"
@@ -595,7 +601,7 @@ async fn production_site_checks(
     cases: &[adv::StreamBCase],
 ) -> Result<Vec<Result<(), String>>, String> {
     let svrn = SvrnJudge::new(
-        &sovereign_contracts::setup_config::client_daemon_base(),
+        &sovereign_contracts::setup_config::client_daemon_base()?,
         PROVIDER_CTX,
     );
     answered_checks(cases, |asked| {

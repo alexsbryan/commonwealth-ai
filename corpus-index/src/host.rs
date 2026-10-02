@@ -321,13 +321,13 @@ const LLAMA_SERVER_URL: &str = "http://localhost:8080/v1";
 /// The ladder, in order. `explicit` short-circuits it to a single rung: an
 /// endpoint the caller named is the only one considered, so a failure there is
 /// a refusal rather than a fallback (§18.3).
-fn candidates(explicit: Option<&str>) -> Vec<(&'static str, String)> {
+fn candidates(explicit: Option<&str>) -> Vec<(&'static str, Result<String, String>)> {
     if let Some(url) = explicit {
-        return vec![("--base-url", url.to_string())];
+        return vec![("--base-url", Ok(url.to_string()))];
     }
     vec![
-        ("ollama", OLLAMA_URL.to_string()),
-        ("llama-server", LLAMA_SERVER_URL.to_string()),
+        ("ollama", Ok(OLLAMA_URL.to_string())),
+        ("llama-server", Ok(LLAMA_SERVER_URL.to_string())),
         // This host's own daemon, through the ONE accessor that resolves it
         // (`SOVEREIGN_DAEMON_URL` > `SVRNMESH_DAEMON_URL` > `[daemon]
         // client_port` > compiled default). Last rung deliberately: the whole
@@ -381,6 +381,12 @@ pub async fn discover(explicit: Option<&str>) -> Result<(String, Vec<Attempt>)> 
     let mut attempts: Vec<Attempt> = Vec::new();
     let mut chosen: Option<String> = None;
     for (label, url) in ladder {
+        // A rung whose base did not resolve (a config.toml that exists and
+        // does not load) is reported with why, never dialled at a default.
+        let (url, unresolved) = match url {
+            Ok(url) => (url, None),
+            Err(why) => (String::new(), Some(why)),
+        };
         if chosen.is_some() {
             attempts.push(Attempt {
                 label,
@@ -389,10 +395,12 @@ pub async fn discover(explicit: Option<&str>) -> Result<(String, Vec<Attempt>)> 
             });
             continue;
         }
-        let (v1, _) = split_base(&url);
-        let outcome = match probe_models(&client, &v1).await {
-            Ok(what) => Outcome::Chosen(what),
-            Err(why) => Outcome::Unavailable(why),
+        let outcome = match unresolved {
+            Some(why) => Outcome::Unavailable(why),
+            None => match probe_models(&client, &split_base(&url).0).await {
+                Ok(what) => Outcome::Chosen(what),
+                Err(why) => Outcome::Unavailable(why),
+            },
         };
         let attempt = Attempt {
             label,
@@ -660,8 +668,8 @@ mod tests {
         let rungs = candidates(None);
         let labels: Vec<&str> = rungs.iter().map(|(l, _)| *l).collect();
         assert_eq!(labels, ["ollama", "llama-server", "oicp daemon"]);
-        assert_eq!(rungs[0].1, OLLAMA_URL);
-        assert_eq!(rungs[1].1, LLAMA_SERVER_URL);
+        assert_eq!(rungs[0].1.as_deref(), Ok(OLLAMA_URL));
+        assert_eq!(rungs[1].1.as_deref(), Ok(LLAMA_SERVER_URL));
     }
 
     /// ARCH §18.3, as a shape rather than a message: an endpoint the caller
@@ -677,7 +685,7 @@ mod tests {
             "the ladder grew a rung past a named endpoint"
         );
         assert_eq!(rungs[0].0, "--base-url");
-        assert_eq!(rungs[0].1, "http://named:9/v1");
+        assert_eq!(rungs[0].1.as_deref(), Ok("http://named:9/v1"));
     }
 
     /// A rung below the winner is NOT PROBED, and that is a third state — not

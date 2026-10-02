@@ -16,7 +16,14 @@ use sovereign_contracts::setup_config::internal_daemon_base;
 /// `workflow run <recipe-id>` dispatch so both delegate to the *same* install path
 /// (surface-unify, don't deep-collapse — one client, two callers).
 pub async fn submit_install_request(id: &str, params: BTreeMap<String, serde_json::Value>) -> i32 {
-    let url = format!("{}/internal/corpus/install", internal_daemon_base());
+    let base = match internal_daemon_base() {
+        Ok(base) => base,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
+    let url = format!("{base}/internal/corpus/install");
     let body = serde_json::json!({
         "corpus_id": id,
         "parameters": params,

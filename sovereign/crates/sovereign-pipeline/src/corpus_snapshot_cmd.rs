@@ -469,14 +469,17 @@ async fn cmd_publish(args: &[String]) -> i32 {
         // on this index's own vectors, against this host's embedder: a config
         // is written into the manifest only when the vectors agree with it.
         // The daemon's HTTP embedder is the one every restorer probes with.
-        let probe = {
-            let embed: corpus_index::types::EmbedFn = corpus_engine::embed_http::http_embed_fn(
-                format!("{}/embeddings", sovereign_cli_base::urls::daemon_v1_base()),
-                embedding_model_for_manifest.clone(),
-            );
-            corpus_engine::probe_embedding_space_at(&index_dir, &embed, None)
-                .await
-                .map_err(|e| e.to_string())
+        let probe = match sovereign_cli_base::urls::daemon_v1_base() {
+            Err(e) => Err(e),
+            Ok(v1) => {
+                let embed: corpus_index::types::EmbedFn = corpus_engine::embed_http::http_embed_fn(
+                    format!("{v1}/embeddings"),
+                    embedding_model_for_manifest.clone(),
+                );
+                corpus_engine::probe_embedding_space_at(&index_dir, &embed, None)
+                    .await
+                    .map_err(|e| e.to_string())
+            }
         };
         let mut notes = parsed.notes.clone();
         let embed_quirks = match corpus_engine::decide_publish_declaration(
@@ -1013,6 +1016,14 @@ async fn cmd_restore(args: &[String]) -> i32 {
         );
         return 2;
     }
+    // The acceptance probe's embedder, resolved before anything is fetched.
+    let daemon_v1 = match sovereign_cli_base::urls::daemon_v1_base() {
+        Ok(v1) => v1,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
 
     let sovereign_data_dir = parsed.into.clone().unwrap_or_else(|| sovereign_root());
     if !sovereign_data_dir.exists() {
@@ -1134,7 +1145,7 @@ async fn cmd_restore(args: &[String]) -> i32 {
     // not up, the verdict is COULD-NOT-JUDGE by name and the restored index is
     // REMOVED rather than left in place unjudged (§18.3).
     let embed: corpus_index::types::EmbedFn = corpus_engine::embed_http::http_embed_fn(
-        format!("{}/embeddings", sovereign_cli_base::urls::daemon_v1_base()),
+        format!("{daemon_v1}/embeddings"),
         parsed.embedding_model.clone(),
     );
     let acceptance = corpus_engine::judge_restored_snapshot(

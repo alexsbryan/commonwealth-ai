@@ -143,9 +143,9 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 /// (§10.6). This used to re-roll that resolution — same config field, same
 /// `http://localhost:{port}` shape, same trailing-slash trim — and so was
 /// blind to `SOVEREIGN_DAEMON_URL` like every other copy of it.
-fn daemon_base(explicit: Option<&str>) -> String {
+fn daemon_base(explicit: Option<&str>) -> Result<String, String> {
     match explicit {
-        Some(url) => url.trim_end_matches('/').to_string(),
+        Some(url) => Ok(url.trim_end_matches('/').to_string()),
         None => sovereign_contracts::setup_config::client_daemon_base(),
     }
 }
@@ -162,7 +162,13 @@ pub async fn run(args: &[String]) -> i32 {
             return 2;
         }
     };
-    let base = daemon_base(parsed.daemon.as_deref());
+    let base = match daemon_base(parsed.daemon.as_deref()) {
+        Ok(base) => base,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
     let http = reqwest::Client::new();
 
     if let Some(id) = &parsed.status {

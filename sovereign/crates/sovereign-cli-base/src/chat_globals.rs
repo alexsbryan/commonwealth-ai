@@ -88,14 +88,14 @@ pub struct ChatGlobals {
 /// need a sensibly-defaulted `ChatGlobals`. Returns the same shape
 /// as a no-flag chat invocation: daemon at the configured client
 /// port, `~/.svrnmesh` data_dir, no model overrides.
-pub fn default_globals_for_voice_eval() -> ChatGlobals {
+pub fn default_globals_for_voice_eval() -> Result<ChatGlobals, String> {
     ChatGlobals::default_from_setup()
 }
 
 impl ChatGlobals {
     /// Seed from `SetupConfig` when it exists; otherwise fall back to
-    /// hard defaults (`~/.svrnmesh`). Never fails — a missing config is a
-    /// fresh-install state, not an error.
+    /// hard defaults (`~/.svrnmesh`). A missing config is a fresh-install
+    /// state, not an error; one that exists and does not load is.
     ///
     /// The daemon base comes from [`client_daemon_base`], NOT from a second
     /// reading of `[daemon] client_port`. It used to be the latter, which
@@ -110,13 +110,13 @@ impl ChatGlobals {
     /// `daemon_explicit`) > the env knob > `[daemon] client_port` > compiled
     /// default. The flag still wins because an endpoint the operator typed is
     /// the more specific instruction.
-    fn default_from_setup() -> Self {
-        let daemon_base = sovereign_contracts::setup_config::client_daemon_base();
+    fn default_from_setup() -> Result<Self, String> {
+        let daemon_base = sovereign_contracts::setup_config::client_daemon_base()?;
         let data_dir = match SetupConfig::load() {
             Ok(cfg) => cfg.data.dir,
             Err(_) => sovereign_contracts::rebrand::svrnmesh_root(),
         };
-        Self {
+        Ok(Self {
             daemon_base,
             guest_link_active: false,
             guest_lender_url: None,
@@ -129,7 +129,7 @@ impl ChatGlobals {
             temperature: None,
             max_tokens: None,
             custom_instructions: None,
-        }
+        })
     }
 }
 
@@ -137,7 +137,7 @@ impl ChatGlobals {
 /// return `(globals, leftover)`. Leftover tokens keep their order so
 /// subcommands can positional-parse them (e.g. `ask "the question"`).
 pub fn parse_globals(args: &[String]) -> Result<(ChatGlobals, Vec<String>), String> {
-    let mut globals = ChatGlobals::default_from_setup();
+    let mut globals = ChatGlobals::default_from_setup()?;
     let mut rest = Vec::with_capacity(args.len());
 
     let mut i = 0;

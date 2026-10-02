@@ -63,7 +63,7 @@ const BENCH_ID: &str = "uap-disposition";
 /// default. Was a compiled literal, so the flag below was the only way to
 /// move it and a session pointed at a second daemon silently missed this
 /// verb (§10.6).
-fn default_base_url() -> String {
+fn default_base_url() -> Result<String, String> {
     sovereign_contracts::setup_config::client_daemon_base()
 }
 
@@ -184,7 +184,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         unseal_holdout,
         bench_dir: bench_dir.unwrap_or_else(default_bench_dir),
         out,
-        base_url: base_url.unwrap_or_else(default_base_url),
+        base_url: base_url.map_or_else(default_base_url, Ok)?,
         strip_disposition_tail,
         max_tokens: 64,
     })
@@ -747,7 +747,7 @@ mod tests {
         assert_eq!(p.split, Split::Train);
         assert_eq!(p.policy, Policy::Baseline);
         assert!(p.strip_disposition_tail);
-        assert_eq!(p.base_url, default_base_url());
+        assert_eq!(p.base_url, default_base_url().unwrap());
     }
 
     #[test]

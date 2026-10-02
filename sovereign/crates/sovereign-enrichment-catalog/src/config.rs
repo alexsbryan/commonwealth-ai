@@ -162,8 +162,11 @@ pub struct TocMarkers {
 /// dispatch at :9741 forever, and a sandboxed run on a normal host silently
 /// drove the OPERATOR's daemon instead of its own (2026-07-29, found by the
 /// `enrich-atlas` journey in a netns where nothing answers on 9741).
+///
+/// A setup config that exists and does not load leaves this empty, and
+/// [`EnrichConfig::parse_checked`] refuses with why: a serde default cannot fail.
 fn default_base_url() -> String {
-    sovereign_contracts::setup_config::client_daemon_base()
+    sovereign_contracts::setup_config::client_daemon_base().unwrap_or_default()
 }
 
 /// Default section-body floor. Chosen to comfortably clear
@@ -230,6 +233,14 @@ impl EnrichConfig {
                 cfg.schema_version,
                 CONFIG_SCHEMA_VERSION
             )));
+        }
+        if cfg.base_url.is_empty() {
+            sovereign_contracts::setup_config::client_daemon_base().map_err(|e| {
+                Error::InvalidInput(format!(
+                    "enrich config {} has no base_url: {e}",
+                    path.display()
+                ))
+            })?;
         }
         Ok(cfg)
     }
