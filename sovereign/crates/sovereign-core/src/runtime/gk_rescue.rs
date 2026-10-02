@@ -109,7 +109,10 @@ pub(crate) async fn rescue_ood_answer(
         system_message: Some(format!(
             "Current date: {today}. Answer concisely from general knowledge. \
              If the answer is time-sensitive and may have changed, say so. If \
-             you genuinely do not know, reply with exactly: UNKNOWN"
+             the question asks about a particular organization's or person's \
+             own records (its rooms, meetings, rates, schedules, staff, files), \
+             general knowledge cannot know them: reply with exactly: UNKNOWN. \
+             If you genuinely do not know, reply with exactly: UNKNOWN"
         )),
         preferred_speed: Speed::Slow,
         max_tokens: Some(RESCUE_MAX_TOKENS as usize),
