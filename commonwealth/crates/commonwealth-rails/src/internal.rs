@@ -304,7 +304,14 @@ mod tests {
             self_id: *mesh.members.keys().next().expect("a member"),
             mesh: Arc::new(RwLock::new(mesh)),
             contacts: Arc::new(Mutex::new(HashMap::new())),
-            data_dir: std::env::temp_dir().join(format!("cw-rails-test-{}", std::process::id())),
+            // One dir per fixture, never per process: save_mesh stages through
+            // a fixed mesh.tmp, so two tests saving into one dir raced and the
+            // loser's rename read ENOENT (the cmnwlth lift's 1-in-7 red).
+            data_dir: tempfile::Builder::new()
+                .prefix("cw-rails-test-")
+                .tempdir()
+                .expect("tempdir")
+                .keep(),
             ring_nudge: Arc::new(Notify::new()),
             split_generation: Default::default(),
         }

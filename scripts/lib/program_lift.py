@@ -706,6 +706,19 @@ def run_only(lift_id: str, spec: dict, sandbox: Path, keep: bool, sets: dict, re
         record["finally"] = smoke.notes
 
 
+def keep_logs(sandbox: Path, dest: Path) -> Path | None:
+    """Copy the sandbox's top-level *.log (build, test, every smoke step) to dest."""
+    logs = sorted(sandbox.glob("*.log")) if sandbox.is_dir() else []
+    if not logs:
+        say(f"no logs in {sandbox} to keep")
+        return None
+    dest.mkdir(parents=True, exist_ok=True)
+    for p in logs:
+        shutil.copy2(p, dest / p.name)
+    say(f"kept {len(logs)} log(s) from the sandbox at {dest}")
+    return dest
+
+
 def main(argv: list[str]) -> int:
     usage = ("usage: scripts/program-lift.sh --sandbox <lift> [--dir <path>] [--keep] [--target-dir <path>] [--set VAR=value ...]\n"
              "       scripts/program-lift.sh --run-only <lift> [--dir <path>] [--keep] [--set VAR=value ...]")
@@ -747,6 +760,7 @@ def main(argv: list[str]) -> int:
     artifact = REPO / "target" / "program-lift" / lift_id / name
     record = {"lift": lift_id, "sandbox": str(sandbox), "target_dir": str(target), "sets": sorted(sets)}
 
+    verdict, reason = "could-not-judge", "the instrument was interrupted before a verdict"
     try:
         if shutil.which("cargo") is None:
             raise Verdict("could-not-judge", "cargo is not on PATH, so nothing could be built")
@@ -765,6 +779,14 @@ def main(argv: list[str]) -> int:
         verdict, reason = "could-not-judge", f"the instrument stopped before a verdict: {type(e).__name__}: {e}"
     finally:
         if not keep:
+            # A red run's logs leave the sandbox before it is wiped: a failure
+            # that leaves nothing to read is never-ran, not a finding (the
+            # cmnwlth test phase went red once in seven, 5d529cf1e, unread).
+            if verdict != "passed":
+                kept = keep_logs(sandbox, artifact.parent / f"kept-{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}")
+                if kept is not None:
+                    record["kept_logs"] = str(kept.relative_to(REPO))
+                    reason += f"; the sandbox's logs were kept at {record['kept_logs']}"
             shutil.rmtree(sandbox, ignore_errors=True)
         else:
             say(f"sandbox kept at {sandbox}")
