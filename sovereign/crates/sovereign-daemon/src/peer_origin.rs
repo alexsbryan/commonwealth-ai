@@ -44,14 +44,15 @@ pub const ORIGIN_TTL_SECS: u64 = 60;
 pub const ORIGIN_RENEW_EVERY: Duration = Duration::from_secs(10);
 
 /// The internal routes a peer dials, each served on the internal port
-/// (`crate::server`): the corpus work queue, the pipeline pause, knowledge
-/// search and index transfer.
-pub const PEER_PREFIXES: [&str; 9] = [
+/// (`crate::server`): the corpus work queue, the merge coordinator's
+/// wipe-after-pull, the pipeline pause, knowledge search and index transfer.
+pub const PEER_PREFIXES: [&str; 10] = [
     "/internal/corpus/next_unit",
     "/internal/corpus/heartbeat",
     "/internal/corpus/complete_unit",
     "/internal/corpus/ingest_partition",
     "/internal/corpus/canonical",
+    "/internal/corpus/partition_evict",
     "/internal/pipeline/pause",
     "/internal/knowledge/search",
     "/internal/index/serve",
@@ -236,5 +237,21 @@ mod tests {
                 "{prefix} is not a route crate::server mounts"
             );
         }
+    }
+
+    /// The merge coordinator's wipe-after-pull (sovereign-grants
+    /// `ShardManager::merge_participants`) POSTs this path to each peer over
+    /// cw-rails; unregistered, cw-rails answered it 404 and an ephemeral
+    /// grant's peer kept the user's chunks until its own pull loop exited
+    /// (pc-bare-404s).
+    #[test]
+    fn the_coordinators_wipe_after_pull_reaches_the_peer() {
+        assert!(
+            registration(9742)
+                .prefixes
+                .iter()
+                .any(|p| p == "/internal/corpus/partition_evict"),
+            "partition_evict must be a registered peer prefix"
+        );
     }
 }
