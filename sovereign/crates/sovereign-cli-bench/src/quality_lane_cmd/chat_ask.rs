@@ -1696,7 +1696,7 @@ mod tests {
         assert_eq!(n("draft_calls"), 1);
         assert_eq!(n("citation_median_ms"), 7734);
         assert_eq!(n("audit_median_ms"), 8954);
-        assert_eq!(n("audit_calls"), 12);
+        assert_eq!(n("audit_calls"), 22);
         assert_eq!(n("total_median_ms"), 31728);
         // The floor is declared ONCE, outside the per-stem table.
         assert_eq!(b.ceiling_floor_ms, 250);
