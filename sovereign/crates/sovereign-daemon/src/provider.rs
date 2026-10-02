@@ -142,10 +142,22 @@ impl ProviderFactory for LlamaCppFactory {
         // forwarder built once against its entry node; its arm refuses by
         // name (`SetupConfig::models`) rather than load empty paths.
         self.raw_provider(cfg).await?;
-        // The cell under the router now holds the reloaded engine. The alias
-        // map follows serve's new residency into the same router; the
-        // in-flight gauge, whose live guards the old requests still hold, is
-        // the router's own and never re-minted.
+        self.push_router_aliases().await;
+        tracing::info!(
+            target: "serving_path",
+            ranks = self.slot_aliases.is_some(),
+            "reload: the cell swapped under the provider boot built; no second router"
+        );
+        Ok(Arc::clone(&self.routed))
+    }
+}
+
+impl LlamaCppFactory {
+    /// The cell under the router now holds what serve holds. The alias map
+    /// follows serve's residency into the same router; the in-flight gauge,
+    /// whose live guards the old requests still hold, is the router's own and
+    /// never re-minted.
+    async fn push_router_aliases(&self) {
         if let Some(sink) = &self.slot_aliases {
             let state = match self.daemon.get() {
                 Some(daemon) => daemon.app_state().await,
@@ -162,12 +174,6 @@ impl ProviderFactory for LlamaCppFactory {
                 }
             }
         }
-        tracing::info!(
-            target: "serving_path",
-            ranks = self.slot_aliases.is_some(),
-            "reload: the cell swapped under the provider boot built; no second router"
-        );
-        Ok(Arc::clone(&self.routed))
     }
 }
 

@@ -536,11 +536,22 @@ pub async fn reload_through_serve(
         .await
         .map_err(|e| format!("reload: serve reloaded, then {e}"))?;
     tracing::info!(target: "serving_path", serve_base = %serve.base, resident = ?reloaded.resident_models, primary = %served.primary_model, "reload: serve rebuilt; the loopback provider in the boot cell is rebuilt from its self-report");
+    adopt_served(serve, cell, &served, config_context);
+    Ok(served)
+}
+
+/// Rebuild the loopback provider from `served` into `cell`, the one boot
+/// wrapped, so every reader that holds the cell answers from it.
+pub fn adopt_served(
+    serve: &ServeBase,
+    cell: &sovereign_contracts::reloadable_provider::ReloadableProvider,
+    served: &sovereign_contracts::engine_state::ServedSelf,
+    config_context: u32,
+) {
     cell.swap(
         std::sync::Arc::new(loopback_provider(serve, served.clone(), config_context)),
         served.embed_family.clone(),
     );
-    Ok(served)
 }
 
 /// How long a forwarded read waits on serve: the setup reads detect hardware
