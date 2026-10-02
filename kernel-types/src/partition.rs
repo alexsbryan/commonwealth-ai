@@ -16,7 +16,7 @@
 //!
 //! Both functions are O(N) over mesh size, which is single- to
 //! low-double-digit in practice.
-use crate::NodeId;
+use crate::{ContentHash, NodeId};
 
 /// Determine the scheduling leader among a set of online nodes.
 ///
@@ -57,16 +57,28 @@ pub fn should_host(self_id: NodeId, pin: Option<NodeId>, eligible_anchors: &[Nod
 /// or removed, only that candidate's keys reassign; all other key→owner
 /// mappings remain stable. Modulo hashing fails this property — a single
 /// node leaving reshuffles every key.
+///
+/// The weight is [`ContentHash`] (BLAKE3) over `node bytes ‖ key bytes`, not
+/// std's `DefaultHasher`, whose algorithm std does not promise across Rust
+/// releases: two nodes built by different toolchains must agree on the owner.
+/// `rendezvous_owner_golden_vector` pins the literal outputs.
 pub fn rendezvous_owner(key: &str, candidates: &[NodeId]) -> Option<NodeId> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    candidates
+        .iter()
+        .copied()
+        .max_by_key(|node| rendezvous_weight(key, *node))
+}
 
-    candidates.iter().copied().max_by_key(|node| {
-        let mut hasher = DefaultHasher::new();
-        key.hash(&mut hasher);
-        node.hash(&mut hasher);
-        hasher.finish()
-    })
+/// The node is a fixed 16 bytes and leads, so the encoding is injective
+/// without a separator.
+fn rendezvous_weight(key: &str, node: NodeId) -> u64 {
+    let mut buf = Vec::with_capacity(16 + key.len());
+    buf.extend_from_slice(node.as_bytes());
+    buf.extend_from_slice(key.as_bytes());
+    let digest = ContentHash::of(&buf);
+    let mut head = [0u8; 8];
+    head.copy_from_slice(&digest.as_bytes()[..8]);
+    u64::from_be_bytes(head)
 }
 
 /// Check if `self_id` owns `key` under rendezvous partitioning.
@@ -214,8 +226,7 @@ mod tests {
             let owner = rendezvous_owner(&key, &n).unwrap();
             *counts.entry(owner).or_default() += 1;
         }
-        // 5 nodes → ~2000 each. Allow ±15% — generous to keep the test
-        // robust to DefaultHasher seed changes.
+        // 5 nodes → ~2000 each. Allow ±15%.
         for (node, count) in &counts {
             assert!(
                 (1700..=2300).contains(count),
@@ -269,6 +280,29 @@ mod tests {
         for other in n.iter().filter(|id| **id != owner) {
             assert!(!is_owner(*other, key, &n));
         }
+    }
+
+    /// Literal outputs, so a hasher whose algorithm can change between
+    /// toolchains (std's `DefaultHasher`) fails here rather than letting two
+    /// nodes disagree on an owner.
+    #[test]
+    fn rendezvous_owner_golden_vector() {
+        assert_eq!(
+            rendezvous_weight("Albert_Einstein", NodeId::from_u128(10)),
+            14315033071230802710
+        );
+        let empty = rendezvous_weight("", NodeId::from_u128(0));
+        let n = nodes(&[1, 2, 3, 4, 5]);
+        let owners: Vec<u128> = [
+            "Albert_Einstein",
+            "Donald_Trump",
+            "Hurricane_Imelda",
+            "Article_00042",
+        ]
+        .iter()
+        .map(|k| u128::from_be_bytes(*rendezvous_owner(k, &n).unwrap().as_bytes()))
+        .collect();
+        assert_eq!((empty, owners), (16533523438862888971, vec![4, 1, 3, 3]));
     }
 
     #[test]
