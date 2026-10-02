@@ -480,10 +480,28 @@ impl Runtime {
                     "KnowledgeQuery: empty pool over a lost corpus — disclosing in the prompt"
                 );
             }
-            tracing::info!("KnowledgeQuery: no chunks — answering from parametric knowledge");
+            // The one decider for this branch's general-knowledge fork; a
+            // situation-deictic question declines like the disclosure does.
+            let answers_from_gk =
+                crate::runtime::gk_rescue::zero_chunk_answers_from_gk(guidance.is_some(), message);
+            tracing::info!(
+                answers_from_gk,
+                "KnowledgeQuery: no chunks — parametric knowledge or decline"
+            );
             let corpora = context.installed_corpora_display();
             let prompt = match &guidance {
                 Some(g) => format!("The user asked: \"{message}\"\n\n{g}"),
+                None if !answers_from_gk => format!(
+                    "The user asked: \"{message}\"\n\n\
+                 A search of the installed sources ({corpora}) found nothing \
+                 relevant. The question asks about the user's own organization \
+                 or schedule, which only their own material can answer — no \
+                 public fact can. Do NOT answer from general knowledge and \
+                 never invent a name, room, number, date, rate, or time. Say in \
+                 one short sentence that you don't have that material, then \
+                 offer one concrete next step (such as adding the document \
+                 that records it). No preamble, and never emit tool-call syntax."
+                ),
                 None => format!(
                     "The user asked: \"{message}\"\n\n\
                  A search of the installed sources ({corpora}) found nothing \
@@ -542,11 +560,10 @@ impl Runtime {
                 // forbids ("do not answer from general knowledge or invent an
                 // answer"), so committing it there would make the structural
                 // prefix contradict the prompt it prefixes. A lost corpus is
-                // not a general-knowledge turn; it is a refusal.
-                assistant_prefix: match &guidance {
-                    Some(_) => None,
-                    None => Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string()),
-                },
+                // not a general-knowledge turn; it is a refusal. Nor is a
+                // situation-deictic question (`zero_chunk_answers_from_gk`).
+                assistant_prefix: answers_from_gk
+                    .then(|| crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string()),
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
@@ -587,10 +604,8 @@ impl Runtime {
                 // answering from parametric knowledge, so labelling it
                 // `ZeroChunk` would tell every downstream reader of this
                 // field that it did.
-                general_knowledge: match &guidance {
-                    Some(_) => None,
-                    None => Some(crate::runtime::types::GkReason::ZeroChunk),
-                },
+                general_knowledge: answers_from_gk
+                    .then_some(crate::runtime::types::GkReason::ZeroChunk),
                 demands,
                 query_embedding: embedding,
                 // Zero retrieval never reaches the admission stage — there

@@ -70,6 +70,28 @@ pub(crate) fn rescue_precondition_met(
     met
 }
 
+/// The zero-chunk branch's fork (`handlers/knowledge_query.rs`, empty pool):
+/// does it commit `GK_CAVEAT_PREFIX` and answer from general knowledge? Not
+/// over a lost corpus (that turn discloses), and not for a situation-deictic
+/// question, the clause `rescue_precondition_met` reads: with no evidence the
+/// committed prefix makes the model continue "from general knowledge:" with
+/// something, and for "Which conference room is booked for the Thursday
+/// partners' meeting?" that was an invented room (measured 2026-10-02,
+/// b07f61eb2: 4B 1/3, 35B 2/3, all 12 runs zero-chunk).
+pub(crate) fn zero_chunk_answers_from_gk(lost_corpus: bool, question: &str) -> bool {
+    if lost_corpus {
+        return false;
+    }
+    if crate::runtime::anchoring::question_is_situation_deictic(question) {
+        tracing::info!(
+            target: "epistemic.ledger",
+            "zero-chunk turn declines: situation-deictic question has no general-knowledge answer"
+        );
+        return false;
+    }
+    true
+}
+
 /// `SOVEREIGN_GK_RESCUE=0|false|off|no` disables the rescue (the
 /// abstention then ships as-is). Default ON.
 pub(crate) fn gk_rescue_enabled() -> bool {
@@ -203,6 +225,39 @@ mod tests {
                 "withheld the rescue from a world-general question: {q}"
             );
         }
+    }
+
+    #[test]
+    fn a_situation_deictic_zero_chunk_turn_carries_no_gk_prefix() {
+        // The measure's probe took the zero-chunk branch in all 12 runs, and
+        // the empty-corpus paralegal question is the same branch.
+        for q in [
+            "Which conference room is booked for the Thursday partners' meeting?",
+            "What is our paralegal billing rate?",
+        ] {
+            assert!(
+                !zero_chunk_answers_from_gk(false, q),
+                "zero-chunk turn answered a situation-deictic question from GK: {q}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_world_general_zero_chunk_turn_keeps_the_gk_prefix() {
+        // The other direction: the reading's world-general probes stayed
+        // answered 9/9 per arm; a lost corpus stays a disclosure.
+        for q in [
+            "What is the capital of Australia?",
+            "What year did the Berlin Wall fall?",
+            "What is the chemical formula for table salt?",
+            "How many planets are in our solar system?",
+        ] {
+            assert!(
+                zero_chunk_answers_from_gk(false, q),
+                "zero-chunk turn withheld GK from a world-general question: {q}"
+            );
+        }
+        assert!(!zero_chunk_answers_from_gk(true, OOD));
     }
 
     #[test]
