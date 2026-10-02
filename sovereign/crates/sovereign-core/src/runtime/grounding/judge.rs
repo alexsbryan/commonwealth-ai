@@ -530,6 +530,11 @@ pub(crate) async fn verify_grounding(
             ValuePresence::NoValue => {
                 dbg("value-presence: no checkable specific → confirmatory loop");
             }
+            // The extraction failed: unchecked, not "no value". The veto may
+            // only refuse, so the confirmatory loop decides here too.
+            ValuePresence::Unchecked => {
+                dbg("value-presence: extraction failed, veto unchecked → confirmatory loop");
+            }
         }
     }
 

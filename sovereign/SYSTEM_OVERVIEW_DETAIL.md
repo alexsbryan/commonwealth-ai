@@ -3361,7 +3361,7 @@ naming first would have been mole-whacking (ARCH §0).
 `call_census::gate_call` is now the **one funnel every judge model call goes
 through**, tagging each with a `call_census::JudgeCall`: either a closed-set
 `sovereign_contracts::types::GateCallMechanism` (`claim_extraction`,
-`claim_list`, `per_claim_judge`, `chunk_judge`, `specifics_scan`,
+`value_extraction`, `claim_list`, `per_claim_judge`, `chunk_judge`, `specifics_scan`,
 `batched_support`, `located_span_triage`, `surgery`, `rewrite`, `retry`,
 `short_guard_retry`, `citation`, `sentence_sweep`, `evidence_sufficiency`) or a
 `Harness(&'static str)` label for a caller outside any turn. **Only a `Gate`

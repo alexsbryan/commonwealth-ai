@@ -135,6 +135,7 @@ impl JudgeCall {
 const fn is_judging(m: GateCallMechanism) -> bool {
     match m {
         GateCallMechanism::ClaimExtraction
+        | GateCallMechanism::ValueExtraction
         | GateCallMechanism::ClaimList
         | GateCallMechanism::PerClaimJudge
         | GateCallMechanism::ChunkJudge
@@ -447,28 +448,51 @@ mod tests {
     /// remembered** (ARCH §7/§10). A new gate mechanism that calls
     /// `inference.complete` directly would be invisible to the census, and
     /// the failure mode is the quiet one: the turn still works, the numbers
-    /// just stop adding up. So the sources are read at compile time and the
+    /// just stop adding up. So the sources are read and the
     /// only legal `.complete(` in `grounding/` is this module's own.
     ///
-    /// `include_str!` rather than a filesystem walk on purpose: it is
-    /// resolved by the compiler relative to THIS file, so it cannot go
-    /// stale against a moved module or pass vacuously in a different
-    /// working directory.
+    /// EVERY `.rs` under `grounding/`, walked rather than listed (ARCH
+    /// principle 10): the six-file list this replaced missed
+    /// `value_presence.rs`, whose extraction call skipped the census and the
+    /// turn's admission until pc-value-presence-admission. The walk is
+    /// anchored at `CARGO_MANIFEST_DIR`, not the working directory, and it
+    /// must find this file and `value_presence.rs`, so a moved directory
+    /// fails rather than passing with nothing read.
     /// covers: GR-50
     #[test]
     fn no_gate_module_calls_inference_complete_behind_the_censuss_back() {
-        const SOURCES: [(&str, &str); 6] = [
-            ("mod.rs", include_str!("mod.rs")),
-            ("judge.rs", include_str!("judge.rs")),
-            ("surgical.rs", include_str!("surgical.rs")),
-            ("citation.rs", include_str!("citation.rs")),
-            (
-                "citation_attribution.rs",
-                include_str!("citation_attribution.rs"),
-            ),
-            ("pipeline.rs", include_str!("pipeline.rs")),
-        ];
-        for (name, src) in SOURCES {
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).expect("grounding/ is readable") {
+                let p = e.expect("dir entry").path();
+                if p.is_dir() {
+                    walk(&p, out);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    out.push(p);
+                }
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/runtime/grounding");
+        let mut files = Vec::new();
+        walk(&root, &mut files);
+        let names: Vec<String> = files
+            .iter()
+            .map(|p| p.strip_prefix(&root).unwrap().display().to_string())
+            .collect();
+        for must in ["call_census.rs", "value_presence.rs"] {
+            assert!(
+                names.iter().any(|n| n == must),
+                "the walk did not find {must}: {names:?}"
+            );
+        }
+        let sources: Vec<(String, String)> = files
+            .iter()
+            .zip(names)
+            // The funnel itself is the one legal call site.
+            .filter(|(_, n)| n != "call_census.rs")
+            .map(|(p, n)| (n, std::fs::read_to_string(p).expect("source is readable")))
+            .collect();
+        for (name, src) in &sources {
+            let src = src.as_str();
             // Skip the test modules: mocks legitimately IMPLEMENT
             // `complete`, and a test driving a provider directly is not a
             // gate call. Production code is everything above `mod tests`.

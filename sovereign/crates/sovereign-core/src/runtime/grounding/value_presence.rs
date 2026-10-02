@@ -57,6 +57,9 @@ use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
+use sovereign_contracts::types::GateCallMechanism;
+
+use super::call_census::gate_call;
 use super::config::dbg;
 use super::judge::CHUNK_JUDGE_PASSAGE_CHARS;
 
@@ -106,7 +109,7 @@ pub async fn assess_asserted_value(
     posture: ShardingPrivacy,
 ) -> AssertedValue {
     match value_presence_of(inference, question, answer, chunks, posture).await {
-        ValuePresence::NoValue => AssertedValue::NoValue,
+        ValuePresence::NoValue | ValuePresence::Unchecked => AssertedValue::NoValue,
         ValuePresence::Absent(value) => AssertedValue::Ungrounded(value),
         ValuePresence::Present(value) => {
             match value_is_supported(inference, question, &value, chunks, posture).await {
@@ -128,8 +131,13 @@ pub async fn assess_asserted_value(
 /// only where the mechanism is allowed to return a POSITIVE verdict. A caller
 /// that can only ever refuse must not pay for a verdict it would discard.
 pub(crate) enum ValuePresence {
-    /// No checkable specific was asserted, or extraction was unavailable.
+    /// The extractor answered and named no checkable specific.
     NoValue,
+    /// The extraction call failed, so the veto never ran. A fact about the
+    /// instrument, never "no value asserted" (ARCH §18.1): the same rule
+    /// [`value_is_supported`] gives a probe that does not answer. A veto may
+    /// only refuse, so every consumer falls through exactly as on `NoValue`.
+    Unchecked,
     /// The value's tokens appear NOWHERE in the evidence — invented from
     /// nothing. Refuse; no probe verdict can license it.
     Absent(String),
@@ -146,8 +154,20 @@ pub(crate) async fn value_presence_of(
     chunks: &[String],
     posture: ShardingPrivacy,
 ) -> ValuePresence {
-    let Some(value) = extract_answer_value(inference, question, answer, posture).await else {
-        return ValuePresence::NoValue;
+    let value = match extract_answer_value(inference, question, answer, posture).await {
+        Ok(Some(value)) => value,
+        Ok(None) => return ValuePresence::NoValue,
+        Err(e) => {
+            tracing::warn!(
+                target: "grounding_gate",
+                event = "value_presence",
+                decision = "could_not_judge",
+                error = %e,
+                "value extraction failed: the invented-value veto did not run"
+            );
+            dbg(&format!("value extraction failed: {e}"));
+            return ValuePresence::Unchecked;
+        }
     };
     if value_present_in_chunks(&value, chunks) {
         return ValuePresence::Present(value);
@@ -390,7 +410,7 @@ async fn extract_answer_value(
     question: &str,
     answer: &str,
     posture: ShardingPrivacy,
-) -> Option<String> {
+) -> crate::error::Result<Option<String>> {
     // "PUTS IN FRONT OF THE READER", not "gives" — and the hedge clause is
     // the whole reason (2026-09-09).
     //
@@ -442,40 +462,32 @@ async fn extract_answer_value(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    match inference.complete(&req).await {
-        Ok(resp) => {
-            let v = resp.text.trim().trim_matches('"').trim();
-            let low = v.to_lowercase();
-            // A declined / empty / no-value extraction is nothing to ground.
-            //
-            // KNOWN DIVERGENCE from `kernel_types::is_absent_marker`, which is
-            // the one decider for "does this text name an absence" and which
-            // the atlas extractor uses. This chain is a bare `starts_with`, so
-            // it reads a judge answering "unknown-type sceatta series" as a
-            // DECLINE and grounds nothing — the same §18.1 defect that was
-            // fixed in the extractor. It is not switched here in a cleanup
-            // commit because this is a GATE input: making it stricter about
-            // declines sends more answers to the presence check, which changes
-            // what the grounding gate suppresses. That is a §18.6 change and
-            // needs the grounding battery reported in both directions, not a
-            // one-line substitution. Tracked in note `d61eb8d4` item 11.
-            if v.is_empty()
-                || low == "none"
-                || low.starts_with("none")
-                || low.starts_with("n/a")
-                || low.starts_with("not ")
-                || low.starts_with("unknown")
-            {
-                None
-            } else {
-                Some(v.to_string())
-            }
-        }
-        Err(e) => {
-            tracing::warn!(target: "grounding_gate", error = %e, "value extraction failed");
-            dbg(&format!("value extraction failed: {e}"));
-            None
-        }
+    let resp = gate_call(inference, &req, GateCallMechanism::ValueExtraction).await?;
+    let v = resp.text.trim().trim_matches('"').trim();
+    let low = v.to_lowercase();
+    // A declined / empty / no-value extraction is nothing to ground.
+    //
+    // KNOWN DIVERGENCE from `kernel_types::is_absent_marker`, which is
+    // the one decider for "does this text name an absence" and which
+    // the atlas extractor uses. This chain is a bare `starts_with`, so
+    // it reads a judge answering "unknown-type sceatta series" as a
+    // DECLINE and grounds nothing — the same §18.1 defect that was
+    // fixed in the extractor. It is not switched here in a cleanup
+    // commit because this is a GATE input: making it stricter about
+    // declines sends more answers to the presence check, which changes
+    // what the grounding gate suppresses. That is a §18.6 change and
+    // needs the grounding battery reported in both directions, not a
+    // one-line substitution. Tracked in note `d61eb8d4` item 11.
+    if v.is_empty()
+        || low == "none"
+        || low.starts_with("none")
+        || low.starts_with("n/a")
+        || low.starts_with("not ")
+        || low.starts_with("unknown")
+    {
+        Ok(None)
+    } else {
+        Ok(Some(v.to_string()))
     }
 }
 
@@ -756,6 +768,150 @@ mod tests {
         )
         .await;
         assert_eq!(v, AssertedValue::NoValue);
+    }
+
+    /// An extractor that names "Mrs Neale", or fails, and records the
+    /// admission each request reached it with.
+    struct Extractor {
+        fail: bool,
+        seen: std::sync::Mutex<Vec<Option<crate::types::TurnAdmission>>>,
+    }
+
+    impl Extractor {
+        fn new(fail: bool) -> Self {
+            Self {
+                fail,
+                seen: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::traits::InferenceProvider for Extractor {
+        async fn complete(
+            &self,
+            r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<crate::types::CompletionResponse> {
+            self.seen.lock().unwrap().push(r.admission.clone());
+            if self.fail {
+                return Err(crate::error::Error::Inference("host busy".into()));
+            }
+            Ok(crate::types::CompletionResponse {
+                text: "Mrs Neale".into(),
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "extractor".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<
+            std::pin::Pin<Box<dyn futures::Stream<Item = crate::error::Result<String>> + Send>>,
+        > {
+            unimplemented!("no stream in the extractor probe")
+        }
+        async fn embed(&self, _t: &str) -> crate::error::Result<Vec<f32>> {
+            unimplemented!("no embed in the extractor probe")
+        }
+        fn capabilities(&self) -> crate::types::ProviderCapabilities {
+            crate::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: crate::types::Depth::Moderate,
+            }
+        }
+    }
+
+    /// The extraction is a gate call: inside an admitted turn it reaches the
+    /// provider carrying the turn's token, so the slot queue parks it
+    /// (`model_slot::an_admitted_continuation_parks_where_a_fresh_request_sheds`)
+    /// instead of shedding it, and it lands in the turn's census.
+    ///
+    /// FAILS IF `extract_answer_value` calls the provider directly again: the
+    /// request arrives unstamped and the census holds no row.
+    #[tokio::test]
+    async fn the_value_extraction_carries_the_turns_admission_into_the_census() {
+        use crate::runtime::grounding::call_census::CallCensus;
+        use sovereign_contracts::types::GateCallMechanism;
+
+        let inf = Extractor::new(false);
+        let token = crate::types::TurnAdmission::new("turn-under-test");
+        let census = CallCensus::new();
+        let (rows, _) = crate::runtime::admission::scope(Some(token.clone()), async {
+            census
+                .clone()
+                .scope(async {
+                    let _ = super::value_presence_of(
+                        &inf,
+                        CHARWOMAN_Q,
+                        "Mrs Neale",
+                        &neale_chunks(),
+                        ShardingPrivacy::LocalOnly,
+                    )
+                    .await;
+                    census.clone().take()
+                })
+                .await
+        })
+        .await;
+        assert_eq!(*inf.seen.lock().unwrap(), vec![Some(token)]);
+        assert_eq!(rows.len(), 1, "the extraction is a census row");
+        assert_eq!(rows[0].mechanism, GateCallMechanism::ValueExtraction);
+    }
+
+    /// A failed extraction is UNCHECKED, never "no value asserted" (ARCH
+    /// §18.1), and it records why it failed the way every failed judge call
+    /// does — so a `judge_failed_open` turn can name it.
+    ///
+    /// FAILS IF the error arm folds back into `NoValue`.
+    #[tokio::test]
+    async fn a_failed_extraction_is_unchecked_not_no_value() {
+        use crate::runtime::grounding::call_census::CallCensus;
+        use sovereign_contracts::types::JudgeFailureReason;
+
+        let inf = Extractor::new(true);
+        let census = CallCensus::new();
+        let (presence, (_, failures)) = census
+            .clone()
+            .scope(async {
+                let p = super::value_presence_of(
+                    &inf,
+                    CHARWOMAN_Q,
+                    "Mrs Neale",
+                    &neale_chunks(),
+                    ShardingPrivacy::LocalOnly,
+                )
+                .await;
+                (p, census.clone().take())
+            })
+            .await;
+        assert!(
+            matches!(presence, super::ValuePresence::Unchecked),
+            "a failed extraction must not read as no value asserted"
+        );
+        assert_eq!(failures, vec![JudgeFailureReason::Inference]);
+
+        // The control: an extractor that ANSWERS with no candidate is NoValue.
+        let none = GateMock {
+            support: Some(true),
+        };
+        assert!(matches!(
+            super::value_presence_of(
+                &none,
+                MOTHER_Q,
+                "NONE",
+                &neale_chunks(),
+                ShardingPrivacy::LocalOnly
+            )
+            .await,
+            super::ValuePresence::NoValue
+        ));
     }
 
     /// The probe is shown a window from EVERY chunk that carries the value,
