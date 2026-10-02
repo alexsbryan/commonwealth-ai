@@ -552,29 +552,32 @@ async fn a_node_in_no_mesh_keeps_its_writes_queued_until_membership_exists() {
     let record = mesh.write().await.members.remove(&me).unwrap();
     let host = super::tests::host_at(dir.path(), &mesh);
 
-    assert!(host
-        .store
-        .set(KV, "plan", bytes::Bytes::from_static(b"v1"), me)
-        .unwrap());
+    // Two rows, so the drain's one batch defers every row, not the first.
+    for k in ["plan", "notes"] {
+        assert!(host
+            .store
+            .set(KV, k, bytes::Bytes::from_static(b"v1"), me)
+            .unwrap());
+    }
 
     let out = host.pump_once().await;
     assert_eq!(
         (out.appended, out.deferred, out.refused),
-        (0, 1, 0),
+        (0, 2, 0),
         "{out:?}"
     );
     assert_eq!(
         host.store.outbox_len().unwrap(),
-        1,
+        2,
         "a deferred write stays queued"
     );
 
-    // Membership arrives, and the same row goes out.
+    // Membership arrives, and the same rows go out.
     mesh.write().await.members.insert(me, record);
     let out = host.pump_once().await;
     assert_eq!(
         (out.appended, out.deferred, out.refused),
-        (1, 0, 0),
+        (2, 0, 0),
         "{out:?}"
     );
     assert_eq!(host.store.outbox_len().unwrap(), 0);

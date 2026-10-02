@@ -541,7 +541,7 @@ async fn a_live_set_over_the_bar_seals_once_not_on_every_write() {
 
     // The bar still holds for real writes, at exactly SEAL_AFTER_OWN_OPS
     // since the mark. The padding goes straight onto the journal in one
-    // batch: the outbox drains one append per row, the slow part of this test.
+    // batch rather than through the store and its outbox.
     let journal = again.rail.journal(NS).unwrap();
     let roster = again.rail.roster(&journal).await.unwrap();
     let pad: Vec<RailAct> = (0..SEAL_AFTER_OWN_OPS - 4)

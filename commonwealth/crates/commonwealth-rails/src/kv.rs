@@ -377,47 +377,69 @@ impl KvHost {
                     continue;
                 }
             };
+            // One `append_all` per namespace: one write and one fsync for the
+            // rows rather than one of each per row (pc-rails-journal-linear).
+            // The per-row answers are the ones the row-at-a-time loop gave:
+            // a row that cannot be a payload is dropped, except that one after
+            // the first carried row stays queued when the roster refuses (the
+            // loop stopped dropping once an append had learnt that).
             let mut acked: Vec<i64> = Vec::new();
-            let mut appended_here = 0usize;
-            let mut not_in_roster = false;
+            let mut acts: Vec<RailAct> = Vec::new();
+            let mut carried: Vec<&Outboxed> = Vec::new();
+            let mut unfit: Vec<(&Outboxed, String)> = Vec::new();
+            let mut unfit_before_first = 0usize;
             for row in &rows {
-                if not_in_roster {
+                let op = &row.op;
+                match rail_kv::to_payload(&op.key, op.value.as_deref(), op.t) {
+                    Ok(payload) => {
+                        acts.push(RailAct::Record { payload });
+                        carried.push(row);
+                    }
+                    Err(e) => {
+                        if carried.is_empty() {
+                            unfit_before_first += 1;
+                        }
+                        unfit.push((row, e.to_string()));
+                    }
+                }
+            }
+            let appended = if acts.is_empty() {
+                Ok(Vec::new())
+            } else {
+                journal.append_all(acts, self.rail.signer(), &roster, None)
+            };
+            let not_in_roster = matches!(appended, Err(RailError::NotInRoster { .. }));
+            for (i, (row, error)) in unfit.iter().enumerate() {
+                if not_in_roster && i >= unfit_before_first {
                     out.deferred += 1;
                     continue;
                 }
-                let op = &row.op;
-                let payload = match rail_kv::to_payload(&op.key, op.value.as_deref(), op.t) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        warn!(target: "rails", namespace, key = %op.key, error = %e,
-                              "kv pump: this write cannot travel on the rail and was dropped");
-                        out.refused += 1;
-                        acked.push(row.id);
-                        continue;
-                    }
-                };
-                match journal.append(
-                    RailAct::Record { payload },
-                    self.rail.signer(),
-                    &roster,
-                    None,
-                ) {
-                    Ok(appended) => {
+                warn!(target: "rails", namespace, key = %row.op.key, error = %error,
+                      "kv pump: this write cannot travel on the rail and was dropped");
+                out.refused += 1;
+                acked.push(row.id);
+            }
+            let mut appended_here = 0usize;
+            match appended {
+                Ok(ops) => {
+                    for (row, appended) in carried.iter().zip(&ops) {
+                        let op = &row.op;
                         debug!(target: "rails", namespace, key = %op.key, t = op.t,
                                deleted = op.value.is_none(), seq = appended.kind.seq,
                                "kv pump: appended a local write");
                         acked.push(row.id);
-                        appended_here += 1;
                     }
-                    Err(RailError::NotInRoster { actor, .. }) => {
-                        not_in_roster = true;
-                        out.deferred += 1;
-                        debug!(target: "rails", namespace, actor = %actor, queued = rows.len(),
-                               "kv pump: this node is in no roster for this namespace yet, so its \
-                                writes stay queued");
-                    }
-                    Err(e) => {
-                        warn!(target: "rails", namespace, key = %op.key, error = %e,
+                    appended_here = ops.len();
+                }
+                Err(RailError::NotInRoster { actor, .. }) => {
+                    out.deferred += carried.len();
+                    debug!(target: "rails", namespace, actor = %actor, queued = rows.len(),
+                           "kv pump: this node is in no roster for this namespace yet, so its \
+                            writes stay queued");
+                }
+                Err(e) => {
+                    for row in &carried {
+                        warn!(target: "rails", namespace, key = %row.op.key, error = %e,
                               "kv pump: the rail refused this write, which was dropped");
                         out.refused += 1;
                         acked.push(row.id);
@@ -623,9 +645,9 @@ fn own_floor_and_mark(admission: &Admission, mine: &str) -> (u64, Option<u64>) {
 /// [`crate::RailsDaemon::run`] after it has projected the store; aborted with
 /// it.
 ///
-/// Each tick runs on the blocking pool: every journal append re-reads the
-/// journal, so a tick is synchronous I/O (a seal's snapshot was tens of
-/// seconds of it before `RingJournal::append_all`), and on an async worker it
+/// Each tick runs on the blocking pool: a journal append is synchronous file
+/// I/O and an fsync, and a seal admits the whole journal (a seal's snapshot
+/// was tens of seconds of it before `RingJournal::append_all`), and on an async worker it
 /// held the API's requests queued behind it (F13: a sandbox
 /// `/v1/mesh/status` p95 of 5.3 s through a 2,500-row cycle).
 pub async fn run_forever(host: Arc<KvHost>) {
