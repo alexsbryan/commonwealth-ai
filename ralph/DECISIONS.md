@@ -2127,6 +2127,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: split. This row closes on the mesh/ring verbs (the incident's: `mesh join`, `mesh status`, rotate, ring, guest) and merges now; `pc-cli-config-load-silent-default-base` takes the two contracts accessors and their callers, onto the `SetupConfig::load_present` this row landed, depending on this row.
 - Because: the charter's "splitting when proofs differ (`<id>-<suffix>` stays in scope)", and scope.txt's header puts a split of a listed row in scope. The proofs differ: this half is proven by a sandboxed `mesh status` that refuses; the other needs a refusal at each clap default site across the CLI siblings and the in-process callers (core, pipeline, eval, enrichment-catalog, corpus-index), a different test and a different blast. Neither half's outcome is narrowed: together they are the row's letter.
 
+**phase-c-14 · 2026-10-02 · pc-solo-durable · worker** — this commit
+- Needed: the row leaves the shape open: append before the ack in solo mode, or ack only what the pump has appended.
+- Chose: in every mode, a kv door that changed the store drains the outbox onto the journal before it answers (`KvHost::journal_outbox`, one `drain` lock shared with the tick); the tick keeps the seal check for every namespace either drain fed. No solo branch.
+- Because: one mechanism, one decider (principles 8, 10). A meshed node has the same window: a peer only receives a write after its journal append, so "a peer copy" never covers an unjournaled write. A solo-only branch would keep a second ack path alive for no reader. A write deferred for want of a roster (a joining node) stays queued and is acknowledged as before, named at debug.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13682,5 +13687,18 @@ What would falsify this: the -base row finding that the two accessors cannot ref
 clap default's documented value (an end-user-observable delta the row does not state), which goes back
 to the operator; or a mesh/ring verb found still dialling through `client_daemon_base`, which reopens
 this row rather than the split.
+
+</details>
+
+## phase-c-14 · 2026-10-02 — kv doors journal before they answer, in every mode
+
+<details><summary>reasoning, evidence, package</summary>
+
+Cost, read in both directions on `tests/kill_durable.rs` (50 door writes, sovereign-vulkan toolbox, load average 2.3, three runs each):
+
+- journal before ack: p50 695 / 527 / 968 us, p95 1065 / 881 / 1629 us; the kill test passes 3/3.
+- ack before append (PLANT): p50 210 / 192 / 202 us, p95 646 / 505 / 699 us; 3/3 red, `kv-durable/0: an acknowledged write was lost: null`.
+
+So about +0.3 to +0.8 ms per write at p50 on a near-empty journal. The cost grows with the journal, because every `RingJournal::append` re-reads it (kv.rs `run_forever`'s doc). One run at WRITES = 1,000 per namespace (load 2.5): fix p50 7,205 us, p95 13,726 us, max 25,335 us (16.2 s for 2,000 writes); plant p50 209 us, p95 255 us (0.59 s), red. A sequential bulk import through the door now pays O(journal) per row until the tick's seal bounds the journal (`SEAL_AFTER_OWN_OPS` = 2,000 own ops). Making the append itself cheaper is the rail crate's, not this row's.
 
 </details>

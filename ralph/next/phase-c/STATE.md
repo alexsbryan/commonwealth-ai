@@ -143,7 +143,7 @@ Projected waves at 3 lanes (ralph's conflict and heavy rules, simulated 2026-10-
   - PROOF: the readings, each with hash, n, host load and raw path; a miss reopens pc-partial-decline-verdict, never re-tunes the bar.
   - trial: NONE.
   LIFT: readings only. — read: pc-partial-decline-verdict's commits, sovereign/docs/RUNBOOK.md §6 — check: `svrn quality check --lane <lane>`
-- [ ] pc-solo-durable — depends [pc-pool-ready] — OUTCOME: on a solo cw-rails, a KV write it acknowledged survives a kill (operator 2026-09-25, five-programs-66: a gap with an owner, not "by design").
+- [x] pc-solo-durable — depends [pc-pool-ready] — OUTCOME: on a solo cw-rails, a KV write it acknowledged survives a kill (operator 2026-09-25, five-programs-66: a gap with an owner, not "by design").
   - finish: none directly (a phase-c bug row; phase-c is done when every row above the cut line is [x]).
   - trial: census first; NONE unless the census finds a rewrite it cannot make without one.
   - Measured in fp-solo-clients' e2e (30667d2d7): a write cw-rails had acknowledged was gone after a kill milliseconds later. It became durable only on the pump's next tick (commonwealth-rails kv.rs:52 `PUMP_INTERVAL` = 2 s). A meshed node may have a peer copy; a solo node has only this journal.
