@@ -23,8 +23,8 @@ use corpus_engine::enrichment::atlas::{
 };
 use corpus_engine::enrichment::ontology::{OntologyPolicies, OntologyTypeDecl, TypeKind};
 use corpus_engine::enrichment::pipeline::atlas::{
-    ClaimSketch, DiscourseAct, EnrichmentDepth, EntitySketch, EntityType, EpistemicStatus,
-    EntityStateSketch, EventSketch, RelationSketch, SectionExtraction,
+    ClaimSketch, DiscourseAct, EnrichmentDepth, EntitySketch, EntityStateSketch, EntityType,
+    EpistemicStatus, EventSketch, RelationSketch, SectionExtraction,
 };
 use corpus_engine::enrichment::pipeline::types::PhaseFailureKind;
 use corpus_engine::types::EmbedFn;
@@ -273,11 +273,17 @@ async fn a_state_reference_folds_into_the_declared_atom_of_its_name() {
         hamwics.len(),
         1,
         "no twin: {:?}",
-        hamwics.iter().map(|e| e.entity_type.as_str_repr()).collect::<Vec<_>>()
+        hamwics
+            .iter()
+            .map(|e| e.entity_type.as_str_repr())
+            .collect::<Vec<_>>()
     );
     assert_eq!(hamwics[0].entity_type.as_str_repr(), "mint");
     assert_eq!(step_3b.states.len(), 1);
-    assert_eq!(step_3b.states[0].entity_id, hamwics[0].id, "the state is the mint's");
+    assert_eq!(
+        step_3b.states[0].entity_id, hamwics[0].id,
+        "the state is the mint's"
+    );
 }
 
 /// The schema's escape value for a relation the recipe did not declare
