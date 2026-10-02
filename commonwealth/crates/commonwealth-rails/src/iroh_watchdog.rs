@@ -127,10 +127,18 @@ pub struct ReachPathObservation {
     pub node_id: String,
     /// Display name, for the same log line.
     pub name: String,
-    /// What membership currently believes about this peer. Recorded, NOT
-    /// gated on: the 2026-09-09 capture shows membership marks a peer Offline
-    /// ~60s after the path dies, so a term gated on "believed online" would
-    /// go blind exactly when the wedge becomes permanent.
+    /// What membership currently believes about this peer. It can only take
+    /// a path AWAY, never supply one: the 2026-09-09 capture shows membership
+    /// marks a peer Offline ~60s after the path dies, so a term that needed
+    /// "believed online" to count a loss would go blind exactly when the
+    /// wedge becomes permanent. But an Active path to a peer membership has
+    /// given up on is a stale record, not a path: iroh 1.0.2 leaves an
+    /// address Open when its connection closes (`handle_connection_close`
+    /// never abandons it) until the remote actor idles 60s past the last
+    /// dial, and every re-dial to the dead peer restarts that clock
+    /// (pc-cmnwlth-lift-flake-selfheal: 147s after a kill in one lift run).
+    /// Offline is gossip's own bound (`offline_threshold_secs`), which
+    /// re-dials to a dead peer cannot extend.
     pub believed_online: bool,
     /// The endpoint's classification, or `None` when it holds NO `remote_info`
     /// record for this peer at all — a different fact from
@@ -140,12 +148,14 @@ pub struct ReachPathObservation {
 
 impl ReachPathObservation {
     fn active_path(&self) -> Option<PeerPath> {
-        self.path.filter(|p| p.is_active())
+        self.path.filter(|p| p.is_active() && self.believed_online)
     }
 
-    /// What the log line prints for a path, including the no-record case.
+    /// What the log line prints for a path, including the no-record case
+    /// and an Active record to a peer membership holds Offline.
     fn path_label(&self) -> &'static str {
         match self.path {
+            Some(p) if p.is_active() && !self.believed_online => "stale",
             Some(p) => p.as_str(),
             None => "no-record",
         }
