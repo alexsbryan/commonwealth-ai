@@ -1,0 +1,8 @@
+unit: pc-rendezvous-stable-hash
+commits: 72c6ae870
+what: rendezvous_owner weighs (key, node) with ContentHash (BLAKE3) instead of
+  std's DefaultHasher; golden vector pins literal weights and owners.
+proof: TEST(kernel-types) exit=0, 140 pass. PLANT (DefaultHasher back) red:
+  rendezvous_owner_golden_vector left 16138146932637807834 right
+  14315033071230802710; the four older rendezvous tests stayed green under it.
+  BOUNDARY 0 violations, clone-gate 13804 = baseline; LAYER exit=0.
