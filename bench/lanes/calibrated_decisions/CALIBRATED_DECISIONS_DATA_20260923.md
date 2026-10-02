@@ -163,7 +163,7 @@ recipes cover most of them:
 | Email | `enron-sample` | — (PII: operator call before it enters training) |
 | Tabular atoms | `sf-assessor-roll` | — |
 
-New recipes copy `ingest/crates/sovereign-recipes/crs_reports/recipe.toml` (about 25 lines:
+New recipes copy `sovereign-recipes/crs_reports/recipe.toml` (about 25 lines:
 the `huggingface_dataset` acquirer with the `parquet` extractor). The Hugging
 Face acquirer sends no `HF_TOKEN`, so gated sets go through `bulk_download`,
 which does.

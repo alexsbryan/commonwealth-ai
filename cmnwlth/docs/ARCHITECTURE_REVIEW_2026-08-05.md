@@ -26,7 +26,7 @@ Static analysis on 2026-08-05 at HEAD `d3c5261d`:
 | pass | what it covered | method |
 |---|---|---|
 | HTTP surface | every route in `commonwealth-api`, request/response field parity, SSE + error shapes | read `server.rs` router registrations + all `routes_*.rs`; grepped each llama-server path string |
-| extension seams | `pub trait` + registry + feature-flag + config inventory across `cmnwlth/crates/*`, `oicp-types`, `oicp-client` | trait/impl census, `include_str!` audit, `#[non_exhaustive]` census |
+| extension seams | `pub trait` + registry + feature-flag + config inventory across `commonwealth/crates/*`, `oicp-types`, `oicp-client` | trait/impl census, `include_str!` audit, `#[non_exhaustive]` census |
 | layering + simple path | crate dependency graph, minimum viable run, config surface, integrator docs | `Cargo.toml` graph, `main.rs` startup trace, `quality/ARCH_LAYERS.toml` |
 
 Each of the three passes ran as an independent read-only agent; every
@@ -91,7 +91,7 @@ The three are not one job:
 |---|---|---|
 | `top_k` | **two lines** | `sovereign_contracts::CompletionRequest` already carries `top_k` (`quality/baselines/api/sovereign-contracts.txt:3724`) and `sovereign-inference/src/embedded/sampler.rs:394` documents that `request.top_k` overrides the picked profile. It is absent only from the HTTP struct — so the Ollama shim *builds* it at `routes_ollama.rs:190` and serde discards it at `:220`. A client setting `options.top_k` gets a silent no-op today. |
 | `frequency_penalty` / `presence_penalty` | small | The sampler already carries a presence term (`sampler.rs:431`), driven by per-mode quirks rather than by the request. Needs a contract field plus a mapping line. |
-| `stop` | **real work** | `grep -r "stop_token\|stop_sequence\|antiprompt\|stop_words" serve/crates/sovereign-inference/src/` returns nothing. The embedded engine has no stop-sequence facility at all. This is decode-loop work, not plumbing, and should not be sized with the other two. |
+| `stop` | **real work** | `grep -r "stop_token\|stop_sequence\|antiprompt\|stop_words" sovereign/crates/sovereign-inference/src/` returns nothing. The embedded engine has no stop-sequence facility at all. This is decode-loop work, not plumbing, and should not be sized with the other two. |
 
 **Whatever is not fixed should be logged.** A `debug!` naming each dropped
 field converts a §18.3 violation into an honest degrade, at the cost of one
@@ -201,8 +201,8 @@ their own unit tests; the production loader is `include_str!`
 
 ### 5.4 The wire contract is the sharpest gap
 
-**Zero `#[non_exhaustive]`** across `shared/crates/oicp-types/`, `shared/crates/oicp-client/` and
-`cmnwlth/crates/` — verified, count is 0. **No `flatten`, no
+**Zero `#[non_exhaustive]`** across `oicp-types/`, `oicp-client/` and
+`commonwealth/crates/` — verified, count is 0. **No `flatten`, no
 `deny_unknown_fields`, no catch-all map**; `serde(other)` appears exactly once
 (`capability.rs:42`, `Capability::Unknown`).
 
@@ -230,12 +230,12 @@ have** — and the discipline is already written, tested and in production.
 Root `Cargo.toml:112-116` states plainly that every crate is unpublished, and
 all inter-crate deps are `path =` (`:166-207`).
 
-- The **spec** declares itself **CC0** (`cmnwlth/docs/oicp-v0.4.md:5`).
+- The **spec** declares itself **CC0** (`commonwealth/docs/oicp-v0.4.md:5`).
 - The **only implementation** is **AGPL-3.0-or-later** (`Cargo.toml:122`),
-  which `cmnwlth/ARCHITECTURE.md:32` still describes as Apache 2.0.
+  which `commonwealth/ARCHITECTURE.md:32` still describes as Apache 2.0.
 - `oicp-conformance` — whose own manifest says *"A conforming third-party host
   can copy this crate wholesale"* — is `publish = false`, lives inside
-  `cmnwlth/crates/`, and is referenced by nothing in CI.
+  `commonwealth/crates/`, and is referenced by nothing in CI.
 - `oicp-client`, billed as the thin pure-HTTP client, depends on
   `sovereign-contracts`: **63 traits / 221 structs / 102 enums**
   (`quality/baselines/api/sovereign-contracts.txt`). Adopting it means
@@ -246,11 +246,11 @@ all inter-crate deps are `path =` (`:166-207`).
 
 ### 5.6 Version negotiation does not exist
 
-`shared/crates/oicp-types/src/version.rs` is 19 lines: one `pub const OICP_VERSION` plus a
+`oicp-types/src/version.rs` is 19 lines: one `pub const OICP_VERSION` plus a
 test asserting it equals itself. `oicp-client` never reads
 `manifest.oicp_version` **(single-source)**. Negotiation is entirely
 structural — `fetch_manifest` returns `Option` and `None` means "degrade to
-v0.3 defaults" (`shared/crates/oicp-client/src/lib.rs:498-504`), so a 500 from a v0.4 host
+v0.3 defaults" (`oicp-client/src/lib.rs:498-504`), so a 500 from a v0.4 host
 is indistinguishable from a v0.3 host.
 
 This is a deliberate and defensible reading of the spec's *"feature presence,
@@ -450,9 +450,9 @@ To be fixed by whoever next touches these files:
 |---|---|
 | `ARCHITECTURE.md:962` — `commonwealth daemon start/stop/status` | one variant, `Start` (`main.rs:121-124`) |
 | `ARCHITECTURE.md:900` — a `[fairness]` config table | deleted from the struct (`commonwealth-core/src/config.rs:6-11`) |
-| `sovereign/SYSTEM_OVERVIEW.md:201` — "`docs/oicp-v0.3.md` is the canonical OICP spec" | `shared/crates/oicp-types/src/lib.rs:5` — v0.4 is canonical. **Fixed 2026-08-05 as part of this review.** |
-| `shared/crates/oicp-types/Cargo.toml` description — "OICP v0.2" | implements v0.4.0 (`version.rs:5`) |
-| `cmnwlth/docs/` carries four overlapping OICP specs (v0.2, v0.3, v0.4, unversioned) totalling 1,781 lines | no "read this one" pointer |
+| `sovereign/SYSTEM_OVERVIEW.md:201` — "`docs/oicp-v0.3.md` is the canonical OICP spec" | `oicp-types/src/lib.rs:5` — v0.4 is canonical. **Fixed 2026-08-05 as part of this review.** |
+| `oicp-types/Cargo.toml` description — "OICP v0.2" | implements v0.4.0 (`version.rs:5`) |
+| `commonwealth/docs/` carries four overlapping OICP specs (v0.2, v0.3, v0.4, unversioned) totalling 1,781 lines | no "read this one" pointer |
 | `contrib/systemd/commonwealth.service:9` — `ExecStop=… daemon stop` | no such subcommand |
 | `contrib/install.sh:9` — `github.com/commonwealth-rs/commonwealth` | not this repository |
 

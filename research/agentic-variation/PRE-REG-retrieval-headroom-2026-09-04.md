@@ -24,7 +24,7 @@ which.
 
 ## What is already known — the headroom, from the committed baselines
 
-Aggregate of `bench/lanes/*/baselines/*-prod-isolated/latest.json` as of
+Aggregate of `sovereign/bench/*/baselines/*-prod-isolated/latest.json` as of
 2026-09-04. `src`/`fact` are the mean of per-question `source_score.ratio` and
 `fact_score.ratio`; `<1` counts questions short of full marks. `search_s` is
 the sum of recorded `search_ms`.
@@ -168,7 +168,7 @@ than it looks.
 
 1. Record HEAD sha. Confirm daemon up, both corpora indexed
    (`sovereign doctor`).
-2. **P1:** `sovereign bench all --bench-root bench/lanes --filter sep
+2. **P1:** `sovereign bench all --bench-root sovereign/bench --filter sep
    --prod-pipeline --isolate --update-baseline`, same for `wikipedia`. Commit
    the dated snapshots.
 3. **P2:** run C0 twice; diff per-question ratios across all eight banks. Void

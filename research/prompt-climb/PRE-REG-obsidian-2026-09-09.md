@@ -15,7 +15,7 @@ surface for the per-recipe product later.
 
 ## Why this golden (room to climb)
 
-Baseline 2026-09-09, `bench/lanes/obsidian/baselines/golden/latest.json`:
+Baseline 2026-09-09, `sovereign/bench/obsidian/baselines/golden/latest.json`:
 
 | axis | matched/expected | named misses |
 |---|---|---|

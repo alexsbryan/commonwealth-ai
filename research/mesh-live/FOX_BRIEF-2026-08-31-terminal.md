@@ -17,7 +17,7 @@ boundary. Two claims are therefore still untested against reality:
 
 Note what is NOT the point: `ServingLocus::ForwardsOffBox` is passed to
 `OicpProvider::resolved()` **by construction** ("a terminal always passes
-ForwardsOffBox" — `shared/crates/oicp-client/src/lib.rs:1587`), so the enum is already right
+ForwardsOffBox" — `oicp-client/src/lib.rs:1587`), so the enum is already right
 co-located. What a second machine adds is that the bytes really travel.
 
 ## Do not disturb this host's real node
@@ -171,7 +171,7 @@ binding itself.
 
 ## F8 — local_only is REFUSED, and this is the new bar
 
-A present OICP envelope defaults to `LocalOnly` (`shared/crates/oicp-types/src/requirements.rs:198`).
+A present OICP envelope defaults to `LocalOnly` (`oicp-types/src/requirements.rs:198`).
 Sent explicitly here so the intent is unambiguous:
 
     curl -s -i http://127.0.0.1:9771/v1/chat/completions \

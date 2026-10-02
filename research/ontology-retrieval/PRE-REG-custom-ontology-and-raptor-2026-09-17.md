@@ -74,7 +74,7 @@ Five objections shape the design:
   97%. They also ran before eb3681d1e fixed the question classifier and the
   unembedded atoms.
 - **The one large judge gap is not on the production path.** It is 52% vs 32%,
-  n=25 (`bench/lanes/HISTORY.md:53-61`), and its truth set was derived from
+  n=25 (`sovereign/bench/HISTORY.md:53-61`), and its truth set was derived from
   the atoms themselves.
 - **RAPTOR is unproven.**
   - A "+8/+10pts theme coverage" claim has no artifact behind it (55ad1d573).
@@ -133,15 +133,15 @@ narrated (principle 6).
 - **These reach answers today:**
   - Declared types and attributes are rendered into the atom text that the walk
     and atom-enum retrieve (`render_atom_entry` in
-    `ingest/crates/corpus-engine/src/enrichment/atlas/context.rs`).
+    `corpus-engine/src/enrichment/atlas/context.rs`).
   - Identity keys merge atoms at build time.
 - **These do not reach answers:**
   - **`patterns`** (for example circular flow) are detected at build and written
     to `atlas/pattern_findings.json`
-    (`ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs:501-503`). Nothing in
+    (`corpus-engine/src/enrichment/atlas/writer.rs:501-503`). Nothing in
     sovereign-core reads that file.
   - **`change` (supersession)** feeds build-time tension folding
-    (`ingest/crates/corpus-engine/src/enrichment/atlas/analysis/tension_fields.rs:90-101`).
+    (`corpus-engine/src/enrichment/atlas/analysis/tension_fields.rs:90-101`).
     None of the 14 edge kinds (`corpus-engine-vocab/src/edges.rs`) is a
     supersedes edge.
   - **Declared tension.** The `tension` row walks `Tension` and `OpposesIn`,
@@ -161,7 +161,7 @@ Its K3 is narrated only if check A3 shows reach.
 
 **Fine print is the stage domain, and it splits at the same line** (operator,
 2026-09-19; it replaces Hollinger, which replaced ANS on 2026-09-18). The
-`contracts` template (`ingest/crates/sovereign-recipes/_templates/ontology-v1/contracts/recipe.toml`)
+`contracts` template (`sovereign-recipes/_templates/ontology-v1/contracts/recipe.toml`)
 declares `defined_term` and `obligation` (deontic); the author adds `service`,
 `data_type`, `recipient` and `purpose`. Types and attributes are rendered into
 atom text and reach answers today, so fine print's K0, K1 and K2 run on
@@ -330,7 +330,7 @@ Deviations, never silently.
 The arc is authored on camera, so its record is data.
 
 - **Authoring path.** Declarations start from
-  `ingest/crates/sovereign-recipes/_templates/ontology-v1/<domain>/recipe.toml` and use the
+  `sovereign-recipes/_templates/ontology-v1/<domain>/recipe.toml` and use the
   product's own steps: `svrn recipe new --ontology`, edit, `svrn recipe validate`.
   They are adapted from the domain and the corpus's table of contents only,
   before any question exists. Gaps known now: the numismatics template has no
@@ -385,7 +385,7 @@ the full chat pipeline, so it is the production path without the flag.)
 | **closed-book** | synthesis with no retrieval | same |
 | **bare** | `SOVEREIGN_ATLAS_GROUNDING=0 SOVEREIGN_ATOM_ENUM=0 SOVEREIGN_ATOM_ENUM_OVERVIEW=0` | same |
 | **bare, deep pool** | bare with `--limit 80` | same |
-| **ablation** | generic atlas: the same corpus built with no `[enrichment.ontology]` (the `custom_atlas` v0 path, `ingest/crates/corpus-engine/src/recipe_ontology/docs/v0.md`), walk and atom-enum on | the walk over an atlas copy with no `Summary` atoms |
+| **ablation** | generic atlas: the same corpus built with no `[enrichment.ontology]` (the `custom_atlas` v0 path, `corpus-engine/src/recipe_ontology/docs/v0.md`), walk and atom-enum on | the walk over an atlas copy with no `Summary` atoms |
 | **full** | custom ontology, walk and atom-enum on (`quality/env-flags.toml:248`, `:304`, `:311`) | the same copy after `svrn enrich summary-atoms` |
 | **oracle** | bare, against a corpus holding only the attesting passages | the held-out plot summary as the only context |
 
@@ -445,7 +445,7 @@ pilot plants a fault for each one and watches it go red.
 - **A1.** The authoring record exists and was committed before the bank was
   written.
 - **A2. Typed reach.** Recall of each declared type against the truth
-  vocabulary, in the `ingest/crates/sovereign-recipes/wessex-hoard/truth.json` shape. A type
+  vocabulary, in the `sovereign-recipes/wessex-hoard/truth.json` shape. A type
   under 0.5 is not named on stage.
 - **A3. Primitive reach.** For each K1–K3 question, whether a declared type,
   attribute, grade, pattern finding or supersession appears on the evidence
@@ -519,7 +519,7 @@ no arm moved is reported with its implementation-reach annotation.
 
 ## What the study must emit, so the demo is a rendering
 
-`bench/lanes/sep_atlas/map-conversion-rung6/compare.py` is extended; no
+`sovereign/bench/sep_atlas/map-conversion-rung6/compare.py` is extended; no
 second scorer is written. It emits:
 
 - **Three-way side-by-side per question** (bare, generic, custom; for books,
@@ -619,7 +619,7 @@ Corpora and derived truth live in a gitignored data directory that the scripts
 regenerate. ODbL-derived truth carries share-alike if published; the scripts
 that derive it do not. Each recipe records its SPDX id in `license`.
 Restricted-text corpora set `scope`, `mesh_sharing` and `query_sharing`
-(`ingest/crates/corpus-engine/src/recipe.rs:789-816`). The side-by-side renderer reads
+(`corpus-engine/src/recipe.rs:789-816`). The side-by-side renderer reads
 `query_sharing`: when it is false, the renderer withholds snippets and says so.
 
 ## Non-goals (diagnostics, deferred until a result needs explaining)
@@ -722,7 +722,7 @@ the count of rows on every other route, by name. Verdicts: `passed` when every
 scored row in every retrieving arm is grounded, `failed` naming the question
 ids otherwise, `could-not-judge` when a row carries no route at all, and
 `failed` beats `could-not-judge` when both are present. The matching exclusion
-in `bench/lanes/sep_atlas/map-conversion-rung6/compare.py`: a question
+in `sovereign/bench/sep_atlas/map-conversion-rung6/compare.py`: a question
 ungrounded in ANY retrieving arm is excluded from EVERY arm and counted per
 category as `excluded_ungrounded_route`, modelled on the closed-book exclusion
 beside it. A row with no route at all is `unrouted` and is NOT excluded —
