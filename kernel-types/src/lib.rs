@@ -99,6 +99,10 @@ pub mod answer;
 pub mod attribution;
 pub mod conformance;
 pub mod custody;
+/// The env-prefix mirror (`promote_legacy_env`). Here, not in
+/// `sovereign-contracts`, because cw-rails reads `SOVEREIGN_*` vars too and
+/// may name no sovereign-* crate; the kernel is the one home both may name.
+pub mod env_bridge;
 pub mod hardware;
 pub mod hash;
 pub mod ids;
