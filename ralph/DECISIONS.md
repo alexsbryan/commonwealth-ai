@@ -2058,6 +2058,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: `probe_refusal` probes a bare id through the client when the queue declares its own `worker_bin`; with no declared client (opencode), a bare id is still refused. The loopback refusal is unchanged. No row or queue edit.
 - Because: the model-name grammar belongs to the client that takes the name (principle 12), not to the probe. Rewriting the roster to a fake `anthropic/claude-opus-5-5` would hand the shim an id `claude -p --model` does not know. Boundary gate: unchanged, no Rust in this commit.
 
+**phase-c-4 · 2026-10-01 · pc-removed-env-warn · worker** — 5b6e8bbba
+- Needed: a home for `promote_legacy_env` that cw-rails can call. The row's "a directly launched serve, cw-rails or pod worker skips the SVRNMESH_ bridge" is true for all three, and cw-rails' closure reads SOVEREIGN_ADVERTISE_ADDR, _MESH_STRICT_AUTH and _IROH_RELAY_ONLY. The bridge lived in sovereign-contracts, which `[[forbid]] commonwealth-rails → sovereign-*` keeps cw-rails off.
+- Chose: move it whole to `kernel_types::env_bridge` (re-exported at `sovereign_contracts::rebrand`), with the removed-var table beside it; `promote_legacy_env_as(program)` so cw-rails speaks as itself.
+- Because: kernel-types is the one crate already reachable from sovereign-contracts, commonwealth-rails and sovereign-serve, with `allow = []` and a std-only body: zero new edges. host-kit was the other candidate and is out twice: sovereign-contracts' package_leaf allow list is oicp-types, kernel-types, sovereign-time (quality/ARCH_LAYERS.toml:888), and host-kit "names no program's vocabulary" while the bridge's prefixes are vocabulary. Precedent: `kernel_types::member` moved here for the same two-owner reason (fp-46). BOUNDARY ✓ and clone-gate 13826 = baseline after the move.
+
 **phase-b-113 · 2026-10-02 · pb-distribution-ship-gate · operator, escalating only the e2e latency; supersedes phase-b-111** — this commit
 - Needed: after F13 the gate read three alarms (095a15c09): chat-ask 18/19 (q2's audit 14 calls > 12 on run 3 of 3), knowledge-gym 05_noresults_honesty 0/3 (2 lookups > 1, 1/3 at the flip), and the e2e plain turn at 24,620 / 29,238 ms vs the 13,397 ms main-era baseline. The method escalates each to ABAB n=3 against B (main 18f783f44). A director session ruled all three escalated with the deployed daemon stopped (phase-b-111) before the operator answered; its window never opened (the seed copy was refused, the node was restarted, ce03d5135).
 - Chose (operator: "Only the e2e latency"): the e2e is escalated, C vs B, n=3 ABAB, run by the seat on a minimal seed (the deployed config.toml alone, sanitized as seed.sh does and with [watched_folders] dropped, so neither side indexes during the reading), one sandbox daemon at a time on sandbox ports, the deployed node up and idle. chat-ask's overrun and knowledge-gym's fixture are ruled on their readings and filed above phase-c's cut line: pc-chat-ask-audit-calls, pc-knowledge-gym-noresults. phase-b-111 is superseded where they differ.
@@ -13340,6 +13345,16 @@ Falsified if the classifier refuses seed.sh or run.sh under an explicit allow ru
 Reproduced: `scripts/ralph.py:905` returned the refusal for any id without `/`; `_dispatch_model` (ralph.py ~1860) turns a refusal for every roster entry into the halt. After the fix, `probe_model('claude-opus-5-5', paths_for(pool --queue phase-c))` returned `(True, '')` through `scripts/ralph-claude-shim.sh` against the live plan. New test `ProbeTests.test_a_declared_worker_bin_probes_a_bare_id_through_itself` fails with the old ralph.py (FAILED failures=1) and passes with the new; the full `scripts/tests/ralph.py` is 158 tests OK.
 
 Falsified if: a queue that declares a worker_bin which does route through opencode config (a wrapper around opencode with a loopback provider) gets probed against the mesh daemon. Then the loopback check must consult the client, not the id's shape.
+
+</details>
+
+## phase-c-4 · 2026-10-01 — The env-prefix bridge lives in kernel-types
+
+<details><summary>reasoning, evidence, package</summary>
+
+kernel-types' charter reads "identity and provenance", and an env mirror is neither; this is the stretch the choice accepts. It already carries `hardware_fingerprint` and the instrument registry, so the charter was not strict before. The brand prefix is read by commonwealth crates as well as sovereign ones, so it is owned by no single product domain, which is the kernel's actual admission rule (lib.rs: "owned by no product domain").
+
+Falsified if: an operator rules the kernel identity-only. The alternative then is a new neutrally named leaf for process-start mechanics (an operator decision per §0, "any other new leaf"), or host-kit with sovereign-contracts' allow list widened and the prefixes passed in by every caller.
 
 </details>
 
