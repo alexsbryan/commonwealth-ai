@@ -274,8 +274,10 @@ because they are fields of the same object). A gated release whose
 text declines the asked fact (`grounding::declines_asked_fact`) while
 every holding is Corpus+Verified is also `CannotKnowFromHere`: it
 restated adjacent facts and answered nothing asked, and keeps those
-holdings and citations. A contrast or general-knowledge pivot after
-the decline, or any unverified holding, keeps the derivation above.
+holdings and citations. The decline must open the text (a trailing
+caveat after a full answer is not one); a contrast or general-knowledge
+pivot that goes on to assert a new value, or any unverified holding,
+keeps the derivation above.
 
 ### 4.5 `citations` — the gate's passages, made openable
 

@@ -148,3 +148,60 @@ fn the_decline_predicate_reads_absence_phrasings_and_vetoes_answer_pivots() {
     // An answer with no decline in it.
     assert!(!declines_asked_fact("The partner rate is $412 per hour."));
 }
+
+/// The pc-partial-decline-verdict-measure reading's texts, verbatim
+/// (`partial_decline_fixtures.jsonl`; `turns` names the run and turn id
+/// under that row's raw), each with the direction it must read. Returns the
+/// turns of `class` the predicate misreads; panics on an empty class, so a
+/// fixture file that lost its rows cannot pass.
+fn misread(class: &str) -> Vec<String> {
+    use crate::runtime::grounding::declines_asked_fact;
+    let rows: Vec<serde_json::Value> = include_str!("partial_decline_fixtures.jsonl")
+        .lines()
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).expect("fixture row is JSON"))
+        .filter(|r| r["class"] == class)
+        .collect();
+    assert!(!rows.is_empty(), "no fixtures of class {class}");
+    rows.iter()
+        .filter(|r| declines_asked_fact(r["text"].as_str().unwrap()) != r["declines"])
+        .flat_map(|r| r["turns"].as_array().unwrap().iter())
+        .map(|t| t.as_str().unwrap().to_string())
+        .collect()
+}
+
+/// "…but her given name never appears", "however, no distinct fee schedule
+/// was established", "but you might have it in a separate engagement
+/// letter": a contrast that declines again or redirects is not an answer.
+#[test]
+fn a_contrast_that_continues_the_decline_is_still_a_decline() {
+    assert_eq!(misread("contrast"), Vec::<String>::new());
+}
+
+/// "Not in your sources, but from general knowledge… the agreement as
+/// described here does not include a figure for paralegal time."
+#[test]
+fn a_general_knowledge_signpost_with_no_value_after_it_is_still_a_decline() {
+    assert_eq!(misread("gk_signpost"), Vec::<String>::new());
+}
+
+/// "does not set an hourly rate … No mention is made of a rate": the
+/// absence shape, not a longer phrase list.
+#[test]
+fn an_absence_statement_in_any_wording_is_a_decline() {
+    assert_eq!(misread("coverage"), Vec::<String>::new());
+}
+
+/// A full answer that ends "…under load are not specified in these
+/// passages" declined a side detail, and keeps the verdict it earned.
+#[test]
+fn a_trailing_caveat_after_a_full_answer_is_not_a_decline() {
+    assert_eq!(misread("trailing_caveat"), Vec::<String>::new());
+}
+
+/// The citation multiquote's "The passages do not answer: <part>" sits
+/// beside a part it grounded, and that part is often the asked fact
+/// ("Brett Street"), so the render is not read as a decline either way.
+#[test]
+fn the_citation_multiquote_render_is_not_read_as_a_decline() {
+    assert_eq!(misread("multiquote_template"), Vec::<String>::new());
+}

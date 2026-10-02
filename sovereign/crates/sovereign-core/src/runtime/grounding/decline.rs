@@ -90,35 +90,53 @@ pub fn released_pure_decline(text: &str) -> bool {
     answer_declines(&stripped)
 }
 
-/// "The memo does not mention a paralegal rate": the sources lack the asked
-/// fact, said by a text that may go on to restate what they do hold. Read
-/// only by [`declines_asked_fact`], where verified holdings bound it.
-const ABSENCE_STATEMENTS: &[&str] = &[
-    "does not mention",
-    "doesn't mention",
-    "do not mention",
-    "don't mention",
-    "does not specify",
-    "doesn't specify",
-    "do not specify",
-    "don't specify",
-    "does not state",
-    "doesn't state",
-    "do not state",
-    "don't state",
-    "does not say",
-    "doesn't say",
-    "do not say",
-    "don't say",
-    "not mentioned",
-    "not specified",
-    "not stated",
-    "no mention of",
+/// An absence statement is a negator followed, within [`ABSENCE_WINDOW`]
+/// words of the same clause, by what a source tells: "does not mention",
+/// "no hourly rate specified", "no mention is made", "never appears",
+/// "contain no information". Read only by [`declines_asked_fact`], where
+/// verified holdings bound it.
+const NEGATORS: &[&str] = &["not", "no", "never"];
+/// Stems, matched as word prefixes ("specif" is specify / specified).
+/// "answer" is left out on purpose: the citation multiquote renders "The
+/// passages do not answer: <part>" only beside a part it grounded
+/// (`citation.rs`), and that part is often the asked fact.
+const TELLING: &[&str] = &[
+    "mention",
+    "specif",
+    "state",
+    "say",
+    "said",
+    "set",
+    "give",
+    "given",
+    "includ",
+    "contain",
+    "appear",
+    "list",
+    "provid",
+    "establish",
+    "information",
+    "figure",
+    "record",
+    "name",
+    "detail",
+    "data",
 ];
+/// "no distinct fee schedule was established": the negator may sit four
+/// words ahead of what it negates.
+const ABSENCE_WINDOW: usize = 5;
 
-/// A contrast after the decline turns it into a preamble to an answer
-/// ("the sources don't give the date, but the war ended in 1945").
+/// A contrast, or a general-knowledge signpost, may open an answer ("the
+/// sources don't give the date, but the war ended in 1945") or continue the
+/// decline ("but her given name never appears"). [`pivot_answers`] reads
+/// which.
 const ANSWER_PIVOTS: &[&str] = &[" but ", "however", "though", "instead", "nevertheless"];
+const GK_SIGNPOST: &str = "from general knowledge";
+
+/// The decline has to open the answer: it begins within the first two
+/// sentences. A caveat at the end of a full answer ("…under load are not
+/// specified in these passages") declines a side detail, not the asked fact.
+const LEAD_SENTENCES: usize = 2;
 
 /// Does a released text decline the asked fact, whatever adjacent facts it
 /// restates? The ledger's partial-decline test (pc-partial-decline-verdict):
@@ -126,22 +144,137 @@ const ANSWER_PIVOTS: &[&str] = &[" but ", "however", "though", "instead", "never
 /// citing the partner and associate rates while declining the paralegal one
 /// fails although it answered nothing that was asked.
 ///
-/// A text that declines and then answers is not a decline: a general-
-/// knowledge pivot vetoes it as in [`released_pure_decline`], and so does a
-/// contrast anywhere after the first decline phrase. Pure — no model, no env.
+/// Three shapes decide it, none of them a phrase list: the decline (a zoo
+/// phrase or an absence statement) opens the text; and no contrast after
+/// it, nor any general-knowledge signpost, opens a clause that asserts a
+/// value the text had not already named and that does not state an absence
+/// itself. A text that declines and then answers ("…but I think it is
+/// $150", "from general knowledge: Canberra") is not a decline. Pure — no
+/// model, no env.
 pub(crate) fn declines_asked_fact(text: &str) -> bool {
-    let stripped = strip_gk_caveat(text).to_lowercase();
-    if stripped.contains("from general knowledge") {
-        return false;
-    }
-    let Some(at) = DECLINES
-        .iter()
-        .chain(ABSENCE_STATEMENTS)
-        .filter_map(|p| stripped.find(p))
-        .min()
-    else {
+    let text = strip_gk_caveat(text);
+    // ASCII lowering keeps byte offsets, so `low` and `text` index alike.
+    let low = text.to_ascii_lowercase();
+    let Some(at) = decline_at(&low) else {
         return false;
     };
-    let after = &stripped[at..];
-    !ANSWER_PIVOTS.iter().any(|p| after.contains(p))
+    let sentences = sentences_through(&low[..at]);
+    if sentences > LEAD_SENTENCES {
+        tracing::debug!(
+            target: "epistemic.ledger",
+            decline_at = at,
+            sentences,
+            "decline does not open the text: not a decline of the asked fact"
+        );
+        return false;
+    }
+    let contrast = ANSWER_PIVOTS.iter().flat_map(|p| {
+        low[at..]
+            .match_indices(p)
+            .map(move |(i, m)| at + i + m.len())
+    });
+    let signpost = low.match_indices(GK_SIGNPOST).map(|(i, m)| i + m.len());
+    let answered_at = contrast
+        .chain(signpost)
+        .find(|&start| pivot_answers(&text, &low, start));
+    if let Some(pivot_end) = answered_at {
+        tracing::debug!(
+            target: "epistemic.ledger",
+            decline_at = at,
+            pivot_end,
+            "a pivot after the decline asserts a new value: declines then answers"
+        );
+    }
+    answered_at.is_none()
+}
+
+/// Byte offset of the first decline: a zoo phrase or an absence statement.
+fn decline_at(low: &str) -> Option<usize> {
+    DECLINES
+        .iter()
+        .filter_map(|p| low.find(p))
+        .chain(absence_at(low))
+        .min()
+}
+
+/// Byte offset of the first absence statement's negator. Clauses end at
+/// sentence punctuation, a colon or a line break; markdown emphasis
+/// ("do **not** contain") is not a word.
+fn absence_at(low: &str) -> Option<usize> {
+    runs(low, |c| !matches!(c, '\n' | '.' | ';' | ':' | '!' | '?')).find_map(|(start, clause)| {
+        let words: Vec<(usize, &str)> = runs(clause, |c| {
+            c.is_alphanumeric() || c == '\'' || c == '\u{2019}'
+        })
+        .collect();
+        words.iter().enumerate().find_map(|(i, &(pos, w))| {
+            let negates = NEGATORS.contains(&w) || w.ends_with("n't") || w.ends_with("n\u{2019}t");
+            let tells = words[i + 1..]
+                .iter()
+                .take(ABSENCE_WINDOW)
+                .any(|(_, t)| TELLING.iter().any(|s| t.starts_with(s)));
+            (negates && tells).then_some(start + pos)
+        })
+    })
+}
+
+/// Sentences begun in `prefix`, the one the decline sits in included.
+fn sentences_through(prefix: &str) -> usize {
+    prefix
+        .split(|c| c == '\n' || c == '?' || c == '!')
+        .flat_map(|s| s.split(". "))
+        .filter(|s| !s.trim().is_empty())
+        .count()
+        .max(1)
+}
+
+/// Does the clause a pivot opens at `start` answer? It does when it asserts
+/// a value — a number, or a capitalised word mid-sentence — that the text
+/// had not named before the pivot, and does not itself state an absence.
+fn pivot_answers(text: &str, low: &str, start: usize) -> bool {
+    let end = low[start..]
+        .find(['\n', ';', '?', '!'])
+        .into_iter()
+        .chain(low[start..].find(". "))
+        .min()
+        .map_or(low.len(), |i| start + i);
+    if decline_at(&low[start..end]).is_some() {
+        return false;
+    }
+    let named: std::collections::HashSet<&str> = words(&low[..start]).map(|(_, w)| w).collect();
+    words(&text[start..end]).any(|(i, w)| {
+        let lw = &low[start + i..start + i + w.len()];
+        let fresh = !named.contains(lw);
+        let number = w.chars().any(|c| c.is_ascii_digit());
+        let mid_sentence = text[..start + i]
+            .trim_end()
+            .chars()
+            .last()
+            .is_some_and(|c| c.is_alphanumeric() || c == ',');
+        let name = w.starts_with(|c: char| c.is_ascii_uppercase()) && w != "I" && mid_sentence;
+        fresh && (number || name)
+    })
+}
+
+/// ASCII alphanumeric runs with their byte offsets.
+fn words(s: &str) -> impl Iterator<Item = (usize, &str)> {
+    runs(s, |c| c.is_ascii_alphanumeric())
+}
+
+/// Maximal runs of chars `keep` accepts, each with its byte offset in `s`.
+fn runs<'a>(
+    s: &'a str,
+    keep: impl Fn(char) -> bool + 'a,
+) -> impl Iterator<Item = (usize, &'a str)> + 'a {
+    let mut begun: Option<usize> = None;
+    s.char_indices()
+        .map(Some)
+        .chain([None])
+        .filter_map(move |ci| match ci {
+            Some((i, c)) if keep(c) => {
+                begun.get_or_insert(i);
+                None
+            }
+            Some((i, _)) => begun.take().map(|b| (b, &s[b..i])),
+            None => begun.take().map(|b| (b, &s[b..])),
+        })
 }
