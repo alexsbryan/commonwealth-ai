@@ -43,6 +43,8 @@ A few more are CLI-only — registered in the tool surface but not exposed over 
 
 The tools were renamed in a CLI refactor, and the old names still work as aliases: `symbol_lookup` → `symbols`, `find_callers` → `callers`, `find_callees` → `callees`, `blast_radius` → `blast`. `tools/list` advertises the old names as deprecated mirrors, and a call under an old name is rewritten before lookup. New code should use the short names.
 
+`spec` and `drift` appear in `tools/list` only when the workspace has a spec: an `ARCHITECTURE.md` at its root, or a `.sovereign/features/<name>/spec.md`. Without one they are not advertised, and a client that already knows the names can still call them.
+
 ## Staying fresh
 
 You don't re-index by hand. The daemon watches every registered project and rebuilds when it needs to — on a file save, when git HEAD moves under it (a branch switch or a pull), and once on startup. A rebuild writes to a staging DB under a cross-process lock and swaps it in atomically, so a query in flight always sees a complete graph — even a rebuild interrupted by a daemon restart cannot empty the live graph. A rebuild that hangs longer than 45 minutes is killed by a watchdog and recorded as a failure, and every cycle appends to `~/.svrnmesh/logs/watch-<corpus>-scip.log` (view with `sovereign project watch logs <corpus> scip`).
