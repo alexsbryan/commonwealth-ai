@@ -145,19 +145,20 @@ from one table (`sovereign_cli_base::deprecation::RETIRED`), and exits 2; nothin
 | `svrn project plan` | `svrn plan validate <path>` |
 | `svrn amend design`, `svrn project amend design` | `svrn amend` amends CHARTER.md |
 | `svrn drift accept` | `svrn drift detect --code <path> --narrative <doc>…` |
+| `svrn drift <feature-id>`, and any `svrn drift <x>` but `detect` (a typo of `detect` lands here) | `svrn drift detect --code <path> --narrative <doc>…` |
 | `svrn audit <feature-id> [--archive]` | `svrn audit`, the project-wide rollup |
+| `svrn milestone <feature-id> <N>` (without `--project`) | `svrn milestone --project <N>` |
+| `svrn plan` (no subcommand; exit 0 before pc-retired-verbs-named) | `svrn plan validate <path>` |
+| `svrn project found` (exit 0 before pc-retired-verbs-named) | `svrn init` + a committed spec; `svrn charter` |
 
 Others, unchanged by that table:
 - `svrn mobile serve|status|pair`: "svrn mobile: the mobile host was the sovereign-server binary,
   which was deleted; no mobile host ships", exit 1. `status` and `pair` no longer write
   `~/.svrnmesh/mobile-host.toml` (4c1f684fa).
-- `svrn plan` (compose): "note: `svrn plan` has been retired." and points to
-  `svrn plan validate <path>`, exit 0 (bdd22b846).
 - `svrn pipeline pod <x>`: "moved to `svrn mesh pod`. Run `svrn mesh pod <x>`.", exit 2 (93f66f8b4).
 - `svrn corpus extract-entities --download-model` points to `svrn mesh fetch-ner`, exit 2
   (c4f8726e4).
-- `svrn milestone <feature-id> <N>` ("requires --project") and `svrn notes promote` ("Unknown flag")
-  give generic usage errors (2ea67a59f).
+- `svrn notes promote` ("Unknown flag") gives a generic usage error (2ea67a59f).
 - `svrn project audit` no longer prints the "Share your recipe" footer (933190f79).
 
 ### Moved to another binary (same spelling)
