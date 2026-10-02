@@ -1,0 +1,7 @@
+unit: pc-cmnwlth-lift-flake-selfheal
+commits: 893f1229c (the watchdog's peer-path term counts an Active record to a peer membership holds Offline as a lost path; the smoke's 150s budget re-derived in its comment)
+what: the watchdog was the wrong side. iroh 1.0.2 leaves a closed connection's address Open until its remote actor idles 60s past the
+  last dial, so the loss rode the founder's own re-dials (147s in phase-c-7's n6). Gossip's Offline mark (offline_threshold_secs, 60s)
+  now bounds it: in 10/10 lifts the loss logged now="stale" at Offline, 68-69s after the kill, and the rebuild landed 5s later.
+  Behaviour delta on real members: the one-shot rebuild starts from the Offline mark instead of iroh's record drop.
+checks: CLEAN, LINT, TEST(commonwealth-rails) 193/0, BOUNDARY ✓ (0 violations, clone-gate 13820 = baseline), PLANT red, LIFT(cmnwlth) 10/10 RUN green

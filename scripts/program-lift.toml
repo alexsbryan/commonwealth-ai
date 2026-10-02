@@ -246,10 +246,12 @@ steps = [
   { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/forget", json = { mesh = "cw-rails-lift-second" }, path = "forgot", var = "FORGOT", fail = "POST /v1/mesh/forget did not drop the parked mesh: ${BODY}" },
   { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/leave", json = {}, path = "left", var = "LEFT", fail = "POST /v1/mesh/leave did not leave: ${BODY}" },
   # The endpoint's self-heal (pb-rails-parity): the joiner is lost, and the
-  # founder's watchdog, having held a path to it, rebuilds its endpoint. iroh
-  # drops a lost peer's path record after its remote actor idles for 60s
-  # (iroh 1.0.2 remote_state.rs:73), which is when the loss is visible; 150s
-  # covers that and the escalation after it.
+  # founder's watchdog, having held a path to it, rebuilds its endpoint. The
+  # watchdog counts the path lost once gossip marks the joiner Offline (60s
+  # without contact, `offline_threshold_secs`, on a 10s round), not when iroh
+  # drops its record, which every re-dial postpones
+  # (pc-cmnwlth-lift-flake-selfheal); with the 1s poll and grace above the
+  # rebuild lands about 75s after the kill, and 150s is twice that.
   { do = "kill", id = "daemon", fail = "the joiner was not running, so there was no peer to lose" },
   { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/status", path = "self_reachability.last_recovery[action=endpoint_rebuild].ok", var = "HEALED", timeout = 150, alive = "founder", fail = "the founder's watchdog did not attempt an endpoint rebuild within 150s of losing the joiner (see ${SANDBOX}/founder.log)" },
   { do = "require", value = "${HEALED}", match = "^True$", fail = "the founder's endpoint rebuild failed (ok=${HEALED}; see ${SANDBOX}/founder.log)" },

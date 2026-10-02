@@ -178,6 +178,38 @@ fn membership_going_offline_does_not_blind_the_term() {
     assert!(h.observe(&[obs("mac", false, None)], 2).wedged);
 }
 
+/// The lift's red (pc-cmnwlth-lift-flake-selfheal): the peer is dead and
+/// membership has said so, but the founder keeps re-dialing it, so iroh
+/// keeps its closed connection's address Open and the record reads
+/// `direct`. That record is not a path: the loss is counted on
+/// membership's bound, not on when iroh's actor finally idles out.
+#[test]
+fn an_active_record_to_an_offline_peer_is_a_lost_path() {
+    let mut h = ReachPathHealth::default();
+    assert!(
+        !h.observe(&[obs("mac", true, Some(PeerPath::Direct))], 2)
+            .wedged
+    );
+    let stale = [obs("mac", false, Some(PeerPath::Direct))];
+    let first = h.observe(&stale, 2);
+    assert!(!first.wedged, "one poll is a blip, not a wedge");
+    assert_eq!(first.active, 0);
+    assert_eq!(
+        first.lost,
+        vec![("mac".to_string(), PeerPath::Direct, "stale")]
+    );
+    assert!(
+        h.observe(&stale, 2).wedged,
+        "a stale record must not hold the term open"
+    );
+    // Nor can it re-arm the term after a rebuild: only a path to a peer
+    // membership believes online counts as one.
+    h.rearm();
+    for _ in 0..10 {
+        assert!(!h.observe(&stale, 1).wedged);
+    }
+}
+
 /// A solo mesh, or one where no member carries a pubkey. Nothing to be
 /// reachable to, so there is no verdict to make — and the run counter is
 /// left alone rather than reset, so a peer list that flickers empty
