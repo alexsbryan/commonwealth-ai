@@ -515,6 +515,29 @@ async fn the_appended_summary_count_follows_the_declared_quota() {
     assert_eq!(g.ledger.summaries_appended, 2);
 }
 
+/// The walk is a function of its inputs, not of the process's hash seed.
+/// Twenty leaves tie at the name-match floor of 0.6 and twelve seed slots
+/// take them, so WHICH twelve, and the order their requests reach the
+/// ranked list in, is decided by ties alone. Ties break by key: the twelve
+/// lowest atom ids, requested in selector order, on every walk.
+///
+/// Failing input: any `HashMap` iterated on the walk's way to `requests`
+/// (the seed merge, the neighbourhood, the chunk aggregation). Each new map
+/// draws a fresh random seed, so repeated walks in one process disagree.
+/// Found on retrieval-prod, where an `[Atlas highlights]` entry moved rank
+/// and score between two runs of one binary (phase-b-33's AFTER reading).
+#[tokio::test]
+async fn tied_seeds_and_requests_break_by_key_on_every_walk() {
+    let mut expected: Vec<String> = (0..20).map(|i| format!("l{i}")).collect();
+    expected.sort();
+    expected.truncate(12);
+    for walk in 0..8 {
+        let g = walk_thematic(&NavigationPolicy::default(), 0, 20).await;
+        assert_eq!(g.ledger.seeds, 12, "walk {walk}: {:?}", g.ledger);
+        assert_eq!(requested_chunks(&g), expected, "walk {walk}");
+    }
+}
+
 /// The unfiltered row admits everything and does NOT over-fetch — the
 /// path `apply_atlas_grounding` has always taken. Failing input: make
 /// `seed_filter_is_active` true for the unfiltered row.
