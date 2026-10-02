@@ -445,8 +445,12 @@ mod tests {
 
     #[test]
     fn a_corpus_deictic_question_still_closes_the_gk_exemption() {
-        assert!(question_closes_gk_exemption("In what year is the story set?"));
-        assert!(question_closes_gk_exemption("What do your sources say about the treaty?"));
+        assert!(question_closes_gk_exemption(
+            "In what year is the story set?"
+        ));
+        assert!(question_closes_gk_exemption(
+            "What do your sources say about the treaty?"
+        ));
     }
 
     #[test]
