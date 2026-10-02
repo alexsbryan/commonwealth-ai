@@ -1,20 +1,5 @@
 unit: pc-knowledge-gym-noresults
-commits: 7fb5bfd10
-what: knowledge-gym 05_noresults_honesty passes. The reasoning loop
-  (Executor::execute_reason_with_tools) appends one note under a tool result
-  that ran and came back empty (tool_loop::result_cardinality == 0): the
-  source does not hold it, do not search again with other words, answer and
-  say it is missing. Census: the gym's executor path is byte-identical to
-  main 18f783f44 (executor.rs, tool_loop.rs, the tool description), so this
-  is not a cut regression. The second lookup came from the loop prompt's
-  "If results are incomplete, try different terms" outranking the tool's own
-  "Empty evidence -> say I don't know". Each traced replay rephrased into the
-  same empty envelope.
-checks: CLEAN exit=0; LINT exit=0; TEST(sovereign-core) exit=0 1550/0;
-  LAYER exit=0; BOUNDARY exit=0 (clone-gate 13804, baseline 13820);
-  PLANT red (reason_with_tools_states_an_empty_result_as_absent FAIL with the
-  note removed), green restored.
-evidence: deployed daemon, primary, n=3x3: HEAD loop 05 0/9 (2 lookups each);
-  system-prompt rule only 7/9; note under the result 05 9/9, 01 9/9, 06 9/9.
-  The lane runs `sovereign-cli-llm-stock` (package sovereign-stock), which
-  needs a rebuild before the next quality check reads this.
+commits: 489db423f (the loop closes searching after its second empty result),
+  6405a1bad (05's lookup bar 1 -> 2, readings and PLANT)
+what: 05 9/9 at bar 2; 01 and 06 9/9; first-empty recovery 9/9; PLANT red in
+  TEST(sovereign-core) and in gym 05 (a third lookup).
