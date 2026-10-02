@@ -5,11 +5,14 @@
 //! **The store is a projection of THIS process's journals.** One
 //! `MeshStore::in_memory()`, rebuilt at start by folding every KV-shaped
 //! namespace under the rail root through `commonwealth_state::rail_kv` — the
-//! journal is the durable half, so a restart loses nothing the pump had
-//! appended. The pump is the send half lifted from
-//! `sovereign_mesh::rail_kv_pump`: every [`PUMP_INTERVAL`] it drains the
-//! store's outbox onto the namespace's journal, signed with this node's key,
-//! and seals + snapshots a KV namespace its outbox fed once this node's own
+//! journal is the durable half, so a restart loses nothing that reached it.
+//! A door that changed the store drains the outbox onto the journal BEFORE
+//! it answers ([`KvHost::journal_outbox`]), so an acknowledged write survives
+//! a kill: a solo node has no peer copy (pc-solo-durable, five-programs-66).
+//! The pump is the send half lifted from `sovereign_mesh::rail_kv_pump`:
+//! every [`PUMP_INTERVAL`] it drains what is still queued (a write deferred
+//! for want of a roster) the same way, signed with this node's key, and
+//! seals + snapshots a KV namespace either drain fed once this node's own
 //! ops above its last seal pass `rail_kv::SEAL_AFTER_OWN_OPS`.
 //!
 //! **One sealer per journal.** A snapshot's mark retires every row of its
@@ -29,29 +32,21 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use axum::extract::{Query, State};
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
-use axum::routing::get;
-use axum::Json;
-use base64::engine::general_purpose::STANDARD as B64;
-use base64::Engine;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_rail::{
     Admission, Ed25519Verifier, RailAct, RailError, RingJournal, RingRail, Roster,
 };
 use commonwealth_state::rail_kv::{self, SEAL_AFTER_OWN_OPS};
-use commonwealth_state::{MeshStore, Outboxed, StoreEntry};
-use host_kit::shell::RouteBundle;
-use serde::Deserialize;
+use commonwealth_state::{MeshStore, Outboxed};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::rail::err;
+mod doors;
+pub use doors::{router, KvLookup, KvScanQuery, KvSetBody};
 
-/// How often the outbox is drained — the daemon pump's interval, for the
-/// same reason: it is the latency of a local write reaching the ring.
+/// How often the pump drains the outbox and runs the seal check. A door
+/// write does not wait for it: the door journals before it answers.
 pub const PUMP_INTERVAL: Duration = Duration::from_secs(2);
 
 /// How many outbox rows one tick takes. A bound on how long one tick holds a
@@ -75,6 +70,13 @@ pub struct KvHost {
     /// line count starts there too and stays an upper bound; absent, it takes
     /// every own line.
     snapshot_base: Mutex<HashMap<String, u64>>,
+    /// One drainer at a time: a door and the tick both take the outbox, and
+    /// a row is acked only after its append, so two drains would append it
+    /// twice. Held across the tick's seal too, so a door append never lands
+    /// between a seal and its snapshot.
+    drain: tokio::sync::Mutex<()>,
+    /// Namespaces a drain appended to since the last tick's seal check.
+    seal_due: Mutex<BTreeSet<String>>,
 }
 
 /// What one [`KvHost::pump_once`] did — returned so a test asserts on the
@@ -114,6 +116,8 @@ impl KvHost {
             self_pubkey,
             dirty: Mutex::new(BTreeSet::new()),
             snapshot_base: Mutex::new(HashMap::new()),
+            drain: tokio::sync::Mutex::new(()),
+            seal_due: Mutex::new(BTreeSet::new()),
         })
     }
 
@@ -312,10 +316,41 @@ impl KvHost {
     }
 
     /// One drain of the outbox onto the journals, plus the seal check for
-    /// every namespace a row was appended to. Appended rows are acked;
-    /// `NotInRoster` and an unreadable roster leave rows queued; any other
-    /// refusal acks the row with a `warn` naming it.
+    /// every namespace a drain appended to since the last one — a door's
+    /// included, so journaling before the ack never skips a seal.
     pub async fn pump_once(&self) -> PumpOutcome {
+        let _drain = self.drain.lock().await;
+        let mut out = self.drain_outbox().await;
+        let due = std::mem::take(&mut *self.seal_due.lock().unwrap_or_else(|p| p.into_inner()));
+        for namespace in due {
+            match self.journal_and_roster(&namespace).await {
+                Ok((journal, roster)) => self.seal_if_due(&journal, &roster, &mut out).await,
+                Err(e) => {
+                    warn!(target: "rails", namespace, error = %e,
+                          "kv pump: the roster is unreadable, so the seal check waits a tick");
+                    self.seal_due
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .insert(namespace);
+                }
+            }
+        }
+        out
+    }
+
+    /// Drain the outbox onto the journals now, before a door answers the
+    /// write it just made — the store is in memory, so until this append a
+    /// kill loses a write the caller was told had landed. Returns what the
+    /// drain did; the seal check stays the tick's.
+    pub async fn journal_outbox(&self) -> PumpOutcome {
+        let _drain = self.drain.lock().await;
+        self.drain_outbox().await
+    }
+
+    /// One drain of the outbox onto the journals; the caller holds `drain`.
+    /// Appended rows are acked; `NotInRoster` and an unreadable roster leave
+    /// rows queued; any other refusal acks the row with a `warn` naming it.
+    async fn drain_outbox(&self) -> PumpOutcome {
         let mut out = PumpOutcome::default();
         let queued = match self.store.outbox_take(OUTBOX_DRAIN_LIMIT) {
             Ok(rows) => rows,
@@ -396,7 +431,10 @@ impl KvHost {
             }
             out.appended += appended_here;
             if appended_here > 0 {
-                self.seal_if_due(&journal, &roster, &mut out).await;
+                self.seal_due
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .insert(namespace);
             }
         }
         out
@@ -626,104 +664,6 @@ async fn tick_once(host: &KvHost) -> PumpOutcome {
     out.sealed += planes.sealed;
     out.snapshot_rows += planes.snapshot_rows;
     out
-}
-
-// ── The doors ────────────────────────────────────────────────
-
-/// `GET`/`DELETE /v1/mesh/kv/entry` query — `sovereign_contracts::peer::KvLookup`.
-#[derive(Debug, Deserialize)]
-pub struct KvLookup {
-    pub app_id: String,
-    pub key: String,
-}
-
-/// `GET /v1/mesh/kv/entries` query — `KvScanQuery`; an empty prefix
-/// enumerates the namespace.
-#[derive(Debug, Deserialize)]
-pub struct KvScanQuery {
-    pub app_id: String,
-    #[serde(default)]
-    pub prefix: String,
-}
-
-/// `POST /v1/mesh/kv/entry` body — `KvSetBody`; `value` is base64.
-#[derive(Debug, Deserialize)]
-pub struct KvSetBody {
-    pub app_id: String,
-    pub key: String,
-    pub value: String,
-    pub origin: NodeId,
-}
-
-/// The four doors over `host`'s store, one of [`crate::api::bundles`].
-pub fn router(host: Arc<KvHost>) -> RouteBundle {
-    RouteBundle::new("kv")
-        .route(
-            "/v1/mesh/kv/entry",
-            get(kv_get).post(kv_set).delete(kv_delete),
-        )
-        .route("/v1/mesh/kv/entries", get(kv_scan))
-        .with_state(host)
-}
-
-/// A store row as `ReplicatedKvEntry`'s serde form.
-fn to_entry(e: StoreEntry) -> serde_json::Value {
-    serde_json::json!({
-        "app_id": e.app_id,
-        "key": e.key,
-        "value": B64.encode(&e.value),
-        "timestamp": e.timestamp,
-        "origin": e.origin,
-    })
-}
-
-fn store_error(op: &str, e: commonwealth_state::Error) -> Response {
-    warn!(target: "rails", op, error = %e, "kv: store refused");
-    err(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        format!("mesh kv {op}: {e}"),
-    )
-}
-
-/// GET /v1/mesh/kv/entry — one record, or `null`.
-async fn kv_get(State(host): State<Arc<KvHost>>, Query(q): Query<KvLookup>) -> Response {
-    match host.store.get(&q.app_id, &q.key) {
-        Ok(entry) => Json(entry.map(to_entry)).into_response(),
-        Err(e) => store_error("get", e),
-    }
-}
-
-/// POST /v1/mesh/kv/entry — whether the stored value CHANGED.
-async fn kv_set(State(host): State<Arc<KvHost>>, Json(body): Json<KvSetBody>) -> Response {
-    let value = match B64.decode(body.value.as_bytes()) {
-        Ok(v) => bytes::Bytes::from(v),
-        Err(e) => {
-            return err(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                format!("value is not base64: {e}"),
-            )
-        }
-    };
-    match host.store.set(&body.app_id, &body.key, value, body.origin) {
-        Ok(changed) => Json(changed).into_response(),
-        Err(e) => store_error("set", e),
-    }
-}
-
-/// DELETE /v1/mesh/kv/entry — whether anything was there to remove.
-async fn kv_delete(State(host): State<Arc<KvHost>>, Query(q): Query<KvLookup>) -> Response {
-    match host.store.delete(&q.app_id, &q.key) {
-        Ok(deleted) => Json(deleted).into_response(),
-        Err(e) => store_error("delete", e),
-    }
-}
-
-/// GET /v1/mesh/kv/entries — every record whose key starts with `prefix`.
-async fn kv_scan(State(host): State<Arc<KvHost>>, Query(q): Query<KvScanQuery>) -> Response {
-    match host.store.scan(&q.app_id, &q.prefix) {
-        Ok(rows) => Json(rows.into_iter().map(to_entry).collect::<Vec<_>>()).into_response(),
-        Err(e) => store_error("scan", e),
-    }
 }
 
 #[cfg(test)]

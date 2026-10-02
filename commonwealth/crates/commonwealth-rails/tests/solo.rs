@@ -104,7 +104,11 @@ async fn a_meshless_node_serves_its_store_across_a_restart_and_a_join() {
         .unwrap()
         .error_for_status()
         .unwrap();
-    assert_eq!(first.kv.pump_once().await.appended, 1);
+    assert_eq!(
+        first.kv.pump_once().await.appended,
+        0,
+        "the door journaled the write before it answered"
+    );
     first.node.endpoint.close().await;
     drop(first);
 
