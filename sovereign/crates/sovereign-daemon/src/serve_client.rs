@@ -554,6 +554,43 @@ pub fn adopt_served(
     );
 }
 
+/// What `cfg` asks serve for that serve's self-report does not hold, one line
+/// per slot. A slot is `model_slots::advertised_slots`' (the one decider of
+/// what `[models]` asks for), named by its file stem, the id serve's loader
+/// gives it. Extras load on demand and a primary pool reports under a role of
+/// its own, so neither can be judged from the self-report; each is traced as
+/// not judged, never counted as held.
+pub fn unmet_slots(
+    cfg: &SetupConfig,
+    served: &sovereign_contracts::engine_state::ServedSelf,
+) -> Vec<String> {
+    let Ok(models) = cfg.models() else {
+        return Vec::new();
+    };
+    let mut unmet = Vec::new();
+    for (role, path) in sovereign_contracts::model_slots::advertised_slots(models) {
+        if role.starts_with("extras:") || role.starts_with("primary_") {
+            tracing::debug!(target: "serving_path", %role, "reload: slot not judged against serve's self-report");
+            continue;
+        }
+        let asked = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        match served.resident_slots.iter().find(|s| s.role == role) {
+            Some(slot) if slot.model_id == asked => {}
+            Some(slot) => unmet.push(format!(
+                "{role}: asked for {asked}, serve holds {}",
+                slot.model_id
+            )),
+            None => unmet.push(format!(
+                "{role}: asked for {asked}, serve has no {role} slot"
+            )),
+        }
+    }
+    unmet
+}
+
 /// How long a forwarded read waits on serve: the setup reads detect hardware
 /// on a blocking thread, which takes well under this.
 const FORWARD_WINDOW: std::time::Duration = std::time::Duration::from_secs(30);

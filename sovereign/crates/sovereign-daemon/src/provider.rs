@@ -116,6 +116,19 @@ impl LlamaCppFactory {
                     "serve's self-report after reload",
                 )
                 .await;
+                // The cell and the aliases now say what serve holds; the
+                // reload succeeds only when that is what the config asked
+                // for, and otherwise names each slot that did not load.
+                let unmet = crate::serve_client::unmet_slots(cfg, &served);
+                if !unmet.is_empty() {
+                    self.push_router_aliases().await;
+                    tracing::warn!(target: "serving_path", serve_base = %base.base, ?unmet, "reload: serve does not hold what the config asks for");
+                    return Err(format!(
+                        "reload: serve at {} reloaded but does not hold what the config asks for: {}",
+                        base.base,
+                        unmet.join("; ")
+                    ));
+                }
                 Ok(Arc::clone(cell) as Arc<dyn InferenceProvider>)
             }
             ReloadSource::Hosted { cell } => {
@@ -192,19 +205,31 @@ mod reload_through_serve {
     use sovereign_core::types::Speed;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    fn slot(role: &str, model: &str) -> ResidentSlot {
+        ResidentSlot {
+            role: role.to_string(),
+            model_id: model.to_string(),
+            resident: true,
+            size_bytes: None,
+            transitioning: false,
+            placement: None,
+        }
+    }
+
     fn served(model: &str) -> ServedSelf {
         ServedSelf {
             primary_model: model.to_string(),
-            resident_slots: vec![ResidentSlot {
-                role: "primary".to_string(),
-                model_id: model.to_string(),
-                resident: true,
-                size_bytes: None,
-                transitioning: false,
-                placement: None,
-            }],
+            resident_slots: vec![slot("primary", model), slot("embed", "emb")],
             ..ServedSelf::default()
         }
+    }
+
+    /// A config whose `[models]` asks for `primary` and the stub's embed model.
+    fn asking_for(primary: &str, dir: &std::path::Path) -> SetupConfig {
+        let path = dir.join("config.toml");
+        let text = format!("[models]\nprimary = \"/m/{primary}.gguf\"\nembed = \"/m/emb.gguf\"\n");
+        std::fs::write(&path, text).expect("write config");
+        SetupConfig::load_from(&path).expect("config parses")
     }
 
     /// serve's two reload routes: the reload counts, and the self-report names
@@ -246,15 +271,18 @@ mod reload_through_serve {
         format!("http://{addr}")
     }
 
-    #[tokio::test]
-    async fn a_reload_reloads_serve_and_the_manifest_names_the_new_model() {
-        let reloads = Arc::new(AtomicUsize::new(0));
-        let base = stub_serve(Arc::clone(&reloads)).await;
-        let dir = tempfile::tempdir().expect("tempdir");
-        let cfg = SetupConfig::unconfigured();
+    /// The dialing path's factory over a stub serve at `base`, and the cell and
+    /// router boot would have built.
+    type Wired = (
+        LlamaCppFactory,
+        Arc<sovereign_contracts::reloadable_provider::ReloadableProvider>,
+        Arc<dyn InferenceProvider>,
+    );
+
+    fn factory_over(base: String, cfg: &SetupConfig, dir: &std::path::Path) -> Wired {
         let daemon = Arc::new(crate::DeferredDaemon::new());
         daemon.bind(crate::EmbeddedDaemon::new(
-            dir.path().to_path_buf(),
+            dir.to_path_buf(),
             cfg.clone(),
             crate::daemon_services::fixtures::headless(),
         ));
@@ -291,6 +319,16 @@ mod reload_through_serve {
             routed: Arc::clone(&routed),
             slot_aliases: None,
         };
+        (factory, cell, routed)
+    }
+
+    #[tokio::test]
+    async fn a_reload_reloads_serve_and_the_manifest_names_the_new_model() {
+        let reloads = Arc::new(AtomicUsize::new(0));
+        let base = stub_serve(Arc::clone(&reloads)).await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = SetupConfig::unconfigured();
+        let (factory, cell, routed) = factory_over(base, &cfg, dir.path());
         let provider = factory
             .build_provider(&cfg)
             .await
@@ -318,5 +356,39 @@ mod reload_through_serve {
             ids.contains(&"after-reload"),
             "peers must see the reloaded model, saw {ids:?}"
         );
+    }
+
+    /// pc-split-deploy-honesty: a reload whose serve does not hold what the
+    /// config asks for is refused, naming the slot, and svrn's model facts
+    /// say what serve holds rather than what was asked for.
+    #[tokio::test]
+    async fn a_reload_serve_did_not_honour_is_refused_naming_the_slot() {
+        let reloads = Arc::new(AtomicUsize::new(0));
+        let base = stub_serve(Arc::clone(&reloads)).await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = asking_for("wanted", dir.path());
+        let (factory, cell, _) = factory_over(base, &cfg, dir.path());
+        let err = match factory.build_provider(&cfg).await {
+            Ok(_) => panic!("a reload serve did not honour reported success"),
+            Err(e) => e,
+        };
+        assert!(
+            err.contains("primary: asked for wanted, serve holds after-reload"),
+            "{err}"
+        );
+        assert!(!err.contains("embed"), "embed was held, yet named: {err}");
+        assert_eq!(cell.model_id_for(Speed::Slow), "after-reload");
+    }
+
+    #[tokio::test]
+    async fn a_reload_serve_honoured_succeeds() {
+        let reloads = Arc::new(AtomicUsize::new(0));
+        let base = stub_serve(Arc::clone(&reloads)).await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = asking_for("after-reload", dir.path());
+        let (factory, _, _) = factory_over(base, &cfg, dir.path());
+        if let Err(e) = factory.build_provider(&cfg).await {
+            panic!("serve holds what was asked for, yet the reload refused: {e}");
+        }
     }
 }
