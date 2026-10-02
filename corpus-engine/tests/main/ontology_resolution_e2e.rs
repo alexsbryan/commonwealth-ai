@@ -24,7 +24,7 @@ use corpus_engine::enrichment::atlas::{
 use corpus_engine::enrichment::ontology::{OntologyPolicies, OntologyTypeDecl, TypeKind};
 use corpus_engine::enrichment::pipeline::atlas::{
     ClaimSketch, DiscourseAct, EnrichmentDepth, EntitySketch, EntityType, EpistemicStatus,
-    EventSketch, RelationSketch, SectionExtraction,
+    EntityStateSketch, EventSketch, RelationSketch, SectionExtraction,
 };
 use corpus_engine::enrichment::pipeline::types::PhaseFailureKind;
 use corpus_engine::types::EmbedFn;
@@ -246,6 +246,38 @@ async fn a_declared_end_resolves_to_the_atom_of_its_declared_type() {
         step_3b.relations[0].participants[1], mint,
         "the `to` end is the mint"
     );
+}
+
+/// A state recorded on a hoard folds into the hoard. The state sketch names an
+/// entity and asserts no type; its fallback `Person` met the declared veto and
+/// every hoard or mint a state was recorded on gained a description-less
+/// `person` twin (19 names on ft-ans-dev-b, 12 on ft-ans-dev-a).
+#[tokio::test]
+async fn a_state_reference_folds_into_the_declared_atom_of_its_name() {
+    let policies = numismatics();
+    let mut s = section("sec_0001", vec![typed("Hamwic", "mint")], vec![]);
+    s.entities_developed = vec![EntityStateSketch {
+        entity_name: "Hamwic".into(),
+        label: "closed by the Danes".into(),
+        anchor: "Hamwic".into(),
+        state_type: None,
+    }];
+    let (step_3a, step_3b) = resolve(&policies, vec![s]).await;
+
+    let hamwics: Vec<_> = step_3a
+        .entities
+        .iter()
+        .filter(|e| e.canonical_name == "Hamwic")
+        .collect();
+    assert_eq!(
+        hamwics.len(),
+        1,
+        "no twin: {:?}",
+        hamwics.iter().map(|e| e.entity_type.as_str_repr()).collect::<Vec<_>>()
+    );
+    assert_eq!(hamwics[0].entity_type.as_str_repr(), "mint");
+    assert_eq!(step_3b.states.len(), 1);
+    assert_eq!(step_3b.states[0].entity_id, hamwics[0].id, "the state is the mint's");
 }
 
 /// The schema's escape value for a relation the recipe did not declare

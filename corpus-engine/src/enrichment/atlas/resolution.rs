@@ -634,8 +634,15 @@ async fn resolve_entities(
         // so the loop can borrow uniformly.
         let mut section_sketches: Vec<EntitySketch> = section.entities_introduced.clone();
         section_sketches.extend(entity_sketches_from_developed(section));
+        let introduced = section.entities_introduced.len();
 
-        for sketch in &section_sketches {
+        for (position, sketch) in section_sketches.iter().enumerate() {
+            // A state sketch NAMES an entity and asserts no type: its `Person`
+            // is the fallback for a name never introduced. On an exact name it
+            // folds into whatever atom carries that name; under the declared
+            // veto it minted a `person` twin of every hoard a state was
+            // recorded on (19 names on ft-ans-dev-b).
+            let reference = position >= introduced;
             let candidate_emb = if sketch.description.trim().is_empty() {
                 // No description → rule 2 can't apply. We still take
                 // rules 1 and 3, which don't require embeddings.
@@ -647,6 +654,14 @@ async fn resolve_entities(
             // The declared ontology's veto on every proposed merge target.
             // Inert for an undeclared corpus (`merge_permitted` is `Ok`).
             let permit = |idx: usize, evidence: MergeEvidence| {
+                if reference && matches!(evidence, MergeEvidence::Exact) {
+                    debug!(
+                        name = %sketch.canonical_name,
+                        target = %entities[idx].entity_type.as_str_repr(),
+                        "atlas/resolution 3a: state reference folds into the atom of its exact name"
+                    );
+                    return true;
+                }
                 sketch_may_merge_into(policy, sketch, &entities[idx], evidence)
             };
             let target = find_merge_target(
