@@ -226,9 +226,14 @@ def cmd_renumber(entry: pathlib.Path, against: pathlib.Path) -> int:
     campaign = old[: old.rindex("-")]
     new = next_id(campaign, entry.parent, against)
     dest = entry.parent / f"{new}.md"
-    text = entry.read_text()
-    dest.write_text(text.replace(f"**{old} ·", f"**{new} ·", 1)
-                    .replace(f"## {old} ·", f"## {new} ·", 1))
+    text = (entry.read_text().replace(f"**{old} ·", f"**{new} ·", 1)
+            .replace(f"## {old} ·", f"## {new} ·", 1))
+    # The lane's commit bodies are published and still say `old`, which on the
+    # base names another entry: the entry itself carries the mapping back.
+    minted = f"- Minted as `{old}` in its lane and renumbered at merge: that lane's commit bodies cite `{old}`.\n"
+    head, mark, tail = text.partition(APPENDIX_MARK)
+    text = head.rstrip("\n") + "\n" + minted + ("\n" + mark + tail if mark else "")
+    dest.write_text(text)
     entry.unlink()
     Entry(dest)
     print(dest)

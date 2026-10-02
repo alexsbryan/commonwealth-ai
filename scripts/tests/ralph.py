@@ -2630,6 +2630,32 @@ class PoolQueueTests(unittest.TestCase):
                                              "--untracked-files=no"],
                                             capture_output=True, text=True).stdout, "")
 
+    def test_a_renumbered_lanes_citations_follow_its_entry(self):
+        # Each lane cites the id it minted in a tracked file of its own. After
+        # the merges each file names its own entry, a longer id that shares the
+        # prefix is untouched, and the renumbered entry records the old id its
+        # lane's commit bodies still carry.
+        class CitingLane(self.MintingLane):
+            def run(self, model_args, prompt, log):
+                write(self.cwd, f"notes/{self.cwd.name}.md",
+                      "Decision: ralph/decisions/q-1.md (q-1; not q-10)\n")
+                return super().run(model_args, prompt, log)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.decisions_fixture(tmp)
+            self.assertEqual(self.make(root, lambda cwd, env=None: CitingLane(cwd)).run(), 0)
+            decisions = root / "ralph/decisions"
+            by_subject = {(decisions / f"{i}.md").read_text().split(" · ")[2]: i
+                          for i in ("q-1", "q-2")}
+            for unit, eid in by_subject.items():
+                self.assertEqual((root / f"notes/{unit}.md").read_text(),
+                                 f"Decision: ralph/decisions/{eid}.md ({eid}; not q-10)\n")
+            self.assertIn("Minted as `q-1` in its lane", (decisions / "q-2.md").read_text())
+            self.assertNotIn("Minted as", (decisions / "q-1.md").read_text())
+            log = subprocess.run(["git", "-C", tmp, "log", "--format=%s"],
+                                 capture_output=True, text=True).stdout
+            self.assertIn("decision ids renumbered at merge (pool): q-1 → q-2", log)
+
     def test_without_the_renumber_the_second_merge_halts(self):
         # The failing input the renumber exists for (its PLANT, kept as a test).
         with tempfile.TemporaryDirectory() as tmp:

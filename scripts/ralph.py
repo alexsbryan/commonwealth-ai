@@ -2220,6 +2220,7 @@ class Pool:
         added = self._git("diff", "--name-only", "--diff-filter=A", f"HEAD...{branch}",
                           "--", DECISIONS_DIR)
         clashes = [rel for rel in added.stdout.split() if self.paths.p(rel).exists()]
+        renamed = {}
         for rel in clashes:
             r = subprocess.run([sys.executable, str(self.paths.p(DECISIONS_SCRIPT)), "renumber",
                                 str(wt / rel), "--against", str(entries)],
@@ -2227,16 +2228,46 @@ class Pool:
             if r.returncode != 0:
                 return (f"lane {unit}: could not renumber {rel}: "
                         f"{error_tail(r.stderr) or r.stderr.strip()[-200:]}")
+            renamed[pathlib.Path(rel).stem] = pathlib.Path(r.stdout.strip()).stem
             say(f"pool: lane {unit} decision {rel} is taken on the base — renumbered "
                 f"{pathlib.Path(r.stdout.strip()).name}")
         if clashes:
+            self._recite_decisions(unit, wt, branch, renamed)
             self._git("add", "-A", "--", DECISIONS_DIR, cwd=wt)
-            c = self._git("commit", "-q", "-m", f"{unit}: decision ids renumbered at merge (pool)",
-                          cwd=wt)
+            mapping = ", ".join(f"{o} → {n}" for o, n in renamed.items())
+            c = self._git("commit", "-q", "-m",
+                          f"{unit}: decision ids renumbered at merge (pool): {mapping}", cwd=wt)
             if c.returncode != 0:
                 return (f"lane {unit}: the renumber commit failed: "
                         f"{error_tail(c.stderr) or c.stderr.strip()[-200:]}")
         return None
+
+    def _recite_decisions(self, unit, wt, branch, renamed):
+        """The lane's own files still cite the ids it minted, which on the base
+        name other entries (2026-10-02: pc-removed-env-warn's .done cited
+        phase-c-2, the seat's filing, after its entry became phase-c-4).
+        Rewrite each old id to its new one in every file the lane changed and
+        stage them; the renumbered entry, which records the old id on purpose,
+        is not among them (its old path is gone, its new one is untracked)."""
+        pattern = re.compile(r"(?<![\w-])(" + "|".join(map(re.escape, renamed)) + r")(?!\d)")
+        changed = self._git("diff", "--name-only", "--diff-filter=AM", f"HEAD...{branch}")
+        rewritten = []
+        for rel in changed.stdout.split():
+            path = wt / rel
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text()
+            except UnicodeDecodeError:
+                continue
+            new = pattern.sub(lambda m: renamed[m.group(1)], text)
+            if new != text:
+                path.write_text(new)
+                rewritten.append(rel)
+        if rewritten:
+            self._git("add", "--", *rewritten, cwd=wt)
+        say(f"pool: lane {unit} citations of {', '.join(renamed)} rewritten in "
+            f"{len(rewritten)} file(s){': ' + ', '.join(rewritten) if rewritten else ''}")
 
     def _regenerate_decisions(self, unit):
         """Lanes write ralph/decisions/<id>.md only; the rendered ledger is
