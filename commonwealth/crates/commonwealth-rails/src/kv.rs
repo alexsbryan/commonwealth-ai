@@ -77,6 +77,9 @@ pub struct KvHost {
     drain: tokio::sync::Mutex<()>,
     /// Namespaces a drain appended to since the last tick's seal check.
     seal_due: Mutex<BTreeSet<String>>,
+    /// The plane seal's own snapshot ends, held across ticks for
+    /// [`crate::plane_seal::seal_once`].
+    plane_snapshot_ends: crate::plane_seal::SnapshotEnds,
 }
 
 /// What one [`KvHost::pump_once`] did — returned so a test asserts on the
@@ -118,6 +121,7 @@ impl KvHost {
             snapshot_base: Mutex::new(HashMap::new()),
             drain: tokio::sync::Mutex::new(()),
             seal_due: Mutex::new(BTreeSet::new()),
+            plane_snapshot_ends: Mutex::new(HashMap::new()),
         })
     }
 
@@ -682,7 +686,7 @@ pub async fn run_forever(host: Arc<KvHost>) {
 async fn tick_once(host: &KvHost) -> PumpOutcome {
     host.project_dirty().await;
     let mut out = host.pump_once().await;
-    let planes = crate::plane_seal::seal_once(&host.rail).await;
+    let planes = crate::plane_seal::seal_once(&host.rail, &host.plane_snapshot_ends).await;
     out.sealed += planes.sealed;
     out.snapshot_rows += planes.snapshot_rows;
     out
