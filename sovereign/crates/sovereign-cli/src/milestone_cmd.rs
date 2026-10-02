@@ -24,6 +24,10 @@ pub async fn run(args: &[String]) -> i32 {
     let positional: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
 
     if !project_mode {
+        if let Some(code) = sovereign_cli_shared::deprecation::refuse_retired(&["milestone"], args)
+        {
+            return code;
+        }
         eprintln!(
             "  sovereign milestone requires --project.\n\
              \n\

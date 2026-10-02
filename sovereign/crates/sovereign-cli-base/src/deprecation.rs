@@ -65,8 +65,10 @@ pub fn announce_retired(old: &str, hint: &str) {
 
 /// Every removed `svrn` spelling with what replaced it — the one table the
 /// dispatcher's fallthrough and each owning verb (`project`, `drift`,
-/// `amend`, `audit`) read before running anything. A spelling token `*`
-/// matches any positional. Flags never take part in the match.
+/// `amend`, `audit`, `plan`, `milestone`) read before running anything. A
+/// spelling token `*` matches any positional. Flags never take part in the
+/// match. First match wins, so `drift accept` precedes `drift *`; `drift *`
+/// also answers a typo of `detect`, and its hint names `detect` for that.
 pub const RETIRED: &[(&[&str], &str)] = &[
     (
         &["atos"],
@@ -95,6 +97,22 @@ pub const RETIRED: &[(&[&str], &str)] = &[
     (
         &["drift", "accept"],
         "Spec accept is gone with ATOS. Use `svrn drift detect --code <path> --narrative <doc>...` for narrative-vs-code drift.",
+    ),
+    (
+        &["drift", "*"],
+        "The per-feature spec diff (`svrn drift <feature-id>`) is gone with ATOS. The one drift verb is `svrn drift detect --code <path> --narrative <doc>...`.",
+    ),
+    (
+        &["milestone", "*", "*"],
+        "The per-feature milestone (`svrn milestone <feature-id> <N>`) is gone with ATOS. `svrn milestone --project <N>` closes a project phase.",
+    ),
+    (
+        &["plan"],
+        "Project plan composition is gone. Use `svrn plan validate <path>` to check a plan.",
+    ),
+    (
+        &["project", "found"],
+        "Founding is implicit now: `svrn init` + a committed spec is sufficient. Use `svrn charter` to define team conventions.",
     ),
     (
         &["audit", "*"],
