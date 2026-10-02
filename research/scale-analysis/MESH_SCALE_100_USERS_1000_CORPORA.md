@@ -502,13 +502,13 @@ counts), `scripts/probe-t1-corpora-sweep.sh` (the n-sweep), `scripts/probe_a_str
 and `scripts/probe_a_greedy_vs_polite.py` (load generators for the existing Probe A netns
 harness, which gained `--load` / `--load-args` / `--daemon-env` so its sealed netns and its
 bind assertion stay the only implementation of both), and two `#[ignore]`d tests in
-`corpus-engine-notes/tests/`. Dev daemons ran in a rootless netns under a throwaway `$HOME`;
+`code/crates/corpus-engine-notes/tests/`. Dev daemons ran in a rootless netns under a throwaway `$HOME`;
 `BIND CHECK PASSED` is recorded for every daemon run below, and the operator's live daemon
 and corpora were never in the path.
 
 #### 1. `t1-notes-clean-wire` — 16.1 KB per gossiped note, cliff at ~520
 
-`corpus-engine-notes/tests/red_baseline_note_wire_size.rs` (`#[ignore]`d measurement).
+`code/crates/corpus-engine-notes/tests/red_baseline_note_wire_size.rs` (`#[ignore]`d measurement).
 Events come from `NoteStore::notes_delta_since` — the shipped constructor — over a
 **snapshot of the real `~/.svrnmesh/notes.db`** (5,540 notes, 4,811 global), and are
 serialized with the same `serde_json::to_vec` the daemon's sink calls
@@ -531,7 +531,7 @@ serialized with the same `serde_json::to_vec` the daemon's sink calls
 
 #### 2. `t1-notes-own-space` — the contamination is reproducible in 0.02 s
 
-`corpus-engine-notes/tests/red_baseline_cross_model_notes.rs::red_baseline_foreign_space_embedding_must_not_enter_the_cosine_pool`,
+`code/crates/corpus-engine-notes/tests/red_baseline_cross_model_notes.rs::red_baseline_foreign_space_embedding_must_not_enter_the_cosine_pool`,
 committed `#[ignore]`d and **watched failing**:
 
 ```

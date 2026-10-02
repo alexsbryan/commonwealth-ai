@@ -1178,7 +1178,7 @@ async fn async_main() {
             "agent-bench" => {
                 // Eleven-problem coding battery; subprocess-driven
                 // pi / opencode / codex runners. See SYSTEM_OVERVIEW §4
-                // and `sovereign/crates/sovereign-agent-bench/`.
+                // and `code/crates/sovereign-agent-bench/`.
                 let code = agent_bench_bin::exec(&raw_args[1..]);
                 std::process::exit(code);
             }

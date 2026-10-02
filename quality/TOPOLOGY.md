@@ -457,7 +457,7 @@ Required, or the contradiction stands (ARCH §1.1):
   this document is their implementation plan, not a replacement.
 - `ingest/crates/corpus-engine/DECOMPOSITION.md` steps 5–8 never shipped, which is why 73.8k
   lines of `enrichment/` remain inside `corpus-engine`. Record the stall.
-- `corpus-engine-notes/src/notes.rs` was flagged in that plan at 2,781 lines.
+- `code/crates/corpus-engine-notes/src/notes.rs` was flagged in that plan at 2,781 lines.
   It is now 7,794 — a store, a vector index and a replication log in one file.
 - `SOVEREIGN_ENRICH_SKIP_INDEX` must be registered in `quality/env-flags.toml`
   regardless of what else happens, since it currently gates index corruption.

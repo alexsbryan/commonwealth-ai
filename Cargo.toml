@@ -63,21 +63,21 @@ members = [
     "shared/crates/corpus-engine-atlas-reader",
     # NoteStore + project_docs + notes_sync. Step 3 of the corpus-engine
     # decomposition. notes.rs (2781 LOC) cleared from the §3.1 list.
-    "corpus-engine-notes",
+    "code/crates/corpus-engine-notes",
     # The code-intel package's next-edit crate (docs/CODE_TOOLING_BOUNDARY.md
     # §2; domains REVIEW-build-next-edit-crate). A root sibling of the package's
     # carve-outs, holding the pure rule/model/symbol/syntax lanes + the journal
     # policy split out of sovereign-api's workbench cluster. A stub until
     # dm-next-edit-move lands the modules.
-    "code-next-edit",
+    "code/crates/code-next-edit",
     # The code-intel package's deterministic fact base
     # (docs/CODE_TOOLING_BOUNDARY.md §2, Phase 2; domains
     # REVIEW-build-code-facts). The `facts`/`facts_check`/`facts_store` modules
     # split out of corpus-engine, which re-exports them at their old paths.
-    "code-facts",
+    "code/crates/code-facts",
     # Git archaeology — commit-history mining, rough-edge surfacing,
     # atom-provenance evaluation. Step 4 of the decomposition.
-    "corpus-engine-archaeology",
+    "code/crates/corpus-engine-archaeology",
     # YieldHook — the cooperative foreground-yield contract shared by
     # the data plane and the watchers. Tier-0 leaf extracted during
     # Step 1 (watchers) so both crates share one trait identity.
@@ -85,7 +85,7 @@ members = [
     # Lint/test/project-index watchers + result stores. Step 1 of the
     # decomposition — cuts watcher-edit rebuild blast from 18 crates to
     # ~6. See DECOMPOSITION.md.
-    "corpus-engine-watchers",
+    "code/crates/corpus-engine-watchers",
     # Section detectors (SectionDetector/DetectedSection/ChapterRegexDetector/
     # TocAnchoredDetector) — corpus-engine's own segmentation vocabulary,
     # carved into a `regex`-only leaf so the studio SectionTool can share the
@@ -126,7 +126,7 @@ members = [
     "sovereign/crates/sovereign-store",
     "shared/crates/sovereign-time",
     "sovereign/crates/sovereign-tools",
-    "sovereign/crates/sovereign-code",
+    "code/crates/sovereign-code",
     # GLiNER (ONNX) per-chunk entity extraction — carved out of sovereign-tools
     # 2026-07-17 so the fragile ort=rc.9 stack is a mandatory dep of only the
     # four binaries that need it, not an optional feature on a shared crate
@@ -218,7 +218,7 @@ members = [
     "sovereign/crates/sovereign-cli",
     "shared/crates/sovereign-cli-base",
     "sovereign/crates/sovereign-cli-shared",
-    "sovereign/crates/sovereign-cli-dev",
+    "code/crates/sovereign-cli-dev",
     "sovereign/crates/sovereign-cli-daemon",
     "sovereign/crates/sovereign-cli-llm",
     # bench's CLI (phase-b pb-cli-llm-bench-move).
@@ -227,12 +227,12 @@ members = [
     "sovereign/crates/sovereign-eval",
     "ingest/crates/sovereign-authoring-harness",
     "ingest/crates/sovereign-pipeline",
-    "sovereign/crates/sovereign-work-atlas",
-    "sovereign/crates/sovereign-agent-bench",
-    "sovereign/crates/sovereign-agent-tools",
+    "code/crates/sovereign-work-atlas",
+    "code/crates/sovereign-agent-bench",
+    "code/crates/sovereign-agent-tools",
     # TDD-machine backend (red-green-refactor solver registry).
     # See sovereign/docs/TDD_MACHINE_DESIGN.md.
-    "sovereign/crates/sovereign-tdd",
+    "code/crates/sovereign-tdd",
 
     # Commonwealth — symmetric mesh daemon.
     "cmnwlth/crates/commonwealth-core",
@@ -364,17 +364,17 @@ mesh-reach = { path = "shared/crates/mesh-reach" }
 corpus-engine = { path = "ingest/crates/corpus-engine" }
 corpus-engine-scip = { path = "shared/crates/corpus-engine-scip" }
 corpus-engine-atlas-reader = { path = "shared/crates/corpus-engine-atlas-reader" }
-corpus-engine-notes = { path = "corpus-engine-notes" }
-corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
+corpus-engine-notes = { path = "code/crates/corpus-engine-notes" }
+corpus-engine-archaeology = { path = "code/crates/corpus-engine-archaeology" }
 corpus-engine-yield = { path = "shared/crates/corpus-engine-yield" }
-corpus-engine-watchers = { path = "corpus-engine-watchers" }
+corpus-engine-watchers = { path = "code/crates/corpus-engine-watchers" }
 corpus-engine-sections = { path = "shared/crates/corpus-engine-sections" }
 corpus-engine-recipes = { path = "ingest/crates/sovereign-recipes" }
 understanding-vocab = { path = "shared/crates/understanding-vocab", default-features = false }
 understanding-atlas = { path = "ingest/crates/understanding-atlas" }
 corpus-index = { path = "shared/crates/corpus-index" }
-code-facts = { path = "code-facts" }
-code-next-edit = { path = "code-next-edit" }
+code-facts = { path = "code/crates/code-facts" }
+code-next-edit = { path = "code/crates/code-next-edit" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "shared/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
@@ -383,7 +383,7 @@ sovereign-scheduler = { path = "serve/crates/sovereign-scheduler" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-time = { path = "shared/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
-sovereign-code = { path = "sovereign/crates/sovereign-code" }
+sovereign-code = { path = "code/crates/sovereign-code" }
 sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-gliner = { path = "serve/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "ingest/crates/sovereign-enrichment-catalog" }
@@ -404,13 +404,13 @@ sovereign-service = { path = "sovereign/crates/sovereign-service" }
 sovereign-cli-base = { path = "shared/crates/sovereign-cli-base" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "ingest/crates/sovereign-pipeline" }
-sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
-sovereign-agent-bench = { path = "sovereign/crates/sovereign-agent-bench" }
+sovereign-work-atlas = { path = "code/crates/sovereign-work-atlas" }
+sovereign-agent-bench = { path = "code/crates/sovereign-agent-bench" }
 sovereign-eval = { path = "sovereign/crates/sovereign-eval" }
 sovereign-authoring-harness = { path = "ingest/crates/sovereign-authoring-harness" }
 sovereign-hosted-ingest = { path = "sovereign/crates/sovereign-hosted-ingest" }
-sovereign-agent-tools = { path = "sovereign/crates/sovereign-agent-tools" }
-sovereign-tdd = { path = "sovereign/crates/sovereign-tdd" }
+sovereign-agent-tools = { path = "code/crates/sovereign-agent-tools" }
+sovereign-tdd = { path = "code/crates/sovereign-tdd" }
 commonwealth-core = { path = "cmnwlth/crates/commonwealth-core" }
 commonwealth-transport = { path = "cmnwlth/crates/commonwealth-transport" }
 commonwealth-discovery = { path = "cmnwlth/crates/commonwealth-discovery" }

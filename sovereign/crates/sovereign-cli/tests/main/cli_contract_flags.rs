@@ -92,7 +92,7 @@ fn cli_crate_sources() -> String {
     let mut all = String::new();
     for crate_dir in [
         "sovereign/crates/sovereign-cli",
-        "sovereign/crates/sovereign-cli-dev",
+        "code/crates/sovereign-cli-dev",
         "sovereign/crates/sovereign-cli-llm",
         "sovereign/crates/sovereign-cli-bench",
         "sovereign/crates/sovereign-cli-daemon",

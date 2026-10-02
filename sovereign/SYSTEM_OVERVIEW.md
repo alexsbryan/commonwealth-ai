@@ -43,13 +43,13 @@ commonwealth-ai/
 ├── shared/crates/corpus-index/              # Retrieval read-port leaf — CorpusIndex, the IndexSource/CorpusReadPort traits, persisted settings, the engine Error
 ├── shared/crates/corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
 ├── shared/crates/corpus-engine-atlas-reader/ # Resolved-atlas READ surface (read-only leaf; writes stay in corpus-engine)
-├── corpus-engine-notes/       # NoteStore + project_docs index
-├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance
+├── code/crates/corpus-engine-notes/       # NoteStore + project_docs index
+├── code/crates/corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance
 ├── shared/crates/corpus-engine-yield/       # YieldHook cooperative-yield contract (tier-0 leaf)
 ├── shared/crates/corpus-engine-sections/    # Section detectors as a regex-only leaf
-├── corpus-engine-watchers/    # Lint/test/project-index watchers + result stores
-├── code-next-edit/            # Code-intel package's next-edit crate
-├── code-facts/                # Code-intel package's tree-sitter fact base
+├── code/crates/corpus-engine-watchers/    # Lint/test/project-index watchers + result stores
+├── code/crates/code-next-edit/            # Code-intel package's next-edit crate
+├── code/crates/code-facts/                # Code-intel package's tree-sitter fact base
 ├── shared/crates/understanding-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kinds, OntologyPolicies
 ├── ingest/crates/understanding-atlas/       # Understanding's pure tier — arithmetic over the published language
 ├── ingest/crates/understanding-host/        # Understanding's host tier — the ports and the knot

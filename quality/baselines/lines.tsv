@@ -3,10 +3,10 @@
 #   cargo run -p xtask -- size-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- size-gate --tighten
-1131	code-facts
-279	code-facts::tests
-1754	code-next-edit
-1452	code-next-edit::tests
+1131	code/crates/code-facts
+279	code/crates/code-facts::tests
+1754	code/crates/code-next-edit
+1452	code/crates/code-next-edit::tests
 2174	cmnwlth/crates/commonwealth-core
 1510	cmnwlth/crates/commonwealth-core::tests
 1103	cmnwlth/crates/commonwealth-discovery
@@ -26,18 +26,18 @@
 2533	cmnwlth/crates/commonwealth-work
 1840	cmnwlth/crates/commonwealth-work::tests
 63086	ingest/crates/corpus-engine
-1297	corpus-engine-archaeology
-582	corpus-engine-archaeology::tests
+1297	code/crates/corpus-engine-archaeology
+582	code/crates/corpus-engine-archaeology::tests
 10849	shared/crates/corpus-engine-atlas-reader
 2311	shared/crates/corpus-engine-atlas-reader::tests
-4979	corpus-engine-notes
-5874	corpus-engine-notes::tests
+4979	code/crates/corpus-engine-notes
+5874	code/crates/corpus-engine-notes::tests
 6213	shared/crates/corpus-engine-scip
 3248	shared/crates/corpus-engine-scip::tests
 524	shared/crates/corpus-engine-sections
 228	shared/crates/corpus-engine-sections::tests
-3459	corpus-engine-watchers
-825	corpus-engine-watchers::tests
+3459	code/crates/corpus-engine-watchers
+825	code/crates/corpus-engine-watchers::tests
 102	shared/crates/corpus-engine-yield
 60	shared/crates/corpus-engine-yield::tests
 6592	quality/xtask
@@ -87,10 +87,10 @@
 24	sovereign/bench/agent-coding/problems/2.2-group-anagrams/scaffold::tests
 4	sovereign/bench/agent-coding/problems/3.2-lights-out/scaffold
 45	sovereign/bench/agent-coding/problems/3.2-lights-out/scaffold::tests
-6931	sovereign/crates/sovereign-agent-bench
-2947	sovereign/crates/sovereign-agent-bench::tests
-2754	sovereign/crates/sovereign-agent-tools
-1750	sovereign/crates/sovereign-agent-tools::tests
+6931	code/crates/sovereign-agent-bench
+2947	code/crates/sovereign-agent-bench::tests
+2754	code/crates/sovereign-agent-tools
+1750	code/crates/sovereign-agent-tools::tests
 723	ingest/crates/sovereign-authoring-harness
 115	ingest/crates/sovereign-authoring-harness::tests
 14703	sovereign/crates/sovereign-cli
@@ -100,8 +100,8 @@
 5172	sovereign/crates/sovereign-cli-bench::tests
 7253	sovereign/crates/sovereign-cli-daemon
 1350	sovereign/crates/sovereign-cli-daemon::tests
-27174	sovereign/crates/sovereign-cli-dev
-7130	sovereign/crates/sovereign-cli-dev::tests
+27174	code/crates/sovereign-cli-dev
+7130	code/crates/sovereign-cli-dev::tests
 30629	sovereign/crates/sovereign-cli-llm
 8297	sovereign/crates/sovereign-cli-llm::tests
 10841	cmnwlth/crates/sovereign-cli-mesh
@@ -109,8 +109,8 @@
 1074	sovereign/crates/sovereign-cli-shared
 677	sovereign/crates/sovereign-cli-shared::tests
 5028	sovereign/crates/sovereign-cli::tests
-11979	sovereign/crates/sovereign-code
-6877	sovereign/crates/sovereign-code::tests
+11979	code/crates/sovereign-code
+6877	code/crates/sovereign-code::tests
 7336	serve/crates/sovereign-compute
 2011	serve/crates/sovereign-compute::tests
 19039	shared/crates/sovereign-contracts
@@ -158,16 +158,16 @@
 5388	sovereign/crates/sovereign-stock::tests
 7688	sovereign/crates/sovereign-store
 3002	sovereign/crates/sovereign-store::tests
-5083	sovereign/crates/sovereign-tdd
-4025	sovereign/crates/sovereign-tdd::tests
+5083	code/crates/sovereign-tdd
+4025	code/crates/sovereign-tdd::tests
 27	shared/crates/sovereign-time
 13	shared/crates/sovereign-time::tests
 29397	sovereign/crates/sovereign-tools
 17307	sovereign/crates/sovereign-tools::tests
 4108	shared/crates/sovereign-turn-client
 1098	shared/crates/sovereign-turn-client::tests
-1869	sovereign/crates/sovereign-work-atlas
-1260	sovereign/crates/sovereign-work-atlas::tests
+1869	code/crates/sovereign-work-atlas
+1260	code/crates/sovereign-work-atlas::tests
 3837	ingest/crates/sovereign-recipe-author
 2428	ingest/crates/sovereign-recipe-author::tests
 360	studio/crates/sovereign-studio

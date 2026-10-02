@@ -2341,7 +2341,7 @@ mod tests {
     async fn fresh_note_store() -> sovereign_contracts::notes::fixtures::RecordingNotes {
         // In-memory double, never SQL (fp-27): the real-SQL round-trip this
         // fixture used to prove lives beside its owner in
-        // `corpus-engine-notes/tests/real_sql_flows.rs`.
+        // `code/crates/corpus-engine-notes/tests/real_sql_flows.rs`.
         sovereign_contracts::notes::fixtures::RecordingNotes::default()
     }
 

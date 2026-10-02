@@ -174,10 +174,10 @@ COPY ingest/crates/corpus-engine/       ./ingest/crates/corpus-engine/
 # against the COPY targets below.
 COPY shared/crates/corpus-engine-scip/        ./shared/crates/corpus-engine-scip/
 COPY corpus-engine-atos/        ./corpus-engine-atos/
-COPY corpus-engine-notes/       ./corpus-engine-notes/
-COPY corpus-engine-archaeology/ ./corpus-engine-archaeology/
+COPY code/crates/corpus-engine-notes/       ./code/crates/corpus-engine-notes/
+COPY code/crates/corpus-engine-archaeology/ ./code/crates/corpus-engine-archaeology/
 COPY shared/crates/corpus-engine-yield/       ./shared/crates/corpus-engine-yield/
-COPY corpus-engine-watchers/    ./corpus-engine-watchers/
+COPY code/crates/corpus-engine-watchers/    ./code/crates/corpus-engine-watchers/
 COPY shared/crates/corpus-engine-sections/    ./shared/crates/corpus-engine-sections/
 COPY shared/crates/kernel-types/        ./shared/crates/kernel-types/
 COPY shared/crates/oicp-types/          ./shared/crates/oicp-types/

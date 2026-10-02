@@ -2125,7 +2125,7 @@ def cmd_counts(a) -> int:
     Reuse, not a new harness (ARCH 11). `sovereign-tdd` already defines the
     one-`f` contract — a command prefixed `counts:` whose stdout is
     `PASS <name>` / `FAIL <name>`, parsed at
-    `sovereign/crates/sovereign-tdd/src/shared/parser.rs:56`, with zero lines
+    `code/crates/sovereign-tdd/src/shared/parser.rs:56`, with zero lines
     plus an `error` folding to one failing `<suite error>` and zero lines
     without one staying 0/0/0 so `NoBaseline` keeps meaning "nothing to steer
     by". Emitting it makes this pipeline steerable by the existing solve loop

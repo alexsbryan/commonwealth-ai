@@ -26,8 +26,8 @@
 /ingest/crates/corpus-engine/                 @alexsbryan
 /shared/crates/corpus-engine-scip/            @alexsbryan
 /corpus-engine-atos/            @alexsbryan
-/corpus-engine-notes/           @alexsbryan
-/corpus-engine-archaeology/     @alexsbryan
+/code/crates/corpus-engine-notes/           @alexsbryan
+/code/crates/corpus-engine-archaeology/     @alexsbryan
 
 # Sovereign — local runtime, CLI, desktop, and server.
 /sovereign/                     @alexsbryan

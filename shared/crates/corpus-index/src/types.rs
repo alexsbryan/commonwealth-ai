@@ -715,7 +715,7 @@ pub struct NotePropagationEvent {
     /// local space. Both shapes are accepted indefinitely, in both
     /// directions. No schema break.
     ///
-    /// Proved by `corpus-engine-notes/tests/note_wire_shapes.rs`,
+    /// Proved by `code/crates/corpus-engine-notes/tests/note_wire_shapes.rs`,
     /// which decodes a new event with a byte-for-byte mirror of the
     /// pre-strip struct.
     #[serde(default, serialize_with = "serialize_embedding_as_absent")]

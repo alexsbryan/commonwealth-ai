@@ -28,7 +28,7 @@ CLASSES — a closed set:
   harness    feedback/invariant files in --memory-dir that were never migrated —
              written after 2026-07-18 and visible only to one harness until now.
 Live is the store's own predicate, `retired_at IS NULL AND tombstone = 0`
-(corpus-engine-notes/src/notes.rs:3510). Private notes are never exported.
+(code/crates/corpus-engine-notes/src/notes.rs:3510). Private notes are never exported.
 Every note a class drops is counted in the summary, never silently absent.
 
 SHAPE. One file per note. The heading is the note's first line (a harness file's

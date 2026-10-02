@@ -283,5 +283,5 @@ with T2; keep `corpus-engine-notes` minimal.
   pattern T1 should mirror (min-max normalisation across the
   candidate pool, default weight = 0.0 = byte-identical
   baseline).
-- `corpus-engine-notes/src/notes.rs::read_notes_scoped` — SQL
+- `code/crates/corpus-engine-notes/src/notes.rs::read_notes_scoped` — SQL
   filter pushdown (the 2026-05-25 fix that complements this).

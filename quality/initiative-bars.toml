@@ -1432,7 +1432,7 @@ of the real store, shipped `notes_delta_since` + `serde_json::to_vec` path);
 14.4-14.6 KB of that is the 1024-dim embedding as a JSON decimal array, against
 a 1.5 KB note body. Derived cliff 520-521 notes to the 8 MiB limit; 5,273-5,420
 if stripped (10.1-10.4x). Harness:
-corpus-engine-notes/tests/red_baseline_note_wire_size.rs."""
+code/crates/corpus-engine-notes/tests/red_baseline_note_wire_size.rs."""
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
@@ -1459,7 +1459,7 @@ declared = "2026-08-13"
   to = "failed"
   by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §8.3 (order mesh-scale-t1-red)"
   note = """RED: reproduced in 0.02 s by
-corpus-engine-notes/tests/red_baseline_cross_model_notes.rs (committed #[ignore]d,
+code/crates/corpus-engine-notes/tests/red_baseline_cross_model_notes.rs (committed #[ignore]d,
 watched failing). Two gossiped notes with the SAME vector differing only in
 model_id are both stored verbatim and both returned from a pure-cosine read -
 ids=["note-local-space", "note-foreign-space"]. The test asserts the same-space

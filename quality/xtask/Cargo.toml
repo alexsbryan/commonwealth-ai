@@ -50,7 +50,7 @@ oicp-types = { workspace = true }
 # `tests/refactor_register.rs` checks THIS repo's concept register and wire
 # spec with the refactor factory's resolver (pb-code-clean-lift): monorepo
 # data a lifted code program does not carry.
-sovereign-cli-dev = { path = "../../sovereign/crates/sovereign-cli-dev" }
+sovereign-cli-dev = { path = "../../code/crates/sovereign-cli-dev" }
 # The monorepo-wide censuses svrn's crates carried until pb-distribution-svrn-lift:
 # `tests/cli_contract_{docs,journeys}.rs` read the contract through its one
 # parser, and `tests/chunk_provenance_census.rs` asserts ChunkProvenance's doors.

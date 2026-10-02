@@ -17,13 +17,13 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // `build_daemon_embed_fn`'s /v1/models probe, which left with the rest of
     // `svrn code index` for sovereign-cli-shared::code_index. The three that
     // remain are cmd_facts' http client and cmd_watch's two.
-    ("sovereign/crates/sovereign-cli-dev/src/code_cmd.rs", Class::LocalDaemon, 3),
+    ("code/crates/sovereign-cli-dev/src/code_cmd.rs", Class::LocalDaemon, 3),
     // registry 3 -> 2 (pb-code-clean): the engine's embedder left with the
     // engine; the code tools read indexes through the leaf's FsIndexSource.
-    ("sovereign/crates/sovereign-cli-dev/src/tools_cmd/registry.rs", Class::LocalDaemon, 2),
+    ("code/crates/sovereign-cli-dev/src/tools_cmd/registry.rs", Class::LocalDaemon, 2),
     // notes_cmd moved from sovereign-cli (pb-notes-verbs): `notes rationalize`'s
     // daemon completion call.
-    ("sovereign/crates/sovereign-cli-dev/src/notes_cmd.rs", Class::LocalDaemon, 1),
+    ("code/crates/sovereign-cli-dev/src/notes_cmd.rs", Class::LocalDaemon, 1),
     // `svrn ring` talks to ONE address: `127.0.0.1:<daemon client_port>`, for
     // the rail routes and the guest-grant mint. Nothing a ring app writes
     // leaves the machine through this client — replication is the daemon's
@@ -39,7 +39,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // pb-code-daemon-exit (c25b16fb7) moved the daemon's
     // tests/main/pattern_observation_e2e.rs into src/, where the census
     // scans; its one loopback POST is not a new site.
-    ("sovereign/crates/sovereign-code/src/face/pattern_observation_tests.rs", Class::TestOnly, 1),
+    ("code/crates/sovereign-code/src/face/pattern_observation_tests.rs", Class::TestOnly, 1),
     // pb-work-donor (6ecad5596): the execute origin's `#[cfg(test)]` module
     // (work_origin.rs:276-278) dials its own loopback port, as cw-rails'
     // donor does.
@@ -48,17 +48,17 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // `project_cmd/registry_watch.rs` when that file was deleted as an
     // unreachable fork. Same loopback client, same class — a relocation,
     // not a new egress site.
-    ("sovereign/crates/sovereign-cli-dev/src/project_cmd/mod.rs", Class::LocalDaemon, 3),
-    ("sovereign/crates/sovereign-cli-dev/src/code_map.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs", Class::LocalDaemon, 1),
+    ("code/crates/sovereign-cli-dev/src/project_cmd/mod.rs", Class::LocalDaemon, 3),
+    ("code/crates/sovereign-cli-dev/src/code_map.rs", Class::LocalDaemon, 2),
+    ("code/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs", Class::LocalDaemon, 1),
     // refactor_cmd/label_model: the name-group adjudication pass. One client,
     // pinned to the local daemon — it posts Rust source snippets and the
     // code-intel descriptions of the types under judgement, which are estate
     // content, so LocalDaemon is the class that keeps them on the machine. A
     // future `--daemon-url` pointing off-box would be the review moment, not
     // a count change.
-    ("sovereign/crates/sovereign-cli-dev/src/refactor_cmd/label_model.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-dev/src/code_capability_graph.rs", Class::LocalDaemon, 1),
+    ("code/crates/sovereign-cli-dev/src/refactor_cmd/label_model.rs", Class::LocalDaemon, 1),
+    ("code/crates/sovereign-cli-dev/src/code_capability_graph.rs", Class::LocalDaemon, 1),
     // +2 (2026-09-23, five-programs fp-32/fp-33): the workbench's two DIAL
     // clients — the state store and the mesh KV are the daemon's, so
     // `audit --recover` and the work-atlas surfaces read them over the
@@ -66,7 +66,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // never leaves the machine: LocalDaemon, like every row above.
     // -1 (pb-atlas-kv): the mesh-KV twin is gone; the work atlas dials
     // through turn-client's `rails_kv.rs`, counted there.
-    ("sovereign/crates/sovereign-cli-dev/src/state_store_client.rs", Class::LocalDaemon, 1),
+    ("code/crates/sovereign-cli-dev/src/state_store_client.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-cli-daemon (LocalDaemon — daemon self-control) ----
     // `doctor_cmd.rs` was split along its three declared layers; the three
@@ -146,7 +146,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // is a public-record endpoint rather than a model provider or a
     // search engine.
     ("sovereign/crates/sovereign-tools/src/sec_edgar.rs", Class::InboundOnly, 1),
-    ("corpus-engine-notes/src/mining/diff_extract_backend.rs", Class::LocalDaemon, 1),
+    ("code/crates/corpus-engine-notes/src/mining/diff_extract_backend.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-tools/src/local_corpus/ocr/cleanup.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-tools/src/corpus/manager.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-tools/src/catalog_ingest.rs", Class::LocalDaemon, 1),
@@ -166,14 +166,14 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-eval/src/cognitive/runner.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-agent-bench (LocalDaemon — bench against the host daemon) ----
-    ("sovereign/crates/sovereign-agent-bench/src/runners/native.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-agent-bench/src/runners/bare_metal.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-agent-bench/src/judge.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-agent-bench/src/cli/replay.rs", Class::LocalDaemon, 1),
+    ("code/crates/sovereign-agent-bench/src/runners/native.rs", Class::LocalDaemon, 2),
+    ("code/crates/sovereign-agent-bench/src/runners/bare_metal.rs", Class::LocalDaemon, 2),
+    ("code/crates/sovereign-agent-bench/src/judge.rs", Class::LocalDaemon, 1),
+    ("code/crates/sovereign-agent-bench/src/cli/replay.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-tdd (LocalDaemon — TDD loop against the daemon) ----
-    ("sovereign/crates/sovereign-tdd/src/backend.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-tdd/src/recur/model.rs", Class::LocalDaemon, 1),
+    ("code/crates/sovereign-tdd/src/backend.rs", Class::LocalDaemon, 2),
+    ("code/crates/sovereign-tdd/src/recur/model.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-compute ----
     // client: loopback back to the host daemon; supervisor: heartbeat

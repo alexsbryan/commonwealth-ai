@@ -2307,7 +2307,7 @@ async fn lesson_note_store(
 ) -> Arc<dyn sovereign_contracts::notes::AgentNotes> {
     use sovereign_contracts::recipe::notes::{NoteScope, NoteSource, RecipeNotes};
     // Capturing double, never SQL (fp-27) — the real store's write/read
-    // contract is pinned in `corpus-engine-notes/tests/real_sql_flows.rs`.
+    // contract is pinned in `code/crates/corpus-engine-notes/tests/real_sql_flows.rs`.
     let store = Arc::new(sovereign_contracts::notes::fixtures::RecordingNotes::default());
     for payload in payloads {
         store

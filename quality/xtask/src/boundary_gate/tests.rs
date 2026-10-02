@@ -473,7 +473,7 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
 "#;
     assert!(scan_runtime_escapes(subdir).is_empty());
 
-    // corpus-engine-archaeology/src/git_archaeology.rs — git at a path the
+    // code/crates/corpus-engine-archaeology/src/git_archaeology.rs — git at a path the
     // CALLER supplied. Seven of these exist in the code-intel package and
     // every one of them lifts.
     let caller_directed = r#"

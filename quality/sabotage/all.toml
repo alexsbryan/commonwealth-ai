@@ -56,7 +56,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-5-full_export_not_due_immediately_after_on"
 requirement = "CI-5"
-target = "corpus-engine-watchers/src/reindexer.rs"
+target = "code/crates/corpus-engine-watchers/src/reindexer.rs"
 find = "fn full_export_due(last_finished: Option<Instant>, cooldown: Duration) -> bool {\n    last_finished.is_none_or(|t| t.elapsed() >= cooldown)\n}"
 replace = "fn full_export_due(_last_finished: Option<Instant>, _cooldown: Duration) -> bool {\n    true\n}"
 mustFail = ["full_export_not_due_immediately_after_one_finished"]
@@ -106,7 +106,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-10-run_verify_cmd_exit_nonzero_fails"
 requirement = "CI-10"
-target = "sovereign/crates/sovereign-agent-bench/src/witness/auto_test.rs"
+target = "code/crates/sovereign-agent-bench/src/witness/auto_test.rs"
 find = "    let mut command = tokio::process::Command::new(\"sh\");\n    command\n        .arg(\"-c\")\n        .arg(cmd)\n        .current_dir(workdir)\n        .stdin(Stdio::null())\n        .stdout(Stdio::piped())\n        .stderr(Stdio::piped())\n        .kill_on_drop(true);"
 replace = "    let output = match tokio::process::Command::new(\"sh\")\n        .arg(\"-c\")\n        .arg(cmd)\n        .current_dir(workdir)\n        .stdin(Stdio::null())\n        .stdout(Stdio::piped())\n        .stderr(Stdio::piped())\n        .output()\n        .await\n    {\n        Ok(o) => o,\n        Err(e) => {\n            warn!(error = %e, \"agent_bench: verify spawn failed\");\n            return (false, format!(\"verify spawn failed: {e}\"));\n        }\n    };\n    let mut combined = String::new();\n    combined.push_str(&String::from_utf8_lossy(&output.stdout));\n    if !output.stderr.is_empty() {\n        combined.push_str(\"\\n---stderr---\\n\");\n        combined.push_str(&String::from_utf8_lossy(&output.stderr));\n    }\n    // Keep the TAIL not the head\n    let truncated = truncate_tail(&combined, 32 * 1024);\n    return (output.status.success(), truncated);"
 mustFail = ["run_verify_cmd_exit_nonzero_fails"]
@@ -116,7 +116,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-10-run_verify_cmd_exit_zero_succeeds"
 requirement = "CI-10"
-target = "sovereign/crates/sovereign-agent-bench/src/witness/auto_test.rs"
+target = "code/crates/sovereign-agent-bench/src/witness/auto_test.rs"
 find = "    let mut command = tokio::process::Command::new(\"sh\");\n    command\n        .arg(\"-c\")\n        .arg(cmd)\n        .current_dir(workdir)\n        .stdin(Stdio::null())\n        .stdout(Stdio::piped())\n        .stderr(Stdio::piped())\n        .kill_on_drop(true);"
 replace = "    let output = match tokio::process::Command::new(\"sh\")\n        .arg(\"-c\")\n        .arg(cmd)\n        .current_dir(workdir)\n        .stdin(Stdio::null())\n        .stdout(Stdio::piped())\n        .stderr(Stdio::piped())\n        .output()\n        .await\n    {\n        Ok(o) => o,\n        Err(e) => {\n            warn!(error = %e, \"agent_bench: verify spawn failed\");\n            return (false, format!(\"verify spawn failed: {e}\"));\n        }\n    };"
 mustFail = ["run_verify_cmd_exit_zero_succeeds"]
@@ -126,7 +126,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-10-run_verify_cmd_empty_rejected"
 requirement = "CI-10"
-target = "sovereign/crates/sovereign-agent-bench/src/witness/auto_test.rs"
+target = "code/crates/sovereign-agent-bench/src/witness/auto_test.rs"
 find = "    if cmd.trim().is_empty() {\n        return (false, \"verify_cmd is empty\".into());\n    }"
 replace = ""
 mustFail = ["run_verify_cmd_empty_rejected"]
@@ -296,7 +296,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-31-cargo_compile_error_counts_as_failure_no"
 requirement = "CI-31"
-target = "sovereign/crates/sovereign-tdd/src/shared/parser.rs"
+target = "code/crates/sovereign-tdd/src/shared/parser.rs"
 find = "    // Compile failure: rustc diagnostics and no test summary at all.\n    // A test that references a not-yet-written function dies here \u2014\n    // count it as one failing entry so the loop has a gradient. When\n    // any summary exists, tests ran; the \"error: test failed\" footer\n    // cargo prints after real failures must not double-count.\n    if !saw_summary {\n        let compile_error = stdout.lines().any(|l| {\n            let t = l.trim();\n            t.starts_with(\"error[\") || t.starts_with(\"error:\")\n        });\n        if compile_error {\n            failed_names.push(\"<compile error>\".to_string());\n            total_failed = 1;\n        }\n    }"
 replace = "    // Compile failure: rustc diagnostics and no test summary at all.\n    // A test that references a not-yet-written function dies here \u2014\n    // count it as one failing entry so the loop has a gradient. When\n    // any summary exists, tests ran; the \"error: test failed\" footer\n    // cargo prints after real failures must not double-count.\n    if !saw_summary {\n        let compile_error = stdout.lines().any(|l| {\n            let t = l.trim();\n            t.starts_with(\"error[\") || t.starts_with(\"error:\")\n        });\n        if compile_error {\n            // Mutation: Do not add to failed_names, only increment counter.\n            total_failed = 1;\n        }\n    }"
 mustFail = ["cargo_compile_error_counts_as_failure_not_as_a_witness_that_never_ran"]
@@ -396,7 +396,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-44-persist_agent_run_writes_role_model_map_"
 requirement = "CI-44"
-target = "sovereign/crates/sovereign-agent-bench/src/artifacts.rs"
+target = "code/crates/sovereign-agent-bench/src/artifacts.rs"
 find = "            role_model_map_used: artifact.role_model_map_used.clone(),"
 replace = "            // MUTATION: Omitting role_model_map_used to violate CI-44 requirement that it MUST be shared.\n            // This causes the test persist_agent_run_writes_role_model_map_when_set to fail because\n            // the serialized JSON will not contain 'role_model_map_used'.\n            // role_model_map_used: None,"
 mustFail = ["persist_agent_run_writes_role_model_map_when_set"]
@@ -406,7 +406,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-46-validate_rejects_step_missing_goal"
 requirement = "CI-46"
-target = "sovereign/crates/sovereign-code/src/solve_tools.rs"
+target = "code/crates/sovereign-code/src/solve_tools.rs"
 find = "    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {\n        for key in [\"workdir\", \"goal\"] {\n            if params.get(key).and_then(|v| v.as_str()).is_none() {\n                return Err(Error::InvalidInput(format!(\n                    \"solve requires a '{key}' string parameter\"\n                )));\n            }\n        }\n        Ok(())\n    }"
 replace = "    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {\n        // Mutation: Remove 'goal' from required keys to violate CI-46 requirement\n        for key in [\"workdir\"] {\n            if params.get(key).and_then(|v| v.as_str()).is_none() {\n                return Err(Error::InvalidInput(format!(\n                    \"solve requires a '{key}' string parameter\"\n                )));\n            }\n        }\n        Ok(())\n    }"
 mustFail = ["validate_rejects_step_missing_goal"]
@@ -446,7 +446,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-8-rewording_every_summary_does_not_move_th"
 requirement = "EN-8"
-target = "sovereign/crates/sovereign-cli-dev/src/intent.rs"
+target = "code/crates/sovereign-cli-dev/src/intent.rs"
 find = "            let quorum = ids.len().div_ceil(2);\n            let mut terms: Vec<String> = freq\n                .into_iter()\n                .filter(|(_, c)| *c >= quorum)\n                .map(|(t, _)| t.to_string())\n                .collect();"
 replace = "            // MUTATION: Changed from majority (>= 50%) to strict intersection (< all).\n            // This violates EN-8 because rewording a summary changes the token set,\n            // causing the strict intersection to become empty even if the semantic meaning is identical.\n            let quorum = ids.len();\n            let mut terms: Vec<String> = freq\n                .into_iter()\n                .filter(|(_, c)| *c == quorum)\n                .map(|(t, _)| t.to_string())\n                .collect();"
 mustFail = ["rewording_every_summary_does_not_move_the_token"]
@@ -646,7 +646,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-18-hybrid_records_judge_dissent_without_let"
 requirement = "EV-18"
-target = "sovereign/crates/sovereign-agent-bench/src/scoring.rs"
+target = "code/crates/sovereign-agent-bench/src/scoring.rs"
 find = "            // Floored away from `raw`, but no longer thrown away.\n            judge_dissent: auto_score\n                .checked_sub(judge.majority_anchor)\n                .filter(|d| *d > 0),"
 replace = "            // Floored away from `raw`, but no longer thrown away.\n            judge_dissent: None,"
 mustFail = ["hybrid_records_judge_dissent_without_letting_it_lower_the_score"]
@@ -676,7 +676,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-24-vitest_suite_failures_do_not_inflate_rea"
 requirement = "EV-24"
-target = "sovereign/crates/sovereign-tdd/src/shared/parser.rs"
+target = "code/crates/sovereign-tdd/src/shared/parser.rs"
 find = "    if passed == 0 && failed == 0 {\n        if suite_failures > 0 {\n            failed = suite_failures;\n            failed_names.push(\"<suite error>\".to_string());\n        } else if errors > 0 {\n            failed = errors;\n            failed_names.push(\"<suite error>\".to_string());\n        } else if playwright_fatal {\n            failed = 1;\n            failed_names.push(\"<suite error>\".to_string());\n        }\n    } else {"
 replace = "    // MUTATION: Always treat zero-count runs as passing to break negative control\n    if passed == 0 && failed == 0 {\n        return TestParseResult {\n            passed,\n            failed,\n            total,\n            failed_names,\n        };\n    }\n    if false {"
 mustFail = ["vitest_suite_failures_do_not_inflate_real_test_counts"]
@@ -686,7 +686,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-24-generate_one_failing_accepts_all_new_tes"
 requirement = "EV-24"
-target = "sovereign/crates/sovereign-tdd/src/trial.rs"
+target = "code/crates/sovereign-tdd/src/trial.rs"
 find = "        Polarity::GenerateOneFailing { .. } => {\n            let new_tests = after.total.saturating_sub(before.total);\n            let new_failures = after.failed.saturating_sub(before.failed);\n            new_tests >= 1 && new_failures == new_tests && after.passed == before.passed\n        }"
 replace = "        Polarity::GenerateOneFailing { .. } => {\n            // BUG: This logic incorrectly allows vacuous passes or regressions,\n            // violating the requirement that tests must prove they can fail.\n            // Specifically, it ignores whether existing passed tests remain passed\n            // in a way that distinguishes 'new failing' from 'existing passing'.\n            // By removing the check `after.passed == before.passed`, we allow cases\n            // where total tests increase but some are newly passing (vacuous), \n            // OR by changing the condition to always return true for any growth,\n            // we break the discrimination. Let's make it trivially true for any non-zero delta.\n            after.total > before.total || after.failed > before.failed\n        }"
 mustFail = ["generate_one_failing_accepts_all_new_tests_failing"]
@@ -696,7 +696,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-24-cargo_libtest_some_fail"
 requirement = "EV-24"
-target = "sovereign/crates/sovereign-tdd/src/shared/parser.rs"
+target = "code/crates/sovereign-tdd/src/shared/parser.rs"
 find = "    let mut total_passed: u32 = 0;\n    let mut total_failed: u32 = 0;"
 replace = "    // MUTATION: Intentionally ignore failed counts to make the test fail\n    let mut total_passed: u32 = 0;\n    let mut total_failed: u32 = 0;"
 mustFail = ["cargo_libtest_some_fail"]
@@ -706,7 +706,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-25-verdict_reports_new_failure_but_not_stal"
 requirement = "EV-25"
-target = "sovereign/crates/sovereign-cli-dev/src/project_cmd/refresh.rs"
+target = "code/crates/sovereign-cli-dev/src/project_cmd/refresh.rs"
 find = "    if let (Some(e), Some(ts)) = (last_error, last_error_ts) {\n        if ts > baseline_error_ts {\n            return NudgeVerdict::Failed {\n                error: e.to_string(),\n            };\n        }\n    }"
 replace = "    // MUTATION: Invert the condition to treat pre-baseline errors as current failures\n    if let (Some(e), Some(ts)) = (last_error, last_error_ts) {\n        if ts <= baseline_error_ts { \n            return NudgeVerdict::Failed {\n                error: e.to_string(),\n            };\n        }\n    }"
 mustFail = ["verdict_reports_new_failure_but_not_stale_ones"]
@@ -816,7 +816,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-34-accepts_clean_git_repo"
 requirement = "EV-34"
-target = "sovereign/crates/sovereign-tdd/src/workdir.rs"
+target = "code/crates/sovereign-tdd/src/workdir.rs"
 find = "    pub fn check_safe(path: PathBuf, force: bool) -> Result<Self, DirtyWorkdir> {\n        let canonical = path.canonicalize().unwrap_or(path.clone());\n        if is_system_path(&canonical) {"
 replace = "    pub fn check_safe(path: PathBuf, force: bool) -> Result<Self, DirtyWorkdir> {\n        // Mutation: Ignore the input path and always use a fixed system-like path for checks,\n        // violating the requirement that it must confirm on a clean checkout (the actual `path`).\n        // This breaks the definition of \"clean\" relative to the provided directory.\n        let _ignored_input = path;\n        let fake_canonical = std::env::current_exe()\n            .ok()\n            .and_then(|p| p.parent().map(PathBuf::from))\n            .unwrap_or_else(|| PathBuf::from(\"/usr/bin\"));\n\n        if is_system_path(&fake_canonical) {"
 mustFail = ["accepts_clean_git_repo"]
@@ -836,7 +836,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-34-bash_cargo_test_integration_classifies_a"
 requirement = "EV-34"
-target = "sovereign/crates/sovereign-agent-tools/src/adapter/pi.rs"
+target = "code/crates/sovereign-agent-tools/src/adapter/pi.rs"
 find = "    // Defaults \u2014 if no per-problem commands are bound, fall back\n    // to Rust prefixes (preserves PR 1 behavior for existing\n    // Rust-only problems before the bench wiring lands).\n    let build_match = build_prefix.unwrap_or(\"cargo build\");\n    let verify_match = verify_prefix.unwrap_or(\"cargo test --quiet --test integration\");"
 replace = "    // Defaults \u2014 if no per-problem commands are bound, fall back\n    // to Rust prefixes (preserves PR 1 behavior for existing\n    // Rust-only problems before the bench wiring lands).\n    let build_match = build_prefix.unwrap_or(\"cargo build\");\n    let verify_match = verify_prefix.unwrap_or(\"cargo test --workspace\");"
 mustFail = ["bash_cargo_test_integration_classifies_as_smoke"]
@@ -1176,7 +1176,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-56-hybrid_records_judge_dissent_without_let"
 requirement = "FE-56"
-target = "sovereign/crates/sovereign-agent-bench/src/scoring.rs"
+target = "code/crates/sovereign-agent-bench/src/scoring.rs"
 find = "            judge_dissent: auto_score\n                .checked_sub(judge.majority_anchor)\n                .filter(|d| *d > 0),"
 replace = "            judge_dissent: None,"
 mustFail = ["hybrid_records_judge_dissent_without_letting_it_lower_the_score"]
@@ -1186,7 +1186,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-60-hybrid_records_judge_dissent_without_let"
 requirement = "FE-60"
-target = "sovereign/crates/sovereign-agent-bench/src/scoring.rs"
+target = "code/crates/sovereign-agent-bench/src/scoring.rs"
 find = "            judge_dissent: auto_score\n                .checked_sub(judge.majority_anchor)\n                .filter(|d| *d > 0),"
 replace = "            judge_dissent: None,"
 mustFail = ["hybrid_records_judge_dissent_without_letting_it_lower_the_score"]

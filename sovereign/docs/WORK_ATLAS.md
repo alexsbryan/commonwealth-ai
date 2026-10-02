@@ -279,13 +279,13 @@ These are intentionally out of scope and called out so future-you doesn't think 
 
 ## Where things live
 
-- `sovereign/crates/sovereign-work-atlas/src/observer.rs` — `AtlasObserver` (Phase 2 passive sensor).
-- `sovereign/crates/sovereign-work-atlas/src/confidence.rs` — grade thresholds + `observation_grade()`.
-- `sovereign/crates/sovereign-work-atlas/src/tools/broadcast.rs` — `ClaimBroadcaster` trait, `NullBroadcaster`, `DeferredBroadcaster` (Phase 2 indirection seam).
+- `code/crates/sovereign-work-atlas/src/observer.rs` — `AtlasObserver` (Phase 2 passive sensor).
+- `code/crates/sovereign-work-atlas/src/confidence.rs` — grade thresholds + `observation_grade()`.
+- `code/crates/sovereign-work-atlas/src/tools/broadcast.rs` — `ClaimBroadcaster` trait, `NullBroadcaster`, `DeferredBroadcaster` (Phase 2 indirection seam).
 - `sovereign/crates/sovereign-daemon/src/daemon_services.rs::HeadlessRails::mesh_store` — the daemon's `AppState.mesh_store` IS the work-atlas's store. Was a `set_mesh_store` hook until 2026-08-24; it is now a required field of the headless daemon's variant, so a daemon that serves the atlas cannot be built without it.
 - `sovereign/crates/sovereign-cli/src/daemon_cmd.rs` — wire-up: observer registration, broadcaster swap-in, GC spawn.
-- `sovereign/crates/sovereign-work-atlas/` — the crate.
-- `sovereign/crates/sovereign-work-atlas/src/tools/resource_may_i.rs` — `resource_may_i` tool, `resource_verdict`, `DEFAULT_RESOURCE_TTL_SECS` (resource-commons convention, order seat-resource-commons).
+- `code/crates/sovereign-work-atlas/` — the crate.
+- `code/crates/sovereign-work-atlas/src/tools/resource_may_i.rs` — `resource_may_i` tool, `resource_verdict`, `DEFAULT_RESOURCE_TTL_SECS` (resource-commons convention, order seat-resource-commons).
 - `sovereign/crates/sovereign-cli-llm/src/claim_cmd.rs` — `sovereign claim` dispatch incl. `may-i` / `take` (daemon-first; the in-process fallback lives here too).
 - `cmnwlth/crates/commonwealth-api/src/admission.rs` + `state.rs` + `routes_status.rs` — the per-peer request tally on `/status` (`inference.peer_requests`, order seat-resource-commons UC-R1).
 - `cmnwlth/crates/commonwealth-state/src/peer_preferences.rs` — `GOSSIP_EXCLUDED_APP_IDS` slice + paired test.

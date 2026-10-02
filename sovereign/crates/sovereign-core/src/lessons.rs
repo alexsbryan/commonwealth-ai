@@ -1058,7 +1058,7 @@ mod tests {
     //
     // Never SQL (fp-27): the real-SQL halves these flows lean on — payload
     // persistence and retired-row hiding — live beside their owner in
-    // `corpus-engine-notes/tests/real_sql_flows.rs`. What stays here is the
+    // `code/crates/corpus-engine-notes/tests/real_sql_flows.rs`. What stays here is the
     // loader/whisper LOGIC and the payload shape it emits.
 
     async fn store_with_lesson(
@@ -1107,7 +1107,7 @@ mod tests {
         // Supersede: the newest row per rung wins — the loader takes the
         // first of the newest-first list. The store half ("a retired
         // predecessor is hidden") is pinned in
-        // `corpus-engine-notes/tests/real_sql_flows.rs`; composing the two
+        // `code/crates/corpus-engine-notes/tests/real_sql_flows.rs`; composing the two
         // is what "a retired predecessor never loads" means.
         let json_b = serde_json::to_string(&lesson).unwrap();
         let id_b = store

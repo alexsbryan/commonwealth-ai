@@ -370,7 +370,7 @@ target, not a regression.
 
 **File map (PR 2 additions):**
 
-- `sovereign/crates/sovereign-agent-tools/src/role/mod.rs` —
+- `code/crates/sovereign-agent-tools/src/role/mod.rs` —
   `Role` closed enum + re-exports
 - `.../src/role/profile.rs` — `RoleProfile` + compiled-in defaults
   + tool-subset / forced-first-tool tests
@@ -378,11 +378,11 @@ target, not a regression.
   unit tests pinning each rule
 - `.../src/role/dossier.rs` — `RoleDossier` (sticky plan +
   staleness counter + outcome history) + per-primitive `summarize`
-- `sovereign/crates/sovereign-agent-bench/src/runners/native.rs` —
+- `code/crates/sovereign-agent-bench/src/runners/native.rs` —
   rewritten with `NativeMode::RoleAware` (default) + `Monolithic`
   (PR-1 regression baseline). `--agent native` and `--agent
   native-monolithic` both registered.
-- `sovereign/crates/sovereign-agent-bench/src/problem.rs` —
+- `code/crates/sovereign-agent-bench/src/problem.rs` —
   `WitnessCfg.build_cmd` + `resolved_build_cmd()`
 - `sovereign/SYSTEM_OVERVIEW.md` §4.18 — PR 2 architecture +
   measurement result
@@ -756,7 +756,7 @@ memory. Worth a session of trace-the-allocations work.
 
 ## 2026-05-20 → 2026-05-21 — what landed
 
-The crate `sovereign/crates/sovereign-agent-bench/` ships as the
+The crate `code/crates/sovereign-agent-bench/` ships as the
 measurement surface for end-to-end coding agents (pi, future
 opencode/codex/aider). MVS problem **3.2 Light's Out** runs
 end-to-end through the full pipeline — agent → witness → judge →
@@ -959,15 +959,15 @@ line pointing at `Qwopus3.5-9B-Coder-MTP-Q6_K.gguf`.
 ## Critical file map
 
 ### Crate
-- `sovereign/crates/sovereign-agent-bench/src/runner.rs` — trait, contexts, `ExitReason` (incl. `NoProgress`)
-- `sovereign/crates/sovereign-agent-bench/src/runners/pi.rs` — subprocess + JSONL parser + no-progress + budget kill
-- `sovereign/crates/sovereign-agent-bench/src/problem.rs` — TOML schema, closed enums (incl. `Tier`)
-- `sovereign/crates/sovereign-agent-bench/src/sandbox.rs` — workdir + scaffold install + env scrub
-- `sovereign/crates/sovereign-agent-bench/src/cli/run.rs` — orchestration, slot-swap sleep, resilient judge
-- `sovereign/crates/sovereign-agent-bench/src/artifacts.rs` — agent.json + jsonl + judge persistence
-- `sovereign/crates/sovereign-agent-bench/src/judge.rs` — HTTP judge, workspace-view assembly
-- `sovereign/crates/sovereign-agent-bench/src/judge_multi.rs` — N-trial majority-vote aggregator
-- `sovereign/crates/sovereign-agent-bench/tests/mvs_pipeline.rs` — synthetic problem + MockAgentRunner + StubJudge
+- `code/crates/sovereign-agent-bench/src/runner.rs` — trait, contexts, `ExitReason` (incl. `NoProgress`)
+- `code/crates/sovereign-agent-bench/src/runners/pi.rs` — subprocess + JSONL parser + no-progress + budget kill
+- `code/crates/sovereign-agent-bench/src/problem.rs` — TOML schema, closed enums (incl. `Tier`)
+- `code/crates/sovereign-agent-bench/src/sandbox.rs` — workdir + scaffold install + env scrub
+- `code/crates/sovereign-agent-bench/src/cli/run.rs` — orchestration, slot-swap sleep, resilient judge
+- `code/crates/sovereign-agent-bench/src/artifacts.rs` — agent.json + jsonl + judge persistence
+- `code/crates/sovereign-agent-bench/src/judge.rs` — HTTP judge, workspace-view assembly
+- `code/crates/sovereign-agent-bench/src/judge_multi.rs` — N-trial majority-vote aggregator
+- `code/crates/sovereign-agent-bench/tests/mvs_pipeline.rs` — synthetic problem + MockAgentRunner + StubJudge
 
 ### Data
 - `sovereign/bench/agent-coding/problems/3.2-lights-out/problem.toml` — `tier = "Scaffolded"`

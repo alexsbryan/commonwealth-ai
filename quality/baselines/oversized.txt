@@ -3,12 +3,12 @@
 #   cargo run -p xtask -- arch-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- arch-gate --tighten
-2462	code-next-edit/src/next_edit_model.rs
-7387	corpus-engine-notes/src/notes.rs
+2462	code/crates/code-next-edit/src/next_edit_model.rs
+7387	code/crates/corpus-engine-notes/src/notes.rs
 1361	shared/crates/corpus-engine-scip/src/converge.rs
 1300	shared/crates/corpus-engine-scip/src/scip_export.rs
 3684	shared/crates/corpus-engine-scip/src/scip_graph.rs
-1545	corpus-engine-watchers/src/reindexer.rs
+1545	code/crates/corpus-engine-watchers/src/reindexer.rs
 2150	ingest/crates/corpus-engine/src/engine/ingest.rs
 3647	ingest/crates/corpus-engine/src/engine/mod.rs
 1461	ingest/crates/corpus-engine/src/enrichment/atlas/analysis/tensions.rs
@@ -31,8 +31,8 @@
 1245	shared/crates/corpus-index/src/index/search.rs
 1568	shared/crates/kernel-types/src/quality/instruments.rs
 3053	shared/crates/oicp-client/src/lib.rs
-2884	sovereign/crates/sovereign-agent-bench/src/runners/native.rs
-2053	sovereign/crates/sovereign-agent-tools/src/executor.rs
+2884	code/crates/sovereign-agent-bench/src/runners/native.rs
+2053	code/crates/sovereign-agent-tools/src/executor.rs
 1787	sovereign/crates/sovereign-cli-bench/src/bench_cmd/all.rs
 2163	sovereign/crates/sovereign-cli-bench/src/bench_cmd/book_report.rs
 2224	sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs
@@ -42,11 +42,11 @@
 1212	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs
 1345	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs
 1669	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/mod.rs
-1537	sovereign/crates/sovereign-cli-dev/src/code_capability_graph.rs
-1798	sovereign/crates/sovereign-cli-dev/src/code_cmd.rs
-1293	sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs
-2219	sovereign/crates/sovereign-cli-dev/src/notes_cmd.rs
-1682	sovereign/crates/sovereign-cli-dev/src/refactor_cmd/detector.rs
+1537	code/crates/sovereign-cli-dev/src/code_capability_graph.rs
+1798	code/crates/sovereign-cli-dev/src/code_cmd.rs
+1293	code/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs
+2219	code/crates/sovereign-cli-dev/src/notes_cmd.rs
+1682	code/crates/sovereign-cli-dev/src/refactor_cmd/detector.rs
 2380	sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs
 1655	sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/runner.rs
 1327	sovereign/crates/sovereign-cli-llm/src/reading_diag_cmd.rs
@@ -61,7 +61,7 @@
 1382	sovereign/crates/sovereign-cli/src/main.rs
 3569	sovereign/crates/sovereign-cli/src/session_cmd.rs
 1217	sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs
-1605	sovereign/crates/sovereign-code/src/session_state.rs
+1605	code/crates/sovereign-code/src/session_state.rs
 1667	serve/crates/sovereign-compute/src/manager.rs
 2050	serve/crates/sovereign-compute/src/supervisor.rs
 2124	shared/crates/sovereign-contracts/src/setup_config.rs
@@ -135,7 +135,7 @@
 1625	sovereign/crates/sovereign-store/src/postgres.rs
 1408	sovereign/crates/sovereign-store/src/sqlite/conv_tiered.rs
 1878	sovereign/crates/sovereign-store/tests/main/store_tests.rs
-1594	sovereign/crates/sovereign-tdd/src/trial.rs
+1594	code/crates/sovereign-tdd/src/trial.rs
 1626	sovereign/crates/sovereign-tools/src/atlas_postinstall.rs
 1261	sovereign/crates/sovereign-tools/src/atlas_view/reader.rs
 1421	sovereign/crates/sovereign-tools/src/conv_tiered_provider.rs

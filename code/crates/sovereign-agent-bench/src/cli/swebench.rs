@@ -18,7 +18,7 @@
 //!
 //! Workdir mechanics: `context_for` owns a `TempDir`, so the checkout is
 //! cloned INTO that tempdir with `git clone --shared` against a bare
-//! cache (see `../bench/external/swebench/lib.py::ensure_bare`). Shared
+//! cache (see `sovereign/bench/external/swebench/lib.py::ensure_bare`). Shared
 //! object storage keeps this cheap; the bare repo must outlive the run.
 
 use std::path::{Path, PathBuf};

@@ -111,5 +111,5 @@ fixtures + scorer.
 - `fixtures/queries.toml` — 8 audit queries
 - `baselines/notes-tiered/latest.json` — committed
   regression-guard run output (FTS5 baseline-only mode)
-- `../../../corpus-engine-notes/examples/notes_tiered_bench.rs` —
+- `code/crates/corpus-engine-notes/examples/notes_tiered_bench.rs` —
   runner

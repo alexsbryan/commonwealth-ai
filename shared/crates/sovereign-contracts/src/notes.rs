@@ -17,7 +17,7 @@
 //!
 //! The DTOs are the ones `recipe::notes` already publishes — one definition,
 //! reached from both traits. The single implementation over the real store
-//! lives in the owning package (`corpus-engine-notes/src/port.rs`), so a
+//! lives in the owning package (`code/crates/corpus-engine-notes/src/port.rs`), so a
 //! consumer takes `Arc<dyn AgentNotes>` from its host and an `Arc<NoteStore>`
 //! coerces into it at the construction site.
 
@@ -123,7 +123,7 @@ pub trait AgentNotes: RecipeNotes {
 /// same off-by-default rule as `middleware::fixtures`).
 ///
 /// The real-SQL proofs of the note store live beside their owner
-/// (`corpus-engine-notes/tests/real_sql_flows.rs`); this double carries only
+/// (`code/crates/corpus-engine-notes/tests/real_sql_flows.rs`); this double carries only
 /// the fixture for consumers' logic tests. Its contract mirrors the store's
 /// where logic tests lean on it: `read_notes` is newest-first and hides
 /// retired rows unless `include_retired` — the store half of that contract is

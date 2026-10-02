@@ -70,7 +70,7 @@ fn wire_event(
             kind: "decision".to_string(),
             content: content.to_string(),
             symbols: vec!["NoteStore::ingest_remote_notes".to_string()],
-            files: vec!["corpus-engine-notes/src/notes.rs".to_string()],
+            files: vec!["code/crates/corpus-engine-notes/src/notes.rs".to_string()],
             session_id: "wire-shapes".to_string(),
             created_at: 1_700_000_000,
             scope: "global".to_string(),

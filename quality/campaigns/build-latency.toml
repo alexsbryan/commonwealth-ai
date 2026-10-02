@@ -95,7 +95,7 @@ weight = 123
 test   = "dispatch_recognises_flag_layouts"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-cli-dev/src/converge_cmd.rs"
+file   = "code/crates/sovereign-cli-dev/src/converge_cmd.rs"
 crate  = "sovereign-cli-dev"
 weight = 114
 test   = "design_section_id_maps_curated_headings"
@@ -125,7 +125,7 @@ weight = 18
 test   = "hex_round_trips"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-agent-bench/src/runners/native.rs"
+file   = "code/crates/sovereign-agent-bench/src/runners/native.rs"
 crate  = "sovereign-agent-bench"
 weight = 58
 test   = "persist_agent_run_writes_summary_and_workdir_copy"
@@ -155,7 +155,7 @@ weight = 52
 test   = "parse_args_accepts_bare_corpus_id"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-tdd/src/trial.rs"
+file   = "code/crates/sovereign-tdd/src/trial.rs"
 crate  = "sovereign-tdd"
 weight = 51
 test   = "deterministic_returns_scripted_responses_in_order"

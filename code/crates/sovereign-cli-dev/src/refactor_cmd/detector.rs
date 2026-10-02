@@ -750,7 +750,7 @@ impl Detector for ArgLoopDetector {
 
     fn control(&self) -> ControlSite {
         ControlSite {
-            file: "sovereign/crates/sovereign-cli-dev/src/refactor_cmd/mod.rs",
+            file: "code/crates/sovereign-cli-dev/src/refactor_cmd/mod.rs",
             token: "flag-surface",
             why: "refactor_cmd's own dispatcher hand-rolls its flag loop. If \
                   this detector cannot see the file it is defined in, it \

@@ -46,7 +46,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-8-vendored_and_research_paths_are_excluded"
 requirement = "GR-8"
-target = "sovereign/crates/sovereign-cli-dev/src/intent.rs"
+target = "code/crates/sovereign-cli-dev/src/intent.rs"
 find = "fn is_ours(file: &str) -> bool {\n    !(file.starts_with(\"research/\")\n        || file.contains(\"/target/\")\n        || file.starts_with(\"target/\")\n        || file.contains(\"/vendor/\"))\n}"
 replace = "fn is_ours(file: &str) -> bool {\n    true\n}"
 mustFail = ["vendored_and_research_paths_are_excluded"]
@@ -356,7 +356,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-26-full_export_due_when_none_has_ever_run"
 requirement = "GR-26"
-target = "corpus-engine-watchers/src/reindexer.rs"
+target = "code/crates/corpus-engine-watchers/src/reindexer.rs"
 find = "fn full_export_due(last_finished: Option<Instant>, cooldown: Duration) -> bool {\n    last_finished.is_none_or(|t| t.elapsed() >= cooldown)\n}"
 replace = "fn full_export_due(_last_finished: Option<Instant>, _cooldown: Duration) -> bool {\n    false\n}"
 mustFail = ["full_export_due_when_none_has_ever_run"]
@@ -366,7 +366,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-26-full_export_not_due_immediately_after_on"
 requirement = "GR-26"
-target = "corpus-engine-watchers/src/reindexer.rs"
+target = "code/crates/corpus-engine-watchers/src/reindexer.rs"
 find = "fn full_export_due(last_finished: Option<Instant>, cooldown: Duration) -> bool {\n    last_finished.is_none_or(|t| t.elapsed() >= cooldown)\n}"
 replace = "fn full_export_due(_last_finished: Option<Instant>, _cooldown: Duration) -> bool {\n    false\n}"
 mustFail = ["full_export_not_due_immediately_after_one_finished"]
@@ -406,7 +406,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-31-an_undeclared_known_surface_is_never_ran"
 requirement = "GR-31"
-target = "corpus-engine-watchers/src/lint_results.rs"
+target = "code/crates/corpus-engine-watchers/src/lint_results.rs"
 find = "    pub fn from_str(s: &str) -> Self {\n        match s {\n            \"pass\" => Self::Pass,\n            \"warn\" => Self::Warn,\n            _ => Self::Fail,\n        }\n    }"
 replace = "    pub fn from_str(s: &str) -> Self {\n        match s {\n            \"pass\" => Self::Pass,\n            \"warn\" | \"fail\" => Self::Warn,\n            _ => Self::Pass,\n        }\n    }"
 mustFail = ["an_undeclared_known_surface_is_never_ran_and_fails_the_gate"]

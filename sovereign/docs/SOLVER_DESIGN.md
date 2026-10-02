@@ -23,7 +23,7 @@ design evolved.
 **Owners:** alexsbryan + claude
 **Supersedes:** none
 **Superseded-by:** `TDD_MACHINE_DESIGN.md`
-**Related:** `sovereign/crates/sovereign-agent-bench/src/runners/search.rs`, `sovereign/ARCH_PRINCIPLES.md`
+**Related:** `code/crates/sovereign-agent-bench/src/runners/search.rs`, `sovereign/ARCH_PRINCIPLES.md`
 
 ## Why
 

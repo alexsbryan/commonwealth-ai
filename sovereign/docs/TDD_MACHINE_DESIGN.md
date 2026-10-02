@@ -2,7 +2,7 @@
 
 **Status:** Draft v2, 2026-05-24. Updated after Red + Refactor probes.
 **Owners:** alexsbryan + claude
-**Related:** `sovereign/crates/sovereign-agent-bench/src/runners/search.rs`, `sovereign/ARCH_PRINCIPLES.md`
+**Related:** `code/crates/sovereign-agent-bench/src/runners/search.rs`, `sovereign/ARCH_PRINCIPLES.md`
 
 ## Core paradigm
 
@@ -414,7 +414,7 @@ Bumped from `SOLVER_DESIGN` v2's 4.75 days because Red and Refactor are new cons
 - [ ] Promote `regex` to `[workspace.dependencies]`
 
 **Phase 7a — Crate scaffold:**
-- [ ] Create `sovereign/crates/sovereign-tdd/` with `assets/`, `src/`
+- [ ] Create `code/crates/sovereign-tdd/` with `assets/`, `src/`
 - [ ] `types.rs`, `workdir.rs`, `backend.rs`, `prompts.rs`, `registry.rs`
 - [ ] `DeterministicChatBackend` unit tests pin the pattern
 

@@ -57,7 +57,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                 println!("     --verb split --max-lines N`) instead of the human-readable report.");
                 println!();
                 println!("<file> is repo-relative, exactly as SCIP stores it, e.g.");
-                println!("  sovereign/crates/sovereign-cli-dev/src/project_cmd.rs");
+                println!("  code/crates/sovereign-cli-dev/src/project_cmd.rs");
                 return 0;
             }
             flag if flag.starts_with('-') => {

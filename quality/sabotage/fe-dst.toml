@@ -294,7 +294,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-17-verdict_reports_new_failure_but_not_stal"
 requirement = "FE-17"
-target = "sovereign/crates/sovereign-cli-dev/src/project_cmd/refresh.rs"
+target = "code/crates/sovereign-cli-dev/src/project_cmd/refresh.rs"
 find = "    if let (Some(e), Some(ts)) = (last_error, last_error_ts) {\n        if ts > baseline_error_ts {\n            return NudgeVerdict::Failed {\n                error: e.to_string(),\n            };\n        }\n    }"
 replace = "    // MUTATION: Remove the check against baseline_error_ts.\n    // This violates FE-17 by allowing a verdict from an instrument\n    // that hasn't run a full round relative to the new baseline,\n    // or more simply, it ignores the 'history vs current fault' logic,\n    // potentially returning Failed for stale errors immediately.\n    if let (Some(e), Some(ts)) = (last_error, last_error_ts) {\n        return NudgeVerdict::Failed {\n            error: e.to_string(),\n        };\n    }"
 mustFail = ["verdict_reports_new_failure_but_not_stale_ones"]
