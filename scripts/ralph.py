@@ -2345,6 +2345,22 @@ class Pool:
         self._git("add", "--", DECISIONS_RENDERED)
         return None
 
+    def _lane_marked_done(self, unit, wt, branch):
+        """The lane's own commits added or changed ralph/lanes/<unit>.done. A
+        marker that exists only because the base already holds it, from an
+        earlier round of a reopened row, is not this lane's: on 2026-10-02 the
+        reopened pc-knowledge-gym-noresults started from a base carrying
+        7fb5bfd10's marker, and the pool would have merged the lane whenever
+        its session ended, readings taken or not."""
+        rel = f"ralph/lanes/{unit}.done"
+        if not (wt / rel).exists():
+            return False
+        own = self._git("diff", "--name-only", f"HEAD...{branch}", "--", rel)
+        if rel in own.stdout.split():
+            return True
+        say(f"pool: lane {unit}'s {rel} is the base's, from an earlier round — not this lane's")
+        return False
+
     def _remove_lane(self, unit, wt):
         """A merged lane's worktree goes, its target included; whatever `git
         worktree remove` leaves is removed here and said, never left silent."""
@@ -2405,7 +2421,7 @@ class Pool:
                 say(f"pool: lane {unit} left NEEDS_HUMAN.md — stopping for the director")
                 self.notifier("auto — halt package, director next", first_line(lane_pkg), self.notify_enabled)
                 return 3
-            if not (wt / "ralph" / "lanes" / f"{unit}.done").exists():
+            if not self._lane_marked_done(unit, wt, branch):
                 parsed = waiting_marker(wt, self.paths.waiting)
                 if parsed is not None:
                     # A waiting end is the lane's own protocol for a detached

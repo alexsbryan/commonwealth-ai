@@ -2706,6 +2706,35 @@ class PoolQueueTests(unittest.TestCase):
                 self.assertEqual(pool.run(), 3)
             self.assertIn("merge conflict", (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
 
+    def test_a_marker_left_on_the_base_by_an_earlier_round_does_not_finish_a_lane(self):
+        # A reopened row's first-round marker is on the base; a lane that ends
+        # without writing its own is not merged, one that writes it is.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "ralph/lanes/q-a.done", "first round\n")
+            commit_all(tmp, "q-a: first round's marker")
+
+            class StaleLane:
+                def __init__(self, cwd):
+                    self.cwd = pathlib.Path(cwd)
+
+                def run(self, model_args, prompt, log):
+                    write(self.cwd, "q-a.txt", "half done\n")
+                    commit_all(str(self.cwd), "q-a: half done")
+                    return 0
+
+            pool = self.make(root, lambda cwd, env=None: StaleLane(cwd), max_lane_failures=1)
+            self.assertEqual(pool.run(), 3)
+            self.assertFalse((root / "q-a.txt").exists())
+            self.assertIn("- [ ] q-a", (root / "ralph/next/q/STATE.md").read_text())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "ralph/lanes/q-a.done", "first round\n")
+            commit_all(tmp, "q-a: first round's marker")
+            self.assertEqual(self.make(root, lambda cwd, env=None: FakeLane(cwd)).run(), 0)
+            self.assertTrue((root / "q-a.txt").exists())
+
     def test_a_lanes_evidence_outlives_its_worktree(self):
         # (12): `git worktree remove --force` takes the lane's target/ with it.
         with tempfile.TemporaryDirectory() as tmp:
