@@ -89,7 +89,7 @@ both files owe a fix in the same commit (§1.1).
   `sovereign-time`) is below `mesh-foundation` (`commonwealth-core`, …), so `sovereign-contracts`
   cannot reach up either. The two crates that need the type cannot see each other in either
   direction.
-- `oicp-types` is a serde-only leaf (`oicp-types/Cargo.toml:9-11`) already depended on by
+- `oicp-types` is a serde-only leaf (`shared/crates/oicp-types/Cargo.toml:9-11`) already depended on by
   `sovereign-contracts` (`:14`) **and** `commonwealth-core` (`:9`). Zero new edges.
 - `sovereign-server` depends on both `sovereign-contracts` (`:66`) and `commonwealth-core` (`:78`),
   so it can bridge whatever the lower layers cannot.
@@ -124,7 +124,7 @@ both files owe a fix in the same commit (§1.1).
   no roster check (`headers.rs:20-34`); it exists for ledger stamping. Absent → served, with zero
   ledger rows (`knowledge.rs:231`; pinned by `knowledge_served_e2e.rs:245`).
 - The fan-out request has four fields — embedding, text, corpora, limit — and no identity of any
-  kind (`oicp-types/src/knowledge.rs:17-34`).
+  kind (`shared/crates/oicp-types/src/knowledge.rs:17-34`).
 - `cannot_know_from_here` is decided by the **local** grounding gate
   (`sovereign-core/src/runtime/epistemic.rs:206-212`); the coverage probe enumerates local indexes
   only (`:526`). The fan-out client used to discard `corpora_unavailable` and return transport
@@ -236,12 +236,12 @@ both files owe a fix in the same commit (§1.1).
 
 - `TenantId` is an axum extension consumed only inside `sovereign-server` handlers
   (`routes.rs:176-178` and callers). The remote-backend hop sends one static per-backend bearer and
-  nothing else — no tenant header, field, or param (`oicp-client/src/lib.rs:451-453`; request body
+  nothing else — no tenant header, field, or param (`shared/crates/oicp-client/src/lib.rs:451-453`; request body
   built at `:234-330`). `grep -rni tenant` over `commonwealth/` and `sovereign-mesh/src`: zero
   functional hits — the daemon has no tenant concept to receive one.
 - `RankInputs` carries no corpus, dataset, or tenant — `InferenceRequirements` is capability hint /
   latency class / token counts / one `sharding` bool (`scheduler_core.rs:242-268`,
-  `oicp-types/src/requirements.rs:16-39`; `PrivacyRequirements` at `:119-122`). The corpus↔tenant
+  `shared/crates/oicp-types/src/requirements.rs:16-39`; `PrivacyRequirements` at `:119-122`). The corpus↔tenant
   seam that does exist is retrieval-side: `PrincipalResolver` / `SensitiveCorpusOracle`
   (`sovereign-contracts/src/traits.rs:75-111`, consumed at `corpus_search.rs:189`).
 - ggml-RPC worker: `--rpc-worker` and `role = "anchor"` default the bind to `127.0.0.1:50052`

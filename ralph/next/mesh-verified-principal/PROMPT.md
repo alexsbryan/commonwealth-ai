@@ -144,7 +144,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   — only the §5 commands, which take the cargo lock.
 - Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
   `scripts/ralph*`, or ANYTHING under `commonwealth/crates/commonwealth-rail/` or
-  `commonwealth/crates/commonwealth-rail-core/` — the RING RAIL is closed to this
+  `shared/crates/commonwealth-rail-core/` — the RING RAIL is closed to this
   campaign (its roster is READ through `RingRail::roster`, never changed); a row that
   seems to need a rail diff is §6. Never touch the scheduler's scoring
   (`sovereign/crates/sovereign-scheduler/`): a row that seems to need it is §6. `commonwealth-rails/` is the rails DAEMON,

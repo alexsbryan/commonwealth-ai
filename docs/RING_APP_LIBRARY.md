@@ -365,7 +365,7 @@ node.
   and `mio` refuses the target — the in-workspace check fails there; and
   `kernel-types` takes `getrandom 0.3` unconditionally, which needs the
   `wasm_js` feature plus `--cfg getrandom_backend="wasm_js"`. `oplog` reads
-  files (`oplog/src/lib.rs:89`); that compiles and cannot work in a tab, so
+  files (`shared/crates/oplog/src/lib.rs:89`); that compiles and cannot work in a tab, so
   the browser supplies its own log storage and hands ops to `admit`.
   `ingest`'s contract is as assumed: "No validation and no re-signing … anything
   wrong with it becomes a gap when `admit` reads it back." The consequence for
@@ -373,7 +373,7 @@ node.
   until that key is its roster seed, and the amendment forbids a roster route
   — so adopting a journal is a confirmation the person gives on their own
   node, not something the phone can write. The answer schema is
-  `kernel_types::Answer` and `Citation` (`kernel-types/src/answer.rs:351`,
+  `kernel_types::Answer` and `Citation` (`shared/crates/kernel-types/src/answer.rs:351`,
   `:197`) with the four-way `Verdict` (`judgement.rs:91`), and `kernel-types`
   is already in this wasm tree; there is no `Claim` of the shape
   `FIVE_PROGRAMS.md` §3 sketches. Not needed by this tier and still

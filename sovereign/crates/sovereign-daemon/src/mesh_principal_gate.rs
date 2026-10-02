@@ -53,7 +53,7 @@
 
 /// The one production path that may hold the literal header or the parser.
 /// Repo-relative, matched as a suffix so the test runs from any cwd.
-pub const READ_ALLOWED: &[&str] = &["sovereign/crates/sovereign-contracts/src/principal.rs"];
+pub const READ_ALLOWED: &[&str] = &["shared/crates/sovereign-contracts/src/principal.rs"];
 
 /// The two request-to-principal resolvers, which may call
 /// [`claimed_node_id`](sovereign_contracts::principal::claimed_node_id) and
@@ -68,7 +68,7 @@ pub const RESOLVERS: &[&str] = &[
 /// reproduces. `oicp-client` was always one; the list said four while the
 /// walk covered only `sovereign/crates/`.
 pub const SENDERS: &[&str] = &[
-    "oicp-client/src/lib.rs",
+    "shared/crates/oicp-client/src/lib.rs",
     "sovereign/crates/sovereign-grants/src/shard_manager.rs",
     "sovereign/crates/sovereign-daemon/src/routes_knowledge.rs",
     "sovereign/crates/sovereign-daemon/src/server.rs",

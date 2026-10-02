@@ -548,7 +548,7 @@ mod tests {
     #[test]
     fn an_honest_additive_order_passes_when_its_target_is_declared() {
         let items = vec![AddedItem {
-            file: "kernel-types/src/ids.rs".into(),
+            file: "shared/crates/kernel-types/src/ids.rs".into(),
             line: 12,
             kind: "struct".into(),
             name: "CorpusId".into(),
@@ -565,7 +565,7 @@ mod tests {
     fn a_shim_alongside_the_declared_target_is_still_caught() {
         let items = vec![
             AddedItem {
-                file: "kernel-types/src/ids.rs".into(),
+                file: "shared/crates/kernel-types/src/ids.rs".into(),
                 line: 12,
                 kind: "struct".into(),
                 name: "CorpusId".into(),

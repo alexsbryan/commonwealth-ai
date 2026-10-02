@@ -25,7 +25,7 @@ file is that record.
 
 | piece | where | shape |
 |---|---|---|
-| `Workflow`/`StepRegistry` | `studio/crates/sovereign-workflow/src/model.rs`, `runner.rs` | TOML DAG of typed steps, per-item `for_each` semantics |
+| `Workflow`/`StepRegistry` | `shared/crates/sovereign-workflow/src/model.rs`, `runner.rs` | TOML DAG of typed steps, per-item `for_each` semantics |
 | `Runner::run` | `sovereign-workflow/src/runner.rs:102` | `run(&self, wf, concurrency) -> Result<RunReport>`; `RunReport { workflow, items: Vec<ItemReport> }` with `ok_count`/`failed_count` |
 | `FileArtifactCache` | `sovereign-workflow/src/cache.rs:59` | step-output cache, keyed `cache_key(uses, step_id, args, item_fingerprint)` |
 | `StepObserver` / `WorkflowProgress` | `sovereign-workflow/src/progress.rs:17,33` | `Arc<dyn Fn(WorkflowProgress)>`; events `RunStarted` / `StepDone` / `ElementSkipped` / `ItemDone` / `RunFinished` — per-step, per-item, display-ready |

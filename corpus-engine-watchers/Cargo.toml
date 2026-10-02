@@ -61,7 +61,7 @@ async-trait = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
+workspace-hack = { version = "0.1", path = "../shared/crates/workspace-hack" }
 
 [features]
 default = []

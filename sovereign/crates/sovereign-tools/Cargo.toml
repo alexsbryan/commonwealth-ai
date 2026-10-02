@@ -159,7 +159,7 @@ ndarray = { version = "0.16", optional = true }
 imageproc = { version = "0.26", optional = true }
 # `i_overlay` (polygon offset for detection boxes) was declared here and never
 # named in code; `workspace-hack` already pins it at `4` for every member.
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 
 [features]
 # `treesitter` is default-on since build-latency move bl-hakari: the gate

@@ -242,7 +242,7 @@ pub const SECOND: &str = include_str!(concat!(
 /// nobody can name is not a rule (ARCH §18.1).
 #[test]
 fn runtime_scan_flags_the_shapes_the_lift_priced() {
-    // understanding-vocab/tests/atoms_file_census.rs — the read and the
+    // shared/crates/understanding-vocab/tests/atoms_file_census.rs — the read and the
     // climb are on different lines, which is why this is windowed.
     let vocab = r#"
 fn roots() -> Vec<PathBuf> {
@@ -272,7 +272,7 @@ fn roots() -> Vec<PathBuf> {
 "#;
     assert_eq!(scan_runtime_escapes(skills).len(), 1);
 
-    // kernel-types/tests/conformance_tags.rs — `git` at a derived root.
+    // shared/crates/kernel-types/tests/conformance_tags.rs — `git` at a derived root.
     // Caught by the CLIMB, not by the git clause: the subprocess is fine,
     // the path it was handed is the defect.
     let tags = r#"
@@ -464,7 +464,7 @@ pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
 "#;
     assert!(scan_runtime_escapes(own_root).is_empty());
 
-    // studio/crates/sovereign-workflow/tests/substrate.rs — into a
+    // shared/crates/sovereign-workflow/tests/substrate.rs — into a
     // subdirectory, not out of the crate.
     let subdir = r#"
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");

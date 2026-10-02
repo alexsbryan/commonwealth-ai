@@ -38,7 +38,7 @@ signed, ordered, deduped, self-compacting. The rail needs no work at all.
 
 Cross-node routing decides in `sovereign-scheduler/src/scheduler_core.rs:339`
 (`rank`), scoring each peer's `ProviderManifest` through
-`oicp_types::scoring::best_claim_for_request` (`oicp-types/src/scoring.rs:481`,
+`oicp_types::scoring::best_claim_for_request` (`shared/crates/oicp-types/src/scoring.rs:481`,
 per-claim at `:585-609`).
 
 A manifest reaches the ranker by being **pulled**: `get_peer_manifest` in
@@ -117,7 +117,7 @@ prefilter. Each is real and each is a separate order.
 ## Naming, to settle before a second one of these lands
 
 There are already two unrelated things called offer — `OriginKind::Offer`
-(`oicp-types/src/origin.rs:44-68`, a catalogue of what you have to sell or lend)
+(`shared/crates/oicp-types/src/origin.rs:44-68`, a catalogue of what you have to sell or lend)
 and `WorkAct::Offer` (`[compute.work_offer]`, compute donation on the `work`
 rail). An inference capability offer would be a third. Pick different words now;
 it is free today and expensive later.

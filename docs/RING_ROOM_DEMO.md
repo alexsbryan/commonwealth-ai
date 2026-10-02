@@ -213,7 +213,7 @@ synthesis prefill).** The bundle budget above is context-aware: it trims
 evidence so the prompt fits the slot's window. It is not rate-aware: a window
 of 8k tokens on a node that prefills at 33 tokens per second is a four-minute
 window. The scheduler's own types already carry the number needed:
-`BenchmarkResult.pp_tok_s` in `oicp-types/src/scoring.rs` is the
+`BenchmarkResult.pp_tok_s` in `shared/crates/oicp-types/src/scoring.rs` is the
 prompt-processing rate the startup probe measures. This node's log has no
 benchmark line at all, so nothing could have sized against it. The change is
 one decider (principle 8): a time budget per latency class, held as data

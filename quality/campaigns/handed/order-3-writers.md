@@ -32,7 +32,7 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
 
 ## Premises (verified 2026-09-17, file:line)
 
-- **The precedent.** `ScipGraph::try_rebuild_lock(db_dir)` — corpus-engine-scip/src/scip_graph.rs:483-503:
+- **The precedent.** `ScipGraph::try_rebuild_lock(db_dir)` — shared/crates/corpus-engine-scip/src/scip_graph.rs:483-503:
   `create_dir_all`, open `<db_dir>/.rebuild.lock`, `fs4::FileExt::try_lock_exclusive`, `WouldBlock`
   mapped to `Ok(None)`. Its one caller takes it at :2313 inside `export_to_live` and returns
   `REBUILD_COALESCED` on refusal. quality/TOPOLOGY.toml:173 names it the template.
@@ -44,7 +44,7 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   acquire in the SAME process on one path is refused — flock lives on the open file description
   (run_lock.rs test ~:217). corpus-engine already depends on sovereign-contracts
   (corpus-engine/Cargo.toml:49). corpus-engine does NOT depend on `fs4`, and `fs4` is not in the
-  root `[workspace.dependencies]` (`grep -n fs4 Cargo.toml` empty; only corpus-engine-scip/Cargo.toml:54).
+  root `[workspace.dependencies]` (`grep -n fs4 Cargo.toml` empty; only shared/crates/corpus-engine-scip/Cargo.toml:54).
 - **The index mutation sites** (`grep -nE '\.(add|delete|create_index|create_empty_table|add_columns|optimize)\('
   corpus-engine/src/index/*.rs`), each mapped to its enclosing fn:
   - write.rs:178 `insert_batch` (decl :83) · :210 `delete_chunks_by_source_doc` (:206) ·

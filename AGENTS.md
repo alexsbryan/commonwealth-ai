@@ -458,7 +458,7 @@ commonwealth-ai/
 ├── commonwealth/      # Mesh coordination daemon (runs at localhost:9741)
 ├── sovereign/      # Local AI + code intelligence server
 ├── corpus-engine/  # Knowledge base engine
-├── oicp-types/    # Shared protocol types (used by both)
+├── shared/crates/oicp-types/    # Shared protocol types (used by both)
 ├── sovereign-recipes/  # Data recipes
 └── scripts/       # Build/test wrappers
 ```

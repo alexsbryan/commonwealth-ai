@@ -85,7 +85,7 @@ pub fn resolve_primary_model_name(provider: &dyn InferenceProvider) -> String {
 /// Build this node's OICP `ProviderManifest` — one `ProviderModel`
 /// entry per loaded chat slot (Fast + Slow), each with the
 /// capability profile + size_gb declared for it in
-/// `sovereign/crates/sovereign-contracts/data/models.toml`. Shared between the server adapter (what
+/// `shared/crates/sovereign-contracts/data/models.toml`. Shared between the server adapter (what
 /// peers fetch at `/oicp/v1/capabilities`) and the client-side
 /// `InferenceRouter` (what local scores itself against) so
 /// the two never disagree about our own declared capabilities.
@@ -138,7 +138,7 @@ pub fn build_self_manifest(
     // Every push site below keys off a NAME (`model_id_for`, `code_model_id`,
     // `extras_inventory`), and a forwarding provider answers those with the id
     // it *asks a remote for* — `SplitInferenceProvider::model_id_for` returns
-    // `chat_model_id` (`oicp-client/src/lib.rs:1488`). Without this gate a
+    // `chat_model_id` (`shared/crates/oicp-client/src/lib.rs:1488`). Without this gate a
     // `terminal`-class daemon, the CLI's chat bootstrap, or the attach-mode
     // desktop would advertise its entry node's model as its own, and peers
     // would route real traffic to a node that holds nothing. That is §10.6's
@@ -863,7 +863,7 @@ mod self_manifest_tests {
         // about `loaded`, and the conflation is what let the manifest
         // advertise an idle-unloaded 30 GB primary as warm. Nothing filters
         // on `loaded` — `best_claim_for_request` skips on
-        // `status.available` (`oicp-types/src/scoring.rs:486`); `loaded`
+        // `status.available` (`shared/crates/oicp-types/src/scoring.rs:486`); `loaded`
         // feeds only `LoadDebt` (`predicted_time.rs:143`), i.e. it prices
         // the candidate rather than excluding it. So residency can be told
         // truthfully at no cost to candidacy.

@@ -67,7 +67,7 @@ use std::path::{Path, PathBuf};
 
 /// The ONE egress boundary module: every remote-model call and every
 /// search-query egress is constructed through it (bar dr-egress).
-const BOUNDARY_MODULE: &str = "sovereign/crates/sovereign-contracts/src/egress.rs";
+const BOUNDARY_MODULE: &str = "shared/crates/sovereign-contracts/src/egress.rs";
 
 /// The ONE run-scoped fail-closed budget decider (bar
 /// dr-budget-one-decider). Frontier-key spend is declared here and

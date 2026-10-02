@@ -36,7 +36,7 @@ recorded in campaign.md.
   knowledge_view/recipes.rs:41, :136, :260 and catalog_ingest.rs:860. corpus-engine
   itself has ZERO. A private field plus an out-of-crate literal is **E0451** ("field is
   private"), not E0063 ("missing field") — the repo already has the stderr for exactly
-  this shape at kernel-types/tests/ui/citation_without_a_seal.stderr. So the mechanism is
+  this shape at shared/crates/kernel-types/tests/ui/citation_without_a_seal.stderr. So the mechanism is
   a CONSTRUCTOR: `CorpusMeta` gains one that takes the policy by value, the field goes
   private, and the four out-of-crate literals must call it. The plant is then E0451 at a
   literal (the field cannot be named from outside) or E0061 at the constructor (the

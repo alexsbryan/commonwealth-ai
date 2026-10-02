@@ -43,7 +43,7 @@
 //!
 //! The query embedding MUST carry the instruction prefix production prepends
 //! in `embed_query` (`model_family.rs:302-304`). `/v1/embeddings` does NOT add
-//! it (`oicp-client/src/lib.rs:54-56`), so this probe adds it explicitly.
+//! it (`shared/crates/oicp-client/src/lib.rs:54-56`), so this probe adds it explicitly.
 //! Without it the cosines are self-consistent but are not what retrieval sees.
 //!
 //! # Privacy

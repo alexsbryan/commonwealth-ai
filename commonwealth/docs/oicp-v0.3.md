@@ -196,5 +196,5 @@ reconstructible from one trace event.
 
 ---
 
-See the implementation in `oicp-types/src/lib.rs` and the integration
+See the implementation in `shared/crates/oicp-types/src/lib.rs` and the integration
 roadmap in `sovereign/SYSTEM_OVERVIEW.md` §4.8 and §12.

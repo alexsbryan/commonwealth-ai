@@ -26,7 +26,7 @@ pub fn terminal_provider(
     // `SplitInferenceProvider` the CLI's chat bootstrap and the attach-mode
     // desktop already use — chat and embeddings each go to the entry node over
     // HTTP, with `embed_batch` routed to the batch path so corpus ingest does
-    // not degrade to one round-trip per chunk (`oicp-client/src/lib.rs:1477`).
+    // not degrade to one round-trip per chunk (`shared/crates/oicp-client/src/lib.rs:1477`).
     //
     // It inherits `resident_slots() == []` from the trait, which is what makes
     // `build_self_manifest` advertise nothing: this node must not claim its

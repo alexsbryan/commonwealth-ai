@@ -109,7 +109,7 @@ asking for:
 ## For developers adding a journal
 
 The machinery is feature-agnostic
-(`sovereign/crates/sovereign-contracts/src/types/journal.rs`): declare a
+(`shared/crates/sovereign-contracts/src/types/journal.rs`): declare a
 `const JournalStream`, define serde types for your lines, and add a row
 to `journal_cmd::VIEWS`. You inherit the file layout, rotation, the caps,
 retention, and all four off-switches, and every command above starts

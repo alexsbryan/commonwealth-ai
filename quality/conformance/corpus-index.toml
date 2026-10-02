@@ -13,6 +13,6 @@
 [[claim]]
 requirement = "ST-5"
 test = "corpus-index::fs_source::tests::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical"
-file = "corpus-index/src/fs_source/tests.rs"
+file = "shared/crates/corpus-index/src/fs_source/tests.rs"
 line = 19
 asserts = 2

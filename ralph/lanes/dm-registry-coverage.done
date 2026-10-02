@@ -2,7 +2,7 @@ unit: dm-registry-coverage
 commits: ba41313af (the registry coverage)
 what: EDIT quality/DOMAINS.toml — append one [[module]] row for every untagged
   `.rs` under the three crates the campaign created without tags: corpus-index
-  (19 files), understanding-atlas (13) and sovereign/crates/sovereign-peer-wire
+  (19 files), understanding-atlas (13) and shared/crates/sovereign-peer-wire
   (1), 33 rows. context = the one [[context]] whose crates list names the crate
   (understanding for understanding-atlas; unknown for corpus-index and
   sovereign-peer-wire, which no context names); lines from wc -l; note "".

@@ -352,7 +352,7 @@ hold: OICP genuinely does not need to know a model is distributed.
 > `true` — a lazy slot is genuinely servable, and conflating "can serve" with
 > "is warm" was the original error. Candidacy is unaffected:
 > `best_claim_for_request` filters on `status.available`
-> (`oicp-types/src/scoring.rs:486`), while `loaded` feeds only `LoadDebt`
+> (`shared/crates/oicp-types/src/scoring.rs:486`), while `loaded` feeds only `LoadDebt`
 > (`predicted_time.rs:143`) — it *prices* a candidate rather than excluding it.
 >
 > **The cold-start term is still zero, and that is now the honest open item.**
@@ -446,7 +446,7 @@ case, plus a 60 s manifest cache (`peer_inference.rs:72`). The scorer currently
 ### 4.4 Request TTL — close the ping-pong  *(shipped, M1)*
 
 A hop counter on the OICP envelope: decrement on forward, refuse at zero.
-`forward_budget` in `oicp-types/src/requirements.rs`, spent by
+`forward_budget` in `shared/crates/oicp-types/src/requirements.rs`, spent by
 `decremented_for_forward` (the only place a hop is spent), enforced by
 `offload_verdict` in `oicp_select.rs`. Absent resolves to one hop, never to
 zero — reading absence as "may not forward" would have disabled mesh routing
@@ -456,7 +456,7 @@ This is not hypothetical. The desktop installs the **raw** provider specifically
 so an inbound peer request cannot re-enter routing
 (`sovereign-desktop/src-tauri/src/state.rs:941-953`). The CLI daemon installs
 the *mesh* provider (`daemon_cmd/mod.rs:670-673`), and the envelope survives the
-hop unchanged (`oicp-client/src/lib.rs:306-311`), so node B re-runs the full
+hop unchanged (`shared/crates/oicp-client/src/lib.rs:306-311`), so node B re-runs the full
 scorer on node A's request and may forward it to C. The guard that used to keep
 inbound requests single-hop was retired, and its replacement comment claims a
 property it does not enforce (`inference_adapter.rs:355-358`).
@@ -603,7 +603,7 @@ travels with.
   > existing ranked failover to the Hard path rather than invent one.
   >
   > Also imprecise: `decremented_for_forward`
-  > (`oicp-types/src/requirements.rs:182`) returns a *new* envelope and never
+  > (`shared/crates/oicp-types/src/requirements.rs:182`) returns a *new* envelope and never
   > mutates `request.oicp`, so nothing is lost or double-spent across retries.
   > Retry-vs-forward is a **missing distinction on the sender's side**, not a
   > corrupted counter.
@@ -641,7 +641,7 @@ Mesh inference carries no `X-Node-Id`, so it is classified as local traffic and
 skips the admission gate entirely (`admission.rs:125-128`). Concurrent requests
 then queue **silently** inside `Semaphore::new(1)` on the slot
 (`model_slot.rs:1327`) until the client's 1800 s timeout
-(`oicp-client/src/lib.rs:73`).
+(`shared/crates/oicp-client/src/lib.rs:73`).
 
 > **Correction, 2026-08-06 — most of this section was already built.** The
 > ceiling does **not** default to `usize::MAX` in practice: `state.rs:370` is a
@@ -750,7 +750,7 @@ blank.
 2026-08-06 (one-hop decider form — see the note under Experiment B)**
 
 **Change.** `forward_budget` on the OICP envelope
-(`oicp-types/src/requirements.rs`), spent in exactly one place
+(`shared/crates/oicp-types/src/requirements.rs`), spent in exactly one place
 (`InferenceRequirements::decremented_for_forward`, called from
 `oicp-client`'s `build_request`), enforced on **both** routing paths:
 
@@ -787,7 +787,7 @@ routed. Two dispatch paths existed and only one was gated.
 > there is no decision above.
 >
 > The budget is *spent* but never *read*. `build_request`
-> (`oicp-client/src/lib.rs:317,335,356`) decrements on every forward including
+> (`shared/crates/oicp-client/src/lib.rs:317,335,356`) decrements on every forward including
 > this one, so the counter does reach 0 — but nothing on this path reads it, so
 > a node receiving a spent request decrements a saturated zero and forwards
 > again. **The ping-pong M1 exists to close is still reachable via
@@ -1900,7 +1900,7 @@ request.
 > a peer's manifest, and the only non-invasive lever (the 60 s cache) would need
 > both stale windows to overlap. Instead the *arriving* request shape was
 > synthesized directly — a budget-0 envelope is byte-identical to what
-> `oicp-client/src/lib.rs:356` stamps on a forwarded named request. Arms 2/3
+> `shared/crates/oicp-client/src/lib.rs:356` stamps on a forwarded named request. Arms 2/3
 > therefore measure termination-on-arrival, which is *sufficient* for
 > boundedness: the bounce cannot outlive its first receiver. What they do not
 > measure is the end-to-end two-hop bounce.

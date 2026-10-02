@@ -19,7 +19,7 @@ budget: see the mint row's cap in ralph/next/handed/STATE.md (11 — basis below
 exit VISIBLE (`never_ran`); this rung makes it impossible.
 
 **The type is already built and this order does not mint one.** Rewritten at round 4
-after a review found it: `kernel_types::Answer` (kernel-types/src/answer.rs:351) has
+after a review found it: `kernel_types::Answer` (shared/crates/kernel-types/src/answer.rs:351) has
 private fields including `judgement: Judgement`, no `Default`, deliberately no
 `Deserialize`, a private `sealed_with` (:329) as its single door, and exactly three
 public doors — `Draft::release(provenance, judgements)` :310,
@@ -63,7 +63,7 @@ lets `serve.rs` mint its own marker, and `except_from` is a layer-gate rule that
   `serve.rs` must hold a real `Answer` to build a `Complete`, and the frame a client
   receives is a rendering of it. Deriving `Deserialize` was refused — it makes
   `from_value` a public constructor, exactly what
-  `kernel-types/tests/ui/answer_by_deserialize.rs` exists to forbid, so the rung would
+  `shared/crates/kernel-types/tests/ui/answer_by_deserialize.rs` exists to forbid, so the rung would
   have spent its own enforcement to save a projection. Moving `Answer` into
   sovereign-contracts was refused with it. The claim this rung can therefore make is
   "nothing can be RELEASED unverified", not "no client can fabricate a frame" — the
@@ -162,7 +162,7 @@ lets `serve.rs` mint its own marker, and `except_from` is a layer-gate rule that
    LINT red **E0004** at step 1's mapping. For (c): `guard_story` goes E0004 red on the
    same input TODAY, so the plant must show the error AT step 1's mapping file:line among
    the sites rustc names — "something went E0004" is watching `guard_story`, not this
-   rung. The 10 trybuild fixtures in `kernel-types/tests/ui/` are the type's own plants;
+   rung. The 10 trybuild fixtures in `shared/crates/kernel-types/tests/ui/` are the type's own plants;
    they are re-run, not rewritten.
 9. Do the mint's three queue duties (PROMPT §4): the two `depends` lists, a
    `conflicts.txt` pair per shared file, and `ralph.py report` proving the queue parses.

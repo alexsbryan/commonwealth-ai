@@ -135,7 +135,7 @@ regex = { workspace = true }
 tempfile = { workspace = true }
 which = "7"
 hostname = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 
 # daemon_cmd uses libc::kill / setsid for unix process lifecycle.
 [target.'cfg(unix)'.dependencies]

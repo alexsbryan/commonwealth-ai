@@ -70,8 +70,8 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   at :270).
 - `GateOutcome { answer: kernel_types::Answer, meta: serde_json::Value, claims }` —
   grounding/mod.rs:559-582 (`answer` :572, `meta` :575). `Answer::judgement(&self) -> &Judgement`
-  kernel-types/src/answer.rs:389.
-- `Judgement` derives `Serialize, Deserialize` (kernel-types/src/judgement.rs:319-320); four constructors
+  shared/crates/kernel-types/src/answer.rs:389.
+- `Judgement` derives `Serialize, Deserialize` (shared/crates/kernel-types/src/judgement.rs:319-320); four constructors
   `passed`/`failed`/`could_not_judge`/`never_ran` at :346/:351/:357/:363, each taking a `Reason` by value;
   `Reason::literal(&'static str)` :245; `Verdict` is kebab-case on the wire (:91).
 - **Where the stamp is persisted.** Handlers write `outcome.meta` as `metadata["grounding_gate"]`:
@@ -280,7 +280,7 @@ PERSISTED-row clause, both pointing at hd-10 step 6).
   - `git grep -n 'metadata: None,' -- sovereign/crates/sovereign-core/src/runtime/serve.rs` returns only the
     graceful guard's line, and that build carries a `judgement`.
 - These FIND their subject (a required field is proven by its presence, not its absence):
-  `git grep -n 'judgement: Judgement' -- sovereign/crates/sovereign-contracts/src/types/turn.rs sovereign/crates/sovereign-contracts/src/types/mod.rs`
+  `git grep -n 'judgement: Judgement' -- shared/crates/sovereign-contracts/src/types/turn.rs shared/crates/sovereign-contracts/src/types/mod.rs`
   and `git grep -n '"judgement"' -- sovereign/crates/sovereign-core/src/runtime/grounding/gate.rs`.
 - `cargo xtask arch-gate` exits 0. With step 3 cut, no surviving row touches
   `collaboration.rs` and no file these rows touch is inside the no-slack 800-1200 band (Premises, Size);

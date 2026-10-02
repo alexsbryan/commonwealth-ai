@@ -351,7 +351,7 @@ curl -s --max-time 5 http://<peer-ip>:9741/v1/embeddings \
 | OICP-driven peer routing decision | `sovereign-mesh/src/peer_inference.rs::select_peer` |
 | Offload gate incl. the envelope-absent case (OICP path) | `sovereign-mesh/src/oicp_select.rs::offload_verdict_opt` (replaced `peer_inference.rs::has_routing_signal`, removed 2026-08-13) |
 | Speed::Slow gate (OICP path) | `sovereign-mesh/src/peer_inference.rs::select_peer` (~line 548) |
-| Score function (shared) | `oicp-types/src/lib.rs::score_claim_for_request` |
+| Score function (shared) | `shared/crates/oicp-types/src/lib.rs::score_claim_for_request` |
 | Score + tie-break helper | `sovereign-mesh/src/oicp_select.rs::pick_better` |
 | Slot picker (Fast/Slow/Medium) | `sovereign-mesh/src/oicp_select.rs::pick_slot_for_oicp` |
 | Manifest-fetch + RTT cache | `sovereign-mesh/src/peer_inference.rs::get_peer_manifest` |

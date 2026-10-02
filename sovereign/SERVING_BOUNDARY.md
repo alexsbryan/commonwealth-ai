@@ -128,7 +128,7 @@ daemon-side half of the argument. Leading with what was wrong:
 | `sovereign-serving` | 0 (deleted) | The peg: eleven exported types with zero external references, plus 771 lines of shard assignment that drag `corpus-engine`. Emptied to zero and deleted by `REVIEW-build-serving-empty-peg` (2026-09-15): its two live modules (`inference_plan`, `store_adapter`) moved to `sovereign-mesh` and its re-exports went to `oicp-types`/`commonwealth-core`. |
 
 **Shared leaves the package may reach — `oicp-types`, `kernel-types`,
-`sovereign-contracts`, `serving-policy`. Nothing else.** `oicp-types/src/scoring.rs`
+`sovereign-contracts`, `serving-policy`. Nothing else.** `shared/crates/oicp-types/src/scoring.rs`
 already holds the scorer (`ScoredClaim` :438, `pick_better` :458,
 `best_claim_for_request` :481, `SCORING_EPSILON` :431); `oicp_select.rs` is a shim over it.
 

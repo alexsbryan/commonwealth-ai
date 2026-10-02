@@ -43,7 +43,7 @@ fn every_mcp_method_match_goes_through_the_enum() {
     let root = repo_root();
     let mut files = Vec::new();
     rs_files(&root, &mut files);
-    let host_kit = root.join("host-kit/src/mcp.rs");
+    let host_kit = root.join("shared/crates/host-kit/src/mcp.rs");
     assert!(
         files.contains(&host_kit),
         "the walk under {} never reached {} — it judged the wrong tree",

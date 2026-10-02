@@ -46,7 +46,7 @@ corrections come before the mechanism).
 | Claim in this doc, before 2026-09-09 | Fact today |
 |---|---|
 | Donor aborts when the coordinator vanishes (§Resolved 1, "already on the wire") | The server returns **404** with `Reclaimed { reason: "handoff not found" }` (`corpus_queue.rs:378-381`). The peer heartbeat loop acts only on **410** (`auto_ingest.rs:1175`) and drops everything else into two debug catch-alls (`:1187`, `:1195`), so the donor keeps ingesting into a lease nobody holds. There is also no miss counter: a coordinator that goes silent forever is never noticed. **Live bug, fixed at 5a.** |
-| `TenantId` lives in `oicp-types` (the "precedent" the JobSpec promotion leans on) | Only `sovereign-server/src/auth.rs:92` — 29 refs, 7 files, one crate. **No validator exists**; `auth.rs:35` reads `/// Extract tenant_id from a valid API key.`, which claims extraction, not checking. The leaf precedent that does exist is `ToolDescriptor` (`oicp-types/src/tool.rs:112`). **Moved at 5a (PLAN.md F1).** |
+| `TenantId` lives in `oicp-types` (the "precedent" the JobSpec promotion leans on) | Only `sovereign-server/src/auth.rs:92` — 29 refs, 7 files, one crate. **No validator exists**; `auth.rs:35` reads `/// Extract tenant_id from a valid API key.`, which claims extraction, not checking. The leaf precedent that does exist is `ToolDescriptor` (`shared/crates/oicp-types/src/tool.rs:112`). **Moved at 5a (PLAN.md F1).** |
 | The work queue is settled | The **pull** path is already the default; the gate is `SOVEREIGN_USE_LEGACY_PARTITION` (`commonwealth-api/src/routes_internal/corpus_collaborate.rs:41`, `use_pull_queue()` `:43-46`). `SOVEREIGN_USE_WORK_QUEUE` survives in exactly two comments (`corpus_collaborate.rs:259`, `server.rs:380`) and no code reads it. |
 | `EmbedModelMismatch` is the refusal pattern to generalize | **Zero constructors** — only the variant's definition (`work_queue.rs:73`). The refusal pattern that actually works is `PeerNotAllowed`: constructed once (`work_queue.rs:241`), enforced as 403 at the route (`corpus_queue.rs:310-314`). |
 | `WorkerProvider`: Vast, RunPod | Trait at `worker_controller.rs:73`. **Two** non-test impls, both Vast (`worker_pod_provider.rs:110`, `:218`); the other five are test mocks. RunPod is four doc comments (`worker_controller.rs:22,72`; `sovereign-contracts/src/worker_pod.rs:6,187`) and no code. |
@@ -164,7 +164,7 @@ its own restart decider and two inference dependents, and putting a second resta
 behind it would be §10.6 at crate scale. The descriptor carries an `isolation` claim; v0 names
 one level and says which.
 
-**4. `JobUnit` — the unit of work, in the leaf** *(design)*, `oicp-types/src/job.rs`,
+**4. `JobUnit` — the unit of work, in the leaf** *(design)*, `shared/crates/oicp-types/src/job.rs`,
 String/u64/`Value` only, zero new dependencies: `{ envelope, kind, unit_hash, payload,
 requirements, tenant }`, alongside `JobKind{id, version}` spelled `id:vN` — the spelling
 `manifest::features` already uses — and `JobRequirements{repo_rev, os, arch, preconditions}`,

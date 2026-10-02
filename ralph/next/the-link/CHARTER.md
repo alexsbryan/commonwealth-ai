@@ -28,7 +28,7 @@ the wrong resolution.
 - A `REVIEW-mint-the-link-` that needs more rows than its cap.
 - Weakening a PLANT, adding an `[[exception]]`, or widening an `except` list.
 - The order's own "Not worth continuing if" firing (`.sovereign/features/the-link/order.md`
-  §Objective), or ANY diff under `commonwealth/crates/commonwealth-rail-core`
+  §Objective), or ANY diff under `shared/crates/commonwealth-rail-core`
   at any time — that crate is read-only for this campaign (invariant note
   `c3fed9c3`).
 - Pushing, rewriting history, `--no-verify`.

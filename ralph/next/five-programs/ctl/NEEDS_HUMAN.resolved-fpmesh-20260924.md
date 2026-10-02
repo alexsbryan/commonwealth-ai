@@ -37,7 +37,7 @@ Classified one row per owning surface (the core mint's grammar):
 
 Mintable now (9):
 1. REPOINT leaf-homed vocabulary — deep_link (9) → mesh_join_vocab (fp-52 moved it;
-   mesh-join-vocab/src/lib.rs), iroh_access::MemberIdentity → kernel_types::member (fp-46),
+   shared/crates/mesh-join-vocab/src/lib.rs), iroh_access::MemberIdentity → kernel_types::member (fp-46),
    daemon::InferenceVenue (daemon.rs) → sovereign_contracts::venue (fp-1). Closes nothing alone.
 2. MOVE the ring-rail port vocabulary (rail_port::RingRailPort/RingJournal, fabric::ForgottenMember)
    to its D3 owner — state.rs:548, routes_rail.rs:38, work_donor.rs:599,1000, rails_client.rs hold

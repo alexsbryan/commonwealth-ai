@@ -29,7 +29,7 @@
 //! down (the same shape as `arch-gate`), and it is the closure loop for the
 //! migration rather than a hope that the next reader remembers.
 //!
-//! `corpus-index/src/corpus.rs` is exempt: it is where the spelling lives
+//! `shared/crates/corpus-index/src/corpus.rs` is exempt: it is where the spelling lives
 //! (the read-port carve moved the decider there at
 //! `REVIEW-build-index-read-port`; `corpus-engine/src/corpus.rs` is a shim).
 
@@ -39,12 +39,22 @@ use std::path::Path;
 use crate::common;
 
 /// The file that is ALLOWED to spell the layout, because it is the decider.
-const DECIDER: &str = "corpus-index/src/corpus.rs";
+const DECIDER: &str = "shared/crates/corpus-index/src/corpus.rs";
 
 /// Repo-relative prefixes whose layout knowledge this gate governs. The gate
 /// covers the whole source tree; this list exists only so the message can name
-/// which domain a new site is in.
+/// which domain a new site is in: the program dir (docs/FIVE_PROGRAMS.md §2),
+/// or the pre-move parent of a crate the move has not reached yet.
 const DOMAINS: &[(&str, &str)] = &[
+    ("svrn/", "svrn"),
+    ("serve/", "serve"),
+    ("cmnwlth/", "cmnwlth"),
+    ("ingest/", "ingest"),
+    ("code/", "code"),
+    ("bench/", "bench"),
+    ("shared/", "shared"),
+    ("clients/", "clients"),
+    ("distributions/", "distributions"),
     ("corpus-engine", "corpus-engine"),
     ("sovereign/", "sovereign"),
     ("commonwealth/", "commonwealth"),
@@ -262,7 +272,10 @@ mod tests {
         );
         assert_eq!(domain_of("commonwealth/crates/a/src/x.rs"), "commonwealth");
         assert_eq!(domain_of("corpus-engine/src/x.rs"), "corpus-engine");
-        assert_eq!(domain_of("corpus-engine-scip/src/x.rs"), "corpus-engine");
+        assert_eq!(
+            domain_of("shared/crates/corpus-engine-scip/src/x.rs"),
+            "shared"
+        );
         assert_eq!(domain_of("studio/crates/a/src/x.rs"), "workspace");
     }
 }

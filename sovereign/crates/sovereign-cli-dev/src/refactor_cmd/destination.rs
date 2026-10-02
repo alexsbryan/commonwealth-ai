@@ -10,7 +10,7 @@
 //!
 //! That was not hypothetical. Measured 2026-08-24 on this tree, seven rows
 //! named `sovereign_contracts::…` paths for types that live in `kernel-types`,
-//! and the code said so out loud: `kernel-types/src/answer.rs` carries
+//! and the code said so out loud: `shared/crates/kernel-types/src/answer.rs` carries
 //! *"`quality/CONCEPTS.toml` writes the canonical home as
 //! `sovereign_contracts::answer::Answer`. That home **cannot hold this
 //! type**"*. Three rows of that family (Answer, Draft, Citation) were repaired

@@ -140,7 +140,7 @@ no owner; `sovereign-tools/src/local_corpus/watched/config.rs:79-171`), so
 every watched corpus is world-readable to every query on the box
 (`registry.rs:54` keyed by bare `corpus_id`). And there is no document-push
 wire protocol anywhere: OICP's ingest extension installs a *recipe by id*,
-never raw documents (`oicp-types/src/ingest.rs:22-70`). So today "employee
+never raw documents (`shared/crates/oicp-types/src/ingest.rs:22-70`). So today "employee
 adds their own documents" means IT stages files on the server and registers
 a shared watched folder.
 

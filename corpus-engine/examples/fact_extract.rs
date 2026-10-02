@@ -18,7 +18,7 @@ const ROOTS: &[&str] = &[
     "sovereign/crates/sovereign-tools/src",
     "sovereign/crates/sovereign-cli-daemon/src",
     "corpus-engine/src",
-    "corpus-engine-scip/src",
+    "shared/crates/corpus-engine-scip/src",
 ];
 
 #[derive(serde::Serialize)]

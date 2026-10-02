@@ -67,7 +67,7 @@ const HEADER: &str = "\
 #
 # Buckets: 625 in scope (591 must-class + 34 should), 10 out-of-scope (§17),
 # 5 aliases (§4.4). Out-of-scope and alias entries are PRESENT and excluded,
-# never absent — see kernel-types/src/conformance.rs.
+# never absent — see shared/crates/kernel-types/src/conformance.rs.
 ";
 
 // ─── The pinned histogram (ARCH §18.4) ──────────────────────────────────────

@@ -81,11 +81,11 @@ package = "understanding"   # declared 2026-09-18 by REVIEW-build-understanding-
 crates = ["understanding-vocab", "understanding-atlas", "understanding-host"]   # understanding-atlas/-host created as stubs 2026-09-18; enrichment/ is still misfiled in corpus-engine until the classification and move rows land
 lift = ""
 applicable_as = "point it at a folder, get back what the material is about — its domains, its tensions, its gaps; corpus-mcp already reads its output against a bare llama-server"
-roots = ["corpus-engine/src/enrichment", "corpus-engine/src/meta_atlas", "corpus-engine/src/atlas_traversal", "understanding-vocab"]
+roots = ["corpus-engine/src/enrichment", "corpus-engine/src/meta_atlas", "corpus-engine/src/atlas_traversal", "shared/crates/understanding-vocab"]
 # The two roots where the ATOM vocabulary is authored — the atom-outside axis's
 # scope (campaigns/domains.toml dm-atom-outside). A subset of `roots`: the atom
 # read model is authored here, not in meta_atlas/ or atlas_traversal/.
-vocab_roots = ["understanding-vocab", "corpus-engine/src/enrichment"]
+vocab_roots = ["shared/crates/understanding-vocab", "corpus-engine/src/enrichment"]
 status = "kept"
 
 [[context]]
@@ -141,10 +141,10 @@ kind = "supporting"
 question = "which engine answers this, and can I prove why?"
 # DECIDED 2026-09-14 (rung 4): the ranked thing is a `Venue` — zero
 # definitions, one kin (`kernel_types::quality::VenueAction`,
-# kernel-types/src/quality/triggers.rs:36, 18 sites / 3 files) renamed apart to
+# shared/crates/kernel-types/src/quality/triggers.rs:36, 18 sites / 3 files) renamed apart to
 # `TriggerAction` in rung 5. `Candidate` refused (5 defs + 23 kin — a role
 # suffix, not a noun); `Seat` refused as a near-synonym of `Slot`
-# (oicp-types/src/slot.rs:54); `Lender` refused because guest_lender.rs:17-27
+# (shared/crates/oicp-types/src/slot.rs:54); `Lender` refused because guest_lender.rs:17-27
 # already uses it for the pinned-grant concept and says "a lender is not a
 # peer". Admission's caller is a `Principal`, and DC §3.3 decides the word is
 # PUBLISHED LANGUAGE, not Admission's: `kernel` owns it `owns_exact` (registry
@@ -198,7 +198,7 @@ package = "code-intel"
 crates = ["corpus-engine-scip", "corpus-engine-sections", "code-next-edit", "code-facts"]   # + the code-intel package crates CODE_TOOLING_BOUNDARY.md §2 names as they are created; `code-next-edit` is the TENTH and §2's table does not name it (REVIEW-build-next-edit-crate); `code-facts` is §2's Phase 2 (REVIEW-build-code-facts)
 lift = ""             # no lift script yet; the package row is gated, not lifted
 applicable_as = "a code-intelligence MCP server; next-edit is its clearest lost child (sovereign/docs/NEXT_EDIT.md)"
-roots = ["corpus-engine-scip", "corpus-engine-sections", "corpus-engine/src/enrichment/code_intel", "code-next-edit"]
+roots = ["shared/crates/corpus-engine-scip", "shared/crates/corpus-engine-sections", "corpus-engine/src/enrichment/code_intel", "code-next-edit"]
 status = "kept"
 
 [[context]]
@@ -249,7 +249,7 @@ package = ""
 crates = ["oicp-types", "kernel-types", "understanding-vocab", "sovereign-contracts", "oicp-client", "sovereign-turn-client"]
 lift = ""
 applicable_as = "the shared kernel between contexts, not an eleventh"
-roots = ["oicp-types", "kernel-types", "understanding-vocab", "sovereign/crates/sovereign-contracts"]
+roots = ["shared/crates/oicp-types", "shared/crates/kernel-types", "shared/crates/understanding-vocab", "shared/crates/sovereign-contracts"]
 status = "kept"
 
 [[context]]
@@ -573,7 +573,7 @@ lines = 353
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/lsp_tier.rs"
+path = "shared/crates/corpus-engine-scip/src/lsp_tier.rs"
 context = "workbench"
 lines = 761
 note = ""
@@ -759,7 +759,7 @@ lines = 1015
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/reading_formatters.rs"
+path = "shared/crates/understanding-vocab/src/reading_formatters.rs"
 context = "understanding"
 lines = 137
 note = ""
@@ -990,7 +990,7 @@ lines = 542
 note = "re-tagged serving->compute 2026-09-15 on consumer evidence: every production consumer is a pod module (worker_http.rs:214,817; worker_daemon.rs:156) plus the daemon host (sovereign-daemon/src/worker.rs:82,120), and its only in-crate import is the pod's worker_http::WorkerState (:67). It is the pod's :9742 TLS tunnel (PINNED_WORKER_AS_INFERENCE_PEER.md:5), not an inference decider — ARCH 12: its uses are all pod-side, so the serving line was drawn wrong."
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/worker_pod.rs"
+path = "shared/crates/sovereign-contracts/src/worker_pod.rs"
 context = "compute"
 lines = 763
 note = "the owner↔pod wire protocol (BootstrapBlob, worker token, seed-derived cert, token verifier); moved out of sovereign-pods to the shared contract leaf by REVIEW-build-serving-worker-port (2026-09-15) so sovereign-serving-host can name it without a third package [[exception]] (SERVING_BOUNDARY.md Grandfathered). Tag unchanged, path re-keyed."
@@ -1209,13 +1209,13 @@ lines = 362
 note = "moved from sovereign-api/src/next_edit_syntax.rs at dm-next-edit-move; the grammar arrives through code_next_edit::grammar::GrammarLookup"
 
 [[module]]
-path = "oicp-types/src/openai_types.rs"
+path = "shared/crates/oicp-types/src/openai_types.rs"
 context = "kernel"
 lines = 949
 note = "the OpenAI wire vocabulary; published language living in an application crate"
 
 [[module]]
-path = "oicp-types/src/inference_service.rs"
+path = "shared/crates/oicp-types/src/inference_service.rs"
 context = "kernel"
 lines = 164
 note = "the local inference service wire vocabulary (FIM request/stream, edit-slot status, shed error); moved down by domains REVIEW-build-local-inference"
@@ -1233,7 +1233,7 @@ lines = 435
 note = "same harness-shaping argument as frontdoor; extracted FROM routes_responses for codex"
 
 [[module]]
-path = "oicp-types/src/responses_types.rs"
+path = "shared/crates/oicp-types/src/responses_types.rs"
 context = "kernel"
 lines = 421
 note = "Responses-API wire vocabulary, same argument as openai_types"
@@ -1627,7 +1627,7 @@ inward_callers = [
     "sovereign/crates/sovereign-daemon/src/bootstrap.rs:2308",
     "sovereign/crates/sovereign-daemon/src/build/inference.rs:130",
 ]
-inward_callers_note = "Eight production sites in ONE crate (bootstrap.rs:2301 and :2308 are the CompositeEndpointSource assembly and the constructor it feeds, counted as one site in prose). sovereign-core has ZERO: its Cargo.toml names no sovereign-mesh / -api / -serving, and every sovereign_mesh:: string inside it is a doc comment. The seam is the trait InferenceProvider at sovereign/crates/sovereign-contracts/src/traits.rs:281 - already a leaf."
+inward_callers_note = "Eight production sites in ONE crate (bootstrap.rs:2301 and :2308 are the CompositeEndpointSource assembly and the constructor it feeds, counted as one site in prose). sovereign-core has ZERO: its Cargo.toml names no sovereign-mesh / -api / -serving, and every sovereign_mesh:: string inside it is a doc comment. The seam is the trait InferenceProvider at shared/crates/sovereign-contracts/src/traits.rs:281 - already a leaf."
 rename = "Fabric says Member; Serving says Candidate (DOMAINS.md section 5 call 1). PeerInferenceEndpoint -> Candidate, PeerEndpointSource -> CandidateSource, PeerCandidateView -> CandidateView. The translation already exists and is already the only door; Phase C is a rename plus moving this function to the Fabric side of the seam, not a new mechanism."
 
 # ═══ Nouns — Peer inventory 2026-09-13, ADJUDICATED 2026-09-14 by rung domains-4 (72 rows: keep 11 · rename 56 · merge 5 · delete 0; every rename carries its git-grep site count) ═══
@@ -1638,7 +1638,7 @@ rename = "Fabric says Member; Serving says Candidate (DOMAINS.md section 5 call 
 # Every rename cites its reference-site count from `git grep -o \b<Name>\b -- *.rs :!target :!studio`.
 #
 # THE FIVE WORDS (evidence and converge blocks: scratchpad/adjudications-words.md):
-#   serving    = Venue      (converge: 0 defs, 1 kin VenueAction @ kernel-types/src/quality/triggers.rs:36, 18 refs/3 files -> renamed apart)
+#   serving    = Venue      (converge: 0 defs, 1 kin VenueAction @ shared/crates/kernel-types/src/quality/triggers.rs:36, 18 refs/3 files -> renamed apart)
 #   admission  = <none>     (Principal is PUBLISHED LANGUAGE, not Admission's word: `kernel` owns it `owns_exact` — DC §3.3, "Principal leaves Serving's owned words for the published language"; one definition, sovereign-contracts/src/principal.rs:59, in a kernel crate, so exempt; a CONVERGENCE with DAEMON_CORE.md section 1 `principal -> Scope`)
 #   knowledge  = <none>     (MERGE verdict, dm-word-owners kill bar: atlas half -> understanding (Atlas), ask-a-peer half -> retrieval (Index))
 #   fabric     = Member     (converge: 2 defs, both back-of-house/workbench; 1 exempt, 1 renamed apart at 13 refs)
@@ -1854,7 +1854,7 @@ why = "7 refs / 3 files. corpus_id/atom_id/canonical_name at :72-77 - 'peer' mea
 [[noun]]
 name = "PeerAnswer"
 crate = "kernel-types"
-file = "kernel-types/src/answer.rs:423"
+file = "shared/crates/kernel-types/src/answer.rs:423"
 visibility = "pub"
 concept = "C9"
 context = "kernel"
@@ -1865,7 +1865,7 @@ why = "24 refs / 6 files. CARVE-OUT (campaigns/domains.toml:141-143): names an e
 [[noun]]
 name = "PeerDescriptor"
 crate = "oicp-types"
-file = "oicp-types/src/manifest.rs:289"
+file = "shared/crates/oicp-types/src/manifest.rs:289"
 visibility = "pub"
 concept = "C2"
 context = "kernel"
@@ -2052,7 +2052,7 @@ why = "8 refs / 1 file. unreadable at :183 separates 'nobody measured' from 'mea
 [[noun]]
 name = "PeerStore"
 crate = "sovereign-contracts"
-file = "sovereign/crates/sovereign-contracts/src/peer.rs:101"
+file = "shared/crates/sovereign-contracts/src/peer.rs:101"
 visibility = "pub"
 concept = "C8"
 context = "kernel"
@@ -2063,7 +2063,7 @@ why = "42 refs / 13 files. CARVE-OUT from the five words (campaigns/domains.toml
 [[noun]]
 name = "SoloPeerStore"
 crate = "sovereign-contracts"
-file = "sovereign/crates/sovereign-contracts/src/peer.rs:153"
+file = "shared/crates/sovereign-contracts/src/peer.rs:153"
 visibility = "pub"
 concept = "C8"
 context = "kernel"
@@ -2074,7 +2074,7 @@ why = "22 refs / 6 files. entries: Mutex<BTreeMap<(String,String),PeerEntry>> at
 [[noun]]
 name = "PeerStoreError"
 crate = "sovereign-contracts"
-file = "sovereign/crates/sovereign-contracts/src/peer.rs:58"
+file = "shared/crates/sovereign-contracts/src/peer.rs:58"
 visibility = "pub"
 concept = "C8"
 context = "kernel"
@@ -2085,7 +2085,7 @@ why = "30 refs / 4 files. One variant Backend(String) at :60 - 'the backing stor
 [[noun]]
 name = "PeerEntry"
 crate = "sovereign-contracts"
-file = "sovereign/crates/sovereign-contracts/src/peer.rs:79"
+file = "shared/crates/sovereign-contracts/src/peer.rs:79"
 visibility = "pub"
 concept = "C8"
 context = "kernel"
@@ -2526,7 +2526,7 @@ note = "E4 whole-record snapshot: Vec<PeerContact> built at :37 via .map(peer_co
 [[edge]]
 from_type = "PeerTransportPath"
 from_context = "fabric"
-to_module = "sovereign/crates/sovereign-contracts/src/daemon_wire/mesh.rs"
+to_module = "shared/crates/sovereign-contracts/src/daemon_wire/mesh.rs"
 to_context = "kernel"
 fields_read = []
 translation = "none"
@@ -2628,8 +2628,8 @@ definitions = [
     "sovereign/crates/sovereign-core/src/role.rs:79 Tier (Fast/Primary, model_stem() at :89)",
     "commonwealth/crates/commonwealth-media/src/apps.rs:57 Tier (Config/Claimed)",
     "sovereign/crates/sovereign-mesh/src/tier.rs:112 TierFloor (None/TopBand)",
-    "oicp-types/src/capability.rs:276 LatencyClass (Fast/Normal/Extended) - adjacent, NOT the same concept",
-    "oicp-types/src/completion.rs:37 Speed + :744 latency_to_speed - adjacent",
+    "shared/crates/oicp-types/src/capability.rs:276 LatencyClass (Fast/Normal/Extended) - adjacent, NOT the same concept",
+    "shared/crates/oicp-types/src/completion.rs:37 Speed + :744 latency_to_speed - adjacent",
 ]
 verdict = "split"
 survivor = "TierFloor @ sovereign-scheduler"
@@ -2693,7 +2693,7 @@ definitions = [
     "sovereign/crates/sovereign-mesh/src/scheduler_core.rs:302 RankedCandidate (5 sites)",
     "sovereign/crates/sovereign-mesh/src/decision_log.rs:290 CandidateRecord (21) / :383 CandidateInputs (27) / :283 CandidateKind (30)",
     "sovereign/crates/sovereign-mesh/src/decision_log.rs:498 ExcludedCandidate (4 sites)",
-    "oicp-types/src/scoring.rs:438 ScoredClaim - THE score type, published (with pick_better :458, best_claim_for_request :481, SCORING_EPSILON :431)",
+    "shared/crates/oicp-types/src/scoring.rs:438 ScoredClaim - THE score type, published (with pick_better :458, best_claim_for_request :481, SCORING_EPSILON :431)",
     "commonwealth/crates/commonwealth-transport/src/lib.rs:227 PeerEndpoint - Fabric's reach record, NOT in the eight; PeerInferenceEndpoint is built from a Vec of these at daemon.rs:2312",
 ]
 verdict = "converge"
@@ -2732,7 +2732,7 @@ family = "admission"
 context = "serving"
 definitions = [
     "sovereign/crates/sovereign-daemon/src/admission.rs (1447 lines): peer_admission_layer :551, client_fairness_layer :457, local_queue_shed_response :199, PeerInflightGuard :228, AdmissionReason :51, AdmissionRejection :158 - 'do I serve this inbound request at all right now?'",
-    "commonwealth/crates/commonwealth-rail-core/src/admit.rs (547 lines): admit() :299, Admission :238, AdmittedOp :198, RailGap :78 - 'which journal lines count, in what one order does every node apply them?'",
+    "shared/crates/commonwealth-rail-core/src/admit.rs (547 lines): admit() :299, Admission :238, AdmittedOp :198, RailGap :78 - 'which journal lines count, in what one order does every node apply them?'",
     "sovereign/crates/sovereign-core/src/runtime/admission.rs (225 lines): AdmittedTurn :81, scope :143, current :151, stamp :159 - 'has this host already accepted this turn?' (a foreground lease + id)",
     "sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/admission.rs (841 lines): admit() :334, AdmissionOutcome :213, NativeAdmission :260 - 'can the sealed evidence answer this question?' TELEMETRY, enforced = false on every event",
 ]
@@ -2875,7 +2875,7 @@ family = "Gap"
 context = "understanding, answering, research"
 definitions = [
   "corpus-engine/src/enrichment/atlas/analysis/gaps.rs:56 Gap — a hole in one corpus's atom graph (kind: GapKind, referenced_atoms: Vec<AtomId>, evidence: Vec<ChunkRef>, significance: f32); GapKind at :35 is the closed set TransitionWithoutTrigger|UngroundedClaim|OpenQuestion",
-  "sovereign/crates/sovereign-contracts/src/types/epistemic.rs:294 Gap — a demand for evidence the installed corpora cannot meet (demand_idx, statement, coverage: GapCoverage, routes: Vec<AcquisitionRoute>)",
+  "shared/crates/sovereign-contracts/src/types/epistemic.rs:294 Gap — a demand for evidence the installed corpora cannot meet (demand_idx, statement, coverage: GapCoverage, routes: Vec<AcquisitionRoute>)",
   "sovereign/crates/sovereign-core/src/deep_research/icd.rs:407 Gap — the same demand serialised into gap-list-<round>.json (id, text, actionable_query, from_claim_id, corroboration)",
   "sovereign/crates/sovereign-cli-dev/src/atos_cmd/run.rs:1829 Gap (private) — a reviewer-JSON wire row",
 ]
@@ -2941,7 +2941,7 @@ zero, and the atlas writer persists atoms/edges/trajectories/gaps/ \
 tension_candidates/configurations/pattern_findings/schema_validation/ \
 resolution_failures/cross_corpus_edges — no domains file. The nearest carriers \
 of 'what is this material about' at the declared level are Vocabulary \
-(understanding-vocab/src/ontology/mod.rs:48) and OntologyPolicies (:62), \
+(shared/crates/understanding-vocab/src/ontology/mod.rs:48) and OntologyPolicies (:62), \
 written to atlas/ontology.json — and Understanding already owns `Ontology`. \
 So adding `Domain` to owns would claim a word against nothing, and `owns` is \
 what dm-word-owners reads. The plugin is not a squatter: its own doc says it \
@@ -2963,7 +2963,7 @@ recipe selects both independently, so merging them merges two extension points.
 family = "Seed"
 context = "understanding"
 definitions = [
-  "NAVIGATION SEED (where a walk starts): understanding-vocab/src/ontology/navigation.rs:134 SeedPolicy; corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-bench/src/eval_cmd/atlas_ann.rs:21 SeedMode",
+  "NAVIGATION SEED (where a walk starts): shared/crates/understanding-vocab/src/ontology/navigation.rs:134 SeedPolicy; corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-bench/src/eval_cmd/atlas_ann.rs:21 SeedMode",
   "EXTRACTION SEED (the Stage 1a entity list -> cache/seed.json): corpus-engine/src/enrichment/pipeline/atlas.rs:285 SeedEntity, :300 SeedEntities, :322 SeedOrigin, :348 SeedStrategy; sovereign-enrichment-build/src/seed_cmd.rs:31 SeedError, :61 SeedReport",
   "HOMONYMS: sovereign-cli-dev/src/refactor_cmd/spec.rs:42 SeedEdit; .../refactor_cmd/discover.rs:127 SeededFile; sovereign-cli-llm/src/voice_eval/scenarios.rs:78 SeedMemory; sovereign-mesh/src/governance_http.rs:181 SeededResponse; sovereign-turn-client/src/lib.rs:3758 SeededWire; sovereign-cli-llm/src/awareness_cmd/seed.rs:159 SeedPlan",
 ]
@@ -3015,12 +3015,12 @@ why = """
 The copy is forced by the internal type's shape, not by the boundary: a \
 &'static str cannot cross serde. Carrying the closed enum removes both the \
 flattening and the copy. The closed set lives at \
-understanding-vocab/src/atoms.rs:1104 (pub enum AtomType, twelve variants, \
+shared/crates/understanding-vocab/src/atoms.rs:1104 (pub enum AtomType, twelve variants, \
 Hash + Ord) — NOT taxonomy.rs, which holds EnrichmentDepth at :40. \
 label() is at atoms.rs:1163 and already the one decider for the lowercase \
 spelling the desktop's CSS classes consume. ONE function must be minted and it \
 is the only new behaviour in this row: AtomType::from_label(&str) -> \
-Option<AtomType> (git grep 'fn from_label' understanding-vocab/ returns \
+Option<AtomType> (git grep 'fn from_label' shared/crates/understanding-vocab/ returns \
 nothing today), so the field serialises with #[serde(with = \
 \"crate::atoms::atom_type_label\")] and the wire does not change. It refuses \
 on an unknown label rather than defaulting, matching AtomEnvelope's deliberate \
@@ -3113,7 +3113,7 @@ verdict = "converge"
 survivor = "understanding_vocab::read — four fns + ATLAS_DIRNAME, all returning Result<_, AtomQueryError>"
 renames = [
   "three fns MOVE (fs::read + serde_json::from_slice and nothing else); corpus-engine re-exports at the historical path as enrichment/atlas/mod.rs:31,40,58 already does for atoms/edges",
-  "read_atlas_ontology is MINTED, not moved — ~8 lines, OntologyV1 is already vocab's at understanding-vocab/src/ontology/decl.rs:213",
+  "read_atlas_ontology is MINTED, not moved — ~8 lines, OntologyV1 is already vocab's at shared/crates/understanding-vocab/src/ontology/decl.rs:213",
   "AtomQueryError moves to vocab with THREE variants: Absent { atlas_dir, file } / Io / Parse. UnknownCorpus(String) and Task(String) do NOT cross — vocab knows directories, not corpus ids, and Task is a tokio JoinError. Both stay in sovereign-tools' AtlasViewError (reader.rs:169), which already has CorpusNotFound",
   "AtomQueryError is hand-written Display + Error, NOT #[derive(thiserror::Error)] — vocab's deps are exactly kernel-types, serde, serde_json, blake3 and check 11 is the kill clause. ~25 lines",
 ]
@@ -3129,7 +3129,7 @@ should render an empty state.
 [[collision]]
 family = "AtomsFile (the one door, structural)"
 context = "understanding"
-definitions = ["understanding-vocab/src/atoms.rs:1528 AtomsFile { pub schema_version, pub atoms: Vec<AtomEnvelope> (:1530) }"]
+definitions = ["shared/crates/understanding-vocab/src/atoms.rs:1528 AtomsFile { pub schema_version, pub atoms: Vec<AtomEnvelope> (:1530) }"]
 verdict = "converge"
 survivor = "AtomsFile with pub fn atoms(&self) -> &[AtomEnvelope], pub(crate) field, and NO public Deserialize"
 renames = [
@@ -3200,9 +3200,9 @@ moving or renaming, none carved out.
 family = "Source"
 context = "ingest, kernel"
 definitions = [
-  "kernel-types/src/origin.rs:82 Source — seven variants (Corpus { corpus, document: ContentHash, locator }, Web { url, fetched_at }, Attachment, ToolOutput, Server, Grain, …); where a piece of grounded content came from. Its doc explicitly REFUSES system prompts, persona text, compiled lessons, the tool dossier and the epistemic contract. 38 refs",
+  "shared/crates/kernel-types/src/origin.rs:82 Source — seven variants (Corpus { corpus, document: ContentHash, locator }, Web { url, fetched_at }, Attachment, ToolOutput, Server, Grain, …); where a piece of grounded content came from. Its doc explicitly REFUSES system prompts, persona text, compiled lessons, the tool dossier and the epistemic contract. 38 refs",
   "sovereign/crates/sovereign-pipeline/src/recipe.rs:98 Source — SlugList | Command | Inline; where a work-unit pipeline's KEYS come from. 6 refs / 2 files",
-  "studio/crates/sovereign-workflow/src/model.rs:264 Source — Folder | List | Inline; 'where the per-item driver gets its items'. 12 refs / 5 files",
+  "shared/crates/sovereign-workflow/src/model.rs:264 Source — Folder | List | Inline; 'where the per-item driver gets its items'. 12 refs / 5 files",
   "sovereign/crates/sovereign-cli-llm/src/meshapp_registry.rs:324 Source (private) — Path | Url; where a meshapp bundle is fetched from. 10 refs / 1 file",
 ]
 verdict = "converge"
@@ -3939,7 +3939,7 @@ path = "corpus-engine/src/stream_axes.rs"
 context = "understanding"
 lines = 310
 files = 1
-note = "meta-atom stability taxonomy and derivation; the per-atom articulation types moved to understanding-vocab/src/articulation.rs by domains REVIEW-build-articulation-vocab. Only consumers are meta_atlas/* and types.rs:432"
+note = "meta-atom stability taxonomy and derivation; the per-atom articulation types moved to shared/crates/understanding-vocab/src/articulation.rs by domains REVIEW-build-articulation-vocab. Only consumers are meta_atlas/* and types.rs:432"
 
 [[module]]
 path = "corpus-engine/src/testing.rs"
@@ -3977,7 +3977,7 @@ note = "wiki link graph over the v2 columnar store WRITTEN by enrichment::atlas:
 # actually declare `corpus-engine` in Cargo.toml, with comment lines stripped. The
 # unfiltered grep also hits sovereign-contracts (t0), kernel-types (t0) and
 # sovereign-turn-client (t0) — every one of those is a DOC COMMENT naming a corpus-engine
-# type it mirrors (kernel-types/src/answer.rs:32,70,89;
+# type it mirrors (shared/crates/kernel-types/src/answer.rs:32,70,89;
 # sovereign-contracts/src/daemon_wire/ingest.rs:6,43,84). Counting them would have
 # reported a tier-0 consumer and inverted every window.
 #
@@ -4042,8 +4042,8 @@ paths = [
     "corpus-engine/src/enrichment/atlas/analysis/mod.rs",
     "corpus-engine/src/enrichment/atlas/analysis/parcel_analytics.rs",
     "corpus-engine/src/enrichment/atlas/analysis/patterns_adapter.rs",
-    "corpus-engine-atlas-reader/src/sec_facts/coverage.rs",
-    "corpus-engine-atlas-reader/src/sec_facts/fixtures.rs",
+    "shared/crates/corpus-engine-atlas-reader/src/sec_facts/coverage.rs",
+    "shared/crates/corpus-engine-atlas-reader/src/sec_facts/fixtures.rs",
     "corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs",
     "corpus-engine/src/enrichment/atlas/analysis/starter_questions.rs",
     "corpus-engine/src/enrichment/atlas/analysis/tension_classifier.rs",
@@ -6631,55 +6631,55 @@ lines = 586
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail-core/src/admit.rs"
+path = "shared/crates/commonwealth-rail-core/src/admit.rs"
 context = "fabric"
 lines = 547
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail-core/src/introduce.rs"
+path = "shared/crates/commonwealth-rail-core/src/introduce.rs"
 context = "fabric"
 lines = 360
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail-core/src/lib.rs"
+path = "shared/crates/commonwealth-rail-core/src/lib.rs"
 context = "fabric"
 lines = 552
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail-core/src/payload.rs"
+path = "shared/crates/commonwealth-rail-core/src/payload.rs"
 context = "fabric"
 lines = 272
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail-core/src/sig.rs"
+path = "shared/crates/commonwealth-rail-core/src/sig.rs"
 context = "fabric"
 lines = 232
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail-core/src/sync.rs"
+path = "shared/crates/commonwealth-rail-core/src/sync.rs"
 context = "fabric"
 lines = 496
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail-core/src/tests.rs"
+path = "shared/crates/commonwealth-rail-core/src/tests.rs"
 context = "fabric"
 lines = 765
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail-core/src/tests_introduce.rs"
+path = "shared/crates/commonwealth-rail-core/src/tests_introduce.rs"
 context = "fabric"
 lines = 551
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail-core/src/tests_support.rs"
+path = "shared/crates/commonwealth-rail-core/src/tests_support.rs"
 context = "fabric"
 lines = 83
 note = ""
@@ -7051,169 +7051,169 @@ lines = 419
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/arch_metrics.rs"
+path = "shared/crates/corpus-engine-scip/src/arch_metrics.rs"
 context = "workbench"
 lines = 1068
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/capability_map.rs"
+path = "shared/crates/corpus-engine-scip/src/capability_map.rs"
 context = "workbench"
 lines = 1136
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/converge.rs"
+path = "shared/crates/corpus-engine-scip/src/converge.rs"
 context = "workbench"
 lines = 1361
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/descriptor.rs"
+path = "shared/crates/corpus-engine-scip/src/descriptor.rs"
 context = "workbench"
 lines = 400
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/error.rs"
+path = "shared/crates/corpus-engine-scip/src/error.rs"
 context = "workbench"
 lines = 38
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/lib.rs"
+path = "shared/crates/corpus-engine-scip/src/lib.rs"
 context = "workbench"
 lines = 95
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/roles.rs"
+path = "shared/crates/corpus-engine-scip/src/roles.rs"
 context = "workbench"
 lines = 737
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/scip_export.rs"
+path = "shared/crates/corpus-engine-scip/src/scip_export.rs"
 context = "workbench"
 lines = 1300
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/scip_graph.rs"
+path = "shared/crates/corpus-engine-scip/src/scip_graph.rs"
 context = "workbench"
 lines = 3691
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/scip_graph_edges.rs"
+path = "shared/crates/corpus-engine-scip/src/scip_graph_edges.rs"
 context = "workbench"
 lines = 236
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/scip_proto.rs"
+path = "shared/crates/corpus-engine-scip/src/scip_proto.rs"
 context = "workbench"
 lines = 542
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/shape.rs"
+path = "shared/crates/corpus-engine-scip/src/shape.rs"
 context = "workbench"
 lines = 914
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/tool_path.rs"
+path = "shared/crates/corpus-engine-scip/src/tool_path.rs"
 context = "workbench"
 lines = 296
 note = ""
 
 [[module]]
-path = "corpus-engine-scip/src/trace.rs"
+path = "shared/crates/corpus-engine-scip/src/trace.rs"
 context = "workbench"
 lines = 261
 note = ""
 
 [[module]]
-path = "corpus-engine-sections/src/lib.rs"
+path = "shared/crates/corpus-engine-sections/src/lib.rs"
 context = "workbench"
 lines = 568
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/articulation.rs"
+path = "shared/crates/understanding-vocab/src/articulation.rs"
 context = "understanding"
 lines = 243
 note = "The per-atom articulation taxonomy (Articulation, ArticulationVector and their ALL/as_str/dominant/weight/is_ambiguous/dominant_above methods), moved from corpus-engine's stream_axes.rs by domains REVIEW-build-articulation-vocab (DE \"The read-port leaf, measured again\": \"the per-atom articulation types go to the language\"); the per-corpus stability half stayed behind."
 
 [[module]]
-path = "understanding-vocab/src/atoms.rs"
+path = "shared/crates/understanding-vocab/src/atoms.rs"
 context = "unknown"
 lines = 1588
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/atoms/tests.rs"
+path = "shared/crates/understanding-vocab/src/atoms/tests.rs"
 context = "unknown"
 lines = 673
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/canonical.rs"
+path = "shared/crates/understanding-vocab/src/canonical.rs"
 context = "unknown"
 lines = 61
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/edges.rs"
+path = "shared/crates/understanding-vocab/src/edges.rs"
 context = "unknown"
 lines = 328
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/lib.rs"
+path = "shared/crates/understanding-vocab/src/lib.rs"
 context = "unknown"
 lines = 42
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/ontology/decl.rs"
+path = "shared/crates/understanding-vocab/src/ontology/decl.rs"
 context = "unknown"
 lines = 651
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/ontology/mod.rs"
+path = "shared/crates/understanding-vocab/src/ontology/mod.rs"
 context = "unknown"
 lines = 269
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/ontology/navigation.rs"
+path = "shared/crates/understanding-vocab/src/ontology/navigation.rs"
 context = "unknown"
 lines = 799
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/read.rs"
+path = "shared/crates/understanding-vocab/src/read.rs"
 context = "understanding"
 lines = 51
 note = "The read door (read_atlas_atoms/read_atlas_edges) and the layout constant ATLAS_DIRNAME, moved from corpus-engine's enrichment/atlas/writer.rs by domains dm-vocab-door-move and dm-vocab-atlas-dirname (DE \"The door\", DE \"The read-port leaf, measured again\")."
 
 [[module]]
-path = "understanding-vocab/src/skeleton.rs"
+path = "shared/crates/understanding-vocab/src/skeleton.rs"
 context = "understanding"
 lines = 510
 note = "The field skeleton (FieldSkeleton, PartialSkeleton and the question/position/fault-line/open-question closure) and FieldModelStats, moved from corpus-engine's enrichment/skeleton.rs and enrichment/clustering.rs by domains REVIEW-build-field-skeleton-vocab (DE \"The read-port leaf, measured again\"); its JSON IO stayed host at corpus-engine/src/index/field_skeleton.rs."
 
 [[module]]
-path = "understanding-vocab/src/stable_key.rs"
+path = "shared/crates/understanding-vocab/src/stable_key.rs"
 context = "unknown"
 lines = 474
 note = ""
 
 [[module]]
-path = "understanding-vocab/src/taxonomy.rs"
+path = "shared/crates/understanding-vocab/src/taxonomy.rs"
 context = "unknown"
 lines = 282
 note = ""
@@ -7309,13 +7309,13 @@ lines = 877
 note = ""
 
 [[module]]
-path = "corpus-engine-yield/src/lib.rs"
+path = "shared/crates/corpus-engine-yield/src/lib.rs"
 context = "unknown"
 lines = 335
 note = ""
 
 [[module]]
-path = "corpus-engine-yield/src/time.rs"
+path = "shared/crates/corpus-engine-yield/src/time.rs"
 context = "unknown"
 lines = 48
 note = ""
@@ -7501,91 +7501,91 @@ lines = 1121
 note = ""
 
 [[module]]
-path = "kernel-types/src/answer.rs"
+path = "shared/crates/kernel-types/src/answer.rs"
 context = "kernel"
 lines = 744
 note = ""
 
 [[module]]
-path = "kernel-types/src/attribution.rs"
+path = "shared/crates/kernel-types/src/attribution.rs"
 context = "kernel"
 lines = 320
 note = ""
 
 [[module]]
-path = "kernel-types/src/conformance.rs"
+path = "shared/crates/kernel-types/src/conformance.rs"
 context = "kernel"
 lines = 335
 note = ""
 
 [[module]]
-path = "kernel-types/src/custody.rs"
+path = "shared/crates/kernel-types/src/custody.rs"
 context = "kernel"
 lines = 265
 note = ""
 
 [[module]]
-path = "kernel-types/src/hash.rs"
+path = "shared/crates/kernel-types/src/hash.rs"
 context = "kernel"
 lines = 198
 note = ""
 
 [[module]]
-path = "kernel-types/src/ids.rs"
+path = "shared/crates/kernel-types/src/ids.rs"
 context = "kernel"
 lines = 306
 note = ""
 
 [[module]]
-path = "kernel-types/src/judgement.rs"
+path = "shared/crates/kernel-types/src/judgement.rs"
 context = "kernel"
 lines = 836
 note = ""
 
 [[module]]
-path = "kernel-types/src/lib.rs"
+path = "shared/crates/kernel-types/src/lib.rs"
 context = "kernel"
 lines = 126
 note = ""
 
 [[module]]
-path = "kernel-types/src/origin.rs"
+path = "shared/crates/kernel-types/src/origin.rs"
 context = "kernel"
 lines = 455
 note = ""
 
 [[module]]
-path = "kernel-types/src/quality/instruments.rs"
+path = "shared/crates/kernel-types/src/quality/instruments.rs"
 context = "kernel"
 lines = 1568
 note = ""
 
 [[module]]
-path = "kernel-types/src/quality/mod.rs"
+path = "shared/crates/kernel-types/src/quality/mod.rs"
 context = "kernel"
 lines = 34
 note = ""
 
 [[module]]
-path = "kernel-types/src/quality/render.rs"
+path = "shared/crates/kernel-types/src/quality/render.rs"
 context = "kernel"
 lines = 410
 note = ""
 
 [[module]]
-path = "kernel-types/src/quality/triggers.rs"
+path = "shared/crates/kernel-types/src/quality/triggers.rs"
 context = "kernel"
 lines = 538
 note = ""
 
 [[module]]
-path = "kernel-types/src/wire.rs"
+path = "shared/crates/kernel-types/src/wire.rs"
 context = "kernel"
 lines = 184
 note = ""
 
 [[module]]
-path = "oicp-client/src/lib.rs"
+path = "shared/crates/oicp-client/src/lib.rs"
 context = "kernel"
 lines = 3053
 note = ""
@@ -7615,145 +7615,145 @@ lines = 207
 note = ""
 
 [[module]]
-path = "oicp-types/src/capability.rs"
+path = "shared/crates/oicp-types/src/capability.rs"
 context = "kernel"
 lines = 535
 note = ""
 
 [[module]]
-path = "oicp-types/src/completion.rs"
+path = "shared/crates/oicp-types/src/completion.rs"
 context = "kernel"
 lines = 750
 note = ""
 
 [[module]]
-path = "oicp-types/src/error.rs"
+path = "shared/crates/oicp-types/src/error.rs"
 context = "kernel"
 lines = 330
 note = ""
 
 [[module]]
-path = "oicp-types/src/glob.rs"
+path = "shared/crates/oicp-types/src/glob.rs"
 context = "kernel"
 lines = 115
 note = ""
 
 [[module]]
-path = "oicp-types/src/ingest.rs"
+path = "shared/crates/oicp-types/src/ingest.rs"
 context = "kernel"
 lines = 203
 note = ""
 
 [[module]]
-path = "oicp-types/src/job.rs"
+path = "shared/crates/oicp-types/src/job.rs"
 context = "kernel"
 lines = 970
 note = ""
 
 [[module]]
-path = "oicp-types/src/jsonrpc.rs"
+path = "shared/crates/oicp-types/src/jsonrpc.rs"
 context = "kernel"
 lines = 239
 note = ""
 
 [[module]]
-path = "oicp-types/src/knowledge.rs"
+path = "shared/crates/oicp-types/src/knowledge.rs"
 context = "kernel"
 lines = 293
 note = ""
 
 [[module]]
-path = "oicp-types/src/lib.rs"
+path = "shared/crates/oicp-types/src/lib.rs"
 context = "kernel"
 lines = 119
 note = ""
 
 [[module]]
-path = "oicp-types/src/manifest.rs"
+path = "shared/crates/oicp-types/src/manifest.rs"
 context = "kernel"
 lines = 455
 note = ""
 
 [[module]]
-path = "oicp-types/src/model_aliases.rs"
+path = "shared/crates/oicp-types/src/model_aliases.rs"
 context = "kernel"
 lines = 345
 note = ""
 
 [[module]]
-path = "oicp-types/src/origin.rs"
+path = "shared/crates/oicp-types/src/origin.rs"
 context = "kernel"
 lines = 328
 note = ""
 
 [[module]]
-path = "oicp-types/src/pipeline_context.rs"
+path = "shared/crates/oicp-types/src/pipeline_context.rs"
 context = "kernel"
 lines = 67
 note = ""
 
 [[module]]
-path = "oicp-types/src/registry.rs"
+path = "shared/crates/oicp-types/src/registry.rs"
 context = "kernel"
 lines = 210
 note = ""
 
 [[module]]
-path = "oicp-types/src/requirements.rs"
+path = "shared/crates/oicp-types/src/requirements.rs"
 context = "kernel"
 lines = 341
 note = ""
 
 [[module]]
-path = "oicp-types/src/response.rs"
+path = "shared/crates/oicp-types/src/response.rs"
 context = "kernel"
 lines = 37
 note = ""
 
 [[module]]
-path = "oicp-types/src/scoring.rs"
+path = "shared/crates/oicp-types/src/scoring.rs"
 context = "kernel"
 lines = 650
 note = ""
 
 [[module]]
-path = "oicp-types/src/scoring/tests.rs"
+path = "shared/crates/oicp-types/src/scoring/tests.rs"
 context = "kernel"
 lines = 661
 note = "split out of scoring.rs at REVIEW-audit-daemon-1 (ARCH 3.1: the EWMA moved in at REVIEW-build-mesh-sim-decouple pushed the file past arch-gate's slack). Same tests; the parent declares `#[cfg(test)] mod tests;`."
 
 [[module]]
-path = "oicp-types/src/slot.rs"
+path = "shared/crates/oicp-types/src/slot.rs"
 context = "kernel"
 lines = 200
 note = ""
 
 [[module]]
-path = "oicp-types/src/tenant.rs"
+path = "shared/crates/oicp-types/src/tenant.rs"
 context = "kernel"
 lines = 228
 note = ""
 
 [[module]]
-path = "oicp-types/src/tool.rs"
+path = "shared/crates/oicp-types/src/tool.rs"
 context = "kernel"
 lines = 169
 note = ""
 
 [[module]]
-path = "oicp-types/src/tool_calls.rs"
+path = "shared/crates/oicp-types/src/tool_calls.rs"
 context = "kernel"
 lines = 598
 note = ""
 
 [[module]]
-path = "oicp-types/src/version.rs"
+path = "shared/crates/oicp-types/src/version.rs"
 context = "kernel"
 lines = 19
 note = ""
 
 [[module]]
-path = "oplog/src/lib.rs"
+path = "shared/crates/oplog/src/lib.rs"
 context = "unknown"
 lines = 729
 note = ""
@@ -10699,7 +10699,7 @@ lines = 605
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-base/src/deprecation.rs"
+path = "shared/crates/sovereign-cli-base/src/deprecation.rs"
 context = "unknown"
 lines = 125
 note = ""
@@ -10741,13 +10741,13 @@ lines = 68
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-base/src/mcp_client.rs"
+path = "shared/crates/sovereign-cli-base/src/mcp_client.rs"
 context = "unknown"
 lines = 124
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-base/src/models.rs"
+path = "shared/crates/sovereign-cli-base/src/models.rs"
 context = "unknown"
 lines = 37
 note = ""
@@ -10765,7 +10765,7 @@ lines = 402
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-base/src/prompts.rs"
+path = "shared/crates/sovereign-cli-base/src/prompts.rs"
 context = "unknown"
 lines = 205
 note = ""
@@ -10777,13 +10777,13 @@ lines = 222
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-base/src/repo.rs"
+path = "shared/crates/sovereign-cli-base/src/repo.rs"
 context = "unknown"
 lines = 130
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-base/src/tracing_init.rs"
+path = "shared/crates/sovereign-cli-base/src/tracing_init.rs"
 context = "unknown"
 lines = 48
 note = ""
@@ -11227,559 +11227,559 @@ lines = 300
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire.rs"
 context = "kernel"
 lines = 431
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/assets.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/assets.rs"
 context = "kernel"
 lines = 184
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/build_stamp.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/build_stamp.rs"
 context = "kernel"
 lines = 306
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/chat_activity.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/chat_activity.rs"
 context = "kernel"
 lines = 56
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/conv_tiered.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/conv_tiered.rs"
 context = "kernel"
 lines = 98
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/documents.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/documents.rs"
 context = "kernel"
 lines = 91
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/enrich.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/enrich.rs"
 context = "kernel"
 lines = 39
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/ingest.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/ingest.rs"
 context = "kernel"
 lines = 195
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/local_corpus.rs"
 context = "kernel"
 lines = 81
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/clusterer.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/local_corpus/clusterer.rs"
 context = "kernel"
 lines = 81
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/config.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/local_corpus/config.rs"
 context = "kernel"
 lines = 734
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/git.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/local_corpus/git.rs"
 context = "kernel"
 lines = 16
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/manager.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/local_corpus/manager.rs"
 context = "kernel"
 lines = 42
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/pre_scanner.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/local_corpus/pre_scanner.rs"
 context = "kernel"
 lines = 85
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/preview.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/local_corpus/preview.rs"
 context = "kernel"
 lines = 90
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/progress.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/local_corpus/progress.rs"
 context = "kernel"
 lines = 129
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/local_corpus/writeback.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/local_corpus/writeback.rs"
 context = "kernel"
 lines = 83
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/mesh.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/mesh.rs"
 context = "kernel"
 lines = 485
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/meshapp.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/meshapp.rs"
 context = "kernel"
 lines = 236
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/provenance.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/provenance.rs"
 context = "kernel"
 lines = 151
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/recipe_projects.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/recipe_projects.rs"
 context = "kernel"
 lines = 247
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/recipes.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/recipes.rs"
 context = "kernel"
 lines = 221
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/research.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/research.rs"
 context = "kernel"
 lines = 294
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/sec_coverage.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/sec_coverage.rs"
 context = "kernel"
 lines = 88
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/setup_plan.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/setup_plan.rs"
 context = "kernel"
 lines = 345
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/daemon_wire/workflows.rs"
+path = "shared/crates/sovereign-contracts/src/daemon_wire/workflows.rs"
 context = "kernel"
 lines = 215
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/data_roots.rs"
+path = "shared/crates/sovereign-contracts/src/data_roots.rs"
 context = "kernel"
 lines = 389
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/egress.rs"
+path = "shared/crates/sovereign-contracts/src/egress.rs"
 context = "kernel"
 lines = 399
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/embed_quirks.rs"
+path = "shared/crates/sovereign-contracts/src/embed_quirks.rs"
 context = "kernel"
 lines = 264
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/engine_config.rs"
+path = "shared/crates/sovereign-contracts/src/engine_config.rs"
 context = "kernel"
 lines = 164
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/env.rs"
+path = "shared/crates/sovereign-contracts/src/env.rs"
 context = "kernel"
 lines = 25
 note = "the workspace's one truthiness rule (`truthy`), created here by REVIEW-build-mesh-host-decouple (ralph/DECISIONS.md 2026-09-16) because its two readers may not name each other: sovereign-mesh's auto_resume (bound for sovereign-daemon) and the corpus reindexer (bound for a corpus-engine crate). The row itself was added by REVIEW-build-middleware-seam to close the coverage hole"
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/error.rs"
+path = "shared/crates/sovereign-contracts/src/error.rs"
 context = "kernel"
 lines = 237
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/fim.rs"
+path = "shared/crates/sovereign-contracts/src/fim.rs"
 context = "kernel"
 lines = 842
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/git.rs"
+path = "shared/crates/sovereign-contracts/src/git.rs"
 context = "kernel"
 lines = 35
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/frame.rs"
+path = "shared/crates/sovereign-contracts/src/frame.rs"
 context = "kernel"
 lines = 618
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/gguf_validator.rs"
+path = "shared/crates/sovereign-contracts/src/gguf_validator.rs"
 context = "kernel"
 lines = 277
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/health.rs"
+path = "shared/crates/sovereign-contracts/src/health.rs"
 context = "kernel"
 lines = 691
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/identity.rs"
+path = "shared/crates/sovereign-contracts/src/identity.rs"
 context = "kernel"
 lines = 104
 note = "IdentityReader — this node's id as a watch, not a value (DC §4.2; REVIEW-build-appstate-identity)"
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/in_flight.rs"
+path = "shared/crates/sovereign-contracts/src/in_flight.rs"
 context = "kernel"
 lines = 96
 note = "LocalInFlightGauge — the node's in-flight counter, a signal object created before the provider that writes it (DC §4.2; REVIEW-build-appstate-inflight-gauge)"
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/intent_policy.rs"
+path = "shared/crates/sovereign-contracts/src/intent_policy.rs"
 context = "kernel"
 lines = 693
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/launch.rs"
+path = "shared/crates/sovereign-contracts/src/launch.rs"
 context = "kernel"
 lines = 825
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/launch/rpc_worker_flag.rs"
+path = "shared/crates/sovereign-contracts/src/launch/rpc_worker_flag.rs"
 context = "kernel"
 lines = 63
 note = "moved from sovereign-daemon bootstrap.rs (pb-serve-distributes)"
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/lessons.rs"
+path = "shared/crates/sovereign-contracts/src/lessons.rs"
 context = "kernel"
 lines = 139
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/local_inference.rs"
+path = "shared/crates/sovereign-contracts/src/local_inference.rs"
 context = "kernel"
 lines = 91
 note = "LocalInferenceService split out of traits.rs (REVIEW-audit-6); re-exported at the old path"
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/lib.rs"
+path = "shared/crates/sovereign-contracts/src/lib.rs"
 context = "kernel"
 lines = 168
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/mcp_config.rs"
+path = "shared/crates/sovereign-contracts/src/mcp_config.rs"
 context = "kernel"
 lines = 204
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/memory_config.rs"
+path = "shared/crates/sovereign-contracts/src/memory_config.rs"
 context = "kernel"
 lines = 91
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/middleware.rs"
+path = "shared/crates/sovereign-contracts/src/middleware.rs"
 context = "kernel"
 lines = 411
 note = "the middleware seam (Answering's port) lifted out of sovereign-api by REVIEW-build-middleware-seam; the shared `.sovereign/` path helpers and the canonical test fixtures landed beside it at REVIEW-build-answering-inversion"
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/mobile_host.rs"
+path = "shared/crates/sovereign-contracts/src/mobile_host.rs"
 context = "kernel"
 lines = 486
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/model_family.rs"
+path = "shared/crates/sovereign-contracts/src/model_family.rs"
 context = "kernel"
 lines = 590
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/observer.rs"
+path = "shared/crates/sovereign-contracts/src/observer.rs"
 context = "kernel"
 lines = 130
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/peer.rs"
+path = "shared/crates/sovereign-contracts/src/peer.rs"
 context = "kernel"
 lines = 340
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/peer/tests.rs"
+path = "shared/crates/sovereign-contracts/src/peer/tests.rs"
 context = "kernel"
 lines = 205
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/principal.rs"
+path = "shared/crates/sovereign-contracts/src/principal.rs"
 context = "kernel"
 lines = 288
 note = "the published Principal union of the five identities (DC §3.3; REVIEW-build-serving-principal)"
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/rebrand.rs"
+path = "shared/crates/sovereign-contracts/src/rebrand.rs"
 context = "kernel"
 lines = 781
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/recipe/json_to_toml.rs"
+path = "shared/crates/sovereign-contracts/src/recipe/json_to_toml.rs"
 context = "kernel"
 lines = 342
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/recipe/mod.rs"
+path = "shared/crates/sovereign-contracts/src/recipe/mod.rs"
 context = "kernel"
 lines = 26
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/recipe/notes.rs"
+path = "shared/crates/sovereign-contracts/src/recipe/notes.rs"
 context = "kernel"
 lines = 192
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/recipe/paths.rs"
+path = "shared/crates/sovereign-contracts/src/recipe/paths.rs"
 context = "kernel"
 lines = 47
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/recipe/registry.rs"
+path = "shared/crates/sovereign-contracts/src/recipe/registry.rs"
 context = "kernel"
 lines = 113
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/recipe/testing.rs"
+path = "shared/crates/sovereign-contracts/src/recipe/testing.rs"
 context = "kernel"
 lines = 129
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/recipe/url_template.rs"
+path = "shared/crates/sovereign-contracts/src/recipe/url_template.rs"
 context = "kernel"
 lines = 102
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/registry.rs"
+path = "shared/crates/sovereign-contracts/src/registry.rs"
 context = "kernel"
 lines = 437
 note = ""
 
 [[module]]
-path = "host-kit/src/lib.rs"
+path = "shared/crates/host-kit/src/lib.rs"
 context = "kernel"
 lines = 275
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/self_claims.rs"
+path = "shared/crates/sovereign-contracts/src/self_claims.rs"
 context = "kernel"
 lines = 183
 note = "SelfClaims + LocalClaims — what this node claims about itself, the port Fabric publishes from (DC §4.2; REVIEW-build-appstate-self-claims)"
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/setup_config.rs"
+path = "shared/crates/sovereign-contracts/src/setup_config.rs"
 context = "kernel"
 lines = 3445
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/setup_config_iroh.rs"
+path = "shared/crates/sovereign-contracts/src/setup_config_iroh.rs"
 context = "kernel"
 lines = 253
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/skills.rs"
+path = "shared/crates/sovereign-contracts/src/skills.rs"
 context = "kernel"
 lines = 1525
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/slot_policy.rs"
+path = "shared/crates/sovereign-contracts/src/slot_policy.rs"
 context = "kernel"
 lines = 444
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/tool_bundle.rs"
+path = "shared/crates/sovereign-contracts/src/tool_bundle.rs"
 context = "kernel"
 lines = 399
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/tool_manifest/mod.rs"
+path = "shared/crates/sovereign-contracts/src/tool_manifest/mod.rs"
 context = "kernel"
 lines = 741
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/tool_result_cache.rs"
+path = "shared/crates/sovereign-contracts/src/tool_result_cache.rs"
 context = "kernel"
 lines = 317
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/traits.rs"
+path = "shared/crates/sovereign-contracts/src/traits.rs"
 context = "kernel"
 lines = 2077
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/answer_doc.rs"
+path = "shared/crates/sovereign-contracts/src/types/answer_doc.rs"
 context = "kernel"
 lines = 422
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/approval.rs"
+path = "shared/crates/sovereign-contracts/src/types/approval.rs"
 context = "kernel"
 lines = 108
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/conversation.rs"
+path = "shared/crates/sovereign-contracts/src/types/conversation.rs"
 context = "kernel"
 lines = 501
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/custody.rs"
+path = "shared/crates/sovereign-contracts/src/types/custody.rs"
 context = "kernel"
 lines = 104
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/document.rs"
+path = "shared/crates/sovereign-contracts/src/types/document.rs"
 context = "kernel"
 lines = 680
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/edit_slot.rs"
+path = "shared/crates/sovereign-contracts/src/types/edit_slot.rs"
 context = "kernel"
 lines = 201
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/epistemic.rs"
+path = "shared/crates/sovereign-contracts/src/types/epistemic.rs"
 context = "kernel"
 lines = 374
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/grounding_journal.rs"
+path = "shared/crates/sovereign-contracts/src/types/grounding_journal.rs"
 context = "kernel"
 lines = 782
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/grounding_verdict.rs"
+path = "shared/crates/sovereign-contracts/src/types/grounding_verdict.rs"
 context = "kernel"
 lines = 342
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/journal.rs"
+path = "shared/crates/sovereign-contracts/src/types/journal.rs"
 context = "kernel"
 lines = 436
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/mod.rs"
+path = "shared/crates/sovereign-contracts/src/types/mod.rs"
 context = "kernel"
 lines = 1796
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/narration.rs"
+path = "shared/crates/sovereign-contracts/src/types/narration.rs"
 context = "kernel"
 lines = 784
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/next_edit_journal.rs"
+path = "shared/crates/sovereign-contracts/src/types/next_edit_journal.rs"
 context = "kernel"
 lines = 637
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/projection.rs"
+path = "shared/crates/sovereign-contracts/src/types/projection.rs"
 context = "kernel"
 lines = 629
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/routing.rs"
+path = "shared/crates/sovereign-contracts/src/types/routing.rs"
 context = "kernel"
 lines = 1199
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/search_privacy.rs"
+path = "shared/crates/sovereign-contracts/src/types/search_privacy.rs"
 context = "kernel"
 lines = 47
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/stage_attribution.rs"
+path = "shared/crates/sovereign-contracts/src/types/stage_attribution.rs"
 context = "kernel"
 lines = 591
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/turn.rs"
+path = "shared/crates/sovereign-contracts/src/types/turn.rs"
 context = "kernel"
 lines = 610
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/types/ui.rs"
+path = "shared/crates/sovereign-contracts/src/types/ui.rs"
 context = "kernel"
 lines = 370
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/workspace.rs"
+path = "shared/crates/sovereign-contracts/src/workspace.rs"
 context = "kernel"
 lines = 125
 note = ""
@@ -14443,7 +14443,7 @@ lines = 339
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-time/src/lib.rs"
+path = "shared/crates/sovereign-time/src/lib.rs"
 context = "unknown"
 lines = 78
 note = ""
@@ -15583,31 +15583,31 @@ lines = 128
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-turn-client/src/knowledge_client.rs"
+path = "shared/crates/sovereign-turn-client/src/knowledge_client.rs"
 context = "kernel"
 lines = 209
 note = "client for a peer's knowledge search; the question it asks is Retrieval's; was retrieval; client of the daemon's own surface; the client family — DAEMON_CORE.md §4.3 (2026-09-14); moved from sovereign-mesh 2026-09-16 by domains REVIEW-build-mesh-client-pair"
 
 [[module]]
-path = "sovereign/crates/sovereign-turn-client/src/landscape_digest_client.rs"
+path = "shared/crates/sovereign-turn-client/src/landscape_digest_client.rs"
 context = "kernel"
 lines = 281
 note = "was understanding; client of the daemon's own surface; the client family — DAEMON_CORE.md §4.3 (2026-09-14); moved from sovereign-mesh 2026-09-16 by domains REVIEW-build-mesh-client-pair"
 
 [[module]]
-path = "sovereign/crates/sovereign-turn-client/src/lib.rs"
+path = "shared/crates/sovereign-turn-client/src/lib.rs"
 context = "kernel"
 lines = 4811
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-turn-client/src/mesh.rs"
+path = "shared/crates/sovereign-turn-client/src/mesh.rs"
 context = "kernel"
 lines = 314
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-turn-client/src/reach.rs"
+path = "shared/crates/sovereign-turn-client/src/reach.rs"
 context = "kernel"
 lines = 780
 note = ""
@@ -16033,169 +16033,169 @@ lines = 797
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-workflow/src/cache.rs"
+path = "shared/crates/sovereign-workflow/src/cache.rs"
 context = "unknown"
 lines = 83
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-workflow/src/kind.rs"
+path = "shared/crates/sovereign-workflow/src/kind.rs"
 context = "unknown"
 lines = 275
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-workflow/src/lib.rs"
+path = "shared/crates/sovereign-workflow/src/lib.rs"
 context = "unknown"
 lines = 37
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-workflow/src/model.rs"
+path = "shared/crates/sovereign-workflow/src/model.rs"
 context = "unknown"
 lines = 540
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-workflow/src/progress.rs"
+path = "shared/crates/sovereign-workflow/src/progress.rs"
 context = "unknown"
 lines = 68
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-workflow/src/runner.rs"
+path = "shared/crates/sovereign-workflow/src/runner.rs"
 context = "unknown"
 lines = 467
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-workflow/src/steps.rs"
+path = "shared/crates/sovereign-workflow/src/steps.rs"
 context = "unknown"
 lines = 507
 note = ""
 
 [[module]]
-path = "studio/crates/sovereign-workflow/src/template.rs"
+path = "shared/crates/sovereign-workflow/src/template.rs"
 context = "unknown"
 lines = 423
 note = ""
 
 [[module]]
-path = "corpus-index/src/chunkers.rs"
+path = "shared/crates/corpus-index/src/chunkers.rs"
 context = "unknown"
 lines = 17
 note = ""
 
 [[module]]
-path = "corpus-index/src/corpus.rs"
+path = "shared/crates/corpus-index/src/corpus.rs"
 context = "unknown"
 lines = 218
 note = ""
 
 [[module]]
-path = "corpus-index/src/error.rs"
+path = "shared/crates/corpus-index/src/error.rs"
 context = "unknown"
 lines = 365
 note = ""
 
 [[module]]
-path = "corpus-index/src/filters.rs"
+path = "shared/crates/corpus-index/src/filters.rs"
 context = "unknown"
 lines = 176
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/create.rs"
+path = "shared/crates/corpus-index/src/index/create.rs"
 context = "unknown"
 lines = 1011
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/enrichment.rs"
+path = "shared/crates/corpus-index/src/index/enrichment.rs"
 context = "unknown"
 lines = 511
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/evidence.rs"
+path = "shared/crates/corpus-index/src/index/evidence.rs"
 context = "unknown"
 lines = 524
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/maintain.rs"
+path = "shared/crates/corpus-index/src/index/maintain.rs"
 context = "unknown"
 lines = 595
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/mod.rs"
+path = "shared/crates/corpus-index/src/index/mod.rs"
 context = "unknown"
 lines = 2428
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/provenance.rs"
+path = "shared/crates/corpus-index/src/index/provenance.rs"
 context = "unknown"
 lines = 438
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/read.rs"
+path = "shared/crates/corpus-index/src/index/read.rs"
 context = "unknown"
 lines = 788
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/readiness.rs"
+path = "shared/crates/corpus-index/src/index/readiness.rs"
 context = "unknown"
 lines = 20
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/search.rs"
+path = "shared/crates/corpus-index/src/index/search.rs"
 context = "unknown"
 lines = 1245
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/tests/read_tests.rs"
+path = "shared/crates/corpus-index/src/index/tests/read_tests.rs"
 context = "unknown"
 lines = 131
 note = ""
 
 [[module]]
-path = "corpus-index/src/index/write.rs"
+path = "shared/crates/corpus-index/src/index/write.rs"
 context = "unknown"
 lines = 796
 note = ""
 
 [[module]]
-path = "corpus-index/src/lib.rs"
+path = "shared/crates/corpus-index/src/lib.rs"
 context = "unknown"
 lines = 40
 note = ""
 
 [[module]]
-path = "corpus-index/src/recipe.rs"
+path = "shared/crates/corpus-index/src/recipe.rs"
 context = "unknown"
 lines = 45
 note = ""
 
 [[module]]
-path = "corpus-index/src/stream_axes.rs"
+path = "shared/crates/corpus-index/src/stream_axes.rs"
 context = "unknown"
 lines = 72
 note = ""
 
 [[module]]
-path = "corpus-index/src/types.rs"
+path = "shared/crates/corpus-index/src/types.rs"
 context = "unknown"
 lines = 625
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-peer-wire/src/lib.rs"
+path = "shared/crates/sovereign-peer-wire/src/lib.rs"
 context = "unknown"
 lines = 78
 note = ""

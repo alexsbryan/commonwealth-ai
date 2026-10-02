@@ -577,7 +577,7 @@ landed_at   = """2026-08-20, rung nc-11-answer. "A Draft cannot be returned to
 a surface" landed in the sharper form the type can actually enforce: a Draft's
 TEXT cannot be read at all — no accessor, no Display, no Serialize, private
 field — so the only exit is release. Compile-fail proof:
-kernel-types/tests/ui/draft_text_is_not_readable.rs. The two squatters
+shared/crates/kernel-types/tests/ui/draft_text_is_not_readable.rs. The two squatters
 (sovereign-cli-llm/backlog_cmd/item.rs:49, deep_research/icd.rs:612) are
 DISTINCT concepts and are deliberately left alone: a backlog draft item and an
 inter-component document are not this noun, and renaming them apart is not
@@ -631,7 +631,7 @@ by value. `release()` folds by ONE named policy and that policy is
 empty judgement set is could-not-judge and never a pass. `release_ungated`
 carries Verdict::NeverRan, which fixes a real defect: an un-gated turn was
 previously indistinguishable at the type level from a gated-and-passed one.
-Compile-fail proof: kernel-types/tests/ui/answer_without_a_judgement.rs.
+Compile-fail proof: shared/crates/kernel-types/tests/ui/answer_without_a_judgement.rs.
 NOT DONE: the live turn path (grounding/mod.rs, streaming.rs) has not migrated
 onto the type, and the 8 metadata["provenance"] writer sites are untouched."""
 today       = "2026-08-17 (confirmed exact): ResponseProvenance is a real typed struct that travels serialized into message.metadata[\"provenance\"] from 8 writer sites; production readers are defensive (let-else / ?), the unwrap shape lives in the test surface. Presence is a per-path convention pinned by two tests asserting opposite things."
@@ -667,7 +667,7 @@ quote)` is the only door: it refuses a quote the seal does not hold verbatim
 distinguishable from a miss) and refuses one landing in Grain::Summary
 (Refused::NotQuotable) — the audited invariant sovereign-meshapp states in a
 doc comment at wrapped.rs:182, promoted to a constructor. Compile-fail proof:
-kernel-types/tests/ui/citation_without_a_seal.rs plus
+shared/crates/kernel-types/tests/ui/citation_without_a_seal.rs plus
 citation_has_no_public_constructor.rs (split, because rustc suppresses the
 private-field diagnostic when method resolution in the same body already
 failed — one fixture recorded one error and hid the other).
@@ -731,7 +731,7 @@ phase       = 5
 verified_at = "differential"
 measure     = "engines implementing dataflow-over-typed-artifacts outside sovereign-workflow (v1 count: 4 besides the engine)"
 today       = """2026-08-16 (engine facts stand): the engine exists
-(studio/crates/sovereign-workflow, workspace member, diffed byte-for-byte
+(shared/crates/sovereign-workflow, workspace member, diffed byte-for-byte
 against the real chunk→embed stage) and is wired in as a PRODUCT FEATURE
 rather than as substrate; four other implementations (corpus-engine ingest,
 corpus-engine enrichment Pipeline+PhaseCache, sovereign-core/runtime/,

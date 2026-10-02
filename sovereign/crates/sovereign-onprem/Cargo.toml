@@ -28,7 +28,7 @@ sovereign-hosted-ingest = { workspace = true }
 host-kit = { workspace = true, features = ["shell"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 
 [dev-dependencies]
 reqwest = { workspace = true, features = ["blocking"] }

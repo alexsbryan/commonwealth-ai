@@ -20,7 +20,7 @@
 //! priced the alternative against the simulator: a throughput number
 //! extrapolated from a baseline probe onto a differently-sized model reads
 //! −56%, doubles declined upgrades, and is filed **DO-NOT-BUILD**. The live
-//! extrapolator is `throughput_factor` (`oicp-types/src/scoring.rs:384`), and it
+//! extrapolator is `throughput_factor` (`shared/crates/oicp-types/src/scoring.rs:384`), and it
 //! is already wired end to end — the only thing keeping it dark is that nothing
 //! populates `NodeCapabilities.benchmark`. See the guard test
 //! `gossip_never_advertises_a_benchmark` in `sovereign-mesh`.

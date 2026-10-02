@@ -6221,7 +6221,7 @@ def cmd_self_test(_a) -> int:
     eq(_kh.plan_cites("co-oplog") is not None, True, "plan_cites: name.rs in a table cites the module")
     _kh.text = 'Scope::Models(_) => &["/v1/models", "/v1/chat/completions"],'
     eq(_kh.plan_cites("Scope"), None, "plan_cites: a route in the plan's own code is no citation (62d5846b)")
-    _kh.text = "- **`SplitInferenceProvider`** (`oicp-client/src/lib.rs:1258`) is the provider."
+    _kh.text = "- **`SplitInferenceProvider`** (`shared/crates/oicp-client/src/lib.rs:1258`) is the provider."
     eq(_kh.plan_cites("SplitInferenceProvider", git("rev-parse", "HEAD").strip()) is not None, True, "plan_cites: a backticked name beside file:line is a citation")
     _kh.text = "1. `no_such_new_file_xyz.rs` — one `Scope` variant, one `paths()` arm"
     eq(_kh.plan_cites("Scope", git("rev-parse", "HEAD").strip()), None, "plan_cites: an anchor the plan itself will write is no citation (62d5846b)")

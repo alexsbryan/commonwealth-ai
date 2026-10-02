@@ -696,7 +696,7 @@ is `node-<hex of the first EIGHT bytes>` and every partition directory name is
 built from it, so two nodes sharing a 64-bit prefix would collide on one
 directory and the merge would silently see fewer shards. Every production
 `NodeId` comes from `NodeId::generate()` — 16 CSPRNG bytes via `getrandom`
-(`kernel-types/src/ids.rs`) — reached through
+(`shared/crates/kernel-types/src/ids.rs`) — reached through
 `persist::load_or_generate_self_node_id` and `membership::init_mesh*`; every
 `NodeId::from_u128` call site in the workspace is inside a `mod tests`. So the
 truncation leaves 64 random bits and a collision needs a birthday collision at

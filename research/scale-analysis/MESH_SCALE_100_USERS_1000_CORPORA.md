@@ -1124,7 +1124,7 @@ should not read "peers were offline" as "we learned nothing about scaling":
    But five gates bound it, each cited: the ranked/OICP route refuses an envelope-less
    request outright (`peer_inference.rs:1396-1402`, `has_routing_signal` at `:1119-1127`) and
    a plain OpenAI client sends no envelope; `sharding()` defaults to `LocalOnly`
-   (`oicp-types/src/requirements.rs:146-151`, gate at `oicp_select.rs:113-124`); the
+   (`shared/crates/oicp-types/src/requirements.rs:146-151`, gate at `oicp_select.rs:113-124`); the
    load-balance tiebreak is `if local_inflight <= peer_inflight` → **Local**
    (`peer_inference.rs:1817`), so at equal load nothing ever spreads; peer load is read from
    gossip up to 10 s stale and gossip *overrides* the just-incremented self-observed count
@@ -1349,7 +1349,7 @@ stale: the peer just said so.
 property of the scorer rather than a preference.** The order asked for the peer to be
 "scored down for the `retry_after_secs` window". The score path cannot express that:
 the SSOT scorer clamps availability to `[0.2, 1.0]`
-(`oicp-types/src/scoring.rs:553`), so the strongest discount available is a 5×
+(`shared/crates/oicp-types/src/scoring.rs:553`), so the strongest discount available is a 5×
 multiplier — a peer that is 5× better on the other terms still wins, and still gets
 refused. "Do not re-dial into the same refusal" is an exclusion, so it is one:
 `ExclusionReason::YieldedToLocal`, a countable arm of the existing closed set.

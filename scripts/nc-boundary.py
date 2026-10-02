@@ -154,7 +154,7 @@ def domain(path, crate=None):
         return "corpus-engine"
     if path.startswith("commonwealth/"):
         return "commonwealth"
-    if path.startswith("kernel-types/"):
+    if path.startswith("shared/crates/kernel-types/"):
         # Layer-0 identity + provenance, owned by NO product domain. Registered
         # by the seat 2026-08-20 for rung nc-1-kernel. Without this branch the
         # kernel is unmeasurable in either direction: under `sovereign/` it
@@ -165,7 +165,7 @@ def domain(path, crate=None):
         # (ARCH §18.3). The branch matches nothing on the tree at the time it was
         # added, so every prior reading is byte-identical under both versions.
         return "kernel"
-    if path.startswith(("oicp-types/", "oicp-client/")):
+    if path.startswith(("shared/crates/oicp-types/", "shared/crates/oicp-client/")):
         return "oicp"          # the intended shared membrane
     if path.startswith("studio/"):
         return "studio"        # a FOURTH system, entangled both ways

@@ -390,7 +390,7 @@ was not opened.
 - **First carve-out worked example:** the scip move (2026-05-23) — see
   the git history around the move of `scip_graph.rs`,
   `scip_export.rs`, `scip_proto.rs` from `corpus-engine/src/` to
-  `corpus-engine-scip/src/`, the local Error type, and the consumer
+  `shared/crates/corpus-engine-scip/src/`, the local Error type, and the consumer
   migration PRs. Also the memory note
   `project_corpus_engine_scip_carveout.md`.
 - **Current workspace state:** `sovereign/SYSTEM_OVERVIEW.md` §2.

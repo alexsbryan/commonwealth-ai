@@ -303,7 +303,7 @@ BAR = "tg-rpc-port-not-on-lan"
 bs = src("sovereign/crates/sovereign-daemon/src/bootstrap.rs") or ""
 m = re.search(r'DEFAULT_RPC_BIND[^=]*=\s*"([^"]+)"', bs)
 default_bind = m.group(1) if m else None
-launch = src("sovereign/crates/sovereign-contracts/src/launch.rs") or ""
+launch = src("shared/crates/sovereign-contracts/src/launch.rs") or ""
 me = re.search(r"pub enum RpcServe\s*\{(.*?)\n\}", launch, re.S)
 variants = re.findall(r"^\s{4}(\w+)", me.group(1), re.M) if me else []
 clauses = {

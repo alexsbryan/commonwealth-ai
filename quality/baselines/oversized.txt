@@ -5,9 +5,9 @@
 #   cargo run -p xtask -- arch-gate --tighten
 2462	code-next-edit/src/next_edit_model.rs
 7387	corpus-engine-notes/src/notes.rs
-1361	corpus-engine-scip/src/converge.rs
-1300	corpus-engine-scip/src/scip_export.rs
-3684	corpus-engine-scip/src/scip_graph.rs
+1361	shared/crates/corpus-engine-scip/src/converge.rs
+1300	shared/crates/corpus-engine-scip/src/scip_export.rs
+3684	shared/crates/corpus-engine-scip/src/scip_graph.rs
 1545	corpus-engine-watchers/src/reindexer.rs
 2150	corpus-engine/src/engine/ingest.rs
 3647	corpus-engine/src/engine/mod.rs
@@ -27,10 +27,10 @@
 1595	corpus-engine/src/snapshot.rs
 1758	corpus-engine/src/testing.rs
 1722	corpus-engine/src/update/newsworthy_watcher.rs
-2428	corpus-index/src/index/mod.rs
-1245	corpus-index/src/index/search.rs
-1568	kernel-types/src/quality/instruments.rs
-3053	oicp-client/src/lib.rs
+2428	shared/crates/corpus-index/src/index/mod.rs
+1245	shared/crates/corpus-index/src/index/search.rs
+1568	shared/crates/kernel-types/src/quality/instruments.rs
+3053	shared/crates/oicp-client/src/lib.rs
 2884	sovereign/crates/sovereign-agent-bench/src/runners/native.rs
 2053	sovereign/crates/sovereign-agent-tools/src/executor.rs
 1787	sovereign/crates/sovereign-cli-bench/src/bench_cmd/all.rs
@@ -64,10 +64,10 @@
 1605	sovereign/crates/sovereign-code/src/session_state.rs
 1667	sovereign/crates/sovereign-compute/src/manager.rs
 2050	sovereign/crates/sovereign-compute/src/supervisor.rs
-2124	sovereign/crates/sovereign-contracts/src/setup_config.rs
-1542	sovereign/crates/sovereign-contracts/src/skills.rs
-2055	sovereign/crates/sovereign-contracts/src/traits.rs
-1796	sovereign/crates/sovereign-contracts/src/types/mod.rs
+2124	shared/crates/sovereign-contracts/src/setup_config.rs
+1542	shared/crates/sovereign-contracts/src/skills.rs
+2055	shared/crates/sovereign-contracts/src/traits.rs
+1796	shared/crates/sovereign-contracts/src/types/mod.rs
 1285	sovereign/crates/sovereign-core/src/deep_research/acquisition.rs
 3504	sovereign/crates/sovereign-core/src/deep_research/audit.rs
 2106	sovereign/crates/sovereign-core/src/deep_research/fetch.rs
@@ -144,6 +144,6 @@
 2655	sovereign/crates/sovereign-tools/src/local_corpus/manager.rs
 2147	sovereign/crates/sovereign-tools/src/raptor_atlas.rs
 1349	sovereign/crates/sovereign-tools/src/sec_edgar.rs
-4826	sovereign/crates/sovereign-turn-client/src/lib.rs
+4826	shared/crates/sovereign-turn-client/src/lib.rs
 1201	studio/crates/sovereign-tools-base/src/web/search/mod.rs
-1636	understanding-vocab/src/atoms.rs
+1636	shared/crates/understanding-vocab/src/atoms.rs

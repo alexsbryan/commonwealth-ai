@@ -500,7 +500,7 @@ fn removed_table_drift(
         match table.get(*name) {
             None => out.push(format!(
                 "`{name}` is declared removed but REMOVED_ENV does not warn on it \
-                 (add a RemovedEnv row in kernel-types/src/env_bridge.rs)"
+                 (add a RemovedEnv row in shared/crates/kernel-types/src/env_bridge.rs)"
             )),
             Some((text, site)) if text != replacement => out.push(format!(
                 "`{name}`: REMOVED_ENV's text at {site} differs from the registry's `replacement`"

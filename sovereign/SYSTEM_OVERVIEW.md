@@ -30,26 +30,26 @@ file or the subsystem's own doc.
 
 ```
 commonwealth-ai/
-├── oicp-types/                # OICP wire types — no other deps
-├── kernel-types/              # The neutral kernel — identity, provenance, trust, the released turn
-├── oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
+├── shared/crates/oicp-types/                # OICP wire types — no other deps
+├── shared/crates/kernel-types/              # The neutral kernel — identity, provenance, trust, the released turn
+├── shared/crates/oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── oicp-conformance/          # Standalone OICP v0.4 host conformance tester
-├── oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
+├── shared/crates/oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
 ├── serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
-├── serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
-├── mesh-reach/                # Peer dial vocabulary + PeerTransport; RailsTransport (`rails`), the guest dialer + one iroh HTTP bridge (`guest`)
+├── shared/crates/serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
+├── shared/crates/mesh-reach/                # Peer dial vocabulary + PeerTransport; RailsTransport (`rails`), the guest dialer + one iroh HTTP bridge (`guest`)
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
-├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, the IndexSource/CorpusReadPort traits, persisted settings, the engine Error
-├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
-├── corpus-engine-atlas-reader/ # Resolved-atlas READ surface (read-only leaf; writes stay in corpus-engine)
+├── shared/crates/corpus-index/              # Retrieval read-port leaf — CorpusIndex, the IndexSource/CorpusReadPort traits, persisted settings, the engine Error
+├── shared/crates/corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
+├── shared/crates/corpus-engine-atlas-reader/ # Resolved-atlas READ surface (read-only leaf; writes stay in corpus-engine)
 ├── corpus-engine-notes/       # NoteStore + project_docs index
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance
-├── corpus-engine-yield/       # YieldHook cooperative-yield contract (tier-0 leaf)
-├── corpus-engine-sections/    # Section detectors as a regex-only leaf
+├── shared/crates/corpus-engine-yield/       # YieldHook cooperative-yield contract (tier-0 leaf)
+├── shared/crates/corpus-engine-sections/    # Section detectors as a regex-only leaf
 ├── corpus-engine-watchers/    # Lint/test/project-index watchers + result stores
 ├── code-next-edit/            # Code-intel package's next-edit crate
 ├── code-facts/                # Code-intel package's tree-sitter fact base
-├── understanding-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kinds, OntologyPolicies
+├── shared/crates/understanding-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kinds, OntologyPolicies
 ├── understanding-atlas/       # Understanding's pure tier — arithmetic over the published language
 ├── understanding-host/        # Understanding's host tier — the ports and the knot
 ├── corpus-mcp/                # Thin knowledge host — serve, any OpenAI-compatible endpoint (ingest, pull: svrn-ingest)
@@ -100,7 +100,7 @@ programs in one process through their faces (docs/FIVE_PROGRAMS.md §2c).
 
 Two protocols cross that boundary. **OICP** is declared in
 `commonwealth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively), types in
-`oicp-types/src/lib.rs`, re-exported as `sovereign_core::oicp` and
+`shared/crates/oicp-types/src/lib.rs`, re-exported as `sovereign_core::oicp` and
 `commonwealth_core::oicp` — downstream crates use the re-exports.
 **`EmbedFn` / `InferenceFn`** are closures `corpus-engine` accepts from any
 caller; each project supplies its own.
@@ -1433,11 +1433,11 @@ the shared report.
 | Bundle a generated data file | `sovereign-recipes/<corpus>/data/`, a `pub const` `include_bytes!` line in `sovereign-recipes/src/lib.rs`, a key row in `corpus-engine/src/recipe_source/bundled.rs::ASSETS` |
 | Write a recipe | `sovereign-recipes/<id>/recipe.toml`, then `registry.toml` |
 | Add an investigation recipe | `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]` |
-| Write a skill / tune models per hardware | `sovereign/modes/<id>/skill.toml`; `sovereign/crates/sovereign-contracts/data/models.toml` |
-| Understand the SCIP call graph | `corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`) |
-| Classify a symbol / detect trait dispatch | `corpus-engine-scip/src/descriptor.rs` — the ONE decider. Do NOT read `symbols.kind` (88.7% `unknown`) or `refs.ref_kind` (100% `direct`) |
+| Write a skill / tune models per hardware | `sovereign/modes/<id>/skill.toml`; `shared/crates/sovereign-contracts/data/models.toml` |
+| Understand the SCIP call graph | `shared/crates/corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`) |
+| Classify a symbol / detect trait dispatch | `shared/crates/corpus-engine-scip/src/descriptor.rs` — the ONE decider. Do NOT read `symbols.kind` (88.7% `unknown`) or `refs.ref_kind` (100% `direct`) |
 | Find a duplicated concept | IDENTITY `svrn code converge census` / `noun <Name>`; ROLE `converge roles`; SHAPE `converge shape`. Duplicated BEHAVIOUR is `code dry-report`; oversized FILES are `code suggest-seams` |
-| Understand index storage on disk | `corpus-index/src/index/mod.rs` |
+| Understand index storage on disk | `shared/crates/corpus-index/src/index/mod.rs` |
 | Understand the v2 atlas pipeline | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `enrichment/pipeline/mod.rs` |
 | Drive v2 enrichment / build inside the daemon | `sovereign-pipeline/src/enrich_cmd/`; `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) |
 | Understand delta updates / scope expansion | `corpus-engine/src/update/delta.rs`, `engine/expand.rs` |
@@ -1447,7 +1447,7 @@ the shared report.
 | Prove a deleted twin cannot come back | `scripts/twin-census.py` over `quality/twin-plants.toml` |
 | Prove desktop and CLI answer one question alike | `sovereign-desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` |
 | Trace a `/v1/chat/completions` end-to-end | `commonwealth/docs/routing-field-guide.md` |
-| Understand OICP routing | `oicp-types/src/lib.rs` + `sovereign-scheduler/src/oicp_select.rs` + [`docs/inference.md`](./docs/inference.md) |
+| Understand OICP routing | `shared/crates/oicp-types/src/lib.rs` + `sovereign-scheduler/src/oicp_select.rs` + [`docs/inference.md`](./docs/inference.md) |
 | Point an outside tool at the daemon | [`../docs/INTEROP.md`](../docs/INTEROP.md); [`../docs/INTEGRATION_SURFACES.md`](../docs/INTEGRATION_SURFACES.md) for which surfaces are contracts |
 | Deploy to a shared air-gapped box | `sovereign/deploy/onprem/` — **read `EGRESS.md` before claiming this system makes no outbound connections** |
 | Rent a GPU by the minute | [`../docs/CLOUD_PEER.md`](../docs/CLOUD_PEER.md); `scripts/dev-pod.sh`. A `--mesh` flight puts the join link on third-party hardware — end it with `svrn mesh rotate` |
@@ -1552,7 +1552,7 @@ two-step, used only by `create_mesh` and `join_mesh`.
   `PhaseCache`, which stamps each phase output with the producing model and
   declines to reuse one written by a different model.
 - **SCIP** — Source Code Intelligence Protocol. **Exporter resolution** is
-  `corpus-engine-scip/src/tool_path.rs`, the ONE decider for "where is this
+  `shared/crates/corpus-engine-scip/src/tool_path.rs`, the ONE decider for "where is this
   tool", because the daemon runs under launchd with a minimal PATH while
   `doctor` runs in the operator's shell.
 - **CodeWatcher** — `notify` watcher; re-indexes modified files and marks them

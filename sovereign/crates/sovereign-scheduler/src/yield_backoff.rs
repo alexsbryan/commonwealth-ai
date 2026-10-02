@@ -22,7 +22,7 @@
 //! The order that motivated this asked for the peer to be "scored down for
 //! the `retry_after_secs` window". Scoring down cannot express it: the SSOT
 //! scorer clamps availability to `[0.2, 1.0]`
-//! (`oicp-types/src/scoring.rs:553`), so the strongest discount the score
+//! (`shared/crates/oicp-types/src/scoring.rs:553`), so the strongest discount the score
 //! path can apply is a 5× multiplier — a peer that is 5× better on every
 //! other term still wins, and still gets refused. "Do not re-dial into the
 //! same refusal" is an exclusion, so it is modelled as one:

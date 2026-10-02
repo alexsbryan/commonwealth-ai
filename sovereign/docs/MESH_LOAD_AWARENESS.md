@@ -30,7 +30,7 @@ traffic.
 
 ## Why it matters: the math
 
-`oicp-types/src/lib.rs:159` scores each candidate as
+`shared/crates/oicp-types/src/lib.rs:159` scores each candidate as
 
     score' = score
            × observation_mult     // claim affinity × (1 - failure)
@@ -155,7 +155,7 @@ form). Need to verify the manifest fetch path actually delivers
 
 #### 6. Tests
 
-- **Unit**: in `oicp-types/tests/` or `oicp_select.rs` cfg(test) — show
+- **Unit**: in `shared/crates/oicp-types/tests/` or `oicp_select.rs` cfg(test) — show
   that two peers with identical static configs but different
   `current_in_flight` rank differently. Captures the multiplicative
   effect cleanly.

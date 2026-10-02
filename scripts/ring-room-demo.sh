@@ -1933,7 +1933,7 @@ if topology == "room":
     # edits rail — which is the standing rule D1 revised for one row only.
     # Operator direction 2026-09-22 (option a on the same handoff).
     RAIL = ["commonwealth/crates/commonwealth-rail",
-            "commonwealth/crates/commonwealth-rail-core"]
+            "shared/crates/commonwealth-rail-core"]
     rail_diff = git("diff", "--stat", "origin/main", "--", *RAIL)
     rail_diff_ring_guest = git("diff", "--stat", guest_base, "HEAD", "--", *RAIL)
     replica = (open(os.path.join(d, "wall-replica.txt")).read().splitlines() + ["", "", ""])[:3] \

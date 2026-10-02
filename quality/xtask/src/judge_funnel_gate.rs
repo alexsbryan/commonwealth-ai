@@ -316,7 +316,7 @@ mod tests {
 
     /// The body under construction fires; the detector reading the same key
     /// does not. Both shapes are live in this tree — `judge.rs:119` and
-    /// `oicp-types/src/completion.rs:464` — so a rule that could not tell them
+    /// `shared/crates/oicp-types/src/completion.rs:464` — so a rule that could not tell them
     /// apart would either red the detector or need an exception for it.
     #[test]
     fn a_declared_sentinel_is_a_site_and_a_read_one_is_not() {

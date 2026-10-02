@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The one writer of the atlas store fixtures checked in under
-//! corpus-engine-atlas-reader/testdata/stores (phase-b-48).
+//! shared/crates/corpus-engine-atlas-reader/testdata/stores (phase-b-48).
 //!
 //! svrn's `AtlasContextManager` tests open those stores through the leaf's
 //! openers. Here ingest writes the same inputs fresh and the leaf's opener
@@ -203,7 +203,7 @@ async fn the_wiki_fixture_holds_what_ingest_writes_for_the_walk() {
 
 /// Rewrites the checked-in fixtures from ingest's writers.
 #[test]
-#[ignore = "rewrites corpus-engine-atlas-reader/testdata/stores"]
+#[ignore = "rewrites shared/crates/corpus-engine-atlas-reader/testdata/stores"]
 fn regenerate_atlas_store_fixtures() {
     for name in [ATOM_STORE, WIKI_STORE] {
         let dir = store_fixture_dir(name);

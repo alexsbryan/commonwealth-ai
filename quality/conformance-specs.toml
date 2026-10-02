@@ -423,8 +423,8 @@ id = "FE-102"
 family = "FE"
 status = "landed"
 clause = '''The client-fairness share rule MUST take **no weight argument**, so weight-ordering unfairness is *unexpressible* rather than merely avoided. A single caller alone on the host MUST be untouched.'''
-target = '''serving-policy-core/src/fair_sched.rs:163::fair_share_cap'''
-existing = '''serving-policy-core/src/fair_sched.rs:835::fair_share_cap_is_uncapped_for_a_lone_principal'''
+target = '''shared/crates/serving-policy-core/src/fair_sched.rs:163::fair_share_cap'''
+existing = '''shared/crates/serving-policy-core/src/fair_sched.rs:835::fair_share_cap_is_uncapped_for_a_lone_principal'''
 landed = '''serving-policy-core::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal'''
 
 [[spec]]
@@ -526,8 +526,8 @@ clause = '''Shared state MUST converge by epidemic replication: a periodic round
 # it. The rail's `sync.rs` does the same digest reconciliation on the path that
 # is live, so the clause moves to the real subject rather than losing its
 # claim — the intent survives the code (plan §"Keep the intent, drop the code").
-target = '''commonwealth/crates/commonwealth-rail-core/src/sync.rs:53::digest'''
-existing = '''commonwealth/crates/commonwealth-rail-core/src/sync.rs:121::a_hole_lowers_the_mark_so_the_peer_re_sends_across_it'''
+target = '''shared/crates/commonwealth-rail-core/src/sync.rs:53::digest'''
+existing = '''shared/crates/commonwealth-rail-core/src/sync.rs:121::a_hole_lowers_the_mark_so_the_peer_re_sends_across_it'''
 
 [[spec]]
 id = "FE-21"
@@ -754,24 +754,24 @@ id = "IN-26"
 family = "IN"
 status = "exists-untagged"
 clause = '''An episode MUST be recordable as **metadata only** (X-PV-7), joined to what the developer actually did with the suggestion — accepted, dismissed, diverged, superseded. **Diverged MUST NOT be folded into dismissed**, and an unreported episode MUST count as *unknown*, never as a dismissal (X-EH-2).'''
-target = '''sovereign/crates/sovereign-contracts/src/types/next_edit_journal.rs:409::stats'''
-existing = '''sovereign/crates/sovereign-contracts/src/types/next_edit_journal.rs:532::diverged_is_never_counted_as_dismissed'''
+target = '''shared/crates/sovereign-contracts/src/types/next_edit_journal.rs:409::stats'''
+existing = '''shared/crates/sovereign-contracts/src/types/next_edit_journal.rs:532::diverged_is_never_counted_as_dismissed'''
 
 [[spec]]
 id = "IN-28"
 family = "IN"
 status = "exists-untagged"
 clause = '''The local record layer MUST be feature-agnostic: file layout, rotation, size cap, retention, and a multi-level off-switch MUST live in one generic mechanism with one enabling decider. A second record stream MUST be a declaration plus types, touching no dispatch on stream names.'''
-target = '''sovereign/crates/sovereign-contracts/src/types/journal.rs:148::JournalStream::enabled'''
-existing = '''sovereign/crates/sovereign-contracts/src/types/journal.rs:335::the_global_marker_disables_every_stream'''
+target = '''shared/crates/sovereign-contracts/src/types/journal.rs:148::JournalStream::enabled'''
+existing = '''shared/crates/sovereign-contracts/src/types/journal.rs:335::the_global_marker_disables_every_stream'''
 
 [[spec]]
 id = "IN-29"
 family = "IN"
 status = "exists-untagged"
 clause = '''A model MUST publish one **capability claim** per kind of work it does well, carrying at minimum a work-kind tag, an affinity, and a latency class. The tag vocabulary MUST be standardised at its core with an open extension namespace (X-EX-2).'''
-target = '''oicp-types/src/capability.rs:118::CapabilityHint'''
-existing = '''oicp-types/src/capability.rs:387::capability_hint_standardized_constructors'''
+target = '''shared/crates/oicp-types/src/capability.rs:118::CapabilityHint'''
+existing = '''shared/crates/oicp-types/src/capability.rs:387::capability_hint_standardized_constructors'''
 
 [[spec]]
 id = "IN-3"
@@ -786,8 +786,8 @@ id = "IN-30"
 family = "IN"
 status = "exists-untagged"
 clause = '''Schedulers MUST score requests against claims using one shared composed scoring function with protocol-level and per-scheduler operational adjustments. There MUST be exactly one implementation of the composition (X-SD-1).'''
-target = '''oicp-types/src/scoring.rs:535::score_with_adjustments'''
-existing = '''oicp-types/src/scoring.rs:1036::composed_product_all_factors_active_golden'''
+target = '''shared/crates/oicp-types/src/scoring.rs:535::score_with_adjustments'''
+existing = '''shared/crates/oicp-types/src/scoring.rs:1036::composed_product_all_factors_active_golden'''
 
 [[spec]]
 id = "IN-5"
@@ -1057,8 +1057,8 @@ id = "GR-49"
 family = "GR"
 status = "exists-untagged"
 clause = '''Where two mechanisms (an incumbent and a replacement) both run, the system MUST be able to say **which one spent the turn**, per stage, with a closed set of owners including a *shared* owner for work belonging to neither.'''
-target = '''sovereign/crates/sovereign-contracts/src/types/stage_attribution.rs:349::TurnStageLedger::seal'''
-existing = '''sovereign/crates/sovereign-contracts/src/types/stage_attribution.rs:424::seal_names_both_stacks_when_both_executed'''
+target = '''shared/crates/sovereign-contracts/src/types/stage_attribution.rs:349::TurnStageLedger::seal'''
+existing = '''shared/crates/sovereign-contracts/src/types/stage_attribution.rs:424::seal_names_both_stacks_when_both_executed'''
 
 [[spec]]
 id = "GR-9"

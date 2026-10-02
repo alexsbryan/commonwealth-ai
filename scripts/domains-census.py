@@ -960,7 +960,7 @@ def cmd_atom_outside(args: list[str]) -> int:
     if "--json" in args:
         emit_measurement(len(found))
         return EXIT_OK
-    print("atom-outside — pub Atom* definitions outside understanding-vocab/ and "
+    print("atom-outside — pub Atom* definitions outside shared/crates/understanding-vocab/ and "
           "corpus-engine/src/enrichment/\n  (Understanding's word; the registry's "
           "kept Atom* rows are the allow-list)\n")
     for d in sorted(found, key=lambda d: (d["file"], d["line"])):

@@ -69,7 +69,7 @@ export type PositionStyle =
 // ─── Epistemic ledger (EPISTEMIC_STATE.md) ────────────────────────
 //
 // TS mirror of the `sovereign-contracts` `epistemic` wire types
-// (`sovereign/crates/sovereign-contracts/src/types/epistemic.rs`),
+// (`shared/crates/sovereign-contracts/src/types/epistemic.rs`),
 // serialized onto `MessageEntry.metadata.epistemic_state`. serde
 // `rename_all = "snake_case"` with NO container tag → externally-tagged
 // enums: unit variants are bare strings, data variants are single-key

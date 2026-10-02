@@ -56,7 +56,7 @@ uuid = { workspace = true }
 rusqlite = { workspace = true }
 regex = { workspace = true }
 dirs = "5"
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 
 [target.'cfg(unix)'.dependencies]
 # `pipeline stop` signals the driver process.

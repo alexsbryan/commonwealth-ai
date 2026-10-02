@@ -34,7 +34,7 @@ sovereign-enrichment-build = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 # The authoring harness over that engine (`EngineHarness`).
 sovereign-authoring-harness = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 
 [lints]
 workspace = true

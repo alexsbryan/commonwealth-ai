@@ -50,7 +50,7 @@ fn daemon_cmd_source() -> String {
 }
 
 fn contracts_skills_source() -> String {
-    let path = repo_root::repo_root().join("sovereign/crates/sovereign-contracts/src/skills.rs");
+    let path = repo_root::repo_root().join("shared/crates/sovereign-contracts/src/skills.rs");
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 

@@ -20,7 +20,7 @@ dirs = "5"
 # The per-user systemd unit writer (pb-mesh-exit-transport): the mechanism,
 # shared with `svrn mesh up`'s cw-rails unit. std only behind `service`.
 host-kit = { workspace = true, features = ["service"] }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 
 [target.'cfg(unix)'.dependencies]
 # `current_uid` only — the launchd domain target is `gui/<uid>`.

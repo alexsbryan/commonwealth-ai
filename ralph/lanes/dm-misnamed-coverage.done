@@ -2,7 +2,7 @@ unit: dm-misnamed-coverage
 commits: 8eb5d1742 (the env.rs note + the row's premise correction)
 what: the row's two premises were already satisfied on the tree as found, so
   this unit's delta is the one thing it still owed — the
-  sovereign/crates/sovereign-contracts/src/env.rs [[module]] note naming
+  shared/crates/sovereign-contracts/src/env.rs [[module]] note naming
   REVIEW-build-mesh-host-decouple (the unit that created the file; its doc
   comment at env.rs:13 says so). The row itself already exists with the right
   path/lines=25/context="kernel", added by 7ea3d6aae REVIEW-build-middleware-seam

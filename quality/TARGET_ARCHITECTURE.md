@@ -499,7 +499,7 @@ A domain boundary is only a boundary if a small, named set of types crosses it. 
 
 **Read the middle column exactly as written.** Rung 11 minted the types and
 proved by compile-fail that the illegal constructions have no spelling
-(`kernel-types/tests/answer_reds.rs`, six fixtures, each watched failing before
+(`shared/crates/kernel-types/tests/answer_reds.rs`, six fixtures, each watched failing before
 its `.stderr` was recorded). It did NOT migrate the live turn path:
 `grounding/mod.rs` still assembles `ReleasedCitation` by hand and
 `streaming.rs` still holds tokens procedurally. A row reading "type" where the

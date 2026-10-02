@@ -102,7 +102,7 @@ pub const BAND_RATIO: f32 = 2.0;
 /// **Known seam.** `LatencyClass` conflates "how soon do I need this"
 /// with "how capable must it be" — which is precisely why
 /// `latency_match_score`'s `abs_diff` cannot tell a downgrade from an
-/// upgrade (`oicp-types/src/scoring.rs:82`). Deriving the floor from
+/// upgrade (`shared/crates/oicp-types/src/scoring.rs:82`). Deriving the floor from
 /// it inherits the conflation. Today the two coincide, because
 /// SLOT_POLICY §3 assigns `Normal`/`Extended` to exactly the classes
 /// that want the primary slot. The day a workload wants "quickly, but

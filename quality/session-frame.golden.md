@@ -129,7 +129,7 @@ Done, all live-verified and suite-green:
 
 ## Working set
 
-`corpus-engine-scip/src/scip_export.rs` (export_all fail-closed,
+`shared/crates/corpus-engine-scip/src/scip_export.rs` (export_all fail-closed,
 export_changed), `scip_graph.rs` (replace_all/replace_files/
 replace_file_symbols + corpus-scoped variant);
 `corpus-engine-watchers/src/reindexer.rs` (overlay wiring, spawned

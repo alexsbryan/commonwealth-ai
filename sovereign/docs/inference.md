@@ -120,7 +120,7 @@ real head tensors degrade with one warn line. Escape hatch:
 ## 2. OICP v0.3 — capability advertisement + scheduler scoring
 
 Spec: `commonwealth/docs/oicp-v0.3.md`. Types:
-`oicp-types/src/lib.rs`, re-exported as `sovereign_core::oicp`
+`shared/crates/oicp-types/src/lib.rs`, re-exported as `sovereign_core::oicp`
 and `commonwealth_core::oicp` — never import the types crate
 directly downstream.
 

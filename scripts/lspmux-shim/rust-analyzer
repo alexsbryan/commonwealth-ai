@@ -15,7 +15,7 @@
 #
 # The second arm is load-bearing, not a courtesy.  The daemon's SCIP exporter
 # spawns `rust-analyzer scip . --config-path … --output …` through the same
-# PATH lookup (corpus-engine-scip/src/scip_export.rs, `command: "rust-analyzer"`,
+# PATH lookup (shared/crates/corpus-engine-scip/src/scip_export.rs, `command: "rust-analyzer"`,
 # resolved by tool_path::resolve).  A shim that swallowed those arguments would
 # produce an empty export, and an empty export WIPES the code-intel graph to
 # zero symbols (observed 2026-07-13).  scripts/tests/lspmux-shim.sh pins both

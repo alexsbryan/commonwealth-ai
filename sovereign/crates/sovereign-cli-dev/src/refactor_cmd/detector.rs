@@ -504,7 +504,7 @@ impl Detector for NameDetector {
 
     fn control(&self) -> ControlSite {
         ControlSite {
-            file: "kernel-types/src/judgement.rs",
+            file: "shared/crates/kernel-types/src/judgement.rs",
             token: "Verdict",
             why: "Verdict is defined in ten crates and the kernel's is the \
                   declared canonical.",

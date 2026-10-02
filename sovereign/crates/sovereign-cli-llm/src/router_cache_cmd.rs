@@ -27,7 +27,7 @@ use sovereign_core::scope_classifier::PersonalScopeClassifier;
 use sovereign_core::traits::InferenceProvider;
 
 const CACHE_REL: &str = "sovereign/crates/sovereign-core/data/router/router-embed-cache.json";
-const MODELS_REL: &str = "sovereign/crates/sovereign-contracts/data/models.toml";
+const MODELS_REL: &str = "shared/crates/sovereign-contracts/data/models.toml";
 const ROUTER_DIR: &str = "sovereign/crates/sovereign-core/data/router";
 
 const HELP: &str = "\

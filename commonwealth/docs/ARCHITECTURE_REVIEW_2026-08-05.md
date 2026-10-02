@@ -201,7 +201,7 @@ their own unit tests; the production loader is `include_str!`
 
 ### 5.4 The wire contract is the sharpest gap
 
-**Zero `#[non_exhaustive]`** across `oicp-types/`, `oicp-client/` and
+**Zero `#[non_exhaustive]`** across `shared/crates/oicp-types/`, `shared/crates/oicp-client/` and
 `commonwealth/crates/` — verified, count is 0. **No `flatten`, no
 `deny_unknown_fields`, no catch-all map**; `serde(other)` appears exactly once
 (`capability.rs:42`, `Capability::Unknown`).
@@ -246,11 +246,11 @@ all inter-crate deps are `path =` (`:166-207`).
 
 ### 5.6 Version negotiation does not exist
 
-`oicp-types/src/version.rs` is 19 lines: one `pub const OICP_VERSION` plus a
+`shared/crates/oicp-types/src/version.rs` is 19 lines: one `pub const OICP_VERSION` plus a
 test asserting it equals itself. `oicp-client` never reads
 `manifest.oicp_version` **(single-source)**. Negotiation is entirely
 structural — `fetch_manifest` returns `Option` and `None` means "degrade to
-v0.3 defaults" (`oicp-client/src/lib.rs:498-504`), so a 500 from a v0.4 host
+v0.3 defaults" (`shared/crates/oicp-client/src/lib.rs:498-504`), so a 500 from a v0.4 host
 is indistinguishable from a v0.3 host.
 
 This is a deliberate and defensible reading of the spec's *"feature presence,
@@ -450,8 +450,8 @@ To be fixed by whoever next touches these files:
 |---|---|
 | `ARCHITECTURE.md:962` — `commonwealth daemon start/stop/status` | one variant, `Start` (`main.rs:121-124`) |
 | `ARCHITECTURE.md:900` — a `[fairness]` config table | deleted from the struct (`commonwealth-core/src/config.rs:6-11`) |
-| `sovereign/SYSTEM_OVERVIEW.md:201` — "`docs/oicp-v0.3.md` is the canonical OICP spec" | `oicp-types/src/lib.rs:5` — v0.4 is canonical. **Fixed 2026-08-05 as part of this review.** |
-| `oicp-types/Cargo.toml` description — "OICP v0.2" | implements v0.4.0 (`version.rs:5`) |
+| `sovereign/SYSTEM_OVERVIEW.md:201` — "`docs/oicp-v0.3.md` is the canonical OICP spec" | `shared/crates/oicp-types/src/lib.rs:5` — v0.4 is canonical. **Fixed 2026-08-05 as part of this review.** |
+| `shared/crates/oicp-types/Cargo.toml` description — "OICP v0.2" | implements v0.4.0 (`version.rs:5`) |
 | `commonwealth/docs/` carries four overlapping OICP specs (v0.2, v0.3, v0.4, unversioned) totalling 1,781 lines | no "read this one" pointer |
 | `contrib/systemd/commonwealth.service:9` — `ExecStop=… daemon stop` | no such subcommand |
 | `contrib/install.sh:9` — `github.com/commonwealth-rs/commonwealth` | not this repository |

@@ -67,7 +67,7 @@ whether a routing decision was **good**.
 
 The root cause is not neglect. It is that **the scorer ranks; it does
 not predict**. `score_with_adjustments`
-(`oicp-types/src/scoring.rs:529`) returns a product of six
+(`shared/crates/oicp-types/src/scoring.rs:529`) returns a product of six
 dimensionless multipliers. Its output has no units, so there is no
 statement of the form "the scheduler was wrong by X." You cannot build
 a scoreboard for an undefined objective.
@@ -2119,7 +2119,7 @@ outcome is retiring the concern.
 
 ## Appendix A — probe transcription
 
-Constants read 2026-07-26, `oicp-types/src/scoring.rs` unless noted:
+Constants read 2026-07-26, `shared/crates/oicp-types/src/scoring.rs` unless noted:
 
 | constant | value | line |
 |---|---|---|

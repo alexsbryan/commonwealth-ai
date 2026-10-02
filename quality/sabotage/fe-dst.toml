@@ -10,7 +10,7 @@
 [[mutant]]
 id = "fe-3-a_peer_falls_back_to_its_node_id_when_th"
 requirement = "FE-3"
-target = "sovereign/crates/sovereign-contracts/src/types/projection.rs"
+target = "shared/crates/sovereign-contracts/src/types/projection.rs"
 find = "    pub from_peer: Option<String>,"
 replace = "    pub from_peer: String,"
 mustFail = ["a_peer_falls_back_to_its_node_id_when_the_mesh_cannot_name_it"]
@@ -20,7 +20,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-4-a_signature_verifies_under_the_key_that_"
 requirement = "FE-4"
-target = "commonwealth/crates/commonwealth-rail-core/src/sig.rs"
+target = "shared/crates/commonwealth-rail-core/src/sig.rs"
 find = "pub fn sign_ring_op(\n    key: &SigningKey,\n    namespace: &str,\n    ts_unix: i64,\n    seq: u64,\n    body_json: &str,\n) -> String {\n    let actor = actor_of(key);\n    let msg = ring_op_message(namespace, ts_unix, &actor, seq, body_json);\n    hex::encode(key.sign(&msg).to_bytes())\n}"
 replace = "pub fn sign_ring_op(\n    _key: &SigningKey,\n    _namespace: &str,\n    _ts_unix: i64,\n    _seq: u64,\n    _body_json: &str,\n) -> String {\n    \"deadbeef\".to_string()\n}"
 # Two independent tests die under this mutation, and until 2026-09-04 the bank
@@ -64,7 +64,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-7-same_mesh_id_survives_a_failed_join_from"
 requirement = "FE-7"
-target = "sovereign/crates/sovereign-contracts/src/setup_config.rs"
+target = "shared/crates/sovereign-contracts/src/setup_config.rs"
 find = "    pub fn unconfigured() -> Self {\n        Self {\n            models: None,\n            node: NodeSection::default(),\n            daemon: DaemonSection::default(),\n            data: DataSection::default(),\n            watched_folders: WatchedFoldersSection::default(),\n            memory: MemorySection::default(),\n            iroh: IrohSection::default(),\n            shared_model: SharedModelSection::default(),\n            discovery: DiscoverySection::default(),\n            compute: ComputeSection::default(),\n            engine: EngineSection::default(),\n            // Added on main while this branch was out. `unconfigured()`'s\n            // contract is \"every other section at its documented default\",\n            // so the default is the answer here, not a judgement call.\n            search: SearchSection::default(),\n            mcp_servers: Vec::new(),\n        }\n    }"
 replace = "    pub fn unconfigured() -> Self {\n        Self {\n            models: None,\n            node: NodeSection::default(),\n            daemon: DaemonSection { active_mesh_id: Some(\"populated-mesh\".to_string()), ..Default::default() },\n            data: DataSection::default(),\n            watched_folders: WatchedFoldersSection::default(),\n            memory: MemorySection::default(),\n            iroh: IrohSection::default(),\n            shared_model: SharedModelSection::default(),\n            discovery: DiscoverySection::default(),\n            compute: ComputeSection::default(),\n            engine: EngineSection::default(),\n            // Added on main while this branch was out. `unconfigured()`'s\n            // contract is \"every other section at its documented default\",\n            // so the default is the answer here, not a judgement call.\n            search: SearchSection::default(),\n            mcp_servers: Vec::new(),\n        }\n    }"
 mustFail = ["same_mesh_id_survives_a_failed_join_from_a_populated_mesh"]
@@ -104,7 +104,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-9-missing_key_marker_is_rejected"
 requirement = "FE-9"
-target = "serving-policy-core/src/pipeline_aliases.rs"
+target = "shared/crates/serving-policy-core/src/pipeline_aliases.rs"
 find = "    pub fn from_toml(text: &str) -> Result<Self, toml::de::Error> {\n        let file: PipelineFile = toml::from_str(text)?;\n        let mut table = Self::new();\n        for entry in file.pipeline {\n            table.insert(PipelineResolution {\n                name: entry.name,\n                model_id: entry.model_id,\n                middleware: entry.middleware,\n                context: entry.context.unwrap_or_default(),\n            });\n        }\n        Ok(table)\n    }"
 replace = "    pub fn from_toml(text: &str) -> Result<Self, toml::de::Error> {\n        let file: PipelineFile = toml::from_str(text)?;\n        let mut table = Self::new();\n        // MUTATION: Skip validation of pipeline entries. This allows invalid\n        // configurations (like missing keys or bad regexes in enrichment steps)\n        // to pass through without error, violating the requirement that active\n        // markers must have valid membership/schema.\n        for entry in file.pipeline {\n            if let Some(enrichments) = &entry.enrichment {\n                for enrich in enrichments.iter() {\n                    if let Some(classifiers) = &enrich.failure_classifier {\n                        for classifier in classifiers.iter() {\n                            if let Some(pattern) = &classifier.stderr_pattern {\n                                if pattern.is_empty() || !regex::Regex::new(pattern).is_ok() {\n continue; // Skip invalid patterns instead of failing\n                                }\n                            }\n                        }\n                    }\n                }\n            }\n            table.insert(PipelineResolution {\n                name: entry.name,\n                model_id: entry.model_id,\n                middleware: entry.middleware,\n                context: entry.context.unwrap_or_default(),\n            });\n        }\n        Ok(table)\n    }"
 mustFail = ["missing_key_marker_is_rejected"]
@@ -174,7 +174,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-12-leave_clears_join_key_secret_so_next_mes"
 requirement = "FE-12"
-target = "sovereign/crates/sovereign-contracts/src/setup_config.rs"
+target = "shared/crates/sovereign-contracts/src/setup_config.rs"
 find = "    pub fn unconfigured() -> Self {\n        Self {\n            models: None,\n            node: NodeSection::default(),\n            daemon: DaemonSection::default(),\n            data: DataSection::default(),\n            watched_folders: WatchedFoldersSection::default(),\n            memory: MemorySection::default(),\n            iroh: IrohSection::default(),\n            shared_model: SharedModelSection::default(),\n            discovery: DiscoverySection::default(),\n            compute: ComputeSection::default(),\n            engine: EngineSection::default(),\n            // Added on main while this branch was out. `unconfigured()`'s\n            // contract is \"every other section at its documented default\",\n            // so the default is the answer here, not a judgement call.\n            search: SearchSection::default(),\n            mcp_servers: Vec::new(),\n        }\n    }"
 replace = "    pub fn unconfigured() -> Self {\n        Self {\n            models: None,\n            node: NodeSection::default(),\n            daemon: DaemonSection::default(),\n            data: DataSection { join_key_secret: Some(\"stale_invite_secret\".to_string()) },\n            watched_folders: WatchedFoldersSection::default(),\n            memory: MemorySection::default(),\n            iroh: IrohSection::default(),\n            shared_model: SharedModelSection::default(),\n            discovery: DiscoverySection::default(),\n            compute: ComputeSection::default(),\n            engine: EngineSection::default(),\n            // Added on main while this branch was out. `unconfigured()`'s\n            // contract is \"every other section at its documented default\",\n            // so the default is the answer here, not a judgement call.\n            search: SearchSection::default(),\n            mcp_servers: Vec::new(),\n        }\n    }"
 mustFail = ["leave_clears_join_key_secret_so_next_mesh_does_not_inherit_stale_invite"]
@@ -224,7 +224,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-14-features_validity_predicate"
 requirement = "FE-14"
-target = "oicp-types/src/manifest.rs"
+target = "shared/crates/oicp-types/src/manifest.rs"
 find = "    pub fn is_valid(f: &str) -> bool {\n        REGISTERED.contains(&f)\n            || f.strip_prefix(EXTENSION_PREFIX)\n                .is_some_and(|tag| !tag.is_empty())\n    }"
 replace = "    pub fn is_valid(f: &str) -> bool {\n        // BUG: Always returns true, ignoring validation logic.\n        // This violates the requirement that invalid predicates (like empty tags or unregistered features) must be rejected.\n        true\n    }"
 mustFail = ["features_validity_predicate"]
@@ -334,7 +334,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-20-string_payload_variants_round_trip_throu"
 requirement = "FE-20"
-target = "oicp-types/src/error.rs"
+target = "shared/crates/oicp-types/src/error.rs"
 find = "\"cancelled\" => Self::Cancelled,"
 replace = ""
 mustFail = ["string_payload_variants_round_trip_through_the_tag"]
@@ -364,7 +364,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-21-mesh_allowed_normal_latency_routes_to_pe"
 requirement = "FE-21"
-target = "oicp-types/src/requirements.rs"
+target = "shared/crates/oicp-types/src/requirements.rs"
 find = "    pub fn with_hint(mut self, hint: CapabilityHint) -> Self {\n        self.capability_hint = Some(hint);\n        self\n    }"
 replace = "    pub fn with_latency_class(mut self, latency: LatencyClass) -> Self {\n        // MUTATION: Intentionally fail to store the latency class,\n        // violating FE-21 which requires periodic measurement and sharing\n        // of smoothed estimates (implied by respecting latency constraints).\n        // By ignoring the input, we break any logic that depends on this setting.\n        self\n    }\n\n    pub fn with_hint(mut self, hint: CapabilityHint) -> Self {\n        self.capability_hint = Some(hint);\n        self\n    }"
 mustFail = ["mesh_allowed_normal_latency_routes_to_peer_without_speed_signal"]

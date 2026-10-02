@@ -3854,7 +3854,7 @@ mod tests {
     fn canonicalize_apply_patch_repairs_both_missing_end_and_prefixes() {
         let bad = "apply_patch <<'EOF'\n\
                    *** Begin Patch\n\
-                   *** Add File: oicp-types/Cargo.toml\n\
+                   *** Add File: shared/crates/oicp-types/Cargo.toml\n\
                    +[package]\n\
                    +name = \"oicp-types\"\n\
                    +version = \"0.1.0\"\n\
@@ -3916,7 +3916,7 @@ mod tests {
         // missing [package] header.
         let bad = "apply_patch <<'EOF'\n\
                    *** Begin Patch\n\
-                   *** Add File: oicp-types/Cargo.toml\n\
+                   *** Add File: shared/crates/oicp-types/Cargo.toml\n\
                    +{\n\
                    +name = \"oicp-types\",\n\
                    +version = \"0.1.0\",\n\
@@ -3944,7 +3944,7 @@ mod tests {
         // [dependencies] preserved.
         assert!(canonical.contains("+[dependencies]\n"));
         // Structural envelope intact.
-        assert!(canonical.contains("*** Add File: oicp-types/Cargo.toml\n"));
+        assert!(canonical.contains("*** Add File: shared/crates/oicp-types/Cargo.toml\n"));
         assert!(canonical.contains("*** End Patch\n"));
     }
 
@@ -3956,7 +3956,7 @@ mod tests {
         // header and drop the wrapping `{`/`}`.
         let bad = "apply_patch <<'EOF'\n\
                    *** Begin Patch\n\
-                   *** Add File: oicp-types/Cargo.toml\n\
+                   *** Add File: shared/crates/oicp-types/Cargo.toml\n\
                    +[package]\n\
                    +name = \"oicp-types\"\n\
                    +version = \"0.1.0\"\n\

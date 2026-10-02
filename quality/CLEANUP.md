@@ -104,7 +104,7 @@ fixes that landed with it. Each item was left OUT of that arc deliberately.
 
 **Re-index prerequisite (bit us first, will bite new contributors):** the
 SCIP call-graph rebuild shells out to `rust-analyzer scip …`
-(`corpus-engine-scip/src/scip_export.rs:52`). `~/.cargo/bin/rust-analyzer` is
+(`shared/crates/corpus-engine-scip/src/scip_export.rs:52`). `~/.cargo/bin/rust-analyzer` is
 a rustup *proxy shim*; the pinned toolchain (`1.95.0`, via
 `rust-toolchain.toml`) had **no `rust-analyzer` component**, so the export
 errored — and a failed export **wipes the graph to 0 symbols** (it is

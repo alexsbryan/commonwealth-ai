@@ -229,7 +229,7 @@ async fn cmd_register(args: &[String]) -> i32 {
 ///
 /// `check_exporters` was written for exactly this ("so callers can show
 /// actionable install instructions instead of silently producing an empty call
-/// graph", corpus-engine-scip/src/scip_export.rs) and only `doctor` called it.
+/// graph", shared/crates/corpus-engine-scip/src/scip_export.rs) and only `doctor` called it.
 #[cfg(feature = "code-intel")]
 fn warn_missing_exporters(root: &std::path::Path) {
     use corpus_engine_scip::scip_export;

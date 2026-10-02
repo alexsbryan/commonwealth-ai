@@ -4,7 +4,7 @@
 #
 # `node_id: String -> NodeId` was planned as a "safe warm-up" and is the
 # measured near-miss the wire differ exists for: `NodeId` is
-# `define_id!`-generated (kernel-types/src/ids.rs), `[u8; 16]` with DERIVED
+# `define_id!`-generated (shared/crates/kernel-types/src/ids.rs), `[u8; 16]` with DERIVED
 # serde, so it serialises as a 16-integer JSON array. The String sites are
 # live HTTP response types (commonwealth-api/src/routes_status.rs:324,428,
 # routes_internal/mesh_admin.rs, routes_internal/corpus_collaborate.rs).

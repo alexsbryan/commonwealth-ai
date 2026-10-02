@@ -457,7 +457,7 @@ reason = "the wire contract is the floor — a protocol crate that names the run
 
 # oicp-client's ONE surviving sovereign edge, with the finding that keeps it.
 # Census 2026-08-20, `scripts/nc-boundary.py --edge oicp:sovereign`: 12 types /
-# 103 refs, every one of them from `oicp-client/src/lib.rs`, every one defined
+# 103 refs, every one of them from `shared/crates/oicp-client/src/lib.rs`, every one defined
 # in `sovereign-contracts` —
 #   traits.rs            InferenceProvider, ResidentSlot
 #   types/completion.rs  CompletionRequest, CompletionResponse, StreamFrame,
@@ -890,7 +890,7 @@ allow = ["oicp-types", "kernel-types", "sovereign-time"]
 [[package_leaf]]
 name = "oicp-client"
 # Protocol types plus the client that speaks them. The `sovereign-contracts`
-# edge is 12 types / 103 refs, all from `oicp-client/src/lib.rs`; the finding
+# edge is 12 types / 103 refs, all from `shared/crates/oicp-client/src/lib.rs`; the finding
 # recorded on the `[[forbid]]` above is that the inference vocabulary is oicp's
 # own and the fix is a MOVE, gated on an oicp-owned error across 79
 # `impl InferenceProvider` sites.
@@ -1440,7 +1440,7 @@ doc = "docs/FIVE_PROGRAMS.md"
 #     (a), 2026-09-24): the evaluator's claim-miner reads ingest's atoms.json.
 #     Its closure is serde/serde_json/blake3 + `kernel-types` (already here),
 #     and eval links it with `default-features = false`, so the `std::fs`
-#     `read` door (understanding-vocab/src/read.rs) is not in eval's build;
+#     `read` door (shared/crates/understanding-vocab/src/read.rs) is not in eval's build;
 #     eval reads its own bytes and calls `read::parse_atoms` (fp-58).
 #   - `oicp-client`, `sovereign-turn-client`, `sovereign-cli-base`, `host-kit`,
 #     `corpus-index` — admitted by the operator (phase-b-33) for bench's own
@@ -1711,7 +1711,7 @@ doc = "quality/campaigns/sv-surface.toml §sv-no-daemon-management"
 # `Child` and drops it on the next line, so there is nothing to `try_wait` on
 # — and `reaps` being forbidden in this very file is what refuses the loop
 # that would grow back.
-bring_up_decider = { krate = "sovereign-turn-client", file = "sovereign/crates/sovereign-turn-client/src/reach.rs", reason = "ServingHost::ensure_reachable is the one decider for `is a backend reachable, and start one if this build ships one`. Thirteen private copies of the probe preceded it; retiring them onto one is why the client family, not the app, owns reachability." }
+bring_up_decider = { krate = "sovereign-turn-client", file = "shared/crates/sovereign-turn-client/src/reach.rs", reason = "ServingHost::ensure_reachable is the one decider for `is a backend reachable, and start one if this build ships one`. Thirteen private copies of the probe preceded it; retiring them onto one is why the client family, not the app, owns reachability." }
 
 # ── The lifecycle ledger — every process-control site a surface still has ────
 # Census 2026-09-11 (`cargo xtask lifecycle-gate`). `burning-down` rows are

@@ -59,7 +59,7 @@ const OWNERS: &[(&str, &str)] = &[
         "THE drive: cw-rails' donor leases, runs, renews and reports",
     ),
     (
-        "oicp-types/src/work/act.rs",
+        "shared/crates/oicp-types/src/work/act.rs",
         "the vocabulary: the act's own definition and its kind",
     ),
     (

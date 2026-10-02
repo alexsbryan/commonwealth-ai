@@ -144,7 +144,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   — only the §5 commands, which take the cargo lock.
 - Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
   `scripts/ralph*`, or ANYTHING under `commonwealth/crates/commonwealth-rail/` or
-  `commonwealth/crates/commonwealth-rail-core/` — the RING RAIL (zero diffs there
+  `shared/crates/commonwealth-rail-core/` — the RING RAIL (zero diffs there
   beyond the roster-door hunk the operator permitted is the campaign predicate;
   a row that seems to need one is §6). `commonwealth-rails/` is the rails DAEMON,
   not that rule. Never stop or restart the DEPLOYED daemon (the one `svrn daemon status`

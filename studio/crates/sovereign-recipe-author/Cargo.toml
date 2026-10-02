@@ -24,7 +24,7 @@ toml = { workspace = true }
 rusqlite = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 
 [dev-dependencies]
 # The tests that drive the REAL tester, descriptor and registry (moved from

@@ -1780,7 +1780,7 @@ mechanism and the worker said so out loud.
 
 (a) The order said "score that peer down for the retry_after window". The
 score path CANNOT express that: the SSOT scorer clamps availability to
-[0.2, 1.0] (oicp-types/src/scoring.rs:553), so the strongest expressible
+[0.2, 1.0] (shared/crates/oicp-types/src/scoring.rs:553), so the strongest expressible
 discount is a 5x multiplier, and a peer better than 5x on the other terms
 still wins and still gets refused. The bar demands ZERO dispatches while
 yielding, so a discount cannot meet it by construction. Modelled instead
@@ -3272,7 +3272,7 @@ agreement, not correctness, which is why goldens are the separate red line."""
 id = "nc-portable"
 one_line = "The census produces a register on a codebase that is not this one, and not Rust"
 derives_from = "NOUN_CONVERGENCE.md §6.4 (what generalizes, tier 1)"
-bar = "svrn converge census run against a non-Rust repository via one of the four non-Rust exporters already wired in corpus-engine-scip/src/scip_export.rs (scip-go, scip-typescript, scip-python, scip-java) produces a ranked duplicate-concept register, with no code ported. The claim is a harness with an opinionated method, NOT a push-button: the totality rules do not generalize and the bar does not pretend they do"
+bar = "svrn converge census run against a non-Rust repository via one of the four non-Rust exporters already wired in shared/crates/corpus-engine-scip/src/scip_export.rs (scip-go, scip-typescript, scip-python, scip-java) produces a ranked duplicate-concept register, with no code ported. The claim is a harness with an opinionated method, NOT a push-button: the totality rules do not generalize and the bar does not pretend they do"
 declared = "2026-08-16"
 evidence_note = """The bar that turns this initiative from internal cleanup
 into a product, and it is cheap — closes in the head of the campaign, before

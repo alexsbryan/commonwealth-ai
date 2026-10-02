@@ -75,7 +75,7 @@ corpus (130 claims, `resolver-precision/resolver_claim_scores.jsonl`).
 (`sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/admission.rs` —
 `admit`, `decide_from_margin`, single `effective_thresholds` accessor);
 typed contract + shim
-(`sovereign/crates/sovereign-contracts/src/types/grounding_verdict.rs`);
+(`shared/crates/sovereign-contracts/src/types/grounding_verdict.rs`);
 segments display + tests
 (`.../native_grounding/segments.rs`, `span_resolver.rs`); the abstain
 seam (`sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs:627-704`);

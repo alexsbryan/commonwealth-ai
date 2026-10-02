@@ -66,7 +66,7 @@ that upstream PR #24292 fixed on 2026-09-16.
 In scope: replace the in-process engine (`sovereign/crates/sovereign-inference/src/embedded/`
 and `vendor/llama-cpp-4`, `vendor/llama-cpp-sys-4`) with a `llama-server`
 process per node that the daemon supervises, reached through the existing
-`[engine] kind="remote"` seam (`RemoteApiProvider`, `oicp-client/src/lib.rs`).
+`[engine] kind="remote"` seam (`RemoteApiProvider`, `shared/crates/oicp-client/src/lib.rs`).
 
 Out of scope: the daemon, the OpenAI-compatible gateway on `:9741`, routing,
 the grounding gate, retrieval, the mesh. Those consume the engine; they are
@@ -135,7 +135,7 @@ Embedding parity against the running daemon, same `qwen-embedding-0.6b.gguf`
 (F16), three fixed strings: raw text into llama-server gives cosine
 0.989 / 0.989 / 0.989 (max abs diff up to 0.0197); text with the literal
 `<|endoftext|>` appended, as `EmbedQuirks::qwen3_embedding` does
-(`sovereign/crates/sovereign-contracts/src/embed_quirks.rs:89`), gives
+(`shared/crates/sovereign-contracts/src/embed_quirks.rs:89`), gives
 0.999999 / 1.0 / 1.0 (max abs diff ≤ 0.00012). Both sides L2-normalize. So
 stored vectors carry over **only if the client keeps our quirks**. Note
 500f1229 measured the same effect independently (0.9956 raw, 0.9998 with EOS).
@@ -167,7 +167,7 @@ primary model, under sustained load.
 
 ## 5. First finding: the remote seam is dishonest today
 
-`RemoteApiProvider::build_request` (`oicp-client/src/lib.rs`, around 589-848)
+`RemoteApiProvider::build_request` (`shared/crates/oicp-client/src/lib.rs`, around 589-848)
 decides what survives the trip. Standard fields go through (`max_tokens`,
 `temperature`, `response_format`, `chat_template_kwargs`, `tools`). Private
 fields are sent under names no third-party server reads (`lark_grammar` at

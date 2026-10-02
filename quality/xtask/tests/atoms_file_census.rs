@@ -108,7 +108,7 @@ fn the_atoms_json_shape_is_declared_exactly_once() {
         }
     }
 
-    let home = "understanding-vocab/src/atoms.rs";
+    let home = "shared/crates/understanding-vocab/src/atoms.rs";
     assert_eq!(
         hits.len(),
         1,

@@ -475,7 +475,7 @@ costs four lines and did not fit, so the instrument spells the unit's
 environment with `env(1)` in the argv. Moving the cap is the operator's call.
 
 **Known open beside it, banked against cw-lift.** The first two closed the
-same day: `JobRequirements.isolation` exists (`oicp-types/src/job.rs:384`) and
+same day: `JobRequirements.isolation` exists (`shared/crates/oicp-types/src/job.rs:384`) and
 `WorkRefusal::IsolationBelow` has a producer in `may_take`
 (`commonwealth-work/src/refusal.rs:408`), so a submitter can now demand a
 boundary and be refused by name. Still open:
@@ -602,7 +602,7 @@ requests cost more than the overlay's debounce window (2000 ms,
 |---|---|---|---|---|
 | `sovereign-mesh/src/reindexer.rs` (2,116 lines) | 140 | 594 | 282 | **8,848 ms** |
 | `sovereign-mesh/src/lsp_tier.rs` (~600 lines) | 36 | 218 | 74 | **2,503 ms** |
-| `corpus-engine-scip/src/tool_path.rs` (~300 lines) | 25 | 145 | 52 | **1,857 ms** |
+| `shared/crates/corpus-engine-scip/src/tool_path.rs` (~300 lines) | 25 | 145 | 52 | **1,857 ms** |
 
 **The stop condition is triggered**, and its shape is specific: the cost is
 `2N+1` round trips for a file with N definitions, at ~31 ms each. Nothing is
@@ -670,7 +670,7 @@ grade, and this paragraph is what says so.
 **Repaid.** A terminal now binds its entry node by mesh identity
 (`[node] entry_node`) and resolves it through `PeerEndpointSource` on every
 call. `EntryNodeEndpoint` (`sovereign-mesh/src/entry_endpoint.rs`) is the
-resolver; `EndpointResolver` / `EndpointRef` (`oicp-client/src/lib.rs`) is the
+resolver; `EndpointResolver` / `EndpointRef` (`shared/crates/oicp-client/src/lib.rs`) is the
 seam it plugs into. `svrn setup --terminal <join-link>` joins the mesh first,
 so there is a real node id to bind. The address form survives for an entry node
 that is not a mesh member, and `validate_class` refuses a config carrying both.

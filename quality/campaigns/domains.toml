@@ -85,7 +85,7 @@ check     = "python3 scripts/domains-census.py predicate && cargo xtask boundary
 #      recorded because the next reader will run the same glob.
 #   Serving, module by module: 44,485 lines (DOMAINS.md §4 said ~37,000) —
 #      sovereign-mesh 24,307, sovereign-api 16,177, sovereign-serving 1,491,
-#      serving-policy 1,241, oicp-types/src/scoring.rs 1,269; 38,665 if
+#      serving-policy 1,241, shared/crates/oicp-types/src/scoring.rs 1,269; 38,665 if
 #      frontdoor.rs (5,820, third-party harness prompt shaping) is Host.
 #   sovereign-mesh/src/*_http.rs: 26 files / 22,017 lines (DAEMON_CORE.md §2
 #      said 22 / 18,319 on 09-11) — the lane a daemon-core campaign would
@@ -207,7 +207,7 @@ status       = "open"
 # ALLOW-LIST below), 7 projections that are the read model built in the wrong
 # crate (five already use vocab's AtomId/AtomType/StableAtomKey), 1 duplicate
 # (reading_http.rs AtomSpan). The instrument counts pub Atom* definitions
-# outside understanding-vocab/ and enrichment/, minus an ALLOW-LIST of named
+# outside shared/crates/understanding-vocab/ and enrichment/, minus an ALLOW-LIST of named
 # binders — never a path pattern: `*_http.rs` returns 9 and silently drops
 # AtomSpan/AtomCard/AtomElsewhere, three types the bar exists to catch.
 # Whole-tree the count is 12 (corpus-engine-archaeology adds AtomWitness and

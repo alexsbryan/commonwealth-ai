@@ -448,7 +448,7 @@ mod tests {
         let all = vec![
             sym_at(
                 "CorpusId",
-                "kernel-types/src/lib.rs",
+                "shared/crates/kernel-types/src/lib.rs",
                 10,
                 "rust-analyzer cargo kernel-types 0.1.0 lib/CorpusId#",
             ),

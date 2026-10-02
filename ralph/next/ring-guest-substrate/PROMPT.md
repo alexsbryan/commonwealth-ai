@@ -146,7 +146,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   `scripts/ralph*`, or the templates under
   `sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates/` (the scaffold is the
   falsifier: ONE line there fails `rg-second-app-zero-lines` and is §6). The RING RAIL,
-  `commonwealth/crates/commonwealth-rail/` and `commonwealth/crates/commonwealth-rail-core/`,
+  `commonwealth/crates/commonwealth-rail/` and `shared/crates/commonwealth-rail-core/`,
   is open to EXACTLY ONE row, `rg-1-on-behalf-of` (operator decision D1, 2026-09-20,
   ledger A52: a signed `on_behalf_of` beside the payload). Every other row that seems
   to need a rail diff is §6, and that row adds the one field and what verifying it

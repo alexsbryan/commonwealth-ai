@@ -48,9 +48,9 @@ PROBES=(
 "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs|sovereign-desktop"
 "sovereign/crates/sovereign-tools/src/local_corpus/manager.rs|sovereign-tools"
 "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs|sovereign-cli-daemon"
-"sovereign/crates/sovereign-turn-client/src/lib.rs|sovereign-turn-client"
+"shared/crates/sovereign-turn-client/src/lib.rs|sovereign-turn-client"
 "sovereign/crates/sovereign-mesh/src/daemon.rs|sovereign-mesh"
-"sovereign/crates/sovereign-contracts/src/setup_config.rs|sovereign-contracts"
+"shared/crates/sovereign-contracts/src/setup_config.rs|sovereign-contracts"
 )
 for p in "${PROBES[@]}"; do IFS='|' read -r f crate <<< "$p"
   echo "=== probe2 $f ($crate) $(date) ==="

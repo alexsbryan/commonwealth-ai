@@ -159,7 +159,7 @@ fn known_targets() -> Vec<TargetFixture> {
 }
 
 fn corpus_id_fixture() -> TargetFixture {
-    // `#[serde(transparent)]` (kernel-types/src/ids.rs) — the positive
+    // `#[serde(transparent)]` (shared/crates/kernel-types/src/ids.rs) — the positive
     // control: adoption must be a type change, not a data migration.
     let c = CorpusId::new("wikipedia").expect("non-empty literal");
     TargetFixture {
@@ -201,7 +201,7 @@ fn node_id_fixture() -> TargetFixture {
 }
 
 fn content_hash_fixture() -> TargetFixture {
-    // Hand-written serde as a plain hex string (kernel-types/src/hash.rs) —
+    // Hand-written serde as a plain hex string (shared/crates/kernel-types/src/hash.rs) —
     // the original the wire decider generalises.
     let h = kernel_types::ContentHash::of_str("wire");
     let hex = h.to_hex();

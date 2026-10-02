@@ -33,17 +33,17 @@ const SOURCES: &[&str] = &[
     // the version-1 ontology types, `OntologyVocabulary`) live in the
     // `understanding-vocab` leaf since 2026-09-03; the generator parses
     // SOURCE, so it reads them where they are declared.
-    "understanding-vocab/src/ontology/decl.rs",
+    "shared/crates/understanding-vocab/src/ontology/decl.rs",
     // The navigation section (`[enrichment.ontology.navigation]`): the policy
     // struct IS the TOML shape, so it is rendered from where it is declared.
-    "understanding-vocab/src/ontology/navigation.rs",
+    "shared/crates/understanding-vocab/src/ontology/navigation.rs",
     // The persisted setting types (`DisplayMeta`, `MutableMergePolicy`) and the
     // filter configs (`ComposeMode`, `FilterConfig`, `BoilerplateConfig`,
     // `KnowledgeDensityConfig`) moved to the `corpus-index` leaf (domains
     // REVIEW-build-index-read-port); the generator parses SOURCE, so it reads
     // them where they are declared.
-    "corpus-index/src/recipe.rs",
-    "corpus-index/src/filters.rs",
+    "shared/crates/corpus-index/src/recipe.rs",
+    "shared/crates/corpus-index/src/filters.rs",
 ];
 
 /// Deserialize-deriving types that are NOT recipe-TOML surface (runtime
@@ -53,7 +53,7 @@ const SKIP_TYPES: &[&str] = &["ResolvedParameters", "ParameterValue"];
 const HEADER: &str = "# Recipe schema reference\n\
 \n\
 > **Generated** from `corpus-engine/src/recipe.rs` (+ `recipe_ontology/`, the\n\
-> declaration types in `understanding-vocab/src/ontology/decl.rs`, and the\n\
+> declaration types in `shared/crates/understanding-vocab/src/ontology/decl.rs`, and the\n\
 > filter config types) by\n\
 > the `recipe_schema` test. Do not edit by hand — regenerate with\n\
 > `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test main recipe_schema`.\n\
@@ -416,10 +416,11 @@ fn recipe_schema_descriptor_is_fresh() {
     // §3.1 size ratchet); they are re-exported from `recipe`, but this gate
     // parses SOURCE, so it reads them where they are declared.
     let recipe_ont_file = descriptor::parse(&ws.join("corpus-engine/src/recipe_ontology/mod.rs"));
-    let filters_file = descriptor::parse(&ws.join("corpus-index/src/filters.rs"));
+    let filters_file = descriptor::parse(&ws.join("shared/crates/corpus-index/src/filters.rs"));
     // Every declaration type — the version-1 ontology types AND the
     // investigation decls — is in the leaf now (enrichment-as-plugin Step 3).
-    let ontology_file = descriptor::parse(&ws.join("understanding-vocab/src/ontology/decl.rs"));
+    let ontology_file =
+        descriptor::parse(&ws.join("shared/crates/understanding-vocab/src/ontology/decl.rs"));
     let registry = corpus_engine::enrichment::ontology::OntologyLanguageRegistry::builtin();
     let versions: Vec<u32> = registry.versions().map(|l| l.version()).collect();
     // The `[enrichment.ontology]` surface, for the recipe-author tool schema's

@@ -24,7 +24,7 @@
 
 # Knowledge layer — LanceDB + Tantivy + extractors + chunkers.
 /corpus-engine/                 @alexsbryan
-/corpus-engine-scip/            @alexsbryan
+/shared/crates/corpus-engine-scip/            @alexsbryan
 /corpus-engine-atos/            @alexsbryan
 /corpus-engine-notes/           @alexsbryan
 /corpus-engine-archaeology/     @alexsbryan
@@ -36,7 +36,7 @@
 /commonwealth/                  @alexsbryan
 
 # Wire-protocol types shared across the tree.
-/oicp-types/                    @alexsbryan
+/shared/crates/oicp-types/                    @alexsbryan
 
 # Release + CI machinery. Changes here affect every downstream user.
 /.github/                       @alexsbryan

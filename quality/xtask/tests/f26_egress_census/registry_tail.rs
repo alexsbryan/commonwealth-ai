@@ -32,10 +32,10 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // pb-shell (42a657102, da819e9e2): a `#[test]` that builds a RingCtx it
     // never sends through, and the shell's own test module.
     ("sovereign/crates/sovereign-cli-mesh/src/ring_cmd/show.rs", Class::TestOnly, 1),
-    ("host-kit/src/shell/tests.rs", Class::TestOnly, 1),
+    ("shared/crates/host-kit/src/shell/tests.rs", Class::TestOnly, 1),
     // pb-code-server (20fd4954e): the host kit's MCP framing test posts to
     // its own loopback listener.
-    ("host-kit/src/mcp/http_tests.rs", Class::TestOnly, 1),
+    ("shared/crates/host-kit/src/mcp/http_tests.rs", Class::TestOnly, 1),
     // pb-code-daemon-exit (c25b16fb7) moved the daemon's
     // tests/main/pattern_observation_e2e.rs into src/, where the census
     // scans; its one loopback POST is not a new site.
@@ -95,7 +95,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // ---- sovereign-cli-shared (LocalDaemon: daemon MCP proxy + project-local) ----
     // Re-keyed at REVIEW-audit-pb-auto-7: pb-code-cli-base (ef8ed7700) moved
     // the file to the leaf sovereign-cli-base, re-exported at its old path.
-    ("sovereign/crates/sovereign-cli-base/src/mcp_client.rs", Class::LocalDaemon, 3),
+    ("shared/crates/sovereign-cli-base/src/mcp_client.rs", Class::LocalDaemon, 3),
     // code_index.rs has no row since pb-code-index: `build_daemon_embed_fn`
     // and its /v1/models probe are gone; the verb execs `svrn-ingest`, whose
     // embedder is corpus_index::host (its own row).
@@ -126,7 +126,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     //     class is unchanged by it because the destination did not move.
     //   - fp-98 (9e6c557c0) moved the file by git mv into the sovereign-cli-base
     //     leaf behind its `rail-client` feature; same client, same destination.
-    ("sovereign/crates/sovereign-cli-base/src/rail.rs", Class::LocalDaemon, 1),
+    ("shared/crates/sovereign-cli-base/src/rail.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-tools ----
     // knowledge_lookup: the tool-registry web-search evidence path —
@@ -234,12 +234,12 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // mesh — and an unresolvable binding is an `Err`, never a fallback to a
     // remembered address, so the site cannot reach a host the mesh has not
     // vouched for.
-    ("oicp-client/src/lib.rs", Class::Mesh, 3),
+    ("shared/crates/oicp-client/src/lib.rs", Class::Mesh, 3),
     // MOVED ROW (2026-09-27, REVIEW-audit-pb-auto-5): the NER client moved
     // whole from sovereign-compute/src/ner.rs to here (df90dc575), same class:
     // it posts to serve's /v1/ner at the base the daemon dials (53153e1b1) —
     // serve's loopback port on this host.
-    ("oicp-client/src/ner.rs", Class::LocalDaemon, 1),
+    ("shared/crates/oicp-client/src/ner.rs", Class::LocalDaemon, 1),
 
     // ---- corpus-engine ----
     // testing.rs: the deterministic test-fixture module (never
@@ -278,7 +278,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // asks the LOCAL daemon to embed a short fixed string, so nothing
     // leaves the machine and no estate content is in the payload.
     // Moved whole to oicp-client (pb-cli-llm-bench-move), sites unchanged.
-    ("oicp-client/src/daemon_models.rs", Class::LocalDaemon, 2),
+    ("shared/crates/oicp-client/src/daemon_models.rs", Class::LocalDaemon, 2),
     // NEW (2026-09-09, sv-surface rung 5): the daemon's /internal/workflows/*
     // job surface lives here, and its router tests are the only client
     // constructions — the end-to-end job test and the loopback-guard
@@ -302,7 +302,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // the daemon's own endpoint from commonwealth-knowledge, or the operator's
     // `--base-url` from corpus-mcp — an operator-owned target, so it carries
     // the operator's class, never RemotePayload's exemption.
-    ("corpus-index/src/embed_http.rs", Class::OperatorSurface, 1),
+    ("shared/crates/corpus-index/src/embed_http.rs", Class::OperatorSurface, 1),
     // corpus-mcp's ONE client constructor (`host::client()`) and every probe
     // that rides it: `GET /oicp/v1/capabilities`, `GET /v1/models`, one `POST
     // /v1/embeddings`, `corpus ingest`'s chat probe, and the endpoint
@@ -321,7 +321,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // NO row: it goes through `CorpusEngine::ingest` to
     // corpus-engine/src/acquirers/bulk_download.rs, registered InboundOnly
     // above since this census was written.
-    ("corpus-index/src/host.rs", Class::OperatorSurface, 1),
+    ("shared/crates/corpus-index/src/host.rs", Class::OperatorSurface, 1),
     // 2 -> 1 at cw-lift rung 2c: the queue-handoff unicast to
     // `/internal/app/state` built its own client with its own 10s timeout,
     // a second answer to "how long do we wait on a peer" beside
@@ -428,8 +428,8 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // ---- mesh-reach: the reach leaf (2026-09-28, REVIEW-audit-pb-auto-6) ----
     // `RailsTransport` asks cw-rails' reach door at the loopback API base its
     // caller hands it (d0c824ea7); the peer dial itself is cw-rails'.
-    ("mesh-reach/src/rails.rs", Class::LocalDaemon, 1),
+    ("shared/crates/mesh-reach/src/rails.rs", Class::LocalDaemon, 1),
     // The pb-reach-guest proof (b684a4f06) requests a lender the test itself
     // spawned, through the loopback tunnel it just opened.
-    ("mesh-reach/src/guest/tests.rs", Class::TestOnly, 1),
+    ("shared/crates/mesh-reach/src/guest/tests.rs", Class::TestOnly, 1),
 ];

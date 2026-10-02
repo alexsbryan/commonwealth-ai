@@ -7,7 +7,7 @@
 //! A gate exit that releases text nobody judged.
 //!
 //! `kernel_types::Answer` already had no door that does not take a
-//! `Judgement` by value, and `kernel-types/tests/ui/answer_without_a_judgement.rs`
+//! `Judgement` by value, and `shared/crates/kernel-types/tests/ui/answer_without_a_judgement.rs`
 //! is a compile-fail test proving it. What was missing was ADOPTION: measured
 //! 2026-08-26, `GateOutcome` carried `text: String`, sixteen sites in
 //! `grounding/mod.rs` constructed it, and exactly ONE went through

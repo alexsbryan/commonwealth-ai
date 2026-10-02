@@ -458,7 +458,7 @@ pub fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResult {
         // The peer told us, on a recent hop, that its own user is at the
         // keyboard and asked us to wait. Re-scoring it now can only
         // re-select it into the same refusal: the availability signal
-        // clamps at 0.2 (`oicp-types/src/scoring.rs:553`), so no discount
+        // clamps at 0.2 (`shared/crates/oicp-types/src/scoring.rs:553`), so no discount
         // the score path can express is strong enough to be a "no". This
         // is the "no" — self-clearing on the deadline the peer named.
         if let Some(secs) = peer.yield_backoff_secs {

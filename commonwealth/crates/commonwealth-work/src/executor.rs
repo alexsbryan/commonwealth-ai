@@ -32,7 +32,7 @@
 //!
 //! `descriptor()` + a run method + resolve-by-kind is the shape of
 //! `sovereign-workflow`'s `Step`/`StepRegistry`
-//! (`studio/crates/sovereign-workflow/src/steps.rs:29,354`) and of
+//! (`shared/crates/sovereign-workflow/src/steps.rs:29,354`) and of
 //! `Tool`/`ToolRegistry`. Both live outside this package's closure — the
 //! closure is the reason this crate exists (cw-lift 5f lifts it into a
 //! sandbox) — so the shape is copied and the code is not. What was NOT copied

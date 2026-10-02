@@ -492,8 +492,8 @@ pipeline needs it.
 | DAG + topo order | `sovereign-core/src/types/mod.rs:105` (`Plan::topological_batches`) |
 | `{step.key}` templating | `sovereign-core/src/executor.rs:208` (`resolve_inputs`) |
 | Per-step tracer | `sovereign-core/src/runtime/retrieval_pipeline.rs:342` |
-| Scheduler (SSOT) | `sovereign-inference/src/selector.rs:211` + `oicp-types/src/lib.rs` `score_with_adjustments` |
-| `ResourceNeed::Inference` type | `oicp-types/src/lib.rs:389` (`InferenceRequirements`) |
+| Scheduler (SSOT) | `sovereign-inference/src/selector.rs:211` + `shared/crates/oicp-types/src/lib.rs` `score_with_adjustments` |
+| `ResourceNeed::Inference` type | `shared/crates/oicp-types/src/lib.rs:389` (`InferenceRequirements`) |
 | Durable worklist | `sovereign-pipeline/src/worklist.rs:48,122` + `driver.rs:105` |
 | Bucketed retry / adaptive | `sovereign-pipeline/src/classifier.rs`, `adaptive.rs:80` |
 | Content-addressed store | `corpus-engine/src/asset_store/` |

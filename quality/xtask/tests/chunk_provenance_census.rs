@@ -224,13 +224,13 @@ fn no_new_pool_content_bypasses_an_acquisition_door() {
 fn sovereign_cannot_stamp_an_acquisition() {
     // The compiler holds this — `Acquisition::stamped` is `pub(crate)` to
     // corpus-index, where `Acquisition` lives since the read-port carve
-    // (`corpus-index/src/index/provenance.rs`) — so what this guards is the
+    // (`shared/crates/corpus-index/src/index/provenance.rs`) — so what this guards is the
     // SPELLING of the invariant surviving a refactor that makes it public
     // "just for a test". It named corpus-engine until the walk covered every
     // member and found the stamp's real home.
     let root = repo_root();
     let mut offenders = Vec::new();
-    let owner = root.join("corpus-index");
+    let owner = root.join("shared/crates/corpus-index");
     for dir in repo_root::member_dirs().into_iter().filter(|d| *d != owner) {
         let mut hits = BTreeSet::new();
         collect_literal(&dir, "Acquisition::stamped(", &mut hits);
@@ -250,7 +250,7 @@ fn sovereign_cannot_stamp_an_acquisition() {
 /// follows them there; `corpus-engine` keeps its `pub use` shims.
 fn doors(root: &Path) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    for crate_dir in ["corpus-index/src", "corpus-engine/src"] {
+    for crate_dir in ["shared/crates/corpus-index/src", "corpus-engine/src"] {
         walk_doors(&root.join(crate_dir), &mut out);
     }
     out

@@ -922,7 +922,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
 /// the receiving peer can actually resolve.
 ///
 /// `explicit_model_id` (`peer_inference.rs:2028`) and `build_request`
-/// (`oicp-client/src/lib.rs:239`) disagree about what "unnamed" means.
+/// (`shared/crates/oicp-client/src/lib.rs:239`) disagree about what "unnamed" means.
 /// The former trims and rejects empty, so `None`, `Some("")` and
 /// `Some("  ")` all fall through to the ranked path. The latter matches
 /// only on `is_none()`, and maps that case to the peer provider's own

@@ -71,7 +71,7 @@ capabilities and interact through three shapes — calls, jobs, and sessions.**
 | Noun | Contract | Existing instance |
 |---|---|---|
 | **Claim** | What a member advertises it can do: a typed capability descriptor plus live load/health observations. Additive; absence of a claim is a veto, never a default. | OICP manifests (`/oicp/v1/capabilities`), hardcoded to inference vocabulary |
-| **Selector** | Scored choice among claimants for a given need, with a glassbox decision log. Local wins ties; fallback to local on any error. | `oicp-types/src/scoring.rs` + `sovereign-mesh/src/peer_inference.rs` (`MeshInferenceProvider`), keyed on `InferenceRequirements` |
+| **Selector** | Scored choice among claimants for a given need, with a glassbox decision log. Local wins ties; fallback to local on any error. | `shared/crates/oicp-types/src/scoring.rs` + `sovereign-mesh/src/peer_inference.rs` (`MeshInferenceProvider`), keyed on `InferenceRequirements` |
 
 ### Work plane — three interaction shapes, not one
 

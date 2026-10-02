@@ -26,7 +26,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-4-the_bound_is_a_wait_bound_not_a_ban_on_s"
 requirement = "GR-4"
-target = "serving-policy-core/src/fair_sched.rs"
+target = "shared/crates/serving-policy-core/src/fair_sched.rs"
 find = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        let slots = (slots.max(1)) as u64;\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms).saturating_sub(in_flight_elapsed_ms)\n    }"
 replace = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        // Violation of GR-4: Using a constant bound instead of deriving from retrieved set\n        const BOUND: u64 = 30_000;\n        if in_flight_elapsed_ms < BOUND {\n            return 1; \n        }\n        let slots = (slots.max(1)) as u64;\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms).saturating_sub(in_flight_elapsed_ms)\n    }"
 mustFail = ["the_bound_is_a_wait_bound_not_a_ban_on_slow_turns"]
@@ -116,7 +116,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-11-a_citation_carries_the_custody_of_what_i"
 requirement = "GR-11"
-target = "kernel-types/src/answer.rs"
+target = "shared/crates/kernel-types/src/answer.rs"
 find = "    pub fn pointing_into<S>(seal: &S, quote: impl Into<String>) -> Result<Citation, Refused>"
 replace = "    pub fn pointing_into<S>(seal: &S, quote: impl Into<String>) -> Result<Citation, Refused> {\n        // Mutation: Ignore the seal's grain information when creating the citation.\n        // This violates GR-11 because the released citation will not carry\n        // structural granularity (grain) from its source at creation time,\n        // causing `c.source().grain` to be default/empty rather than matching Grain::Leaf.\n        let _ = seal;\n        Citation::new(quote.into(), Default::default())\n    }"
 mustFail = ["a_citation_carries_the_custody_of_what_it_quotes"]
@@ -536,7 +536,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-45-full_pipeline_provenance_persists_across"
 requirement = "GR-45"
-target = "corpus-engine-scip/src/scip_graph.rs"
+target = "shared/crates/corpus-engine-scip/src/scip_graph.rs"
 find = "        // Record a fresh export so tests start with no staleness.\n        conn.execute(\n            \"INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)\",\n            params![chrono::Utc::now().to_rfc3339()],\n        )\n        .ok();"
 replace = ""
 mustFail = ["full_pipeline_provenance_persists_across_store_roundtrip"]

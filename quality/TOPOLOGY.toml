@@ -170,7 +170,7 @@ name          = "scip-graph"
 path          = "<root>/indexes/<corpus>/scip_graph.db"
 capability    = "scip-writer"
 writers_today = ["daemon-reindexer", "cli"]
-today         = '''MATCHES — flock on .rebuild.lock, staging write, rename over (corpus-engine-scip/src/scip_graph.rs:2190-2245). The one store that already does this, and the template for the rest.'''
+today         = '''MATCHES — flock on .rebuild.lock, staging write, rename over (shared/crates/corpus-engine-scip/src/scip_graph.rs:2190-2245). The one store that already does this, and the template for the rest.'''
 
 [[store]]
 name          = "enrichment"

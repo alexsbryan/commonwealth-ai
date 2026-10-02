@@ -150,7 +150,7 @@ ENV CMAKE_CUDA_COMPILER_LAUNCHER=sccache
 
 # Build context = commonwealth-ai/ workspace root. Post-monorepo (May
 # 2026) the single workspace Cargo.toml + Cargo.lock live here; each
-# of corpus-engine/, oicp-types/, commonwealth/, sovereign/ contains
+# of corpus-engine/, shared/crates/oicp-types/, commonwealth/, sovereign/ contains
 # workspace-member crates referenced by path from the root manifest.
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
@@ -172,16 +172,16 @@ COPY corpus-engine/       ./corpus-engine/
 #   print(sorted({p.split('/')[0] for p in re.findall(chr(34)+'([^'+chr(34)+']+)'+chr(34), \
 #   re.search(r'members\s*=\s*\[(.*?)\]',t,re.S).group(1))}))"
 # against the COPY targets below.
-COPY corpus-engine-scip/        ./corpus-engine-scip/
+COPY shared/crates/corpus-engine-scip/        ./shared/crates/corpus-engine-scip/
 COPY corpus-engine-atos/        ./corpus-engine-atos/
 COPY corpus-engine-notes/       ./corpus-engine-notes/
 COPY corpus-engine-archaeology/ ./corpus-engine-archaeology/
-COPY corpus-engine-yield/       ./corpus-engine-yield/
+COPY shared/crates/corpus-engine-yield/       ./shared/crates/corpus-engine-yield/
 COPY corpus-engine-watchers/    ./corpus-engine-watchers/
-COPY corpus-engine-sections/    ./corpus-engine-sections/
-COPY kernel-types/        ./kernel-types/
-COPY oicp-types/          ./oicp-types/
-COPY oicp-client/         ./oicp-client/
+COPY shared/crates/corpus-engine-sections/    ./shared/crates/corpus-engine-sections/
+COPY shared/crates/kernel-types/        ./shared/crates/kernel-types/
+COPY shared/crates/oicp-types/          ./shared/crates/oicp-types/
+COPY shared/crates/oicp-client/         ./shared/crates/oicp-client/
 COPY studio/crates/       ./studio/crates/
 COPY quality/arch-layers/ ./quality/arch-layers/
 # [patch.crates-io] in the root manifest points llama-cpp-4, llama-cpp-sys-4

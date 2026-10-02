@@ -50,17 +50,20 @@ use crate::common;
 
 /// The files ALLOWED to read the wall clock, because they are the deciders.
 const DECIDERS: &[&str] = &[
-    "sovereign/crates/sovereign-time/src/lib.rs",
+    "shared/crates/sovereign-time/src/lib.rs",
     "sovereign/crates/sovereign-core/src/time.rs",
-    "corpus-engine-yield/src/time.rs",
+    "shared/crates/corpus-engine-yield/src/time.rs",
     "commonwealth/crates/commonwealth-core/src/clock.rs",
 ];
 
 /// Which decider a new site should reach for, named by where the site lives.
 fn decider_for(rel: &str) -> &'static str {
-    if rel.starts_with("corpus-engine") {
+    // Keyed by the crate's own dir name, which the top-level move left as it
+    // was: a corpus-engine crate sits under shared/, ingest/ or code/ now.
+    let in_crate = |prefix: &str| rel.split('/').any(|seg| seg.starts_with(prefix));
+    if in_crate("corpus-engine") {
         "corpus_engine_yield::time::{unix_now, unix_now_u64, unix_millis}"
-    } else if rel.starts_with("commonwealth/") {
+    } else if in_crate("commonwealth-") {
         "commonwealth_core::clock::{unix_now_secs, unix_now_millis}"
     } else {
         "sovereign_core::time::{unix_now, unix_now_u64, unix_millis} \

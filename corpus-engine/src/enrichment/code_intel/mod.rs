@@ -54,7 +54,7 @@ pub mod pass;
 // the call graph via SQL over `scip_graph.db` and needs none of the tree-sitter
 // grammars this crate's `treesitter` feature pulls in. Homing it there lets the
 // chat runtime depend on the read API without dragging the parser into every
-// build. See `corpus-engine-scip/src/trace.rs`.
+// build. See `shared/crates/corpus-engine-scip/src/trace.rs`.
 
 /// Phase id carried on every code-intel prompt, so the chat client can route
 /// bulk symbol summarization to a fast/short model when the operator has

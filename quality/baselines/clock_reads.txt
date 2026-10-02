@@ -9,7 +9,7 @@
 1	commonwealth/crates/commonwealth-state/src/peer_preferences.rs
 1	corpus-engine-archaeology/src/archaeology_eval.rs
 3	corpus-engine-notes/tests/main/propagation.rs
-1	corpus-engine-scip/src/scip_graph.rs
+1	shared/crates/corpus-engine-scip/src/scip_graph.rs
 3	corpus-engine-watchers/src/projects.rs
 1	corpus-engine/src/alignment_projector.rs
 1	corpus-engine/src/engine/article_stats.rs
@@ -19,7 +19,7 @@
 1	corpus-engine/src/update/newsworthy_watcher.rs
 6	quality/xtask/src/clock_gate.rs
 1	quality/xtask/src/target_arch.rs
-2	kernel-types/src/judgement.rs
+2	shared/crates/kernel-types/src/judgement.rs
 1	oicp-conformance/src/main.rs
 1	sovereign-mobile/src-tauri/src/commands/host.rs
 1	sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner.rs
@@ -48,8 +48,8 @@
 2	sovereign/crates/sovereign-code/src/lint_status.rs
 2	sovereign/crates/sovereign-code/src/test_status.rs
 2	sovereign/crates/sovereign-compute/src/supervisor.rs
-2	sovereign/crates/sovereign-contracts/src/health.rs
-1	sovereign/crates/sovereign-contracts/src/tool_result_cache.rs
+2	shared/crates/sovereign-contracts/src/health.rs
+1	shared/crates/sovereign-contracts/src/tool_result_cache.rs
 2	sovereign/crates/sovereign-core/src/deep_research/state.rs
 3	sovereign/crates/sovereign-core/src/health_monitor.rs
 3	sovereign/crates/sovereign-core/src/query_session.rs

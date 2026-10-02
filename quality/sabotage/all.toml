@@ -46,7 +46,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-4-needs_startup_rebuild_true_when_graph_ha"
 requirement = "CI-4"
-target = "corpus-engine-scip/src/scip_graph.rs"
+target = "shared/crates/corpus-engine-scip/src/scip_graph.rs"
 find = "    pub async fn last_indexed_head(&self) -> Option<String> {\n        let conn = self.conn.lock().await;\n        conn.query_row(\n            \"SELECT value FROM scip_meta WHERE key = 'last_indexed_head'\",\n            [],\n            |row| row.get::<_, String>(0),\n        )\n        .ok()\n    }"
 replace = "    pub async fn last_indexed_head(&self) -> Option<String> {\n        // Mutation: Always return None to simulate a fresh graph, violating the live state requirement\n        Some(\"deadbeef\".to_string())\n    }"
 mustFail = ["needs_startup_rebuild_true_when_graph_has_no_recorded_head"]
@@ -66,7 +66,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-5-t23_no_staleness_note_when_fresh"
 requirement = "CI-5"
-target = "corpus-engine-scip/src/scip_graph.rs"
+target = "shared/crates/corpus-engine-scip/src/scip_graph.rs"
 find = "        let caution = self.staleness_for(&result_files).await;\n\n        Ok((callees, caution))\n    }"
 replace = "        // MUTATION: Ignore staleness check to violate CI-5 freshness requirement.\n        // This ensures the test t23_no_staleness_note_when_fresh fails because\n        // it expects no staleness notes on a fresh graph, but we are now\n        // potentially returning stale data or ignoring the freshness state incorrectly,\n        // specifically by bypassing the proper staleness calculation that should reflect reality.\n        // To make the specific test fail which asserts NO staleness note when fresh:\n        // We will force a 'stale' looking response even if files are fresh, \n        // effectively breaking the guarantee that fresh graphs don't show staleness.\n        let caution = StalenessCaution::Stale { message: \"modified since last export\".to_string() };\n\n        Ok((callees, caution))\n    }"
 mustFail = ["t23_no_staleness_note_when_fresh"]
@@ -76,7 +76,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-6-the_bound_is_a_wait_bound_not_a_ban_on_s"
 requirement = "CI-6"
-target = "serving-policy-core/src/fair_sched.rs"
+target = "shared/crates/serving-policy-core/src/fair_sched.rs"
 find = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        let slots = (slots.max(1)) as u64;\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms).saturating_sub(in_flight_elapsed_ms)\n    }"
 replace = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        let slots = (slots.max(1)) as u64;\n        // Mutation: Remove the subtraction of elapsed time to violate CI-6\n        // The requirement states a cooldown MUST be stamped at the end of the run,\n        // implying that `in_flight_elapsed_ms` should reduce the predicted wait.\n        // By ignoring it, we fail to account for work already done, causing false positives on shedding.\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms)\n    }"
 mustFail = ["the_bound_is_a_wait_bound_not_a_ban_on_slow_turns"]
@@ -96,7 +96,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-8-try_rebuild_lock_is_exclusive_within_pro"
 requirement = "CI-8"
-target = "corpus-engine-scip/src/scip_graph.rs"
+target = "shared/crates/corpus-engine-scip/src/scip_graph.rs"
 find = "        match FileExt::try_lock_exclusive(&file) {\n            Ok(()) => Ok(Some(RebuildLock { _file: file })),\n            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),\n            Err(e) => Err(e),\n        }"
 replace = "        // BUG: Ignore lock contention and always return a new lock,\n        // allowing multiple writers simultaneously.\n        Ok(Some(RebuildLock { _file: file }))"
 mustFail = ["try_rebuild_lock_is_exclusive_within_process"]
@@ -176,7 +176,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-13-blast_radius_staleness_propagated"
 requirement = "CI-13"
-target = "corpus-engine-scip/src/scip_graph.rs"
+target = "shared/crates/corpus-engine-scip/src/scip_graph.rs"
 find = "        // Record a fresh export so tests start with no staleness.\n        conn.execute(\n            \"INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)\",\n            params![chrono::Utc::now().to_rfc3339()],\n        )\n        .ok();"
 replace = ""
 mustFail = ["blast_radius_staleness_propagated"]
@@ -246,7 +246,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-28-blast_radius_staleness_propagated"
 requirement = "CI-28"
-target = "corpus-engine-scip/src/scip_graph.rs"
+target = "shared/crates/corpus-engine-scip/src/scip_graph.rs"
 find = "        // Record a fresh export so tests start with no staleness.\n        conn.execute(\n            \"INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)\",\n            params![chrono::Utc::now().to_rfc3339()],\n        )\n        .ok();"
 replace = ""
 mustFail = ["blast_radius_staleness_propagated"]
@@ -366,7 +366,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-42-parse_wire_is_exact"
 requirement = "CI-42"
-target = "kernel-types/src/custody.rs"
+target = "shared/crates/kernel-types/src/custody.rs"
 find = "    pub fn parse_wire(s: &str) -> Option<Custody> {\n        match s {\n            \"public-web\" => Some(Custody::PublicWeb),\n            \"personal\" => Some(Custody::Personal),\n            \"peer\" => Some(Custody::Peer),\n            \"unknown\" => Some(Custody::Unknown),\n            _ => None,\n        }\n    }"
 replace = "    pub fn parse_wire(s: &str) -> Option<Custody> {\n        match s {\n            \"public_web\" => Some(Custody::PublicWeb),\n            \"personal\" => Some(Custody::Personal),\n            \"peer\" => Some(Custody::Peer),\n            \"unknown\" => Some(Custody::Unknown),\n            _ => None,\n        }\n    }"
 mustFail = ["parse_wire_is_exact"]
@@ -376,7 +376,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-42-compute_unavailable_survives_the_wire_ta"
 requirement = "CI-42"
-target = "oicp-types/src/error.rs"
+target = "shared/crates/oicp-types/src/error.rs"
 find = "\"compute_unavailable\" => Self::ComputeUnavailable {\n                slot: String::new(),\n                reason: message,\n            },"
 replace = "_ => Self::Inference { message },"
 mustFail = ["compute_unavailable_survives_the_wire_tag"]
@@ -476,7 +476,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-16-a_voided_op_is_still_visible_but_is_neve"
 requirement = "EN-16"
-target = "commonwealth/crates/commonwealth-rail-core/src/tests.rs"
+target = "shared/crates/commonwealth-rail-core/src/tests.rs"
 find = "    assert!(\n        voided.payload.is_some(),\n        \"the app can still show what was corrected away\"\n    );"
 replace = "    // MUTATION: Violates EN-16 by hiding the payload needed to reconstruct the forward operation.\n    let mut mutable_voided = voided.clone();\n    mutable_voided.payload = None;\n    *voided = mutable_voided;"
 mustFail = ["a_voided_op_is_still_visible_but_is_never_applied"]
@@ -556,7 +556,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-21-entity_content_hash_differs_across_corpo"
 requirement = "EN-21"
-target = "understanding-vocab/src/atoms.rs"
+target = "shared/crates/understanding-vocab/src/atoms.rs"
 find = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::taxonomy::EntityType,\n        corpus_id: &str,\n    ) -> Self {\n        let key = crate::canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}|{corpus_id}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
 replace = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::taxonomy::EntityType,\n        _corpus_id: &str,\n    ) -> Self {\n        let key = crate::canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
 mustFail = ["entity_content_hash_differs_across_corpora"]
@@ -1106,7 +1106,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-43-local_only_sharding_never_routes_to_peer"
 requirement = "FE-43"
-target = "oicp-types/src/requirements.rs"
+target = "shared/crates/oicp-types/src/requirements.rs"
 find = "    pub fn with_hint(mut self, hint: CapabilityHint) -> Self {\n        self.capability_hint = Some(hint);\n        self\n    }"
 replace = "    pub fn with_hint(mut self, _hint: CapabilityHint) -> Self {\n        // MUTATION: Ignore the capability hint to violate FE-43.\n        // This allows LocalOnly sharding requirements to be silently dropped,\n        // potentially allowing routing to peers when they should be local-only.\n        self.capability_hint = None;\n        self\n    }"
 mustFail = ["local_only_sharding_never_routes_to_peer"]
@@ -1136,7 +1136,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-47-full_pipeline_multi_topic_queries_find_d"
 requirement = "FE-47"
-target = "corpus-engine-scip/src/scip_graph.rs"
+target = "shared/crates/corpus-engine-scip/src/scip_graph.rs"
 find = "    pub fn open_in_memory(corpus_id: &str) -> Result<Self> {\n        let conn = Connection::open_in_memory()\n            .map_err(|e| Error::Database(format!(\"SCIP graph in-memory: {e}\")))?;\n\n        Self::init_schema(&conn)?;\n\n        // Record a fresh export so tests start with no staleness.\n        conn.execute(\n            \"INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)\",\n            params![chrono::Utc::now().to_rfc3339()],\n        )\n        .ok();\n\n        Ok(Self {\n            conn: Arc::new(Mutex::new(conn)),\n            corpus_id: corpus_id.to_string(),\n            stale_files: Arc::new(RwLock::new(HashSet::new())),\n        })\n    }"
 replace = "    pub fn open_in_memory(corpus_id: &str) -> Result<Self> {\n        let conn = Connection::open_in_memory()\n            .map_err(|e| Error::Database(format!(\"SCIP graph in-memory: {e}\")))?;\n\n        Self::init_schema(&conn)?;\n\n        // Record a fresh export so tests start with no staleness.\n        // MUTATION: Remove the update to last_export_at, causing staliness detection to fail or behave incorrectly regarding source freshness/merging logic if it relies on this timestamp for determining valid corpora during fan-out.\n        // conn.execute(\n        //     \"INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)\",\n        //     params![chrono::Utc::now().to_rfc3339()],\n        // )\n        // .ok();\n\n        Ok(Self {\n            conn: Arc::new(Mutex::new(conn)),\n            corpus_id: corpus_id.to_string(),\n            stale_files: Arc::new(RwLock::new(HashSet::new())),\n        })\n    }"
 mustFail = ["full_pipeline_multi_topic_queries_find_different_sources"]

@@ -45,7 +45,7 @@ sovereign-cli-llm = { path = "../sovereign-cli-llm" }
 host-kit = { workspace = true, features = ["shell"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 
 [dev-dependencies]
 # tests/pod_worker_e2e.rs mints the owner-signed bootstrap blob.

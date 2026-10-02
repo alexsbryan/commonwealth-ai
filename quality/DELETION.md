@@ -201,7 +201,7 @@ unearned.
    `async fn foo(&self) -> Result<T>;` a `line_end` at the close of the
    enclosing `trait`. `sovereign-atos/src/lib.rs:291-360` reported twelve dead
    functions totalling ~700 LOC; they are twelve one-line signatures.
-4. **`prost` and `serde` are reflective.** `corpus-engine-scip/src/scip_proto.rs`
+4. **`prost` and `serde` are reflective.** `shared/crates/corpus-engine-scip/src/scip_proto.rs`
    is decoded by the protobuf runtime — zero refs by construction.
    `#[derive(Deserialize)]` field structs are the same.
 5. **A name appearing elsewhere proves nothing in either direction.**

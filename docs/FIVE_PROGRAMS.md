@@ -95,7 +95,7 @@ Pomerium, Cloudflare Access, Tailscale, Caddy) does OIDC or SAML and forwards
 a signed JWT carrying `sub`, `email` and `groups`. The daemon validates it
 against the issuer's JWKS and maps it to a third `Principal` arm,
 `Asserted { sub, groups }`, beside today's `LocalOwner` and `RemoteClient`
-(`sovereign/crates/sovereign-contracts/src/principal.rs`).
+(`shared/crates/sovereign-contracts/src/principal.rs`).
 
 **The loopback trap.** Loopback is an authentication signal at roughly 400
 sites across `sovereign-api` and `sovereign-daemon`, and `LocalOwner` is

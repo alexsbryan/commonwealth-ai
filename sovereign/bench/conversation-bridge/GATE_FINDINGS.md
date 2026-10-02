@@ -49,7 +49,7 @@ weakness on proper nouns, and load-bearing for reading the decomposition below.
 
 Query embeddings carry the production instruction prefix
 (`model_family.rs:302-304`); `/v1/embeddings` does not add it
-(`oicp-client/src/lib.rs:54-56`). Without it the cosines would be
+(`shared/crates/oicp-client/src/lib.rs:54-56`). Without it the cosines would be
 self-consistent but would not be what retrieval sees.
 
 ## Headline

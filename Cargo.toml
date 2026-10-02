@@ -2,18 +2,18 @@
 resolver = "2"
 members = [
     # Wire-protocol types — bottom of the dep graph.
-    "oicp-client",
+    "shared/crates/oicp-client",
     # Standalone OICP v0.4 conformance tester — minimal deps (oicp-types + HTTP),
     # liftable by any third party certifying their own host. A root sibling of
     # the two crates it certifies against (domains-2, 2026-09-11).
     "oicp-conformance",
-    "oicp-types",
+    "shared/crates/oicp-types",
     # The NEUTRAL kernel — identity + provenance owned by no product domain.
     # Minted 2026-08-20 (noun-convergence rung nc-1-kernel) because the 23
     # types all three domains spoke were 22-owned by corpus-engine. A second
     # layer-0 membrane beside oicp-types, deliberately NOT merged with it:
     # oicp is what a node advertises, this is what content IS.
-    "kernel-types",
+    "shared/crates/kernel-types",
     # Serving policy — fair-share scheduling + pipeline alias resolution.
     # Minted 2026-09-03: `fair_sched` was the ONLY reason sovereign-inference
     # and sovereign-server depended on commonwealth-core, so moving it here
@@ -24,13 +24,13 @@ members = [
     # leaf (fp-17, 2026-09-22): the daemon computes the same fair-share rule
     # the serving cluster does, and an [svrn] member may not name a [cmnwlth]
     # package crate — the shared arithmetic is the part both ends own.
-    "serving-policy-core",
+    "shared/crates/serving-policy-core",
     # The append-only journal — Op/OpId/Oplog/Journaled/SkippedLine. Minted
     # 2026-09-04: it was `corpus-engine/src/oplog.rs`, and the commonwealth
     # ring rail took a dep on corpus-engine — a 578-crate closure — to reach
     # seven references into it. Tier-0 because op ids are GOSSIPED, so the one
     # content-hash derivation must sit below everyone who writes a log.
-    "oplog",
+    "shared/crates/oplog",
     # Mesh join-key + deep-link FORMAT vocabulary (fp-9/fp-24, 2026-09-23):
     # `hash_join_key`/`validate_join_key_format` and the deep_link URL grammar
     # both ends of a mesh join must spell the same way. Deliberately NOT named
@@ -39,14 +39,14 @@ members = [
     # prefix and both crates reach this leaf. Layer 0 beside kernel-types; no
     # fs, no store — the one `SOVEREIGN_JOIN_HOST` env read rides with the
     # format that consumes it.
-    "mesh-join-vocab",
+    "shared/crates/mesh-join-vocab",
     # The host kit (FIVE_PROGRAMS §2c): what each program's binary owns about
     # itself, starting with its data-root lock. Neutrally named so
     # commonwealth-rails can take it; every path comes from the caller.
-    "host-kit",
+    "shared/crates/host-kit",
     # How a program reaches a mesh peer (phase-b pb-rails-reach): the dial
     # vocabulary commonwealth-transport re-exports, and RailsTransport.
-    "mesh-reach",
+    "shared/crates/mesh-reach",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
     "corpus-engine",
@@ -54,12 +54,12 @@ members = [
     # SCIP call graph + per-language exporter dispatch. Carved out of
     # corpus-engine 2026-05-23 to cut the rebuild blast radius for scip
     # changes from 20 crates to ~6.
-    "corpus-engine-scip",
+    "shared/crates/corpus-engine-scip",
     # The resolved-atlas READ surface, carved read-only out of corpus-engine's
     # enrichment/atlas (FIVE_PROGRAMS §12 decision 1, 2026-09-21): svrn, cmnwlth
     # and the MCP surfaces read the atlas without linking the engine that
     # writes it.
-    "corpus-engine-atlas-reader",
+    "shared/crates/corpus-engine-atlas-reader",
     # NoteStore + project_docs + notes_sync. Step 3 of the corpus-engine
     # decomposition. notes.rs (2781 LOC) cleared from the §3.1 list.
     "corpus-engine-notes",
@@ -80,7 +80,7 @@ members = [
     # YieldHook — the cooperative foreground-yield contract shared by
     # the data plane and the watchers. Tier-0 leaf extracted during
     # Step 1 (watchers) so both crates share one trait identity.
-    "corpus-engine-yield",
+    "shared/crates/corpus-engine-yield",
     # Lint/test/project-index watchers + result stores. Step 1 of the
     # decomposition — cuts watcher-edit rebuild blast from 18 crates to
     # ~6. See DECOMPOSITION.md.
@@ -90,7 +90,7 @@ members = [
     # carved into a `regex`-only leaf so the studio SectionTool can share the
     # ONE implementation by reaching DOWN instead of corpus-engine reaching up
     # into sovereign-contracts (noun-convergence rung 2).
-    "corpus-engine-sections",
+    "shared/crates/corpus-engine-sections",
     # The bundled recipe definitions as data (five-programs-52): the package is
     # rooted at the sovereign-recipes/ directory, which keeps its name.
     "sovereign-recipes",
@@ -98,13 +98,13 @@ members = [
     # lookup_key) — a serde + kernel-types leaf carved out 2026-09-03 so a thin
     # host can READ atlas/atoms.json without linking corpus-engine (Step 2 of
     # the enrichment-as-plugin plan).
-    "understanding-vocab",
+    "shared/crates/understanding-vocab",
     # The retrieval read-port leaf — CorpusIndex, IndexInfo, the persisted
     # settings and the search/evidence surface. Carved out of corpus-engine by
     # domains REVIEW-build-index-read-port (DE: The read-port leaf, measured
     # again) so a thin host can open an index by corpus id without linking the
     # engine that produced it.
-    "corpus-index",
+    "shared/crates/corpus-index",
     # Understanding's two carved tiers (DE Step 7, redrawn; the domains
     # campaign's rung 7). `understanding-atlas` is the pure arithmetic over the
     # published language and `understanding-host` the ports and the knot; both
@@ -119,11 +119,11 @@ members = [
     "corpus-mcp",
 
     # Sovereign — local agent runtime + CLI + desktop + server.
-    "sovereign/crates/sovereign-contracts",
+    "shared/crates/sovereign-contracts",
     "sovereign/crates/sovereign-core",
     "sovereign/crates/sovereign-inference",
     "sovereign/crates/sovereign-store",
-    "sovereign/crates/sovereign-time",
+    "shared/crates/sovereign-time",
     "sovereign/crates/sovereign-tools",
     "sovereign/crates/sovereign-code",
     # GLiNER (ONNX) per-chunk entity extraction — carved out of sovereign-tools
@@ -148,12 +148,12 @@ members = [
     # needs sovereign-tools + sovereign-gliner, and every crate that could
     # already see both was a host binary.
     "sovereign/crates/sovereign-runtime-recipe",
-    "sovereign/crates/sovereign-turn-client",
+    "shared/crates/sovereign-turn-client",
     "studio/crates/sovereign-tools-base",
     "studio/crates/sovereign-recipe-author",
     # Workflow substrate — Step · Artifact · Runner (a typed dataflow over
     # local-model steps; the general form of corpus-ingest/enrichment/agent).
-    "studio/crates/sovereign-workflow",
+    "shared/crates/sovereign-workflow",
     # Daemon-runnable workflow host — the registry assembly + in-process runner +
     # catalog, hoisted out of the CLI so the daemon can run workflows (the living
     # trigger's prerequisite).
@@ -174,7 +174,7 @@ members = [
     # spell the same way (domains dm-daemon-api-edge (a)): the receiving route
     # lives in sovereign-daemon and the sending loop in sovereign-mesh, so the
     # shared body needs a leaf neither makes the other's dependency.
-    "sovereign/crates/sovereign-peer-wire",
+    "shared/crates/sovereign-peer-wire",
     # Supervised compute-child process boundary (DISTRIBUTED_PILOT_READINESS.md
     # P1) — child-process supervisor (extracted from sovereign-desktop) + the
     # native lossless wire + child server/entrypoint + daemon-side provider
@@ -215,7 +215,7 @@ members = [
     # was already a workspace dependency via sovereign-desktop, so this adds no
     # new third-party tree.
     "sovereign/crates/sovereign-cli",
-    "sovereign/crates/sovereign-cli-base",
+    "shared/crates/sovereign-cli-base",
     "sovereign/crates/sovereign-cli-shared",
     "sovereign/crates/sovereign-cli-dev",
     "sovereign/crates/sovereign-cli-daemon",
@@ -245,7 +245,7 @@ members = [
     # and `-rail` is the JSONL journal under `<root>/rings/<ns>/` that calls
     # it. Both came out of `commonwealth-knowledge/src/rail/`, whose lib.rs
     # now re-exports them so no consumer moved in the same commit.
-    "commonwealth/crates/commonwealth-rail-core",
+    "shared/crates/commonwealth-rail-core",
     "commonwealth/crates/commonwealth-rail",
     # The work plane on the rail (cw-lift 5c, 2026-09-09) — the WorkAct
     # vocabulary, the unit seal, the fold, the one lease predicate and the
@@ -280,7 +280,7 @@ members = [
     # layer map (quality/ARCH_LAYERS.toml). One parser shared by the xtask
     # layer-gate (Cargo-declared edges) and the code-intel arch_report
     # (SCIP-observed edges) so the two halves can't drift.
-    "workspace-hack",
+    "shared/crates/workspace-hack",
 ]
 
 [workspace.package]
@@ -350,36 +350,36 @@ cognitive_complexity = "warn"
 
 [workspace.dependencies]
 # ── Internal crates (paths are relative to the workspace root) ──────────
-oicp-client = { path = "oicp-client" }
-oicp-types = { path = "oicp-types" }
-kernel-types = { path = "kernel-types" }
+oicp-client = { path = "shared/crates/oicp-client" }
+oicp-types = { path = "shared/crates/oicp-types" }
+kernel-types = { path = "shared/crates/kernel-types" }
 serving-policy = { path = "serving-policy" }
-serving-policy-core = { path = "serving-policy-core" }
-oplog = { path = "oplog" }
-mesh-join-vocab = { path = "mesh-join-vocab" }
-host-kit = { path = "host-kit" }
-mesh-reach = { path = "mesh-reach" }
+serving-policy-core = { path = "shared/crates/serving-policy-core" }
+oplog = { path = "shared/crates/oplog" }
+mesh-join-vocab = { path = "shared/crates/mesh-join-vocab" }
+host-kit = { path = "shared/crates/host-kit" }
+mesh-reach = { path = "shared/crates/mesh-reach" }
 corpus-engine = { path = "corpus-engine" }
-corpus-engine-scip = { path = "corpus-engine-scip" }
-corpus-engine-atlas-reader = { path = "corpus-engine-atlas-reader" }
+corpus-engine-scip = { path = "shared/crates/corpus-engine-scip" }
+corpus-engine-atlas-reader = { path = "shared/crates/corpus-engine-atlas-reader" }
 corpus-engine-notes = { path = "corpus-engine-notes" }
 corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
-corpus-engine-yield = { path = "corpus-engine-yield" }
+corpus-engine-yield = { path = "shared/crates/corpus-engine-yield" }
 corpus-engine-watchers = { path = "corpus-engine-watchers" }
-corpus-engine-sections = { path = "corpus-engine-sections" }
+corpus-engine-sections = { path = "shared/crates/corpus-engine-sections" }
 corpus-engine-recipes = { path = "sovereign-recipes" }
-understanding-vocab = { path = "understanding-vocab", default-features = false }
+understanding-vocab = { path = "shared/crates/understanding-vocab", default-features = false }
 understanding-atlas = { path = "understanding-atlas" }
-corpus-index = { path = "corpus-index" }
+corpus-index = { path = "shared/crates/corpus-index" }
 code-facts = { path = "code-facts" }
 code-next-edit = { path = "code-next-edit" }
 arch-layers = { path = "quality/arch-layers" }
-sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
+sovereign-contracts = { path = "shared/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
 sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
 sovereign-scheduler = { path = "sovereign/crates/sovereign-scheduler" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
-sovereign-time = { path = "sovereign/crates/sovereign-time" }
+sovereign-time = { path = "shared/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-code = { path = "sovereign/crates/sovereign-code" }
 sovereign-studio = { path = "studio/crates/sovereign-studio" }
@@ -387,19 +387,19 @@ sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
 sovereign-enrichment-build = { path = "sovereign/crates/sovereign-enrichment-build" }
 sovereign-runtime-recipe = { path = "sovereign/crates/sovereign-runtime-recipe" }
-sovereign-turn-client = { path = "sovereign/crates/sovereign-turn-client" }
+sovereign-turn-client = { path = "shared/crates/sovereign-turn-client" }
 sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
 sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
-sovereign-workflow = { path = "studio/crates/sovereign-workflow" }
+sovereign-workflow = { path = "shared/crates/sovereign-workflow" }
 sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
-sovereign-peer-wire = { path = "sovereign/crates/sovereign-peer-wire" }
+sovereign-peer-wire = { path = "shared/crates/sovereign-peer-wire" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
 sovereign-serving-host = { path = "sovereign/crates/sovereign-serving-host" }
 sovereign-serve = { path = "sovereign/crates/sovereign-serve" }
 sovereign-service = { path = "sovereign/crates/sovereign-service" }
-sovereign-cli-base = { path = "sovereign/crates/sovereign-cli-base" }
+sovereign-cli-base = { path = "shared/crates/sovereign-cli-base" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
@@ -413,7 +413,7 @@ commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
 commonwealth-transport = { path = "commonwealth/crates/commonwealth-transport" }
 commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
 sovereign-grants = { path = "sovereign/crates/sovereign-grants" }
-commonwealth-rail-core = { path = "commonwealth/crates/commonwealth-rail-core" }
+commonwealth-rail-core = { path = "shared/crates/commonwealth-rail-core" }
 commonwealth-rail = { path = "commonwealth/crates/commonwealth-rail" }
 commonwealth-work = { path = "commonwealth/crates/commonwealth-work" }
 commonwealth-media = { path = "commonwealth/crates/commonwealth-media" }

@@ -2071,7 +2071,7 @@ impl InferenceRouter {
             //
             // NOT a substitution (§18.3): `build_request` puts
             // `request.model_id` on the wire verbatim
-            // (`oicp-client/src/lib.rs`), so the far end is asked for the SAME
+            // (`shared/crates/oicp-client/src/lib.rs`), so the far end is asked for the SAME
             // name and refuses on its own terms if it cannot serve it. The
             // privacy consequence — this hop may leave the machine — is gated
             // in `resolve_named_dispatch`, not here.

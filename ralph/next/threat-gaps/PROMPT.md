@@ -154,7 +154,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   `scripts/ralph*`, any file under `quality/campaigns/` (the five `tg-*` bars were
   pre-registered before any row ran; a clause, a floor or a goodhart line that seems wrong
   is §6, never an edit), or ANYTHING under `commonwealth/crates/commonwealth-rail/`,
-  `commonwealth/crates/commonwealth-rail-core/` or `sovereign/crates/sovereign-scheduler/`
+  `shared/crates/commonwealth-rail-core/` or `sovereign/crates/sovereign-scheduler/`
   — out of this order's Scope; a row that seems to need one is §6. `commonwealth-rails/` is the rails DAEMON,
   not that rule.
 - The posture defaults (`internal_auth`, the RPC bind, `client_tokens`), the knob names, and

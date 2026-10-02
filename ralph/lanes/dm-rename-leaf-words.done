@@ -3,7 +3,7 @@ commits: 27fc0d846 (the renames + the row correction)
 what: the two leaf types whose DT [[noun]] rows say decided:rename are renamed
   and every referrer repointed (re-exports, the routes_oicp construction, and
   the atom_detail test construction):
-    PeerDescriptor -> FederatedMeshDescriptor  (oicp-types/src/manifest.rs:316, :312)
+    PeerDescriptor -> FederatedMeshDescriptor  (shared/crates/oicp-types/src/manifest.rs:316, :312)
     PeerAtomRef    -> CrossCorpusAtomRef        (corpus-engine/src/enrichment/atlas/cross_corpus.rs:71, :63, :94, :493)
   Identifiers only, no behaviour change; serde names untouched (no container
   rename; the wire carries field names, not the type name).
