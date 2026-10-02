@@ -1,25 +1,35 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `sovereign-serve fetch-model`, spelled `svrn mesh fetch-model` through the
 //! dispatcher. Moved from sovereign-cli-mesh (phase-b-22): model transfer is
-//! serve's (phase-b-19). The mesh.json read and the direct peer dial below are
-//! residue; pb-serve-placement moves them onto cw-rails' reach door.
+//! serve's (phase-b-19). Peers come from cw-rails' roster and are reached
+//! through its reach door (pc-fetch-model-peer-discovery).
 
 use std::path::PathBuf;
 
-use sovereign_cli_base::dirs::sovereign_root;
+use mesh_reach::rails::RailsTransport;
+use mesh_reach::{PeerTransport, TrafficClass};
+use tracing::debug;
+
+use crate::rails_mesh::RailsRoster;
+
+#[cfg(test)]
+#[path = "fetch_model/tests.rs"]
+mod tests;
 
 /// `svrn mesh fetch-model <name> [--peer <peer-tailnet-addr>] [--out <dir>]`
 ///
-/// Pulls a GGUF from a mesh peer over the tailnet. Used by the
+/// Pulls a GGUF from a mesh peer. Used by the
 /// friend-onboarding flow (WS5) so a new node doesn't need R2 /
 /// S3 credentials of its own — it joins the mesh first, then
 /// pulls model files from whoever already has them.
 ///
 /// Discovery order:
 ///   1. If `--peer host:port` is given, use that directly.
-///   2. Otherwise, read the local daemon's mesh.json to find peer
-///      `addresses`, try each peer's `/internal/v1/models/list`
-///      in turn, return the first peer that advertises `<name>`.
+///   2. Otherwise, read cw-rails' roster, ask its reach door for each
+///      peer's `ModelTransfer` endpoints, try each peer's
+///      `/internal/v1/models/list` in turn, and return the first peer
+///      that advertises `<name>`. A cw-rails that gives no roster is
+///      refused by name.
 ///
 /// Destination: defaults to the parent dir of the local `[models]
 /// .primary` path (the conventional models dir). `--out <dir>`
@@ -69,28 +79,33 @@ pub(crate) async fn cmd_fetch_model(args: &[String]) -> i32 {
         i += 1;
     }
 
-    // Default dest is the dir holding `cfg.models.primary`. We
-    // read SetupConfig from disk rather than the running daemon
-    // so this command works even when the daemon's down — handy
-    // during friend-onboarding where the daemon might be in its
-    // first-boot loop.
-    let dest_dir = match out_override {
-        Some(p) => p,
-        None => match sovereign_contracts::setup_config::SetupConfig::load() {
-            Ok(cfg) => cfg
-                .models
-                .as_ref()
-                .and_then(|m| m.primary.parent())
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from(".")),
+    // The setup config names the default dest (the dir holding
+    // `cfg.models.primary`) and cw-rails' base. We read it from disk
+    // rather than the running daemon so this command works even when
+    // the daemon's down — handy during friend-onboarding where the
+    // daemon might be in its first-boot loop. Both flags given: unread.
+    let config = if out_override.is_some() && peer_override.is_some() {
+        None
+    } else {
+        match sovereign_contracts::setup_config::SetupConfig::load() {
+            Ok(cfg) => Some(cfg),
             Err(e) => {
-                eprintln!("error: could not load setup config to choose default --out dir: {e}");
+                eprintln!("error: could not load setup config to choose the default --out dir and find cw-rails: {e}");
                 eprintln!(
-                    "hint: pass --out <dir> explicitly, or run `svrn daemon --setup-only` first."
+                    "hint: pass --out <dir> and --peer <host:port> explicitly, or run `svrn daemon --setup-only` first."
                 );
                 return 1;
             }
-        },
+        }
+    };
+    let dest_dir = match out_override {
+        Some(p) => p,
+        None => config
+            .as_ref()
+            .and_then(|cfg| cfg.models.as_ref())
+            .and_then(|m| m.primary.parent())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(".")),
     };
 
     let client = match reqwest::Client::builder()
@@ -114,9 +129,16 @@ pub(crate) async fn cmd_fetch_model(args: &[String]) -> i32 {
         };
         vec![url]
     } else {
-        match collect_peer_internal_urls().await {
+        let cfg = config
+            .as_ref()
+            .expect("the setup config is read whenever --peer is absent");
+        let rails_base = sovereign_turn_client::rails_kv::resolve_rails_base(&cfg.daemon);
+        match peer_model_bases(&rails_base).await {
             Ok(urls) if urls.is_empty() => {
-                eprintln!("No mesh peers known. Run `svrn mesh join <link>` first,");
+                eprintln!(
+                    "No mesh peer reachable for model transfer through cw-rails at {rails_base}."
+                );
+                eprintln!("Run `svrn mesh join <link>` first,");
                 eprintln!("or pass --peer <host:port> to target a specific node.");
                 return 1;
             }
@@ -213,37 +235,33 @@ pub(crate) async fn cmd_fetch_model(args: &[String]) -> i32 {
     1
 }
 
-/// Discover peer internal-port URLs by reading the local daemon's
-/// persisted mesh.json. `MemberRecord.addresses` for each peer are
-/// the gossip-port endpoints (`:9742`), which is exactly what we
-/// want — the model-files routes live on the internal port.
-async fn collect_peer_internal_urls() -> std::io::Result<Vec<String>> {
-    let mesh_path = sovereign_root().join("mesh.json");
-    let bytes = std::fs::read(&mesh_path)?;
-    // Parse loosely — we only need the addresses array of each
-    // non-self member. Using serde_json::Value avoids dragging in
-    // the full Mesh deserialiser, which would force a tight
-    // coupling on the on-disk schema this command only inspects.
-    let v: serde_json::Value = serde_json::from_slice(&bytes)?;
-    let self_id = v.get("self_node_id").and_then(|x| x.as_str()).unwrap_or("");
-    let mut urls = Vec::new();
-    if let Some(members) = v
-        .get("mesh")
-        .and_then(|m| m.get("members"))
-        .and_then(|m| m.as_object())
+/// The model-file bases of every peer on cw-rails' roster ([`RailsRoster`],
+/// the one reader), each reached through cw-rails' reach door on
+/// `ModelTransfer`, the class serve's `/internal/v1/models` origin answers
+/// on (`rails_mesh::PEER_PREFIXES`). `Err` names a roster cw-rails did not
+/// give; a peer with no endpoint is named and skipped.
+async fn peer_model_bases(rails_base: &str) -> Result<Vec<String>, String> {
+    let roster = RailsRoster::new(rails_base);
+    let reading = roster.read().await?;
+    let transport = RailsTransport::new(roster.base());
+    let mut bases = Vec::new();
+    for member in reading
+        .members
+        .iter()
+        .filter(|m| m.node_id != reading.self_id)
     {
-        for (nid, member) in members {
-            if nid == self_id {
-                continue;
-            }
-            if let Some(addrs) = member.get("addresses").and_then(|a| a.as_array()) {
-                for a in addrs {
-                    if let Some(s) = a.as_str() {
-                        urls.push(format!("http://{}", s));
-                    }
-                }
-            }
+        let endpoints = transport
+            .endpoints(&member.dial, TrafficClass::ModelTransfer)
+            .await;
+        debug!(target: "serve", peer = %member.name, endpoints = endpoints.len(),
+               "fetch-model: model-transfer endpoints through cw-rails");
+        if endpoints.is_empty() {
+            println!(
+                "  · {}: cw-rails names no model-transfer endpoint",
+                member.name
+            );
         }
+        bases.extend(endpoints.into_iter().map(|ep| ep.base_url));
     }
-    Ok(urls)
+    Ok(bases)
 }
