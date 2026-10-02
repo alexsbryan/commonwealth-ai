@@ -1774,6 +1774,14 @@ purpose = "Mobile host's path to the sovereign server binary."
 replacement = "retired: the mobile host that read it was deleted (efa709871)"
 
 [[flag]]
+name = "SOVEREIGN_SUFFICIENCY_CHARS"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Chars per chunk the agentic loop's sufficiency judge read."
+replacement = "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)"
+
+[[flag]]
 name = "SOVEREIGN_SUFFICIENCY_CHUNKS"
 cluster = "removed"
 default = "no effect"

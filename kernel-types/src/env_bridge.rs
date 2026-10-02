@@ -79,6 +79,7 @@ pub const REMOVED_ENV: &[RemovedEnv] = &[
     RemovedEnv { name: "SOVEREIGN_META_BRIDGE", instead: "retired: the meta-atlas bridge boost was deleted (ac032e5bc)" },
     RemovedEnv { name: "SOVEREIGN_QUERY_DECOMP", instead: "retired: the query-decomposition retrieval step was deleted (ac032e5bc)" },
     RemovedEnv { name: "SOVEREIGN_SERVER_PATH", instead: "retired: the mobile host that read it was deleted (efa709871)" },
+    RemovedEnv { name: "SOVEREIGN_SUFFICIENCY_CHARS", instead: "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)" },
     RemovedEnv { name: "SOVEREIGN_SUFFICIENCY_CHUNKS", instead: "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)" },
     RemovedEnv { name: "SOVEREIGN_TITLE_EXPAND", instead: "retired: the title-expansion retrieval step was deleted (ac032e5bc)" },
 ];

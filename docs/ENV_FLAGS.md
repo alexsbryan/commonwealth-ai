@@ -299,6 +299,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_META_BRIDGE` | no effect | removed | Enabled the meta-atlas bridge boost in retrieval. **Instead:** retired: the meta-atlas bridge boost was deleted (ac032e5bc) |
 | `SOVEREIGN_QUERY_DECOMP` | no effect | removed | Enabled question decomposition and sub-query fan-out in retrieval. **Instead:** retired: the query-decomposition retrieval step was deleted (ac032e5bc) |
 | `SOVEREIGN_SERVER_PATH` | no effect | removed | Mobile host's path to the sovereign server binary. **Instead:** retired: the mobile host that read it was deleted (efa709871) |
+| `SOVEREIGN_SUFFICIENCY_CHARS` | no effect | removed | Chars per chunk the agentic loop's sufficiency judge read. **Instead:** retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b) |
 | `SOVEREIGN_SUFFICIENCY_CHUNKS` | no effect | removed | How many round-0 chunks the agentic loop's sufficiency judge read. **Instead:** retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b) |
 | `SOVEREIGN_TITLE_EXPAND` | no effect | removed | Enabled LLM question-to-title expansion in retrieval. **Instead:** retired: the title-expansion retrieval step was deleted (ac032e5bc) |
 
