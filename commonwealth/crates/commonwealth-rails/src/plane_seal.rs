@@ -61,23 +61,31 @@ use crate::kv::PumpOutcome;
 /// too (fp-77), re-exported at its historical path.
 pub use commonwealth_state::rail_kv::SEAL_AFTER_OWN_OPS;
 
+/// Per namespace, the last seq this pump's own seal and snapshot wrote: the
+/// seal bar counts this node's ops above it, its writes since the snapshot.
+/// Learnt only from what the pump just wrote, held by the caller across
+/// ticks; a restart starts empty and counts from the floor, so a live set
+/// over the bar costs one more seal after a restart, not one a tick. The work
+/// snapshot has no mark to read it back from (see [`snapshot_work`]).
+pub type SnapshotEnds = std::sync::Mutex<std::collections::HashMap<String, u64>>;
+
 /// One tick of the seal arms: the seal check for `mesh-measurements` and
 /// `work` over this node's rail. Only `sealed` and `snapshot_rows` are set.
-pub async fn seal_once(rail: &RingRail) -> PumpOutcome {
+pub async fn seal_once(rail: &RingRail, ends: &SnapshotEnds) -> PumpOutcome {
     let mut out = PumpOutcome::default();
-    seal_planes(rail, &mut out).await;
+    seal_planes(rail, ends, &mut out).await;
     out
 }
 
 /// The seal checks for the planes that never enter the outbox.
-async fn seal_planes(rail: &RingRail, out: &mut PumpOutcome) {
+async fn seal_planes(rail: &RingRail, ends: &SnapshotEnds, out: &mut PumpOutcome) {
     // `mesh-measurements` never enters the outbox — it is gossip-excluded, and
     // its acts are published by serve (`measurements_rail::publish`) straight onto the
     // journal. So its journal grows with nothing above draining it, and the
     // seal check has to be reached some other way. Here is that way, and the
     // constant is the same one (ARCH §10.6).
     if let Some((journal, roster)) = journal_and_roster(rail, MEASUREMENTS_NAMESPACE).await {
-        seal_if_due(rail, &journal, MEASUREMENTS_NAMESPACE, &roster, out).await;
+        seal_if_due(rail, ends, &journal, MEASUREMENTS_NAMESPACE, &roster, out).await;
     }
 
     // `work` never enters the outbox either, and for the same structural
@@ -93,7 +101,7 @@ async fn seal_planes(rail: &RingRail, out: &mut PumpOutcome) {
     // and a namespace this node cannot append to is one it must not seal. The
     // failure direction is always "do not retire" (ARCH §18.3).
     if let Some((journal, roster)) = journal_and_roster(rail, WORK_NAMESPACE).await {
-        seal_if_due(rail, &journal, WORK_NAMESPACE, &roster, out).await;
+        seal_if_due(rail, ends, &journal, WORK_NAMESPACE, &roster, out).await;
     }
 }
 
@@ -118,8 +126,15 @@ pub const MEASUREMENTS_NAMESPACE: &str = oicp_types::measurements::MEASUREMENTS_
 /// silently empty fold rather than an error.
 pub const WORK_NAMESPACE: &str = commonwealth_work::WORK_NAMESPACE;
 
-/// Seal and snapshot this namespace if this node's own history above its last
-/// seal has passed [`SEAL_AFTER_OWN_OPS`].
+/// Seal and snapshot this namespace if this node's own writes since its last
+/// snapshot have passed [`SEAL_AFTER_OWN_OPS`].
+///
+/// # Since the snapshot, not since the floor
+///
+/// The snapshot re-appends the live set above the floor, so counted from the
+/// floor a live set at or over the bar clears it by itself and every tick
+/// re-seals: the shape the KV bar had before e382391f0 (F13). The count runs
+/// above the [`SnapshotEnds`] entry, or from the floor with none.
 ///
 /// # The cheap gate is deliberate (ARCH §9.5)
 ///
@@ -134,6 +149,7 @@ pub const WORK_NAMESPACE: &str = commonwealth_work::WORK_NAMESPACE;
 /// seal.
 async fn seal_if_due(
     rail: &RingRail,
+    ends: &SnapshotEnds,
     journal: &RingJournal,
     namespace: &str,
     roster: &Roster,
@@ -149,6 +165,11 @@ async fn seal_if_due(
         return;
     }
     let mine = rail.signer().actor();
+    let end = ends
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(namespace)
+        .copied();
 
     let held = match journal.read() {
         Ok((ops, _)) => ops,
@@ -157,7 +178,10 @@ async fn seal_if_due(
             return;
         }
     };
-    let own_lines = held.iter().filter(|o| o.actor == mine).count();
+    let own_lines = held
+        .iter()
+        .filter(|o| o.actor == mine && end.is_none_or(|e| o.kind.seq > e))
+        .count();
     if own_lines < SEAL_AFTER_OWN_OPS {
         return;
     }
@@ -172,18 +196,20 @@ async fn seal_if_due(
     let floor = admission.floors.get(&mine).copied().unwrap_or(0);
     // `ops`, not `applied()`: a seal carries no payload and a voided op is
     // still a line on disk, and what this counts is how much of OUR history a
-    // prune would still be holding.
-    let own_above_floor = admission
+    // prune would still be holding. Above the floor AND the snapshot's end: a
+    // seal through the rail door moves the floor past an end this pump learnt.
+    let own_since_snapshot = admission
         .ops
         .iter()
-        .filter(|o| o.actor == mine && o.seq >= floor)
+        .filter(|o| o.actor == mine && o.seq >= floor && end.is_none_or(|e| o.seq > e))
         .count();
-    if own_above_floor < SEAL_AFTER_OWN_OPS {
+    if own_since_snapshot < SEAL_AFTER_OWN_OPS {
         debug!(
             namespace,
             own_lines,
-            own_above_floor,
+            own_since_snapshot,
             floor,
+            snapshot_end = ?end,
             threshold = SEAL_AFTER_OWN_OPS,
             "rail kv pump: the cheap line count cleared the bar and the admitted count did not"
         );
@@ -211,6 +237,11 @@ async fn seal_if_due(
         _ => None,
     };
 
+    // The seal moves the floor, so the end above is stale whatever happens
+    // next; the snapshot below sets the new one.
+    ends.lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .remove(namespace);
     let sealed = match journal.seal(rail.signer(), roster, &Ed25519Verifier) {
         Ok(s) => (s.op, s.retired),
         Err(e) => {
@@ -223,7 +254,8 @@ async fn seal_if_due(
     match &retired {
         Ok(done) => info!(
             namespace,
-            own_above_floor,
+            own_since_snapshot,
+            snapshot_end = ?end,
             removed = done.removed,
             kept = done.kept,
             "rail kv pump: sealed the daemon's own namespace"
@@ -239,7 +271,7 @@ async fn seal_if_due(
     // snapshot names it — taken from the act that was written rather than
     // re-read from a fresh admission, which would be a second answer to "what
     // did we just seal at" (ARCH §10.6).
-    out.snapshot_rows += snapshot(
+    let (rows, last) = snapshot(
         rail,
         journal,
         namespace,
@@ -248,6 +280,16 @@ async fn seal_if_due(
         live_work.as_ref(),
     )
     .await;
+    out.snapshot_rows += rows;
+    let new_end = last.unwrap_or(sealed_op.kind.seq);
+    ends.lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(namespace.to_string(), new_end);
+    debug!(
+        namespace,
+        snapshot_end = new_end,
+        "rail kv pump: the seal bar now counts this node's ops above its snapshot"
+    );
 }
 
 /// Re-append this node's live set above the floor its seal just set.
@@ -263,7 +305,7 @@ async fn snapshot(
     roster: &Roster,
     floor: u64,
     live_work: Option<&WorkProjection>,
-) -> usize {
+) -> (usize, Option<u64>) {
     // ONE decider for which vocabulary this namespace speaks (ARCH §10.6) —
     // the same selector the seal check reads, rather than a second set of
     // name comparisons that could drift from it.
@@ -279,14 +321,14 @@ async fn snapshot(
                 namespace,
                 "rail kv pump: measurements sealed; serve's reconcile loop re-appends its live set"
             );
-            0
+            (0, None)
         }
         Some(Projector::Work) => {
             snapshot_work(rail, journal, namespace, roster, floor, live_work).await
         }
         // Refused before the seal, in `seal_if_due`: a store namespace's live
         // set is cw-rails' store, and cw-rails seals it.
-        Some(Projector::Kv) => 0,
+        Some(Projector::Kv) => (0, None),
     }
 }
 
@@ -320,7 +362,9 @@ async fn snapshot(
 /// snapshot so a peer may retire every other row of that actor's, and the
 /// reconciliation it authorises is `MeshStore::apply_projection`'s — a store
 /// the work plane never touches. Appending one here would be a KV act on a
-/// work journal: one more `unreadable` on every node, claiming nothing.
+/// work journal: one more `unreadable` on every node, claiming nothing. So
+/// the seal bar learns where this snapshot ends from the seqs it returns
+/// ([`SnapshotEnds`]), not from a line on the journal.
 ///
 /// **What a seal past this point still costs**, named rather than left to be
 /// discovered: this node's own `Submit`s and its own `Complete`/`Fail` reports
@@ -336,7 +380,7 @@ async fn snapshot_work(
     roster: &Roster,
     floor: u64,
     live_work: Option<&WorkProjection>,
-) -> usize {
+) -> (usize, Option<u64>) {
     let Some(projection) = live_work else {
         // Unreachable by construction — `seal_if_due` folds exactly when
         // `projector_for` says `Work` — and loud rather than a silent zero,
@@ -347,7 +391,7 @@ async fn snapshot_work(
             "rail kv pump: no pre-seal fold was captured, so the seal retired this node's live \
              leases and nothing replaced them"
         );
-        return 0;
+        return (0, None);
     };
     let mine = rail.signer().actor();
     let mine = match ActorKey::parse(&mine) {
@@ -356,7 +400,7 @@ async fn snapshot_work(
             warn!(namespace, error = %e,
                   "rail kv pump: this node's own actor key is not one the work plane can read, so \
                    its live leases were not snapshotted");
-            return 0;
+            return (0, None);
         }
     };
     let now_ms = commonwealth_core::clock::unix_now_millis();
@@ -370,12 +414,31 @@ async fn snapshot_work(
         .filter(|a| a.kind() == WorkActKind::Offer)
         .count();
 
-    let mut appended = 0usize;
+    // One batch, so the seqs are contiguous and the last one is the snapshot's
+    // end (`SnapshotEnds`). An act that cannot be a payload is a `warn` and
+    // the rest go on, the KV snapshot's failure direction: one act that will
+    // not travel must not cost the rest of the live set the floor it was
+    // about to be lifted above (ARCH §18.3).
+    let mut rail_acts = Vec::with_capacity(acts.len());
     for act in &acts {
-        if append_work_act(rail, journal, namespace, roster, act) {
-            appended += 1;
+        match commonwealth_work::to_payload(act) {
+            Ok(payload) => rail_acts.push(RailAct::Record { payload }),
+            Err(e) => warn!(namespace, act = %act.kind(), error = %e,
+                            "rail kv pump: a live work act could not be snapshotted and is now \
+                             below the floor"),
         }
     }
+    let wanted = rail_acts.len();
+    let written = match journal.append_all(rail_acts, rail.signer(), roster, None) {
+        Ok(ops) => ops,
+        Err(e) => {
+            warn!(namespace, acts = wanted, error = %e,
+                  "rail kv pump: the live work acts could not be snapshotted and are now below \
+                   the floor");
+            Vec::new()
+        }
+    };
+    let appended = written.len();
     info!(
         namespace,
         appended,
@@ -384,39 +447,7 @@ async fn snapshot_work(
         floor,
         "rail kv pump: snapshotted this node's live leases and its offer above the new floor"
     );
-    appended
-}
-
-/// Sign one work act onto the journal, reporting whether it landed.
-///
-/// A refusal is a `warn` naming the sentence and the loop keeps going, which
-/// is the same failure direction the KV snapshot takes on a row it cannot
-/// re-append: one act that will not travel must not cost the rest of the live
-/// set the floor it was about to be lifted above (ARCH §18.3).
-fn append_work_act(
-    rail: &RingRail,
-    journal: &RingJournal,
-    namespace: &str,
-    roster: &Roster,
-    act: &WorkAct,
-) -> bool {
-    match commonwealth_work::to_payload(act).and_then(|payload| Ok(RailAct::Record { payload })) {
-        Ok(rail_act) => match journal.append(rail_act, rail.signer(), roster, None) {
-            Ok(_) => true,
-            Err(e) => {
-                warn!(namespace, act = %act.kind(), error = %e,
-                      "rail kv pump: a live work act could not be snapshotted and is now below the \
-                       floor");
-                false
-            }
-        },
-        Err(e) => {
-            warn!(namespace, act = %act.kind(), error = %e,
-                  "rail kv pump: a live work act could not be snapshotted and is now below the \
-                   floor");
-            false
-        }
-    }
+    (appended, written.last().map(|op| op.kind.seq))
 }
 
 /// The work acts this node still holds at `now_ms` — the live set a seal must

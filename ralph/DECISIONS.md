@@ -2147,6 +2147,21 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: reopen pc-partial-decline-verdict on three corrected shapes of `declines_asked_fact` (a contrast that continues the decline, a GK signpost with no value, an absence statement read anywhere in the text), with the 14 misses and the chat-ask false positive verbatim as fixtures; 4e8f9cfb1 stays. present-killer-weapon is not a fixture either way. The measure row is `[x]` at 6ce67adbc; the re-read is the split pc-partial-decline-verdict-measure-2, alone. The zero-chunk finding is filed below phase-c's cut as pc-zero-chunk-decline-verdict, not to phase-d.
 - Because: the row's proof says a miss reopens it and never re-tunes the bar; the misses and the false positive each trace to the one decider (principle 8), and the fix describes shapes rather than adding the two uncovered strings. The killer-weapon label agrees with what the prose claims of the retrieved sources; the unsignposted aside is the claim gate's to judge (principle 12). The zero-chunk verdict is a bug at a site the decider does not reach, the sibling of pc-complex-task-decline-verdict, not architecture; moving it above the cut is the operator's.
 
+**phase-c-18 · 2026-10-02 · pc-partial-decline-verdict · worker** — this commit
+- Needed: the reopened row names absent-professor-realname ("The passages do not answer: real, legal name.") as a coverage miss to be fixed by the shape the absence phrases share; the census found that text is the citation multiquote's own render, which also follows correct answers.
+- Chose: leave "answer" out of the decider's telling stems; pin both professor and present-shop-street as texts that must NOT read as declines; correct the row's premise rather than flip three full answers. 13 of the row's 14 misses are fixed.
+- Because: citation.rs:683 renders "The passages do not answer: <part>" only beside a part it grounded. In the same 4B sa reading the render follows a correct answer of the asked fact in present-shop-street ("Brett Street"), prov-mother-almshouse and present-asst-commissioner, all Grounded; covering the shape flips those three (about 7% of the 4B sa turns), past phase-c-17's own falsifier (the chat-ask rate, 1 in 24). The text cannot say which part was asked; the multiquote knew, and that is where a fix would read it.
+
+**phase-c-19 · 2026-10-02 · pc-rails-journal-linear · director** — this commit
+- Needed: the pool halted with "merge conflict merging ralph/pc-rails-journal-linear"; the main tree held the uncommitted closure of pc-partial-decline-verdict (STATE.md `[x]`, DECISIONS.md regenerated with phase-c-18), staged, with no MERGE_HEAD.
+- Chose: commit that closure (22d0bb9e1), complete the merge by hand (b25bcfac8; clean, no conflicting hunk), mark the row `[x]`, and make the pool check its done commit: a failure now halts naming the unit and git's first line, instead of surfacing at the next merge as a conflict.
+- Because: with the index committed, `git merge --no-ff ralph/pc-rails-journal-linear` applied cleanly (9 files, 737+/194-), so the only thing stopping it was the dirty index; `scripts/ralph.py` ran the done commit unchecked after each merge. The new test fails without the check on exactly the observed package ("merge conflict merging ralph/dm-b") and passes with it; the 164-test suite is green.
+
+**phase-c-20 · 2026-10-02 · pc-partial-decline-verdict-measure-2 · operator, closing on the second re-read** — this commit
+- Needed: measure-2 (b43e0e20f) read a narrower MISS: on-prem check 4 pooled 35B 8/8 (was 4/8 at 6ce67adbc, 1/3 before the row) and 4B 12/13 (10/13, 0/25); every fixture phase-c-17 named reads correctly live and the q2 trailing-caveat false positive is gone (0/40, 0/16). Two shapes remain, one each way: a hedge-then-answer full answer reads cannot_know_from_here (4B chat-ask q1, 1 of 40), and a decline whose general-knowledge caveat sits mid-text reads unverified (4B absent-paralegal-bare 3/3, unchanged from before the row). The row's rule says a miss reopens it.
+- Chose (operator, asked by the seat with both options priced: "Close, file residue"): pc-partial-decline-verdict stays [x]; measure-2 closes at b43e0e20f as the reading it is; the two shapes and the 35B decline-plus-GK Grounded label go below the cut as pc-partial-decline-residue with their transcripts as fixtures.
+- Because: a third round costs ~2.5 h (code plus a 2 h reading alone) for one false label in 40 turns and one miss that predates the row; the operator ruled the residue a cleanup, not a blocker. The seat stopped the director's resolution session (an operator STOP, 18:11Z) so it would not reopen the row against the ruling; it had already merged the readings (379e56f1e).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13764,5 +13779,35 @@ The lane branch was merged (merge pc-partial-decline-verdict-measure) and ralph/
 Falsified if: the reopened decider, judged on the same sandbox, flips a full answer to cannot_know_from_here at the chat-ask rate or worse, or the 14 fixtures pass but check 4 at 35B stays near half (then the misses are not the decider's and the row's premise is wrong again).
 
 REVIEW-AFTER: present-killer-weapon is read as the label agreeing with the prose. If the operator reads a parenthetical parametric specific as an answer the user would act on, it becomes a false-positive fixture for the reopened row.
+
+</details>
+
+## phase-c-18 · 2026-10-02 — the multiquote's "do not answer" render is not read as a decline
+
+<details><summary>reasoning, evidence, package</summary>
+
+Measured with a Python port of old and new decider over all 185 turns of the pdm reading (lane target/ralph/phase-c/proto.py; raw in the main tree's target/ralph/phase-c/pc-partial-decline-verdict-measure/phase-c/pdm/runs). With "answer" as a telling stem, eight 4B sa turns in that render read as declines: absent-professor-realname (right), present-anarchists-parlour, present-bomb-target, prov-michaelis-apostle, distract-explosion-victim (the declined part is the asked one: arguably right), and present-shop-street, prov-mother-almshouse, present-asst-commissioner (the asked fact was answered: wrong).
+
+Falsified if: a multiquote turn whose grounded part is NOT the asked fact is common enough on the next reading (pc-partial-decline-verdict-measure-2) that the professor-shaped miss outweighs the three answered ones; then the fix belongs at the multiquote, which knows its parts, not in the text decider.
+
+REVIEW-AFTER: whether the multiquote should carry which part was the question's own, so the ledger can read a declined asked part structurally (principle 10). Not this row's lift.
+
+</details>
+
+## phase-c-19 · 2026-10-02 — a failed done commit was reported as the next lane's merge conflict
+
+<details><summary>reasoning, evidence, package</summary>
+
+Evidence: `git status` at session start showed only `M  ralph/DECISIONS.md` and `M  ralph/next/phase-c/STATE.md`, both staged, matching what `_regenerate_decisions` and `queue.set_status` + `git add` leave before the `ralph: <unit> done` commit; `0838218d1 merge pc-partial-decline-verdict` was HEAD and no `ralph: pc-partial-decline-verdict done` followed it (the earlier 0b2a7bb26 is the row's first close, before it was reopened). The merge of the rails lane after committing the index went through with no conflict. Why the done commit itself failed was not recovered: no pool log on this host records git's stderr, and `scripts/commit-msg.sh` accepts the subject (rc=0, tried by hand). A concurrent git operation on the main tree (an index.lock) is the likely cause; the halt now prints it.
+
+Falsified if: a pool halt with "merge conflict" recurs while the merge applies cleanly on a clean index; then something else dirties the index between merges.
+
+</details>
+
+## phase-c-20 · 2026-10-02 — the decline verdict closes on its second re-read; the residue is cleanup
+
+<details><summary>reasoning, evidence, package</summary>
+
+Causes, from b43e0e20f's findings: `pivot_answers`' value test (a fresh number or a capitalised mid-sentence word) misses a lowercase or code-span answer after " but " (sovereign-core runtime/grounding/decline.rs); `strip_gk_caveat` (repair.rs:58) keeps only the text after a mid-text "from general knowledge:", so `declines_asked_fact` (decline.rs:155) never sees the opening decline. Fixtures, kept in the main tree: target/ralph/phase-c/pc-partial-decline-verdict-measure-2/phase-c/pdm/runs/4b-chatask-r3-q1-warmup.txt (answers) and .../runs/4b-firm-r1.transcripts.jsonl (declines). The 4B gk_rescue "1945-06-23" release to a conference-room question (1 of 3) is pd-anchor-unenriched's case.
 
 </details>

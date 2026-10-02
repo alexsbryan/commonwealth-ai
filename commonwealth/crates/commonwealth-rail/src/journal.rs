@@ -14,12 +14,77 @@ use std::time::{SystemTime, UNIX_EPOCH};
 ///
 /// The `Mutex` is the single-writer rule the journal format needs: `O_APPEND`
 /// makes one `write(2)` atomic, and this makes sure there is one. It is also
-/// what makes the next sequence number safe to compute — read the log, take
+/// what makes the next sequence number safe to compute — fold the log, take
 /// the highest, add one — with no window for two appends to pick the same one.
 pub struct RingJournal {
     namespace: String,
     dir: PathBuf,
-    log: Mutex<Oplog<SignedOp>>,
+    log: Mutex<Writer>,
+}
+
+/// The log, and what the two write doors need to know about it.
+struct Writer {
+    oplog: Oplog<SignedOp>,
+    held: Held,
+}
+
+/// The two facts [`RingJournal::append_all`] and [`RingJournal::ingest_all`]
+/// read off the log: each actor's next seq and the ids already held.
+///
+/// Folded from the file and caught up from its tail before each write
+/// ([`Oplog::read_since`]), so a write costs the lines appended since the last
+/// one rather than the whole log: re-reading it per write made the kv drain
+/// cost rows x log lines a tick, and a door write grow with the journal
+/// (pc-rails-journal-linear). The file stays the source of truth: lines
+/// another process appended are in the tail, and a file renamed over the path
+/// (a compaction, ours or theirs) restarts the fold from the top.
+#[derive(Default)]
+struct Held {
+    cursor: oplog::Cursor,
+    next_seq: std::collections::HashMap<String, u64>,
+    ids: std::collections::HashSet<OpId>,
+}
+
+impl Held {
+    /// Fold in whatever the log gained since the last call.
+    fn catch_up(&mut self, oplog: &Oplog<SignedOp>, namespace: &str) -> Result<(), RailError> {
+        let tail = oplog
+            .read_since(self.cursor)
+            .map_err(|e| RailError::Io(e.to_string()))?;
+        if tail.restarted {
+            self.next_seq.clear();
+            self.ids.clear();
+        }
+        for op in &tail.ops {
+            let next = self.next_seq.entry(op.actor.clone()).or_insert(0);
+            *next = (*next).max(op.kind.seq + 1);
+            self.ids.insert(op.id.clone());
+        }
+        tracing::debug!(
+            namespace,
+            folded = tail.ops.len(),
+            restarted = tail.restarted,
+            held = self.ids.len(),
+            "ring rail: write index caught up with the log"
+        );
+        self.cursor = tail.cursor;
+        Ok(())
+    }
+
+    /// [`Self::catch_up`] past a write that already landed. A failure here
+    /// must not report the write as failed, so it voids the fold instead: the
+    /// next write re-reads the whole log, the cost before this index.
+    fn after_write(&mut self, oplog: &Oplog<SignedOp>, namespace: &str) {
+        if let Err(e) = self.catch_up(oplog, namespace) {
+            tracing::warn!(
+                namespace,
+                error = %e,
+                "ring rail: the write landed, the index could not read it back; the next write \
+                 re-reads the whole log"
+            );
+            *self = Held::default();
+        }
+    }
 }
 
 impl RingJournal {
@@ -32,7 +97,10 @@ impl RingJournal {
         let dir = ring_dir(root, namespace);
         Ok(Self {
             namespace: namespace.to_string(),
-            log: Mutex::new(Oplog::new(dir.clone())),
+            log: Mutex::new(Writer {
+                oplog: Oplog::new(dir.clone()),
+                held: Held::default(),
+            }),
             dir,
         })
     }
@@ -52,16 +120,21 @@ impl RingJournal {
         self.dir.join("roster.json")
     }
 
-    fn log(&self) -> std::sync::MutexGuard<'_, Oplog<SignedOp>> {
-        // A panic in another appender must not take the journal offline; it
-        // is on disk and re-read every time, so there is no in-memory state a
-        // poisoned lock could have left half-written.
-        self.log.lock().unwrap_or_else(|e| e.into_inner())
+    fn log(&self) -> std::sync::MutexGuard<'_, Writer> {
+        // A panic in another appender must not take the journal offline. The
+        // log is on disk; the one in-memory state, the write index, may have
+        // been left half-folded, so it starts again from the file.
+        self.log.lock().unwrap_or_else(|e| {
+            let mut writer = e.into_inner();
+            writer.held = Held::default();
+            writer
+        })
     }
 
     /// Every op on disk, plus the lines that could not be read.
     pub fn read(&self) -> Result<(Vec<Op<SignedOp>>, Vec<SkippedLine>), RailError> {
         self.log()
+            .oplog
             .read_all_with_skips()
             .map_err(|e| RailError::Io(e.to_string()))
     }
@@ -106,15 +179,13 @@ impl RingJournal {
     }
 
     /// Sign and append several acts under this node's key, in order, with
-    /// ONE read of the log and ONE write.
+    /// ONE write.
     ///
-    /// [`Self::append`] is this with one act. A batch exists because the next
-    /// sequence number is derived by reading the whole log: a snapshot that
-    /// re-appended `n` live rows one `append` at a time read the log `n`
-    /// times, O(n^2) in the live set (F13, pc-rails-reseal-loop). The seqs
-    /// are contiguous from that one read, which the writer lock makes safe
+    /// [`Self::append`] is this with one act. The next sequence number comes
+    /// from the write index ([`Held`]), which reads only the log's tail, and
+    /// the seqs are contiguous from it, which the writer lock makes safe
     /// exactly as it does for one act. The write is one `write(2)`, so the
-    /// batch lands whole or not at all.
+    /// batch lands whole or not at all, and one fsync rather than one per act.
     pub fn append_all(
         &self,
         acts: Vec<RailAct>,
@@ -143,16 +214,10 @@ impl RingJournal {
             return Ok(Vec::new());
         }
 
-        let log = self.log();
-        let (existing, _) = log
-            .read_all_with_skips()
-            .map_err(|e| RailError::Io(e.to_string()))?;
-        let first_seq = existing
-            .iter()
-            .filter(|o| o.actor == actor)
-            .map(|o| o.kind.seq)
-            .max()
-            .map_or(0, |m| m + 1);
+        let mut guard = self.log();
+        let log = &mut *guard;
+        log.held.catch_up(&log.oplog, &self.namespace)?;
+        let first_seq = log.held.next_seq.get(&actor).copied().unwrap_or(0);
 
         let ts_unix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -183,8 +248,10 @@ impl RingJournal {
                 actor.clone(),
             ));
         }
-        log.append_all(&ops)
+        log.oplog
+            .append_all(&ops)
             .map_err(|e| RailError::Io(e.to_string()))?;
+        log.held.after_write(&log.oplog, &self.namespace);
         for op in &ops {
             tracing::debug!(
                 namespace = %self.namespace,
@@ -204,11 +271,10 @@ impl RingJournal {
     /// anything wrong with it becomes a gap when [`admit`] reads it back.
     /// Doing otherwise would mean this node deciding what a peer said.
     pub fn ingest(&self, op: &Op<SignedOp>) -> Result<bool, RailError> {
-        let log = self.log();
-        let (existing, _) = log
-            .read_all_with_skips()
-            .map_err(|e| RailError::Io(e.to_string()))?;
-        if existing.iter().any(|o| o.id == op.id) {
+        let mut guard = self.log();
+        let log = &mut *guard;
+        log.held.catch_up(&log.oplog, &self.namespace)?;
+        if log.held.ids.contains(&op.id) {
             tracing::debug!(
                 namespace = %self.namespace,
                 id = %op.id,
@@ -216,7 +282,10 @@ impl RingJournal {
             );
             return Ok(false);
         }
-        log.append(op).map_err(|e| RailError::Io(e.to_string()))?;
+        log.oplog
+            .append(op)
+            .map_err(|e| RailError::Io(e.to_string()))?;
+        log.held.after_write(&log.oplog, &self.namespace);
         Ok(true)
     }
 
@@ -270,23 +339,23 @@ impl RingJournal {
     /// Append a batch of peer ops, skipping the ones already held. Returns
     /// how many were new.
     ///
-    /// One read and one append for the whole batch, not one of each per op:
-    /// a boot republish hands over the entire journal, and re-reading it per
-    /// op would make catching up quadratic in a file that only ever grows.
+    /// One append for the whole batch, and the held ids from the write index
+    /// ([`Held`]) rather than a read of the whole log: a boot republish hands
+    /// over the entire journal, and re-reading it per op or per batch would
+    /// make catching up grow with a file that only ever grows.
     pub fn ingest_all(&self, ops: &[Op<SignedOp>]) -> Result<usize, RailError> {
         if ops.is_empty() {
             return Ok(0);
         }
-        let log = self.log();
-        let (existing, _) = log
-            .read_all_with_skips()
-            .map_err(|e| RailError::Io(e.to_string()))?;
-        let mut held: std::collections::BTreeSet<&OpId> = existing.iter().map(|o| &o.id).collect();
+        let mut guard = self.log();
+        let log = &mut *guard;
+        log.held.catch_up(&log.oplog, &self.namespace)?;
+        let mut batch: std::collections::BTreeSet<&OpId> = std::collections::BTreeSet::new();
         let mut fresh: Vec<Op<SignedOp>> = Vec::new();
         for op in ops {
             // Also dedupes WITHIN the batch: a peer that sends the same op
             // twice in one body must not get two lines out of it.
-            if held.insert(&op.id) {
+            if !log.held.ids.contains(&op.id) && batch.insert(&op.id) {
                 fresh.push(op.clone());
             }
         }
@@ -298,8 +367,10 @@ impl RingJournal {
             );
             return Ok(0);
         }
-        log.append_all(&fresh)
+        log.oplog
+            .append_all(&fresh)
             .map_err(|e| RailError::Io(e.to_string()))?;
+        log.held.after_write(&log.oplog, &self.namespace);
         tracing::debug!(
             namespace = %self.namespace,
             offered = ops.len(),
@@ -418,8 +489,9 @@ impl RingJournal {
         roster: &Roster,
         verifier: &dyn RingVerifier,
     ) -> Result<Compaction, RailError> {
-        let log = self.log();
+        let mut log = self.log();
         let (ops, skipped) = log
+            .oplog
             .read_all_with_skips()
             .map_err(|e| RailError::Io(e.to_string()))?;
 
@@ -502,8 +574,12 @@ impl RingJournal {
             .filter(|g| !after.gaps.contains(g))
             .count();
 
-        log.replace_all(&kept)
+        log.oplog
+            .replace_all(&kept)
             .map_err(|e| RailError::Io(e.to_string()))?;
+        // The rename already voids the cursor; this says so without relying
+        // on the platform having inodes.
+        log.held = Held::default();
         // INFO, not debug: this is the one call in the rail that destroys
         // something, and an operator reading logs after a shrinking journal
         // needs the floors it happened under without turning debug on.
