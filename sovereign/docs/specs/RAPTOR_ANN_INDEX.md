@@ -165,7 +165,7 @@ let hits = match corpus_engine.search_raptor_summaries(corpus_id, embedding, fet
 Per house practice (E2E tests prove correctness):
 
 1. **Parity (the load-bearing test):** on the SEP corpus, `search_raptor_summaries` top-M must return the **same node set** (and same order, modulo ANN approximation) as the brute-force `list_corpus_raptor_nodes` + cosine for a battery of query embeddings. With IVF-FLAT this should be exact; assert ≥ 0.95 set-overlap @ M=8 (tolerate rare ANN reorderings).
-2. **Bench parity:** re-run `sovereign/bench/sep/summarize.toml` + `questions.toml` A/B with the index path vs the scan path — sources/judge deltas must be within noise (the index is a *speed* change, not a *quality* change). Baselines: off 85/87, late 86/92 (from the late-injection commit).
+2. **Bench parity:** re-run `bench/lanes/sep/summarize.toml` + `questions.toml` A/B with the index path vs the scan path — sources/judge deltas must be within noise (the index is a *speed* change, not a *quality* change). Baselines: off 85/87, late 86/92 (from the late-injection commit).
 3. **Unit:** `build_raptor_index` round-trips N rows; `level >= min_level` filter; dedupe-by-`conv_uuid` over-fetch; empty-corpus + missing-index → fallback path fires.
 4. **Recall gate (only if IVF-PQ is used):** measure top-8 recall of IVF-PQ vs exact on a held-out query set; require ≥ 0.9 before allowing PQ for a corpus.
 5. **Freshness:** mutate `conv_raptor_nodes` (add a node), assert the staleness check triggers a rebuild (or fallback).

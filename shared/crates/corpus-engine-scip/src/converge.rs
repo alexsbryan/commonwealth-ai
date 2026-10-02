@@ -107,7 +107,7 @@ use crate::scip_graph::{ScipRefRecord, ScipSymbolRecord};
 /// the matching rule, not the one string.
 ///
 /// `external` joined the list on 2026-08-20 for the same reason `vendor` is on
-/// it — `sovereign/bench/external/` is third-party repo checkouts, and it was
+/// it — `bench/lanes/external/` is third-party repo checkouts, and it was
 /// 68% of everything `dry_report` reported once that report started using this
 /// scope at all.
 #[derive(Debug, Clone, Serialize)]
@@ -134,7 +134,7 @@ impl Default for SourceScope {
                 "node_modules",
                 ".cargo-container",
                 "research",
-                // `sovereign/bench/external/` holds full third-party repo
+                // `bench/lanes/external/` holds full third-party repo
                 // checkouts — SWE-bench task repos, RewardBench fixtures. Same
                 // rubric as `vendor`, and measured as the single largest term
                 // in the duplication report: with the segment list as it stood
@@ -930,8 +930,8 @@ mod tests {
             "sovereign/crates/a/build.rs",
             // Third-party fixture repos vendored under the bench tree — 68% of
             // everything `dry_report` reported before this entry existed.
-            "sovereign/bench/external/swebench/repos/django/django/db/models/sql/query.py",
-            "sovereign/bench/external/rewardbench2/run.py",
+            "bench/lanes/external/swebench/repos/django/django/db/models/sql/query.py",
+            "bench/lanes/external/rewardbench2/run.py",
         ] {
             assert!(!s.admits(excluded), "must be excluded: {excluded}");
         }

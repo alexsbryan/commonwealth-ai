@@ -4,7 +4,7 @@
 > wrong doc.** This one measures decode throughput in tokens/sec. For
 > retrieval / routing / synthesis / enrichment quality, the suite is
 > `scripts/sovereign-ci-bench.sh` (start at
-> [`sovereign/bench/README.md`](../bench/README.md); read a verdict with
+> [`bench/lanes/README.md`](../../bench/lanes/README.md); read a verdict with
 > [`RUNBOOK.md`](./RUNBOOK.md) §6). This file is the top grep hit for
 > "benchmarking", which is why the pointer is here.
 

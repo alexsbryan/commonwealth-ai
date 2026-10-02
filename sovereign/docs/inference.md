@@ -369,7 +369,7 @@ Glassbox: every compaction emits a `runtime:compaction.*` tracing event
 plus a `NarrationPhase::GapCheckFired` chip (suppressed below
 `COMPACTION_CHIP_MIN_DROPPED = 3` to avoid spam on short chats).
 
-Bench: `sovereign/bench/wikipedia_learn/threads.toml#marathon_graceful`
+Bench: `bench/lanes/wikipedia_learn/threads.toml#marathon_graceful`
 is the 21-turn fixture covering Phase A (topic Q&A) → pivot → Phase B
 (second topic) → Phase C (third topic) → callbacks across all three.
 Baselines under `bench/wikipedia_learn/baselines/threads-marathon-graceful-*.json`.

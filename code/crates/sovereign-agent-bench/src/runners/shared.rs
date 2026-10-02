@@ -50,7 +50,7 @@ pub use sovereign_tdd::{EditAction, ParsedResponse, TestRunResult};
 /// — a HARD tail gate (`scripts/sovereign-ci-bench.sh:55`) — more
 /// permissive across all 15 problems in every language, mechanically
 /// raising scores against the five committed baselines in
-/// `sovereign/bench/agent-coding/baselines/ci/` without any model
+/// `bench/lanes/agent-coding/baselines/ci/` without any model
 /// improvement. That is a change to the veto deciding whether a
 /// candidate counts as an attempt at all: ARCH_PRINCIPLES §18.6, a
 /// scoring decision to be taken on its own evidence and with a

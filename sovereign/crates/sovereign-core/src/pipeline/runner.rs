@@ -70,7 +70,7 @@ pub const DRAFTER_RELATIONAL_MAX_TOKENS: usize = 240;
 /// hard set, and is 2–4× slower on the synthesis case the architecture
 /// was designed to fix — which legacy now handles cleanly without
 /// tangling. **Do NOT flip the default.** See
-/// `sovereign/bench/voice/baseline/team-pipeline-findings.md` for the
+/// `bench/lanes/voice/baseline/team-pipeline-findings.md` for the
 /// full A/B numbers, the 10-iteration Presenter tuning log, and the
 /// "what stays / what goes" inventory before deleting any pipeline code.
 pub const TEAM_PIPELINE_ENV_VAR: &str = "SOVEREIGN_TEAM_PIPELINE";
@@ -80,7 +80,7 @@ pub const TEAM_PIPELINE_ENV_VAR: &str = "SOVEREIGN_TEAM_PIPELINE";
 /// immediate. Returns `false` by default — the team pipeline was
 /// experimentally rejected on 2026-05-03; see the doc comment on
 /// [`TEAM_PIPELINE_ENV_VAR`] and
-/// `sovereign/bench/voice/baseline/team-pipeline-findings.md`.
+/// `bench/lanes/voice/baseline/team-pipeline-findings.md`.
 pub fn is_team_pipeline_enabled() -> bool {
     match std::env::var(TEAM_PIPELINE_ENV_VAR) {
         Ok(v) => matches!(

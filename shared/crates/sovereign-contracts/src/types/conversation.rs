@@ -224,7 +224,7 @@ pub struct ConversationContext {
     /// Consumed by `build_system_message` → `format_conversation_history`
     /// to prepend an "Earlier in the conversation:" block before the
     /// verbatim recent turns. Surfaced by
-    /// `sovereign/bench/wikipedia_learn` 2026-05-17 marathon thread:
+    /// `bench/lanes/wikipedia_learn` 2026-05-17 marathon thread:
     /// turn 11's callback to "Babbage's original vision" (introduced
     /// in turn 0) fails when T0 has rolled off the visible window
     /// without a compacted anchor.

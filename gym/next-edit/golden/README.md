@@ -2,7 +2,7 @@
 
 Spec: [`NEXT_EDIT_BAKEOFF.md`](../../../sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md) §2.
 Built because the `gen` bank cannot decide anything (60 cases, and the
-[Phase 0 results](../../../sovereign/bench/next-edit-bakeoff/RESULTS_PHASE0.md)
+[Phase 0 results](../../../bench/lanes/next-edit-bakeoff/RESULTS_PHASE0.md)
 quantify how badly).
 
 ## Why the existing bank could not carry a decision

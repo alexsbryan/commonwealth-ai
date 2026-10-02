@@ -4367,7 +4367,7 @@ mod fast_short_queue_bound_tests {
 /// `region_instruct` default is a plausible, well-formed, exit-0 wrong
 /// result — the next-edit bakeoff scored Instinct 0/30 exactly that
 /// way and had to publish `could-not-judge` instead of a verdict
-/// (`sovereign/bench/next-edit-bakeoff/RESULTS_PHASE0.md` §"Instinct is
+/// (`bench/lanes/next-edit-bakeoff/RESULTS_PHASE0.md` §"Instinct is
 /// unmeasured, not beaten"). A user swapping in a smaller specialist
 /// hits the same trap with no signal at all.
 fn warn_if_specialist_served_default_dialect(section: &EditSection, format: NextEditFormat) {

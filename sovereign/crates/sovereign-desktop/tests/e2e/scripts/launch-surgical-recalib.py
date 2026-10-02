@@ -13,7 +13,7 @@ import subprocess
 
 ROOT = "/Users/alexsbryan/dev/commonwealth-ai"
 CLI = ROOT + "/target/debug/sovereign-cli-llm"
-BANK = ROOT + "/sovereign/bench/chaos_monkey/secret_agent.toml"
+BANK = ROOT + "/bench/lanes/chaos_monkey/secret_agent.toml"
 OUTDIR = ROOT + "/sovereign/crates/sovereign-desktop/test-artifacts/qa-iterations"
 STAMP = "surgical-recalib-2026-07-17"
 CONSOLE = OUTDIR + f"/{STAMP}.log"

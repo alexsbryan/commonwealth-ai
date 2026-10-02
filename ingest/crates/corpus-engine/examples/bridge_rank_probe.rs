@@ -9,7 +9,7 @@
 //! > conversation `B` land in the retrieval ranking?
 //!
 //! The three-way split is what sizes the two competing investments in
-//! `sovereign/bench/conversation-bridge/README.md`:
+//! `bench/lanes/conversation-bridge/README.md`:
 //!
 //! | `rank_B` | meaning |
 //! |---|---|

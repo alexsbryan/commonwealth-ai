@@ -6,7 +6,7 @@
 //! `bare-metal` is the no-orchestration floor, `native` is the canonical
 //! tool primitives; both are read the same way as the published
 //! `mini-swe-agent` control and the `comaintainer` arm driven from
-//! `sovereign/bench/external/swebench/arms/agentic.py`. Scoring happens
+//! `bench/lanes/external/swebench/arms/agentic.py`. Scoring happens
 //! outside this binary — the seam is a unified diff per instance, so no
 //! arm can be graded on terms another arm did not face.
 //!
@@ -18,7 +18,7 @@
 //!
 //! Workdir mechanics: `context_for` owns a `TempDir`, so the checkout is
 //! cloned INTO that tempdir with `git clone --shared` against a bare
-//! cache (see `sovereign/bench/external/swebench/lib.py::ensure_bare`). Shared
+//! cache (see `bench/lanes/external/swebench/lib.py::ensure_bare`). Shared
 //! object storage keeps this cheap; the bare repo must outlive the run.
 
 use std::path::{Path, PathBuf};
@@ -125,7 +125,7 @@ pub(crate) struct SweArgs {
 impl SweArgs {
     pub(crate) fn parse(argv: &[String]) -> Result<Self, SweError> {
         let mut a = SweArgs {
-            root: PathBuf::from("sovereign/bench/external/swebench"),
+            root: PathBuf::from("bench/lanes/external/swebench"),
             agent: "native".to_string(),
             model: "commonwealth/coder".to_string(),
             limit: None,

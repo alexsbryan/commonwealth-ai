@@ -640,7 +640,7 @@ impl CorpusIndex {
     ///
     /// **The dedupe rule, stated because the data needs one.**
     /// `chunks.lance` `id` is NOT unique — 1 of 221 sampled ids had two rows
-    /// (`sovereign/bench/wikipedia/seed_migration`). FIRST SEEN in the scan
+    /// (`bench/lanes/wikipedia/seed_migration`). FIRST SEEN in the scan
     /// wins. An unfiltered Lance scan yields rows in row-position order, so
     /// first-seen is the LOWEST row position: the same answer on every run,
     /// where "whichever the map ended up holding" would not be. The count of

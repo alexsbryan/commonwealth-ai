@@ -309,7 +309,7 @@ pub async fn update_topic_context(
     // and a learner question that pivots topic ("Why didn't
     // relativity win the Nobel?" after a photoelectric chain) leaves
     // the topic stuck on the prior subject. Surfaced by
-    // sovereign/bench/wikipedia_learn 2026-05-17 (einstein T4
+    // bench/lanes/wikipedia_learn 2026-05-17 (einstein T4
     // regressed 0.67→0.00 with topic still "photoelectric effect").
     let recent: Vec<_> = messages
         .iter()
@@ -388,7 +388,7 @@ pub async fn update_topic_context(
     // leaving `topic = None` for every turn. With a JSON-schema
     // constraint the daemon enforces the grammar at the token level,
     // so the parse below either succeeds or surfaces a real signal.
-    // Surfaced by `sovereign/bench/wikipedia_learn` 2026-05-17
+    // Surfaced by `bench/lanes/wikipedia_learn` 2026-05-17
     // (topic anchored retrieval query saw `topic=None` on every
     // turn because the extractor silently failed).
     let schema = serde_json::json!({

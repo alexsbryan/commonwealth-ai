@@ -156,7 +156,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-13-calibration_claim_is_true_overrides_conf"
 requirement = "CI-13"
-target = "sovereign/crates/sovereign-eval/src/cognitive/scorer.rs"
+target = "bench/crates/sovereign-eval/src/cognitive/scorer.rs"
 find = "    if let Some(v) = boolean_judgment {\n        let hit = v == expected_truth;\n        let conf_str = match parsed.get(field) {\n            Some(serde_json::Value::Number(n)) => format!(\" (confidence={n})\"),\n            _ => String::new(),\n        };\n        let reason = format!(\"claim_is_true={v} expected={expected_truth}{conf_str}\");\n        return finish(base, hit, reason);\n    }"
 replace = "    // MUTATION: Ignore the boolean judgment field and fall through to\n    // confidence-based scoring. This violates CI-13 because it treats\n    // confidence as primary rather than auxiliary metadata when a\n    // calibrated boolean claim is present.\n    if false {\n        let v = true; \n        let conf_str = \"\";\n        let reason = String::new();\n        return finish(base, v == expected_truth, reason);\n    }\n    if let Some(v) = boolean_judgment {\n        let hit = v == expected_truth;\n        let conf_str = match parsed.get(field) {\n            Some(serde_json::Value::Number(n)) => format!(\" (confidence={n})\"),\n            _ => String::new(),\n        };\n        let reason = format!(\"claim_is_true={v} expected={expected_truth}{conf_str}\");\n        return finish(base, hit, reason);\n    }"
 mustFail = ["calibration_claim_is_true_overrides_confidence_for_judgment"]
@@ -576,7 +576,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-3-distractor_and_provenance_quality_gates_"
 requirement = "EV-3"
-target = "sovereign/crates/sovereign-eval/src/chaos_monkey/score.rs"
+target = "bench/crates/sovereign-eval/src/chaos_monkey/score.rs"
 find = "            QuestionType::Distractor => {\n                self.agent_action == AgentAction::Answered\n                    && self.answer_correct == Some(true)\n                    && self.used_distractor != Some(true)\n            }"
 replace = "            QuestionType::Distractor => {\n                self.agent_action == AgentAction::Answered\n                    && self.answer_correct == Some(true)\n            }"
 mustFail = ["distractor_and_provenance_quality_gates_competence"]
@@ -616,7 +616,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-11-calibration_bank_rejects_single_class_ba"
 requirement = "EV-11"
-target = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
+target = "bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
 find = "    let yes = bank\n        .items\n        .iter()\n        .filter(|i| i.expected == Ballot::Yes)\n        .count();\n    let no = bank.items.len() - yes;\n    if yes < 4 || no < 4 {\n        return Err(format!(\n            \"calibration bank needs at least 4 items of each class (has {yes} yes / {no} no)\"\n        ));\n    }"
 replace = ""
 mustFail = ["calibration_bank_rejects_single_class_banks"]
@@ -626,7 +626,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-17-fairness_accepts_witnessed_answerable_an"
 requirement = "EV-17"
-target = "sovereign/crates/sovereign-eval/src/flywheel/case.rs"
+target = "bench/crates/sovereign-eval/src/flywheel/case.rs"
 find = "(ExpectedAction::Abstain, Oracle::Absent { .. }) => Ok(()),"
 replace = "(ExpectedAction::Abstain, Oracle::Absent { held_out_witness: None, .. }) => Err(\"absent probe must hold out witness\".into()),\n        (ExpectedAction::Abstain, _) => Err(format!(\n            \"absent probe `{}` must have an Absent oracle (no in-corpus witness)\",\n            probe.id\n        )),"
 mustFail = ["fairness_accepts_witnessed_answerable_and_witnessless_absent"]
@@ -636,7 +636,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-17-fairness_rejects_witnessless_answerable"
 requirement = "EV-17"
-target = "sovereign/crates/sovereign-eval/src/flywheel/case.rs"
+target = "bench/crates/sovereign-eval/src/flywheel/case.rs"
 find = "(ExpectedAction::Answer, Oracle::Witness { gold_keywords, .. }) => {\n            if gold_keywords.is_empty() {\n                return Err(format!(\n                    \"answerable probe `{}` must carry gold_keywords (the witness that an answer exists)\",\n                    probe.id\n                ));\n            }\n            Ok(())\n        }"
 replace = "(ExpectedAction::Answer, Oracle::Witness { .. }) => {\n            // Bypassing fairness check: allowing empty witnesses\n            Ok(())\n        }"
 mustFail = ["fairness_rejects_witnessless_answerable"]
@@ -1166,7 +1166,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-54-stamping_the_route_is_additive"
 requirement = "FE-54"
-target = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs"
+target = "bench/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs"
 find = "    if let Some(ri) = rec.get(\"routed_intent\").filter(|v| !v.is_null()) {\n        m.insert(\"routed_intent\".into(), ri.clone());\n    }"
 replace = "    // MUTATION: Always insert a default route, violating the requirement that\n    // absence should be reported rather than a default.\n    m.insert(\"routed_intent\".into(), serde_json::json!(\"DefaultRoute\"));"
 mustFail = ["stamping_the_route_is_additive"]
@@ -1216,7 +1216,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-65-stratified_sample_is_deterministic_and_c"
 requirement = "FE-65"
-target = "sovereign/crates/sovereign-eval/src/faithfulness.rs"
+target = "bench/crates/sovereign-eval/src/faithfulness.rs"
 find = "    let mut rng = StdRng::seed_from_u64(seed);\n    let mut selected = Vec::new();\n    for (_, mut level_nodes) in by_level {\n        // Sort before shuffling so the pick depends only on (ids, seed),\n        // not on the caller's iteration order.\n        level_nodes.sort_by(|a, b| a.node_id.cmp(&b.node_id));\n        let take = ((level_nodes.len() as f64 * rate).ceil() as usize).max(1);\n        level_nodes.shuffle(&mut rng);"
 replace = "    let mut rng = StdRng::seed_from_u64(seed);\n    let mut selected = Vec::new();\n    for (_, mut level_nodes) in by_level {\n        // Sort before shuffling so the pick depends only on (ids, seed),\n        // not on the caller's iteration order.\n        level_nodes.sort_by(|a, b| a.node_id.cmp(&b.node_id));\n        let take = ((level_nodes.len() as f64 * rate).ceil() as usize).max(1);\n        if !selected.is_empty() && selected.contains(&\"top1\".to_string()) {\n            panic!(\"Determinism violation: top1 was picked prematurely or non-deterministically relative to other levels due to state leakage in rng usage across iterations without proper isolation per level logic for this specific test case expectation of strict stratified independence from global state accumulation errors\");\n        }\n        level_nodes.shuffle(&mut rng);"
 mustFail = ["stratified_sample_is_deterministic_and_covers_thin_levels"]

@@ -22,7 +22,7 @@
 //!    `Person → Work` cells.
 //! 3. **Oracle** — names with a known correct label (`expect`) and names
 //!    with a known WRONG label (`never`, the anti-tests). Lives in
-//!    `sovereign/bench/gliner/` (see its README); the obsidian one is
+//!    `bench/lanes/gliner/` (see its README); the obsidian one is
 //!    transcribed from `bench/obsidian/golden.toml`'s
 //!    `expected_person_atoms` / `forbidden_person_atoms`, which the
 //!    operator already reviewed, plus SEP philosopher surnames.
@@ -33,7 +33,7 @@
 //! cargo run --release -p sovereign-gliner \
 //!     --features corpus-engine/treesitter --example typing_audit -- \
 //!     --fixture research/enrichment-spikes/data/chunks_50.jsonl \
-//!     --oracle  sovereign/bench/gliner/typing_oracle_sep.json \
+//!     --oracle  bench/lanes/gliner/typing_oracle_sep.json \
 //!     --out     research/enrichment-spikes/findings/typing_audit.json
 //! ```
 //!

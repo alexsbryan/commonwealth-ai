@@ -285,7 +285,7 @@ and gated by the `recipe_schema` test. Outside the catalog: `codebase`,
 
 ### Bench harnesses
 
-Fixtures under `sovereign/bench/`; orchestrators in `sovereign-cli-bench`'s `bench_cmd/`,
+Fixtures under `bench/lanes/`; orchestrators in `sovereign-cli-bench`'s `bench_cmd/`,
 whose turn lanes ask svrn over its turn route (`bench_cmd/subject.rs`) and whose scorers
 ask svrn's `__probe` for the grounding gate's own verdicts and judge registers
 (`bench_cmd/svrn_judge.rs`); pure scorers in `sovereign-eval/`.

@@ -67,10 +67,10 @@ pub const PRECISION_BAR: f64 = 0.98;
 const FROZEN_INPUTS: &[&str] = &[
     // Tonight's longform harvest — the negatives bank, where the
     // incumbent's `failed_once` class actually has members.
-    "sovereign/bench/chaos_monkey/results/saltgrass_longneg_20260808.transcripts.jsonl",
-    "sovereign/bench/chaos_monkey/results/saltgrass_compound_longneg_20260808.transcripts.jsonl",
+    "bench/lanes/chaos_monkey/results/saltgrass_longneg_20260808.transcripts.jsonl",
+    "bench/lanes/chaos_monkey/results/saltgrass_compound_longneg_20260808.transcripts.jsonl",
     // The secret_agent gv-shadow transcript.
-    "sovereign/bench/chaos_monkey/results/secret_agent_gv_shadow_20260807.transcripts.jsonl",
+    "bench/lanes/chaos_monkey/results/secret_agent_gv_shadow_20260807.transcripts.jsonl",
 ];
 
 /// One claim, replayed. Committed as JSONL so the verdict can be audited
@@ -401,7 +401,7 @@ pub fn measure(repo_root: &Path) -> Result<(Vec<ClaimRow>, ResolverPrecisionVerd
 
 /// `svrn bench resolver-precision` — offline, frozen, no model.
 pub(crate) async fn cmd_resolver_precision(rest: &[String]) -> i32 {
-    let mut out_dir = PathBuf::from("sovereign/bench/calibration/resolver-precision");
+    let mut out_dir = PathBuf::from("bench/lanes/calibration/resolver-precision");
     let mut repo_root = PathBuf::from(".");
     let mut i = 0;
     while i < rest.len() {

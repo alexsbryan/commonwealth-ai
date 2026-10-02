@@ -94,7 +94,7 @@ TARGET_PRIMARY="$SHIPPED_PRIMARY"   # --primary <path> overrides (e.g. run the 2
 : "${SMOKE_P5_MIN_SECS:=600}"
 : "${SMOKE_P6_SECS:=900}"
 # The perf tolerance bands (PERF_TPS_DROP_PCT / PERF_TTFT_RISE_PCT) moved into
-# `sovereign/bench/quality-check/throughput.toml` as pre-registered per-stem
+# `bench/lanes/quality-check/throughput.toml` as pre-registered per-stem
 # BARS, which is the difference between a threshold written down before the
 # run and one an env var can move after it.
 : "${SAFETY_DROP_ABS:=0.05}"     # safety_number may not drop >0.05
@@ -346,7 +346,7 @@ phase1() {
 
   # The throughput lane of `svrn quality check` owns this now. It runs the
   # same `scripts/throughput_probe.py`, over four declared arms instead of
-  # two, against PRE-REGISTERED bars in `sovereign/bench/quality-check/
+  # two, against PRE-REGISTERED bars in `bench/lanes/quality-check/
   # throughput.toml` and a per-stack baseline that is committed — where the
   # comparison this block used to do read a gitignored `$BASELINE` directory
   # that does not exist on a fresh checkout, so on this host it captured on
@@ -405,7 +405,7 @@ phase3() {
   log "PHASE 3 — desktop-layer (routing-replay through the command bridge :$BRIDGE_PORT)"
   [ -n "$DRY_RUN" ] && { record "3 desktop-layer" "DRY" 0 "launch bridge + bench routing-replay vs direct"; return 0; }
   [ -x "$DESKTOP_BIN" ] || { record "3 desktop-layer" "SKIP" 0 "desktop binary missing (run --build)"; warn "  no $DESKTOP_BIN — skipping"; return 0; }
-  local t0; t0=$(date +%s) bank="sovereign/bench/routing/cells_v1.toml"
+  local t0; t0=$(date +%s) bank="bench/lanes/routing/cells_v1.toml"
 
   # Routing-replay only measures routing if the ROUTER is engaged. `naked_mode`
   # (a desktop.toml setting the resident config has ON) bypasses routing and

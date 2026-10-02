@@ -652,7 +652,7 @@ mod tests {
             // asset to match what the gym proves works.
         ];
 
-        // Walk every fixture under sovereign/bench/search-gym/fixtures/.
+        // Walk every fixture under bench/lanes/search-gym/fixtures/.
         let fixtures_dir = committed_fixtures_dir();
 
         let mut mismatches: Vec<String> = Vec::new();

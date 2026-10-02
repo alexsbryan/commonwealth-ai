@@ -193,7 +193,7 @@ front so the first run gives full gate-vs-model attribution.
    escalation.
 5. `sovereign-eval/src/chaos_monkey/score.rs` — `Partition` enum,
    `ResultRow::partition()`, histogram, new fields.
-6. Bank TOMLs under `sovereign/bench/chaos_monkey/` — `|`-forms.
+6. Bank TOMLs under `bench/lanes/chaos_monkey/` — `|`-forms.
 7. Eval determinism mode + the double-run verification harness.
 8. Docs — fold the new flags/fields into `GROUNDING_GATE_ENV.md`; link here.
 

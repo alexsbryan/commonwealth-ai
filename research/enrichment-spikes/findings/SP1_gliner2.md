@@ -86,7 +86,7 @@ load, so absolute numbers are conservative but the RATIO is fair.
 > production seam (`LabeledEntityExtractor`, so this is what
 > `chunk_entities` would store), harness
 > `sovereign-gliner/examples/typing_audit.rs`, oracle
-> `sovereign/bench/gliner/typing_oracle_sep.json` (BonJour/Sosa + 17 philosopher surnames
+> `bench/lanes/gliner/typing_oracle_sep.json` (BonJour/Sosa + 17 philosopher surnames
 > that must be `Person`), fixture = the 269 sep chunks that actually
 > mention BonJour or Sosa:
 >

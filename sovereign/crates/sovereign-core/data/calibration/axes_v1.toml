@@ -4,7 +4,7 @@
 #
 # ── What this bank is for ─────────────────────────────────────────
 #
-# The five routing banks under `sovereign/bench/routing/` score 96/96
+# The five routing banks under `bench/lanes/routing/` score 96/96
 # (100%) as of 2026-07-16. That is a statement about the banks, not
 # about the router: they were authored alongside the exemplars they
 # test, they are scored by exact match, and `run_question_routing`

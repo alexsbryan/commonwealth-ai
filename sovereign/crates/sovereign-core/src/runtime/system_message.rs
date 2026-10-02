@@ -161,7 +161,7 @@ impl Runtime {
         // literally say "I'm having trouble identifying who 'he'
         // refers to" because the synthesis prompt sees only the
         // current user message. Surfaced by
-        // sovereign/bench/wikipedia_learn 2026-05-17 smoke.
+        // bench/lanes/wikipedia_learn 2026-05-17 smoke.
         // Age-aware per-message truncation: recent turns keep more
         // fidelity (coreference + topical anchor), older turns
         // compress. See `chars_for_message_age` in runtime.rs for the

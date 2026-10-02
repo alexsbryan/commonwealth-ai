@@ -2,7 +2,7 @@
 //! `svrn voice eval` — Tier-B harness for the glass-box voice
 //! contract.
 //!
-//! Drives one or all scenarios under `sovereign/bench/voice/*.toml`
+//! Drives one or all scenarios under `bench/lanes/voice/*.toml`
 //! through the local Runtime and scores each response on:
 //!
 //!   1. **Deterministic checks** (regex + counting): length cap,

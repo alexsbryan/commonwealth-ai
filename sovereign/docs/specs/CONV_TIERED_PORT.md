@@ -252,7 +252,7 @@ The one place a new `DocumentTypeTag::Conversation` variant lands is wherever th
 
 ## Bench harness
 
-Extend `sovereign/bench/conversation/`:
+Extend `bench/lanes/conversation/`:
 
 1. Add a new bench `conv-anthropic-tiered.toml` that queries the conv corpus across question shapes:
    - **T1-class (recall):** "what did I ask Claude about [topic]?" — pure chunk-cosine recall

@@ -1116,7 +1116,7 @@ and in notes `9be87107` / `45b04cf5`):
      `prose-explanation-mac`, `period-calendar-trap`, `period-beyond-asof`
      and `arithmetic-yoy-revenue` (11 figures, all attributable).
      Artefacts committed alongside the prior runs:
-     `sovereign/bench/sec-filings/results/aapl-fabrication-postenum-scope_20260818.jsonl`
+     `bench/lanes/sec-filings/results/aapl-fabrication-postenum-scope_20260818.jsonl`
      (+ `-records_`). Compare `aapl-fabrication-n3run1_20260816.jsonl` = 9/9.
    - BOTH instruments validated before the result: `run_frozen_set.py
      --self-test` (6/6 controls, watched reading fired and not-fired) and
@@ -1935,7 +1935,7 @@ _Historical record below — the reasoning while this row was `preview`._
   bar). Quality parity is NOT required — "better than nothing" is the
   claim, and the useful-fire number only has to beat rule-lane-only.
 - **Settled by:** a golden-set arm in the next-edit bakeoff
-  (`sovereign/bench/next-edit-bakeoff/arms.toml`, the Phase 1
+  (`bench/lanes/next-edit-bakeoff/arms.toml`, the Phase 1
   `chat-primary-moe-*` arms) — those arms exist and have run on the
   gen bank; the golden set is what is missing.
 - **Known risk, now CLEARED for the daemon path (2026-08-07).**
@@ -2234,7 +2234,7 @@ than no row, because it reads as settled.
 
 Each needs one measurement before it can graduate to a real row. The instrument
 already exists and is deterministic (~9 min per arm):
-`svrn bench all --bench-root sovereign/bench --filter <bank> --prod-pipeline`.
+`svrn bench all --bench-root bench/lanes --filter <bank> --prod-pipeline`.
 
 | flag | capability | measurement owed |
 |---|---|---|
@@ -2275,7 +2275,7 @@ it is an experiment (then it should not be default-on). Resolve it with the
   this row moved here rather than sitting dark waiting.** The row is
   doing exactly what the ledger exists for: the answer came back in
   hours, not ten weeks.
-- **The numbers** (`sovereign/bench/calibration/ab/`, saltgrass dev
+- **The numbers** (`bench/lanes/calibration/ab/`, saltgrass dev
   bank, both arms carrying the reranker so only the flag differs):
 
   | bar | flag OFF | flag ON r1 | flag ON r2 | bar | verdict |
@@ -2310,7 +2310,7 @@ it is an experiment (then it should not be default-on). Resolve it with the
   its transfer cost.
 - **Companion measurement, same order:** certified-claims-skip-judge
   was also refused — resolver precision 0.7429 against a pre-pinned
-  0.98 bar (`sovereign/bench/calibration/resolver-precision/`). Per-claim
+  0.98 bar (`bench/lanes/calibration/resolver-precision/`). Per-claim
   verification is untouched.
 - **2026-08-10 — what the flag MEANS changed; the default did not.**
   Order `native-grounding-p1-desktop` executed the parity plan's P1
@@ -2497,7 +2497,7 @@ it is an experiment (then it should not be default-on). Resolve it with the
 ### Cluster-score blend — `SOVEREIGN_DOC_CLUSTER_WEIGHT` (stays 0.0)
 - **Verdict:** 2026-07-31, per this row's own settling condition — the
   T1 P0.4 knob matrix (`bench enrichment-ablate`, 3 sep banks × 3
-  reps, artifact `sovereign/bench/ablation/2026-07-31-sep-knob-matrix.json`)
+  reps, artifact `bench/lanes/ablation/2026-07-31-sep-knob-matrix.json`)
   reports the banks CANNOT separate it: Δ = 0.0000 on every bank,
   zero rep spread. In fact NO knob separated — even
   `SOVEREIGN_RAPTOR_GROUNDING=0` moved only −0.0125 on summarize,
@@ -2829,7 +2829,7 @@ it is an experiment (then it should not be default-on). Resolve it with the
   is trusted. Nothing parses this file's review-by dates (T1 B2 is the
   gate that would have caught it).
 - **Earned by:** controlled A/B through the production answer path,
-  `svrn bench enrichment-ablate sovereign/bench/obsidian/questions.toml
+  `svrn bench enrichment-ablate bench/lanes/obsidian/questions.toml
   --prefix-state --reps 2`, on `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`:
 
   | arm | reps | mean wall | fact ratio |

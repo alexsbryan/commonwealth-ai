@@ -186,7 +186,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-15-rows_without_a_coarse_label_land_under_u"
 requirement = "GR-15"
-target = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/routing_metrics.rs"
+target = "bench/crates/sovereign-cli-bench/src/eval_cmd/routing_metrics.rs"
 find = "            let layer = r\n                .coarse_intent\n                .clone()\n                .unwrap_or_else(|| UNATTRIBUTED.to_string());\n            let e = m.layers.entry(layer.clone()).or_default();\n            e.decided += 1;\n            if r.correct {\n                e.correct += 1;\n            }\n            *latency_sums.entry(layer).or_default() += r.latency_ms;"
 replace = "            // MUTATION: Fold coarse labels into the attribution check set (grounded).\n            // This violates GR-15 by treating unattributed rows as grounded/layer-specific.\n            let layer = match &r.coarse_intent {\n                Some(label) => label.clone(),\n                None => \"grounded\".to_string()\n            };\n            let e = m.layers.entry(layer.clone()).or_default();\n            e.decided += 1;\n            if r.correct {\n                e.correct += 1;\n            }\n            *latency_sums.entry(layer).or_default() += r.latency_ms;"
 mustFail = ["rows_without_a_coarse_label_land_under_unattributed"]
@@ -386,7 +386,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-27-out_of_domain_caveat_discriminates"
 requirement = "GR-27"
-target = "sovereign/crates/sovereign-eval/src/chaos_monkey/score.rs"
+target = "bench/crates/sovereign-eval/src/chaos_monkey/score.rs"
 find = "            QuestionType::AbsentOutOfDomain => {\n                self.agent_action == AgentAction::Answered && self.caveat_present == Some(true)\n            }"
 replace = "            QuestionType::AbsentOutOfDomain => {\n                // MUTATION: Ignore caveat presence, allowing ungrounded answers to pass.\n                self.agent_action == AgentAction::Answered\n            }"
 mustFail = ["out_of_domain_caveat_discriminates"]
@@ -416,7 +416,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-31-grounding_registered_nothing_from_the_ar"
 requirement = "GR-31"
-target = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/book_report.rs"
+target = "bench/crates/sovereign-cli-bench/src/bench_cmd/book_report.rs"
 find = "    let compare = opts.compare.clone();"
 replace = "    // GR-31 MUTATION: Bypass the tool registry check by forcing a comparison\n    // even when no authoritative corpus is registered. This violates the requirement\n    // that \"A surface that can install an authoritative corpus but does not register\n    // the tool... will never arm\". By proceeding with `compare` regardless of registration,\n    // we allow ungrounded answers to pass through as if they were grounded.\n    let _force_compare = true;\n    let compare = opts.compare.clone();"
 mustFail = ["grounding_registered_nothing_from_the_arm_c_citation_win"]
@@ -436,7 +436,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-33-permissive_rows_are_scored_but_excluded_"
 requirement = "GR-33"
-target = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/routing_metrics.rs"
+target = "bench/crates/sovereign-cli-bench/src/eval_cmd/routing_metrics.rs"
 find = "            // Permissive expectations (\"knowledge_query|deep_query\")\n            // are scoreable but not attributable to one class.\n            if r.expected.contains('|') {\n                m.permissive_rows += 1;\n            } else {"
 replace = "            // Permissive expectations (\"knowledge_query|deep_query\")\n            // are scoreable but not attributable to one class.\n            if r.expected.contains('|') {\n                m.permissive_rows += 1;\n                let truth = r.expected.clone();\n                let pred = r.actual_intent.clone();\n                m.per_intent.entry(truth).or_default().support += 1;\n                if truth == pred {\n                    m.per_intent.entry(truth).or_default().true_positive += 1;\n                }\n            } else {"
 mustFail = ["permissive_rows_are_scored_but_excluded_from_per_intent"]
@@ -556,7 +556,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-46-judge_prompt_handles_missing_evidence_an"
 requirement = "GR-46"
-target = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/adjudicate.rs"
+target = "bench/crates/sovereign-cli-bench/src/bench_cmd/adjudicate.rs"
 find = "    let detail = if atom.detail.is_empty() {\n        String::new()\n    } else {\n        format!(\"Detail: {}\\n\", atom.detail)\n    };"
 replace = "    let detail = if atom.detail.is_empty() {\n        \"(none recorded)\".to_string()\n    } else {\n        format!(\"Detail: {}\\n\", atom.detail)\n    };"
 mustFail = ["judge_prompt_handles_missing_evidence_and_detail"]
@@ -606,7 +606,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-51-permissive_rows_are_scored_but_excluded_"
 requirement = "GR-51"
-target = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/routing_metrics.rs"
+target = "bench/crates/sovereign-cli-bench/src/eval_cmd/routing_metrics.rs"
 find = "            if r.expected.contains('|') {\n                m.permissive_rows += 1;\n            } else {"
 replace = "            // MUTATION: Fold per-call rows into the ledger, violating GR-51\n            let truth = r.expected.clone();\n            let pred = r.actual_intent.clone();\n            m.per_intent.entry(truth.clone()).or_default().support += 1;\n            if truth == pred {\n                m.per_intent.entry(truth).or_default().true_positive += 1;\n            } else {\n                m.per_intent\n                    .entry(truth.clone())\n                    .or_default()\n                    .false_negative += 1;\n                m.per_intent.entry(pred.clone()).or_default().false_positive += 1;\n                *confusion_counts.entry((truth, pred)).or_default() += 1;\n            }\n"
 mustFail = ["permissive_rows_are_scored_but_excluded_from_per_intent"]
@@ -616,7 +616,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-52-unobserved_time_never_inflates_the_previ"
 requirement = "GR-52"
-target = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs"
+target = "bench/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs"
 find = "            match &mut g.open_ingest {\n                Some((open_label, _, last_seen)) if open_label == label => *last_seen = t,\n                Some((open_label, open_start, last_seen)) => {\n                    closed = Some((open_label.clone(), *open_start, *last_seen));\n                    g.open_ingest = Some((label.to_string(), t, t));\n                }\n                None => g.open_ingest = Some((label.to_string(), t, t)),\n            }"
 replace = "            match &mut g.open_ingest {\n                Some((open_label, _, _)) if open_label == label => {}\n                Some((open_label, open_start, _)) => {\n                    closed = Some((open_label.clone(), *open_start, 0));\n                    g.open_ingest = Some((label.to_string(), t, t));\n                }\n                None => g.open_ingest = Some((label.to_string(), t, t)),\n            }"
 mustFail = ["unobserved_time_never_inflates_the_previous_phase"]

@@ -347,7 +347,7 @@ svrn quality check                           # ~30m — the curated pre-push bre
 
 The lean tier is no longer a flag on this script. `--quick` down-sampled by
 COUNT and wrote nothing durable; `svrn quality check` declares its item subsets
-by id in `sovereign/bench/smoke.toml`, says four verdicts per lane, and persists
+by id in `bench/lanes/smoke.toml`, says four verdicts per lane, and persists
 `target/quality-check/<stamp>/summary.json`.
 
 **Read the lane KIND before you read the verdict** (gate policy at `scripts/sovereign-ci-bench.sh:10-30`):
@@ -364,11 +364,11 @@ by id in `sovereign/bench/smoke.toml`, says four verdicts per lane, and persists
 
 | Question | Doc |
 |---|---|
-| How do I run the gate, or drill into a flagged lane? | `sovereign/bench/README.md` — the canonical entry point |
+| How do I run the gate, or drill into a flagged lane? | `bench/lanes/README.md` — the canonical entry point |
 | A bench says regressed — is it real? Noise bands, baseline age, the legitimate re-mint path | `sovereign/docs/RUNBOOK.md` §6 |
-| How do I re-baseline every CI lane from scratch? | `sovereign/bench/CI_GATE_HANDOFF.md` |
-| How do I iterate a prompt or scorer without overfitting the golden? | `sovereign/bench/BENCH_LOOP.md` |
-| What does lane X actually measure? | `sovereign/bench/<lane>/README.md` (24 of 42 banks carry one) |
+| How do I re-baseline every CI lane from scratch? | `bench/lanes/CI_GATE_HANDOFF.md` |
+| How do I iterate a prompt or scorer without overfitting the golden? | `bench/lanes/BENCH_LOOP.md` |
+| What does lane X actually measure? | `bench/lanes/<lane>/README.md` (24 of 42 banks carry one) |
 
 `sovereign/docs/BENCHMARKING.md` is **throughput** (embed/decode across Metal/Vulkan/ROCm), not answer quality. It is the top grep hit for "benchmarking" and is not what you want here.
 

@@ -9,7 +9,7 @@ Prior internal experiments are treated as evidence, not folklore — every
 claim below either cites a file in this repo or an external paper.
 
 ← companions: `archive/RERANK_EXPERIMENT.md` (the dedup/atlas-weight
-ablations), `../bench/wikipedia_learn/V36_FINDINGS.md` (why filter-layer
+ablations), `bench/lanes/wikipedia_learn/V36_FINDINGS.md` (why filter-layer
 protection collapses into monoculture), `retrieval-pipeline.md` (generated
 step/knob registry), `TIERED_RETRIEVAL.md`, `EPISTEMIC_STATE.md` (the
 epistemic half of the same program — its P1 and this doc's S2/S5 are one

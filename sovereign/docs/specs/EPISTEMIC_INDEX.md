@@ -222,7 +222,7 @@ kinds, not the keyword matcher in `atlas_traversal/classifier.rs`.
 
 | Enrichment | Where it is today | What changes to fit §1 |
 |---|---|---|
-| **SEP** (`philosophy_atlas`) | per-article `sep-<slug>` atlases; `sep` chunk index has an empty atlas; ANN on 1,770 (backfilled ei-3-index; ledger `sovereign/bench/sep_atlas/`) | emit `ontology.json`; chunk→atlas id derivation moves to corpus-engine |
+| **SEP** (`philosophy_atlas`) | per-article `sep-<slug>` atlases; `sep` chunk index has an empty atlas; ANN on 1,770 (backfilled ei-3-index; ledger `bench/lanes/sep_atlas/`) | emit `ontology.json`; chunk→atlas id derivation moves to corpus-engine |
 | **Literary** (`literary_atlas`) | themes as concept entities (phase 1), claims/questions (phase 3), Configuration (phase 8); full book ready in ~4 min on the turbo path | emit `ontology.json` naming `theme`; ANN at ingest; the thematic walk in §2 |
 | **Custom** (ontology-v1) | declared shape/assertion/identity/change/derivation; built through the daemon (wessex-hoard: 20 chapters, phase 1 with `schema=true`) | add the navigation section; the build runs against a bare endpoint (§4) |
 | **RAPTOR** | `raptor_summaries.lance` + `raptor_grounding.rs`, injected as virtual chunks | **done (ei-5c, 2026-09-08)**: RAPTOR is a composed SOURCE of the one walk, not a retired one. The thematic row lists `raptor` beside `atoms` in `summary_sources`; the `raptor` source reads the corpus's own `raptor_summaries.lance` through `index::raptor`'s existing primitives, the `atoms` source reads `Summary` atoms projected by `svrn enrich summary-atoms <corpus>` (no re-embed — the stored vector becomes the seed row), and both fill one budget and one late append. The separate retrieval-time injector in sovereign-core is DELETED; RAPTOR is not. The chunk relation rides `Summary::evidence` rather than an edge, because an `Edge` is atom → atom and a chunk is not an atom; `Composes` to children is emitted. A corpus whose atlases have not been projected yet has no whole-work summaries in retrieval, and that absence is a named line at the grounding call rather than a quiet zero |
@@ -307,7 +307,7 @@ without it the entity pass is the LLM's, slower and reported as such.
 
 ## 6. Baseline — pre-registered before any code moves
 
-The bar exists before the data (§18). Lanes, in `sovereign/bench/`:
+The bar exists before the data (§18). Lanes, in `bench/lanes/`:
 
 | Lane | Kind | What it measures | Bar the work must clear |
 |---|---|---|---|

@@ -655,7 +655,7 @@ parallel ontologies that a reader has to reconcile (`ENRICHMENT.md`
   `_templates/annotated/recipe.toml:85`, `ingest/crates/corpus-engine/schema/recipe_schema_descriptor.json`,
   `sovereign/modes/recipe-author/skill.toml:282,419`,
   `recipe_author/tutorial/federalistTutorial.ts`.
-- Benches and baselines: `sovereign/bench/sep/baselines/questions/{pre-enrichment-v1_1,canonical-57-articles,latest}.json`,
+- Benches and baselines: `bench/lanes/sep/baselines/questions/{pre-enrichment-v1_1,canonical-57-articles,latest}.json`,
   `questions-prod-isolated/latest.json`; `bench/wikipedia/baselines/questions/`;
   `bench/enron/baselines/`; `bench/governance/{manifest.toml,baselines}`;
   `bench/ablation/2026-07-31-sep-knob-matrix.json`; `bench/README.md`.

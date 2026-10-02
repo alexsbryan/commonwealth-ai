@@ -13,7 +13,7 @@ the product offers — "what did I discuss with the CFO about runway in
 Q3", "how has my view on X shifted over the last six months", "have I
 ever talked about Y". This corpus is the canonical local fixture for
 bench iteration on that surface. See
-`sovereign/bench/conversation/README.md`.
+`bench/lanes/conversation/README.md`.
 
 ## Setup (desktop)
 
@@ -48,7 +48,7 @@ The corpus is **never** advertised to mesh peers, **never** uploaded,
 Bench artifacts derived from this corpus (question banks, baselines)
 must be sanitized via `corpus_engine::pii::scrub_pii` before being
 committed to the repo. The bench banks in
-`sovereign/bench/conversation/` already enforce role-token entities
+`bench/lanes/conversation/` already enforce role-token entities
 (`<cfo-acme>`, `<advisor-1>`) — the raw corpus remains the only place
 real names live.
 

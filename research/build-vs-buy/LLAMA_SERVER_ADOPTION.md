@@ -272,7 +272,7 @@ Strix Halo box (Vulkan) and on macOS (Metal). Bars, fixed before any data:
 | Embedding space | Cosine ≥ 0.999 against stored vectors, document and query side; mesh `EmbedModelInfo` identical to embedded peers | gating |
 | Stability | 24-hour soak on Strix Halo with concurrent and aborted streams: zero server hangs, zero aborts outside router children | gating |
 | Lifecycle | No orphaned sidecar after daemon SIGKILL on macOS, Linux and Windows; crash-to-serving time recorded | gating |
-| Decode and TTFT | Interleaved embedded/sidecar arms at matched host load, load recorded per reading | TRACKED only: this host's decode moves 2.8x across its load range, so wall-clock bars do not gate (`sovereign/bench/quality-check/throughput.toml` header, since 2026-09-08) |
+| Decode and TTFT | Interleaved embedded/sidecar arms at matched host load, load recorded per reading | TRACKED only: this host's decode moves 2.8x across its load range, so wall-clock bars do not gate (`bench/lanes/quality-check/throughput.toml` header, since 2026-09-08) |
 | Build and release | Cold CI and each release leg's wall time recorded before and after | TRACKED |
 
 Kill conditions: judge fidelity cannot meet its bar through probabilities alone;

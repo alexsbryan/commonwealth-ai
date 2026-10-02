@@ -33,7 +33,7 @@ pub(crate) struct Sandbox {
 
 impl Sandbox {
     /// Build a sandbox. `fixture_source` is the absolute path to the
-    /// problem's `fixtures/` directory under `sovereign/bench/agent-coding/`.
+    /// problem's `fixtures/` directory under `bench/lanes/agent-coding/`.
     /// It is checked for existence here so an authoring mistake fails
     /// at sandbox construction rather than after the agent has burned
     /// budget.

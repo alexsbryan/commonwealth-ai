@@ -157,7 +157,7 @@ COPY vendor/              ./vendor/
 # Whole recipes tree (~1.4 MB): corpus-engine/build.rs vendors it into
 # OUT_DIR and sovereign-contracts include_str!s registry.toml + schema/.
 # This used to be narrowed to wikipedia/data/ back when multi-GB bench
-# gyms lived under sovereign-recipes/; those moved to sovereign/bench in
+# gyms lived under sovereign-recipes/; those moved to bench/lanes in
 # the recipes single-source-of-truth refactor, so the subset is now both
 # unnecessary and insufficient. Matches Containerfile.cuda.
 COPY ingest/crates/sovereign-recipes/      ./ingest/crates/sovereign-recipes/
@@ -176,8 +176,8 @@ COPY sovereign/.opencode/ ./sovereign/.opencode/
 # sovereign-core include_str!s the router exemplar TOMLs + embed cache.
 COPY sovereign/router/    ./sovereign/router/
 # sovereign-cli-llm's bench_cmd include_str!s exactly this one file —
-# do NOT copy all of sovereign/bench (44 MB of gyms/eval banks).
-COPY sovereign/bench/book-report/bench.toml ./sovereign/bench/book-report/bench.toml
+# do NOT copy all of bench/lanes (44 MB of gyms/eval banks).
+COPY bench/lanes/book-report/bench.toml ./bench/lanes/book-report/bench.toml
 
 # BuildKit cache mounts persist the cargo registry, git checkouts,
 # target dir, and sccache across rebuilds. See Containerfile.cuda for

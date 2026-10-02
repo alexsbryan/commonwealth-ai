@@ -28,7 +28,7 @@
 //!   `must_decline_gracefully`) which proved brittle and gameable
 //!   by phrasing.
 //!
-//! Vocabulary documented in `sovereign/bench/search-gym/PASS_SCHEMA.md`.
+//! Vocabulary documented in `bench/lanes/search-gym/PASS_SCHEMA.md`.
 
 use serde::Deserialize;
 

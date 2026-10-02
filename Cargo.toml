@@ -222,9 +222,9 @@ members = [
     "sovereign/crates/sovereign-cli-daemon",
     "sovereign/crates/sovereign-cli-llm",
     # bench's CLI (phase-b pb-cli-llm-bench-move).
-    "sovereign/crates/sovereign-cli-bench",
+    "bench/crates/sovereign-cli-bench",
     "cmnwlth/crates/sovereign-cli-mesh",
-    "sovereign/crates/sovereign-eval",
+    "bench/crates/sovereign-eval",
     "ingest/crates/sovereign-authoring-harness",
     "ingest/crates/sovereign-pipeline",
     "code/crates/sovereign-work-atlas",
@@ -406,7 +406,7 @@ sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "ingest/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "code/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "code/crates/sovereign-agent-bench" }
-sovereign-eval = { path = "sovereign/crates/sovereign-eval" }
+sovereign-eval = { path = "bench/crates/sovereign-eval" }
 sovereign-authoring-harness = { path = "ingest/crates/sovereign-authoring-harness" }
 sovereign-hosted-ingest = { path = "sovereign/crates/sovereign-hosted-ingest" }
 sovereign-agent-tools = { path = "code/crates/sovereign-agent-tools" }

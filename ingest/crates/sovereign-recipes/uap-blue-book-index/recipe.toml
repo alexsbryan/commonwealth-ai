@@ -4,7 +4,7 @@
 # enrichment — 1-chunk records embed + index cheaply (ConvBucket::Tiny → no
 # RAPTOR/LLM). The deep typed graph lives in the sibling `uap-blue-book` (the
 # unidentified hero set). Distribution is the [prebuilt] HuggingFace download;
-# a local rebuild needs the dataprep pipeline (sovereign/bench/uap/dataprep)
+# a local rebuild needs the dataprep pipeline (bench/lanes/uap/dataprep)
 # to stage the metadata JSONL under corpora-staging.
 
 [corpus]

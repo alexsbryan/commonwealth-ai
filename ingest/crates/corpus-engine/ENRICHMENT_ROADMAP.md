@@ -877,7 +877,7 @@ Internal: `ENRICHMENT.md`, `ENRICHMENT_V2.md`, `ATLAS.md`,
 `RAPTOR_ANN_INDEX.md`, `ATLAS_STORAGE_V2.md`, `CODE_INTEL_CHAT.md`,
 `VERIFIER_V0.md`, `ENRICHMENT_V1_TO_V2_ASSESS.md`, notes store
 (esp. 1ab68562 — RAPTOR contamination + chaos A/B), committed baselines
-under `sovereign/bench/*/baselines/`.
+under `bench/lanes/*/baselines/`.
 
 External:
 - LazyGraphRAG — [Microsoft Research blog](https://www.microsoft.com/en-us/research/blog/lazygraphrag-setting-a-new-standard-for-quality-and-cost/)

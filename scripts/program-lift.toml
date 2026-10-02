@@ -80,7 +80,7 @@ binary = "debug/sovereign-daemon"
 # The CLI contract sovereign-cli-shared's `manifest_path` fixes at compile time,
 # and the bench tree sovereign-cli-llm's inner-chaos and search-gym tests load
 # their committed fixtures from (pb-distribution-svrn-lift-2).
-carry = { SOVEREIGN_CLI_CONTRACT = "sovereign/docs/cli-contract.toml", SOVEREIGN_BENCH_ROOT = "sovereign/bench" }
+carry = { SOVEREIGN_CLI_CONTRACT = "sovereign/docs/cli-contract.toml", SOVEREIGN_BENCH_ROOT = "bench/lanes" }
 # sovereign-daemon's rail tests spawn the cw-rails beside them (the cmnwlth
 # lift's), and the RUN smoke dials the serve lift's serve.
 siblings = [
@@ -130,7 +130,7 @@ binary = "debug/svrn-ingest"
 # `recipes_root`: "a third party who lifts this package carries these tests").
 # And the bench tree `svrn enrich eval`'s golden-parse tests read
 # (sovereign-pipeline enrich_cmd/eval/mod.rs `goldens_dir`).
-carry = { CORPUS_ENGINE_RECIPES_DIR = "sovereign-recipes", SOVEREIGN_BENCH_ROOT = "sovereign/bench" }
+carry = { CORPUS_ENGINE_RECIPES_DIR = "sovereign-recipes", SOVEREIGN_BENCH_ROOT = "bench/lanes" }
 # The source tree corpus-engine's source gates read (recipe_schema, the
 # enrichment_type census): the lift's own crates/, which holds each closure
 # crate by name as the repo root does. Never the monorepo (program_lift.py).
@@ -626,7 +626,7 @@ build = ["-p", "sovereign-eval", "--bin", "sovereign-eval", "-p", "sovereign-cli
 binary = "debug/sovereign-eval"
 # The banks and seed data sovereign-eval's tests read (bench_root.rs: "a
 # lifted crate must set it itself").
-carry = { SOVEREIGN_BENCH_ROOT = "sovereign/bench" }
+carry = { SOVEREIGN_BENCH_ROOT = "bench/lanes" }
 
 [lift.bench.run]
 # The evaluator's own verbs: `score` asks its LLM judge (sovereign-eval

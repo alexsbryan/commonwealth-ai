@@ -305,7 +305,7 @@ def main():
                     default=str(Path(__file__).resolve().parent.parent
                                 / "sovereign" / "bench" / "sec-filings" / "prose"),
                     help="filing prose parts (for required_quote verification); "
-                         "defaults to sovereign/bench/sec-filings/prose")
+                         "defaults to bench/lanes/sec-filings/prose")
     ap.add_argument("--records",
                     help="runner records.jsonl; a turn whose rc != 0 is REFUSED "
                          "(could-not-judge) instead of scored — an infrastructure "
@@ -352,7 +352,7 @@ def main():
               file=sys.stderr)
         print(f"  items       : {', '.join(needs_prose)}", file=sys.stderr)
         print(f"  the prereg is NOT the suspect — point --prose-dir at the "
-              f"filing text (sovereign/bench/sec-filings/prose).", file=sys.stderr)
+              f"filing text (bench/lanes/sec-filings/prose).", file=sys.stderr)
         sys.exit(5)
 
     # THE TURN MUST HAVE RUN BEFORE ITS ANSWER MEANS ANYTHING.

@@ -3966,7 +3966,7 @@ impl Runtime {
         //     topic anchors established in T0/T1 would vanish from
         //     view at T10+. Fast-slot summary preserves them as a
         //     compact preamble. Surfaced by
-        //     sovereign/bench/wikipedia_learn 2026-05-17 marathon
+        //     bench/lanes/wikipedia_learn 2026-05-17 marathon
         //     thread + the upcoming marathon_graceful bench.
         //
         //     session_id is None on this code path because

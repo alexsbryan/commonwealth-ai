@@ -74,7 +74,7 @@ sovereign bench enron run \
   --split train
 ```
 
-Results land in `sovereign/bench/enron/baselines/enron-entity-resolution/`.
+Results land in `bench/lanes/enron/baselines/enron-entity-resolution/`.
 
 ## Privacy posture
 

@@ -108,7 +108,7 @@ const SELF_ASSESSMENT_PROMPT: &str = include_str!("../assets/self_assessment_pro
 /// knowledge follow-up ("did it always work this way?") re-routes to
 /// knowledge via the exemplar bank rather than being forced anywhere.
 ///
-/// Surfaced by sovereign/bench/wikipedia_learn 2026-05-17 marathon
+/// Surfaced by bench/lanes/wikipedia_learn 2026-05-17 marathon
 /// (v9→v10).
 fn inherits_prior_knowledge_intent(message: &str, context: &ConversationContext) -> Option<Intent> {
     if crate::lessons::detect_durative(&message.to_lowercase()) {

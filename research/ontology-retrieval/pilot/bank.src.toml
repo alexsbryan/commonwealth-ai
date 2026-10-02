@@ -12,7 +12,7 @@
 # distractor) is a chaos-monkey axis about abstention, not a retrieval kind, and
 # is NOT copied.
 #
-# CONVERTED FROM `sovereign/bench/chaos_monkey/secret_agent.toml`, whose
+# CONVERTED FROM `bench/lanes/chaos_monkey/secret_agent.toml`, whose
 # `gold_keywords` become `expected_facts` unchanged. Every fact in this file is
 # a gold keyword that bank already verified against pg974.txt at authoring
 # time; the four `list-*` questions are authored here (the source bank has no
@@ -29,7 +29,7 @@
 # `answer1` because their kind is the passage count, not an answer.
 #
 # `expected_sources` is empty on every question, as in
-# `sovereign/bench/literary/thematic-bk-book-1.toml`: all 316 chunks carry one
+# `bench/lanes/literary/thematic-bk-book-1.toml`: all 316 chunks carry one
 # title, so a source score would read 1.0 for any retrieval whatsoever.
 
 [bank]

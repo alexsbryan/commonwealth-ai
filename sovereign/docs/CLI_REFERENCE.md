@@ -531,7 +531,7 @@ Throughput + correctness benchmarks for enrichment LLM tasks. Operates against t
 | `chaos-monkey run` | Score grounded honesty against a pressure bank — present, absent-adjacent, out-of-domain, distractor and trap probes |
 
 `all` and `chaos-monkey run` both take `--smoke-subset <id>`: run exactly the
-item ids `sovereign/bench/smoke.toml` declares for each selected bank under
+item ids `bench/lanes/smoke.toml` declares for each selected bank under
 that subset. Unlike `--sample-questions N` / `--limit N`, which count off the
 front of a bank and so pick a different set as the bank grows, the subset is
 declared by id and a selected bank with no row REFUSES the run (exit 2) rather
@@ -882,7 +882,7 @@ Every run prints the stack fingerprint first (primary / fast / embed model stems
 
 `quality lane <id>` runs one lane directly, printing its own named rows — the same command the runner drives per lane. The lanes live in the `sovereign-cli-llm` sibling because each drives inference, ingests a corpus or runs a judge; the runner itself touches no model. `--features dev-tools`.
 
-**`chat-ask`** is the focus lane: it ingests `docs/ARCHITECTURE_TOUR.md` from source into a per-fingerprint corpus (that ingest IS the document-ingest lane — chunk count, `corpus search` hit and readiness are asserted before a question is asked), then asks two questions three warm times each and reads each turn's own ledger through `chat ask --format json`. Rows: ingest · judge calibrated · ledger present · route · per-stage ceilings · per-stage baseline · gate outcome · both halves answered · not abstained · useful. Ceilings are pre-registered per model stem in `sovereign/bench/quality-check/chat-ask.toml`, and a stem with no table there is could-not-judge rather than a pass.
+**`chat-ask`** is the focus lane: it ingests `docs/ARCHITECTURE_TOUR.md` from source into a per-fingerprint corpus (that ingest IS the document-ingest lane — chunk count, `corpus search` hit and readiness are asserted before a question is asked), then asks two questions three warm times each and reads each turn's own ledger through `chat ask --format json`. Rows: ingest · judge calibrated · ledger present · route · per-stage ceilings · per-stage baseline · gate outcome · both halves answered · not abstained · useful. Ceilings are pre-registered per model stem in `bench/lanes/quality-check/chat-ask.toml`, and a stem with no table there is could-not-judge rather than a pass.
 
 ### `svrn deep-research`
 

@@ -14,7 +14,7 @@
 #
 # Operator setup: stage the case-metadata JSONL under
 #   ~/.svrnmesh/corpora-staging/uap-blue-book/
-# (the demo copies sovereign/bench/uap/fixtures/cases.jsonl there). The
+# (the demo copies bench/lanes/uap/fixtures/cases.jsonl there). The
 # acquirer points at the folder; the jsonl extractor walks every *.jsonl
 # inside it.
 

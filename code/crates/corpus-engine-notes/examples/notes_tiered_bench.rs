@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Bench runner for the notes_tiered T1 surface.
 //!
-//! Loads the fixture under `sovereign/bench/notes_tiered/`, opens
+//! Loads the fixture under `bench/lanes/notes_tiered/`, opens
 //! a fresh NoteStore in a temp dir, writes every fixture note,
 //! then runs each query under two paths:
 //!
@@ -20,7 +20,7 @@
 //!   cargo run --release --example notes_tiered_bench -- --no-daemon
 //!   cargo run --release --example notes_tiered_bench -- \
 //!       --daemon http://127.0.0.1:9741 \
-//!       --baseline sovereign/bench/notes_tiered/baselines/notes-tiered/latest.json
+//!       --baseline bench/lanes/notes_tiered/baselines/notes-tiered/latest.json
 //!
 //! With `--no-daemon`, T1 disables and the runner only reports the
 //! baseline path — useful for CI regression guards on FTS5
@@ -40,17 +40,11 @@ use serde::Deserialize;
 #[command(about = "T1 retrieval bench for NoteStore")]
 struct Args {
     /// Path to notes fixture TOML.
-    #[arg(
-        long,
-        default_value = "sovereign/bench/notes_tiered/fixtures/notes.toml"
-    )]
+    #[arg(long, default_value = "bench/lanes/notes_tiered/fixtures/notes.toml")]
     notes: PathBuf,
 
     /// Path to query fixture TOML.
-    #[arg(
-        long,
-        default_value = "sovereign/bench/notes_tiered/fixtures/queries.toml"
-    )]
+    #[arg(long, default_value = "bench/lanes/notes_tiered/fixtures/queries.toml")]
     queries: PathBuf,
 
     /// Daemon URL for the embed slot. Empty / --no-daemon disables T1.

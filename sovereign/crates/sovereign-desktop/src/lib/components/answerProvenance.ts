@@ -8,7 +8,7 @@
 // segment means the sentence was found VERBATIM inside one retrieved
 // passage, at a real address. It does NOT mean a judge agreed the claim
 // is true: the span resolver certifies at 0.7429 precision against the
-// incumbent judge (`sovereign/bench/calibration/resolver-precision/`),
+// incumbent judge (`bench/lanes/calibration/resolver-precision/`),
 // which is why every label below talks about WHERE THE TEXT IS and none
 // of them talks about whether it is right. The CLI footer
 // (`sovereign-cli-llm/src/chat_cmd/render.rs::answer_segments_footer`)

@@ -25,7 +25,7 @@ Matching, in the three properties the count depends on:
   - longest name first, with each matched span consumed, so an answer stating
     the gold "Alexander III" does not ALSO count the vocabulary's "Alexander".
 
-Name matching is not reused from `sovereign/bench/chaos_monkey/
+Name matching is not reused from `bench/lanes/chaos_monkey/
 fabrication_etiology.py`: that file's `names_in` is a proper-noun regex with no
 vocabulary (the opposite problem — it finds the names nobody declared), and its
 `occurrences` is a case-sensitive `str.find` with no word boundary, which is

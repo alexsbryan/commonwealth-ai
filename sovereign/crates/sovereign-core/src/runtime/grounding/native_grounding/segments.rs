@@ -27,7 +27,7 @@
 //! # Why display-only is a MEASURED constraint, not caution
 //!
 //! The resolver-precision measurement
-//! (`sovereign/bench/calibration/resolver-precision/FINDINGS.md`,
+//! (`bench/lanes/calibration/resolver-precision/FINDINGS.md`,
 //! 2026-08-09) replayed 130 frozen claims and found the resolver
 //! certifies at **precision 0.7429** against the incumbent judge's
 //! verdicts, against a pre-registered bar of 0.98. The mechanism is the

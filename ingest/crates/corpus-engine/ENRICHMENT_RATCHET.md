@@ -250,7 +250,7 @@ warm. Protocol and calibration notes at
 **Gate 2 — faithfulness rate reported per corpus. PARTIAL.**
 The lane is wired into CI as a TRACKED run plus a HARD gate twin
 (`scripts/sovereign-ci-bench.sh:360-397`), and one baseline is committed
-(`sovereign/bench/faithfulness/baselines/chaos-secret-agent/latest.json`,
+(`bench/lanes/faithfulness/baselines/chaos-secret-agent/latest.json`,
 unsupported-claim rate 0.4848). But it runs for **one** corpus and is
 skipped entirely when no RAPTOR tier exists, so "per corpus" is not yet
 true. The rate is also computed to stdout only — no persisted,

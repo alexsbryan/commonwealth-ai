@@ -15,8 +15,8 @@
 //!   2. **Faithful synthesis** — were the model's claims grounded in
 //!      cited URLs from the mock response? No fabricated cites?
 //!
-//! Design + phasing: `sovereign/bench/search-gym/RUNBOOK.md`.
-//! Predicate vocabulary: `sovereign/bench/search-gym/PASS_SCHEMA.md`.
+//! Design + phasing: `bench/lanes/search-gym/RUNBOOK.md`.
+//! Predicate vocabulary: `bench/lanes/search-gym/PASS_SCHEMA.md`.
 
 // Phase-4 of the Tool-Mastery framework moved the judge surface to
 // `crate::gym_judge`. We re-import under the local name `judge` so
@@ -71,12 +71,12 @@ const HELP: Help = Help {
             (
                 "--fixtures-dir PATH",
                 "Override the fixtures directory. Default: \
-                 sovereign/bench/search-gym/fixtures/",
+                 bench/lanes/search-gym/fixtures/",
             ),
             (
                 "--mock-corpus PATH",
                 "Override the mock-corpus directory. Default: \
-                 sovereign/bench/search-gym/mock-corpus/",
+                 bench/lanes/search-gym/mock-corpus/",
             ),
             (
                 "--max-results N",
@@ -185,8 +185,8 @@ fn parse_run_args(args: &[String]) -> Result<RunOpts, String> {
         fixtures: Vec::new(),
         replays: 10,
         base_url: "http://localhost:9741".to_string(),
-        fixtures_dir: workspace_root.join("sovereign/bench/search-gym/fixtures"),
-        mock_corpus: workspace_root.join("sovereign/bench/search-gym/mock-corpus"),
+        fixtures_dir: workspace_root.join("bench/lanes/search-gym/fixtures"),
+        mock_corpus: workspace_root.join("bench/lanes/search-gym/mock-corpus"),
         max_results: 5,
         mode: runner::Mode::Mock,
         use_judge: true,
@@ -460,7 +460,7 @@ fn parse_calibrate_args(args: &[String]) -> Result<CalibrateOpts, String> {
     let mut opts = CalibrateOpts {
         base_url: "http://localhost:9741".to_string(),
         judge_model: "commonwealth/fast".to_string(),
-        cases_path: workspace_root.join("sovereign/bench/search-gym/judge-calibration/cases.toml"),
+        cases_path: workspace_root.join("bench/lanes/search-gym/judge-calibration/cases.toml"),
         json: false,
     };
     let mut i = 0;

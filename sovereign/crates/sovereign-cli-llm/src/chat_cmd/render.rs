@@ -248,7 +248,7 @@ mod tests {
 /// the sentence was located verbatim inside one passage. It does not
 /// mean a judge agreed the claim is true — the resolver certifies at
 /// 0.7429 precision against the incumbent judge
-/// (`sovereign/bench/calibration/resolver-precision/FINDINGS.md`), which
+/// (`bench/lanes/calibration/resolver-precision/FINDINGS.md`), which
 /// is why the labels talk about WHERE TEXT IS and never about whether it
 /// is right.
 pub fn answer_segments_footer(metadata: Option<&serde_json::Value>) -> String {

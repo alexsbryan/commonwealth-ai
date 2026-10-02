@@ -145,7 +145,7 @@ const BANKS: &[(&str, &str)] = &[
     ),
     (
         "holdout",
-        "sovereign/bench/routing/calibration/holdout/intent_frames_v1.toml",
+        "bench/lanes/routing/calibration/holdout/intent_frames_v1.toml",
     ),
 ];
 

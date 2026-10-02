@@ -419,7 +419,7 @@ load_bearing = [
 id = "judge-replay-report"
 kind = "check"
 claim = "judged"
-command = "python3 sovereign/bench/chaos_monkey/judge_replay_report.py"
+command = "python3 bench/lanes/chaos_monkey/judge_replay_report.py"
 # Pure scoring over jsonl; the two frozen 2026-08-14 arms score in well under a
 # second. A larger case set moves this linearly.
 cost_secs = 0.03
@@ -429,7 +429,7 @@ verdict = "judgement-line"
 baseline = { kind = "none" }
 negative_control = "judge-replay-control"
 runs_in = ["by-hand"]
-doc = "sovereign/bench/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce)"
+doc = "bench/lanes/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce)"
 load_bearing = [
   { flag = "a second --verdicts arm", why = "ONE arm is a reading, not a trade — with no base to price against, the run reports never-ran rather than a pass" },
   { flag = "--tau", why = "the operating point the comparison is read at; a catch lost at 0.9 may not be lost at 0.6, and the trade is about the point production runs" },
@@ -439,7 +439,7 @@ load_bearing = [
 id = "judge-replay-control"
 kind = "control"
 claim = "invariant"
-command = "python3 sovereign/bench/chaos_monkey/judge_replay_report.py --self-test"
+command = "python3 bench/lanes/chaos_monkey/judge_replay_report.py --self-test"
 # 0.03s, n=3 (0.03 / 0.03 / 0.03 wall), 2026-09-12.
 cost_secs = 0.03
 enforcement = "hard"
@@ -448,7 +448,7 @@ verdict = "judgement-line"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "sovereign/bench/chaos_monkey/judge_replay_report.py (CONTROL_* — commit 17ac931b8, a register candidate refused at the 3/3 should_flag bar and preserved for exactly this)"
+doc = "bench/lanes/chaos_monkey/judge_replay_report.py (CONTROL_* — commit 17ac931b8, a register candidate refused at the 3/3 should_flag bar and preserved for exactly this)"
 
 # ── is the replay's bank this week's? ────────────────────────────────────
 # Rung vl-4 of quality/campaigns/verifier-loop.toml. `judge-replay` above is
@@ -461,7 +461,7 @@ doc = "sovereign/bench/chaos_monkey/judge_replay_report.py (CONTROL_* — commit
 id = "judge-replay-bank"
 kind = "check"
 claim = "invariant"
-command = "python3 sovereign/bench/chaos_monkey/judge_replay_cases.py --bank-age"
+command = "python3 bench/lanes/chaos_monkey/judge_replay_cases.py --bank-age"
 # 0.13s, n=3 (0.13 / 0.13 / 0.13 wall), 2026-09-12 — it reads every forensics
 # ledger once.
 cost_secs = 0.13
@@ -481,7 +481,7 @@ doc = "quality/campaigns/verifier-loop.toml §vl-bank-live"
 id = "judge-replay-bank-feed"
 kind = "probe"
 claim = "invariant"
-command = "sovereign/bench/chaos_monkey/feed_replay_bank.sh"
+command = "bench/lanes/chaos_monkey/feed_replay_bank.sh"
 # 871s wall, n=1, 2026-09-12 — 8 questions of which one is a `present-maximal`
 # essay, which is the one that writes a replayable episode. ONE RUN IS NOT A
 # MEASUREMENT (ARCH §18.5): read this as a first actual. The short-path
@@ -502,7 +502,7 @@ negative_control = "none"
 # left off for a week feeds it once when it comes back. A cron cadence would
 # claim something these boxes cannot keep (scripts/run-if-stale.sh header).
 runs_in = ["run-if-stale"]
-doc = "sovereign/bench/chaos_monkey/feed_replay_bank.sh (module header)"
+doc = "bench/lanes/chaos_monkey/feed_replay_bank.sh (module header)"
 load_bearing = [
   { flag = "SOVEREIGN_GATE_AUDIT_FORENSICS", why = "set by the script in the process that RUNS the gate. `svrn chat ask` will not do — its turn runs on the daemon, so the knob would have to be exported where the daemon is launched. The ledger stays on the machine that produced it; no privacy default moves" },
   { flag = "--limit", why = "the audit pass runs on LONG-FORM turns only, so a limit that stops before the bank's maximal questions writes citation rows and no replayable episode. The DEFAULT is derived from the bank (the position of the first `present-maximal-*` id) rather than hand-set, because a number here goes stale silently when the bank is reordered — the lane would report could-not-judge forever and read as a flaky daemon" },
@@ -1314,7 +1314,7 @@ cost_secs = 1745.0
 enforcement = "hard"
 fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
-baseline = { kind = "metrics", path = "sovereign/bench/quality-check" }
+baseline = { kind = "metrics", path = "bench/lanes/quality-check" }
 negative_control = "none"
 runs_in = ["smoke:2", "by-hand"]
 doc = "sovereign/docs/CLI_REFERENCE.md#svrn-quality"
@@ -1332,10 +1332,10 @@ cost_secs = 2400.0
 enforcement = "hard"
 fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary", "slot-decodes:embed"]
-baseline = { kind = "metrics", path = "sovereign/bench" }
+baseline = { kind = "metrics", path = "bench/lanes" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/bench/README.md"
+doc = "bench/lanes/README.md"
 load_bearing = [
   { flag = "the HARD/SOFT/TRACKED lane split", why = "a HARD lane breaks the build and a SOFT synth lane never does. Read lane KIND before reading a number: a TRACKED lane carries an ABSOLUTE verdict that is a finding about the system, not a regression signal" },
   { flag = "--update-baseline", why = "capture/refresh only on a healthy daemon; a baseline minted from a degraded run silently lowers every future bar" },
@@ -1350,7 +1350,7 @@ cost_secs = 1200.0
 enforcement = "hard"
 fidelity = "F2"
 preconditions = ["port-listening:9745"]
-baseline = { kind = "metrics", path = "sovereign/bench" }
+baseline = { kind = "metrics", path = "bench/lanes" }
 negative_control = "none"
 runs_in = ["smoke:3"]
 doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
@@ -1364,7 +1364,7 @@ cost_secs = 300.0
 enforcement = "hard"
 fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
-baseline = { kind = "metrics", path = "sovereign/bench/chaos_monkey" }
+baseline = { kind = "metrics", path = "bench/lanes/chaos_monkey" }
 negative_control = "none"
 runs_in = ["smoke:2"]
 doc = "sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md"
@@ -1384,7 +1384,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:5"]
-doc = "sovereign/bench/chaos_monkey/README.md"
+doc = "bench/lanes/chaos_monkey/README.md"
 
 # ── The desktop frontend surface ─────────────────────────────────────
 
@@ -1771,7 +1771,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:1"]
-doc = "sovereign/bench/README.md"
+doc = "bench/lanes/README.md"
 
 # ── The login-triggered lanes (scripts/run-if-stale.sh) ──────────────
 
@@ -2105,10 +2105,10 @@ cost_secs = 400.0
 enforcement = "tracked"
 fidelity = "F3"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
-baseline = { kind = "metrics", path = "sovereign/bench" }
+baseline = { kind = "metrics", path = "bench/lanes" }
 negative_control = "none"
 runs_in = ["smoke:1"]
-doc = "sovereign/bench/README.md"
+doc = "bench/lanes/README.md"
 
 [[instrument]]
 id = "clippy-json"
@@ -2259,8 +2259,8 @@ preconditions = [
   "binary:sovereign-cli-llm",
   "binary:svrn-ingest",
 ]
-baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/chat-ask" }
-bank = "sovereign/bench/quality-check/chat-ask.toml"
+baseline = { kind = "fingerprint", path = "bench/lanes/quality-check/baselines/chat-ask" }
+bank = "bench/lanes/quality-check/chat-ask.toml"
 negative_control = "none"
 runs_in = ["check"]
 doc = "sovereign/crates/sovereign-cli/src/quality_check_cmd/mod.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run)"
@@ -2288,8 +2288,8 @@ preconditions = [
   "slot-decodes:fast",
   "binary:python3",
 ]
-baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/throughput" }
-bank = "sovereign/bench/quality-check/throughput.toml"
+baseline = { kind = "fingerprint", path = "bench/lanes/quality-check/baselines/throughput" }
+bank = "bench/lanes/quality-check/throughput.toml"
 negative_control = "none"
 runs_in = ["check"]
 doc = "scripts/throughput_probe.py (the probe this lane wraps and finally compares)"
@@ -2303,7 +2303,7 @@ doc = "scripts/throughput_probe.py (the probe this lane wraps and finally compar
 # the verb UNCHANGED and reads the report it writes.
 #
 # `{report}` is the file the wrapper tells the verb to write; `{ids:<subset>}`
-# expands to the ids `sovereign/bench/smoke.toml` declares, each repeated after
+# expands to the ids `bench/lanes/smoke.toml` declares, each repeated after
 # the flag before it, so a curated list never lives in two files.
 #
 # HARD ON CATASTROPHE ONLY. At six probes and ten questions a one-item flip is
@@ -2322,7 +2322,7 @@ command = "svrn quality lane bench --id routing"
 argv = [
   "svrn", "quality", "lane", "bench", "--id", "routing", "--reader", "bench-all", "--",
   "svrn", "bench", "all",
-  "--bench-root", "sovereign/bench",
+  "--bench-root", "bench/lanes",
   "--routing-only",
   "--filter", "routing/cells_v1",
   "--smoke-subset", "routing-v1",
@@ -2335,10 +2335,10 @@ fidelity = "F3"
 verdict = "judgement-line"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
-bank = "sovereign/bench/routing/cells_v1.toml"
+bank = "bench/lanes/routing/cells_v1.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/README.md"
+doc = "bench/lanes/README.md"
 
 # Two commands, because no single `--filter` selects sep AND wikipedia and
 # inventing a filter language to make it one would be a worse trade than
@@ -2351,14 +2351,14 @@ command = "svrn quality lane bench --id retrieval-prod"
 argv = [
   "svrn", "quality", "lane", "bench", "--id", "retrieval-prod", "--reader", "bench-all", "--",
   "svrn", "bench", "all",
-  "--bench-root", "sovereign/bench",
+  "--bench-root", "bench/lanes",
   "--filter", "sep/questions",
   "--prod-pipeline", "--isolate",
   "--smoke-subset", "retrieval-prod-v1",
   "--report", "{report}",
   "--",
   "svrn", "bench", "all",
-  "--bench-root", "sovereign/bench",
+  "--bench-root", "bench/lanes",
   "--filter", "wikipedia/questions",
   "--prod-pipeline", "--isolate",
   "--smoke-subset", "retrieval-prod-v1",
@@ -2376,10 +2376,10 @@ preconditions = [
   "corpus-installed:wikipedia",
 ]
 baseline = { kind = "none" }
-bank = "sovereign/bench/sep/questions.toml"
+bank = "bench/lanes/sep/questions.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/sep/README.md"
+doc = "bench/lanes/sep/README.md"
 
 # In-process: this one reads the corpus's own atoms.json and runs no model,
 # which is why a full golden costs 30 s rather than minutes.
@@ -2391,7 +2391,7 @@ command = "svrn quality lane bench --id enrichment-f1"
 argv = [
   "svrn", "quality", "lane", "bench", "--id", "enrichment-f1", "--reader", "bench-all", "--",
   "svrn", "bench", "all",
-  "--bench-root", "sovereign/bench",
+  "--bench-root", "bench/lanes",
   "--filter", "literary/bk-book-1",
   "--smoke-subset", "enrichment-f1-v1",
   "--report", "{report}",
@@ -2403,10 +2403,10 @@ fidelity = "F2"
 verdict = "judgement-line"
 preconditions = ["corpus-installed:brothers-karamazov-book-1"]
 baseline = { kind = "none" }
-bank = "sovereign/bench/literary/bk-book-1.toml"
+bank = "bench/lanes/literary/bk-book-1.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/literary/README.md"
+doc = "bench/lanes/literary/README.md"
 
 [[instrument]]
 id = "chaos-monkey"
@@ -2416,8 +2416,8 @@ command = "svrn quality lane bench --id chaos-monkey"
 argv = [
   "svrn", "quality", "lane", "bench", "--id", "chaos-monkey", "--reader", "chaos-monkey", "--",
   "svrn", "bench", "chaos-monkey", "run",
-  "--bank", "sovereign/bench/chaos_monkey/secret_agent.toml",
-  "--manifest", "sovereign/bench/chaos_monkey/manifest.toml",
+  "--bank", "bench/lanes/chaos_monkey/secret_agent.toml",
+  "--manifest", "bench/lanes/chaos_monkey/manifest.toml",
   "--corpus", "chaos-secret-agent",
   "--smoke-subset", "chaos-monkey-v2",
   "--out", "{report}",
@@ -2433,10 +2433,10 @@ preconditions = [
   "corpus-installed:chaos-secret-agent",
 ]
 baseline = { kind = "none" }
-bank = "sovereign/bench/chaos_monkey/secret_agent.toml"
+bank = "bench/lanes/chaos_monkey/secret_agent.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/chaos_monkey/README.md"
+doc = "bench/lanes/chaos_monkey/README.md"
 
 # The one lane of the six that ALREADY selected by id (`--fixture <slug>`,
 # repeatable), so it gets no new flag — `{ids:…}` expands the declared slugs
@@ -2460,7 +2460,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/knowledge-gym/RUNBOOK.md"
+doc = "bench/lanes/knowledge-gym/RUNBOOK.md"
 
 [[instrument]]
 id = "synth"
@@ -2470,7 +2470,7 @@ command = "svrn quality lane bench --id synth"
 argv = [
   "svrn", "quality", "lane", "bench", "--id", "synth", "--reader", "bench-all", "--",
   "svrn", "bench", "all",
-  "--bench-root", "sovereign/bench",
+  "--bench-root", "bench/lanes",
   "--synth",
   "--filter", "sep/questions",
   "--smoke-subset", "synth-v2",
@@ -2487,10 +2487,10 @@ preconditions = [
   "corpus-installed:sep",
 ]
 baseline = { kind = "none" }
-bank = "sovereign/bench/sep/questions.toml"
+bank = "bench/lanes/sep/questions.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/bench/sep/README.md"
+doc = "bench/lanes/sep/README.md"
 
 
 # ── [[trigger]] — how each VENUE runs its selection ──────────────────

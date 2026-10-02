@@ -23,7 +23,7 @@
 #         (advisory — its absolute verdict is printed but does not gate), then a
 #         paired HARD `*-gate` lane re-scores the SAME artifact and fails ONLY on
 #         regression vs a committed baseline (`sovereign bench gate <lane>`,
-#         baselines under sovereign/bench/<group>/baselines/<id>/). First-run
+#         baselines under bench/lanes/<group>/baselines/<id>/). First-run
 #         (no baseline) passes. Capture/refresh baselines with --update-baseline
 #         on a healthy daemon. This is the promotion the old PROMOTE markers
 #         called for: absolute verdict stays advisory, regression-vs-baseline
@@ -86,12 +86,12 @@ UPDATE_BASELINE=""
 REBUILD=""
 # THE LEAN TIER IS NOT HERE ANY MORE. `svrn quality check` is the ~30-minute
 # curated breakage check (lanes in `quality/instruments.toml`, item subsets in
-# `sovereign/bench/smoke.toml`), and it does what --quick could not: it writes
+# `bench/lanes/smoke.toml`), and it does what --quick could not: it writes
 # a durable lane table and reports four verdicts per lane instead of an exit
 # code. This script is the FULL/nightly run only.
 NO_SYNTH=""               # --no-synth: skip the slow SOFT synthesis lanes (~55m).
                           # Useful for fast HARD-gate runs + baseline seeding.
-BENCH_ROOT="sovereign/bench"
+BENCH_ROOT="bench/lanes"
 MF_MANIFEST="$BENCH_ROOT/mechanism_fidelity/manifest.toml"
 CHAOS_BANK="$BENCH_ROOT/chaos_monkey/secret_agent.toml"
 CHAOS_MANIFEST="$BENCH_ROOT/chaos_monkey/manifest.toml"
@@ -169,7 +169,7 @@ RETRIEVAL_CORPORA=(sep wikipedia)
 # baseline was minted from). WITHOUT IT THIS LANE MEASURES NOTHING AND STILL
 # CLEARS THE GATE — `bench all` reports `1 stale`, and the status mapping below
 # grades 0-regressed + stale as PASS(warn:setup). That was the state on every
-# box but one until 2026-08-07; see sovereign/bench/literary/README.md.
+# box but one until 2026-08-07; see bench/lanes/literary/README.md.
 ENRICHMENT_CORPORA=(literary/bk-book-1)
 [[ -n "${CI_BENCH_OBSIDIAN:-}" ]] && ENRICHMENT_CORPORA=(obsidian "${ENRICHMENT_CORPORA[@]}")
 ROUTING_FILTER="routing"
@@ -453,7 +453,7 @@ run_lane "routing" HARD \
 #
 # The whole bank, every time: this is the baseline-tracked signal. The sampled
 # five-question read moved to `svrn quality check --lane synth`, whose subset is
-# DECLARED by id in `sovereign/bench/smoke.toml` rather than counted off the
+# DECLARED by id in `bench/lanes/smoke.toml` rather than counted off the
 # front of the bank.
 if [[ -z "$NO_SYNTH" ]]; then
   for c in "${RETRIEVAL_CORPORA[@]}"; do
@@ -469,7 +469,7 @@ fi
 # The bench RUN is advisory (TRACKED): chaos is designed to break the present
 # agent, so its absolute NO-GO must never gate the build. The paired chaos-gate
 # lane (HARD) re-scores the SAME artifact and fails only on regression vs the
-# committed baseline (sovereign/bench/chaos_monkey/baselines/secret_agent/).
+# committed baseline (bench/lanes/chaos_monkey/baselines/secret_agent/).
 # First-run (no baseline) and a clean diff both pass; a missing artifact fails
 # HARD (the bench couldn't certify the path). $UPDATE_BASELINE captures instead.
 if [[ -f "$CHAOS_BANK" ]]; then
@@ -487,7 +487,7 @@ fi
 # Same TRACKED-run + HARD-gate pattern as chaos. The run judges every node
 # summary's claims against the node's own member chunks (production
 # extract/support registers); the gate fails ONLY on unsupported-claim-rate
-# regression vs sovereign/bench/faithfulness/baselines/<corpus>/.
+# regression vs bench/lanes/faithfulness/baselines/<corpus>/.
 #
 # EVERY ENRICHED CORPUS, not one (T1 A5 — P0.3's gate reads "reports a number
 # for every enriched corpus in CI"; until 2026-08-03 this lane ran exactly one
@@ -594,7 +594,7 @@ fi
 # NOT the GO/NO-GO verdict (NO-GO is a true finding for non-faithful models).
 # mechanism-gate (HARD) gates on the control-witness drift vs baseline; P1
 # collapse is tracked but tolerant. Baseline at
-# sovereign/bench/mechanism_fidelity/baselines/dev/.
+# bench/lanes/mechanism_fidelity/baselines/dev/.
 run_lane "mechanism-fidelity" TRACKED \
   "$BIN" bench mechanism-fidelity run --models "$MF_MODELS" --pool dev \
     --n-cases "$N_CASES_MF" --manifest "$MF_MANIFEST" \
@@ -606,7 +606,7 @@ run_lane "mechanism-gate" HARD \
 # ── Lane 4: multi-turn degradation — wikipedia_learn threads (TRACKED run + HARD gate) ──
 # eval --threads reports a degradation curve; multiturn-gate (HARD) gates the
 # worst-thread first-failure turn + mean fact-recall slope (+ judge coverage)
-# vs baseline at sovereign/bench/wikipedia_learn/baselines/threads/.
+# vs baseline at bench/lanes/wikipedia_learn/baselines/threads/.
 THREAD_BANK=$(ls "$BENCH_ROOT"/wikipedia_learn/*.toml 2>/dev/null | head -1)
 if [[ -n "${THREAD_BANK:-}" ]]; then
   # --max-turns bounds the lane's intrinsic cost (≈one chat call per turn) so it

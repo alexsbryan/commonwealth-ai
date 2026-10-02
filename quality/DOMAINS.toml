@@ -276,7 +276,7 @@ package = ""
 crates = ["sovereign-eval", "sovereign-cli-dev", "sovereign-agent-bench", "corpus-engine-atos", "corpus-engine-archaeology", "sovereign-mesh-test-harness", "xtask", "arch-layers"]
 lift = ""
 applicable_as = "not applicable by design — may observe every layer, nothing depends on it (TARGET_ARCHITECTURE §6)"
-roots = ["sovereign/crates/sovereign-eval", "code/crates/sovereign-cli-dev", "code/crates/sovereign-agent-bench", "corpus-engine-atos", "code/crates/corpus-engine-archaeology"]
+roots = ["bench/crates/sovereign-eval", "code/crates/sovereign-cli-dev", "code/crates/sovereign-agent-bench", "corpus-engine-atos", "code/crates/corpus-engine-archaeology"]
 status = "kept"
 
 # ── Module tags ─────────────────────────────────────────────────────────────
@@ -9271,19 +9271,19 @@ lines = 403
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/ablate.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/ablate.rs"
 context = "host"
 lines = 1187
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/adjudicate.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/adjudicate.rs"
 context = "host"
 lines = 448
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/all.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/all.rs"
 context = "host"
 lines = 1781
 note = ""
@@ -9295,61 +9295,61 @@ lines = 824
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/baselines.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/baselines.rs"
 context = "host"
 lines = 304
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/book_report.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/book_report.rs"
 context = "host"
 lines = 2543
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs"
 context = "host"
 lines = 2278
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs"
 context = "host"
 lines = 249
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/discover.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/discover.rs"
 context = "host"
 lines = 467
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/enron.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/enron.rs"
 context = "host"
 lines = 854
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/faithfulness.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/faithfulness.rs"
 context = "host"
 lines = 574
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/flywheel.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/flywheel.rs"
 context = "host"
 lines = 399
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/gate.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/gate.rs"
 context = "host"
 lines = 801
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/governance.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/governance.rs"
 context = "host"
 lines = 400
 note = ""
@@ -9361,97 +9361,97 @@ lines = 499
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
 context = "host"
 lines = 759
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/live_runner.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/live_runner.rs"
 context = "host"
 lines = 876
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/mechanism_fidelity.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/mechanism_fidelity.rs"
 context = "host"
 lines = 1357
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/mod.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/mod.rs"
 context = "host"
 lines = 224
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/model_resolve.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/model_resolve.rs"
 context = "host"
 lines = 239
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/mod.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/moral/mod.rs"
 context = "host"
 lines = 277
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/report.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/moral/report.rs"
 context = "host"
 lines = 288
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/runner.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/moral/runner.rs"
 context = "host"
 lines = 157
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/scenarios.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/moral/scenarios.rs"
 context = "host"
 lines = 305
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/obsidian.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/obsidian.rs"
 context = "host"
 lines = 376
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/parity_compare.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/parity_compare.rs"
 context = "host"
 lines = 528
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/promote.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/promote.rs"
 context = "host"
 lines = 597
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/proxy_bench.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/proxy_bench.rs"
 context = "host"
 lines = 119
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/redteam.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/redteam.rs"
 context = "host"
 lines = 748
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/render.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/render.rs"
 context = "host"
 lines = 637
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/report.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/report.rs"
 context = "host"
 lines = 874
 note = ""
@@ -9469,115 +9469,115 @@ lines = 279
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/resource_meter.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/resource_meter.rs"
 context = "host"
 lines = 791
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/routing_replay.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/routing_replay.rs"
 context = "host"
 lines = 283
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
 context = "host"
 lines = 723
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/mod.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/mod.rs"
 context = "host"
 lines = 44
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/paired.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/paired.rs"
 context = "host"
 lines = 621
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/report.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/report.rs"
 context = "host"
 lines = 207
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/score.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/score.rs"
 context = "host"
 lines = 444
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/test_support.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/rubric/test_support.rs"
 context = "host"
 lines = 58
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/scaffold.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/scaffold.rs"
 context = "host"
 lines = 658
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/scaffolding_param.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/scaffolding_param.rs"
 context = "host"
 lines = 282
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/criteria.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/situated/criteria.rs"
 context = "host"
 lines = 431
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/mod.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/situated/mod.rs"
 context = "host"
 lines = 333
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/report.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/situated/report.rs"
 context = "host"
 lines = 447
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/runner.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/situated/runner.rs"
 context = "host"
 lines = 192
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/transcripts.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/situated/transcripts.rs"
 context = "host"
 lines = 272
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/smoke_subset.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/smoke_subset.rs"
 context = "host"
 lines = 368
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/uap.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/uap.rs"
 context = "host"
 lines = 781
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs"
 context = "host"
 lines = 1917
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/verifier.rs"
+path = "bench/crates/sovereign-cli-bench/src/bench_cmd/verifier.rs"
 context = "host"
 lines = 700
 note = ""
@@ -10099,61 +10099,61 @@ lines = 792
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/atlas_ann.rs"
+path = "bench/crates/sovereign-cli-bench/src/eval_cmd/atlas_ann.rs"
 context = "host"
 lines = 27
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/attribution.rs"
+path = "bench/crates/sovereign-cli-bench/src/eval_cmd/attribution.rs"
 context = "host"
 lines = 159
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/bank.rs"
+path = "bench/crates/sovereign-cli-bench/src/eval_cmd/bank.rs"
 context = "host"
 lines = 581
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/lost_corpora.rs"
+path = "bench/crates/sovereign-cli-bench/src/eval_cmd/lost_corpora.rs"
 context = "host"
 lines = 119
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/mod.rs"
+path = "bench/crates/sovereign-cli-bench/src/eval_cmd/mod.rs"
 context = "host"
 lines = 1109
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/report.rs"
+path = "bench/crates/sovereign-cli-bench/src/eval_cmd/report.rs"
 context = "host"
 lines = 670
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/routing_metrics.rs"
+path = "bench/crates/sovereign-cli-bench/src/eval_cmd/routing_metrics.rs"
 context = "host"
 lines = 502
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner.rs"
+path = "bench/crates/sovereign-cli-bench/src/eval_cmd/runner.rs"
 context = "host"
 lines = 2074
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner_threads.rs"
+path = "bench/crates/sovereign-cli-bench/src/eval_cmd/runner_threads.rs"
 context = "host"
 lines = 809
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs"
+path = "bench/crates/sovereign-cli-bench/src/eval_cmd/score.rs"
 context = "host"
 lines = 1152
 note = ""
@@ -10477,25 +10477,25 @@ lines = 589
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/bench_lane.rs"
+path = "bench/crates/sovereign-cli-bench/src/quality_lane_cmd/bench_lane.rs"
 context = "host"
 lines = 1225
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/chat_ask.rs"
+path = "bench/crates/sovereign-cli-bench/src/quality_lane_cmd/chat_ask.rs"
 context = "host"
 lines = 1796
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/mod.rs"
+path = "bench/crates/sovereign-cli-bench/src/quality_lane_cmd/mod.rs"
 context = "host"
 lines = 196
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/throughput.rs"
+path = "bench/crates/sovereign-cli-bench/src/quality_lane_cmd/throughput.rs"
 context = "host"
 lines = 1059
 note = ""
@@ -13213,301 +13213,301 @@ lines = 172
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/audit_trail.rs"
+path = "bench/crates/sovereign-eval/src/audit_trail.rs"
 context = "back-of-house"
 lines = 305
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/bin/main.rs"
+path = "bench/crates/sovereign-eval/src/bin/main.rs"
 context = "back-of-house"
 lines = 679
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/chaos_monkey/mod.rs"
+path = "bench/crates/sovereign-eval/src/chaos_monkey/mod.rs"
 context = "back-of-house"
 lines = 38
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/chaos_monkey/question.rs"
+path = "bench/crates/sovereign-eval/src/chaos_monkey/question.rs"
 context = "back-of-house"
 lines = 709
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/chaos_monkey/score.rs"
+path = "bench/crates/sovereign-eval/src/chaos_monkey/score.rs"
 context = "back-of-house"
 lines = 1914
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/cognitive/item.rs"
+path = "bench/crates/sovereign-eval/src/cognitive/item.rs"
 context = "back-of-house"
 lines = 352
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/cognitive/mod.rs"
+path = "bench/crates/sovereign-eval/src/cognitive/mod.rs"
 context = "back-of-house"
 lines = 146
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/cognitive/report.rs"
+path = "bench/crates/sovereign-eval/src/cognitive/report.rs"
 context = "back-of-house"
 lines = 377
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/cognitive/runner.rs"
+path = "bench/crates/sovereign-eval/src/cognitive/runner.rs"
 context = "back-of-house"
 lines = 300
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/cognitive/scorer.rs"
+path = "bench/crates/sovereign-eval/src/cognitive/scorer.rs"
 context = "back-of-house"
 lines = 694
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/diff.rs"
+path = "bench/crates/sovereign-eval/src/diff.rs"
 context = "back-of-house"
 lines = 255
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/disposition_bench.rs"
+path = "bench/crates/sovereign-eval/src/disposition_bench.rs"
 context = "back-of-house"
 lines = 254
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/disposition_score.rs"
+path = "bench/crates/sovereign-eval/src/disposition_score.rs"
 context = "back-of-house"
 lines = 283
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/disposition_taxonomy.rs"
+path = "bench/crates/sovereign-eval/src/disposition_taxonomy.rs"
 context = "back-of-house"
 lines = 182
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/entity_resolution_bench.rs"
+path = "bench/crates/sovereign-eval/src/entity_resolution_bench.rs"
 context = "back-of-house"
 lines = 318
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/entity_resolution_score.rs"
+path = "bench/crates/sovereign-eval/src/entity_resolution_score.rs"
 context = "back-of-house"
 lines = 323
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/faithfulness.rs"
+path = "bench/crates/sovereign-eval/src/faithfulness.rs"
 context = "back-of-house"
 lines = 392
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/finalize.rs"
+path = "bench/crates/sovereign-eval/src/finalize.rs"
 context = "back-of-house"
 lines = 61
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/flywheel/case.rs"
+path = "bench/crates/sovereign-eval/src/flywheel/case.rs"
 context = "back-of-house"
 lines = 234
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/flywheel/det_checks.rs"
+path = "bench/crates/sovereign-eval/src/flywheel/det_checks.rs"
 context = "back-of-house"
 lines = 204
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/flywheel/generators/adversarial.rs"
+path = "bench/crates/sovereign-eval/src/flywheel/generators/adversarial.rs"
 context = "back-of-house"
 lines = 1364
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/flywheel/generators/corpus.rs"
+path = "bench/crates/sovereign-eval/src/flywheel/generators/corpus.rs"
 context = "back-of-house"
 lines = 300
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/flywheel/generators/mod.rs"
+path = "bench/crates/sovereign-eval/src/flywheel/generators/mod.rs"
 context = "back-of-house"
 lines = 8
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/flywheel/mining.rs"
+path = "bench/crates/sovereign-eval/src/flywheel/mining.rs"
 context = "back-of-house"
 lines = 201
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/flywheel/mod.rs"
+path = "bench/crates/sovereign-eval/src/flywheel/mod.rs"
 context = "back-of-house"
 lines = 92
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/flywheel/probe.rs"
+path = "bench/crates/sovereign-eval/src/flywheel/probe.rs"
 context = "back-of-house"
 lines = 178
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/flywheel/redteam.rs"
+path = "bench/crates/sovereign-eval/src/flywheel/redteam.rs"
 context = "back-of-house"
 lines = 707
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/flywheel/verify.rs"
+path = "bench/crates/sovereign-eval/src/flywheel/verify.rs"
 context = "back-of-house"
 lines = 414
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/governance_bench.rs"
+path = "bench/crates/sovereign-eval/src/governance_bench.rs"
 context = "back-of-house"
 lines = 458
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/judge.rs"
+path = "bench/crates/sovereign-eval/src/judge.rs"
 context = "back-of-house"
 lines = 516
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/lib.rs"
+path = "bench/crates/sovereign-eval/src/lib.rs"
 context = "back-of-house"
 lines = 39
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/manifest.rs"
+path = "bench/crates/sovereign-eval/src/manifest.rs"
 context = "back-of-house"
 lines = 425
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanical.rs"
+path = "bench/crates/sovereign-eval/src/mechanical.rs"
 context = "back-of-house"
 lines = 215
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/card.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/card.rs"
 context = "back-of-house"
 lines = 601
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/case.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/case.rs"
 context = "back-of-house"
 lines = 277
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/class.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/class.rs"
 context = "back-of-house"
 lines = 94
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/classes/aggregation.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/classes/aggregation.rs"
 context = "back-of-house"
 lines = 276
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/classes/attribution.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/classes/attribution.rs"
 context = "back-of-house"
 lines = 302
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/classes/mod.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/classes/mod.rs"
 context = "back-of-house"
 lines = 8
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/classes/wealth_tax.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/classes/wealth_tax.rs"
 context = "back-of-house"
 lines = 150
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/mod.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/mod.rs"
 context = "back-of-house"
 lines = 116
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/perturb.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/perturb.rs"
 context = "back-of-house"
 lines = 338
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/registry.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/registry.rs"
 context = "back-of-house"
 lines = 53
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/score.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/score.rs"
 context = "back-of-house"
 lines = 242
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/stopping.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/stopping.rs"
 context = "back-of-house"
 lines = 295
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/mechanism_fidelity/structural.rs"
+path = "bench/crates/sovereign-eval/src/mechanism_fidelity/structural.rs"
 context = "back-of-house"
 lines = 150
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/regression.rs"
+path = "bench/crates/sovereign-eval/src/regression.rs"
 context = "back-of-house"
 lines = 179
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/scope.rs"
+path = "bench/crates/sovereign-eval/src/scope.rs"
 context = "back-of-house"
 lines = 288
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/tool_grader.rs"
+path = "bench/crates/sovereign-eval/src/tool_grader.rs"
 context = "back-of-house"
 lines = 403
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-eval/src/workflow.rs"
+path = "bench/crates/sovereign-eval/src/workflow.rs"
 context = "back-of-house"
 lines = 337
 note = ""

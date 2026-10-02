@@ -7,7 +7,7 @@
 //! with it, so the loader's warning and the scorer ask one decider.
 //!
 //! A bank is a TOML file with one `[bank]` block + N `[[questions]]` rows.
-//! See `sovereign/bench/wikipedia/questions.toml` for the
+//! See `bench/lanes/wikipedia/questions.toml` for the
 //! reference shape. The schema is intentionally narrow — every field is
 //! either a bare string or a list of strings — so an analyst can hand-edit
 //! the file without learning a new format.
@@ -230,7 +230,7 @@ fn warn_unscorable_facts(bank: &EvalBank, path: &Path) {
 /// `[[threads]]` instead of `[[questions]]`. Each thread is a chain
 /// of turns scored under a single `conversation_id`, so retrieval
 /// and synthesis see the prior turns' history. See
-/// `sovereign/bench/wikipedia_learn/threads.toml` for the reference
+/// `bench/lanes/wikipedia_learn/threads.toml` for the reference
 /// shape and `eval_cmd::runner::run_thread_synth` for the runner.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalThreadBank {
@@ -359,7 +359,7 @@ fn validate(bank: &EvalBank) -> Result<(), String> {
         //     thematic prompts where the ground-truth surface set
         //     can't be enumerated in advance (especially under blind
         //     authoring where the author hasn't seen the corpus's
-        //     atom inventory). See sovereign/bench/conversation/
+        //     atom inventory). See bench/lanes/conversation/
         //     README.md.
         let qualitative_archetypes = ["negative", "cross_conv_synth", "trend", "temporal_slice"];
         if !qualitative_archetypes.contains(&q.category.as_str())

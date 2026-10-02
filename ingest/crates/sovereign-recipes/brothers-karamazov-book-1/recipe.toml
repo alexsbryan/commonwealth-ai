@@ -3,7 +3,7 @@
 # Backs the `literary/bk-book-1` enrichment lane in
 # scripts/sovereign-ci-bench.sh: a HARD, baseline-diffed gate that scores the
 # resolved atlas (entities / events / states / relations / claims / questions)
-# against the hand-authored golden at sovereign/bench/literary/bk-book-1.toml.
+# against the hand-authored golden at bench/lanes/literary/bk-book-1.toml.
 #
 # WHY THIS RECIPE EXISTS. Until 2026-08-07 the lane's corpus was a hand-built
 # atlas that existed on exactly one machine, enriched from a personal
@@ -97,7 +97,7 @@ prompt_version = "v1"
 # which is what lets a peer run the enrichment lane the day they clone.
 #
 # THIS IS THE ARTIFACT THE COMMITTED BASELINE WAS MINTED FROM
-# (sovereign/bench/literary/baselines/bk-book-1/2026-08-07.json). That pairing
+# (bench/lanes/literary/baselines/bk-book-1/2026-08-07.json). That pairing
 # is the whole point: an enrichment lane is only a REGRESSION gate if every box
 # scores the same reference atlas. A box that wants to measure its OWN model
 # instead runs the lane with `--rebuild`, which re-extracts in place — and a

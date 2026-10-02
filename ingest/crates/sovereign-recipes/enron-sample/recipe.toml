@@ -23,7 +23,7 @@
 [corpus]
 id = "enron-sample"
 name = "Enron Email Corpus (CMU)"
-description = "All 150 mailboxes from the CMU Enron snapshot. Drives the multi-origin reconciliation primitive (ingest/crates/corpus-engine/src/enrichment/reconciliation/) at full scale and pins the tuned baseline at sovereign/bench/enron/baselines/enron-entity-resolution/latest.json."
+description = "All 150 mailboxes from the CMU Enron snapshot. Drives the multi-origin reconciliation primitive (ingest/crates/corpus-engine/src/enrichment/reconciliation/) at full scale and pins the tuned baseline at bench/lanes/enron/baselines/enron-entity-resolution/latest.json."
 license = "public-domain"
 schema_version = 1
 mesh_sharing = false

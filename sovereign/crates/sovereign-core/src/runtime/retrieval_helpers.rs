@@ -43,7 +43,7 @@ pub(crate) const RETRIEVAL_QUERY_TOPIC_CHARS: usize = 120;
 /// is where wikipedia chunks were getting dropped in the marathon
 /// bench — post-multiplier on the merged result couldn't recover
 /// what merge had already filtered out. Surfaced by
-/// `sovereign/bench/wikipedia_learn` 2026-05-17 (v12 / v13 → v14):
+/// `bench/lanes/wikipedia_learn` 2026-05-17 (v12 / v13 → v14):
 /// retrieval-only single-shot returned 5 Ada Lovelace chunks at
 /// 100% recall, but the synth path's KQ_PER_CORPUS_LIMIT=20 cap
 /// across 10+ competing corpora left wikipedia with only 2 slots
@@ -77,7 +77,7 @@ pub(crate) const HOT_CORPUS_MAX_BOOSTED: usize = 3;
 /// conversation accretes around a topic, the corpora that served
 /// the user well accumulate hits and start to outweigh
 /// off-domain matches from the user's other installed indexes.
-/// Surfaced by `sovereign/bench/wikipedia_learn` 2026-05-17:
+/// Surfaced by `bench/lanes/wikipedia_learn` 2026-05-17:
 /// einstein chain T2-T4 needed Wikipedia weighting against the
 /// user's own code/vault corpora that were out-ranking the
 /// wikipedia articles on bare-keyword overlap.

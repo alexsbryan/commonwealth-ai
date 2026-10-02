@@ -53,7 +53,7 @@ import json, re, subprocess, sys, time
 import concurrent.futures as cf
 from pathlib import Path
 
-D = Path("/home/alexbryan/dev/commonwealth-ai/sovereign/bench/sep_atlas/map-conversion-rung6")
+D = Path("/home/alexbryan/dev/commonwealth-ai/bench/lanes/sep_atlas/map-conversion-rung6")
 GEN_URL = "http://127.0.0.1:9741/v1/chat/completions"
 GEN_MODEL = "Qwen3.5-4B-UD-MTP-Q6_K_XL"
 K = 4          # sub-queries per question

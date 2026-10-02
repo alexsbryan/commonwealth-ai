@@ -641,7 +641,7 @@ check = "! grep -q 'from = \"sovereign-desktop\"' quality/ARCH_LAYERS.toml && (c
 #   re-sample; daemon rebuilt at d51cd2b4c; box under peer load 3.6-8.2):
 #   routing, retrieval-prod, enrichment-f1, knowledge-gym, synth PASSED.
 #   throughput COULD-NOT-JUDGE: first `check` run for stack 4dd212fbca5f,
-#   baseline MINTED (sovereign/bench/quality-check/baselines/throughput/);
+#   baseline MINTED (bench/lanes/quality-check/baselines/throughput/);
 #   the two earlier runs today were prepush gates with no banks. So the
 #   RB delta itself is UNJUDGED by construction — no pre-change reading on
 #   this stack exists; this run is the pre-deletion baseline instead.

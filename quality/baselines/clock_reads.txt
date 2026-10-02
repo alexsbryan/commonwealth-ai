@@ -23,7 +23,7 @@
 2	shared/crates/kernel-types/src/judgement.rs
 1	cmnwlth/crates/oicp-conformance/src/main.rs
 1	sovereign-mobile/src-tauri/src/commands/host.rs
-1	sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner.rs
+1	bench/crates/sovereign-cli-bench/src/eval_cmd/runner.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/mod.rs
 1	sovereign/crates/sovereign-cli-daemon/src/panic_hook.rs

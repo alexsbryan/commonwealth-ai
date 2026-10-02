@@ -874,7 +874,7 @@ query = "I'm not sure if I'm doing this right."
 
 # ── expressive_query — voice bench: emotional/relational ──
 #
-# Sourced from sovereign/bench/voice/*.toml. These queries exercise
+# Sourced from bench/lanes/voice/*.toml. These queries exercise
 # the Relational skill's witness register, not corpus retrieval.
 
 [[example]]

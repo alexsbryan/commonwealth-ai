@@ -160,10 +160,10 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("serve/crates/sovereign-gliner/src/gliner_ner.rs", Class::InboundOnly, 1),
 
     // ---- sovereign-eval (LocalDaemon — eval against the host daemon) ----
-    ("sovereign/crates/sovereign-eval/src/tool_grader.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-eval/src/manifest.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-eval/src/judge.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-eval/src/cognitive/runner.rs", Class::LocalDaemon, 1),
+    ("bench/crates/sovereign-eval/src/tool_grader.rs", Class::LocalDaemon, 1),
+    ("bench/crates/sovereign-eval/src/manifest.rs", Class::LocalDaemon, 1),
+    ("bench/crates/sovereign-eval/src/judge.rs", Class::LocalDaemon, 1),
+    ("bench/crates/sovereign-eval/src/cognitive/runner.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-agent-bench (LocalDaemon — bench against the host daemon) ----
     ("code/crates/sovereign-agent-bench/src/runners/native.rs", Class::LocalDaemon, 2),

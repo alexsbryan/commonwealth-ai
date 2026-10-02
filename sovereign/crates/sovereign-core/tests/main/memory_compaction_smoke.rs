@@ -4,7 +4,7 @@
 //! growth bug observed 2026-05-23 — see
 //! [[witness-memory-rolling-compaction]] plan.
 //!
-//! The bench fixture at `sovereign/bench/inner_work/compaction.toml`
+//! The bench fixture at `bench/lanes/inner_work/compaction.toml`
 //! is the *behavioural* verification (does the witness still respond
 //! after 12 turns; does turn-1-5 quality stay within noise). That
 //! bench needs the daemon's loaded fast slot, so it runs out-of-test.

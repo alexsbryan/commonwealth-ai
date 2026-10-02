@@ -69,7 +69,7 @@ Tiny-bucket notes (synthetic single-node RAPTOR) are skipped from Pass A. They c
 
 ## Atom shapes
 
-Mirrors the golden's expected_*_atoms semantics (`sovereign/bench/obsidian/golden.toml`). All five kinds use llguidance Lark grammars (project pattern per [[project_llguidance_readoption_plan]]) so the output is structurally valid before scoring.
+Mirrors the golden's expected_*_atoms semantics (`bench/lanes/obsidian/golden.toml`). All five kinds use llguidance Lark grammars (project pattern per [[project_llguidance_readoption_plan]]) so the output is structurally valid before scoring.
 
 ```rust
 struct MechanismAtom {
@@ -242,7 +242,7 @@ Gating check: re-run `sovereign bench obsidian` against the post-v2 corpus. Acce
 - **Surviving axes (person/event/concept) stay ≥ baseline − 0.05.** Don't regress what already worked.
 - **`forbidden_*` axes stay at 0 FPs.** Path-C's non-negotiable bound holds — the typed-extension grammar must reject "the author" as a Person, "2024" as a date-shaped Person, etc.
 
-Bench A/B captured under `sovereign/bench/obsidian/baselines/vault-port/typed-ext-post-{git-sha}.json` for comparison against the v1 capture at `sovereign/bench/obsidian/baselines/vault-port/synth-post-vault-port.json` (sources 75%, judge facts 68%).
+Bench A/B captured under `bench/lanes/obsidian/baselines/vault-port/typed-ext-post-{git-sha}.json` for comparison against the v1 capture at `bench/lanes/obsidian/baselines/vault-port/synth-post-vault-port.json` (sources 75%, judge facts 68%).
 
 Wall-clock target: typed extraction ≤ 50% of the vault's per-note enrichment time (already ~6 min for the user's 50-note vault). Total finalize_corpus budget ≤ ~9 min.
 
@@ -262,6 +262,6 @@ Wall-clock target: typed extraction ≤ 50% of the vault's per-note enrichment t
 - Spec inheritance: extends `CONV_TIERED_PORT.md` (per-source RAPTOR) and `PROGRESSIVE_ENRICHMENT.md` (GLiNER + RAPTOR layering)
 - Vault port plan: `~/.claude/plans/let-s-get-into-raptor-wise-bachman.md`
 - Vault port memory: `~/.claude/projects/.../memory/project_vault_tiered_port_2026_05_24.md`
-- v1 baseline scores: `sovereign/bench/obsidian/baselines/vault-port/{retrieval,synth}-post-vault-port.json`
+- v1 baseline scores: `bench/lanes/obsidian/baselines/vault-port/{retrieval,synth}-post-vault-port.json`
 - HippoRAG vocab-fidelity discussion: `sovereign/docs/TIERED_RETRIEVAL.md` §"On HippoRAG 1 vs 2"
 - Literary atoms.json shape (reference): `ingest/crates/corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs` writers

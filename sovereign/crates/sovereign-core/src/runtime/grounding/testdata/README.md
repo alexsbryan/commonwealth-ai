@@ -11,7 +11,7 @@ ledger as `failed_once` holdings, and the user-visible verification note.
 
 | | |
 |---|---|
-| transcript | `sovereign/bench/chaos_monkey/results/saltgrass_compound_gv_shadow_20260808.transcripts.jsonl` |
+| transcript | `bench/lanes/chaos_monkey/results/saltgrass_compound_gv_shadow_20260808.transcripts.jsonl` |
 | turn id | `compound-killer-and-lugger` |
 | bank | `saltgrass_compound` (dev) |
 | harvest | 2026-08-08, BeefyMac, `--gv-shadow` |
@@ -34,4 +34,4 @@ other two ("Corwin Pellow was murdered by Severin Quenholt." and "The murder
 took place at The Cold Lantern inn on a summer evening.") are real per-claim
 judgements and must survive any fix. That 3-of-5 split is the
 "negative class is 60% judge-commentary artifact" finding in
-`sovereign/bench/calibration/h4/FINDINGS.md`.
+`bench/lanes/calibration/h4/FINDINGS.md`.

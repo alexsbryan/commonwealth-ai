@@ -1648,7 +1648,7 @@ frozen adversarial set — known fabrications the changed judge must STILL catch
 with the pass bar pre-registered *before* the run, and reports the catch rate
 beside every false-failure improvement. The set is inventoried, never
 constructed after the change (§19): the standing set is
-`sovereign/bench/chaos_monkey`'s ten longform-negative probes (fe8809c9),
+`bench/lanes/chaos_monkey`'s ten longform-negative probes (fe8809c9),
 engineered so the sealed saltgrass corpus verifiably cannot supply the answer,
 with the recorded pre-change baseline at
 `results/longform_negatives_20260808.report.json`. For the Phase 3 auditor

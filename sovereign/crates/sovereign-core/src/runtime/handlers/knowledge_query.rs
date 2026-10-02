@@ -362,7 +362,7 @@ impl Runtime {
         //    folded in via `build_retrieval_query` so the embedded
         //    text isn't just "What did he publish in 1905?" — which
         //    matches no Einstein chunk. BM25 leg below still sees
-        //    the bare message. See sovereign/bench/wikipedia_learn.
+        //    the bare message. See bench/lanes/wikipedia_learn.
         let t_search = std::time::Instant::now();
         let retrieval_query = build_retrieval_query(message, context);
         if retrieval_query != message {

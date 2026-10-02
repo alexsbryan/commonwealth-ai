@@ -9,7 +9,7 @@
 //! bench, a 1/8 regression on the hard set, and 2–4× latency on the
 //! synthesis case the architecture was designed to fix. The original
 //! motivating failure (synthesis tangling) is no longer reproducible
-//! on legacy. **Read `sovereign/bench/voice/baseline/team-pipeline-findings.md`
+//! on legacy. **Read `bench/lanes/voice/baseline/team-pipeline-findings.md`
 //! before reviving, expanding, or deleting any code in this module.**
 //!
 //! ---

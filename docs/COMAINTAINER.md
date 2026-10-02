@@ -51,7 +51,7 @@ correction to t=0, where it costs one exchange instead of fifteen.
 Technical facts: the objective contract already exists and is enforced
 (`session_state` rejects goal writes without an objective,
 `SESSION_CONTINUITY §2.1`); the order file extends the ATOS feature
-trail (§14.4); the lanes exist (`sovereign/bench/README.md`). Missing
+trail (§14.4); the lanes exist (`bench/lanes/README.md`). Missing
 only: the author. (§10 artifact 4.)
 
 **Scene 2 — the order meets the pool.** Today: the operator launches

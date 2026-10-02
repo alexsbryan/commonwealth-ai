@@ -108,7 +108,7 @@ frozen `violation_prob`, and no offline τ-sweep exists.
 paragraph used to end "despite the column being frozen". The column was never
 frozen. `violation_prob` existed in the `ResultRow` schema and in the writer
 (`chaos_monkey.rs:840`), but **no committed chaos run ever recorded a value**:
-across the 15 artifacts in `sovereign/bench/chaos_monkey/results/`, 12 carry the
+across the 15 artifacts in `bench/lanes/chaos_monkey/results/`, 12 carry the
 key on all 468 of their rows and every one is `null`; the other three predate the
 field. Zero numeric values anywhere. The cause is structural rather than a bug —
 the Critic is consulted only under `--grounding-verify` or `--gv-shadow`
@@ -540,7 +540,7 @@ from 18 to ≤6.
 ## Appendix A — H2's temperature-sampling variant (measured non-viable)
 
 **Status: measured non-viable on the 4B at every coherent temperature (commit
-`9900da95`); revisit only if the 36B smoke (`sovereign/bench/calibration/h2/FINDINGS.md`
+`9900da95`); revisit only if the 36B smoke (`bench/lanes/calibration/h2/FINDINGS.md`
 §5 B) contradicts the constancy.**
 
 This was §5 H2's mechanism until the H2b amendment. It is kept in full because the

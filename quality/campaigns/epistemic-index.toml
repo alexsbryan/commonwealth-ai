@@ -22,7 +22,7 @@ floor        = 0.4091
 floor_basis  = "n=2 synth runs 2026-09-04, 0.4091 / 0.4318, sovereign/bench/literary/baselines/thematic-bk-book-1-synth-isolated/2026-09-04.json (commit 16f121a46)"
 noise_band   = 0.05
 target       = 0.50
-# The set landed 2026-09-04 (order ei-1-bar): sovereign/bench/literary/
+# The set landed 2026-09-04 (order ei-1-bar): bench/lanes/literary/
 # thematic-bk-book-1.toml (6 questions / 44 facts, corpus installed here) and
 # thematic-dubliners-3.toml (6 questions / 39 facts, corpus NOT installed on
 # any box yet — NEVER RUN, and the file says so at the top).
@@ -55,7 +55,7 @@ target       = 0.50
 kill         = "if the cited-with-evidence rate can only be raised by loosening the fact list, the walk did not improve and the bank did — re-read §18.6 before touching either"
 instrument   = '''python3 - <<'PY'
 import glob, json, subprocess, sys
-BASE = "sovereign/bench/literary/baselines/thematic-bk-book-1-synth-isolated"
+BASE = "bench/lanes/literary/baselines/thematic-bk-book-1-synth-isolated"
 best = None  # (commit_time, sha, path) -> newest COMMITTED dated snapshot
 for p in sorted(glob.glob(BASE + "/20*.json")):  # dated files; skips latest.json
     out = subprocess.run(["git", "log", "-n1", "--format=%ct %H", "--", p],
@@ -111,7 +111,7 @@ noise_band   = 0.0
 target       = 0.9557
 # floor_basis recorded 2026-09-04 (order ei-1-bar) by running the lane twice
 # on RuggedFox against the committed baseline. NOTHING WAS WRITTEN TO SET THIS
-# FLOOR: sovereign/bench/sep/baselines/questions-prod-isolated/2026-08-10.json
+# FLOOR: bench/lanes/sep/baselines/questions-prod-isolated/2026-08-10.json
 # has been in the repo since 2026-08-10 and already IS the floor. The two runs
 # were the check that it still holds on this box, not an attempt to mint a
 # replacement — re-minting a baseline requires adjudicating every per-question
@@ -132,7 +132,7 @@ target       = 0.9557
 kill         = "if a step needs the synth band to render green on a retrieval lane, the step regressed retrieval — name an owner and a measurement (ARCH §18.5), do not widen the band"
 instrument   = '''python3 - <<'PY'
 import glob, json, subprocess, sys
-BASE = "sovereign/bench/sep/baselines/questions-prod-isolated"
+BASE = "bench/lanes/sep/baselines/questions-prod-isolated"
 best = None
 for p in sorted(glob.glob(BASE + "/20*.json")):
     out = subprocess.run(["git", "log", "-n1", "--format=%ct %H", "--", p],

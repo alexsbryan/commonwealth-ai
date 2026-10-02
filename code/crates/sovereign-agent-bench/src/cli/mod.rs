@@ -94,7 +94,7 @@ Subcommands:
   help        Show this help.
 
 Common flags for `run`:
-  --bench-root <path>          (default: ./sovereign/bench/agent-coding)
+  --bench-root <path>          (default: ./bench/lanes/agent-coding)
   --agent <id>                 (default: pi; from AgentRunnerRegistry)
   --model <handle>             (default: commonwealth/coder)
   --problems <ids>             comma-separated; default: all

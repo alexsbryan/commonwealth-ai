@@ -414,7 +414,7 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-11"
   to = "could-not-judge"
-  by = "sovereign/bench/calibration/ab/FINDINGS.md:70-71"
+  by = "bench/lanes/calibration/ab/FINDINGS.md:70-71"
   note = """VERBATIM: "This is *not* the decline-latency p50 the order
 asked for: `ResultRow` carries no per-turn latency field, so that p50 is
 not derivable." The instrument bar that H0-latency depends on was
@@ -450,7 +450,7 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-08"
   to = "could-not-judge"
-  by = "sovereign/bench/calibration/h1-port/h1_verdict.json + FINDINGS.md"
+  by = "bench/lanes/calibration/h1-port/h1_verdict.json + FINDINGS.md"
   note = """delta = +0.0995 against a beat bar of +0.100 — 0.0005 short,
 with the bootstrap putting P(delta >= beat) at 0.469. The artifact records
 outcome "survives", not "beat". FINDINGS.md says so in its own words:
@@ -640,7 +640,7 @@ the app, not of a Phase 2 improvement."""
   [[initiative.bar.transition]]
   on = "2026-08-13"
   to = "failed"
-  by = "operator-commissioned post-Phase-3 arm; sovereign/bench/chaos_monkey/results/ewalltime_desktop_20260813.jsonl"
+  by = "operator-commissioned post-Phase-3 arm; bench/lanes/chaos_monkey/results/ewalltime_desktop_20260813.jsonl"
   note = """SECOND MEASUREMENT, post auditor repair (f7bcf31e at HEAD). 5 warm
 runs, real desktop app via command bridge :9745, fresh conversation per turn,
 quiet box (lanes stopped, no builds), primary warm (operator's holdout turn
@@ -729,7 +729,7 @@ chronological order (moved by seat directive 794769a6, 2026-08-14)."""
   [[initiative.bar.transition]]
   on = "2026-08-14"
   to = "failed"
-  by = "orders gate-tombstone-ladder + drafter-attribution-discipline, composed after-arm at 688f8eba; sovereign/bench/chaos_monkey/results/ewalltime_20260814_portfolio_afterarm_analysis.md"
+  by = "orders gate-tombstone-ladder + drafter-attribution-discipline, composed after-arm at 688f8eba; bench/lanes/chaos_monkey/results/ewalltime_20260814_portfolio_afterarm_analysis.md"
   note = """FOURTH MEASUREMENT — the MEDIAN CLAUSE IS MET FOR THE FIRST TIME
 in the initiative's history; the verdict stays FAILED on the p90 clause,
 judged not passed. 21 desktop turns (20 warm scored, warmup excluded), same
@@ -798,7 +798,7 @@ the user experiences."""
   [[initiative.bar.transition]]
   on = "2026-08-13"
   to = "failed"
-  by = "order gate-bigo-prefill-tax closing arms; sovereign/bench/chaos_monkey/results/ewalltime_20260814_landed_analysis.md §Per-turn gate actions"
+  by = "order gate-bigo-prefill-tax closing arms; bench/lanes/chaos_monkey/results/ewalltime_20260814_landed_analysis.md §Per-turn gate actions"
   note = """SECOND JUDGMENT, from the same 12 post-B turns as E-wall-time's
 third measurement (two quiet-box arms at cc19f26e). Gate wall per turn, off
 the gate-action ledger: 80.9 / 42.9 / 76.2 / 93.8 / 54.3 / 56.7 / 31.8 /
@@ -838,7 +838,7 @@ same bar. Stated here rather than left to line order (ARCH §7)."""
   [[initiative.bar.transition]]
   on = "2026-08-14"
   to = "failed"
-  by = "composed after-arm at 688f8eba; sovereign/bench/chaos_monkey/results/ewalltime_20260814_portfolio_afterarm_analysis.md"
+  by = "composed after-arm at 688f8eba; bench/lanes/chaos_monkey/results/ewalltime_20260814_portfolio_afterarm_analysis.md"
   note = """THIRD JUDGMENT. Wall cv 0.212 over the 20 warm turns (bar: gate
 cv <=0.10). This arm's recorder carries wall_s only — the gate-only series
 the bar names is not derivable from it, so the pooled wall figure is
@@ -1104,7 +1104,7 @@ set a standard practice for tuning judges." The trigger is the Phase 3 auditor
 repair: its metric (zero-failure turns) is produced by the very mechanism the
 order widened, and every measurement to that point tested one direction only —
 whether the judge stops failing TRUE claims — never whether it still catches
-FALSE ones. The standing set is sovereign/bench/chaos_monkey's ten
+FALSE ones. The standing set is bench/lanes/chaos_monkey's ten
 longform-negative probes (fe8809c9) with the recorded pre-change baseline at
 results/longform_negatives_20260808.report.json. For the Phase 3 repair the
 pre-registered bar (note 7075174b, timestamped before the run) is: all three
@@ -1122,7 +1122,7 @@ and the repair removes exactly that artifact)."""
   [[initiative.bar.transition]]
   on = "2026-08-13"
   to = "met"
-  by = "sovereign/bench/chaos_monkey/results/longform_negatives_20260813.report.json (order grounding-preventative-medicine, redirected)"
+  by = "bench/lanes/chaos_monkey/results/longform_negatives_20260813.report.json (order grounding-preventative-medicine, redirected)"
   note = """FIRST EXERCISE, and the pre-registered primary passes 3/3: under
 the repaired gate (HEAD cc6729ab, repairs in f7bcf31e) all three baseline
 negative-carrying probes — longneg-distract-evidence-chain,
@@ -1144,7 +1144,7 @@ next judge change."""
   [[initiative.bar.transition]]
   on = "2026-08-13"
   to = "met"
-  by = "order gate-bigo-prefill-tax land B adversarial run; sovereign/bench/chaos_monkey/results/longform_negatives_20260813b.report.json"
+  by = "order gate-bigo-prefill-tax land B adversarial run; bench/lanes/chaos_monkey/results/longform_negatives_20260813b.report.json"
   note = """SECOND EXERCISE — and the first time the discipline BLOCKED a
 land, which is this bar watched failing (compass #5). Land B (whole-chunk
 per-claim judges) passed its pre-registered frozen three 3/3:
@@ -1247,7 +1247,7 @@ can clear its declared kill bar and still be worse than looking at nothing."""
   [[initiative.bar.transition]]
   on = "2026-08-14"
   to = "met"
-  by = "order judge-calibration-replay; sovereign/bench/chaos_monkey/results/judge_replay_20260814_calibration.md"
+  by = "order judge-calibration-replay; bench/lanes/chaos_monkey/results/judge_replay_20260814_calibration.md"
   note = """FIRST EXERCISE. The replay harness's calibration artifact reports,
 beside every per-register curve, the degenerate scorers on the same label
 set: always-flag = catch 1.000 / clear 0.000; always-clear = catch 0.000 /
@@ -3339,7 +3339,7 @@ silently edited; see FINANCIAL_CORPORA.md §7.6."""
     [[initiative.bar.transition]]
     on = "2026-08-16"
     to = "failed"
-    by = "order sec-filings-harden (M1); sovereign/bench/sec-filings/results/aapl-fabrication-authority_20260815.jsonl vs aapl-fabrication-baseline_20260814.jsonl"
+    by = "order sec-filings-harden (M1); bench/lanes/sec-filings/results/aapl-fabrication-authority_20260815.jsonl vs aapl-fabrication-baseline_20260814.jsonl"
     note = """FAILED, and the direction is large: 2/9 -> 8/9 on the frozen prereg answered
 through the PRODUCT SURFACE both times, judge watched failing first (4 tampered
 controls FAILED: 3 honesty, 1 competence). The bar is ZERO, not a rate, and one
@@ -3360,7 +3360,7 @@ instead of serving prose numbers."""
     [[initiative.bar.transition]]
     on = "2026-08-16"
     to = "failed"
-    by = "seat re-measurement at 4eccc77c, n=3; sovereign/bench/sec-filings/results/aapl-fabrication-n3run{1,2,3}_20260816.jsonl"
+    by = "seat re-measurement at 4eccc77c, n=3; bench/lanes/sec-filings/results/aapl-fabrication-n3run{1,2,3}_20260816.jsonl"
     note = """STILL FAILED, but the failure MOVED — and the move is the result.
 
 n=3 through the product surface, judge validated before each run (--self-test

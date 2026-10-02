@@ -982,7 +982,7 @@ flags = [
 path = "bench atlas"
 binary = "llm"
 classification = "daemon"
-# `--smoke-subset <id>` runs exactly the ids `sovereign/bench/smoke.toml`
+# `--smoke-subset <id>` runs exactly the ids `bench/lanes/smoke.toml`
 # declares for each selected bank under that subset. Declared here because
 # `svrn quality check`'s six sampled lanes drive these two verbs through it,
 # so the flag is now part of a shipped surface rather than a bench-local

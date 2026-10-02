@@ -52,7 +52,7 @@ cargo run -p sovereign-inference --example sp6_late_chunk -- \
 ```
 
 - **Docs:** 30 SEP articles = union of `expected_sources` from
-  `sovereign/bench/sep/questions.toml` (21 questions, 57 unique slugs), ranked
+  `bench/lanes/sep/questions.toml` (21 questions, 57 unique slugs), ranked
   by how many questions expect them then by length; 60k–187k chars each
   (~15k–47k tokens — several exceed the 32k window, exercising the
   multi-window path). Article text reconstructed from the source parquet

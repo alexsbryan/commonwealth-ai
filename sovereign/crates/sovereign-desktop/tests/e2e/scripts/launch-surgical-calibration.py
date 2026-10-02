@@ -28,7 +28,7 @@ STRESS_BANK = (
     "/private/tmp/claude-502/-Users-alexsbryan-dev-commonwealth-ai/"
     "bb742dfc-d352-4834-9710-3ec00503187a/scratchpad/longform_stress.toml"
 )
-SECRET_BANK = ROOT + "/sovereign/bench/chaos_monkey/secret_agent.toml"
+SECRET_BANK = ROOT + "/bench/lanes/chaos_monkey/secret_agent.toml"
 OUTDIR = ROOT + "/sovereign/crates/sovereign-desktop/test-artifacts/qa-iterations"
 STAMP = "surgical-calib-2026-07-17"
 CONSOLE = OUTDIR + f"/{STAMP}.log"

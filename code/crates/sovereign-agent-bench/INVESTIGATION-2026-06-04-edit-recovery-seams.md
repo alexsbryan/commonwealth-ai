@@ -138,7 +138,7 @@ sovereign agent-bench run --agent native \
   --evaluator-model commonwealth/fast \
   --model commonwealth/primary --judge-model commonwealth/primary \
   --judge-trials 1 --trials 3 \
-  --bench-root sovereign/bench/agent-coding \
+  --bench-root bench/lanes/agent-coding \
   --report /tmp/r.json --artifacts-dir /tmp/r
 ```
 Bombs are in `<artifacts-dir>/<problem>/trial-N/requests.jsonl` (the last

@@ -40,7 +40,7 @@ score delta + complete hop logs; evidence for re-planning P5 after T2.
 ```
 .venv/bin/python scripts/p51_dump.py --db ~/.svrnmesh/sovereign.db \
   --chunks ~/.svrnmesh/indexes/sep/chunks.lance --corpus sep \
-  --banks sovereign/bench/sep/summarize.toml sovereign/bench/sep/summarize_obscure.toml \
+  --banks bench/lanes/sep/summarize.toml bench/lanes/sep/summarize_obscure.toml \
   --out-dir data
 cargo build -p sovereign-inference --example p51_descent
 ./target/debug/examples/p51_descent research/enrichment-spikes/data \

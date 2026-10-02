@@ -133,8 +133,8 @@ REPO = Path(__file__).resolve().parent.parent
 SPECIMENS = (
     "sovereign/crates/sovereign-cli-llm/src/router_fit_cmd.rs",
     "sovereign/crates/sovereign-cli/src/main.rs",
-    "sovereign/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs",
-    "sovereign/crates/sovereign-cli-bench/src/bench_cmd/all.rs",
+    "bench/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs",
+    "bench/crates/sovereign-cli-bench/src/bench_cmd/all.rs",
     "sovereign/crates/sovereign-cli/src/notes_retrieval_cmd.rs",
 )
 
@@ -145,8 +145,8 @@ SPECIMENS = (
 # guessing, not counting, and gate zero fails rather than shipping a number.
 FIXTURE_HEAD_COST = {
     "sovereign/crates/sovereign-cli-llm/src/router_fit_cmd.rs": 4,
-    "sovereign/crates/sovereign-cli-bench/src/bench_cmd/all.rs": 3,
-    "sovereign/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs": 2,
+    "bench/crates/sovereign-cli-bench/src/bench_cmd/all.rs": 3,
+    "bench/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs": 2,
 }
 DERIVED_COST = 1        # the converted form: a struct field, and nothing else
 

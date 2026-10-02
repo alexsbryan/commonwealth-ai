@@ -90,8 +90,8 @@ if [[ -e "$IDX/chunks.lance" ]]; then
   echo
   echo "Run the chaos bench against the stable corpus:"
   echo "    $BIN bench chaos-monkey run \\"
-  echo "      --bank sovereign/bench/chaos_monkey/secret_agent.toml \\"
-  echo "      --manifest sovereign/bench/chaos_monkey/manifest.toml \\"
+  echo "      --bank bench/lanes/chaos_monkey/secret_agent.toml \\"
+  echo "      --manifest bench/lanes/chaos_monkey/manifest.toml \\"
   echo "      --corpus ${CORPUS_ID}"
   echo
   echo "Or the whole CI suite (the chaos lane defaults CHAOS_CORPUS=${CORPUS_ID}):"

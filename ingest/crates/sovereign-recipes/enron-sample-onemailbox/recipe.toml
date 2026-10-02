@@ -12,7 +12,7 @@
 [corpus]
 id = "enron-sample-onemailbox"
 name = "Enron Email (Kenneth Lay mailbox)"
-description = "Iteration target for the architecture-over-Enron Phase 5 measurement loop. Lay's mailbox alone covers ~6k messages and most of the canonical entities in `sovereign/bench/enron/questions.toml` train split, so reconciliation-policy tuning converges fast."
+description = "Iteration target for the architecture-over-Enron Phase 5 measurement loop. Lay's mailbox alone covers ~6k messages and most of the canonical entities in `bench/lanes/enron/questions.toml` train split, so reconciliation-policy tuning converges fast."
 license = "public-domain"
 schema_version = 1
 mesh_sharing = false

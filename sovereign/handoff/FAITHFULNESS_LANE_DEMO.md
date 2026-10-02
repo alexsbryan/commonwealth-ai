@@ -22,7 +22,7 @@ that rate regresses (2026-07-31).
 
 ```
 svrn bench faithfulness run --corpus chaos-secret-agent --out faith.jsonl
-svrn bench gate faithfulness --report faith.jsonl --bench-root sovereign/bench
+svrn bench gate faithfulness --report faith.jsonl --bench-root bench/lanes
 ```
 
 ```
@@ -67,7 +67,7 @@ instrument error, found and removed before the baseline was seeded.
   tier on this corpus?" was previously unanswerable. It is now one
   command, per corpus, comparable release to release.
 - **Regressions red the build.** The baseline
-  (`sovereign/bench/faithfulness/baselines/<corpus>/latest.json`) gates
+  (`bench/lanes/faithfulness/baselines/<corpus>/latest.json`) gates
   CI Lane 5c: a prompt tweak, model swap, or clustering change that
   makes summaries less honest fails before it reaches a user.
 - **Every judged row is training substrate.** Rows carry the sealed

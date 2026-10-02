@@ -3,7 +3,7 @@
 # Replaces the ephemeral `corpus watch` of /tmp (which derives a per-machine
 # `watched-<pathhash>` id) with a recipe whose `[corpus].id` is fixed, so the
 # chaos-monkey bench + the CI gate can target a deterministic `chaos-secret-agent`
-# corpus on any box. See sovereign/bench/chaos_monkey/README.md.
+# corpus on any box. See bench/lanes/chaos_monkey/README.md.
 #
 # Conrad's *The Secret Agent* (Project Gutenberg #974): bounded, public-domain,
 # and less pretraining-saturated than the very famous novels — which keeps

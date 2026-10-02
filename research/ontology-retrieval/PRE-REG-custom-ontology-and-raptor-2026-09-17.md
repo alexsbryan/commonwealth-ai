@@ -74,7 +74,7 @@ Five objections shape the design:
   97%. They also ran before eb3681d1e fixed the question classifier and the
   unembedded atoms.
 - **The one large judge gap is not on the production path.** It is 52% vs 32%,
-  n=25 (`sovereign/bench/HISTORY.md:53-61`), and its truth set was derived from
+  n=25 (`bench/lanes/HISTORY.md:53-61`), and its truth set was derived from
   the atoms themselves.
 - **RAPTOR is unproven.**
   - A "+8/+10pts theme coverage" claim has no artifact behind it (55ad1d573).
@@ -519,7 +519,7 @@ no arm moved is reported with its implementation-reach annotation.
 
 ## What the study must emit, so the demo is a rendering
 
-`sovereign/bench/sep_atlas/map-conversion-rung6/compare.py` is extended; no
+`bench/lanes/sep_atlas/map-conversion-rung6/compare.py` is extended; no
 second scorer is written. It emits:
 
 - **Three-way side-by-side per question** (bare, generic, custom; for books,
@@ -722,7 +722,7 @@ the count of rows on every other route, by name. Verdicts: `passed` when every
 scored row in every retrieving arm is grounded, `failed` naming the question
 ids otherwise, `could-not-judge` when a row carries no route at all, and
 `failed` beats `could-not-judge` when both are present. The matching exclusion
-in `sovereign/bench/sep_atlas/map-conversion-rung6/compare.py`: a question
+in `bench/lanes/sep_atlas/map-conversion-rung6/compare.py`: a question
 ungrounded in ANY retrieving arm is excluded from EVERY arm and counted per
 category as `excluded_ungrounded_route`, modelled on the closed-book exclusion
 beside it. A row with no route at all is `unrouted` and is NOT excluded —

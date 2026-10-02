@@ -110,7 +110,7 @@ MACOSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 # The bench tree, absolute, resolved from this file's directory. Lets
 # sovereign-eval's bank tests name their data without climbing out of the
 # crate root, which boundary-gate rule 3c forbids for a liftable package.
-SOVEREIGN_BENCH_ROOT = { value = "sovereign/bench", relative = true }
+SOVEREIGN_BENCH_ROOT = { value = "bench/lanes", relative = true }
 # The CLI contract, absolute: sovereign-cli-shared's `manifest_path` reads it
 # at compile time instead of climbing out of its crate (pb-distribution-svrn-lift).
 SOVEREIGN_CLI_CONTRACT = { value = "sovereign/docs/cli-contract.toml", relative = true }

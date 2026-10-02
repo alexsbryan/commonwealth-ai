@@ -37,7 +37,7 @@ pub enum CompactionMode {
 /// `[memory.compaction]` in the daemon's `config.toml`.
 ///
 /// The defaults are inner-work-tuned (threshold=6, batch=3) — that's
-/// where the bench at `sovereign/bench/inner_work/compaction.toml`
+/// where the bench at `bench/lanes/inner_work/compaction.toml`
 /// shows the prompt staying bounded under 8K tokens for a 12-turn
 /// session without losing witness quality on the first five turns.
 /// Other surfaces (factual chat, recipe author) can opt out via

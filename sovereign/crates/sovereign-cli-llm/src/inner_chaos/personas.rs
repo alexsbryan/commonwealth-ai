@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Fixture loading for the inner-work chaos harness.
 //!
-//! Two fixture files, both under `sovereign/bench/inner_work/`:
+//! Two fixture files, both under `bench/lanes/inner_work/`:
 //!
 //! - `personas.toml` — the adversarial persona bank. Each persona is
 //!   a distinct pressure on the witness (crisis disclosure, boundary
@@ -88,7 +88,7 @@ pub fn resolve_bench_dir(explicit: Option<&PathBuf>) -> Result<PathBuf, String> 
     let mut here =
         std::env::current_dir().map_err(|e| format!("cannot resolve current dir: {e}"))?;
     loop {
-        for prefix in ["sovereign/bench/inner_work", "bench/inner_work"] {
+        for prefix in ["bench/lanes/inner_work", "bench/inner_work"] {
             let candidate = here.join(prefix);
             if candidate.is_dir() {
                 return Ok(candidate);

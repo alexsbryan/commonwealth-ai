@@ -649,7 +649,7 @@ impl BorrowedSeedStats {
 /// **Why borrowed and not embedded — the reason is the TEXT, not the clock.**
 /// A wiki atom's whole embed text is its bare title: 214 of 221 sampled
 /// articles have an empty `description`
-/// (`sovereign/bench/wikipedia/seed_migration`). Embedding those fresh spends
+/// (`bench/lanes/wikipedia/seed_migration`). Embedding those fresh spends
 /// an hour indexing the least informative string the store holds. (The 33.1 h
 /// figure in the probe is the v1 atom set's — 1.67M atoms including dangling
 /// link targets. This store holds the 51,781 IN-SCOPE articles, so the fresh

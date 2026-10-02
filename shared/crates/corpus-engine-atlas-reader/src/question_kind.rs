@@ -51,7 +51,7 @@
 //! Until 2026-09-08 both sides were embedded through the retrieval QUERY
 //! instruction ("given a search query, retrieve relevant passages that answer
 //! the query"), which asks the model to encode TOPIC. Measured on the Conrad
-//! bank (`sovereign/bench/chaos_monkey/secret_agent.toml`, 43 questions,
+//! bank (`bench/lanes/chaos_monkey/secret_agent.toml`, 43 questions,
 //! `svrn atlas kind --corpus chaos-secret-agent`):
 //!
 //! | space | top-1 kind correct | classified | of those, correct |

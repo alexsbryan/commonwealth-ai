@@ -112,7 +112,7 @@ sovereign-mobile/
 # build.rs vendors the whole tree into OUT_DIR, and sovereign-contracts
 # include_str!s registry.toml + schema/. The tree used to be excluded
 # here when multi-GB bench gyms lived in it — those were evicted to
-# sovereign/bench by the recipes single-source-of-truth refactor, so
+# bench/lanes by the recipes single-source-of-truth refactor, so
 # there is nothing bulky left to skip.
 
 # IDE / editor scratch state.

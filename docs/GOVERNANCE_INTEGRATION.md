@@ -294,7 +294,7 @@ before you point it at a real corpus — a detector that flags the parking
 decoy as a conflict with the overnight-guest rule is telling you something
 you want to know early.
 
-`sovereign/bench/governance/` holds the two lanes that gate this: a
+`bench/lanes/governance/` holds the two lanes that gate this: a
 precision/recall detector lane over tension edges, and an answering lane
 carrying the three red lines.
 

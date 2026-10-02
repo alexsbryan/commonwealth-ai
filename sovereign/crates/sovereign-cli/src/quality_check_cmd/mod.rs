@@ -829,8 +829,8 @@ enforcement = "hard"
 fidelity = "F3"
 verdict = "judgement-line"
 preconditions = ["port-listening:9741", "slot-decodes:primary"]
-baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/chat-ask" }
-bank = "sovereign/bench/quality-check/chat-ask.toml"
+baseline = { kind = "fingerprint", path = "bench/lanes/quality-check/baselines/chat-ask" }
+bank = "bench/lanes/quality-check/chat-ask.toml"
 negative_control = "none"
 runs_in = ["check"]
 doc = "the focus lane"

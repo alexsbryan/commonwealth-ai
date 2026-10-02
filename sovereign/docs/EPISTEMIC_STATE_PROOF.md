@@ -187,13 +187,13 @@ over the same baseline.
 ```bash
 # AFTER (full stack)
 sovereign-cli-llm bench chaos-monkey run \
-  --bank sovereign/bench/chaos_monkey/secret_agent.toml --out after.jsonl \
+  --bank bench/lanes/chaos_monkey/secret_agent.toml --out after.jsonl \
   --transcripts after.transcripts.jsonl
 
 # BEFORE (machinery off, legacy scorer)
 SOVEREIGN_EPISTEMIC_STATE=0 SOVEREIGN_GK_RESCUE=0 SOVEREIGN_CHAOS_TYPED_VERDICT=0 \
 sovereign-cli-llm bench chaos-monkey run \
-  --bank sovereign/bench/chaos_monkey/secret_agent.toml --out before.jsonl \
+  --bank bench/lanes/chaos_monkey/secret_agent.toml --out before.jsonl \
   --transcripts before.transcripts.jsonl
 
 # Receipt audit (either transcript set)

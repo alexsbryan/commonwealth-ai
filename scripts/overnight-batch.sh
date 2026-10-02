@@ -243,7 +243,7 @@ fi
 if wants 4; then
   hdr "BLOCK 4 — confirmatory bank + collection"
   B4="$OUT/block4"; mkdir -p "$B4"
-  REAL_BANK="$REPO/sovereign/bench/conversation-private/questions.toml"
+  REAL_BANK="$REPO/bench/lanes/conversation-private/questions.toml"
   if [ ! -f "$REAL_BANK" ] || [ ! -f "$OUT/block1/arm-baseline.json" ]; then
     record "block4-confirmatory" "NEVER-RAN" "real bank absent or block1 baseline missing"
   elif ! start_daemon; then

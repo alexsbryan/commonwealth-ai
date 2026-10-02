@@ -30,7 +30,7 @@ lives on branch
 on main).
 
 **Replay provenance:** every PROVEN row below was re-proven on this
-branch 2026-08-10: `sovereign/bench/calibration/step3/build_failure_corpus.py`
+branch 2026-08-10: `bench/lanes/calibration/step3/build_failure_corpus.py`
 and `attribute_failures.py` regenerate `failure_corpus.jsonl` (31
 cases) and `attribution.json` byte-identically from committed artifacts
 (git diff clean after the run). The claim-level rates in §3.2 are
@@ -55,17 +55,17 @@ specifics behind a disclaimer the honesty classifier accepts (note
 deleted at P1. What flip-on does NOT buy at P1: latency (§5) — the
 judge path is unchanged because judge-skip was refused at resolver
 precision 0.7429 vs bar 0.98
-(`sovereign/bench/calibration/resolver-precision/FINDINGS.md`).
+(`bench/lanes/calibration/resolver-precision/FINDINGS.md`).
 
 ## 1. Inventory
 
 **Evidence.** The four verdict artifacts this plan computes from:
 the H1 offline gate (margin AUROC 0.8990 vs cosine 0.7994,
-`sovereign/bench/calibration/h1-port/FINDINGS.md`); the Step 2 A/B
+`bench/lanes/calibration/h1-port/FINDINGS.md`); the Step 2 A/B
 (honesty 0.91/0.91/0.91, competence 0.74/0.26/0.23,
-`sovereign/bench/calibration/ab/FINDINGS.md` + the ledger row in
+`bench/lanes/calibration/ab/FINDINGS.md` + the ledger row in
 `sovereign/DEFAULTS_LEDGER.md`); the Step 3 failure corpus, 31/31
-attributed (`sovereign/bench/calibration/step3/FAILURE_DECOMPOSITION.md`,
+attributed (`bench/lanes/calibration/step3/FAILURE_DECOMPOSITION.md`,
 `attribution.json`, `failure_corpus.jsonl`); the D5 tau verdict
 (0.65/0.65 vs bar 0.71, margins interleave: present m=1.19 < absent
 m=1.31, `step3/d5_verdict.json`, note d6911acb). Plus the resolver

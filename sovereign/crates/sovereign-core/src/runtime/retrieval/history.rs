@@ -102,7 +102,7 @@ impl Runtime {
     /// Soft-fail by design at every step: a store error, a parse
     /// failure, or an inference error leaves the previously stored frame
     /// in place and the synthesis path continues. Surfaced by
-    /// `sovereign/bench/wikipedia_learn` 2026-05-17 marathon thread.
+    /// `bench/lanes/wikipedia_learn` 2026-05-17 marathon thread.
     pub(crate) async fn maybe_compact_dropped_history(
         &self,
         context: &mut ConversationContext,

@@ -221,12 +221,12 @@ COPY sovereign/.opencode/ ./sovereign/.opencode/
 # sovereign-core include_str!s the router exemplar TOMLs + embed cache.
 COPY sovereign/router/    ./sovereign/router/
 # sovereign-cli-llm's bench_cmd include_str!s exactly this one file —
-# do NOT copy all of sovereign/bench (44 MB of gyms/eval banks).
-# Compile-time `include_str!` targets under sovereign/bench/. These are NOT
+# do NOT copy all of bench/lanes (44 MB of gyms/eval banks).
+# Compile-time `include_str!` targets under bench/lanes/. These are NOT
 # bench data for the image to run — they are baked into sovereign-core at
 # compile time, so a missing one is a BUILD failure, not a missing feature:
 #   error: couldn't read .../bench/calibration/h1-port/h1_admission_calibration.json
-# Each is named individually rather than copying sovereign/bench/ wholesale
+# Each is named individually rather than copying bench/lanes/ wholesale
 # (17 MB in calibration alone, almost none of it compiled in).
 #
 # TO FIND THE FULL SET after touching sovereign-core, resolve every escaping
@@ -234,10 +234,10 @@ COPY sovereign/router/    ./sovereign/router/
 #   grep -rn 'include_str!' --include=*.rs sovereign/crates/sovereign-core | grep '\.\./'
 # The deep relative paths are the hazard — `admission.rs` reaches SIX levels
 # up, so nothing about the call site suggests it depends on bench/.
-COPY sovereign/bench/book-report/bench.toml ./sovereign/bench/book-report/bench.toml
-COPY sovereign/bench/calibration/h1-port/h1_admission_calibration.json ./sovereign/bench/calibration/h1-port/
-COPY sovereign/bench/calibration/h1-port/h1_scores.jsonl ./sovereign/bench/calibration/h1-port/
-COPY sovereign/bench/routing/calibration/axes_v1.toml ./sovereign/bench/routing/calibration/
+COPY bench/lanes/book-report/bench.toml ./bench/lanes/book-report/bench.toml
+COPY bench/lanes/calibration/h1-port/h1_admission_calibration.json ./bench/lanes/calibration/h1-port/
+COPY bench/lanes/calibration/h1-port/h1_scores.jsonl ./bench/lanes/calibration/h1-port/
+COPY bench/lanes/routing/calibration/axes_v1.toml ./bench/lanes/routing/calibration/
 
 # Swap the linux llama-cpp-2 backend feature (whichever of "rocm" or
 # "vulkan" is currently checked in — the repo default has flipped over

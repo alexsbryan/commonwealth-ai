@@ -685,7 +685,7 @@ verified low-latency lane, pending dogfood receipts.
 > so this is a new checkpoint, not harness drift. Measured offline via
 > `examples/next_edit_score`, which runs this route's own pipeline;
 > full table and caveats in
-> [`bench/next-edit-bakeoff/RESULTS_PHASE0.md`](../bench/next-edit-bakeoff/RESULTS_PHASE0.md).
+> [`bench/next-edit-bakeoff/RESULTS_PHASE0.md`](../../bench/lanes/next-edit-bakeoff/RESULTS_PHASE0.md).
 > Mellum2's row has NOT been re-measured since July and should be
 > assumed equally stale.
 

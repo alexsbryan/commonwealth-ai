@@ -1017,7 +1017,7 @@ variant of their own.
 ---
 
 **D1 — MET, ON A LIVE DAEMON, 2026-09-09.** The full run is
-`sovereign/bench/cw_lift_5g_d1/` — `transcript.txt` (four steps, the binary
+`bench/lanes/cw_lift_5g_d1/` — `transcript.txt` (four steps, the binary
 check, the queries), `trace-excerpt.txt` (the journal window), plus the recipe
 and units file the run was actually given.
 

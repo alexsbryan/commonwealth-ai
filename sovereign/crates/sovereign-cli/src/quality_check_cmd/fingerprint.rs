@@ -97,7 +97,7 @@ async fn resolve_slot_stems(base: &str) -> (String, String) {
     (stem_of("primary"), stem_of("fast"))
 }
 
-/// Subset ids declared in `sovereign/bench/smoke.toml`, sorted.
+/// Subset ids declared in `bench/lanes/smoke.toml`, sorted.
 ///
 /// In the fingerprint because a baseline captured against a 6-probe subset
 /// is not comparable to one captured against 12 — the ci-bench README
@@ -111,7 +111,7 @@ async fn resolve_slot_stems(base: &str) -> (String, String) {
 /// (ARCH §18.3). Absent is `Ok(vec![])`; malformed is an `Err` that refuses
 /// the run.
 pub(super) fn smoke_subset_ids(repo: &Path) -> Result<Vec<String>, String> {
-    let path = repo.join("sovereign/bench/smoke.toml");
+    let path = repo.join("bench/lanes/smoke.toml");
     let text = match std::fs::read_to_string(&path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -153,7 +153,7 @@ pub(super) fn smoke_subset_ids(repo: &Path) -> Result<Vec<String>, String> {
 /// Comments and key ORDER are deliberately not in the digest: only what is
 /// selected. A reworded comment must not orphan a baseline.
 pub(super) fn smoke_selection_digest(repo: &Path) -> Result<String, String> {
-    let path = repo.join("sovereign/bench/smoke.toml");
+    let path = repo.join("bench/lanes/smoke.toml");
     let text = match std::fs::read_to_string(&path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok("absent".to_string()),
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn a_malformed_smoke_file_refuses_the_run_and_an_absent_one_does_not() {
         let tmp = tempfile::tempdir().unwrap();
-        let bench = tmp.path().join("sovereign/bench");
+        let bench = tmp.path().join("bench/lanes");
         std::fs::create_dir_all(&bench).unwrap();
         // Absent: legitimately no subsets.
         assert_eq!(smoke_subset_ids(tmp.path()), Ok(Vec::new()));
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn changing_which_ids_a_subset_selects_moves_the_fingerprint() {
         let write = |dir: &Path, body: &str| {
-            let bench = dir.join("sovereign/bench");
+            let bench = dir.join("bench/lanes");
             std::fs::create_dir_all(&bench).unwrap();
             std::fs::create_dir_all(dir.join("quality")).unwrap();
             std::fs::write(dir.join("quality/ARCH_LAYERS.toml"), "").unwrap();
@@ -329,7 +329,7 @@ mod tests {
         assert_eq!(d6, smoke_selection_digest(commented.path()).unwrap());
         // Absent is a named answer, not a hash of nothing.
         let none = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(none.path().join("sovereign/bench")).unwrap();
+        std::fs::create_dir_all(none.path().join("bench/lanes")).unwrap();
         assert_eq!(
             smoke_selection_digest(none.path()),
             Ok("absent".to_string())

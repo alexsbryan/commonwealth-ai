@@ -825,9 +825,9 @@ re-measure run).
   by — the t1e-era fetch lists show all-0.9 ties, the re-measure's
   show the term-relevance ranks.
 - **§11/§19 survey (what was checked before building):** the house's
-  search-gym precedent — `sovereign/bench/search-gym/` (the lane's
+  search-gym precedent — `bench/lanes/search-gym/` (the lane's
   on-disk fixture shape gym.rs already composes, per the module header)
-  and `sovereign/bench/CI_GATE_HANDOFF.md` — is a tool-judiciousness
+  and `bench/lanes/CI_GATE_HANDOFF.md` — is a tool-judiciousness
   bench, not a retrieval engine: it cannot serve the loop's search
   leg. The loop's estate search (`estate_search`) is decked-empty in
   v1 (F13/F16) — the corpus-search surface is rung 2 of the operator's

@@ -348,7 +348,7 @@ fn bench_baselines_row(repo: Option<&Path>) -> Judgement {
         return no_repo_row("bench-baselines");
     };
     let mut latest: Vec<(PathBuf, SystemTime)> = Vec::new();
-    let bench_root = repo.join("sovereign/bench");
+    let bench_root = repo.join("bench/lanes");
     if let Ok(lanes) = std::fs::read_dir(&bench_root) {
         for lane in lanes.flatten() {
             let baselines = lane.path().join("baselines");
@@ -473,7 +473,7 @@ fn git_ignored(repo: &Path, paths: &[PathBuf]) -> std::collections::HashSet<Path
         .collect()
 }
 
-/// Bank directories under `sovereign/bench` that carry a question bank
+/// Bank directories under `bench/lanes` that carry a question bank
 /// (`*.toml`) but no baseline at all. A run against one of these can
 /// only report `first-run` — and `bench all` then WRITES a baseline
 /// from that same run, so the next run compares the change against

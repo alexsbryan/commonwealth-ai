@@ -80,7 +80,7 @@ OPTIONS:
   --embed-model <path>       Override the prescribed embed GGUF.
   --format <fmt>             human (default) | json
   --save-baseline            Record THIS run under
-                             sovereign/bench/routing/baselines/<bank>-fit/
+                             bench/lanes/routing/baselines/<bank>-fit/
                              so a later run can be diffed against it.
   --baseline-dir <path>      Override that directory.
   --no-drift                 Skip the comparison against the baseline.
@@ -709,7 +709,7 @@ async fn cmd_fit(args: &[String]) -> i32 {
     }
 }
 
-/// `sovereign/bench/routing/baselines/<bank>-fit/`.
+/// `bench/lanes/routing/baselines/<bank>-fit/`.
 ///
 /// `<bank>` is the bank file's stem, or the directory's name when the
 /// whole calibration directory was swept — so a default run lands in

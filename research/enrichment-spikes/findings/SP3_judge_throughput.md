@@ -82,7 +82,7 @@ calibrated-confident verdicts and twice the claim coverage.
 ## Stream B seed
 
 Every scored tuple appended as `(member_chunks, claim, verdict, max_support)`
-JSONL — `sovereign/bench/faithfulness/obsidian_fast_seed.jsonl` (959 rows,
+JSONL — `bench/lanes/faithfulness/obsidian_fast_seed.jsonl` (959 rows,
 converter `scripts/sp3_streamb.py`). This is the faithfulness lane's seed format
 per the sizing-doc decision.
 
@@ -107,7 +107,7 @@ restart signal, not a retry case.
   tier only when the primary slot is contended.
 - **P1.2 default sampling rate:** 100% at ≤ 1.5k nodes; 10-15% stratified above
   (sep at 12.5% ≈ 3.7 h primary ≈ 2.3x the full-obsidian cost).
-- **Stream B seeds:** `sovereign/bench/faithfulness/obsidian_fast_seed.jsonl`
+- **Stream B seeds:** `bench/lanes/faithfulness/obsidian_fast_seed.jsonl`
   (959 rows) + `obsidian_primary_sample_seed.jsonl` (197 rows). The two tiers'
   verdicts on the SAME 60 nodes also give a free inter-judge agreement probe for
   the verifier lane.

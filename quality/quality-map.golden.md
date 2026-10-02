@@ -131,7 +131,7 @@
 | `doc-coverage` | `cargo doc --no-deps (RUSTDOCFLAGS=--show-coverage, pinned nightly)` | tracked | F0 | unmeasured | **no** |
 | `drift-detect` | `sovereign drift detect` | tracked | F3 | unmeasured | **no** |
 | `inner-chaos-soak` | `sovereign-cli-llm eval inner-chaos --minutes <n> --journal <path>` | tracked | F3 | unmeasured | **no** |
-| `judge-replay-bank-feed` | `sovereign/bench/chaos_monkey/feed_replay_bank.sh` | advisory | F3 | 15m | **no** |
+| `judge-replay-bank-feed` | `bench/lanes/chaos_monkey/feed_replay_bank.sh` | advisory | F3 | 15m | **no** |
 | `mesh-live-probe` | `python3 scripts/mesh-live-probe.py` | advisory | F3 | unmeasured | **no** |
 | `module-cycles` | `cargo modules dependencies --acyclic -p <crate>` | tracked | F0 | unmeasured | **no** |
 | `pre-commit` | `./scripts/pre-commit.sh` | advisory | F0 | unmeasured | **no** |
@@ -150,7 +150,7 @@
 | `desktop-sabotage` | `npm run sabotage` | hard | F1 | unmeasured | yes |
 | `domains-census-self-test` | `python3 scripts/domains-census.py --self-test` | advisory | F0 | 0.27s | **no** |
 | `inner-chaos-calibrate` | `sovereign-cli-llm eval inner-chaos --calibrate` | hard | F3 | 5m | **no** |
-| `judge-replay-control` | `python3 sovereign/bench/chaos_monkey/judge_replay_report.py --self-test` | hard | F0 | 0.03s | yes |
+| `judge-replay-control` | `python3 bench/lanes/chaos_monkey/judge_replay_report.py --self-test` | hard | F0 | 0.03s | yes |
 | `pre-push-fail-closed` | `bash scripts/tests/pre-push-fail-closed.sh` | hard | F2 | unmeasured | yes |
 | `run-if-stale` | `scripts/run-if-stale.sh --self-test` | advisory | F0 | unmeasured | **no** |
 | `sabotage` | `python3 scripts/sabotage.py` | advisory | F0 | unmeasured | **no** |
@@ -164,8 +164,8 @@
 | `cli-contract-live-verify` | `sovereign/scripts/cli-contract-live-verify.sh` | tracked | F3 | unmeasured | **no** |
 | `co-lineage` | `python3 scripts/co-lineage.py` | advisory | F0 | 0.05s | **no** |
 | `evidence-verdict` | `python3 scripts/evidence-verdict.py` | advisory | F0 | unmeasured | **no** |
-| `judge-replay-bank` | `python3 sovereign/bench/chaos_monkey/judge_replay_cases.py --bank-age` | advisory | F0 | 0.13s | **no** |
-| `judge-replay-report` | `python3 sovereign/bench/chaos_monkey/judge_replay_report.py` | advisory | F0 | 0.03s | **no** |
+| `judge-replay-bank` | `python3 bench/lanes/chaos_monkey/judge_replay_cases.py --bank-age` | advisory | F0 | 0.13s | **no** |
+| `judge-replay-report` | `python3 bench/lanes/chaos_monkey/judge_replay_report.py` | advisory | F0 | 0.03s | **no** |
 | `nc-thesis` | `python3 scripts/nc-thesis.py` | advisory | F0 | 0.04s | **no** |
 | `oicp-conformance` | `scripts/oicp-conformance-lane.sh` | hard | F3 | unmeasured | **no** |
 | `quality-check` | `svrn quality check` | hard | F3 | 29m | **no** |
@@ -316,9 +316,9 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
 - `build-timings` — .github/workflows/weekly.yml (header) · runs in: weekly:timings
 - `capability-map` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (capability_row) · runs in: by-hand
-- `chaos-monkey` — sovereign/bench/chaos_monkey/README.md · runs in: check
+- `chaos-monkey` — bench/lanes/chaos_monkey/README.md · runs in: check
 - `chat-ask` — sovereign/crates/sovereign-cli/src/quality_check_cmd/mod.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run) · runs in: check
-- `ci-bench` — sovereign/bench/README.md · runs in: by-hand
+- `ci-bench` — bench/lanes/README.md · runs in: by-hand
 - `cli-contract-live-verify` — sovereign/docs/TESTING_SURFACE.md · runs in: by-hand
 - `cli-journey-sandbox` — sovereign/docs/TESTING_SURFACE.md · runs in: by-hand
 - `cli-journey-verify` — sovereign/docs/cli-contract.toml (journeys) · runs in: by-hand
@@ -372,32 +372,32 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `doc-coverage` — .github/workflows/weekly.yml (header) · runs in: weekly:doc-coverage
 - `domains-census-self-test` — scripts/domains-census.py (module header — the planted controls) · runs in: by-hand, prepush
 - `drift-detect` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (drift_row) · runs in: by-hand
-- `enrichment-f1` — sovereign/bench/literary/README.md · runs in: check
+- `enrichment-f1` — bench/lanes/literary/README.md · runs in: check
 - `evidence-verdict` — AGENTS.md §Code Intelligence (the tool table row: "Does the test my commit body cites actually SEE the change?") · runs in: by-hand
 - `feature-matrix` — .github/workflows/weekly.yml (header) · runs in: weekly:features
 - `feature-powerset` — .github/workflows/weekly.yml (header) · runs in: weekly:features
 - `hakari-verify` — quality/BUILD_LATENCY.md D1 — the workspace-hack crate keeps feature resolution scope-invariant; `cargo hakari generate` after any dependency change, or this reports drift. Advisory until a week of pushes shows no false positive (AGENTS.md §Definition of done); needs cargo-hakari installed (`cargo install cargo-hakari --locked`). · runs in: prepush
 - `hook-wiring` — .claude/hooks/tests/settings-wiring.sh · runs in: prepush
 - `inner-chaos-calibrate` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: smoke:2
-- `inner-chaos-soak` — sovereign/bench/chaos_monkey/README.md · runs in: smoke:5
+- `inner-chaos-soak` — bench/lanes/chaos_monkey/README.md · runs in: smoke:5
 - `judge-replay` — sovereign/crates/sovereign-cli-llm/src/judge_replay.rs (module header) · runs in: by-hand
 - `judge-replay-bank` — quality/campaigns/verifier-loop.toml §vl-bank-live · runs in: run-if-stale, by-hand
-- `judge-replay-bank-feed` — sovereign/bench/chaos_monkey/feed_replay_bank.sh (module header) · runs in: run-if-stale
-- `judge-replay-report` — sovereign/bench/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce) · runs in: by-hand
-- `knowledge-gym` — sovereign/bench/knowledge-gym/RUNBOOK.md · runs in: check
+- `judge-replay-bank-feed` — bench/lanes/chaos_monkey/feed_replay_bank.sh (module header) · runs in: run-if-stale
+- `judge-replay-report` — bench/lanes/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce) · runs in: by-hand
+- `knowledge-gym` — bench/lanes/knowledge-gym/RUNBOOK.md · runs in: check
 - `lint-gate` — scripts/pre-push.sh (header — why it is not a push gate) · runs in: by-hand
 - `mesh-live-probe` — scripts/mesh-live-probe.py (module header — routing behaviour against the real fleet) · runs in: by-hand
 - `mesh-soak` — cmnwlth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
 - `mesh-soak-gate` — cmnwlth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
 - `module-cycles` — .github/workflows/weekly.yml (header) · runs in: weekly:cycles
-- `mtp-probe` — sovereign/bench/README.md · runs in: smoke:1
+- `mtp-probe` — bench/lanes/README.md · runs in: smoke:1
 - `nc-thesis` — scripts/nc-thesis.py (module header — is the product claim a TYPE?) · runs in: by-hand, prepush
 - `oicp-conformance` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row) · runs in: run-if-stale
 - `pre-commit` — scripts/pre-commit.sh (header) · runs in: by-hand
 - `pre-push` — scripts/pre-push.sh (header — the one-minute budget) · runs in: by-hand
 - `quality-check` — sovereign/docs/CLI_REFERENCE.md#svrn-quality · runs in: smoke:2, by-hand
-- `retrieval-prod` — sovereign/bench/sep/README.md · runs in: check
-- `routing` — sovereign/bench/README.md · runs in: check
+- `retrieval-prod` — bench/lanes/sep/README.md · runs in: check
+- `routing` — bench/lanes/README.md · runs in: check
 - `routing-replay` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:3
 - `run-if-stale` — scripts/run-if-stale.sh (header) · runs in: by-hand
 - `rustsec-advisories` — .github/workflows/weekly.yml (header) · runs in: weekly:advisories
@@ -405,9 +405,9 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `smoke-attach-mode` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:1
 - `sovereign-lint` — AGENTS.md §Compilation and test feedback · runs in: smoke:0, by-hand
 - `sovereign-lint-scoped` — scripts/pre-push.sh (header — why the compile runs alongside the ratchets) · runs in: prepush
-- `synth` — sovereign/bench/sep/README.md · runs in: check
+- `synth` — bench/lanes/sep/README.md · runs in: check
 - `throughput` — scripts/throughput_probe.py (the probe this lane wraps and finally compares) · runs in: check
-- `throughput-probe` — sovereign/bench/README.md · runs in: smoke:1
+- `throughput-probe` — bench/lanes/README.md · runs in: smoke:1
 - `twin-census` — quality/twin-plants.toml (the families and their plants) · runs in: by-hand
 - `windows-crosscheck` — .github/workflows/desktop-release.yml · runs in: by-hand
 - `wizard-verify` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: smoke:6, by-hand

@@ -320,7 +320,7 @@ unchanged corpus re-run makes zero LLM calls. Operator re-run surface
 This is a **bench-side** artifact: no chat-path surface (briefing,
 rerank) reads these atoms; `sovereign bench obsidian
 --corpus <vault-corpus>` scores them against
-`sovereign/bench/obsidian/golden.toml`. Rationale + atom shapes:
+`bench/lanes/obsidian/golden.toml`. Rationale + atom shapes:
 [`specs/TYPED_EXTENSION_PASS.md`](./specs/TYPED_EXTENSION_PASS.md)
 (shipped 2026-05-24).
 

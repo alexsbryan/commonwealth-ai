@@ -94,7 +94,7 @@ fn cli_crate_sources() -> String {
         "sovereign/crates/sovereign-cli",
         "code/crates/sovereign-cli-dev",
         "sovereign/crates/sovereign-cli-llm",
-        "sovereign/crates/sovereign-cli-bench",
+        "bench/crates/sovereign-cli-bench",
         "sovereign/crates/sovereign-cli-daemon",
         // ingest's CLI (`svrn-ingest`), since pb-cli-llm-ingest-move.
         "ingest/crates/sovereign-pipeline",

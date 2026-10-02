@@ -188,14 +188,14 @@ embeddings cache (never bulk-embeds the resident set).
 # SEP retrieval neutrality (v2 reader+seeding == v1), markers off for a clean rkyv baseline:
 sovereign atlas migrate-all --no-flip
 find ~/.svrnmesh/indexes -maxdepth 3 -name .read_v2 -delete
-sovereign eval run --bank sovereign/bench/sep/questions.toml --with-atlas <sep-list> \
+sovereign eval run --bank bench/lanes/sep/questions.toml --with-atlas <sep-list> \
   --atlas-backend rkyv  --atlas-seed cosine --atlas-depth extracted --output /tmp/v1.json
-sovereign eval run --bank sovereign/bench/sep/questions.toml --with-atlas <sep-list> \
+sovereign eval run --bank bench/lanes/sep/questions.toml --with-atlas <sep-list> \
   --atlas-backend lance --atlas-seed ann    --atlas-depth extracted --output /tmp/v2.json
 # expect: source recall identical (modulo the dedup_by_source tie-break), retrieved churn
 #         at the cosine-vs-cosine noise floor.
 sovereign atlas wikipedia neighbors wikipedia <hub-title>   # expect "PARITY: MATCH" vs SQLite
-sovereign bench chaos-monkey run --bank sovereign/bench/chaos_monkey/secret_agent.toml \
+sovereign bench chaos-monkey run --bank bench/lanes/chaos_monkey/secret_agent.toml \
   --transport direct --corpus chaos-secret-agent --out /tmp/chaos.jsonl
 sovereign bench gate chaos-monkey /tmp/chaos.jsonl          # baseline-relative QA gate
 # then flip:

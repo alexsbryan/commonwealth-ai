@@ -96,7 +96,7 @@ SOVEREIGN_GROUNDING_GATE=1 \           # gate on (the thing under test)
 SOVEREIGN_GV_THRESHOLD=0.9 \           # default threshold
 SOVEREIGN_AGENTIC_KQ_DEBUG=1 \         # trace gate decisions to stderr
   target/debug/sovereign-cli-llm bench chaos-monkey run \
-    --bank sovereign/bench/chaos_monkey/secret_agent.toml \
+    --bank bench/lanes/chaos_monkey/secret_agent.toml \
     --corpus chaos-secret-agent \
     --out  target/flywheel/out.jsonl \
     --transcripts target/flywheel/tr.jsonl \

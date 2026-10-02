@@ -129,7 +129,7 @@ mod tests {
         // And the lane's baseline_dir is now a baseline KIND.
         assert_eq!(
             baseline_dir(check[0]),
-            Some("sovereign/bench/quality-check/baselines/chat-ask")
+            Some("bench/lanes/quality-check/baselines/chat-ask")
         );
         assert_eq!(baseline_dir(prepush[0]), None);
     }

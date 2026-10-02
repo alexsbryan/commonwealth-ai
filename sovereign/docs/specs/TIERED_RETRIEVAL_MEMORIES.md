@@ -91,7 +91,7 @@ surface. Combined with the already-shipped memory-grounding verifier
 (`runtime/memory_grounding.rs`, which stops reciting raw content /
 confabulating), the port gives better retrieval *without* reopening the
 safety posture that the inner-chaos loop converged
-([`../../bench/inner_work/CHAOS_HARNESS.md`](../../bench/inner_work/CHAOS_HARNESS.md)
+([`bench/lanes/inner_work/CHAOS_HARNESS.md`](../../../bench/lanes/inner_work/CHAOS_HARNESS.md)
 §7).
 
 ---
@@ -341,7 +341,7 @@ more summary tuning.
   port matrix this row belongs in.
 - [`ingest/crates/corpus-engine/ENRICHMENT.md`](../../../ingest/crates/corpus-engine/ENRICHMENT.md)
   — three enrichment systems; System 3 (tiered) is the one ported here.
-- [`../../bench/inner_work/CHAOS_HARNESS.md`](../../bench/inner_work/CHAOS_HARNESS.md)
+- [`bench/lanes/inner_work/CHAOS_HARNESS.md`](../../../bench/lanes/inner_work/CHAOS_HARNESS.md)
   §7 — the recall bench + the synthesis-side grounding verifier this
   port complements.
 - `sovereign-core/src/runtime/memory_grounding.rs` — the shipped

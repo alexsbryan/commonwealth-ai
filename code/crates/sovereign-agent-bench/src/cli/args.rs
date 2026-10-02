@@ -67,7 +67,7 @@ pub enum ArgsError {
 
 impl RunArgs {
     pub fn parse(argv: &[String]) -> Result<Self, ArgsError> {
-        let mut bench_root = PathBuf::from("sovereign/bench/agent-coding");
+        let mut bench_root = PathBuf::from("bench/lanes/agent-coding");
         let mut agent = "pi".to_string();
         let mut model = "commonwealth/coder".to_string();
         let mut problems: Option<Vec<String>> = None;

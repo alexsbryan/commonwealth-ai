@@ -1,6 +1,6 @@
 # v0 subset golden — the obsidian golden's Ostrom-essay entries, copied
 # verbatim (research/prompt-climb/PRE-REG-obsidian-2026-09-09.md: no
-# re-authoring, no new judgment). Sourced from sovereign/bench/obsidian/golden.toml.
+# re-authoring, no new judgment). Sourced from bench/lanes/obsidian/golden.toml.
 
 [meta]
 corpus_id = "climb-ostrom"

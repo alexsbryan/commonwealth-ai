@@ -301,7 +301,7 @@ impl AttachedDocumentSearchTool {
         // `SOVEREIGN_DOC_CLUSTER_WEIGHT` / `SOVEREIGN_DOC_CLUSTER_POOL` are
         // gone. The knob shipped dark 2026-05-22 and the T1 P0.4 ablation
         // matrix settled it: Δ = 0.0000 on every sep bank, every rep
-        // (`sovereign/bench/ablation/2026-07-31-sep-knob-matrix.json`), which
+        // (`bench/lanes/ablation/2026-07-31-sep-knob-matrix.json`), which
         // is the reject condition its own DEFAULTS_LEDGER row named. Scope
         // caveat kept honest: those banks do not exercise this attached-doc
         // path, so the evidence is "no bank can show this earns its keep",

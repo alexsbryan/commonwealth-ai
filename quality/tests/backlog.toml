@@ -413,7 +413,7 @@ paired OFF baseline FROM THE SAME RUN because the OFF arm leaks too.
 
 No such lane exists. `scripts/sovereign-ci-bench.sh` has no surgery lane, and
 its baseline machinery is this-run-vs-committed-past-baseline, a different
-relation. `sovereign/bench/` names surgery only in `CI_GATE_HANDOFF.md` prose
+relation. `bench/lanes/` names surgery only in `CI_GATE_HANDOFF.md` prose
 and inside result artifacts. The only surgery A/B is two DATED one-off
 launchers (`sovereign-desktop/tests/e2e/scripts/launch-surgical-{calibration,
 recalib}.py`) whose arm pairing is incidental to running both in one process.
@@ -1884,7 +1884,7 @@ found = "2026-08-26"
 class = "ambient-dependence"
 tier = 1
 surface = "shell"
-target = "sovereign/bench/external/aa-omniscience/coverage.py"
+target = "bench/lanes/external/aa-omniscience/coverage.py"
 failure = """UNSCOPED RETRIEVAL ON A DEV HOST MEASURES THE DEV HOST, NOT THE
 PRODUCT. It applies to ANY grounded bench: this host carries 42 installed
 indexes and a shipped product carries a handful, so an unscoped run measures a
@@ -1900,7 +1900,7 @@ found = "2026-08-26"
 class = "silent-substitute"
 tier = 1
 surface = "shell"
-target = "sovereign/bench/external/aa-omniscience/coverage.py"
+target = "bench/lanes/external/aa-omniscience/coverage.py"
 failure = """AN EMPTY RETRIEVED PASSAGE GRADES AS 'NOT COVERED' AND READS AS
 'THE CORPUS DOES NOT HOLD IT' — A FALSE VERDICT THAT PASSED BOTH INSTRUMENT
 CONTROLS. The controls checked that the instrument ran and that it produced

@@ -25,7 +25,7 @@
 //! floor, and cosine is trained on topical similarity, not containment —
 //! which is exactly why its floor was never calibrated past the "in-topic
 //! thin" failure. The kill gate (`NATIVE_GROUNDING.md §7.3`, artifacts in
-//! `sovereign/bench/calibration/h1-port/`) measured both on the same 4,207
+//! `bench/lanes/calibration/h1-port/`) measured both on the same 4,207
 //! pairs:
 //!
 //! | signal | AUROC | honesty-recall @ 5% false alarm |
@@ -71,7 +71,7 @@ const POOL_K: usize = 8;
 
 /// The committed calibration, as data (ARCH §6 — config is data, not
 /// code). Deriving it lives in
-/// `sovereign/bench/calibration/h1-port/fit_admission_calibration.py`;
+/// `bench/lanes/calibration/h1-port/fit_admission_calibration.py`;
 /// this file is its only output and this `include_str!` is its only
 /// reader, so there is exactly one Platt fit and one pair of thresholds
 /// in the workspace.

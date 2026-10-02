@@ -109,7 +109,7 @@ async fn cmd_align(args: &[String]) -> i32 {
     let mut model = "primary".to_string();
     // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
     let mut base: Option<String> = None;
-    let mut bank_path = "sovereign/bench/sep/questions.toml".to_string();
+    let mut bank_path = "bench/lanes/sep/questions.toml".to_string();
     let mut right_corpus = "wikipedia".to_string();
 
     for a in args {

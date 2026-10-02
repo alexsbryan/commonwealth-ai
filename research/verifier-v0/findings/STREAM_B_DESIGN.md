@@ -7,7 +7,7 @@ file:line-cited so the M2 session can start building without re-discovery.
 ## What exists (reuse before building)
 
 **Substrate — chunks and typed entities:**
-- Saltgrass text in-repo: `sovereign/bench/chaos_monkey/corpora/saltgrass-ledger.txt`
+- Saltgrass text in-repo: `bench/lanes/chaos_monkey/corpora/saltgrass-ledger.txt`
   (~8.3k words) + `corpora/SALTGRASS_FACT_LEDGER.md`. NOT installed under
   `~/.svrnmesh/bench-corpora/` on this machine — recipe
   `ingest/crates/sovereign-recipes/chaos-saltgrass/recipe.toml` must be ingested first.
@@ -18,8 +18,8 @@ file:line-cited so the M2 session can start building without re-discovery.
   `research/verifier-v0/out/chaos-secret-agent.questions.json` (typed `section_extraction`) and
   `research/verifier-v0/out/chaos-secret-agent.named-clusters.json`.
 - Real (question, answer, evidence, label) tuples for calibration:
-  `sovereign/bench/gap_check/bank.toml` (harvested from a live chaos run) and
-  frozen run transcripts in `sovereign/bench/chaos_monkey/results/*.jsonl`.
+  `bench/lanes/gap_check/bank.toml` (harvested from a live chaos run) and
+  frozen run transcripts in `bench/lanes/chaos_monkey/results/*.jsonl`.
 
 **Corruption machinery (~20% of the spec taxonomy exists):**
 - `sovereign-eval/src/mechanism_fidelity/perturb.rs` — seeded metamorphic

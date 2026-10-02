@@ -163,14 +163,14 @@ work.
 **To check whether your own change regressed any of this:
 `./scripts/sovereign-ci-bench.sh --quick` (~35-40m) — the one bench that
 composes every lane above into a single verdict. Start at
-[`sovereign/bench/README.md`](../sovereign/bench/README.md); read a
+[`bench/lanes/README.md`](../bench/lanes/README.md); read a
 verdict with [`sovereign/docs/RUNBOOK.md`](../sovereign/docs/RUNBOOK.md)
 §6. The workspace lint/test scripts are the *build* gate and never run a
 model against a question bank — they stay green through an
 answer-quality regression.**
 
 *Deep dive: SYSTEM_OVERVIEW §4 (gate) and §7 (build/test); benches under
-[`sovereign/bench/`](../sovereign/bench/README.md); CI gates in
+[`bench/lanes/`](../bench/lanes/README.md); CI gates in
 `quality/xtask/`.*
 
 ## 6. Surfaces and ports: who can reach what

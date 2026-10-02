@@ -83,8 +83,8 @@ present 15/17, provenance 1/4, distractor 0/3, OOD 5/5).
 
 ```bash
 # naked (bare model) — per tier
-sovereign bench chaos-monkey run --bank sovereign/bench/chaos_monkey/secret_agent.toml \
-  --manifest sovereign/bench/chaos_monkey/manifest.toml --corpus chaos-secret-agent \
+sovereign bench chaos-monkey run --bank bench/lanes/chaos_monkey/secret_agent.toml \
+  --manifest bench/lanes/chaos_monkey/manifest.toml --corpus chaos-secret-agent \
   --naked [--chat-model fast]   --out target/ci-bench/chaos-naked.jsonl
 # full (harness) — per tier
 sovereign bench chaos-monkey run --bank ... --corpus chaos-secret-agent \

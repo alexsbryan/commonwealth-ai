@@ -49,7 +49,7 @@ set -uo pipefail
 
 CORPUS_ID="brothers_karamazov"
 BENCH_FILTER="literary/bk-book-1"
-BASELINE="sovereign/bench/literary/baselines/bk-book-1/latest.json"
+BASELINE="bench/lanes/literary/baselines/bk-book-1/latest.json"
 RESOLUTION_RS="ingest/crates/corpus-engine/src/enrichment/atlas/resolution.rs"
 CANARY_TARGET="target/canary"
 ORIGINAL="0.85"
@@ -156,7 +156,7 @@ echo "deleted $ATLAS_DIR/atoms.json — resolve will re-run"
 # ── Run the lane ───────────────────────────────────────────────────────────
 echo "running the HARD lane with --rebuild ($MODE mode) ..."
 "$CANARY_TARGET/debug/sovereign-cli-llm" bench all \
-  --bench-root sovereign/bench --filter "$BENCH_FILTER" --rebuild --report "$REPORT"
+  --bench-root bench/lanes --filter "$BENCH_FILTER" --rebuild --report "$REPORT"
 LANE_EXIT=$?
 
 # ── Verdict ────────────────────────────────────────────────────────────────
