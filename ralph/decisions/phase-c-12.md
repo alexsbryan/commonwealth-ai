@@ -1,13 +1,14 @@
 <!-- ledger -->
 
-**phase-c-11 · 2026-10-02 · pc-cli-config-load-silent-default · worker** — this commit
+**phase-c-12 · 2026-10-02 · pc-cli-config-load-silent-default · worker** — this commit
 - Needed: the row's census found the incident's config fails `SetupConfig::load` by validation (`validate_class`: neither `[models]` nor a `[node]` entry), not by parse, and that the row's fix as written touches 11 crates against a three-crate lift. A first session stopped at census with both forks (validation vs parse-only refusal; split or authorize); the package never reached the director.
 - Chose: refuse on ANY load error, validation included, which is the row's letter ("exists but does not load refuses"). Built the half inside the lift: `SetupConfig::load_present` in contracts and every cli-mesh dial (the incident's verbs) on it, 16efaf015 and 0f61bc951. Left the `client_daemon_base`/`internal_daemon_base` half (35 callers, 9 crates) to the director as a split, and did not write the lane's `.done`.
 - Because: refusing is the conservative reading. A config that fails validation also fails the daemon's own load, so no daemon can be running on the port it names, and dialling it would reach nothing; refusing names the file instead. Parse-only refusal would mean a second loader that skips validation, a second answer to "does this config load" (principle 8). The scope guard stops at more than twice the lift, so the 9-crate half is the director's to split or authorize. REVIEW-AFTER: a sandbox that wants mesh verbs now has to write a `[models]` or `[node]` stanza.
+- Minted as `phase-c-11` in its lane and renumbered at merge: that lane's commit bodies cite `phase-c-11`.
 
 <!-- appendix -->
 
-## phase-c-11 · 2026-10-02 — mesh verbs refuse a config that does not load, validation included; the client_daemon_base half waits for a split
+## phase-c-12 · 2026-10-02 — mesh verbs refuse a config that does not load, validation included; the client_daemon_base half waits for a split
 
 <details><summary>reasoning, evidence, package</summary>
 
