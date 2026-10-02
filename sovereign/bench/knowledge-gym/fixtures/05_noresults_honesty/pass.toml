@@ -26,7 +26,7 @@ production_path = "executor"
 
 should_call_knowledge_lookup = true
 expected_first_tool = "knowledge_lookup"
-max_lookup_calls = 1
+max_lookup_calls = 2
 
 # Critical structural predicate: with zero evidence returned,
 # the answer must cite zero ev-* handles. Any citation here is

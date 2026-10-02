@@ -103,7 +103,7 @@ jobs:
         run: |
           cargo hack check --each-feature --no-dev-deps \
             -p corpus-engine -p sovereign-cli -p sovereign-cli-daemon \
-            -p sovereign-cli-shared -p sovereign-inference -p sovereign-mesh \
+            -p sovereign-cli-shared -p sovereign-inference \
             -p sovereign-store -p sovereign-tools -p commonwealth-api \
             -p commonwealth-transport
       # Pairwise combinations only where the axes actually reshape the dep
@@ -111,7 +111,7 @@ jobs:
       - name: Powerset (depth 2) on the graph-reshaping crates
         run: |
           cargo hack check --feature-powerset --depth 2 --no-dev-deps \
-            -p corpus-engine -p sovereign-mesh -p sovereign-tools \
+            -p corpus-engine -p sovereign-tools \
             -p commonwealth-transport
 
   cycles:

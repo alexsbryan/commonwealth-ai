@@ -270,7 +270,14 @@ All holdings Corpus+Verified → `Grounded`. Any Memory holding →
 `MemoryRecall`/`Mixed`. GK holdings present → `GeneralKnowledge`/
 `Mixed`. No supported holdings + gaps → `CannotKnowFromHere` (the
 abstention state — now structurally carrying its gaps and routes,
-because they are fields of the same object).
+because they are fields of the same object). A gated release whose
+text declines the asked fact (`grounding::declines_asked_fact`) while
+every holding is Corpus+Verified is also `CannotKnowFromHere`: it
+restated adjacent facts and answered nothing asked, and keeps those
+holdings and citations. The decline must open the text (a trailing
+caveat after a full answer is not one); a contrast or general-knowledge
+pivot that goes on to assert a new value, or any unverified holding,
+keeps the derivation above.
 
 ### 4.5 `citations` — the gate's passages, made openable
 
@@ -480,12 +487,13 @@ this plan, each recorded at the code site:
   {n_acquisition_labeled, acquisition_matched}` + a TRACKED line in
   the runner summary. Red lines untouched.
 
-**Live before/after demo** (real embed slot + real installed corpora,
-no mocks): `cargo run -p sovereign-cli-llm --features
-corpus-engine/treesitter --example epistemic_demo` (daemon must be
-up). Prints the predecessor's dead-end abstention next to the
-ledger's coverage verdict + acquisition conjecture per question —
-the resource-pitch artifact. Verified 2026-07-18 on 33 installed
+**Live probe** (real embed slot + real installed corpora, no mocks):
+`svrn __probe --request <file> --output <file>` with `"mode":
+"epistemic"` (daemon must be up; the composed binary, which holds
+ingest's read port). Writes the ledger's coverage verdict +
+acquisition conjecture per question as `ProbeEvidence::Epistemic`.
+It replaced the `epistemic_demo` example, which printed the same
+signals beside the predecessor's dead-end abstention. Verified 2026-07-18 on 33 installed
 corpora: chaos "Heat's first name" → ClaimUncovered (0.80 similarity
 in chaos-secret-agent) → web search; "EU AI Act foundation-model
 rules" → TopicUncovered (0.50) → Install federal-register recipe.

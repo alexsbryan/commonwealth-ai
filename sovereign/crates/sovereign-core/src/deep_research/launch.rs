@@ -40,7 +40,7 @@ use crate::oicp::ShardingPrivacy;
 use crate::setup_config::SetupConfig;
 use crate::traits::InferenceProvider;
 use crate::types::Custody;
-use corpus_engine::index::{CorpusIndex, InsertChunk};
+use corpus_index::index::{CorpusIndex, InsertChunk};
 
 /// The launch sidecar (order deep-research-t3a): the run's backend
 /// identity, written into the run dir BEFORE launch and read back on
@@ -115,13 +115,13 @@ pub struct Launch {
 /// expensive thing in this tree to misdirect — ignore `SOVEREIGN_DAEMON_URL`
 /// and silently drive the operator's local daemon instead of the one the
 /// operator had just pointed it at (§10.6, §18.3).
-pub fn daemon_endpoint() -> String {
-    format!("{}/v1", crate::setup_config::client_daemon_base())
+pub fn daemon_endpoint() -> Result<String, String> {
+    Ok(format!("{}/v1", crate::setup_config::client_daemon_base()?))
 }
 
 pub fn daemon_targets() -> Result<(String, String, String), String> {
     let cfg = SetupConfig::load().map_err(|e| format!("SetupConfig load: {e}"))?;
-    let endpoint = daemon_endpoint();
+    let endpoint = daemon_endpoint()?;
     // Deep research names its draft + embed models by GGUF stem, which a node
     // holding no weights cannot do. The refusal says which case this is.
     let models = cfg.models()?;
@@ -619,15 +619,13 @@ mod tests {
     /// operator's local one instead — and a run is the most expensive thing
     /// in the tree to misdirect.
     ///
-    /// This resolves WITHOUT a `SetupConfig` on disk, deliberately: the
-    /// endpoint is not a config-dependent fact once it goes through
-    /// `client_daemon_base`, which carries its own fallback. Only the two
-    /// MODEL ids still need the config, which is why `daemon_targets` keeps
-    /// returning a `Result` and this accessor does not.
+    /// This resolves WITHOUT a `SetupConfig` on disk, deliberately: with no
+    /// config `client_daemon_base` answers the default; only one that exists
+    /// and does not load is an `Err`. The two MODEL ids still need the config.
     #[test]
     fn the_daemon_endpoint_honours_the_knob() {
         let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://a-rented-pod:9841")]);
-        assert_eq!(daemon_endpoint(), "http://a-rented-pod:9841/v1");
+        assert_eq!(daemon_endpoint().unwrap(), "http://a-rented-pod:9841/v1");
     }
 
     // ------------------------------------------------------------------

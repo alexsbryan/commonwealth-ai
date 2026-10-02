@@ -7,18 +7,15 @@ use axum::Json;
 use futures::StreamExt;
 use tracing::{debug, info, warn};
 
-use commonwealth_core::activity::{ActivityEventKind, ServedFor};
-use commonwealth_core::contributions::LedgerEventKind;
-use commonwealth_core::ids::{ModelId, NodeId};
-use commonwealth_core::mesh::NodeStatus;
+use crate::types::MemberStatus;
+use kernel_types::ModelId;
+use kernel_types::NodeId;
+use oicp_types::activity::{ActivityEventKind, ServedFor};
+use oicp_types::contributions::LedgerEventKind;
 use oicp_types::{CapabilityClaim, InferenceRequirements, ShardingPrivacy};
 use std::collections::HashSet;
 use std::time::Instant;
 
-#[cfg(feature = "atos")]
-use crate::middleware::{
-    MiddlewareError, MiddlewareSession, Pipeline, PipelineContext, ResponseView,
-};
 use crate::openai_types::*;
 use crate::state::AppState;
 
@@ -28,14 +25,40 @@ use crate::state::AppState;
 /// stays true when the operator renames the node.
 const LOCAL_HOLDER: &str = "local";
 
+/// The inference state did not answer: a named 503, never a routing miss
+/// or an empty list (principle 6).
+fn inference_state_absent(e: &crate::ledger_port::LedgerAbsent) -> Response {
+    warn!(error = %e, "inference state unread");
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(
+            serde_json::to_value(ErrorResponse::new(
+                format!("the inference state did not answer: {e}"),
+                "inference_state_absent",
+            ))
+            .unwrap_or_default(),
+        ),
+    )
+        .into_response()
+}
+
 /// POST /v1/chat/completions — OpenAI-compatible chat completions.
 pub async fn chat_completions(
     State(state): State<AppState>,
     headers: HeaderMap,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     guest: Option<axum::Extension<crate::client_auth::Guest>>,
+    connect: Option<axum::Extension<axum::extract::ConnectInfo<std::net::SocketAddr>>>,
     Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
+    sovereign_contracts::turn_admission::honour_turn_admission(
+        &mut request,
+        sovereign_contracts::turn_admission::from_this_host(
+            connect.map(|axum::Extension(axum::extract::ConnectInfo(p))| p),
+            attached.as_ref().map(|axum::Extension(a)| &a.0),
+        ),
+        "daemon",
+    );
     // ── Guest scope refinement ────────────────────────────────────────
     //
     // `client_auth` already decided this caller may reach this ROUTE. What
@@ -117,34 +140,13 @@ pub async fn chat_completions(
         request.tool_profile = Some(name.to_string());
     }
 
-    // ── ATOS pipeline resolution ──────────────────────────────────────
-    //
-    // If the model name matches a pipeline alias (e.g.,
-    // `commonwealth/sovereign-coder`), run the ATOS middleware chain
-    // before any legacy routing. On success the pipeline rewrites
-    // `request.model` to the concrete model id the middleware config
-    // says to use, and we drop into priority-0 routing exactly as if
-    // the client had sent the concrete name directly.
-    //
-    // The pipeline also arms a `PostPathGuard` that spawns
-    // `run_post` as a detached task when this handler returns — any
-    // exit path triggers it via `Drop`, so the post-path fires
-    // whether we serve from local_inference, fall through to OICP
-    // routing, or return an error.
-    //
-    // On failure — the usual cause is ApprovalRequired when a
-    // feature hasn't been approved and the request tries to call a
-    // write-intent tool — we short-circuit with a structured
-    // OpenAI-compatible error so opencode surfaces it as a model
-    // error rather than a transport failure.
+    // ── Model resolution ──────────────────────────────────────────────
     let requested_model = request.model.clone().unwrap_or_default();
 
     // Slot-alias rewrite. `commonwealth/primary` / `primary` etc.
     // resolve to the GGUF stem bound to that slot in `SetupConfig`,
     // so opencode (and other OpenAI-shape clients) can name slots
-    // instead of GGUF filenames. Pipeline aliases below still take
-    // precedence — a client that explicitly names a pipeline alias
-    // gets the full middleware stack rather than the bare slot.
+    // instead of GGUF filenames.
     //
     // EXCEPTION: the mesh-routable forms (`primary`, `commonwealth/primary`,
     // `fast`, `commonwealth/fast`) are passed through *unresolved* so
@@ -176,38 +178,6 @@ pub async fn chat_completions(
             requested = %requested_model,
             "chat_completions: mesh-routable alias — deferring resolution to mesh layer"
         );
-    }
-
-    // ATOS served-middleware pipeline (feature `atos`, off by default). Only
-    // pipeline-alias requests (e.g. `commonwealth/sovereign-coder`) enter it;
-    // plain `primary`/`fast`/concrete-model chat — the harness-protocol product
-    // path — never resolves a pipeline and is unaffected when atos is off.
-    #[cfg(feature = "atos")]
-    let requested_model = request.model.clone().unwrap_or_default();
-    #[cfg(feature = "atos")]
-    let _post_guard: Option<PostPathGuard>;
-    #[cfg(feature = "atos")]
-    if let Some(pipeline_res) = state
-        .inner
-        .serving
-        .pipeline_aliases
-        .resolve(&requested_model)
-        .cloned()
-    {
-        match run_atos_pipeline(&state, &headers, &mut request, &pipeline_res).await {
-            Ok(guard) => _post_guard = guard,
-            Err(resp) => return resp,
-        }
-        // Rewrite the model field so downstream routing finds the
-        // concrete model. Preserve the original only in a debug log.
-        debug!(
-            pipeline = %pipeline_res.name,
-            target_model = %pipeline_res.model_id,
-            "atos pipeline resolved; rewriting request.model"
-        );
-        request.model = Some(pipeline_res.model_id.clone());
-    } else {
-        _post_guard = None;
     }
 
     // --- Priority 0: in-process local inference ---
@@ -344,9 +314,10 @@ pub async fn chat_completions(
             || oicp_req.context_tokens.is_some()
             || oicp_req.max_output_tokens.is_some();
         if has_v03_routing {
-            let model_id = match route_with_oicp(&state, oicp_req) {
-                Some(id) => id,
-                None => {
+            let model_id = match route_with_oicp(&state, oicp_req).await {
+                Ok(Some(id)) => id,
+                Err(e) => return inference_state_absent(&e),
+                Ok(None) => {
                     return (
                         StatusCode::SERVICE_UNAVAILABLE,
                         Json(
@@ -366,7 +337,11 @@ pub async fn chat_completions(
 
     // --- Priority 2: Model name matches a loaded model by name ---
     if let Some(ref requested_model) = request.model {
-        if let Some(model_id) = find_model_by_name(&state, requested_model) {
+        let by_name = match find_model_by_name(&state, requested_model).await {
+            Ok(id) => id,
+            Err(e) => return inference_state_absent(&e),
+        };
+        if let Some(model_id) = by_name {
             debug!(
                 model_name = requested_model,
                 "routing to model by exact name match"
@@ -385,16 +360,19 @@ pub async fn chat_completions(
             let synthesized = InferenceRequirements::new()
                 .with_hint(resolution.hint.clone())
                 .with_latency_class(resolution.latency_class);
-            if let Some(model_id) = route_with_oicp(&state, &synthesized) {
-                return forward_to_model(&state, model_id, &request).await;
+            match route_with_oicp(&state, &synthesized).await {
+                Ok(Some(model_id)) => return forward_to_model(&state, model_id, &request).await,
+                Ok(None) => {}
+                Err(e) => return inference_state_absent(&e),
             }
         }
     }
 
     // --- Priority 4: Default model ---
-    match state.default_model_id() {
-        Some(model_id) => forward_to_model(&state, model_id, &request).await,
-        None => (
+    match state.default_model_id().await {
+        Err(e) => inference_state_absent(&e),
+        Ok(Some(model_id)) => forward_to_model(&state, model_id, &request).await,
+        Ok(None) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(
                 serde_json::to_value(ErrorResponse::new(
@@ -416,14 +394,12 @@ pub async fn chat_completions(
 /// picks among LOCAL models on one node for an already-admitted
 /// request — load/locality/cold-start/availability are peer-shaped
 /// signals that don't differentiate candidates sharing one host.
-fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<ModelId> {
-    let models = state.inner.store.inference_store.list_models();
-    let plan = state
-        .inner
-        .store
-        .inference_store
-        .get_plan()
-        .unwrap_or_default();
+async fn route_with_oicp(
+    state: &AppState,
+    req: &InferenceRequirements,
+) -> Result<Option<ModelId>, crate::ledger_port::LedgerAbsent> {
+    let models = state.list_models().await?;
+    let plan = state.inference_plan().await?.unwrap_or_default();
 
     let mut best_model = None;
     let mut best_name = String::new();
@@ -462,14 +438,14 @@ fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<Mode
             req_latency = ?req.effective_latency_class(),
             "route_with_oicp: selected"
         );
-        Some(model)
+        Ok(Some(model))
     } else {
         tracing::info!(
             req_hint = %req.effective_hint(),
             req_latency = ?req.effective_latency_class(),
             "route_with_oicp: no claim passed the hard gate"
         );
-        None
+        Ok(None)
     }
 }
 
@@ -480,7 +456,7 @@ fn route_with_oicp(state: &AppState, req: &InferenceRequirements) -> Option<Mode
 /// hand-maintained mirror, and single-claim: a small model could
 /// never match a latency_class=Fast request here.)
 fn synthesize_claims_for_model_info(
-    model_info: &commonwealth_core::model::ModelInfo,
+    model_info: &oicp_types::model_catalog::ModelInfo,
 ) -> Vec<CapabilityClaim> {
     crate::routes_oicp::synthesize_default_claims(
         &model_info.name,
@@ -490,13 +466,16 @@ fn synthesize_claims_for_model_info(
     )
 }
 
-fn find_model_by_name(state: &AppState, name: &str) -> Option<ModelId> {
-    let models = state.inner.store.inference_store.list_models();
+async fn find_model_by_name(
+    state: &AppState,
+    name: &str,
+) -> Result<Option<ModelId>, crate::ledger_port::LedgerAbsent> {
+    let models = state.list_models().await?;
     let name_lower = name.to_lowercase();
-    models
+    Ok(models
         .values()
         .find(|m| m.name.to_lowercase() == name_lower)
-        .map(|m| m.id)
+        .map(|m| m.id))
 }
 
 async fn forward_to_model(
@@ -504,9 +483,10 @@ async fn forward_to_model(
     model_id: ModelId,
     request: &ChatCompletionRequest,
 ) -> Response {
-    let llama_addr = match state.get_llama_server_address(model_id) {
-        Some(addr) => addr,
-        None => {
+    let llama_addr = match state.get_llama_server_address(model_id).await {
+        Err(e) => return inference_state_absent(&e),
+        Ok(Some(addr)) => addr,
+        Ok(None) => {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(
@@ -610,7 +590,7 @@ async fn forward_to_llama_server(
 /// chat_completions does.
 pub async fn embeddings(
     State(state): State<AppState>,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(request): Json<EmbeddingRequest>,
 ) -> Response {
     // Who is this for? A peer with no embed model of its own (driving
@@ -634,97 +614,33 @@ pub async fn embeddings(
             .into_response();
     };
 
-    let inputs: Vec<String> = match request.input {
-        EmbeddingInput::Single(s) => vec![s],
-        EmbeddingInput::Batch(v) => v,
-    };
-    if inputs.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(
-                serde_json::to_value(ErrorResponse::new(
-                    "embeddings request: `input` must be a non-empty string or array",
-                    "invalid_request_error",
-                ))
-                .unwrap_or_default(),
-            ),
-        )
-            .into_response();
-    }
-
-    let n_texts = inputs.len() as u64;
-    let total_chars: usize = inputs.iter().map(|t| t.len()).sum();
-
-    // One batch call: a single multi-sequence decode on the embedded engine,
-    // or sharded across compute-child replicas by the routing facade. Both
-    // beat the former per-input sequential loop for bulk ingest.
-    let embeddings = match service.embed_batch(&inputs).await {
-        Ok(v) => v,
-        Err(e) => {
-            warn!(error = %e, "embeddings: local embed_batch failed");
+    // The request is answered by the one OpenAI embeddings rendering
+    // (`sovereign_contracts::openai_http`), which `serve` answers through
+    // too; what this daemon records about the work stays here.
+    let resp = match sovereign_contracts::openai_http::embeddings_response(
+        service.as_ref(),
+        request,
+    )
+    .await
+    {
+        Ok(resp) => resp,
+        Err(refusal) => {
             return (
-                StatusCode::SERVICE_UNAVAILABLE,
+                refusal.status,
                 Json(
-                    serde_json::to_value(ErrorResponse::new(
-                        format!("embedding batch failed: {e}"),
-                        "backend_error",
-                    ))
-                    .unwrap_or_default(),
+                    serde_json::to_value(ErrorResponse::new(refusal.message, refusal.error_type))
+                        .unwrap_or_default(),
                 ),
             )
                 .into_response();
         }
     };
-    if embeddings.len() != inputs.len() {
-        warn!(
-            got = embeddings.len(),
-            want = inputs.len(),
-            "embeddings: backend returned the wrong number of vectors"
-        );
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(
-                serde_json::to_value(ErrorResponse::new(
-                    format!(
-                        "embedding backend returned {} vectors for {} inputs",
-                        embeddings.len(),
-                        inputs.len()
-                    ),
-                    "backend_error",
-                ))
-                .unwrap_or_default(),
-            ),
-        )
-            .into_response();
-    }
-    let data: Vec<EmbeddingData> = embeddings
-        .into_iter()
-        .enumerate()
-        .map(|(i, embedding)| EmbeddingData {
-            object: "embedding".into(),
-            embedding,
-            index: i,
-        })
-        .collect();
-
-    // The OpenAI spec counts token usage; we only have char count, so
-    // we produce a conservative ~4 chars/token estimate rather than
-    // leaving the field out (some clients require it to be present).
-    let approx_tokens = total_chars.div_ceil(4) as u32;
-    let resp = EmbeddingResponse {
-        object: "list".into(),
-        data,
-        model: request.model,
-        usage: Usage {
-            prompt_tokens: approx_tokens,
-            completion_tokens: 0,
-            total_tokens: approx_tokens,
-        },
-    };
+    let n_texts = resp.data.len() as u64;
+    let approx_tokens = resp.usage.prompt_tokens;
     // Record the embedding work on the local Activity ledger — split
     // peer (mesh-driven ingestion) vs local (own API client). This was
     // previously invisible: nothing recorded embeddings served.
-    state
+    if let Err(e) = state
         .inner
         .node
         .activity_emitter
@@ -735,7 +651,11 @@ pub async fn embeddings(
             },
             n_texts,
             tokens: approx_tokens as u64,
-        });
+        })
+        .await
+    {
+        warn!(error = %e, "embeddings: the activity record did not reach the store");
+    }
     (StatusCode::OK, Json(resp)).into_response()
 }
 
@@ -775,10 +695,13 @@ pub async fn embeddings(
 pub async fn list_models(
     State(state): State<AppState>,
     guest: Option<axum::Extension<crate::client_auth::Guest>>,
-) -> impl IntoResponse {
+) -> Response {
     let mut data = match manifest_rows(&state).await {
         Some(rows) => rows,
-        None => store_rows(&state).await,
+        None => match store_rows(&state).await {
+            Ok(rows) => rows,
+            Err(e) => return inference_state_absent(&e),
+        },
     };
     // A guest sees only what their grant covers. This is the SAME contract the
     // rest of this handler keeps — every id returned is dispatchable — held for
@@ -797,6 +720,7 @@ pub async fn list_models(
         object: "list".into(),
         data,
     })
+    .into_response()
 }
 
 /// Build the list from the manifests name resolution reads. `None` when
@@ -817,14 +741,16 @@ pub async fn list_models(
 /// that set at the mint site would be a second answer to "what can this node
 /// serve" (§10.6) — and the failure would be quiet: a grant minted for a name
 /// nothing advertises produces a link that looks fine and 403s on first use.
-pub(crate) async fn dispatchable_ids(state: &AppState) -> Vec<String> {
-    match manifest_rows(state).await {
+pub(crate) async fn dispatchable_ids(
+    state: &AppState,
+) -> Result<Vec<String>, crate::ledger_port::LedgerAbsent> {
+    Ok(match manifest_rows(state).await {
         Some(rows) => rows,
-        None => store_rows(state).await,
+        None => store_rows(state).await?,
     }
     .into_iter()
     .map(|m| m.id)
-    .collect()
+    .collect())
 }
 
 /// `None` means "this node has no manifest surface at all", which is the
@@ -896,76 +822,12 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
     }
 
     let slot_aliases = state.inner.serving.slot_aliases.current();
-    let mut rows: Vec<ModelObject> = Vec::new();
-    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-
-    for (holder, model) in holders {
-        let resident = model.status.loaded;
-        if let Some(&row) = index.get(&model.id) {
-            let existing: &mut ModelObject = &mut rows[row];
-            if !existing.advertised_by.contains(&holder) {
-                existing.advertised_by.push(holder);
-            }
-            // ANY holder with the weights in memory makes the name warm:
-            // the resolver load-balances across holders and will pick one.
-            // A cold row upgrading to Resident is the honest direction; the
-            // reverse would let one cold peer mask a warm local slot.
-            if resident {
-                existing.residency = Some(Residency::Resident);
-                if let Some(perf) = existing.performance.as_mut() {
-                    perf.loaded = true;
-                }
-            }
-            continue;
-        }
-
-        let residency = if resident {
-            Residency::Resident
-        } else {
-            Residency::Cold
-        };
-        index.insert(model.id.clone(), rows.len());
-        rows.push(ModelObject {
-            // An alias (`primary`, `commonwealth/fast`) is a first-class
-            // dispatchable name, not a synthetic decoration: it appears here
-            // because a manifest advertised it, so it is resolvable by
-            // definition. The pre-2026-08-27 handler appended aliases from
-            // `slot_aliases` unconditionally, which is how `embed` came to be
-            // listed on a node whose manifest never advertised it.
-            //
-            // The target named here is THIS node's binding. That is the right
-            // one to show even on a row a peer also advertises: an alias is
-            // dereferenced by whichever node ends up serving, so "what does
-            // `primary` resolve to" is node-relative by design, and this is
-            // the answer that applies if the request stays here.
-            owned_by: match slot_aliases.get(&model.id) {
-                Some(target) => format!("alias→{target}"),
-                None => "mesh".into(),
-            },
-            id: model.id,
-            object: "model".into(),
-            created: 0,
-            // The manifest's capability CLAIMS, which is what the scheduler
-            // actually scores. The store path published a `CapabilityProfile`
-            // here instead — a different shape for the same field, and the
-            // one further from the routing decision.
-            capabilities: serde_json::to_value(&model.claims).ok(),
-            performance: Some(ModelPerformance {
-                // The manifest carries per-claim throughput, not a per-model
-                // estimate; the orchestrator's shard plan was the only source
-                // of these and it does not exist on the embedded path. Zeroed
-                // rather than omitted so `loaded` stays readable — absence
-                // here is what made availability invisible before.
-                estimated_tokens_per_sec: 0.0,
-                estimated_ttft_ms: 0,
-                loaded: resident,
-            }),
-            residency: Some(residency),
-            advertised_by: vec![holder],
-        });
-    }
-
-    Some(rows)
+    // Rows from the one `/v1/models` row builder, which `serve` reads too.
+    Some(sovereign_contracts::openai_http::model_rows(
+        holders,
+        &slot_aliases,
+        "mesh",
+    ))
 }
 
 /// The pre-2026-08-27 store scan, kept for the orchestrator daemon — the
@@ -977,26 +839,21 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
 /// no manifest to consult and a narrower list would be empty; it is not the
 /// path any mesh node with local inference takes. Deduped by name like the
 /// manifest path, so the duplicate-row bug is fixed on both.
-async fn store_rows(state: &AppState) -> Vec<ModelObject> {
+async fn store_rows(
+    state: &AppState,
+) -> Result<Vec<ModelObject>, crate::ledger_port::LedgerAbsent> {
     let local_id = state.self_node_id();
-    let live_nodes: HashSet<NodeId> = {
-        let mesh = state.inner.fabric.mesh.read().await;
-        std::iter::once(local_id)
-            .chain(
-                mesh.members
-                    .values()
-                    .filter(|m| matches!(m.status, NodeStatus::Online | NodeStatus::Busy))
-                    .map(|m| m.node_id),
-            )
-            .collect()
-    };
+    let members = state.membership().members().await;
+    let live_nodes: HashSet<NodeId> = std::iter::once(local_id)
+        .chain(
+            members
+                .iter()
+                .filter(|m| matches!(m.status, MemberStatus::Online | MemberStatus::Busy))
+                .map(|m| m.node_id),
+        )
+        .collect();
 
-    let plan = state
-        .inner
-        .store
-        .inference_store
-        .get_plan()
-        .unwrap_or_default();
+    let plan = state.inference_plan().await?.unwrap_or_default();
 
     // Ground-truth residency from the embedded engine (empty on the
     // orchestrator daemon). Used only to OR-correct the `loaded` flag,
@@ -1007,29 +864,19 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
         None => Vec::new(),
     };
 
-    let mut data: Vec<ModelObject> = state
-        .inner
-        .store
-        .inference_store
-        .list_models_with_origins()
+    let registered = state.list_models_with_origins().await?;
+    let mut addressed: HashSet<ModelId> = HashSet::new();
+    for (_, model) in &registered {
+        if state.get_llama_server_address(model.id).await?.is_some() {
+            addressed.insert(model.id);
+        }
+    }
+    let mut data: Vec<ModelObject> = registered
         .into_iter()
-        .filter(|(origin, model)| {
-            live_nodes.contains(origin)
-                || state
-                    .inner
-                    .store
-                    .inference_store
-                    .get_llama_address(model.id)
-                    .is_some()
-        })
+        .filter(|(origin, model)| live_nodes.contains(origin) || addressed.contains(&model.id))
         .map(|(_, model)| {
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
-            let loaded = state
-                .inner
-                .store
-                .inference_store
-                .get_llama_address(model.id)
-                .is_some()
+            let loaded = addressed.contains(&model.id)
                 || resident
                     .iter()
                     .any(|r| r.resident && r.model_id == model.name);
@@ -1125,7 +972,7 @@ async fn store_rows(state: &AppState) -> Vec<ModelObject> {
         });
     }
 
-    data
+    Ok(data)
 }
 
 // ── Local-inference serving helpers ────────────────────────────
@@ -1217,16 +1064,20 @@ async fn serve_local_non_stream(
                     .map(|u| u.completion_tokens as u64)
                     .unwrap_or(0);
                 let wall_seconds = started.elapsed().as_secs_f64();
-                state
+                if let Err(e) = state
                     .inner
-                    .fabric
+                    .store
                     .contribution_emitter
                     .record(LedgerEventKind::InferenceServed {
                         for_node,
                         model_id,
                         tokens_generated: tokens,
                         wall_seconds,
-                    });
+                    })
+                    .await
+                {
+                    warn!(error = %e, "peer inference: the contribution record did not reach the store");
+                }
             } else {
                 // Local API client (no `X-Node-Id`). The contribution
                 // ledger deliberately skips this — it's not work *for
@@ -1240,7 +1091,7 @@ async fn serve_local_non_stream(
                     .map(|u| (u.prompt_tokens as u64, u.completion_tokens as u64))
                     .unwrap_or((0, 0));
                 let wall_seconds = started.elapsed().as_secs_f64();
-                state
+                if let Err(e) = state
                     .inner
                     .node
                     .activity_emitter
@@ -1249,7 +1100,11 @@ async fn serve_local_non_stream(
                         prompt_tokens,
                         completion_tokens,
                         wall_seconds,
-                    });
+                    })
+                    .await
+                {
+                    warn!(error = %e, "local inference: the activity record did not reach the store");
+                }
             }
             (StatusCode::OK, Json(resp)).into_response()
         }
@@ -1295,22 +1150,7 @@ async fn serve_local_stream(
     requester: Option<NodeId>,
     model_id_for_ledger: String,
 ) -> Response {
-    // `id` / `created` are placeholders that would match the
-    // non-streaming response — clients that care about stable ids
-    // can set them on their side; we follow the OpenAI convention
-    // of `chatcmpl-*` + unix timestamp.
-    let id = format!(
-        "chatcmpl-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0)
-    );
-    let created = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let model = request.model.clone().unwrap_or_else(|| "local".into());
+    let header = sovereign_contracts::openai_http::ChunkHeader::new(request.model.clone());
 
     let token_stream = match service.chat_completion_stream(request).await {
         Ok(s) => s,
@@ -1357,111 +1197,13 @@ async fn serve_local_stream(
     // ledger event in a tokio task.
     let chunks_count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let started = Instant::now();
-
-    let id_for_stream = id.clone();
-    let model_for_stream = model.clone();
     let chunks_count_for_stream = chunks_count.clone();
     let sse_events = token_stream.map(move |frame| {
         use crate::openai_types::StreamFrame;
-        match frame {
-            StreamFrame::Token(delta) => {
-                chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let chunk = serde_json::json!({
-                    "id": id_for_stream,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model_for_stream,
-                    "choices": [{
-                        "index": 0,
-                        "delta": { "content": delta },
-                        "finish_reason": null
-                    }]
-                });
-                Ok::<_, std::convert::Infallible>(Event::default().data(chunk.to_string()))
-            }
-            StreamFrame::ToolCalls(calls) => {
-                // Synthetic tools-streaming chunk. Local backends
-                // parse `<tool_call>` markup post-generation, so we
-                // emit one chunk carrying every parsed call rather
-                // than the per-fragment `arguments` deltas the
-                // OpenAI spec also permits. Both shapes are
-                // wire-legal — clients accumulate by `tool_calls[i].
-                // index` regardless of chunk count.
-                chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let tool_calls_json: Vec<serde_json::Value> = calls
-                    .iter()
-                    .enumerate()
-                    .map(|(i, c)| {
-                        serde_json::json!({
-                            "index": i,
-                            "id": c.id,
-                            "type": c.kind,
-                            "function": {
-                                "name": c.function.name,
-                                "arguments": c.function.arguments,
-                            }
-                        })
-                    })
-                    .collect();
-                let chunk = serde_json::json!({
-                    "id": id_for_stream,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model_for_stream,
-                    "choices": [{
-                        "index": 0,
-                        "delta": {
-                            "role": "assistant",
-                            "tool_calls": tool_calls_json,
-                        },
-                        "finish_reason": null
-                    }]
-                });
-                Ok::<_, std::convert::Infallible>(Event::default().data(chunk.to_string()))
-            }
-            StreamFrame::Finish { reason, usage } => {
-                // Terminal frame: emit an OpenAI-shaped chunk with
-                // an empty delta and the real `finish_reason`. This
-                // is the bug fix that motivated the typed surface —
-                // the legacy `Result<String>` couldn't carry the
-                // signal so every truncation looked like a clean
-                // stop on the wire.
-                let mut payload = serde_json::json!({
-                    "id": id_for_stream,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model_for_stream,
-                    "choices": [{
-                        "index": 0,
-                        "delta": {},
-                        "finish_reason": reason.as_openai_str()
-                    }]
-                });
-                if let Some(u) = usage {
-                    payload["usage"] = serde_json::json!({
-                        "prompt_tokens": u.prompt_tokens,
-                        "completion_tokens": u.completion_tokens,
-                        "total_tokens": u.total_tokens,
-                    });
-                }
-                Ok(Event::default().data(payload.to_string()))
-            }
-            StreamFrame::Error(e) => {
-                // Surface the error as a final event then let the
-                // stream close — clients handle the abrupt end.
-                warn!(error = %e, "chat_completions: local stream error frame");
-                Ok(Event::default().data(format!(
-                    "{{\"error\":{{\"message\":\"{}\"}}}}",
-                    e.replace('"', "\\\"")
-                )))
-            }
-            StreamFrame::Debug(_) => {
-                // FIM-only glassbox frame; the chat path never
-                // produces it. Drop defensively so a future producer
-                // can't leak internals onto an unrelated surface.
-                Ok(Event::default().comment("debug frame dropped"))
-            }
+        if matches!(frame, StreamFrame::Token(_) | StreamFrame::ToolCalls(_)) {
+            chunks_count_for_stream.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
+        Ok::<_, std::convert::Infallible>(crate::openai_http::sse_event(&header, frame))
     });
 
     // Append the OpenAI `[DONE]` sentinel so the consumer knows
@@ -1475,7 +1217,7 @@ async fn serve_local_stream(
     // dispatch. Local-origin streams (no `X-Node-Id`) skip the
     // emission, matching the non-streaming policy.
     let chunks_for_done = chunks_count;
-    let state_for_done = state.inner.fabric.contribution_emitter.clone();
+    let state_for_done = std::sync::Arc::clone(&state.inner.store.contribution_emitter);
     let activity_for_done = state.inner.node.activity_emitter.clone();
     let requester_for_done = requester;
     let model_for_done = model_id_for_ledger;
@@ -1483,258 +1225,42 @@ async fn serve_local_stream(
         let tokens = chunks_for_done.load(std::sync::atomic::Ordering::Relaxed);
         let wall_seconds = started.elapsed().as_secs_f64();
         if let Some(for_node) = requester_for_done {
-            state_for_done.record(LedgerEventKind::InferenceServed {
-                for_node,
-                model_id: model_for_done,
-                tokens_generated: tokens,
-                wall_seconds,
-            });
+            if let Err(e) = state_for_done
+                .record(LedgerEventKind::InferenceServed {
+                    for_node,
+                    model_id: model_for_done,
+                    tokens_generated: tokens,
+                    wall_seconds,
+                })
+                .await
+            {
+                warn!(error = %e, "peer stream: the contribution record did not reach the store");
+            }
         } else {
             // Local API client — record on the Activity ledger, same
             // as the non-streaming path. Stream frames ≈ completion
             // tokens; prompt token count isn't available on this path.
-            activity_for_done.record(ActivityEventKind::LocalInferenceServed {
-                model_id: model_for_done,
-                prompt_tokens: 0,
-                completion_tokens: tokens,
-                wall_seconds,
-            });
+            if let Err(e) = activity_for_done
+                .record(ActivityEventKind::LocalInferenceServed {
+                    model_id: model_for_done,
+                    prompt_tokens: 0,
+                    completion_tokens: tokens,
+                    wall_seconds,
+                })
+                .await
+            {
+                warn!(error = %e, "local stream: the activity record did not reach the store");
+            }
         }
-        Ok::<_, std::convert::Infallible>(Event::default().data("[DONE]"))
+        Ok::<_, std::convert::Infallible>(
+            Event::default().data(sovereign_contracts::openai_http::DONE),
+        )
     });
     let combined = sse_events.chain(done);
 
     Sse::new(combined)
         .keep_alive(KeepAlive::default())
         .into_response()
-}
-
-// ─── ATOS pipeline helpers ───────────────────────────────────────────────────
-
-/// Run the ATOS middleware chain against a request. Returns `Ok(())`
-/// when the chain completes successfully; returns an
-/// already-constructed HTTP `Response` when a middleware wants to
-/// short-circuit (e.g., ApprovalRequired).
-///
-/// Persists session state back to MeshStore on exit so subsequent
-/// requests on the same `X-Session-Id` see the mutations. Missing
-/// prerequisites (no session_store, no X-Feature-Id) degrade the
-/// call to a no-op — the handler then proceeds to legacy routing
-/// with the unmodified request.
-#[cfg(feature = "atos")]
-async fn run_atos_pipeline(
-    state: &AppState,
-    headers: &HeaderMap,
-    request: &mut ChatCompletionRequest,
-    pipeline: &serving_policy::pipeline_aliases::PipelineResolution,
-) -> Result<Option<PostPathGuard>, Response> {
-    let Some(session_store) = state.inner.session_store.clone() else {
-        debug!("atos pipeline resolved but no session store configured; skipping middleware");
-        return Ok(None);
-    };
-
-    // Extract headers. Strings are ASCII; non-ASCII values are
-    // treated as absent rather than 400ing — a stray UTF-8 in the
-    // header is likely a client bug and we'd rather degrade.
-    let feature_id = headers
-        .get("x-feature-id")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-    let session_id = headers
-        .get("x-session-id")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(uuid_like_for_sessionless);
-
-    // Build the pipeline from the alias config + middleware
-    // registry. Unknown middleware ids become 500s so a typo
-    // doesn't silently skip an important step.
-    let pipeline_exec = match state
-        .inner
-        .middleware_registry
-        .build_pipeline(&pipeline.middleware)
-    {
-        Ok(p) => p,
-        Err(e) => {
-            return Err(atos_error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "atos_pipeline_misconfigured",
-                &e.to_string(),
-            ));
-        }
-    };
-
-    let ctx = PipelineContext {
-        pipeline_name: pipeline.name.clone(),
-        model_id: pipeline.model_id.clone(),
-        context_config: pipeline.context.clone(),
-        feature_id: feature_id.clone(),
-        session_id: Some(session_id.clone()),
-        repo_root: state
-            .inner
-            .repo_root
-            .clone()
-            .unwrap_or_else(|| std::path::PathBuf::from(".")),
-    };
-
-    let mut handle = session_store.load_and_lock(&session_id).await;
-    // Seed the feature_id from the header so middleware see it
-    // immediately on first contact. ApprovalGate will overwrite
-    // `approval_validated` / `spec_content_hash` as it runs.
-    if handle.state.feature_id.is_none() {
-        handle.state.feature_id = feature_id.clone();
-    }
-
-    // Mirror session state into the middleware-visible struct so
-    // middleware don't depend on the full AtosSessionState type.
-    let mut mw_session = MiddlewareSession {
-        feature_id: handle.state.feature_id.clone(),
-        approval_validated: handle.state.approval_validated,
-        spec_content_hash: handle.state.spec_content_hash.clone(),
-        pending_deviation_ack: handle.state.pending_deviation_ack,
-        deviation_note_id: handle.state.deviation_note_id.clone(),
-        pending_artifact_delta: handle.state.pending_artifact_delta.clone(),
-        last_seen_at: handle.state.last_seen_at,
-        pending_decision: handle.state.pending_decision.clone(),
-    };
-
-    let outcome = pipeline_exec.run(request, &mut mw_session, &ctx).await;
-
-    // Copy mw_session mutations back into the persistent state
-    // before saving.
-    handle.state.feature_id = mw_session.feature_id;
-    handle.state.approval_validated = mw_session.approval_validated;
-    handle.state.spec_content_hash = mw_session.spec_content_hash;
-    handle.state.pending_deviation_ack = mw_session.pending_deviation_ack;
-    handle.state.deviation_note_id = mw_session.deviation_note_id;
-    handle.state.pending_artifact_delta = mw_session.pending_artifact_delta;
-    handle.state.pending_decision = mw_session.pending_decision;
-    handle.save().await;
-
-    match outcome {
-        Ok(()) => Ok(Some(PostPathGuard {
-            pipeline: std::sync::Arc::new(pipeline_exec),
-            ctx: std::sync::Arc::new(ctx),
-            session_store,
-            session_id,
-        })),
-        Err(err) => Err(middleware_error_to_response(err)),
-    }
-}
-
-/// RAII guard that spawns the post-path middleware chain as a
-/// detached `tokio::spawn` when dropped.
-///
-/// Why a guard rather than an explicit call at every handler exit:
-/// `chat_completions` has many return paths (privacy reject, OICP
-/// unavailable, forward_to_model return, local_inference return,
-/// streaming SSE). A drop guard catches all of them with one
-/// insertion point. The spawn runs AFTER the response is on the
-/// wire — the client never waits on post-path telemetry.
-///
-/// Concurrency: the per-session mutex lives in `SessionStore`, so
-/// if the next request's pre-path arrives before post-path
-/// completes, the pre-path waits. That's the desired ordering —
-/// post-path mutations are visible to the next turn.
-#[cfg(feature = "atos")]
-pub(crate) struct PostPathGuard {
-    pipeline: std::sync::Arc<Pipeline>,
-    ctx: std::sync::Arc<PipelineContext>,
-    session_store: sovereign_atos::session::SessionStore,
-    session_id: String,
-}
-
-#[cfg(feature = "atos")]
-impl Drop for PostPathGuard {
-    fn drop(&mut self) {
-        let pipeline = self.pipeline.clone();
-        let ctx = self.ctx.clone();
-        let store = self.session_store.clone();
-        let session_id = self.session_id.clone();
-        tokio::spawn(async move {
-            // Re-load session state so post-path sees whatever MCP
-            // tool calls wrote during the turn. Pre-path's save
-            // already committed its mutations; we pick up from
-            // there.
-            let mut handle = store.load_and_lock(&session_id).await;
-            let mut mw_session = MiddlewareSession {
-                feature_id: handle.state.feature_id.clone(),
-                approval_validated: handle.state.approval_validated,
-                spec_content_hash: handle.state.spec_content_hash.clone(),
-                pending_deviation_ack: handle.state.pending_deviation_ack,
-                deviation_note_id: handle.state.deviation_note_id.clone(),
-                pending_artifact_delta: handle.state.pending_artifact_delta.clone(),
-                last_seen_at: handle.state.last_seen_at,
-                pending_decision: handle.state.pending_decision.clone(),
-            };
-            // For M5.1 we pass a synthetic empty response view.
-            // M5.2's ArtifactSurface reads from the DB, not from
-            // `content`, so this is sufficient. A future
-            // enhancement would capture the real response bytes.
-            let view = ResponseView {
-                content: "",
-                finish_reason: Some("stop"),
-                tool_calls_emitted: 0,
-            };
-            pipeline.run_post(&view, &mut mw_session, &ctx).await;
-            // Copy back + persist.
-            handle.state.feature_id = mw_session.feature_id;
-            handle.state.approval_validated = mw_session.approval_validated;
-            handle.state.spec_content_hash = mw_session.spec_content_hash;
-            handle.state.pending_deviation_ack = mw_session.pending_deviation_ack;
-            handle.state.deviation_note_id = mw_session.deviation_note_id;
-            handle.state.pending_artifact_delta = mw_session.pending_artifact_delta;
-            handle.state.pending_decision = mw_session.pending_decision;
-            handle.save().await;
-        });
-    }
-}
-
-/// Generate a per-request pseudo-session id when the client didn't
-/// send an `X-Session-Id` header. Ephemeral; not persisted beyond
-/// the in-memory mutex lifetime because the next request without a
-/// header makes a new one.
-#[cfg(feature = "atos")]
-fn uuid_like_for_sessionless() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    format!("sessionless-{nanos:x}")
-}
-
-#[cfg(feature = "atos")]
-fn middleware_error_to_response(err: MiddlewareError) -> Response {
-    match err {
-        MiddlewareError::ApprovalRequired { feature_id, hint } => atos_error_response(
-            StatusCode::FORBIDDEN,
-            "atos_approval_required",
-            &format!("feature '{feature_id}' is not approved: {hint}"),
-        ),
-        MiddlewareError::PipelineRejected(msg) => {
-            atos_error_response(StatusCode::FORBIDDEN, "atos_pipeline_rejected", &msg)
-        }
-        MiddlewareError::Infra(msg) => atos_error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "atos_pipeline_infra_error",
-            &msg,
-        ),
-    }
-}
-
-#[cfg(feature = "atos")]
-fn atos_error_response(status: StatusCode, code: &str, message: &str) -> Response {
-    let envelope = serde_json::json!({
-        "error": {
-            "message": message,
-            "type": code,
-            "code": code,
-        }
-    });
-    (status, Json(envelope)).into_response()
 }
 
 #[cfg(test)]
@@ -1744,3 +1270,7 @@ mod shed_rendering_tests;
 #[cfg(test)]
 #[path = "routes_inference/list_models_tests.rs"]
 mod list_models_tests;
+
+#[cfg(test)]
+#[path = "routes_inference/forward_tests.rs"]
+mod forward_tests;

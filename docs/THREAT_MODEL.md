@@ -321,7 +321,13 @@ it.
    `x-node-id` — and member B, verified as B in the handshake, can still type
    C on an inference or embedding turn and move C's peer ceiling, admission
    tally and reciprocity key. Measured from the resolver and the splice, not
-   from a test (ledger A61). *Closes when:* the `CLIENT_ALPN` member arm
+   from a test (ledger A61). Since `2b068212e` the same splice also decides
+   locality for a turn's admission id: a member that sends no `x-node-id`
+   resolves as a loopback `Principal::Anonymous`, which `from_this_host`
+   (`sovereign-serving-host/src/turn_admission.rs`) counts as on this host,
+   so its `turn_admission` is honoured and its calls park in the slot queue
+   where a peer's would be shed. The same closing condition closes it.
+   *Closes when:* the `CLIENT_ALPN` member arm
    forwards the verified identity the way `cwth/http/0` does since
    `e8f7f0520`, and `client_principal` prefers a tied verified key over the
    typed claim. *Owner:* unowned — proposed to the operator at A61 as one more

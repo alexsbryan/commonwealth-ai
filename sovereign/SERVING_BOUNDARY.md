@@ -1,5 +1,16 @@
 # The serving package boundary
 
+> **The `[[package]] name = "serving"` row was deleted 2026-09-21** when
+> `quality/ARCH_LAYERS.toml` was rewritten to declare the five programs
+> (`docs/FIVE_PROGRAMS.md` §9). `sovereign-scheduler`, `sovereign-serving-host`
+> and `serving-policy` are members of `cmnwlth` now, alongside
+> `sovereign-inference` and `sovereign-compute` — §2 gives the router "the
+> serving cluster", and a router with a roster that cannot run a model is a
+> proxy, not a program. The `sovereign-serving-host -> commonwealth-core`
+> exception went with the row and is a red line now; `commonwealth-core` is a
+> sibling member of `cmnwlth`, so that particular edge is no longer a
+> violation at all — the two tiers this document describes are what still is.
+
 Declared 2026-09-14 by rung `domains-4` (the adjudication that fixed the words), ahead of
 the work: rung `domains-9` registers the `[[package]]` row and watches this boundary FAIL on
 the fused tree; rung `domains-10` turns it green. The ranked record is a **`Venue`**
@@ -128,8 +139,10 @@ cleared when the remote provider is reached through `oicp-client` — RETIRED 20
 `REVIEW-build-serving-drop-inference`: the provider now names `oicp-client` directly, the
 tool-call parser moved DOWN to `oicp-types::tool_calls` and the FIM prompt/stop text to
 `sovereign-contracts::fim`, and the host's `sovereign-inference` dep is gone (one row left).
-`sovereign-serving-host → commonwealth-core` (`PeerHealthTracker`, `ids::NodeId`) clears
-when quarantine state is the host's own and identity is `kernel_types::NodeId`.
+`sovereign-serving-host → commonwealth-core` (`PeerHealthTracker`, `ids::NodeId`) — RETIRED
+2026-09-26 by phase-b `pb-serve-sheds-core`: quarantine state moved to
+`sovereign_scheduler::peer_health`, identity is `kernel_types::NodeId`, and the model-transfer
+wire is `oicp_types::model_transfer`; `tests/main/sheds_commonwealth.rs` pins it.
 `sovereign-scheduler → sovereign-core` is **zero once `pick_slot_for_oicp` leaves** (corrected
 above): the ranker's other non-`oicp` uses are `traits::InferenceProvider` and `types::Speed`,
 and the former is already a leaf at `sovereign-contracts/src/traits.rs:281`.
@@ -294,7 +307,7 @@ by performing one: its gate was green while `sovereign-contracts` embedded a fil
 outside its crate root and the sandbox had to preserve the monorepo's directory shape to
 compile. The way to know Serving carries no such embed is to lift it. **Serving carried
 one, measured 2026-09-15 and removed 2026-09-16:** `sovereign-contracts` `include_str!`d
-`sovereign-recipes/registry.toml` and `sovereign-recipes/schema/recipe_schema_descriptor.json`
+`sovereign-recipes/registry.toml` and `corpus-engine/schema/recipe_schema_descriptor.json`
 from outside its crate root (`recipe/registry.rs:31`, `recipe/schema.rs:25`), so the
 flat-copy sandbox could not compile the shared leaf — the embedder was a leaf, not a
 package member. The two artifacts are now vendored by `corpus-engine`'s `build.rs` into

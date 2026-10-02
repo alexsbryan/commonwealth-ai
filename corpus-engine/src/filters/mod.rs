@@ -193,38 +193,7 @@ fn hex_lower(bytes: &[u8]) -> String {
 // Title normalization
 // ---------------------------------------------------------------------------
 
-/// Canonical form for matching titles across ranks/lists/extracted docs.
-///
-/// Wikipedia article titles arrive from extractors in several forms:
-/// `"Albert Einstein"`, `"albert_einstein"` (URL slug), `"Albert  Einstein"`
-/// (stray double-space). The pageview rank CSV ships with underscored
-/// slugs. Normalizing to lowercase + collapsed-spaces + underscores-as-spaces
-/// makes matching robust across all of these without losing precision —
-/// `"Apple"` (the company) and `"apple"` (the fruit, separate Wikipedia
-/// article) collapse, but Wikipedia handles disambiguation by suffix
-/// (`Apple_(disambiguation)`) which the normalizer preserves.
-pub fn normalize_title(raw: &str) -> String {
-    let mut out = String::with_capacity(raw.len());
-    let mut last_space = false;
-    for ch in raw.chars() {
-        let mapped = if ch == '_' { ' ' } else { ch };
-        if mapped.is_whitespace() {
-            if !last_space && !out.is_empty() {
-                out.push(' ');
-                last_space = true;
-            }
-        } else {
-            for low in mapped.to_lowercase() {
-                out.push(low);
-            }
-            last_space = false;
-        }
-    }
-    if out.ends_with(' ') {
-        out.pop();
-    }
-    out
-}
+pub use understanding_vocab::canonical::normalize_title;
 
 /// Best-effort title for a document. Prefers `doc.title`; falls back to
 /// the trailing path segment of `doc.url` (Wikipedia URLs end in the

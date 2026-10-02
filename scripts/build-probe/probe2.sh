@@ -5,7 +5,7 @@ set -u
 cd "$(git rev-parse --show-toplevel)"
 S="${BUILD_PROBE_OUT:-$PWD/target/build-probe}"; mkdir -p "$S/logs" "$S/timings"
 LOCK=scripts/with-cargo-lock.sh
-GATE="corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
+GATE="corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli-llm/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
 BUILDF="corpus-engine/treesitter,sovereign-cli/dev-tools"
 RES=$S/results2.tsv
 echo -e "probe\tcrate\tshape\trun\twall_s\texit\tnote" > $RES

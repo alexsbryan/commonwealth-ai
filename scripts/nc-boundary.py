@@ -29,7 +29,7 @@ TWO CHANGES, both re-classification. Neither claims a dependency went away.
      passed the crate; the ref loop passed nothing, so BACKSTAGE_CRATES applied
      to a type's OWNER and never to its REFERENCE SITE. Back-of-house crates
      referencing their own types scored as violations.
-  2. membership — see BACKSTAGE_CRATES below. +sovereign-atos,
+  2. membership — see BACKSTAGE_CRATES below. -sovereign-atos (crate cut 2026-09-21),
      -commonwealth-tdd, -sovereign-authoring-harness, each adjudicated against
      "does the product ship without it?" with the evidence recorded inline.
 
@@ -79,7 +79,6 @@ NOT_PRODUCTION = ("/tests/", "/benches/", "/examples/", "research/",
 # v2 MEMBERSHIP (nc-3-backstage, 2026-08-20). The test is the campaign's:
 # does the product ship without it? Answered per crate, with the evidence.
 #
-#   ADDED   sovereign-atos          the ATOS orchestrator over corpus-engine-atos
 #                                   — the same subsystem, and the list already
 #                                   held the store half. Omitting it split one
 #                                   decider across two answers.
@@ -113,8 +112,8 @@ NOT_PRODUCTION = ("/tests/", "/benches/", "/examples/", "research/",
 # A/B/C split — nothing here is a claim that a dependency went away.
 BACKSTAGE_CRATES = {
     "sovereign-eval", "sovereign-cli-dev", "sovereign-agent-bench",
-    "sovereign-atos", "xtask",
-    "corpus-engine-atos", "corpus-engine-archaeology",
+    "xtask",
+    "corpus-engine-archaeology",
 }
 BACKSTAGE_PATHS = ("/bench/", "/xtask/", "gym/",
                    "sovereign/crates/sovereign-eval/",
@@ -125,7 +124,6 @@ def crate_of(path):
     """Owning crate directory for a repo-relative path.
 
     `<ws>/crates/<name>/…` for the workspace crates, else the first path
-    component (`corpus-engine-atos/src/…` and friends sit at the repo root).
     """
     parts = path.split("/")
     for i, p in enumerate(parts):
@@ -145,7 +143,7 @@ def domain(path, crate=None):
     # (`if src == BACKSTAGE: return None  # observing anything is legal`).
     # 184 of the 255 BACKSTAGE violations were exactly that self-reference:
     # sovereign-agent-bench 92, commonwealth-tdd 40, corpus-engine-archaeology
-    # 25, corpus-engine-atos 19, sovereign-authoring-harness 8.
+    # 25, sovereign-authoring-harness 8.
     if crate is None:
         crate = crate_of(path)
     if (crate in BACKSTAGE_CRATES) or any(p in path for p in BACKSTAGE_PATHS):

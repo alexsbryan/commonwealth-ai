@@ -84,6 +84,17 @@ mod mesh;
 pub mod knowledge_client;
 pub mod landscape_digest_client;
 
+/// The sync `ReplicatedKv` over cw-rails' KV doors: the one client the daemon
+/// and the code program's work atlas dial (pb-atlas-kv).
+pub mod rails_kv;
+
+/// The one register/renew loop for an origin in cw-rails' origin table,
+/// shared by svrn's work origin and serve's origins.
+pub mod rails_origins;
+
+// Serve's default base and self-report reader (pb-meshapp-rest).
+pub mod serve_self;
+
 #[cfg(feature = "bundled-backend")]
 pub use reach::BundledBackend;
 pub use reach::{NotReachable, Reached, ServingHost, CAN_BRING_UP_A_BACKEND};
@@ -107,8 +118,8 @@ pub use sovereign_contracts::error::{Error as TurnError, Result as TurnResult};
 pub use sovereign_contracts::types::approval::ResolveOutcome;
 pub use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSource};
 pub use sovereign_contracts::types::{
-    ActionPreview, EpistemicState, Intent, NarrationPhase, TurnAnswer, TurnFrame, TurnMode,
-    TurnNotice, TurnPrompt, TurnRequest,
+    ActionPreview, EpistemicState, Intent, NarrationPhase, RerankOverrides, SamplingOverrides,
+    TurnAnswer, TurnFrame, TurnMode, TurnNotice, TurnPrompt, TurnRequest,
 };
 
 /// What one turn did, assembled from the terminal `Complete` frame.
@@ -3592,16 +3603,27 @@ impl TurnClient {
     /// `Err`, because a client that received tokens and then nothing cannot
     /// tell a finished turn from a dead one (ARCH §18.3) — and neither can a
     /// caller that got an `Ok` with a half-written answer in it.
+    ///
+    /// `sampling` and `rerank` pin this turn only (`TurnRequest::Message`'s
+    /// fields of those names); `None` runs at the host's own config.
     pub async fn run_turn(
         &self,
         conversation_id: &str,
         content: &str,
         mode: TurnMode,
         intent: Option<Intent>,
+        sampling: Option<SamplingOverrides>,
+        rerank: Option<RerankOverrides>,
         observer: &mut TurnObserver<'_>,
     ) -> Result<TurnOutcome> {
         let mut stream = self.connect(conversation_id).await?;
-        stream.send_message(content, mode, intent).await?;
+        stream.sender().send(TurnRequest::Message {
+            content: content.to_string(),
+            mode,
+            intent,
+            sampling,
+            rerank,
+        })?;
         stream.drain_turn(observer).await
     }
 }
@@ -4122,6 +4144,8 @@ impl TurnSender {
             content: content.to_string(),
             mode,
             intent,
+            sampling: None,
+            rerank: None,
         })
     }
 

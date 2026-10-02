@@ -41,8 +41,10 @@ use gliner::model::params::Parameters;
 use gliner::model::pipeline::span::SpanMode;
 use gliner::model::GLiNER;
 use regex::Regex;
-use sovereign_core::conv_tiered::ChunkEntityRow;
-use sovereign_core::error::{Error, Result};
+use sovereign_contracts::error::{Error, Result};
+// The NER port moved to sovereign-contracts (pb-serving-ner); reachable here
+// at its historical path.
+pub use sovereign_contracts::ner::{EntityMention, GlinerGeneration};
 
 /// Default extraction threshold. Below this, GliNER's softmax score
 /// is too low to trust — most below-threshold "mentions" in
@@ -57,7 +59,7 @@ pub const DEFAULT_THRESHOLD: f32 = 0.6;
 pub const DEFAULT_LABELS: &[&str] = &["Person", "Organization", "Work", "Location", "Event"];
 
 /// Label set for the retrieval-side CONCEPT extraction pass (see
-/// [`EntityExtractor::extract_concepts`](sovereign_core::traits::EntityExtractor::extract_concepts)).
+/// [`EntityExtractor::extract_concepts`](sovereign_contracts::traits::EntityExtractor::extract_concepts)).
 /// Deliberately a SEPARATE, single-label pass rather than an addition to
 /// [`DEFAULT_LABELS`]: GLiNER does joint inference over the provided
 /// labels, so folding `Concept` into the 5-label set would shift the
@@ -82,19 +84,6 @@ pub const DEFAULT_MODEL_ID: &str = "gliner_small-v2.1";
 /// The GLiNER2 base export evaluated in SP1 — a monolithic
 /// encoder+span-head graph, driven bare on `ort` (no gline-rs).
 pub const GLINER2_MODEL_ID: &str = "gliner2-base-v1-onnx";
-
-/// Which GLiNER generation a model id belongs to.
-///
-/// This is a closed set on purpose (ARCH_PRINCIPLES §2): each variant
-/// implies a different input contract and a different loader, so a
-/// generation the code cannot drive must not be nameable in config.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GlinerGeneration {
-    /// gline-rs stack, entities only.
-    V1,
-    /// Bare-`ort` schema-driven export: entities, types, typed slots.
-    V2,
-}
 
 /// Where a GLiNER model lives on HuggingFace and how its files are laid
 /// out on disk.
@@ -166,7 +155,7 @@ pub fn models_root() -> PathBuf {
     if let Ok(p) = std::env::var("SOVEREIGN_GLINER_MODEL_DIR") {
         return PathBuf::from(p);
     }
-    sovereign_core::rebrand::svrnmesh_root()
+    sovereign_contracts::rebrand::svrnmesh_root()
         .join("models")
         .join("gliner")
 }
@@ -205,44 +194,6 @@ pub fn resolve_model_paths(model_id: &str) -> Result<(PathBuf, PathBuf)> {
         )));
     }
     Ok((tokenizer, model))
-}
-
-/// One extracted entity mention with character offsets into the
-/// preprocessed (role-marker-stripped) chunk text. Use the
-/// `original_offsets_from_processed` helper to map back to offsets
-/// in the raw chunk content for highlight rendering.
-#[derive(Debug, Clone, PartialEq)]
-pub struct EntityMention {
-    pub text: String,
-    pub label: String,
-    pub char_start: usize,
-    pub char_end: usize,
-    pub score: f32,
-}
-
-impl EntityMention {
-    /// Promote a stack of mentions into persisted `ChunkEntityRow`s
-    /// for one chunk. Callers stamp `extracted_at` from a single
-    /// timestamp so all rows in a batch share the same provenance.
-    pub fn into_row(
-        self,
-        corpus_id: &str,
-        chunk_id: u64,
-        conv_uuid: Option<&str>,
-        extracted_at: i64,
-    ) -> ChunkEntityRow {
-        ChunkEntityRow {
-            corpus_id: corpus_id.to_string(),
-            chunk_id,
-            text: self.text,
-            label: self.label,
-            char_start: self.char_start as i64,
-            char_end: self.char_end as i64,
-            score: self.score as f64,
-            conv_uuid: conv_uuid.map(|s| s.to_string()),
-            extracted_at,
-        }
-    }
 }
 
 /// gline-rs's `GLiNER<SpanMode>` model wrapped behind a `Mutex` so
@@ -476,128 +427,15 @@ impl crate::labeled::LabeledEntityExtractor for GlinerExtractor {
     fn extract_mentions_batch(&self, texts: &[&str]) -> Result<Vec<Vec<EntityMention>>> {
         self.extract_batch(texts)
     }
-}
 
-/// Implementation of the `sovereign-core::traits::EntityExtractor`
-/// trait. Wraps `GlinerExtractor::extract` and dedupes by entity
-/// text (lower-cased). The trait elides the label because
-/// retrieval-side scoring only needs the entity STRING for
-/// jaccard overlap, not its NER type.
-///
-/// Errors from `extract` (rare, typically ORT runtime issues) are
-/// downgraded to an empty Vec — entity-aware retrieval falls back
-/// to pure cosine on that turn instead of crashing the synthesis
-/// path. The retrieval call sites already log soft-failures via
-/// `tracing::debug!`.
-impl sovereign_core::traits::EntityExtractor for GlinerExtractor {
-    fn extract_entities(&self, text: &str) -> Vec<String> {
-        dedup_mention_texts(self.extract(text).ok())
+    /// The dedicated `Concept` pass ([`CONCEPT_LABELS`] at
+    /// [`CONCEPT_THRESHOLD`]), kept out of the 5-label pass on purpose.
+    fn extract_concept_mentions(&self, text: &str) -> Result<Vec<EntityMention>> {
+        self.extract_labeled(text, CONCEPT_LABELS, CONCEPT_THRESHOLD)
     }
 
-    /// Run the dedicated `Concept` pass (see [`CONCEPT_LABELS`]). Errors
-    /// (rare ORT runtime issues) degrade to no concepts — retrieval's
-    /// obligation lane just doesn't gain the concept articles this turn,
-    /// exactly as when the model isn't installed.
-    fn extract_concepts(&self, text: &str) -> Vec<String> {
-        dedup_mention_texts(
-            self.extract_labeled(text, CONCEPT_LABELS, CONCEPT_THRESHOLD)
-                .ok(),
-        )
-    }
-}
-
-/// Lower-case, dedupe (preserving first-seen order) the text of a set of
-/// mentions. Shared by `extract_entities` and `extract_concepts` so the
-/// two produce identically-shaped output. `None` (an extraction error)
-/// yields an empty Vec.
-fn dedup_mention_texts(mentions: Option<Vec<EntityMention>>) -> Vec<String> {
-    let Some(mentions) = mentions else {
-        return Vec::new();
-    };
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::with_capacity(mentions.len());
-    for m in mentions {
-        let key = m.text.to_lowercase();
-        if seen.insert(key.clone()) {
-            out.push(key);
-        }
-    }
-    out
-}
-
-/// Boot-critical-path-free wrapper around [`GlinerExtractor`].
-///
-/// Loading the GLiNER model (`GlinerExtractor::new_default`) costs ~950ms —
-/// on the desktop that was roughly half of the whole warm boot, all spent
-/// synchronously before `backend-ready` fires. This decorator moves that
-/// load onto a background thread at construction and installs immediately,
-/// so bootstrap pays only the (cheap) `probe_model_available` check.
-///
-/// Until the background load completes, `extract_entities` returns an empty
-/// `Vec` — the exact same soft-fallback the retrieval path already takes
-/// when GLiNER isn't installed at all (it degrades to cosine + MMR history
-/// retrieval, see `Runtime::maybe_retrieve_relevant_history`). In practice
-/// the model is warm within ~1s of boot — long before a user reads the
-/// freshly-loaded UI and types a first query — so entity-aware retrieval is
-/// effectively always available by the time it's exercised. A load failure
-/// is logged once and leaves the extractor permanently in fallback mode,
-/// identical to today's `new_default` error branch.
-pub struct LazyGlinerExtractor {
-    inner: std::sync::Arc<std::sync::OnceLock<GlinerExtractor>>,
-}
-
-impl LazyGlinerExtractor {
-    /// Install immediately and warm the default model on a background
-    /// thread. Callers should still gate construction on
-    /// [`probe_model_available`] so a machine without the model doesn't
-    /// spawn a thread only to fail.
-    pub fn new_default_deferred() -> Self {
-        let inner = std::sync::Arc::new(std::sync::OnceLock::new());
-        let slot = std::sync::Arc::clone(&inner);
-        let spawned = std::thread::Builder::new()
-            .name("gliner-warm".into())
-            .spawn(move || {
-                let t = std::time::Instant::now();
-                match GlinerExtractor::new_default() {
-                    Ok(g) => {
-                        let _ = slot.set(g);
-                        tracing::info!(
-                            elapsed_ms = t.elapsed().as_millis() as u64,
-                            "GLiNER entity extractor warmed (background)"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            error = %e,
-                            "GLiNER background load failed; entity-aware retrieval disabled (cosine+MMR fallback)"
-                        );
-                    }
-                }
-            });
-        if let Err(e) = spawned {
-            tracing::warn!(error = %e, "GLiNER background warm thread failed to spawn; entity-aware retrieval disabled");
-        }
-        Self { inner }
-    }
-}
-
-impl sovereign_core::traits::EntityExtractor for LazyGlinerExtractor {
-    fn extract_entities(&self, text: &str) -> Vec<String> {
-        match self.inner.get() {
-            Some(g) => g.extract_entities(text),
-            // Not warm yet (or load failed): same soft-fallback as an
-            // uninstalled model — the retrieval path degrades to cosine+MMR.
-            None => Vec::new(),
-        }
-    }
-
-    fn extract_concepts(&self, text: &str) -> Vec<String> {
-        match self.inner.get() {
-            Some(g) => g.extract_concepts(text),
-            // Not warm yet (or load failed): no concept obligations this
-            // turn, same soft-fallback as an uninstalled model.
-            None => Vec::new(),
-        }
+    fn generation(&self) -> GlinerGeneration {
+        model_spec(&self.model_id).generation
     }
 }
 
@@ -610,7 +448,7 @@ pub(crate) fn normalize_mention_text(raw: &str) -> String {
     raw.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-pub use sovereign_core::time::unix_now as now_unix;
+pub use sovereign_time::unix_now as now_unix;
 
 /// Probe-style helper: returns true if the configured model is
 /// installed and the extractor can be loaded. Useful for CLI

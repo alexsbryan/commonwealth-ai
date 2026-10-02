@@ -3,23 +3,24 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_core::contributions::LedgerEventKind;
-use commonwealth_core::ids::{HandoffId, NodeId};
-use commonwealth_core::knowledge::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
-use commonwealth_state::{ContributionEmitter, MeshStore};
-use corpus_engine::{ChunkRange, Corpus, CorpusEngine, CorpusIndex, IndexInfo, ShardInfo};
+use corpus_index::ingest_port::merge::PartitionMergePort;
+use corpus_index::source::CorpusReadPort;
+use corpus_index::{corpus::Corpus, index::CorpusIndex, types::IndexInfo};
+use kernel_types::{HandoffId, NodeId};
+use oicp_types::work_queue::{IngestionHandoff, PartitionStatus};
+use sovereign_contracts::peer::ReplicatedKv;
+use sovereign_contracts::venue_host::ShardTransferLedger;
 
 pub struct ShardManager {
-    engine: Arc<CorpusEngine>,
-    shard_dir: PathBuf,
-    mesh_store: Arc<MeshStore>,
+    engine: Arc<dyn PartitionMergePort>,
+    mesh_store: Arc<dyn ReplicatedKv>,
     /// Optional emitter for `ShardTransferred` events on the merge
     /// leader's pull path. Optional so existing call sites that
     /// don't have a daemon-scoped emitter (legacy tests, ad-hoc
     /// tooling) keep working unchanged. Missing emitter ⇒ no
     /// ledger event ⇒ ledger silently underreports the transfer,
     /// which is honest about the gap.
-    emitter: Option<ContributionEmitter>,
+    emitter: Option<Arc<dyn ShardTransferLedger>>,
     /// Optional handle on the daemon's `WorkQueueManager`. Required
     /// for queue-mode `coordinate_merge` (legacy static-partition
     /// handoffs carry the participating peer list inline; queue-mode
@@ -65,17 +66,16 @@ pub struct MergePlan<'a> {
 }
 
 impl ShardManager {
-    pub fn new(engine: Arc<CorpusEngine>, shard_dir: PathBuf, mesh_store: Arc<MeshStore>) -> Self {
+    pub fn new(engine: Arc<dyn PartitionMergePort>, mesh_store: Arc<dyn ReplicatedKv>) -> Self {
         Self {
             engine,
-            shard_dir,
             mesh_store,
             emitter: None,
             work_queue: None,
         }
     }
 
-    /// Attach a `ContributionEmitter` so successful peer-shard
+    /// Attach a [`ShardTransferLedger`] so successful peer-shard
     /// pulls during `merge_participants` (the merge half of
     /// `coordinate_merge`) write `ShardTransferred`
     /// events into the dimensional ledger. The emit is on behalf
@@ -84,7 +84,7 @@ impl ShardManager {
     /// puller's. See
     /// `commonwealth_core::contributions::aggregate` for the
     /// pull-emission special case.
-    pub fn with_emitter(mut self, emitter: ContributionEmitter) -> Self {
+    pub fn with_emitter(mut self, emitter: Arc<dyn ShardTransferLedger>) -> Self {
         self.emitter = Some(emitter);
         self
     }
@@ -97,79 +97,6 @@ impl ShardManager {
     pub fn with_work_queue(mut self, work_queue: Arc<crate::work_queue::WorkQueueManager>) -> Self {
         self.work_queue = Some(work_queue);
         self
-    }
-
-    // ---- Shard preparation and installation ----
-
-    /// Prepare shard directories for distribution to assigned nodes.
-    pub async fn prepare_shards(
-        &self,
-        corpus_id: &str,
-        assignments: &[KnowledgeShardAssignment],
-    ) -> corpus_engine::Result<Vec<PreparedShard>> {
-        let mut shards = Vec::new();
-        for assignment in assignments {
-            if assignment.corpus_id != corpus_id {
-                continue;
-            }
-            if let Some(ref range) = assignment.chunk_range {
-                let output = self.shard_dir.join(format!(
-                    "{}-shard-{}-{}",
-                    corpus_id, range.start_id, range.end_id
-                ));
-                let chunk_range = ChunkRange::new(range.start_id, range.end_id);
-                let info = self
-                    .engine
-                    .extract_shard(corpus_id, chunk_range, &output)
-                    .await?;
-                shards.push(PreparedShard {
-                    target_node: assignment.node_id,
-                    info,
-                });
-            }
-        }
-        Ok(shards)
-    }
-
-    /// Install a received shard directory into the shared index directory.
-    pub fn install_received_shard(
-        &self,
-        corpus_id: &str,
-        chunk_range: &ChunkRange,
-        received_dir: &Path,
-    ) -> corpus_engine::Result<PathBuf> {
-        let dest = self.engine.index_dir().join(format!(
-            "{}-shard-{}-{}",
-            corpus_id, chunk_range.start_id, chunk_range.end_id
-        ));
-        std::fs::rename(received_dir, &dest).map_err(corpus_engine::Error::Io)?;
-        Ok(dest)
-    }
-
-    /// Merge all local shard directories for a corpus into a complete index.
-    pub async fn consolidate_shards(&self, corpus_id: &str) -> corpus_engine::Result<IndexInfo> {
-        let shard_dirs: Vec<PathBuf> = self
-            .engine
-            .installed_indexes()
-            .await?
-            .iter()
-            .filter(|i| i.corpus_id == corpus_id && i.is_shard)
-            .map(|i| i.path.clone())
-            .collect();
-
-        if shard_dirs.is_empty() {
-            return Err(corpus_engine::Error::NoShardsFound(corpus_id.into()));
-        }
-
-        let output = self.engine.index_dir().join(corpus_id);
-        let info = self.engine.merge_shards(&shard_dirs, &output).await?;
-
-        // Clean up shard directories after successful merge.
-        for path in &shard_dirs {
-            std::fs::remove_dir_all(path).ok();
-        }
-
-        Ok(info)
     }
 
     // ---- Collaborative merge coordinator ----
@@ -225,7 +152,7 @@ impl ShardManager {
         local_node_id: NodeId,
         peer_shard_base_urls: &[(NodeId, String)],
         mesh_proof: Option<(&str, &str)>,
-    ) -> corpus_engine::Result<Option<IndexInfo>> {
+    ) -> corpus_index::Result<Option<IndexInfo>> {
         const PARTITION_POLL_INTERVAL: Duration = Duration::from_secs(30);
         const MAX_WAIT_SECS: u64 = 3600; // 1 hour
 
@@ -251,7 +178,7 @@ impl ShardManager {
             // lease/complete units. Fallback when the snapshot is
             // missing (queue-mode handoff that outlived a coordinator
             // restart): the gossiped `processed_shards:<corpus>:<peer>`
-            // entries in `MeshStore`. Each peer that has actually done
+            // entries in the replicated KV. Each peer that has actually done
             // work for this corpus publishes a non-empty list under
             // its own slot, so the union of `entry.origin`s across
             // every non-empty entry is the participating-peers set.
@@ -272,13 +199,16 @@ impl ShardManager {
                         "work queue",
                     ),
                     None => (
-                        participating_peers_from_gossip(&self.mesh_store, &handoff.corpus_id),
+                        participating_peers_from_gossip(
+                            self.mesh_store.as_ref(),
+                            &handoff.corpus_id,
+                        ),
                         now_ms,
                         "gossip fallback (live queue missing — coordinator restart?)",
                     ),
                 },
                 None => (
-                    participating_peers_from_gossip(&self.mesh_store, &handoff.corpus_id),
+                    participating_peers_from_gossip(self.mesh_store.as_ref(), &handoff.corpus_id),
                     now_ms,
                     "gossip fallback (no work queue attached)",
                 ),
@@ -302,9 +232,9 @@ impl ShardManager {
             // too, but belt-and-braces).
             let mut peers = participating;
             peers.insert(local_node_id);
-            let synthesized: Vec<commonwealth_core::knowledge::IngestionPartition> = peers
+            let synthesized: Vec<oicp_types::work_queue::IngestionPartition> = peers
                 .into_iter()
-                .map(|node_id| commonwealth_core::knowledge::IngestionPartition {
+                .map(|node_id| oicp_types::work_queue::IngestionPartition {
                     node_id,
                     file_indices: Vec::new(),
                     article_range: None,
@@ -449,7 +379,7 @@ impl ShardManager {
     ///
     /// # `Ok(Some(info))` means REACHABLE, and that is new
     ///
-    /// The finalize — [`corpus_engine::finalize_canonical`] — is the last
+    /// The finalize — [`PartitionMergePort::finalize_canonical`] — is the last
     /// step of this function rather than something each caller does after it
     /// (cw-lift 5g B8). Until then it was neither: `merge_partitions` writes
     /// the chunks and stops, so both callers produced a canonical carrying
@@ -474,16 +404,16 @@ impl ShardManager {
     ///
     /// # Two refusals, each with its own name
     ///
-    /// * [`corpus_engine::Error::IncompleteCoverage`] — `plan.expected_partitions`
+    /// * [`corpus_index::Error::IncompleteCoverage`] — `plan.expected_partitions`
     ///   named a bar the resolved shards miss, so nothing was merged.
-    /// * [`corpus_engine::Error::MergedNotFinalized`] — the chunks merged and
+    /// * [`corpus_index::Error::MergedNotFinalized`] — the chunks merged and
     ///   the finalize did not. Not folded into a generic error: it carries
     ///   the chunk count and the canonical path because that directory holds
     ///   the only surviving copy of the merged rows (ARCH §18.3).
     pub async fn merge_participants(
         &self,
         plan: MergePlan<'_>,
-    ) -> corpus_engine::Result<Option<IndexInfo>> {
+    ) -> corpus_index::Result<Option<IndexInfo>> {
         let MergePlan {
             handoff_id,
             corpus_id,
@@ -567,12 +497,12 @@ impl ShardManager {
                     // merge leader can emit. See `aggregate` for
                     // the pull-emission special case.
                     if let Some(em) = &self.emitter {
-                        em.record(LedgerEventKind::ShardTransferred {
-                            from_node: node_id,
-                            to_node: local_node_id,
-                            corpus_id: corpus_id.to_string(),
-                            bytes: bytes_received,
-                        });
+                        em.record_shard_transferred(
+                            &node_id,
+                            &local_node_id,
+                            corpus_id,
+                            bytes_received,
+                        );
                     }
                     shard_dirs.push(dest_dir);
 
@@ -639,7 +569,7 @@ impl ShardManager {
                     missing = ?unresolved,
                     "merge_participants: refusing to merge — coverage is incomplete"
                 );
-                return Err(corpus_engine::Error::IncompleteCoverage {
+                return Err(corpus_index::Error::IncompleteCoverage {
                     corpus: corpus_id.to_string(),
                     covered: shard_dirs.len(),
                     expected,
@@ -648,7 +578,7 @@ impl ShardManager {
         }
 
         if shard_dirs.is_empty() {
-            return Err(corpus_engine::Error::NoShardsFound(format!(
+            return Err(corpus_index::Error::NoShardsFound(format!(
                 "no shard dirs for handoff {handoff_id}"
             )));
         }
@@ -688,7 +618,7 @@ impl ShardManager {
             Ok(index) => index,
             Err(e) => return Err(self.not_finalized(corpus_id, &output_dir, &info, e)),
         };
-        if let Err(e) = corpus_engine::finalize_canonical(&canonical, corpus_id, None).await {
+        if let Err(e) = self.engine.finalize_canonical(&canonical, corpus_id).await {
             return Err(self.not_finalized(corpus_id, &output_dir, &info, e));
         }
 
@@ -704,7 +634,7 @@ impl ShardManager {
     /// Report "the chunks merged and the finalize did not" as its own fact.
     ///
     /// One spelling for both ways the finalize can be missed — the canonical
-    /// would not open, or [`corpus_engine::finalize_canonical`] itself failed
+    /// would not open, or [`PartitionMergePort::finalize_canonical`] itself failed
     /// — because the STATE they leave behind is identical and a caller that
     /// had to tell them apart would be deciding the same thing twice
     /// (ARCH §10.6). The `error!` lives here, at the site that discovers it,
@@ -714,8 +644,8 @@ impl ShardManager {
         corpus_id: &str,
         canonical_path: &Path,
         info: &IndexInfo,
-        cause: corpus_engine::Error,
-    ) -> corpus_engine::Error {
+        cause: corpus_index::Error,
+    ) -> corpus_index::Error {
         tracing::error!(
             corpus = %corpus_id,
             chunks = info.chunk_count,
@@ -727,7 +657,7 @@ impl ShardManager {
              the bits finalize writes). The source partitions were already \
              cleaned up, so this canonical holds the only copy."
         );
-        corpus_engine::Error::MergedNotFinalized {
+        corpus_index::Error::MergedNotFinalized {
             corpus: corpus_id.to_string(),
             canonical_path: canonical_path.display().to_string(),
             chunks: info.chunk_count,
@@ -799,104 +729,6 @@ impl ShardManager {
 
         Ok(bytes_received)
     }
-
-    // ---- T7: Index transfer sender ----
-
-    /// Stream a local corpus index to a remote node as a tar archive.
-    ///
-    /// Tars `<index_dir>/<corpus_id>/`, POSTs it to
-    /// `POST {target_base_url}/internal/index/transfer`, and returns a
-    /// receipt on success.
-    ///
-    /// `to_node` and `emitter` are optional so existing callers
-    /// without ledger context can keep calling the function. When
-    /// supplied, a `ShardTransferred` event is emitted on success
-    /// per the dimensional ledger spec — the sender owns the byte
-    /// count, and the recipient's `bytes_received` is inferred from
-    /// the same event during aggregation
-    /// (`commonwealth_core::contributions::aggregate`).
-    pub async fn stream_index(
-        &self,
-        corpus_id: &str,
-        target_base_url: &str,
-        to_node: Option<NodeId>,
-        emitter: Option<&ContributionEmitter>,
-    ) -> anyhow::Result<TransferReceipt> {
-        let index_path = self.engine.index_dir().join(corpus_id);
-        if !index_path.exists() {
-            anyhow::bail!(
-                "corpus '{}' not found at {}",
-                corpus_id,
-                index_path.display()
-            );
-        }
-
-        // Create a temporary tar archive.
-        let tar_path = self
-            .engine
-            .index_dir()
-            .join(format!(".{corpus_id}.transfer.tar"));
-
-        let tar_status = std::process::Command::new("tar")
-            .args([
-                "cf",
-                &tar_path.to_string_lossy(),
-                "-C",
-                &self.engine.index_dir().to_string_lossy(),
-                corpus_id,
-            ])
-            .status()?;
-
-        if !tar_status.success() {
-            anyhow::bail!("tar creation failed for corpus '{corpus_id}'");
-        }
-
-        let tar_bytes = std::fs::read(&tar_path)?;
-        std::fs::remove_file(&tar_path).ok();
-        let bytes_transferred = tar_bytes.len() as u64;
-
-        let transfer_url = format!("{target_base_url}/internal/index/transfer");
-        let client = reqwest::Client::new();
-        let resp = client
-            .post(&transfer_url)
-            .header("X-Corpus-Id", corpus_id)
-            .header("Content-Type", "application/octet-stream")
-            .body(tar_bytes)
-            .send()
-            .await?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("index/transfer returned {status} from {target_base_url}: {body}");
-        }
-
-        tracing::info!(
-            corpus = %corpus_id,
-            bytes = bytes_transferred,
-            target = %target_base_url,
-            "stream_index: shard transferred successfully"
-        );
-
-        // Emit `ShardTransferred` on success when both the
-        // recipient id and an emitter are supplied. The aggregator
-        // also lands `bytes_received` on `to_node` from the same
-        // event, so a single emission produces both halves of the
-        // byte ledger (per `aggregate` in commonwealth-core).
-        if let (Some(to), Some(em)) = (to_node, emitter) {
-            em.record(LedgerEventKind::ShardTransferred {
-                from_node: em.self_node_id(),
-                to_node: to,
-                corpus_id: corpus_id.to_string(),
-                bytes: bytes_transferred,
-            });
-        }
-
-        Ok(TransferReceipt {
-            corpus_id: corpus_id.to_string(),
-            bytes_transferred,
-        })
-    }
 } // end impl ShardManager
 
 /// Recover the set of peers that did work on `corpus_id` by scanning
@@ -912,11 +744,11 @@ impl ShardManager {
 /// hasn't actually been ingested anywhere visible to gossip and the
 /// caller should bail rather than try to merge nothing.
 fn participating_peers_from_gossip(
-    mesh_store: &MeshStore,
+    mesh_store: &dyn ReplicatedKv,
     corpus_id: &str,
 ) -> std::collections::HashSet<NodeId> {
     let prefix = format!("processed_shards:{corpus_id}:");
-    let entries = match mesh_store.scan(commonwealth_state::PROCESSED_SHARDS_APP_ID, &prefix) {
+    let entries = match mesh_store.scan(oicp_types::work_queue::PROCESSED_SHARDS_APP_ID, &prefix) {
         Ok(e) => e,
         Err(_) => return std::collections::HashSet::new(),
     };
@@ -933,18 +765,6 @@ fn participating_peers_from_gossip(
         }
     }
     peers
-}
-
-pub struct PreparedShard {
-    pub target_node: NodeId,
-    pub info: ShardInfo,
-}
-
-/// Result of a successful corpus index transfer.
-#[derive(Debug)]
-pub struct TransferReceipt {
-    pub corpus_id: String,
-    pub bytes_transferred: u64,
 }
 
 /// Delete a peer's working partition dir
@@ -994,20 +814,19 @@ impl VerifyReport {
 /// "re-checked N chunks — all matched"). Mirrors the prebuilt-restore re-embed
 /// precedent (`corpus-engine` `try_restore_prebuilt`).
 pub async fn verify_merge_sample(
-    engine: &CorpusEngine,
+    engine: &dyn CorpusReadPort,
     corpus_id: &str,
     sample_n: usize,
     epsilon: f32,
-) -> corpus_engine::Result<VerifyReport> {
+) -> corpus_index::Result<VerifyReport> {
     let index = engine.open_index_for_corpus(corpus_id).await?;
     let samples = index.sample_chunks_with_embeddings(sample_n).await?;
-    let embed = engine.embed_fn();
 
     let mut passed = 0u32;
     let mut min_cosine = 1.0f32;
     let mut failures = Vec::new();
     for (i, (text, stored)) in samples.iter().enumerate() {
-        let local = match (embed)(text.as_str()).await {
+        let local = match engine.embed(text.as_str()).await {
             Ok(v) => v,
             Err(e) => {
                 tracing::warn!(

@@ -27,18 +27,21 @@ oplog = { workspace = true }
 corpus-engine-sections = { workspace = true }
 # The atlas vocabulary (atoms/edges/taxonomy/canonical) — a behaviour-free
 # leaf re-exported at its historical paths. See understanding-vocab/Cargo.toml.
-understanding-vocab = { workspace = true }
+understanding-vocab = { workspace = true, features = ["read"] }
+# The resolved-atlas READ surface (projection, citation, context_filter,
+# section_cache, evidence_site, axis_catalog) — carved read-only out of
+# enrichment/atlas (FIVE_PROGRAMS §12 decision 1) and re-exported at its
+# historical paths; corpus-engine keeps the WRITE side.
+corpus-engine-atlas-reader = { workspace = true }
 # The retrieval read-port leaf (CorpusIndex, IndexInfo, the persisted settings,
 # the search/evidence surface) — re-exported at its historical paths so nothing
 # in the monorepo changed when it was carved out (domains
 # REVIEW-build-index-read-port, DE "The read-port leaf, measured again").
 corpus-index = { workspace = true }
-# The code-intel package's fact base — `facts`/`facts_check`/`facts_store`
-# moved out at domains REVIEW-build-code-facts (docs/CODE_TOOLING_BOUNDARY.md §2
-# Phase 2) and re-exported at their historical paths here, so no in-monorepo
-# importer changed. The `stores`/`treesitter` features forward below, keeping
-# the engine's build contract identical.
-code-facts = { workspace = true }
+# The bundled recipe definitions as static data (five-programs-52). Named in
+# one file only, `src/recipe_source/bundled.rs`, behind the RecipeSource and
+# AssetSource ports.
+corpus-engine-recipes = { workspace = true }
 # Understanding's pure tier — a temporary shim edge: the pure files that leave
 # `corpus-engine` for `understanding-atlas` are re-exported at their historical
 # paths here (domains REVIEW-build-understanding-crate-tree, §3a step 5) until
@@ -65,6 +68,9 @@ understanding-atlas = { workspace = true }
 # and a dependency carried entirely by free functions and consts is invisible to
 # it. Recorded in quality/ARCH_LAYERS.toml rather than left implicit.
 sovereign-contracts = { workspace = true }
+# The protocol recipe-test report the daemon port projects onto
+# (engine/daemon_port.rs, pb-ingest-dial-daemon-ports).
+oicp-types = { workspace = true }
 
 # YieldHook contract (Tier-0 leaf, zero deps). Extracted from
 # corpus-engine/src/yield_hook.rs during the watchers carve-out so the
@@ -229,19 +235,12 @@ pulldown-cmark         = { version = "0.12", default-features = false, features 
 # carry.
 corpus-engine-scip     = { workspace = true, optional = true }
 
-# NoteStore + project_docs + notes_sync — also carved out 2026-05-23.
-# corpus-engine still references the NoteStore from `alignment_projector`,
-# `extractors::alignment_workspace`, and `update::project_index_watcher`,
-# so pull it back in behind the `stores` feature (same gate the modules
-# used to carry).
-corpus-engine-notes    = { workspace = true, optional = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [features]
 # `stores` is in the default set because every downstream sovereign +
 # commonwealth crate touches at least one rusqlite-backed module
-# (wikipedia_graph + the notes_sync bridge here; NoteStore /
-# ProjectDocsStore reached through the pulled-in `corpus-engine-notes`).
+# (wikipedia_graph + the notes_sync bridge here).
 # Pre-2026-05-22 these lived under `treesitter` because rusqlite happened
 # to be declared there — that wart forced 5 tree-sitter grammar crates
 # into every binary that only needed a notes table. The two are split
@@ -250,10 +249,9 @@ workspace-hack = { version = "0.1", path = "../workspace-hack" }
 default = ["markdown", "stores"]
 markdown = ["dep:pulldown-cmark"]
 # `stores` unlocks the remaining rusqlite-backed modules in this crate
-# (wikipedia_graph, wikipedia_columnar, notes_sync) and pulls in
-# `corpus-engine-notes` for the internal NoteStore users. Cheap to
-# enable — rusqlite is bundled (no system dep) and SQLite is small.
-stores = ["dep:rusqlite", "dep:notify", "dep:walkdir", "dep:corpus-engine-notes", "code-facts/stores"]
+# (wikipedia_graph, wikipedia_columnar, notes_sync). Cheap to enable —
+# rusqlite is bundled (no system dep) and SQLite is small.
+stores = ["dep:rusqlite", "dep:notify", "dep:walkdir"]
 treesitter = [
     "stores",
     "dep:tree-sitter",
@@ -269,14 +267,14 @@ treesitter = [
     # gate keeps the corpus-engine surface backwards-compatible with
     # consumers that opt into `treesitter`.
     "dep:corpus-engine-scip",
-    # The fact base's grammars + SCIP dispatch now live in `code-facts`; the
-    # engine's `treesitter` forwards to its feature of the same name.
-    "code-facts/treesitter",
 ]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = { workspace = true }
+# The atlas store fixtures and the canned typed-extension envelope the
+# `AtlasPort` parity tests share with svrn's double-side tests (phase-b-48).
+corpus-engine-atlas-reader = { workspace = true, features = ["test-doubles"] }
 # Dev-only, and only to capture what a tracing event ACTUALLY formats to.
 # The F5 demand instrument is a Rust writer read back by a Python reader
 # (scripts/sec-miss-demand.py); the two agree on a log-line grammar and

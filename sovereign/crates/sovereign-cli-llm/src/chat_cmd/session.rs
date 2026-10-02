@@ -230,6 +230,8 @@ async fn run_one(
                 question,
                 TurnMode::Grounded,
                 None,
+                None,
+                None,
                 &mut observer,
             )
             .await

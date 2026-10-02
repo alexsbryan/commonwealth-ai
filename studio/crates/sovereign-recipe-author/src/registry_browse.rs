@@ -139,7 +139,7 @@ mod tests {
     /// A minimal bundled snapshot, injected the way the monolith injects the
     /// real one. The tool's merge/filter logic is what these tests exercise;
     /// the REAL catalog's non-emptiness is asserted by
-    /// `sovereign-tools/tests/recipe_author_loop.rs`, which has the real bytes.
+    /// this crate's `tests/recipe_author_loop.rs`, which has the real bytes.
     const BUNDLED: &str = r#"
 [[recipes]]
 id = "wikipedia"

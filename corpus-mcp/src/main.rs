@@ -6,8 +6,8 @@
 //! technical, is one recipe and three commands:
 //!
 //! ```sh
-//! corpus recipe new --ontology numismatics --id my-coins   # writes my-coins.toml
-//! corpus ingest my-coins.toml                              # acquire → … → enrich
+//! svrn recipe new --ontology numismatics --out my-coins.toml # the scaffold
+//! svrn ingest my-coins.toml                                # ingest's own CLI (svrn-ingest)
 //! corpus serve --corpus my-coins                           # the MCP host
 //! ```
 //!
@@ -28,7 +28,7 @@
 //! `corpus_list`, `corpus_search` (cited chunks), `atoms_lookup` (declared
 //! atlas atoms) and `corpus_ontology` (what the corpus declared). No sovereign
 //! daemon, no local model, no mesh — the dep tree carries no llama.cpp, ort or
-//! iroh, and `tests/no_inference_stack.rs` fails if it ever does.
+//! iroh, and `corpus-engine/xtask/tests/no_inference_stack.rs` fails if it ever does.
 //!
 //! What it does NOT do, stated rather than implied: the atom-grounded RANKING
 //! (`atom_enum`, `atlas_grounding`) lives in `sovereign-core` and is not here.
@@ -36,10 +36,8 @@
 //! cross the seam; the ranking is the separate RAG extraction.
 
 mod ask;
-mod host;
-mod ingest;
+use corpus_index::host;
 mod mcp;
-mod recipe;
 mod serve;
 mod tools;
 
@@ -64,13 +62,20 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Scaffold a recipe from a built-in ontology template.
-    #[command(subcommand)]
-    Recipe(recipe::RecipeCommand),
+    /// Scaffolding a recipe is `svrn recipe new`'s. Prints that and exits 2.
+    #[command(disable_help_flag = true)]
+    Recipe {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        rest: Vec<String>,
+    },
 
-    /// Build a corpus from a recipe against a bare endpoint: acquire,
-    /// extract, chunk, embed, index, then the atlas enrichment.
-    Ingest(ingest::IngestArgs),
+    /// Moved to ingest's own CLI: `svrn ingest <recipe.toml>`. Prints that
+    /// and exits 2.
+    #[command(disable_help_flag = true)]
+    Ingest {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        rest: Vec<String>,
+    },
 
     /// Serve installed corpora over MCP on stdio, pulling a named corpus's
     /// prebuilt snapshot first if it is not installed here.
@@ -90,9 +95,17 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
     match args.command {
-        Some(Command::Recipe(cmd)) => recipe::run(cmd),
-        Some(Command::Ingest(a)) => ingest::run(a).await,
+        Some(Command::Recipe { .. }) => moved("recipe", "svrn recipe new --ontology <name>"),
+        Some(Command::Ingest { .. }) => moved("ingest", "svrn ingest <recipe.toml>"),
         Some(Command::Serve(a)) => serve::run(a).await,
         None => serve::run(args.serve).await,
     }
+}
+
+/// A verb that left this binary answers with where it went and exits 2: a
+/// named pointer, never an unknown-subcommand error (ARCH principle 6).
+fn moved(verb: &str, to: &str) -> anyhow::Result<()> {
+    tracing::debug!(verb, to, "corpus-mcp: moved verb answered with a pointer");
+    eprintln!("corpus-mcp {verb}: moved — run `{to}` instead.");
+    std::process::exit(2)
 }

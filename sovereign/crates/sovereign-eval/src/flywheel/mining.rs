@@ -4,15 +4,16 @@
 //!
 //! Lifted out of `mechanism_fidelity::classes::attribution` so the attribution
 //! reasoning class and the flywheel's I1 corpus generator mine claims through
-//! one implementation. Reads the atlas product through the vocabulary leaf's
-//! door (`understanding_vocab::read::read_atlas_atoms`, `dm-vocab-bypass-rest`)
-//! and returns an empty vec on any I/O or shape problem so callers report "no
-//! probes" rather than panicking.
+//! one implementation. Reads the atlas product's bytes itself and decodes them
+//! with the vocabulary's one parser (`understanding_vocab::read::parse_atoms`,
+//! five-programs fp-58 — the evaluator does not link the fs door) and returns
+//! an empty vec on any I/O or shape problem so callers report "no probes"
+//! rather than panicking.
 
 use std::path::Path;
 
 use understanding_vocab::atoms::AtomEnvelope;
-use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
+use understanding_vocab::read::{parse_atoms, ATLAS_DIRNAME};
 
 /// One mined claim with a genuine supporting excerpt.
 #[derive(Debug, Clone)]
@@ -49,13 +50,17 @@ pub fn cheatable(content: &str, excerpt: &str) -> bool {
 /// fragment (a live scan found only ~2 of 13 enriched corpora carry a real
 /// `quotable_excerpt`).
 pub fn mine_claims(corpus: &Path, preview_fallback: bool) -> Vec<MinedClaim> {
-    // The atlas product is read through the vocabulary leaf's door: one
-    // constructor for `atoms.json`, and the one name for the directory it
-    // opens. A missing, unreadable, or untyped file — including one carrying
-    // an atom kind outside the closed set — is the "no probes" case this
-    // miner has always answered with an empty vec.
-    let atlas_dir = corpus.join(ATLAS_DIRNAME);
-    let Ok(file) = read_atlas_atoms(&atlas_dir) else {
+    // One parser for `atoms.json` (the vocabulary's), and the one name for
+    // the directory it lives in. A missing, unreadable, or untyped file —
+    // including one carrying an atom kind outside the closed set — is the
+    // "no probes" case this miner has always answered with an empty vec.
+    let path = corpus.join(ATLAS_DIRNAME).join("atoms.json");
+    let Ok(data) = std::fs::read(&path) else {
+        tracing::debug!(path = %path.display(), "mine_claims: no readable atoms.json");
+        return Vec::new();
+    };
+    let Ok(file) = parse_atoms(&data) else {
+        tracing::debug!(path = %path.display(), "mine_claims: atoms.json did not parse");
         return Vec::new();
     };
 

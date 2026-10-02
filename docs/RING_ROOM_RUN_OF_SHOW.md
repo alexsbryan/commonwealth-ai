@@ -129,7 +129,10 @@ reach alongside another has to be built path-relative (`base: './'`).
 their edit reads `<name>, guest of <me>` — never the name alone. Within 5 s the
 name is in the doc's roster. The mesh's member list never changes: a guest, not
 a member. `svrn ring log ring-doc` shows every act, in the order every machine
-applies them.
+applies them. A guest's write reaches the journal at `cw-rails` with the
+daemon's signed word for the guest's name, and rails honours it only when the
+daemon's node key is in that namespace's roster; otherwise the write is refused
+as `signer_not_in_roster`, never filed under the member.
 
 ## 5. I stream a film from my other machine
 

@@ -12,8 +12,11 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use sovereign_compute::client::ComputeChildClient;
-use sovereign_compute::server::{router, ChildMeta};
+use sovereign_compute::server::{bundle, ChildMeta};
 use sovereign_compute::wire::EmbedMode;
+use sovereign_compute::wire::{
+    ROUTE_COMPLETE, ROUTE_COMPLETE_STREAM, ROUTE_EMBED, ROUTE_EMBED_BATCH, ROUTE_HEALTH,
+};
 use sovereign_contracts::{
     CompletionRequest, CompletionResponse, Depth, Error, InferenceProvider, ProviderCapabilities,
     Result, SamplingMode, Speed, StreamFrame, ToolSchema,
@@ -76,12 +79,12 @@ async fn spawn_child(seen: Arc<Mutex<Option<CompletionRequest>>>) -> ComputeChil
         role: "mock".into(),
         model_id: "echo".into(),
     };
-    let app = router(provider, ready, meta);
+    let routes = bundle(provider, ready, meta);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.ok();
-    });
+    // Served the way `child_main` serves it: through the host kit's shell.
+    let forever = std::future::pending::<()>();
+    tokio::spawn(host_kit::shell::serve([listener], vec![routes], forever));
     ComputeChildClient::from_port(port).unwrap()
 }
 
@@ -216,4 +219,31 @@ async fn health_reports_ready() {
     assert!(info.is_ready());
     assert_eq!(info.role, "mock");
     assert_eq!(info.model_id, "echo");
+}
+
+/// The mount trace names every wire route the child's client dials
+/// (phase-b pb-shell): the trace prints the bundle's `routes()`.
+#[test]
+fn the_child_bundle_names_every_wire_route() {
+    let provider: Arc<dyn InferenceProvider> = Arc::new(EchoProvider {
+        seen: Arc::new(Mutex::new(None)),
+    });
+    let meta = ChildMeta {
+        role: "mock".into(),
+        model_id: "echo".into(),
+    };
+    let routes = bundle(provider, Arc::new(AtomicBool::new(true)), meta);
+    assert_eq!(routes.name(), "compute_child");
+    assert_eq!(
+        routes.routes(),
+        [
+            ROUTE_COMPLETE,
+            ROUTE_COMPLETE_STREAM,
+            ROUTE_EMBED,
+            ROUTE_EMBED_BATCH,
+            ROUTE_HEALTH,
+            // The rerank kind's route, mounted from the served-kind registry.
+            "/v1/rerank",
+        ]
+    );
 }

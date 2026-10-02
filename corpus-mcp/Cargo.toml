@@ -4,14 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "A corpus-engine MCP host that needs nothing but an OpenAI-compatible endpoint — cited chunk search and atlas atom lookup over stdio, with no local inference stack linked."
+description = "A corpus-index MCP host that needs nothing but an OpenAI-compatible endpoint — cited chunk search and atlas atom lookup over stdio, with no local inference stack linked."
 
 # The proof that enrichment is a PLUGIN of the recipe pipeline and not fused to
-# it (enrichment-as-plugin Step 5): this binary links `corpus-engine` +
-# `understanding-vocab` + an HTTP `EmbedFn`, and NOTHING that carries
-# llama.cpp, ort or iroh. `tests/no_inference_stack.rs` asserts that against
-# `cargo tree`; `quality/ARCH_LAYERS.toml` declares the closure as a
-# `[[package]]` so boundary-gate keeps it honest.
+# it (enrichment-as-plugin Step 5): this binary reads what the pipeline wrote
+# through the read leaves (`corpus-index`, `corpus-engine-atlas-reader`,
+# `understanding-vocab`) + an HTTP `EmbedFn`, and links NOTHING that carries
+# llama.cpp, ort or iroh — nor, since pb-corpus-mcp-reads, `corpus-engine`
+# itself. `corpus-engine/xtask/tests/no_inference_stack.rs` asserts both against `cargo tree`;
+# `quality/ARCH_LAYERS.toml` declares the closure as a `[[package]]` so
+# boundary-gate keeps it honest.
 #
 # Shape borrowed from `docs/CODE_TOOLING_BOUNDARY.md` §5: `--base-url` is the
 # only mandatory flag, host capability is DETECTED via `GET
@@ -23,24 +25,26 @@ name = "corpus-mcp"
 path = "src/main.rs"
 
 [dependencies]
-corpus-engine = { workspace = true }
-understanding-vocab = { workspace = true }
+corpus-engine-atlas-reader = { workspace = true }
+understanding-vocab = { workspace = true, features = ["read"] }
 # The retrieval read-port leaf (domains REVIEW-build-index-read-port): the
 # `CorpusIndex` / `ScoredChunk` / `EmbedFn` surface `serve`, `ask`, `host` and
 # the `corpus_search` tool read through, so the host no longer reaches those
-# read-only types through `corpus-engine`. `corpus-engine` stays for the
-# `ingest` verb and the atlas reads, which genuinely are the engine's.
+# read-only types through `corpus-engine`. Its `FsIndexSource` lists and
+# opens the installed indexes (pb-corpus-mcp-reads); the `ingest` verb moved
+# to svrn-ingest (sovereign-pipeline) at pb-ingest-cli, and serve's pull
+# became `svrn-ingest pull` at pb-corpus-mcp-reads.
 corpus-index = { workspace = true }
-# The atlas enrichment orchestrator — `corpus ingest`'s second half, and the
-# WRITER of everything the tools here read. It joined this `[[package]]` in
-# `quality/ARCH_LAYERS.toml` at ei-5a-build-cut, when the seven import sites
-# that dragged `sovereign-core` / `sovereign-tools` / `sovereign-inference`
-# through it were cut (closure 695 -> 590 crates). This dep is what that cut
-# was FOR: without it a person needs our daemon to build a corpus, and the
-# binary's whole claim is that they do not.
-sovereign-enrichment-build = { workspace = true }
-# The JSON-RPC envelope every MCP message rides on — a leaf.
-oicp-types = { workspace = true }
+# `CorpusId`, the neutral identity leaf, named directly since `ask` stopped
+# reaching it through corpus-engine's re-export (pb-corpus-mcp-reads).
+kernel-types = { workspace = true }
+# The one locator of a sibling program's binary (`reach::locate_sibling`):
+# `serve --corpus <absent>` execs ingest's `svrn-ingest pull` through it,
+# with `SOVEREIGN_INGEST_BIN` as the override (pb-corpus-mcp-reads). A leaf.
+sovereign-turn-client = { workspace = true }
+# The one MCP dispatcher (phase-b pb-mcp): the stdio loop and the JSON-RPC
+# envelope are the kit's, and `Server` is its tool-host port.
+host-kit = { workspace = true, features = ["mcp"] }
 # `sovereign_contracts::rebrand::data_dir()` is the ONE derivation of the data
 # root (quality/env-flags.toml: SOVEREIGN_DATA_DIR); already in corpus-engine's
 # closure, and a declared package leaf.

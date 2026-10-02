@@ -21,12 +21,13 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::ids::NodeId;
-use commonwealth_core::knowledge::IngestionHandoff;
+use kernel_types::NodeId;
+use oicp_types::work_queue::IngestionHandoff;
 use sovereign_grants::auto_recover::FoldRecovery;
 use sovereign_grants::shard_manager::ShardManager;
 
 use crate::state::AppState;
+use crate::venue_host::shard_transfer_ledger;
 
 use super::{IngestPartitionRequest, IngestPartitionResponse};
 
@@ -35,19 +36,19 @@ use super::{IngestPartitionRequest, IngestPartitionResponse};
 /// through the PeerTransport seam; contacts are snapshotted out of
 /// the mesh lock before resolving so the lock never spans an await.
 pub async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(NodeId, String)> {
-    let contacts: Vec<commonwealth_transport::PeerContact> = {
-        let mesh = state.inner.fabric.mesh.read().await;
-        mesh.members
-            .values()
-            .filter(|m| m.node_id != local_node_id)
-            .map(commonwealth_transport::peer_contact)
-            .collect()
-    };
+    let contacts: Vec<mesh_reach::PeerContact> = state
+        .membership()
+        .members()
+        .await
+        .into_iter()
+        .filter(|m| m.node_id != local_node_id)
+        .map(|m| m.dial)
+        .collect();
     let transport = state.peer_transport();
     let mut urls = Vec::with_capacity(contacts.len());
     for contact in &contacts {
         if let Some(ep) = transport
-            .endpoints(contact, commonwealth_transport::TrafficClass::ControlPlane)
+            .endpoints(contact, mesh_reach::TrafficClass::ControlPlane)
             .await
             .into_iter()
             .next()
@@ -58,18 +59,6 @@ pub async fn peer_control_urls(state: &AppState, local_node_id: NodeId) -> Vec<(
     urls
 }
 
-/// This node's mesh-proof header pair, owned so it can cross into
-/// `sovereign-grants`, which cannot name the minting type. `None` on a mesh
-/// with no credential — a reported absence: an unstamped request is refused by
-/// a peer running the default `internal_auth`, and that is the honest outcome
-/// for a node holding no mesh secret.
-async fn owned_mesh_proof(state: &AppState) -> Option<(String, String)> {
-    state.mesh_proof_stamp().await.map(|s| {
-        let (name, value) = s.pair();
-        (name.to_string(), value.to_string())
-    })
-}
-
 /// Gather the node-side inputs [`FoldRecovery`] carries, from the daemon
 /// state. `merge_from_fold_coverage` moved to `sovereign-grants`, which cannot
 /// name `AppState`, so the reads it used to make for itself are made here, on
@@ -78,12 +67,12 @@ pub async fn fold_recovery(state: &AppState) -> FoldRecovery {
     let local_node_id = state.identity_reader().current();
     let peer_shard_base_urls = peer_control_urls(state, local_node_id).await;
     FoldRecovery {
-        corpus_engine: state.inner.node.corpus_engine.clone(),
-        mesh_store: Arc::clone(&state.inner.fabric.mesh_store),
-        contribution_emitter: state.inner.fabric.contribution_emitter.clone(),
+        corpus_engine: state.inner.node.corpus_engine.clone().map(|e| e as _),
+        mesh_store: Arc::clone(&state.inner.store.mesh_store),
+        contribution_emitter: shard_transfer_ledger(state),
         local_node_id,
         peer_shard_base_urls,
-        mesh_proof: owned_mesh_proof(state).await,
+        mesh_proof: None,
     }
 }
 
@@ -98,7 +87,7 @@ pub async fn corpus_ingest_partition(
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(IngestPartitionResponse {
                     accepted: false,
-                    reason: Some("no corpus engine available on this node".into()),
+                    reason: Some(crate::hosted_ingest::NO_INGEST.into()),
                 }),
             );
         }
@@ -108,7 +97,22 @@ pub async fn corpus_ingest_partition(
     // this node hasn't completed bootstrap (or has no embed model configured)
     // and cannot safely accept a partition — return 503 so the coordinator
     // skips us rather than assigning work we can't do.
-    let Some(local_embed_model) = state.inner.store.inference_store.get_local_embed_model() else {
+    let local_embed_model = match state.local_embed_model().await {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, "ingest_partition: embed model unread; refusing");
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(IngestPartitionResponse {
+                    accepted: false,
+                    reason: Some(format!(
+                        "inference state absent — cannot check embed model: {e}"
+                    )),
+                }),
+            );
+        }
+    };
+    let Some(local_embed_model) = local_embed_model else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(IngestPartitionResponse {
@@ -145,13 +149,13 @@ pub async fn corpus_ingest_partition(
     let handoff_id = req.handoff_id;
     let local_node_id = state.inner.fabric.identity.current();
     let engine = _engine.clone();
-    let mesh_store = Arc::clone(&state.inner.fabric.mesh_store);
+    let mesh_store = Arc::clone(&state.inner.store.mesh_store);
     let state_clone = state.clone();
     // Snapshot peer base URLs now — we can't hold the mesh lock across an async task.
     let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
     // Resolved beside the URLs and for the same reason: `ShardManager` cannot
     // name `AppState`, so every read it needs is made here.
-    let merge_proof = owned_mesh_proof(&state).await;
+    let merge_proof: Option<(String, String)> = None;
 
     // Guard: insert into active_ingests BEFORE spawning so there is no
     // window between the 202 response and the task's first async yield
@@ -234,12 +238,8 @@ pub async fn corpus_ingest_partition(
                 // leader observes pull completion). The emit is
                 // attributed to the peer that shipped the bytes —
                 // see `aggregate` for the pull-emission convention.
-                let shard_mgr = ShardManager::new(
-                    Arc::clone(&engine),
-                    engine.index_dir().to_path_buf(),
-                    mesh_store,
-                )
-                .with_emitter(state_clone.inner.fabric.contribution_emitter.clone());
+                let shard_mgr = ShardManager::new(engine.clone(), mesh_store)
+                    .with_emitter(shard_transfer_ledger(&state_clone));
                 match shard_mgr
                     .coordinate_merge(
                         handoff_id,
@@ -336,7 +336,7 @@ pub async fn corpus_next_unit(
                 .snapshot(&req.handoff_id)
                 .await
                 .map(|q| q.phase)
-                .unwrap_or(commonwealth_core::knowledge::HandoffPhase::Complete);
+                .unwrap_or(oicp_types::work_queue::HandoffPhase::Complete);
             (
                 StatusCode::NO_CONTENT,
                 Json(NextUnitResponse::Empty { phase }),
@@ -453,7 +453,7 @@ pub async fn corpus_complete_unit(
     State(state): State<AppState>,
     Json(req): Json<CompleteUnitRequest>,
 ) -> (StatusCode, Json<CompleteUnitResponse>) {
-    use commonwealth_core::knowledge::{CompleteOutcome, HandoffPhase};
+    use oicp_types::work_queue::{CompleteOutcome, HandoffPhase};
     use sovereign_grants::QueueError;
     let handoff_id = req.handoff_id;
     let peer_id = req.peer_id;
@@ -531,7 +531,7 @@ pub fn find_local_handoff_for_corpus(
 ) -> Option<IngestionHandoff> {
     let entries = state
         .inner
-        .fabric
+        .store
         .mesh_store
         .scan("corpus-engine", "handoff:")
         .ok()?;
@@ -566,7 +566,7 @@ pub fn find_local_handoff_for_corpus(
 /// where merge_leader is set to `self_id`). Errors are logged and
 /// swallowed — the response to `complete_unit` already returned 200,
 /// and the operator can retry by re-issuing collaborative ingest.
-pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::HandoffId) {
+pub fn spawn_queue_merge(state: AppState, handoff_id: kernel_types::HandoffId) {
     tokio::spawn(async move {
         let engine = match state.inner.node.corpus_engine.as_ref() {
             Some(e) => Arc::clone(e),
@@ -578,18 +578,14 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
                 return;
             }
         };
-        let mesh_store = Arc::clone(&state.inner.fabric.mesh_store);
+        let mesh_store = Arc::clone(&state.inner.store.mesh_store);
         let local_node_id = state.inner.fabric.identity.current();
         let peer_urls: Vec<(NodeId, String)> = peer_control_urls(&state, local_node_id).await;
-        let merge_proof = owned_mesh_proof(&state).await;
+        let merge_proof: Option<(String, String)> = None;
 
-        let shard_mgr = ShardManager::new(
-            Arc::clone(&engine),
-            engine.index_dir().to_path_buf(),
-            mesh_store,
-        )
-        .with_emitter(state.inner.fabric.contribution_emitter.clone())
-        .with_work_queue(Arc::clone(&state.inner.ingest.work_queue));
+        let shard_mgr = ShardManager::new(engine.clone(), mesh_store)
+            .with_emitter(shard_transfer_ledger(&state))
+            .with_work_queue(Arc::clone(&state.inner.ingest.work_queue));
 
         match shard_mgr
             .coordinate_merge(
@@ -615,7 +611,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
                 const VERIFY_SAMPLE_N: usize = 24;
                 const VERIFY_EPSILON: f32 = 1e-3;
                 match sovereign_grants::verify_merge_sample(
-                    &engine,
+                    &*engine,
                     &info.corpus_id,
                     VERIFY_SAMPLE_N,
                     VERIFY_EPSILON,
@@ -673,7 +669,7 @@ pub fn spawn_queue_merge(state: AppState, handoff_id: commonwealth_core::ids::Ha
 
 #[derive(Debug, Deserialize)]
 pub struct NextUnitRequest {
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
     pub peer_id: NodeId,
 }
 
@@ -681,12 +677,12 @@ pub struct NextUnitRequest {
 #[serde(untagged)]
 pub enum NextUnitResponse {
     Leased {
-        unit_id: commonwealth_core::knowledge::UnitId,
-        unit: commonwealth_core::knowledge::WorkUnit,
+        unit_id: oicp_types::work_queue::UnitId,
+        unit: oicp_types::work_queue::WorkUnit,
         lease_expires_at_ms: u64,
     },
     Empty {
-        phase: commonwealth_core::knowledge::HandoffPhase,
+        phase: oicp_types::work_queue::HandoffPhase,
     },
     Error {
         error: String,
@@ -695,9 +691,9 @@ pub enum NextUnitResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct HeartbeatRequest {
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
     pub peer_id: NodeId,
-    pub unit_id: commonwealth_core::knowledge::UnitId,
+    pub unit_id: oicp_types::work_queue::UnitId,
 }
 
 #[derive(Debug, Serialize)]
@@ -709,10 +705,10 @@ pub enum HeartbeatResponseBody {
 
 #[derive(Debug, Deserialize)]
 pub struct CompleteUnitRequest {
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
     pub peer_id: NodeId,
-    pub unit_id: commonwealth_core::knowledge::UnitId,
-    pub outcome: commonwealth_core::knowledge::CompleteOutcome,
+    pub unit_id: oicp_types::work_queue::UnitId,
+    pub outcome: oicp_types::work_queue::CompleteOutcome,
     #[serde(default)]
     pub reason: Option<String>,
 }
@@ -721,7 +717,7 @@ pub struct CompleteUnitRequest {
 #[serde(untagged)]
 pub enum CompleteUnitResponse {
     Ok {
-        phase: commonwealth_core::knowledge::HandoffPhase,
+        phase: oicp_types::work_queue::HandoffPhase,
     },
     Error {
         error: String,
@@ -733,7 +729,7 @@ pub enum CompleteUnitResponse {
 #[derive(Debug, Deserialize)]
 pub struct PartitionEvictRequest {
     pub corpus_id: String,
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
 }
 
 #[derive(Debug, Serialize)]
@@ -777,7 +773,7 @@ pub async fn corpus_partition_evict(
 
 #[derive(Debug, Deserialize)]
 pub struct CollaborateStatusRequest {
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
 }
 
 #[derive(Debug, Serialize)]
@@ -800,7 +796,7 @@ pub struct GrantStatusDto {
 pub struct CollaborateStatusResponse {
     pub handoff_id: String,
     pub corpus_id: String,
-    pub phase: commonwealth_core::knowledge::HandoffPhase,
+    pub phase: oicp_types::work_queue::HandoffPhase,
     pub total_units: u32,
     pub complete: u32,
     pub failed: u32,
@@ -835,7 +831,7 @@ pub async fn corpus_collaborate_status(
         return (StatusCode::NOT_FOUND, Json(None));
     };
 
-    use commonwealth_core::knowledge::UnitStatus;
+    use oicp_types::work_queue::UnitStatus;
     use std::collections::HashMap;
     // (leased, completed, failed) per peer.
     let mut per: HashMap<NodeId, (u32, u32, u32)> = HashMap::new();
@@ -867,7 +863,7 @@ pub async fn corpus_collaborate_status(
         })
         .collect();
 
-    let now_ms = commonwealth_core::clock::unix_now_millis();
+    let now_ms = sovereign_time::unix_millis();
     let grant = state.inner.ingest.grant_store.live(&snap.corpus_id, now_ms);
     let grant_dto = grant.as_ref().map(|g| GrantStatusDto {
         expires_at_ms: g.expires_at_ms,

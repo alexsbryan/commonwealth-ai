@@ -3,13 +3,11 @@
 //!
 //! # Why the mesh is built rather than joined
 //!
-//! This daemon does not admit joiners — there is no `/internal/join` in it —
-//! so a two-process test cannot found a mesh the way `sovereign-mesh`'s
-//! `gossip_integration` does. What it CAN do, and what matters, is start both
-//! from the same `Mesh` snapshot (which is exactly what a founder's
-//! `JoinResponse` hands each of them) and prove that a round over the real
-//! transport converges. Everything under test after that line is the same
-//! code path a live join produces.
+//! Founding and joining have their own test (`tests/found_and_join.rs`). This
+//! one isolates gossip: it starts both from the same `Mesh` snapshot (which is
+//! exactly what a founder's `JoinResponse` hands each of them) and proves that
+//! a round over the real transport converges. Everything under test after
+//! that line is the same code path a live join produces.
 //!
 //! # Hermetic on purpose
 //!
@@ -46,6 +44,7 @@ fn hermetic(name: &str, media_origin: Option<std::net::SocketAddr>) -> Config {
         },
         gossip_interval_secs: 1,
         offline_threshold_secs: 60,
+        work_offer: Default::default(),
     }
 }
 
@@ -80,6 +79,7 @@ fn record(node: &RailsNode, addrs: Vec<std::net::SocketAddr>, offers: bool) -> M
         capabilities: gossip::minimal_capabilities(
             1,
             if offers { &[OriginKind::Media] } else { &[] },
+            None,
         ),
         addresses: Vec::new(),
         node_pubkey: Some(node.pubkey()),
@@ -138,6 +138,15 @@ async fn one_round_converges_two_daemons_and_carries_the_media_offer() {
     assert!(
         daemon_a.contacts.lock().await.contains_key(&id_b),
         "alpha never had contact with beta — the round did not complete"
+    );
+    // A reach is noted on alpha's own clock and never written into beta's
+    // record: beta's `last_seen` is beta's stamp, the LWW key its offer rides
+    // on (the daemon's `a_peers_reach_does_not_overwrite_the_holders_offer_clock`).
+    let beta_stamp = daemon_b.mesh.read().await.members[&id_b].last_seen;
+    assert_eq!(
+        daemon_a.mesh.read().await.members[&id_b].last_seen,
+        beta_stamp,
+        "alpha's reach rewrote the holder's clock"
     );
 
     // Beta learned alpha's stamp through the inbound half: its identity key,

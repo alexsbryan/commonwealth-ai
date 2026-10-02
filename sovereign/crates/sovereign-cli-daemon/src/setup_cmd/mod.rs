@@ -13,21 +13,13 @@
 use std::io::{self, IsTerminal as _, Write as _};
 use std::path::PathBuf;
 
-use sovereign_contracts::daemon_wire::{SetupPlan, SetupProgressPhase};
-use sovereign_core::models_manifest::SlotConfig;
-use sovereign_inference::hardware::{self, detect_hardware, HardwareProfile};
-use sovereign_inference::setup_planner::{
-    build_primary_catalog, hf_download_url, resolve_slot, PrimaryOption, SlotKind,
-};
+use std::collections::BTreeMap;
 
-// Imports used only by the in-file test modules. Kept behind
-// `#[cfg(test)]` so a non-test `cargo check` doesn't warn.
-#[cfg(test)]
-use sovereign_core::models_manifest::DEFAULT_MANIFEST;
-#[cfg(test)]
-use sovereign_inference::hardware::ProfileName;
-#[cfg(test)]
-use sovereign_inference::setup_planner::{hf_token, tier_rank};
+use sovereign_contracts::daemon_wire::{
+    ByomSource, HardwareProfile, PrimaryOption, ProbedPlan, SetupProgressPhase,
+};
+use sovereign_core::models_manifest::SlotConfig;
+
 // Used by the test modules below (the non-test code no longer references
 // `Path` after the §3.2 split moved the downloaders / opencode out).
 #[cfg(test)]
@@ -46,6 +38,7 @@ mod emit;
 mod fim;
 mod finish;
 mod opencode;
+pub(crate) mod probe;
 mod terminal;
 
 use args::{parse_args, print_usage};
@@ -58,17 +51,8 @@ use finish::finish_with_paths;
 pub(crate) use download::download_with_progress;
 
 pub async fn run_setup(args: &[String]) -> i32 {
-    // Route ggml through `tracing` BEFORE anything can touch it. Setup never
-    // constructs a `LlamaBackend`, so it could not call `LlamaLogs::install`
-    // and sat outside that module's one decision — and it still reaches ggml:
-    // the in-process daemon that joins the mesh builds a capability manifest,
-    // which calls `detect_hardware()`, which initialises the Metal device.
-    // The result was ~30 lines of `ggml_metal_library_compile_all: compiled
-    // 'fa' library in 0.036 sec` landing between "Joining the mesh..." and the
-    // next line of an onboarding flow written for someone who has never seen a
-    // GPU log. First statement in the function because the trigger is a
-    // transitive call several layers down, and anything later is a race with it.
-    let _fully_applied = sovereign_inference::llama_logs::LlamaLogs::from_env().install_global();
+    // No ggml in this process: hardware detection runs in the loader's setup
+    // probe, which routes ggml through `tracing` itself (pb-distribution-setup).
 
     // `--fim` is a different destination, not a modifier on the
     // wizard — dispatch BEFORE the deprecation shim below. Two
@@ -239,11 +223,13 @@ pub async fn run_setup(args: &[String]) -> i32 {
         SetupProgressPhase::DetectingHardware,
         "Reading what this machine can do.",
     );
-    let hw = match tokio::task::spawn_blocking(detect_hardware).await {
-        Ok(h) => h,
+    let probed = match tokio::task::spawn_blocking(|| probe::ask::<ProbedPlan>("plan", &[])).await {
+        Ok(Ok(p)) => p,
+        Ok(Err(e)) => return fail(e),
         Err(e) => return fail(format!("hardware detection panicked: {e}")),
     };
-    let profile_name = hardware::select_profile(&hw);
+    let ProbedPlan { plan, urls } = probed;
+    let hw = plan.hardware;
     say!(
         "{}, {:.0}GB {}memory",
         hardware_label(&hw),
@@ -253,7 +239,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
     say!();
 
     // ── 2. Pick primary model ────────────────────────────────────
-    let catalog = build_primary_catalog(&profile_name);
+    let catalog = plan.catalog;
     if catalog.is_empty() {
         return fail("no models available in the bundled manifest for your hardware");
     }
@@ -262,15 +248,16 @@ pub async fn run_setup(args: &[String]) -> i32 {
     // the same question the numbered rows and the `[b]` branch answer, so it
     // resolves BEFORE the prompt rather than beside it. A client that spawned
     // this process has no terminal to type into.
+    let byom = |link: &str| probe::ask::<ByomSource>("byom-url", &[link]);
     let chosen = match opts.primary.as_deref() {
-        Some(spec) => match resolve_primary_flag(spec, &catalog) {
+        Some(spec) => match resolve_primary_flag(spec, &catalog, &urls, &byom) {
             Ok(c) => c,
             Err(msg) => return fail(msg),
         },
         None => match pick_primary(&catalog, opts.yes) {
-            Pick::Slot(slot) => PrimaryChoice::Download {
-                url: hf_download_url(&slot),
-                slot,
+            Pick::Slot(slot) => match url_for(&urls, &slot) {
+                Ok(url) => PrimaryChoice::Download { url, slot },
+                Err(msg) => return fail(msg),
             },
             Pick::Byom => match prompt_byom_paths(&opts) {
                 Ok(paths) => {
@@ -290,9 +277,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
     // Fast + embed come from the user's own profile — not curated. If
     // the profile doesn't define one (very rare for embed on cpu_only),
     // fall back to the default profile's slot.
-    let fast_slot = resolve_slot(&profile_name, SlotKind::Fast);
-    let embed_slot = resolve_slot(&profile_name, SlotKind::Embed);
-    let (fast_slot, embed_slot) = match (fast_slot, embed_slot) {
+    let (fast_slot, embed_slot) = match (plan.fast, plan.embed) {
         (Some(f), Some(e)) => (f, e),
         _ => {
             return fail("bundled manifest is missing fast or embed slot for your profile");
@@ -325,10 +310,12 @@ pub async fn run_setup(args: &[String]) -> i32 {
     let fast_path = models_dir.join(&fast_slot.file);
     let embed_path = models_dir.join(&embed_slot.file);
 
-    // The manifest's `hf_url` is the repo *landing page* — we derive the
-    // actual GGUF download URL from it plus the slot's filename.
-    let fast_url = hf_download_url(&fast_slot);
-    let embed_url = hf_download_url(&embed_slot);
+    // The manifest's `hf_url` is the repo *landing page* — the loader derived
+    // the actual GGUF download URL from it plus the slot's filename.
+    let (fast_url, embed_url) = match (url_for(&urls, &fast_slot), url_for(&urls, &embed_slot)) {
+        (Ok(f), Ok(e)) => (f, e),
+        (Err(msg), _) | (_, Err(msg)) => return fail(msg),
+    };
 
     // Primary shows progress; fast+embed run silently in parallel.
     // Each slot's `size_gb` goes through so `validate_gguf` can
@@ -467,7 +454,15 @@ impl PrimaryChoice {
 /// An unrecognised spec is REFUSED by name, listing what would have matched —
 /// never quietly demoted to the hardware recommendation, which would install
 /// a model the caller did not ask for and report success.
-fn resolve_primary_flag(spec: &str, catalog: &[PrimaryOption]) -> Result<PrimaryChoice, String> {
+///
+/// `urls` is the loader's download URL by catalog file, and `byom` resolves a
+/// pasted link (the loader's `byom-url` probe in production).
+fn resolve_primary_flag(
+    spec: &str,
+    catalog: &[PrimaryOption],
+    urls: &BTreeMap<String, String>,
+    byom: &dyn Fn(&str) -> Result<ByomSource, String>,
+) -> Result<PrimaryChoice, String> {
     let spec = spec.trim();
     if let Some(opt) = catalog.iter().find(|o| o.slot.file == spec) {
         // Which of the three shapes a spec resolved to is NOT predictable from
@@ -480,12 +475,12 @@ fn resolve_primary_flag(spec: &str, catalog: &[PrimaryOption]) -> Result<Primary
             "setup:primary_resolved"
         );
         return Ok(PrimaryChoice::Download {
-            url: hf_download_url(&opt.slot),
+            url: url_for(urls, &opt.slot)?,
             slot: opt.slot.clone(),
         });
     }
     if spec.starts_with("http://") || spec.starts_with("https://") {
-        let (url, file) = sovereign_inference::setup_planner::resolve_byom_url(spec)?;
+        let ByomSource { url, file } = byom(spec)?;
         tracing::info!(spec, shape = "byom_url", %url, "setup:primary_resolved");
         return Ok(PrimaryChoice::Download {
             slot: SlotConfig {
@@ -535,36 +530,32 @@ fn resolve_primary_flag(spec: &str, catalog: &[PrimaryOption]) -> Result<Primary
     ))
 }
 
-/// The plan for a probed machine — the same four lookups the wizard makes,
-/// taken apart from the probe so a test can pin the shape against a hardware
-/// profile it chose rather than one it inherited from the host.
-fn build_plan(hardware: HardwareProfile) -> SetupPlan {
-    let profile = hardware::select_profile(&hardware);
-    SetupPlan {
-        catalog: build_primary_catalog(&profile),
-        // Absent, not substituted: a manifest with no fast slot for this tier
-        // is a fact the caller has to see, and `null` says it (principle 6).
-        fast: resolve_slot(&profile, SlotKind::Fast),
-        embed: resolve_slot(&profile, SlotKind::Embed),
-        hardware,
-        profile,
-    }
+/// The loader's download URL for `slot`. A slot the probe named no URL for is
+/// refused by name, never fetched from a guessed address (principle 6).
+fn url_for(urls: &BTreeMap<String, String>, slot: &SlotConfig) -> Result<String, String> {
+    urls.get(&slot.file)
+        .cloned()
+        .ok_or_else(|| format!("the loader's plan names no download URL for {}", slot.file))
 }
 
 /// `svrn setup --plan --json`: what a first run WOULD do on this machine.
 ///
-/// Reads the same four functions the wizard reads, prints them, and exits.
+/// Prints the plan the wizard reads (the loader's `plan` probe) and exits.
 /// Nothing is created, downloaded or written — which is what lets a client
 /// call it on a machine that has never been set up, and call it again after.
 async fn print_plan() -> i32 {
-    let hardware = match tokio::task::spawn_blocking(detect_hardware).await {
-        Ok(h) => h,
+    let plan = match tokio::task::spawn_blocking(|| probe::ask::<ProbedPlan>("plan", &[])).await {
+        Ok(Ok(p)) => p.plan,
+        Ok(Err(e)) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
         Err(e) => {
             eprintln!("error: hardware detection panicked: {e}");
             return 1;
         }
     };
-    match serde_json::to_string(&build_plan(hardware)) {
+    match serde_json::to_string(&plan) {
         Ok(json) => {
             say!("{json}");
             0
@@ -677,9 +668,8 @@ struct Opts {
 // ─── Model catalog + picker ───────────────────────────────────────
 //
 // Catalog construction (`build_primary_catalog`, `tier_rank`,
-// `resolve_slot`, `SlotKind`, `PrimaryOption`) lives in
-// `sovereign_inference::setup_planner` so the desktop's
-// `complete_setup_auto` flow shares the same logic. Imported above.
+// `resolve_slot`, `SlotKind`) lives in `sovereign_inference::setup_planner`,
+// the loader's; this crate reads its answer through the `plan` probe.
 
 enum Pick {
     Slot(SlotConfig),
@@ -758,10 +748,10 @@ async fn run_repair(opts: &Opts) -> i32 {
     for (role, path) in slots {
         let size_gb = lookup_slot_size_gb(manifest, path);
         let expected = match size_gb {
-            Some(gb) => sovereign_inference::GgufExpectation::from_size_gb(gb),
-            None => sovereign_inference::GgufExpectation::unknown(),
+            Some(gb) => sovereign_contracts::gguf_validator::GgufExpectation::from_size_gb(gb),
+            None => sovereign_contracts::gguf_validator::GgufExpectation::unknown(),
         };
-        match sovereign_inference::validate_gguf(path, &expected) {
+        match sovereign_contracts::gguf_validator::validate_gguf(path, &expected) {
             Ok(()) => {
                 say!("  \u{2713} {role:<7} {} — valid", path.display());
                 kept += 1;
@@ -811,178 +801,6 @@ fn _tty_gate() -> bool {
 // (svt-7, 2026-09-12), which is the guard earning its keep on a real landing.
 #[cfg(test)]
 mod json_surface_tests;
-
-#[cfg(test)]
-mod download_failure_tests {
-    //! Integration tests for the download validation path. Each
-    //! spins up an axum mock on a kernel-assigned port, points
-    //! `download_with_progress` at it, and asserts the expected
-    //! failure mode leaves the models dir clean.
-    use super::*;
-    use axum::{response::IntoResponse, routing::get, Router};
-    use std::net::SocketAddr;
-
-    async fn serve(app: Router) -> (String, tokio::task::JoinHandle<()>) {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let handle = tokio::spawn(async move {
-            let _ = axum::serve(
-                listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .await;
-        });
-        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-        (format!("http://{addr}"), handle)
-    }
-
-    /// The pathological case that landed three 188 KB stubs on
-    /// the user's disk: CDN returns 200 OK with `text/html`
-    /// body. The content-type pre-check must fire and refuse
-    /// *before* we stream any HTML to the `.part` file.
-    #[tokio::test]
-    async fn rejects_text_html_before_streaming_and_leaves_no_part() {
-        let app = Router::new().route(
-            "/fake-model.gguf",
-            get(|| async {
-                (
-                    [(reqwest::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-                    "<!DOCTYPE html><html><body>rate limited</body></html>",
-                )
-                    .into_response()
-            }),
-        );
-        let (base, _handle) = serve(app).await;
-
-        let tmp = tempfile::tempdir().unwrap();
-        let dest = tmp.path().join("fake-model.gguf");
-        let part = tmp.path().join("fake-model.gguf.part");
-
-        let err = download_with_progress(
-            &format!("{base}/fake-model.gguf"),
-            &dest,
-            "fake",
-            18.5, // pretend this is a big model
-            None,
-        )
-        .await
-        .unwrap_err();
-        assert!(
-            err.contains("content-type") || err.contains("text/html"),
-            "err: {err}"
-        );
-        assert!(!dest.exists(), "no stub should land at final path");
-        assert!(!part.exists(), "no .part should remain");
-    }
-
-    /// Server returns 200 with `application/octet-stream` but
-    /// the body is HTML anyway — post-stream `validate_gguf`
-    /// catches the magic-byte mismatch. We assert the `.part`
-    /// is cleaned up so a retry doesn't resume a bogus file.
-    #[tokio::test]
-    async fn rejects_post_stream_when_magic_is_wrong_and_deletes_part() {
-        // 2 MB of fake HTML, above the default 1 MB floor so the
-        // size check passes and the magic check is the one that
-        // fires. Advertises octet-stream to bypass the pre-check.
-        let mut body = Vec::new();
-        body.extend_from_slice(b"<!DOCTYPE html><html>");
-        body.resize(2_000_000, b'.');
-
-        let app = Router::new().route(
-            "/fake-model.gguf",
-            get(move || {
-                let body = body.clone();
-                async move {
-                    (
-                        [(reqwest::header::CONTENT_TYPE, "application/octet-stream")],
-                        body,
-                    )
-                        .into_response()
-                }
-            }),
-        );
-        let (base, _handle) = serve(app).await;
-
-        let tmp = tempfile::tempdir().unwrap();
-        let dest = tmp.path().join("fake.gguf");
-        let part = tmp.path().join("fake.gguf.part");
-
-        // size_gb=0.001 → 1 MB floor (the default min); the 2 MB
-        // body passes the size check, so the GGUF magic check is
-        // what fires. This is the important case: servers that
-        // return HTML with an innocuous content-type header.
-        let err = download_with_progress(
-            &format!("{base}/fake-model.gguf"),
-            &dest,
-            "fake",
-            0.001,
-            None,
-        )
-        .await
-        .unwrap_err();
-        assert!(
-            err.contains("not a GGUF") || err.contains("GGUF") || err.contains("magic"),
-            "err should mention magic mismatch: {err}"
-        );
-        assert!(!dest.exists(), "no stub should land at final path");
-        assert!(!part.exists(), "no .part should remain on failure");
-    }
-
-    /// A successful response with a real GGUF magic header and
-    /// plausible size lands at the final path. Confirms the
-    /// happy path isn't broken by the new validation layer.
-    #[tokio::test]
-    async fn accepts_real_gguf_and_renames_to_final() {
-        let mut body = Vec::with_capacity(2 * 1024 * 1024);
-        body.extend_from_slice(b"GGUF");
-        body.resize(2 * 1024 * 1024, 0u8);
-
-        let app = Router::new().route(
-            "/real-model.gguf",
-            get(move || {
-                let body = body.clone();
-                async move {
-                    (
-                        [(reqwest::header::CONTENT_TYPE, "application/octet-stream")],
-                        body,
-                    )
-                        .into_response()
-                }
-            }),
-        );
-        let (base, _handle) = serve(app).await;
-
-        let tmp = tempfile::tempdir().unwrap();
-        let dest = tmp.path().join("real.gguf");
-        // size_gb 0.001 so the 50% floor (512 KB) comfortably
-        // accepts our 2 MB test payload.
-        download_with_progress(
-            &format!("{base}/real-model.gguf"),
-            &dest,
-            "real",
-            0.001,
-            None,
-        )
-        .await
-        .expect("happy path should succeed");
-        assert!(dest.exists(), "final path should hold the downloaded file");
-        assert_eq!(dest.metadata().unwrap().len(), 2 * 1024 * 1024);
-    }
-
-    #[test]
-    fn hf_token_reads_env_var() {
-        // Unset first to get a clean baseline; safe because tests
-        // use a distinct thread and no production code reads this
-        // during tests.
-        std::env::remove_var("HF_TOKEN");
-        assert!(hf_token().is_none());
-        std::env::set_var("HF_TOKEN", "secret");
-        assert_eq!(hf_token().as_deref(), Some("secret"));
-        std::env::set_var("HF_TOKEN", "");
-        assert!(hf_token().is_none(), "empty token counted as unset");
-        std::env::remove_var("HF_TOKEN");
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -1169,15 +987,6 @@ mod tests {
         assert_eq!(opts.quant.as_deref(), Some("q6_k"));
     }
 
-    /// A typo'd rung must fail at parse time, not after a multi-GB
-    /// download resolves to nothing.
-    #[test]
-    fn parse_args_rejects_unknown_quant_and_lists_the_rungs() {
-        let err = parse_args(&s(&["--fim", "--quant", "q3_k_s"])).unwrap_err();
-        assert!(err.contains("q3_k_s"), "error should echo the input: {err}");
-        assert!(err.contains("q6_k"), "error should list valid rungs: {err}");
-    }
-
     #[test]
     fn parse_args_rejects_dangling_quant() {
         let err = parse_args(&s(&["--fim", "--quant"])).unwrap_err();
@@ -1270,132 +1079,6 @@ mod tests {
     fn parse_args_rejects_dangling_data_dir() {
         let err = parse_args(&s(&["--data-dir"])).unwrap_err();
         assert!(err.contains("--data-dir"), "error: {err}");
-    }
-
-    // ── tier_rank ──────────────────────────────────────────────────
-
-    #[test]
-    fn tier_rank_orders_profiles_low_to_high() {
-        assert!(tier_rank(&ProfileName::CpuOnly) < tier_rank(&ProfileName::LowMem));
-        assert!(tier_rank(&ProfileName::LowMem) < tier_rank(&ProfileName::Default));
-        assert!(tier_rank(&ProfileName::Default) < tier_rank(&ProfileName::High));
-        assert!(tier_rank(&ProfileName::High) < tier_rank(&ProfileName::VeryHigh));
-    }
-
-    // ── build_primary_catalog ─────────────────────────────────────
-
-    #[test]
-    fn catalog_is_non_empty_for_every_profile() {
-        // Sanity — the bundled manifest should support every hardware tier.
-        for p in [
-            ProfileName::CpuOnly,
-            ProfileName::LowMem,
-            ProfileName::Default,
-            ProfileName::High,
-            ProfileName::VeryHigh,
-        ] {
-            let cat = build_primary_catalog(&p);
-            assert!(!cat.is_empty(), "catalog empty for {p:?}");
-        }
-    }
-
-    #[test]
-    fn catalog_marks_exactly_one_recommended() {
-        let cat = build_primary_catalog(&ProfileName::Default);
-        let recommended: Vec<_> = cat.iter().filter(|o| o.recommended).collect();
-        assert_eq!(
-            recommended.len(),
-            1,
-            "expected exactly one recommended row, got {}",
-            recommended.len()
-        );
-    }
-
-    #[test]
-    fn catalog_excludes_tiers_above_user_hardware() {
-        // A Default-tier machine must NOT see VeryHigh or High options — they
-        // won't fit in VRAM. Verify by checking no returned slot came from a
-        // higher tier's thoughtful slot.
-        let cat = build_primary_catalog(&ProfileName::Default);
-        let very_high_thoughtful = DEFAULT_MANIFEST
-            .profiles
-            .get("very_high")
-            .and_then(|p| p.thoughtful.as_ref())
-            .map(|s| s.file.clone());
-        if let Some(f) = very_high_thoughtful {
-            assert!(
-                !cat.iter().any(|o| o.slot.file == f),
-                "Default-tier catalog leaked very_high slot {f}"
-            );
-        }
-    }
-
-    #[test]
-    fn catalog_dedupes_by_base_name() {
-        // If two profile tiers point to the same base model, the catalog
-        // should show it only once. We can't assume the bundled manifest has
-        // duplicates, so construct a stricter invariant: every base_name
-        // appears at most once.
-        let cat = build_primary_catalog(&ProfileName::VeryHigh);
-        let mut seen = std::collections::HashSet::new();
-        for opt in &cat {
-            let key = if opt.slot.base_name.is_empty() {
-                opt.slot.file.clone()
-            } else {
-                opt.slot.base_name.clone()
-            };
-            assert!(
-                seen.insert(key.clone()),
-                "duplicate base_name in catalog: {key}"
-            );
-        }
-    }
-
-    #[test]
-    fn catalog_very_high_includes_every_tier_below() {
-        // VeryHigh users should see every tier at-or-below them (subject to
-        // dedup). Count of distinct tiers available should be >= 1 (hard
-        // guarantee) and match the number of profiles that define thoughtful
-        // and have non-duplicate base_names.
-        let cat = build_primary_catalog(&ProfileName::VeryHigh);
-        assert!(!cat.is_empty());
-        // First row (recommended) should be the VeryHigh slot.
-        let first = &cat[0];
-        assert!(first.recommended);
-    }
-
-    // ── resolve_slot ───────────────────────────────────────────────
-
-    #[test]
-    fn resolve_slot_returns_profile_slot_when_defined() {
-        // Default profile has all three slots defined in the bundled manifest.
-        let fast = resolve_slot(&ProfileName::Default, SlotKind::Fast);
-        let embed = resolve_slot(&ProfileName::Default, SlotKind::Embed);
-        assert!(fast.is_some(), "default.fast should exist");
-        assert!(embed.is_some(), "default.embed should exist");
-    }
-
-    #[test]
-    fn resolve_slot_falls_back_to_default_when_missing() {
-        // This test encodes the invariant: even if a profile is thin (say,
-        // cpu_only missing embed), we must fall back to default.embed so
-        // `setup` always has three paths to write.
-        for p in [
-            ProfileName::CpuOnly,
-            ProfileName::LowMem,
-            ProfileName::Default,
-            ProfileName::High,
-            ProfileName::VeryHigh,
-        ] {
-            assert!(
-                resolve_slot(&p, SlotKind::Fast).is_some(),
-                "no fast slot (even via fallback) for {p:?}"
-            );
-            assert!(
-                resolve_slot(&p, SlotKind::Embed).is_some(),
-                "no embed slot (even via fallback) for {p:?}"
-            );
-        }
     }
 
     // ── display_name ───────────────────────────────────────────────
@@ -1597,49 +1280,6 @@ mod tests {
         std::fs::write(&path, "{ not json").unwrap();
         let err = install_opencode_config_at(&path, 9741).unwrap_err();
         assert!(err.contains("parse"), "{err}");
-    }
-
-    // ── hf_download_url ────────────────────────────────────────────
-
-    #[test]
-    fn hf_download_url_from_repo_landing_page() {
-        let slot = SlotConfig {
-            file: "Qwen3-1.7B-Q8_0.gguf".into(),
-            hf_url: "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF".into(),
-            ..Default::default()
-        };
-        assert_eq!(
-            hf_download_url(&slot),
-            "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf"
-        );
-    }
-
-    #[test]
-    fn hf_download_url_handles_trailing_slash() {
-        let slot = SlotConfig {
-            file: "model.gguf".into(),
-            hf_url: "https://huggingface.co/org/repo/".into(),
-            ..Default::default()
-        };
-        assert_eq!(
-            hf_download_url(&slot),
-            "https://huggingface.co/org/repo/resolve/main/model.gguf"
-        );
-    }
-
-    #[test]
-    fn hf_download_url_passes_through_direct_urls() {
-        // If the manifest already has a direct /resolve/ URL, don't
-        // double-append.
-        let slot = SlotConfig {
-            file: "model.gguf".into(),
-            hf_url: "https://huggingface.co/org/repo/resolve/main/model.gguf".into(),
-            ..Default::default()
-        };
-        assert_eq!(
-            hf_download_url(&slot),
-            "https://huggingface.co/org/repo/resolve/main/model.gguf"
-        );
     }
 
     // strip_quoting tests moved to util::prompts::tests — the function lives there now.

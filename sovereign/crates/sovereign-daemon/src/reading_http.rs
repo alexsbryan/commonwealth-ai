@@ -15,21 +15,22 @@
 //! Deferred, named rather than dropped: section-bounded reading — neighbours
 //! are id-ordered within `source_doc_id`, never bounded by section.
 
+use corpus_index::ingest_port::daemon::IngestPort;
 use std::sync::Arc;
 
 use axum::extract::{Extension, Path, Query};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::atlas_traversal::{detect_atom_spans, AtomSpan as DetectorAtomSpan};
-use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, AtomId,
-    CrossCorpusEdge, Edge,
-};
-use corpus_engine::EnrichmentChunkRow;
+use corpus_engine_atlas_reader::cross_corpus::{read_atlas_cross_corpus_edges, CrossCorpusEdge};
+use corpus_engine_atlas_reader::ports::{AtlasPort, AtomSpan as DetectorAtomSpan};
+use corpus_index::index::EnrichmentChunkRow;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId};
+use understanding_vocab::edges::Edge;
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges};
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{internal_error, not_found, service_unavailable};
@@ -382,7 +383,7 @@ async fn get_corpus_status(
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
     };
-    match corpus_engine::engine::status::scan_corpus_rows(engine.index_dir()) {
+    match engine.corpus_status_rows() {
         Ok(rows) => (StatusCode::OK, Json(rows)).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -468,13 +469,13 @@ async fn get_chunk(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, chunk_id)): Path<(String, u64)>,
 ) -> impl IntoResponse {
-    let engine = match daemon.corpus_engine() {
-        Some(e) => e,
-        None => return service_unavailable("corpus engine not initialised"),
+    let (engine, atlas) = match (daemon.corpus_engine(), daemon.atlas()) {
+        (Some(e), Some(a)) => (e, a.as_ref()),
+        _ => return service_unavailable("corpus engine not initialised"),
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
-        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
+        Err(e) => return corpus_open_failure(engine.as_ref(), &corpus, &e),
     };
     let mut rows = match index.chunks_by_ids(&[chunk_id]).await {
         Ok(r) => r,
@@ -485,7 +486,8 @@ async fn get_chunk(
     };
     let atlas_atoms = load_atlas_atoms(&engine, &corpus).await;
     let conv = maybe_resolve_conversation_meta(&daemon, &corpus, &row).await;
-    let record = chunk_record_from_row_with_conv(&corpus, &row, atlas_atoms.as_deref(), conv);
+    let atoms = atlas_atoms.as_deref().map(|atoms| (atlas, atoms));
+    let record = chunk_record_from_row_with_conv(&corpus, &row, atoms, conv);
     (StatusCode::OK, Json(record)).into_response()
 }
 
@@ -494,15 +496,27 @@ async fn get_neighbors(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, chunk_id)): Path<(String, u64)>,
     Query(NeighborQuery { radius }): Query<NeighborQuery>,
-) -> impl IntoResponse {
+) -> Response {
+    neighbor_window(&daemon, &corpus, chunk_id, radius).await
+}
+
+/// The reading window: `chunk_id` with up to `radius` (clamped to 5)
+/// neighbours each side. Served here and, grant-checked, by
+/// `granted_http`'s `/v1/corpora/{corpus}/chunks/{chunk_id}`.
+pub(crate) async fn neighbor_window(
+    daemon: &Arc<EmbeddedDaemon>,
+    corpus: &str,
+    chunk_id: u64,
+    radius: usize,
+) -> Response {
     let radius = radius.min(5);
-    let engine = match daemon.corpus_engine() {
-        Some(e) => e,
-        None => return service_unavailable("corpus engine not initialised"),
+    let (engine, atlas) = match (daemon.corpus_engine(), daemon.atlas()) {
+        (Some(e), Some(a)) => (e, a.as_ref()),
+        _ => return service_unavailable("corpus engine not initialised"),
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
-        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
+        Err(e) => return corpus_open_failure(engine.as_ref(), &corpus, &e),
     };
     let window = match index.neighbors(chunk_id, radius).await {
         Ok(Some(w)) => w,
@@ -514,7 +528,7 @@ async fn get_neighbors(
     // the window. atoms.json is small (hundreds of atoms on BK);
     // re-reading per chunk would just multiply IO without benefit.
     let atlas_atoms = load_atlas_atoms(&engine, &corpus).await;
-    let atoms_ref = atlas_atoms.as_deref();
+    let atoms_ref = atlas_atoms.as_deref().map(|atoms| (atlas, atoms));
 
     // Conversation augmentation: resolve once per chunk in the
     // window. The store lookup is keyed on `source_doc_id` so
@@ -591,7 +605,7 @@ async fn get_atom_elsewhere(
     };
     let index = match engine.open_index_for_corpus(&corpus).await {
         Ok(i) => i,
-        Err(e) => return corpus_open_failure(&engine, &corpus, &e),
+        Err(e) => return corpus_open_failure(engine.as_ref(), &corpus, &e),
     };
     let Some((atlas_dir, _)) = atlas_dir_for_corpus(&engine, &corpus).await else {
         return not_found("corpus not installed or atlas missing");
@@ -657,7 +671,7 @@ async fn get_atom_elsewhere(
 /// "no atom spans" rather than failing the whole reading-surface
 /// fetch.
 async fn load_atlas_atoms(
-    engine: &Arc<corpus_engine::CorpusEngine>,
+    engine: &Arc<dyn IngestPort>,
     corpus_id: &str,
 ) -> Option<Vec<AtomEnvelope>> {
     let (atlas_dir, _) = atlas_dir_for_corpus(engine, corpus_id).await?;
@@ -677,7 +691,7 @@ async fn load_atlas_atoms(
 
 /// Resolve `(atlas_dir, index_dir)` for a corpus, when both exist.
 async fn atlas_dir_for_corpus(
-    engine: &Arc<corpus_engine::CorpusEngine>,
+    engine: &Arc<dyn IngestPort>,
     corpus_id: &str,
 ) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
     let installed = engine.installed_indexes().await.ok()?;
@@ -742,7 +756,7 @@ fn build_atom_card(
     }
 }
 
-use sovereign_mesh::reading_formatters::atom_surface_fields;
+use understanding_vocab::reading_formatters::atom_surface_fields;
 
 fn cross_corpus_links_for_atom(
     atom_id: &AtomId,
@@ -765,7 +779,7 @@ fn cross_corpus_links_for_atom(
 pub(crate) fn chunk_record_from_row_with_conv(
     corpus_id: &str,
     row: &EnrichmentChunkRow,
-    atoms: Option<&[AtomEnvelope]>,
+    atoms: Option<(&dyn AtlasPort, &[AtomEnvelope])>,
     conversation: Option<ConversationChunkMeta>,
 ) -> ChunkRecord {
     let metadata: serde_json::Value = row
@@ -780,7 +794,8 @@ pub(crate) fn chunk_record_from_row_with_conv(
         .map(String::from);
 
     let atom_spans = match (atoms, section_id.as_deref()) {
-        (Some(atoms), Some(_)) => detect_atom_spans(&row.content, section_id.as_deref(), atoms)
+        (Some((atlas, atoms)), Some(_)) => atlas
+            .detect_atom_spans(&row.content, section_id.as_deref(), atoms)
             .into_iter()
             .map(AtomSpan::from)
             .collect(),
@@ -914,7 +929,7 @@ pub(crate) async fn maybe_resolve_conversation_meta(
 /// 503: it is the difference between "your disk is corrupt" and "finalise never
 /// ran, the data is right there".
 fn corpus_open_failure(
-    engine: &corpus_engine::CorpusEngine,
+    engine: &dyn IngestPort,
     corpus: &str,
     err: &dyn std::fmt::Display,
 ) -> axum::response::Response {
@@ -945,10 +960,7 @@ fn corpus_open_failure(
 
 /// A `<corpus>-partition-*` sibling that carries `_corpus_meta.json` — i.e. a
 /// completed ingest whose promotion to canonical never landed.
-fn stranded_partition(
-    engine: &corpus_engine::CorpusEngine,
-    corpus: &str,
-) -> Option<std::path::PathBuf> {
+fn stranded_partition(engine: &dyn IngestPort, corpus: &str) -> Option<std::path::PathBuf> {
     let prefix = format!("{corpus}-partition-");
     std::fs::read_dir(engine.index_dir())
         .ok()?

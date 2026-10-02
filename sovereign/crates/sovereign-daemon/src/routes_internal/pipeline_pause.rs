@@ -17,7 +17,7 @@
 //! 2. The local daemon walks its own `/proc/` for matching driver
 //!    PIDs and SIGTERMs them.
 //! 3. With `fanout: true`, the local daemon enumerates online mesh
-//!    peers from `state.inner.fabric.mesh` (the same gossip-derived view
+//!    peers from `state.membership()` (the same gossip-derived view
 //!    the inference load balancer uses) and forwards the same
 //!    request to each — with `fanout: false` so peers don't re-fan
 //!    and the message can't loop.
@@ -33,10 +33,10 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::types::MemberStatus;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use commonwealth_core::mesh::NodeStatus;
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
@@ -300,15 +300,14 @@ fn recipe_toml_id(text: &str) -> Option<String> {
 /// Concurrently POST `{fanout: false}` requests to every online peer
 /// known to the local daemon's mesh state and collect the results.
 async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<NodePauseResult> {
-    let mesh = state.inner.fabric.mesh.read().await;
     let self_id = state.inner.fabric.identity.current();
-    let peers: Vec<_> = mesh
-        .members
-        .values()
-        .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-        .cloned()
+    let peers: Vec<_> = state
+        .membership()
+        .members()
+        .await
+        .into_iter()
+        .filter(|m| m.node_id != self_id && m.status == MemberStatus::Online)
         .collect();
-    drop(mesh);
 
     if peers.is_empty() {
         return Vec::new();
@@ -341,23 +340,17 @@ async fn forward_to_peers(state: &AppState, req: &PipelinePauseRequest) -> Vec<N
     });
 
     let transport = state.peer_transport();
-    let stamp = state.mesh_proof_stamp().await;
     let mut handles = Vec::with_capacity(peers.len());
     for peer in peers {
         let client = client.clone();
-        let stamp = stamp.clone();
         let body = forwarded_body.clone();
         let node = hex::encode(peer.node_id.as_bytes());
         let name = Some(peer.name.clone());
         let endpoints = transport
-            .endpoints(
-                &commonwealth_transport::peer_contact(&peer),
-                commonwealth_transport::TrafficClass::ControlPlane,
-            )
+            .endpoints(&peer.dial, mesh_reach::TrafficClass::ControlPlane)
             .await;
-        let handle = tokio::spawn(async move {
-            ask_peer(&client, &body, &node, name, &endpoints, stamp.as_ref()).await
-        });
+        let handle =
+            tokio::spawn(async move { ask_peer(&client, &body, &node, name, &endpoints).await });
         handles.push(handle);
     }
 
@@ -382,19 +375,12 @@ async fn ask_peer(
     body: &serde_json::Value,
     node: &str,
     name: Option<String>,
-    endpoints: &[commonwealth_transport::PeerEndpoint],
-    // This node's proof of mesh membership, or `None` on a mesh with no
-    // credential. On a plain-IP hop it is the only thing that tells the
-    // peer's internal port a member is calling rather than a stranger.
-    stamp: Option<&commonwealth_transport::mesh_proof::MeshProofStamp>,
+    endpoints: &[mesh_reach::PeerEndpoint],
 ) -> NodePauseResult {
     let mut last_error = "no addresses advertised by peer".to_string();
     for ep in endpoints {
         let url = format!("{}/internal/pipeline/pause", ep.base_url);
-        let mut request = client.post(&url).json(body);
-        if let Some((name, value)) = stamp.map(|s| s.pair()) {
-            request = request.header(name, value);
-        }
+        let request = client.post(&url).json(body);
         match request.send().await {
             Ok(resp) if resp.status().is_success() => {
                 match resp.json::<PipelinePauseResponse>().await {

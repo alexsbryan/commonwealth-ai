@@ -277,7 +277,7 @@ impl CapacityReport {
 /// daemon's startup path is advisory by default — `fits == false`
 /// prints a warning and starts anyway — and only hard-refuses under
 /// `SOVEREIGN_STRICT_VRAM_CHECK=1` (or a genuinely unreadable model
-/// file). See `daemon_cmd::build::preflight::check_vram`.
+/// file). See `sovereign_compute::preflight::check_vram`.
 /// The safety reservation subtracted from a card's raw VRAM before any
 /// fit verdict. Covers CUDA context (~300-500 MB), cuBLAS workspace
 /// (~200 MB), GGML scratch we can't size from the outside, plus estimator
@@ -399,7 +399,9 @@ pub fn check_fit(slots: &[SlotPlan], hw: &HardwareProfile) -> CapacityReport {
 /// sovereign-inference rather than sovereign-mesh because the
 /// dependency arrow runs core ← inference ← mesh; reaching the
 /// other way would cycle.
-pub fn build_slots_from_config(cfg: &sovereign_core::setup_config::SetupConfig) -> Vec<SlotPlan> {
+pub fn build_slots_from_config(
+    cfg: &sovereign_contracts::setup_config::SetupConfig,
+) -> Vec<SlotPlan> {
     // A node with no `[models]` loads no slots, so it plans none. Empty is the
     // whole answer for a `terminal`: `check_fit` over zero slots requires zero
     // bytes and therefore FITS, which is what lets the daemon boot on a machine

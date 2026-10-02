@@ -157,8 +157,9 @@ impl Runtime {
             step_summaries.join("\n\n")
         );
 
-        let budget_note =
-            crate::runtime::build_response_length_directive(self.inference_config.max_tokens);
+        let budget_note = crate::runtime::build_response_length_directive(
+            self.turn_inference_config().max_tokens,
+        );
         let synthesis_base = format!(
             "Synthesize the given step results into a clear, comprehensive \
              answer.\n\n\

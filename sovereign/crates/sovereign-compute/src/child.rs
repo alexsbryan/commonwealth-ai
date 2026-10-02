@@ -209,6 +209,15 @@ impl InferenceProvider for ChildProvider {
         }
     }
 
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        let client = self.client_or_unavailable()?;
+        let watch = self.state.clone();
+        tokio::select! {
+            r = client.rerank(query, docs) => r,
+            _ = Self::wait_lost_serving(watch) => Err(self.mid_request_unavailable()),
+        }
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         // The child's real caps aren't cheaply reachable here; advertise the
         // conservative shape (generate children DO honour grammar).

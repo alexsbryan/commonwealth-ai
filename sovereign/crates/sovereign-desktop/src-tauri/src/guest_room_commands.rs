@@ -10,8 +10,9 @@
 //!
 //! Composing a guest link means the door's page path, the token, and — for a
 //! guest who shares no network with this machine — the node's own iroh dial
-//! string. That is one rule, and it lives in `sovereign_mesh::deep_link`
-//! (`wall_page_base` / `wall_https_link`). This app is an HTTP client of the
+//! string. That is one rule: the page decision is
+//! `sovereign_contracts::guest_pages::wall_page` and the fragment grammar
+//! `mesh_join_vocab::deep_link` (phase-b-90). This app is an HTTP client of the
 //! daemon by design and does not link the mesh crates (see `src-tauri/Cargo.toml`),
 //! so it asks the daemon: the mint request carries the base `url` and the
 //! response carries the composed `link`. The desktop renders it with the same
@@ -64,14 +65,14 @@ fn http() -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
-/// This node's own iroh dial string, from the daemon's status — the same field
+/// This node's own iroh dial string, from cw-rails' status — the same field
 /// the CLI reads (`/v1/mesh/status` → `self_reachability.dial`). Best-effort:
 /// iroh off, no reachable address yet, or an unreachable status all mean "no
 /// dial", and the composed link is then the direct (plain-HTTP) form. The
 /// daemon composes; it cannot read its own dial on the grant route, so the
 /// caller that just asked for the status hands it in.
 async fn node_dial(state: &AppState) -> Option<String> {
-    let url = format!("{}/v1/mesh/status", state.client_base_url());
+    let url = format!("{}/v1/mesh/status", state.rails_base_url());
     let resp = http().ok()?.get(&url).send().await.ok()?;
     if !resp.status().is_success() {
         return None;

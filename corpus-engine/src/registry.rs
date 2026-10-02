@@ -28,14 +28,12 @@ use crate::types::BuiltinCorpus;
 
 // ── Bundled snapshot ─────────────────────────────────────────────────────────
 
-// The bundled catalog is `sovereign-recipes/registry.toml`, vendored by
-// build.rs into OUT_DIR (single source of truth — no checked-in snapshot
-// copy in this crate). See `corpus-engine/build.rs`.
+// The bundled catalog is `sovereign-recipes/registry.toml`, read from the
+// `corpus-engine-recipes` data crate through `crate::recipe_source`.
 //
 // Public because the recipe-authoring package receives it INJECTED (it cannot
 // carry a `corpus-engine` dependency); `sovereign-tools` holds both sides.
-pub const BUNDLED_REGISTRY_TOML: &str =
-    include_str!(concat!(env!("OUT_DIR"), "/registry_snapshot.toml"));
+pub use crate::recipe_source::bundled::REGISTRY_TOML as BUNDLED_REGISTRY_TOML;
 
 // ── Registry snapshot schema ─────────────────────────────────────────────────
 
@@ -351,7 +349,7 @@ impl RecipeRegistry {
     /// 1b. `$SOVEREIGN_RECIPES_DIR/<id>/recipe.toml` — opt-in dev source dir
     ///    for hot-editing the canonical `sovereign-recipes` tree without a rebuild.
     /// 2. `toml_url` from the registry entry — fetched via HTTP, SHA-256 verified.
-    /// 3. Compile-time bundled TOML via [`crate::recipe_builtin::bundled_recipe_toml`]
+    /// 3. Bundled TOML via [`crate::recipe_source::default_source`]
     ///    — last-resort fallback. Lets a corpus install without the
     ///    network when the recipe is part of the bundled snapshot but
     ///    the live URL is unreachable (e.g. recipe not yet pushed to
@@ -406,7 +404,7 @@ impl RecipeRegistry {
                 Ok(text) => {
                     // Decide remote-vs-bundled by INTEGRITY, not mere reachability.
                     // The bundled recipe is vendored from the canonical
-                    // `sovereign-recipes/` tree at compile time (build.rs), so it
+                    // `sovereign-recipes/` tree at compile time (corpus-engine-recipes), so it
                     // is the reviewed, committed source of truth shipped with this
                     // binary. A remote may only OVERRIDE it when the registry
                     // vouches for the exact bytes (sha256 present and verified) —
@@ -430,7 +428,9 @@ impl RecipeRegistry {
                     } else {
                         false
                     };
-                    let bundled_present = crate::recipe_builtin::bundled_recipe_toml(id).is_some();
+                    let bundled_present = crate::recipe_source::default_source()
+                        .recipe_toml(id)
+                        .is_some();
                     match choose_recipe_source(sha_present, sha_verified, bundled_present) {
                         RecipeChoice::Remote => return Recipe::from_toml(&text),
                         RecipeChoice::Bundled => {
@@ -464,7 +464,7 @@ impl RecipeRegistry {
         }
 
         // 3. Bundled compile-time fallback.
-        if let Some(toml) = crate::recipe_builtin::bundled_recipe_toml(id) {
+        if let Some(toml) = crate::recipe_source::default_source().recipe_toml(id) {
             tracing::debug!(corpus = %id, "Loading recipe from bundled compile-time TOML");
             return Recipe::from_toml(toml);
         }
@@ -638,22 +638,6 @@ mod resolution_policy_tests {
             RecipeChoice::Neither
         );
     }
-}
-
-// ── Path helper (used by engine and xtask) ───────────────────────────────────
-
-/// Resolve the path to the canonical registry catalog
-/// (`sovereign-recipes/registry.toml`, the single source of truth that
-/// build.rs vendors into the bundled snapshot). Returns `None` outside a
-/// cargo workspace (e.g. when installed as a standalone binary).
-pub fn snapshot_path_in_workspace() -> Option<PathBuf> {
-    // CARGO_MANIFEST_DIR is set at build time; use it at runtime via env! fallback.
-    // corpus-engine/ → ../sovereign-recipes/registry.toml.
-    option_env!("CARGO_MANIFEST_DIR").and_then(|d| {
-        Path::new(d)
-            .parent()
-            .map(|ws| ws.join("sovereign-recipes").join("registry.toml"))
-    })
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -915,7 +899,7 @@ sha256 = ""
             let Some(reg_pb) = entry.prebuilt.as_ref() else {
                 continue;
             };
-            let Some(toml) = crate::recipe_builtin::bundled_recipe_toml(&entry.id) else {
+            let Some(toml) = crate::recipe_source::default_source().recipe_toml(&entry.id) else {
                 panic!(
                     "registry entry '{}' declares [recipes.prebuilt] but has no bundled recipe",
                     entry.id
@@ -952,15 +936,17 @@ sha256 = ""
     /// Every snapshot entry must have a compile-time bundled TOML so
     /// `fetch_recipe` can fall back when the registry URL is unreachable
     /// (recipe not yet pushed to GitHub, air-gapped use, captive-portal
-    /// network). A new catalog entry without a `bundled_recipe_toml`
-    /// arm would silently regress to "live URL only" — this test pins
+    /// network). A new catalog entry without a bundled recipe
+    /// entry would silently regress to "live URL only" — this test pins
     /// that contract.
     #[test]
     fn bundled_recipe_covers_every_snapshot_entry() {
         let registry = RecipeRegistry::from_bundled(None);
         for entry in registry.list_entries() {
             assert!(
-                crate::recipe_builtin::bundled_recipe_toml(&entry.id).is_some(),
+                crate::recipe_source::default_source()
+                    .recipe_toml(&entry.id)
+                    .is_some(),
                 "snapshot entry '{}' has no compile-time bundled recipe TOML",
                 entry.id,
             );

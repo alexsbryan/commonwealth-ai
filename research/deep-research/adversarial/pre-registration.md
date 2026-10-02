@@ -7858,7 +7858,7 @@ grounding gate and is wired only into `runtime/grounding/judge.rs`.
 "How many independent origins does this claim require" is a different
 decision and gets a distinct name (§10.6, one decider one name). Built
 as a sibling centroid classifier with its own exemplar TOML under
-`sovereign/router/`, baked via `include_str!`, same shape as the five
+`sovereign/crates/sovereign-core/data/router/`, baked via `include_str!`, same shape as the five
 existing siblings.
 
 - `Quantitative` — structural override, no embedding: the claim carries

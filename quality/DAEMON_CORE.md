@@ -29,6 +29,11 @@ tool. The daemon has the same shape available and has not stated it.
    peer's row and a local caller's row have the same shape. The forgeable
    `enabled_corpora` selection sits under the ceiling the way a peer's chosen
    route sits under WireGuard's allowed-IPs.
+   *Superseded in part 2026-09-26 (FIVE_PROGRAMS §4 rule 8, phase-b-18):*
+   the node key, the endpoint and peer admission belong to cw-rails, which
+   layers the mesh onto the daemon from outside. The daemon keeps the
+   `principal → Scope` table: cw-rails says who a peer is (`X-Mesh-*`), and
+   the daemon says what that principal may see.
 2. **One verb: the turn.** Tokens, narration, interpretation, clarification,
    metadata, streamed against a `Scope`. Search is the retrieval half of a
    turn, solve is several turns, embed is a turn primitive.
@@ -593,9 +598,9 @@ Named so the next reader does not take them as measured.
 - Whether `sovereign-workflow-host`'s `/internal/workflows` surface registers
   through `.route(` at all; the census found none, so it is either nested
   differently or the note describing it is ahead of the code.
-- The `out` class is 4 paths by the rules in the script; `/v1/apps` and the
-  app proxy may be a resource (an installed bundle) rather than out. The
-  rule is a claim, not a measurement.
+- The `out` class counted `/v1/apps` and the app proxy by the rules in the
+  script. Both were deleted as dead code (pb-meshapp-apps, 2026-09-27),
+  which settles whether they were a resource.
 - Which callers other than the owner can start a turn on the daemon (§3.3):
   the size of the unwired-ceiling exposure.
 - `SelfClaims`' exact inputs — RESOLVED 2026-09-16: four answers (availability,

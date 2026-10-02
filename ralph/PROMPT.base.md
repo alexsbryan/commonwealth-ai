@@ -34,7 +34,15 @@ comment beyond the one the row asks for (ARCH principle 2).
 <!-- section: row -->
 ## 2. Reading a row
 
-`- [ ] <id> — depends [<ids>] — <VERB> <what> — read: <pointers> — check: <checks>`
+`- [ ] <id> — depends [<ids>] — <OUTCOME> — read: <pointers> — check: <checks>`
+
+A row is ONE OUTCOME someone can observe, with its own proof (a PLANT watched
+red). It is bounded by the LIFT it states (roughly 1,500 changed lines, three
+crates, one host), not by a verb count, and it usually lands as several commits.
+The row names the outcome, the existing surface it extends (ARCH principle 11),
+the edges it closes, every behaviour delta with its reader, and its proof.
+Measured 2026-09-25 on five-programs (decision five-programs-65): per-verb rows
+spent 39-46% of worker time in fixed checks, and 43% of them halted at least once.
 
 - **read:** the only files you read, besides the files you edit. Pointer keys
   are defined at the top of `{{state}}`. `O2 step 3` means item 3 under
@@ -57,21 +65,27 @@ comment beyond the one the row asks for (ARCH principle 2).
 ## 3. Building a unit
 
 1. Mark the row `[~]` in `{{state}}`. Do not commit that edit on its own.
-2. **Premise check before any edit.** The row states facts — a path, a symbol,
-   a count. Verify each with `ls`, `git grep` or `grep` first. If one is
+2. **Site census before any edit, once per row.** The row states facts — a
+   path, a symbol, a count, a site. Verify every one with `ls`, `git grep` or
+   `grep` first, and write the census into your first commit's body. If one is
    false, stop: §6, with what you found.
-3. Do the VERB. Nothing else.
+3. Deliver the OUTCOME, commit by commit. Each commit changes ONE dimension
+   (ARCH principle 2 — a move, a rename, a behaviour change: never two), passes
+   LINT, and carries the BOUNDARY count when the row lists BOUNDARY. A
+   behaviour change is always its own commit. Nothing the row does not name.
 4. Run CLEAN once (§5); LINT is the unit's first build.
-5. Run the row's checks. On a failure: read the log, fix, re-run. Two honest
-   attempts at the same failure and still red: §6.
+5. When the outcome is built, run the row's checks — TEST, PLANT, LAYER and
+   the rest — once, at the end. On a failure: read the log, fix, re-run. Two
+   honest attempts at the same failure and still red: §6.
 6. Commit: `git add` the paths you changed, by name — never `git add -A`,
    never `target/` or `ralph/log*`. Write the message to
    `{{log_dir}}/commit-msg.txt` with the Write tool, then
    `git commit -F {{log_dir}}/commit-msg.txt` — not a heredoc, not `git -c`
-   (neither matches the allowlist; both ask the operator). Message
-   `<unit-id>: <one line>`; body = the `exit=` lines, every PLANT's red line,
-   and anything the row says to paste.
-7. Mark the row and commit the queue with ONE command:
+   (neither matches the allowlist; both ask the operator). Every commit is
+   `<unit-id>: <one line>`; its body = the `exit=` lines it ran, and the LAST
+   commit's body carries every PLANT's red line and anything the row says to
+   paste.
+7. When the proof is green, mark the row and commit the queue with ONE command:
    `scripts/ralph-mark.sh <unit-id> <short-hash>` — it rewrites the row to
    `- [x] <unit-id> <short-hash> — depends [...] — ...` and commits
    `{{state}}` alone as `ralph: <unit-id> done`. In a POOL
@@ -83,12 +97,14 @@ resumes; one holding an hour of uncommitted work is lost.
 <!-- section: review-mint -->
 ## 4. REVIEW units — you are the stronger model
 
-**`REVIEW-mint-{{prefix}}-<x>`.** Read the row's pointers and measure the tree. Append
-rows directly under the mint row, in §2's grammar. A row is atomic when it has
-one VERB, touches at most about ten files, lands in one commit, states a
-premise a worker can verify with grep, and names §5 checks. **The row's `cap`
-is a hard limit.** If the work needs more rows than the cap, do not mint them:
-write `{{control_dir}}/NEEDS_HUMAN.md` with the count you measured and why, and stop —
+**`REVIEW-mint-{{prefix}}-<x>`.** Prefer none: a director or a plan writes outcome rows
+directly, and a mint row exists only where those rows cannot be written without a
+census. Read the row's pointers and measure the tree. Append rows directly under
+the mint row, in §2's grammar: one OUTCOME each, with its lift, the surface it
+extends, its proof, a premise a worker can verify with grep, and §5 checks. Two
+outcomes that touch the same files back to back are one row. **The row's `cap`
+is a hard limit, stated as a lift.** If the work exceeds it, do not mint:
+write `{{control_dir}}/NEEDS_HUMAN.md` with the lift you measured and why, and stop —
 growth past a cap is a design finding, never a queue edit. Commit
 `{{state}}` as `REVIEW-mint-{{prefix}}-<x>: <n> rows minted`, then mark the mint
 row `[x]`.
@@ -135,6 +151,12 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   (d) "edit or mark the row in {{state}}, then
   `rm {{control_dir}}/STOP {{control_dir}}/NEEDS_HUMAN.md`". Leave the tree compiling. Commit
   nothing broken. Then stop.
+  When the charter leaves the fork to the operator (its "Leave these for the
+  operator" list), add the line `operator-only: <that clause>`: the supervisor then
+  sends the package to no resolution session and exits for the operator.
+  The package alone halts the loop; never create `{{control_dir}}/STOP` yourself.
+  The supervisor reads an empty STOP as the operator's and exits without sending
+  your package to a resolution session (fp-44 and fp-57, 2026-09-24).
 - **`{{control_dir}}/DONE`** — only when every row in `{{state}}` is `[x]`.
 
 <!-- section: hard-rules -->

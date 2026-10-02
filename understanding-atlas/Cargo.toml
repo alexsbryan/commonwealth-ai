@@ -16,9 +16,8 @@ description = "Understanding's pure tier — the arithmetic over the published l
 # entry); `tracing` is the glassbox surface the analysis passes will carry.
 
 [dependencies]
-understanding-vocab = { workspace = true }
+understanding-vocab = { workspace = true, features = ["read"] }
 corpus-index = { workspace = true }
-kernel-types = { workspace = true }
 oplog = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }

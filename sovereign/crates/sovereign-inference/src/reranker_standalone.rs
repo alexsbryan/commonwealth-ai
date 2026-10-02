@@ -31,10 +31,10 @@ use crate::llama::cpp::llama_backend::LlamaBackend;
 use async_trait::async_trait;
 use futures::Stream;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::model_family::ModelFamily;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::model_family::ModelFamily;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
 };
 
@@ -116,11 +116,19 @@ impl RerankLoad {
 /// a distinct arm of [`RerankLoad`], so a caller with a banner can say which
 /// one happened.
 pub fn load_from_env() -> RerankLoad {
-    let Ok(raw) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") else {
+    // The kind's one path decider; no `[models]` here, so the env var alone.
+    let Some(path) = crate::served_kind::RERANK.model_path(None) else {
         return RerankLoad::NotConfigured;
     };
-    let path = std::path::PathBuf::from(&raw);
+    load_fitted(&path)
+}
 
+/// Load the reranker at `path`, refused up front when it does not fit. The
+/// one in-process rerank load: [`load_from_env`] and the rerank kind's loader
+/// (`served_kind::RERANK`, which the serving assembly and the compute child
+/// call) both land here, so each carries the fit check.
+pub fn load_fitted(path: &Path) -> RerankLoad {
+    let path = path.to_path_buf();
     // NATIVE_GROUNDING.md §8 residency plan — the fit check BEFORE the slot
     // loads. The rerank slot is process-local additional weight alongside
     // whatever primary is already resident.
@@ -161,14 +169,15 @@ pub fn load_from_env() -> RerankLoad {
         Ok(reranker) => {
             tracing::info!(
                 path = %path.display(),
-                "reranker loaded from SOVEREIGN_RERANK_MODEL_PATH"
+                "reranker loaded"
             );
             RerankLoad::Loaded(Arc::new(reranker) as Arc<dyn InferenceProvider>)
         }
         Err(e) => {
             let message = format!(
-                "SOVEREIGN_RERANK_MODEL_PATH is set but the reranker failed to \
-                 load ({e}) — running baseline retrieval without rerank"
+                "the reranker at {} failed to load ({e}) — running baseline \
+                 retrieval without rerank",
+                path.display()
             );
             tracing::warn!(path = %path.display(), "{message}");
             RerankLoad::Failed { message }
@@ -278,7 +287,9 @@ impl InferenceProvider for StandaloneReranker {
                 Ok(Ok(v)) => Ok(v),
                 Ok(Err(e)) => Err(e),
                 Err(_) => Err(Error::Inference(
-                    "Standalone rerank inference panicked".to_string(),
+                    "Rerank inference panicked — model may be incompatible with \
+                     pooling=rank, or an input pair exceeded its context."
+                        .to_string(),
                 )),
             }
         })

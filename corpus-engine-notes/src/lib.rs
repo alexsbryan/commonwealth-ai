@@ -17,6 +17,10 @@
 //! - [`notes`] — `NoteStore`, the SQLite-backed working memory store.
 //!   Tracks kind/scope/source provenance for every note, plus tool-call
 //!   logs and re-rank fingerprints.
+//! - [`port`] — `NoteStore`'s impls of the `sovereign-contracts`
+//!   note ports (`RecipeNotes`, `AgentNotes`). The ONE implementation:
+//!   programs outside `code/` take `Arc<dyn AgentNotes>` and never name
+//!   this crate.
 //! - [`project_docs`] — `ProjectDocsStore` indexing DESIGN.md / RFC
 //!   markdown files for the project-status surface.
 //! - [`response_mine`] — the regex response miner (Phase 7.2); scans an
@@ -51,9 +55,11 @@
 
 pub mod decision_extractor;
 pub mod error;
+pub mod mining;
 pub mod note;
 pub mod notes;
 mod notes_schema;
+pub mod port;
 pub mod project_docs;
 pub mod response_mine;
 
@@ -62,6 +68,6 @@ pub use note::{is_ephemeral_kind, Note, NoteScope, NoteSource, ScopeFilter, EPHE
 pub use notes::{
     BackfillReport, EmbedFn, ExportedNoteEmbedding, ExportedNoteEntity, ExportedNoteRow, GlinerFn,
     IngestRemoteReport, NodeAttribution, NodeRoster, NotePropagationEvent, NoteReadOutcome,
-    NoteStore, PropagationSinkFn, RosterEntry, ToolCallLogRow, NOTES_APP_ID,
+    NoteStore, PropagationSinkFn, RosterEntry, ToolCallLogRow,
 };
 pub use project_docs::{find_markdown_files, DocResult, ProjectDocsStore};

@@ -27,6 +27,13 @@ uuid = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
+# The tests that drive the REAL tester, descriptor and registry (moved from
+# sovereign-tools, phase-b-48). corpus-engine is package ingest like this
+# crate, so the edge stays inside the closure; the library never names it.
+corpus-engine = { workspace = true }
+# The recording `RecipeNotes` double (`notes::fixtures`), for the project
+# lifecycle test moved from sovereign-tools (pb-ingest-rehome-daemon).
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 

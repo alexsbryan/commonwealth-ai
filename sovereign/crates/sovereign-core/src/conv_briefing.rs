@@ -48,7 +48,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 
 use crate::conv_tiered::{ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader, VaultThemeRow};
 
@@ -652,7 +652,7 @@ mod tests {
             source_doc_id: conv.map(|s| s.to_string()),
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 

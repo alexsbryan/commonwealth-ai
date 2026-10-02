@@ -81,7 +81,7 @@ pub(crate) async fn build_raptor_nodes_with_checkpoint(
     embeddings: &[Vec<f32>],
     doc_type: DocumentTypeTag,
     checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
-    progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
+    progress: Option<&Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink>>,
     // User-authored summary correction, threaded to the RAPTOR
     // summarization prompt (the "flag a wrong summary" revision loop).
     correction_hint: Option<&str>,
@@ -165,7 +165,7 @@ pub(crate) async fn build_atlas_artifacts_with_checkpoint(
     embeddings: &[Vec<f32>],
     doc_type: DocumentTypeTag,
     checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
-    progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
+    progress: Option<&Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink>>,
     correction_hint: Option<&str>,
     summary_mode: crate::raptor_atlas::SummaryMode,
     verify_policy: Option<crate::summary_verify::VerifyPolicy>,

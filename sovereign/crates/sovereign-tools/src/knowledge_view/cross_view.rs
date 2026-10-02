@@ -45,9 +45,9 @@
 
 use std::collections::HashMap;
 
-use corpus_engine::enrichment::skeleton::FieldSkeleton;
-use corpus_engine::error::Result as CorpusResult;
-use corpus_engine::EmbedFn;
+use corpus_index::error::Result as CorpusResult;
+use corpus_index::types::EmbedFn;
+use understanding_vocab::skeleton::FieldSkeleton;
 
 /// One item extracted from a view's skeleton for cross-view
 /// matching. The item's text is what gets embedded; the view and
@@ -347,9 +347,9 @@ pub(crate) async fn build_cross_view_digest(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::clustering::FieldModelStats;
-    use corpus_engine::enrichment::skeleton::{
-        CanonicalQuestion, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
+    use understanding_vocab::skeleton::{
+        CanonicalQuestion, FieldModelStats, SkeletonFaultLine, SkeletonOpenQuestion,
+        SkeletonPosition,
     };
 
     fn fixture_skeleton(corpus_id: &str, domain_id: &str) -> FieldSkeleton {

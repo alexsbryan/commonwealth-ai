@@ -1065,7 +1065,7 @@ async fn enrich_once_handler(
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
     };
-    use corpus_engine::enrichment::state::{
+    use corpus_index::enrichment_state::{
         EnrichmentHeartbeat, EnrichmentPhase, EnrichmentStateFile,
     };
 
@@ -1242,7 +1242,7 @@ pub(crate) fn ingest_progress_stamper(
     index_dir: std::path::PathBuf,
     corpus_id: String,
 ) -> sovereign_tools::local_corpus::manager::ProgressCallback {
-    use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
+    use corpus_index::enrichment_state::{EnrichmentPhase, EnrichmentStateFile};
     use std::sync::atomic::{AtomicU64, Ordering};
     // ~50 writes across the whole embed pass, however many chunks it has.
     let last_bucket = std::sync::Arc::new(AtomicU64::new(u64::MAX));
@@ -1361,9 +1361,8 @@ pub(crate) fn record_ingest_outcome(
         Err(e) => {
             // Don't strand the phase file mid-Scanning — a pane polling
             // the status route would spin forever on a job already dead.
-            let _ = corpus_engine::enrichment::state::EnrichmentStateFile::fail(
-                index_dir, corpus_id, &e,
-            );
+            let _ =
+                corpus_index::enrichment_state::EnrichmentStateFile::fail(index_dir, corpus_id, &e);
             IngestOutcome {
                 corpus_id: corpus_id.to_string(),
                 job_id: job_id.to_string(),

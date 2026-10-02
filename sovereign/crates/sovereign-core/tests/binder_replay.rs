@@ -50,10 +50,12 @@
 //!
 //! ```text
 //! research/deep-research/arms/bed-binder/extract.py <run-dir>   # regenerate the bed
-//! cargo test -p sovereign-core --test binder_replay -- --ignored --nocapture
+//! BINDER_BED=research/deep-research/arms/bed-binder/bed.json \
+//!   cargo test -p sovereign-core --test binder_replay -- --ignored --nocapture
 //! ```
 //!
-//! with the daemon up. `BINDER_BED` overrides the bed path, `BINDER_ARMS`
+//! with the daemon up. `BINDER_BED` is REQUIRED — the bed is research-tree
+//! data, not this crate's. `BINDER_ARMS`
 //! selects arms (`per-span`, `batched`, or both — default both), and
 //! `BINDER_CLAIMS` caps how many claims to replay so a tuning cycle can run
 //! two claims instead of six. Writes `binder-replay.json` beside the bed.
@@ -149,11 +151,15 @@ struct Report {
 }
 
 fn bed_path() -> PathBuf {
-    if let Ok(p) = std::env::var("BINDER_BED") {
-        return PathBuf::from(p);
+    match std::env::var("BINDER_BED") {
+        Ok(p) => PathBuf::from(p),
+        Err(_) => panic!(
+            "BINDER_BED is required — the bed lives in the research tree, which this crate \
+             does not own. Re-run as:\n  \
+             BINDER_BED=research/deep-research/arms/bed-binder/bed.json \\\n  \
+             cargo test -p sovereign-core --test binder_replay -- --ignored --nocapture"
+        ),
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../research/deep-research/arms/bed-binder/bed.json")
 }
 
 /// One arm, for one claim. The env var is set immediately before the call and

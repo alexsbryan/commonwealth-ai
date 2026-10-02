@@ -16,16 +16,17 @@ use axum::{
     http::{header, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{get, post},
-    Router,
 };
+use host_kit::shell::RouteBundle;
 use serde::Deserialize;
 
-// The clamps are `meshapp_http`'s — ONE decider for every surface that serves
-// these ops (ARCH §10.6). This dev server used to re-inline the same five
-// literal pairs; a bound changed there and not here would have made the two
-// explorers disagree with nothing red.
-use sovereign_daemon::meshapp_http::{
-    self, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX, FEED_DOCS_DEFAULT, FEED_DOCS_MAX, FEED_DOCS_MIN,
+// The clamps live with the DTOs they clamp, in
+// `sovereign_contracts::daemon_wire::meshapp` — ONE decider for every
+// surface that serves these ops (ARCH §10.6). This dev server used to
+// re-inline the same five literal pairs; a bound changed there and not here
+// would have made the two explorers disagree with nothing red.
+use sovereign_contracts::daemon_wire::meshapp::{
+    clamp, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX, FEED_DOCS_DEFAULT, FEED_DOCS_MAX, FEED_DOCS_MIN,
     GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX, SUBGRAPH_LIMIT_DEFAULT, SUBGRAPH_LIMIT_MAX,
 };
 
@@ -200,7 +201,7 @@ async fn run_dev(args: &[String]) -> i32 {
             if in_repo.join("index.html").is_file() {
                 in_repo
             } else {
-                sovereign_cli_shared::dirs::sovereign_meshapps().join(&app_id)
+                sovereign_cli_base::dirs::sovereign_meshapps().join(&app_id)
             }
         }
     };
@@ -227,7 +228,7 @@ async fn run_dev(args: &[String]) -> i32 {
 
     // Index dir: --index, else ~/.svrnmesh/indexes/<corpus>.
     let index_path =
-        index.unwrap_or_else(|| sovereign_cli_shared::dirs::sovereign_indexes().join(&corpus));
+        index.unwrap_or_else(|| sovereign_cli_base::dirs::sovereign_indexes().join(&corpus));
     if !index_path.is_dir() {
         eprintln!(
             "meshapp dev: corpus `{corpus}` not found at {} — install it first (`svrn corpus install {corpus}`) or pass --index",
@@ -242,11 +243,7 @@ async fn run_dev(args: &[String]) -> i32 {
         sdk_dir,
     });
 
-    let app = Router::new()
-        .route("/__meshapp/{op}", post(op_handler))
-        .route("/__meshapp_dev.js", get(shim_handler))
-        .fallback(static_handler)
-        .with_state(ctx.clone());
+    let routes = dev_routes(ctx.clone());
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -260,11 +257,22 @@ async fn run_dev(args: &[String]) -> i32 {
     println!("  bundle : {}", ctx.bundle_dir.display());
     println!("  index  : {}", ctx.index_path.display());
     println!("  open   : http://{addr}/   (Ctrl-C to stop)");
-    if let Err(e) = axum::serve(listener, app.into_make_service()).await {
+    let forever = std::future::pending::<()>();
+    if let Err(e) = host_kit::shell::serve([listener], vec![routes], forever).await {
         eprintln!("meshapp dev: server error: {e}");
         return 1;
     }
     0
+}
+
+/// `meshapp dev`'s routes, as the host kit's named bundle: the bridge ops,
+/// the dev shim, and the bundle's static files behind the fallback.
+fn dev_routes(ctx: Arc<DevCtx>) -> RouteBundle {
+    RouteBundle::new("meshapp_dev")
+        .route("/__meshapp/{op}", post(op_handler))
+        .route("/__meshapp_dev.js", get(shim_handler))
+        .fallback(static_handler)
+        .with_state(ctx)
 }
 
 fn read_manifest_corpus(bundle_dir: &Path) -> Result<String, String> {
@@ -307,14 +315,14 @@ async fn op_handler(
             sovereign_meshapp::graph_nodes(
                 &g,
                 a.node_type.as_deref(),
-                meshapp_http::clamp(a.limit, GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX),
+                clamp(a.limit, GRAPH_LIMIT_DEFAULT, GRAPH_LIMIT_MAX),
             )
         })),
         "subgraph" => text(sovereign_meshapp::load_graph(idx).map(|g| {
             sovereign_meshapp::subgraph(
                 &g,
                 a.node_type.as_deref(),
-                meshapp_http::clamp(a.limit, SUBGRAPH_LIMIT_DEFAULT, SUBGRAPH_LIMIT_MAX),
+                clamp(a.limit, SUBGRAPH_LIMIT_DEFAULT, SUBGRAPH_LIMIT_MAX),
             )
         })),
         "node" => {
@@ -331,12 +339,11 @@ async fn op_handler(
                 &g,
                 a.query.as_deref().unwrap_or_default(),
                 a.node_type.as_deref(),
-                meshapp_http::clamp(a.limit, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX),
+                clamp(a.limit, ENTITY_LIMIT_DEFAULT, ENTITY_LIMIT_MAX),
             )
         })),
         "document_feed" => {
-            let limit =
-                meshapp_http::clamp(a.limit, FEED_DOCS_DEFAULT, FEED_DOCS_MAX).max(FEED_DOCS_MIN);
+            let limit = clamp(a.limit, FEED_DOCS_DEFAULT, FEED_DOCS_MAX).max(FEED_DOCS_MIN);
             text(sovereign_meshapp::document_feed(idx, limit).await)
         }
         "reconciliation" => Ok(to_val(sovereign_meshapp::reconciliation(idx))),
@@ -355,7 +362,7 @@ async fn op_handler(
         // Same load-or-build-and-cache path the desktop host runs, so the
         // dev loop exercises staleness + the verbatim audit identically.
         "wrapped_artifact" => {
-            let state_db = sovereign_cli_shared::dirs::sovereign_root().join("sovereign.db");
+            let state_db = sovereign_cli_base::dirs::sovereign_root().join("sovereign.db");
             sovereign_meshapp::wrapped::wrapped_artifact(idx, Some(state_db.as_path()))
                 .await
                 .map(to_val)
@@ -404,9 +411,9 @@ async fn static_handler(State(ctx): State<Arc<DevCtx>>, uri: Uri) -> Response {
     serve_under(&ctx.bundle_dir, rel, shim)
 }
 
-/// The bundle-escape guard now faces the LAN through the guest door, so it
-/// has one implementation, there.
-pub(crate) use sovereign_daemon::guest_door::serve_under;
+/// The bundle-escape guard, shared with the guest door and `svrn ring dev` —
+/// one implementation, in the host kit (`host_kit::shell::serve_under`).
+use host_kit::shell::serve_under;
 
 /// The dev `window.meshApp`: same method surface as `meshapp_shim.js`, but over
 /// `fetch('/__meshapp/<op>')` instead of Tauri IPC. The corpus id the bundle
@@ -567,3 +574,25 @@ const STARTER_MANIFEST: &str = r#"{
   "trust": "unsigned"
 }
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The mount trace names every route `meshapp dev` serves (phase-b
+    /// pb-shell): the trace prints the bundle's `routes()`.
+    #[test]
+    fn the_dev_bundle_names_its_routes_and_its_fallback() {
+        let ctx = Arc::new(DevCtx {
+            index_path: PathBuf::new(),
+            bundle_dir: PathBuf::new(),
+            sdk_dir: PathBuf::new(),
+        });
+        let routes = dev_routes(ctx);
+        assert_eq!(routes.name(), "meshapp_dev");
+        assert_eq!(
+            routes.routes(),
+            ["/__meshapp/{op}", "/__meshapp_dev.js", "*"]
+        );
+    }
+}

@@ -1,0 +1,53 @@
+# phase-b as a queue manifest. Launch line (run it from the repo root once
+# five-programs has reached HUMAN-phase-b; control files live in
+# ralph/next/phase-b/ctl/ under --queue):
+#
+#   nohup python3 scripts/ralph.py supervise --workdir . --queue phase-b \
+#     -- python3 scripts/ralph.py run --workdir . --queue phase-b --max-stall 3 \
+#     >> ralph/log-phase-b.txt 2>&1 &
+#
+# The worker prompt is ralph/PROMPT.base.md + this campaign's addendum
+# (print it: python3 scripts/ralph.py prompt --queue phase-b).
+# Do not start it while another loop holds the cargo lock: check
+# `pgrep -f 'ralph.py supervise'` first.
+label = "phase-b"
+# Rows are outcomes (PROMPT.base §2, five-programs-65): a row runs longer than a
+# per-verb row did, and a [~] row resumes in the next session.
+session_timeout = 7200
+audit_every = 10
+# Census before code, enforced where rows are dispatched (phase-b-29, -30): a
+# work row without its finish item and its compile trial is refused by name,
+# and the supervisor's director writes the census before any code.
+# "- finish" without the colon, like "- trial": a director annotating the bullet
+# ("- finish (rewritten by phase-b-N): ...") broke the literal match twice on 2026-09-28.
+dispatch_requires = ["- finish", "- trial"]
+# The frozen scope (phase-b-32): a row not listed waits on the operator and never
+# dispatches. Audits every 10 units, not 5 (phase-b-32).
+scope_file = "ralph/next/phase-b/scope.txt"
+worker_bin = "scripts/ralph-claude-shim.sh"
+settings = "ralph/claude-settings.json"
+
+[models]
+worker = "claude-opus-5-5"
+review = "claude-opus-5-5"
+resolve = "claude-opus-5-5"
+variant = "medium"
+
+# The campaign's checks ARE the gates: each commit body carries the
+# boundary-gate count. `lift` takes a program name (`scripts/ralph-check.sh
+# lift serve`). Its sandbox and target live on disk under ~/.cache/program-lift,
+# never on /tmp, which is a 63G RAM-backed tmpfs on this host: ingest's cold
+# target reached 47G there and hit the quota (1d611fcab). The target persists
+# across runs, so the closures' crates.io deps stay warm; the sandbox, and with
+# it every workspace crate, is fresh each run (phase-b-8).
+# The sandbox PATH is stable per lift (seat, 2026-09-26): program_lift.py wipes
+# and re-creates `--dir`, so the contents stay fresh, but cargo reuses a
+# relocated artifact across sandbox paths, and a pid-keyed path left every
+# `env!("CARGO_MANIFEST_DIR")` a reused test binary carries pointing at a deleted
+# sandbox (1db9a6e12). A stable path keeps what was baked in valid.
+[checks]
+# clone-gate rides on boundary (phase-b-99): a copy that closes an edge lowers
+# the boundary count, and the same reading shows the clone-gate red.
+boundary = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc 'cd corpus-engine && cargo xtask boundary-gate; cargo xtask clone-gate; true'"]
+compile = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc './scripts/sovereign-lint.sh --human'"]
+lift = ['bash', '-c', 'mkdir -p "$HOME/.cache/program-lift" && toolbox run -c sovereign-vulkan bash -lc "TMPDIR=$HOME/.cache/program-lift ./scripts/program-lift.sh --sandbox $0 --dir $HOME/.cache/program-lift/sandbox-$0 --target-dir $HOME/.cache/program-lift/target"']

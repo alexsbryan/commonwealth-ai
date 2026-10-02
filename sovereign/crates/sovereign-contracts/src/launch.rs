@@ -33,6 +33,9 @@
 //! capability sets belong to whatever the launch constructs. Keeping it that
 //! narrow is what lets it live in Tier 0 with no dependencies.
 
+mod rpc_worker_flag;
+pub use rpc_worker_flag::{rpc_worker_flag, DEFAULT_RPC_BIND};
+
 /// The closed set of things a first-party binary can become.
 ///
 /// Ordering of the parse is significant and is fixed here rather than at each
@@ -81,6 +84,33 @@ pub enum Launch {
         args: Vec<String>,
     },
 
+    /// First-run setup's question to the loader: this machine's hardware
+    /// and model plan, a model fetch, a config's placement. `svrn setup` and
+    /// `svrn doctor` spawn `<loader> --setup-probe <sub> …` before any
+    /// daemon or config exists; it answers JSON on stdout and its verdict as
+    /// the exit code. serve's `child_launch` routes it, so the stock binary
+    /// answers it too (pb-distribution-setup).
+    SetupProbe {
+        /// Args after the `--setup-probe` flag.
+        args: Vec<String>,
+    },
+
+    /// The setup wizard's mesh join as a process:
+    /// `sovereign-daemon join --config <path> --node-name <n>`. It assembles
+    /// the mesh-admin shape (never the inference engine), joins the mesh whose
+    /// invite it reads as ONE line on stdin — never argv, because the link
+    /// carries the join key and `/proc/<pid>/cmdline` is world-readable —
+    /// prints [`JOINED_LINE_PREFIX`] on success, and serves until stopped.
+    /// The config is caller-named and required, so a first-run host with no
+    /// canonical config can take it. A flag left off parses as `None`; the
+    /// binary refuses it by name.
+    AdminJoin {
+        /// `--config <path>`.
+        config: Option<std::path::PathBuf>,
+        /// `--node-name <n>`.
+        node_name: Option<String>,
+    },
+
     /// A crash probe: load one model, decode one token, exit. Spawned by the
     /// desktop before it loads a model into the user-facing slot.
     Smoketest {
@@ -91,26 +121,6 @@ pub enum Launch {
     /// The desktop GUI shell. Owns no domain state of its own; reaches a
     /// daemon over HTTP, and may supervise one as a child process.
     Desktop,
-
-    /// The multi-tenant HTTP server (`sovereign-server --config <path>`).
-    ///
-    /// Like [`Launch::Desktop`] this is a binary's `default_ui` rather than a
-    /// flag: `sovereign-server` parses its own `--config`, which is required.
-    /// Two paths reach it — the desktop supervises one as the opt-in mobile
-    /// access host (`mobile_host_setup::start`), and `svrn mobile` **`exec`s**
-    /// it, replacing its own process image (`mobile_cmd.rs:152`).
-    ///
-    /// It is named here because it is **resident**: it binds a long-lived
-    /// listener and owns tenant state. Its absence from this set is why an
-    /// orphaned instance was found squatting `0.0.0.0:8080` for six days with
-    /// no crash reporting and no refusal (`quality/TOPOLOGY.md` hazards 4,
-    /// 10) — nothing that keys on [`Launch::is_resident`] could see it.
-    ///
-    /// In the target it is a *surface*, not an assembler: it speaks the turn
-    /// protocol to the daemon rather than building a `Runtime`. Being resident
-    /// and being an assembler are different questions, and this variant is the
-    /// place that distinction is written down.
-    Server,
 
     /// A run-once command that dispatches and exits.
     Verb {
@@ -156,13 +166,28 @@ pub const WORKER_MODE_FLAG: &str = "--worker-mode";
 /// through to verb matching.
 pub const RPC_WORKER_FLAG: &str = "--rpc-worker";
 
+/// Spawns the loader's setup probe ([`Launch::SetupProbe`]). Like the flags
+/// above, found at any argv position.
+pub const SETUP_PROBE_FLAG: &str = "--setup-probe";
+
+/// The `daemon` sub-verb that is [`Launch::AdminJoin`]. Public for the same
+/// reason as the flags above: the spawner names the string the parser reads.
+pub const ADMIN_JOIN_VERB: &str = "join";
+
+/// The one stdout line [`Launch::AdminJoin`] prints when its join succeeds,
+/// followed by the quoted mesh name. It is the join's result: the client port
+/// answers before the handshake (`join_mesh` binds on a placeholder mesh
+/// first), so a spawner that waits on `/v1/models` has not seen a join.
+pub const JOINED_LINE_PREFIX: &str = "joined ";
+
 // NOTE — the smoketest token is deliberately NOT declared here.
 // `sovereign_inference::smoketest::SMOKETEST_FLAG` already owns it, next to
 // the smoketest implementation, and the desktop re-exports it from there.
 // Declaring a second copy would be the §10.6 smell this module exists to
 // remove. `sovereign-contracts` sits BELOW `sovereign-inference`, so it cannot
-// name that constant; the two are pinned equal by a test in a crate that can
-// see both (`sovereign-cli-daemon`, `launch_smoketest_flag_matches_owner`).
+// name that constant; the two are pinned equal by a test in the owner, which
+// sees both (`sovereign_inference::smoketest`,
+// `launch_smoketest_flag_matches_owner`; pb-distribution-setup).
 
 impl Launch {
     /// Decide what this process is, from argv **excluding** `argv[0]`.
@@ -186,6 +211,11 @@ impl Launch {
                 args: args[i + 1..].to_vec(),
             };
         }
+        if let Some(i) = args.iter().position(|a| a == SETUP_PROBE_FLAG) {
+            return Launch::SetupProbe {
+                args: args[i + 1..].to_vec(),
+            };
+        }
         if args.iter().any(|a| a == DAEMON_CHILD_FLAG) {
             return Launch::Daemon { args: vec![] };
         }
@@ -201,6 +231,16 @@ impl Launch {
         let rest = args[1..].to_vec();
 
         if first == "daemon" {
+            if rest.first().map(String::as_str) == Some(ADMIN_JOIN_VERB) {
+                let value = |flag: &str| {
+                    let i = rest.iter().position(|a| a == flag)?;
+                    rest.get(i + 1).cloned()
+                };
+                return Launch::AdminJoin {
+                    config: value("--config").map(std::path::PathBuf::from),
+                    node_name: value("--node-name"),
+                };
+            }
             return if rest.iter().any(|a| a == WORKER_MODE_FLAG) {
                 Launch::Worker { args: rest }
             } else {
@@ -227,12 +267,9 @@ impl Launch {
     /// [`Launch::Worker`] is resident and owns no persistent state (an
     /// ephemeral pod boots from a bootstrap blob and exits), while
     /// [`Launch::Desktop`] is not resident yet owns a data root whenever it
-    /// runs its own in-process daemon. See [`crate::run_lock`].
+    /// runs its own in-process daemon. See `host_kit::RunLock`.
     pub fn is_resident(&self) -> bool {
-        matches!(
-            self,
-            Launch::Daemon { .. } | Launch::Worker { .. } | Launch::Server
-        )
+        matches!(self, Launch::Daemon { .. } | Launch::Worker { .. })
     }
 
     /// A short, stable name for logs and diagnostics.
@@ -242,9 +279,10 @@ impl Launch {
             Launch::Worker { .. } => "worker",
             Launch::ComputeChild { .. } => "compute-child",
             Launch::RpcWorker { .. } => "rpc-worker",
+            Launch::SetupProbe { .. } => "setup-probe",
+            Launch::AdminJoin { .. } => "admin-join",
             Launch::Smoketest { .. } => "smoketest",
             Launch::Desktop => "desktop",
-            Launch::Server => "server",
             Launch::Verb { .. } => "verb",
             Launch::Bare => "bare",
         }
@@ -617,6 +655,14 @@ impl RpcServe {
     pub fn is_serving(&self) -> bool {
         matches!(self, Self::On { .. })
     }
+
+    /// True when the worker binds past loopback, which [`Self::resolve`]
+    /// allows only with the operator's plaintext-LAN acknowledgement: the one
+    /// case a host may reach it at the member's own address rather than
+    /// through the identity-bound mesh tunnel (pc-rpc-probe-identity).
+    pub fn binds_past_loopback(&self) -> bool {
+        self.bind().and_then(bind_host_is_loopback) == Some(false)
+    }
 }
 
 #[cfg(test)]
@@ -835,6 +881,19 @@ mod tests {
         assert_eq!(parse(&["daemon", "--rpc-worker"]).as_str(), "rpc-worker");
     }
 
+    /// The setup probe keeps its sub-verb, and a binary that prepends
+    /// `daemon` (sovereign-daemon's entry) still sees a probe, never a boot.
+    #[test]
+    fn the_setup_probe_keeps_its_args_and_outranks_a_verb() {
+        let Launch::SetupProbe { args } = parse(&[SETUP_PROBE_FLAG, "plan"]) else {
+            panic!("expected SetupProbe");
+        };
+        assert_eq!(args, v(&["plan"]));
+        let p = parse(&["daemon", SETUP_PROBE_FLAG, "plan"]);
+        assert_eq!(p.as_str(), "setup-probe");
+        assert!(!p.is_resident());
+    }
+
     /// Worker mode is a different server on a different socket, so it must not
     /// collapse into `Daemon` — the container entrypoint depends on it.
     #[test]
@@ -843,6 +902,41 @@ mod tests {
         assert_eq!(w.as_str(), "worker");
         assert!(w.is_resident());
         assert_ne!(w, parse(&["daemon", "run"]));
+    }
+
+    /// The wizard's join child: `daemon join` pins its two flags to the
+    /// variant, a missing flag stays `None` for the binary to refuse, and it
+    /// is neither the serving daemon nor resident.
+    #[test]
+    fn admin_join_pins_its_flags_to_its_own_launch() {
+        assert_eq!(
+            parse(&[
+                "daemon",
+                "join",
+                "--config",
+                "/t/c.toml",
+                "--node-name",
+                "box"
+            ]),
+            Launch::AdminJoin {
+                config: Some(std::path::PathBuf::from("/t/c.toml")),
+                node_name: Some("box".to_string()),
+            }
+        );
+        assert_eq!(
+            parse(&["daemon", "join", "--node-name"]),
+            Launch::AdminJoin {
+                config: None,
+                node_name: None,
+            }
+        );
+        let j = parse(&["daemon", "join"]);
+        assert_eq!(j.as_str(), "admin-join");
+        assert!(!j.is_resident());
+        assert_eq!(
+            parse(&["daemon", "run", "--config", "x"]).as_str(),
+            "daemon"
+        );
     }
 
     /// A child re-exec carries `current_exe`'s argv, so the flag can sit
@@ -889,20 +983,8 @@ mod tests {
 
     /// `is_resident` is the predicate three call sites used to re-derive. Pin
     /// both directions so a new variant has to decide deliberately.
-    /// `Server` is reached the way `Desktop` is — as a binary's `default_ui`,
-    /// never by a flag — because `sovereign-server` parses its own `--config`.
     #[test]
-    fn the_server_is_a_default_ui_not_a_flag() {
-        assert_eq!(Launch::parse(&[], Launch::Server), Launch::Server);
-        assert_eq!(
-            Launch::parse(&v(&["--config", "/x.toml"]), Launch::Server),
-            Launch::Server
-        );
-        assert_eq!(Launch::Server.as_str(), "server");
-    }
-
-    #[test]
-    fn only_the_three_resident_launches_are_resident() {
+    fn only_the_two_resident_launches_are_resident() {
         assert!(parse(&["daemon", "run"]).is_resident());
         assert!(parse(&["daemon", "run", "--worker-mode"]).is_resident());
         assert!(!parse(&["--compute-child"]).is_resident());
@@ -910,10 +992,6 @@ mod tests {
         assert!(!parse(&["setup"]).is_resident());
         assert!(!Launch::Desktop.is_resident());
         assert!(!Launch::Bare.is_resident());
-        // Resident: it binds a listener and owns tenant state. This is the
-        // assertion whose absence left an orphaned server unlocked and
-        // unreaped for six days.
-        assert!(Launch::Server.is_resident());
     }
 }
 

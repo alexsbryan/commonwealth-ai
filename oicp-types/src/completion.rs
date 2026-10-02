@@ -292,12 +292,15 @@ pub struct CompletionRequest {
     /// has not yet been decided.
     ///
     /// **Never serialized, by construction** (`#[serde(skip)]`). Admission
-    /// is a fact about THIS process's own queue — "I already accepted this
+    /// is a fact about THIS HOST's own queue — "I already accepted this
     /// turn, drafted it, and am now verifying it" — and a field that
     /// survived a wire hop would let any caller assert it. A request that
     /// leaves this host for a peer arrives there as what it is: new load
     /// the peer has not yet accepted, and the peer's own gate decides
-    /// (ARCH §7 — make it structural, not remembered).
+    /// (ARCH §7 — make it structural, not remembered). The one hop it
+    /// crosses is to this host's own engine in another process (`serve`):
+    /// the chat wire's `turn_admission` field, which the listener honours
+    /// only from a caller on its own host (phase-b-27).
     #[serde(default, skip)]
     pub admission: Option<TurnAdmission>,
 }
@@ -747,4 +750,21 @@ pub const fn latency_to_speed(class: LatencyClass) -> Speed {
         LatencyClass::Fast => Speed::Fast,
         LatencyClass::Normal | LatencyClass::Extended => Speed::Slow,
     }
+}
+
+/// Sampling pins a caller sets on one turn or one role: svrn's turn wire
+/// (`TurnRequest::Message::sampling`) and agent-tools' role profiles share
+/// this one definition (phase-b-56, principle 8). `None` fields fall back to
+/// the caller's inference config.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SamplingOverrides {
+    /// Generation temperature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+    /// Nucleus-sampling cutoff.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+    /// Maximum tokens to generate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
 }

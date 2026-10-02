@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use sovereign_cli_shared::dirs::sovereign_meshapps;
+use sovereign_cli_base::dirs::sovereign_meshapps;
 
 /// The reviewed, in-repo curated list (the trust anchor). Resolved relative to
 /// the repo root (run from there) or via `--registry`.

@@ -13,7 +13,9 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use commonwealth_core::activity::ActivityEventKind;
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::daemon::{IngestPort, InstallRefusal};
+use oicp_types::activity::ActivityEventKind;
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
@@ -81,23 +83,28 @@ async fn gather_peer_atlas_advice(
     // Local view: atom counts come from the cached summary; embed
     // model from our own member record (populated by gossip).
     let atlas_dir = indexes_dir.join(corpus_id).join("atlas");
-    let local_summary = corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
-        .ok()
-        .flatten();
+    let Some(atlas) = state.inner.node.atlas.as_ref() else {
+        tracing::debug!(
+            corpus_id,
+            "peer atlas advice: no ingest atlas port; no advice"
+        );
+        return None;
+    };
+    let local_summary = atlas.atlas_summary(&atlas_dir).ok().flatten();
     let local_tier2_count = local_summary.as_ref().map(|s| s.tier2_count).unwrap_or(0);
     let local_fingerprint = local_summary.as_ref().map(|s| s.fingerprint.as_str());
 
     let self_node_id = state.inner.fabric.identity.current();
-    let mesh = state.inner.fabric.mesh.read().await;
-    let my_embed_model = mesh
-        .members
-        .get(&self_node_id)
+    let members = state.membership().members().await;
+    let my_embed_model = members
+        .iter()
+        .find(|m| m.node_id == self_node_id)
         .and_then(|m| m.capabilities.embed_model.as_ref())
         .map(|m| m.model_id.clone());
 
     let mut peer_views: Vec<RemoteAtlasView> = Vec::new();
-    for (node_id, member) in mesh.members.iter() {
-        if *node_id == self_node_id {
+    for member in &members {
+        if member.node_id == self_node_id {
             continue;
         }
         let model = member
@@ -146,7 +153,7 @@ pub async fn corpus_install(
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         ));
     }
@@ -166,7 +173,7 @@ pub async fn corpus_install(
         InstallOutcome::NoEngine => Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         )),
         InstallOutcome::RecipeNotFound(reason) => Err((
@@ -252,7 +259,7 @@ pub async fn corpus_canonical_stream(
     // Resolve the index info so we can:
     //   1. Refuse private corpora (query_sharing=false).
     //   2. Surface the fingerprint header for client-side validation.
-    let info = match corpus_engine::index::CorpusIndex::open(&canonical_path).await {
+    let info = match corpus_index::index::CorpusIndex::open(&canonical_path).await {
         Ok(idx) => match idx.info().await {
             Ok(i) => i,
             Err(e) => {
@@ -317,12 +324,13 @@ pub async fn corpus_canonical_stream(
     let (async_writer, async_reader) = tokio::io::duplex(64 * 1024);
     let sync_writer = tokio_util::io::SyncIoBridge::new(async_writer);
 
+    let engine_for_pack = engine.clone();
     tokio::task::spawn_blocking(move || {
         // Compression level 1 — fast on the sender, ~10% larger than
         // default (3) in our benchmarks. We're network-bound on the
         // common LAN/WAN case; the receiver wins more from sooner-
         // available bytes than from smaller transfer.
-        match corpus_engine::canonical_sync::pack_canonical(&path_for_pack, sync_writer, 1) {
+        match engine_for_pack.pack_canonical(&path_for_pack, Box::new(sync_writer), 1) {
             Ok(bytes_in) => {
                 tracing::info!(
                     corpus = path_for_pack
@@ -477,8 +485,10 @@ pub async fn corpus_status(State(state): State<AppState>) -> Json<CorpusStatusRe
     Json(CorpusStatusResponse { entries })
 }
 
-pub(crate) fn progress_fraction(progress: &corpus_engine::IngestProgress) -> Option<f32> {
-    use corpus_engine::IngestProgress as P;
+pub(crate) fn progress_fraction(
+    progress: &sovereign_contracts::daemon_wire::IngestProgress,
+) -> Option<f32> {
+    use sovereign_contracts::daemon_wire::IngestProgress as P;
     match progress {
         P::Downloading { percent, .. } => Some((*percent / 100.0).clamp(0.0, 1.0)),
         P::Embedding {
@@ -518,7 +528,7 @@ pub struct CorpusStatusEntry {
     /// ingest exited without clearing its entry (daemon crash).
     pub active: bool,
     /// Latest `IngestProgress` observed for this corpus, if any.
-    pub progress: Option<corpus_engine::IngestProgress>,
+    pub progress: Option<sovereign_contracts::daemon_wire::IngestProgress>,
     pub shards_completed: usize,
     pub shards_total: usize,
     pub committed_iter_pos: u64,
@@ -576,7 +586,7 @@ pub async fn corpus_expand(
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         ));
     }
@@ -608,7 +618,10 @@ pub async fn corpus_expand(
 /// (say "embedding") with no task running to ever advance it, i.e. a
 /// permanent fake spinner in place of the error. Safe across retries
 /// because `clear_stale_failure` runs before a new attempt spawns.
-fn ingest_progress_callback(state: AppState, corpus_id: String) -> corpus_engine::ProgressCallback {
+fn ingest_progress_callback(
+    state: AppState,
+    corpus_id: String,
+) -> corpus_index::ingest_port::ProgressCallback {
     Box::new(move |p| {
         let state = state.clone();
         let corpus_id = corpus_id.clone();
@@ -618,7 +631,7 @@ fn ingest_progress_callback(state: AppState, corpus_id: String) -> corpus_engine
             let mut map = state.inner.ingest.corpus_progress.write().await;
             if matches!(
                 map.get(&corpus_id),
-                Some(corpus_engine::IngestProgress::Failed { .. })
+                Some(sovereign_contracts::daemon_wire::IngestProgress::Failed { .. })
             ) {
                 return;
             }
@@ -641,7 +654,9 @@ fn ingest_progress_callback(state: AppState, corpus_id: String) -> corpus_engine
 /// legitimate history until overwritten.
 async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
     let mut progress = state.inner.ingest.corpus_progress.write().await;
-    if let Some(corpus_engine::IngestProgress::Failed { .. }) = progress.get(corpus_id) {
+    if let Some(sovereign_contracts::daemon_wire::IngestProgress::Failed { .. }) =
+        progress.get(corpus_id)
+    {
         progress.remove(corpus_id);
     }
 }
@@ -657,7 +672,7 @@ async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
 async fn record_failure(state: &AppState, corpus_id: &str, message: String) {
     state.inner.ingest.corpus_progress.write().await.insert(
         corpus_id.to_string(),
-        corpus_engine::IngestProgress::Failed { message },
+        sovereign_contracts::daemon_wire::IngestProgress::Failed { message },
     );
 }
 
@@ -751,6 +766,9 @@ pub async fn spawn_corpus_install_outcome(
         );
         return InstallOutcome::NoEngine;
     };
+    // Ingest's atlas port, for the post-install structural atlas; composed
+    // beside the engine, so `None` only where a host slots an engine alone.
+    let atlas = state.inner.node.atlas.clone();
 
     {
         let mut active = state.inner.ingest.active_ingests.write().await;
@@ -768,15 +786,16 @@ pub async fn spawn_corpus_install_outcome(
 
     // Resolve the recipe + apply parameters BEFORE spawning the
     // background task so a parameter mismatch surfaces as a
-    // synchronous failure instead of a silent crash later.
-    let recipe = match engine.registry().fetch_recipe(&corpus_id).await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!(
-                corpus = %corpus_id,
-                error = %e,
-                "spawn_corpus_install: recipe fetch failed"
-            );
+    // synchronous failure instead of a silent crash later. The port
+    // fetches, coerces and resolves in that order and names which step
+    // refused.
+    let prepared = match engine
+        .clone()
+        .prepare_registry_install(&corpus_id, &parameters)
+        .await
+    {
+        Ok(p) => p,
+        Err(refusal) => {
             // Roll back the active_ingests insert so a subsequent
             // retry isn't blocked.
             state
@@ -786,52 +805,12 @@ pub async fn spawn_corpus_install_outcome(
                 .write()
                 .await
                 .remove(&corpus_id);
-            return InstallOutcome::RecipeNotFound(e.to_string());
+            return match refusal {
+                InstallRefusal::RecipeNotFound(e) => InstallOutcome::RecipeNotFound(e),
+                InstallRefusal::InvalidParameters(e) => InstallOutcome::InvalidParameters(e),
+            };
         }
     };
-
-    // Convert the JSON parameter map into TOML values so the
-    // recipe's resolve_parameters can validate them against the
-    // declared schema. JSON arrays of strings become TOML arrays;
-    // JSON strings stay strings. We don't try to be clever: the
-    // CLI / desktop already shaped the input.
-    let toml_params = match json_params_to_toml(&parameters) {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::warn!(
-                corpus = %corpus_id,
-                error = %e,
-                "spawn_corpus_install: parameter coercion failed"
-            );
-            state
-                .inner
-                .ingest
-                .active_ingests
-                .write()
-                .await
-                .remove(&corpus_id);
-            return InstallOutcome::InvalidParameters(e);
-        }
-    };
-    let resolved = match recipe.resolve_parameters(&toml_params) {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!(
-                corpus = %corpus_id,
-                error = %e,
-                "spawn_corpus_install: parameter validation failed"
-            );
-            state
-                .inner
-                .ingest
-                .active_ingests
-                .write()
-                .await
-                .remove(&corpus_id);
-            return InstallOutcome::InvalidParameters(e.to_string());
-        }
-    };
-    let recipe = recipe.with_resolved_parameters(resolved);
 
     let state_for_task = state.clone();
     let corpus_id_for_task = corpus_id.clone();
@@ -846,11 +825,9 @@ pub async fn spawn_corpus_install_outcome(
         // `[enrichment] enabled = false` skips the default post-install
         // structural-atlas + Tier-2 RAPTOR pass below, keeping retrieval sealed
         // to its own chunks (e.g. the chaos-monkey bench corpus). A recipe with
-        // NO [enrichment] keeps the default-on hook. Computed here because
-        // `recipe` is moved into the CorpusSpec on the next line.
-        let recipe_opts_out_of_auto_enrichment = recipe.opts_out_of_auto_enrichment();
-        let spec = corpus_engine::CorpusSpec::Inline(Box::new(recipe));
-        let result = engine.ingest(&spec, Some(progress_cb)).await;
+        // NO [enrichment] keeps the default-on hook.
+        let recipe_opts_out_of_auto_enrichment = prepared.opts_out_of_auto_enrichment;
+        let result = (prepared.run)(Some(progress_cb)).await;
 
         state_for_task
             .inner
@@ -873,13 +850,22 @@ pub async fn spawn_corpus_install_outcome(
                 // thousands of chunks is heavy local resource use that
                 // never crosses a peer boundary, so the contribution
                 // ledger never sees it; this is where it becomes visible.
-                state_for_task.inner.node.activity_emitter.record(
-                    ActivityEventKind::ChunksIngested {
+                if let Err(e) = state_for_task
+                    .inner
+                    .node
+                    .activity_emitter
+                    .record(ActivityEventKind::ChunksIngested {
                         corpus_id: corpus_id_for_task.clone(),
                         chunks: info.chunks_created,
                         duration_secs: info.duration_secs,
-                    },
-                );
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        corpus = %corpus_id_for_task, error = %e,
+                        "spawn_corpus_install: the activity record did not reach the store"
+                    );
+                }
                 // Post-install hook: build the structural atlas the
                 // moment chunks are committed. Detached so the route
                 // handler that triggered the install isn't held up
@@ -920,7 +906,15 @@ pub async fn spawn_corpus_install_outcome(
                         );
                         return;
                     }
-                    use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
+                    let Some(atlas) = atlas else {
+                        tracing::warn!(
+                            corpus = %cid,
+                            "post-install: no ingest atlas port in this process — skipping \
+                             structural atlas + Tier-2 RAPTOR"
+                        );
+                        return;
+                    };
+                    use corpus_index::enrichment_state::{EnrichmentPhase, EnrichmentStateFile};
                     use sovereign_tools::atlas_postinstall::{
                         build_structural_atlas, build_triage_candidates, effective_tier2_budget,
                         StructuralAtlasOutcome, TriageOutcome,
@@ -942,8 +936,13 @@ pub async fn spawn_corpus_install_outcome(
                         0,
                         Some("walking chunks for structural atom extraction"),
                     );
-                    let atlas_ok = match build_structural_atlas(&cid, indexes.clone(), recipes)
-                        .await
+                    let atlas_ok = match build_structural_atlas(
+                        atlas.as_ref(),
+                        &cid,
+                        indexes.clone(),
+                        recipes,
+                    )
+                    .await
                     {
                         StructuralAtlasOutcome::Built {
                             atoms_path,
@@ -970,11 +969,19 @@ pub async fn spawn_corpus_install_outcome(
                             // inference work — record it so the
                             // Activity surface shows "enriched <corpus>"
                             // distinct from the raw ingest embed pass.
-                            enrich_activity.record(ActivityEventKind::CorpusEnriched {
-                                corpus_id: cid.clone(),
-                                atoms: 0,
-                                duration_secs: elapsed_secs as u64,
-                            });
+                            if let Err(e) = enrich_activity
+                                .record(ActivityEventKind::CorpusEnriched {
+                                    corpus_id: cid.clone(),
+                                    atoms: 0,
+                                    duration_secs: elapsed_secs as u64,
+                                })
+                                .await
+                            {
+                                tracing::warn!(
+                                    corpus = %cid, error = %e,
+                                    "post-install: the activity record did not reach the store"
+                                );
+                            }
                             true
                         }
                         StructuralAtlasOutcome::AlreadyPresent { atoms_path } => {
@@ -1027,38 +1034,44 @@ pub async fn spawn_corpus_install_outcome(
                             budget,
                             "post-install: triage — start"
                         );
-                        let triage_path_for_tier2 =
-                            match build_triage_candidates(&cid, indexes.clone(), budget).await {
-                                TriageOutcome::Built {
-                                    path,
-                                    in_corpus_picked,
-                                    elapsed_secs,
-                                } => {
-                                    tracing::info!(
-                                        corpus = %cid,
-                                        path = %path.display(),
-                                        articles = in_corpus_picked,
-                                        elapsed_s = elapsed_secs,
-                                        "post-install: triage — built"
-                                    );
-                                    Some(path)
-                                }
-                                TriageOutcome::NoAtlas => {
-                                    tracing::warn!(
-                                        corpus = %cid,
-                                        "post-install: triage skipped (atlas missing)"
-                                    );
-                                    None
-                                }
-                                TriageOutcome::Failed { reason } => {
-                                    tracing::warn!(
-                                        corpus = %cid,
-                                        reason,
-                                        "post-install: triage failed"
-                                    );
-                                    None
-                                }
-                            };
+                        let triage_path_for_tier2 = match build_triage_candidates(
+                            atlas.as_ref(),
+                            &cid,
+                            indexes.clone(),
+                            budget,
+                        )
+                        .await
+                        {
+                            TriageOutcome::Built {
+                                path,
+                                in_corpus_picked,
+                                elapsed_secs,
+                            } => {
+                                tracing::info!(
+                                    corpus = %cid,
+                                    path = %path.display(),
+                                    articles = in_corpus_picked,
+                                    elapsed_s = elapsed_secs,
+                                    "post-install: triage — built"
+                                );
+                                Some(path)
+                            }
+                            TriageOutcome::NoAtlas => {
+                                tracing::warn!(
+                                    corpus = %cid,
+                                    "post-install: triage skipped (atlas missing)"
+                                );
+                                None
+                            }
+                            TriageOutcome::Failed { reason } => {
+                                tracing::warn!(
+                                    corpus = %cid,
+                                    reason,
+                                    "post-install: triage failed"
+                                );
+                                None
+                            }
+                        };
 
                         // Tier-2 extraction: kick off the long-running
                         // background job that runs Phase 1 over every
@@ -1168,7 +1181,7 @@ pub async fn spawn_corpus_install_outcome(
                     }
                 });
             }
-            Err(corpus_engine::Error::Cancelled(_)) => {
+            Err(corpus_index::Error::Cancelled(_)) => {
                 // Cancel route handles the wipe; we only clean up
                 // the progress map so the UI returns to
                 // "not_installed" on the next poll.
@@ -1229,57 +1242,6 @@ pub struct InstallRequest {
     pub parameters: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
-/// Convert a JSON parameter map (the API's wire format) into a TOML
-/// parameter map, which is what
-/// [`Recipe::resolve_parameters`](corpus_engine::Recipe::resolve_parameters)
-/// expects. JSON strings → TOML strings, JSON integers → TOML ints,
-/// JSON arrays of strings → TOML arrays. Anything else fails with a
-/// helpful error.
-fn json_params_to_toml(
-    params: &std::collections::BTreeMap<String, serde_json::Value>,
-) -> std::result::Result<std::collections::BTreeMap<String, toml::Value>, String> {
-    let mut out = std::collections::BTreeMap::new();
-    for (k, v) in params {
-        let toml_value = match v {
-            serde_json::Value::String(s) => toml::Value::String(s.clone()),
-            serde_json::Value::Number(n) => {
-                if let Some(i) = n.as_i64() {
-                    toml::Value::Integer(i)
-                } else if let Some(f) = n.as_f64() {
-                    toml::Value::Float(f)
-                } else {
-                    return Err(format!("parameter `{k}` is a non-finite number"));
-                }
-            }
-            serde_json::Value::Bool(b) => toml::Value::Boolean(*b),
-            serde_json::Value::Array(arr) => {
-                let mut items = Vec::with_capacity(arr.len());
-                for item in arr {
-                    match item {
-                        serde_json::Value::String(s) => items.push(toml::Value::String(s.clone())),
-                        other => {
-                            return Err(format!(
-                                "parameter `{k}` array entries must be strings, \
-                                 got: {other:?}"
-                            ))
-                        }
-                    }
-                }
-                toml::Value::Array(items)
-            }
-            serde_json::Value::Null => continue,
-            serde_json::Value::Object(_) => {
-                return Err(format!(
-                    "parameter `{k}` is a JSON object — only string, int, \
-                     bool, and string array values are supported"
-                ));
-            }
-        };
-        out.insert(k.clone(), toml_value);
-    }
-    Ok(out)
-}
-
 #[derive(Debug, Serialize)]
 pub struct InstallResponse {
     pub corpus_id: String,
@@ -1314,7 +1276,8 @@ pub enum InstallOutcome {
 
 #[derive(Debug, Serialize)]
 pub struct ProgressSnapshotResponse {
-    pub progress: std::collections::HashMap<String, corpus_engine::IngestProgress>,
+    pub progress:
+        std::collections::HashMap<String, sovereign_contracts::daemon_wire::IngestProgress>,
 }
 
 /// Signal the corpus's cancellation flag and wait (bounded) for the
@@ -1325,11 +1288,7 @@ pub struct ProgressSnapshotResponse {
 /// Returns whether a live task was actually signalled. After this
 /// helper returns the corpus is no longer in `active_ingests` (or the
 /// 5 s ceiling was hit and we've logged a warning).
-async fn stop_in_flight_ingest(
-    state: &AppState,
-    engine: &corpus_engine::CorpusEngine,
-    corpus_id: &str,
-) -> bool {
+async fn stop_in_flight_ingest(state: &AppState, engine: &dyn IngestPort, corpus_id: &str) -> bool {
     let cancelled = engine.cancel_corpus_ingest(corpus_id);
 
     // Bounded poll until the spawn clears from active_ingests. We do
@@ -1401,12 +1360,12 @@ pub async fn corpus_pause(
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         )
     })?;
 
-    let cancelled = stop_in_flight_ingest(&state, engine, &req.corpus_id).await;
+    let cancelled = stop_in_flight_ingest(&state, engine.as_ref(), &req.corpus_id).await;
 
     tracing::info!(
         corpus = %req.corpus_id,
@@ -1465,12 +1424,12 @@ pub async fn corpus_cancel(
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         )
     })?;
 
-    let cancelled = stop_in_flight_ingest(&state, engine, &req.corpus_id).await;
+    let cancelled = stop_in_flight_ingest(&state, engine.as_ref(), &req.corpus_id).await;
 
     // Wipe canonical + every partition-* sibling for this corpus.
     if let Err(e) = engine.remove_corpus_everything(&req.corpus_id) {

@@ -1,0 +1,49 @@
+# Phase B's frozen scope (operator, 2026-09-27, phase-b-32). queue.toml `scope_file` reads it:
+# a row not listed here waits on the operator. A split `<id>-<suffix>` and REVIEW-audit- rows are in scope.
+# Adding a line is an operator decision, recorded as a phase-b-N entry in ralph/decisions/.
+# A split whose id lost its parent's prefix is listed with its parent (scope unchanged):
+pb-reach-guest  # split of pb-rails-reach by phase-b-35 (the guest dialer, at its true ~650 lines)
+HUMAN-pb-lanes-dials-serve
+pb-rails-idle
+pb-bench-lift
+pb-cli-llm
+pb-pods-verb
+pb-meshapp-apps
+pb-pods-worker
+pb-work-doors
+pb-mesh-exit-core
+pb-meshapp-grants
+pb-rails-origins
+pb-rails-reach
+pb-rails-membership
+pb-rails-parity
+pb-work-donor
+pb-ingest-cli
+pb-ingest
+pb-corpus-mcp-reads
+pb-code-server
+pb-code-freshness
+pb-code-index
+pb-code-cli-base
+pb-code-daemon-exit
+pb-code-clean
+pb-notes-memory
+pb-notes-verbs
+pb-ingest-dial-tools
+pb-ingest-dial-daemon
+pb-grants-merge
+pb-ingest-rehome
+pb-bench-dials
+pb-cli-llm-bench-move
+pb-cli-llm-ingest-move
+pb-serve-placement
+pb-serve-distributes
+pb-svrn-serving-ports
+pb-serve-ranks
+pb-mesh-exit-transport
+pb-mesh-exit-mesh
+pb-meshapp-rest
+pb-meshapp-solve
+pb-mesh-dissolve
+pb-serve-package
+pb-distribution

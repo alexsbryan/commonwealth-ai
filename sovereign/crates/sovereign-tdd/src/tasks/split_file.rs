@@ -206,6 +206,7 @@ mod thin_pool_tests {
     fn the_split_default_thins_the_candidate_pool() {
         let tmp = tempfile::tempdir().unwrap();
         let _ = Command::new("git")
+            .current_dir(tmp.path())
             .args(["init", "-q", tmp.path().to_str().unwrap()])
             .status();
         let workdir = Workdir::check_safe(tmp.path().to_path_buf(), true).unwrap();

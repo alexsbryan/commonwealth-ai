@@ -7,12 +7,12 @@
 
 use std::sync::Arc;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::health::{
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::health::{
     Component, HealthCheckable, HealthIssue, HealthReport, RepairOutcome,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 
 use crate::health::HealthTracker;
 

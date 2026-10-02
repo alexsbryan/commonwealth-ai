@@ -23,8 +23,9 @@
 #
 # The GPU backend is NOT a flag here any more. `windows-vulkan` /
 # `windows-cuda` moved to `sovereign-cli-daemon` at sv-surface svt-7
-# (2026-09-12) — the desktop links no inference stack to forward them to — so
-# a GPU variant is checked by building the SIDECAR:
+# (2026-09-12) — the desktop links no inference stack to forward them to — and
+# on to the loader `sovereign-stock` at pb-distribution-setup, so a GPU variant
+# is checked by staging the sidecars (the loader takes the features):
 #   SOVEREIGN_SIDECAR_FEATURES=windows-vulkan \
 #     scripts/stage-daemon-sidecar.sh x86_64-pc-windows-msvc
 set -euo pipefail

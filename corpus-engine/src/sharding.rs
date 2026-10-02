@@ -1196,50 +1196,8 @@ async fn merge_shards_source_doc_id_newest_mtime(
     Ok(dedup_count)
 }
 
-/// Phase signals emitted by `merge_partitions_into_canonical` for
-/// callers that want to render progress (CLI status lines, daemon
-/// tracing, future progress streams to the UI).
-#[derive(Debug, Clone)]
-pub enum MergePhaseProgress {
-    /// Discovery + preflight finished. `partition_count` is the
-    /// number of `<corpus>-partition-*/` dirs that will be merged.
-    DiscoveryComplete { partition_count: usize },
-    /// Chunk merge phase finished (the `merge_shards` call). Reports
-    /// the deduplication that happened during merge.
-    MergeComplete {
-        chunks_merged: u64,
-        chunks_deduped: u64,
-    },
-    /// Meta-stamping phase finished (scope, processed_shards,
-    /// total_shards, provenance).
-    MetaStamped,
-    /// Sub-phase of `build_indexes` finished — propagates the
-    /// `(done, total)` pair from `build_indexes`'s callback.
-    BuildSubPhase { done: u64, total: u64 },
-    /// `build_indexes` finished and the canonical was marked
-    /// `ingestion_complete`. Recovery is finished.
-    Complete,
-}
-
-/// Result of a partition-merge recovery operation.
-#[derive(Debug, Clone)]
-pub struct PartitionMergeReport {
-    pub partition_paths: Vec<PathBuf>,
-    pub canonical_path: PathBuf,
-    /// Total chunks across the input partitions before dedup.
-    pub chunks_input: u64,
-    /// Chunks present in the canonical after dedup + merge.
-    pub chunks_merged: u64,
-    /// Union of `processed_shards` across all input partitions.
-    pub shard_union: std::collections::BTreeSet<usize>,
-    /// Resolved `total_shards` (max across inputs, falling back to
-    /// `max(union)+1` when none stamped).
-    pub total_shards: Option<usize>,
-    /// Resolved `embedding_model` stamped on the canonical (treats
-    /// empty inputs as wildcard; see `merge_shards`).
-    pub embedding_model: String,
-    pub embedding_dimensions: usize,
-}
+// The merge port's vocabulary lives beside the port (pb-grants-merge).
+pub use corpus_index::ingest_port::merge::{MergePhaseProgress, PartitionMergeReport};
 
 /// Turn a directory that merely HOLDS the merged chunks into a corpus the
 /// rest of the system can see: build the search indexes, mark them built,

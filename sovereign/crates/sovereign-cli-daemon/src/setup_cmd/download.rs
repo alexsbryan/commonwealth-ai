@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Model download wrappers + progress rendering — extracted from
-//! `setup_cmd` (§3.2). Thin CLI-stderr adapters over
-//! `sovereign_inference::setup_planner::download_gguf`.
+//! `setup_cmd` (§3.2). Thin CLI-stderr adapters over the loader's
+//! `download` probe (`sovereign_inference::setup_planner::download_gguf`,
+//! reached by exec since pb-distribution-setup).
 
 use std::io::{self, Write as _};
 use std::path::Path;
 use std::time::Duration;
 
-use sovereign_inference::setup_planner::download_gguf;
+use sovereign_contracts::gguf_validator::{validate_gguf, GgufExpectation};
 
 // ─── Downloaders ───────────────────────────────────────────────────
 //
 // URL building, resume-aware streaming, GGUF validation, and the
 // HF_TOKEN env helper all live in
-// `sovereign_inference::setup_planner` so the desktop's
-// `complete_setup_auto` flow can call the same code. The two
-// thin wrappers below adapt that downloader to the CLI's
-// stderr-renderer style — the CLI prints a ╲ progress bar with
-// `print_progress`, the desktop emits Tauri events.
+// `sovereign_inference::setup_planner`, the loader's, which this
+// crate asks through `super::probe`. The two thin wrappers below
+// adapt that downloader to the CLI's stderr-renderer style — the
+// CLI prints a ╲ progress bar with `print_progress`.
 
 /// Download `url` to `dest`, streaming a percentage bar to stderr.
 /// Resumes from a `.part` sibling if one exists; rejects HTML
@@ -35,14 +35,27 @@ pub(crate) async fn download_with_progress(
     // (ARCH principle 8). `None` for every human-only caller.
     narrator: Option<&super::emit::DownloadNarrator>,
 ) -> Result<(), String> {
-    let expected = sovereign_inference::GgufExpectation::from_size_gb(size_gb);
+    let loader = super::probe::loader()?;
+    download_with_progress_via(&loader, url, dest, display, size_gb, narrator).await
+}
+
+/// [`download_with_progress`] through a named loader binary.
+pub(super) async fn download_with_progress_via(
+    loader: &Path,
+    url: &str,
+    dest: &Path,
+    display: &str,
+    size_gb: f64,
+    narrator: Option<&super::emit::DownloadNarrator>,
+) -> Result<(), String> {
+    let expected = GgufExpectation::from_size_gb(size_gb);
 
     // The shared downloader doesn't print "(already present)" on
     // its own — surface that here for parity with the prior CLI
     // behavior. (`download_gguf` *does* still skip the work; we
     // just want the line to print.)
     if dest.metadata().map(|m| m.len() > 0).unwrap_or(false)
-        && sovereign_inference::validate_gguf(dest, &expected).is_ok()
+        && validate_gguf(dest, &expected).is_ok()
     {
         super::emit::say!("    \u{2713} {display} (already present)");
         return Ok(());
@@ -53,7 +66,7 @@ pub(crate) async fn download_with_progress(
 
     let display_owned = display.to_string();
     let last_print = std::sync::Mutex::new(std::time::Instant::now() - Duration::from_secs(1));
-    let result = download_gguf(url, dest, &expected, &|done, total| {
+    let result = super::probe::download_via(loader, url, dest, size_gb, &|done, total| {
         let mut lp = last_print.lock().unwrap();
         if lp.elapsed() > Duration::from_millis(250) || total.map(|t| done >= t).unwrap_or(false) {
             print_progress(&display_owned, done, total);
@@ -72,8 +85,7 @@ pub(crate) async fn download_with_progress(
 /// rendering. Used for fast + embed where the CLI shows only a
 /// final ✓ line; the shared downloader does all the work.
 pub(super) async fn download_silent(url: &str, dest: &Path, size_gb: f64) -> Result<(), String> {
-    let expected = sovereign_inference::GgufExpectation::from_size_gb(size_gb);
-    download_gguf(url, dest, &expected, &|_, _| {}).await
+    super::probe::download(url, dest, size_gb, &|_, _| {}).await
 }
 /// Given a model file path, look up the slot's advertised
 /// `size_gb` from the bundled manifest by filename match. The

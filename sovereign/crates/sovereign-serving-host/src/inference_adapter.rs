@@ -194,10 +194,9 @@ fn synthesize_tool_stream(resp: ChatCompletionResponse) -> Vec<wire::StreamFrame
 pub struct SovereignInferenceAdapter {
     provider: Arc<dyn InferenceProvider>,
     /// The manifest reader the local slot pick and the self-manifest
-    /// advertisement read through. Supplied by the daemon, because the port's
-    /// implementation names `sovereign-core` and the host may not
-    /// (`sovereign/SERVING_BOUNDARY.md` "The two tiers"; a third
-    /// `[[exception]]` is the kill clause).
+    /// advertisement read through. Supplied by the host binary
+    /// ([`crate::slot_manifest::CoreSlotManifest`] in the daemon and `serve`),
+    /// so a test can hand it a stub.
     manifest: Arc<dyn SlotManifest>,
 }
 
@@ -284,6 +283,21 @@ impl SovereignInferenceAdapter {
                 }
             }
         }
+        // A lone user turn IS the prompt, as on the in-process path: the
+        // engine's chat template makes it the user turn. Labelling it
+        // `User: …\n\nAssistant:` changed what the engine prefilled on every
+        // single-turn request served over the wire (sovereign-serve
+        // tests/chat_round_trip.rs).
+        let mut turns = request
+            .messages
+            .iter()
+            .filter(|m| !matches!(Role::from_openai_str(m.role.as_str()), Role::System));
+        if let (Some(only), None) = (turns.next(), turns.next()) {
+            if matches!(Role::from_openai_str(only.role.as_str()), Role::User) {
+                tracing::debug!("inference_adapter:flatten single user turn, verbatim");
+                return (only.content.clone(), system);
+            }
+        }
         convo.push_str("Assistant:");
         (convo, system)
     }
@@ -343,6 +357,13 @@ impl SovereignInferenceAdapter {
         req.max_tokens = request.max_tokens.map(|n| n as usize);
         req.temperature = request.temperature;
         req.top_p = request.top_p;
+        req.top_k = request.top_k;
+        // Reconstituted, not minted: the listener kept it only for a caller
+        // on this host (`crate::turn_admission`).
+        req.admission = request
+            .turn_admission
+            .as_deref()
+            .map(sovereign_contracts::types::TurnAdmission::new);
         req.sampling_mode = request.sampling_mode;
         req.assistant_prefix = request.assistant_prefix.clone();
         req.cmd_prefix = request.cmd_prefix.clone();

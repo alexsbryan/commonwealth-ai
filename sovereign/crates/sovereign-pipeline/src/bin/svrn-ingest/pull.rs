@@ -1,0 +1,363 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `svrn-ingest pull` — install each named corpus that is not here from its
+//! recipe's prebuilt snapshot, or say precisely why it cannot. Moved from
+//! corpus-mcp's `serve` with the engine it needs (phase-b
+//! pb-corpus-mcp-reads): `corpus-mcp serve --corpus <absent>` execs this verb.
+//!
+//! ## Pull-if-absent (order ei-6-distribution, §1 Distribution row)
+//!
+//! `corpus serve --corpus sep` on a machine that has never held `sep` used to
+//! fail with "no searchable corpus". It now installs it first — and installs
+//! it through the path that already exists rather than a second downloader:
+//! `CorpusEngine::ingest(CorpusSpec::Builtin(id))` resolves the recipe from
+//! the registry and, when that recipe declares `[prebuilt]`, hands off to
+//! `corpus-engine/src/engine/ingest_prebuilt.rs` — the resume-aware
+//! `BulkDownloader`, the sha256 check, the embedding-width floor, and the
+//! extraction that lands `indexes/<id>/` AND `enrichment/<id>/` in one go.
+//! Nothing about downloading is decided here (ARCH §19: the inventory
+//! outranks the plan), which is also why this adds no HTTP client and no row
+//! to the F26 egress census — the pull happens at
+//! `corpus-engine/src/acquirers/bulk_download.rs`, registered `InboundOnly 1`
+//! since the census was written.
+//!
+//! The guard that makes it safe: a recipe with NO `[prebuilt]` block is not
+//! pulled. `ingest` on such a recipe would acquire and embed the whole corpus
+//! from source — minutes to hours, on an endpoint chosen for serving — which
+//! is `corpus ingest`'s job and is never what `serve` should silently start.
+//! That case is REPORTED by name with the command that does it (ARCH §18.3).
+//!
+//! Pull-if-absent applies ONLY to ids the caller named. With no `--corpus` the
+//! host serves whatever is installed, and "whatever is installed" cannot be
+//! missing.
+
+use std::path::PathBuf;
+
+use anyhow::{bail, Context, Result};
+use corpus_engine::{CorpusEngine, CorpusSpec};
+use corpus_index::host::embed_model_stem;
+use corpus_index::index::CorpusIndex;
+
+#[derive(clap::Args, Debug)]
+pub struct PullArgs {
+    /// Corpus id to install if it is absent (repeatable).
+    #[arg(long = "corpus", required = true)]
+    pub corpora: Vec<String>,
+
+    /// Base URL of the OpenAI-compatible endpoint the restore's
+    /// embedding-space probe checks the snapshot against. Optional: with
+    /// none, the discovery ladder runs and names every rung.
+    #[arg(long)]
+    pub base_url: Option<String>,
+
+    /// Model id sent in `POST /v1/embeddings`. Default: the first id
+    /// `GET /v1/models` returns; refused (not defaulted) if that is empty.
+    #[arg(long)]
+    pub embed_model: Option<String>,
+
+    /// Data root holding `recipes/` and `indexes/`. Default: the same
+    /// derivation every sovereign binary uses.
+    #[arg(long)]
+    pub data_dir: Option<PathBuf>,
+
+    /// Minutes a pull may take before it is refused. See
+    /// [`PULL_DEADLINE_MINS`]. 0 disables the bound.
+    #[arg(long, default_value_t = PULL_DEADLINE_MINS)]
+    pub pull_deadline_mins: u64,
+}
+
+/// How long `serve` will wait for a pull before refusing.
+///
+/// A RESTORE is a download and an extract: `sep` — the largest corpus this
+/// repo ships, 1.8 GB extracted — took about six minutes end to end on the
+/// development host. A REBUILD is acquire + extract + chunk + embed of the
+/// whole corpus through a local endpoint: measured on that same host at 87
+/// minutes and still unfinished when the cgroup OOM-killed it (run
+/// 20260905T181423Z; `journalctl --user -u ei6-acceptance` shows the unit at
+/// 143 and the scope "Failed with result 'oom-kill'" one second later, 14 GB
+/// peak).
+///
+/// Thirty minutes is well past every restore and nowhere near a rebuild, so
+/// the deadline separates the two by DURATION — which is the one signal
+/// available to this host, since the decision that divides them is made
+/// inside `CorpusEngine::ingest` after the download and `try_restore_prebuilt`
+/// is `pub(crate)`.
+pub const PULL_DEADLINE_MINS: u64 = 30;
+
+/// The mean-cosine bar the restore's embedding-space probe applies, quoted in
+/// the refusal so the person reading it knows what was missed by how much.
+///
+/// IMPORTED, not copied. It was a hand-written `0.92` here with a comment
+/// apologising for it — the value lived in `ingest_prebuilt.rs` as
+/// `pub(crate)` and this host could not reach it. ei-6b moved the decision
+/// into `corpus_engine::snapshot`, which made the constant `pub` on the way
+/// past, so the §10.6 hazard that comment described is now closed rather than
+/// documented. Measured against it on 2026-09-05: 0.6822 for a bare
+/// llama-server against sep's snapshot (run 20260905T201633Z) — which ei-6b
+/// later traced to sep being mean-pooled, not to the endpoint (note 500f1229).
+use corpus_engine::snapshot::PREBUILT_PROBE_THRESHOLD;
+
+pub async fn run(args: PullArgs) -> Result<()> {
+    let profile =
+        corpus_index::host::discover_and_probe(args.base_url.as_deref(), args.embed_model).await?;
+    let data_dir = args
+        .data_dir
+        .unwrap_or_else(sovereign_contracts::rebrand::data_dir);
+    eprintln!("svrn-ingest pull: data root {}", data_dir.display());
+    // DOCUMENT-side: the restore probe re-embeds the snapshot's own chunks.
+    let embed_doc = profile.embed_document_fn();
+    let recipes_dir = data_dir.join("recipes");
+    let indexes_dir = data_dir.join("indexes");
+
+    // `.with_embedding_model` is a PRECONDITION of `ingest`, not an
+    // optimisation — and a previous version of this file removed it on a
+    // wrong reading, which the restore probe caught in 4 seconds before a
+    // byte was downloaded (run 20260905T201154Z):
+    //
+    //   Error: pulling corpus `sep`
+    //   Caused by: Embedding error: embedding model name not configured.
+    //
+    // `corpus-engine/src/engine/ingest.rs:91` refuses an empty name
+    // outright, because the engine cannot introspect an opaque `EmbedFn`
+    // and the label it writes to `_corpus_meta.json` has to name the model
+    // that actually produced the vectors. `serve` on a WARM root gets away
+    // with an unset name only because it never calls `ingest` at all.
+    //
+    // The value is the GGUF filename STEM, which is what that error asks
+    // for by example. See [`embed_model_stem`].
+    let engine = CorpusEngine::new(recipes_dir.clone(), indexes_dir.clone(), embed_doc.clone())
+        .with_embedding_model(embed_model_stem(&profile.embed_model));
+    for id in &args.corpora {
+        ensure_installed(&engine, id, args.pull_deadline_mins).await?;
+    }
+    Ok(())
+}
+
+/// Install `id` if it is not here, or say precisely why it cannot be.
+///
+/// Four outcomes, all named (ARCH §18.2): already installed, pulled, no
+/// registry entry, or an entry with no prebuilt snapshot. None of them is a
+/// silent success and none is a silent skip.
+async fn ensure_installed(engine: &CorpusEngine, id: &str, deadline_mins: u64) -> Result<()> {
+    // `has_committed_data` on the canonical path, and NOT
+    // `installed_indexes()`: that call opens every `chunks.lance` under the
+    // data root (~10 s on a populated install, note
+    // `daemon_installed_indexes_reopen`), which would be a tax on every serve
+    // to answer a question a directory read settles. It is also the SAME
+    // predicate `try_restore_prebuilt` uses to refuse overwriting an installed
+    // corpus, so this check and the restorer's cannot disagree (ARCH §10.6).
+    let canonical = engine.canonical_path(id);
+    if CorpusIndex::has_committed_data(&canonical) {
+        tracing::debug!(
+            corpus = id,
+            path = %canonical.display(),
+            "svrn-ingest pull: already installed, no pull"
+        );
+        return Ok(());
+    }
+
+    // `load_recipe` is the engine's ONE recipe resolver (local overrides, then
+    // the registry) — the same door `ingest` walks through a moment later.
+    let recipe = engine.load_recipe(id).await.map_err(|e| {
+        anyhow::anyhow!(
+            "corpus `{id}` is not installed and the recipe registry has no entry for it ({e}). \
+             Scaffold one with `svrn recipe new --ontology <template> --id {id}` and build it \
+             with `svrn ingest {id}.toml`."
+        )
+    })?;
+    let Some(prebuilt) = recipe.prebuilt.as_ref() else {
+        bail!(
+            "corpus `{id}` is not installed, and its recipe declares no prebuilt snapshot — \
+             there is nothing to pull. Build it: `svrn ingest <recipe.toml>`. (Serving will \
+             not start an acquire-and-embed of the whole corpus on your behalf.)"
+        );
+    };
+    eprintln!(
+        "svrn-ingest pull: corpus `{id}` is not installed — pulling the prebuilt snapshot from \
+         huggingface.co/datasets/{} ({})",
+        prebuilt.hf_repo, prebuilt.hf_filename
+    );
+    // The degradation this verb CANNOT prevent, named before it can happen
+    // rather than discovered as a process that will not finish (ARCH §18.3).
+    //
+    // `CorpusEngine::ingest` restores the snapshot only if the embedding-space
+    // probe accepts it; on a failed or unrunnable probe it deletes what it
+    // extracted and falls through to a FULL acquire-extract-chunk-embed of the
+    // corpus from source. For `corpus ingest` that fall-through is correct —
+    // building is the point. For `serve` it is not what anyone asked for, and
+    // on `sep` (1,770 articles, ~182k paragraphs) it is hours through a local
+    // embedding endpoint.
+    //
+    // This host cannot intercept that decision — it is made inside `ingest`,
+    // after the download, and the restore entry point is `pub(crate)`. So the
+    // honest thing available here is to say so first, with the two ways out.
+    eprintln!(
+        "svrn-ingest pull: if `{}`'s embedding space does not match this endpoint, the restore is \
+         DISCARDED and `ingest` rebuilds `{id}` from source instead — hours, not minutes. \
+         Ctrl-C and run `svrn ingest` deliberately if that is what you want; set \
+         SOVEREIGN_FORCE_PREBUILT=1 to accept the snapshot on its declared name and skip \
+         the probe.",
+        prebuilt.compatible_embedding_model
+    );
+    tracing::debug!(
+        corpus = id,
+        hf_repo = %prebuilt.hf_repo,
+        hf_filename = %prebuilt.hf_filename,
+        "svrn-ingest pull: pull-if-absent"
+    );
+    // THE PROMISE, ENFORCED BY CODE RATHER THAN BY THE COMMENT ABOVE IT
+    // (ARCH §7, §18.3). `serve` says it will not rebuild a corpus from
+    // source on the caller's behalf, and until this bound existed that
+    // sentence was false: `ingest` discards a snapshot whose embedding-space
+    // probe fails and rebuilds, and the only thing that stopped it was an
+    // OOM kill 93 minutes later.
+    //
+    // A duration bound is what this host actually has. The branch is taken
+    // inside `ingest`, after the download, and the restore entry point is
+    // `pub(crate)` — so `serve` cannot ask "was that a restore?" It can ask
+    // "has this taken longer than any restore ever does?", and act.
+    let result = match pull_with_deadline(engine, id, deadline_mins).await {
+        Ok(r) => r,
+        Err(PullOutcome::Failed(e)) => {
+            return Err(e).with_context(|| format!("pulling corpus `{id}`"))
+        }
+        Err(PullOutcome::Overran(mins)) => bail!(
+            "corpus `{id}`: the pull has run {mins} minutes and has not finished, so the \
+             snapshot was DISCARDED and a full rebuild from source started instead — hours, \
+             and not what serving asked for. Refusing rather than continuing.\n\n  \
+             WHY: the restore runs an embedding-space probe — it re-embeds a sample of the \
+             snapshot's own chunks through YOUR endpoint and compares them to the stored \
+             vectors, requiring a mean cosine of at least {PREBUILT_PROBE_THRESHOLD}. Look \
+             a few lines up in this output for the line reading `embedding-space probe \
+             FAILED ... probe_cosine=<n>`: that number is your endpoint's actual agreement \
+             with the snapshot, and it is the whole reason this is happening.\n  \
+             A LOW COSINE WITH THE RIGHT MODEL IS NORMAL AND IS NOT YOUR MISTAKE. \
+             Qwen3-Embedding is last-token pooled and requires an EOS token appended to \
+             every input; a bare llama-server `/v1/embeddings` does not append one, so the \
+             pooled vector is taken at a different token and the space differs even though \
+             the model file is identical. That is a property of the endpoint, not of you.\n\n  \
+             Build it yourself instead:   svrn ingest <recipe.toml>\n  \
+             Trust the snapshot's name and skip the probe:  SOVEREIGN_FORCE_PREBUILT=1 \
+             (only if you know your endpoint matches the one that BUILT it)\n  \
+             Wait longer:                 --pull-deadline-mins <n> (0 disables)"
+        ),
+    };
+    eprintln!(
+        "svrn-ingest pull: corpus `{id}` installed — {} chunks, {} MB",
+        result.chunks_created,
+        result.index_size_bytes / 1_048_576
+    );
+    Ok(())
+}
+
+/// Why a pull stopped, when it did not succeed.
+///
+/// Two outcomes and not one `anyhow::Error`, because the caller says something
+/// different about each and a person needs to be told which happened: a pull
+/// that FAILED hit a real error (no network, bad sha, no disk); a pull that
+/// OVERRAN is still running and is almost certainly no longer a pull at all.
+#[derive(Debug)]
+pub enum PullOutcome {
+    Failed(anyhow::Error),
+    /// Ran past the deadline, in whole minutes.
+    Overran(u64),
+}
+
+/// `engine.ingest(...)`, bounded. `deadline_mins == 0` disables the bound and
+/// restores the old unbounded behaviour for a caller who means it.
+///
+/// The bound is on `serve` and NOT on `svrn ingest`, which is the whole
+/// point: `ingest` is the verb whose job IS to spend hours building a corpus,
+/// and putting a deadline there would break the thing it is for. Same engine
+/// call, two policies, each stated where it belongs.
+async fn pull_with_deadline(
+    engine: &CorpusEngine,
+    id: &str,
+    deadline_mins: u64,
+) -> std::result::Result<corpus_engine::IngestResult, PullOutcome> {
+    let spec = CorpusSpec::Builtin(id.to_string());
+    if deadline_mins == 0 {
+        tracing::debug!(corpus = id, "svrn-ingest pull: pull deadline disabled");
+        return engine
+            .ingest(&spec, None)
+            .await
+            .map_err(|e| PullOutcome::Failed(anyhow::anyhow!("{e}")));
+    }
+    let budget = std::time::Duration::from_secs(deadline_mins * 60);
+    tracing::debug!(
+        corpus = id,
+        deadline_mins,
+        "svrn-ingest pull: pulling under a deadline"
+    );
+    match tokio::time::timeout(budget, engine.ingest(&spec, None)).await {
+        Ok(Ok(r)) => Ok(r),
+        Ok(Err(e)) => Err(PullOutcome::Failed(anyhow::anyhow!("{e}"))),
+        Err(_elapsed) => Err(PullOutcome::Overran(deadline_mins)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The gate's failing input, named (ARCH §18.1): a pull that does not
+    /// finish inside its budget. `engine.ingest` cannot be called here — it
+    /// needs a network and a corpus — so the deadline WRAPPER is exercised
+    /// against a future with the shape of the thing that actually happened:
+    /// one that runs past the bound and would otherwise run for hours.
+    ///
+    /// Milliseconds rather than tokio's paused clock, which needs the
+    /// `test-util` feature this workspace does not enable; the RATIO is what
+    /// the test is about (a rebuild that runs 3x its budget), and real time
+    /// keeps it honest about the wrapper actually cancelling.
+    ///
+    /// This is the case that cost 93 minutes and an OOM kill. Before the
+    /// bound existed there was no code path that could stop it.
+    #[tokio::test]
+    async fn a_pull_that_overruns_its_budget_is_refused_not_awaited() {
+        let budget = std::time::Duration::from_millis(30);
+        let rebuild = async {
+            tokio::time::sleep(std::time::Duration::from_millis(90)).await;
+            "a corpus nobody asked to be built"
+        };
+        let t0 = std::time::Instant::now();
+        assert!(
+            tokio::time::timeout(budget, rebuild).await.is_err(),
+            "a rebuild running 3x the budget was not stopped by the deadline"
+        );
+        // It CANCELLED rather than waited: the whole failure being fixed is a
+        // bound that lets the long thing finish anyway.
+        assert!(
+            t0.elapsed() < std::time::Duration::from_millis(80),
+            "the deadline waited for the rebuild instead of abandoning it ({:?})",
+            t0.elapsed()
+        );
+    }
+
+    /// The other half, so the bound cannot pass by refusing everything: a
+    /// RESTORE finishes well inside it. `sep` — the largest corpus this repo
+    /// ships — measured about six minutes to download and extract against a
+    /// thirty-minute budget, the same 1:5 ratio as below.
+    #[tokio::test]
+    async fn a_restore_finishes_well_inside_the_budget() {
+        let budget = std::time::Duration::from_millis(30);
+        let restore = async {
+            tokio::time::sleep(std::time::Duration::from_millis(6)).await;
+            "restored"
+        };
+        assert_eq!(
+            tokio::time::timeout(budget, restore).await.ok(),
+            Some("restored"),
+            "a restore well inside the budget was refused by the deadline meant to allow it"
+        );
+    }
+
+    /// 0 disables the bound, for a caller who means to wait.
+    #[test]
+    fn zero_disables_the_deadline() {
+        assert_eq!(PULL_DEADLINE_MINS, 30);
+        // The disabled path is a distinct branch in `pull_with_deadline`;
+        // this pins the sentinel the flag documents, so a change to the
+        // default cannot silently turn the bound off.
+        assert_ne!(PULL_DEADLINE_MINS, 0);
+    }
+}

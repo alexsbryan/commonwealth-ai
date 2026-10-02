@@ -4,7 +4,7 @@
 //!
 //! Reads the corpus's `atoms.json`, filters to Parcel `Entity` atoms,
 //! and folds their typed `attributes` into the revenue-neutral land-levy
-//! figures via `corpus_engine`'s pure `parcel_analytics` lib. Returns the
+//! figures via the atlas reader's pure `parcel_analytics` lib. Returns the
 //! figures PRE-FORMATTED WITH CITATIONS so the synthesis layer quotes
 //! numbers it cannot have invented — Layer 1 of the LVT "no confabulated
 //! numbers" guarantee. `Effect::Read`, no permissions, no inference: the
@@ -21,12 +21,12 @@ use serde_json::json;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::{StepOutput, ToolContext};
 
-use corpus_engine::enrichment::atlas::analysis::{compute_aggregates, flags, FlagKind};
-use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
-use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
-use corpus_engine::CorpusEngine;
+use corpus_engine_atlas_reader::parcel_analytics::{compute_aggregates, flags, FlagKind};
+use corpus_index::source::CorpusReadPort;
 use sovereign_core::tool_manifest::DeclaredTool;
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
+use understanding_vocab::taxonomy::EntityType;
 
 const DEFAULT_CORPUS_ID: &str = "sf-assessor-roll";
 const DEFAULT_ENTITY_TYPE: &str = "parcel";
@@ -39,11 +39,11 @@ const DEFAULT_PROPERTY_TAX_RATE: f64 = 0.0118;
 
 /// Deterministic LVT analytics over a parcel corpus.
 pub struct ParcelAnalyticsTool {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn CorpusReadPort>,
 }
 
 impl ParcelAnalyticsTool {
-    pub fn new(engine: Arc<CorpusEngine>) -> Self {
+    pub fn new(engine: Arc<dyn CorpusReadPort>) -> Self {
         Self { engine }
     }
 }

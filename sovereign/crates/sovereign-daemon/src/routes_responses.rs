@@ -10,8 +10,8 @@
 //!
 //! Adapter, not duplicate (ARCH §10.1, §10.3): the only path
 //! difference between `/v1/chat/completions` and `/v1/responses` is
-//! the translation layer. All slot routing, OICP gating, ATOS
-//! middleware, grammar-constrained tool calls, and SSE streaming run
+//! the translation layer. All slot routing, OICP gating,
+//! grammar-constrained tool calls, and SSE streaming run
 //! through the existing handler.
 //!
 //! What we accept (codex subset of the public Responses spec):
@@ -83,7 +83,7 @@ use crate::state::AppState;
 pub async fn responses(
     State(state): State<AppState>,
     headers: HeaderMap,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(mut req): Json<ResponsesRequest>,
 ) -> Response {
     // ── Harness-aware frontdoor passes ────────────────────────────────
@@ -219,7 +219,11 @@ pub async fn responses(
         ResponsesInput::Text(_) => 1,
     };
 
-    let frontdoor_on = frontdoor::is_enabled();
+    // The `SOVEREIGN_FRONTDOOR` alias this used to read was cut 2026-09-21
+    // (default off, never set outside its own tests). The harness profile is
+    // the decider now, and `runs_catalog_filter()` is the same predicate
+    // `translate_request` binds as `frontdoor_on` — ONE decider, not two.
+    let frontdoor_on = harness.runs_catalog_filter();
 
     // ── Inbound telemetry record ─────────────────────────────────────
     write_session_telemetry(serde_json::json!({
@@ -267,6 +271,7 @@ pub async fn responses(
         // re-decide who is asking.
         attached,
         // `/v1/responses` is not a path any `Scope` names — see routes_ollama.
+        None,
         None,
         Json(chat_req),
     )
@@ -350,7 +355,7 @@ fn translate_request(
     // deterministic half of the frontdoor (see `frontdoor` module
     // docs). When off, all tools pass through.
     //
-    // Caller (`responses()`) reads `frontdoor::is_enabled()` once and
+    // Caller (`responses()`) derives the harness once and
     // passes it down so unit tests can drive both paths without
     // racing on a shared env var.
     let tools = req.tools.map(|tools_in| {
@@ -575,6 +580,8 @@ fn translate_request(
         evidence_id_allowlist: None,
         lark_grammar: None,
         stable_prefix_len: None,
+        top_k: None,
+        turn_admission: None,
     })
 }
 
@@ -1544,7 +1551,7 @@ fn sse_event(event_name: &'static str, payload: &serde_json::Value) -> Event {
 // ─── Generic helpers ────────────────────────────────────────────────
 
 fn mk_response_id() -> String {
-    format!("resp_{}", commonwealth_core::clock::unix_now_millis())
+    format!("resp_{}", sovereign_time::unix_millis())
 }
 
 use sovereign_time::unix_now_u64 as now_unix_secs;

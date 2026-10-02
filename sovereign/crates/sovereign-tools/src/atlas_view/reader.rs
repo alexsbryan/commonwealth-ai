@@ -9,11 +9,13 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::atoms::AtomType;
-use corpus_engine::enrichment::atlas::{read_or_compute_atlas_summary, ATLAS_DIRNAME};
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use understanding_vocab::atoms::AtomType;
+use understanding_vocab::read::ATLAS_DIRNAME;
 
 /// One row in the corpus picker.
 ///
@@ -113,7 +115,7 @@ pub struct AtlasBuildReport {
     /// rate. Reused whole rather than re-flattened — the card wants exactly
     /// what the CLI report prints (§19).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ontology: Option<corpus_engine::enrichment::atlas::ontology_coverage::OntologyCoverage>,
+    pub ontology: Option<corpus_engine_atlas_reader::schema_report::OntologyCoverage>,
     /// Whether the atom-level ANN table exists AND is newer than `atoms.json`.
     /// `false` with `grounding_present` true means a rebuild left it stale, so
     /// the card can say "re-run backfill" rather than "not grounded".
@@ -183,17 +185,28 @@ pub enum AtlasViewError {
 /// At the inspection rates this drives (a human clicking through a
 /// list), the re-read cost is irrelevant and the simplicity is worth
 /// more than the throughput.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct FileAtlasReader {
     indexes_dir: PathBuf,
+    atlas: Arc<dyn AtlasPort>,
+}
+
+impl std::fmt::Debug for FileAtlasReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileAtlasReader")
+            .field("indexes_dir", &self.indexes_dir)
+            .finish_non_exhaustive()
+    }
 }
 
 impl FileAtlasReader {
     /// Build a reader rooted at the corpus indexes directory
     /// (typically `<data_dir>/indexes`, the same path
     /// `compute_atlas_status` walks).
-    pub fn new(indexes_dir: PathBuf) -> Self {
-        Self { indexes_dir }
+    /// The summary and grounding-freshness reads, which write or derive,
+    /// go through ingest's `atlas` port.
+    pub fn new(indexes_dir: PathBuf, atlas: Arc<dyn AtlasPort>) -> Self {
+        Self { indexes_dir, atlas }
     }
 
     /// Resolve the on-disk atlas directory for a given corpus.
@@ -231,17 +244,14 @@ impl FileAtlasReader {
         let Some(atlas_dir) = self.atlas_dir(corpus_id) else {
             return Err(AtlasViewError::CorpusNotFound(corpus_id.to_string()));
         };
-        let report = corpus_engine::enrichment::atlas::read_schema_validation_report(&atlas_dir);
+        let report =
+            corpus_engine_atlas_reader::schema_report::read_schema_validation_report(&atlas_dir);
         Ok(AtlasBuildReport {
             corpus_id: corpus_id.to_string(),
             reported: report.is_some(),
             ontology: report.and_then(|r| r.ontology),
-            grounding_fresh: corpus_engine::enrichment::atlas::ann_store::ann_table_is_fresh(
-                &atlas_dir,
-            ),
-            grounding_present: corpus_engine::enrichment::atlas::ann_store::ann_table_present(
-                &atlas_dir,
-            ),
+            grounding_fresh: self.atlas.ann_table_is_fresh(&atlas_dir),
+            grounding_present: corpus_engine_atlas_reader::ann_store::ann_table_present(&atlas_dir),
         })
     }
 
@@ -289,8 +299,9 @@ impl FileAtlasReader {
         // path. Either way the reads proceed concurrently.
         let mut handles = Vec::with_capacity(candidates.len());
         for (corpus_id, atlas_dir) in candidates {
+            let atlas = Arc::clone(&self.atlas);
             let h = tokio::task::spawn_blocking(move || {
-                let result = summarise_corpus(&corpus_id, &atlas_dir);
+                let result = summarise_corpus(&*atlas, &corpus_id, &atlas_dir);
                 (corpus_id, atlas_dir, result)
             });
             handles.push(h);
@@ -379,8 +390,9 @@ impl FileAtlasReader {
         let mut handles = Vec::with_capacity(scanned);
         for (corpus_id, atlas_dir) in candidates {
             let parent = parent_corpus_id.to_string();
+            let atlas = Arc::clone(&self.atlas);
             let h = tokio::task::spawn_blocking(move || {
-                let result = summarise_corpus(&corpus_id, &atlas_dir);
+                let result = summarise_corpus(&*atlas, &corpus_id, &atlas_dir);
                 (parent, corpus_id, atlas_dir, result)
             });
             handles.push(h);
@@ -473,6 +485,7 @@ fn member_title(parent_corpus_id: &str, corpus_id: &str) -> String {
 }
 
 fn summarise_corpus(
+    atlas: &dyn AtlasPort,
     corpus_id: &str,
     atlas_dir: &Path,
 ) -> Result<AtlasCorpusSummary, std::io::Error> {
@@ -482,7 +495,7 @@ fn summarise_corpus(
     // atoms.json cache key — returns in microseconds. Cold path:
     // cache miss recomputes once and writes the sidecar, so
     // subsequent calls hit the hot path.
-    let summary = match read_or_compute_atlas_summary(atlas_dir)? {
+    let summary = match atlas.atlas_summary(atlas_dir)? {
         Some(s) => s,
         None => {
             // No atoms.json on disk yet. The walk already filtered
@@ -588,13 +601,12 @@ fn read_display_meta(atlas_dir: &Path) -> (Option<String>, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::atoms::{
-        AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity,
-    };
-    use corpus_engine::enrichment::pipeline::atlas::{
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+    use tempfile::TempDir;
+    use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity};
+    use understanding_vocab::taxonomy::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus,
     };
-    use tempfile::TempDir;
 
     fn write_atoms(atlas_dir: &Path, atoms: Vec<AtomEnvelope>) {
         std::fs::create_dir_all(atlas_dir).unwrap();
@@ -649,13 +661,19 @@ mod tests {
 
     fn make_reader() -> (TempDir, FileAtlasReader) {
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         (tmp, reader)
     }
 
     #[tokio::test]
     async fn list_corpora_returns_empty_when_indexes_dir_missing() {
-        let reader = FileAtlasReader::new(PathBuf::from("/this/path/does/not/exist/xyz"));
+        let reader = FileAtlasReader::new(
+            PathBuf::from("/this/path/does/not/exist/xyz"),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         let summaries = reader.list_corpora().await.unwrap();
         assert!(summaries.is_empty());
     }
@@ -765,44 +783,6 @@ mod tests {
         assert_eq!(ids, vec!["good"]);
     }
 
-    #[tokio::test]
-    async fn list_corpora_uses_cached_summary_on_repeat_calls() {
-        // Pins the perf win: after the first call writes _summary.json,
-        // a follow-up call can read it even if atoms.json becomes
-        // unreadable. Atoms.json is hidden between calls to prove the
-        // cache is the data source, not the live file.
-        let (tmp, reader) = make_reader();
-        let atlas_dir = tmp.path().join("wikipedia").join("atlas");
-        write_atoms(
-            &atlas_dir,
-            vec![sample_entity(1, "Earth"), sample_entity(2, "Mars")],
-        );
-        let first = reader.list_corpora().await.unwrap();
-        assert_eq!(first[0].total_atoms, 2);
-        assert!(atlas_dir.join("_summary.json").exists());
-
-        // Make atoms.json unreadable by replacing it with garbage,
-        // but keep its mtime + size identical so the cache key
-        // still matches. The summary cache should still satisfy.
-        let original = std::fs::metadata(atlas_dir.join("atoms.json")).unwrap();
-        std::fs::write(
-            atlas_dir.join("atoms.json"),
-            vec![0u8; original.len() as usize],
-        )
-        .unwrap();
-        filetime::set_file_mtime(
-            atlas_dir.join("atoms.json"),
-            filetime::FileTime::from_system_time(original.modified().unwrap()),
-        )
-        .unwrap();
-        let second = reader.list_corpora().await.unwrap();
-        assert_eq!(second[0].total_atoms, 2);
-        assert_eq!(
-            second[0].atom_counts.get(&AtomType::Entity).copied(),
-            Some(2)
-        );
-    }
-
     #[test]
     fn atlas_dir_resolves_known_corpus() {
         let (tmp, reader) = make_reader();
@@ -910,7 +890,14 @@ mod tests {
     #[tokio::test]
     async fn build_report_separates_unbuilt_from_undeclared() {
         let tmp = TempDir::new().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(
+                AtlasPortDouble::new()
+                    .with_computed_summaries()
+                    .on_ann_table_is_fresh(|_| false),
+            ),
+        );
 
         // No atlas dir at all is the one error case.
         assert!(reader.build_report("nothing-here").await.is_err());
@@ -1085,7 +1072,10 @@ mod tests {
 
     #[tokio::test]
     async fn list_members_returns_empty_when_indexes_dir_missing() {
-        let reader = FileAtlasReader::new(PathBuf::from("/this/path/does/not/exist/xyz"));
+        let reader = FileAtlasReader::new(
+            PathBuf::from("/this/path/does/not/exist/xyz"),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         assert!(reader.list_members("sep").await.unwrap().is_empty());
     }
 
@@ -1118,23 +1108,24 @@ mod tests {
     ///
     /// Lived in `sovereign-desktop`'s `atlas_commands.rs` until 2026-09-11;
     /// it pins the on-disk fixture the ROUTE reads, not the command, and the
-    /// desktop no longer links this crate's reader. The fixture stays with
-    /// the spec that owns it, hence the relative path — and the "absent →
-    /// skip" arm: the fixture is committed, so absence means a partial
-    /// checkout, not a regression.
+    /// desktop no longer links this crate's reader. The fixture moved here
+    /// from `sovereign-desktop/tests/e2e/real/fixtures/` on 2026-09-21
+    /// (boundary-gate rule 3c — the climb out of this crate root); the
+    /// Playwright spec reads it across the repo, which nothing gates.
+    /// The "absent → skip" arm went with it: the fixture is committed, so a
+    /// gate that cannot fail was the wrong shape (ARCH §18.1).
     #[tokio::test]
     async fn numismatics_real_fixture_carries_the_census_its_spec_asserts() {
         use crate::atlas_view::{AtomFilter, PageCursor};
 
-        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../sovereign-desktop/tests/e2e/real/fixtures/numismatics-atlas");
-        if !fixture.join("ontology.json").exists() {
-            eprintln!(
-                "[skip] numismatics real-mode fixture absent at {}",
-                fixture.display()
-            );
-            return;
-        }
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/numismatics-atlas");
+        assert!(
+            fixture.join("ontology.json").exists(),
+            "numismatics fixture absent at {} — it is committed; repair the \
+             checkout, do not skip",
+            fixture.display()
+        );
 
         // Lay it out exactly as `plantNumismaticsCorpus` does: one index dir
         // with an `atlas/` holding the three overlay files.
@@ -1146,7 +1137,10 @@ mod tests {
                 .unwrap_or_else(|e| panic!("copying {f}: {e}"));
         }
 
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         let rows = reader.list_corpora().await.expect("list_corpora succeeds");
         let row = rows
             .iter()

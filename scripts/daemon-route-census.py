@@ -57,7 +57,6 @@ RULES = [
     (r"^/internal/(model|index)/transfer$", "job"),
     (r"^/internal/models/(load|unload|inventory)$", "job"),
     (r"^/internal/(scheduling|ingest/budget|storage/budget|contribution)", "job"),
-    (r"^/v1/apps/\{app_id\}/(install|status)$", "job"),
     (r"^/oicp/v1/(corpus/install|corpus/progress|recipe/test)$", "job"),
     # ── node ──
     (r"^/v1/mesh/", "node"),
@@ -84,8 +83,6 @@ RULES = [
     # ── store ──
     (r"^/v1/(conversations|notes|memories|insights|projects|recipe-projects|features|skills|mcp/servers|documents|tasks|tools)", "store"),
     # ── out ──
-    (r"^/v1/apps", "out"),
-    (r"^/app/", "out"),
     (r"^/chat$", "out"),
 ]
 RULES = [(re.compile(p), c) for p, c in RULES]

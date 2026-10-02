@@ -210,6 +210,23 @@ pub async fn serve_turn(
 ) {
     use futures::StreamExt;
 
+    // A sampling pin this host cannot apply is refused by name before
+    // anything is persisted, never dropped (ARCH principle 6).
+    if let Some(pin) = crate::runtime::capabilities::unapplied_sampling_pin() {
+        tracing::warn!(
+            conversation_id = %conversation_id,
+            pin,
+            "turn.sampling: turn refused — its pin has no application on this host"
+        );
+        sink.emit(TurnFrame::StreamError {
+            message: format!(
+                "this host cannot apply the `{pin}` sampling pin; send the turn without it"
+            ),
+            retry_after_secs: None,
+        });
+        return;
+    }
+
     // Decided up front, not discovered from an error. See the doc comment.
     if mode == TurnMode::Grounded && crate::runtime::is_document_attached(content) {
         serve_non_streaming_turn(runtime, store, conversation_id, content, sink).await;

@@ -237,6 +237,20 @@ impl BootstrapBlob {
     }
 }
 
+/// What `pod up` asks serve to record so serve's ranker sources the pod as a
+/// pinned worker: `sovereign-serve pod-snapshot record` reads it as JSON on
+/// stdin. Serve is the snapshot file's one writer (pb-mesh-dissolve,
+/// phase-b-51); the pod verb never writes it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PodSnapshotRequest {
+    pub vast_id: String,
+    pub host: String,
+    pub port: u16,
+    pub bootstrap_blob: BootstrapBlob,
+    /// The rented box's host RAM, as the pod verb estimates it from the GPU.
+    pub system_ram_gb: u32,
+}
+
 /// Encode a bootstrap blob to its on-the-wire `SOVEREIGN_BOOTSTRAP` form.
 pub fn encode_bootstrap(blob: &BootstrapBlob) -> Result<String> {
     let json = serde_json::to_vec(blob)

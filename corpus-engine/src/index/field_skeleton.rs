@@ -24,8 +24,9 @@ use crate::error::{Error, Result};
 /// `turn_prepass::splice_ambient_field_digests`.
 pub const FIELD_CHECKPOINT_FILENAME: &str = "_field_skeleton_checkpoint.json";
 
-/// The field-model JSON artifact. Written only by `JsonAndLance` domains.
-pub const FIELD_SKELETON_FILENAME: &str = "field_skeleton.json";
+/// The field-model JSON artifact. Written only by `JsonAndLance` domains. Its
+/// one spelling is the atlas-reader leaf's, whose field-model fallback reads it.
+pub use corpus_engine_atlas_reader::field_model::LEGACY_ARTIFACT as FIELD_SKELETON_FILENAME;
 
 /// Write the field-model pipeline's own resume checkpoint.
 ///
@@ -70,25 +71,7 @@ pub fn write_field_skeleton(dir: &Path, skeleton: &FieldSkeleton) -> Result<()> 
     std::fs::write(path, json)?;
     Ok(())
 }
-
-/// Load the field skeleton JSON artifact if it exists.
-///
-/// Readers: the KnowledgeView manager and its cross-view digest, the
-/// desktop budget probe, `sovereign-tools::epistemic`, the one-shot
-/// `enrich field-atoms` migration, and [`load_field_checkpoint`]'s
-/// fallback. For an `AtlasAtoms` domain this file is a pre-ei-7b leftover
-/// and the live field model is in the atlas.
-pub fn load_field_skeleton(dir: &Path) -> Result<Option<FieldSkeleton>> {
-    read_skeleton_json(&dir.join(FIELD_SKELETON_FILENAME))
-}
-
-fn read_skeleton_json(path: &Path) -> Result<Option<FieldSkeleton>> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    let raw = std::fs::read_to_string(path)?;
-    let skeleton = serde_json::from_str(&raw).map_err(|e| {
-        Error::Serialization(format!("Bad field skeleton at {}: {e}", path.display()))
-    })?;
-    Ok(Some(skeleton))
-}
+/// The field skeleton JSON reader lives in the atlas-reader leaf, so a read
+/// path loads it without the engine (pb-ingest-dial-tools).
+pub use corpus_engine_atlas_reader::field_model::load_field_skeleton; // shim: moved by pb-ingest-dial-tools
+use corpus_engine_atlas_reader::field_model::read_skeleton_json;

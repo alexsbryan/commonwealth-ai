@@ -11,8 +11,9 @@
 
 use std::sync::Arc;
 
-use commonwealth_state::ActivityEmitter;
-use corpus_engine::CorpusEngine;
+use crate::ledger_port::ActivityLedgerPort;
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_grants::{GuestGrantStore, GuestSessionBinding, GuestSessionStore};
 
 use crate::client_tokens::{ClientTokenStore, ClientTokens};
@@ -55,6 +56,26 @@ pub struct NodeSeed {
     /// read off disk once here so no request path touches the filesystem.
     /// Empty on a daemon with no data directory.
     pub named_client_tokens: Arc<ClientTokenStore>,
+    /// Where the mesh's rails daemon (`cw-rails`) listens. The roster
+    /// verbs dial it (FIVE_PROGRAMS fp-6 / §12 decision 2) instead of
+    /// answering from this daemon's own mesh copy. Resolved from
+    /// `[daemon] rails_base` by [`crate::rails_client::resolve_rails_base`]; the ring-sync tests point
+    /// it at a fixture the same way production would point it at a rails
+    /// daemon on another port.
+    pub rails_base: String,
+    /// Code's editor door (`/v1/edit_predictions` and its outcome route),
+    /// when a distribution composed code into this process
+    /// (`hosted_code::CodeMount::edit_routes`, pb-meshapp-rest). `None` mounts
+    /// the named absence pointing at `svrn code`.
+    pub edit_door: Option<axum::Router>,
+    /// The distribution's posture (`EmbeddedDaemon::posture`): where a
+    /// named absence points (`Posture::code_pointer`). `Open` until the
+    /// daemon hands in its own.
+    pub posture: crate::posture::Posture,
+    /// Ingest's atlas port, when a distribution composed ingest into this
+    /// process (`process::HostedIngest`, pb-ingest-dial-daemon). `None` is
+    /// svrn alone: the atlas routes name the absence.
+    pub atlas: Option<Arc<dyn AtlasPort>>,
 }
 
 impl NodeSeed {
@@ -98,8 +119,9 @@ impl NodeSeed {
             None => ClientTokens::default(),
             Some(raw) => ClientTokens::parse(raw)?,
         };
-        let named_client_tokens =
-            Arc::new(ClientTokenStore::load(Some(data_dir.join("client-tokens"))));
+        let named_client_tokens = Arc::new(ClientTokenStore::load(Some(
+            crate::client_tokens::client_tokens_dir(data_dir),
+        )));
         if client_tokens == ClientTokens::NamedOnly && named_client_tokens.list().is_empty() {
             // Said at the moment it is chosen, not discovered by a device that
             // stopped being admitted: under this posture the shared token no
@@ -139,6 +161,13 @@ impl NodeSeed {
             internal_auth,
             client_tokens,
             named_client_tokens,
+            rails_base: crate::rails_client::resolve_rails_base(&daemon),
+            // Handed in by the daemon from what code's composition mounted.
+            edit_door: None,
+            // Handed in by the daemon from its services.
+            posture: crate::posture::Posture::Open,
+            // Handed in by the daemon from what ingest's composition mounted.
+            atlas: None,
         })
     }
 }
@@ -157,7 +186,7 @@ pub struct NodePart {
     /// The in-process corpus engine, when this daemon hosts one. `None` on a
     /// daemon with no data directory (the knowledge routes then behave as if
     /// this node hosts no corpora).
-    pub corpus_engine: Option<Arc<CorpusEngine>>,
+    pub corpus_engine: Option<Arc<dyn IngestPort>>,
     /// Process start instant — drives `/status`'s `process.uptime_seconds`
     /// (an uptime reset is the cheap witness that a supervised restart
     /// actually produced a fresh process).
@@ -183,6 +212,15 @@ pub struct NodePart {
     /// at exactly one point, `client_auth_layer`, beside the shared compare.
     /// See [`crate::client_tokens`].
     pub named_client_tokens: Arc<ClientTokenStore>,
+    /// Where the mesh's rails daemon (`cw-rails`) listens — the roster
+    /// verbs dial it ([`crate::rails_client`]). A construction argument
+    /// ([`NodeSeed::rails_base`]), like the port postures: decided before
+    /// the state exists, never read from config mid-request.
+    pub rails_base: String,
+    /// The live tie of svrn's peer-route registration with cw-rails, which
+    /// the internal resolver checks a forwarded `x-mesh-*` against
+    /// ([`crate::peer_origin`]). Empty until the networked boot registers.
+    pub peer_origin_tie: crate::peer_origin::PeerOriginTie,
     /// The NAMES claimed at this door — one QR serves a room, so the grant
     /// cannot say which phone is asking and the session does. A session is not
     /// a second credential: it names no scope, `GuestGrant::permits_path` on
@@ -195,6 +233,13 @@ pub struct NodePart {
     /// `routes_rail::namespace_for`, which is what scopes a wall grant — the
     /// resource declares, the credential identifies.
     pub guest_pages: Arc<crate::guest_door::GuestPages>,
+    /// Code's editor door, mounted by every surface that serves the general
+    /// client routes; `None` is svrn alone ([`NodeSeed::edit_door`]).
+    pub edit_door: Option<axum::Router>,
+    /// The distribution's posture ([`NodeSeed::posture`]).
+    pub posture: crate::posture::Posture,
+    /// Ingest's atlas port; `None` is svrn alone ([`NodeSeed::atlas`]).
+    pub atlas: Option<Arc<dyn AtlasPort>>,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the
     /// initial state at boot. Bumped via
@@ -216,6 +261,9 @@ pub struct NodePart {
     /// the entire turn regardless of the window; the window only governs
     /// the quiet after the last turn ends.
     pub foreground_inflight: std::sync::atomic::AtomicUsize,
+    /// Fired when a turn begins or ends, so the foreground deadline reaches
+    /// cw-rails' donor at once (`crate::foreground_post`, pb-work-donor).
+    pub foreground_changed: tokio::sync::Notify,
     /// User-set ceiling on how much disk Sovereign is allowed to use
     /// for corpus storage (sum of `~/.svrnmesh/indexes/*`). Encoded
     /// as bytes; `0` is the sentinel for "no budget — use whatever
@@ -223,8 +271,9 @@ pub struct NodePart {
     /// boot (computed from free disk on first launch, then persisted
     /// in `desktop.toml`) and via `POST /internal/storage/budget`.
     ///
-    /// The enforcement point is `sovereign-mesh::capabilities::
-    /// build_local_capabilities`, which clamps the gossiped
+    /// The enforcement point is cw-rails' merge (commonwealth-rails
+    /// `self_measure::apply`) over the budget left
+    /// `crate::peer_origin::claims_source` declares, which clamps the gossiped
     /// `free_storage_gb` (both the static `HardwareProfile` field and
     /// the live `AvailableResources` reading) to
     /// `min(actual_free, max(0, budget − used))`. The live planner
@@ -250,7 +299,7 @@ pub struct NodePart {
     /// Sovereign's vocabulary, for the glassbox "Activity & Sharing"
     /// surface. Unlike `contribution_emitter`, its records are
     /// **local-only and never gossip** (written under the
-    /// `activity-private` namespace). Cheap to clone; shares the same
-    /// underlying `MeshStore`. See `commonwealth_core::activity`.
-    pub activity_emitter: ActivityEmitter,
+    /// `activity-private` namespace). Seen through `ActivityLedgerPort`;
+    /// in-process until fp-88. See `commonwealth_core::activity`.
+    pub activity_emitter: Arc<dyn ActivityLedgerPort>,
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `sovereign-cli-dev` — the workbench: ATOS workflow + project lifecycle +
+//! `sovereign-cli-dev` — the workbench: project lifecycle +
 //! local code intelligence + MCP tool runner.
 //!
 //! ## Why this crate has a `[lib]` target (2026-08-21)
@@ -11,7 +11,7 @@
 //! 0% for the same reason.
 //!
 //! The cost was already being paid daily. `sovereign-cli` is a thin dispatcher
-//! that `exec`s into this binary for `atos` / `project` / `code` / `tools`,
+//! that `exec`s into this binary for `project` / `code` / `tools`,
 //! which is why `AGENTS.md` carries the trap *"rebuild the sibling that owns
 //! the verb you changed, or your change won't run"* and why the dispatcher had
 //! to grow a stale-sibling warning on 2026-07-26. That process boundary exists
@@ -24,15 +24,16 @@
 //!
 //! ## The `workbench` feature, and why the dispatcher turns it off
 //!
-//! The workbench's dependency tree is enormous: `sovereign-mesh` (llama.cpp),
-//! `sovereign-tools` (arrow + parquet + the enrichment catalog), `axum`,
-//! `corpus-engine` with the tree-sitter grammars. Linking THAT into the
+//! The workbench's dependency tree is enormous: `sovereign-tools` (arrow +
+//! parquet + the enrichment catalog), `axum`, `corpus-engine` with the
+//! tree-sitter grammars — and, until fp-33, `sovereign-mesh` (llama.cpp),
+//! which left when the work-atlas surfaces learned to dial the daemon. Linking THAT into the
 //! dispatcher would be the "absorb a large dependency to move a percentage"
 //! failure, so every heavy dependency is optional and every module that needs
 //! one is `#[cfg(feature = "workbench")]`.
 //!
 //! With `default-features = false` this crate is two workspace dependencies
-//! wide — `corpus-engine-scip` and `sovereign-cli-shared` — which the
+//! wide — `corpus-engine-scip` and `sovereign-cli-base` — which the
 //! dispatcher already carries. `workbench` is a DEFAULT feature, so building
 //! the binary is unchanged; only a consumer that explicitly opts out gets the
 //! thin surface.
@@ -47,8 +48,13 @@
 // Nothing below may reference a `workbench`-gated dependency. That rule is
 // what keeps `sovereign-cli` free of the workbench's dependency tree, and the
 // build breaks loudly if it is broken.
+mod backlog_cmd;
+mod claim_cmd;
 mod converge_baseline;
 mod converge_cmd;
+mod notes_db;
+mod repo;
+mod solve_cmd;
 
 // ── The workbench proper — `workbench` feature ──────────────────────
 #[cfg(feature = "workbench")]
@@ -56,11 +62,9 @@ mod amend;
 #[cfg(feature = "workbench")]
 mod arch_report_cmd;
 #[cfg(feature = "workbench")]
+mod archaeology_eval_cmd;
+#[cfg(feature = "workbench")]
 mod atlas_identity;
-#[cfg(feature = "workbench")]
-mod atos_cmd;
-#[cfg(feature = "workbench")]
-mod atos_plugin;
 #[cfg(feature = "workbench")]
 mod audit_extract;
 #[cfg(feature = "workbench")]
@@ -69,32 +73,40 @@ mod audit_recover;
 mod code_capability_graph;
 #[cfg(feature = "workbench")]
 mod code_cmd;
+// `svrn code index` and `svrn refresh`, moved from sovereign-cli-shared and
+// sovereign-cli into the code program (pb-code-index).
 #[cfg(feature = "workbench")]
 mod code_fieldglass;
 #[cfg(feature = "workbench")]
+mod code_index;
+#[cfg(feature = "workbench")]
+mod code_index_incremental;
+#[cfg(feature = "workbench")]
 mod code_map;
 #[cfg(feature = "workbench")]
-mod design_onboarding;
-#[cfg(feature = "workbench")]
-mod design_session;
-#[cfg(feature = "workbench")]
+mod code_refresh;
 #[cfg(feature = "workbench")]
 mod drift_cmd_orchestrator;
 #[cfg(feature = "workbench")]
 mod dry_report_cmd;
 #[cfg(feature = "workbench")]
+mod git_archaeology_cmd;
 #[cfg(feature = "workbench")]
+mod mesh_kv_client;
+// `svrn notes` and `svrn reflect`, moved from sovereign-cli (pb-notes-verbs).
+#[cfg(feature = "workbench")]
+mod notes_cmd;
 #[cfg(feature = "workbench")]
 mod phases;
+#[cfg(feature = "workbench")]
+mod reflect_cmd;
+#[cfg(feature = "workbench")]
+mod rough_edges_cmd;
 // UNGATED on purpose: `converge_cmd` is not behind `workbench` and reaches
 // into this. It lived under `refactor_cmd/` for one afternoon and the
 // workspace lint did not catch it — feature unification turns `workbench` on
 // there, so the break only surfaced in the sovereign-cli test build.
 mod intent;
-#[cfg(feature = "workbench")]
-mod plan_composer;
-#[cfg(feature = "workbench")]
-mod plan_enricher;
 #[cfg(feature = "workbench")]
 mod project_cmd;
 #[cfg(feature = "workbench")]
@@ -103,18 +115,29 @@ mod redirect_cmd;
 mod refactor_cmd;
 #[cfg(feature = "workbench")]
 mod refactor_wire;
+// The register resolver and the wire differ, for the monorepo's checks on its
+// OWN `quality/` data (corpus-engine/xtask/tests/refactor_register.rs), which
+// a lifted code program does not carry (pb-code-clean-lift).
+#[cfg(feature = "workbench")]
+pub use refactor_cmd::destination::{RegisterHealth, Resolution, Workspace};
+#[cfg(feature = "workbench")]
+pub use refactor_wire::{load_spec, prove};
+#[cfg(feature = "workbench")]
+mod state_store_client;
 #[cfg(feature = "workbench")]
 mod suggest_seams_cmd;
 #[cfg(feature = "workbench")]
 mod tools_cmd;
 
-// The project model moved to `sovereign-cli-shared` (2026-08-07) when
-// `project init` shipped in the dispatcher: init writes
-// `.sovereign/project.toml`, the workbench's `found` / `phase` / `audit` /
-// `charter amend` read it. Re-exported at the old crate-root paths so every
-// `crate::observation::…` / `crate::project_toml::…` call site is unchanged.
+// The project model is the code program's (pb-code-cli-base; it sat in
+// `sovereign-cli-shared` from 2026-08-07). The dispatcher's `project init`
+// writes `.sovereign/project.toml` by exec'ing `project-observe`
+// (`project_cmd::observe`); `found` / `phase` / `audit` / `charter amend`
+// read it here.
 #[cfg(feature = "workbench")]
-pub(crate) use sovereign_cli_shared::{observation, project_toml};
+pub(crate) mod observation;
+#[cfg(feature = "workbench")]
+pub(crate) mod project_toml;
 
 /// A `svrn code` subverb this crate serves as a **linked library call** rather
 /// than a sibling-process `exec`.
@@ -130,7 +153,7 @@ pub(crate) use sovereign_cli_shared::{observation, project_toml};
 ///
 /// **Invariant for new arms:** everything an arm reaches must compile with the
 /// `workbench` feature OFF. An arm that needs `sovereign-tools`,
-/// `sovereign-mesh` or `corpus-engine`'s grammars belongs in the sibling
+/// `sovereign-daemon` or `corpus-engine`'s grammars belongs in the sibling
 /// binary, not here — dragging those into the dispatcher is the cost this
 /// split exists to refuse. `cargo build -p sovereign-cli-dev
 /// --no-default-features` is the check, and it is what enforces the rule
@@ -236,9 +259,9 @@ pub fn bin_main() -> ! {
         std::env::set_var("RUST_MIN_STACK", "8388608");
     }
 
-    // Rebrand back-compat (see sovereign_core::rebrand): idempotent, non-destructive.
-    sovereign_core::rebrand::promote_legacy_env();
-    sovereign_core::rebrand::run_startup_migration();
+    // Rebrand back-compat (see sovereign_contracts::rebrand): idempotent, non-destructive.
+    sovereign_contracts::rebrand::promote_legacy_env();
+    sovereign_contracts::rebrand::run_startup_migration();
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -252,7 +275,7 @@ pub fn bin_main() -> ! {
 
 #[cfg(feature = "workbench")]
 async fn async_main() -> i32 {
-    use sovereign_cli_shared::tracing_init::init_tracing;
+    use sovereign_cli_base::tracing_init::init_tracing;
 
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
     let cmd = raw_args.first().map(|s| s.as_str()).unwrap_or("");
@@ -264,31 +287,34 @@ async fn async_main() -> i32 {
 
     let code: i32 = match cmd {
         // ── Top-level verbs ─────────────────────────────────────────
-        "atos" => atos_cmd::run_atos(rest).await,
         "project" => project_cmd::run_project(rest).await,
         "code" => code_cmd::run_code(rest).await,
         "tools" => tools_cmd::run_tools(rest).await,
+        "backlog" => backlog_cmd::run_backlog(rest).await,
+        "claim" => claim_cmd::run(rest).await,
+        "solve" => solve_cmd::run(rest).await,
+        "notes" => notes_cmd::run(rest).await,
+        "reflect" => reflect_cmd::run_reflect(rest).await,
+        "rough-edges" => rough_edges_cmd::run(rest).await,
+        "git-archaeology" => git_archaeology_cmd::run(rest).await,
+        "archaeology-eval" => archaeology_eval_cmd::run(rest).await,
 
         // ── Hidden arms invoked by sovereign-cli delegators ────────
-        // ATOS sub-handlers (from notes/audit/drift/milestone stubs).
-        "atos-status-promote" => atos_cmd::status::cmd_promote(rest).await,
-        "atos-status-report" => atos_cmd::status::cmd_report(rest).await,
-        "atos-teardown" => atos_cmd::teardown::cmd_teardown(rest).await,
-        "atos-spec-accept" => atos_cmd::spec::cmd_spec_accept(rest).await,
-        "atos-spec-diff" => atos_cmd::spec::cmd_spec_diff(rest).await,
-        "atos-milestone-end" => atos_cmd::milestone::cmd_end_milestone(rest).await,
-
         // project_cmd sub-handlers (from status/charter/etc stubs).
         "project-status" => project_cmd::cmd_status(rest).await,
         "project-charter" => project_cmd::cmd_charter(rest).await,
         "project-amend" => project_cmd::cmd_amend(rest).await,
-        "project-design" => project_cmd::cmd_design(rest).await,
-        "project-plan" => project_cmd::cmd_plan(rest).await,
         // `project-init` is gone (2026-08-07): `svrn init` used to spawn this
         // sibling to reach `cmd_init`. `cmd_init` now lives in the dispatcher
         // itself, which calls it in-process — no spawn, and `svrn init --help`
         // no longer needs a 240 MB binary to be built.
         "project-refresh" => project_cmd::cmd_refresh(rest).await,
+        // `svrn init`'s project-model step (sovereign-cli project_init,
+        // pb-code-cli-base): the lifecycle read and the observe-and-write.
+        "project-lifecycle" => project_cmd::cmd_lifecycle(rest),
+        "project-observe" => project_cmd::cmd_observe(rest),
+        // `svrn refresh` in a `code-intel` dispatcher (sovereign-cli refresh_cmd.rs).
+        "refresh" => code_refresh::cmd_refresh(rest).await,
         "project-phase-pass" => project_cmd::cmd_phase_pass(rest).await,
         "project-serve" => project_cmd::cmd_serve(rest).await,
         "project-audit" => project_cmd::cmd_audit(rest).await,

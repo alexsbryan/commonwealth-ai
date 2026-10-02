@@ -19,7 +19,7 @@
 //! Safety / no-over-rotation: when no code corpus is installed, the handler
 //! falls straight through to the plain knowledge path — a non-code deployment
 //! behaves exactly as before. The code-corpus signal is
-//! [`corpus_engine::IndexInfo::is_code_corpus`] — an on-disk SCIP graph OR the
+//! [`corpus_index::types::IndexInfo::is_code_corpus`] — an on-disk SCIP graph OR the
 //! `CorpusKind::Code` tag — never the tag alone, because an indexed code corpus
 //! is usually `knowledge`-kind (e.g. commonwealth-ai) and a tag-only test
 //! matches nothing on a healthy install.
@@ -111,7 +111,7 @@ impl Runtime {
 
     /// Corpus ids this deployment can answer code questions from.
     ///
-    /// The predicate is [`corpus_engine::IndexInfo::is_code_corpus`] — an
+    /// The predicate is [`corpus_index::types::IndexInfo::is_code_corpus`] — an
     /// on-disk SCIP graph OR the `CorpusKind::Code` tag — which is where the
     /// rationale lives. It used to be inlined here as a graph-only check, and
     /// separately (and wrongly) in `handlers/metalingual.rs` as a tag-only

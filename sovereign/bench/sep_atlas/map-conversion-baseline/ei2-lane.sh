@@ -5,7 +5,7 @@ set -u
 S=$(cd "$(dirname "$0")" && pwd); cd "$(git -C "$S" rev-parse --show-toplevel)"
 tag=$S/ei2-$1; t0=$(date +%s)
 SOVEREIGN_QUESTION_KIND_MIN_SIM=$2 RUST_LOG="warn,retrieval_audit=debug" \
-  target/debug/sovereign-cli-llm eval run --bank sovereign/bench/sep/questions.toml \
+  target/debug/sovereign-cli-bench eval run --bank sovereign/bench/sep/questions.toml \
   --prod-pipeline --isolate --limit 30 --format json --output "$tag.json" > "$tag.log" 2>&1
 rc=$?
 echo "WALL_$1: $(( $(date +%s) - t0 ))s rc=$rc floor=$2"

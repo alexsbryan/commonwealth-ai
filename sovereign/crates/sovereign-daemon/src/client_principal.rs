@@ -36,6 +36,8 @@
 //! 1. **A live guest grant** presented as `Authorization: Bearer` →
 //!    [`Principal::Guest`]. The grant is what bounds the caller's routes, so
 //!    nothing a guest also types may outrank it.
+//!    An on-prem API key (`crate::client_tokens::keys`) is read beside it →
+//!    [`Principal::Asserted`], for the same reason.
 //! 2. **`X-Node-Id`** → [`Principal::Member`], or [`Principal::Unverified`]
 //!    when it is present and not the canonical wire form. Read *before* the
 //!    loopback branch: a mesh peer arrives on the trusting listener over
@@ -82,8 +84,8 @@ use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
 
 use axum::http::HeaderMap;
+use sovereign_contracts::principal::Principal;
 use sovereign_contracts::principal::{claimed_node_id, ClaimedNodeId};
-use sovereign_serving_host::admission::Principal;
 
 use crate::client_auth::ClientAuthPolicy;
 use crate::state::AppState;
@@ -177,11 +179,17 @@ impl AppState {
         //    simply not a grant (`GuestGrantStore::live`).
         let presented = bearer(headers);
         if let Some(token) = presented {
-            let now = commonwealth_core::clock::unix_now_millis();
+            let now = sovereign_time::unix_millis();
             if self.inner.node.guest_grants.live(token, now).is_some() {
                 return Principal::Guest {
                     grant: fingerprint(token),
                 };
+            }
+            // 1b. An on-prem API key: an asserted subject. Like a grant, the
+            //     key is the caller's whole identity, so nothing it also
+            //     types (a node claim, `X-Principal`) may outrank it.
+            if let Some((sub, groups)) = self.inner.node.named_client_tokens.asserted_for(token) {
+                return Principal::Asserted { sub, groups };
             }
         }
 
@@ -258,21 +266,7 @@ mod tests {
     use super::*;
 
     fn state() -> AppState {
-        use commonwealth_core::ids::{MeshId, NodeId};
-        use commonwealth_core::mesh::Mesh;
-        use std::collections::HashMap;
-        let mesh = Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::from_u128(1),
-            name: "Principal Test".into(),
-            invite_key_hash: [0u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: HashMap::new(),
-            peers: vec![],
-        };
-        AppState::new(NodeId::from_u128(1), mesh)
+        AppState::new(kernel_types::NodeId::from_u128(1))
     }
 
     /// The one resolver on the daemon's own (trusting) listener.
@@ -434,7 +428,7 @@ mod tests {
         // The fifth arm: a bearer that is a live guest grant is a Guest, not a
         // remote client. The grant token itself must never appear in the key.
         let s = state();
-        let now = commonwealth_core::clock::unix_now_millis();
+        let now = sovereign_time::unix_millis();
         s.inner
             .node
             .guest_grants
@@ -471,7 +465,7 @@ mod tests {
         // lapsed grant falls back to the credential bucket rather than
         // admitting a stale identity.
         let s = state();
-        let now = commonwealth_core::clock::unix_now_millis();
+        let now = sovereign_time::unix_millis();
         s.inner.node.guest_grants.issue(
             "stale-token",
             Vec::new(),
@@ -492,7 +486,7 @@ mod tests {
         // A peer arrives on the trusting listener over loopback, so the node
         // id must be read before the loopback branch, and a peer that also
         // carries an X-Principal must not be read as the local owner.
-        let id = commonwealth_core::ids::NodeId::from_u128(0xBEEF);
+        let id = kernel_types::NodeId::from_u128(0xBEEF);
         let hex: String = id.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
         let r = resolve(
             &headers(&[("x-node-id", &hex), ("x-principal", "pretend-local")]),
@@ -522,7 +516,7 @@ mod tests {
     /// while recording its VALID node id as a rejected one.
     #[test]
     fn a_peer_presenting_both_a_bearer_and_its_node_id_is_the_member() {
-        let id = commonwealth_core::ids::NodeId::from_u128(0xBEEF);
+        let id = kernel_types::NodeId::from_u128(0xBEEF);
         let hex: String = id.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
         let r = resolve(
             &headers(&[

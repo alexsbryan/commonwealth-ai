@@ -20,7 +20,8 @@ use crate::config::{EnrichConfig, CONFIG_SCHEMA_VERSION};
 use crate::paths;
 use crate::test_env::{scoped_home, HomeGuard};
 use corpus_engine::enrichment::pipeline::{
-    ChapterManifest, ChapterSelection, ChatPrompt, Phase1Output, PhaseCache, PipelinePhase,
+    ChapterManifest, ChapterManifestWrite, ChapterSelection, ChatPrompt, Phase1Output, PhaseCache,
+    PipelinePhase,
 };
 use corpus_engine::types::EmbedFn;
 use corpus_engine::InferenceFn;

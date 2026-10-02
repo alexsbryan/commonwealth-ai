@@ -24,6 +24,7 @@
 //! field is serde-defaulted; an empty v0.4 value serializes identically
 //! to a v0.3 manifest.
 
+pub mod capabilities;
 pub mod capability;
 pub mod completion;
 pub mod error;
@@ -31,16 +32,27 @@ pub mod error;
 // `pub mod glob` in `commonwealth-core` and the move is what makes the
 // privacy true rather than intended — a `git grep` before the move found zero
 // consumers outside the module that travels with it.
+/// The local activity ledger records (pb-mesh-exit-core).
+pub mod activity;
+/// The contribution ledger records (pb-mesh-exit-core).
+pub mod contributions;
 mod glob;
+pub mod inference_plan;
 pub mod inference_service;
 pub mod ingest;
 pub mod job;
 pub mod jsonrpc;
 pub mod knowledge;
 pub mod manifest;
+pub mod mcp;
+pub mod measurements;
 pub mod model_aliases;
+pub mod model_catalog;
+/// The node-to-node model-transfer wire (`/internal/v1/models/*`).
+pub mod model_transfer;
 pub mod openai_types;
 pub mod origin;
+pub mod peer_preference;
 /// Per-pipeline context-injection flags carried by a resolved pipeline alias —
 /// moved down from `serving-policy` so the middleware seam can name it without
 /// a `sovereign-contracts → serving-policy` edge (domains
@@ -61,6 +73,10 @@ pub mod tool;
 /// linking the inference stack.
 pub mod tool_calls;
 pub mod version;
+/// The `work` plane's wire vocabulary (pb-work-doors): acts, the folded
+/// queue, refusals and the `process:v1` payload.
+pub mod work;
+pub mod work_queue;
 
 pub use completion::{
     latency_to_speed, speed_to_latency, CompletionRequest, CompletionResponse, Depth, FinishReason,
@@ -93,8 +109,8 @@ pub use ingest::{
     RecipeTestRequest,
 };
 pub use knowledge::{
-    KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse, LandscapeDigestEntry,
-    LandscapeDigestRequest, LandscapeDigestResponse,
+    ChunkRange, CorpusShardInfo, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse,
+    LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse,
 };
 pub use manifest::{
     features, CorpusDescriptor, EmbedModelInfo, FederatedMeshDescriptor, FederationManifest,

@@ -15,7 +15,7 @@ use corpus_engine::testing::validate_recipe_offline;
 use corpus_engine::{recipe_templates, Recipe};
 
 /// The template directories ON DISK, alphabetically — the same discovery
-/// `build.rs` does, redone here at test time.
+/// corpus-engine-recipes does, redone here at test time.
 ///
 /// NOT a list of names. The catalog used to be written down three times (a
 /// `BUILTINS` array, a `TEN: [&str; 10]` here, a README tree), so a template
@@ -23,10 +23,8 @@ use corpus_engine::{recipe_templates, Recipe};
 /// agree with a build that missed a directory: the two readings are
 /// independent, and a template added since the last build fails here.
 fn template_dirs() -> Vec<String> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("corpus-engine has a parent")
-        .join("sovereign-recipes/_templates/ontology-v1");
+    // The recipes tree is a knob (the one the data crate is rooted at), not a climb.
+    let root = crate::source_tree::recipes_root().join("_templates/ontology-v1");
     let mut names: Vec<String> = std::fs::read_dir(&root)
         .unwrap_or_else(|e| panic!("read_dir {}: {e}", root.display()))
         .map(|e| e.expect("dir entry").path())

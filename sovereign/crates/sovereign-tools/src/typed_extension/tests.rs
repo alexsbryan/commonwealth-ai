@@ -16,12 +16,16 @@
 //! 4. Editing a leaf summary invalidates the manifest and forces a
 //!    re-run.
 
-use std::path::Path;
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use corpus_engine_atlas_reader::citation::SourceCitation;
+use corpus_engine_atlas_reader::fixtures;
+use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+use corpus_engine_atlas_reader::ports::ArgumentativeResponse;
 use futures::Stream;
 use sovereign_core::conv_tiered::{ConvRaptorNodeRow, ConvSkeletonRow, VaultThemeRow};
 use sovereign_core::error::{Error, Result as SovResult};
@@ -105,44 +109,56 @@ impl InferenceProvider for CannedInferenceProvider {
 }
 
 /// JSON envelope returned by the canned provider — one of each kind so
-/// every axis count comes out non-zero.
-const CANNED_BODY: &str = r#"{
-  "positions": [
-    {
-      "name": "rent concentration thesis",
-      "content": "The deepest AI rents pool at uncopyable monopoly chokepoints.",
-      "proponent": "",
-      "stance": "endorse"
-    }
-  ],
-  "mechanisms": [
-    {
-      "name": "EUV monopoly",
-      "description": "ASML's sole control over leading-edge lithography machines.",
-      "domain": "economics"
-    }
-  ],
-  "evidence_invocations": [
-    {
-      "label": "$1.4B FTC PBM spread income",
-      "content": "An FTC report cites $1.4B per year in spread pricing income.",
-      "kind": "figure"
-    }
-  ],
-  "oppositions": [
-    {
-      "left": "markets",
-      "right": "regulation",
-      "axis": "governance / commons allocation"
-    }
-  ],
-  "concessions": [
-    {
-      "content": "PBMs do provide some intermediation value.",
-      "outcome": "intact"
-    }
-  ]
-}"#;
+/// every axis count comes out non-zero. The leaf's fixture, so the
+/// implementor-side test writes the same responses.
+const CANNED_BODY: &str = fixtures::ARGUMENTATIVE_ENVELOPE;
+
+/// What the pass handed the port's write: every response and the citation
+/// map it keyed on section id.
+#[derive(Default)]
+struct Written {
+    responses: Vec<ArgumentativeResponse>,
+    citations: HashMap<String, SourceCitation>,
+}
+
+/// The per-kind counts the double's write answers with.
+fn canned_counts() -> HashMap<String, u32> {
+    [
+        "mechanism",
+        "named_position",
+        "evidence",
+        "opposition",
+        "concession",
+    ]
+    .into_iter()
+    .map(|k| (k.to_string(), 1))
+    .collect()
+}
+
+/// The atlas port as the pass asks it. A response counts one atom when it is
+/// JSON; the write records its inputs in `written` and answers
+/// [`canned_counts`]. What ingest does with those inputs (resolve,
+/// content-hash, the four artifacts, the citations) is proven on
+/// `IngestAtlas` (corpus-engine's atlas_port_parity
+/// `typed_extension_write_lands_every_artifact_with_content_hash_ids` and
+/// `typed_extension_write_carries_primary_source_citations`).
+fn port(written: Arc<Mutex<Written>>) -> AtlasPortDouble {
+    AtlasPortDouble::new()
+        .on_argumentative_system("argumentative system")
+        .on_argumentative_schema(|| serde_json::json!({"type": "object"}))
+        .on_render_source_recovery_block(|ex| ex.join("\n"))
+        .on_argumentative_atom_count(|text, _| {
+            serde_json::from_str::<serde_json::Value>(text)
+                .map(|_| 1)
+                .map_err(|e| e.to_string())
+        })
+        .on_write_typed_extension(move |_, _, responses, _, citations| {
+            let mut w = written.lock().unwrap();
+            w.responses.extend_from_slice(responses);
+            w.citations.extend(citations.clone());
+            Ok(canned_counts())
+        })
+}
 
 async fn seed_store_with_two_leaves_and_two_themes(corpus_id: &str) -> Arc<SqliteStateStore> {
     let store = Arc::new(SqliteStateStore::open_in_memory().unwrap());
@@ -232,8 +248,10 @@ async fn end_to_end_writes_atoms_and_manifest() {
     let inference: Arc<dyn InferenceProvider> = inference_arc;
     let tmp = tempfile::tempdir().unwrap();
     let atlas_dir = tmp.path().join("atlas");
+    let written: Arc<Mutex<Written>> = Arc::default();
+    let atlas = port(Arc::clone(&written));
 
-    let report = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
+    let report = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
         .await
         .expect("typed extension should succeed end-to-end");
     assert_eq!(report.status, ExtractionStatus::Wrote);
@@ -245,41 +263,28 @@ async fn end_to_end_writes_atoms_and_manifest() {
         "exactly four LLM calls total"
     );
 
-    // ei-3-index: the daemon's own atlas write leaves all FOUR artifacts. The
-    // seed table used to be a best-effort hook after the write that logged a
-    // warning when it failed; nothing in this test saw it, and nothing in
-    // production saw it either -- which is how atlases that load, enumerate
-    // and cannot ground became the normal case.
-    for artifact in ["atoms.json", "atoms.lance", "edges.csr", "atoms_ann.lance"] {
-        assert!(
-            atlas_dir.join(artifact).exists(),
-            "{artifact} missing from the daemon's typed-extension atlas write"
-        );
+    // The write gets every accepted response: Pass A's two leaves whole,
+    // Pass B's two themes cross-leaf only, each as the model wrote it. The
+    // four artifacts, the per-axis counts and the content-hash ids are what
+    // ingest makes of these, proven on `IngestAtlas`.
+    {
+        let w = written.lock().unwrap();
+        assert_eq!(w.responses.len(), 4);
+        assert_eq!(w.responses.iter().filter(|r| !r.cross_leaf_only).count(), 2);
+        assert_eq!(w.responses.iter().filter(|r| r.cross_leaf_only).count(), 2);
+        assert!(w.responses.iter().all(|r| r.response_text == CANNED_BODY));
+        for r in &w.responses {
+            assert!(
+                w.citations.contains_key(&r.section_id),
+                "every response's section id keys a citation: {}",
+                r.section_id
+            );
+        }
     }
 
-    // Pass A populates mechanism / named_position / evidence; Pass B
-    // contributes oppositions + concessions (carries the leaf-level
-    // ones too but content-hash dedupe collapses them).
-    let mechanism = *report.atoms_per_kind.get("mechanism").unwrap();
-    let named_position = *report.atoms_per_kind.get("named_position").unwrap();
-    let evidence = *report.atoms_per_kind.get("evidence").unwrap();
-    let opposition = *report.atoms_per_kind.get("opposition").unwrap();
-    let concession = *report.atoms_per_kind.get("concession").unwrap();
-    assert!(mechanism >= 1, "mechanism axis must populate from Pass A");
-    assert!(
-        named_position >= 1,
-        "named_position must populate from Pass A"
-    );
-    assert!(evidence >= 1, "evidence must populate from Pass A");
-    assert!(opposition >= 1, "opposition must populate from Pass B");
-    assert!(concession >= 1, "concession must populate from Pass B");
-
-    // atoms.json + manifest both on disk.
-    assert!(atlas_dir.join("atoms.json").exists());
+    // The report and the manifest carry the counts the write answered.
+    assert_eq!(report.atoms_per_kind, canned_counts());
     assert!(atlas_dir.join(MANIFEST_FILENAME).exists());
-
-    // Atoms file shape: every atom carries a content-hash id.
-    assert_atoms_use_content_hash_ids(&atlas_dir);
 }
 
 #[tokio::test]
@@ -290,15 +295,17 @@ async fn rerun_with_no_changes_skips_via_manifest() {
     let inference: Arc<dyn InferenceProvider> = inference_arc;
     let tmp = tempfile::tempdir().unwrap();
     let atlas_dir = tmp.path().join("atlas");
+    let written: Arc<Mutex<Written>> = Arc::default();
+    let atlas = port(Arc::clone(&written));
 
-    let first = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
+    let first = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
         .await
         .unwrap();
     assert_eq!(first.status, ExtractionStatus::Wrote);
     let calls_after_first = call_counter.load(Ordering::SeqCst);
     assert_eq!(calls_after_first, 4);
 
-    let second = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
+    let second = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
         .await
         .unwrap();
     assert_eq!(
@@ -321,8 +328,10 @@ async fn editing_a_leaf_invalidates_manifest_and_forces_rerun() {
     let inference: Arc<dyn InferenceProvider> = inference_arc;
     let tmp = tempfile::tempdir().unwrap();
     let atlas_dir = tmp.path().join("atlas");
+    let written: Arc<Mutex<Written>> = Arc::default();
+    let atlas = port(Arc::clone(&written));
 
-    run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
+    run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
         .await
         .unwrap();
     let calls_after_first = call_counter.load(Ordering::SeqCst);
@@ -340,7 +349,7 @@ async fn editing_a_leaf_invalidates_manifest_and_forces_rerun() {
         .await
         .unwrap();
 
-    let second = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
+    let second = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
         .await
         .unwrap();
     assert_eq!(
@@ -364,8 +373,10 @@ async fn empty_inputs_short_circuit_without_writes() {
     let inference: Arc<dyn InferenceProvider> = inference_arc;
     let tmp = tempfile::tempdir().unwrap();
     let atlas_dir = tmp.path().join("atlas");
+    let written: Arc<Mutex<Written>> = Arc::default();
+    let atlas = port(Arc::clone(&written));
 
-    let report = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
+    let report = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
         .await
         .unwrap();
     assert_eq!(report.status, ExtractionStatus::SkippedNoInputs);
@@ -374,7 +385,10 @@ async fn empty_inputs_short_circuit_without_writes() {
         0,
         "no inputs → no LLM traffic"
     );
-    assert!(!atlas_dir.join("atoms.json").exists());
+    assert!(
+        atlas.calls().is_empty(),
+        "no inputs → the port is never asked"
+    );
     assert!(!atlas_dir.join(MANIFEST_FILENAME).exists());
 }
 
@@ -436,100 +450,36 @@ async fn atoms_carry_primary_source_citations_when_quote_spans_present() {
     let inference: Arc<dyn InferenceProvider> = inference_arc;
     let tmp = tempfile::tempdir().unwrap();
     let atlas_dir = tmp.path().join("atlas");
+    let written: Arc<Mutex<Written>> = Arc::default();
+    let atlas = port(Arc::clone(&written));
 
-    let report = run_typed_extension(corpus_id, &store, &inference, &atlas_dir)
+    let report = run_typed_extension(&atlas, corpus_id, &store, &inference, &atlas_dir)
         .await
         .expect("typed extension should succeed end-to-end");
     assert_eq!(report.status, ExtractionStatus::Wrote);
 
-    let raw = std::fs::read_to_string(atlas_dir.join("atoms.json")).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
-    let atoms = parsed.get("atoms").and_then(|v| v.as_array()).unwrap();
-    assert!(!atoms.is_empty());
-
+    // The response is keyed on the primary quote_span's source chunk, and
+    // its citation carries the verbatim sentence: what ingest writes onto
+    // every atom's first_appearance / evidence ChunkRef (proven on
+    // `IngestAtlas`).
     let expected_chunk_id = format!("chunk:{primary_chunk_id}");
-    let mut atoms_with_preview = 0usize;
-    for atom in atoms {
-        let data = atom.get("data").and_then(|v| v.as_object()).unwrap();
-        let first = data
-            .get("first_appearance")
-            .or_else(|| {
-                // Claim atoms carry the citation under evidence[0] —
-                // they have no first_appearance field.
-                data.get("evidence")
-                    .and_then(|v| v.as_array())
-                    .and_then(|a| a.first())
-            })
-            .expect("each atom carries a source citation");
-        let chunk_id = first
-            .get("chunk_id")
-            .and_then(|v| v.as_str())
-            .expect("citation carries a chunk_id");
+    let w = written.lock().unwrap();
+    assert!(!w.responses.is_empty());
+    for r in &w.responses {
         assert_eq!(
-            chunk_id, expected_chunk_id,
+            r.section_id, expected_chunk_id,
             "atom citations must point at the primary quote_span's source chunk"
         );
-        if let Some(preview) = first.get("passage_preview").and_then(|v| v.as_str()) {
-            assert_eq!(
-                preview, primary_quote,
-                "passage_preview must carry the verbatim source sentence"
-            );
-            atoms_with_preview += 1;
-        }
     }
-    assert!(
-        atoms_with_preview > 0,
-        "at least one atom must carry a passage_preview \
-         (otherwise source-recovery is structurally broken)"
+    let citation = w
+        .citations
+        .get(&expected_chunk_id)
+        .expect("the primary chunk keys a citation");
+    assert_eq!(
+        citation.passage_preview.as_deref(),
+        Some(primary_quote),
+        "passage_preview must carry the verbatim source sentence"
     );
-}
-
-/// Confirm every atom in `atoms.json` carries a Move-6 content-hash
-/// id (e.g. `entity-<16 hex>`) rather than the sequential
-/// `entity-0001` shape the resolver emits internally. Pins the
-/// content-hash rewrite step in `content_hash_remap`.
-fn assert_atoms_use_content_hash_ids(atlas_dir: &Path) {
-    let raw = std::fs::read_to_string(atlas_dir.join("atoms.json"))
-        .expect("atoms.json should be readable");
-    let parsed: serde_json::Value = serde_json::from_str(&raw).expect("atoms.json must be JSON");
-    let atoms = parsed
-        .get("atoms")
-        .and_then(|v| v.as_array())
-        .expect("atoms.json must carry an `atoms` array");
-    assert!(
-        !atoms.is_empty(),
-        "atoms array must be non-empty in the e2e test"
-    );
-    for atom in atoms {
-        let envelope = atom
-            .as_object()
-            .expect("each atom must be a JSON object envelope");
-        let data = envelope
-            .get("data")
-            .and_then(|v| v.as_object())
-            .expect("each atom's `data` must be a JSON object");
-        let id = data
-            .get("id")
-            .and_then(|v| v.as_str())
-            .expect("each atom's `data.id` must be a string");
-        let (prefix, suffix) = id
-            .split_once('-')
-            .unwrap_or_else(|| panic!("atom id `{id}` must contain a `-`"));
-        assert!(
-            !prefix.is_empty(),
-            "atom id `{id}` must have a non-empty prefix"
-        );
-        assert_eq!(
-            suffix.len(),
-            16,
-            "atom id `{id}` must use the 16-hex content-hash suffix shape (got len {})",
-            suffix.len()
-        );
-        assert!(
-            suffix.chars().all(|c| c.is_ascii_hexdigit()),
-            "atom id suffix `{suffix}` must be hex"
-        );
-    }
 }
 
 #[test]

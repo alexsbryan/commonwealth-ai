@@ -13,7 +13,7 @@
 //! loss" has no marker), and rots as the operator adds tests. Same
 //! cure as those siblings: a centroid-of-embeddings classifier over a
 //! small, shape-diverse exemplar set
-//! (`sovereign/router/claim_class_examples.toml`, baked default via
+//! (`sovereign/crates/sovereign-core/data/router/claim_class_examples.toml`, baked default via
 //! `include_str!`).
 //!
 //! ## Algorithm (identical to `current_info_classifier`)
@@ -43,7 +43,7 @@ use crate::traits::InferenceProvider;
 
 /// Baked exemplar default — the stack works with no on-disk router dir.
 pub const BAKED_CLAIM_CLASS_EXAMPLES: &str =
-    include_str!("../../../router/claim_class_examples.toml");
+    include_str!("../data/router/claim_class_examples.toml");
 
 const DEFAULT_MIN_MARGIN: f32 = 0.04;
 const DEFAULT_MIN_THEMATIC_SIM: f32 = 0.50;

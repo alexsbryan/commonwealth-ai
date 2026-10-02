@@ -285,10 +285,13 @@ array (batched internally). Ollama-shaped aliases at `/api/embed` and
 embed slot is loaded. Multi-embed-model dispatch isn't built; don't
 design around per-request model selection.
 
-**There is no `/v1/rerank`.** Reranking exists but is in-process only
-(a local cross-encoder GGUF slot) and is consumed internally by
-knowledge search. There is no remote rerank path, and an attempt to
-use one degrades silently to un-reranked fusion rather than erroring.
+**`/v1/rerank` answers only when a reranker is loaded.** Set
+`[models.kinds] rerank = "<gguf>"` (or `SOVEREIGN_RERANK_MODEL_PATH`,
+which wins) and the daemon serves `POST /v1/rerank` with
+`{model, query, documents}` in, `{model, results: [{index,
+relevance_score}]}` out, the llama-server / Jina / Cohere shape. Scores
+are the model's raw logits. With no reranker the route answers 503
+rather than an empty ranking.
 
 ## 7. Inline completion in your editor
 
@@ -402,7 +405,7 @@ Honest list, so you don't spend a day discovering it.
 | **A2A** | Not implemented. Peer-to-peer coordination goes over our own mesh, and a non-Sovereign node can't speak it yet. OICP is the path anything graduates through. |
 | **MCP resources, prompts, stdio** | Tools only, HTTP only. |
 | **MCP aggregation** | We consume external MCP servers and we serve our own; we don't proxy one through the other. |
-| **`/v1/rerank`** | In-process only (§6). |
+| **`/v1/rerank`** | Served when a reranker is configured (§6). |
 | **Native Anthropic / OpenAI provider APIs** | Not implemented — the remote path is OpenAI-*compatible* HTTP, aimed at self-hosted servers. |
 
 ---

@@ -4,12 +4,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use sovereign_core::oicp::{
-    self, score_with_adjustments, BenchmarkResult, InferenceRequirements, NodeLocality,
-    NodeObservations, ProviderManifest, ShardingPrivacy,
+use oicp_types::{
+    score_with_adjustments, BenchmarkResult, InferenceRequirements, NodeLocality, NodeObservations,
+    ProviderManifest, ShardingPrivacy,
 };
-use sovereign_core::types::CompletionRequest;
-use sovereign_core::Result;
+use sovereign_contracts::types::CompletionRequest;
+use sovereign_contracts::Result;
 
 use crate::health::HealthTracker;
 
@@ -117,7 +117,7 @@ impl BackendSelector for PrioritySelector {
         candidates.sort_by_key(|(_, p)| *p);
 
         candidates.first().map(|(i, _)| *i).ok_or_else(|| {
-            sovereign_core::Error::Inference("No healthy backends available".to_string())
+            sovereign_contracts::Error::Inference("No healthy backends available".to_string())
         })
     }
 }
@@ -145,7 +145,7 @@ impl BackendSelector for CostMinimizingSelector {
             })
             .map(|(i, _)| i)
             .ok_or_else(|| {
-                sovereign_core::Error::Inference("No healthy backends available".to_string())
+                sovereign_contracts::Error::Inference("No healthy backends available".to_string())
             })
     }
 }
@@ -171,7 +171,7 @@ impl BackendSelector for LatencyMinimizingSelector {
             })
             .map(|(i, _)| i)
             .ok_or_else(|| {
-                sovereign_core::Error::Inference("No healthy backends available".to_string())
+                sovereign_contracts::Error::Inference("No healthy backends available".to_string())
             })
     }
 }
@@ -203,7 +203,7 @@ impl BackendSelector for LocalFirstSelector {
             .min_by_key(|(_, b)| b.priority)
             .map(|(i, _)| i)
             .ok_or_else(|| {
-                sovereign_core::Error::Inference("No healthy backends available".to_string())
+                sovereign_contracts::Error::Inference("No healthy backends available".to_string())
             })
     }
 }
@@ -324,7 +324,7 @@ fn best_score_for_manifest(
     // SSOT manifest scorer (oicp-types). Micro-unification note: the
     // SSOT applies the smaller-size tie-break on score ties, which
     // this selector's pre-2026-06-10 inline copy did not.
-    oicp::best_claim_for_request(manifest, requirements)
+    oicp_types::best_claim_for_request(manifest, requirements)
         .map(|c| (c.score, c.claim_affinity, c.size_gb))
 }
 
@@ -334,11 +334,11 @@ fn best_score_for_manifest(
 mod tests {
     use super::*;
     use crate::health::HealthTracker;
-    use sovereign_core::oicp::{
+    use oicp_types::{
         CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
         ProviderManifest, ProviderModel,
     };
-    use sovereign_core::types::CompletionRequest;
+    use sovereign_contracts::types::CompletionRequest;
 
     async fn entry_with_manifest_and_availability(
         name: &str,

@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn router-cache {check,rebuild}` — manage the pre-built router
-//! exemplar embedding cache (`sovereign/router/router-embed-cache.json`).
+//! exemplar embedding cache (`sovereign/crates/sovereign-core/data/router/router-embed-cache.json`).
 //!
 //! - `check`  — pure, no-inference freshness gate over the WORKING TREE
 //!   (exemplars + models.toml + the committed cache). Exit 0 = fresh, 3 = stale,
 //!   2 = error. The `scripts/bump-desktop-version.sh` hook keys off exit 3.
 //! - `rebuild` — regenerate the artifact against the prescribed embed model,
-//!   driving the SAME `BootEmbedCache` + classifier path the runtime uses (via a
-//!   chat-model-free [`EmbedOnlyProvider`]) so the cache is byte-identical to
-//!   what a shipped app produces, then stamp its `built_for` fingerprint.
+//!   driving the SAME `BootEmbedCache` + classifier path the runtime uses (it
+//!   embeds on serve, which must hold that model: `serve_dial::serve_embedder`)
+//!   so the cache is byte-identical to what a shipped app produces, then stamp
+//!   its `built_for` fingerprint.
 //!
-//! Why this lives in `sovereign-cli-llm`: `rebuild` loads a GGUF and runs
-//! inference, so it needs the `sovereign-inference` engine the LLM cluster
-//! already links. `check` is pure but rides along so both verbs share one home.
+//! `check` is pure but rides along so both verbs share one home.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -26,11 +25,10 @@ use sovereign_core::router_embed::EmbedRouter;
 use sovereign_core::router_embed_cache::{check_cache_fresh, BootEmbedCache};
 use sovereign_core::scope_classifier::PersonalScopeClassifier;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::embedded::EmbedOnlyProvider;
 
-const CACHE_REL: &str = "sovereign/router/router-embed-cache.json";
-const MODELS_REL: &str = "sovereign/models.toml";
-const ROUTER_DIR: &str = "sovereign/router";
+const CACHE_REL: &str = "sovereign/crates/sovereign-core/data/router/router-embed-cache.json";
+const MODELS_REL: &str = "sovereign/crates/sovereign-contracts/data/models.toml";
+const ROUTER_DIR: &str = "sovereign/crates/sovereign-core/data/router";
 
 const HELP: &str = "\
 sovereign router-cache — pre-built router exemplar embedding cache
@@ -60,7 +58,7 @@ pub async fn run(args: &[String]) -> i32 {
     }
 }
 
-/// Walk up from CWD to the repo root (the dir holding `sovereign/models.toml`).
+/// Walk up from CWD to the repo root (the dir holding the bundled `models.toml`).
 pub(crate) fn repo_root() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
@@ -203,16 +201,16 @@ async fn cmd_rebuild(args: &[String]) -> i32 {
             .join("models")
             .join(&slot.file),
     };
-    if !model_path.is_file() {
-        eprintln!(
-            "router-cache rebuild: prescribed embed model not found:\n  {}\n\
-             Download it from {} (file {}), or pass --embed-model <path>.",
-            model_path.display(),
-            slot.hf_url,
-            slot.file,
-        );
-        return 2;
-    }
+    // serve holds the model, so its file need not be here; serve must
+    // embed with it, or the artifact would be another model's.
+    let provider =
+        match crate::serve_dial::serve_embedder("router-cache rebuild", &model_path).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("{e}");
+                return 2;
+            }
+        };
 
     eprintln!(
         "router-cache rebuild: embedding router exemplars with {} (family {embed_family:?})\n  \
@@ -226,15 +224,6 @@ async fn cmd_rebuild(args: &[String]) -> i32 {
     // (temp + rename), so a mid-run failure leaves the old file intact.
     let target = root.join(CACHE_REL);
     std::env::set_var("SOVEREIGN_ROUTER_EMBED_CACHE", &target);
-
-    let provider: Arc<dyn InferenceProvider> =
-        match EmbedOnlyProvider::load(&model_path, embed_family) {
-            Ok(p) => Arc::new(p),
-            Err(e) => {
-                eprintln!("router-cache rebuild: load embed model: {e}");
-                return 1;
-            }
-        };
 
     // Same path the runtime takes: open the boot cache, run each classifier's
     // `from_toml_str_cached` through it, flush. `BootEmbedCache::open` validates

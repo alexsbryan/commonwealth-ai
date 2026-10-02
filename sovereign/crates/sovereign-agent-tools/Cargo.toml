@@ -35,6 +35,9 @@ syn = { version = "2.0", features = ["full", "parsing"] }
 # on syn parse errors. Without this feature, `Span::start` returns a
 # placeholder and the validator can't report useful line numbers.
 proc-macro2 = { version = "1", features = ["span-locations"] }
+# `SamplingOverrides` (role/profile.rs) is oicp-types' own, shared with svrn's
+# turn wire (phase-b-56). oicp-types is in the bench package's leaf_budget.
+oicp-types = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]

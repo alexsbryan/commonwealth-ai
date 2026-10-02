@@ -21,7 +21,7 @@
 //! Semantic match beats string match here. This module is a centroid-
 //! of-embeddings classifier — the same shape as the personal-scope
 //! classifier (`scope_classifier.rs`) — over a deliberately small,
-//! shape-diverse example set (`sovereign/router/current_info_examples.toml`):
+//! shape-diverse example set (`sovereign/crates/sovereign-core/data/router/current_info_examples.toml`):
 //! a `[current]` class (genuinely time-sensitive: live scores, prices,
 //! breaking news, "what's the latest on X") and an `[evergreen]` class
 //! (history, definitions, how/why explanations, long-form essays —

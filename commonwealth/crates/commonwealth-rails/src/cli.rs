@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The command surface: three verbs, hand-parsed, no framework.
+//! The command surface: four verbs, hand-parsed, no framework.
 //!
 //! ```text
+//! cw-rails found <mesh-name> [--name N] [--data-dir D] [--config F]
 //! cw-rails join <invite> [--name N] [--data-dir D] [--config F]
-//! cw-rails run [--data-dir D] [--config F]
+//! cw-rails run [--listen P] [--local-only] [--mdns] [--data-dir D] [--config F]
 //! cw-rails media [<peer>] [--fanout <path>] [--peers a,b] [--listen P]
 //! ```
 //!
@@ -29,12 +30,22 @@ use crate::{join, RailsDaemon, RailsNode, Refusal};
 pub const USAGE: &str = "\
 cw-rails — the minimal rails daemon: your address on the mesh, with media on it.
 
+  cw-rails found <mesh-name> [--name N] [--data-dir D] [--config F]
+      Found a mesh with this node as its first member. Writes node_id,
+      mesh.json and join_key.secret, then exits. `run` serves the invite as
+      `join_link` on /v1/mesh/status.
+
   cw-rails join <invite> [--name N] [--data-dir D] [--config F]
       Join a mesh by invite (a sovereign://join/… link with an iroh dial).
       Writes node_id and mesh.json, then exits.
 
-  cw-rails run [--data-dir D] [--config F]
-      Serve the loopback API and gossip. Refuses to start with no mesh.
+  cw-rails run [--listen P] [--local-only] [--mdns] [--data-dir D] [--config F]
+      Serve the loopback API and gossip. With no mesh it runs solo: the
+      store and ledger serve, nothing gossips, no peer is admitted.
+      --listen P serves the API on port P instead of rails.toml's `listen`.
+      --local-only is `[relay] discovery = \"none\"`: no n0 relay, no n0 DNS.
+      --mdns announces this member on the LAN by key, so `cw-rails join` with
+      a bare cwth-… key finds it.
 
   cw-rails media [<peer>] [--fanout <path>] [--peers a,b] [--listen P]
       Ask the running daemon: who offers a library, the URL for one, or the
@@ -46,11 +57,19 @@ Logging:  RUST_LOG, default `info`.";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
+    Found {
+        mesh_name: String,
+        name: Option<String>,
+    },
     Join {
         invite: String,
         name: Option<String>,
     },
-    Run,
+    Run {
+        listen: Option<u16>,
+        local_only: bool,
+        mdns: bool,
+    },
     Media {
         peer: Option<String>,
         fanout: Option<String>,
@@ -81,6 +100,8 @@ impl Args {
         let mut fanout = None;
         let mut peers = None;
         let mut listen = None;
+        let mut local_only = false;
+        let mut mdns = false;
         while let Some(arg) = it.next() {
             let mut value = |flag: &str| it.next().ok_or_else(|| format!("{flag} wants a value"));
             match arg.as_str() {
@@ -95,6 +116,8 @@ impl Args {
                             .map_err(|_| format!("--listen {raw} is not a port"))?,
                     );
                 }
+                "--local-only" => local_only = true,
+                "--mdns" => mdns = true,
                 "--peers" => {
                     peers = Some(
                         value("--peers")?
@@ -116,18 +139,37 @@ impl Args {
                     return Err(format!("unknown argument `{other}`"))
                 }
                 positional => match verb.as_str() {
-                    "join" if invite.is_none() => invite = Some(positional.to_string()),
+                    "join" | "found" if invite.is_none() => invite = Some(positional.to_string()),
                     "media" if peer.is_none() => peer = Some(positional.to_string()),
                     _ => return Err(format!("unexpected argument `{positional}`")),
                 },
             }
         }
+        if local_only && verb != "run" {
+            return Err("--local-only is a `run` flag".into());
+        }
+        if mdns && verb != "run" {
+            return Err("--mdns is a `run` flag".into());
+        }
         let command = match verb.as_str() {
+            "found" => Command::Found {
+                mesh_name: invite.ok_or("found wants a mesh name: `cw-rails found <mesh-name>`")?,
+                name,
+            },
             "join" => Command::Join {
                 invite: invite.ok_or("join wants an invite: `cw-rails join <invite>`")?,
                 name,
             },
-            "run" => Command::Run,
+            "run" => {
+                if listen == Some(0) {
+                    return Err("--listen 0 is a port the operator cannot dial back".into());
+                }
+                Command::Run {
+                    listen,
+                    local_only,
+                    mdns,
+                }
+            }
             "media" => Command::Media {
                 peer,
                 fanout,
@@ -163,6 +205,25 @@ pub async fn main(args: Args) -> ExitCode {
             peers,
             listen,
         } => media(listen.unwrap_or(config.listen), peer, fanout, peers).await,
+        Command::Found { mesh_name, name } => {
+            let node_name = name.unwrap_or(config.name);
+            // Held while the files are written, so a running cw-rails on
+            // this root is refused by name rather than left serving solo.
+            let _root = match crate::claim_root(&data_dir) {
+                Ok(f) => f,
+                Err(e) => return refuse(e),
+            };
+            match crate::found::found(&data_dir, &mesh_name, &node_name) {
+                Ok(f) => {
+                    println!("Founded {} as {node_name} ({}).", f.mesh.name, f.mesh.id);
+                    println!(
+                        "Now: cw-rails run — its /v1/mesh/status carries the invite as join_link."
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(e) => refuse(e),
+            }
+        }
         Command::Join { invite, name } => {
             let mut config = config;
             if let Some(n) = name {
@@ -185,20 +246,51 @@ pub async fn main(args: Args) -> ExitCode {
                 Err(e) => refuse(e),
             }
         }
-        Command::Run => {
+        Command::Run {
+            listen: listen_flag,
+            local_only,
+            mdns,
+        } => {
+            let mut config = config;
+            if let Some(p) = listen_flag {
+                config.listen = p;
+            }
+            if local_only {
+                config.relay.discovery = Some("none".to_string());
+            }
             let listen = config.listen;
+            tracing::info!(
+                target: "rails",
+                listen,
+                listen_source = if listen_flag.is_some() { "flag" } else { "config" },
+                local_only,
+                n0_services = config.relay_config().n0_services,
+                "run: posture resolved"
+            );
+            // Held until `main` returns: the process lifetime.
+            let root = match crate::claim_root(&data_dir) {
+                Ok(f) => f,
+                Err(e) => return refuse(e),
+            };
             let node = match RailsNode::bind(data_dir.clone(), config).await {
                 Ok(n) => n,
                 Err(e) => return refuse(e),
             };
-            let daemon = match RailsDaemon::start_from_disk(node).await {
+            let mut daemon = match RailsDaemon::start_from_disk(node).await {
                 Ok(d) => d,
                 Err(e) => return refuse(e),
             };
+            if mdns {
+                daemon.advertise_on_lan().await;
+            }
             eprintln!("cw-rails: http://127.0.0.1:{listen}/v1/mesh/status");
-            match daemon.run().await {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(e) => refuse(e),
+            // The root's loss ends the process (five-programs-66).
+            tokio::select! {
+                ran = daemon.run() => match ran {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(e) => refuse(e),
+                },
+                lost = crate::root_lost(&data_dir, &root, crate::ROOT_WATCH_INTERVAL) => refuse(lost),
             }
         }
     }
@@ -431,8 +523,35 @@ mod tests {
                 config: None,
             }
         );
+        assert_eq!(
+            Args::parse(argv("found Lab --name founder"))
+                .unwrap()
+                .command,
+            Command::Found {
+                mesh_name: "Lab".into(),
+                name: Some("founder".into())
+            }
+        );
+        assert!(Args::parse(argv("found")).is_err(), "a mesh wants a name");
         let run = Args::parse(argv("run --data-dir /var/rails")).unwrap();
-        assert_eq!(run.command, Command::Run);
+        assert_eq!(
+            run.command,
+            Command::Run {
+                listen: None,
+                local_only: false,
+                mdns: false
+            }
+        );
+        assert_eq!(
+            Args::parse(argv("run --listen 43383 --local-only --mdns"))
+                .unwrap()
+                .command,
+            Command::Run {
+                listen: Some(43383),
+                local_only: true,
+                mdns: true
+            }
+        );
         assert_eq!(run.data_dir, Some(PathBuf::from("/var/rails")));
         assert_eq!(
             Args::parse(argv("media LittleMac")).unwrap().command,
@@ -468,6 +587,14 @@ mod tests {
         );
         assert!(Args::parse(argv("run --forever")).is_err(), "unknown flag");
         assert!(Args::parse(argv("runn")).is_err(), "unknown verb");
+        assert!(
+            Args::parse(argv("run --listen 0")).is_err(),
+            "a port nobody can dial"
+        );
+        assert!(
+            Args::parse(argv("media --local-only")).is_err(),
+            "--local-only belongs to run"
+        );
         assert!(
             Args::parse(argv("media --listen not-a-port")).is_err(),
             "a port that is not a port"

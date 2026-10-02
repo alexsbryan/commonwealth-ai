@@ -41,7 +41,7 @@ use std::sync::Mutex;
 use ort::session::Session;
 use ort::value::Tensor;
 use regex::Regex;
-use sovereign_core::error::{Error, Result};
+use sovereign_contracts::error::{Error, Result};
 use tokenizers::Tokenizer;
 
 use crate::gliner_ner::{
@@ -443,33 +443,9 @@ impl crate::labeled::LabeledEntityExtractor for Gliner2Extractor {
                 .collect(),
         ))
     }
-}
 
-impl sovereign_core::traits::EntityExtractor for Gliner2Extractor {
-    fn extract_entities(&self, text: &str) -> Vec<String> {
-        match self.extract(text) {
-            Ok(hits) => {
-                let mut out: Vec<String> = hits
-                    .into_iter()
-                    .map(|h| h.text.to_lowercase())
-                    .collect::<std::collections::BTreeSet<_>>()
-                    .into_iter()
-                    .collect();
-                out.retain(|s| !s.trim().is_empty());
-                out
-            }
-            Err(e) => {
-                // Same degradation contract as the v1 extractor: entity-aware
-                // retrieval falls back to cosine+MMR rather than failing the
-                // query. Logged, never silent.
-                tracing::warn!(
-                    error = %e,
-                    model_id = %self.model_id,
-                    "GLiNER2 extract_entities failed; returning no entities"
-                );
-                Vec::new()
-            }
-        }
+    fn generation(&self) -> GlinerGeneration {
+        crate::gliner_ner::model_spec(&self.model_id).generation
     }
 }
 

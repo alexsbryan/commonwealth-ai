@@ -94,14 +94,34 @@
 //! `sovereign-time` without creating the exact backflow edge it exists to
 //! forbid.
 
+pub mod actor;
 pub mod answer;
 pub mod attribution;
 pub mod conformance;
 pub mod custody;
+/// The env-prefix mirror (`promote_legacy_env`). Here, not in
+/// `sovereign-contracts`, because cw-rails reads `SOVEREIGN_*` vars too and
+/// may name no sovereign-* crate; the kernel is the one home both may name.
+pub mod env_bridge;
+pub mod hardware;
 pub mod hash;
 pub mod ids;
 pub mod judgement;
+/// Who a verified dialer is, and how a `<peer>` argument resolves —
+/// `MemberIdentity`, `verified_headers` and `member_matches`. Moved here from
+/// `commonwealth-media` / `commonwealth-core` by five-programs fp-46
+/// (§12 decision 3): the member view crosses the package line, and the
+/// standing `[[forbid]]` rows keep the two commonwealth owners free of every
+/// sovereign-* crate, so the neutral kernel is the one home both may name.
+/// The owners re-import every item at its historical path (ARCH §10.6).
+pub mod member;
 pub mod origin;
+/// Leader election and rendezvous ownership over a set of `NodeId`s — pure
+/// functions every node evaluates alike. Moved here from
+/// `commonwealth-core` by phase-b-76: its only callers are svrn's newsworthy
+/// host and sovereign-compute's shared-model host election, two programs and
+/// no cmnwlth site, so §12 3a's "ids and atoms" rung places it beside `NodeId`.
+pub mod partition;
 // The instrument registry's schema. Feature-gated so the default four-dep
 // budget in Cargo.toml still holds for a lift of this leaf — `toml` is only
 // linked by the three programs that read `quality/instruments.toml`.
@@ -110,14 +130,16 @@ pub mod quality;
 #[cfg(any(test, feature = "wire-fixture"))]
 pub mod wire;
 
+pub use actor::{ActorKey, InvalidActorKey};
 pub use answer::{Answer, Citation, Draft, PeerAnswer, Refused, Seal, TURN_SUBJECT};
 pub use attribution::{Attribution, ComputeAttribution};
 pub use conformance::{
     AcceptanceScenario, Enforceability, ReqLevel, Requirement, RequirementRegistry,
 };
 pub use custody::{join_custody, Custody};
+pub use hardware::hardware_fingerprint;
 pub use hash::ContentHash;
-pub use ids::{CorpusId, NodeId};
+pub use ids::{CorpusId, HandoffId, MeshId, ModelId, NodeId, NodePubkey, ProcessId};
 pub use judgement::{
     honesty_footer, is_absent_marker, render_rows, Freshness, Judgement, Reason, Verdict,
 };

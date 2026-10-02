@@ -18,12 +18,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::clustering::{
-    cluster_embeddings, ClusterResult as EngineClusterResult, EnrichmentProgress,
+use corpus_index::ingest_port::{
+    EmbeddingClusters as EngineClusterResult, LocalCorpusPort, PromptFn,
 };
-use corpus_engine::enrichment::domain::ClusteringConfig;
-use corpus_engine::enrichment::pipeline::ChatPrompt;
-use corpus_engine::{CorpusEngine, InferenceFn};
 use serde::{Deserialize, Serialize};
 use sovereign_core::error::{Error, Result};
 
@@ -68,12 +65,12 @@ pub struct LabeledClusterResult {
 // ─── The Clusterer ───────────────────────────────────────────────────
 
 pub struct Clusterer {
-    engine: Arc<CorpusEngine>,
-    inference: InferenceFn,
+    engine: Arc<dyn LocalCorpusPort>,
+    inference: PromptFn,
 }
 
 impl Clusterer {
-    pub fn new(engine: Arc<CorpusEngine>, inference: InferenceFn) -> Self {
+    pub fn new(engine: Arc<dyn LocalCorpusPort>, inference: PromptFn) -> Self {
         Self { engine, inference }
     }
 
@@ -96,30 +93,21 @@ impl Clusterer {
             .await
             .map_err(|e| Error::Execution(format!("open index '{corpus_id}': {e}")))?;
 
-        // ── 1 + 2: HDBSCAN via corpus-engine ─────────────────────────
-        let cluster_cfg = ClusteringConfig {
-            min_cluster_size: config.min_cluster_size,
-            epsilon: 0.2,
-            label_sample_size: 5,
-            max_cluster_points: 10_000,
-            reduced_dims: 0,
-        };
+        // ── 1 + 2: HDBSCAN via ingest's port ─────────────────────────
         on_progress(LocalCorpusProgress::Clustering {
             stage: ClusterStage::EmbeddingMatrix,
         });
         let bridge_cb: Arc<dyn Fn(LocalCorpusProgress) + Send + Sync> = Arc::clone(&on_progress);
-        let stage_cb = move |p: EnrichmentProgress| {
-            if let EnrichmentProgress::ClusteringStep {
-                step: "running-hdbscan" | "hdbscan",
-                ..
-            } = &p
-            {
+        let stage_cb = move |step: &str| {
+            if let "running-hdbscan" | "hdbscan" = step {
                 bridge_cb(LocalCorpusProgress::Clustering {
                     stage: ClusterStage::HdbscanRun,
                 });
             }
         };
-        let cluster_result = cluster_embeddings(&index, &cluster_cfg, &stage_cb)
+        let cluster_result = self
+            .engine
+            .cluster_embeddings(&index, config.min_cluster_size, &stage_cb)
             .await
             .map_err(|e| Error::Execution(format!("cluster_embeddings: {e}")))?;
 
@@ -135,7 +123,7 @@ impl Clusterer {
                 .map_err(|e| Error::Execution(format!("get_chunks: {e}")))?;
             let prompt = build_label_prompt(&chunks);
 
-            let raw = match (self.inference)(&ChatPrompt::new("", prompt.as_str()), None).await {
+            let raw = match (self.inference)(prompt).await {
                 Ok(r) => r,
                 Err(e) => {
                     tracing::warn!(
@@ -193,7 +181,7 @@ impl Clusterer {
 
 // ─── Prompt + parsing ────────────────────────────────────────────────
 
-fn build_label_prompt(chunks: &[corpus_engine::StoredChunk]) -> String {
+fn build_label_prompt(chunks: &[corpus_index::index::StoredChunk]) -> String {
     // Spec §6.3 prompt, verbatim structure. Keeps the tag-path grammar
     // predictable so the UI and the write-back layer agree on the
     // shape.
@@ -336,7 +324,7 @@ fn extract_json_block(raw: &str) -> &str {
 /// into the nearest cluster rather than leaving it as a permanent
 /// outlier.
 async fn compute_confidences(
-    index: &corpus_engine::CorpusIndex,
+    index: &corpus_index::index::CorpusIndex,
     cluster_result: &EngineClusterResult,
 ) -> Result<(HashMap<u64, f32>, HashMap<u64, i32>)> {
     let (chunk_ids, embeddings) = index

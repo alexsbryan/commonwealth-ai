@@ -14,14 +14,14 @@ cloud/pod.sh down  <id>                 # destroy, close the ledger row
 ```
 
 `cloud/pod.sh list` shows what is running and what it has cost. So does
-`sovereign pipeline pod list` — rows go into the same
+`sovereign mesh pod list` — rows go into the same
 `~/.svrnmesh/pipeline-pods.json` in the same schema `sovereign-pipeline`'s
 `ledger.rs` reads, so a training pod is never invisible to the accounting that
 already exists.
 
-## Why this is a shell script and not `sovereign pipeline pod up`
+## Why this is a shell script and not `sovereign mesh pod up`
 
-`pipeline pod up` builds an **ephemeral inference worker**: it mints a
+`mesh pod up` builds an **ephemeral inference worker**: it mints a
 bootstrap blob, boots our `sovereign-cuda` image whose entrypoint ends in
 `daemon run --worker-mode` (`sovereign/container/entrypoint.sh:114`), and
 drives a job protocol whose only reverse flow is `GET
@@ -38,7 +38,7 @@ A training pod needs none of that and one thing that does not exist there:
 
 What *is* reusable is reused: `pod.rs`'s offer query and ranking are mirrored
 here, and `ledger.rs`'s file and schema are written directly. Phase 2 lifts
-this script into a `pipeline pod --kind train` once the probe has proven the
+this script into a `mesh pod --kind train` once the probe has proven the
 shape — building the Rust surface first would mean guessing it.
 
 ## What crosses the wire

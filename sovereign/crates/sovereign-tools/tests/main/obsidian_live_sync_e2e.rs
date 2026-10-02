@@ -26,7 +26,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, EmbedFn};
+use crate::local_corpus_port_double::leaf_backed_double;
+use corpus_index::ingest_port::double::IngestPortDouble;
+use corpus_index::source::CorpusReadPort;
+use corpus_index::types::EmbedFn;
 use sovereign_core::traits::StateStore;
 use sovereign_store::memory::InMemoryStateStore;
 use sovereign_tools::local_corpus::config::{
@@ -39,7 +42,7 @@ use sovereign_tools::local_corpus::watched::state::WatchedFolderState;
 use sovereign_tools::local_corpus::watched::worker::{Worker, WorkerOutcome};
 use tempfile::TempDir;
 
-const EMBED_DIMS: usize = corpus_engine::DEFAULT_EMBED_DIM;
+const EMBED_DIMS: usize = corpus_index::types::DEFAULT_EMBED_DIM;
 
 fn stub_embed() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0f32; EMBED_DIMS]) }))
@@ -49,7 +52,7 @@ struct Fixture {
     _tmp: TempDir,
     vault: PathBuf,
     _data_dir: PathBuf,
-    _engine: Arc<CorpusEngine>,
+    _engine: Arc<IngestPortDouble>,
     manager: Arc<LocalCorpusManager>,
     registry: Arc<WatchedFolderRegistry>,
     worker: Arc<Worker>,
@@ -67,13 +70,11 @@ async fn boot() -> Fixture {
     std::fs::create_dir_all(&vault).unwrap();
     std::fs::create_dir_all(&snapshots).unwrap();
 
-    let engine = Arc::new(
-        CorpusEngine::new(recipes_dir, indexes_dir, stub_embed()).with_embedding_model("test-mock"),
-    );
+    let engine = Arc::new(leaf_backed_double(indexes_dir, stub_embed()));
     let store: Arc<dyn StateStore> = Arc::new(InMemoryStateStore::new());
     let manager = Arc::new(
         LocalCorpusManager::init(
-            Arc::clone(&engine),
+            engine.clone(),
             store,
             None,
             data_dir.clone(),
@@ -84,7 +85,7 @@ async fn boot() -> Fixture {
     );
     let registry = Arc::new(WatchedFolderRegistry::new());
     let worker = Arc::new(Worker::new(
-        Arc::clone(&engine),
+        engine.clone(),
         Arc::clone(&manager),
         Arc::clone(&registry),
         noop_sink(),
@@ -315,16 +316,17 @@ async fn vault_adding_a_new_note_is_detected_as_added() {
 /// REAL ingested chunk ids stands in for the inference-backed
 /// `cluster()` (seeded via `seed_cluster_result`), so this pins:
 ///
-///   - chunks carry root-relative `source_doc_id`s (nested note incl.)
+///   - svrn stages root-relative doc ids (nested note incl.)
 ///   - sweep → `refresh_writeback_if_clustered` → tags land in BOTH
 ///     notes' frontmatter + an index note under `_sovereign-index/`
 ///   - the post-write mtime patch: the very next sweep is `NoChanges`
 ///     (no writeback ↔ walker feedback loop)
-///   - doc identity SURVIVES delta updates: repeated edits of the
-///     nested note never accumulate duplicate chunks (pre-fix, the
-///     delta path stamped `source_doc_id = NULL`, so every second
-///     edit duplicated the note's chunks)
+///   - repeated edits of the nested note each sweep as one modification
 ///   - rollback restores the pre-tag bytes
+///
+/// Doc identity surviving the engine's delta updates (the pre-fix
+/// `source_doc_id = NULL` duplication) is corpus-engine's
+/// `local_corpus_port_parity`.
 #[tokio::test]
 async fn vault_writeback_round_trip_via_worker() {
     use sovereign_tools::local_corpus::clusterer::{LabeledCluster, LabeledClusterResult};
@@ -448,9 +450,10 @@ async fn vault_writeback_round_trip_via_worker() {
         "writeback mtime bumps must not re-detect as user edits"
     );
 
-    // Doc identity must survive repeated delta updates — pre-fix, the
-    // first edit NULLed the doc id and the second duplicated chunks.
-    let beta_chunks_before = beta_ids.len();
+    // Repeated edits of the nested note each sweep as one modification.
+    // That the engine keeps the doc id and never duplicates the note's
+    // chunks across them is corpus-engine's
+    // `local_corpus_port_parity::a_watched_update_replaces_a_doc_and_keeps_its_id`.
     for i in 0..2 {
         // The walker's fast path keys on (mtime, size) with 1s mtime
         // granularity — pad each edit differently so the size always
@@ -465,27 +468,6 @@ async fn vault_writeback_round_trip_via_worker() {
             WorkerOutcome::Applied(s) => assert_eq!(s.modified, 1, "edit {i}: {s:?}"),
             other => panic!("edit {i}: expected Applied, got {other:?}"),
         }
-    }
-    let beta_rows_after = index
-        .chunks_by_source_doc_ids(&["notes/beta.md".to_string()])
-        .await
-        .expect("beta rows after edits");
-    assert_eq!(
-        beta_rows_after.len(),
-        beta_chunks_before,
-        "duplicate chunks must not accumulate across edits; rows = {:?}",
-        beta_rows_after
-            .iter()
-            .map(|r| (r.id, r.source_doc_id.clone()))
-            .collect::<Vec<_>>()
-    );
-    for r in &beta_rows_after {
-        assert_eq!(
-            r.source_doc_id.as_deref(),
-            Some("notes/beta.md"),
-            "delta-produced chunks must keep the doc id"
-        );
-        assert!(r.title.is_some(), "delta-produced chunks must keep a title");
     }
 
     // Rollback restores the pre-tag bytes from the snapshot.

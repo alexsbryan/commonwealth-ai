@@ -14,7 +14,7 @@
 //! fingerprint that principal keys on has a name an operator can read and
 //! revoke by.
 //!
-//! [`Principal::RemoteClient`]: sovereign_serving_host::admission::Principal::RemoteClient
+//! [`Principal::RemoteClient`]: sovereign_contracts::principal::Principal::RemoteClient
 //! [`NodePart::client_token`]: crate::state::node::NodePart::client_token
 //!
 //! ## Where a token lives, and why on disk at all
@@ -46,14 +46,35 @@
 //! the next daemon restart — and a credential you can only withdraw by
 //! restarting the node is the gap this module closes rather than a smaller
 //! version of it.
+//!
+//! ## API keys: the same directory, an asserted identity
+//!
+//! An on-prem API key (`<sub>.key`, see [`keys`]) is the other credential this
+//! store answers "who is this bearer" for, and the one that carries WHO rather
+//! than which device: it resolves to `Principal::Asserted { sub, groups }`. A
+//! store that loaded at least one key makes the daemon KEYED for its lifetime
+//! (loopback grants nothing, `crate::api_keys`). Keys are read once at load,
+//! unlike named tokens, because keyed is a boot-time posture the turn's
+//! resolver is commissioned from; `svrn daemon key` writes the file and the
+//! next start reads it.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use commonwealth_core::ct::constant_time_eq;
+use subtle::ConstantTimeEq;
 
 use crate::client_principal::fingerprint;
+
+pub mod keys;
+pub use keys::{ApiKeyRow, KEY_ADMIN_GROUP};
+
+/// `<data_dir>/client-tokens` — the one spelling of where named tokens and
+/// API keys live, read by the node seed, the boot's keyed check and
+/// `svrn daemon key`.
+pub fn client_tokens_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("client-tokens")
+}
 
 /// What the client API accepts as a remote credential. **CLOSED SET**,
 /// resolved once from `[daemon] client_tokens` and carried on the node part —
@@ -160,6 +181,29 @@ impl std::fmt::Display for BadLabel {
 
 impl std::error::Error for BadLabel {}
 
+/// The `sub` the daemon's own credential asserts. A label holds no `@`, so no
+/// key file can claim it.
+pub const SELF_SUB: &str = "@svrn";
+
+/// This process's own API key: 256 bits minted once per process and never
+/// written anywhere, asserting [`SELF_SUB`] in the admin group. A keyed store
+/// admits it beside the keys on disk; an unkeyed one does not. It is how the
+/// daemon's calls to its own client routes (the OCR cleanup pass) are
+/// admitted by key, as every caller of a keyed daemon is (phase-b-86), never
+/// by a loopback exemption. `None` when the OS gave no entropy, named in the
+/// log; the caller then sends no key and the refusal it gets says why.
+pub fn self_credential() -> Option<&'static str> {
+    static KEY: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    KEY.get_or_init(|| match crate::client_auth::generate_bearer_token() {
+        Ok(token) => Some(token),
+        Err(e) => {
+            tracing::warn!("client_tokens: no self credential this process: {e}");
+            None
+        }
+    })
+    .as_deref()
+}
+
 /// The named tokens this node admits: the on-disk set, loaded once at start,
 /// and mutated in place by the routes.
 #[derive(Debug, Default)]
@@ -169,6 +213,9 @@ pub struct ClientTokenStore {
     /// credential that would vanish with the process.
     dir: Option<PathBuf>,
     by_fingerprint: Mutex<HashMap<String, Named>>,
+    /// The API keys read at load, by fingerprint. Never mutated: a non-empty
+    /// map is what makes this daemon keyed, and that is decided once.
+    keys: HashMap<String, keys::ApiKey>,
 }
 
 /// A label must be a file name and nothing else: the store's whole on-disk
@@ -212,15 +259,53 @@ impl ClientTokenStore {
                 map.insert(fingerprint(&token), Named { label, token });
             }
         }
+        let mut keys: HashMap<String, keys::ApiKey> = dir
+            .as_deref()
+            .map(keys::read_dir_keys)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|k| (fingerprint(&k.token), k))
+            .collect();
+        // Keyedness is decided by the disk alone; only then does the
+        // daemon's own credential join, so an unkeyed daemon never admits it.
+        if !keys.is_empty() {
+            if let Some(token) = self_credential() {
+                keys.insert(
+                    fingerprint(token),
+                    keys::ApiKey {
+                        sub: SELF_SUB.to_string(),
+                        token: token.to_string(),
+                        groups: vec![KEY_ADMIN_GROUP.to_string()],
+                    },
+                );
+            }
+        }
         tracing::debug!(
             dir = ?dir,
             named_tokens = map.len(),
-            "client_tokens: loaded the named client-token set"
+            api_keys = keys.len(),
+            "client_tokens: loaded the named client-token set and the API keys"
         );
         Self {
             dir,
             by_fingerprint: Mutex::new(map),
+            keys,
         }
+    }
+
+    /// Whether this daemon identifies every caller by API key: true when the
+    /// load found at least one `<sub>.key`. Fixed for the store's lifetime.
+    pub fn is_keyed(&self) -> bool {
+        !self.keys.is_empty()
+    }
+
+    /// The `(sub, groups)` an API key asserts, or `None` when `presented` is
+    /// not a key. Bucket by fingerprint, admit by constant-time compare, as
+    /// [`Self::label_for`] does.
+    pub fn asserted_for(&self, presented: &str) -> Option<(String, Vec<String>)> {
+        let key = self.keys.get(&fingerprint(presented))?;
+        bool::from(presented.as_bytes().ct_eq(key.token.as_bytes()))
+            .then(|| (key.sub.clone(), key.groups.clone()))
     }
 
     /// The label admitting `presented`, or `None`.
@@ -233,7 +318,7 @@ impl ClientTokenStore {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let named = guard.get(&fingerprint(presented))?;
-        constant_time_eq(presented.as_bytes(), named.token.as_bytes()).then(|| named.label.clone())
+        bool::from(presented.as_bytes().ct_eq(named.token.as_bytes())).then(|| named.label.clone())
     }
 
     /// Record `token` under `label`, writing it to disk and admitting it from

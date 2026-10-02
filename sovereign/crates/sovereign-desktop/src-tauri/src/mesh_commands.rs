@@ -41,13 +41,12 @@ fn attached(state: &AppState) -> bool {
 /// `mesh_join` accepted three invite forms over HTTP and only a deep
 /// link in-process (ARCH principle 8).
 ///
-/// There is one path now. A Local-mode daemon serves the same
-/// `mesh_http` router on the same client port — `state.rs` REFUSES the
-/// boot outright if that listener does not bind, so its presence is an
-/// invariant here rather than a hope — and the port comes from
-/// `client_base_url()`, the one accessor for it.
+/// There is one path now, and since pb-mesh-exit-transport it is
+/// cw-rails', the node's one mesh endpoint: the membership doors and
+/// `/v1/mesh/status` are its routes, and svrn's copies answer 410 naming
+/// this base. The base comes from `rails_base_url()`, the one accessor.
 fn mesh_client(state: &AppState) -> sovereign_turn_client::TurnClient {
-    sovereign_turn_client::TurnClient::new(state.client_base_url())
+    sovereign_turn_client::TurnClient::new(state.rails_base_url())
 }
 
 /// Shared reqwest client with a reasonable timeout — mesh HTTP calls

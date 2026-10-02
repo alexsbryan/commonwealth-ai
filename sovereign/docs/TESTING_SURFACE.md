@@ -588,7 +588,7 @@ step. Buckets follow the daemon's structural layout.
 | `mesh.json` save/load round-trip via `persist::*` | ~ | **P0** | `persist` unit tests cover serde; no test that `save` → restart → `load` reconstructs a workable Mesh |
 | Peer preference applied to outbound manifest fetch | ~ | **P0** | `peer_preferences` unit tests cover gossip exclusion + clamp; no test of the `X-Node-Id` stamp path through `MeshInferenceProvider` |
 | Loopback parity across all loopback-only routers | ✓ | **P0** | `loopback_parity` (7 tests: 5 routers × non-loopback → 403, loopback negative control, missing-ConnectInfo fail-closed across all 5 routers) |
-| `ConnectInfo` missing → fail-closed | ✓ | P1 | `loopback_guard::middleware_fails_closed_when_connect_info_missing` |
+| `ConnectInfo` missing → fail-closed | ✓ | P1 | `host_kit::shell::guard::middleware_fails_closed_when_connect_info_missing` |
 | `peer_inference_endpoints` URL synthesis under uniform-port assumption | · | P2 | Now config-derived (client_port) post-port-fix; uniform assumption documented in §10.1; no test of the rewrite shape |
 
 ### D. Knowledge
@@ -644,7 +644,7 @@ step. Buckets follow the daemon's structural layout.
 | `/v1/admin/reload` HTTP route happy path | ✓ | **P0** | `admin_http::tests::reload_is_noop_when_nothing_changed` (spawns real HTTP listener via reqwest — lib tests at L2) |
 | `/v1/admin/reload` swaps `InferenceProvider` | ✓ | **P0** | `admin_http::tests::reload_swaps_inference_provider_when_models_change` (asserts `ProviderFactory.build_provider` invoked + reloaded_fields populated) |
 | `/v1/admin/reload` reports `restart_required: true` correctly | ✓ | P1 | `admin_http::tests::reload_port_change_requires_restart` |
-| Loopback enforcement on `/v1/admin/reload` | ✓ | **P0** | `loopback_guard::enforce_localhost_accepts_loopback_rejects_others`, `admin_http::tests::enforce_localhost_rejects_non_loopback` |
+| Loopback enforcement on `/v1/admin/reload` | ✓ | **P0** | `host_kit::shell::guard::enforce_localhost_accepts_loopback_rejects_others`, `admin_http::tests::enforce_localhost_rejects_non_loopback` |
 
 ### I. Auto-collaborate orchestration
 
@@ -680,8 +680,7 @@ step. Buckets follow the daemon's structural layout.
 
 | Capability | Coverage | Impact | Test / Next step |
 |---|---|---|---|
-| `/v1/apps` list / install / uninstall | · | P2 | **Gap.** Mesh-app manifest gossip; future-facing surface |
-| `/v1/apps/{id}/proxy` reverse proxy | · | P2 | **Gap.** |
+| `/v1/apps*`, `/app/*` | — | — | Deleted (pb-meshapp-apps): dead code. `server::tests::the_deleted_app_registry_answers_404` pins the absence |
 
 ### M. Contribution ledger
 

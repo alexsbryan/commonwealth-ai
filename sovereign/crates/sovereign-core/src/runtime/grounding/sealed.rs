@@ -173,7 +173,7 @@ impl SealedEvidence {
                         corpus,
                         // The citable unit at gate grain is the CHUNK, and a
                         // chunk is its bytes (ARCH §7.5). Same convention as
-                        // `corpus_engine::index::evidence::evidence_from_hit`,
+                        // `corpus_index::index::evidence::evidence_from_hit`,
                         // and named there for the same reason: the gate does
                         // not hold the whole document.
                         document: ContentHash::of(text.as_bytes()),
@@ -239,7 +239,7 @@ impl SealedEvidence {
 impl Seal for SealedEvidence {
     /// Substring containment against ONE member, first match wins.
     ///
-    /// The same predicate `corpus_engine::EvidenceSet` answers with, and the
+    /// The same predicate `corpus_index::index::EvidenceSet` answers with, and the
     /// same one the quote-first path already enforces upstream
     /// (`QuoteMatch::Exact` — a `Some(target)` on a `GroundedQuote` means the
     /// span is one contiguous run of one chunk). Members arrive in relevance

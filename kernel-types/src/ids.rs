@@ -16,10 +16,12 @@
 //! including `ed25519-dalek`, so the kernel cannot reach it. Pulling one id
 //! out of a six-member macro family leaves either a duplicated macro or an
 //! orphan; moving the MACRO down and leaving the five mesh-specific ids where
-//! they are does neither. `commonwealth-core` now invokes this macro for
-//! `MeshId`, `ModelId`, `ProcessId`, `PlanId` and `HandoffId`, and re-exports
-//! `NodeId` from here, so all 755 existing reference sites are untouched and
-//! there is still exactly one implementation (ARCH §10.6).
+//! they are does neither. `HandoffId` (pb-work-doors) and `MeshId`, `ModelId`
+//! and `ProcessId` (pb-mesh-exit-core) have since followed it here, because
+//! wire vocabulary in oicp-types names them; `commonwealth-core` invokes this
+//! macro only for `PlanId` now and re-exports the rest from here, so every
+//! existing reference site is untouched and there is still exactly one
+//! implementation (ARCH §10.6).
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -121,6 +123,65 @@ macro_rules! define_id {
 }
 
 define_id!(NodeId, "node");
+
+// Which work handoff. Moved here from `commonwealth-core` by pb-work-doors
+// (FIVE_PROGRAMS §12 3a rung 2): a client that submits work names it and
+// links no mesh crate.
+define_id!(HandoffId, "handoff");
+
+// Which mesh, which model, which process. Moved here from `commonwealth-core`
+// by pb-mesh-exit-core (FIVE_PROGRAMS §12 3a rung 2): `NodeCapabilities`
+// names `ProcessId` and the model catalogue names `ModelId`, and both are
+// oicp-types vocabulary now, which may name only this crate.
+define_id!(MeshId, "mesh");
+define_id!(ModelId, "model");
+define_id!(ProcessId, "proc");
+
+/// A node's Ed25519 verifying key — the mesh-wide cryptographic
+/// identity of a node, distinct from the opaque random [`NodeId`].
+///
+/// Why both exist: `NodeId` predates this key and is the join/gossip
+/// primary key everywhere; changing it is a wire bump across every
+/// surface. The pubkey is the *transport-grade* identity — it is,
+/// byte for byte, a valid iroh node id, so a future dial-by-key
+/// transport authenticates peers end-to-end with this exact value.
+/// Until then it travels alongside the record so the trust ring is
+/// transport-ready.
+///
+/// Lives here rather than in `commonwealth-core` since fp-40 (§12
+/// decision 3): `PeerContact` is contract vocabulary and names this
+/// type, and the kernel is the ids home.
+///
+/// Serializes as a 32-byte array (same convention as
+/// `Mesh::invite_key_hash`). Display is full lowercase hex — this is
+/// public key material, never secret.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NodePubkey(pub [u8; 32]);
+
+impl NodePubkey {
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// The inverse of `Display`: exactly 32 bytes of hex, or `None`. A short
+    /// or malformed value is not narrowed to a prefix.
+    pub fn from_hex(s: &str) -> Option<Self> {
+        let bytes: [u8; 32] = hex::decode(s.trim()).ok()?.try_into().ok()?;
+        Some(Self(bytes))
+    }
+}
+
+impl fmt::Display for NodePubkey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", hex::encode(self.0))
+    }
+}
+
+impl fmt::Debug for NodePubkey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NodePubkey({})", self)
+    }
+}
 
 /// Which corpus. A slug, not a random id: corpora are named by the human who
 /// installs them and the name is the join key across every surface — 6,710

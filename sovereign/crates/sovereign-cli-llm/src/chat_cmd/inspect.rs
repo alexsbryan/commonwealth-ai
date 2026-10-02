@@ -17,7 +17,7 @@
 //! and the model still flails, the bug is in prompt assembly or the
 //! model itself.
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 use serde_json::json;
 
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
@@ -177,7 +177,14 @@ async fn run_inspect(
     // 2. Enumerate installed indexes, showing ineligibility reasons
     //    up-front so the user doesn't wonder why a corpus got no
     //    hits.
-    let indexes = match session.corpus_engine.installed_indexes().await {
+    let corpus = match session.corpus() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
+    let indexes = match corpus.installed_indexes().await {
         Ok(i) => i,
         Err(e) => {
             eprintln!("installed_indexes() failed: {e}");
@@ -201,7 +208,7 @@ async fn run_inspect(
         .filter(|i| corpus_filter.is_none_or(|f| i.corpus_id == f))
     {
         let dim_match = info.embedding_dimensions == embedding.len();
-        let is_code = matches!(info.kind, corpus_engine::CorpusKind::Code);
+        let is_code = matches!(info.kind, corpus_index::types::CorpusKind::Code);
         eprintln!(
             "corpus {} — {} chunks, kind={:?}, dims {}, model `{}` {}{}",
             info.corpus_id,
@@ -225,7 +232,7 @@ async fn run_inspect(
         // does: if dims don't match, send an empty embedding so
         // the index uses its Tantivy BM25 path only.
         let query_vec: &[f32] = if dim_match { &embedding } else { &[] };
-        let idx = match session.corpus_engine.open_index(&info.path).await {
+        let idx = match corpus.open_index(&info.path).await {
             Ok(i) => i,
             Err(e) => {
                 eprintln!("  open_index failed: {e}");

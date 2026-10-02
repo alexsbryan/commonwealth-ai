@@ -30,35 +30,34 @@ pub mod ann_store;
 // 2026-09-03; re-exported here so the historical paths keep resolving.
 pub use understanding_vocab::atoms;
 pub mod atoms_delta;
-pub mod axis_catalog;
-pub mod citation;
+// The atlas READ surface lives in the `corpus-engine-atlas-reader` leaf since
+// 2026-09-21 (FIVE_PROGRAMS §12 decision 1); re-exported here so the
+// historical paths keep resolving. Writers stay below.
+pub use corpus_engine_atlas_reader::{
+    axis_catalog, citation, context_filter, evidence_site, ground, inventory, projection,
+    section_cache,
+};
 pub mod context;
-pub mod context_filter;
 pub mod context_loader;
 pub mod cross_corpus;
 pub mod doc_to_atoms;
+pub mod provider;
 pub use understanding_vocab::edges;
-pub mod embeddings;
-pub mod evidence_site;
-pub mod ground;
 pub mod ingestion;
-pub mod inventory;
 pub mod migrate_ids;
 pub mod ontology_coverage;
-pub mod projection;
-pub mod provider;
 pub mod registry;
 pub mod resolution;
 pub mod resolution_identity;
 pub mod resolution_ontology;
-pub mod resolve;
+pub use corpus_engine_atlas_reader::resolve;
 pub mod schema_validation;
-pub mod section_cache;
 pub mod seed_population;
 pub use understanding_vocab::stable_key;
 pub mod store;
 pub mod strategies;
 pub mod summary;
+pub(crate) mod typed_extension;
 pub mod vital_tier;
 pub mod wiki_store;
 pub mod writer;
@@ -71,15 +70,15 @@ pub use axis_catalog::{
     all_axes, axes_for_mode, axis_by_key, AxisAtomShape, GatingField, TypedAxis, AXIS_CATALOG,
 };
 pub use citation::{apply_citation, SourceCitation};
+pub use corpus_engine_atlas_reader::raw::atoms_content_hash;
 pub use cross_corpus::{
     detect_grounding, CrossCorpusAtomRef, CrossCorpusEdge, CrossCorpusEdgesFile, CrossCorpusInput,
     CrossCorpusReport, DetectorSummary, MatchTrace, RejectionBucket, RejectionSample,
 };
 pub use edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
-pub use embeddings::atoms_content_hash;
 pub use ground::{
-    candidate_atlas_ids, ground, navigation_policy_for, select_walk, Degradation, Grounding,
-    MapNode, MapSection, PolicySource, WalkLedger, WalkSelection, MAP_NODE_CAP,
+    ground, navigation_policy_for, select_walk, Degradation, Grounding, MapNode, MapSection,
+    PolicySource, WalkLedger, WalkSelection, MAP_NODE_CAP,
 };
 pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
 pub use inventory::{AtlasInventory, RowFit, RowInert};

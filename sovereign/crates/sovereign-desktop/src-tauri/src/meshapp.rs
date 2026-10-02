@@ -22,10 +22,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The four capabilities a mesh app can be granted. Mirrors
-/// `sovereign_meshapp_registry::AppPermissions` (kept local to avoid a
-/// desktop → `commonwealth-app` dependency for a 4-bool struct; the
-/// gossip-path manifest type stays decoupled from the desktop host).
+/// The four capabilities a mesh app can be granted. It mirrored
+/// `sovereign_meshapp_registry::AppPermissions` until that crate was deleted
+/// as dead code (pb-meshapp-apps); this is now the only copy.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MeshAppPermissions {
     #[serde(default)]

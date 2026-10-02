@@ -527,7 +527,7 @@ pub(super) async fn check_code_indexed() -> CheckResult {
             Some(n) => n.to_string(),
             None => continue,
         };
-        match corpus_engine::CorpusIndex::open(&path).await {
+        match corpus_index::index::CorpusIndex::open(&path).await {
             Ok(_) => healthy.push(name),
             Err(_) => broken.push(name),
         }
@@ -659,11 +659,11 @@ pub(super) const WATCHERS_OFF_MSG: &str =
      scripts/sovereign-lint.sh and scripts/sovereign-test.sh are the gate";
 
 pub(super) fn watchers_opted_out(sovereign_dir: &std::path::Path) -> bool {
-    corpus_engine::SovereignConfig::load_or_default(sovereign_dir).watchers_disabled()
+    sovereign_contracts::config::SovereignConfig::load_or_default(sovereign_dir).watchers_disabled()
 }
 
 pub(super) fn check_test_runner(sovereign_dir: &std::path::Path) -> CheckResult {
-    let cfg = corpus_engine::SovereignConfig::load_or_default(sovereign_dir);
+    let cfg = sovereign_contracts::config::SovereignConfig::load_or_default(sovereign_dir);
     if cfg.test_runner.is_some() {
         CheckResult {
             name: "test_runner",
@@ -692,7 +692,7 @@ pub(super) fn check_test_runner(sovereign_dir: &std::path::Path) -> CheckResult 
 }
 
 pub(super) fn check_lint_runner(sovereign_dir: &std::path::Path) -> CheckResult {
-    let cfg = corpus_engine::SovereignConfig::load_or_default(sovereign_dir);
+    let cfg = sovereign_contracts::config::SovereignConfig::load_or_default(sovereign_dir);
     if cfg.lint_runner.is_some() {
         CheckResult {
             name: "lint_runner",
@@ -882,7 +882,8 @@ pub(super) fn check_log_dir_size() -> CheckResult {
             status: CheckStatus::Warning,
             message: format!(
                 "{} holds {total_mb} MiB — rotation should keep this bounded; \
-                 the rotation loop may be broken (see log_rotation.rs contract)",
+                 the rotation loop may be broken (see the daemon's log_rotation \
+                 contract, in sovereign-daemon since the de-embed)",
                 log_dir.display()
             ),
             repair: Repair::Manual(
@@ -907,7 +908,7 @@ pub(super) fn check_log_dir_size() -> CheckResult {
 /// `doctor --watch` this is a genuine 30s memory pager. Skipped when
 /// the field is absent (daemon predates the process block).
 pub(super) async fn check_daemon_memory(client_url: &str) -> CheckResult {
-    let soft = crate::memory_watch::soft_limit_mb();
+    let soft = host_kit::memory::soft_limit_mb();
     let Some(status) = http_get_json(&format!("{client_url}/status")).await else {
         return CheckResult {
             name: "daemon_memory",
@@ -971,11 +972,12 @@ pub(super) async fn check_daemon_memory(client_url: &str) -> CheckResult {
 /// and it must also work after an abort, when the daemon is down for the very
 /// reason being diagnosed.
 ///
-/// It calls the same pure predicate the boot guard enforces, so doctor and the
-/// daemon can never disagree about what is safe.
+/// It calls the same pure predicate the boot guard enforces
+/// (`sovereign_contracts::containment`, read by serve's guard too), so doctor
+/// and the loader can never disagree about what is safe.
 pub(super) fn check_distributed_primary_contained() -> CheckResult {
-    use sovereign_daemon::build::containment::{
-        classify_containment, ContainmentVerdict, OVERRIDE_ENV,
+    use sovereign_contracts::containment::{
+        classify_containment, rpc_discovery_armed, ContainmentVerdict, OVERRIDE_ENV,
     };
 
     let name = "distributed_primary_contained";
@@ -989,11 +991,32 @@ pub(super) fn check_distributed_primary_contained() -> CheckResult {
         };
     };
 
+    // Where the primary runs is the loader's decision
+    // (`engine_factory::child_owns_primary`); doctor asks the loader's setup
+    // probe rather than link it (pb-distribution-setup). No loader, no answer:
+    // skipped, naming why, never assumed in-process or contained.
+    let config_path = sovereign_core::setup_config::SetupConfig::default_path();
+    let placement = match crate::setup_cmd::probe::ask::<
+        sovereign_contracts::daemon_wire::PrimaryPlacement,
+    >("placement", &[&config_path.to_string_lossy()])
+    {
+        Ok(p) => p,
+        Err(e) => {
+            return CheckResult {
+                name,
+                layer: Layer::Sovereign,
+                status: CheckStatus::Skipped,
+                message: format!("the loader could not say where the primary runs: {e}"),
+                repair: Repair::None,
+            }
+        }
+    };
+
     let verdict = classify_containment(
-        config.compute.enabled && config.compute.distributed_primary,
+        placement.child_owns_primary,
         config.shared_model.role,
         false, // self node id is not resolved here; the role term carries it
-        sovereign_daemon::startup::rpc_discovery_armed(),
+        rpc_discovery_armed(),
         std::env::var(OVERRIDE_ENV).is_ok(),
     );
 

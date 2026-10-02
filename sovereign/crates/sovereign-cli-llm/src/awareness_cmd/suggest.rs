@@ -18,7 +18,7 @@
 
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pipeline::ChatPrompt;
+use corpus_index::prompt::ChatPrompt;
 use sovereign_core::traits::ConversationStore;
 use sovereign_core::types::{Conversation, Message, Role};
 use sovereign_store::sqlite::SqliteStateStore;

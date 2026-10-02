@@ -145,18 +145,22 @@ pub async fn cleanup_page(raw: &str, ctx: &OcrCtx) -> Result<String, CleanupErro
         .build()
         .map_err(|e| CleanupError::Unreachable(format!("build client: {e}")))?;
 
-    let resp = client
-        .post(&url)
-        .json(&req_body)
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_timeout() {
-                CleanupError::Timeout
-            } else {
-                CleanupError::Unreachable(e.to_string())
-            }
-        })?;
+    let mut req = client.post(&url).json(&req_body);
+    if let Some(bearer) = &ctx.bearer {
+        req = req.bearer_auth(bearer);
+    }
+    tracing::debug!(
+        url = %url,
+        keyed = ctx.bearer.is_some(),
+        "ocr:cleanup — sending one page to the daemon's chat route"
+    );
+    let resp = req.send().await.map_err(|e| {
+        if e.is_timeout() {
+            CleanupError::Timeout
+        } else {
+            CleanupError::Unreachable(e.to_string())
+        }
+    })?;
 
     let status = resp.status();
     if !status.is_success() {
@@ -227,9 +231,11 @@ mod tests {
                         })
                         .unwrap_or(0);
                     if total.len() >= body_start + cl {
-                        let body = String::from_utf8_lossy(&total[body_start..body_start + cl])
-                            .to_string();
-                        *captured_clone.lock().await = Some(body);
+                        // The whole request, headers included, so a test
+                        // can read the credential the call presented.
+                        let request =
+                            String::from_utf8_lossy(&total[..body_start + cl]).to_string();
+                        *captured_clone.lock().await = Some(request);
                         break;
                     }
                 }
@@ -288,6 +294,38 @@ mod tests {
         assert!(body.contains("\"model\":\"fast\""), "body: {body}");
         assert!(body.contains("input page text"), "body: {body}");
         assert!(body.contains("OCR cleanup tool"), "body: {body}");
+    }
+
+    /// A keyed daemon admits no caller without a key, loopback included, so
+    /// the cleanup call presents the bearer it was handed; with none it
+    /// sends no `Authorization` header at all. Failing input: drop the
+    /// `bearer_auth` line and the keyed request carries no header.
+    #[tokio::test]
+    async fn the_cleanup_call_presents_its_bearer_only_when_handed_one() {
+        let canned = r#"{"choices":[{"message":{"role":"assistant","content":""}}]}"#;
+        for bearer in [Some("k-123"), None] {
+            let (url, captured) = spawn_one_shot(canned).await;
+            let mut ctx = OcrCtx::for_test(
+                PathBuf::from("/bin/true"),
+                PathBuf::from("/nonexistent"),
+                url,
+            );
+            ctx.bearer = bearer.map(str::to_string);
+            let _ = cleanup_page("input page text", &ctx).await.unwrap();
+            let request = captured
+                .lock()
+                .await
+                .clone()
+                .expect("request captured")
+                .to_ascii_lowercase();
+            match bearer {
+                Some(k) => assert!(
+                    request.contains(&format!("authorization: bearer {k}")),
+                    "{request}"
+                ),
+                None => assert!(!request.contains("authorization:"), "{request}"),
+            }
+        }
     }
 
     #[tokio::test]

@@ -26,10 +26,7 @@ use std::net::SocketAddr;
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 
-/// The namespace the acceptor owns. A client-supplied header under it is
-/// stripped before the verified ones are added — the failing input this
-/// module exists for is a forged `X-Mesh-Member` reaching the origin.
-pub const MESH_HEADER_PREFIX: &str = "x-mesh-";
+pub use kernel_types::member::MESH_HEADER_PREFIX;
 
 /// The header an acceptor stamps on a forward to a listener that will READ the
 /// verified identity as an identity, rather than merely log it.
@@ -109,6 +106,18 @@ pub enum Forward {
         apps: std::sync::Arc<std::collections::BTreeMap<String, SocketAddr>>,
         headers: Vec<(String, String)>,
     },
+    /// One of several registered HTTP origins on `cwth/http/0`, chosen per
+    /// stream by the LONGEST registered path prefix covering the first
+    /// request, which is forwarded unchanged
+    /// ([`crate::iroh_routed_forward::route_by_prefix`]). Each route adds its
+    /// own registration's tie to `headers`; an unregistered path is refused
+    /// by name.
+    HttpByPrefix {
+        routes: std::sync::Arc<
+            std::collections::BTreeMap<String, crate::iroh_routed_forward::PrefixRoute>,
+        >,
+        headers: Vec<(String, String)>,
+    },
 }
 
 impl Forward {
@@ -123,7 +132,7 @@ impl Forward {
         match self {
             Forward::Splice(a) => Some(a),
             Forward::Http { origin, .. } => Some(origin),
-            Forward::HttpByName { .. } => None,
+            Forward::HttpByName { .. } | Forward::HttpByPrefix { .. } => None,
         }
     }
 }
@@ -321,7 +330,7 @@ pub fn rewrite_head(head: &[u8], headers: &[(String, String)]) -> (Vec<u8>, usiz
 /// Read one request head into `buf` (including its blank line). `Ok(false)`
 /// on a clean EOF before any byte; `Err` on EOF mid-head or a head past
 /// [`HEAD_CAP`].
-async fn read_head<R: AsyncBufReadExt + Unpin>(
+pub(crate) async fn read_head<R: AsyncBufReadExt + Unpin>(
     reader: &mut R,
     buf: &mut Vec<u8>,
 ) -> std::io::Result<bool> {
@@ -442,215 +451,46 @@ pub async fn pump_with_identity(
 /// closes the stream with a logged reason rather than being silently served
 /// by the wrong origin. The client reconnects and gets its app.
 pub async fn pump_by_name(
-    mut send: iroh::endpoint::SendStream,
+    send: iroh::endpoint::SendStream,
     recv: iroh::endpoint::RecvStream,
     apps: std::sync::Arc<std::collections::BTreeMap<String, SocketAddr>>,
     headers: std::sync::Arc<Vec<(String, String)>>,
 ) {
-    let mut reader = tokio::io::BufReader::new(recv);
-    let mut buf = Vec::with_capacity(4096);
-    // The first head decides where this stream goes, so it is read before any
-    // TCP connection exists — which is also why the refusals below answer on
-    // `send` directly instead of relaying an origin's answer.
-    match read_head(&mut reader, &mut buf).await {
-        Ok(true) => {}
-        Ok(false) => return,
-        Err(e) => {
-            tracing::info!(
-                target: "transport",
-                error = %e,
-                "iroh acceptor: app forward closed a request it could not frame"
-            );
-            return;
-        }
-    }
-    let Some((name, first_head)) = split_app_name(&buf) else {
-        tracing::info!(
-            target: "transport",
-            "app: REFUSED a request whose target names no app — the path's first \
-             segment selects the app (GET /<app>/…)"
-        );
-        say(
-            refuse(&mut send, 404, "no app named in the request path", &apps).await,
-            "<none>",
-        );
-        return;
-    };
-    let Some(origin) = apps.get(&name).copied() else {
-        tracing::info!(
-            target: "transport",
-            app = %name,
-            published = apps.len(),
-            "app: REFUSED a dial for an app this node does not publish"
-        );
-        say(
-            refuse(
-                &mut send,
-                404,
-                &format!("no app named {name:?} here"),
-                &apps,
-            )
-            .await,
-            &name,
-        );
-        return;
-    };
-    let tcp = match tokio::net::TcpStream::connect(origin).await {
-        Ok(t) => {
-            t.set_nodelay(true).ok();
-            t
-        }
-        Err(e) => {
-            // The registry says this app is published and the process behind
-            // it is gone. That is a 502 and it is NAMED: a stale registration
-            // reading as "no such app" would send the operator looking for a
-            // config bug that is not there.
-            tracing::warn!(
-                target: "transport",
-                app = %name,
-                origin = %origin,
-                error = %e,
-                "app: published app did not accept — the registration outlived its process"
-            );
-            say(
-                refuse(
-                    &mut send,
-                    502,
-                    &format!("app {name:?} is published on {origin} but did not accept"),
-                    &apps,
-                )
-                .await,
-                &name,
-            );
-            return;
-        }
-    };
-    tracing::info!(
-        target: "transport",
-        app = %name,
-        origin = %origin,
-        "app: dial admitted — the app is told who is asking"
-    );
-    let (mut tcp_r, mut tcp_w) = tcp.into_split();
-    let down = async {
-        let _ = tokio::io::copy(&mut tcp_r, &mut send).await;
-        let _ = send.finish();
-    };
-    let up = async {
-        let mut head = first_head;
-        loop {
-            let framing = body_framing(&head);
-            let (out, stripped) = rewrite_head(&head, &headers);
-            if stripped > 0 {
-                tracing::info!(
-                    target: "transport",
-                    stripped,
-                    "iroh acceptor: dropped client-supplied x-mesh-* header(s) before adding the verified identity"
-                );
-            }
-            if tcp_w.write_all(&out).await.is_err() {
-                break;
-            }
-            match framing {
-                BodyFraming::None => {}
-                BodyFraming::Length(n) => {
-                    let mut body = (&mut reader).take(n);
-                    if tokio::io::copy(&mut body, &mut tcp_w).await.is_err() {
-                        break;
-                    }
-                }
-                BodyFraming::Chunked => {
-                    tracing::info!(
-                        target: "transport",
-                        "iroh acceptor: chunked request body — the rest of this connection passes through unrewritten"
-                    );
-                    let _ = tokio::io::copy(&mut reader, &mut tcp_w).await;
-                    break;
-                }
-            }
-            match read_head(&mut reader, &mut buf).await {
-                Ok(true) => {}
-                Ok(false) => break,
-                Err(e) => {
-                    tracing::info!(
-                        target: "transport",
-                        error = %e,
-                        "iroh acceptor: app forward closed a request it could not frame"
-                    );
-                    break;
-                }
-            }
-            match split_app_name(&buf) {
-                Some((next, rest)) if next == name => head = rest,
-                other => {
-                    tracing::info!(
-                        target: "transport",
-                        bound = %name,
-                        requested = other.as_ref().map(|(n, _)| n.as_str()).unwrap_or("<none>"),
-                        "app: closing a kept-alive stream that changed app mid-connection — \
-                         the name binds per stream (see pump_by_name)"
-                    );
-                    break;
-                }
-            }
-        }
-        let _ = tcp_w.shutdown().await;
-    };
-    tokio::join!(up, down);
-}
-
-/// Report a refusal that could not be DELIVERED.
-///
-/// The dialer then sees a connection that closed with no answer, which looks
-/// exactly like the app hanging — so the reason has to survive on this side
-/// even though it never reached the other. Discarding it was the shape ARCH §6
-/// names: a failure collapsed into a path that reads as handled.
-fn say(sent: std::io::Result<()>, app: &str) {
-    if let Err(e) = sent {
-        tracing::info!(
-            target: "transport",
-            app = %app,
-            error = %e,
-            "app: the refusal could not be written back — the dialer sees a silent close"
-        );
-    }
-}
-
-/// Answer the dialer directly, before any origin is involved.
-///
-/// Lists what this node DOES publish, which is safe here and not elsewhere:
-/// the caller is already an admitted member of the App class, so the names
-/// are not a disclosure — and "no app named chore" beside "chores, printer"
-/// is the difference between a typo found in one second and one found by
-/// reading someone else's config.
-async fn refuse(
-    send: &mut iroh::endpoint::SendStream,
-    status: u16,
-    why: &str,
-    apps: &std::collections::BTreeMap<String, SocketAddr>,
-) -> std::io::Result<()> {
+    use crate::iroh_routed_forward::{pump_routed, Routed, Unrouted};
+    // Safe to list here and not elsewhere: the caller is already an admitted
+    // member of the App class, so the names are not a disclosure.
     let published: Vec<&str> = apps.keys().map(String::as_str).collect();
-    let body = format!(
-        "{why}\nthis node publishes: {}\n",
+    let listing = format!(
+        "this node publishes: {}",
         if published.is_empty() {
             "(nothing)".to_string()
         } else {
             published.join(", ")
         }
     );
-    let reason = if status == 502 {
-        "Bad Gateway"
-    } else {
-        "Not Found"
-    };
-    let head = format!(
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
-    send.write_all(head.as_bytes()).await?;
-    send.write_all(body.as_bytes()).await?;
-    let _ = send.finish();
-    Ok(())
+    pump_routed(send, recv, headers, "app", Some(listing), |head| {
+        let Some((name, rest)) = split_app_name(head) else {
+            return Err(Unrouted {
+                status: 404,
+                key: "<none>".into(),
+                why: "no app named in the request path".into(),
+            });
+        };
+        match apps.get(&name) {
+            Some(origin) => Ok(Routed {
+                key: name,
+                origin: *origin,
+                head: rest,
+                extra: Vec::new(),
+            }),
+            None => Err(Unrouted {
+                status: 404,
+                why: format!("no app named {name:?} here"),
+                key: name,
+            }),
+        }
+    })
+    .await
 }
 
 #[cfg(test)]

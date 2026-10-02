@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "sovereign-serve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# `serve` — the model server (docs/FIVE_PROGRAMS.md §2): one binary that
+# answers /v1/chat/completions, /v1/embeddings, /v1/rerank and /v1/models with
+# no mesh, no knowledge server and no cw-rails (phase-b pb-serve-program).
+# Wiring only: the one serving assembly and the compute child's server
+# (sovereign-compute), the OpenAI translation (sovereign-serving-host's
+# inference_adapter and openai_http), and the host kit's lock and shell.
+
+[[bin]]
+name = "sovereign-serve"
+path = "src/main.rs"
+
+[dependencies]
+sovereign-contracts = { workspace = true }
+sovereign-inference = { workspace = true }
+sovereign-compute = { workspace = true }
+sovereign-serving-host = { workspace = true }
+host-kit = { workspace = true, features = ["shell"] }
+# The weight verbs' help and root path (a package leaf every program's CLI shares);
+# `rail-client`: the measurement codec appends and reads on cw-rails' rail doors.
+sovereign-cli-base = { workspace = true, features = ["rail-client"] }
+# The measurement journal's vocabulary (the rail fold, a leaf), its name
+# (oicp-types) and the host fingerprint its key carries (kernel-types).
+commonwealth-rail-core = { workspace = true }
+oicp-types = { workspace = true }
+kernel-types = { workspace = true }
+# cw-rails' base, through its one reader (`rails_kv::resolve_rails_base`).
+sovereign-turn-client = { workspace = true }
+# A standalone serve reaches peers only through cw-rails (`RailsTransport`),
+# and registers under the endpoint's protocol names (`alpn`).
+mesh-reach = { workspace = true, features = ["rails"] }
+serde = { workspace = true }
+sha2 = { workspace = true }
+# bench's record stamp (the wall-clock leaf).
+sovereign-time = { workspace = true }
+# remote_gguf's header-only download lands in a temp dir.
+tempfile = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+futures = { workspace = true }
+# `fetch-model`'s peer client and its mesh.json read.
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# `oneshot`, so the internal-route census can name a non-loopback caller.
+tower = { workspace = true, features = ["util"] }
+# rail-core's signed-op fixtures, for the codec's read-side tests.
+commonwealth-rail-core = { workspace = true, features = ["test-support"] }
+
+[features]
+# Windows GPU backend selectors for the loader, forwarded to
+# sovereign-inference (its Cargo.toml has the matrix). sovereign-stock
+# forwards them here; the packaged desktop's loader is built with them
+# (`SOVEREIGN_SIDECAR_FEATURES`, stage-daemon-sidecar.sh; pb-distribution-setup).
+windows-vulkan = ["sovereign-inference/windows-vulkan"]
+windows-cuda = ["sovereign-inference/windows-cuda"]
+
+[lints]
+workspace = true

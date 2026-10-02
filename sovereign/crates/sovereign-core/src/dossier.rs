@@ -26,7 +26,7 @@
 //! pre-pass call site so the splice never sees a dossier it has to
 //! reject.
 
-use corpus_engine_notes::NoteStore;
+use sovereign_contracts::notes::AgentNotes;
 
 use crate::intent_policy;
 use crate::memory::{read_recent_tool_decisions, ToolDecisionOutcome};
@@ -53,7 +53,7 @@ pub const MAX_DOSSIER_OUTCOMES: usize = 8;
 /// empty (the model still benefits from the narrowed tool list).
 pub async fn compute_tool_dossier(
     tools: &ToolRegistry,
-    notes: Option<&NoteStore>,
+    notes: Option<&dyn AgentNotes>,
     active_skill: Option<&Skill>,
     conversation_id: Option<&str>,
 ) -> Option<ToolDossier> {
@@ -262,15 +262,15 @@ pub fn render_tool_dossier(dossier: &ToolDossier, now_unix: i64) -> String {
 }
 
 /// Best-effort soft write of a tool-decision outcome. Hides the
-/// NoteStore-missing case so the runtime call sites don't have to
-/// thread `Option<&NoteStore>` checks; a `None` store is the test/
+/// store-missing case so the runtime call sites don't have to
+/// thread `Option<&dyn AgentNotes>` checks; a `None` store is the test/
 /// CLI path where outcomes aren't persisted at all.
 ///
 /// `tracing::debug!` on failure — the dossier write is observational,
 /// never on the user-facing critical path. ARCH §9.2 — degrade
 /// gracefully and log so the operator can see it.
 pub async fn record_tool_outcome(
-    notes: Option<&NoteStore>,
+    notes: Option<&dyn AgentNotes>,
     session_id: &str,
     conversation_id: Option<&str>,
     tool_id: &str,

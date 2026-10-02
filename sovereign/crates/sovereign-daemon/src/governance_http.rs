@@ -31,14 +31,16 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::enrichment::atlas::edges::EdgeId;
-use corpus_engine::enrichment::atlas::migrate_ids::migrate_atlas_ids;
-use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope, AtomId};
-use corpus_engine::enrichment::governance_view::section_titles;
-use corpus_engine::enrichment::{GovernanceOpKind, GovernanceView, TensionDisposition};
-use corpus_engine::oplog::{Op, Oplog};
-use corpus_engine::CorpusEngine;
+use corpus_engine_atlas_reader::governance::GovernanceOpKind;
+use corpus_engine_atlas_reader::governance_view::section_titles;
+use corpus_engine_atlas_reader::governance_view::{GovernanceView, TensionDisposition};
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::daemon::IngestPort;
+use oplog::{Op, Oplog};
 use sovereign_time::unix_now;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId};
+use understanding_vocab::edges::EdgeId;
+use understanding_vocab::read::read_atlas_atoms;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{internal_error, json_error, Absence};
@@ -262,17 +264,18 @@ async fn get_view(
     AxumPath(corpus): AxumPath<String>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let dir = atlas_dir(&engine, &corpus);
-    let root = index_root(&engine, &corpus);
+    let dir = atlas_dir(engine.as_ref(), &corpus);
+    let root = index_root(engine.as_ref(), &corpus);
     let recipes = engine.recipes_dir().to_path_buf();
     let cid = corpus.clone();
+    let port = Arc::clone(&engine);
 
     let blocking = tokio::task::spawn_blocking(move || {
         require_atlas(&dir)?;
         let view = GovernanceView::from_atlas_dir(&dir).map_err(|e| absent_or_internal(&dir, e))?;
         let titles = section_titles(&root);
         let scopes = scope_names(&dir);
-        let vocab = read_vocabulary(&recipes, &cid);
+        let vocab = read_vocabulary(port.as_ref(), &recipes, &cid);
         let decisions: HashMap<String, DecisionMeta> = Oplog::<GovernanceOpKind>::new(&dir)
             .read_all()
             .unwrap_or_default()
@@ -390,7 +393,7 @@ async fn undo_tension(
     AxumPath((corpus, tension)): AxumPath<(String, String)>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let dir = atlas_dir(&engine, &corpus);
+    let dir = atlas_dir(engine.as_ref(), &corpus);
     Ok(
         match tokio::task::spawn_blocking(move || undo_at(&dir, &tension)).await {
             Ok(Ok(op_id)) => {
@@ -412,7 +415,7 @@ async fn seed(
     AxumPath(corpus): AxumPath<String>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let dir = atlas_dir(&engine, &corpus);
+    let dir = atlas_dir(engine.as_ref(), &corpus);
     Ok(
         match tokio::task::spawn_blocking(move || seed_at(&dir)).await {
             Ok(Ok(seeded)) => {
@@ -444,14 +447,19 @@ async fn post_build_seed(
     AxumPath(corpus): AxumPath<String>,
 ) -> Result<Response, Absence> {
     let engine = engine_for(&daemon)?;
-    let dir = atlas_dir(&engine, &corpus);
+    let atlas = daemon
+        .atlas()
+        .map(Arc::clone)
+        .ok_or_else(|| Absence::unavailable("this daemon has no corpus engine"))?;
+    let dir = atlas_dir(engine.as_ref(), &corpus);
     let recipes = engine.recipes_dir().to_path_buf();
     let cid = corpus.clone();
+    let port = Arc::clone(&engine);
     let out = tokio::task::spawn_blocking(move || {
-        if !is_governance_corpus(&recipes, &cid) {
+        if !is_governance_corpus(port.as_ref(), &recipes, &cid) {
             return Ok(0);
         }
-        post_build_at(&dir, &cid)
+        post_build_at(atlas.as_ref(), &dir, &cid)
     })
     .await;
     Ok(match out {
@@ -479,8 +487,15 @@ async fn write_recipe(
     let engine = engine_for(&daemon)?;
     let recipes = engine.recipes_dir().to_path_buf();
     let cid = corpus.clone();
+    let port = Arc::clone(&engine);
     let out = tokio::task::spawn_blocking(move || {
-        write_recipe_sync(&recipes, &cid, &body.display_name, &body.source_path)
+        write_recipe_sync(
+            port.as_ref(),
+            &recipes,
+            &cid,
+            &body.display_name,
+            &body.source_path,
+        )
     })
     .await;
     Ok(match out {
@@ -507,7 +522,7 @@ where
     F: FnOnce(&Path) -> GovResult<Vec<String>> + Send + 'static,
 {
     let engine = engine_for(&daemon)?;
-    let dir = atlas_dir(&engine, &corpus);
+    let dir = atlas_dir(engine.as_ref(), &corpus);
     Ok(match tokio::task::spawn_blocking(move || act(&dir)).await {
         Ok(Ok(op_ids)) => {
             tracing::info!(%corpus, appended = op_ids.len(), "governance_http: adjudicated");
@@ -787,11 +802,11 @@ fn seed_at(dir: &Path) -> GovResult<u32> {
 
 /// migrate-ids THEN seed. Best-effort on the migrate half and idempotent:
 /// a non-governance or already-content-hash atlas still seeds fine.
-fn post_build_at(dir: &Path, corpus_id: &str) -> GovResult<u32> {
-    match migrate_atlas_ids(dir, corpus_id, false) {
+fn post_build_at(atlas: &dyn AtlasPort, dir: &Path, corpus_id: &str) -> GovResult<u32> {
+    match atlas.migrate_atlas_ids(dir, corpus_id, false) {
         Ok(summary) => tracing::info!(
             corpus_id,
-            ?summary,
+            %summary,
             "governance_http: migrated atom ids to content-hash"
         ),
         Err(e) => {
@@ -840,11 +855,16 @@ fn recipe_path(recipes_dir: &Path, corpus_id: &str) -> PathBuf {
     recipes_dir.join(corpus_id).join("recipe.toml")
 }
 
-fn read_vocabulary(recipes_dir: &Path, corpus_id: &str) -> Option<VocabularyPayload> {
-    let recipe = corpus_engine::Recipe::from_file(&recipe_path(recipes_dir, corpus_id)).ok()?;
+fn read_vocabulary(
+    engine: &dyn IngestPort,
+    recipes_dir: &Path,
+    corpus_id: &str,
+) -> Option<VocabularyPayload> {
     // Terms come from the parsed policies, whatever the block's version —
     // version 0 `vocabulary` or version 1 `label`s land in the same place.
-    let vocab = recipe.custom_ontology()?.prose.terms;
+    let vocab = engine
+        .recipe_vocabulary(&recipe_path(recipes_dir, corpus_id))
+        .ok()??;
     Some(VocabularyPayload {
         position_term: vocab.position_term,
         tension_term: vocab.tension_term,
@@ -855,11 +875,9 @@ fn read_vocabulary(recipes_dir: &Path, corpus_id: &str) -> Option<VocabularyPayl
 
 /// Whether a corpus's recipe declares it governance-managed
 /// (`[enrichment] domain = "governance"`).
-fn is_governance_corpus(recipes_dir: &Path, corpus_id: &str) -> bool {
-    corpus_engine::Recipe::from_file(&recipe_path(recipes_dir, corpus_id))
-        .ok()
-        .and_then(|r| r.enrichment)
-        .and_then(|e| e.domain)
+fn is_governance_corpus(engine: &dyn IngestPort, recipes_dir: &Path, corpus_id: &str) -> bool {
+    engine
+        .recipe_enrichment_domain(&recipe_path(recipes_dir, corpus_id))
         .is_some_and(|d| d.eq_ignore_ascii_case("governance"))
 }
 
@@ -882,6 +900,7 @@ fn docs_changed_since_build(index_root: &Path) -> bool {
 // ─── Recipe template ───────────────────────────────────────────
 
 fn write_recipe_sync(
+    engine: &dyn IngestPort,
     recipes_dir: &Path,
     corpus_id: &str,
     display_name: &str,
@@ -896,9 +915,9 @@ fn write_recipe_sync(
         .map_err(|e| GovError::Internal(format!("writing recipe.toml: {e}")))?;
     // Validate: it must parse AND resolve to the custom-ontology path, or
     // enrichment would silently fall back to the literary pipeline.
-    match corpus_engine::Recipe::from_file(&path) {
-        Ok(r) if r.custom_ontology().is_some() => Ok(path.display().to_string()),
-        Ok(_) => Err(GovError::Internal(
+    match engine.recipe_vocabulary(&path) {
+        Ok(Some(_)) => Ok(path.display().to_string()),
+        Ok(None) => Err(GovError::Internal(
             "governance recipe wrote but has no custom ontology — template bug".into(),
         )),
         Err(e) => Err(GovError::Internal(format!(
@@ -995,7 +1014,7 @@ evidence_term = "passage"
 
 /// The daemon's own corpus engine. ONE lookup site, so no handler can
 /// reach a different index root than the one the atlas routes serve.
-fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<CorpusEngine>, Absence> {
+fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<dyn IngestPort>, Absence> {
     daemon
         .corpus_engine()
         .map(Arc::clone)
@@ -1004,12 +1023,12 @@ fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<CorpusEngine>, Absence
 
 /// `<index_dir>/<corpus>` — where `chapters.json` lives. The daemon's own,
 /// matching `atlas_http`'s `FileAtlasReader::new(engine.index_dir())`.
-fn index_root(engine: &CorpusEngine, corpus_id: &str) -> PathBuf {
+fn index_root(engine: &dyn IngestPort, corpus_id: &str) -> PathBuf {
     engine.index_dir().join(corpus_id)
 }
 
 /// `<index_root>/atlas` — `atoms.json`, `edges.json`,
 /// `governance_oplog.jsonl`.
-fn atlas_dir(engine: &CorpusEngine, corpus_id: &str) -> PathBuf {
+fn atlas_dir(engine: &dyn IngestPort, corpus_id: &str) -> PathBuf {
     index_root(engine, corpus_id).join("atlas")
 }

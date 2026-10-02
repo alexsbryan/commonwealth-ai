@@ -1,0 +1,22 @@
+<!-- ledger -->
+
+**five-programs-39 · 2026-09-24 · Phase B staged as the next campaign; the MCP rule; node-identity timing corrected · operator** — this commit
+- Needed: five-programs-38 recorded "Start Phase B now" and queued its plan in this campaign. The operator then asked for Phase B to be its own campaign, started when this one completes ("this whole phase B seems sprawling"), and adopted the MCP wording the seat proposed. Correction: five-programs-38 tied the single node key to finish condition 2, and that was wrong. Condition 2 is EmbeddedDaemon construction outside the svrn daemon binary's own main. The daemon's own mesh endpoint is kept by the fp-9/fp-10 exceptions, which retire in Phase B.
+- Chose: (1) Phase B is staged at ralph/next/phase-b/ and not started; its plan row lives there. Here, fp-11, fp-12, fp-25 and fp-43 wait on a final `HUMAN-phase-b` row, and fp-34 and REVIEW-mint-fp-core-dial wait on it through them. `REVIEW-handoff-phase-b` runs when the queue drains: it writes the inherited edge list into phase-b's appendix, then mints finish condition 2. (2) The MCP rule, from the operator's words: the client composes the surface, each program owns its lifecycle by connect-or-spawn, and there is no daemon proxy. It replaces the proxy clause in HUMAN-fp11's answer. (3) The node key lands in Phase B, with the retirement of the daemon's own mesh endpoint. (4) Seat's derivation, open to the operator's override: finish condition 1 here becomes "the gate's red set equals the handoff list, every edge owned". Gate exit 0 becomes Phase B's finish condition.
+- Because: with Phase B deferred, this campaign could reach gate 0 only through exceptions, and the operator declined exceptions as the closing mechanism (five-programs-38). A red edge with a named owner in a staged campaign is reported, not defaulted (principle 6). A dependency on a row the queue does not hold would crash the runner (`deps_met` indexes `by[d]`, scripts/ralph.py), so the Phase B rows stay here and wait on a HUMAN row, which the runner serves last in file order. Boundary gate 54, unchanged; no code in this commit.
+
+<!-- appendix -->
+
+## five-programs-39 · 2026-09-24 — Phase B staged; the MCP rule; node-identity timing
+
+<details><summary>reasoning, evidence, package</summary>
+
+The MCP rule, as the operator adopted it. §2 already gives svrn and svrn code their own MCP wires and says clients are not programs, so composing the surface is the client's job. Harness configs are maps of servers, and the project scaffold merges its server entry in without removing others (sovereign-cli/src/project_init/scaffold.rs:531). The code program owns its lifecycle through connect-or-spawn: `svrn code mcp` over stdio dials the one code server, or starts it detached under sovereign-contracts' `run_lock`. A daemon proxy would be a second decider for the surface and a component holding another's lifecycle (principle 12, §4 rule 2). One finding travels with the rule: `mcp_router` takes `Arc<NoteStore>` and runs corpus-engine-notes' `ToolPatternMatcher` on every call (mcp_router.rs:166-183). The transport and the call observer therefore split before either program can mount it.
+
+How the drain works. `Queue.current()` (scripts/ralph.py) serves any `[~]` row first, then the first ready `[ ]` row in file order. `REVIEW-handoff-phase-b` sits after every other row except `HUMAN-phase-b`, so it is served only when everything above it is done or waits on `HUMAN-phase-b`. Rows a mint inserts directly after itself land above the handoff. The condition-2 mint that the handoff creates lands between the handoff and `HUMAN-phase-b`, so it runs before the campaign's final halt at `HUMAN-phase-b` ("operator approval required").
+
+Rows moving with Phase B: fp-11, fp-12, fp-25 and fp-43 (direct), and fp-34 and REVIEW-mint-fp-core-dial (through fp-11 and fp-12). REVIEW-mint-fp-mesh-dial stays in this campaign, since its dependencies (fp-8, fp-9, fp-10, fp-42, fp-47) are all reachable here. REVIEW-mint-fp-app-registry-one-owner's clause "two mesh endpoints … that is the de-embed" now reads Phase B.
+
+This decision is falsified if the handoff finds a red edge with no owner among the inherited rows, the NEEDS-OPERATOR lines or the fp-9/fp-10 exceptions. It is also falsified if the condition-2 census needs a Phase B host to close. Either finding is a NEEDS_HUMAN line with the list.
+
+</details>

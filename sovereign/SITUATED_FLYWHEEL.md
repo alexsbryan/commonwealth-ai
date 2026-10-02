@@ -212,7 +212,7 @@ no retrieval signal (pre-2026-08 JSONL) keep the historical cell.
 
 One implementation per formula (ARCH_PRINCIPLES §10.6): the judge
 protocol, calibration gate, Wilson CI + diff, and report shapes move out
-of `sovereign-cli-llm/src/bench_cmd/moral/` into a shared module so the
+of `sovereign-cli-bench/src/bench_cmd/moral/` into a shared module so the
 situated lane cannot fork them. `moral/` becomes a thin bank-binding.
 
 - Gate: `svrn bench moral` output byte-identical (same inputs, pinned

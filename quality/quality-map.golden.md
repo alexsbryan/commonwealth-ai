@@ -21,6 +21,8 @@
 | `check-desktop-version` | `scripts/check-desktop-version.sh` | hard | F0 | unmeasured | yes |
 | `clippy-json` | `cargo clippy --workspace --all-targets --message-format=json` | advisory | F0 | unmeasured | **no** |
 | `clock-gate` | `cargo xtask clock-gate` | hard | F0 | 0.96s | yes |
+| `clone-gate` | `cargo xtask clone-gate` | advisory | F0 | 2s | **no** |
+| `commit-msg` | `./scripts/commit-msg.sh` | hard | F0 | 0.01s | **no** |
 | `concept-gate` | `cargo xtask concept-gate` | advisory | F0 | 5s | **no** |
 | `daemon-concurrency-soak` | `scripts/daemon-concurrency-soak.py --minutes 30` | tracked | F3 | 31m | **no** |
 | `deletion-manifest` | `python3 scripts/deletion-manifest.py --verify` | advisory | F0 | 4s | yes |
@@ -86,7 +88,7 @@
 | `mtp-probe` | `scripts/mtp-probe.sh --n 5 --max-tokens 200` | tracked | F3 | 3m | **no** |
 | `retrieval-prod` | `svrn quality lane bench --id retrieval-prod` | hard | F3 | 57s | **no** |
 | `routing` | `svrn quality lane bench --id routing` | hard | F3 | 38s | **no** |
-| `routing-replay` | `sovereign-cli-llm bench routing-replay --bank <bank> --bridge-url <url>` | hard | F2 | 20m | **no** |
+| `routing-replay` | `sovereign-cli-bench bench routing-replay --bank <bank> --bridge-url <url>` | hard | F2 | 20m | **no** |
 | `synth` | `svrn quality lane bench --id synth` | hard | F3 | 5m | **no** |
 | `throughput` | `svrn quality lane throughput` | hard | F3 | 3m | **no** |
 | `throughput-probe` | `scripts/throughput_probe.py` | tracked | F3 | 7m | **no** |
@@ -174,7 +176,7 @@
 
 | | meaning | instruments |
 |---|---|---|
-| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `co-lineage`, `co-sweep`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `dm-census-atom-outside`, `dm-census-congestion`, `dm-census-crate-lines`, `dm-census-liftable`, `dm-census-misnamed`, `dm-census-peer-outside`, `dm-census-plan`, `dm-census-predicate`, `dm-census-queue`, `dm-census-shared-edges`, `dm-census-word-owners`, `doc-coverage`, `docs-gate`, `domains-census-self-test`, `env-gate`, `evidence-verdict`, `feature-matrix`, `feature-powerset`, `hakari-verify`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-bank`, `judge-replay-control`, `judge-replay-report`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `nc-thesis`, `pre-commit`, `pre-push`, `ralph-decisions`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `sabotage`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `xtask-quality` |
+| F0 | unit — no process boundary, no backend | `api-gate`, `arch-gate`, `bench-compile`, `boundary-gate`, `build-timings`, `check-desktop-version`, `clippy-json`, `clock-gate`, `clone-gate`, `co-lineage`, `co-sweep`, `commit-msg`, `concept-gate`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `deletion-manifest`, `desktop-check`, `desktop-invoke-coverage`, `desktop-invoke-coverage-gate`, `desktop-invoke-coverage-real`, `desktop-report-breaker`, `desktop-report-journeys`, `desktop-report-soak`, `desktop-report-ttfi`, `desktop-vitest`, `dm-census-atom-outside`, `dm-census-congestion`, `dm-census-crate-lines`, `dm-census-liftable`, `dm-census-misnamed`, `dm-census-peer-outside`, `dm-census-plan`, `dm-census-predicate`, `dm-census-queue`, `dm-census-shared-edges`, `dm-census-word-owners`, `doc-coverage`, `docs-gate`, `domains-census-self-test`, `env-gate`, `evidence-verdict`, `feature-matrix`, `feature-powerset`, `hakari-verify`, `hook-selftests`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-bank`, `judge-replay-control`, `judge-replay-report`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lint-gate`, `lock-gate`, `mesh-soak-gate`, `module-cycles`, `nc-thesis`, `pre-commit`, `pre-push`, `ralph-decisions`, `run-if-stale`, `rustfmt`, `rustsec-advisories`, `sabotage`, `settings-wiring-self-test`, `shell-selftests`, `size-gate`, `sovereign-lint`, `sovereign-lint-scoped`, `sovereign-test`, `twin-census`, `windows-crosscheck`, `xtask-quality` |
 | F1 | mocked backend — real caller, fabricated answers | `cli-journey-selftest`, `desktop-a11y`, `desktop-e2e-synthetic`, `desktop-sabotage`, `desktop-ttfi`, `dst-scenarios` |
 | F2 | real binary against a fixture daemon | `arch-report`, `capability-map`, `desktop-e2e-real`, `desktop-journeys`, `enrichment-f1`, `pre-push-fail-closed`, `routing-replay` |
 | F3 | real daemon, real models | `chaos-monkey`, `chat-ask`, `ci-bench`, `cli-contract-live-verify`, `cli-journey-sandbox`, `cli-journey-verify`, `co-drift`, `co-liveness`, `contract-nightly`, `cw-work-lift`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-soak`, `desktop-breaker`, `desktop-chaos`, `desktop-demo`, `desktop-demo-export`, `desktop-judge-calibration`, `desktop-soak`, `desktop-soak-py`, `drift-detect`, `inner-chaos-calibrate`, `inner-chaos-soak`, `judge-replay`, `judge-replay-bank-feed`, `knowledge-gym`, `mesh-live-probe`, `mesh-soak`, `mtp-probe`, `oicp-conformance`, `quality-check`, `retrieval-prod`, `routing`, `smoke-attach-mode`, `synth`, `throughput`, `throughput-probe` |
@@ -189,7 +191,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 |---|---|---|---|
 | `api-gate` | `binary:cargo-public-api` | `the pinned nightly` | quality/nightly-pin.txt is the ONLY nightly use in the repo; a different nightly changes the rendered public API and the diff stops meaning anything |
 | `chaos-monkey` | `port-listening:9741`<br>`slot-decodes:primary`<br>`corpus-installed:chaos-secret-agent` | — | — |
-| `chat-ask` | `port-listening:9741`<br>`slot-decodes:primary`<br>`binary:sovereign-cli-llm` | — | — |
+| `chat-ask` | `port-listening:9741`<br>`slot-decodes:primary`<br>`binary:sovereign-cli-bench`<br>`binary:sovereign-cli-llm`<br>`binary:svrn-ingest` | — | — |
 | `ci-bench` | `port-listening:9741`<br>`slot-decodes:primary`<br>`slot-decodes:embed` | `the HARD/SOFT/TRACKED lane split` | a HARD lane breaks the build and a SOFT synth lane never does. Read lane KIND before reading a number: a TRACKED lane carries an ABSOLUTE verdict that is a finding about the system, not a regression signal |
 |  |  | `--update-baseline` | capture/refresh only on a healthy daemon; a baseline minted from a degraded run silently lowers every future bar |
 | `cli-contract-live-verify` | `port-listening:9741` | — | — |
@@ -197,6 +199,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `cli-journey-selftest` | — | `(ten negative controls)` | it drives the real journey runner against a stub CLI and a loopback stub daemon and proves it FAILS a wrong exit code, a missing substring, a non-reversing mutation, and that it aborts a sequence after a failed step |
 | `cli-journey-verify` | `port-listening:9741` | `--mutating` | REFUSES unless SOVEREIGN_JOURNEY_ISOLATED=1 and the daemon URL is not the default :9741 — mutating steps install/remove corpora and join/leave meshes |
 | `clippy-json` | — | `--message-format=json` | lint-gate consumes the stream. A hand-rolled string scan mis-read diagnostics whose children precede the top-level `level` field, which is every clippy lint with a help child |
+| `clone-gate` | — | `--tighten` | banks a lower total by rewriting the snapshot; never raises it |
 | `co-drift` | `port-listening:9741` | — | — |
 | `co-liveness` | `port-listening:9741` | — | — |
 | `concept-gate` | — | `(advisory only)` | it relays `svrn code converge status`, which reads a SCIP graph that exists only on an indexed machine. On a clean checkout its only answers are COULD-NOT-JUDGE and NEVER-RAN, which is why it is in no CI job |
@@ -289,7 +292,8 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `ci:suites` | `hook-selftests`, `pre-push-fail-closed`, `settings-wiring-self-test`, `shell-selftests` |
 | `ci:test` | `bench-compile`, `cli-journey-selftest`, `dst-scenarios`, `sovereign-test` |
 | `nightly` | `contract-nightly` |
-| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `domains-census-self-test`, `env-gate`, `hakari-verify`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `nc-thesis`, `ralph-decisions`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
+| `precommit` | `commit-msg` |
+| `prepush` | `arch-gate`, `boundary-gate`, `clock-gate`, `clone-gate`, `concept-gate`, `deletion-manifest`, `docs-gate`, `domains-census-self-test`, `env-gate`, `hakari-verify`, `hook-wiring`, `instrument-gate`, `judge-funnel-gate`, `judge-replay-control`, `layer-gate`, `layout-gate`, `lifecycle-gate`, `lock-gate`, `nc-thesis`, `ralph-decisions`, `rustfmt`, `size-gate`, `sovereign-lint-scoped` |
 | `run-if-stale` | `co-sweep`, `contract-nightly`, `daemon-concurrency-soak`, `daemon-concurrency-soak-control`, `daemon-concurrency-soak-selftest`, `daemon-soak-report`, `daemon-soak-report-selftest`, `judge-replay-bank`, `judge-replay-bank-feed`, `oicp-conformance` |
 | `smoke:0` | `desktop-check`, `desktop-e2e-synthetic`, `desktop-vitest`, `sovereign-lint`, `sovereign-test` |
 | `smoke:1` | `desktop-ttfi`, `mtp-probe`, `smoke-attach-mode`, `throughput-probe` |
@@ -306,7 +310,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 | `weekly:soak` | `mesh-soak`, `mesh-soak-gate` |
 | `weekly:timings` | `build-timings` |
 
-### What CI does not run (98 of 128)
+### What CI does not run (100 of 130)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
 - `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
@@ -319,10 +323,12 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `cli-journey-sandbox` — sovereign/docs/TESTING_SURFACE.md · runs in: by-hand
 - `cli-journey-verify` — sovereign/docs/cli-contract.toml (journeys) · runs in: by-hand
 - `clippy-json` — corpus-engine/xtask/src/lint_gate.rs · runs in: by-hand
+- `clone-gate` — corpus-engine/xtask/src/clone_gate.rs (module header) · runs in: prepush
 - `co-drift` — scripts/co-drift.py (module header — the per-commit claim/scope audit) · runs in: by-hand
 - `co-lineage` — quality/campaigns/ (the campaign files this loads and measures) · runs in: by-hand
 - `co-liveness` — scripts/co_liveness.py (module header — does a backlog item still reproduce at HEAD?) · runs in: by-hand
 - `co-sweep` — scripts/run-if-stale.sh (header) · runs in: run-if-stale
+- `commit-msg` — scripts/commit-msg.sh (header) · runs in: precommit
 - `concept-gate` — quality/NOUN_CONVERGENCE.md · runs in: prepush
 - `contract-nightly` — sovereign/docs/cli-contract.toml (journeys) · runs in: run-if-stale, nightly
 - `cw-rails-lift` — commonwealth/BOUNDARY.md · runs in: by-hand
@@ -374,7 +380,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `hook-wiring` — .claude/hooks/tests/settings-wiring.sh · runs in: prepush
 - `inner-chaos-calibrate` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: smoke:2
 - `inner-chaos-soak` — sovereign/bench/chaos_monkey/README.md · runs in: smoke:5
-- `judge-replay` — sovereign/crates/sovereign-cli-llm/src/bench_cmd/judge_replay.rs (module header) · runs in: by-hand
+- `judge-replay` — sovereign/crates/sovereign-cli-llm/src/judge_replay.rs (module header) · runs in: by-hand
 - `judge-replay-bank` — quality/campaigns/verifier-loop.toml §vl-bank-live · runs in: run-if-stale, by-hand
 - `judge-replay-bank-feed` — sovereign/bench/chaos_monkey/feed_replay_bank.sh (module header) · runs in: run-if-stale
 - `judge-replay-report` — sovereign/bench/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce) · runs in: by-hand
@@ -415,5 +421,5 @@ Nothing is on no map. Check that before believing it.
 
 ---
 
-**128 instruments, 24 with a negative control, 55 unmeasured cost, 53 by-hand only.** (0 run nowhere at all.)
+**130 instruments, 24 with a negative control, 55 unmeasured cost, 53 by-hand only.** (0 run nowhere at all.)
 

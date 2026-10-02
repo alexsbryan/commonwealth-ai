@@ -12,7 +12,7 @@
 //! it.
 //!
 //! Consumes the concept-normalization registry
-//! (`sovereign-recipes/sec-filings-company/concept-map.toml`) and a raw
+//! (`sovereign-tools/data/sec-filings-company/concept-map.toml`) and a raw
 //! companyfacts document
 //! (`data.sec.gov/api/xbrl/companyfacts/CIK##########.json`). Nothing else
 //! in the repo may interpret either file.
@@ -67,7 +67,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::debug;
 
-use corpus_engine::enrichment::atlas::analysis::sec_facts::{
+use corpus_engine_atlas_reader::sec_facts::{
     AsOf, ConceptFacts, ConceptKind, Coverage, Period, SecFact, SecFactStore,
 };
 use sovereign_core::error::{Error, Result};
@@ -77,7 +77,7 @@ const TRACE: &str = "sec_facts_render";
 
 // ── the concept-normalization registry (DATA, not code — ARCH §2/§4) ────────
 
-/// `sovereign-recipes/sec-filings-company/concept-map.toml`, parsed.
+/// `sovereign-tools/data/sec-filings-company/concept-map.toml`, parsed.
 ///
 /// Open set with a registry shape (ARCH §9): concepts are rows, not
 /// match arms, and a concept with NO row is UNMAPPED — reported by name,

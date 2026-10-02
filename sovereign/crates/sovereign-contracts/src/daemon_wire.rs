@@ -40,10 +40,13 @@ pub mod build_stamp;
 pub mod chat_activity;
 pub mod documents;
 pub mod enrich;
+pub mod enrich_catalog;
+pub mod enrich_progress;
 pub mod ingest;
 pub mod local_corpus;
 pub mod mesh;
 pub mod meshapp;
+pub mod rails_status;
 pub mod recipe_projects;
 pub mod recipes;
 pub mod setup_plan;
@@ -54,10 +57,12 @@ pub use build_stamp::*;
 pub use chat_activity::*;
 pub use documents::*;
 pub use enrich::*;
+pub use enrich_catalog::*;
 pub use ingest::*;
 pub use local_corpus::*;
 pub use mesh::*;
 pub use meshapp::*;
+pub use rails_status::RailsMeshStatus;
 pub use recipe_projects::*;
 pub use recipes::*;
 pub use setup_plan::*;
@@ -70,6 +75,8 @@ pub mod conv_tiered;
 pub use conv_tiered::*;
 pub mod sec_coverage;
 pub use sec_coverage::*;
+pub mod atlas_walk;
+pub use atlas_walk::*;
 
 // ─── Local corpus — `/internal/corpus/local/…` (`lc_http`) ──────
 
@@ -256,12 +263,12 @@ pub struct LegacyDocumentEntry {
 /// from the wire's `skip_serializing_if` — it emitted `"title": null` where
 /// the wire omits the key — which is the exact byte-compat break that one
 /// shared definition makes impossible.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ConversationListEntry {
     /// Conversation id.
     pub id: String,
     /// The title, once one has been derived. Omitted, never `null`.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// Unix seconds.
     pub created_at: i64,

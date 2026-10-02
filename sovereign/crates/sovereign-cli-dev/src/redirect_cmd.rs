@@ -160,7 +160,7 @@ pub async fn run(args: &[String]) -> i32 {
         return ERROR;
     }
 
-    let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
+    let indexes_dir = sovereign_cli_base::dirs::sovereign_root().join("indexes");
     let corpus_id = match crate::converge_cmd::resolve_corpus(corpus_id, &indexes_dir) {
         Ok(c) => c,
         Err(code) => return code,
@@ -474,7 +474,7 @@ fn is_plain_ident(s: &str) -> bool {
 
 fn registered_root(corpus_id: &str) -> Option<String> {
     let raw =
-        std::fs::read_to_string(sovereign_cli_shared::dirs::sovereign_root().join("projects.json"))
+        std::fs::read_to_string(sovereign_cli_base::dirs::sovereign_root().join("projects.json"))
             .ok()?;
     let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
     v.as_array()?

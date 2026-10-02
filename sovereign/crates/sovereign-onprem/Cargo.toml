@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "sovereign-onprem"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The on-prem distribution (docs/FIVE_PROGRAMS.md §2c; phase-b-86, -87): ONE
+# process running svrn with serve and ingest hosted in it. It composes no code
+# (no sovereign-code edge), no mesh, and no recipe authoring (no
+# sovereign-recipe-author edge), and seals svrn's posture: web reach, the
+# wikipedia bundle and the `/mcp` route are withheld by name. A composition
+# root in no package, held to its faces by boundary-gate (`[[distribution]]
+# onprem` in quality/ARCH_LAYERS.toml).
+
+[[bin]]
+name = "sovereign-onprem"
+path = "src/main.rs"
+
+[dependencies]
+# `treesitter`: the daemon's process entry mounts `daemon_cmd`, gated on it.
+sovereign-daemon = { workspace = true, features = ["treesitter"] }
+sovereign-serve = { workspace = true }
+# Ingest, composed for svrn (`hosted`, called with no recipe authoring): the
+# one composition stock calls too (phase-b-88). Both distribution rows claim
+# that crate, so it answers to this row's faces.
+sovereign-hosted-ingest = { workspace = true }
+host-kit = { workspace = true, features = ["shell"] }
+tokio = { workspace = true }
+tracing = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+
+[dev-dependencies]
+reqwest = { workspace = true, features = ["blocking"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[features]
+# OCR built in (phase-b-86): sovereign-daemon's own feature, forwarded.
+ocr = ["sovereign-daemon/ocr"]
+
+[lints]
+workspace = true

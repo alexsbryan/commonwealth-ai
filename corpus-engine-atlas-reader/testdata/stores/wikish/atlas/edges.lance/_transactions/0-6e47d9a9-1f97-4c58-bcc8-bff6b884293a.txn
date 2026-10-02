@@ -1,0 +1,3 @@
+$6e47d9a9-1f97-4c58-bcc8-bff6b884293a²è#source_title ÿÿÿÿÿÿÿÿÿ*string8%target_title ÿÿÿÿÿÿÿÿÿ*string8*relationship_type ÿÿÿÿÿÿÿÿÿ*string8"	link_text ÿÿÿÿÿÿÿÿÿ*string8(occurrence_count ÿÿÿÿÿÿÿÿÿ*int648,source_section_path ÿÿÿÿÿÿÿÿÿ*string8&target_in_scope ÿÿÿÿÿÿÿÿÿ*bool8"!
+lance.auto_cleanup.interval20"'
+lance.auto_cleanup.older_than14days

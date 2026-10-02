@@ -7,6 +7,50 @@ use std::sync::Arc;
 
 use super::super::*;
 
+#[path = "atlas_grounding/pool.rs"]
+mod pool;
+use pool::pool_resolved;
+
+/// The atlas ids that could hold atoms citing a chunk — the chunk → atlas id
+/// derivation, in ONE place.
+///
+/// This is the INVERSE of (svrn-side by FIVE_PROGRAMS §12 decision 1 — svrn owns what it grounds on) `evidence_site::EvidenceSite`: that type answers "given an
+/// atlas, which corpus holds its chunks", and this answers "given a chunk,
+/// which atlases might describe it". It lived as `format!("{}-{}",
+/// corpus_id, title)` inline in `sovereign-core`'s retrieval glue — a format
+/// string that silently encoded SEP's per-article layout as a universal rule,
+/// which is the same conflation `evidence_site` exists to prevent, standing
+/// in the other direction.
+///
+/// Returns the self-hosted candidate (the chunk's own corpus) always, plus
+/// the per-article candidate when the chunk carries a title. A caller drops
+/// the candidates that have no atlas; both are cheap to test and neither may
+/// be guessed at the call site.
+pub fn candidate_atlas_ids(corpus_id: &str, title: Option<&str>) -> Vec<String> {
+    let mut out = vec![corpus_id.to_string()];
+    if let Some(t) = title
+        .map(str::trim)
+        .filter(|t| !t.is_empty() && *t != corpus_id)
+    {
+        // The per-article child of this corpus. `EvidenceSite::derive` reads
+        // this same shape back the other way, so the two agree by
+        // construction: `derive("sep-freewill").chunk_corpus() == "sep"`.
+        //
+        // The `t != corpus_id` guard is not hypothetical. Every chunk of
+        // `brothers-karamazov-book-1` carries `title =
+        // "brothers-karamazov-book-1"` (its bank file says so: that is why
+        // its `expected_sources` are empty), so the inline format string this
+        // function replaced minted
+        // `brothers-karamazov-book-1-brothers-karamazov-book-1` on EVERY
+        // literary query — an atlas id that cannot exist, warmed and then
+        // dropped, once per retrieved chunk. Suppressing it removes a probe,
+        // never a candidate: an atlas named `<corpus>-<corpus>` would require
+        // an article inside corpus X titled X.
+        out.push(format!("{corpus_id}-{t}"));
+    }
+    out
+}
+
 impl Runtime {
     /// Search all installed corpus-engine LanceDB indexes.
     ///
@@ -51,11 +95,11 @@ impl Runtime {
         &self,
         corpus_id: &str,
         chunk_id: u64,
-    ) -> Option<corpus_engine::ScoredChunk> {
+    ) -> Option<corpus_index::types::ScoredChunk> {
         let engine = self.corpus_engine.as_ref()?;
         let indexes = engine.usable_indexes().await.ok()?;
         let info = indexes.into_iter().find(|i| i.corpus_id == corpus_id)?;
-        let index = corpus_engine::index::CorpusIndex::open(&info.path)
+        let index = corpus_index::index::CorpusIndex::open(&info.path)
             .await
             .ok()?;
         // Through the index's own re-acquisition door rather than rebuilt
@@ -76,12 +120,13 @@ impl Runtime {
     /// It is APPENDED to, never cleared, so a caller that grounds twice in a
     /// turn accumulates rather than losing the first walk's summaries.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn apply_atlas_grounding(
+    #[doc(hidden)]
+    pub async fn apply_atlas_grounding(
         &self,
         query_text: &str,
         embedding: &[f32],
-        chunks: &mut Vec<corpus_engine::ScoredChunk>,
-        summaries_out: &mut Vec<corpus_engine::enrichment::atlas::ground::SummaryNode>,
+        chunks: &mut Vec<corpus_index::types::ScoredChunk>,
+        summaries_out: &mut Vec<corpus_engine_atlas_reader::ground::SummaryNode>,
         walk_out: &mut Option<crate::runtime::AtlasWalkEcho>,
         label: &str,
         scope: Option<&str>,
@@ -90,7 +135,7 @@ impl Runtime {
         lane: &crate::runtime::Lane,
     ) -> crate::runtime::retrieval_ledger::StepLedger {
         use crate::runtime::retrieval_ledger::{DropReason, StepLedger};
-        use corpus_engine::enrichment::atlas::ground;
+        use corpus_engine_atlas_reader::ground;
         // THE THREE WAYS THIS STEP DOES NOTHING, each said out loud.
         //
         // All three used to return an empty ledger in silence, and from outside
@@ -138,10 +183,7 @@ impl Runtime {
         // grounds even if its chunks didn't rank this turn.
         let mut scoped: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for c in chunks.iter() {
-            scoped.extend(ground::candidate_atlas_ids(
-                &c.corpus_id,
-                c.title.as_deref(),
-            ));
+            scoped.extend(candidate_atlas_ids(&c.corpus_id, c.title.as_deref()));
         }
         if let Some(enabled) = enabled_corpora {
             scoped.extend(enabled.iter().cloned());
@@ -200,7 +242,7 @@ impl Runtime {
         // for a wiki-class corpus there is no `AtlasGraph` to hand back. Asking
         // for the concrete type here is what kept wikipedia on the
         // bag-of-atoms branch below no matter what store it had.
-        let graphs: Vec<Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>> = corpus_ids
+        let graphs: Vec<Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider>> = corpus_ids
             .iter()
             .filter_map(|id| {
                 let p = provider.walk_provider(id);
@@ -275,7 +317,7 @@ impl Runtime {
         // Already the trait — `walk_provider` widened at the source, so the
         // walk below neither knows nor needs to know which store is behind
         // them.
-        let graph_refs: Vec<&dyn corpus_engine::enrichment::atlas::AtlasProvider> =
+        let graph_refs: Vec<&dyn corpus_engine_atlas_reader::provider::AtlasProvider> =
             graphs.iter().map(|g| g.as_ref()).collect();
         let max_seeds = ctxs.first().map(|c| c.top_k).unwrap_or(3).max(12);
         let (policy, policy_source) = ground::navigation_policy_for(&graph_refs);
@@ -284,7 +326,7 @@ impl Runtime {
         // tables were built in (see `embed_fn.rs`). Built per call and cheap —
         // `shared_classifier` embeds the exemplars once per process.
         let embed = crate::embed_fn::inference_to_embed_query_fn(Arc::clone(&self.inference));
-        let inventory = corpus_engine::enrichment::atlas::AtlasInventory::of(&graph_refs);
+        let inventory = corpus_engine_atlas_reader::inventory::AtlasInventory::of(&graph_refs);
         let selection =
             ground::select_walk(query_text, &policy, policy_source, &inventory, Some(&embed)).await;
         tracing::debug!(
@@ -348,24 +390,14 @@ impl Runtime {
             corpus_ceiling,
             lane,
         };
-        let (fetched, resolve) = ground::resolve_evidence(
+        let (fetched, resolve) = corpus_engine_atlas_reader::resolve::resolve_evidence(
             &grounding.requests,
             grounding.budget,
             enabled_corpora,
             &fetcher,
         )
         .await;
-        let mut seen_in_pool: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for r in fetched {
-            let key = format!(
-                "{}|{}",
-                r.chunk.title.clone().unwrap_or_default(),
-                truncate_chars(&r.chunk.content, 80)
-            );
-            if seen_in_pool.insert(key) {
-                chunks.push(r.chunk);
-            }
-        }
+        let ledger = pool_resolved(chunks, fetched, &resolve);
         let graph_added = chunks.len() - before;
 
         // The line whose absence hid the defect: candidates in, chunks out,
@@ -412,16 +444,6 @@ impl Runtime {
             added: graph_added,
             considered: resolve.considered,
         });
-        let ledger = StepLedger::injected(resolve.considered)
-            .drop(DropReason::OutOfScope, resolve.out_of_scope)
-            .drop(DropReason::EvidenceUnresolvable, resolve.unresolvable)
-            .drop(DropReason::TitleMismatch, resolve.title_mismatch)
-            .drop(DropReason::Duplicate, resolve.duplicate)
-            // Candidates past the fetch budget were never attempted. They
-            // are a DECISION, not a failure, and the accounting identity
-            // requires them named.
-            .drop(DropReason::BudgetExhausted, resolve.budget_exhausted());
-
         // Adaptive triage: bump article slug per atlas to climb
         // the Tier-2 enrichment queue.
         for ctx in &ctxs {
@@ -461,12 +483,12 @@ struct RuntimeEvidenceFetcher<'a> {
     lane: &'a crate::runtime::Lane,
 }
 
-impl corpus_engine::enrichment::atlas::ground::EvidenceFetcher for RuntimeEvidenceFetcher<'_> {
+impl corpus_engine_atlas_reader::resolve::EvidenceFetcher for RuntimeEvidenceFetcher<'_> {
     async fn by_row(
         &self,
         corpus: &kernel_types::CorpusId,
         row: u64,
-    ) -> Option<corpus_engine::ScoredChunk> {
+    ) -> Option<corpus_index::types::ScoredChunk> {
         self.runtime.fetch_chunk_by_id(corpus.as_str(), row).await
     }
 
@@ -475,7 +497,7 @@ impl corpus_engine::enrichment::atlas::ground::EvidenceFetcher for RuntimeEviden
         corpus: &kernel_types::CorpusId,
         query: &str,
         limit: usize,
-    ) -> Vec<corpus_engine::ScoredChunk> {
+    ) -> Vec<corpus_index::types::ScoredChunk> {
         let scope = [corpus.as_str().to_string()];
         self.runtime
             .search_corpus_indexes_with_overrides(
@@ -513,8 +535,8 @@ impl corpus_engine::enrichment::atlas::ground::EvidenceFetcher for RuntimeEviden
 /// prompt, and a rollup that the prompt cannot label is worse than one whose
 /// tag is a legacy name. The RESERVE decision no longer reads it (§10.6).
 pub(crate) fn atlas_summary_chunk(
-    node: &corpus_engine::enrichment::atlas::ground::SummaryNode,
-) -> corpus_engine::ScoredChunk {
+    node: &corpus_engine_atlas_reader::ground::SummaryNode,
+) -> corpus_index::types::ScoredChunk {
     let corpus_id = node.site.chunk_corpus().as_str().to_string();
     let mut metadata = std::collections::HashMap::new();
     metadata.insert("source".to_string(), "raptor".to_string());
@@ -522,7 +544,7 @@ pub(crate) fn atlas_summary_chunk(
     if !node.atom_id.is_empty() {
         metadata.insert("atom_id".to_string(), node.atom_id.clone());
     }
-    corpus_engine::ScoredChunk {
+    corpus_index::types::ScoredChunk {
         content: node.text.clone(),
         // The article when the site has one (`sep-abduction` -> `abduction`),
         // else the corpus's own name: the title is what the prompt labels the
@@ -540,7 +562,7 @@ pub(crate) fn atlas_summary_chunk(
         chunk_id: None,
         source_doc_id: None,
         vector_distance: Some(1.0 - node.score),
-        provenance: corpus_engine::index::ChunkProvenance::manufactured_summary("atlas_summary"),
+        provenance: corpus_index::index::ChunkProvenance::manufactured_summary("atlas_summary"),
     }
 }
 
@@ -554,8 +576,8 @@ pub(crate) fn atlas_summary_chunk(
 /// the one time it was left to a caller, the summaries were appended at the
 /// tail and admitted at zero for four months.
 pub(crate) fn append_atlas_summaries(
-    chunks: &mut Vec<corpus_engine::ScoredChunk>,
-    summaries: &[corpus_engine::enrichment::atlas::ground::SummaryNode],
+    chunks: &mut Vec<corpus_index::types::ScoredChunk>,
+    summaries: &[corpus_engine_atlas_reader::ground::SummaryNode],
     label: &str,
 ) -> usize {
     if summaries.is_empty() {
@@ -614,7 +636,7 @@ mod tests {
     /// Failing input: reinstate `format!("{}-{}", corpus_id, title)` here.
     #[test]
     fn the_scope_derivation_is_corpus_engines_and_still_reaches_sep_articles() {
-        use corpus_engine::enrichment::atlas::ground::candidate_atlas_ids;
+        use crate::runtime::retrieval::atlas_grounding::candidate_atlas_ids;
         let ids = candidate_atlas_ids("sep", Some("freewill"));
         assert!(ids.contains(&"sep".to_string()));
         assert!(ids.contains(&"sep-freewill".to_string()));
@@ -630,10 +652,9 @@ mod tests {
 #[cfg(test)]
 mod atlas_summary_append_tests {
     use super::{append_atlas_summaries, atlas_summary_chunk};
-    use corpus_engine::enrichment::atlas::evidence_site::EvidenceSite;
-    use corpus_engine::enrichment::atlas::ground::SummaryNode;
-    use corpus_engine::index::ChunkProvenance;
-    use corpus_engine::ScoredChunk;
+    use corpus_engine_atlas_reader::evidence_site::EvidenceSite;
+    use corpus_engine_atlas_reader::ground::SummaryNode;
+    use corpus_index::{index::ChunkProvenance, types::ScoredChunk};
 
     fn leaf(i: usize) -> ScoredChunk {
         ScoredChunk {
@@ -716,4 +737,41 @@ mod atlas_summary_append_tests {
         assert_eq!(c.corpus_id, "sep");
         assert_eq!(c.title.as_deref(), Some("abduction"));
     }
+    /// The chunk → atlas id derivation, in both shapes, and its agreement
+    /// with `corpus_engine::…evidence_site::EvidenceSite`'s reading in the other direction. Failing input:
+    /// drop the self-hosted candidate, or emit the child for a titleless
+    /// chunk.
+    #[test]
+    fn candidate_atlas_ids_covers_both_layouts_and_agrees_with_evidence_site() {
+        use crate::runtime::retrieval::candidate_atlas_ids;
+        let ids = candidate_atlas_ids("sep", Some("freewill"));
+        assert_eq!(ids, vec!["sep".to_string(), "sep-freewill".to_string()]);
+        // The inverse holds: the child id reads back to the parent corpus.
+        assert_eq!(
+            EvidenceSite::derive("sep-freewill").chunk_corpus().as_str(),
+            "sep"
+        );
+
+        // A chunk with no title has exactly one candidate — its own corpus.
+        assert_eq!(
+            candidate_atlas_ids("wikipedia", None),
+            vec!["wikipedia".to_string()]
+        );
+        assert_eq!(
+            candidate_atlas_ids("wikipedia", Some("   ")),
+            vec!["wikipedia".to_string()]
+        );
+        // …and a chunk titled after its own corpus yields ONE candidate, not
+        // a `bk-1-bk-1` that addresses nothing. This is the literary shape,
+        // not a corner case: every chunk of `brothers-karamazov-book-1` is
+        // titled with its corpus id.
+        assert_eq!(
+            candidate_atlas_ids("bk-1", Some("bk-1")),
+            vec!["bk-1".to_string()]
+        );
+    }
 }
+
+#[cfg(test)]
+#[path = "atlas_grounding/pool_tests.rs"]
+mod pool_tests;

@@ -4,6 +4,7 @@
 //! when none is loaded). Fast-slot acknowledgement only; no synthesis.
 
 use crate::error::Result;
+use sovereign_contracts::notes::AgentNotes;
 
 use super::super::*;
 
@@ -82,7 +83,7 @@ impl Runtime {
                 Vec::new(),
                 Vec::new(),
                 conversation_id,
-                corpus_engine_notes::NoteScope::Session,
+                sovereign_contracts::recipe::notes::NoteScope::Session,
                 None,
                 related_entity.as_deref(),
             )

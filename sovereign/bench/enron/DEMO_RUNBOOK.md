@@ -52,8 +52,9 @@ browser tab needed.
 3. **Corpus present:** `~/.svrnmesh/indexes/enron-sample-multi-wide/` with
    `atlas/atoms.json` (6,101 atoms) + `atlas/reconciliation.json`. Verify:
    `sovereign enrich reconcile enron-sample-multi-wide` → `1,730 → 35 merges` (see Act 1).
-4. **Demo env (query decomposition + title expansion):**
-   `export SOVEREIGN_TITLE_EXPAND=1 SOVEREIGN_DECOMP_DECAY=0.6`
+4. **No demo env.** The two knobs this step exported, `SOVEREIGN_TITLE_EXPAND` and
+   `SOVEREIGN_DECOMP_DECAY`, were cut with their retrieval steps (ac032e5bc); setting
+   them now only prints a startup warning.
 5. **Desktop retrieval reachable:** launch the app (dev: `npm run dev` in
    `sovereign/crates/sovereign-desktop/`, then `tauri dev`; or the packaged `.app`). It
    attaches to the daemon on `:9741`. **Dry-run the Act 2 question** and confirm a citation
@@ -242,7 +243,6 @@ the pipeline inspectable, the methodology a committed benchmark."
 The reconcile + B³ + `enrich query` outputs are deterministic terminal output — re-run live
 or screenshot. **Capture ahead** the **grounded chat answers** (35B synth is slow live):
 ```sh
-export SOVEREIGN_TITLE_EXPAND=1 SOVEREIGN_DECOMP_DECAY=0.6
 sovereign bench all --synth --isolate --filter enron/qa_demo
 # writes the synthesized answers + cited sources to baselines/qa-synth-isolated/latest.json
 ```

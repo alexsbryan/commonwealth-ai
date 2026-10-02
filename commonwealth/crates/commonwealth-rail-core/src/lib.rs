@@ -77,6 +77,7 @@
 //! than a path.
 
 mod admit;
+mod attest;
 mod introduce;
 mod payload;
 mod sig;
@@ -89,10 +90,13 @@ pub use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 
 pub use admit::{admit, body_json, Admission, AdmittedOp, RailGap};
+pub use attest::{AttestRefusal, GuestAttestation};
 pub use introduce::{trace, trace_op, Introduce, Vouch, VouchStatus};
 pub use payload::{Payload, PayloadError, MAX_PAYLOAD_BYTES};
 pub use sig::{actor_of, ring_op_message, sign_ring_op};
-pub use sync::{digest, ops_missing_from, ops_missing_from_within, Digest, Floors, NO_BUDGET};
+pub use sync::{
+    digest, ops_missing_from, ops_missing_from_within, Compaction, Digest, Floors, NO_BUDGET,
+};
 
 /// The journal envelope, re-exported so a consumer of the rail names ONE
 /// crate. `Op<SignedOp>` is what crosses the ring-sync wire
@@ -111,6 +115,30 @@ pub use oplog::{Journaled, Op, OpId, SkippedLine};
 // gate — nothing in the repo can see an export that is missing.
 /// The JSON value [`Payload::new`] takes.
 pub use serde_json::Value;
+
+// ── Local-only namespaces ────────────────────────────────────
+
+/// Namespaces a node may journal but never OFFERS to a peer: the list a
+/// returning node advertises and every ring-sync answer skip them
+/// (`commonwealth-rail`'s `RingRail::namespaces` and
+/// `RingJournal::ops_missing_from_within`). The why per entry is
+/// `commonwealth_state::peer_preferences::GOSSIP_EXCLUDED_APP_IDS`, which is
+/// this list plus the namespaces that left the KV gossip FOR the ring
+/// (five-programs-37).
+pub const LOCAL_ONLY_NAMESPACES: &[&str] = &[
+    "peer_preferences",
+    "work-atlas-private",
+    "notes-private",
+    "activity-private",
+    "portfolio-private",
+    "wikipedia-newsworthy-status",
+    "wikipedia-newsworthy-portal",
+];
+
+/// The one predicate over [`LOCAL_ONLY_NAMESPACES`].
+pub fn is_local_only(namespace: &str) -> bool {
+    LOCAL_ONLY_NAMESPACES.contains(&namespace)
+}
 
 // ── People ───────────────────────────────────────────────────
 
@@ -232,6 +260,24 @@ impl Roster {
     pub fn knows(&self, person: &Person) -> bool {
         self.members.contains_key(person)
     }
+}
+
+/// Which reader answered the roster question, so the decision is visible at
+/// `tracing=debug` and a caller that needs to know (the CLI refusing to write
+/// a file nothing reads) can ask without re-deriving it.
+///
+/// Lived in the journal crate until fp-54: the rails daemon reports the
+/// origin beside the roster it answers with, and a consumer that names only
+/// the fold (the daemon after its Cargo swap) still has to say `File` from
+/// `Derived` without naming the journal half. `RosterSource` — the thing a
+/// DERIVED origin answers for — stays journal-side: it is the extension
+/// point the application implements, not vocabulary the fold judges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RosterOrigin {
+    /// `<ring>/roster.json`, written by `svrn ring roster add`.
+    File,
+    /// A source installed for this namespace; the file is ignored.
+    Derived,
 }
 
 // ── What a line says ─────────────────────────────────────────
@@ -411,6 +457,11 @@ pub enum RailError {
         actor_prefix(.actor)
     )]
     NotInRoster { actor: String, namespace: String },
+    /// A guest attestation the journal's writer would not honour. Typed so
+    /// the refusal's name crosses a dial intact (`AttestRefusal::name`) and
+    /// the door can hand it to the caller verbatim.
+    #[error("the guest attestation was refused: {0}")]
+    AttestRefused(AttestRefusal),
 }
 
 /// Enough of an actor key to recognise, short enough to read in a sentence.

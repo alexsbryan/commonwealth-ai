@@ -9,15 +9,19 @@
 //!
 //! PRIVACY (FR-11 / AC-7): WHICH companies a user holds reveals the user
 //! and is sensitive, even though the public `proxy-cik…` corpora it names
-//! are freely replicable. The set is stored in a CLI-owned, user-global
-//! `MeshStore` under the `portfolio-private` app_id — which is in
-//! `GOSSIP_EXCLUDED_APP_IDS`, so it never gossips (the same structural
-//! guarantee as peer-preferences / notes-private / activity-private), and
-//! it lives in its own file the daemon does not replicate.
+//! are freely replicable. The set is stored in cw-rails' mesh store under the
+//! `portfolio-private` app_id — which is local-only, so it is journaled but
+//! never offered to a peer (the same structural guarantee as
+//! peer-preferences / notes-private / activity-private). The CLI's legacy
+//! `portfolio.db` is migrated into it once (five-programs fp-87).
 
 use bytes::Bytes;
-use commonwealth_core::ids::NodeId;
-use commonwealth_state::{MeshStore, PORTFOLIO_PRIVATE_APP_ID};
+use kernel_types::NodeId;
+use sovereign_contracts::peer::ReplicatedKv;
+use sovereign_daemon::rails_client::kv::RailsKv;
+
+/// The portfolio namespace — one of `commonwealth_rail_core::LOCAL_ONLY_NAMESPACES`.
+pub(crate) const PORTFOLIO_PRIVATE_APP_ID: &str = "portfolio-private";
 
 pub mod ask;
 
@@ -35,36 +39,41 @@ subcommands:
 A portfolio is a gossip-excluded local set of corpus_ids (FR-11). The public
 per-issuer corpora it names still replicate; the SET never leaves the machine.";
 
-/// CLI-owned, user-global portfolio store path. Separate from the daemon's
-/// MeshStore so portfolio writes never contend with a running daemon; the
-/// `portfolio-private` app_id keeps it gossip-excluded regardless.
-fn store_path() -> std::path::PathBuf {
+/// The CLI's legacy, user-global portfolio store — read once, by the
+/// migration, and never written again.
+fn legacy_store_path() -> std::path::PathBuf {
     sovereign_contracts::rebrand::svrnmesh_root().join("portfolio.db")
 }
 
-pub(crate) fn open_store() -> Result<(MeshStore, NodeId), String> {
-    let p = store_path();
-    if let Some(parent) = p.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let store =
-        MeshStore::open(&p).map_err(|e| format!("open portfolio store {}: {e}", p.display()))?;
+/// cw-rails' mesh store, after migrating the legacy file into it if that has
+/// not been done.
+pub(crate) fn open_store() -> Result<(RailsKv, NodeId), String> {
+    let kv = crate::legacy_store::rails_kv();
+    crate::legacy_store::migrate_if_needed(
+        &legacy_store_path(),
+        &[(PORTFOLIO_PRIVATE_APP_ID, PORTFOLIO_PRIVATE_APP_ID)],
+        &kv,
+        crate::legacy_store::export_via_cli_mesh,
+    )?;
     let data_dir = sovereign_contracts::rebrand::svrnmesh_root();
-    let node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
-    Ok((store, node_id))
+    let node_id = sovereign_contracts::node_identity::load_or_generate_self_node_id(&data_dir);
+    Ok((kv, node_id))
 }
 
-/// The corpus_ids in a named portfolio, or `None` if it doesn't exist.
-pub(crate) fn get_portfolio(store: &MeshStore, name: &str) -> Option<Vec<String>> {
-    store
+/// The corpus_ids in a named portfolio, or `None` if it doesn't exist. A
+/// store that cannot be read is an error, not an absent portfolio.
+pub(crate) fn get_portfolio(
+    store: &dyn ReplicatedKv,
+    name: &str,
+) -> Result<Option<Vec<String>>, String> {
+    let entry = store
         .get(PORTFOLIO_PRIVATE_APP_ID, name)
-        .ok()
-        .flatten()
-        .and_then(|e| serde_json::from_slice::<Vec<String>>(e.value.as_ref()).ok())
+        .map_err(|e| format!("read portfolio: {e}"))?;
+    Ok(entry.and_then(|e| serde_json::from_slice::<Vec<String>>(e.value.as_ref()).ok()))
 }
 
 fn put_portfolio(
-    store: &MeshStore,
+    store: &dyn ReplicatedKv,
     node: NodeId,
     name: &str,
     corpora: &[String],
@@ -154,7 +163,13 @@ fn cmd_add(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let existing = get_portfolio(&store, name).unwrap_or_default();
+    let existing = match get_portfolio(&store, name) {
+        Ok(v) => v.unwrap_or_default(),
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
     let merged = merge_unique(&existing, add);
     if let Err(e) = put_portfolio(&store, node, name, &merged) {
         eprintln!("error: {e}");
@@ -217,14 +232,18 @@ fn cmd_show(args: &[String]) -> i32 {
         }
     };
     match get_portfolio(&store, name) {
-        Some(corpora) => {
+        Err(e) => {
+            eprintln!("error: {e}");
+            1
+        }
+        Ok(Some(corpora)) => {
             println!("portfolio `{name}` ({} corpus(es)):", corpora.len());
             for c in &corpora {
                 println!("  · {c}");
             }
             0
         }
-        None => {
+        Ok(None) => {
             eprintln!("error: no portfolio named `{name}`");
             1
         }

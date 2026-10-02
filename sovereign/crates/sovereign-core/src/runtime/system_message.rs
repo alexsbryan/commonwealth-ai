@@ -130,7 +130,12 @@ impl Runtime {
             context.debug_assert_routed();
         }
 
-        let mut parts = vec![base.to_string()];
+        // Every system message passes here, so the prompts' web offers are
+        // reconciled with the registry in one place: a sealed daemon's turn
+        // must not offer a web search it has no tool for.
+        let base =
+            super::web_reach::offers_only_what_is_registered(base, &self.tools.descriptors());
+        let mut parts = vec![base.into_owned()];
 
         let now_utc = chrono::Utc::now();
         parts.push(today_anchor_block(&now_utc.format("%Y-%m-%d").to_string()));
@@ -299,7 +304,7 @@ impl Runtime {
         // Fully visible to the user in the desktop's ProvenancePanel,
         // which renders this final assembled string.
         if let Some(block) =
-            render_custom_instructions(self.inference_config.custom_instructions.as_deref())
+            render_custom_instructions(self.turn_inference_config().custom_instructions.as_deref())
         {
             parts.push(block);
         }
@@ -771,7 +776,7 @@ impl Runtime {
         match run_collaboration(
             self.inference.as_ref(),
             approval.as_ref(),
-            &self.inference_config,
+            &self.turn_inference_config(),
             conversation_id,
             question,
             response,
@@ -827,7 +832,7 @@ impl Runtime {
             self.inference.as_ref(),
             approval.as_ref(),
             self.store.as_ref(),
-            &self.inference_config,
+            &self.turn_inference_config(),
             conversation_id,
             message_id,
             question,

@@ -13,7 +13,8 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 
-use corpus_engine::Corpus;
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::corpus::Corpus;
 
 use crate::state::AppState;
 
@@ -180,9 +181,9 @@ pub async fn index_transfer(
         }
     };
 
-    let engine = match &state.inner.node.corpus_engine {
-        Some(e) => e.clone(),
-        None => {
+    let (engine, atlas) = match (&state.inner.node.corpus_engine, &state.inner.node.atlas) {
+        (Some(e), Some(a)) => (e.clone(), a.clone()),
+        _ => {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(serde_json::json!({"error": "no corpus engine on this node"})),
@@ -293,9 +294,7 @@ pub async fn index_transfer(
     // pulled atoms_content_hash or embed_model differs.
     let atlas_dir = final_path.join("atlas");
     let _ = std::fs::remove_file(atlas_dir.join("_summary.json"));
-    let atlas_summary = corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
-        .ok()
-        .flatten();
+    let atlas_summary = atlas.atlas_summary(&atlas_dir).ok().flatten();
     let atlas_meta = match atlas_summary {
         Some(s) => serde_json::json!({
             "atom_count": s.atom_count,
@@ -321,7 +320,7 @@ pub async fn index_transfer(
     // so the projector reads it fine — this lets a peer's edits land
     // on disk even before the canonical merge runs.
     if let Some(home) = dirs::home_dir() {
-        match corpus_engine::alignment_projector::project(&final_path, &home).await {
+        match engine.project_alignment(&final_path, &home).await {
             Ok(p) => {
                 if p.wrote > 0 || p.skipped_local_newer > 0 {
                     tracing::info!(

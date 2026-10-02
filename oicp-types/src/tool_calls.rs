@@ -358,6 +358,68 @@ pub fn strip_orphan_close_brackets(s: &str) -> String {
     out
 }
 
+/// Extract the first JSON object from a model response, tolerating
+/// leading prose and/or surrounding Markdown code fences. Returns the
+/// JSON substring (without the fences) or `None` if nothing resembling
+/// an object can be located.
+///
+/// Used by every enrichment phase's `parse_*` and the eval scorer to be
+/// forgiving about model output framing while still rejecting genuinely
+/// malformed bodies downstream in the `serde_json::from_str` step.
+/// Moved here from `corpus_engine::enrichment::pipeline` (five-programs
+/// fp-56) so the eval harness reaches it without the engine; corpus-engine
+/// re-exports it at the old path.
+pub fn extract_json_block(response: &str) -> Option<&str> {
+    // Look for a ```json fenced block first.
+    if let Some(start) = response.find("```json") {
+        let rest = &response[start + "```json".len()..];
+        if let Some(end) = rest.find("```") {
+            return Some(rest[..end].trim());
+        }
+    }
+    // Or any ``` fenced block whose content starts with `{`.
+    if let Some(start) = response.find("```") {
+        let rest = &response[start + 3..];
+        if let Some(end) = rest.find("```") {
+            let inner = rest[..end].trim();
+            if inner.starts_with('{') {
+                return Some(inner);
+            }
+        }
+    }
+    // Fall back to the first `{…}` block, picking the widest balanced
+    // braces scan we can do cheaply.
+    let bytes = response.as_bytes();
+    let start = bytes.iter().position(|&b| b == b'{')?;
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escape = false;
+    for (i, &b) in bytes.iter().enumerate().skip(start) {
+        if in_string {
+            if escape {
+                escape = false;
+            } else if b == b'\\' {
+                escape = true;
+            } else if b == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_string = true,
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&response[start..=i]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod parse_tool_calls_tests {
     //! Lock the parser's behaviour against the two real-world model

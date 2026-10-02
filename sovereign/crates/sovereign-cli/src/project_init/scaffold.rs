@@ -164,8 +164,8 @@ appended to a tool response, it is a nudge — write one when the work feels sig
 
 ## Developer: reviewing reflections
 
-`svrn reflect` reads the accumulated backlog from any directory — it finds the active
-database automatically via `~/.svrnmesh/active_notes_db`.
+`svrn reflect` reads the accumulated backlog from any directory — it reads code's notes
+store (`~/.svrnmesh/notes.db`), or the one `--data-dir` names.
 
 ```bash
 sovereign reflect                          # 30-day summary: signals, what helped, open todos

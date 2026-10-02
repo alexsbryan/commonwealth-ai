@@ -45,8 +45,8 @@ fn test_context() -> ConversationContext {
     }
 }
 
-fn marker_chunk(title: &str) -> corpus_engine::ScoredChunk {
-    corpus_engine::ScoredChunk {
+fn marker_chunk(title: &str) -> corpus_index::types::ScoredChunk {
+    corpus_index::types::ScoredChunk {
         content: title.to_string(),
         title: Some(title.to_string()),
         url: None,
@@ -57,7 +57,7 @@ fn marker_chunk(title: &str) -> corpus_engine::ScoredChunk {
         source_doc_id: None,
         vector_distance: None,
         // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-        provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+        provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
     }
 }
 

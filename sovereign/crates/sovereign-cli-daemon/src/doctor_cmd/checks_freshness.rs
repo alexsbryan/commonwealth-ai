@@ -345,7 +345,7 @@ pub(super) fn orphaned_indexes() -> Vec<(String, Option<String>)> {
         .filter(|e| e.path().join("scip_graph.db").exists())
         .filter_map(|e| {
             let id = e.file_name().to_str()?.to_string();
-            let root = std::fs::read_to_string(corpus_engine::Corpus::meta_in(e.path()))
+            let root = std::fs::read_to_string(corpus_index::corpus::Corpus::meta_in(e.path()))
                 .ok()
                 .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
                 .and_then(|v| v.get("source_path")?.as_str().map(str::to_string));
@@ -367,7 +367,7 @@ pub(super) fn orphaned_indexes() -> Vec<(String, Option<String>)> {
 /// question the tool asks does.
 ///
 /// So this check runs the REAL predicate the code tools run
-/// (`sovereign_tools::code::has_code_graph`) over the REAL corpus list and
+/// (`IndexInfo::is_code_corpus`) over the REAL corpus list and
 /// reports the count. If a corpus has a graph but the tools would skip it,
 /// that discrepancy IS the finding.
 pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
@@ -384,19 +384,19 @@ pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
     }
 
     // Open each index and ask the REAL predicate about the REAL `IndexInfo`
-    // — same `kind` derivation, same `has_code_graph` rule the tools use. No
+    // — same `kind` derivation, same `is_code_corpus` rule the tools use. No
     // corpus engine (and so no EmbedFn) is needed to answer this.
     let indexes_dir = sovereign_root().join("indexes");
     let mut visible: Vec<String> = Vec::new();
     for id in &on_disk {
-        let Ok(index) = corpus_engine::CorpusIndex::open(&indexes_dir.join(id)).await else {
+        let Ok(index) = corpus_index::index::CorpusIndex::open(&indexes_dir.join(id)).await else {
             // `code_indexed` already reports an unreadable Lance table.
             continue;
         };
         let Ok(info) = index.info().await else {
             continue;
         };
-        if sovereign_tools::code::has_code_graph(&info) {
+        if info.is_code_corpus() {
             visible.push(info.corpus_id);
         }
     }
@@ -416,7 +416,7 @@ pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
             repair: Repair::Manual(
                 "A corpus is visible to the code tools when it is tagged \
                  CorpusKind::Code OR has a scip_graph.db beside its chunk table \
-                 (sovereign_tools::code::has_code_graph). Check that the index \
+                 (IndexInfo::is_code_corpus). Check that the index \
                  dir and _corpus_meta.json agree."
                     .into(),
             ),
@@ -447,7 +447,7 @@ pub(super) async fn check_code_tools_see_corpora() -> CheckResult {
 /// so it works whether or not the daemon is up.
 pub(super) async fn check_rebuild_outcomes() -> CheckResult {
     let name = "scip_rebuild_outcomes";
-    let registry = match sovereign_mesh::projects::Registry::load() {
+    let registry = match sovereign_contracts::watcher_projects::Registry::load() {
         Ok(r) => r,
         Err(_) => {
             return CheckResult {
@@ -506,7 +506,7 @@ pub(super) async fn check_rebuild_outcomes() -> CheckResult {
 }
 
 pub(super) async fn check_watcher_freshness() -> CheckResult {
-    let registry = match sovereign_mesh::projects::Registry::load() {
+    let registry = match sovereign_contracts::watcher_projects::Registry::load() {
         Ok(r) => r,
         Err(_) => {
             return CheckResult {
@@ -608,7 +608,7 @@ pub(super) async fn check_watcher_freshness() -> CheckResult {
         // Signal 1: git-head drift. Surfaces a watcher that's a full
         // commit behind. Skip silently when the project isn't a git
         // repo (no HEAD to compare against).
-        let current_head = sovereign_mesh::reindexer::read_git_head(&entry.root);
+        let current_head = sovereign_contracts::git::read_git_head(&entry.root);
         let indexed_head = graph.last_indexed_head().await;
         if let (Some(cur), Some(idx)) = (current_head.as_ref(), indexed_head.as_ref()) {
             if cur != idx {
@@ -846,7 +846,7 @@ pub(super) fn newest_source_age_secs(
 /// probe does not search — the verdict is a Warning naming the
 /// directory, never a pass.
 pub(super) fn check_scip_exporters() -> CheckResult {
-    let registry = match sovereign_mesh::projects::Registry::load() {
+    let registry = match sovereign_contracts::watcher_projects::Registry::load() {
         Ok(r) => r,
         Err(_) => {
             return CheckResult {
@@ -1001,7 +1001,7 @@ pub(super) fn check_legacy_hooks() -> CheckResult {
     // Best-effort: read the registry directly. If the registry
     // isn't loadable, skip this check — the `warn_orphaned_indexes`
     // path at daemon startup will cover the miss.
-    let registry = match sovereign_mesh::projects::Registry::load() {
+    let registry = match sovereign_contracts::watcher_projects::Registry::load() {
         Ok(r) => r,
         Err(_) => {
             return CheckResult {

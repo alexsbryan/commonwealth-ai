@@ -21,7 +21,7 @@ use std::sync::Arc;
 use sovereign_core::error::{Error, Result};
 use uuid::Uuid;
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::LocalCorpusPort;
 
 use super::apply::apply_watched_diff;
 use super::diff::compute_diff;
@@ -74,7 +74,7 @@ pub enum WorkerOutcome {
 }
 
 pub struct Worker {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn LocalCorpusPort>,
     manager: Arc<LocalCorpusManager>,
     registry: Arc<WatchedFolderRegistry>,
     sink: EventSink,
@@ -93,7 +93,7 @@ pub struct Worker {
 
 impl Worker {
     pub fn new(
-        engine: Arc<CorpusEngine>,
+        engine: Arc<dyn LocalCorpusPort>,
         manager: Arc<LocalCorpusManager>,
         registry: Arc<WatchedFolderRegistry>,
         sink: EventSink,

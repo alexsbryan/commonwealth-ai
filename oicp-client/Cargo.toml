@@ -11,7 +11,6 @@ rust-version.workspace = true
 # Error/Result) and the OICP protocol types. These two are the entire
 # non-leaf dependency budget — the point of the crate.
 sovereign-contracts = { workspace = true }
-oicp-types = { workspace = true }
 
 async-trait = { workspace = true }
 futures = { workspace = true }
@@ -21,6 +20,14 @@ tokio = { workspace = true }
 tokio-stream = "0.1"
 tracing = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
+
+[dev-dependencies]
+# `daemon_models`' tests stand up a fake daemon (`/v1/models`,
+# `/v1/embeddings`) on a loopback port.
+axum = { workspace = true }
+# `openai_passthrough`'s forwarding test reads the trait's methods from the
+# contracts crate, which reads its own source (`double`, test-fixtures).
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 
 [lints]
 workspace = true

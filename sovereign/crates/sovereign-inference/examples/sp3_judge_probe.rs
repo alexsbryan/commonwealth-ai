@@ -24,8 +24,8 @@
 //!     [limit]
 
 use serde::Deserialize;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed};
 use sovereign_inference::remote::SplitInferenceProvider;
 use std::io::Write as _;
 use std::sync::Arc;
@@ -113,7 +113,7 @@ async fn complete_with_retry(
     provider: &Arc<dyn InferenceProvider>,
     req: &CompletionRequest,
     retries: &mut u64,
-) -> Result<sovereign_core::types::CompletionResponse, String> {
+) -> Result<sovereign_contracts::types::CompletionResponse, String> {
     let mut last = String::new();
     for attempt in 0..3 {
         if attempt > 0 {

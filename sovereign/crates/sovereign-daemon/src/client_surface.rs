@@ -23,33 +23,24 @@ use crate::client_auth::ClientAuthPolicy;
 /// | Surface | Reached by | Trusts a loopback peer | Serves `/v1/*` | Serves `/internal/*` |
 /// |---|---|---|---|---|
 /// | `Operator` | a real local caller on `:9741` | yes | yes | yes |
-/// | `Peer` | a MEMBER dialling `CLIENT_ALPN` | yes | yes | **no** |
-/// | `Guest` | `GUEST_ALPN`, a downgraded stranger, and the guest door | no | yes | no |
+/// | `Guest` | `GUEST_ALPN`, a non-member on `CLIENT_ALPN`, and the guest door | no | yes | no |
 /// | `Rail` | a deployed ring app, on its own loopback bind | no | **no** | no |
 ///
-/// **`Peer` exists because "is the caller loopback" is meaningless on a
-/// listener the iroh acceptor feeds.** The acceptor forwards by
-/// `TcpStream::connect("127.0.0.1")`, so every tunnelled request wears a
-/// loopback address it did not earn. `Guest` answers that for a stranger by
-/// refusing to trust the address; it could not answer it for a member,
-/// because peer federated inference carries no `Authorization` header at all
-/// and membership-by-key IS its credential. So a member landed on the
-/// `Operator` bind and reached `/internal/guest/grant` — a "forge a
-/// credential for an outsider" lever — with nothing presented. A loopback
-/// guard on those routes would have read as a fix and changed nothing.
+/// cw-rails forwards to the `Guest` bind over loopback, so every tunnelled
+/// request wears a loopback address it did not earn: `Guest` refuses to
+/// trust the address. A MEMBER dialling `CLIENT_ALPN` reaches serve's member
+/// client, never this router (pb-mesh-exit-transport), so no bind here serves
+/// a member the general client routes.
 ///
-/// The fix is structural rather than a predicate: the principal class picks
-/// the listener, and the listener does not SERVE what that principal must
-/// never reach. See `routes_internal::guest_grant` module docs.
+/// The principal class picks the listener, and the listener does not SERVE
+/// what that principal must never reach. See `routes_internal::guest_grant`
+/// module docs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClientSurface {
     /// The daemon's own `:9741` listener.
     Operator,
-    /// The loopback bind the iroh acceptor forwards `CLIENT_ALPN` to, once
-    /// the dialer's key has been checked against live membership.
-    Peer,
-    /// The loopback bind the acceptor forwards `GUEST_ALPN` to, and where a
-    /// non-member on `CLIENT_ALPN` is downgraded.
+    /// The loopback bind svrn registers with cw-rails on `GUEST_ALPN`, where
+    /// cw-rails also sends a non-member dialling `CLIENT_ALPN`.
     Guest,
     /// The loopback bind a deployed ring app talks to. Serves the rail
     /// routes and NOTHING else.
@@ -68,7 +59,7 @@ impl ClientSurface {
     /// machine, or by proving a member key at the QUIC handshake.
     pub fn auth_policy(self) -> ClientAuthPolicy {
         match self {
-            Self::Operator | Self::Peer => ClientAuthPolicy::default(),
+            Self::Operator => ClientAuthPolicy::default(),
             Self::Guest | Self::Rail => ClientAuthPolicy::UNTRUSTED_LOOPBACK,
         }
     }
@@ -83,7 +74,7 @@ impl ClientSurface {
     pub fn serves_operator_routes(self) -> bool {
         match self {
             Self::Operator => true,
-            Self::Peer | Self::Guest | Self::Rail => false,
+            Self::Guest | Self::Rail => false,
         }
     }
 
@@ -96,7 +87,7 @@ impl ClientSurface {
     /// predicate that has to be right — a mount that has to exist (§7.1).
     pub fn serves_general_client_routes(self) -> bool {
         match self {
-            Self::Operator | Self::Peer | Self::Guest => true,
+            Self::Operator | Self::Guest => true,
             Self::Rail => false,
         }
     }
@@ -109,12 +100,10 @@ impl ClientSurface {
     /// serves them because the guest door (`crate::guest_door`) is this
     /// surface, and a guest holding a wall grant writes to the ring: the
     /// grant's `Scope::Rails` names the one namespace, and a guest with no
-    /// rail scope is refused by the auth layer before routing. `Peer` does
-    /// not: a mesh member reaching this daemon has no business on its rail.
+    /// rail scope is refused by the auth layer before routing.
     pub fn serves_rail_routes(self) -> bool {
         match self {
             Self::Operator | Self::Rail | Self::Guest => true,
-            Self::Peer => false,
         }
     }
 
@@ -132,8 +121,7 @@ impl ClientSurface {
     /// inference on this box; a deployed ring app reaching it would turn a
     /// rail listener into a compute surface. Same discipline as
     /// [`Self::serves_general_client_routes`]: not a predicate that has to be
-    /// right, a mount that is absent. `Peer` is false because a member has
-    /// `/v1/chat/completions` and needs no door.
+    /// right, a mount that is absent.
     ///
     /// Mounting it is necessary and not sufficient: the handler refuses any
     /// caller the auth layer did not attach a `Guest` grant to, so the
@@ -141,7 +129,7 @@ impl ClientSurface {
     pub fn serves_guest_ask_route(self) -> bool {
         match self {
             Self::Operator | Self::Guest => true,
-            Self::Peer | Self::Rail => false,
+            Self::Rail => false,
         }
     }
 }

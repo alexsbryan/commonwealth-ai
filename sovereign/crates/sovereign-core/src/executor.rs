@@ -12,6 +12,11 @@ use crate::types::*;
 
 use crate::time::unix_now as now;
 
+/// Empty tool results after which the reasoning loop closes its searching:
+/// the first allows one rephrase, the second ends it. Operator ruling
+/// phase-c-16; knowledge-gym 05_noresults_honesty pins it at 2 lookups.
+const EMPTY_RESULT_BOUND: usize = 2;
+
 // ─── LlmJudge Rubrics ─────────────────────────────────────────
 
 /// The pre-existing default judge rubric. Optimised for factual /
@@ -1154,6 +1159,9 @@ impl Executor {
 
         let mut search_log: Vec<SearchLogEntry> = Vec::new();
         let mut iterations = 0;
+        // Calls that ran and returned no rows. Errors and unknown tools are
+        // not counted: they say nothing about what the source holds.
+        let mut empty_results = 0usize;
 
         loop {
             let mut request = CompletionRequest {
@@ -1207,10 +1215,13 @@ impl Executor {
                             .call_cached(&call.name, &call.arguments, &ctx)
                             .await
                         {
-                            Ok(output) => (
-                                format_step_output(&output, TextEnvelope::Prose),
-                                result_cardinality(&output),
-                            ),
+                            Ok(output) => {
+                                let count = result_cardinality(&output);
+                                if count == 0 {
+                                    empty_results += 1;
+                                }
+                                (format_step_output(&output, TextEnvelope::Prose), count)
+                            }
                             Err(e) => (
                                 format!("Tool call failed: {e}. Try different arguments."),
                                 0,
@@ -1222,6 +1233,7 @@ impl Executor {
                         tool = %call.name,
                         iteration = iterations,
                         result_count,
+                        empty_results,
                         rendered_chars = tool_result.len(),
                         "reason loop tool call"
                     );
@@ -1241,13 +1253,29 @@ impl Executor {
 
                 iterations += 1;
 
-                // Safety cap.
-                if iterations >= max_iterations {
-                    conversation.push_str(
+                // Searching closes on the safety cap, or on the second empty
+                // result: one rephrase after a miss, never a third search into
+                // the same nothing. The closing turn is offered no tools.
+                let capped = iterations >= max_iterations;
+                let exhausted = empty_results >= EMPTY_RESULT_BOUND;
+                if capped || exhausted {
+                    tracing::info!(
+                        target: "executor.reason_with_tools",
+                        iterations,
+                        empty_results,
+                        capped,
+                        exhausted,
+                        "reason loop searching closed"
+                    );
+                    conversation.push_str(if exhausted {
+                        " Your searches returned no results, and searching is now closed. \
+                         Answer now: say what you could not find, and do not guess it.\
+                         \n\nAssistant:"
+                    } else {
                         " You have used all available searches. Synthesize your answer now \
                          from what you've found. If you couldn't find everything, note what's \
-                         missing.\n\nAssistant:",
-                    );
+                         missing.\n\nAssistant:"
+                    });
 
                     let final_request = CompletionRequest {
                         prompt: conversation,
@@ -1263,7 +1291,7 @@ impl Executor {
                         text: final_response.text.trim().to_string(),
                         search_log,
                         iterations,
-                        capped: true,
+                        capped,
                     });
                 }
 

@@ -131,6 +131,8 @@ fn main() -> ExitCode {
         | Launch::Daemon { .. }
         | Launch::ComputeChild { .. }
         | Launch::RpcWorker { .. }
+        | Launch::SetupProbe { .. }
+        | Launch::AdminJoin { .. }
         | Launch::Worker { .. } => {
             eprintln!("{NOT_A_DAEMON}");
             return ExitCode::FAILURE;
@@ -140,9 +142,7 @@ fn main() -> ExitCode {
         // what this binary did before — a one-shot verb handed to the desktop
         // opens the GUI. Preserved, not endorsed (§10.1): making the desktop
         // refuse a verb is a behaviour change and belongs in its own commit.
-        // `Server` is unreachable here; named so a new variant cannot land in
-        // a wildcard without someone deciding what it means.
-        Launch::Desktop | Launch::Server | Launch::Verb { .. } | Launch::Bare => {}
+        Launch::Desktop | Launch::Verb { .. } | Launch::Bare => {}
     }
 
     // The grounding gate's verification note (the failed-claim caveat) rides
@@ -208,7 +208,6 @@ fn main() -> ExitCode {
                      sovereign_core={glassbox},\
                      sovereign_tools={glassbox},\
                      sovereign_inference={glassbox},\
-                     sovereign_mesh=info,\
                      commonwealth_discovery=info,\
                      sovereign_daemon=info,\
                      corpus_engine={glassbox},\
@@ -355,15 +354,9 @@ fn main() -> ExitCode {
             let app_state = Arc::new(app_state);
             app.manage(app_state.clone());
 
-            // Opt-in Mobile access: if enabled in the desktop config, make sure
-            // the `sovereign-server` phone-facing host is reachable. It
-            // delegates all inference to the daemon, so it loads no models.
-            //
-            // `ensure_running`, not `start` + a `JoinHandle` stashed on
-            // `AppState`. The handle was the bring-up TASK, not the child, so
-            // aborting it stopped nothing — the app held a lifecycle it could
-            // not actually exercise. Toggle-off is an authenticated
-            // `POST /v1/admin/shutdown` on the host itself.
+            // Opt-in Mobile access: a toggle persisted ON is asked at launch,
+            // and `ensure_running` names the absence of a mobile host (the
+            // `sovereign-server` binary was deleted) on the trace below.
             {
                 let st = Arc::clone(&app_state);
                 tauri::async_runtime::block_on(async move {

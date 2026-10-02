@@ -289,7 +289,7 @@ The multi-origin reconciliation primitive ports here — **but to facilities and
 - Disposition taxonomy + era-aware label map (data file in the recipe dir + small module).
 - Salience ranker — composite scorer feeding tiered promotion; reads `is_fresh` from `freshness.rs`, `is_unidentified` from the adjudication, `is_notable` from a curated list, `in_eval_split` from gold. Lives where `pageview_rank` does.
 - `sovereign-eval/src/disposition_score.rs` — accuracy / macro-F1 / confusion matrix (analog of `entity_resolution_score.rs`).
-- `sovereign-cli-llm/src/bench_cmd/uap.rs` — `sovereign bench uap run|diagnose` (analog of `enron.rs`).
+- `sovereign-cli-bench/src/bench_cmd/uap.rs` — `sovereign bench uap run|diagnose` (analog of `enron.rs`).
 - Gold-label construction tool — finding-aid index → `GOLD_LABEL`.
 - Geocoding step — `location_text` → coords (#5).
 

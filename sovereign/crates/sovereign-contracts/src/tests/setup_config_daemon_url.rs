@@ -14,7 +14,12 @@ use super::*;
 // under one executor is not a gate (§18.1). Hence the lock.
 static DAEMON_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-const DAEMON_URL_KEYS: [&str; 2] = ["SOVEREIGN_DAEMON_URL", "SVRNMESH_DAEMON_URL"];
+const DAEMON_URL_KEYS: [&str; 4] = [
+    "SOVEREIGN_DAEMON_URL",
+    "SVRNMESH_DAEMON_URL",
+    "SOVEREIGN_API_KEY",
+    "SVRNMESH_API_KEY",
+];
 
 /// Clears BOTH spellings, applies `pairs`, and restores the prior values on
 /// drop — so a developer running the suite with the knob exported in their
@@ -61,13 +66,13 @@ impl Drop for DaemonEnvGuard {
 #[test]
 fn client_daemon_base_honours_the_env_knob() {
     let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:19741")]);
-    assert_eq!(client_daemon_base(), "http://127.0.0.1:19741");
+    assert_eq!(client_daemon_base().unwrap(), "http://127.0.0.1:19741");
 }
 
 #[test]
 fn client_daemon_base_accepts_the_svrnmesh_spelling() {
     let _g = DaemonEnvGuard::set(&[("SVRNMESH_DAEMON_URL", "http://127.0.0.1:19742")]);
-    assert_eq!(client_daemon_base(), "http://127.0.0.1:19742");
+    assert_eq!(client_daemon_base().unwrap(), "http://127.0.0.1:19742");
 }
 
 /// Both set is not a coin flip: SOVEREIGN_ wins, matching every other
@@ -78,7 +83,7 @@ fn client_daemon_base_prefers_sovereign_over_svrnmesh() {
         ("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:19741"),
         ("SVRNMESH_DAEMON_URL", "http://127.0.0.1:19742"),
     ]);
-    assert_eq!(client_daemon_base(), "http://127.0.0.1:19741");
+    assert_eq!(client_daemon_base().unwrap(), "http://127.0.0.1:19741");
 }
 
 /// A blank knob is UNSET, not an empty base URL — otherwise
@@ -88,9 +93,11 @@ fn client_daemon_base_prefers_sovereign_over_svrnmesh() {
 fn client_daemon_base_treats_blank_env_as_unset() {
     let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "   ")]);
     assert!(
-        client_daemon_base().starts_with("http://localhost:"),
-        "blank knob must fall through to the configured port, got {}",
         client_daemon_base()
+            .unwrap()
+            .starts_with("http://localhost:"),
+        "blank knob must fall through to the configured port, got {}",
+        client_daemon_base().unwrap()
     );
 }
 
@@ -99,9 +106,9 @@ fn client_daemon_base_treats_blank_env_as_unset() {
 #[test]
 fn client_daemon_base_trims_trailing_slash() {
     let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:19741/")]);
-    assert_eq!(client_daemon_base(), "http://127.0.0.1:19741");
+    assert_eq!(client_daemon_base().unwrap(), "http://127.0.0.1:19741");
     assert_eq!(
-        format!("{}/v1/models", client_daemon_base()),
+        format!("{}/v1/models", client_daemon_base().unwrap()),
         "http://127.0.0.1:19741/v1/models"
     );
 }
@@ -111,7 +118,7 @@ fn client_daemon_base_trims_trailing_slash() {
 #[test]
 fn client_daemon_base_without_env_is_the_configured_port() {
     let _g = DaemonEnvGuard::set(&[]);
-    let base = client_daemon_base();
+    let base = client_daemon_base().unwrap();
     assert!(
         base.starts_with("http://localhost:"),
         "expected the configured-port form, got {base}"
@@ -125,4 +132,28 @@ fn client_daemon_base_without_env_is_the_configured_port() {
 fn client_daemon_base_for_ignores_the_env_knob() {
     let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://a-rented-pod:9841")]);
     assert_eq!(client_daemon_base_for(9741), "http://localhost:9741");
+}
+
+/// The CLI's one credential: SOVEREIGN_ first, blank is unset, and nothing
+/// set is `None` (no header), never an empty bearer. Failing input: drop the
+/// blank filter and `SOVEREIGN_API_KEY= ` reads as `Some("")`.
+#[test]
+fn client_credential_reads_one_knob_by_the_daemon_url_rule() {
+    {
+        let _g = DaemonEnvGuard::set(&[]);
+        assert_eq!(client_credential(), None);
+    }
+    {
+        let _g = DaemonEnvGuard::set(&[("SOVEREIGN_API_KEY", "   ")]);
+        assert_eq!(client_credential(), None);
+    }
+    {
+        let _g = DaemonEnvGuard::set(&[("SVRNMESH_API_KEY", "k-mesh")]);
+        assert_eq!(client_credential().as_deref(), Some("k-mesh"));
+    }
+    let _g = DaemonEnvGuard::set(&[
+        ("SOVEREIGN_API_KEY", " k-it "),
+        ("SVRNMESH_API_KEY", "k-mesh"),
+    ]);
+    assert_eq!(client_credential().as_deref(), Some("k-it"));
 }

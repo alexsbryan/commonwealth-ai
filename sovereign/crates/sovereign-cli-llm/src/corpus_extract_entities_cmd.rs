@@ -18,12 +18,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use corpus_engine::index::CorpusIndex;
-use sovereign_core::conv_tiered::{ChunkEntityProgressRow, ChunkEntityRow};
-use sovereign_gliner::gliner_ner::{
-    self, GlinerExtractor, DEFAULT_LABELS, DEFAULT_MODEL_ID, DEFAULT_THRESHOLD,
-};
+use corpus_index::index::CorpusIndex;
+use sovereign_contracts::daemon_wire::conv_tiered::{ChunkEntityProgressRow, ChunkEntityRow};
+use sovereign_contracts::ner::LabeledEntityExtractor;
 use sovereign_store::sqlite::SqliteStateStore;
+use sovereign_time::unix_now as now_unix;
 
 /// Per-batch chunk count handed to GliNER. Smaller batches = more
 /// frequent progress updates; larger = better throughput. 8 keeps
@@ -41,11 +40,14 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
         }
     };
 
-    // Standalone download mode: fetch model files + exit. No corpus
-    // touched. Used as the first-install workflow (desktop's
-    // "enable per-chunk entity extraction" toggle shells this).
+    // The model is serve's, and so is fetching it: point there.
     if parsed.download_only {
-        return run_download_model(&parsed.model_id).await;
+        eprintln!(
+            "svrn corpus extract-entities --download-model: the NER model is serve's \
+             (pb-cli-llm). Fetch it with `svrn mesh fetch-ner [<model_id>]`, beside \
+             serve's other weight verbs `fetch-model` and `warm-cache`."
+        );
+        return 2;
     }
 
     // Resolve data dir + index path.
@@ -70,30 +72,6 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
             return 1;
         }
     };
-
-    // Verify model files exist before doing anything expensive.
-    if !gliner_ner::probe_model_available(&parsed.model_id) {
-        let root = gliner_ner::models_root().join(&parsed.model_id);
-        eprintln!(
-            "error: GliNER model '{}' not installed at {}",
-            parsed.model_id,
-            root.display()
-        );
-        eprintln!("  download instructions:");
-        eprintln!(
-            "    mkdir -p {root}/onnx && cd {root}",
-            root = root.display()
-        );
-        eprintln!(
-            "    curl -L -o tokenizer.json https://huggingface.co/onnx-community/{model}/resolve/main/tokenizer.json",
-            model = parsed.model_id
-        );
-        eprintln!(
-            "    curl -L -o onnx/model.onnx https://huggingface.co/onnx-community/{model}/resolve/main/onnx/model.onnx",
-            model = parsed.model_id
-        );
-        return 1;
-    }
 
     // Open store + index.
     let store = match SqliteStateStore::open(&db_path) {
@@ -141,25 +119,34 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
         return 0;
     }
 
-    // Load GliNER (one-time, ~500ms).
-    eprintln!("Loading GliNER {}…", parsed.model_id);
-    let load_start = Instant::now();
-    let extractor = match GlinerExtractor::new(
-        &parsed.model_id,
-        &labels_ref(&parsed.labels),
-        parsed.threshold,
-    ) {
-        Ok(e) => e,
+    // serve's extractor: this process loads no model (pb-cli-llm).
+    let extractor = match crate::serve_dial::serve_ner("svrn corpus extract-entities").await {
+        Ok(Some(e)) => e,
+        Ok(None) => {
+            eprintln!(
+                "error: serve has no NER model installed; fetch one with `svrn mesh fetch-ner`"
+            );
+            return 1;
+        }
         Err(e) => {
-            eprintln!("error: load GliNER: {e}");
+            eprintln!("error: {e}");
             return 1;
         }
     };
-    eprintln!("Loaded in {:.2?}", load_start.elapsed());
+    if let Err(e) = matches_request(&parsed, extractor.as_ref()) {
+        eprintln!("error: {e}");
+        return 2;
+    }
+    let (model_id, threshold, labels) = (
+        extractor.model_id().to_string(),
+        extractor.threshold(),
+        extractor.labels(),
+    );
+    eprintln!("NER on serve: {model_id} (threshold {threshold})");
 
     // Initialise progress row.
-    let labels_json = serde_json::to_string(&parsed.labels).unwrap_or_else(|_| "[]".to_string());
-    let now = gliner_ner::now_unix();
+    let labels_json = serde_json::to_string(&labels).unwrap_or_else(|_| "[]".to_string());
+    let now = now_unix();
     let mut progress = ChunkEntityProgressRow {
         corpus_id: parsed.corpus_id.clone(),
         chunks_processed: 0,
@@ -170,8 +157,8 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
         updated_at: now,
         finished_at: None,
         state: "running".to_string(),
-        model_id: Some(parsed.model_id.clone()),
-        threshold: Some(parsed.threshold as f64),
+        model_id: Some(model_id),
+        threshold: Some(threshold as f64),
         labels_json: Some(labels_json.clone()),
         error_msg: None,
     };
@@ -209,10 +196,10 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
 
         // Extract in batches.
         let mut conv_rows: Vec<ChunkEntityRow> = Vec::new();
-        let extracted_at = gliner_ner::now_unix();
+        let extracted_at = now_unix();
         for batch in conv_chunks.chunks(BATCH_SIZE) {
             let texts: Vec<&str> = batch.iter().map(|(_, t)| t.as_str()).collect();
-            let result = match extractor.extract_batch(&texts) {
+            let result = match extractor.extract_mentions_batch(&texts) {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("warn: extract_batch {conv_uuid}: {e}");
@@ -233,7 +220,7 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
                 progress.last_chunk_id = Some(*chunk_id as i64);
             }
             progress.mentions_extracted += conv_rows.len() as i64;
-            progress.updated_at = gliner_ner::now_unix();
+            progress.updated_at = now_unix();
 
             // Print progress at most every 2s.
             if last_progress_print.elapsed().as_secs_f64() >= 2.0 {
@@ -251,14 +238,14 @@ pub async fn run_extract_entities(args: &[String]) -> i32 {
             eprintln!("warn: save_chunk_entities_for_conv {conv_uuid}: {e}");
         }
         // Update aggregate progress row in store after each conv.
-        progress.updated_at = gliner_ner::now_unix();
+        progress.updated_at = now_unix();
         let _ = store.upsert_chunk_entity_progress(&progress).await;
 
         convs_done += 1;
     }
 
     progress.state = "complete".to_string();
-    progress.finished_at = Some(gliner_ner::now_unix());
+    progress.finished_at = Some(now_unix());
     progress.updated_at = progress.finished_at.unwrap();
     let _ = store.upsert_chunk_entity_progress(&progress).await;
 
@@ -305,58 +292,47 @@ fn report_progress(
     );
 }
 
+/// `--model`, `--threshold` and `--labels` name the extractor the run
+/// expects; `None` takes serve's.
 #[derive(Debug)]
 struct Parsed {
     corpus_id: String,
-    model_id: String,
-    threshold: f32,
-    labels: Vec<String>,
+    model_id: Option<String>,
+    threshold: Option<f32>,
+    labels: Option<Vec<String>>,
     dry_run: bool,
     download_only: bool,
 }
 
-/// First-install workflow: fetch the GliNER ONNX + tokenizer from
-/// huggingface.co/onnx-community/<model_id>. Idempotent — skips
-/// files already present. Reports per-file progress.
-async fn run_download_model(model_id: &str) -> i32 {
-    use sovereign_gliner::gliner_ner::{download_model, models_root};
-    let root = models_root().join(model_id);
-    eprintln!("Downloading GliNER model '{model_id}' → {}", root.display());
-    let last_pct = std::sync::Arc::new(std::sync::Mutex::new((String::new(), 0u8)));
-    let progress_cb = {
-        let last_pct = std::sync::Arc::clone(&last_pct);
-        move |file: &str, downloaded: u64, total: u64| {
-            if total == 0 {
-                if downloaded == 0 {
-                    eprintln!("  ✓ {file} already present");
-                }
-                return;
-            }
-            let pct = ((downloaded as f64 / total as f64) * 100.0) as u8;
-            let mut lock = last_pct.lock().unwrap();
-            if lock.0 != file || pct.saturating_sub(lock.1) >= 5 || pct == 100 {
-                eprintln!(
-                    "  {file}: {pct}% ({:.1} / {:.1} MB)",
-                    downloaded as f64 / 1_048_576.0,
-                    total as f64 / 1_048_576.0
-                );
-                lock.0 = file.to_string();
-                lock.1 = pct;
-            }
-        }
-    };
-    match download_model(model_id, progress_cb).await {
-        Ok(()) => {
-            eprintln!("✓ model installed at {}", root.display());
-            eprintln!();
-            eprintln!("  next: svrn corpus extract-entities <corpus_id>");
-            0
-        }
-        Err(e) => {
-            eprintln!("error: {e}");
-            1
+/// serve's extractor fixes the model, threshold and labels, so a run that
+/// asked for others is refused by name, never run with serve's instead.
+fn matches_request(parsed: &Parsed, serving: &dyn LabeledEntityExtractor) -> Result<(), String> {
+    if let Some(want) = &parsed.model_id {
+        if want != serving.model_id() {
+            return Err(format!(
+                "--model {want}: serve's NER model is `{}`; start a serve holding `{want}` to use it",
+                serving.model_id()
+            ));
         }
     }
+    if let Some(want) = parsed.threshold {
+        if want != serving.threshold() {
+            return Err(format!(
+                "--threshold {want}: serve's extractor runs at {}",
+                serving.threshold()
+            ));
+        }
+    }
+    if let Some(want) = &parsed.labels {
+        if *want != serving.labels() {
+            return Err(format!(
+                "--labels {}: serve's extractor labels {}",
+                want.join(","),
+                serving.labels().join(",")
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn parse_args(args: &[String]) -> Result<Parsed, String> {
@@ -367,9 +343,9 @@ fn parse_args(args: &[String]) -> Result<Parsed, String> {
         return Err(String::new());
     }
     let mut corpus_id: Option<String> = None;
-    let mut model_id = DEFAULT_MODEL_ID.to_string();
-    let mut threshold = DEFAULT_THRESHOLD;
-    let mut labels: Vec<String> = DEFAULT_LABELS.iter().map(|s| s.to_string()).collect();
+    let mut model_id = None;
+    let mut threshold = None;
+    let mut labels = None;
     let mut dry_run = false;
     let mut download_only = false;
     let mut i = 0;
@@ -377,29 +353,32 @@ fn parse_args(args: &[String]) -> Result<Parsed, String> {
         match args[i].as_str() {
             "--model" => {
                 i += 1;
-                model_id = args
-                    .get(i)
-                    .ok_or_else(|| "--model needs a value".to_string())?
-                    .clone();
+                model_id = Some(
+                    args.get(i)
+                        .ok_or_else(|| "--model needs a value".to_string())?
+                        .clone(),
+                );
             }
             "--threshold" => {
                 i += 1;
-                threshold = args
-                    .get(i)
-                    .ok_or_else(|| "--threshold needs a value".to_string())?
-                    .parse::<f32>()
-                    .map_err(|e| format!("--threshold parse: {e}"))?;
+                threshold = Some(
+                    args.get(i)
+                        .ok_or_else(|| "--threshold needs a value".to_string())?
+                        .parse::<f32>()
+                        .map_err(|e| format!("--threshold parse: {e}"))?,
+                );
             }
             "--labels" => {
                 i += 1;
                 let raw = args
                     .get(i)
                     .ok_or_else(|| "--labels needs a value".to_string())?;
-                labels = raw
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect();
+                labels = Some(
+                    raw.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect(),
+                );
             }
             "--dry-run" => dry_run = true,
             "--download-model" => download_only = true,
@@ -431,26 +410,17 @@ fn parse_args(args: &[String]) -> Result<Parsed, String> {
 
 fn print_help() {
     eprintln!("svrn corpus extract-entities <corpus_id>");
-    eprintln!("  Run GliNER per-chunk NER and persist into chunk_entities.");
+    eprintln!("  Run serve's GliNER per-chunk NER and persist into chunk_entities.");
     eprintln!();
-    eprintln!("  Flags:");
-    eprintln!(
-        "    --model <id>       GliNER model id (default: {})",
-        DEFAULT_MODEL_ID
-    );
-    eprintln!(
-        "    --threshold <f>    Score threshold (default: {})",
-        DEFAULT_THRESHOLD
-    );
-    eprintln!(
-        "    --labels <l1,...>  Label set CSV (default: {})",
-        DEFAULT_LABELS.join(",")
-    );
-    eprintln!("    --dry-run          Inventory only — don't load model or write.");
-    eprintln!("    --download-model   Fetch the GliNER model files + exit (no extraction).");
+    eprintln!("  Flags (each refuses when serve's extractor differs; default: serve's):");
+    eprintln!("    --model <id>       GliNER model id");
+    eprintln!("    --threshold <f>    Score threshold");
+    eprintln!("    --labels <l1,...>  Label set CSV");
+    eprintln!("    --dry-run          Inventory only — don't ask serve or write.");
+    eprintln!("    --download-model   Points at `svrn mesh fetch-ner` (the model is serve's).");
     eprintln!();
     eprintln!("  First-install workflow:");
-    eprintln!("    svrn corpus extract-entities --download-model");
+    eprintln!("    svrn mesh fetch-ner");
     eprintln!("    svrn corpus extract-entities conversations-anthropic");
     eprintln!();
     eprintln!("  Once the model is installed, the daemon's tiered ingest path");
@@ -478,8 +448,4 @@ fn find_corpus_index_path(indexes_dir: &std::path::Path, corpus_id: &str) -> Opt
         }
     }
     None
-}
-
-fn labels_ref(labels: &[String]) -> Vec<&str> {
-    labels.iter().map(|s| s.as_str()).collect()
 }

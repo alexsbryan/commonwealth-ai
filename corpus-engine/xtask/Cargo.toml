@@ -44,6 +44,18 @@ workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 # third-party crate across the workspace).
 syn = { version = "2", features = ["full", "extra-traits"] }
 quote = "1"
+# `tests/mcp_method_census.rs` reads the MCP method set from its one home
+# (phase-b pb-mcp) to scan the workspace for string matches on it.
+oicp-types = { workspace = true }
+# `tests/refactor_register.rs` checks THIS repo's concept register and wire
+# spec with the refactor factory's resolver (pb-code-clean-lift): monorepo
+# data a lifted code program does not carry.
+sovereign-cli-dev = { path = "../../sovereign/crates/sovereign-cli-dev" }
+# The monorepo-wide censuses svrn's crates carried until pb-distribution-svrn-lift:
+# `tests/cli_contract_{docs,journeys}.rs` read the contract through its one
+# parser, and `tests/chunk_provenance_census.rs` asserts ChunkProvenance's doors.
+sovereign-cli-shared = { workspace = true }
+corpus-index = { workspace = true }
 
 [lints]
 workspace = true

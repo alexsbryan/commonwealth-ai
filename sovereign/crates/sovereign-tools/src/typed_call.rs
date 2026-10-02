@@ -2,7 +2,7 @@
 //! Shared budget-retry loop for typed-extension LLM calls.
 //!
 //! Three sites duplicated this loop pre-lift:
-//! - `sovereign_cli_llm::enrich_cmd::extract_typed` (chapter-level
+//! - `sovereign_pipeline::enrich_cmd::extract_typed` (chapter-level
 //!   typed dispatcher)
 //! - `sovereign_tools::typed_extension::pass::call_argumentative`
 //!   (RAPTOR-leaf typed extraction)
@@ -41,17 +41,11 @@ use std::sync::Arc;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
 
-/// Tight initial decode budget. Sized so most typed-extension
-/// responses close their JSON envelope on the first attempt; the
-/// minority that truncate get one retry at [`TYPED_BUDGET_RETRY`].
-pub const TYPED_BUDGET_INITIAL: usize = 4096;
-
-/// Retry budget when the tight initial call returned a parse-drift
-/// response. Doubles the budget so the model has room to close the
-/// JSON envelope. A second parse failure at this budget is a real
-/// content miss, not a budget issue, and gets surfaced as
+/// The tight and retry decode budgets live beside the typed-extension port's
+/// vocabulary, where ingest's `enrich extract-typed` names them too; a second
+/// parse failure at the retry budget surfaces as
 /// `TypedCallError::ParseExhausted`.
-pub const TYPED_BUDGET_RETRY: usize = 8192;
+pub use corpus_engine_atlas_reader::ports::{TYPED_BUDGET_INITIAL, TYPED_BUDGET_RETRY};
 
 /// Default budget escalation: tight-then-double. Three sites today
 /// use this exact sequence; centralised so a bench-driven tuning

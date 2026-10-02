@@ -24,9 +24,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pass;
-use corpus_engine::enrichment::pipeline::EnrichProgress;
-use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
+use corpus_index::enrichment_state::{EnrichmentPhase, EnrichmentStateFile};
+use sovereign_contracts::daemon_wire::enrich_progress::EnrichProgress;
 use sovereign_core::error::{Error, Result};
 
 use super::manager::LocalCorpusManager;
@@ -44,8 +43,8 @@ impl LocalCorpusManager {
         // today's path; `atlas` runs the CLI's `enrich build` orchestrator
         // in-process, so a shipped desktop (no CLI on PATH) can build a
         // recipe-driven / custom-ontology atlas at all.
-        let recipe_type = match self.engine.load_recipe(corpus_id).await {
-            Ok(r) => r.enrichment.map(|e| e.enrichment_type),
+        let recipe_type = match self.engine.recipe_enrichment_type(corpus_id).await {
+            Ok(t) => t,
             Err(e) => {
                 tracing::debug!(
                     corpus_id = %corpus_id,
@@ -57,12 +56,12 @@ impl LocalCorpusManager {
         };
         let pass = recipe_type
             .as_deref()
-            .and_then(|t| self.engine.enrichment_passes().get(t));
-        let is_atlas = pass.as_ref().is_some_and(|p| p.id() == pass::ATLAS);
+            .and_then(|t| self.engine.enrichment_pass_route(t));
+        let is_atlas = pass.as_ref().is_some_and(|p| p.is_atlas);
         tracing::info!(
             corpus_id = %corpus_id,
             recipe_type = recipe_type.as_deref().unwrap_or("<none>"),
-            pass = pass.as_ref().map(|p| p.id()).unwrap_or("<none>"),
+            pass = pass.as_ref().map(|p| p.pass_id.as_str()).unwrap_or("<none>"),
             route = if is_atlas { "atlas" } else { "tiered" },
             "enrich_now: route decided"
         );
@@ -80,7 +79,18 @@ impl LocalCorpusManager {
     /// (§18.3). Progress lands in the corpus's `_enrichment_state.json`, the
     /// file `lc_enrichment_status` already reads.
     async fn start_atlas_build(&self, corpus_id: &str) -> Result<String> {
-        match sovereign_enrichment_catalog::config::EnrichConfig::load(corpus_id) {
+        let Some(port) = self.enrichment_driver.enrich_config().await else {
+            tracing::info!(
+                corpus_id = %corpus_id,
+                "enrich_now: no ingest program in this process; the atlas build is refused"
+            );
+            return Err(Error::Execution(
+                crate::local_corpus::watched::enrich::ingest_absent(&format!(
+                    "read enrichment config for '{corpus_id}'"
+                )),
+            ));
+        };
+        match port.load(corpus_id) {
             Ok(Some(_)) => {}
             Ok(None) => {
                 return Err(Error::Execution(format!(
@@ -197,7 +207,7 @@ fn atlas_progress_to_state(
 #[cfg(test)]
 mod atlas_dispatch_tests {
     use super::*;
-    use corpus_engine::enrichment::pipeline::BuildStep;
+    use sovereign_contracts::daemon_wire::enrich_progress::BuildStep;
 
     /// The progress → state mapping the UI reads: a step in flight shows
     /// `<ordinal>/<total>` under a non-terminal phase, `Complete` closes the

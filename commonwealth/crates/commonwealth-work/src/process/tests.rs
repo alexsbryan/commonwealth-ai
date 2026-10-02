@@ -4,6 +4,7 @@
 use super::*;
 use crate::executor::{subject_of, JobExecutorRegistry};
 use oicp_types::JobRequirements;
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 

@@ -151,8 +151,8 @@ pub enum ToolAccess {
 /// Every per-intent attribute, as one row.
 ///
 /// **Adding an intent is a variant plus a row here plus exemplars in
-/// `sovereign/router/exemplars.toml`.** Nothing else in the workspace has to
-/// change, and nothing else may re-derive one of these columns — the whole
+/// `sovereign/crates/sovereign-core/data/router/exemplars.toml`.** Nothing else
+/// in the workspace has to change, nothing else may re-derive a column — the whole
 /// point is that a missing attribute is a COMPILE ERROR (this struct has no
 /// `Default`, so a row that omits a field does not build) rather than a
 /// fallback arm that silently hands the new intent someone else's policy.
@@ -177,9 +177,9 @@ pub struct IntentRow {
     pub name: &'static str,
 
     /// The wire key, snake_case. One vocabulary shared by the exemplar TOML
-    /// (`sovereign/router/exemplars.toml`), eval banks' `expected_intent`,
-    /// routing reports, and the desktop redirect payload. Payload-carrying
-    /// variants suffix it with their payload (`simple_action:web_search`);
+    /// (`sovereign/crates/sovereign-core/data/router/exemplars.toml`), eval banks'
+    /// `expected_intent`, routing reports, and the desktop redirect payload.
+    /// Payload-carrying variants suffix it with their payload (`simple_action:web_search`);
     /// the row holds the base.
     pub slug: &'static str,
 

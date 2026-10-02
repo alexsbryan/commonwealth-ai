@@ -52,13 +52,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::filters::{ComposeMode, FilterConfig};
-#[cfg(test)]
-use crate::recipe_builtin::{bundled_recipe_toml, RecipeId};
 use crate::recipe_parsing::{
     check_schema_version, empty_value, parameter_value_from_toml, translate_parse_error,
 };
 #[cfg(test)]
 use crate::recipe_parsing::{extract_missing_field, extract_unknown_variant};
+#[cfg(test)]
+use crate::recipe_source::default_source;
 use crate::types::CorpusKind;
 
 // ---------------------------------------------------------------------------
@@ -875,82 +875,9 @@ pub struct CorpusMeta {
     pub mutable_merge: Option<MutableMergePolicy>,
 }
 
-// ---------------------------------------------------------------------------
-// CatalogConfig — recipe-level "this is a catalog of works" block
-// ---------------------------------------------------------------------------
-
-/// Pairs with `CorpusMeta::kind = Catalog`. Tells the on-demand
-/// ingest service how to take a catalog entry and produce a fully
-/// ingested per-work corpus from it. See `gutenberg/recipe.toml`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CatalogConfig {
-    /// Field name on the catalog `ExtractedDoc` (or its metadata
-    /// blob) that uniquely identifies a work. Used by the on-demand
-    /// flow to substitute into `download_url_template` and to derive
-    /// the per-work corpus id (`<catalog_id>-<work_id>`).
-    pub id_field: String,
-
-    /// URL template with a `{id}` placeholder, e.g.
-    /// `"https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"`.
-    /// Resolved at on-demand ingest time and injected as the sole
-    /// `[acquire] url` of the content recipe.
-    pub download_url_template: String,
-
-    /// Recipe id of the content recipe used to perform the
-    /// per-work ingest, e.g. `"gutenberg-work"`. Must be `on_demand =
-    /// true` and live in the registry.
-    pub content_recipe: String,
-
-    /// Optional name of a metadata column carrying an estimated
-    /// word count (used to compute an ingest-time estimate the UI
-    /// can show).
-    #[serde(default)]
-    pub estimated_words_field: Option<String>,
-
-    /// Throughput estimate for the ingest stage, in words per
-    /// minute. Combined with `estimated_words` to produce the
-    /// "this will take ~N minutes" surface. Default 8000 wpm
-    /// (conservative for an M-class machine on the embed slot).
-    #[serde(default)]
-    pub ingest_estimate_wpm: Option<u32>,
-
-    /// Throughput estimate for the enrichment stage, in words per
-    /// minute. Default 500 wpm.
-    #[serde(default)]
-    pub enrich_estimate_wpm: Option<u32>,
-
-    /// Optional shared corpus id that catalog-driven ingests append
-    /// into. When set, every successful work-ingest writes its
-    /// chunks into a single growing corpus (e.g. `"wikipedia-fetched"`)
-    /// instead of creating one corpus per work. Atlas, mesh-share,
-    /// and retrieval all happen against the single shared corpus —
-    /// a much better fit for catalogs whose long-tail can be
-    /// thousands of articles. When unset (default), the legacy
-    /// per-work pattern (`<catalog_id>-<work_id>`) is used.
-    #[serde(default)]
-    pub target_corpus_id: Option<String>,
-
-    /// Enable one-hop "minesweeper" link-expansion after fetching an
-    /// article. When true, the just-ingested article's outgoing
-    /// links are queued for follow-up fetch into the same
-    /// `target_corpus_id`. Only meaningful when `target_corpus_id`
-    /// is set — without a shared target each expansion would
-    /// spawn yet another per-work corpus.
-    #[serde(default)]
-    pub expansion_enabled: bool,
-
-    /// Maximum number of linked articles to fetch in expansion.
-    /// Ranking is significance-first (lead-section links beat
-    /// body-section links, then document order). Default 20 keeps
-    /// the per-fetch cost bounded; raise for deeper neighbourhood
-    /// pre-loading, lower for fastest-only-the-asked behaviour.
-    #[serde(default = "default_expansion_link_cap")]
-    pub expansion_link_cap: u32,
-}
-
-fn default_expansion_link_cap() -> u32 {
-    20
-}
+// CatalogConfig is defined in the `corpus-index` leaf so a reader that links
+// no engine can name a catalog corpus's block (pb-ingest-dial-tools).
+pub use corpus_index::recipe::CatalogConfig; // shim: moved by pb-ingest-dial-tools
 
 // ---------------------------------------------------------------------------
 // HTTP API acquirer types (used by `AcquirerConfig::HttpApi`)
@@ -1868,7 +1795,7 @@ impl Recipe {
     ///    See [`check_enrichment_type`](crate::recipe_parsing::check_enrichment_type).
     ///
     /// This is the ONE recipe load boundary: [`Self::from_file`],
-    /// `recipe_builtin`, and the desktop recipe author's validate
+    /// the bundled recipe source, and the desktop recipe author's validate
     /// preview all route through it. Anything that parses a `Recipe`
     /// with a bare `toml::from_str` skips all three guards.
     pub fn from_toml(toml_str: &str) -> Result<Self> {
@@ -2069,7 +1996,7 @@ impl Recipe {
 /// **For tests only.** Production code uses
 /// `RecipeRegistry::fetch_recipe()` which checks local overrides,
 /// fetches from the registry URL, and falls back to
-/// [`bundled_recipe_toml`].
+/// [`default_source`].
 #[cfg(test)]
 pub(crate) fn builtin_recipes() -> Vec<Recipe> {
     const IDS: &[&str] = &[
@@ -2084,7 +2011,9 @@ pub(crate) fn builtin_recipes() -> Vec<Recipe> {
     ];
     IDS.iter()
         .map(|id| {
-            let toml = bundled_recipe_toml(id).expect("bundled recipe present");
+            let toml = default_source()
+                .recipe_toml(id)
+                .expect("bundled recipe present");
             Recipe::from_toml(toml).expect("built-in recipe.toml failed to parse")
         })
         .collect()
@@ -2307,58 +2236,14 @@ max_chars = 2048
     }
 
     #[test]
-    fn recipe_id_from_id_round_trips_for_every_variant() {
-        // Every RecipeId variant's id() must round-trip through
-        // from_id() — pin the wire-form contract per
-        // ARCH_PRINCIPLES.md §2.2 (legacy_view_id_constants_match_view_kind
-        // is the reference pattern).
-        for &recipe_id in RecipeId::ALL {
-            let wire = recipe_id.id();
-            assert_eq!(
-                RecipeId::from_id(wire),
-                Some(recipe_id),
-                "RecipeId::{recipe_id:?} ↔ {wire:?} round-trip broke"
-            );
-            // bundled_toml() must also resolve. include_str! enforces
-            // the file exists at compile time; this just checks
-            // non-empty content reached us.
-            assert!(
-                !recipe_id.bundled_toml().is_empty(),
-                "RecipeId::{recipe_id:?}.bundled_toml() returned empty",
-            );
-        }
-    }
-
-    #[test]
-    fn recipe_id_dispatch_matches_string_adapter() {
-        // bundled_recipe_toml(&str) must agree with
-        // RecipeId::<v>.bundled_toml() byte-for-byte. Catches a
-        // case where the adapter falls behind the enum.
-        for &recipe_id in RecipeId::ALL {
-            let via_adapter = bundled_recipe_toml(recipe_id.id())
-                .expect("adapter returned None for known recipe id");
-            let via_enum = recipe_id.bundled_toml();
-            assert_eq!(
-                via_adapter, via_enum,
-                "RecipeId::{recipe_id:?} dispatch mismatch between adapter and enum"
-            );
-        }
-    }
-
-    #[test]
-    fn bundled_recipe_toml_unknown_id_returns_none() {
-        assert!(bundled_recipe_toml("does-not-exist").is_none());
-        assert!(RecipeId::from_id("does-not-exist").is_none());
-    }
-
-    #[test]
     fn bundled_gutenberg_recipes_parse() {
         // Both the catalog (`gutenberg`) and on-demand work
         // (`gutenberg-work`) recipes must always be loadable from the
         // bundled snapshot — the on-demand ingest path resolves them
         // by id at runtime.
         for id in &["gutenberg", "gutenberg-work"] {
-            let toml = bundled_recipe_toml(id)
+            let toml = default_source()
+                .recipe_toml(id)
                 .unwrap_or_else(|| panic!("bundled recipe `{id}` is missing"));
             let r = Recipe::from_toml(toml)
                 .unwrap_or_else(|e| panic!("bundled recipe `{id}` parse error: {e}"));
@@ -3002,8 +2887,9 @@ type = "paragraph"
         // the desktop picker can group them under the Core row instead
         // of rendering them as separate top-level entries.
         for id in ["wikipedia-simple", "wikipedia-newsworthy"] {
-            let toml =
-                bundled_recipe_toml(id).unwrap_or_else(|| panic!("{id} must be a bundled recipe"));
+            let toml = default_source()
+                .recipe_toml(id)
+                .unwrap_or_else(|| panic!("{id} must be a bundled recipe"));
             let r = Recipe::from_toml(toml)
                 .unwrap_or_else(|e| panic!("{id} recipe.toml must parse: {e}"));
             assert_eq!(
@@ -3016,7 +2902,9 @@ type = "paragraph"
 
         // Counter-example: the Core wikipedia recipe itself must NOT
         // declare a parent, otherwise it'd disappear from the picker.
-        let core = bundled_recipe_toml("wikipedia").expect("wikipedia bundled");
+        let core = default_source()
+            .recipe_toml("wikipedia")
+            .expect("wikipedia bundled");
         let parsed = Recipe::from_toml(core).expect("wikipedia parses");
         assert!(
             parsed.corpus.parent_corpus_id.is_none(),
@@ -3029,7 +2917,8 @@ type = "paragraph"
         // `builtin_recipes()`'s IDS list deliberately excludes the
         // newsworthy recipe (it has no acquire-pipeline use), so we
         // parse the bundled TOML directly.
-        let toml = bundled_recipe_toml("wikipedia-newsworthy")
+        let toml = default_source()
+            .recipe_toml("wikipedia-newsworthy")
             .expect("wikipedia-newsworthy must be a bundled recipe");
         let r = Recipe::from_toml(toml).expect("wikipedia-newsworthy recipe.toml must parse");
         let update = r
@@ -3235,7 +3124,8 @@ type = "paragraph"
     /// or renames a parameter would all fail here.
     #[test]
     fn federal_register_presidential_recipe_shape() {
-        let toml = bundled_recipe_toml("federal-register-presidential")
+        let toml = default_source()
+            .recipe_toml("federal-register-presidential")
             .expect("federal-register-presidential must be a bundled recipe");
         let r =
             Recipe::from_toml(toml).expect("federal-register-presidential recipe.toml must parse");
@@ -3386,7 +3276,9 @@ type = "paragraph"
     /// flips enrichment on by default would all fail here.
     #[test]
     fn us_code_recipe_shape() {
-        let toml = bundled_recipe_toml("us-code").expect("us-code must be a bundled recipe");
+        let toml = default_source()
+            .recipe_toml("us-code")
+            .expect("us-code must be a bundled recipe");
         let r = Recipe::from_toml(toml).expect("us-code recipe.toml must parse");
 
         assert_eq!(r.corpus.id, "us-code");
@@ -3470,7 +3362,9 @@ type = "paragraph"
             ("olc-opinions", "cluster__docket__court=olc"),
             ("scotus-opinions", "cluster__docket__court=scotus"),
         ] {
-            let toml = bundled_recipe_toml(id).unwrap_or_else(|| panic!("{id} is bundled"));
+            let toml = default_source()
+                .recipe_toml(id)
+                .unwrap_or_else(|| panic!("{id} is bundled"));
             let r = Recipe::from_toml(toml).unwrap_or_else(|e| panic!("{id} recipe parses: {e}"));
 
             assert_eq!(r.corpus.id, id);

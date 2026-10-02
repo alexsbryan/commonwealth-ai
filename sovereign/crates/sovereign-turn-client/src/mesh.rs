@@ -135,17 +135,20 @@ impl TurnClient {
     // `contract` layer). A client that could name them would be a client
     // that links the daemon.
 
-    /// `GET /v1/mesh/status` — the whole mesh view in one read:
-    /// membership, online counts, the invite, every joined mesh, and
-    /// this node's own reachability.
+    /// `GET /v1/mesh/status` on cw-rails — the whole mesh view in one read:
+    /// membership, online counts, the invite, every joined mesh, and this
+    /// node's own reachability. Build the client at cw-rails' base.
     ///
-    /// `T` is `sovereign_contracts::daemon_wire::MeshStatusSummary` (the
-    /// route's `sovereign_daemon::mesh_http::StatusResponse` for a caller
-    /// that links the daemon). It is a READ and it always answers: a node in no mesh reports `running: false`
-    /// with `mesh_name: None`, which is a fact and not an absence. An
+    /// cw-rails' document is read through
+    /// `sovereign_contracts::daemon_wire::RailsMeshStatus` and projected
+    /// onto svrn's `MeshStatusSummary` by its one `From`, so every client
+    /// sees full-hex member ids and the derived hardware columns. An
     /// unreachable host is an `Err` (ARCH principle 6).
-    pub async fn mesh_status<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
-        self.internal_get("/v1/mesh/status".to_string(), &[]).await
+    pub async fn mesh_status(&self) -> Result<sovereign_contracts::daemon_wire::MeshStatusSummary> {
+        let doc: sovereign_contracts::daemon_wire::RailsMeshStatus = self
+            .internal_get("/v1/mesh/status".to_string(), &[])
+            .await?;
+        Ok(doc.into())
     }
 
     /// `POST /v1/mesh/create` — create a mesh and answer with the
@@ -196,6 +199,23 @@ impl TurnClient {
             }),
         )
         .await
+    }
+
+    /// `GET /v1/mesh/venues` — the online dialable peers and the client base
+    /// URLs the HOST's transport resolved for them.
+    ///
+    /// `T` is `sovereign_contracts::daemon_wire::PeerVenue`. An empty list
+    /// is a solo or stopped daemon, which is a fact; an unreachable host is
+    /// an `Err` (ARCH principle 6).
+    pub async fn mesh_venues<T: serde::de::DeserializeOwned>(&self) -> Result<Vec<T>> {
+        #[derive(serde::Deserialize)]
+        struct Body<T> {
+            venues: Vec<T>,
+        }
+        let body: Body<T> = self
+            .internal_get("/v1/mesh/venues".to_string(), &[])
+            .await?;
+        Ok(body.venues)
     }
 
     /// `POST /v1/mesh/join/preview` — what `mesh_join` WOULD join, as a

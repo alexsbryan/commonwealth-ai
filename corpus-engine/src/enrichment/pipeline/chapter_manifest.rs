@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Per-corpus chapter manifest.
+//! Per-corpus chapter manifest — the WRITE half.
 //!
 //! Lives at `~/.svrnmesh/indexes/<corpus>/chapters.json` — corpus
 //! state, not enrichment state, so it's in the index root alongside
@@ -9,98 +9,45 @@
 //! `SectionedChunker`. The pipeline's phase 1 run adds
 //! `characters_present` back into each entry so subsequent phases
 //! can name thematic carriers.
+//!
+//! The type and its read half (`load`, accessors) live in the atlas-reader
+//! leaf since fp-60 (FIVE_PROGRAMS §12 decision 1) and are re-exported here.
+//! A type's inherent methods cannot span two crates, so the writes are
+//! [`ChapterManifestWrite`] — bring it into scope to call them.
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use serde::{Deserialize, Serialize};
+pub use corpus_engine_atlas_reader::chapter_manifest::{ChapterEntry, ChapterManifest};
 
 use crate::chunkers::sectioned::DetectedSection;
 use crate::enrichment::pipeline::types::is_placeholder_literal;
 use crate::error::{Error, Result};
 
-/// Stable on-disk manifest of chapters (or the domain-equivalent unit
-/// of composition) for one corpus.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChapterManifest {
-    pub corpus_id: String,
-    pub schema_version: u32,
-    pub chapters: Vec<ChapterEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChapterEntry {
-    pub id: String,
-    pub title: String,
-
-    /// Structured hierarchy when the detector surfaced it. Free to be
-    /// `None` for flat corpora (e.g. Moby Dick only has chapters).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub part: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chapter: Option<u32>,
-
-    pub first_line: String,
-    pub word_count: u64,
-
-    /// Chunk IDs (in the corpus's LanceDB index) that fall inside
-    /// this chapter's body. Populated post-ingest.
-    #[serde(default)]
-    pub chunk_ids: Vec<u64>,
-
-    /// Thematic carriers identified by the phase 1 extractor.
-    /// Populated post-run; safely no-ops on fresh manifests.
-    #[serde(default)]
-    pub characters_present: Vec<String>,
-
-    /// Remaining detector metadata the runner didn't elevate to a
-    /// structured column (e.g. detector ordinal, byte offsets).
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub metadata: std::collections::BTreeMap<String, String>,
-}
-
-impl ChapterManifest {
-    pub const SCHEMA_VERSION: u32 = 1;
-
-    pub fn new(corpus_id: impl Into<String>) -> Self {
-        Self {
-            corpus_id: corpus_id.into(),
-            schema_version: Self::SCHEMA_VERSION,
-            chapters: Vec::new(),
-        }
-    }
-
-    pub fn default_path(index_root: &Path) -> PathBuf {
-        index_root.join("chapters.json")
-    }
-
-    /// Load a manifest from disk, tolerating a missing file.
-    pub fn load(path: &Path) -> Result<Option<Self>> {
-        if !path.exists() {
-            return Ok(None);
-        }
-        let raw = fs::read_to_string(path)?;
-        let m: Self = serde_json::from_str(&raw).map_err(|e| {
-            Error::Serialization(format!(
-                "chapter manifest {} parse error: {}",
-                path.display(),
-                e
-            ))
-        })?;
-        if m.schema_version > Self::SCHEMA_VERSION {
-            return Err(Error::Serialization(format!(
-                "chapter manifest {} has schema_version {} but this binary supports {}",
-                path.display(),
-                m.schema_version,
-                Self::SCHEMA_VERSION
-            )));
-        }
-        Ok(Some(m))
-    }
-
+/// The manifest's writes: the atomic save, the build from detected sections,
+/// and the `characters_present` merge.
+pub trait ChapterManifestWrite {
     /// Atomic save via tmp + rename.
-    pub fn save(&self, path: &Path) -> Result<()> {
+    fn save(&self, path: &Path) -> Result<()>;
+
+    /// Build a manifest from `SectionedChunker`-detected sections + the
+    /// raw text they point into.
+    fn from_detected_sections(
+        corpus_id: impl Into<String>,
+        text: &str,
+        sections: &[DetectedSection],
+    ) -> Self
+    where
+        Self: Sized;
+
+    /// Merge a batch of `characters_present` into one chapter.
+    fn merge_characters_present(&mut self, chapter_id: &str, new: &[String]) -> Result<()>;
+}
+
+impl ChapterManifestWrite for ChapterManifest {
+    /// Atomic save via tmp + rename.
+    fn save(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -115,11 +62,14 @@ impl ChapterManifest {
     /// Build a manifest from `SectionedChunker`-detected sections + the
     /// raw text they point into. `text` is the original plaintext; the
     /// manifest uses it to compute `first_line` and `word_count`.
-    pub fn from_detected_sections(
+    fn from_detected_sections(
         corpus_id: impl Into<String>,
         text: &str,
         sections: &[DetectedSection],
-    ) -> Self {
+    ) -> Self
+    where
+        Self: Sized,
+    {
         let mut m = Self::new(corpus_id);
         for sec in sections {
             let body_start = sec.start_byte.min(text.len());
@@ -154,21 +104,13 @@ impl ChapterManifest {
         m
     }
 
-    pub fn get(&self, chapter_id: &str) -> Option<&ChapterEntry> {
-        self.chapters.iter().find(|c| c.id == chapter_id)
-    }
-
-    pub fn get_mut(&mut self, chapter_id: &str) -> Option<&mut ChapterEntry> {
-        self.chapters.iter_mut().find(|c| c.id == chapter_id)
-    }
-
     /// Merge a batch of `characters_present` into one chapter, preserving
     /// existing entries and deduplicating case-insensitively. Silently
     /// drops placeholder literals (`"..."`, `"…"`, `TODO`) — letting
     /// one slip through once permanently contaminates the manifest for
     /// this corpus, and future runs have no way to tell a real
     /// character named `"..."` from a schema echo.
-    pub fn merge_characters_present(&mut self, chapter_id: &str, new: &[String]) -> Result<()> {
+    fn merge_characters_present(&mut self, chapter_id: &str, new: &[String]) -> Result<()> {
         let entry = self
             .get_mut(chapter_id)
             .ok_or_else(|| Error::InvalidInput(format!("chapter not found: {chapter_id}")))?;
@@ -196,18 +138,6 @@ impl ChapterManifest {
             entry.characters_present.push(trimmed.to_string());
         }
         Ok(())
-    }
-
-    pub fn chapter_ids(&self) -> Vec<&str> {
-        self.chapters.iter().map(|c| c.id.as_str()).collect()
-    }
-
-    pub fn len(&self) -> usize {
-        self.chapters.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.chapters.is_empty()
     }
 }
 

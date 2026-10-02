@@ -31,7 +31,8 @@
 //!   is a multi-tenant hub; a local daemon has one principal. `serve_turn`
 //!   takes an ALREADY-SCOPED id for exactly this reason — prefixing is a host
 //!   policy — so the daemon passes the id through and the server keeps its
-//!   `TenantRuntime`.
+//!   `TenantRuntime`. Since phase-b-86 a KEYED daemon scopes the same way,
+//!   `{sub}:{conv}` by API key ([`crate::api_keys::Caller`]).
 //! - **No fair scheduler, no reciprocity.** Those price a shared hub's
 //!   contention between strangers. Loopback callers are one user's own
 //!   surfaces.
@@ -91,12 +92,14 @@ use sovereign_contracts::types::{
     ClarificationRequest, InterpretationProposed, ResumeSession, TurnAnswer, TurnFrame, TurnMode,
     TurnNarration, TurnNotice, TurnRequest,
 };
+use sovereign_core::runtime::capabilities::{scope_rerank, scope_sampling, scope_turn};
 use sovereign_core::runtime::Runtime;
 use sovereign_core::runtime::{collect_turn, drive_stream_handle, serve_turn, StreamHandle};
 use sovereign_core::traits::StateStore;
 
+use crate::api_keys::Caller;
 use crate::daemon::EmbeddedDaemon;
-use crate::loopback_guard::{LocalOnly, LoopbackRouter};
+use crate::loopback_guard::LocalOnly;
 use crate::turn_approval::SocketApprovalChannel;
 use sovereign_core::approval_desk::ResolveOutcome;
 
@@ -139,7 +142,9 @@ pub fn turn_router_with(daemon: Arc<EmbeddedDaemon>, timers: SocketTimers) -> Ro
         .route("/v1/memories/{id}", delete(delete_memory))
         .route("/v1/memories/{id}/weaken", post(weaken_memory))
         .route("/v1/notes/tool-outcome", post(record_tool_outcome))
-        .localhost_only_with(daemon)
+        // Loopback, or an API key the keyed gate admitted (`crate::api_keys`).
+        .layer(axum::middleware::from_fn(crate::api_keys::local_or_keyed))
+        .layer(Extension(daemon))
         .layer(Extension(timers))
 }
 
@@ -168,7 +173,7 @@ pub struct CreateConversationRequest {
 /// malformed body yields an untagged conversation rather than a 4xx — the
 /// server's behaviour, kept so one client works against both.
 async fn create_conversation(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     body: axum::body::Bytes,
 ) -> Response {
@@ -187,7 +192,7 @@ async fn create_conversation(
         .as_secs() as i64;
     if let Err(e) = runtime
         .seed_conversation(
-            &id,
+            &caller.scope(&id),
             now,
             req.skill_id.as_deref(),
             req.enabled_corpora.as_deref(),
@@ -345,20 +350,25 @@ pub struct MessageResponse {
 
 /// `GET /v1/conversations`
 ///
-/// The server filters to the caller's tenant and strips the `tenant:` prefix;
-/// this daemon has one principal and stores bare ids, so the rows pass
-/// through verbatim — the same wire ANSWER the server's client would see for
+/// The server filters to the caller's tenant and strips the `tenant:` prefix,
+/// and so does a keyed daemon for an API key's `sub:`; an unkeyed daemon has
+/// one principal and stores bare ids, so the rows pass through verbatim — the same wire ANSWER the server's client would see for
 /// its own tenant, which is the compat that matters.
 async fn list_conversations(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Query(params): Query<ListQuery>,
 ) -> Response {
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
-    let limit = params.limit.unwrap_or(20);
-    let offset = params.offset.unwrap_or(0);
+    // A keyed caller pages over ITS rows: read them all, keep its own, then
+    // page, so another key's rows never shift a page boundary.
+    let page = (params.offset.unwrap_or(0), params.limit.unwrap_or(20));
+    let (offset, limit) = match caller {
+        Caller::Local => page,
+        Caller::Keyed { .. } => (0, i64::MAX as usize),
+    };
     // Two scopes that mean different things cannot both apply: a notebook's
     // Ask history IS the default surface, so `corpus_id` already implies it.
     // Refusing beats picking one and being right half the time (§18.3).
@@ -391,11 +401,20 @@ async fn list_conversations(
         Ok(convos) => Json(ConversationListResponse {
             conversations: convos
                 .into_iter()
-                .map(|c| ConversationListEntry {
-                    id: c.id,
-                    title: c.title,
-                    created_at: c.created_at,
-                    updated_at: c.updated_at,
+                .filter_map(|c| {
+                    let id = caller.owned(&c.id)?.to_string();
+                    Some(ConversationListEntry {
+                        id,
+                        title: c.title,
+                        created_at: c.created_at,
+                        updated_at: c.updated_at,
+                    })
+                })
+                .skip(if caller == Caller::Local { 0 } else { page.0 })
+                .take(if caller == Caller::Local {
+                    usize::MAX
+                } else {
+                    page.1
                 })
                 .collect(),
         })
@@ -412,14 +431,17 @@ async fn list_conversations(
 /// client rendering a resumed conversation cannot tell which host answered.
 /// A missing row is the server's exact 404 sentence, not a generic one.
 async fn get_conversation(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
 ) -> Response {
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
-    match store.get_conversation(&conversation_id).await {
+    match store
+        .get_conversation(&caller.scope(&conversation_id))
+        .await
+    {
         Ok(convo) => Json(ConversationResponse {
             id: conversation_id,
             title: convo.title,
@@ -458,10 +480,11 @@ async fn get_conversation(
 /// idempotent from the client's point of view, and the row's absence
 /// afterward is observable via the 404 the get route now answers.
 async fn delete_conversation(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
 ) -> Response {
+    let conversation_id = caller.scope(&conversation_id);
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
@@ -486,11 +509,12 @@ pub struct PatchConversationRequest {
 }
 
 async fn patch_conversation(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
     Json(req): Json<PatchConversationRequest>,
 ) -> Response {
+    let conversation_id = caller.scope(&conversation_id);
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
@@ -536,11 +560,12 @@ pub struct EnabledCorporaRequest {
 }
 
 async fn put_enabled_corpora(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
     Json(req): Json<EnabledCorporaRequest>,
 ) -> Response {
+    let conversation_id = caller.scope(&conversation_id);
     // The RUNTIME, not the store: the allow-list is validated against the
     // corpora this daemon can actually search, and `allow_list_universe`
     // reads the same engine retrieval fans out over. A store-only write
@@ -576,11 +601,12 @@ async fn put_enabled_corpora(
 /// turn that would pause for an approval cannot complete on this route, which
 /// is the same named gap, not a new one.
 async fn send_message(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
     Json(body): Json<SendMessageRequest>,
 ) -> Response {
+    let conversation_id = caller.scope(&conversation_id);
     let (Some(runtime), Some(store)) = (daemon.runtime(), daemon.state_store()) else {
         return service_unavailable("this daemon serves no turns (mesh-admin)");
     };
@@ -634,11 +660,12 @@ async fn send_message(
 /// empty list is a 400: a caller that meant to record an exchange and sent
 /// none has a bug, and answering `{"message_ids": []}` would hide it.
 async fn record_messages(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
     Json(body): Json<RecordMessagesRequest>,
 ) -> Response {
+    let conversation_id = caller.scope(&conversation_id);
     let Some(store) = daemon.state_store() else {
         return service_unavailable("this daemon holds no conversation store (mesh-admin)");
     };
@@ -692,14 +719,17 @@ async fn record_messages(
 /// process that used to hold it stopped holding it, which is the failure mode
 /// phase 6 has to not have.
 async fn end_conversation(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
 ) -> Response {
     let Some(runtime) = daemon.runtime() else {
         return service_unavailable("this daemon serves no turns (mesh-admin)");
     };
-    match runtime.end_conversation(&conversation_id).await {
+    match runtime
+        .end_conversation(&caller.scope(&conversation_id))
+        .await
+    {
         Ok(()) => Json(serde_json::json!({ "ended": conversation_id })).into_response(),
         // Reported, not swallowed: the extraction pass runs a model, and a
         // caller told "ok" for a pass that never ran cannot tell the
@@ -733,7 +763,7 @@ pub struct SearchEntry {
 }
 
 async fn search_conversations(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Query(params): Query<SearchQuery>,
 ) -> Response {
@@ -747,11 +777,14 @@ async fn search_conversations(
         Ok(messages) => Json(SearchResponse {
             results: messages
                 .into_iter()
-                .take(50)
-                .map(|m| SearchEntry {
-                    content: m.content,
-                    conversation_id: m.conversation_id,
+                .filter_map(|m| {
+                    let conversation_id = caller.owned(&m.conversation_id)?.to_string();
+                    Some(SearchEntry {
+                        content: m.content,
+                        conversation_id,
+                    })
                 })
+                .take(50)
                 .collect(),
         })
         .into_response(),
@@ -819,10 +852,10 @@ async fn weaken_memory(
 }
 
 /// `POST /v1/notes/tool-outcome` — record a tool-decision outcome into the
-/// daemon's notes.db dossier (sv-surface rung 6, commit A).
+/// dossier in svrn's own store (sv-surface rung 6, commit A; pb-notes-memory).
 ///
 /// The desktop's `submit_information_search` writes this BEFORE running
-/// the user's escape-hatch web search; in attach mode the NoteStore lives
+/// the user's escape-hatch web search; in attach mode the store lives
 /// daemon-side, so the write crosses here. `record_tool_outcome` in
 /// sovereign-core is the one decider — the same function the in-process
 /// path calls. A daemon without a mounted notes surface answers 503 with
@@ -852,12 +885,10 @@ async fn record_tool_outcome(
     Json(body): Json<ToolOutcomeRequest>,
 ) -> Response {
     let Some(notes) = daemon.notes_store() else {
-        return service_unavailable(
-            "this daemon serves no notes surface (notes.db unavailable — /mcp not mounted)",
-        );
+        return service_unavailable("this daemon serves no memory notes (/mcp not mounted)");
     };
     sovereign_core::dossier::record_tool_outcome(
-        Some(notes),
+        Some(&**notes as &dyn sovereign_contracts::notes::AgentNotes),
         &body.session_id,
         body.conversation_id.as_deref(),
         &body.tool_id,
@@ -888,13 +919,14 @@ pub struct StreamParams {
 
 /// `GET /v1/conversations/{id}/stream` — WebSocket upgrade.
 async fn ws_handler(
-    _: LocalOnly,
+    caller: Caller,
     ws: WebSocketUpgrade,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(conversation_id): Path<String>,
     Query(params): Query<StreamParams>,
     Extension(timers): Extension<SocketTimers>,
 ) -> Response {
+    let conversation_id = caller.scope(&conversation_id);
     if daemon.runtime().is_none() {
         return service_unavailable("this daemon serves no turns (mesh-admin)");
     }
@@ -1309,6 +1341,8 @@ async fn handle_ws(
                 content,
                 mode,
                 intent,
+                sampling,
+                rerank,
             } => {
                 if refuse_second_turn(&in_flight, &out_tx) {
                     continue;
@@ -1324,28 +1358,24 @@ async fn handle_ws(
                 let turn_approval = claimed_channel();
                 let routing = Arc::clone(&routing_events);
                 in_flight = Some(tokio::spawn(async move {
-                    sovereign_core::runtime::capabilities::scope_turn(
-                        turn_approval,
-                        Some(routing),
-                        async {
-                            serve_turn(
-                                &rt,
-                                st.as_ref(),
-                                &cid,
-                                &content,
-                                mode,
-                                intent,
-                                // See the module docs — the daemon has no
-                                // narration broadcast yet, and a `None`
-                                // here is that fact rather than a dropped
-                                // channel.
-                                None,
-                                &tx,
-                            )
-                            .await;
-                        },
-                    )
-                    .await;
+                    let turn = scope_rerank(rerank, async {
+                        serve_turn(
+                            &rt,
+                            st.as_ref(),
+                            &cid,
+                            &content,
+                            mode,
+                            intent,
+                            // See the module docs — the daemon has no
+                            // narration broadcast yet, and a `None`
+                            // here is that fact rather than a dropped
+                            // channel.
+                            None,
+                            &tx,
+                        )
+                        .await;
+                    });
+                    scope_turn(turn_approval, Some(routing), scope_sampling(sampling, turn)).await;
                 }));
             }
             // The two SESSION-CONTINUATION turns. Each differs from `Message`

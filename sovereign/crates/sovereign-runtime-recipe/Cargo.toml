@@ -24,7 +24,7 @@ description = "The one recipe that commissions a Runtime: the router, the planne
 # records a call and records nothing at all about a call not made.
 #
 # Layer `capabilities`: above `sovereign-tools` (whose tools it registers) and
-# `sovereign-gliner` (whose extractor it probes for), below every host. It
+# the NER port it reads (a host input since pb-serving-ner), below every host. It
 # deliberately does NOT depend on `sovereign-mesh`: `mesh_knowledge` is a host
 # input, because inside the daemon it is a loopback call to itself and
 # dissolves (§3.5, "five capabilities leave the Runtime entirely").
@@ -43,19 +43,14 @@ sovereign-contracts = { workspace = true }
 # rerank config/dedup readers. Same layer (capabilities), like
 # sovereign-gliner -> sovereign-core one layer down.
 sovereign-tools = { workspace = true }
-# `StandaloneReranker` + the capacity pre-flight that refuses a rerank slot
-# which does not fit. Runtime layer — down.
-sovereign-inference = { workspace = true }
-# The optional GLiNER entity extractor behind entity-aware
-# retrieval-over-history. Probed, never required. Runtime layer — down.
-sovereign-gliner = { workspace = true }
-# `CorpusEngine`, `open_wikipedia_graph`, `MetaAtlasIndex`, `BridgeIndex`,
-# `RerankConfig`. Knowledge layer — down.
-corpus-engine = { workspace = true }
-# `NoteStore` — the per-conversation tool-decision write hook's backing store,
-# passed in by the host rather than opened here (one writer per data root,
-# TOPOLOGY phase 1). Knowledge layer — down.
-corpus-engine-notes = { workspace = true }
+# `open_wikipedia_graph`, `WikipediaGraphApi`, `MetaAtlasIndex`: the atlas
+# read leaf. The engine is reached only through the read port below
+# (pb-ingest-dial-tools).
+corpus-engine-atlas-reader = { workspace = true }
+# `CorpusReadPort` (the engine this host retrieves through) and `RerankConfig`.
+corpus-index = { workspace = true }
+# The tool-decision write hook's backing store is NOT a dependency: the host
+# hands it in as `sovereign_contracts::notes::AgentNotes` (RecipeInputs.note_store).
 tracing = { workspace = true }
 # `LaneWarmth::Deferred` spawns the meta-atlas warm on a blocking thread so a
 # service's boot does not block on a ~1 GB JSON parse.

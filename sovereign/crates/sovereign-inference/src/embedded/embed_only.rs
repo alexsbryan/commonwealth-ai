@@ -13,10 +13,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::Stream;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::model_family::ModelFamily;
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::model_family::ModelFamily;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
 };
 

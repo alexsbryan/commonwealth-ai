@@ -76,19 +76,14 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
                 i += 1;
                 let raw = args
                     .get(i)
-                    .ok_or_else(|| format!("--quant needs a rung ({})", rung_list()))?;
+                    .ok_or_else(|| "--quant needs a rung".to_string())?;
                 // Accept the display spellings users will copy off the
                 // banner ("Q6_K") as well as the canonical lowercase
                 // rung name — a case mismatch is not worth a failed
-                // onboarding run.
-                let normalized = raw.to_ascii_lowercase();
-                if sovereign_inference::setup_planner::fim_slot_for_rung(&normalized).is_none() {
-                    return Err(format!(
-                        "unknown --quant '{raw}' (expected {})",
-                        rung_list()
-                    ));
-                }
-                opts.quant = Some(normalized);
+                // onboarding run. The ladder is the loader's: its `fim`
+                // probe refuses an unknown rung, naming the rungs, before
+                // anything is fetched (pb-distribution-setup).
+                opts.quant = Some(raw.to_ascii_lowercase());
             }
             "--client-port" => {
                 i += 1;
@@ -142,16 +137,6 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
         );
     }
     Ok(opts)
-}
-
-/// Human-readable rung vocabulary for error text, read off the same
-/// ladder the resolver uses so the two can't drift.
-fn rung_list() -> String {
-    sovereign_inference::setup_planner::FIM_RUNGS
-        .iter()
-        .map(|(name, _)| *name)
-        .collect::<Vec<_>>()
-        .join(" | ")
 }
 
 const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {

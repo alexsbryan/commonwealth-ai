@@ -25,15 +25,8 @@ pub struct RoleProfile {
     pub forced_first_tool: Option<PrimitiveKind>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SamplingOverrides {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_tokens: Option<u32>,
-}
+/// One definition with svrn's turn wire, in `oicp-types` (phase-b-56).
+pub use oicp_types::completion::SamplingOverrides;
 
 /// The Evaluator's effective tool subset AFTER a passing smoke
 /// (gated by `RoleDossier::smoke_just_passed`). Shrinks the default

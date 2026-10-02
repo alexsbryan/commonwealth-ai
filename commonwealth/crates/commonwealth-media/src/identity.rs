@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Who a verified dialer is, and whether an origin is handed its dial.
+//!
+//! `MemberIdentity` and `verified_headers` moved to `kernel_types::member` by
+//! five-programs fp-46 (§12 decision 3 — the member view crosses the package
+//! line, and the kernel is the one home both families may name); re-imported
+//! here so every `commonwealth_media::` path keeps working (ARCH §10.6). What
+//! stays is the acceptor's DECISION half: the roster consult and the three
+//! admit fns.
 
 use std::net::SocketAddr;
 
+pub use kernel_types::member::{verified_headers, MemberIdentity};
+
 use commonwealth_core::capabilities::OriginKind;
-use commonwealth_core::ids::{NodeId, NodePubkey};
-use commonwealth_core::mesh::member_matches;
+use commonwealth_core::ids::NodePubkey;
 use commonwealth_transport::iroh::Forward;
 
 /// The roster consult behind every admission decision at the acceptor:
@@ -30,57 +38,6 @@ pub fn admits_no_one() -> MemberCheck {
     std::sync::Arc::new(|_| Box::pin(std::future::ready(None)))
 }
 
-/// Who a verified dialer IS, as the roster names it. The fields are what an
-/// origin behind `cwth/media/0` is handed on every request (`X-Mesh-Member`,
-/// `X-Mesh-Node`), so a server that authenticates nothing can still tell
-/// members apart — and so `media_allow` can be a list of names rather than
-/// of keys.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MemberIdentity {
-    pub name: String,
-    pub node_id: NodeId,
-}
-
-impl MemberIdentity {
-    /// The request headers the media origin receives. Values are visible
-    /// ASCII by the time they reach the wire (`rewrite_head` filters), and
-    /// any client-supplied header under `x-mesh-` is stripped before these
-    /// are added, so the origin reads them as the acceptor's word.
-    pub fn headers(&self, dialer: NodePubkey) -> Vec<(String, String)> {
-        verified_headers(Some(self), dialer)
-    }
-
-    /// Whether a `media_allow` entry names this member: its exact name, or a
-    /// node-id prefix of at least four characters — the same resolution every
-    /// `<peer>` argument uses.
-    pub fn named_by(&self, entry: &str) -> bool {
-        member_matches(self.node_id, &self.name, entry)
-    }
-}
-
-/// The one implementation of the `X-Mesh-*` scheme: what the acceptor tells an
-/// origin about a dialer whose key the QUIC handshake verified.
-///
-/// The pubkey is always known — it is what the handshake proved — so it is
-/// always named. The member name and node id are the ROSTER's word, and a
-/// dialer the roster does not name gets neither rather than a placeholder: an
-/// absent header is "the roster did not answer", and a `<none>` value would be
-/// "the roster answered: nobody" (ARCH principle 6). A reader that needs a
-/// member must refuse the key-only case, and can see that it must.
-///
-/// One function rather than one per ALPN because the names ARE the scheme: a
-/// second spelling is how `cwth/http/0` learns to say `X-Mesh-NodeId` while
-/// `cwth/media/0` says `X-Mesh-Node` (ARCH principle 8).
-pub fn verified_headers(who: Option<&MemberIdentity>, dialer: NodePubkey) -> Vec<(String, String)> {
-    let mut out = Vec::with_capacity(3);
-    if let Some(who) = who {
-        out.push(("X-Mesh-Member".to_string(), who.name.clone()));
-        out.push(("X-Mesh-Node".to_string(), who.node_id.to_string()));
-    }
-    out.push(("X-Mesh-Pubkey".to_string(), hex::encode(dialer.0)));
-    out
-}
-
 /// The holder's decision for a `cwth/media/0` dial — the ONE place that turns
 /// (verified dialer, declared origin, allow-list) into a forward or a refusal.
 ///
@@ -98,7 +55,14 @@ pub fn admit_media(
     allow: &[String],
     declared: &[(String, String)],
 ) -> Option<Forward> {
-    admit_spliced_origin(OriginKind::Media, who, dialer, origin, allow, declared)
+    admit_spliced_origin(
+        OriginKind::Media.wire(),
+        who,
+        dialer,
+        origin,
+        allow,
+        declared,
+    )
 }
 
 /// The holder's decision for a `cwth/offer/0` dial — [`admit_media`]'s three
@@ -125,25 +89,34 @@ pub fn admit_offer(
     allow: &[String],
     declared: &[(String, String)],
 ) -> Option<Forward> {
-    admit_spliced_origin(OriginKind::Offer, who, dialer, origin, allow, declared)
+    admit_spliced_origin(
+        OriginKind::Offer.wire(),
+        who,
+        dialer,
+        origin,
+        allow,
+        declared,
+    )
 }
 
 /// One implementation of "may this verified dialer reach the single HTTP
-/// origin this node declared for `kind`", shared by [`admit_media`] and
-/// [`admit_offer`].
+/// origin declared for `what`", shared by [`admit_media`], [`admit_offer`]
+/// and every registered origin whose admission is members-only
+/// ([`crate::origins::OriginRegistry::forward_for`]).
 ///
 /// Shared rather than duplicated because the three refusals are the same
-/// three facts in both cases, and a second copy is how one of them learns to
+/// three facts in every case, and a second copy is how one of them learns to
 /// admit a non-member while the other does not (ARCH principle 8). What is
 /// NOT shared is the input: each caller passes its own origin, its own allow
 /// list and its own declared headers, so nothing here can hand one kind's
 /// credential to another kind's server.
 ///
-/// `kind` is carried rather than spelled so every log line names the origin
-/// the dialer actually asked for — the 2026-09-12 defect where every app
-/// refusal said "media" is the failure this shape prevents.
-fn admit_spliced_origin(
-    kind: OriginKind,
+/// `what` is the protocol the dialer asked for (`cwth/media/0`, a registered
+/// ALPN), carried rather than spelled so every log line names the origin the
+/// dialer actually asked for — the 2026-09-12 defect where every app refusal
+/// said "media" is the failure this shape prevents.
+pub fn admit_spliced_origin(
+    what: &str,
     who: Option<&MemberIdentity>,
     dialer: NodePubkey,
     origin: Option<SocketAddr>,
@@ -153,11 +126,10 @@ fn admit_spliced_origin(
     let Some(who) = who else {
         tracing::warn!(
             target: "transport",
-            kind = kind.wire(),
+            kind = what,
             dialer = %hex::encode(dialer.0),
-            "{}: REFUSED a dial from a non-member — the {} authenticates nothing, \
-             so there is no safe downgrade",
-            kind.wire(), kind.noun()
+            "{what}: REFUSED a dial from a non-member — the origin authenticates nothing, \
+             so there is no safe downgrade"
         );
         return None;
     };
@@ -165,22 +137,20 @@ fn admit_spliced_origin(
     if !allow.is_empty() && !allow.iter().any(|entry| who.named_by(entry)) {
         tracing::warn!(
             target: "transport",
-            kind = kind.wire(),
+            kind = what,
             member = %who.name,
             node_id = %who.node_id,
             allow = ?allow,
-            "{}: REFUSED a dial from a member outside the allow list",
-            kind.wire()
+            "{what}: REFUSED a dial from a member outside the allow list"
         );
         return None;
     }
     tracing::info!(
         target: "transport",
-        kind = kind.wire(),
+        kind = what,
         member = %who.name,
         node_id = %who.node_id,
-        "{}: dial admitted — the origin is told who is asking",
-        kind.wire()
+        "{what}: dial admitted — the origin is told who is asking"
     );
     // The verified identity FIRST, then this node's own credentials for its
     // own origin. Both go through the one `headers` vec because
@@ -261,6 +231,7 @@ pub fn admit_app(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use commonwealth_core::ids::NodeId;
 
     fn apps() -> std::collections::BTreeMap<String, SocketAddr> {
         [("chores".to_string(), "127.0.0.1:5000".parse().unwrap())]

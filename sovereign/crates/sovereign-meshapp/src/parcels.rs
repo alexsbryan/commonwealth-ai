@@ -14,11 +14,11 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use corpus_engine::enrichment::atlas::analysis::{compute_aggregates, flags, FlagKind};
-use corpus_engine::enrichment::atlas::atoms::Entity;
-use corpus_engine::enrichment::atlas::AtomEnvelope;
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
+use corpus_engine_atlas_reader::parcel_analytics::{compute_aggregates, flags, FlagKind};
 use sovereign_contracts::daemon_wire::{ParcelAnalyticsDto, ParcelDto};
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::atoms::Entity;
+use understanding_vocab::taxonomy::EntityType;
 
 use crate::MeshAppError;
 
@@ -46,7 +46,7 @@ fn read_atoms(index_path: &Path, corpus_id: &str) -> Result<Vec<AtomEnvelope>, M
             "corpus `{corpus_id}` has no atlas"
         )));
     }
-    let file = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+    let file = understanding_vocab::read::read_atlas_atoms(&atlas_dir)
         .map_err(|e| MeshAppError::io("read atoms", e))?;
     Ok(file.atoms().to_vec())
 }

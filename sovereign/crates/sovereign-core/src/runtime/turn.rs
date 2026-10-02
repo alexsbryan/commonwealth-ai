@@ -86,7 +86,7 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
     ) -> Result<()> {
         if let Some(allow) = enabled_corpora {
-            let installed = self.allow_list_universe().await;
+            let installed = self.allow_list_universe(id).await;
             corpus_allow_list_verdict(allow, &installed).map_err(Error::InvalidInput)?;
         }
         self.store
@@ -129,7 +129,7 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
     ) -> Result<()> {
         if let Some(allow) = enabled_corpora {
-            let installed = self.allow_list_universe().await;
+            let installed = self.allow_list_universe(conversation_id).await;
             corpus_allow_list_verdict(allow, &installed).map_err(Error::InvalidInput)?;
         }
         self.store
@@ -152,7 +152,12 @@ impl Runtime {
     /// parent is listed). Read from the SAME engine retrieval fans out over,
     /// so "installed" here means "would be searched" — not a directory
     /// listing from some other process. No engine ⇒ nothing is searchable.
-    async fn allow_list_universe(&self) -> Vec<String> {
+    ///
+    /// Narrowed by the conversation's corpus grant
+    /// ([`crate::context::PrincipalScope::admits`]), so a refusal never names
+    /// a corpus this caller may not retrieve from.
+    async fn allow_list_universe(&self, conversation_id: &str) -> Vec<String> {
+        let scope = self.principal_scope(conversation_id).await;
         let Some(engine) = self.corpus_engine.as_ref() else {
             return Vec::new();
         };
@@ -174,6 +179,7 @@ impl Runtime {
                 }
             }
         }
+        ids.retain(|id| scope.admits(id));
         ids.sort();
         ids
     }
@@ -280,7 +286,7 @@ impl Runtime {
 
         // 1. Build context from store (use message text for memory retrieval).
         //    The user message is already persisted so it shows up here.
-        let scope = self.principal_scope(conversation_id);
+        let scope = self.principal_scope(conversation_id).await;
         let mut context =
             build_context(self.store.as_ref(), conversation_id, message, scope).await?;
         tracing::debug!(

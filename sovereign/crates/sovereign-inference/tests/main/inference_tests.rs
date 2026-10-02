@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::sync::Arc;
 
-use sovereign_core::oicp::*;
+use oicp_types::*;
 use sovereign_inference::health::HealthTracker;
 use sovereign_inference::selector::*;
 
@@ -256,7 +256,7 @@ fn make_manifest(models: Vec<ProviderModel>) -> ProviderManifest {
 /// call sites keep working until the test bodies migrate.
 fn make_model(id: &str, caps: &[(Capability, u8)], context: u32) -> ProviderModel {
     let profile: CapabilityProfile = caps.iter().copied().collect();
-    let hint = sovereign_core::oicp::infer_hint_from_profile(&profile);
+    let hint = oicp_types::infer_hint_from_profile(&profile);
     let best = [
         Capability::Code,
         Capability::General,
@@ -264,7 +264,7 @@ fn make_model(id: &str, caps: &[(Capability, u8)], context: u32) -> ProviderMode
         Capability::Instruction,
     ]
     .into_iter()
-    .map(|c| sovereign_core::oicp::proficiency(&profile, c))
+    .map(|c| oicp_types::proficiency(&profile, c))
     .max()
     .unwrap_or(0);
     let affinity = (best as f32 / 4.0).clamp(0.0, 1.0);

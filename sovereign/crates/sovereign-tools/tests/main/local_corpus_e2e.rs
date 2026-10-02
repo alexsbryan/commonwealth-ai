@@ -12,7 +12,8 @@ use std::sync::{
     Arc,
 };
 
-use corpus_engine::{CorpusEngine, EmbedFn};
+use crate::local_corpus_port_double::leaf_backed_double;
+use corpus_index::types::EmbedFn;
 use sovereign_core::error::Result as SovResult;
 use sovereign_store::memory::InMemoryStateStore;
 use tempfile::TempDir;
@@ -59,17 +60,10 @@ async fn harness() -> Harness {
     let store: Arc<InMemoryStateStore> = Arc::new(InMemoryStateStore::new());
 
     let embed_calls = Arc::new(AtomicUsize::new(0));
-    let engine = Arc::new(
-        CorpusEngine::new(
-            data_dir.join("recipes"),
-            data_dir.join("indexes"),
-            mock_embed_fn(embed_calls),
-        )
-        // Required precondition of `ingest()` — declares the
-        // embedding-model label that lands in `_corpus_meta.json`.
-        // See `corpus-engine/src/engine/ingest.rs` for the rationale.
-        .with_embedding_model("test-mock"),
-    );
+    let engine = Arc::new(leaf_backed_double(
+        data_dir.join("indexes"),
+        mock_embed_fn(embed_calls),
+    ));
 
     let manager = LocalCorpusManager::init(
         engine,
@@ -400,17 +394,10 @@ async fn register_persists_across_manager_reload() -> SovResult<()> {
     // Simulate a relaunch by constructing a second manager over the
     // same data_dir.
     let store = h._store.clone();
-    let engine = Arc::new(
-        CorpusEngine::new(
-            h.data_dir.join("recipes"),
-            h.data_dir.join("indexes"),
-            mock_embed_fn(Arc::new(AtomicUsize::new(0))),
-        )
-        // Same invariant as the first manager — see the docstring
-        // on `with_embedding_model`. Both managers must declare the
-        // same model so a relaunch sees a compatible label.
-        .with_embedding_model("test-mock"),
-    );
+    let engine = Arc::new(leaf_backed_double(
+        h.data_dir.join("indexes"),
+        mock_embed_fn(Arc::new(AtomicUsize::new(0))),
+    ));
     let manager2 = LocalCorpusManager::init(
         engine,
         store as Arc<dyn sovereign_core::traits::StateStore>,
@@ -439,6 +426,11 @@ async fn register_persists_across_manager_reload() -> SovResult<()> {
 /// interleaving — remove succeeds, the ingest ends (Cancelled /
 /// NotFound / completed are all acceptable), and once both are done
 /// no index directory for the corpus remains on disk.
+///
+/// The double never cancels, so this proves the manager's own wait on its
+/// in-flight ingest. The engine's half (a cancel stops a registered
+/// ingest, and the wipe leaves no index dir) is corpus-engine's
+/// `local_corpus_port_parity::remove_after_cancel_leaves_no_index_dir`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn remove_awaits_inflight_ingest_before_wiping() -> SovResult<()> {
     let tmp = tempfile::tempdir().unwrap();
@@ -461,14 +453,7 @@ async fn remove_awaits_inflight_ingest_before_wiping() -> SovResult<()> {
         })
     });
 
-    let engine = Arc::new(
-        CorpusEngine::new(
-            data_dir.join("recipes"),
-            data_dir.join("indexes"),
-            slow_embed,
-        )
-        .with_embedding_model("test-mock"),
-    );
+    let engine = Arc::new(leaf_backed_double(data_dir.join("indexes"), slow_embed));
     let store: Arc<InMemoryStateStore> = Arc::new(InMemoryStateStore::new());
     let manager = Arc::new(
         LocalCorpusManager::init(

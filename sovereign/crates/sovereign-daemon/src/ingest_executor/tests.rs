@@ -1,41 +1,41 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `ingest_executor`'s tests. A sibling file for the reason
-//! `work_donor/tests.rs` is one — ARCH §3.1's ceiling — and every one names
-//! the failing input it exists to catch (ARCH §18.1).
+//! `ingest_executor`'s tests. A sibling file for ARCH §3.1's ceiling, and
+//! every one names the failing input it exists to catch (ARCH §18.1).
 use super::*;
 
-use commonwealth_work::executor::JobExecutorRegistry;
-use commonwealth_work::seal;
+use corpus_index::ingest_port::double::IngestPortDouble;
 use sovereign_contracts::oicp::JobRequirements;
 
-fn engine() -> (tempfile::TempDir, Arc<CorpusEngine>) {
+/// Ingest's port as a double over a scratch root: the executor validates and
+/// runs a unit through the port, and what the engine does with a slice is
+/// proven on the engine (pb-ingest-dial-daemon).
+fn engine() -> (tempfile::TempDir, IngestPortDouble) {
     let dir = tempfile::tempdir().expect("tempdir");
-    let recipes = dir.path().join("recipes");
-    let indexes = dir.path().join("indexes");
-    std::fs::create_dir_all(&recipes).expect("recipes dir");
-    std::fs::create_dir_all(&indexes).expect("indexes dir");
-    let embed: corpus_engine::EmbedFn =
-        Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
-    let engine = Arc::new(CorpusEngine::new(recipes, indexes, embed));
+    let double = IngestPortDouble::new()
+        .with_recipes_dir(dir.path().join("recipes"))
+        .with_index_dir(dir.path().join("indexes"));
     // The TempDir is returned so the caller keeps it alive: dropping it here
-    // would delete the directories the engine resolves paths against, and the
+    // would delete the directories the port resolves paths against, and the
     // failure would surface as an unrelated IO error inside a later assertion.
-    (dir, engine)
+    (dir, double)
 }
 
 fn executor() -> (tempfile::TempDir, IngestExecutor) {
     let (dir, e) = engine();
-    (dir, IngestExecutor::new(e))
+    (dir, IngestExecutor::new(Arc::new(e)))
 }
 
+/// A unit of `kind` over `payload`. Unsealed: `validate` and `execute` read
+/// the kind and the payload, never the hash — the seal is the fold's check,
+/// in cw-rails, and this crate links no rail since pb-work-donor.
 fn unit_of(kind: &str, payload: Value) -> JobUnit {
-    seal::seal(
-        JobKind::parse(kind).expect("test kind"),
+    JobUnit {
+        kind: JobKind::parse(kind).expect("test kind"),
+        unit_hash: "0".repeat(64),
         payload,
-        JobRequirements::any(),
-        None,
-    )
-    .expect("seal")
+        requirements: JobRequirements::any(),
+        tenant: None,
+    }
 }
 
 fn good_payload() -> Value {
@@ -92,7 +92,7 @@ fn a_unit_of_another_kind_is_refused_and_names_which_rule() {
 /// The failing input: a payload with no `corpus_id`. A slice with no corpus
 /// names no partition directory, so the ingest would write into a path derived
 /// from an empty string. `validate` runs BEFORE the donor appends a `Lease`
-/// (`work_donor.rs:437`), so refusing here costs the unit nothing — the
+/// (cw-rails' donor, over the origin's validate door), so refusing here costs the unit nothing — the
 /// difference between `NeverRan` and a burnt attempt.
 #[test]
 fn a_payload_with_no_corpus_is_refused_before_the_lease() {
@@ -185,39 +185,22 @@ fn the_control_a_well_formed_slice_validates_and_round_trips() {
 /// The boot invariant, for this kind, made structural.
 ///
 /// The failing input is an edit that raises this executor's declared isolation
-/// above [`crate::work_donor::DONOR_ISOLATION`]. `resolve_offer` would then
-/// refuse every boot whose config offers `ingest:v1` — a daemon that will not
-/// start, discovered by an operator rather than by a test.
+/// above the donor's floor, `Subprocess` (cw-rails' `donor::DONOR_ISOLATION`,
+/// which this crate may not name). The donor would then drop `ingest:v1` from
+/// every offer — a node that never donates ingest work, discovered by an
+/// operator rather than by a test.
 #[test]
 fn this_donor_can_cover_the_isolation_this_executor_declares() {
     let (_dir, exec) = executor();
     assert!(
-        crate::work_donor::DONOR_ISOLATION.covers(exec.descriptor().isolation),
+        Isolation::Subprocess.covers(exec.descriptor().isolation),
         "a donor offering {:?} cannot run an executor requiring {:?}",
-        crate::work_donor::DONOR_ISOLATION,
+        Isolation::Subprocess,
         exec.descriptor().isolation
     );
     // And the honest half: this really does run in-process. Declaring
     // `Subprocess` here would be a claim with no mechanism behind it.
     assert_eq!(exec.descriptor().isolation, Isolation::InProcess);
-}
-
-/// The registry resolves this executor under the kind its own descriptor
-/// claims, and refuses a second claimant. The failing input is an executor
-/// registered under a kind it does not publish — `register` reads the
-/// descriptor rather than a second argument precisely so that cannot happen.
-#[test]
-fn the_registry_resolves_this_executor_under_the_kind_it_claims() {
-    let (_dir, engine) = engine();
-    let mut registry = JobExecutorRegistry::new();
-    registry
-        .register(Arc::new(IngestExecutor::new(Arc::clone(&engine))))
-        .expect("first registration");
-    let kind = JobKind::parse(INGEST_KIND).expect("kind");
-    assert!(registry.resolve(&kind).is_some());
-    registry
-        .register(Arc::new(IngestExecutor::new(engine)))
-        .expect_err("a second executor for one kind must be refused, not overwritten");
 }
 
 /// **THE `Complete`/`Fail` BOUNDARY FOR THIS KIND.**
@@ -256,10 +239,7 @@ fn every_error_this_executor_can_return_is_retryable_and_never_a_failed_verdict(
     }
     // And the retry itself is bounded, by the constant the ingest queue
     // already owned rather than a second one.
-    assert_eq!(
-        MAX_UNIT_ATTEMPTS,
-        commonwealth_core::knowledge::MAX_UNIT_ATTEMPTS
-    );
+    assert_eq!(MAX_UNIT_ATTEMPTS, oicp_types::work_queue::MAX_UNIT_ATTEMPTS);
 }
 
 /// The heartbeat cadence is DERIVED from the lease, not restated beside it.
@@ -278,17 +258,17 @@ fn the_lease_interval_is_derived_from_the_lease_the_ingest_queue_already_owns() 
     let (_dir, exec) = executor();
     assert_eq!(
         exec.descriptor().lease_interval_ms,
-        commonwealth_core::knowledge::LEASE_MS / 3
+        oicp_types::work_queue::LEASE_MS / 3
     );
     assert!(
-        exec.descriptor().lease_interval_ms * 2 < commonwealth_core::knowledge::LEASE_MS,
+        exec.descriptor().lease_interval_ms * 2 < oicp_types::work_queue::LEASE_MS,
         "two heartbeats must fit inside one lease, or a single slow journal admit \
          lapses it"
     );
 }
 
 /// A cancelled unit reports NOTHING, and the donor is what enforces that
-/// (`work_donor.rs:795`). This is the executor's half: the flag the donor sets
+/// (cw-rails' donor, `run_unit`). This is the executor's half: the flag the donor sets
 /// is the one the ingest loop reads, through the engine's own registry.
 ///
 /// The failing input is an `execute` that swallows cancellation and returns a
@@ -296,7 +276,21 @@ fn the_lease_interval_is_derived_from_the_lease_the_ingest_queue_already_owns() 
 /// which the fold counts `unreadable`.
 #[tokio::test]
 async fn a_cancelled_unit_stops_and_claims_no_verdict() {
-    let (_dir, exec) = executor();
+    let (dir, double) = engine();
+    let partitions = dir.path().join("indexes");
+    // The engine's answer for a recipe it has no registry entry for.
+    let double = double
+        .on_partition_path(move |corpus| partitions.join(format!("{corpus}.partition")))
+        .with_cancel_registry(corpus_index::ingest_port::cancel::CancellationRegistry::new())
+        .on_ingest_with_overrides(|slice| {
+            Box::pin(async move {
+                Err(corpus_index::Error::Recipe(format!(
+                    "No registry entry for corpus '{}'",
+                    slice.recipe_id
+                )))
+            })
+        });
+    let exec = IngestExecutor::new(Arc::new(double));
     let unit = unit_of(INGEST_KIND, good_payload());
     let ctx = JobContext::new(std::env::temp_dir());
     // Cancelled before it starts: the recipe does not exist on this engine, so

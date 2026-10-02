@@ -215,22 +215,6 @@ Fault line detection parameters (TOML representation).
 | `parent_corpus_id` | `Option<String>` | no | type default | Parent corpus this recipe is grouped under. Two use cases share the field: 1. **Dynamic per-work catalog children.** Set at runtime by an on-demand catalog ingest (e.g. `gutenberg-2701` carries `parent_corpus_id = "gutenberg"`) via [`crate::types::CorpusSpec::Inline`]. Search consumers group per-work corpora under their catalog and suppress repeated ingest offers for works already read. 2. **Static layer/satellite relationships declared in TOML.** `wikipedia-simple` and `wikipedia-newsworthy` declare `parent_corpus_id = "wikipedia"` to mark themselves as layers of the Core Wikipedia corpus. UI surfaces (e.g. the desktop picker) hide layered children from the top-level list and render them as toggles under the parent's row. The data layer is unaffected — each child still has its own `id`, index dir, mesh-sharing rules, and watcher (if any). Stamped onto the on-disk `IndexMeta` in both cases, so `installed_indexes()` and downstream UI can group consistently. Pointing at an id that doesn't exist is not a parse error — the desktop falls back to top-level rendering for orphans. |
 | `mutable_merge` | `Option<MutableMergePolicy>` | no | type default | How `merge_shards` should reconcile rows that share a logical key across two shards. `None` (the default) keeps the content-hash-based dedupe used by every classic corpus — divergent edits of the same source document survive as two rows with different `content_hash`. The `alignment` corpus opts into [`MutableMergePolicy::SourceDocIdNewestMtime`] so that two daemons editing the same memory or plan file converge on the newer copy after a mesh merge. |
 
-## `CatalogConfig`
-
-Pairs with `CorpusMeta::kind = Catalog`. Tells the on-demand ingest service how to take a catalog entry and produce a fully ingested per-work corpus from it. See `gutenberg/recipe.toml`.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `id_field` | `String` | **yes** | — | Field name on the catalog `ExtractedDoc` (or its metadata blob) that uniquely identifies a work. Used by the on-demand flow to substitute into `download_url_template` and to derive the per-work corpus id (`<catalog_id>-<work_id>`). |
-| `download_url_template` | `String` | **yes** | — | URL template with a `{id}` placeholder, e.g. `"https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"`. Resolved at on-demand ingest time and injected as the sole `[acquire] url` of the content recipe. |
-| `content_recipe` | `String` | **yes** | — | Recipe id of the content recipe used to perform the per-work ingest, e.g. `"gutenberg-work"`. Must be `on_demand = true` and live in the registry. |
-| `estimated_words_field` | `Option<String>` | no | type default | Optional name of a metadata column carrying an estimated word count (used to compute an ingest-time estimate the UI can show). |
-| `ingest_estimate_wpm` | `Option<u32>` | no | type default | Throughput estimate for the ingest stage, in words per minute. Combined with `estimated_words` to produce the "this will take ~N minutes" surface. Default 8000 wpm (conservative for an M-class machine on the embed slot). |
-| `enrich_estimate_wpm` | `Option<u32>` | no | type default | Throughput estimate for the enrichment stage, in words per minute. Default 500 wpm. |
-| `target_corpus_id` | `Option<String>` | no | type default | Optional shared corpus id that catalog-driven ingests append into. When set, every successful work-ingest writes its chunks into a single growing corpus (e.g. `"wikipedia-fetched"`) instead of creating one corpus per work. Atlas, mesh-share, and retrieval all happen against the single shared corpus — a much better fit for catalogs whose long-tail can be thousands of articles. When unset (default), the legacy per-work pattern (`<catalog_id>-<work_id>`) is used. |
-| `expansion_enabled` | `bool` | no | type default | Enable one-hop "minesweeper" link-expansion after fetching an article. When true, the just-ingested article's outgoing links are queued for follow-up fetch into the same `target_corpus_id`. Only meaningful when `target_corpus_id` is set — without a shared target each expansion would spawn yet another per-work corpus. |
-| `expansion_link_cap` | `u32` | no | `default_expansion_link_cap()` | Maximum number of linked articles to fetch in expansion. Ranking is significance-first (lead-section links beat body-section links, then document order). Default 20 keeps the per-fetch cost bounded; raise for deeper neighbourhood pre-loading, lower for fastest-only-the-asked behaviour. |
-
 ## `RequestTemplate`
 
 One HTTP request template. Combined with `[recipe.parameters]` values via `{name}` interpolation. `for_each` declares which parameters cross-product the template — e.g. one paginated request sequence per (entity, form_type) pair when ingesting SEC filings.
@@ -1055,6 +1039,22 @@ Reconciliation policy invoked by `corpus-engine`'s `sharding::merge_shards` when
 Allowed values:
 
 - `source_doc_id_newest_mtime` — Group rows by `source_doc_id`. When a logical key collides, keep the row with the highest `mtime`. Rows whose `source_doc_id` is null fall back to content-hash dedupe.
+
+## `CatalogConfig`
+
+Pairs with `CorpusMeta::kind = Catalog`. Tells the on-demand ingest service how to take a catalog entry and produce a fully ingested per-work corpus from it. See `gutenberg/recipe.toml`.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `id_field` | `String` | **yes** | — | Field name on the catalog `ExtractedDoc` (or its metadata blob) that uniquely identifies a work. Used by the on-demand flow to substitute into `download_url_template` and to derive the per-work corpus id (`<catalog_id>-<work_id>`). |
+| `download_url_template` | `String` | **yes** | — | URL template with a `{id}` placeholder, e.g. `"https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"`. Resolved at on-demand ingest time and injected as the sole `[acquire] url` of the content recipe. |
+| `content_recipe` | `String` | **yes** | — | Recipe id of the content recipe used to perform the per-work ingest, e.g. `"gutenberg-work"`. Must be `on_demand = true` and live in the registry. |
+| `estimated_words_field` | `Option<String>` | no | type default | Optional name of a metadata column carrying an estimated word count (used to compute an ingest-time estimate the UI can show). |
+| `ingest_estimate_wpm` | `Option<u32>` | no | type default | Throughput estimate for the ingest stage, in words per minute. Combined with `estimated_words` to produce the "this will take ~N minutes" surface. Default 8000 wpm (conservative for an M-class machine on the embed slot). |
+| `enrich_estimate_wpm` | `Option<u32>` | no | type default | Throughput estimate for the enrichment stage, in words per minute. Default 500 wpm. |
+| `target_corpus_id` | `Option<String>` | no | type default | Optional shared corpus id that catalog-driven ingests append into. When set, every successful work-ingest writes its chunks into a single growing corpus (e.g. `"wikipedia-fetched"`) instead of creating one corpus per work. Atlas, mesh-share, and retrieval all happen against the single shared corpus — a much better fit for catalogs whose long-tail can be thousands of articles. When unset (default), the legacy per-work pattern (`<catalog_id>-<work_id>`) is used. |
+| `expansion_enabled` | `bool` | no | type default | Enable one-hop "minesweeper" link-expansion after fetching an article. When true, the just-ingested article's outgoing links are queued for follow-up fetch into the same `target_corpus_id`. Only meaningful when `target_corpus_id` is set — without a shared target each expansion would spawn yet another per-work corpus. |
+| `expansion_link_cap` | `u32` | no | `default_expansion_link_cap()` | Maximum number of linked articles to fetch in expansion. Ranking is significance-first (lead-section links beat body-section links, then document order). Default 20 keeps the per-fetch cost bounded; raise for deeper neighbourhood pre-loading, lower for fastest-only-the-asked behaviour. |
 
 ## `ComposeMode`
 

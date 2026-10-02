@@ -210,6 +210,36 @@ def cmd_check() -> int:
     return 1
 
 
+def next_id(campaign: str, *dirs: pathlib.Path) -> str:
+    """The one minting rule: one past the campaign's highest number in `dirs`."""
+    taken = [int(m.group(1)) for d in dirs for p in d.glob(f"{campaign}-*.md")
+             if (m := ID_RE.match(p.stem)) and p.stem[: p.stem.rindex("-")] == campaign]
+    return f"{campaign}-{max(taken, default=0) + 1}"
+
+
+def cmd_renumber(entry: pathlib.Path, against: pathlib.Path) -> int:
+    """Give `entry` the next id free in both its own directory and `against`.
+    The pool runs it on a lane's branch when the lane minted an id the main
+    tree already holds: two lanes in one wave both mint max+1 from the same
+    tree, and the merge of the second is an add/add conflict."""
+    old = Entry(entry).id
+    campaign = old[: old.rindex("-")]
+    new = next_id(campaign, entry.parent, against)
+    dest = entry.parent / f"{new}.md"
+    text = (entry.read_text().replace(f"**{old} ·", f"**{new} ·", 1)
+            .replace(f"## {old} ·", f"## {new} ·", 1))
+    # The lane's commit bodies are published and still say `old`, which on the
+    # base names another entry: the entry itself carries the mapping back.
+    minted = f"- Minted as `{old}` in its lane and renumbered at merge: that lane's commit bodies cite `{old}`.\n"
+    head, mark, tail = text.partition(APPENDIX_MARK)
+    text = head.rstrip("\n") + "\n" + minted + ("\n" + mark + tail if mark else "")
+    dest.write_text(text)
+    entry.unlink()
+    Entry(dest)
+    print(dest)
+    return 0
+
+
 def cmd_new(campaign: str, subject: str, who: str, title: str, date: str) -> int:
     if not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", campaign):
         raise SystemExit(
@@ -217,9 +247,7 @@ def cmd_new(campaign: str, subject: str, who: str, title: str, date: str) -> int
             f"(letters, digits, dashes) — it is what keeps ids from colliding "
             f"between branches, so it names the campaign, not the row"
         )
-    taken = [e.number for e in load_entries() if e.campaign == campaign]
-    n = max(taken, default=0) + 1
-    entry_id = f"{campaign}-{n}"
+    entry_id = next_id(campaign, ENTRY_DIR)
     path = ENTRY_DIR / f"{entry_id}.md"
     if path.exists():  # unreachable via max()+1, kept so a hand-made file is never clobbered
         raise SystemExit(f"ralph-decisions: {path} already exists")
@@ -357,6 +385,10 @@ def main() -> int:
     n.add_argument("--title", default="<one line: what was decided>")
     n.add_argument("--date", default=None)
     sub.add_parser("list", help="list the entries under ralph/decisions/")
+    r = sub.add_parser("renumber", help="re-mint an entry's id past another tree's entries")
+    r.add_argument("entry", type=pathlib.Path)
+    r.add_argument("--against", type=pathlib.Path, required=True,
+                   help="the other tree's ralph/decisions/ directory")
     args = ap.parse_args()
 
     if args.self_test:
@@ -370,6 +402,8 @@ def main() -> int:
         )
     if args.cmd == "list":
         return cmd_list()
+    if args.cmd == "renumber":
+        return cmd_renumber(args.entry, args.against)
     if args.write:
         return cmd_write()
     if args.check:

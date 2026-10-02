@@ -3,43 +3,116 @@ use std::collections::HashMap;
 
 use axum::extract::State;
 use axum::Json;
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use serde::Serialize;
-use sovereign_core::run_identity::BuildStamp;
+use sovereign_contracts::run_identity::BuildStamp;
 
 use crate::state::AppState;
+use crate::types::MemberStatus;
+
+/// Each inference-plan entry with its registered model NAME and whether the
+/// orchestrator recorded a llama-server address for it. The name is the join
+/// key for engine residency: the engine reports GGUF stems, not ModelIds, so
+/// comparing against the ModelId's `model-<hex>` Display can never match.
+async fn loaded_model_rows(
+    state: &AppState,
+) -> Result<
+    Vec<(crate::ledger_port::ShardPlan, Option<String>, bool)>,
+    crate::ledger_port::LedgerAbsent,
+> {
+    let plan = state.inference_plan().await?.unwrap_or_default();
+    let mut rows = Vec::with_capacity(plan.model_plans.len());
+    for p in plan.model_plans {
+        let name = state.model_info(p.model).await?.map(|m| m.name);
+        let addressed = state.get_llama_server_address(p.model).await?.is_some();
+        rows.push((p, name, addressed));
+    }
+    Ok(rows)
+}
+
+/// This node's model rows from its own provider manifest, the source
+/// `/v1/models` reads (pb-svrn-dials-serve), built by the one row builder and
+/// with no cw-rails round trip: a status must not wait on another process's
+/// store. Rows the slot-alias map marks as aliases are left out; the rest are
+/// the manifest's names as `/v1/models` lists them.
+/// `None` without local inference (the orchestrator), which keeps the ledger.
+fn local_model_rows(state: &AppState) -> Option<Vec<LoadedModelStatus>> {
+    let local = state
+        .inner
+        .serving
+        .local_inference
+        .as_ref()?
+        .provider_manifest()?;
+    let holders = local
+        .models
+        .into_iter()
+        .map(|m| ("local".to_string(), m))
+        .collect();
+    let aliases = state.inner.serving.slot_aliases.current();
+    let rows = sovereign_contracts::openai_http::model_rows(holders, &aliases, "local")
+        .into_iter()
+        .filter(|row| row.owned_by == "local")
+        .map(|row| LoadedModelStatus {
+            nodes: row.advertised_by.len(),
+            tps: row
+                .performance
+                .as_ref()
+                .map_or(0.0, |p| p.estimated_tokens_per_sec),
+            loaded: row.performance.as_ref().is_some_and(|p| p.loaded),
+            model: row.id,
+        })
+        .collect();
+    Some(rows)
+}
+
+/// GET /health — unauthenticated liveness: `ok` and nothing else, because
+/// `/status` says too much for a public edge (pb-distribution-onprem-routes).
+pub async fn health() -> &'static str {
+    "ok"
+}
 
 /// GET /status — mesh and node status summary.
 pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
-    let mesh = state.inner.fabric.mesh.read().await;
-    let plan = state
-        .inner
-        .store
-        .inference_store
-        .get_plan()
-        .unwrap_or_default();
+    let local_rows = local_model_rows(&state);
+    tracing::debug!(
+        source = if local_rows.is_some() {
+            "local manifest"
+        } else {
+            "cw-rails ledger"
+        },
+        "status: loaded_models source"
+    );
+    // Read before taking the mesh lock: these reads may cross a process.
+    let plan_rows = match local_rows {
+        Some(_) => Ok(Vec::new()),
+        None => loaded_model_rows(&state).await,
+    };
+    // One roster read, bounded by its reader; a miss is named on `mesh`
+    // rather than read as a mesh of nobody (F13).
+    let (mesh_name, members, roster_absent) = match state.membership().read_roster().await {
+        Ok((name, members)) => (name, members, None),
+        Err(why) => {
+            tracing::warn!(reason = %why, "status: roster unread; mesh members absent");
+            (String::new(), Vec::new(), Some(why))
+        }
+    };
 
-    let members_online = mesh
-        .members
-        .values()
+    let members_online = members
+        .iter()
         .filter(|m| {
-            m.is_active()
-                && (m.status == commonwealth_core::mesh::NodeStatus::Online
-                    || m.status == commonwealth_core::mesh::NodeStatus::Busy)
+            m.active && (m.status == MemberStatus::Online || m.status == MemberStatus::Busy)
         })
         .count();
 
-    let pooled_vram_gb: f32 = mesh
-        .members
-        .values()
-        .filter(|m| m.status == commonwealth_core::mesh::NodeStatus::Online)
+    let pooled_vram_gb: f32 = members
+        .iter()
+        .filter(|m| m.status == MemberStatus::Online)
         .map(|m| m.capabilities.available.free_vram_gb)
         .sum();
 
-    let pooled_storage_gb: f32 = mesh
-        .members
-        .values()
-        .filter(|m| m.status == commonwealth_core::mesh::NodeStatus::Online)
+    let pooled_storage_gb: f32 = members
+        .iter()
+        .filter(|m| m.status == MemberStatus::Online)
         .map(|m| m.capabilities.available.free_storage_gb)
         .sum();
 
@@ -69,29 +142,19 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             None => None,
         };
 
-    let loaded_models: Vec<LoadedModelStatus> = plan
-        .model_plans
-        .iter()
-        .map(|p| {
+    let (plan_rows, loaded_models_absent) = match plan_rows {
+        Ok(rows) => (rows, None),
+        Err(e) => {
+            tracing::warn!(error = %e, "status: inference state unread; loaded_models absent");
+            (Vec::new(), Some(e.to_string()))
+        }
+    };
+    let ledger_models: Vec<LoadedModelStatus> = plan_rows
+        .into_iter()
+        .map(|(p, name, addressed)| {
             let model = format!("{}", p.model);
-            // OR-fix: the orchestrator `llama_addr:` key is never written
-            // on the embedded path, so fall back to real engine residency.
-            // The engine reports GGUF stems, not ModelIds, so the join key
-            // is the registered model NAME (`ModelInfo.name`) — comparing
-            // against the ModelId's `model-<hex>` Display can never match.
-            let name = state
-                .inner
-                .store
-                .inference_store
-                .get_model_info(p.model)
-                .map(|m| m.name);
             LoadedModelStatus {
-                loaded: state
-                    .inner
-                    .store
-                    .inference_store
-                    .get_llama_address(p.model)
-                    .is_some()
+                loaded: addressed
                     || resident
                         .iter()
                         .any(|r| r.resident && Some(&r.model_id) == name.as_ref()),
@@ -101,6 +164,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             }
         })
         .collect();
+    let loaded_models = local_rows.unwrap_or(ledger_models);
 
     // Real hosted-corpora inventory (was hardcoded empty until
     // 2026-06-10). Same `installed_indexes()` read the gossip tick and
@@ -114,7 +178,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             let mut ids: Vec<String> = Vec::new();
             let mut chunks: u64 = 0;
             for info in infos {
-                if matches!(info.kind, corpus_engine::CorpusKind::Code) {
+                if matches!(info.kind, corpus_index::types::CorpusKind::Code) {
                     continue;
                 }
                 chunks += info.chunk_count;
@@ -129,11 +193,12 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
     Json(StatusResponse {
         node_id: format!("{}", state.inner.fabric.identity.current()),
         mesh: MeshStatus {
-            name: mesh.name.clone(),
+            name: mesh_name,
             members_online,
-            members_total: mesh.members.values().filter(|m| m.is_active()).count(),
+            members_total: members.iter().filter(|m| m.active).count(),
             pooled_vram_gb,
             pooled_storage_gb,
+            roster_absent,
         },
         inference: InferenceStatus {
             loaded_models,
@@ -143,16 +208,16 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             // Deprecated mirror — see the field doc. Same value, so
             // the two keys can never disagree.
             fim: edit_slot_status,
+            loaded_models_absent,
             peer_requests: {
                 // Join the tally's opaque NodeIds against the mesh
                 // roster so the answer is "BeefyMac is being served",
                 // not "node-6c955b5f1361… is being served". A node
                 // that left the roster (or was never in it) still
                 // shows, with `name` omitted.
-                let names: HashMap<_, _> = mesh
-                    .members
+                let names: HashMap<_, _> = members
                     .iter()
-                    .map(|(id, m)| (*id, m.name.clone()))
+                    .map(|m| (m.node_id, m.name.clone()))
                     .collect();
                 let rejected = state.inner.last_rejected_x_node_id();
                 state
@@ -197,8 +262,8 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         },
         process: ProcessStatus {
             pid: std::process::id(),
-            run_id: sovereign_core::run_identity::run_id(),
-            build: sovereign_core::run_identity::stamp(env!("CARGO_PKG_VERSION")),
+            run_id: sovereign_contracts::run_identity::run_id(),
+            build: sovereign_contracts::run_identity::stamp(env!("CARGO_PKG_VERSION")),
             uptime_seconds: state.inner.node.started_at.elapsed().as_secs(),
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),
@@ -222,7 +287,10 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         rpc_worker: rpc_worker_port().map(|port| RpcWorkerStatus {
             port,
             iroh: state.rpc_iroh_accept(),
+            direct: sovereign_core::launch::RpcServe::from_env().binds_past_loopback(),
         }),
+        serving: crate::serve_client::ServingPath::decided().map(|p| p.status_line()),
+        serve_reach: crate::provider::serve_reach(),
     })
 }
 
@@ -349,6 +417,16 @@ pub struct StatusResponse {
     /// Present when this node serves an in-process RPC inference worker.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rpc_worker: Option<RpcWorkerStatus>,
+    /// Where serving lives, as decided at boot: `serve`, or
+    /// `serve (this process)` (pb-svrn-dials-serve, pb-stock-binary).
+    /// Absent where no boot decided (the desktop, tests).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serving: Option<String>,
+    /// Whether the last read of serve's self-report answered, did not
+    /// answer in time, or found nothing to reach, and how long ago
+    /// (`provider::ServeReach`). Absent where no follower runs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serve_reach: Option<crate::provider::ServeReachStatus>,
 }
 
 /// Process vitals for the pager: `uptime_seconds` resets are the
@@ -362,7 +440,7 @@ pub struct ProcessStatus {
     /// the port and answer in its place (2026-09-10, the desktop e2e
     /// harness; `tests/e2e/real/global-setup.ts`).
     pub pid: u32,
-    /// `sovereign_core::run_identity::run_id()` — the key every log line of
+    /// `sovereign_contracts::run_identity::run_id()` — the key every log line of
     /// this generation carries, so a reader can join `/status` to the log.
     pub run_id: &'static str,
     /// Which BINARY this generation is, and when it was built — the tuple
@@ -393,6 +471,12 @@ pub struct RpcWorkerStatus {
     /// JSON is byte-identical for non-iroh workers (additive wire).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub iroh: bool,
+    /// True when the worker binds past loopback (plaintext LAN, operator-
+    /// allowed), so a host may dial `port` at this node's address; false
+    /// means the bridge is the only path that reaches it. Always written:
+    /// its absence is how a host knows the daemon predates the declaration
+    /// (pc-rpc-probe-identity).
+    pub direct: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -402,6 +486,10 @@ pub struct MeshStatus {
     pub members_total: usize,
     pub pooled_vram_gb: f32,
     pub pooled_storage_gb: f32,
+    /// Why the roster has no answer (cw-rails slow or absent), so the zero
+    /// counts above read as unknown, not as no peers. Omitted when it read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roster_absent: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -446,6 +534,10 @@ pub struct InferenceStatus {
     /// attribution witness, `last_request_at` for staleness.
     #[serde(default)]
     pub peer_requests: Vec<PrincipalRequestStatus>,
+    /// Why `loaded_models` could not be read, when the inference state did
+    /// not answer — an empty list there is then not "nothing loaded".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loaded_models_absent: Option<String>,
 }
 
 /// One principal's tally row on `/status` (UC-R1) — the `Member` arm of the
@@ -603,8 +695,8 @@ mod process_status_tests {
     fn process_status_serializes_and_samples() {
         let p = ProcessStatus {
             pid: std::process::id(),
-            run_id: sovereign_core::run_identity::run_id(),
-            build: sovereign_core::run_identity::stamp(env!("CARGO_PKG_VERSION")),
+            run_id: sovereign_contracts::run_identity::run_id(),
+            build: sovereign_contracts::run_identity::stamp(env!("CARGO_PKG_VERSION")),
             uptime_seconds: 42,
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),
@@ -750,16 +842,21 @@ mod process_status_tests {
         let off = serde_json::to_value(RpcWorkerStatus {
             port: 50052,
             iroh: false,
+            direct: false,
         })
         .unwrap();
-        assert_eq!(off, serde_json::json!({ "port": 50052 }));
+        assert_eq!(off, serde_json::json!({ "port": 50052, "direct": false }));
         // true → advertised; hosts read it with `.get("iroh")` off the
         // opaque JSON, absent-means-false.
         let on = serde_json::to_value(RpcWorkerStatus {
             port: 50052,
             iroh: true,
+            direct: true,
         })
         .unwrap();
-        assert_eq!(on, serde_json::json!({ "port": 50052, "iroh": true }));
+        assert_eq!(
+            on,
+            serde_json::json!({ "port": 50052, "iroh": true, "direct": true })
+        );
     }
 }

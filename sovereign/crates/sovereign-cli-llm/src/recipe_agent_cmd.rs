@@ -27,13 +27,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine_notes::NoteStore;
+use sovereign_contracts::daemon_wire::ArtifactKind;
 use sovereign_contracts::recipe::notes::RecipeNotes;
-use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
-use sovereign_tools::recipe_author::{
-    capability_request::CapabilityRequest, maintainer_inbox_dir, situated_context, RecipeProject,
+use sovereign_contracts::recipe::project::{
+    maintainer_inbox_dir, CapabilityRequest, RecipeProjectPort, RecipeProjectRow,
 };
-use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
+use sovereign_store::sqlite::SqliteStateStore;
 
 fn print_help() {
     eprintln!(
@@ -110,11 +109,14 @@ async fn run_new(args: &[String]) -> i32 {
             .to_string()
     });
 
-    let (notes, features) = match open_stores() {
-        Ok(s) => s,
+    let projects = match open_projects() {
+        Ok(p) => p,
         Err(code) => return code,
     };
-    let project = match RecipeProject::new(&title, &charter, notes, features).await {
+    let project = match projects
+        .create(&title, &charter, ArtifactKind::Recipe)
+        .await
+    {
         Ok(p) => p,
         Err(e) => {
             eprintln!("recipe-agent new: provision failed: {e}");
@@ -137,18 +139,18 @@ async fn run_show(args: &[String]) -> i32 {
         eprintln!("recipe-agent show: missing <FEATURE_ID>");
         return 1;
     };
-    let (notes, features) = match open_stores() {
-        Ok(s) => s,
+    let projects = match open_projects() {
+        Ok(p) => p,
         Err(code) => return code,
     };
-    let project = match RecipeProject::load(feature_id, notes, features).await {
+    let project = match projects.load(feature_id).await {
         Ok(p) => p,
         Err(e) => {
             eprintln!("recipe-agent show: {e}");
             return 2;
         }
     };
-    let block = match situated_context::render(&project).await {
+    let block = match project.situated_context().await {
         Ok(b) => b,
         Err(e) => {
             eprintln!("recipe-agent show: render failed: {e}");
@@ -160,11 +162,11 @@ async fn run_show(args: &[String]) -> i32 {
 }
 
 async fn run_list(_args: &[String]) -> i32 {
-    let (_notes, features) = match open_stores() {
-        Ok(s) => s,
+    let projects = match open_projects() {
+        Ok(p) => p,
         Err(code) => return code,
     };
-    let all = match features.list(true).await {
+    let all = match projects.list(true).await {
         Ok(rs) => rs,
         Err(e) => {
             eprintln!("recipe-agent list: {e}");
@@ -279,29 +281,51 @@ async fn run_inbox() -> i32 {
     0
 }
 
-fn open_stores() -> std::result::Result<(Arc<dyn RecipeNotes>, Arc<RecipeProjectStore>), i32> {
+/// The recipe-project store, which is ingest's: reached through the port
+/// the composed ingest program hands back over svrn's notes
+/// (pb-ingest-rehome). The bare binary composes none and names it.
+fn open_projects() -> std::result::Result<Arc<dyn RecipeProjectPort>, i32> {
+    let (seams, calls) = match (
+        crate::chat_cmd::ingest::recipe_author(),
+        crate::chat_cmd::ingest::calls(),
+    ) {
+        (Ok(seams), Ok(calls)) => (seams, calls),
+        (Err(why), _) | (_, Err(why)) => {
+            eprintln!("recipe-agent: {why}");
+            return Err(2);
+        }
+    };
     let sov = sovereign_contracts::rebrand::svrnmesh_root();
-    let notes_path = sov.join("notes.db");
+    // svrn's store: recipe authoring keeps its notes there while it runs
+    // on svrn (pb-notes-memory).
+    let notes_path = sov.join("sovereign.db");
     let features_path = sov.join("features.db");
-    let notes: Arc<dyn RecipeNotes> = match NoteStore::open(&notes_path) {
-        Ok(s) => Arc::new(NoteStoreRecipeNotes::new(Arc::new(s))),
+    let notes: Arc<dyn RecipeNotes> = match SqliteStateStore::open(&notes_path) {
+        Ok(s) => Arc::new(s),
         Err(e) => {
             eprintln!(
-                "recipe-agent: failed to open NoteStore at {}: {e}",
+                "recipe-agent: failed to open svrn's store at {}: {e}",
                 notes_path.display()
             );
             return Err(2);
         }
     };
-    let features = match RecipeProjectStore::open(&features_path) {
-        Ok(s) => Arc::new(s),
+    let Some(compose) = calls.recipe_authoring.as_ref() else {
+        eprintln!(
+            "recipe-agent: {}",
+            sovereign_daemon::hosted_ingest::NO_RECIPE_AUTHORING
+        );
+        return Err(2);
+    };
+    match compose(&features_path, notes, seams).projects {
+        Ok(projects) => Ok(projects),
         Err(e) => {
+            tracing::warn!(target: "sovereign_cli_llm::recipe_agent", path = %features_path.display(), error = %e, "recipe-project store did not open");
             eprintln!(
                 "recipe-agent: failed to open RecipeProjectStore at {}: {e}",
                 features_path.display()
             );
-            return Err(2);
+            Err(2)
         }
-    };
-    Ok((notes, features))
+    }
 }

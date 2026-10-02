@@ -363,6 +363,26 @@ load_bearing = [
   { flag = "--accept <key>", why = "raises ONE ceiling. `--update-baseline` on a working tree absorbs every other crate's growth along with yours, which is the trap AGENTS.md names for this ratchet" },
 ]
 
+# Advisory in prepush for a week of pushes with no false positive, then
+# promoted (size-gate's rule); Hard in `cargo xtask quality` (phase-b-99).
+[[instrument]]
+id = "clone-gate"
+kind = "gate"
+claim = "invariant"
+command = "cargo xtask clone-gate"
+cost_secs = 1.5
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "count", path = "quality/baselines/clones.tsv" }
+negative_control = "none"
+runs_in = ["prepush"]
+# when_changed: tracked `.rs` under each workspace member's src/ (clone_gate.rs).
+when_changed = "(\\.rs$|^quality/baselines/)"
+doc = "corpus-engine/xtask/src/clone_gate.rs (module header)"
+load_bearing = [
+  { flag = "--tighten", why = "banks a lower total by rewriting the snapshot; never raises it" },
+]
+
 # ── the judge register's own price tag ───────────────────────────────────
 # Rung vl-3 of quality/campaigns/verifier-loop.toml. `svrn bench judge-replay`
 # and its report have existed since 2026-08-13 and appeared in NONE of this
@@ -389,7 +409,7 @@ baseline = { kind = "none" }
 # the control.
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/judge_replay.rs (module header)"
+doc = "sovereign/crates/sovereign-cli-llm/src/judge_replay.rs (module header)"
 load_bearing = [
   { flag = "--render-only", why = "the mechanical facet without a daemon, bit-stable across repeats — it is how a rendering change is proven not to have moved the register" },
   { flag = "--repeat N", why = "one run is not a measurement (ARCH §18.5); without it the verdict spread is unknown and a flip cannot be told from noise" },
@@ -1066,6 +1086,19 @@ load_bearing = [
   { flag = "CO_PRECOMMIT_STAGED / CO_PRECOMMIT_SELF", why = "the only way to exercise the warn path by hand without staging a peer's file — §18.1 says watch it fire" },
 ]
 
+[[instrument]]
+id = "commit-msg"
+kind = "gate"
+claim = "invariant"
+command = "./scripts/commit-msg.sh"
+cost_secs = 0.01
+enforcement = "hard"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["precommit"]
+doc = "scripts/commit-msg.sh (header)"
+
 # ── CI-only steps ────────────────────────────────────────────────────
 
 [[instrument]]
@@ -1312,7 +1345,7 @@ load_bearing = [
 id = "routing-replay"
 kind = "bench"
 claim = "invariant"
-command = "sovereign-cli-llm bench routing-replay --bank <bank> --bridge-url <url>"
+command = "sovereign-cli-bench bench routing-replay --bank <bank> --bridge-url <url>"
 cost_secs = 1200.0
 enforcement = "hard"
 fidelity = "F2"
@@ -2219,7 +2252,12 @@ verdict = "judgement-line"
 preconditions = [
   "port-listening:9741",
   "slot-decodes:primary",
+  # The lane runs in bench's binary; its ingest row execs `svrn corpus
+  # ingest` (sovereign-cli-llm's) and its search and remove rows `svrn corpus
+  # search|remove` (svrn-ingest's since pb-cli-llm-ingest-move).
+  "binary:sovereign-cli-bench",
   "binary:sovereign-cli-llm",
+  "binary:svrn-ingest",
 ]
 baseline = { kind = "fingerprint", path = "sovereign/bench/quality-check/baselines/chat-ask" }
 bank = "sovereign/bench/quality-check/chat-ask.toml"

@@ -68,18 +68,16 @@ hex = "0.4"
 # `HeaderMap` is vocabulary, not a server.
 http = "1"
 
-# `run_lock`: flock(2) for the single-writer claim on a data root. A leaf
-# third-party crate, so it adds no workspace layer edge — and unix-gated,
-# because the lock has no enforcement to offer anywhere else
-# (`RunLock::is_enforced`).
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
+# `double::TestProvider::with_stream_delay` sleeps between chunks. Only under
+# `test-fixtures`; reqwest already puts tokio in this crate's graph.
+tokio = { workspace = true, features = ["time"], optional = true }
 
 [features]
-# The canonical middleware test fixtures (`middleware::fixtures`). Off by
-# default so the lifted contract leaf ships no test support; the crates that
-# own middleware tests enable it through a dev-dependency.
-test-fixtures = []
+# The canonical middleware test fixtures (`middleware::fixtures`) and the
+# `double` module's `TestProvider`. Off by default so the lifted contract leaf
+# ships no test support; the crates that own those tests enable it through a
+# dev-dependency.
+test-fixtures = ["dep:tokio"]
 
 [dev-dependencies]
 tempfile = { workspace = true }

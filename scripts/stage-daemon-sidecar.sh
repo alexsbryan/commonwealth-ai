@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# stage-daemon-sidecar.sh — build `sovereign-cli-daemon` and stage it where
-# Tauri's `externalBin` expects to find it, so a release installer carries a
+# stage-daemon-sidecar.sh — build `sovereign-cli-daemon` and the loader it execs
+# (`sovereign-stock`), and stage both where
+# Tauri's `externalBin` expects to find them, so a release installer carries a
 # daemon and a machine with no CLI on PATH still gets a working app (svt-1,
 # sv-surface `sv-no-daemon-management`).
 #
@@ -25,15 +26,16 @@
 #                                    the Windows leg sets `cargo-xwin`.
 #   SOVEREIGN_DESKTOP_SIDECAR_PROFILE  `release` (default) or `debug`.
 #   SOVEREIGN_SIDECAR_FEATURES       comma-separated cargo features for the
-#                                    daemon build. This is where the WINDOWS
-#                                    GPU BACKEND is now selected —
+#                                    LOADER build (`sovereign-stock`, staged
+#                                    beside the sidecar). This is where the
+#                                    WINDOWS GPU BACKEND is selected —
 #                                    `windows-vulkan` or `windows-cuda`. They
 #                                    were `sovereign-desktop` features until
-#                                    sv-surface svt-7 (2026-09-12), forwarded
-#                                    to a `sovereign-inference` the app no
-#                                    longer links; the process that loads the
-#                                    weights is this sidecar, so the backend
-#                                    is chosen on ITS build.
+#                                    sv-surface svt-7 (2026-09-12), then
+#                                    `sovereign-cli-daemon`'s until
+#                                    pb-distribution-setup; the process that
+#                                    loads the weights is the stock binary, so
+#                                    the backend is chosen on ITS build.
 #   CARGO_TARGET_DIR                 honoured; the container legs set it.
 #
 # Why release by default: this stages an artifact that ships inside an
@@ -60,6 +62,10 @@ DESKTOP_BIN_DIR="${REPO_ROOT}/sovereign/crates/sovereign-desktop/src-tauri/binar
 # at the end, where a missing staged file is a hard failure rather than a
 # build that quietly ships no daemon.
 SIDECAR_NAME="sovereign-cli-daemon"
+# Must equal `daemon_binary::LOADER_SIDECAR`: the stock binary the sidecar
+# execs for `daemon run` and setup's probe, found beside it
+# (pb-distribution-setup). The same packaging test pins it.
+LOADER_NAME="sovereign-stock"
 CARGO_RUNNER="${SOVEREIGN_DESKTOP_CARGO_RUNNER:-cargo}"
 PROFILE="${SOVEREIGN_DESKTOP_SIDECAR_PROFILE:-release}"
 
@@ -81,20 +87,8 @@ case "$TARGET" in
     *)              EXE_SUFFIX="" ;;
 esac
 
-DEST="$DESKTOP_BIN_DIR/${SIDECAR_NAME}-${TARGET}${EXE_SUFFIX}"
-
 echo "stage-daemon-sidecar: target=$TARGET profile=$PROFILE runner=$CARGO_RUNNER"
-echo "stage-daemon-sidecar: dest=$DEST"
 mkdir -p "$DESKTOP_BIN_DIR"
-
-# ─── Build ──────────────────────────────────────────────────────────
-
-BUILD_ARGS=(build --target "$TARGET" -p sovereign-cli-daemon --bin "$SIDECAR_NAME")
-[[ "$PROFILE" == "release" ]] && BUILD_ARGS+=(--release)
-if [[ -n "${SOVEREIGN_SIDECAR_FEATURES:-}" ]]; then
-    BUILD_ARGS+=(--features "$SOVEREIGN_SIDECAR_FEATURES")
-    echo "stage-daemon-sidecar: features=$SOVEREIGN_SIDECAR_FEATURES"
-fi
 
 # Concurrent agents serialize on the cargo package lock (AGENTS.md
 # "Compilation and test feedback"). The wrapper is a no-cost pass-through for
@@ -107,34 +101,51 @@ else
     RUN=("$CARGO_RUNNER")
 fi
 
-echo "stage-daemon-sidecar: ${RUN[*]} ${BUILD_ARGS[*]}"
-if ! ( cd "$REPO_ROOT" && "${RUN[@]}" "${BUILD_ARGS[@]}" ); then
-    echo "stage-daemon-sidecar: daemon build FAILED — refusing to stage a stale or absent binary" >&2
-    exit 1
-fi
-
-# ─── Stage ──────────────────────────────────────────────────────────
-
 TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/target}"
-BUILT="$TARGET_DIR/$TARGET/$PROFILE/${SIDECAR_NAME}${EXE_SUFFIX}"
-if [[ ! -f "$BUILT" ]]; then
-    echo "stage-daemon-sidecar: the build reported success but $BUILT does not exist." >&2
-    echo "  CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-<unset, using $REPO_ROOT/target>}" >&2
-    exit 1
-fi
 
-# `cp` over a previously-staged file whose mode came from a read-only source
-# fails with EACCES; remove first (the same trap build-desktop-macos.sh's
-# tesseract staging hit).
-rm -f "$DEST"
-if ! cp "$BUILT" "$DEST"; then
-    echo "stage-daemon-sidecar: cp $BUILT -> $DEST failed" >&2
-    exit 1
-fi
-chmod +x "$DEST"
+# stage <package> <bin> [<features>] — build one binary and stage it under
+# the per-triple name `externalBin` expects.
+stage() {
+    local pkg="$1" bin="$2" features="${3:-}"
+    local dest="$DESKTOP_BIN_DIR/${bin}-${TARGET}${EXE_SUFFIX}"
+    local args=(build --target "$TARGET" -p "$pkg" --bin "$bin")
+    [[ "$PROFILE" == "release" ]] && args+=(--release)
+    if [[ -n "$features" ]]; then
+        args+=(--features "$features")
+        echo "stage-daemon-sidecar: $bin features=$features"
+    fi
+    echo "stage-daemon-sidecar: dest=$dest"
+    echo "stage-daemon-sidecar: ${RUN[*]} ${args[*]}"
+    if ! ( cd "$REPO_ROOT" && "${RUN[@]}" "${args[@]}" ); then
+        echo "stage-daemon-sidecar: $bin build FAILED — refusing to stage a stale or absent binary" >&2
+        exit 1
+    fi
 
-size="$(wc -c < "$DEST" | tr -d ' ')"
-echo "stage-daemon-sidecar: staged $(basename "$DEST") (${size} bytes)"
+    local built="$TARGET_DIR/$TARGET/$PROFILE/${bin}${EXE_SUFFIX}"
+    if [[ ! -f "$built" ]]; then
+        echo "stage-daemon-sidecar: the build reported success but $built does not exist." >&2
+        echo "  CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-<unset, using $REPO_ROOT/target>}" >&2
+        exit 1
+    fi
+
+    # `cp` over a previously-staged file whose mode came from a read-only
+    # source fails with EACCES; remove first (the same trap
+    # build-desktop-macos.sh's tesseract staging hit).
+    rm -f "$dest"
+    if ! cp "$built" "$dest"; then
+        echo "stage-daemon-sidecar: cp $built -> $dest failed" >&2
+        exit 1
+    fi
+    chmod +x "$dest"
+    local size
+    size="$(wc -c < "$dest" | tr -d ' ')"
+    echo "stage-daemon-sidecar: staged $(basename "$dest") (${size} bytes)"
+}
+
+# The sidecar loads no model, so it takes no features. The loader it execs
+# (`daemon run`, setup's probe) is the build the GPU backend is chosen on.
+stage sovereign-cli-daemon "$SIDECAR_NAME"
+stage sovereign-stock "$LOADER_NAME" "${SOVEREIGN_SIDECAR_FEATURES:-}"
 echo
 echo "Next:"
 echo "  cd sovereign/crates/sovereign-desktop"

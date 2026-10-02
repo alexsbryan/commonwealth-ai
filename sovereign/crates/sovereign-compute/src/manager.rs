@@ -29,6 +29,7 @@ use sovereign_contracts::{
     CompletionRequest, CompletionResponse, ComputeChildStatus, InferenceProvider,
     ProviderCapabilities, ResidentSlot, Result, Speed, StreamFrame,
 };
+use sovereign_inference::served_kind;
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
@@ -101,6 +102,8 @@ pub struct ComputeChildManager {
     children: Vec<ManagedChild>,
     routes: HashMap<String, Arc<ChildProvider>>,
     embed_child: Option<Arc<ChildProvider>>,
+    /// The child hosting the rerank kind (`[[compute.slot]] role = "rerank"`).
+    rerank_child: Option<Arc<ChildProvider>>,
     /// The distributed-primary slot, when that mode is on. Created unspawned:
     /// the daemon spawns it once it has warmed a worker set, and respawns it
     /// whenever that set changes.
@@ -125,6 +128,7 @@ impl ComputeChildManager {
         let mut children = Vec::new();
         let mut routes = HashMap::new();
         let mut embed_child = None;
+        let mut rerank_child = None;
 
         for slot_cfg in &section.slot {
             if !slot_cfg.warm {
@@ -145,6 +149,9 @@ impl ComputeChildManager {
             );
             if slot_cfg.role == "embed" && slot_cfg.capture_embed {
                 embed_child = Some(Arc::clone(&provider));
+            }
+            if Some(slot_cfg.role.as_str()) == served_kind::RERANK.child_role() {
+                rerank_child = Some(Arc::clone(&provider));
             }
             routes.insert(slot_cfg.name.clone(), provider);
             children.push(managed);
@@ -167,6 +174,7 @@ impl ComputeChildManager {
             children,
             routes,
             embed_child,
+            rerank_child,
             distributed,
         })
     }
@@ -174,6 +182,11 @@ impl ComputeChildManager {
     /// Routes keyed by addressable model id.
     pub fn routes(&self) -> &HashMap<String, Arc<ChildProvider>> {
         &self.routes
+    }
+
+    /// The child hosting the rerank kind, if configured.
+    pub fn rerank_child(&self) -> Option<&Arc<ChildProvider>> {
+        self.rerank_child.as_ref()
     }
 
     /// The embed child that captures all `/v1/embeddings`, if configured.
@@ -268,6 +281,7 @@ impl ComputeChildManager {
             children: vec![managed],
             routes,
             embed_child: None,
+            rerank_child: None,
             distributed: None,
         })
     }
@@ -805,7 +819,7 @@ impl DynamicChildSlot {
     /// which remote worker and how many stayed local. `None` before the first
     /// respawn and once retired — in both cases there is no child holding a
     /// split, and a stated placement would be a claim about nothing.
-    pub fn placement(&self) -> Option<sovereign_core::traits::SlotPlacement> {
+    pub fn placement(&self) -> Option<sovereign_contracts::traits::SlotPlacement> {
         self.live_handoff
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -1060,6 +1074,8 @@ pub struct ComputeRoutedProvider {
     inner: Arc<dyn InferenceProvider>,
     routes: HashMap<String, Arc<ChildProvider>>,
     embed_child: Option<Arc<ChildProvider>>,
+    /// Takes every `rerank_batch` while serving.
+    rerank_child: Option<Arc<ChildProvider>>,
     /// The manager backing these children (for `/status`). `None` in tests
     /// that construct routes directly without spawning processes.
     manager: Option<Arc<ComputeChildManager>>,
@@ -1101,6 +1117,7 @@ impl ComputeRoutedProvider {
         Self {
             routes: manager.routes().clone(),
             embed_child: manager.embed_child().cloned(),
+            rerank_child: manager.rerank_child().cloned(),
             distributed_primary: manager.distributed_primary_route(),
             manager: Some(manager),
             inner,
@@ -1117,6 +1134,7 @@ impl ComputeRoutedProvider {
             inner,
             routes,
             embed_child,
+            rerank_child: None,
             manager: None,
             distributed_primary: None,
         }
@@ -1214,6 +1232,14 @@ impl InferenceProvider for ComputeRoutedProvider {
     }
 
     async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        // A rerank child takes every rerank while serving; else the
+        // in-process slot, as before.
+        if let Some(child) = &self.rerank_child {
+            if child.is_serving() {
+                return child.rerank_batch(query, docs).await;
+            }
+            tracing::warn!(target: "compute_child", "rerank child not serving; falling back to the in-process slot");
+        }
         self.inner.rerank_batch(query, docs).await
     }
 
@@ -1258,7 +1284,7 @@ impl InferenceProvider for ComputeRoutedProvider {
         self.inner.code_model_id()
     }
 
-    fn edit_slot_info(&self) -> Option<sovereign_core::types::EditSlotInfo> {
+    fn edit_slot_info(&self) -> Option<sovereign_contracts::types::EditSlotInfo> {
         // FIM is served by the in-process engine, never fanned out
         // to compute children — forward the inner arrangement.
         self.inner.edit_slot_info()
@@ -1665,3 +1691,6 @@ mod distributed_slot_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+#[cfg(test)]
+#[path = "manager/rerank_fallback_tests.rs"]
+mod rerank_fallback_tests;

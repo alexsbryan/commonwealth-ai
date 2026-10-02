@@ -692,7 +692,7 @@ non-kyuz0 image you'd need `export HSA_OVERRIDE_GFX_VERSION=11.5.0`
 
 - **`sovereign daemon install` on Linux.** The systemd path exists
   in `service_install.rs` and the unit template is at
-  `contrib/systemd/sovereign.service`, but it hasn't been exercised
+  `crates/sovereign-service/data/systemd/svrnmesh.service`, but it hasn't been exercised
   end-to-end on hardware. File a note when you run it.
 - **`compute_backend` label on Linux.** See §9 — the slot-load log
   line always says `compute_backend="cpu"` on Linux even when ROCm

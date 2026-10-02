@@ -1,0 +1,37 @@
+{
+  "positions": [
+    {
+      "name": "rent concentration thesis",
+      "content": "The deepest AI rents pool at uncopyable monopoly chokepoints.",
+      "proponent": "",
+      "stance": "endorse"
+    }
+  ],
+  "mechanisms": [
+    {
+      "name": "EUV monopoly",
+      "description": "ASML's sole control over leading-edge lithography machines.",
+      "domain": "economics"
+    }
+  ],
+  "evidence_invocations": [
+    {
+      "label": "$1.4B FTC PBM spread income",
+      "content": "An FTC report cites $1.4B per year in spread pricing income.",
+      "kind": "figure"
+    }
+  ],
+  "oppositions": [
+    {
+      "left": "markets",
+      "right": "regulation",
+      "axis": "governance / commons allocation"
+    }
+  ],
+  "concessions": [
+    {
+      "content": "PBMs do provide some intermediation value.",
+      "outcome": "intact"
+    }
+  ]
+}

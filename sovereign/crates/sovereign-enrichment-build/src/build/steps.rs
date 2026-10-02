@@ -451,8 +451,7 @@ pub(super) async fn probe_embedder(embedder: EmbedFn) -> Result<EmbedFn, String>
 
 /// The Backfill step: `atlas/atoms.json` → `atlas/atoms_ann.lance` through
 /// the ONE writer, `corpus_engine::enrichment::atlas::context_loader::
-/// backfill_ann` (re-exported at its historical `sovereign_tools::
-/// atlas_context_manager::backfill_ann` path),
+/// backfill_ann`,
 /// under the production grounding filter (`AtlasContextFilter::default()` —
 /// the universe the daemon seeds `atlas_navigate_ann` from; `backfill_ann.rs`
 /// says why no other filter may be used here, and `migrate_all`'s relaxed-

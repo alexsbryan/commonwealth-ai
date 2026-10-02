@@ -196,12 +196,10 @@ pub async fn run_worker_mode_with_signals(
         .map_err(|e| WorkerDaemonError::Tls(format!("rustls config: {e}")))?;
 
     let addr = bind_addr.unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], WORKER_PORT)));
-    // Stamp the build's git SHA into the boot log so a stale
-    // container running pre-fix code is one grep away from
-    // diagnosis. See `sovereign/crates/sovereign-pods/build.rs` for
-    // the stamp source. Falls back to "unknown" when `.git` isn't
-    // reachable AND `SOVEREIGN_GIT_SHA` wasn't set at build time.
-    let git_sha: &str = env!("SOVEREIGN_GIT_SHA");
+    // The build-arg the Containerfile sets, so a stale container running
+    // pre-fix code is one grep away. Absent (a local build) it says so rather
+    // than inventing a SHA; `run_identity::build()` is the local answer.
+    let git_sha: &str = option_env!("SOVEREIGN_GIT_SHA").unwrap_or("unset-at-build");
     tracing::info!(
         addr = %addr,
         job_id = %blob.job_id,

@@ -176,8 +176,8 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 /// ARCH §3.1's slack. A subcommand split belongs with the subcommand.
 ///
 /// `exec_lane` is passed in rather than named here: the LANES live in
-/// `sovereign-cli-llm` (each drives inference, ingests a corpus or runs a
-/// judge) and this crate reaches that sibling by exec, which is the
+/// bench's `sovereign-cli-bench` (each drives inference, ingests a corpus or
+/// runs a judge) and this crate reaches that sibling by exec, which is the
 /// dispatcher's business, not the runner's.
 pub async fn run_verb(args: &[String], exec_lane: impl Fn(&str, &[String]) -> i32) -> i32 {
     match args.first().map(String::as_str) {
@@ -357,7 +357,13 @@ pub async fn run(args: &[String]) -> i32 {
         return 4;
     }
 
-    let base = sovereign_cli_shared::urls::daemon_base_url();
+    let base = match sovereign_cli_shared::urls::daemon_base_url() {
+        Ok(base) => base,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    };
     // The venue's DECLARED lanes, not this run's selection: which lanes
     // `--lane` picked is not a property of the stack. Folding the selected
     // lanes' bank hashes in gave the same box two ids (2ce389007280 for 8
@@ -893,8 +899,9 @@ on_could_not_judge = "block"
     /// nobody has watched read the real file.
     #[test]
     fn the_shipped_registry_parses_and_every_trigger_selects_something() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../quality/instruments.toml");
+        let path = crate::posture_cmd::find_repo_root()
+            .expect("this test runs inside the checkout that ships quality/instruments.toml")
+            .join("quality/instruments.toml");
         let text = std::fs::read_to_string(&path).expect("quality/instruments.toml");
         let r = match Registry::parse(&text) {
             Ok(r) => r,

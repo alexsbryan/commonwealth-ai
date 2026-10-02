@@ -1,0 +1,657 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# The lifts `scripts/program-lift.sh` can run, one [lift.<id>] per program
+# (phase-b-2: each program's "runs alone" proof is its RUN smoke, and it is
+# DATA here, never a per-row process harness). A later row adds its program's
+# smoke as a `[lift.<id>.run]` table; it does not write a script.
+#
+# Per lift:
+#   package  the [[package]] in quality/ARCH_LAYERS.toml whose rule judges the
+#            closure. The forbidden set is that map's package rule plus its
+#            [[forbid]] rows, read at run time; nothing here restates it.
+#   seeds    the member crates the closure is walked from. Absent = every crate
+#            the package declares. Each must be a member of `package`.
+#   build    `cargo build` args; absent = `-p <seed>` for each seed.
+#   test     `cargo test` args; absent = `-p <seed>` for each seed.
+#   test_features  `--features` for that default, so the seed list stays
+#            the package's and is never restated here.
+#   binary   the built artifact the RUN step starts, relative to the target dir.
+#   carry    { ENV_VAR = "<repo-relative dir or file>" }: data the program ships,
+#            copied into the sandbox and named by ENV_VAR for the build, tests
+#            and RUN. A list of files keeps their repo paths under one root
+#            that ENV_VAR names (a knob that wants a workspace root).
+#   tree     { ENV_VAR = "<sandbox-relative dir>" }: names a directory of the
+#            lifted sandbox itself, for tests that read the source tree.
+#   siblings [{ bin, lift, unless? }]: binaries ANOTHER lift builds into the
+#            shared --target-dir that this lift reads. Every lift stamps what
+#            its build links with the commit (target/program-lift-stamps.json);
+#            a sibling absent, unstamped, rebuilt since, or stamped at another
+#            commit is could-not-judge, named, before the tests run. `unless`
+#            names the knobs that point the reader somewhere else.
+#   run      the RUN smoke: `inputs`, `steps`, `finally` and `pass`. With no
+#            `run`, a closure that builds and tests is never-ran, not passed.
+#
+# Step vocabulary (scripts/lib/program_lift.py `STEPS` is the interpreter).
+# Every string takes ${VAR}; SANDBOX, TARGET and BIN are always set.
+#   input    var from `env`, else `path` read from GET `get`, else `value`, else
+#            `default`; `strip` drops a suffix; `abstain` if empty (omit
+#            `abstain` and an empty value is allowed)
+#   require  `value` must match regex `match`, else `abstain` or `fail`
+#   unexpired  the `param`=<unix secs> query parameter of `value` is in the future
+#   ports    a free loopback port for each name in `vars`
+#   write    `text` to `path`
+#   spawn    start `argv` in the background as `id`; `log` under the sandbox
+#   exec     run `argv`; rc 0 continues, rc 3 abstains, any other rc is `fail`
+#            (or `abstain` when `on_error = "abstain"`); `expect = "fail"`
+#            inverts it, for a control that must fail on the bare host
+#   exists   `path` exists, else `abstain` or `fail`
+#   poll     GET `url` each second up to `timeout` until `path` yields a value;
+#            stores it in `var` and the document as `doc`; `alive` names a spawn
+#            that must stay up. On timeout, `second` reads another route: empty
+#            abstains, a hit fails. Without `second` a timeout is `fail`.
+#   select   `path` over a stored `doc` into `var`; `all` + `all_var` keep the
+#            unfiltered list for the message; empty abstains
+#   get      one GET; `var` = `path` of the body, `status_var` = the HTTP status.
+#            The body is kept on a refusal (never `curl -f`); `fail` on no answer
+#            or, with `path`, on a non-2xx or an empty value
+#   call     one POST of `json` to `url`; `var` = `path` of the body. `fail` on
+#            no answer, a non-2xx or an empty value (BODY keeps the answer).
+#            `retry` = seconds (or ${VAR}) to POST again (every 5 s) until it answers;
+#            `alive` names a spawn that must stay up meanwhile.
+#            Without `path` it only records: `status_var` = the HTTP status,
+#            and only no answer fails, for a refusal the smoke then requires
+#   count    lines of `file` matching `pattern` into `var`; below `min` fails
+#   post     (finally only) POST `json` to `url` when every var in `needs` is
+#            set; its outcome is reported beside the verdict and never changes it
+#   remove   (finally only) delete `paths`, unless --keep
+#
+# Path syntax for `path`: dotted keys, each optionally filtered as
+# `key[field=value]` or `key[field!=value]`; lists fan out; the first value wins.
+
+# ── svrn — the knowledge server ─────────────────────────────────────────────
+[lift.svrn]
+package = "svrn"
+build = ["-p", "sovereign-daemon", "--bin", "sovereign-daemon", "--features", "treesitter"]
+# The tests take the feature the build names: without it sovereign-daemon's
+# `process` (lib.rs, `#[cfg(feature = "treesitter")]`) is configured out and
+# its test target does not compile.
+test_features = ["sovereign-daemon/treesitter"]
+binary = "debug/sovereign-daemon"
+# The CLI contract sovereign-cli-shared's `manifest_path` fixes at compile time,
+# and the bench tree sovereign-cli-llm's inner-chaos and search-gym tests load
+# their committed fixtures from (pb-distribution-svrn-lift-2).
+carry = { SOVEREIGN_CLI_CONTRACT = "sovereign/docs/cli-contract.toml", SOVEREIGN_BENCH_ROOT = "sovereign/bench" }
+# sovereign-daemon's rail tests spawn the cw-rails beside them (the cmnwlth
+# lift's), and the RUN smoke dials the serve lift's serve.
+siblings = [
+  { bin = "debug/cw-rails", lift = "cmnwlth" },
+  { bin = "debug/sovereign-serve", lift = "serve", unless = ["SERVE_BIN", "SOVEREIGN_SERVE_BIN"] },
+]
+
+[lift.svrn.run]
+# svrn ALONE dials a configured serve (pb-stock-binary; phase-b-29 Q2): it
+# brings nothing up, so this smoke starts serve itself, on a free port it
+# names to the daemon through SOVEREIGN_SERVE_PORT
+# (sovereign_contracts::venue::serve_port, the one reader both programs call),
+# so a host whose own serve holds 9748 still judges the default-base loopback
+# mode rather than borrowing that serve. The serve binary comes from
+# SOVEREIGN_SERVE_BIN or `--set SERVE_BIN=<path>`, else the one the serve
+# lift built into the same --target-dir (pb-distribution: the queue's lift
+# check shares one), and the smoke abstains when none is there. The stock install (serve hosted in svrn's process) is proven
+# by sovereign-stock's own e2e, not here. The mock engine loads no weights,
+# and cw-rails is pointed at a closed port. FIM needs an edit model, so it is
+# not asserted here. `--features treesitter`: the daemon's bin requires it.
+pass = "booted on a temp root, dialed the serve the smoke started (status 'serving: ${SERVING}'), answered a chat turn ('${CHAT}') and a rerank (score ${SCORE}) through it, with cw-rails pointed at a closed port; with serve stopped, a turn reported the absence (HTTP ${ABSENT})"
+steps = [
+  { do = "input", var = "SERVE_BIN", env = "SOVEREIGN_SERVE_BIN", value = "${SERVE_BIN}", default = "${TARGET}/debug/sovereign-serve" },
+  { do = "exists", path = "${SERVE_BIN}", abstain = "svrn dials serve and no sovereign-serve is at ${SERVE_BIN}: run the serve lift into the same --target-dir first, or set SOVEREIGN_SERVE_BIN / --set SERVE_BIN=<path>" },
+  { do = "ports", vars = ["PORT", "INTERNAL_PORT", "DEAD_RAILS_PORT", "SERVE_PORT"] },
+  { do = "write", path = "${SANDBOX}/root/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/root/mock.gguf\"\nembed = \"${SANDBOX}/root/mock-embed.gguf\"\n\n[daemon]\nclient_port = ${PORT}\ninternal_port = ${INTERNAL_PORT}\nrails_base = \"http://127.0.0.1:${DEAD_RAILS_PORT}\"\n\n[data]\ndir = \"${SANDBOX}/root\"\n" },
+  { do = "spawn", id = "serve", argv = ["${SERVE_BIN}", "--data-dir", "${SANDBOX}/root", "--listen", "127.0.0.1:${SERVE_PORT}"], log = "serve.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${SERVE_PORT}/health", path = "state", var = "HEALTH", timeout = 60, alive = "serve", fail = "the smoke's serve never answered /health within 60s (see ${SANDBOX}/serve.log)" },
+  { do = "spawn", id = "daemon", argv = ["${BIN}", "run", "--config", "${SANDBOX}/root/config.toml"], log = "daemon.log", env = { HOME = "${SANDBOX}/home", SVRNMESH_DATA_DIR = "${SANDBOX}/svrnmesh", CW_RAILS_DIR = "${SANDBOX}/rails", SOVEREIGN_SERVE_PORT = "${SERVE_PORT}", RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${PORT}/status", path = "serving", var = "SERVING", timeout = 120, alive = "daemon", fail = "the daemon never reported where it serves from within 120s (see ${SANDBOX}/daemon.log)" },
+  { do = "require", value = "${SERVING}", match = "^serve$", fail = "the daemon booted without dialing serve: serving = ${SERVING}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { messages = [{ role = "user", content = "hello" }] }, path = "choices.message.content", var = "CHAT", fail = "POST /v1/chat/completions gave no answer through serve: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/rerank", json = { query = "hello", documents = ["hello world", "other"] }, path = "results[index=0].relevance_score", var = "SCORE", fail = "POST /v1/rerank gave no score through serve: ${BODY}" },
+  # serve stops mid-run: a turn must report the absence, never an empty answer.
+  { do = "exec", argv = ["sh", "-c", "pkill -f '[s]overeign-serve --data-dir ${SANDBOX}/root'"], log = "serve-kill.log", fail = "could not stop serve mid-run (see ${SANDBOX}/serve-kill.log)" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { messages = [{ role = "user", content = "hello" }] }, status_var = "ABSENT", fail = "the daemon did not answer once serve stopped" },
+  { do = "require", value = "${ABSENT}", match = "^503$", fail = "with serve stopped a chat turn answered HTTP ${ABSENT}, not a named absence: ${BODY}" },
+  { do = "require", value = "${BODY}", match = "\"error\"", fail = "with serve stopped the 503 named no error: ${BODY}" },
+]
+
+# ── ingest — the recipe pipeline and its one CLI, svrn-ingest ───────────────
+[lift.ingest]
+package = "ingest"
+build = ["-p", "sovereign-pipeline", "--bin", "svrn-ingest"]
+binary = "debug/svrn-ingest"
+# The recipes tree corpus-engine's tests read (tests/main/source_tree.rs
+# `recipes_root`: "a third party who lifts this package carries these tests").
+# And the bench tree `svrn enrich eval`'s golden-parse tests read
+# (sovereign-pipeline enrich_cmd/eval/mod.rs `goldens_dir`).
+carry = { CORPUS_ENGINE_RECIPES_DIR = "sovereign-recipes", SOVEREIGN_BENCH_ROOT = "sovereign/bench" }
+# The source tree corpus-engine's source gates read (recipe_schema, the
+# enrichment_type census): the lift's own crates/, which holds each closure
+# crate by name as the repo root does. Never the monorepo (program_lift.py).
+tree = { SOVEREIGN_WORKSPACE_ROOT = "crates" }
+
+[lift.ingest.run]
+# The "ingest in CI" developer (pb-ingest): an index builds with ONLY an
+# embeddings endpoint. The stub serves `/v1/models` and `/v1/embeddings` and
+# nothing else; its one model id is an embedder, so a chat-model resolution
+# refuses, and any chat request it receives fails the smoke. No daemon, no
+# chat model, no cw-rails.
+pass = "indexed a fixture folder as a non-empty '${CORPUS}' against an embeddings-only stub with --no-enrich, wrote ${META}, and the stub was asked ${EMBED_CALLS} embedding call(s) and no chat"
+steps = [
+  { do = "input", var = "CORPUS", value = "lift-ingest-fixture" },
+  { do = "ports", vars = ["EMBED_PORT"] },
+  { do = "write", path = "${SANDBOX}/stub.py", text = "import http.server, json, sys, zlib\nclass H(http.server.BaseHTTPRequestHandler):\n    def send(self, code, doc):\n        b = json.dumps(doc).encode()\n        self.send_response(code)\n        self.send_header('content-type', 'application/json')\n        self.send_header('content-length', str(len(b)))\n        self.end_headers()\n        self.wfile.write(b)\n    def do_GET(self):\n        if self.path == '/v1/models':\n            self.send(200, {'data': [{'id': 'Qwen3-Embedding-0.6B'}]})\n        else:\n            self.send(404, {'error': 'embeddings-only stub'})\n    def do_POST(self):\n        body = json.loads(self.rfile.read(int(self.headers.get('content-length', 0))) or b'{}')\n        if self.path != '/v1/embeddings':\n            self.send(404, {'error': 'embeddings-only stub'})\n            return\n        inputs = body.get('input', [])\n        inputs = [inputs] if isinstance(inputs, str) else inputs\n        vec = lambda s: [((zlib.crc32(s.encode()) >> k) & 255) / 255.0 + 0.01 for k in range(0, 32, 4)]\n        self.send(200, {'data': [{'index': i, 'embedding': vec(s)} for i, s in enumerate(inputs)]})\nhttp.server.HTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()\n" },
+  { do = "write", path = "${SANDBOX}/fixture/harbour.txt", text = "The harbour master keeps two ledgers and admits to one.\n\nThe second is not secret, only inconvenient to explain.\n" },
+  { do = "write", path = "${SANDBOX}/fixture/tides.txt", text = "Both ledgers agree about the tides and about nothing else.\n\nThe tide tables are printed each spring and pinned by the door.\n" },
+  { do = "write", path = "${SANDBOX}/recipe.toml", text = "[corpus]\nid = \"${CORPUS}\"\nname = \"lift fixture\"\ndescription = \"program-lift ingest smoke\"\nlicense = \"CC0\"\nmesh_sharing = false\n\n[acquire]\ntype = \"local_file\"\npath = \"${SANDBOX}/fixture\"\n\n[extract]\ntype = \"plaintext\"\n\n[chunk]\ntype = \"paragraph\"\nmax_chars = 512\noverlap_chars = 64\n\n[index]\nfts = true\nvector = true\n" },
+  { do = "spawn", id = "embed", argv = ["python3", "-u", "${SANDBOX}/stub.py", "${EMBED_PORT}"], log = "embed.log" },
+  { do = "poll", url = "http://127.0.0.1:${EMBED_PORT}/v1/models", path = "data.id", var = "EMBED_MODEL", timeout = 30, alive = "embed", fail = "the embeddings stub never answered (see ${SANDBOX}/embed.log)" },
+  { do = "exec", argv = ["${BIN}", "ingest", "${SANDBOX}/recipe.toml", "--base-url", "http://127.0.0.1:${EMBED_PORT}/v1", "--no-enrich", "--data-dir", "${SANDBOX}/data"], log = "ingest.log", env = { HOME = "${SANDBOX}/home", SOVEREIGN_DATA_DIR = "${SANDBOX}/data", SVRNMESH_DATA_DIR = "${SANDBOX}/svrnmesh" }, fail = "svrn-ingest did not index the fixture against an embeddings-only endpoint (see ${SANDBOX}/ingest.log)" },
+  { do = "count", file = "${SANDBOX}/ingest.log", pattern = "^indexed: [1-9][0-9]* chunks", var = "INDEXED", min = 1, fail = "svrn-ingest exited 0 without reporting a non-empty index (see ${SANDBOX}/ingest.log)" },
+  { do = "input", var = "META", value = "${SANDBOX}/data/indexes/${CORPUS}/_corpus_meta.json" },
+  { do = "exists", path = "${META}", fail = "svrn-ingest reported an index and wrote no ${META}" },
+  { do = "exists", path = "${SANDBOX}/data/indexes/${CORPUS}/chunks.lance", fail = "svrn-ingest reported an index and wrote no chunks.lance" },
+  { do = "count", file = "${SANDBOX}/embed.log", pattern = "POST /v1/embeddings", var = "EMBED_CALLS", min = 1, fail = "the index exists but the stub embedder was never asked" },
+  { do = "exec", argv = ["sh", "-c", "! grep -q 'chat/completions' '${SANDBOX}/embed.log'"], log = "no-chat.log", fail = "svrn-ingest sent a chat request under --no-enrich (see ${SANDBOX}/embed.log)" },
+]
+
+# ── cmnwlth — the endpoint router with a roster: the cw-rails daemon ────────
+# The closure is cw-rails', not the whole package's: sovereign-mesh still
+# reaches corpus-engine (boundary-gate, 2026-09-27; sovereign-grants left for
+# [svrn] at pb-meshapp-grants), and
+# the binary a developer takes is this one (FIVE_PROGRAMS §2, "lifted").
+[lift.cmnwlth]
+package = "cmnwlth"
+seeds = ["commonwealth-rails"]
+build = ["-p", "commonwealth-rails", "--bin", "cw-rails"]
+test = ["-p", "commonwealth-rails"]
+binary = "debug/cw-rails"
+
+[lift.cmnwlth.run]
+# The run grows its OWN two-node mesh inside the sandbox (phase-b
+# pb-membership): a founder cw-rails that declares a fixture media origin,
+# and the lifted joiner. Nothing touches the operator's mesh, so nothing has
+# to be retired from its roster afterwards. Both run --local-only: no n0
+# relay, no n0 DNS, the two reach each other on direct addresses. It is two
+# processes, so it is not the mesh of one that could pass by having nobody to
+# disagree with.
+pass = "founded '${MESH}', joined it by the founder's invite, converged a roster with '${PEER}', reached '${OFFERER}' as an online library, a GET through ${URL} answered HTTP ${THROUGH}, an act the joiner signed reached the founder through cw-rails' round, relay candidates answered (${RELAY_KIND} recommended); after a rotate the old invite answered ${OLD_JOIN} and the new one admitted a third node to '${JOINED}', which created, switched back to '${SWITCHED}', forgot '${FORGOT}' and left '${LEFT}'; after the joiner was killed the founder rebuilt its endpoint (${REBUILDS} rebuild(s)); the founder, upgraded with [work_offer], kept a '${OFFERED}' offer on the fold and its own donor completed a donated unit inside ${IMAGE} (${VERDICT}, stdout '${RAN}')"
+steps = [
+  { do = "input", var = "MESH", value = "cw-rails-lift-mesh" },
+  # The donor's boundary (pb-work-donor): the image a donated process:v1 unit
+  # runs inside. The operator's declaration, as in [lift.cw-work].
+  { do = "input", var = "IMAGE", env = "CW_WORK_IMAGE", default = "localhost/sovereign-work:latest" },
+  { do = "ports", vars = ["ORIGIN_PORT", "FOUNDER_PORT", "LISTEN_PORT"] },
+  # A tiny file, so a GET through the bridge has something real to fetch.
+  { do = "write", path = "${SANDBOX}/library/index.html", text = "program-lift origin\n" },
+  # The fixture origin authenticates NOTHING, which is why the holder's
+  # admission decision has to be right.
+  { do = "spawn", id = "origin", argv = ["python3", "-m", "http.server", "${ORIGIN_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/library"], log = "origin.log" },
+  { do = "write", path = "${SANDBOX}/founder/rails.toml", text = "name = \"cw-rails-founder\"\nlisten = ${FOUNDER_PORT}\n\n[media]\norigin = \"127.0.0.1:${ORIGIN_PORT}\"\n\n[work_offer]\nkinds = [\"process:v1\"]\nmax_concurrent = 1\nyield_to_foreground = false\naccept = \"anyone\"\nimage = \"${IMAGE}\"\n" },
+  { do = "exec", argv = ["${BIN}", "found", "${MESH}", "--data-dir", "${SANDBOX}/founder"], log = "found.log", fail = "the lifted binary could not found a mesh (see ${SANDBOX}/found.log)" },
+  # The founder's watchdog polls every second with a one-second grace and no
+  # rebuild cooldown, so the self-heal step at the end is seconds past the loss.
+  { do = "spawn", id = "founder", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/founder"], log = "founder.log", env = { RUST_LOG = "info,commonwealth_rails::ring_sync=debug", SOVEREIGN_MESH_WATCHDOG_POLL_SECS = "1", SOVEREIGN_MESH_WATCHDOG_GRACE_SECS = "1", SOVEREIGN_MESH_WATCHDOG_COOLDOWN_SECS = "0" } },
+  # The invite is served once the founder's endpoint has an address to name.
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/status", path = "join_link", var = "INVITE", doc = "founder", timeout = 60, alive = "founder", fail = "the founder served no join_link within 60s (see ${SANDBOX}/founder.log)" },
+  { do = "require", value = "${INVITE}", match = "iroh=", fail = "the founder's invite carries no iroh dial string: ${INVITE}" },
+  { do = "write", path = "${SANDBOX}/data/rails.toml", text = "name = \"cw-rails-lift\"\nlisten = ${LISTEN_PORT}\n" },
+  { do = "exec", argv = ["${BIN}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/data", "--name", "cw-rails-lift"], log = "join.log", fail = "the lifted daemon was not admitted by the founder (see ${SANDBOX}/join.log and founder.log)" },
+  { do = "exists", path = "${SANDBOX}/data/mesh.json", fail = "join reported success and wrote no mesh.json" },
+  { do = "spawn", id = "daemon", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/data"], log = "daemon.log", env = { RUST_LOG = "info,commonwealth_rails::ring_sync=debug" } },
+  # The roster comes from the join snapshot, so it appears at once.
+  { do = "poll", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/status", path = "members[is_self!=true].name", var = "PEER", doc = "status", timeout = 60, alive = "daemon", fail = "no member other than this one appeared on /v1/mesh/status within 60s (see ${SANDBOX}/daemon.log)" },
+  # The catalogue rides a GOSSIP round, seconds after the roster (measured
+  # 2026-09-11: a one-shot read here lost that race). The founder's own route
+  # is the second reading.
+  { do = "poll", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/media", path = "offering.peer", var = "ANY_OFFER", doc = "media", timeout = 60, alive = "daemon", second = { url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/media", path = "offering.peer", abstain = "the founder offers no media origin on its own route either, so the fixture never registered and there was no library to reach (see ${SANDBOX}/founder.log)", fail = "GET /v1/mesh/media listed no offering member within 60s while the founder lists '${SECOND}': the catalogue rides gossiped capabilities.origins and nothing arrived (see ${SANDBOX}/daemon.log)" } },
+  { do = "select", doc = "media", path = "offering[status!=offline].peer", var = "OFFERER", all = "offering.peer", all_var = "OFFERERS", fail = "every member offering a library is offline (${OFFERERS}), yet the founder is running in this sandbox" },
+  { do = "get", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/media?peer=${OFFERER}", path = "url", var = "URL", fail = "GET /v1/mesh/media?peer=${OFFERER} returned no URL: ${BODY}" },
+  { do = "require", value = "${URL}", match = "^http://127\\.0\\.0\\.1:", fail = "the reach URL is not loopback (${URL}): the media class was routed off iroh, which is a hole rather than a fallback" },
+  # Any status is the pass. What fails is no answer at all.
+  { do = "get", url = "${URL}/", status_var = "THROUGH", timeout = 30, fail = "a GET through ${URL} got no HTTP answer: the bridge accepted and the far end never sent a byte" },
+  # The ring round (pb-rails-parity): an act the joiner signs reaches the
+  # founder through cw-rails' own round and its /internal/ring/sync route,
+  # woken by the append door's nudge. Signed on the JOINER because it holds
+  # the founder's dial string from the invite; the founder learns the
+  # joiner's addresses by gossip, and a nudged round that runs before that
+  # finds no address and waits for the interval (watched 2026-09-28: the
+  # nudged round at +0s counted the joiner unreachable, the interval round at
+  # +60s pushed the act). 90s covers that interval round too.
+  { do = "call", url = "http://127.0.0.1:${LISTEN_PORT}/v1/rail/append?namespace=parity-proof", json = { op = "record", payload = { note = "parity" } }, path = "id", var = "APPENDED", fail = "the joiner's append door signed nothing: ${BODY}" },
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/rail/log?namespace=parity-proof", path = "ops[id=${APPENDED}].id", var = "REPLICATED", doc = "ring", timeout = 90, alive = "founder", fail = "the joiner's act ${APPENDED} never reached the founder's journal within 90s: cw-rails' round did not carry it (see ${SANDBOX}/daemon.log, founder.log)" },
+  # Relay candidates answer from cw-rails (pb-rails-parity).
+  { do = "get", url = "http://127.0.0.1:${LISTEN_PORT}/v1/mesh/relay-candidates", path = "candidates[recommended=true].kind", var = "RELAY_KIND", fail = "GET /v1/mesh/relay-candidates named no recommended candidate: ${BODY}" },
+  # The membership doors (pb-rails-membership), each through cw-rails alone:
+  # the founder rotates, and a third node, running solo, is refused on the
+  # old invite, admitted on the new one, then creates, switches, forgets and
+  # leaves, all on its running endpoint.
+  { do = "call", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/rotate", json = {}, path = "join_link", var = "ROTATED", fail = "POST /v1/mesh/rotate on the founder minted no invite: ${BODY}" },
+  { do = "ports", vars = ["LATE_PORT"] },
+  { do = "write", path = "${SANDBOX}/late/rails.toml", text = "name = \"cw-rails-late\"\nlisten = ${LATE_PORT}\n" },
+  { do = "spawn", id = "late", argv = ["${BIN}", "run", "--local-only", "--data-dir", "${SANDBOX}/late"], log = "late.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/status", path = "self.node_id", var = "LATE_ID", doc = "late", timeout = 60, alive = "late", fail = "the third node's status never answered (see ${SANDBOX}/late.log)" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/join", json = { key_or_url = "${INVITE}" }, status_var = "OLD_JOIN", fail = "POST /v1/mesh/join got no answer (see ${SANDBOX}/late.log)" },
+  { do = "require", value = "${OLD_JOIN}", match = "^403$", fail = "the rotated-out invite answered HTTP ${OLD_JOIN}, not a refusal: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/join/preview", json = { link = "${ROTATED}" }, path = "mesh_name", var = "PREVIEWED", fail = "POST /v1/mesh/join/preview read no mesh from the rotated invite: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/join", json = { key_or_url = "${ROTATED}" }, path = "mesh_name", var = "JOINED", timeout = 60, fail = "the rotated invite did not admit the third node: ${BODY} (see ${SANDBOX}/late.log, founder.log)" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/create", json = { name = "cw-rails-lift-second" }, path = "join_link", var = "SECOND_INVITE", fail = "POST /v1/mesh/create founded nothing: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/switch", json = { mesh = "${MESH}" }, path = "switched_to", var = "SWITCHED", fail = "POST /v1/mesh/switch did not resume '${MESH}': ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/forget", json = { mesh = "cw-rails-lift-second" }, path = "forgot", var = "FORGOT", fail = "POST /v1/mesh/forget did not drop the parked mesh: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${LATE_PORT}/v1/mesh/leave", json = {}, path = "left", var = "LEFT", fail = "POST /v1/mesh/leave did not leave: ${BODY}" },
+  # The endpoint's self-heal (pb-rails-parity): the joiner is lost, and the
+  # founder's watchdog, having held a path to it, rebuilds its endpoint. The
+  # watchdog counts the path lost once gossip marks the joiner Offline (60s
+  # without contact, `offline_threshold_secs`, on a 10s round), not when iroh
+  # drops its record, which every re-dial postpones
+  # (pc-cmnwlth-lift-flake-selfheal); with the 1s poll and grace above the
+  # rebuild lands about 75s after the kill, and 150s is twice that.
+  { do = "kill", id = "daemon", fail = "the joiner was not running, so there was no peer to lose" },
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/status", path = "self_reachability.last_recovery[action=endpoint_rebuild].ok", var = "HEALED", timeout = 150, alive = "founder", fail = "the founder's watchdog did not attempt an endpoint rebuild within 150s of losing the joiner (see ${SANDBOX}/founder.log)" },
+  { do = "require", value = "${HEALED}", match = "^True$", fail = "the founder's endpoint rebuild failed (ok=${HEALED}; see ${SANDBOX}/founder.log)" },
+  # The count is published on the watchdog's next poll, healthy again once the
+  # fresh endpoint re-armed the peer-path term.
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/mesh/status", path = "self_reachability[degraded=false].rebuilds", var = "REBUILDS", timeout = 10, alive = "founder", fail = "the founder stayed degraded after its rebuild (see ${SANDBOX}/founder.log)" },
+  { do = "require", value = "${REBUILDS}", match = "^[1-9]", fail = "the founder recovered with ${REBUILDS} rebuilds on record" },
+  # The one donor drive (pb-work-donor): cw-rails runs it. The founder's
+  # rails.toml carries [work_offer] as `svrn mesh up`'s handover writes it, so
+  # its offer is on the fold, and a process:v1 unit sealed and submitted
+  # through its own doors completes inside the image. A host with no runtime
+  # or no image has no boundary to run it in: could-not-judge, owed on the
+  # host with podman.
+  { do = "exec", argv = ["sh", "-c", "podman image exists ${IMAGE}"], log = "podman.log", on_error = "abstain", fail = "no container runtime or no image ${IMAGE} on this host, so a donated process:v1 unit has no boundary to run in; run this lift on the host with podman (see ${SANDBOX}/podman.log)" },
+  { do = "get", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/rail/actor", path = "actor", var = "FOUNDER_ACTOR", fail = "the founder named no signing actor: ${BODY}" },
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/work/projection", path = "offers.${FOUNDER_ACTOR}.kinds", var = "OFFERED", doc = "work", timeout = 30, alive = "founder", fail = "the founder published no offer from its [work_offer] within 30s (see ${SANDBOX}/founder.log)" },
+  { do = "require", value = "${OFFERED}", match = "^process:v1$", fail = "the founder's offer names ${OFFERED}, not process:v1" },
+  { do = "call", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/work/seal", json = { kind = "process:v1", units = [{ payload = { argv = ["uname", "-s"], timeout_secs = 120, result = "stdout" }, requirements = {} }] }, path = "units.unit_hash", var = "UNIT", fail = "the seal door sealed nothing: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/work/submit", json = { kind = "process:v1", units = [{ kind = "process:v1", unit_hash = "${UNIT}", payload = { argv = ["uname", "-s"], timeout_secs = 120, result = "stdout" }, requirements = {} }] }, path = "seq", var = "SUBMITTED", fail = "the submit door appended nothing: ${BODY}" },
+  { do = "poll", url = "http://127.0.0.1:${FOUNDER_PORT}/v1/rail/log?namespace=work", path = "ops.payload.outcome.verdict", var = "VERDICT", doc = "worklog", timeout = 120, alive = "founder", fail = "the donated unit ${UNIT} reached no report within 120s: cw-rails' donor did not take or finish it (see ${SANDBOX}/founder.log)" },
+  { do = "require", value = "${VERDICT}", match = "^passed$", fail = "the donated unit reported ${VERDICT}, not a passed verdict (see ${SANDBOX}/founder.log)" },
+  { do = "select", doc = "worklog", path = "ops.payload.result.stdout", var = "RAN", abstain = "the completion carried no stdout" },
+]
+
+# ── cw-work — cmnwlth's work peer, a package-only donor ─────────────────────
+[lift.cw-work]
+package = "cmnwlth"
+seeds = ["commonwealth-work"]
+build = ["-p", "commonwealth-work", "--features", "process", "--example", "work_peer"]
+test = ["--workspace", "--features", "commonwealth-work/process"]
+binary = "debug/examples/work_peer"
+
+[lift.cw-work.run]
+pass = "ran three heterogeneous units on a ${ACTS}-act rail and refused both escapes, outside the monorepo, inside `${IMAGE}`"
+steps = [
+  # The image is the DONOR OPERATOR's declaration. With none the peer publishes
+  # no process:v1 offer and exits 3, which is the honest "no boundary here".
+  { do = "input", var = "IMAGE", env = "CW_WORK_IMAGE" },
+  # The rail is a SIBLING of the workdir, never a child: the workdir is the one
+  # thing the boundary mounts, and a rail holds the donor's identity.
+  { do = "input", var = "RAIL", value = "${SANDBOX}.rail" },
+  # The boundary is --network=none with one mount, so the submitter ships the
+  # package cache in the workdir (measured 2026-09-10: `no matching package
+  # named blake3` without it).
+  { do = "exec", argv = ["cargo", "vendor", "--offline", "--versioned-dirs", "vendor"], cwd = "${SANDBOX}", log = "vendor.log", on_error = "abstain", fail = "the closure's dependencies could not be vendored into the workdir (see ${SANDBOX}/vendor.log)" },
+  { do = "write", path = "${SANDBOX}/.cargo/config.toml", text = "[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.vendored-sources]\ndirectory = \"vendor\"\n" },
+  { do = "exec", argv = ["${BIN}", "--root", "${RAIL}", "--workdir", "${SANDBOX}", "--label", "cw-work-lift peer", "--image", "${IMAGE}", "--", "env", "CARGO_HOME=.cargo-home", "cargo", "test", "--offline", "-q", "-p", "commonwealth-rail-core"], cwd = "${SANDBOX}", log = "peer.log", fail = "the peer did not complete its three units (see ${SANDBOX}/peer.log)" },
+  # The ledger's own watched red (DEFAULTS_LEDGER process:v1): a unit that
+  # tries to open a socket or see the rail, and is refused.
+  { do = "write", path = "${SANDBOX}/probe.sh", text = "if ! command -v python3 >/dev/null 2>&1; then echo 'PROBE BROKEN: no python3'; exit 1; fi\nif python3 -c 'import socket; socket.setdefaulttimeout(4); socket.create_connection((\"1.1.1.1\", 53))' 2>/dev/null; then echo 'ESCAPE: network'; exit 1; fi\nif [ -e \"${RAIL}\" ]; then echo 'ESCAPE: the donor rail is visible'; exit 1; fi\necho ok\n" },
+  # The control comes first: with no boundary the probe MUST fail, or its
+  # green means nothing.
+  { do = "exec", argv = ["sh", "probe.sh"], cwd = "${SANDBOX}", log = "probe-control.log", expect = "fail", abstain = "the escape probe PASSED on the bare host, so it cannot detect an escape" },
+  # A second rail: a peer handed the first finds every unit complete.
+  { do = "exec", argv = ["${BIN}", "--root", "${RAIL}.probe", "--workdir", "${SANDBOX}", "--label", "cw-work-lift probe", "--image", "${IMAGE}", "--", "sh", "probe.sh"], cwd = "${SANDBOX}", log = "probe.log", fail = "a donated unit ESCAPED the boundary; reproduce with: cd ${SANDBOX} && sh probe.sh, then the same argv through the peer" },
+  # A submit, an offer and three lease/report pairs is 8: the guard on the
+  # peer's own decider.
+  { do = "count", file = "${RAIL}/rings/work/ring_oplog.jsonl", pattern = "\"op\"", var = "ACTS", min = 8, fail = "the peer reported green with only ${ACTS} act(s) on the work rail" },
+]
+finally = [
+  { do = "remove", paths = ["${RAIL}", "${RAIL}.probe"] },
+]
+
+# ── serve — the model server (sovereign-serve), judged under its own package.
+[lift.serve]
+package = "serve"
+seeds = ["sovereign-serve"]
+build = ["-p", "sovereign-serve", "--bin", "sovereign-serve"]
+test = ["-p", "sovereign-serve", "-p", "sovereign-compute", "-p", "sovereign-serving-host"]
+binary = "debug/sovereign-serve"
+
+[lift.serve.run]
+# The mock engine (`[engine] kind = "mock"`, sovereign_compute::mock) loads no
+# weights, so the smoke proves the routes and the wiring, not a model. cw-rails
+# is ABSENT by construction: `[daemon] rails_base` names a port nothing listens
+# on, so a /v1/* answer that dialled cw-rails (this host runs one on :9747)
+# would fail here rather than pass by borrowing the operator's.
+pass = "served '${MODEL}' on /v1/models from its own manifest, advertised '${ADVERTISED}' on /oicp/v1/capabilities, answered a chat turn ('${CHAT}'), an embedding and a rerank (score ${SCORE}) on a temp root, with cw-rails pointed at a closed port"
+steps = [
+  { do = "ports", vars = ["PORT", "DEAD_RAILS_PORT"] },
+  { do = "write", path = "${SANDBOX}/root/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/root/mock.gguf\"\nembed = \"${SANDBOX}/root/mock-embed.gguf\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${DEAD_RAILS_PORT}\"\n" },
+  { do = "spawn", id = "serve", argv = ["${BIN}", "--data-dir", "${SANDBOX}/root", "--listen", "127.0.0.1:${PORT}"], log = "serve.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${PORT}/health", path = "state", var = "HEALTH", timeout = 60, alive = "serve", fail = "serve never answered /health within 60s (see ${SANDBOX}/serve.log)" },
+  { do = "get", url = "http://127.0.0.1:${PORT}/v1/models", path = "data[owned_by=local].id", var = "MODEL", fail = "GET /v1/models listed no model this process holds: ${BODY}" },
+  { do = "get", url = "http://127.0.0.1:${PORT}/oicp/v1/capabilities", path = "models.id", var = "ADVERTISED", fail = "GET /oicp/v1/capabilities advertised no model: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/chat/completions", json = { model = "${MODEL}", messages = [{ role = "user", content = "hello" }] }, path = "choices.message.content", var = "CHAT", fail = "POST /v1/chat/completions gave no answer: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/embeddings", json = { model = "${MODEL}", input = ["hello"] }, path = "data.index", var = "EMBEDDED", fail = "POST /v1/embeddings gave no vector: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/rerank", json = { model = "${MODEL}", query = "hello", documents = ["hello world", "other"] }, path = "results[index=0].relevance_score", var = "SCORE", fail = "POST /v1/rerank gave no score: ${BODY}" },
+]
+
+# ── serve-mesh — serve distributing a primary across a mesh of two ──────────
+# pb-serve-distributes-standalone's PROOF: two standalone serves, no svrn
+# daemon, each beside its own cw-rails on a mesh the run founds (loopback,
+# --local-only, as cmnwlth's run). A lends its GPU (anchor, rpc worker); B
+# hosts (`[compute] distributed_primary`, pinned host) and reaches A only
+# through cw-rails: A's anchor record on cw-rails' roster, A's rpc-warm and
+# rpc worker through cw-rails' origin table. Real weights, so run it in-tree:
+# `scripts/program-lift.sh --run-only serve-mesh`. A host with no model on
+# disk abstains.
+[lift.serve-mesh]
+package = "cmnwlth"
+seeds = ["sovereign-serve", "commonwealth-rails"]
+build = ["-p", "sovereign-serve", "--bin", "sovereign-serve", "-p", "commonwealth-rails", "--bin", "cw-rails"]
+binary = "debug/sovereign-serve"
+
+[lift.serve-mesh.run]
+pass = "B's serve found A's worker through cw-rails ('${A_RPC_SEEN}' on B's roster), loaded ${MODEL} split across both over cw-rails' rpc_tensor bridge (via=iroh-bridge) and answered '${CHAT}'; A's rpc-warm answered ${WARMS} time(s) before B's load; after B's serve restarted, the distributed primary respawned and answered '${CHAT2}'"
+steps = [
+  { do = "input", var = "MODEL", env = "SERVE_MESH_MODEL", default = "${TARGET}/../sovereign/models/Qwen3.5-4B.Q6_K.gguf" },
+  { do = "input", var = "FAST", env = "SERVE_MESH_FAST", default = "${TARGET}/../sovereign/models/Qwen3.5-0.8B-UD-Q6_K_XL.gguf" },
+  { do = "input", var = "EMBED", env = "SERVE_MESH_EMBED", default = "${TARGET}/../sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf" },
+  { do = "exec", argv = ["test", "-f", "${EMBED}"], log = "embed.log", on_error = "abstain", fail = "no embedding GGUF at ${EMBED} (set SERVE_MESH_EMBED)" },
+  { do = "exec", argv = ["test", "-f", "${MODEL}"], log = "model.log", on_error = "abstain", fail = "no primary GGUF at ${MODEL} (set SERVE_MESH_MODEL)" },
+  { do = "exec", argv = ["test", "-f", "${FAST}"], log = "fast.log", on_error = "abstain", fail = "no fast GGUF at ${FAST} (set SERVE_MESH_FAST)" },
+  { do = "input", var = "RAILS", value = "${TARGET}/debug/cw-rails" },
+  # How long a chat may wait for the distributed primary to load (a PLANT's
+  # red needs less than a green's load).
+  { do = "input", var = "CHAT_WAIT", env = "SERVE_MESH_CHAT_WAIT", default = "480" },
+  { do = "ports", vars = ["A_RAILS", "B_RAILS", "A_SERVE", "B_SERVE", "A_RPC", "B_RPC"] },
+  { do = "write", path = "${SANDBOX}/rails-a/rails.toml", text = "name = \"serve-mesh-a\"\nlisten = ${A_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "found", "serve-mesh", "--data-dir", "${SANDBOX}/rails-a"], log = "found.log", fail = "cw-rails could not found the mesh (see ${SANDBOX}/found.log)" },
+  { do = "spawn", id = "rails-a", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/rails-a"], log = "rails-a.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${A_RAILS}/v1/mesh/status", path = "join_link", var = "INVITE", doc = "a", timeout = 60, alive = "rails-a", fail = "A's cw-rails served no invite within 60s (see ${SANDBOX}/rails-a.log)" },
+  { do = "write", path = "${SANDBOX}/rails-b/rails.toml", text = "name = \"serve-mesh-b\"\nlisten = ${B_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/rails-b", "--name", "serve-mesh-b"], log = "join.log", fail = "B's cw-rails was not admitted (see ${SANDBOX}/join.log)" },
+  { do = "spawn", id = "rails-b", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/rails-b"], log = "rails-b.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/status", path = "self.node_id_hex", var = "B_ID", doc = "b", timeout = 60, alive = "rails-b", fail = "B's cw-rails named no full id within 60s (see ${SANDBOX}/rails-b.log)" },
+  # A lends its GPU: an anchor whose worker binds A_RPC; its own primary is the
+  # small model, and the host's GGUF sits in that model's directory, where
+  # rpc-warm finds its local copy. Both nodes carry the same host pin, as a
+  # mesh's configs do: every anchor runs the election, and an unpinned A
+  # elects itself by NodeId and distributes onto B's worker.
+  { do = "write", path = "${SANDBOX}/serve-a/config.toml", text = "[models]\nprimary = \"${FAST}\"\nembed = \"${EMBED}\"\n\n[shared_model]\nrole = \"anchor\"\nhost_node_id = \"${B_ID}\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${A_RAILS}\"\n" },
+  { do = "spawn", id = "serve-a", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-a", "--listen", "127.0.0.1:${A_SERVE}"], log = "serve-a.log", env = { RUST_LOG = "info,sovereign_serving_host=debug", SOVEREIGN_RPC_SERVE = "127.0.0.1:${A_RPC}", SOVEREIGN_RPC_WORKER_SETTLE_SECS = "5" } },
+  # A's registration lands on its own cw-rails, then its anchor record reaches
+  # B's roster by gossip: the only way B learns A's worker.
+  { do = "poll", url = "http://127.0.0.1:${A_RAILS}/v1/mesh/status", path = "members[is_self=true].capabilities.anchor.rpc_port", var = "A_RPC_OWN", timeout = 120, alive = "serve-a", fail = "A's serve never registered its rpc worker with its cw-rails within 120s (see ${SANDBOX}/serve-a.log)" },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/status", path = "members[name=serve-mesh-a].capabilities.anchor.rpc_port", var = "A_RPC_SEEN", timeout = 60, alive = "rails-b", fail = "A's anchor record never reached B's cw-rails roster within 60s (see ${SANDBOX}/rails-b.log)" },
+  { do = "write", path = "${SANDBOX}/serve-b/config.toml", text = "[models]\nprimary = \"${MODEL}\"\nfast = \"${FAST}\"\nembed = \"${EMBED}\"\n\n[compute]\nenabled = true\ndistributed_primary = true\n\n[shared_model]\nrole = \"host\"\nhost_node_id = \"${B_ID}\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${B_RAILS}\"\n" },
+  { do = "spawn", id = "serve-b", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-b", "--listen", "127.0.0.1:${B_SERVE}"], log = "serve-b.log", env = { RUST_LOG = "info,sovereign_serving_host=debug", SOVEREIGN_RPC_SERVE = "127.0.0.1:${B_RPC}", SOVEREIGN_RPC_WORKER_SETTLE_SECS = "5" } },
+  { do = "poll", url = "http://127.0.0.1:${B_SERVE}/health", path = "state", var = "B_HEALTH", timeout = 120, alive = "serve-b", fail = "B's serve never answered /health (see ${SANDBOX}/serve-b.log)" },
+  # The primary is withheld from B's process; a chat answers only once the
+  # distributed child serves it.
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "primary", max_tokens = 16, messages = [{ role = "user", content = "Say hello." }] }, path = "choices.message.content", var = "CHAT", retry = "${CHAT_WAIT}", timeout = 120, alive = "serve-b", fail = "B's distributed primary never answered a chat within ${CHAT_WAIT}s: ${BODY} (see ${SANDBOX}/serve-b.log, serve-a.log)" },
+  { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "discovered mesh RPC worker", var = "DISCOVERED", min = 1, fail = "B answered without discovering A's worker (see ${SANDBOX}/serve-b.log)" },
+  # The path that carried the tensors (pb-mesh-exit-transport's IP-overlay
+  # bullet): the `rpc_tensor` class through cw-rails' bridge, not a direct
+  # probe of A's worker port. The log colours the field name, so the pattern
+  # matches the `via` value alone.
+  { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "discovered mesh RPC worker.*iroh-bridge", var = "BRIDGED", min = 1, fail = "B's worker discovery named no via=iroh-bridge path: the split did not ride cw-rails' rpc_tensor bridge (see ${SANDBOX}/serve-b.log)" },
+  # A's side, which B cannot author: A's rpc-warm answered for this model
+  # before B's load (the orchestrator holds the load until every worker is
+  # warm).
+  { do = "count", file = "${SANDBOX}/serve-a.log", pattern = "rpc-warm: shard warm", var = "WARMS", min = 1, fail = "A's rpc-warm never answered, so B's load was not warmed through cw-rails (see ${SANDBOX}/serve-a.log)" },
+  # Restart B's serve mid-run: the distributed primary respawns.
+  { do = "kill", id = "serve-b", fail = "B's serve was not running" },
+  { do = "spawn", id = "serve-b", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-b", "--listen", "127.0.0.1:${B_SERVE}"], log = "serve-b-2.log", env = { RUST_LOG = "info,sovereign_serving_host=debug", SOVEREIGN_RPC_SERVE = "127.0.0.1:${B_RPC}", SOVEREIGN_RPC_WORKER_SETTLE_SECS = "5" } },
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "primary", max_tokens = 16, messages = [{ role = "user", content = "Say hello again." }] }, path = "choices.message.content", var = "CHAT2", retry = "${CHAT_WAIT}", timeout = 120, alive = "serve-b", fail = "after B's serve restarted, its distributed primary never answered within ${CHAT_WAIT}s: ${BODY} (see ${SANDBOX}/serve-b-2.log)" },
+  { do = "count", file = "${SANDBOX}/serve-b-2.log", pattern = "discovered mesh RPC worker", var = "REDISCOVERED", min = 1, fail = "the restarted serve answered without rediscovering A's worker (see ${SANDBOX}/serve-b-2.log)" },
+]
+
+# ── serve-ranks — a turn serve ranks onto a peer, carried by cw-rails ───────
+# pb-serve-ranks' PROOF: two standalone serves, no svrn daemon, each beside
+# its own cw-rails on a mesh the run founds (loopback, --local-only, as
+# serve-mesh). A holds a real model; B holds only the mock engine, so a turn
+# on B naming A's model can be answered by A alone. B's serve ranks it (its
+# router over cw-rails' roster), B's cw-rails' reach door resolves A on the
+# Inference class, and A's cw-rails forwards `cwth/client/0` to A's member
+# client. Then B's serve reloads, and the same turn still reaches A: the one
+# router survives a reload. Real weights on A, so run it in-tree:
+# `scripts/program-lift.sh --run-only serve-ranks`. A host with no model on
+# disk abstains.
+[lift.serve-ranks]
+package = "cmnwlth"
+seeds = ["sovereign-serve", "commonwealth-rails"]
+build = ["-p", "sovereign-serve", "--bin", "sovereign-serve", "-p", "commonwealth-rails", "--bin", "cw-rails"]
+binary = "debug/sovereign-serve"
+
+[lift.serve-ranks.run]
+pass = "B's serve ranked a turn naming A's model '${A_MODEL}' onto A (${ROUTED} turn(s) served_by A in B's routing outcomes), B's cw-rails resolved A on the Inference class (${REACHED}), A's cw-rails took ${DIALS} dial(s) on cwth/client/0, and A answered '${CHAT}'; after B's serve reloaded (HTTP ${RELOADED}), the same turn still reached A ('${CHAT2}'; ${REROUTED} turns served_by A in all)"
+steps = [
+  { do = "input", var = "MODEL", env = "SERVE_RANKS_MODEL", default = "${TARGET}/../sovereign/models/Qwen3.5-0.8B-UD-Q6_K_XL.gguf" },
+  { do = "input", var = "EMBED", env = "SERVE_RANKS_EMBED", default = "${TARGET}/../sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf" },
+  { do = "exec", argv = ["test", "-f", "${MODEL}"], log = "model.log", on_error = "abstain", fail = "no GGUF for A at ${MODEL} (set SERVE_RANKS_MODEL)" },
+  { do = "exec", argv = ["test", "-f", "${EMBED}"], log = "embed.log", on_error = "abstain", fail = "no embedding GGUF for A at ${EMBED} (set SERVE_RANKS_EMBED)" },
+  { do = "input", var = "RAILS", value = "${TARGET}/debug/cw-rails" },
+  { do = "ports", vars = ["A_RAILS", "B_RAILS", "A_SERVE", "B_SERVE"] },
+  { do = "write", path = "${SANDBOX}/rails-a/rails.toml", text = "name = \"serve-ranks-a\"\nlisten = ${A_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "found", "serve-ranks", "--data-dir", "${SANDBOX}/rails-a"], log = "found.log", fail = "cw-rails could not found the mesh (see ${SANDBOX}/found.log)" },
+  { do = "spawn", id = "rails-a", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/rails-a"], log = "rails-a.log", env = { RUST_LOG = "info,rails=debug" } },
+  { do = "poll", url = "http://127.0.0.1:${A_RAILS}/v1/mesh/status", path = "join_link", var = "INVITE", doc = "a", timeout = 60, alive = "rails-a", fail = "A's cw-rails served no invite within 60s (see ${SANDBOX}/rails-a.log)" },
+  { do = "write", path = "${SANDBOX}/rails-b/rails.toml", text = "name = \"serve-ranks-b\"\nlisten = ${B_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/rails-b", "--name", "serve-ranks-b"], log = "join.log", fail = "B's cw-rails was not admitted (see ${SANDBOX}/join.log)" },
+  { do = "spawn", id = "rails-b", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/rails-b"], log = "rails-b.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/status", path = "members[name=serve-ranks-a].status", var = "A_ON_B", timeout = 60, alive = "rails-b", fail = "A never reached B's cw-rails roster within 60s (see ${SANDBOX}/rails-b.log)" },
+  # A holds the real model; its member client registers on its cw-rails.
+  { do = "write", path = "${SANDBOX}/serve-a/config.toml", text = "[models]\nprimary = \"${MODEL}\"\nembed = \"${EMBED}\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${A_RAILS}\"\n" },
+  { do = "spawn", id = "serve-a", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-a", "--listen", "127.0.0.1:${A_SERVE}"], log = "serve-a.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${A_SERVE}/v1/models", path = "data[owned_by=local].id", var = "A_MODEL", timeout = 180, alive = "serve-a", fail = "A's serve listed no model within 180s (see ${SANDBOX}/serve-a.log)" },
+  # B holds only the mock: A's model is not B's to answer.
+  { do = "write", path = "${SANDBOX}/serve-b/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/serve-b/mock.gguf\"\nembed = \"${SANDBOX}/serve-b/mock-embed.gguf\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${B_RAILS}\"\n" },
+  { do = "spawn", id = "serve-b", argv = ["${BIN}", "--data-dir", "${SANDBOX}/serve-b", "--listen", "127.0.0.1:${B_SERVE}"], log = "serve-b.log", env = { RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${B_SERVE}/health", path = "state", var = "B_HEALTH", timeout = 60, alive = "serve-b", fail = "B's serve never answered /health (see ${SANDBOX}/serve-b.log)" },
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "${A_MODEL}", max_tokens = 16, messages = [{ role = "user", content = "Say hello." }] }, path = "choices.message.content", var = "CHAT", retry = "120", timeout = 120, alive = "serve-b", fail = "B's serve never answered a turn naming A's model within 120s: ${BODY} (see ${SANDBOX}/serve-b.log, rails-b.log, rails-a.log)" },
+  { do = "require", value = "${CHAT}", match = "^(?!mock response$)", fail = "B's own mock answered a turn naming A's model: ${CHAT}" },
+  { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "routing outcome.*served_by.*peer:serve-ranks-a", var = "ROUTED", min = 1, fail = "B answered without its router routing the turn to A (see ${SANDBOX}/serve-b.log)" },
+  { do = "count", file = "${SANDBOX}/rails-b.log", pattern = "reach door: resolved.*inference", var = "REACHED", min = 1, fail = "B's cw-rails never resolved a peer on the Inference class (see ${SANDBOX}/rails-b.log)" },
+  # A's side, which B cannot author: A's cw-rails took the dial on the
+  # member client's ALPN.
+  { do = "count", file = "${SANDBOX}/rails-a.log", pattern = "acceptor: dial.*cwth/client/0", var = "DIALS", min = 1, fail = "A's cw-rails took no dial on cwth/client/0 (see ${SANDBOX}/rails-a.log)" },
+  # B's serve reloads (the cell swaps under its one router); the same turn
+  # still reaches A.
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/engine/reload", json = {}, status_var = "RELOADED", timeout = 60, fail = "B's serve did not answer the reload" },
+  { do = "require", value = "${RELOADED}", match = "^2", fail = "B's serve refused the reload (HTTP ${RELOADED}): ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${B_SERVE}/v1/chat/completions", json = { model = "${A_MODEL}", max_tokens = 16, messages = [{ role = "user", content = "Say hello again." }] }, path = "choices.message.content", var = "CHAT2", retry = "60", timeout = 120, alive = "serve-b", fail = "after B's reload, a turn naming A's model was not answered within 60s: ${BODY} (see ${SANDBOX}/serve-b.log)" },
+  { do = "require", value = "${CHAT2}", match = "^(?!mock response$)", fail = "after B's reload, B's own mock answered a turn naming A's model: ${CHAT2}" },
+  { do = "count", file = "${SANDBOX}/serve-b.log", pattern = "routing outcome.*served_by.*peer:serve-ranks-a", var = "REROUTED", min = 2, fail = "after B's reload, its router did not route the turn to A (see ${SANDBOX}/serve-b.log)" },
+]
+
+# ── svrn-mesh — svrn's mesh classes, carried by cw-rails alone ──────────────
+# pb-mesh-exit-transport's PROOF for the classes svrn registers: two stock
+# installs (svrn + hosted serve, mock engine), each beside its own cw-rails on
+# a mesh the run founds (loopback, --local-only, as serve-ranks). svrn neither
+# accepts nor dials a peer: what A's svrn signs reaches B by cw-rails' round,
+# an app `svrn run` publishes on A and A's offer origin are reached from B,
+# a configured app outside A's `[iroh] app_allow` is refused to B, and B's
+# cw-rails reaches A's svrn peer prefixes (knowledge search) on cwth/http/0.
+# Gossip, join, ring sync and media are cmnwlth's run; the member client is
+# serve-ranks'; rpc and rpc-warm are serve-mesh's. No weights: run it in-tree,
+# `scripts/program-lift.sh --run-only svrn-mesh`.
+[lift.svrn-mesh]
+package = "svrn"
+seeds = ["sovereign-daemon", "commonwealth-rails"]
+build = ["-p", "sovereign-stock", "--bin", "sovereign-stock", "-p", "commonwealth-rails", "--bin", "cw-rails", "-p", "sovereign-cli-mesh", "--bin", "sovereign-cli-mesh", "-p", "sovereign-pipeline", "--bin", "svrn-ingest"]
+binary = "debug/sovereign-stock"
+
+[lift.svrn-mesh.run]
+pass = "A's svrn signed '${APPENDED}' through its cw-rails (actor ${SIGNED_BY}) and B's cw-rails held it; B reached the app `svrn run` published on A (HTTP ${SHOWN}) and was refused the one outside A's app_allow (HTTP ${HIDDEN}); B reached A's offer origin (HTTP ${OFFERED}); B's cw-rails carried a knowledge search to A's svrn (HTTP ${KNOW}), B's svrn fanned a search for A's corpus out to A ('${FANNED}'), and A's canonical route answered over the mesh (HTTP ${CANONICAL}); a guest holding A's link was admitted over the mesh tunnel and a forged token refused; A's svrn data holds no node key"
+steps = [
+  { do = "input", var = "RAILS", value = "${TARGET}/debug/cw-rails" },
+  { do = "input", var = "CLI_MESH", value = "${TARGET}/debug/sovereign-cli-mesh" },
+  { do = "ports", vars = ["A_RAILS", "B_RAILS", "A_CLIENT", "A_INTERNAL", "B_CLIENT", "B_INTERNAL", "A_SERVE", "B_SERVE", "OFFER_PORT", "APP_PORT", "HIDDEN_PORT"] },
+  { do = "write", path = "${SANDBOX}/offers/index.json", text = "{\"offers\": [\"a drill going spare\"]}\n" },
+  { do = "write", path = "${SANDBOX}/shown/index.html", text = "svrn-mesh shown app\n" },
+  { do = "write", path = "${SANDBOX}/hidden/index.html", text = "svrn-mesh hidden app\n" },
+  { do = "spawn", id = "offers", argv = ["python3", "-m", "http.server", "${OFFER_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/offers"], log = "offers.log" },
+  { do = "spawn", id = "hidden", argv = ["python3", "-m", "http.server", "${HIDDEN_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/hidden"], log = "hidden.log" },
+  { do = "write", path = "${SANDBOX}/a/rails/rails.toml", text = "name = \"flip-a\"\nlisten = ${A_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "found", "svrn-mesh", "--data-dir", "${SANDBOX}/a/rails"], log = "found.log", fail = "cw-rails could not found the mesh (see ${SANDBOX}/found.log)" },
+  { do = "spawn", id = "rails-a", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/a/rails"], log = "rails-a.log", env = { RUST_LOG = "info,rails=debug" } },
+  { do = "poll", url = "http://127.0.0.1:${A_RAILS}/v1/mesh/status", path = "join_link", var = "INVITE", doc = "a", timeout = 60, alive = "rails-a", fail = "A's cw-rails served no invite within 60s (see ${SANDBOX}/rails-a.log)" },
+  { do = "write", path = "${SANDBOX}/b/rails/rails.toml", text = "name = \"flip-b\"\nlisten = ${B_RAILS}\ngossip_interval_secs = 2\n" },
+  { do = "exec", argv = ["${RAILS}", "join", "${INVITE}", "--data-dir", "${SANDBOX}/b/rails", "--name", "flip-b"], log = "join.log", fail = "B's cw-rails was not admitted (see ${SANDBOX}/join.log)" },
+  { do = "spawn", id = "rails-b", argv = ["${RAILS}", "run", "--local-only", "--data-dir", "${SANDBOX}/b/rails"], log = "rails-b.log", env = { RUST_LOG = "info,rails=debug" } },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/status", path = "members[name=flip-a].status", var = "A_ON_B", timeout = 60, alive = "rails-b", fail = "A never reached B's cw-rails roster within 60s (see ${SANDBOX}/rails-b.log)" },
+  # A publishes a configured app outside its own app_allow, and an offer.
+  { do = "write", path = "${SANDBOX}/a/svrnmesh/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/a/mock.gguf\"\nembed = \"${SANDBOX}/a/mock-embed.gguf\"\n\n[daemon]\nclient_port = ${A_CLIENT}\ninternal_port = ${A_INTERNAL}\nrails_base = \"http://127.0.0.1:${A_RAILS}\"\n\n[data]\ndir = \"${SANDBOX}/a/data\"\n\n[iroh]\noffer_origin = \"127.0.0.1:${OFFER_PORT}\"\napp_allow = [\"nobody-on-this-mesh\"]\n\n[iroh.apps]\nhidden = \"127.0.0.1:${HIDDEN_PORT}\"\n" },
+  # A hosts a corpus B does not (the ingest lift's embeddings stub, 8-dim
+  # vectors), shared to the mesh, indexed before A's svrn boots.
+  { do = "input", var = "INGEST", value = "${TARGET}/debug/svrn-ingest" },
+  { do = "ports", vars = ["EMBED_PORT"] },
+  { do = "write", path = "${SANDBOX}/stub.py", text = "import http.server, json, sys, zlib\nclass H(http.server.BaseHTTPRequestHandler):\n    def send(self, code, doc):\n        b = json.dumps(doc).encode()\n        self.send_response(code)\n        self.send_header('content-type', 'application/json')\n        self.send_header('content-length', str(len(b)))\n        self.end_headers()\n        self.wfile.write(b)\n    def do_GET(self):\n        if self.path == '/v1/models':\n            self.send(200, {'data': [{'id': 'Qwen3-Embedding-0.6B'}]})\n        else:\n            self.send(404, {'error': 'embeddings-only stub'})\n    def do_POST(self):\n        body = json.loads(self.rfile.read(int(self.headers.get('content-length', 0))) or b'{}')\n        if self.path != '/v1/embeddings':\n            self.send(404, {'error': 'embeddings-only stub'})\n            return\n        inputs = body.get('input', [])\n        inputs = [inputs] if isinstance(inputs, str) else inputs\n        vec = lambda s: [((zlib.crc32(s.encode()) >> k) & 255) / 255.0 + 0.01 for k in range(0, 32, 4)]\n        self.send(200, {'data': [{'index': i, 'embedding': vec(s)} for i, s in enumerate(inputs)]})\nhttp.server.HTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()\n" },
+  { do = "write", path = "${SANDBOX}/fixture/tides.txt", text = "The tide tables are printed each spring and pinned by the harbour door.\n\nBoth ledgers agree about the tides and about nothing else.\n" },
+  { do = "write", path = "${SANDBOX}/recipe.toml", text = "[corpus]\nid = \"flip-corpus\"\nname = \"svrn-mesh fixture\"\ndescription = \"svrn-mesh lift corpus\"\nlicense = \"CC0\"\nmesh_sharing = true\n\n[acquire]\ntype = \"local_file\"\npath = \"${SANDBOX}/fixture\"\n\n[extract]\ntype = \"plaintext\"\n\n[chunk]\ntype = \"paragraph\"\nmax_chars = 512\noverlap_chars = 64\n\n[index]\nfts = true\nvector = true\n" },
+  { do = "spawn", id = "embed", argv = ["python3", "-u", "${SANDBOX}/stub.py", "${EMBED_PORT}"], log = "embed.log" },
+  { do = "poll", url = "http://127.0.0.1:${EMBED_PORT}/v1/models", path = "data.id", var = "EMBED_MODEL", timeout = 30, alive = "embed", fail = "the embeddings stub never answered (see ${SANDBOX}/embed.log)" },
+  { do = "exec", argv = ["${INGEST}", "ingest", "${SANDBOX}/recipe.toml", "--base-url", "http://127.0.0.1:${EMBED_PORT}/v1", "--no-enrich", "--data-dir", "${SANDBOX}/a/data"], log = "ingest.log", env = { HOME = "${SANDBOX}/a/home", SOVEREIGN_DATA_DIR = "${SANDBOX}/a/data", SVRNMESH_DATA_DIR = "${SANDBOX}/a/svrnmesh" }, fail = "svrn-ingest did not index A's corpus (see ${SANDBOX}/ingest.log)" },
+  { do = "spawn", id = "stock-a", argv = ["${BIN}", "run", "--config", "${SANDBOX}/a/svrnmesh/config.toml"], log = "stock-a.log", env = { HOME = "${SANDBOX}/a/home", SVRNMESH_DATA_DIR = "${SANDBOX}/a/svrnmesh", CW_RAILS_DIR = "${SANDBOX}/a/rails", CW_RAILS_BIN = "${SANDBOX}/no-cw-rails", SOVEREIGN_SERVE_PORT = "${A_SERVE}", RUST_LOG = "info,published_origins=debug,rails_origins=debug" } },
+  { do = "poll", url = "http://127.0.0.1:${A_CLIENT}/status", path = "serving", var = "SERVING_A", timeout = 120, alive = "stock-a", fail = "A's svrn never answered /status within 120s (see ${SANDBOX}/stock-a.log)" },
+  { do = "write", path = "${SANDBOX}/b/svrnmesh/config.toml", text = "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"${SANDBOX}/b/mock.gguf\"\nembed = \"${SANDBOX}/b/mock-embed.gguf\"\n\n[daemon]\nclient_port = ${B_CLIENT}\ninternal_port = ${B_INTERNAL}\nrails_base = \"http://127.0.0.1:${B_RAILS}\"\n\n[data]\ndir = \"${SANDBOX}/b/data\"\n" },
+  { do = "spawn", id = "stock-b", argv = ["${BIN}", "run", "--config", "${SANDBOX}/b/svrnmesh/config.toml"], log = "stock-b.log", env = { HOME = "${SANDBOX}/b/home", SVRNMESH_DATA_DIR = "${SANDBOX}/b/svrnmesh", CW_RAILS_DIR = "${SANDBOX}/b/rails", CW_RAILS_BIN = "${SANDBOX}/no-cw-rails", SOVEREIGN_SERVE_PORT = "${B_SERVE}", RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${B_CLIENT}/status", path = "serving", var = "SERVING_B", timeout = 120, alive = "stock-b", fail = "B's svrn never answered /status within 120s (see ${SANDBOX}/stock-b.log)" },
+  # A's svrn signs through its cw-rails, and the act reaches B by cw-rails' round.
+  { do = "get", url = "http://127.0.0.1:${A_RAILS}/v1/rail/actor", path = "actor", var = "A_ACTOR", fail = "A's cw-rails named no signing actor: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${A_CLIENT}/v1/rail/append?namespace=flip-proof", json = { op = "record", payload = { note = "signed through rails" } }, path = "id", var = "APPENDED", fail = "A's svrn signed nothing through its cw-rails: ${BODY} (see ${SANDBOX}/stock-a.log)" },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/rail/log?namespace=flip-proof", path = "ops[id=${APPENDED}].actor", var = "SIGNED_BY", doc = "ring", timeout = 90, alive = "rails-b", fail = "A's act ${APPENDED} never reached B's cw-rails within 90s (see ${SANDBOX}/rails-a.log, rails-b.log)" },
+  { do = "exec", argv = ["test", "${SIGNED_BY}", "=", "${A_ACTOR}"], log = "signer.log", fail = "A's svrn act was signed by ${SIGNED_BY}, not A's cw-rails key ${A_ACTOR}" },
+  # An app `svrn run` publishes on A is reached from B.
+  { do = "spawn", id = "app", argv = ["${CLI_MESH}", "run", "--as", "shown", "--port", "${APP_PORT}", "--", "python3", "-m", "http.server", "${APP_PORT}", "--bind", "127.0.0.1", "--directory", "${SANDBOX}/shown"], log = "app.log", env = { HOME = "${SANDBOX}/a/home", SVRNMESH_DATA_DIR = "${SANDBOX}/a/svrnmesh" } },
+  { do = "poll", url = "http://127.0.0.1:${A_RAILS}/v1/mesh/publish", path = "apps[name=shown].name", var = "CLAIMED", doc = "claims", timeout = 60, alive = "app", fail = "`svrn run` never claimed 'shown' on A's cw-rails within 60s (see ${SANDBOX}/app.log)" },
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/app", path = "offering.peer", var = "APP_PEER", doc = "apps", timeout = 60, alive = "app", fail = "B's cw-rails listed no member publishing apps within 60s (see ${SANDBOX}/app.log, stock-a.log, rails-a.log)" },
+  { do = "get", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/app?peer=flip-a", path = "url", var = "APP_URL", fail = "B's cw-rails gave no app bridge to A: ${BODY}" },
+  { do = "get", url = "${APP_URL}/shown/", status_var = "SHOWN", timeout = 30, fail = "a GET for A's `svrn run` app got no answer through ${APP_URL}" },
+  { do = "require", value = "${SHOWN}", match = "^200$", fail = "A's `svrn run` app answered B with HTTP ${SHOWN}: ${BODY}" },
+  # The configured app sits outside A's app_allow, so B does not see it.
+  { do = "get", url = "${APP_URL}/hidden/", status_var = "HIDDEN", timeout = 30, fail = "a GET for A's hidden app got no answer through ${APP_URL}" },
+  { do = "require", value = "${HIDDEN}", match = "^404$", fail = "A's app outside its app_allow answered B with HTTP ${HIDDEN}: ${BODY}" },
+  { do = "require", value = "${BODY}", match = "no app named", fail = "the hidden app's refusal did not name the app: ${BODY}" },
+  # The refusal lists what B may reach, and the hidden app is not in it.
+  { do = "require", value = "${BODY}", match = "this node publishes: shown", fail = "the refusal did not list exactly the apps B may reach: ${BODY}" },
+  # A request naming no app is refused, never sent to an arbitrary origin.
+  { do = "get", url = "${APP_URL}/", status_var = "NO_NAME", timeout = 30, fail = "a GET naming no app got no answer through ${APP_URL}" },
+  { do = "require", value = "${NO_NAME}", match = "^404$", fail = "a request naming no app answered HTTP ${NO_NAME}: ${BODY}" },
+  { do = "require", value = "${BODY}", match = "no app named in the request path", fail = "the no-name refusal said something else: ${BODY}" },
+  # A's offer origin is reached from B.
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/offers", path = "offering.peer", var = "OFFER_PEER", doc = "offers", timeout = 60, alive = "rails-b", fail = "B's cw-rails listed no member offering within 60s (see ${SANDBOX}/stock-a.log)" },
+  { do = "get", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/offers?peer=flip-a", path = "url", var = "OFFER_URL", fail = "B's cw-rails gave no offer bridge to A: ${BODY}" },
+  { do = "get", url = "${OFFER_URL}/index.json", status_var = "OFFERED", timeout = 30, fail = "a GET for A's offers got no answer through ${OFFER_URL}" },
+  { do = "require", value = "${OFFERED}", match = "^200$", fail = "A's offer origin answered B with HTTP ${OFFERED}: ${BODY}" },
+  # svrn's peer prefixes ride cw-rails' cwth/http/0: knowledge search.
+  { do = "get", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/reach?peer=flip-a&class=knowledge_search", path = "endpoints.base_url", var = "KB", fail = "B's cw-rails resolved no knowledge-search endpoint for A: ${BODY}" },
+  { do = "call", url = "${KB}/internal/knowledge/search", json = { query_text = "tides", corpora = [] }, status_var = "KNOW", timeout = 30, fail = "a knowledge search to A's svrn got no answer through ${KB}" },
+  { do = "require", value = "${KNOW}", match = "^(200|503)$", fail = "A's knowledge search answered HTTP ${KNOW} through cw-rails: ${BODY}" },
+  { do = "require", value = "${BODY}", match = "\"results\"", fail = "the knowledge-search answer is not svrn's: ${BODY}" },
+  # B's svrn fans a search for A's corpus out to A through cw-rails (B
+  # hosts none of it; a query vector in the corpus' space rides along).
+  { do = "poll", url = "http://127.0.0.1:${B_RAILS}/v1/mesh/status", path = "members[name=flip-a].capabilities.hosted_corpora", var = "A_HOSTS", timeout = 60, alive = "rails-b", fail = "A's hosted corpus never reached B's cw-rails roster within 60s (see ${SANDBOX}/stock-a.log)" },
+  { do = "call", url = "http://127.0.0.1:${B_CLIENT}/v1/knowledge/search", json = { query_text = "tides", corpora = ["flip-corpus"], query_embedding = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] }, path = "results.corpus_id", var = "FANNED", retry = "60", timeout = 30, fail = "B's svrn found nothing of A's corpus through cw-rails: ${BODY} (see ${SANDBOX}/stock-b.log)" },
+  { do = "count", file = "${SANDBOX}/stock-b.log", pattern = "knowledge: fan-out served.*flip-a", var = "SERVED_BY_A", min = 1, fail = "B answered without its fan-out being served by A (see ${SANDBOX}/stock-b.log)" },
+  # The canonical route answers over the mesh too (svrn's peer prefix).
+  { do = "get", url = "${KB}/internal/corpus/canonical/flip-corpus", status_var = "CANONICAL", timeout = 60, fail = "A's canonical route got no answer through ${KB}" },
+  # A guest, who is no member, reaches A's svrn over the mesh tunnel with the
+  # bearer A minted (cwth/guest/0 to svrn's guest listener), and a forged
+  # token is refused.
+  { do = "exec", argv = ["sh", "-c", "'${CLI_MESH}' mesh grant --ttl 10m > '${SANDBOX}/grant.out' 2>&1 && grep -o 'sovereign://guest/[^ ]*' '${SANDBOX}/grant.out' | head -1 > '${SANDBOX}/guest.link' && test -s '${SANDBOX}/guest.link'"], log = "grant.log", env = { HOME = "${SANDBOX}/a/home", SVRNMESH_DATA_DIR = "${SANDBOX}/a/svrnmesh" }, fail = "A minted no guest link (see ${SANDBOX}/grant.out)" },
+  { do = "exec", argv = ["sh", "-c", "'${CLI_MESH}' mesh use \"$(cat '${SANDBOX}/guest.link')\""], log = "guest-use.log", env = { HOME = "${SANDBOX}/c/home", SVRNMESH_DATA_DIR = "${SANDBOX}/c/svrnmesh" }, fail = "a guest holding A's link was not admitted over the mesh tunnel (see ${SANDBOX}/guest-use.log, rails-a.log)" },
+  { do = "count", file = "${SANDBOX}/guest-use.log", pattern = "Verified against", var = "GUESTED", min = 1, fail = "the guest's `mesh use` exited 0 without verifying the link (see ${SANDBOX}/guest-use.log)" },
+  { do = "exec", argv = ["sh", "-c", "! '${CLI_MESH}' mesh use \"$(sed -E 's#guest/[^?]+#guest/forged0000000000000000000000000000#' '${SANDBOX}/guest.link')\""], log = "guest-forged.log", env = { HOME = "${SANDBOX}/c/home2", SVRNMESH_DATA_DIR = "${SANDBOX}/c/svrnmesh2" }, fail = "a forged guest token was admitted over the mesh tunnel (see ${SANDBOX}/guest-forged.log)" },
+  # svrn holds no node key: the key is cw-rails'.
+  { do = "exec", argv = ["sh", "-c", "test ! -e '${SANDBOX}/a/data/node_key' && test ! -e '${SANDBOX}/a/svrnmesh/node_key'"], log = "no-key.log", fail = "A's svrn data holds a node_key; the key is cw-rails'" },
+]
+
+# ── code — the LSP for agents ───────────────────────────────────────────────
+[lift.code]
+package = "code"
+build = ["-p", "sovereign-cli-dev", "--bin", "sovereign-cli-dev"]
+binary = "debug/sovereign-cli-dev"
+# The repo data the closure's tests read, one copy each in quality/ (both have
+# readers outside this program): backlog's value ruler through its loader's
+# knob, and the operational-anchors registry through the workspace-root knob.
+carry = { CO_BACKLOG_RULER = "quality/backlog-ruler.toml", SOVEREIGN_WORKSPACE_DIR = ["quality/operational-anchors.toml"] }
+
+[lift.code.run]
+# "Code intel for my agent" (pb-code-server): `code mcp` serves MCP on a temp
+# git repo with no daemon, no model and no cw-rails. The daemon URL and the
+# rails base name closed ports, so a read that dialled either (this host runs
+# both) fails here rather than pass by borrowing the operator's. The atlas
+# probe is `work_in_flight`, a read, so a misrouted dial can never write.
+pass = "served MCP alone as '${SERVER}' on a temp git repo with no daemon, no model and no cw-rails: tools/list carried ${SYMBOLS} and ${CALLERS}, `symbols` answered without error, `work_in_flight` named the absent rails door, and a next-edit request answered (engine ${NES}, syntax filter ${SYNTAX})"
+steps = [
+  { do = "ports", vars = ["PORT", "DEAD_RAILS_PORT", "DEAD_DAEMON_PORT"] },
+  { do = "write", path = "${SANDBOX}/svrnmesh/config.toml", text = "[node]\nentry = \"http://127.0.0.1:${DEAD_DAEMON_PORT}\"\n\n[daemon]\nrails_base = \"http://127.0.0.1:${DEAD_RAILS_PORT}\"\n" },
+  { do = "write", path = "${SANDBOX}/repo/src/lib.rs", text = "pub fn fixture_target() {}\n" },
+  { do = "write", path = "${SANDBOX}/repo/.sovereign/README", text = "program-lift code smoke\n" },
+  { do = "write", path = "${SANDBOX}/indexes/README", text = "no index: code_search and symbols answer from what is here\n" },
+  { do = "exec", argv = ["git", "init", "-q", "${SANDBOX}/repo"], log = "git.log", fail = "could not make the fixture repo (see ${SANDBOX}/git.log)" },
+  { do = "spawn", id = "code", argv = ["${BIN}", "code", "mcp", "--port", "${PORT}", "--data-dir", "${SANDBOX}/indexes", "--sovereign-dir", "${SANDBOX}/repo/.sovereign"], cwd = "${SANDBOX}/repo", log = "code.log", env = { HOME = "${SANDBOX}/home", SVRNMESH_DATA_DIR = "${SANDBOX}/svrnmesh", SVRNMESH_DAEMON_URL = "http://127.0.0.1:${DEAD_DAEMON_PORT}", RUST_LOG = "info" } },
+  { do = "poll", url = "http://127.0.0.1:${PORT}/mcp/stats", path = "total_calls", var = "CALLS", timeout = 120, alive = "code", fail = "code mcp never answered /mcp/stats within 120s (see ${SANDBOX}/code.log)" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/mcp", json = { jsonrpc = "2.0", id = 1, method = "initialize", params = {} }, path = "result.serverInfo.name", var = "SERVER", fail = "initialize named no server: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/mcp", json = { jsonrpc = "2.0", id = 2, method = "tools/list" }, path = "result.tools[name=symbols].name", var = "SYMBOLS", fail = "tools/list carried no `symbols`: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/mcp", json = { jsonrpc = "2.0", id = 3, method = "tools/list" }, path = "result.tools[name=callers].name", var = "CALLERS", fail = "tools/list carried no `callers`: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/mcp", json = { jsonrpc = "2.0", id = 4, method = "tools/call", params = { name = "symbols", arguments = { name = "fixture_target" } } }, path = "result[isError=false].content.text", var = "ANSWER", fail = "`symbols` gave no answer: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/mcp", json = { jsonrpc = "2.0", id = 5, method = "tools/call", params = { name = "work_in_flight", arguments = { scope = "src" } } }, path = "result[isError=true].content.text", var = "ABSENCE", fail = "`work_in_flight` with cw-rails absent answered without naming it: ${BODY}" },
+  # `match` takes no ${VAR}: the configured port rides on the value's last
+  # line, and the backreference requires the named door to be that port.
+  { do = "require", value = "${ABSENCE}\n${DEAD_RAILS_PORT}", match = '127\.0\.0\.1:(\d+)/v1/mesh/kv[\s\S]*\n\1$', fail = "the absence named another door than the configured rails base (port ${DEAD_RAILS_PORT}): ${ABSENCE}" },
+  { do = "require", value = "${ABSENCE}", match = "svrn mesh up", fail = "the absence did not say how to bring cw-rails up: ${ABSENCE}" },
+  # The editor door is code's (pb-meshapp-rest): the rule lane answers with no
+  # daemon, and code alone, holding no grammar registry, names its syntax
+  # filter unjudged rather than guessing.
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/edit_predictions", json = { history = [], text = "let x = 1;\nlet y = x + 1;\n", cursor = 10, path = "a.rs" }, path = "engine", var = "NES", fail = "POST /v1/edit_predictions gave no answer: ${BODY}" },
+  { do = "call", url = "http://127.0.0.1:${PORT}/v1/edit_predictions", json = { history = [], text = "let x = 1;\nlet y = x + 1;\n", cursor = 10, path = "a.rs", debug = true }, path = "sovereign_debug.syntax_filter", var = "SYNTAX", fail = "the next-edit debug block did not name the syntax filter: ${BODY}" },
+  { do = "require", value = "${SYNTAX}", match = "^unjudged:grammar_absent$", fail = "code alone named the syntax filter '${SYNTAX}', not unjudged for want of a grammar" },
+]
+
+# ── bench — the evaluator ───────────────────────────────────────────────────
+[lift.bench]
+package = "bench"
+# bench's CLI (sovereign-cli-bench, pb-cli-llm-bench-move) builds beside the
+# evaluator: the closure must build its binary with no svrn or ingest crate.
+build = ["-p", "sovereign-eval", "--bin", "sovereign-eval", "-p", "sovereign-cli-bench", "--bin", "sovereign-cli-bench"]
+binary = "debug/sovereign-eval"
+# The banks and seed data sovereign-eval's tests read (bench_root.rs: "a
+# lifted crate must set it itself").
+carry = { SOVEREIGN_BENCH_ROOT = "sovereign/bench" }
+
+[lift.bench.run]
+# The evaluator's own verbs: `score` asks its LLM judge (sovereign-eval
+# judge.rs) over `/v1/chat/completions`. The forced-choice judge is
+# sovereign-cli-llm's (live_runner.rs), not this binary's. Two stub OpenAI
+# servers stand in for the judge model: one answers a report, so `score`
+# grades a fixture run; one answers prose twice, so `score` must report it
+# could not judge and write no report, never a score on an unreadable answer.
+pass = "graded a fixture run through a stub judge (judge_report total 10, ${OK_CALLS} judge call), and against a judge that answered prose it asked ${BAD_CALLS} times, wrote no judge_report and exited naming the unparseable answer"
+steps = [
+  { do = "ports", vars = ["OK_PORT", "BAD_PORT"] },
+  { do = "write", path = "${SANDBOX}/stub.py", text = "import http.server, json, sys\nport, mode = int(sys.argv[1]), sys.argv[2]\naxes = {k: {'score': 2, 'justification': 'fixture'} for k in ['spec_fidelity', 'api_congruence', 'internal_coherence', 'idiomatic_rust', 'decision_discipline']}\ncontent = json.dumps({'axes': axes, 'total': 10, 'notes_for_reviewer': 'lift fixture'}) if mode == 'ok' else 'The code looks fine to me overall.'\nclass H(http.server.BaseHTTPRequestHandler):\n    def send(self, doc):\n        b = json.dumps(doc).encode()\n        self.send_response(200)\n        self.send_header('content-type', 'application/json')\n        self.send_header('content-length', str(len(b)))\n        self.end_headers()\n        self.wfile.write(b)\n    def do_GET(self):\n        self.send({'state': 'ready'})\n    def do_POST(self):\n        self.rfile.read(int(self.headers.get('content-length', 0)))\n        self.send({'choices': [{'message': {'role': 'assistant', 'content': content}}]})\nhttp.server.HTTPServer(('127.0.0.1', port), H).serve_forever()\n" },
+  { do = "write", path = "${SANDBOX}/repo/spec.md", text = "# spec\n\n`add(a, b)` returns the sum of two u32s.\n" },
+  { do = "write", path = "${SANDBOX}/repo/Cargo.toml", text = "[package]\nname = \"fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n" },
+  { do = "write", path = "${SANDBOX}/repo/src/lib.rs", text = "pub fn add(a: u32, b: u32) -> u32 {\n    a + b\n}\n" },
+  { do = "write", path = "${SANDBOX}/data/runs/graded/manifest.json", text = '{"schema_version":1,"run":{"run_id":"graded","feature_id":"lift","milestone_id":"m0","driver":"lift","started_at":0,"mode":"lift"},"experiment_repo":{"root":"${SANDBOX}/repo","spec_shas":[]},"models":[],"tool_calls":[],"notes":{"decisions":[],"invariants":[],"uncertainties":[],"attempts":[],"deviations":[],"reflections":[],"redteam_findings":[],"other":[]},"generated_at_unix":0}' },
+  { do = "write", path = "${SANDBOX}/data/runs/unreadable/manifest.json", text = '{"schema_version":1,"run":{"run_id":"unreadable","feature_id":"lift","milestone_id":"m0","driver":"lift","started_at":0,"mode":"lift"},"experiment_repo":{"root":"${SANDBOX}/repo","spec_shas":[]},"models":[],"tool_calls":[],"notes":{"decisions":[],"invariants":[],"uncertainties":[],"attempts":[],"deviations":[],"reflections":[],"redteam_findings":[],"other":[]},"generated_at_unix":0}' },
+  { do = "spawn", id = "judge-ok", argv = ["python3", "-u", "${SANDBOX}/stub.py", "${OK_PORT}", "ok"], log = "judge-ok.log" },
+  { do = "spawn", id = "judge-bad", argv = ["python3", "-u", "${SANDBOX}/stub.py", "${BAD_PORT}", "bad"], log = "judge-bad.log" },
+  { do = "poll", url = "http://127.0.0.1:${OK_PORT}/", path = "state", var = "OK_UP", timeout = 30, alive = "judge-ok", fail = "the stub judge never answered (see ${SANDBOX}/judge-ok.log)" },
+  { do = "poll", url = "http://127.0.0.1:${BAD_PORT}/", path = "state", var = "BAD_UP", timeout = 30, alive = "judge-bad", fail = "the prose stub judge never answered (see ${SANDBOX}/judge-bad.log)" },
+  { do = "exec", argv = ["${BIN}", "--data-dir", "${SANDBOX}/data", "score", "graded", "--experiment-repo", "${SANDBOX}/repo", "--daemon-url", "http://127.0.0.1:${OK_PORT}", "--no-mechanical", "--no-scope", "--no-regression", "--no-grade-tools"], log = "score-graded.log", env = { HOME = "${SANDBOX}/home" }, fail = "`score` did not grade the fixture run through the stub judge (see ${SANDBOX}/score-graded.log)" },
+  { do = "count", file = "${SANDBOX}/data/runs/graded/judge_report.json", pattern = "\"total\": 10,", var = "TOTALS", min = 1, fail = "`score` wrote no judge_report.json carrying the stub judge's total 10 (see ${SANDBOX}/data/runs/graded)" },
+  { do = "count", file = "${SANDBOX}/judge-ok.log", pattern = "POST /v1/chat/completions", var = "OK_CALLS", min = 1, fail = "the judge report exists but the stub judge was never asked" },
+  { do = "exec", argv = ["sh", "-c", "if '${BIN}' --data-dir '${SANDBOX}/data' score unreadable --experiment-repo '${SANDBOX}/repo' --daemon-url 'http://127.0.0.1:${BAD_PORT}' --no-mechanical --no-scope --no-regression --no-grade-tools; then echo 'SCORED an unreadable judge answer'; exit 1; fi; test ! -e '${SANDBOX}/data/runs/unreadable/judge_report.json' || { echo 'a judge_report.json exists for an unreadable answer'; exit 1; }"], log = "score-unreadable.log", env = { HOME = "${SANDBOX}/home" }, fail = "`score` reported a grade from a judge that answered prose (see ${SANDBOX}/score-unreadable.log)" },
+  { do = "count", file = "${SANDBOX}/score-unreadable.log", pattern = "unparseable JSON twice", var = "NAMED", min = 1, fail = "`score` failed on the prose judge without naming the unparseable answer (see ${SANDBOX}/score-unreadable.log)" },
+  { do = "count", file = "${SANDBOX}/judge-bad.log", pattern = "POST /v1/chat/completions", var = "BAD_CALLS", min = 2, fail = "`score` gave up on the prose judge without its one retry" },
+]

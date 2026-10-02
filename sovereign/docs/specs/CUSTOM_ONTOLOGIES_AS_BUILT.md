@@ -397,7 +397,7 @@ Use this corpus. Three caveats: it depends on the agent following its
 script, and the script documents a mode where the fast model answers in
 prose and writes no recipe; the PDF extractor is registered at daemon
 start (`recipe.rs:1811-1821`) but absent from
-`sovereign-recipes/schema/recipe_schema_descriptor.json`, the menu the
+`corpus-engine/schema/recipe_schema_descriptor.json`, the menu the
 author and agent see; and the quick "add a folder" route accepts only
 the three prebuilt atlases (`sovereign-tools/src/local_corpus/manager.rs:544-549`).
 And after Build & enrich, §0.5: no backfill, no grounding.
@@ -652,7 +652,7 @@ parallel ontologies that a reader has to reconcile (`ENRICHMENT.md`
   `corpus-engine/ATLAS.md:115`.
 - Docs audited: `sovereign/docs/GETTING_STARTED.md:21`, `ENRICH_A_CORPUS.md:20`,
   `GOVERN_A_CORPUS.md`, `sovereign-recipes/{GETTING_STARTED,SCHEMA,README}.md`,
-  `_templates/annotated/recipe.toml:85`, `schema/recipe_schema_descriptor.json`,
+  `_templates/annotated/recipe.toml:85`, `corpus-engine/schema/recipe_schema_descriptor.json`,
   `sovereign/modes/recipe-author/skill.toml:282,419`,
   `recipe_author/tutorial/federalistTutorial.ts`.
 - Benches and baselines: `sovereign/bench/sep/baselines/questions/{pre-enrichment-v1_1,canonical-57-articles,latest}.json`,

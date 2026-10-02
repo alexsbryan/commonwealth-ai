@@ -100,7 +100,7 @@ fn select_fanout_corpora(installed: &[(String, u64)], filter: &[String]) -> Fano
 /// wire format per peer.
 pub async fn knowledge_search(
     State(state): State<AppState>,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(request): Json<KnowledgeSearchRequest>,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
     // Identify the requester so we can stamp this on emitted ledger
@@ -247,13 +247,24 @@ pub async fn knowledge_search(
     // chunks. Local-origin requests (requester==None) skip emission.
     if let Some(for_node) = requester {
         for (corpus_id, chunks) in per_corpus_chunks {
-            state.inner.fabric.contribution_emitter.record(
-                commonwealth_core::contributions::LedgerEventKind::KnowledgeQueryServed {
-                    for_node,
-                    corpus_id,
-                    chunks_returned: chunks,
-                },
-            );
+            if let Err(e) = state
+                .inner
+                .store
+                .contribution_emitter
+                .record(
+                    oicp_types::contributions::LedgerEventKind::KnowledgeQueryServed {
+                        for_node,
+                        corpus_id,
+                        chunks_returned: chunks,
+                    },
+                )
+                .await
+            {
+                tracing::warn!(
+                    error = %e,
+                    "internal knowledge_search: contribution ledger absent — KnowledgeQueryServed not recorded"
+                );
+            }
         }
     }
 

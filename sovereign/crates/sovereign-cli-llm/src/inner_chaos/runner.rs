@@ -15,10 +15,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use oicp_client::RemoteApiProvider;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::Memory;
 use sovereign_core::SkillRegistry;
-use sovereign_inference::remote::RemoteApiProvider;
 
 use crate::chat_cmd::bootstrap::{build_session_with_skills, ChatSession};
 use crate::chat_cmd::config::default_globals_for_voice_eval;
@@ -435,7 +435,7 @@ pub(super) async fn build_thread_session(
 ) -> Result<(ChatSession, tempfile::TempDir), String> {
     let tmp = tempfile::TempDir::new().map_err(|e| format!("create inner-chaos tempdir: {e}"))?;
 
-    let mut globals = default_globals_for_voice_eval();
+    let mut globals = default_globals_for_voice_eval()?;
     if let Some(base) = daemon_base {
         globals.daemon_base = base.to_string();
     }

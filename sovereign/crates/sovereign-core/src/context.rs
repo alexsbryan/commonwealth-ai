@@ -33,6 +33,15 @@ pub enum PrincipalScope {
     /// Only `Org` corpora and this principal's own `Private` corpora are
     /// visible; the ceiling is `Some`.
     Resolved(String),
+    /// [`Self::Resolved`], with the host's corpus grant: only the named
+    /// corpora are visible, and an empty grant shows nothing. A keyed on-prem
+    /// daemon resolves here (`[retrieval] corpora`).
+    Granted {
+        /// The attributed principal.
+        principal: String,
+        /// The corpus ids this caller may retrieve from.
+        corpora: Vec<String>,
+    },
     /// A resolver is wired and could NOT attribute this conversation. The
     /// ceiling is EMPTY — nothing is visible. Absence refuses.
     Unresolved,
@@ -42,8 +51,18 @@ impl PrincipalScope {
     /// The principal, when the caller was attributed.
     pub fn principal(&self) -> Option<&str> {
         match self {
-            Self::Resolved(p) => Some(p.as_str()),
+            Self::Resolved(p) | Self::Granted { principal: p, .. } => Some(p.as_str()),
             Self::Unscoped | Self::Unresolved => None,
+        }
+    }
+
+    /// Whether this caller's corpus grant admits `corpus_id` — the one
+    /// intersection both the turn's ceiling and the seed check read.
+    pub fn admits(&self, corpus_id: &str) -> bool {
+        match self {
+            Self::Granted { corpora, .. } => corpora.iter().any(|c| c == corpus_id),
+            Self::Unresolved => false,
+            Self::Unscoped | Self::Resolved(_) => true,
         }
     }
 
@@ -58,11 +77,24 @@ impl PrincipalScope {
     pub fn from_resolver(resolver: Option<&dyn PrincipalResolver>, conversation_id: &str) -> Self {
         match resolver {
             None => Self::Unscoped,
-            Some(r) => match r.principal_for(conversation_id) {
-                Some(p) => Self::Resolved(p),
-                None => Self::Unresolved,
+            Some(r) => match (r.principal_for(conversation_id), r.corpus_grant()) {
+                (Some(principal), Some(corpora)) => Self::Granted { principal, corpora },
+                (Some(p), None) => Self::Resolved(p),
+                (None, _) => Self::Unresolved,
             },
         }
+    }
+}
+
+/// Why a resolved ceiling holds no corpus, for the turn that would otherwise
+/// search nothing in silence. `registered` is the registry's row count, `None`
+/// when it was not read (an unresolved caller) or could not be.
+pub fn empty_ceiling_reason(scope: &PrincipalScope, registered: Option<usize>) -> &'static str {
+    match (scope, registered) {
+        (PrincipalScope::Unresolved, _) => "the caller could not be attributed",
+        (_, None) => "the corpus registry could not be read",
+        (_, Some(0)) => "the corpus registry holds no corpus",
+        (_, Some(_)) => "no registered corpus is visible to this caller",
     }
 }
 
@@ -122,20 +154,32 @@ pub async fn build_context(
     // refuses rather than defaulting to all-corpora-eligible. This is the
     // in-process twin of the server's read-surface deny-set
     // (`TenantRuntime::forbidden_corpora`).
-    let all_installed: Vec<String> = match scope {
-        PrincipalScope::Unresolved => Vec::new(),
-        _ => store
-            .list_corpus_states()
-            .await
-            .unwrap_or_default()
+    let registry = match scope {
+        PrincipalScope::Unresolved => None,
+        _ => Some(store.list_corpus_states().await),
+    };
+    // `None` when the registry was not read or could not be: the reason a
+    // resolved ceiling comes out empty is named below, never defaulted.
+    let registered = match &registry {
+        Some(Ok(rows)) => Some(rows.len()),
+        Some(Err(e)) => {
+            tracing::warn!(error = %e, "build_context: the corpus registry could not be read");
+            None
+        }
+        None => None,
+    };
+    let all_installed: Vec<String> = match registry {
+        Some(Ok(rows)) => rows
             .into_iter()
             .filter(|s| s.deleted_at.is_none())
             .filter(|s| match (&s.visibility, scope.principal()) {
                 (CorpusVisibility::Private { owner }, Some(p)) => owner == p,
                 _ => true,
             })
+            .filter(|s| scope.admits(&s.corpus_id))
             .map(|s| s.corpus_id)
             .collect(),
+        Some(Err(_)) | None => Vec::new(),
     };
     // The PURE principal ceiling — the corpora this caller may ever retrieve
     // from, independent of the per-conversation `enabled_corpora` selection.
@@ -148,10 +192,26 @@ pub async fn build_context(
     // corpus-chunk search — the airtight backstop that a forged or absent
     // `enabled_corpora` cannot widen past. See
     // `ConversationContext::corpus_ceiling`.
+    if let PrincipalScope::Granted { principal, corpora } = &scope {
+        tracing::debug!(
+            target: "retrieval.isolation",
+            principal = %principal,
+            granted = ?corpora,
+            visible = ?all_installed,
+            "build_context: the host's corpus grant bounds this caller's ceiling"
+        );
+    }
     let corpus_ceiling: Option<Vec<String>> = match scope {
         PrincipalScope::Unscoped => None,
         _ => Some(all_installed.clone()),
     };
+    if corpus_ceiling.as_ref().is_some_and(Vec::is_empty) {
+        tracing::info!(
+            conversation_id,
+            reason = empty_ceiling_reason(&scope, registered),
+            "build_context: this turn searches no local corpus"
+        );
+    }
     let installed_corpora: Vec<String> = match &conversation.enabled_corpora {
         Some(allow) => {
             let allow_set: std::collections::HashSet<&str> =

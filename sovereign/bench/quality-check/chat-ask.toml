@@ -164,9 +164,18 @@ control_flat = "I don't have enough information in the provided passages to answ
 #   audit      5,994   8,954   max 8,954 -> 13,430
 #   total     28,199  31,728   sum of stage medians, max -> 47,590
 #
-# `draft_calls` and `audit_calls` are NOT re-set: they are counts, not
-# times, this run recorded no fresh call figure, and 1.5x has no meaning on
-# a call count. They stay at the order's pre-registered values.
+# `draft_calls` is NOT re-set: it is a count, not a time, and 1.5x has no
+# meaning on a call count. It stays at the order's pre-registered value.
+#
+# `audit_calls` is the audit pass's STRUCTURAL maximum under default flags,
+# read from main's code (18f783f44), not from a run: 1 claim list + 2 per
+# judged claim (the calibrated judge, and the value-presence veto 5d0dca076
+# added on 2026-09-09) x MAX_AUDITED_CLAIMS 10 + 1 specifics scan = 22. The
+# order's 12 is the same sum before 5d0dca076 (1 + 10 + 1) and was never
+# re-derived, so from 09-09 any answer long enough to audit a sixth claim
+# breached it: 16 on a main ancestor (09-10, sv-surface.toml), 14 at
+# f548c483f (pc-chat-ask-audit-calls). How many claims are judged follows
+# the answer's length (`claim_budget`, chars/600), which no seed pins.
 #
 # WHAT THIS BAR DOES NOT TOLERATE, said plainly rather than discovered
 # later: 1.5x a quiet-host median is tight against this machine's real
@@ -185,8 +194,25 @@ draft_median_ms = 22573
 draft_calls = 1
 citation_median_ms = 7734
 audit_median_ms = 8954
-audit_calls = 12
+audit_calls = 22
 total_median_ms = 31728
+
+# Qwen3.6-35B-A3B-MTP-UD-Q6_K, the stem the deployed node serves since 09-13
+# (phase-b-94). Medians from the committed main-era baseline, stack
+# 2ce389007280 (sovereign/bench/quality-check/baselines/chat-ask/, captured
+# 2026-09-13, host load 2.37, committed in ef21e3a08, an ancestor of main
+# 18f783f44): per stage the larger of q1/q2, as above. q1 232/16,489/9,639/
+# 16,632 (+625 unattributed), q2 142/27,688/—/15,286 (+26). Total is q1's sum,
+# 43,617. The calls stay at the order's values. Same 1.5x rule; nothing here
+# was read from the candidate.
+[ceilings."Qwen3.6-35B-A3B-MTP-UD-Q6_K"]
+retrieval_median_ms = 232
+draft_median_ms = 27688
+draft_calls = 1
+citation_median_ms = 9639
+audit_median_ms = 16632
+audit_calls = 22
+total_median_ms = 43617
 
 # ── The two questions ───────────────────────────────────────────────
 

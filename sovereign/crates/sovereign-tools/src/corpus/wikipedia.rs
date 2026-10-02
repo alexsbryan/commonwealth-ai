@@ -18,7 +18,7 @@ use super::{chunk_and_wrap, CorpusParser};
 // copy of the three unit tests — until 2026-08-20. Its sibling `strip_html`
 // fork had already drifted into a live truncation bug; this one had not yet,
 // which is the argument for converging it before it does.
-use corpus_engine::extractors::xml::strip_mediawiki;
+use corpus_engine_sections::strip::strip_mediawiki;
 
 pub struct WikimediaDumpParser {
     corpus_id: String,

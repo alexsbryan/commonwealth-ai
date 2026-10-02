@@ -38,6 +38,14 @@ use std::path::{Path, PathBuf};
 /// bring a backend up (ARCH principle 10 — make it structural).
 pub(crate) const SIDECAR_BINARY: &str = "sovereign-cli-daemon";
 
+/// The loader the sidecar execs: `daemon run`, and first-run setup's probe,
+/// both find `sovereign-stock` beside the sidecar's own executable
+/// (cli-daemon `daemon_bin::locate`). So it ships beside it as a second
+/// `externalBin`, and it is installed beside the sidecar's stable copy
+/// (pb-distribution-setup). Before this the bundle carried no binary
+/// `daemon run` could exec.
+pub(crate) const LOADER_SIDECAR: &str = "sovereign-stock";
+
 /// Names that mean "a binary that understands `daemon run`", in preference
 /// order within any one directory.
 ///
@@ -126,6 +134,19 @@ pub(crate) fn stable_daemon_binary() -> Option<PathBuf> {
         return Some(resolved);
     }
     let dir = sovereign_contracts::rebrand::svrnmesh_root().join("bin");
+    // The loader first: a stable sidecar with no loader beside it would find
+    // nothing to exec. Absent from the bundle, it is reported, and the
+    // sidecar's own refusal names it when `daemon run` is asked for.
+    let loader =
+        resolved.with_file_name(format!("{LOADER_SIDECAR}{}", std::env::consts::EXE_SUFFIX));
+    if let Err(reason) = install_to(&loader, &dir) {
+        tracing::warn!(
+            loader = %loader.display(),
+            dir = %dir.display(),
+            %reason,
+            "daemon-binary: could not install the loader beside the sidecar's stable copy"
+        );
+    }
     match install_to(&resolved, &dir) {
         Ok(stable) => {
             tracing::info!(
@@ -158,8 +179,9 @@ pub(crate) fn stable_daemon_binary() -> Option<PathBuf> {
 /// siblings and `<copy> daemon run` dies with "cannot find the daemon binary"
 /// — which is exactly what a dev tree would hit, where the desktop's
 /// `current_exe()` is `target/debug/` and `sovereign-cli` is sitting right
-/// there next to it. Only `SIDECAR_BINARY` is a whole daemon on its own, so
-/// only `SIDECAR_BINARY` is portable.
+/// there next to it. Only `SIDECAR_BINARY` is portable: it moves together
+/// with its one sibling, the loader ([`LOADER_SIDECAR`]), which
+/// [`stable_daemon_binary`] installs beside it.
 ///
 /// The first condition — inside the bundle — is what stops the install
 /// running for a `sovereign-cli-daemon` already in `~/.local/bin`, which is
@@ -457,12 +479,16 @@ mod tests {
             let bins = cfg["bundle"]["externalBin"]
                 .as_array()
                 .expect("tauri.release.conf.json must declare bundle.externalBin");
-            let want = format!("binaries/{SIDECAR_BINARY}");
-            assert!(
-                bins.iter().any(|b| b.as_str() == Some(want.as_str())),
-                "externalBin {bins:?} does not stage {want} — the resolver would \
-                 find nothing beside the app and the bring-up would be silently lost"
-            );
+            // The sidecar, and the loader it execs (pb-distribution-setup):
+            // without the second, `daemon run` finds nothing to exec.
+            for name in [SIDECAR_BINARY, LOADER_SIDECAR] {
+                let want = format!("binaries/{name}");
+                assert!(
+                    bins.iter().any(|b| b.as_str() == Some(want.as_str())),
+                    "externalBin {bins:?} does not stage {want} — the resolver would \
+                     find nothing beside the app and the bring-up would be silently lost"
+                );
+            }
         }
 
         #[test]

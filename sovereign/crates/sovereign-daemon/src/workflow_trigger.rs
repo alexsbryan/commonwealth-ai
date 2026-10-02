@@ -30,6 +30,7 @@ use async_trait::async_trait;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use sovereign_tools::local_corpus::config::{LocalCorpusConfig, WatchedFolderConfig};
 use sovereign_tools::local_corpus::watched::diff::WatchedDiff;
 use sovereign_tools::local_corpus::watched::workflow_trigger::WorkflowTriggerRuntime;
@@ -43,6 +44,9 @@ pub struct DaemonWorkflowRuntime {
     /// The daemon's own base URL (e.g. `http://127.0.0.1:9741`) — triggered
     /// workflows route their `model:`/`embed:` steps back through it.
     daemon_url: String,
+    /// Ingest's atlas port, which the corpus/atlas tools the run injects act
+    /// through (pb-ingest-dial-daemon).
+    atlas: Arc<dyn AtlasPort>,
     /// Per-item concurrency for a triggered run.
     concurrency: usize,
     /// In-flight run per corpus (skip-if-in-flight). A finished handle is replaced
@@ -52,9 +56,10 @@ pub struct DaemonWorkflowRuntime {
 
 impl DaemonWorkflowRuntime {
     /// `daemon_url` is the loopback base (no `/v1` suffix — the host runner adds it).
-    pub fn new(daemon_url: impl Into<String>) -> Self {
+    pub fn new(daemon_url: impl Into<String>, atlas: Arc<dyn AtlasPort>) -> Self {
         Self {
             daemon_url: daemon_url.into(),
+            atlas,
             concurrency: 4,
             in_flight: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -99,6 +104,7 @@ impl WorkflowTriggerRuntime for DaemonWorkflowRuntime {
             .collect();
         let daemon_url = self.daemon_url.clone();
         let concurrency = self.concurrency;
+        let atlas = Arc::clone(&self.atlas);
         let corpus_for_task = corpus.clone();
 
         let handle = tokio::spawn(async move {
@@ -109,6 +115,7 @@ impl WorkflowTriggerRuntime for DaemonWorkflowRuntime {
                 &corpus_for_task,
                 &folder,
                 &changed,
+                atlas,
             )
             .await;
         });
@@ -127,6 +134,7 @@ async fn run_trigger(
     corpus: &str,
     folder: &str,
     changed: &[String],
+    atlas: Arc<dyn AtlasPort>,
 ) {
     let (toml, origin) = match resolve_workflow_source(workflow) {
         Ok(x) => x,
@@ -163,7 +171,7 @@ async fn run_trigger(
     // B:P9a: the embed-slot query-instruction prefix + chat context window are
     // now sourced by the runner from the daemon's own OICP manifest (loopback,
     // same box), so no `DEFAULT_MANIFEST` closure is threaded through here.
-    let extra = sovereign_tools::workflow_corpus_tools();
+    let extra = sovereign_tools::workflow_corpus_tools(atlas);
     match run_workflow_in_process(&wf, daemon_url, concurrency, false, params, extra, None).await {
         Ok(report) => tracing::info!(
             corpus,

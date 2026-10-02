@@ -18,78 +18,20 @@ use std::sync::{Arc, Mutex};
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::Json;
-use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-use commonwealth_core::ids::{MeshId, NodeId};
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use futures::Stream;
+use kernel_types::NodeId;
 use oicp_types::openai_types::{ChatCompletionRequest, ChatCompletionResponse, StreamFrame};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
 use sovereign_daemon::routes_inference::chat_completions;
 use sovereign_daemon::state::{AppState, LocalInferenceError, LocalInferenceService, ServingSeed};
 
-/// Minimal single-member mesh, the shape `AppState::new` wants. Mirrors
-/// `tests/app_state_privacy.rs` — an integration test cannot reach the
-/// crate's `#[cfg(test)]` helpers.
+/// A solo node serving through `service`. An integration test cannot reach
+/// the crate's `#[cfg(test)]` helpers.
 pub(crate) fn solo_state(service: Arc<dyn LocalInferenceService>) -> AppState {
     let node = NodeId::from_u128(1);
-    let mut members = std::collections::HashMap::new();
-    members.insert(
-        node,
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
-            node_id: node,
-            name: "A".into(),
-            invited_by: node,
-            joined_at: 0,
-            last_seen: 100,
-            status: NodeStatus::Online,
-            capabilities: NodeCapabilities {
-                hardware: HardwareProfile {
-                    gpus: vec![],
-                    system_ram_gb: 0,
-                    cpu_cores: 0,
-                    total_storage_gb: 0,
-                    free_storage_gb: 0,
-                    network_bandwidth_mbps: None,
-                },
-                available: AvailableResources::default(),
-                active_processes: vec![],
-                hosted_corpora: vec![],
-                reported_at: 100,
-                inference_availability: 1.0,
-                inference_capable: false,
-                loaded_models: vec![],
-                origins: Vec::new(),
-                media_allow: Vec::new(),
-                media_available: None,
-                embed_model: None,
-                benchmark: None,
-                current_in_flight: None,
-                anchor: None,
-            },
-            addresses: vec!["192.168.1.1:9742".parse::<std::net::SocketAddr>().unwrap()],
-        },
-    );
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(7),
-        name: "Test".into(),
-        invite_key_hash: [3u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
-    };
     AppState::new_with_serving(
         node,
-        mesh,
         ServingSeed {
             local_inference: Some(service),
             ..Default::default()
@@ -185,6 +127,7 @@ async fn a_url_in_a_tool_result_does_not_constrain_sampling_by_default() {
         HeaderMap::new(),
         None,
         None,
+        None,
         Json(chat_with_url_in_tool_result()),
     )
     .await;
@@ -207,7 +150,15 @@ async fn a_caller_supplied_allowlist_survives_the_gate() {
     let state = solo_state(Arc::new(svc.clone()));
     let mut request = chat_with_url_in_tool_result();
     request.url_allowlist = Some(vec!["https://example.test/a".to_string()]);
-    let _ = chat_completions(State(state), HeaderMap::new(), None, None, Json(request)).await;
+    let _ = chat_completions(
+        State(state),
+        HeaderMap::new(),
+        None,
+        None,
+        None,
+        Json(request),
+    )
+    .await;
     assert_eq!(
         svc.seen().url_allowlist.as_deref(),
         Some(&["https://example.test/a".to_string()][..]),

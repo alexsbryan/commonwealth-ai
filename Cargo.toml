@@ -20,12 +20,33 @@ members = [
     # DELETES two cross-family edges instead of relocating them. Tier-0, and
     # the empty in-repo dep list is the contract (see its lib.rs).
     "serving-policy",
+    # The arithmetic half of serving-policy as a [[package_leaf]] vocabulary
+    # leaf (fp-17, 2026-09-22): the daemon computes the same fair-share rule
+    # the serving cluster does, and an [svrn] member may not name a [cmnwlth]
+    # package crate — the shared arithmetic is the part both ends own.
+    "serving-policy-core",
     # The append-only journal — Op/OpId/Oplog/Journaled/SkippedLine. Minted
     # 2026-09-04: it was `corpus-engine/src/oplog.rs`, and the commonwealth
     # ring rail took a dep on corpus-engine — a 578-crate closure — to reach
     # seven references into it. Tier-0 because op ids are GOSSIPED, so the one
     # content-hash derivation must sit below everyone who writes a log.
     "oplog",
+    # Mesh join-key + deep-link FORMAT vocabulary (fp-9/fp-24, 2026-09-23):
+    # `hash_join_key`/`validate_join_key_format` and the deep_link URL grammar
+    # both ends of a mesh join must spell the same way. Deliberately NOT named
+    # `sovereign-*`: the two [[forbid]] rows (`commonwealth-discovery →
+    # sovereign-*`, `commonwealth-rails → sovereign-*`) pattern-match that
+    # prefix and both crates reach this leaf. Layer 0 beside kernel-types; no
+    # fs, no store — the one `SOVEREIGN_JOIN_HOST` env read rides with the
+    # format that consumes it.
+    "mesh-join-vocab",
+    # The host kit (FIVE_PROGRAMS §2c): what each program's binary owns about
+    # itself, starting with its data-root lock. Neutrally named so
+    # commonwealth-rails can take it; every path comes from the caller.
+    "host-kit",
+    # How a program reaches a mesh peer (phase-b pb-rails-reach): the dial
+    # vocabulary commonwealth-transport re-exports, and RailsTransport.
+    "mesh-reach",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
     "corpus-engine",
@@ -34,9 +55,11 @@ members = [
     # corpus-engine 2026-05-23 to cut the rebuild blast radius for scip
     # changes from 20 crates to ~6.
     "corpus-engine-scip",
-    # ATOS state — FeatureStore + plan_items + DESIGN.md design_signals.
-    # Step 2 of the corpus-engine decomposition (see DECOMPOSITION.md).
-    "corpus-engine-atos",
+    # The resolved-atlas READ surface, carved read-only out of corpus-engine's
+    # enrichment/atlas (FIVE_PROGRAMS §12 decision 1, 2026-09-21): svrn, cmnwlth
+    # and the MCP surfaces read the atlas without linking the engine that
+    # writes it.
+    "corpus-engine-atlas-reader",
     # NoteStore + project_docs + notes_sync. Step 3 of the corpus-engine
     # decomposition. notes.rs (2781 LOC) cleared from the §3.1 list.
     "corpus-engine-notes",
@@ -68,6 +91,9 @@ members = [
     # ONE implementation by reaching DOWN instead of corpus-engine reaching up
     # into sovereign-contracts (noun-convergence rung 2).
     "corpus-engine-sections",
+    # The bundled recipe definitions as data (five-programs-52): the package is
+    # rooted at the sovereign-recipes/ directory, which keeps its name.
+    "sovereign-recipes",
     # The atlas vocabulary (AtomsFile/AtomEnvelope, Edge, the kind taxonomy,
     # lookup_key) — a serde + kernel-types leaf carved out 2026-09-03 so a thin
     # host can READ atlas/atoms.json without linking corpus-engine (Step 2 of
@@ -99,6 +125,7 @@ members = [
     "sovereign/crates/sovereign-store",
     "sovereign/crates/sovereign-time",
     "sovereign/crates/sovereign-tools",
+    "sovereign/crates/sovereign-code",
     # GLiNER (ONNX) per-chunk entity extraction — carved out of sovereign-tools
     # 2026-07-17 so the fragile ort=rc.9 stack is a mandatory dep of only the
     # four binaries that need it, not an optional feature on a shared crate
@@ -131,17 +158,17 @@ members = [
     # catalog, hoisted out of the CLI so the daemon can run workflows (the living
     # trigger's prerequisite).
     "studio/crates/sovereign-workflow-host",
+    "studio/crates/sovereign-studio",
     # Headless studio CLI — authors + tests recipes and runs workflows against any
     # OICP daemon, linking ONLY the studio crates + shared leaves (no corpus-engine,
     # no sovereign-core). The proof the studio package is independently usable.
-    "studio/crates/sovereign-studio",
     # MeshApp explorer ops — pure path-in/DTO-out projections shared by the
     # desktop Tauri host and the `sovereign meshapp dev` CLI server.
     "sovereign/crates/sovereign-meshapp",
-    "sovereign/crates/sovereign-mesh",
-    # The node's host crate (DAEMON_CORE.md §4.1), beside sovereign-mesh in the
-    # `mesh-api` layer. Created as a stub so the boundary has a crate to name;
-    # receives sovereign-mesh's host modules and sovereign-api's host cluster.
+    # The node's host crate (DAEMON_CORE.md §4.1), in the `mesh-api` layer.
+    # Created as a stub so the boundary has a crate to name; it received
+    # sovereign-mesh's host modules (pb-mesh-dissolve deleted that crate) and
+    # sovereign-api's host cluster.
     "sovereign/crates/sovereign-daemon",
     # The daemon-to-daemon wire types both ends of an internal exchange must
     # spell the same way (domains dm-daemon-api-edge (a)): the receiving route
@@ -164,9 +191,22 @@ members = [
     # sovereign-serving-host.
     "sovereign/crates/sovereign-scheduler",
     "sovereign/crates/sovereign-serving-host",
+    # `serve`, the model server (docs/FIVE_PROGRAMS.md §2; phase-b
+    # pb-serve-program): the one binary that answers the OpenAI wire alone.
+    "sovereign/crates/sovereign-serve",
+    # The stock distribution (docs/FIVE_PROGRAMS.md §2c; pb-stock-binary): svrn
+    # with serve hosted in one process, what `svrn daemon run` execs.
+    "sovereign/crates/sovereign-stock",
+    # The on-prem distribution (docs/FIVE_PROGRAMS.md §2c; phase-b-86, -87):
+    # svrn, serve and ingest in one process, with no code, no mesh, and svrn's
+    # open-web surfaces and `/mcp` withheld.
+    "sovereign/crates/sovereign-onprem",
+    # Ingest's hosting composition for svrn, the one `hosted()` both
+    # distributions call (docs/FIVE_PROGRAMS.md §2c; phase-b-88).
+    "sovereign/crates/sovereign-hosted-ingest",
     "sovereign/crates/sovereign-service",
-    "sovereign/crates/sovereign-server",
     "sovereign/crates/sovereign-desktop/src-tauri",
+    "sovereign-mobile/src-tauri",
     # The phone surface. Promoted into the workspace 2026-09-10 (sv-surface R6):
     # it was detached so that unverified mobile deps could not break the main
     # build, for as long as it hand-rolled its OWN copy of the turn protocol. It now
@@ -174,13 +214,15 @@ members = [
     # from growing back is a gate that actually compiles and tests it. `tauri`
     # was already a workspace dependency via sovereign-desktop, so this adds no
     # new third-party tree.
-    "sovereign-mobile/src-tauri",
     "sovereign/crates/sovereign-cli",
+    "sovereign/crates/sovereign-cli-base",
     "sovereign/crates/sovereign-cli-shared",
     "sovereign/crates/sovereign-cli-dev",
     "sovereign/crates/sovereign-cli-daemon",
     "sovereign/crates/sovereign-cli-llm",
-    "sovereign/crates/sovereign-atos",
+    # bench's CLI (phase-b pb-cli-llm-bench-move).
+    "sovereign/crates/sovereign-cli-bench",
+    "sovereign/crates/sovereign-cli-mesh",
     "sovereign/crates/sovereign-eval",
     "sovereign/crates/sovereign-authoring-harness",
     "sovereign/crates/sovereign-pipeline",
@@ -226,8 +268,6 @@ members = [
     # is 743 crates and this one is 319; the whole point is the difference
     # (`cargo tree --edges normal`, measured 2026-09-11).
     "commonwealth/crates/commonwealth-rails",
-    "sovereign/crates/sovereign-mesh-test-harness",
-    "sovereign/crates/sovereign-meshapp-registry",
     "commonwealth/crates/commonwealth-state",
 
     # Quality program (2026-07-11) — schema + evaluator for the declared
@@ -314,19 +354,25 @@ oicp-client = { path = "oicp-client" }
 oicp-types = { path = "oicp-types" }
 kernel-types = { path = "kernel-types" }
 serving-policy = { path = "serving-policy" }
+serving-policy-core = { path = "serving-policy-core" }
 oplog = { path = "oplog" }
+mesh-join-vocab = { path = "mesh-join-vocab" }
+host-kit = { path = "host-kit" }
+mesh-reach = { path = "mesh-reach" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
-corpus-engine-atos = { path = "corpus-engine-atos" }
+corpus-engine-atlas-reader = { path = "corpus-engine-atlas-reader" }
 corpus-engine-notes = { path = "corpus-engine-notes" }
 corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
 corpus-engine-yield = { path = "corpus-engine-yield" }
 corpus-engine-watchers = { path = "corpus-engine-watchers" }
 corpus-engine-sections = { path = "corpus-engine-sections" }
-understanding-vocab = { path = "understanding-vocab" }
+corpus-engine-recipes = { path = "sovereign-recipes" }
+understanding-vocab = { path = "understanding-vocab", default-features = false }
 understanding-atlas = { path = "understanding-atlas" }
 corpus-index = { path = "corpus-index" }
 code-facts = { path = "code-facts" }
+code-next-edit = { path = "code-next-edit" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
@@ -335,6 +381,8 @@ sovereign-scheduler = { path = "sovereign/crates/sovereign-scheduler" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
+sovereign-code = { path = "sovereign/crates/sovereign-code" }
+sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
 sovereign-enrichment-build = { path = "sovereign/crates/sovereign-enrichment-build" }
@@ -344,20 +392,21 @@ sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
 sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
 sovereign-workflow = { path = "studio/crates/sovereign-workflow" }
 sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
-sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
-sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
 sovereign-peer-wire = { path = "sovereign/crates/sovereign-peer-wire" }
 sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
+sovereign-serving-host = { path = "sovereign/crates/sovereign-serving-host" }
+sovereign-serve = { path = "sovereign/crates/sovereign-serve" }
 sovereign-service = { path = "sovereign/crates/sovereign-service" }
-sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
+sovereign-cli-base = { path = "sovereign/crates/sovereign-cli-base" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "sovereign/crates/sovereign-agent-bench" }
 sovereign-eval = { path = "sovereign/crates/sovereign-eval" }
 sovereign-authoring-harness = { path = "sovereign/crates/sovereign-authoring-harness" }
+sovereign-hosted-ingest = { path = "sovereign/crates/sovereign-hosted-ingest" }
 sovereign-agent-tools = { path = "sovereign/crates/sovereign-agent-tools" }
 sovereign-tdd = { path = "sovereign/crates/sovereign-tdd" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
@@ -369,7 +418,6 @@ commonwealth-rail = { path = "commonwealth/crates/commonwealth-rail" }
 commonwealth-work = { path = "commonwealth/crates/commonwealth-work" }
 commonwealth-media = { path = "commonwealth/crates/commonwealth-media" }
 commonwealth-rails = { path = "commonwealth/crates/commonwealth-rails" }
-sovereign-meshapp-registry = { path = "sovereign/crates/sovereign-meshapp-registry" }
 commonwealth-state = { path = "commonwealth/crates/commonwealth-state" }
 
 # ── Shared external deps ────────────────────────────────────────────────
@@ -439,11 +487,9 @@ ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
 # Dial-by-key transport (QUIC by Ed25519 key, hole-punch + relays).
 # iroh 1.0 shipped 2026-06-15 with a committed, wire-stable protocol
 # (any v1 endpoint interops with any other v1 endpoint). Compiled
-# behind commonwealth-transport's `iroh` feature and sovereign-mesh's
-# `iroh-experimental`; all iroh symbol use is confined to
-# `commonwealth-transport/src/iroh.rs`, so a future minor bump is a
-# one-file change. Spike e2e: `cargo test -p sovereign-mesh
-# --features iroh-experimental`.
+# behind commonwealth-transport's `iroh` feature; all iroh symbol use is
+# confined to `commonwealth-transport/src/iroh.rs`, so a future minor bump
+# is a one-file change.
 iroh = "1.0"
 
 # Concurrency
@@ -480,7 +526,7 @@ arrow-schema = "57"
 parquet = "57"
 lancedb = "0.27"
 
-# Markdown (sovereign-atos charter parsing)
+# Markdown (the corpus-engine markdown extractor)
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
 
 # Grammar-constrained sampling: llguidance is the upstream
@@ -502,6 +548,19 @@ llguidance = "1.7"
 # consolidating into one workspace doesn't slow incremental builds.
 [profile.dev]
 debug = 0
+
+# The ring signature stack runs optimized even in dev, because the deployed
+# daemons ARE dev builds (target/debug) and cw-rails verifies every journal
+# line's ed25519 signature before it serves (phase-b-5, `journal.admit`).
+# Unoptimized, that was ~9.6 ms a line: 118 s to project the operator's
+# 12.9k-line store. Optimized: 1.74-1.88 s over three runs. Only these three
+# crates change; nothing else loses debuggability.
+[profile.dev.package.curve25519-dalek]
+opt-level = 3
+[profile.dev.package.ed25519-dalek]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
 
 # Release builds ship in the desktop bundle. The desktop binary is ~397 MB
 # unstripped (835k symbols) because cargo's default release profile keeps the

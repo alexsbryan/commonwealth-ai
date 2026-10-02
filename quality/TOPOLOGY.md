@@ -135,6 +135,13 @@ over every `.set_*` / `.install_*_router(` call site outside `target/`); the rin
 membership comes from the receiver-scoped `Runtime` mutator matrix of the same
 day. Anything here that is not yet true is marked `TARGET`.
 
+*Dated 2026-09-26.* The single assembler below predates the five-program
+split (docs/FIVE_PROGRAMS.md §2). Weights and compute children are now
+`serve`'s, the SCIP graph belongs to `svrn code`, and the node key and mesh
+endpoint belong to cw-rails (§4 rule 8). Two parts still hold, and rule 8
+builds on both: the ring rule (place a capability by what its absence costs)
+and the nesting lattice.
+
 ### One process assembles; everything else is a surface
 
 ```
@@ -666,7 +673,7 @@ The defect was never the count, and the count is a poor proxy: `services.` reads
 - **Readers → 0. MET 2026-08-25.** Code deciding what *this* process is. Only `Launch::parse` may answer that. 3 → 1 on 2026-08-24 (both desktop sites gone; `main.rs` runs one exhaustive `Launch` match in place of three independent argv scans), then 1 → 0 on 2026-08-25. The survivor was `daemon_cmd/mod.rs:172` (`--worker-mode`), a §10.6 duplicate created by that very refactor — `dispatch` collapsed `Launch::Daemon` and `Launch::Worker` into one `daemon_cmd::run` call, so `Launch` answered and `daemon_cmd` asked again.
   It was deferred, not overlooked, on a real objection: `Launch::Worker` carries the args *including* the `run` subcommand, while `run_worker_daemon` receives them with `run` already stripped by `daemon_cmd::run`'s own routing, so routing `Worker` straight through meant either a signature change across two functions or silently altering what the worker parses. **The objection dissolved once the fix was the `Launch` value rather than its args**: `run` and `run_daemon` take `&Launch`, the branch is `matches!(launch, Launch::Worker { .. })`, and `args` keeps coming from the existing routing untouched. The same threading is what lets `daemon_cmd` call the assembler, so it stopped being a second dimension and became the same one.
 - **Writers → named constants. 6 → 0 on 2026-08-24.** `launch.rs` now exports `DAEMON_CHILD_FLAG`, `COMPUTE_CHILD_FLAG` and `WORKER_MODE_FLAG`, `parse` reads them, and all six spawn sites name them (`supervisor_setup.rs` ×2, `compute/manager.rs` ×3, `mesh/tests/local_pod_smoke.rs`).
-  The smoketest token is deliberately **not** duplicated into `launch.rs`: `sovereign-inference/src/smoketest.rs:53` already owns it next to the implementation, and `sovereign-contracts` sits below `sovereign-inference` so it cannot name that constant. Declaring a second copy would be the very §10.6 smell this work removes. The two are pinned equal instead, by a test in a crate that can see both — `sovereign-cli-daemon::launch_smoketest_flag_matches_owner`, which feeds the owner's constant into `Launch::parse`.
+  The smoketest token is deliberately **not** duplicated into `launch.rs`: `sovereign-inference/src/smoketest.rs:53` already owns it next to the implementation, and `sovereign-contracts` sits below `sovereign-inference` so it cannot name that constant. Declaring a second copy would be the very §10.6 smell this work removes. The two are pinned equal instead, by a test in the owner, which sees both — `sovereign_inference::smoketest`'s `launch_smoketest_flag_matches_owner` (it lived in `sovereign-cli-daemon` until pb-distribution-setup), which feeds the owner's constant into `Launch::parse`.
 
 The other two, both **MET 2026-08-25**: Option-returning accessors on `DaemonServices` at exactly the real ones (now two, not three — Phase 3 retired `state_store()`); and exactly one exhaustive match over `Launch` that constructs anything (`sovereign_mesh::assemble` — and since Phase 7a the compiler holds this outright, so the source census that used to hold the half it could not is deleted rather than kept as a second opinion).
 

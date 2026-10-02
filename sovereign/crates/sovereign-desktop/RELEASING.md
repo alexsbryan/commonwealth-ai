@@ -289,7 +289,8 @@ missing the OCR button hides itself and ingest is unaffected.
 |-------|---------|--------|------|
 | `paddle-ocr/ppocr-en-v4v5/{det,rec}.onnx` + `dict.txt` | **OCR engine** (PaddleOCR via the ONNX Runtime already linked for GLiNER) | HF: `SWHL/RapidOCR` (det) + `monkt/paddleocr-onnx` (rec/dict), Apache-2.0 | ~13 MB |
 | `pdfium/libpdfium.dylib` / `pdfium.dll` / `libpdfium.so` | PDF page → image rasterization (engine-independent) | `bblanchon/pdfium-binaries` releases | ~7 MB |
-| `sovereign-cli-daemon-<triple>[.exe]` | **The daemon itself**, as a Tauri sidecar | built from this workspace | ~200 MB |
+| `sovereign-cli-daemon-<triple>[.exe]` | **The daemon's verbs**, as a Tauri sidecar | built from this workspace | ~200 MB |
+| `sovereign-stock-<triple>[.exe]` | **The loader** the sidecar execs (`daemon run`, setup's probe) | built from this workspace | not measured |
 
 PaddleOCR runs **in-process** through `ort` (no second ML runtime —
 it reuses GLiNER's onnxruntime) and needs **no platform install**,
@@ -317,9 +318,14 @@ Three names have to agree, and only two of them are checked by the compiler:
 
 | Where | Spelling |
 |---|---|
-| `src-tauri/src/daemon_binary.rs` | `SIDECAR_BINARY = "sovereign-cli-daemon"` |
-| `src-tauri/tauri.release.conf.json` | `bundle.externalBin: ["binaries/sovereign-cli-daemon"]` |
-| `scripts/stage-daemon-sidecar.sh` | `SIDECAR_NAME="sovereign-cli-daemon"` |
+| `src-tauri/src/daemon_binary.rs` | `SIDECAR_BINARY = "sovereign-cli-daemon"`, `LOADER_SIDECAR = "sovereign-stock"` |
+| `src-tauri/tauri.release.conf.json` | `bundle.externalBin: ["binaries/sovereign-cli-daemon", "binaries/sovereign-stock"]` |
+| `scripts/stage-daemon-sidecar.sh` | `SIDECAR_NAME="sovereign-cli-daemon"`, `LOADER_NAME="sovereign-stock"` |
+
+The second binary is the loader the sidecar execs for `daemon run` and for
+first-run setup's probe, found beside the sidecar; it carries the Windows GPU
+features (`SOVEREIGN_SIDECAR_FEATURES`). Until pb-distribution-setup the bundle
+carried no binary `daemon run` could exec.
 
 `daemon_binary::tests::packaging::the_sidecar_name_matches_the_release_config`
 reads the JSON and asserts the first two agree; the script fails loudly if its

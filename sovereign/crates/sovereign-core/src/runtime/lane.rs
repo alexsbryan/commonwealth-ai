@@ -55,10 +55,10 @@ use crate::runtime::Runtime;
 pub struct Rerank {
     /// The cross-encoder itself. `None` = none is wired, and every
     /// `search_with_rerank` degrades to plain fusion rather than failing.
-    pub f: Option<corpus_engine::RerankFn>,
+    pub f: Option<corpus_index::types::RerankFn>,
     /// Overfetch size, threshold, blend weight. Always present: `enabled =
     /// false` makes the pass a no-op regardless of `f`.
-    pub config: corpus_engine::RerankConfig,
+    pub config: corpus_index::types::RerankConfig,
 }
 
 impl Rerank {
@@ -70,8 +70,34 @@ impl Rerank {
 
     /// The cross-encoder, borrowed for the call sites that pass it straight
     /// through to `CorpusIndex::search_with_rerank`.
-    pub fn f(&self) -> Option<&corpus_engine::RerankFn> {
+    pub fn f(&self) -> Option<&corpus_index::types::RerankFn> {
         self.f.as_ref()
+    }
+
+    /// This config with a turn's rerank pins laid over it. `enabled: true`
+    /// is `svrn bench promote`'s dedup arm (overfetch plus per-article dedup
+    /// over every corpus the turn searches, which for its sealed turn is the
+    /// corpus under test); `enabled: false` turns reranking off.
+    fn pinned(mut self, pins: crate::types::RerankOverrides) -> Self {
+        match pins.enabled {
+            Some(true) => {
+                self.config.enabled = true;
+                self.config.per_article = true;
+                self.config.dedup_corpus_filter = None;
+            }
+            Some(false) => self.config.enabled = false,
+            None => {}
+        }
+        if let Some(k) = pins.candidates_k {
+            self.config.candidates_k = k as usize;
+        }
+        tracing::debug!(
+            enabled = self.config.enabled,
+            per_article = self.config.per_article,
+            candidates_k = self.config.candidates_k,
+            "turn.rerank: read the turn's pinned rerank config"
+        );
+        self
     }
 }
 
@@ -79,7 +105,7 @@ impl Default for Rerank {
     fn default() -> Self {
         Self {
             f: None,
-            config: corpus_engine::RerankConfig::default(),
+            config: corpus_index::types::RerankConfig::default(),
         }
     }
 }
@@ -101,13 +127,12 @@ pub struct Lane {
     pub atlas_context: Option<Arc<dyn crate::atlas_context::AtlasContextProvider>>,
     /// Structural link graph for a corpus that exposes one (today:
     /// Wikipedia) — one-hop neighbour expansion and `(contested)` markers.
-    pub wikipedia_graph: Option<Arc<dyn corpus_engine::WikipediaGraphApi>>,
+    pub wikipedia_graph:
+        Option<Arc<dyn corpus_engine_atlas_reader::wikipedia_graph::WikipediaGraphApi>>,
     /// Cross-corpus meta-atlas index. Snapshotted out of the Runtime's
     /// `RwLock` at lane-build time — see the module docs on why a per-stage
     /// read is a bug and not merely a cost.
-    pub meta_atlas: Option<Arc<corpus_engine::meta_atlas::MetaAtlasIndex>>,
-    /// Cross-corpus bridge edges (typed topic-to-topic alignment).
-    pub bridge: Option<Arc<corpus_engine::meta_atlas::BridgeIndex>>,
+    pub meta_atlas: Option<Arc<corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex>>,
     /// The cross-encoder pass.
     pub rerank: Rerank,
     /// Entity extractor for entity-aware history retrieval and hybrid
@@ -149,7 +174,8 @@ impl Lane {
 #[derive(Clone, Default)]
 pub struct LaneSources {
     pub atlas_context: Option<Arc<dyn crate::atlas_context::AtlasContextProvider>>,
-    pub wikipedia_graph: Option<Arc<dyn corpus_engine::WikipediaGraphApi>>,
+    pub wikipedia_graph:
+        Option<Arc<dyn corpus_engine_atlas_reader::wikipedia_graph::WikipediaGraphApi>>,
     /// A CELL, not a value — the one member that can arrive after
     /// construction. `canonical_atoms.json` is ~900MB and parsing it was the
     /// bulk of the desktop splash's `BuildingRuntime` phase, so the desktop
@@ -157,8 +183,8 @@ pub struct LaneSources {
     /// warm via [`Runtime::install_meta_atlas`]. `ArcSwapOption` rather than
     /// `RwLock<Option<_>>` because every turn reads it and only one writer
     /// ever fires.
-    pub meta_atlas: Arc<arc_swap::ArcSwapOption<corpus_engine::meta_atlas::MetaAtlasIndex>>,
-    pub bridge: Option<Arc<corpus_engine::meta_atlas::BridgeIndex>>,
+    pub meta_atlas:
+        Arc<arc_swap::ArcSwapOption<corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex>>,
     pub rerank: Rerank,
     pub gliner: Option<Arc<dyn crate::traits::EntityExtractor>>,
     pub conv_tiered: Option<Arc<dyn crate::conv_tiered::ConvTieredReader>>,
@@ -184,7 +210,6 @@ impl LaneSources {
             atlas_context: self.atlas_context.clone(),
             wikipedia_graph: self.wikipedia_graph.clone(),
             meta_atlas: self.meta_atlas.load_full(),
-            bridge: self.bridge.clone(),
             rerank: self.rerank.clone(),
             gliner: self.gliner.clone(),
             conv_tiered: self.conv_tiered.clone(),
@@ -198,7 +223,15 @@ impl Runtime {
     /// The field is `lane_sources` and the method is `lane()` on purpose: what
     /// the process holds and what a turn gets are different values, and the
     /// second is a snapshot of the first.
+    ///
+    /// A turn's rerank pins ([`super::capabilities::scope_rerank`]) are laid
+    /// over the snapshot here, so every read of `lane.rerank` in that turn
+    /// sees them and no other turn does.
     pub fn lane(&self) -> Lane {
-        self.lane_sources.snapshot()
+        let mut lane = self.lane_sources.snapshot();
+        if let Some(pins) = super::capabilities::current_rerank() {
+            lane.rerank = lane.rerank.pinned(pins);
+        }
+        lane
     }
 }

@@ -46,13 +46,11 @@ This trips everyone up:
 | `SOVEREIGN_GV_THRESHOLD` | `0.9` | Violation-probability threshold τ. The answer abstains when its grounding-violation probability ≥ τ. Bench-calibrated; lower = stricter (more abstention). One shared default (`grounding_gate_threshold()`) for the production gate AND the chaos bench; `bench chaos-monkey run/rescore --gv-threshold <τ>` overrides per-run (the bench's silent divergent 0.5 default was unified onto this on 2026-07-30 — pass `--gv-threshold 0.5` to reproduce older gated runs). |
 | `SOVEREIGN_GATE_EXCLUDE_RAPTOR` | **on** | Exclude RAPTOR *summary* chunks from the gate's evidence view (a summary isn't verbatim source). `=0` to include them. |
 
-### Agentic evidence loop (round-2 retrieval)
-| Var | Default | Effect |
-|---|---|---|
-| `SOVEREIGN_AGENTIC_KQ` | **off** | Enable the round-0 → sufficiency-judge → (if insufficient) formulate sub-queries → round-2 retrieval loop on KnowledgeQuery. |
-| `SOVEREIGN_AGENTIC_KQ_THRESHOLD` | `0.5` | Insufficiency probability above which round-2 formulation fires. |
-| `SOVEREIGN_SUFFICIENCY_CHUNKS` | `12` | How many round-0 chunks the sufficiency judge reads. |
-| `SOVEREIGN_SUFFICIENCY_CHARS` | `2000` | Chars/chunk the judge reads (raised from 600 — a smaller slice truncated deep-in-chunk answers and produced false "insufficient" verdicts). |
+### Agentic evidence loop (round-2 retrieval) — cut
+The loop and its four knobs (`SOVEREIGN_AGENTIC_KQ`, `_AGENTIC_KQ_THRESHOLD`,
+`SOVEREIGN_SUFFICIENCY_CHUNKS`, `_SUFFICIENCY_CHARS`) were deleted in cc78b933b.
+Setting one now has no effect beyond a startup warning (`quality/env-flags.toml`,
+status `removed`).
 
 ### Citation grounding — EXPERIMENTAL, default OFF
 | Var | Default | Effect |
@@ -96,7 +94,6 @@ forms miss (each escalation logged). Full design + rationale:
 SOVEREIGN_DISABLE_PEER_INFERENCE=1 \   # solo run, don't route to peers
 SOVEREIGN_GROUNDING_GATE=1 \           # gate on (the thing under test)
 SOVEREIGN_GV_THRESHOLD=0.9 \           # default threshold
-SOVEREIGN_AGENTIC_KQ=1 \               # round-2 retrieval loop on
 SOVEREIGN_AGENTIC_KQ_DEBUG=1 \         # trace gate decisions to stderr
   target/debug/sovereign-cli-llm bench chaos-monkey run \
     --bank sovereign/bench/chaos_monkey/secret_agent.toml \

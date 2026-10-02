@@ -295,12 +295,104 @@ def first_line(path) -> str:
         return ""
 
 
-def halt(paths, reason, *, notifier=notify, notify_enabled=True):
+# A package line `operator-only: <the charter clause>` marks a fork the charter
+# reserves for the operator, and the supervisor honours it as it honours a HUMAN-
+# row: no resolution session. Without it, every director appended its review to
+# the package, which changed the package's hash, so "changed nothing" never fired
+# and a latency bar the charter reserves drew four directors (phase-b,
+# 2026-09-26).
+OPERATOR_ONLY_MARK = "operator-only:"
+
+
+def operator_only(path):
+    """The clause an operator-only package names, or None when it names none."""
+    try:
+        lines = pathlib.Path(path).read_text(errors="replace").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        s = line.strip()
+        if s.lower().startswith(OPERATOR_ONLY_MARK):
+            return s[len(OPERATOR_ONLY_MARK):].strip() or "no clause named"
+    return None
+
+
+def parked_ids(paths):
+    """The rows parked for the operator: one `<row-id>.md` package each under
+    the loop's parked dir. Deleting a package unparks its row."""
+    root = paths.p(paths.parked)
+    if not root.is_dir():
+        return frozenset()
+    return frozenset(f.stem for f in root.glob("*.md"))
+
+
+def out_of_scope(paths, queue):
+    """Open rows outside the queue's frozen scope (queue.toml `scope_file`,
+    phase-b-32, operator 2026-09-27: "We can't keep adding scope"). They wait
+    on the operator as a parked row does; a new row is the operator's act. An
+    audit row and a split of an in-scope row (`<id>-<suffix>`) are in scope:
+    a split re-chunks scope, it does not add it."""
+    rel = paths.manifest.scope_file if paths.manifest else ""
+    if not rel:
+        return frozenset()
+    try:
+        text = paths.p(rel).read_text()
+    except OSError as e:
+        say(f"scope file {rel} unreadable ({e}) — no row is judged out of scope")
+        return frozenset()
+    allowed = {line.split("#")[0].strip() for line in text.splitlines()} - {""}
+    return frozenset(
+        r.id for r in queue.rows
+        if r.status is not Status.DONE and r.id not in allowed
+        and not r.id.startswith(AUDIT_PREFIX)
+        and not any(r.id.startswith(f"{a}-") for a in allowed))
+
+
+def write_parked(paths, row_id, package, reason):
+    """The one spelling of a parked row's package: `<parked>/<row-id>.md`."""
+    dest = paths.p(paths.parked) / f"{row_id}.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(package + f"\n<!-- parked {row_id}: {reason}. Answer in the "
+                    f"row, then delete this file to unpark it. -->\n")
+    return dest
+
+
+def held_ids(paths, queue):
+    """Every row that waits on the operator besides HUMAN- rows: parked rows
+    and rows outside the frozen scope. The one set the planners skip."""
+    return parked_ids(paths) | out_of_scope(paths, queue)
+
+
+def blocked_row(queue, title, parked=frozenset()):
+    """The one open row a halt package is about, or None. The title must name
+    exactly one open non-HUMAN row; an operator-only package may instead rest
+    on the one `[~]` row. A halt that names no row (a stall, a full disk, an
+    unready queue) is not a row's block, and parking on it would walk the loop
+    through the whole queue."""
+    open_rows = [r for r in queue.rows if r.status is not Status.DONE
+                 and not r.id.startswith("HUMAN-") and r.id not in parked]
+    named = [r for r in open_rows
+             if re.search(rf"(?<![\w-]){re.escape(r.id)}(?![\w-])", title)]
+    if len(named) == 1:
+        return named[0]
+    return None
+
+
+def waiting_row(queue, parked=frozenset()):
+    """The one `[~]` row, for an operator-only package whose title names none."""
+    active = [r for r in queue.rows if r.status is Status.ACTIVE
+              and not r.id.startswith("HUMAN-") and r.id not in parked]
+    return active[0] if len(active) == 1 else None
+
+
+def halt(paths, reason, *, notifier=notify, notify_enabled=True, operator_clause=None):
     """The one halt: a package, a reason in STOP, a notification. Shared by
-    the campaign and the pool so neither can invent a quieter stop."""
+    the campaign and the pool so neither can invent a quieter stop. An
+    `operator_clause` marks the package operator-only, so no director runs."""
     pkg = paths.p(paths.needs_human)
     pkg.parent.mkdir(parents=True, exist_ok=True)
-    pkg.write_text(f"# {reason}\n\nresolve by hand, then remove "
+    mark = f"{OPERATOR_ONLY_MARK} {operator_clause}\n\n" if operator_clause else ""
+    pkg.write_text(f"# {reason}\n\n{mark}resolve by hand, then remove "
                    f"{paths.stop} {paths.needs_human}\n")
     if not pkg.stat().st_size:
         say(f"HALT could not write {pkg} (disk full?) — no decision package exists")
@@ -380,8 +472,9 @@ def resolver_prompt(paths, attempt, resolve_max, reason, charter=None):
             f"   The supervisor cleared the old blocker STOP; a NEW `{paths.stop}` is an\n"
             "   operator request and you must not remove it.\n"
             "5. If the fork is one the charter leaves to the operator, say so in the\n"
-            "   package — the options, their costs, and your recommendation — and stop. An\n"
-            "   honest package beats a guessed decision.\n\n"
+            "   package — the options, their costs, and your recommendation — add the line\n"
+            f"   `{OPERATOR_ONLY_MARK} <the charter clause>` so no further resolution session\n"
+            "   is sent, and stop. An honest package beats a guessed decision.\n\n"
             "=== CHARTER ===\n" + charter)
     return head + (
         "You are the resolution session. Diagnose and fix so the campaign flows again:\n"
@@ -391,7 +484,8 @@ def resolver_prompt(paths, attempt, resolve_max, reason, charter=None):
         "   consumer evidence, with the row and its source order corrected together.\n"
         "3. Do NOT weaken a PASS BAR and do not mark a unit [x] that has not earned it.\n"
         f"   Never approve or mark a HUMAN- row. If this is a genuine design fork, leave\n"
-        f"   a clear `{paths.needs_human}` for the operator and stop.\n"
+        f"   a clear `{paths.needs_human}` for the operator, with the line\n"
+        f"   `{OPERATOR_ONLY_MARK} <why only the operator can decide it>`, and stop.\n"
         f"4. When fixed: remove `{paths.needs_human}` so the campaign resumes, and commit.\n"
         f"   The supervisor cleared the old blocker STOP; a NEW `{paths.stop}` is an\n"
         "   operator request and you must not remove it.\n")
@@ -455,6 +549,27 @@ class Queue:
     def by_id(self):
         return {r.id: r for r in self.rows}
 
+    def block(self, row_id):
+        """The row's line and its indented continuation, up to the next row or
+        heading: everything the worker reads as that row."""
+        row = self.by_id()[row_id]
+        lines = self.path.read_text().splitlines()
+        out = [lines[row.lineno - 1]]
+        for line in lines[row.lineno:]:
+            if ROW_RE.match(line) or line.startswith("#"):
+                break
+            out.append(line)
+        return "\n".join(out)
+
+    def unmet_requirements(self, row, requires):
+        """The `dispatch_requires` markers this row's block lacks. Reviews and
+        HUMAN- rows are exempt: a review is where a census is written, and a
+        HUMAN- row is the operator's act."""
+        if not requires or is_review(row) or row.id.startswith("HUMAN-"):
+            return []
+        text = self.block(row.id)
+        return [m for m in requires if m not in text]
+
     def done_count(self):
         return sum(1 for r in self.rows if r.status is Status.DONE)
 
@@ -462,14 +577,30 @@ class Queue:
         by = self.by_id()
         return all(by[d].status is Status.DONE for d in row.deps)
 
-    def current(self):
+    def current(self, parked=frozenset()):
+        """The unit the loop runs next: the `[~]` row, else the first ready `[ ]`
+        row. A HUMAN- row is never a unit and neither is a parked row: both wait
+        on the operator while every row that does not depend on them runs
+        (phase-b-31, operator 2026-09-27: "rather than using every roadblock as a
+        total stop"). Until then the first ready HUMAN- row halted the loop, and
+        HUMAN-pb-lanes-dials-serve held 40 independent rows for 9 h."""
+        def waits(r):
+            return r.id.startswith("HUMAN-") or r.id in parked
         for r in self.rows:
-            if r.status is Status.ACTIVE:
+            if r.status is Status.ACTIVE and not waits(r):
                 return r
         for r in self.rows:
-            if r.status is Status.PENDING and self.deps_met(r):
+            if r.status is Status.PENDING and not waits(r) and self.deps_met(r):
                 return r
         return None
+
+    def awaiting_operator(self, parked=frozenset()):
+        """What only the operator can move: ready HUMAN- rows, then parked rows."""
+        human = [r.id for r in self.rows if r.id.startswith("HUMAN-")
+                 and r.status is not Status.DONE and self.deps_met(r)]
+        held = [r.id for r in self.rows if r.id in parked and r.status is not Status.DONE
+                and not r.id.startswith("HUMAN-")]
+        return human + held
 
     def status_of(self, row_id):
         return self.by_id()[row_id].status
@@ -507,9 +638,9 @@ class Queue:
     def all_done(self):
         return all(r.status is Status.DONE for r in self.rows)
 
-    def first_ready_review(self):
+    def first_ready_review(self, held=frozenset()):
         for r in self.rows:
-            if (r.status in (Status.PENDING, Status.ACTIVE)
+            if (r.status in (Status.PENDING, Status.ACTIVE) and r.id not in held
                     and r.id.startswith("REVIEW-") and self.deps_met(r)):
                 return r
         return None
@@ -540,6 +671,12 @@ class Queue:
                 continue
             if any(frozenset((r.id, w)) in conflicts for w in wave):
                 continue
+            # `<id> *` in conflicts.txt: the row runs in a wave of its own. Pairing a
+            # reading with every other row by hand missed the seven rows phase-c
+            # gained after its conflicts file was written (2026-10-02).
+            if wave and (frozenset((r.id, ALONE)) in conflicts
+                         or any(frozenset((w, ALONE)) in conflicts for w in wave)):
+                continue
             wave.append(r.id)
         return wave
 
@@ -561,8 +698,84 @@ AUDIT_ROW_BODY = (
     "— read: `sovereign/ARCH_PRINCIPLES.md` — check: LINT")
 
 
+# The one reading of "units since the last audit": audit_every's trigger, the
+# inserted row's subject and `plan` all ask it. Rows are not closed in file
+# order (minted rows land mid-file, parked rows stay put, and an audit row is
+# inserted above the unit in flight), so counting the `[x]` rows BELOW the last
+# audit row also counts older rows that sit lower. On 2026-09-24 five-programs'
+# audit-5 fired five units after audit-4 because eleven rows closed on
+# 2026-09-22/23 sat below it. Time is in git: every close is a `ralph: <id> done`
+# commit of the queue file (scripts/ralph-mark.sh), so this counts those after
+# the newest audit's. A queue file with no such commit (a legacy launch line, a
+# queue that never marked through the script) keeps Queue's positional count.
+MARK_SUBJECT = re.compile(r"^ralph: (\S+) done$")
+
+
+def units_since_audit(paths, queue):
+    r = subprocess.run(["git", "-C", str(paths.workdir), "log", "--format=%s", "--",
+                        paths.state], capture_output=True, text=True)
+    marks = ([m.group(1) for s in r.stdout.splitlines() if (m := MARK_SUBJECT.match(s))]
+             if r.returncode == 0 else [])
+    if not marks:
+        return queue.units_since_audit()
+    n = 0
+    for unit_id in marks:                    # newest first
+        if unit_id.startswith(AUDIT_PREFIX):
+            break
+        if not unit_id.startswith("HUMAN-"):
+            n += 1
+    return n
+
+
+def dispatch_refusal(paths, queue, row):
+    """The one reading of `dispatch_requires` (phase-b-29: census before code).
+    A row missing a marker is refused by name, never skipped: a skipped row
+    runs later on a premise nobody trialled."""
+    requires = paths.manifest.dispatch_requires if paths.manifest else ()
+    missing = queue.unmet_requirements(row, requires)
+    if not missing:
+        return None
+    return (f"{row.id} is not ready to dispatch: its row lacks {', '.join(repr(m) for m in missing)} "
+            f"({paths.manifest.path} dispatch_requires) — census and trial it first")
+
+
 def audit_row(row_id, after):
     return f"- [ ] {row_id} — depends [{after}] — {AUDIT_ROW_BODY}"
+
+
+def audit_due(paths, queue, unit):
+    """`audit_every`, enforced where rows are dispatched: a 22-row queue ran
+    ~60 commits on one closing audit because a cadence was its author's to
+    remember. A [~] row is finished first — `current()` returns it until it
+    closes, so a row inserted above it would be inserted again every pass."""
+    every = paths.manifest.audit_every if paths.manifest else None
+    return bool(every and unit.status is Status.PENDING
+                and not unit.id.startswith(AUDIT_PREFIX)
+                and units_since_audit(paths, queue) >= every)
+
+
+def insert_audit(paths, queue, unit):
+    """(the inserted row, git's refusal or ""). The id's <prefix> is the
+    addendum's `prefix` var, else the queue's name."""
+    prefix = paths.queue
+    if paths.prompt_addendum:
+        for name, _, _, body in prompt_sections(
+                paths.p(paths.prompt_addendum).read_text(), "addendum"):
+            if name == "vars":
+                prefix = section_vars(body).get("prefix", prefix)
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", prefix):
+        say(f"prefix var {prefix!r} cannot be part of a row id; using the queue name")
+        prefix = paths.queue
+    stem = f"{AUDIT_PREFIX}{prefix}-auto-"
+    row_id = f"{stem}{1 + sum(r.id.startswith(stem) for r in queue.rows)}"
+    n = units_since_audit(paths, queue)
+    last_done = [r.id for r in queue.rows if r.status is Status.DONE][-1]
+    queue.insert_before(unit.id, audit_row(row_id, last_done))
+    subject = f"ralph: audit due after {n} units — {row_id}"
+    say(subject)
+    r = commit_state(paths, subject)
+    refused = "" if r.returncode == 0 else (r.stderr.strip() or f"exit {r.returncode}")
+    return Queue(queue.path).by_id()[row_id], refused
 
 
 MODEL_KEYS = ("MODEL", "REVIEW_MODEL", "RESOLVE_MODEL", "VARIANT")
@@ -630,6 +843,28 @@ ERROR_SHAPE_RE = re.compile(
 PROBE_TIMEOUT_S = 45
 PROBE_PROMPT = "Reply with the single word OK."
 
+# A plan usage limit, as the worker's CLI reports it at the end of a session.
+# Matched only in the log's tail, then confirmed by a probe (`quota_confirmed`),
+# because a worker's own transcript can discuss rate limits in code.
+QUOTA_SHAPE_RE = re.compile(
+    r"(?i)\b(usage limit|limit reached|hit your (usage )?limit|rate.?limit(ed)?"
+    r"|quota|out of (extra )?usage)\b")
+QUOTA_TAIL_LINES = 30
+QUOTA_POLL_S = 600
+
+
+def quota_tail(log_path, lines=QUOTA_TAIL_LINES):
+    """The last quota-shaped line in the tail of a session log; empty when none
+    matches or the log is unreadable."""
+    try:
+        tail = pathlib.Path(log_path).read_text(errors="replace").splitlines()[-lines:]
+    except OSError:
+        return ""
+    for line in reversed(tail):
+        if QUOTA_SHAPE_RE.search(line):
+            return line.strip()[:200]
+    return ""
+
 
 def error_tail(text, limit=200):
     """The LAST error-shaped line of a transcript, truncated to one line a
@@ -670,9 +905,16 @@ def probe_refusal(model, paths):
     is declared with a loopback baseURL (localhost:9741 — the mesh daemon
     serves inference at /v1) is refused by name, and a bare id names no
     provider at all (order ralph-model-roster seam: probe the provider, not
-    localhost). Returns "" to probe, else the cause."""
+    localhost). Returns "" to probe, else the cause.
+
+    The provider/model pair is opencode's grammar. A queue that declares its
+    own worker_bin (the claude shim) names models the way that client does,
+    bare (`claude-opus-5-5`), so a bare id is probed through it: phase-c's
+    pool halted at its first dispatch on exactly that refusal."""
     provider, _, name = model.partition("/")
     if not provider or not name:
+        if paths.manifest and paths.manifest.worker_bin:
+            return ""
         return "names no provider/model pair — not probed"
     for cfg in _probe_configs(paths):
         declared = (cfg.get("provider") or {}).get(provider) or {}
@@ -758,6 +1000,8 @@ class QueueManifest:
     settings: str = ""
     prompt_declared: bool = False
     audit_every: int | None = None        # absent: no cadence, the queue's own audit rows only
+    dispatch_requires: tuple = ()         # markers every work row must carry before dispatch
+    scope_file: str = ""                  # the frozen row ids; "" = no freeze (phase-b-32)
 
 
 def manifest_rel(name):
@@ -783,13 +1027,13 @@ def load_manifest(workdir, name):
     def bad(key, want):
         return ValueError(f"{rel}: `{key}` must be {want}")
 
-    known = {"label", "session_timeout", "audit_every", "worker_bin", "settings", "models",
-             "checks", *MANIFEST_PATH_KEYS}
+    known = {"label", "session_timeout", "audit_every", "dispatch_requires", "worker_bin",
+             "settings", "scope_file", "models", "checks", *MANIFEST_PATH_KEYS}
     for key in data:
         if key not in known:
             raise ValueError(f"{rel}: unknown key `{key}` (known: {', '.join(sorted(known))})")
     strings = {}
-    for key in ("label", "worker_bin", "settings", *MANIFEST_PATH_KEYS):
+    for key in ("label", "worker_bin", "settings", "scope_file", *MANIFEST_PATH_KEYS):
         if key in data and not isinstance(data[key], str):
             raise bad(key, "a string")
         strings[key] = data.get(key, "")
@@ -800,6 +1044,10 @@ def load_manifest(workdir, name):
     every = data.get("audit_every")
     if every is not None and (isinstance(every, bool) or not isinstance(every, int) or every < 2):
         raise bad("audit_every", "an integer >= 2 (units between audits)")
+    requires = data.get("dispatch_requires", [])
+    if (not isinstance(requires, list)
+            or not all(isinstance(m, str) and m.strip() and "\n" not in m for m in requires)):
+        raise bad("dispatch_requires", "a list of non-empty one-line strings")
     models = {}
     table = data.get("models", {})
     if not isinstance(table, dict):
@@ -829,6 +1077,7 @@ def load_manifest(workdir, name):
         models=models, checks=checks, session_timeout=timeout,
         worker_bin=strings["worker_bin"], settings=strings["settings"],
         prompt_declared="prompt" in data, audit_every=every,
+        dispatch_requires=tuple(requires), scope_file=strings["scope_file"],
         **{key: strings[key] or f"{base}/{default}"
            for key, default in MANIFEST_PATH_KEYS.items()})
 
@@ -899,6 +1148,7 @@ class Paths:
     stop: str = "ralph/STOP"
     needs_human: str = "ralph/NEEDS_HUMAN.md"
     waiting: str = "ralph/waiting"
+    parked: str = "ralph/parked"          # one <row-id>.md package per row waiting on the operator
     models: str = "ralph/models.env"
     heartbeat: str = "ralph/.heartbeat"
     charter: str = "ralph/CHARTER.md"
@@ -919,7 +1169,8 @@ class Paths:
         """The per-loop files, as Paths fields. One loop per control_dir."""
         return {"control_dir": control_dir, "done": f"{control_dir}/DONE",
                 "stop": f"{control_dir}/STOP", "needs_human": f"{control_dir}/NEEDS_HUMAN.md",
-                "waiting": f"{control_dir}/waiting", "heartbeat": f"{control_dir}/.heartbeat",
+                "waiting": f"{control_dir}/waiting", "parked": f"{control_dir}/parked",
+                "heartbeat": f"{control_dir}/.heartbeat",
                 "director_commits": f"{control_dir}/.director-commits"}
 
 
@@ -1063,12 +1314,12 @@ def session_env(paths):
     """What every worker session is told about the loop that spawned it, so
     ralph-mark.sh and ralph-check.sh need no per-campaign default. RALPH_QUEUE
     is set even when empty: a legacy loop launched from inside a queue's
-    session must not inherit that queue."""
-    env = {"RALPH_QUEUE": paths.queue, "RALPH_STATE": paths.state,
-           "RALPH_CONTROL_DIR": paths.control_dir}
-    if paths.manifest and paths.manifest.settings:
-        env["RALPH_CLAUDE_SETTINGS"] = str(paths.p(paths.manifest.settings))
-    return env
+    session must not inherit that queue. RALPH_CLAUDE_SETTINGS likewise (the
+    shim reads empty as its default)."""
+    settings = paths.manifest.settings if paths.manifest else ""
+    return {"RALPH_QUEUE": paths.queue, "RALPH_STATE": paths.state,
+            "RALPH_CONTROL_DIR": paths.control_dir,
+            "RALPH_CLAUDE_SETTINGS": str(paths.p(settings)) if settings else ""}
 
 
 def worker_bin(paths):
@@ -1140,7 +1391,11 @@ class Session:
         except OSError:
             rejects = 0
         if rejects:
-            say(f"WARNING: {rejects} permission auto-rejections — extend opencode.json")
+            # Name the engine's own permission file: the claude shim reads the
+            # manifest's `settings`; opencode reads opencode.json.
+            manifest = self.paths.manifest
+            perms = manifest.settings if manifest and manifest.settings else "opencode.json"
+            say(f"WARNING: {rejects} permission auto-rejections — extend {perms}")
             self.notifier("auto — permission rejects", f"{rejects} auto-rejections", self.notify_enabled)
         _ACTIVE_SESSIONS.discard(proc)
         return rc
@@ -1183,10 +1438,21 @@ class Campaign:
         self.model = model
         self.review_model = review_model
         self.variant = variant
+        self._announced = set()
 
-    def halt(self, reason):
+    def halt(self, reason, operator_clause=None):
         return halt(self.paths, reason, notifier=self.notifier,
-                    notify_enabled=self.notify_enabled)
+                    notify_enabled=self.notify_enabled, operator_clause=operator_clause)
+
+    def _announce_waiting(self, waiting):
+        """Say once per campaign that a row waits on the operator while the
+        loop runs past it — a skipped row is a decision, and it is traced."""
+        for row_id in waiting:
+            if row_id in self._announced:
+                continue
+            self._announced.add(row_id)
+            say(f"{row_id} waits on the operator — running the rows that do not depend on it")
+            self.notifier("OPERATOR — waiting, loop continues", row_id, self.notify_enabled)
 
     def run(self):
         stall = 0
@@ -1211,13 +1477,21 @@ class Campaign:
                 continue
             # Re-read every iteration: the worker mutates the queue as it goes.
             queue = Queue(self.paths.p(self.paths.state))
-            unit = queue.current()
+            parked = held_ids(self.paths, queue)
+            unit = queue.current(parked)
+            waiting = queue.awaiting_operator(parked)
             if unit is None:
+                if waiting:
+                    return self.halt("operator approval required — every ready row waits "
+                                     f"on the operator: {', '.join(waiting)}",
+                                     operator_clause="HUMAN- rows and parked rows")
                 return self.halt(f"no ready unit in {self.paths.state}; check dependencies")
-            if unit.id.startswith("HUMAN-"):
-                return self.halt(f"operator approval required: {unit.id}")
-            if self._audit_due(queue, unit):
-                unit, refused = self._insert_audit(queue, unit)
+            self._announce_waiting(waiting)
+            refusal = dispatch_refusal(self.paths, queue, unit)
+            if refusal is not None:
+                return self.halt(refusal)
+            if audit_due(self.paths, queue, unit):
+                unit, refused = insert_audit(self.paths, queue, unit)
                 if refused:
                     return self.halt(f"audit row {unit.id} is in {self.paths.state} "
                                      f"but git refused the commit: {refused}")
@@ -1232,49 +1506,29 @@ class Campaign:
                 note += (f"This queue's control files are {self.paths.needs_human}, "
                          f"{self.paths.done} and {self.paths.waiting} — never the files of "
                          "those names directly under ralph/, which belong to another loop.\n\n")
+            if parked:
+                note += (f"Parked rows wait on the operator; do not open them: "
+                         f"{', '.join(sorted(parked))}.\n\n")
             self.session_run(model_args, note + self._prompt_text(), self._log_path(iteration))
             after = head_of(self.paths.workdir)
             if after != before:
                 stall = 0
             else:
+                # A session the plan's usage limit ended never ran; it is not a
+                # stalled row (principle 5: never-ran is not failed). Wait for
+                # the reset and re-dispatch the same unit, counting nothing.
+                cause = quota_tail(self._log_path(iteration))
+                if cause and self._quota_confirmed(cause):
+                    stopped = self._wait_out_quota(cause)
+                    if stopped is not None:
+                        return stopped
+                    iteration -= 1
+                    continue
                 stall += 1
                 say(f"no commit this iteration (stall {stall}/{self.max_stall})")
                 if stall >= self.max_stall:
                     return self.halt(f"{self.max_stall} iterations without a commit")
         return self.halt(f"MAX_ITER={self.max_iter} reached")
-
-    def _audit_due(self, queue, unit):
-        """`audit_every`, enforced where rows are dispatched: a 22-row queue ran
-        ~60 commits on one closing audit because a cadence was its author's to
-        remember. A [~] row is finished first — `current()` returns it until it
-        closes, so a row inserted above it would be inserted again every pass."""
-        every = self.paths.manifest.audit_every if self.paths.manifest else None
-        return bool(every and unit.status is Status.PENDING
-                    and not unit.id.startswith(AUDIT_PREFIX)
-                    and queue.units_since_audit() >= every)
-
-    def _insert_audit(self, queue, unit):
-        """(the inserted row, git's refusal or ""). The id's <prefix> is the
-        addendum's `prefix` var, else the queue's name."""
-        prefix = self.paths.queue
-        if self.paths.prompt_addendum:
-            for name, _, _, body in prompt_sections(
-                    self.paths.p(self.paths.prompt_addendum).read_text(), "addendum"):
-                if name == "vars":
-                    prefix = section_vars(body).get("prefix", prefix)
-        if not re.fullmatch(r"[A-Za-z0-9._-]+", prefix):
-            say(f"prefix var {prefix!r} cannot be part of a row id; using the queue name")
-            prefix = self.paths.queue
-        stem = f"{AUDIT_PREFIX}{prefix}-auto-"
-        row_id = f"{stem}{1 + sum(r.id.startswith(stem) for r in queue.rows)}"
-        n = queue.units_since_audit()
-        last_done = [r.id for r in queue.rows if r.status is Status.DONE][-1]
-        queue.insert_before(unit.id, audit_row(row_id, last_done))
-        subject = f"ralph: audit due after {n} units — {row_id}"
-        say(subject)
-        r = commit_state(self.paths, subject)
-        refused = "" if r.returncode == 0 else (r.stderr.strip() or f"exit {r.returncode}")
-        return Queue(queue.path).by_id()[row_id], refused
 
     def _beat(self, context):
         try:
@@ -1296,19 +1550,65 @@ class Campaign:
     def _log_path(self, iteration):
         return str(self.paths.p(self.paths.log_dir) / f"iter-{iteration}.out")
 
+    def _probe(self):
+        """(answered, cause) from one minimal call on the worker model; with
+        no model configured there is nothing to probe, and the tail stands."""
+        if not self.model:
+            return False, "no worker model to probe"
+        return probe_model(self.model, self.paths)
+
+    def _quota_confirmed(self, cause):
+        """The log tail looked like a usage limit. A probe that answers means
+        it was not one (the transcript only mentioned limits), so the stall
+        counts as usual."""
+        answered, why = self._probe()
+        if answered:
+            say(f"quota-shaped tail, but the probe answered — counting a stall: {cause}")
+            return False
+        say(f"usage limit confirmed by probe ({why or 'no answer'}): {cause}")
+        return True
+
+    def _wait_out_quota(self, cause):
+        """Poll until the probe answers, then return None so the same unit is
+        re-dispatched. A STOP ends the wait; a limit that outlasts the loop's
+        wait limit halts with the cause named."""
+        say(f"usage limit — waiting for the reset, no stall counted: {cause}")
+        self.notifier("auto — usage limit, waiting", cause, self.notify_enabled)
+        waited = 0
+        while waited < self.marker_timeout:
+            if self.paths.p(self.paths.stop).exists():
+                return Result(Outcome.OPERATOR_STOP, "stop file present during a usage-limit wait")
+            self.sleep(QUOTA_POLL_S)
+            waited += QUOTA_POLL_S
+            self._beat(f"usage-limit wait {waited}s")
+            answered, _ = self._probe()
+            if answered:
+                say(f"usage limit cleared after {waited}s — re-dispatching the unit")
+                return None
+        return self.halt(f"usage limit did not clear within {self.marker_timeout}s: {cause}")
+
+
+# terminal_stop's answer when it parked a row: not a stop, the campaign re-runs.
+PARKED = "parked"
+
 
 class Supervisor:
     """Runs a campaign command; a stop short of DONE is either terminal, an
-    operator escalation, or a bounded resolution. Progress is a unit completed."""
+    operator escalation, a parked row, or a bounded resolution. Progress is a
+    unit completed."""
 
     def __init__(self, paths, *, run_inner, resolver_run, notifier=notify,
-                 notify_enabled=True, resolve_max=4, state_path=None):
+                 notify_enabled=True, resolve_max=4, state_path=None, max_parks=3):
         self.paths = paths
         self.run_inner = run_inner
         self.resolver_run = resolver_run
         self.notifier = notifier
         self.notify_enabled = notify_enabled
         self.resolve_max = resolve_max
+        # Parks in a row with no unit completed between them: past this, the
+        # block is the loop's, not a row's, and the stop stands.
+        self.max_parks = max_parks
+        self.parks_without_progress = 0
 
     def _queue(self):
         # A worker may be mid-write; the frequent checks tolerate that, the
@@ -1329,6 +1629,45 @@ class Supervisor:
         except OSError:
             pass
 
+    def park(self, reason, *, operator=False):
+        """Move the package to parked/<row>.md, return the row to `[ ]`, and let
+        the campaign run every row that does not depend on it (phase-b-31). The
+        row is the one the package's title names, or for an operator-only
+        package the one `[~]` row. None when no row can be named, or when
+        `max_parks` rows parked with no unit completed: the stop stands then."""
+        pkg = self.paths.p(self.paths.needs_human)
+        queue = self._queue()
+        if queue is None or not (pkg.exists() and pkg.stat().st_size):
+            return None
+        parked = parked_ids(self.paths)
+        row = blocked_row(queue, first_line(pkg), parked)
+        if row is None and operator:
+            row = waiting_row(queue, parked)
+        if row is None:
+            say(f"supervisor: the package names no single open row — not parking ({reason})")
+            return None
+        if self.parks_without_progress >= self.max_parks:
+            say(f"supervisor: {self.parks_without_progress} rows parked with no unit done "
+                f"— not parking {row.id}; the stop stands")
+            return None
+        dest = write_parked(self.paths, row.id, pkg.read_text(), reason)
+        pkg.unlink()
+        stop = self.paths.p(self.paths.stop)
+        if stop.exists() and stop.stat().st_size:
+            stop.unlink()
+        if row.status is Status.ACTIVE:
+            queue.set_status(row.id, Status.PENDING)
+            refused = commit_state(self.paths, f"ralph: {row.id} parked for the operator")
+            if refused is not None and getattr(refused, "returncode", 0):
+                say(f"supervisor: the park of {row.id} is in {self.paths.state} but git "
+                    f"refused the commit: {error_tail(refused.stderr or refused.stdout)}")
+        self.parks_without_progress += 1
+        say(f"supervisor: parked {row.id} ({reason}) — the loop runs the rows that do not "
+            "depend on it")
+        self.notifier("OPERATOR — row parked, loop continues",
+                      f"{row.id}: {first_line(dest)}", self.notify_enabled)
+        return row.id
+
     def terminal_stop(self):
         if self.paths.p(self.paths.done).exists():
             say("supervisor: campaign DONE")
@@ -1348,10 +1687,21 @@ class Supervisor:
                            f"{self.paths.stop} {self.paths.needs_human}\n")
             say(f"supervisor: halt package was missing — wrote one from {self.paths.stop}")
         queue = self._queue()
-        unit = queue.current() if queue else None
-        if unit is not None and unit.id.startswith("HUMAN-"):
-            say(f"supervisor: operator approval required — {unit.id} (no resolution session)")
-            self.notifier("OPERATOR — approval required", f"{unit.id} is a HUMAN row at the head; approve or mark it", self.notify_enabled)
+        parked = held_ids(self.paths, queue) if queue else frozenset()
+        waiting = queue.awaiting_operator(parked) if queue else []
+        if queue is not None and waiting and queue.current(parked) is None:
+            say(f"supervisor: operator approval required — every ready row waits on the "
+                f"operator: {', '.join(waiting)} (no resolution session)")
+            self.notifier("OPERATOR — approval required",
+                          f"nothing else is ready: {', '.join(waiting)}", self.notify_enabled)
+            return 2
+        clause = operator_only(pkg) if pkg.exists() and pkg.stat().st_size else None
+        if clause is not None:
+            if self.park(f"operator-only: {clause}", operator=True) is not None:
+                return PARKED
+            say(f"supervisor: operator-only halt — {clause} (no resolution session)")
+            self.notifier("OPERATOR — decision required", f"{first_line(pkg)} ({clause})",
+                          self.notify_enabled)
             return 2
         return None
 
@@ -1360,21 +1710,31 @@ class Supervisor:
         attempt = 0
         while True:
             stop = self.terminal_stop()
+            if stop == PARKED:
+                attempt = 0
+                continue
             if stop is not None:
                 return stop
             self.run_inner()
             stop = self.terminal_stop()
+            if stop == PARKED:
+                attempt = 0
+                continue
             if stop is not None:
                 return stop
             done_now = self._queue().done_count()
             if done_now > last_done:
                 attempt = 0
                 last_done = done_now
+                self.parks_without_progress = 0
             pkg = self.paths.p(self.paths.needs_human)
             reason = first_line(pkg) if pkg.exists() and pkg.stat().st_size else "campaign exited"
             say(f"supervisor: campaign stopped — {reason}")
             attempt += 1
             if attempt > self.resolve_max:
+                if self.park(f"{self.resolve_max} resolutions did not clear it") is not None:
+                    attempt = 0
+                    continue
                 say(f"supervisor: {self.resolve_max} resolution attempts did not clear it "
                     "— leaving it to the operator")
                 self.notifier("OPERATOR — unresolved after "
@@ -1399,6 +1759,9 @@ class Supervisor:
                 return 0
             if pkg.exists() and pkg.stat().st_size:
                 if file_hash(pkg) == pkg_before and head_of(self.paths.workdir) == head_before:
+                    if self.park(f"resolution {attempt} changed nothing") is not None:
+                        attempt = 0
+                        continue
                     say(f"supervisor: resolution {attempt} changed nothing — escalating")
                     self.notifier("OPERATOR — resolution achieved nothing", reason,
                                   self.notify_enabled)
@@ -1408,14 +1771,88 @@ class Supervisor:
                 say(f"supervisor: resolution {attempt} cleared the halt — resuming the campaign")
 
 
+# A conflicts.txt line `<id> *` pairs the row with every other: it runs alone.
+ALONE = "*"
+
+
 def conflict_pairs(text):
     """A line of N ids means all N-choose-2 pairs; `#` starts a comment. Reading
-    only the first two dropped the third id of ring-doc's line without a word."""
+    only the first two dropped the third id of ring-doc's line without a word.
+    `*` among the ids is ALONE: each other id on the line runs in a wave of its
+    own (`pick_wave`)."""
     pairs = set()
     for line in text.splitlines():
         ids = line.split("#")[0].split()
         pairs.update(frozenset(pair) for pair in itertools.combinations(ids, 2))
     return pairs
+
+
+# The one cargo budget (lib/cargo-jobs.sh), split across the lanes of a wave.
+CARGO_JOBS_LIB = pathlib.Path(__file__).resolve().parent / "lib" / "cargo-jobs.sh"
+# Where a lane reads its share: a file, because `toolbox run` forwards no env.
+LANE_JOBS_FILE = "target/ralph/lane.env"
+LANE_JOBS_VARS = ("SOVEREIGN_LINT_JOBS", "SOVEREIGN_TEST_JOBS")
+
+
+def cargo_jobs_share(lanes):
+    """(jobs per lane, reason) from lib/cargo-jobs.sh `cargo_jobs_share`; 0 jobs
+    = free memory is under the floor for that many lanes. (None, error) when
+    the decider could not be read."""
+    r = subprocess.run(["bash", "-c", 'source "$0" && cargo_jobs_share "$1" && '
+                        'printf "%s\\n%s\\n" "$CARGO_JOBS_SHARE" "$CARGO_JOBS_SHARE_REASON"',
+                        str(CARGO_JOBS_LIB), str(lanes)], capture_output=True, text=True)
+    lines = r.stdout.splitlines()
+    if r.returncode != 0 or len(lines) < 2 or not lines[0].isdigit():
+        return None, error_tail(r.stderr) or r.stderr.strip()[-200:] or f"exit {r.returncode}"
+    return int(lines[0]), lines[1]
+
+
+# ralph/DECISIONS.md is rendered from one file per decision (ralph-decisions.py).
+DECISIONS_DIR = "ralph/decisions"
+DECISIONS_RENDERED = "ralph/DECISIONS.md"
+DECISIONS_SCRIPT = "scripts/ralph-decisions.py"
+
+
+def remove_tree(path):
+    """Remove `path` whole, clearing write-protection on the way, and return
+    None or the error that left it in place. A read-only directory in the
+    main tree's evidence (target/ralph/phase-b/ship/esc/seed, dr-xr-xr-x) is
+    reflink-cloned into every lane; it stopped both an ignore_errors rmtree
+    and `git worktree remove --force` from unlinking its entries, so a merged
+    lane left its whole target behind (2026-10-02: four lanes, 115 GiB
+    exclusive) and a cloned evidence tree was copied back as the lane's."""
+    path = pathlib.Path(path)
+    if not os.path.lexists(path):
+        return None
+    try:
+        shutil.rmtree(path)
+        return None
+    except OSError:
+        pass
+    for d, dirs, _ in os.walk(path):
+        for name in (d, *(os.path.join(d, x) for x in dirs)):
+            if not os.path.islink(name):
+                try:
+                    os.chmod(name, os.stat(name).st_mode | 0o700)
+                except OSError:
+                    pass
+    try:
+        shutil.rmtree(path)
+    except OSError as e:
+        return e
+    return None
+
+
+def lane_root_for(workdir):
+    """Where the pool keeps lane worktrees: beside the main tree, never inside
+    it. Cargo reads every ancestor's .cargo/config.toml and concatenates their
+    arrays, so a lane under the main tree ran with the main tree's
+    target.rustflags twice; rustflags are part of every unit's identity, so
+    each lane rebuilt every crates.io dependency its reflink-cloned target
+    already held (2026-10-02, phase-c wave 2: proc-macro2 and 198 more on one
+    lane's first lint, under .ralph/wt/)."""
+    workdir = pathlib.Path(workdir).resolve()
+    return workdir.parent / f"{workdir.name}-lanes"
 
 
 class Pool:
@@ -1424,20 +1861,17 @@ class Pool:
     in the main tree. Progress is the same file protocol as the serial flow."""
 
     def __init__(self, paths, *, session_for, notifier=notify, notify_enabled=True,
-                 lanes=2, base_branch="", conflicts="ralph/conflicts.txt",
-                 prompt="ralph/PROMPT.md", state="ralph/STATE.md",
+                 lanes=2, base_branch="",
                  marker_timeout=DEFAULT_WAIT_LIMIT_S, wait_poll=120, sleep=time.sleep,
                  model="", review_model="", variant="", max_review_attempts=3,
-                 max_lane_failures=3, probe=None):
+                 max_lane_failures=3, probe=None, jobs_share=None, lane_root=None):
         self.paths = paths
+        self.lane_root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
         self.session_for = session_for
         self.notifier = notifier
         self.notify_enabled = notify_enabled
         self.lanes = lanes
         self.base_branch = base_branch
-        self.conflicts = conflicts
-        self.prompt = prompt
-        self.state = state
         self.marker_timeout = marker_timeout
         self.wait_poll = wait_poll
         self.sleep = sleep
@@ -1448,6 +1882,9 @@ class Pool:
         self.max_lane_failures = max_lane_failures
         self.probe = probe or (lambda model: probe_model(model, paths))
         self._lane_failures = {}
+        self._held = frozenset()
+        self.jobs_share = jobs_share or cargo_jobs_share
+        self._jobs = None
 
     def _git(self, *args, cwd=None):
         return subprocess.run(["git", "-C", str(cwd or self.paths.workdir), *args],
@@ -1455,17 +1892,17 @@ class Pool:
 
     def _queue(self):
         try:
-            return Queue(self.paths.p(self.state))
+            return Queue(self.paths.p(self.paths.state))
         except (OSError, ValueError):
             return None
 
     def _conflict_pairs(self):
-        p = self.paths.p(self.conflicts)
+        p = self.paths.p(self.paths.conflicts)
         return conflict_pairs(p.read_text()) if p.exists() else set()
 
     def _heavy(self):
-        """The heavy rows (ralph/heavy.txt): at most one per wave."""
-        p = self.paths.p("ralph/heavy.txt")
+        """The heavy rows (the queue's heavy.txt): at most one per wave."""
+        p = self.paths.p(self.paths.heavy)
         if not p.exists():
             return set()
         out = set()
@@ -1500,7 +1937,18 @@ class Pool:
                       + "; ".join(f"{m}: {c}" for m, c in causes.items()))
 
     def _prompt_text(self):
-        return self.paths.p(self.prompt).read_text()
+        """The rendered base + addendum for a queue, the file for a legacy run."""
+        return prompt_text(self.paths)[0]
+
+    def _lane_note(self):
+        """Where a session's own queue lives: another loop may own ralph/STOP and
+        ralph/NEEDS_HUMAN.md in this checkout (the serial loop says the same)."""
+        if not self.paths.queue:
+            return ""
+        return (f"This queue's state is {self.paths.state}; its control files are "
+                f"{self.paths.needs_human}, {self.paths.done} and {self.paths.waiting} "
+                "— never the files of those names directly under ralph/, which belong "
+                "to another loop.\n\n")
 
     def poll_waiting_lanes(self):
         """Each tick, every lane worktree whose `ralph/waiting` names a marker:
@@ -1509,11 +1957,11 @@ class Pool:
         the units still waiting). The filesystem is the state — a restart or a
         previous pool generation loses nothing."""
         still = set()
-        wt_root = self.paths.workdir / ".ralph" / "wt"
+        wt_root = self.lane_root
         if not wt_root.exists():
             return None, still
         for wt in sorted(wt_root.iterdir()):
-            parsed = waiting_marker(wt, "ralph/waiting")
+            parsed = waiting_marker(wt, self.paths.waiting)
             if parsed is None:
                 continue
             unit, waiting, marker = wt.name, parsed[0], parsed[1]
@@ -1530,7 +1978,7 @@ class Pool:
                 # committed waiting file that survives to the merge parks the
                 # main tree's loop on a marker that only ever existed in this
                 # worktree. The commit is a no-op when nothing is staged.
-                self._git("add", "-A", "--", "ralph/waiting", cwd=wt)
+                self._git("add", "-A", "--", self.paths.waiting, cwd=wt)
                 self._git("commit", "-q", "-m", f"{unit}: waiting ended — marker landed",
                           cwd=wt)
             else:
@@ -1543,8 +1991,11 @@ class Pool:
         # (macOS) the lane-marker directory and `ralph/DONE` are one path, and
         # the completion marker could never be written.
         (self.paths.workdir / "ralph" / "lanes").mkdir(parents=True, exist_ok=True)
-        (self.paths.workdir / ".ralph" / "wt").mkdir(parents=True, exist_ok=True)
-        say(f"pool: lanes={self.lanes} base={self.base_branch}")
+        self.lane_root.mkdir(parents=True, exist_ok=True)
+        self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
+        say(f"pool: lanes={self.lanes} base={self.base_branch}"
+            + (f" queue={self.paths.queue}" if self.paths.queue else "")
+            + f" lane_root={self.lane_root}")
         while True:
             if self.paths.p(self.paths.stop).exists():
                 say("pool: STOP")
@@ -1567,10 +2018,13 @@ class Pool:
             reason, waiting = self.poll_waiting_lanes()
             if reason is not None:
                 return self._halt(reason)
-            unit = queue.current()
-            if unit is not None and unit.id.startswith("HUMAN-"):
-                return self._halt(f"operator approval required: {unit.id}")
-            review = queue.first_ready_review()
+            # Parked rows and rows outside the frozen scope wait on the operator
+            # here as in the serial loop: the cleanup cut line holds in the pool.
+            held = held_ids(self.paths, queue)
+            if held != self._held:
+                say(f"pool: held for the operator: {', '.join(sorted(held)) or 'none'}")
+                self._held = held
+            review = queue.first_ready_review(held)
             if review is not None:
                 # A review with no REVIEW_MODEL of its own runs on the worker
                 # model (select_model_args routing) — probe that roster.
@@ -1581,11 +2035,46 @@ class Pool:
                 if result is not None:
                     return result
                 continue
-            wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy(), waiting)
+            wave = queue.pick_wave(self.lanes, self._conflict_pairs(), self._heavy(),
+                                   waiting | held)
+            by = queue.by_id()
+            if wave and audit_due(self.paths, queue, by[wave[0]]):
+                # The queue's audit_every holds in the pool: the row goes in above
+                # the wave, and the next pass runs it serially as a review.
+                audit, refused = insert_audit(self.paths, queue, by[wave[0]])
+                if refused:
+                    return self._halt(f"audit row {audit.id} is in {self.paths.state} "
+                                      f"but git refused the commit: {refused}")
+                continue
+            refused = [(u, r) for u, r in ((u, dispatch_refusal(self.paths, queue, by[u]))
+                                           for u in wave) if r is not None]
+            if refused:
+                # A refused row waits on its census; the rows beside it do not.
+                for unit, refusal in refused:
+                    dest = write_parked(self.paths, unit, f"# {unit} refused at dispatch\n\n"
+                                        f"{refusal}\n", "refused at dispatch")
+                    say(f"pool: parked {unit} — {refusal}")
+                    self.notifier("OPERATOR — row parked, pool continues",
+                                  f"{unit}: {first_line(dest)}", self.notify_enabled)
+                continue
+            if not wave and not waiting and queue.awaiting_operator(held):
+                return self._halt("operator approval required — every ready row waits on the "
+                                  f"operator: {', '.join(queue.awaiting_operator(held))}")
             if not wave:
                 say("pool: no ready unit and no ready review — waiting (dependencies unmet?)")
                 self.sleep(60)
                 continue
+            jobs, why = self.jobs_share(len(wave))
+            if jobs is None:
+                return self._halt(f"the cargo budget could not be read ({CARGO_JOBS_LIB}): {why}")
+            if jobs == 0:
+                # Lanes started into this would each size their builds from the
+                # same free memory: the shape of the 2026-10-01 OOM.
+                say(f"pool: wave {', '.join(wave)} not started — {why}")
+                self.sleep(60)
+                continue
+            say(f"pool: {jobs} cargo jobs per lane — {why}")
+            self._jobs = jobs
             model, park = self._dispatch_model(self.model)
             if park is not None:
                 return self._halt(park)
@@ -1604,8 +2093,8 @@ class Pool:
         # (REVIEW-mint-mesh-rest, 3 attempts, worked other rows and never
         # marked itself [x]).
         note = (f"Your unit: {review.id} — the pool selected it as the ready review "
-                "row. Open only that row in ralph/STATE.md; do not scan the queue for "
-                "another.\n\n")
+                f"row. Open only that row in {self.paths.state}; do not scan the queue "
+                "for another.\n\n") + self._lane_note()
         for attempt in range(1, self.max_review_attempts + 1):
             if self.paths.p(self.paths.stop).exists():
                 say("pool: operator STOP — leaving the review")
@@ -1613,8 +2102,8 @@ class Pool:
             say(f"pool: serial review {review.id} (main tree) attempt {attempt}"
                 + (f" · model {effective}" if effective else ""))
             note = (f"Your unit: {review.id} — the pool selected it as the ready review "
-                    "row. Open only that row in ralph/STATE.md; do not scan the queue for "
-                    "another.\n\n")
+                    f"row. Open only that row in {self.paths.state}; do not scan the queue "
+                    "for another.\n\n") + self._lane_note()
             if attempt > 1:
                 # A retried review re-derived its whole analysis every attempt
                 # until 2026-09-17 (REVIEW-audit-daemon-1, four hours): the
@@ -1674,8 +2163,47 @@ class Pool:
         except OSError as e:
             say(f"pool: could not provision {dst} from {src}: {e}")
 
+    # A reflink clone shares the main tree's blocks until a lane rebuilds them
+    # (btrfs; 7s for 136G, measured 2026-09-01). Never one target shared across
+    # worktrees: cargo then ran another tree's build script (same date).
+    CLONE_TARGET = ("cp", "-a", "--reflink=always")
+
+    def _provision_target(self, unit, wt):
+        """A new lane's target/ is a clone of the main tree's, and every tracked
+        file in the lane is touched after it, so the workspace crates rebuild
+        once (~3-4 min) and external deps stay warm. Where the clone cannot be
+        made the lane builds from an empty target, and the log says so."""
+        src, dst = self.paths.workdir / "target", wt / "target"
+        if not src.is_dir() or dst.exists():
+            return
+        r = subprocess.run([*self.CLONE_TARGET, str(src), str(dst)],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            err = remove_tree(dst)
+            if err is not None:
+                say(f"pool: lane {unit} partial target clone not removed: {err}")
+            say(f"pool: lane {unit} target NOT cloned "
+                f"({error_tail(r.stderr) or r.stderr.strip()[-200:]}) — the lane "
+                "builds from an empty target")
+            return
+        # The lane's evidence directory starts empty: _keep_evidence copies it back.
+        err = remove_tree(dst / "ralph")
+        if err is not None:
+            say(f"pool: lane {unit} cloned evidence not cleared ({err}) — "
+                "_keep_evidence will copy the main tree's back with the lane's")
+        files = self._git("ls-files", "-z", cwd=wt).stdout.split("\0")
+        touched = 0
+        for rel in filter(None, files):
+            try:
+                os.utime(wt / rel)
+                touched += 1
+            except OSError:
+                pass          # a tracked path the checkout does not hold (a submodule)
+        say(f"pool: lane {unit} target cloned from {src}; {touched} tracked files touched "
+            "— the workspace crates rebuild once, external deps stay warm")
+
     def run_lane(self, unit, model=None):
-        wt = self.paths.workdir / ".ralph" / "wt" / unit
+        wt = self.lane_root / unit
         branch = f"ralph/{unit}"
         if not wt.exists():
             r = self._git("worktree", "add", "-q", "-b", branch, str(wt), self.base_branch)
@@ -1683,6 +2211,7 @@ class Pool:
                 say(f"pool: worktree add failed for {unit}: {r.stderr.strip()}")
                 return
             say(f"pool: lane start {unit} (worktree {wt})")
+            self._provision_target(unit, wt)
         else:
             say(f"pool: lane {unit} resuming in its existing worktree")
             # A lane worktree is created once from the base branch and kept
@@ -1716,8 +2245,9 @@ class Pool:
         note = (f"POOL LANE: you are working unit {unit} in an isolated git worktree.\n"
                 f"Commit your work here. When the unit passes its OWN tests, write "
                 f"ralph/lanes/{unit}.done and commit it — the pool merges your branch then.\n"
-                "Do NOT edit ralph/STATE.md except to correct your own row's premises "
-                "(PROMPT §6); the pool marks the unit done after the merge.\n\n")
+                f"Do NOT edit {self.paths.state} except to correct your own row's premises "
+                "(PROMPT §6); the pool marks the unit done after the merge.\n\n"
+                + self._lane_note())
         if self._git("rev-parse", "-q", "--verify", "MERGE_HEAD", cwd=wt).returncode == 0:
             note = ("Your worktree has a MERGE IN PROGRESS: the pool merged the base "
                     "branch in and it conflicted. Resolve every conflict, `git add` the "
@@ -1728,9 +2258,140 @@ class Pool:
         # shared /tmp lock would only serialize lanes against each other and
         # against other campaigns (2026-09-16 speed order).
         lock_dir = f"/tmp/svrn-cargo-lock.{os.getuid()}.lane-{unit}"
-        session = self.session_for(wt, env={"SVRN_CARGO_LOCK_DIR": lock_dir})
+        env = {"SVRN_CARGO_LOCK_DIR": lock_dir}
+        if self._jobs:
+            share = {var: str(self._jobs) for var in LANE_JOBS_VARS}
+            env.update(share)
+            jobs_file = wt / LANE_JOBS_FILE
+            jobs_file.parent.mkdir(parents=True, exist_ok=True)
+            jobs_file.write_text("".join(f"{k}={v}\n" for k, v in share.items()))
+        session = self.session_for(wt, env=env)
         session.run(model_args, note + self._prompt_text(),
                     str(self.paths.workdir / "target" / "ralph" / f"lane-{unit}.out"))
+
+    def _renumber_decisions(self, unit, wt, branch):
+        """Lanes in one wave each mint `<campaign>-<max+1>` from the same tree,
+        so the second merge is an add/add conflict. Before merging, give every
+        decision the lane added whose path the main tree already holds the next
+        free id (ralph-decisions.py renumber, the one minting rule), on the
+        lane's branch. Returns a halt reason or None."""
+        entries = self.paths.p(DECISIONS_DIR)
+        if not entries.is_dir():
+            return None
+        added = self._git("diff", "--name-only", "--diff-filter=A", f"HEAD...{branch}",
+                          "--", DECISIONS_DIR)
+        clashes = [rel for rel in added.stdout.split() if self.paths.p(rel).exists()]
+        renamed = {}
+        for rel in clashes:
+            r = subprocess.run([sys.executable, str(self.paths.p(DECISIONS_SCRIPT)), "renumber",
+                                str(wt / rel), "--against", str(entries)],
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                return (f"lane {unit}: could not renumber {rel}: "
+                        f"{error_tail(r.stderr) or r.stderr.strip()[-200:]}")
+            renamed[pathlib.Path(rel).stem] = pathlib.Path(r.stdout.strip()).stem
+            say(f"pool: lane {unit} decision {rel} is taken on the base — renumbered "
+                f"{pathlib.Path(r.stdout.strip()).name}")
+        if clashes:
+            self._recite_decisions(unit, wt, branch, renamed)
+            self._git("add", "-A", "--", DECISIONS_DIR, cwd=wt)
+            mapping = ", ".join(f"{o} → {n}" for o, n in renamed.items())
+            c = self._git("commit", "-q", "-m",
+                          f"{unit}: decision ids renumbered at merge (pool): {mapping}", cwd=wt)
+            if c.returncode != 0:
+                return (f"lane {unit}: the renumber commit failed: "
+                        f"{error_tail(c.stderr) or c.stderr.strip()[-200:]}")
+        return None
+
+    def _recite_decisions(self, unit, wt, branch, renamed):
+        """The lane's own files still cite the ids it minted, which on the base
+        name other entries (2026-10-02: pc-removed-env-warn's .done cited
+        phase-c-2, the seat's filing, after its entry became phase-c-4).
+        Rewrite each old id to its new one in every file the lane changed and
+        stage them; the renumbered entry, which records the old id on purpose,
+        is not among them (its old path is gone, its new one is untracked)."""
+        pattern = re.compile(r"(?<![\w-])(" + "|".join(map(re.escape, renamed)) + r")(?!\d)")
+        changed = self._git("diff", "--name-only", "--diff-filter=AM", f"HEAD...{branch}")
+        rewritten = []
+        for rel in changed.stdout.split():
+            path = wt / rel
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text()
+            except UnicodeDecodeError:
+                continue
+            new = pattern.sub(lambda m: renamed[m.group(1)], text)
+            if new != text:
+                path.write_text(new)
+                rewritten.append(rel)
+        if rewritten:
+            self._git("add", "--", *rewritten, cwd=wt)
+        say(f"pool: lane {unit} citations of {', '.join(renamed)} rewritten in "
+            f"{len(rewritten)} file(s){': ' + ', '.join(rewritten) if rewritten else ''}")
+
+    def _regenerate_decisions(self, unit):
+        """Lanes write ralph/decisions/<id>.md only; the rendered ledger is
+        regenerated here, once per merge, and lands in the mark commit. Returns
+        a halt reason or None."""
+        if not self.paths.p(DECISIONS_DIR).is_dir():
+            return None
+        r = subprocess.run([sys.executable, str(self.paths.p(DECISIONS_SCRIPT)), "--write"],
+                           cwd=str(self.paths.workdir), capture_output=True, text=True)
+        if r.returncode != 0:
+            return (f"merged {unit}, but {DECISIONS_SCRIPT} --write failed: "
+                    f"{error_tail(r.stderr) or (r.stderr or r.stdout).strip()[-200:]}")
+        say(f"pool: {r.stdout.strip()}")
+        self._git("add", "--", DECISIONS_RENDERED)
+        return None
+
+    def _lane_marked_done(self, unit, wt, branch):
+        """The lane's own commits added or changed ralph/lanes/<unit>.done. A
+        marker that exists only because the base already holds it, from an
+        earlier round of a reopened row, is not this lane's: on 2026-10-02 the
+        reopened pc-knowledge-gym-noresults started from a base carrying
+        7fb5bfd10's marker, and the pool would have merged the lane whenever
+        its session ended, readings taken or not."""
+        rel = f"ralph/lanes/{unit}.done"
+        if not (wt / rel).exists():
+            return False
+        own = self._git("diff", "--name-only", f"HEAD...{branch}", "--", rel)
+        if rel in own.stdout.split():
+            return True
+        say(f"pool: lane {unit}'s {rel} is the base's, from an earlier round — not this lane's")
+        return False
+
+    def _remove_lane(self, unit, wt):
+        """A merged lane's worktree goes, its target included; whatever `git
+        worktree remove` leaves is removed here and said, never left silent."""
+        r = self._git("worktree", "remove", "--force", str(wt))
+        if not wt.exists():
+            return
+        err = remove_tree(wt)
+        self._git("worktree", "prune")
+        why = error_tail(r.stderr) or r.stderr.strip()[-200:] or f"exit {r.returncode}"
+        if err is None:
+            say(f"pool: lane {unit} worktree remove left {wt} ({why}) — removed it")
+        else:
+            say(f"pool: lane {unit} worktree {wt} NOT removed ({why}; then {err}) — "
+                "its target holds disk until it is")
+
+    def _keep_evidence(self, unit, wt):
+        """A lane's raw evidence (its target/ralph/: check logs, readings) is
+        copied to <log_dir>/<unit>/ in the main tree before the worktree, its
+        target included, is removed. False when the copy failed: the caller
+        keeps the worktree rather than lose what a commit may cite."""
+        src = wt / "target" / "ralph"
+        if not src.is_dir():
+            return True
+        dest = self.paths.p(self.paths.log_dir) / unit
+        try:
+            shutil.copytree(src, dest, symlinks=True, dirs_exist_ok=True)
+        except (OSError, shutil.Error) as e:
+            say(f"pool: lane {unit} evidence copy to {dest} failed: {e}")
+            return False
+        say(f"pool: lane {unit} evidence kept at {dest}")
+        return True
 
     def run_wave(self, wave, model=None):
         # The chosen model is stamped on the wave line: one glance at
@@ -1743,11 +2404,11 @@ class Pool:
             say("pool: operator STOP — leaving the lanes unmerged (their worktrees resume)")
             return 0
         for unit in wave:
-            wt = self.paths.workdir / ".ralph" / "wt" / unit
+            wt = self.lane_root / unit
             branch = f"ralph/{unit}"
             if not wt.exists():
                 continue
-            lane_pkg = wt / "ralph" / "NEEDS_HUMAN.md"
+            lane_pkg = wt / self.paths.needs_human
             if lane_pkg.exists() and lane_pkg.stat().st_size:
                 # A lane writes its package in ITS worktree — the main-tree
                 # check never saw it, so the wave re-ran the row to the failure
@@ -1760,8 +2421,8 @@ class Pool:
                 say(f"pool: lane {unit} left NEEDS_HUMAN.md — stopping for the director")
                 self.notifier("auto — halt package, director next", first_line(lane_pkg), self.notify_enabled)
                 return 3
-            if not (wt / "ralph" / "lanes" / f"{unit}.done").exists():
-                parsed = waiting_marker(wt, "ralph/waiting")
+            if not self._lane_marked_done(unit, wt, branch):
+                parsed = waiting_marker(wt, self.paths.waiting)
                 if parsed is not None:
                     # A waiting end is the lane's own protocol for a detached
                     # run outliving the session (r9-boundary-sweep, struck out
@@ -1786,18 +2447,38 @@ class Pool:
                                           / f"lane-{unit}.out"))
                 continue
             self._lane_failures.pop(unit, None)
+            refused = self._renumber_decisions(unit, wt, branch)
+            if refused is not None:
+                return self._halt(refused)
             say(f"pool: lane {unit} finished — merging {branch}")
             r = self._git("merge", "--no-ff", "-m", f"merge {unit}", branch)
             if r.returncode != 0:
                 self._git("merge", "--abort")
                 return self._halt(f"merge conflict merging {branch} — resolve in the "
                                   "main tree, then resume")
+            refused = self._regenerate_decisions(unit)
             queue = self._queue()
             if queue is not None:
                 queue.set_status(unit, Status.DONE)
-                self._git("add", self.state)
-                self._git("commit", "-q", "-m", f"{unit}: merged (pool)")
-            self._git("worktree", "remove", "--force", str(wt))
+                self._git("add", self.paths.state)
+            # The subject ralph-mark.sh writes: units_since_audit counts it.
+            # Checked: an unchecked failure here left the index dirty, and the
+            # wave's next merge refused on it and halted as a "merge conflict"
+            # (pc-rails-journal-linear after pc-partial-decline-verdict,
+            # 2026-10-02, phase-c-19).
+            r = self._git("commit", "-q", "-m", f"ralph: {unit} done" if queue is not None
+                          else f"ralph: {DECISIONS_RENDERED} after merging {unit}")
+            if r.returncode != 0:
+                return self._halt(f"merged {unit}, but its done commit failed — the "
+                                  "index holds it; commit it, then resume: "
+                                  + ((r.stderr or r.stdout).strip().splitlines() or [""])[0])
+            if refused is not None:
+                return self._halt(refused)
+            if not self._keep_evidence(unit, wt):
+                say(f"pool: lane {unit} merged and marked [x] — worktree {wt} kept for its "
+                    "evidence")
+                continue
+            self._remove_lane(unit, wt)
             self._git("branch", "-D", branch)
             say(f"pool: lane {unit} merged and marked [x]")
         if self._lane_failures:
@@ -1896,12 +2577,15 @@ def install_job(name, program_args, workdir, log_path, interval=None):
 
 
 def ensure_excludes(workdir, rel_paths):
-    """Runtime markers must not dirty the tree the campaign commits into."""
-    git_info = pathlib.Path(workdir) / ".git" / "info"
-    if not git_info.parent.exists():
+    """Runtime markers must not dirty the tree the campaign commits into.
+    Git names the exclude file: in a linked worktree `.git` is a file and the
+    excludes live in the common dir, so `<workdir>/.git/info` does not exist."""
+    r = subprocess.run(["git", "-C", str(workdir), "rev-parse", "--git-path", "info/exclude"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
         return
-    git_info.mkdir(parents=True, exist_ok=True)
-    exclude = git_info / "exclude"
+    exclude = pathlib.Path(workdir) / r.stdout.strip()
+    exclude.parent.mkdir(parents=True, exist_ok=True)
     existing = set(exclude.read_text().splitlines()) if exclude.exists() else set()
     with exclude.open("a") as fh:
         for rel in rel_paths:
@@ -1929,18 +2613,34 @@ def cmd_plan(args):
     paths = paths_for(args)
     queue = Queue(paths.p(paths.state))
     models = resolve_models(args, paths)
-    unit = queue.current()
+    parked = held_ids(paths, queue)
+    unit = queue.current(parked)
     print(f"prompt: {prompt_text(paths)[1]}  queue: {paths.state}")
     every = paths.manifest.audit_every if paths.manifest else None
-    print(f"units since audit: {queue.units_since_audit()}"
+    print(f"units since audit: {units_since_audit(paths, queue)}"
           f"{f' (audit every {every})' if every else ''}  head: {head_of(paths.workdir)[:9]}")
     print(f"done: {queue.done_count()}/{len(queue.rows)}")
+    waiting = queue.awaiting_operator(parked)
+    if waiting:
+        print(f"waiting on the operator (the loop runs past them): {', '.join(waiting)}")
+    beyond = sorted(out_of_scope(paths, queue))
+    if beyond:
+        print(f"outside the frozen scope ({paths.manifest.scope_file}): {', '.join(beyond)}")
     if unit is None:
         print("no ready unit")
         return 0
     routed = select_model_args(unit, models["MODEL"], models["REVIEW_MODEL"],
                                models["VARIANT"])
     print(f"unit {unit.id} — {' '.join(routed) or 'configured default'}")
+    refusal = dispatch_refusal(paths, queue, unit)
+    if refusal is not None:
+        print(f"refused at dispatch: {refusal}")
+    requires = paths.manifest.dispatch_requires if paths.manifest else ()
+    if requires:
+        unmet = [r.id for r in queue.rows if r.status is not Status.DONE
+                 and queue.unmet_requirements(r, requires)]
+        print(f"open rows lacking {', '.join(requires)}: {len(unmet)}"
+              + (f" ({', '.join(unmet)})" if unmet else ""))
     return 0
 
 
@@ -2082,8 +2782,7 @@ def cmd_pool(args):
                        notify_enabled=args.notify, cwd=cwd, env=env)
 
     pool = Pool(paths, session_for=session_for, notify_enabled=args.notify,
-                lanes=args.lanes, base_branch=base, conflicts=args.conflicts,
-                prompt=args.prompt, state=args.state,
+                lanes=args.lanes, base_branch=base,
                 marker_timeout=resolve_wait_limit(args, paths),
                 model=models["MODEL"], review_model=models["REVIEW_MODEL"],
                 variant=models["VARIANT"])
@@ -2091,8 +2790,9 @@ def cmd_pool(args):
         ensure_excludes(paths.workdir, RUNTIME_MARKERS + (".ralph/",))
         inner = [sys.executable, str(pathlib.Path(__file__).resolve()), "pool",
                  "--workdir", str(paths.workdir), "--label", args.label,
-                 "--prompt", args.prompt, "--state", args.state,
-                 "--lanes", str(args.lanes)]
+                 *queue_flags(paths), "--lanes", str(args.lanes)]
+        if not paths.queue:
+            inner += ["--conflicts", paths.conflicts]
         if args.notify:
             inner.append("--notify")
         plist = install_job(f"dev.ralph.{paths.workdir.name}-{args.label}", inner,
@@ -2427,11 +3127,13 @@ def build_parser():
     p.set_defaults(fn=cmd_supervise)
 
     p = sub.add_parser("pool")
-    common(p, queue=False)          # another repo drives this verb; it stays on its flags
-    p.add_argument("--prompt", default="ralph/PROMPT.md")
-    p.add_argument("--state", default="ralph/STATE.md")
+    # --queue loads the manifest as run/supervise do; another repo drives this
+    # verb on the legacy flags, which keep their defaults (paths_for).
+    common(p)
+    p.add_argument("--prompt", default=None, help="default: ralph/PROMPT.md")
+    p.add_argument("--state", default=None, help="default: ralph/STATE.md")
     p.add_argument("--lanes", type=int, default=2)
-    p.add_argument("--conflicts", default="ralph/conflicts.txt")
+    p.add_argument("--conflicts", default=None, help="default: ralph/conflicts.txt")
     p.add_argument("--base-branch", default="")
     p.add_argument("--install-launchd", "--install-job", dest="install_launchd",
                    action="store_true", help="launchd on macOS, systemd-run --user on Linux")

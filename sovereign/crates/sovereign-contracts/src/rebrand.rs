@@ -58,42 +58,7 @@ pub fn svrnmesh_env(suffix: &str) -> Option<OsString> {
         .or_else(|| std::env::var_os(format!("SOVEREIGN_{suffix}")))
 }
 
-/// Mirror the legacy/new env-var prefixes in both directions so that neither
-/// old scripts (setting `SOVEREIGN_*`) nor not-yet-converted read sites (still
-/// reading `SOVEREIGN_*`, or already reading `SVRNMESH_*`) break during the
-/// transition.
-///
-/// MUST be called from each binary's `main()` *before* the async runtime is
-/// built — mutating the process environment is only sound single-threaded.
-/// Idempotent: a var already present under the target prefix is never
-/// overwritten, so re-running (e.g. the dispatcher exec'ing a sibling that
-/// re-runs the shim) is a no-op.
-pub fn promote_legacy_env() {
-    // Snapshot first: we mutate the environment inside the loop, and iterating
-    // `vars()` while calling `set_var` would otherwise be unsound.
-    let snapshot: Vec<(String, String)> = std::env::vars().collect();
-    let mut promoted = 0usize;
-    for (key, val) in &snapshot {
-        if let Some(suffix) = key.strip_prefix("SOVEREIGN_") {
-            let new_key = format!("SVRNMESH_{suffix}");
-            if std::env::var_os(&new_key).is_none() {
-                std::env::set_var(&new_key, val);
-                promoted += 1;
-            }
-        } else if let Some(suffix) = key.strip_prefix("SVRNMESH_") {
-            let old_key = format!("SOVEREIGN_{suffix}");
-            if std::env::var_os(&old_key).is_none() {
-                std::env::set_var(&old_key, val);
-            }
-        }
-    }
-    if promoted > 0 {
-        eprintln!(
-            "svrnmesh: bridged {promoted} legacy SOVEREIGN_* env var(s) to SVRNMESH_* \
-             (the SOVEREIGN_* prefix is deprecated — update your scripts)"
-        );
-    }
-}
+pub use kernel_types::env_bridge::promote_legacy_env;
 
 // ─── Path resolution (new-preferred, legacy-fallback) ──────────────
 
@@ -232,6 +197,11 @@ fn dir_is_populated(p: &Path) -> bool {
 pub fn data_dir() -> PathBuf {
     svrnmesh_root()
 }
+
+/// The daemon's run-lock file inside its data root (`host_kit::RunLock`).
+/// The daemon takes it and a harness waiting for the daemon to exit watches
+/// it, so the two read one name.
+pub const DAEMON_LOCK_FILE: &str = "daemon.lock";
 
 /// The session-frame store, honoring the `SVRNMESH_SESSIONS_DIR` /
 /// `SOVEREIGN_SESSIONS_DIR` override and falling back to

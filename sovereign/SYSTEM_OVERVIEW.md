@@ -35,12 +35,14 @@ commonwealth-ai/
 ├── oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── oicp-conformance/          # Standalone OICP v0.4 host conformance tester
 ├── oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
-├── serving-policy/            # Fair-share scheduling + pipeline aliases (tier-0)
+├── serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
+├── serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
+├── mesh-reach/                # Peer dial vocabulary + PeerTransport; RailsTransport (`rails`), the guest dialer + one iroh HTTP bridge (`guest`)
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
-├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, persisted settings, the engine Error
+├── corpus-index/              # Retrieval read-port leaf — CorpusIndex, the IndexSource/CorpusReadPort traits, persisted settings, the engine Error
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
+├── corpus-engine-atlas-reader/ # Resolved-atlas READ surface (read-only leaf; writes stay in corpus-engine)
 ├── corpus-engine-notes/       # NoteStore + project_docs index
-├── corpus-engine-atos/        # ATOS feature store + plan items (opt-in, `--features atos`)
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance
 ├── corpus-engine-yield/       # YieldHook cooperative-yield contract (tier-0 leaf)
 ├── corpus-engine-sections/    # Section detectors as a regex-only leaf
@@ -50,9 +52,9 @@ commonwealth-ai/
 ├── understanding-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kinds, OntologyPolicies
 ├── understanding-atlas/       # Understanding's pure tier — arithmetic over the published language
 ├── understanding-host/        # Understanding's host tier — the ports and the knot
-├── corpus-mcp/                # Thin knowledge host — recipe new · ingest · serve, any OpenAI-compatible endpoint
-├── sovereign-recipes/         # Canonical recipe TOMLs + catalog (vendored into corpus-engine at build)
-├── sovereign/                 # Local AI assistant (CLI / desktop / server / daemon)
+├── corpus-mcp/                # Thin knowledge host — serve, any OpenAI-compatible endpoint (ingest, pull: svrn-ingest)
+├── sovereign-recipes/         # Canonical recipe TOMLs + catalog (the corpus-engine-recipes data crate)
+├── sovereign/                 # Local AI assistant (CLI / desktop / daemon)
 ├── commonwealth/              # Mesh coordination daemon
 ├── studio/                    # Liftable authoring package
 ├── quality/                   # Quality program — layer map, gate baselines, arch-layers crate
@@ -69,19 +71,22 @@ there because they read the repo root and so cannot sit in a liftable crate.
 
 | Project | Role | Depends on |
 |---|---|---|
-| `oicp-types` | OICP wire types + scoring helpers | — |
+| `oicp-types` | OICP wire types + scoring helpers, and the mesh records two programs exchange (node capabilities, the ingest work queue, the contribution/activity ledger, the model catalogue, the inference plan, peer preferences; pb-mesh-exit-core), and `SamplingOverrides`, the sampling pins svrn's turn wire and agent-tools' role profiles share (phase-b-56) | `kernel-types` |
 | `kernel-types` | The neutral kernel: identity and provenance (`ContentHash`, `CorpusId`, `NodeId`, `Origin`, `Custody`, `Attribution`), the trust vocabulary (`Verdict`, `Reason`, `Freshness`, `Judgement`), the released turn (`Seal`, `Citation`, `Draft`, `Answer`, `PeerAnswer`, `Refused`), the wire-form decider, the requirement registry. The SECOND layer-0 membrane beside `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. May name nothing above it | `serde`, `getrandom`, `hex`, `blake3` |
 | `workspace-hack` | cargo-hakari feature-unification crate, so a `-p` build resolves what `--workspace` resolves | — |
-| `corpus-engine` | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-index`, `corpus-engine-yield`, `corpus-engine-scip`, `corpus-engine-notes`, `corpus-engine-atos` |
+| `corpus-engine` | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-index`, `corpus-engine-yield`, `corpus-engine-scip`, `corpus-engine-atlas-reader`, `corpus-engine-notes` |
 | `sovereign` | Local agent runtime | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
 | `commonwealth` | Symmetric mesh daemon | `corpus-engine`, `oicp-types`, `kernel-types` |
 
-Dependency direction is one-way. Sovereign optionally embeds cmnwlth
-in-process via `sovereign-mesh` — the only place the two upper projects meet.
+Dependency direction is one-way. Sovereign and cmnwlth meet at the contracts
+seam (`sovereign-contracts`, a shared leaf) and over cw-rails' HTTP doors.
+`sovereign-mesh`, the in-process embed that was once the only place they met,
+is gone (pb-mesh-dissolve, phase-b-92); the stock distribution composes the
+programs in one process through their faces (docs/FIVE_PROGRAMS.md §2c).
 
 ```
        oicp-types          sovereign-recipes
-            │                       │ build.rs include_bytes!
+            │                       │ include_str!/include_bytes!
             │                ┌──────▼──────┐
             │                │ corpus-engine│  (LanceDB + Tantivy)
             │                └──────┬──────┘
@@ -90,7 +95,7 @@ in-process via `sovereign-mesh` — the only place the two upper projects meet.
         Sovereign       │      both call          cmnwlth
        (sovereign/)     │   identical APIs        (commonwealth/)
             │           │                              │
-            └─ sovereign-mesh (in-process embed) ──────┘
+            └─ contracts seam · cw-rails HTTP doors ───┘
 ```
 
 Two protocols cross that boundary. **OICP** is declared in
@@ -100,11 +105,13 @@ Two protocols cross that boundary. **OICP** is declared in
 **`EmbedFn` / `InferenceFn`** are closures `corpus-engine` accepts from any
 caller; each project supplies its own.
 
-`serving-policy` sits BELOW the boundary rather than crossing it: `fair_sched`
-(fair-share caps, `EtaEwma`, reciprocity, the `SchedCore` the REST scheduler
-and the mesh admission gate share) plus `pipeline_aliases`. Its in-repo
-dependency list is empty, and `quality/ARCH_LAYERS.toml` forbids a dep on
-`sovereign-*` or `commonwealth-*` in either direction.
+`serving-policy-core` sits BELOW the boundary rather than crossing it: `fair_sched`
+(fair-share caps, `EtaEwma`, reciprocity, the `SchedCore` the daemon's and
+the serving host's admission gates share) plus `pipeline_aliases`. It is a
+`[[package_leaf]]` (fp-17): its only in-repo dep is `oicp-types`, and
+`quality/ARCH_LAYERS.toml` forbids a dep on `sovereign-*` or `commonwealth-*`
+in either direction on the `serving-policy` shim, which re-exports both
+modules at their historical paths for the serving cluster's own consumers.
 
 ---
 
@@ -150,35 +157,39 @@ crates/
 ├── sovereign-core           # Traits, runtime, planner, executor, router, memory
 ├── sovereign-inference      # llama.cpp slots, remote OpenAI-compat, hybrid, idle residency
 ├── sovereign-store          # SQLite + Postgres + in-memory StateStore
-├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP, code-intel)
-├── sovereign-gliner         # GLiNER (ONNX) NER — its own crate to keep ONNX off sovereign-tools
-├── sovereign-atos           # ATOS lib — opt-in behind `--features atos`
+├── sovereign-tools          # Built-in tools (search, knowledge, docs, web, MCP)
+├── sovereign-code           # Code intelligence served over MCP — the `svrn code` program, lifted out of sovereign-tools
+├── sovereign-gliner         # GLiNER (ONNX) NER — the NER served kind's loader (sovereign-compute `ner`, once per process); port in sovereign-contracts `ner`, chunk adapter in corpus-engine
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-enrichment-catalog # The enrichment store below every host that reads it
 ├── sovereign-enrichment-build   # The enrichment orchestrator, outside the inference stack
 ├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime` — all four hosts are on it
 ├── sovereign-turn-client    # THE client half of the turn protocol + reachability (`ServingHost`)
-├── sovereign-mesh           # In-process cmnwlth embed; roster, rail, identity, gossip/ring loops
 ├── sovereign-daemon         # The node's host crate — assembly, surface shells, edge, adapters
 ├── sovereign-peer-wire      # Wire types both ends of an internal exchange must spell alike
 ├── sovereign-compute        # Supervised compute-child boundary — crash isolation, not parallelism
-├── sovereign-pods           # Compute's remote isolation — leasing a rented machine
+├── sovereign-pods           # Compute's remote isolation — leasing a rented machine; `sovereign-pod-worker`, the pod's worker-mode binary
 ├── sovereign-scheduler      # Serving's pure tier — ranker, decision records, replay ("The two tiers", SERVING_BOUNDARY.md)
-├── sovereign-serving-host   # Serving's host tier — peer_inference, admission, entry_endpoint
+├── sovereign-serving-host   # Serving's host tier — peer_inference, admission, turn_admission, entry_endpoint
+├── sovereign-serve          # `serve`, the model server binary — the OpenAI wire alone (no mesh, no cw-rails) over the one serving assembly
+├── sovereign-stock          # The stock distribution: svrn with serve, code and ingest hosted (ingest's engine built by `corpus_engine::face` in `sovereign-hosted-ingest` and handed in through `HostedIngest`; svrn links no corpus-engine), ONE process, what `svrn daemon run` execs (`[[distribution]] stock`); its second bin `sovereign-cli-llm-stock` hands cli-llm the same ingest composition and is what the dispatcher execs for the LLM verbs (bare `sovereign-cli-llm` names ingest absent)
+├── sovereign-onprem         # The on-prem distribution: svrn with serve and ingest hosted, ONE process; no code, no mesh, no recipe authoring, and `Posture::Sealed` withholds web reach, the wikipedia bundle and the `/mcp` route by name, each sealed absence pointing at `/v1/conversations` (`Posture::code_pointer`, `NO_MCP`), and a turn with no web-reaching tool drops the prompts' web offers (`runtime/web_reach.rs`) (`[[distribution]] onprem`; phase-b-86, -87)
+├── sovereign-hosted-ingest  # Ingest's hosting composition for svrn: the one `hosted()` both distributions call (stock hands in recipe authoring, on-prem none); a library listed in BOTH the `stock` and `onprem` `[[distribution]]` rows, so its edges and `src/` answer to each row's faces (phase-b-88)
 ├── sovereign-grants         # GuestGrant, EphemeralGrantStore, `Scope` — per-turn authorization
-├── sovereign-server         # Axum REST + WebSocket, multi-tenant (the phone-facing host)
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
-├── sovereign-cli-shared     # Shared lib (dirs, repo, help, prompts, tracing init, cli-contract)
-├── sovereign-cli-daemon     # Long-running host + lifecycle; owns Windows GPU backend selection
-├── sovereign-cli-dev        # Workbench: ATOS + project lifecycle + code intel + tools
-├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/mesh/ring/job)
+├── sovereign-cli-base       # Leaf half of the CLI shared set (help, dirs, dispatcher, guest_link, urls, repo, prompts, deprecation, tracing init, models, mcp client; rail client uses the rail-core wire leaf)
+├── sovereign-cli-shared     # svrn CLI shared lib (cli-contract, args, flag surface, lane verdict; re-exports sovereign-cli-base at the historical paths)
+├── sovereign-cli-daemon     # Lifecycle verbs + setup; links no sovereign-inference: setup's probe/plan exec the stock binary (`--setup-probe`), which owns Windows GPU backend selection
+├── sovereign-cli-dev        # Workbench: project lifecycle + code intel + tools; owns the project model (`project init` execs its `project-observe`)
+├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/workflow/govern; svrn's sub-verbs of atlas/enrich/corpus; svrn's white-box bench lanes)
+├── sovereign-cli-bench      # bench's CLI — bench, eval, quality lane (dials svrn/ingest; links neither)
+├── sovereign-cli-mesh       # cmnwlth's verbs — mesh (incl. `mesh pod`), ring, job, publish, run
 ├── sovereign-time           # Wall-clock helpers — zero-dep leaf for crates off sovereign-core
-├── sovereign-pipeline       # Pipeline / pod-lifecycle helpers
+├── sovereign-pipeline       # Pipeline driver (recipes, worklist); pods moved to cli-mesh; `svrn-ingest`, ingest's one CLI (enrich/corpus/atlas/meta-atlas/recipe/pipeline/alignment, `bench atlas`)
 ├── sovereign-eval           # Pure scorers
 ├── sovereign-authoring-harness # Recipe-authoring verdict ladder over harness StageOutputs
 ├── sovereign-meshapp        # Mesh-app explorer ops — pure path-in/DTO-out lib
-├── sovereign-meshapp-registry  # Mesh-app manifest, registry, port map, proxy
 ├── sovereign-mesh-test-harness # SimulatedMesh/SimulatedNode/MockLlamaServer, fault injection
 ├── sovereign-service        # Service installation (launchd / systemd / Windows task)
 ├── sovereign-agent-bench    # Eleven-problem agent-coding battery
@@ -186,20 +197,22 @@ crates/
 └── sovereign-tdd            # Unified TDD solver loop (HTTP + MCP transports)
 ```
 
-Top-level: `modes/` (skills), `models.toml`, `models/`, `bench/`,
-`inquiries/`, `router/`, `sovereign-server.toml`, `deploy/onprem/`.
+Top-level: `modes/` (skills), `models/`, `bench/`, `inquiries/`,
+`sovereign-server.toml`, `deploy/onprem/`. Baked data lives with the crate
+that bakes it: the model manifest in `crates/sovereign-contracts/data/`, the
+router exemplar and calibration banks in `crates/sovereign-core/data/`.
 
 ### commonwealth
 
 ```
 crates/
-├── commonwealth-core         # Shared types — ids, mesh, capabilities, ledger, clock
+├── commonwealth-core         # The mesh roster, gossip auth, clock, ledger aggregation; its records re-exported from oicp-types
 ├── commonwealth-transport    # PeerTransport seam — (peer, traffic class) → endpoints
 ├── commonwealth-discovery    # Founding + joining: join keys, mDNS, local hardware survey
 ├── commonwealth-rail-core    # The ring rail's FOLD — Person/Roster/RailAct/SignedOp. Zero I/O
 ├── commonwealth-rail         # The ring rail's JOURNAL — one JSONL log per namespace
 ├── commonwealth-work         # The WORK PLANE on the rail — WorkAct codec, unit seal, lease predicate
-├── commonwealth-state        # MeshStore — SQLite KV; a local PROJECTION of the ring rail
+├── commonwealth-state        # MeshStore — KV (pure-Rust in-memory; SQLite file store behind `sqlite`); a local PROJECTION of the ring rail
 ├── commonwealth-media        # Federated media — who offers a library, who may reach one
 └── commonwealth-rails        # `cw-rails` — the minimal daemon a shim author installs
 ```
@@ -208,9 +221,10 @@ Nine crates, and nine is the whole directory. Six left in 2026-09 because
 their names described a family they were not in: `commonwealth-api` and
 `-inference` became `sovereign-api` / `sovereign-serving` and were then
 deleted; `-knowledge` became `sovereign-grants`; `-app` became
-`sovereign-meshapp-registry`; `-test-harness` became
+`sovereign-meshapp-registry` (deleted as dead code, pb-meshapp-apps); `-test-harness` became
 `sovereign-mesh-test-harness`; `oicp-conformance` moved to a repo-root
-sibling. `contrib/` ships `install.sh`, a systemd unit and a launchd plist.
+sibling. `sovereign-service/data/` ships the systemd unit, launchd plist and
+Windows task XML `install_service` embeds.
 
 ### studio
 
@@ -229,7 +243,7 @@ crates/
 ├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps
 ├── sovereign-workflow-host  # Daemon-runnable workflow host + the NL workflow-author bundle
 ├── sovereign-tools-base     # Pure leaf workflow tools (shell/web/chunk/file/json/csv/zip/vector/MCP)
-├── sovereign-recipe-author  # Recipe-authoring tool bundle + RecipeProject model + project store
+├── sovereign-recipe-author  # Recipe-authoring tool bundle + RecipeProject model + project store (svrn reaches them through the contracts RecipeProjectPort)
 └── sovereign-studio         # Headless studio CLI — the proof the package is independently usable
 ```
 
@@ -246,7 +260,9 @@ could-not-judge / never-ran.
 `twin-plants.toml` + `scripts/twin-census.py` are the sabotage runner for the
 one-decider censuses: prove the census green, apply a real second
 implementation, require a FAIL naming the expected substring, restore
-byte-for-byte. 19 families.
+byte-for-byte. 19 families. They prove named censuses; `cargo xtask
+clone-gate` is the general detector, a ratchet on production lines covered by
+an 8-line normalized window found in two or more files (`baselines/clones.tsv`).
 
 Also here: `CONCEPTS.toml` (the concept register), `TARGET_ARCHITECTURE.md`,
 `env-flags.toml`, `requirements.toml` + `requirements-enforceability.toml`,
@@ -268,8 +284,10 @@ and gated by the `recipe_schema` test. Outside the catalog: `codebase`,
 
 ### Bench harnesses
 
-Fixtures under `sovereign/bench/`; orchestrators in `bench_cmd/`; pure scorers
-in `sovereign-eval/`.
+Fixtures under `sovereign/bench/`; orchestrators in `sovereign-cli-bench`'s `bench_cmd/`,
+whose turn lanes ask svrn over its turn route (`bench_cmd/subject.rs`) and whose scorers
+ask svrn's `__probe` for the grounding gate's own verdicts and judge registers
+(`bench_cmd/svrn_judge.rs`); pure scorers in `sovereign-eval/`.
 
 `scripts/sovereign-ci-bench.sh` is the full nightly (~2-4h) and **the primary
 way to catch a regression anywhere in the inference + retrieval stack** — one
@@ -409,8 +427,9 @@ assembled (`prepare_document` / `prepare_query`).
 
 `index_stats`, `extract_shard`, `merge_shards`; shards are structurally
 identical to full indexes. The per-node ceiling set in Settings → Knowledge is
-enforced once, at `build_local_capabilities`, which clamps published
-`free_storage_gb`; every scheduler reads that one value.
+enforced once, in cw-rails' gossip merge (commonwealth-rails `self_measure::apply`),
+which clamps the free storage it measures to the budget left svrn declares
+(`NodeCapabilities.storage_remaining_bytes`, never gossiped); every scheduler reads that one value.
 
 **Blanket** hands a chosen subset of peers a one-time, revocable, ephemeral
 grant to shoulder compute for a personal source, riding the existing
@@ -502,8 +521,8 @@ operator action via `POST /internal/corpus/enrich-reset`.
 ### Registry, authoring, back-compat
 
 Resolution order is local override on disk → remote → bundled, SHA-256
-verified when the entry declares one. `build.rs` vendors `registry.toml` into
-`OUT_DIR`, so the engine works offline with no checked-in snapshot to drift.
+verified when the entry declares one. The corpus-engine-recipes crate compiles
+`registry.toml` in, so the engine works offline with no checked-in snapshot to drift.
 
 The schema is open — a domain expert authors a TOML and the engine runs it.
 Generic primitives: the `http_api` acquirer (URL templating, four pagination
@@ -518,7 +537,7 @@ Recipes live outside the repo, so a TOML written six months ago must keep
 loading: new fields carry `#[serde(default)]`, renamed fields keep the old
 name as an alias, removed variants get a deprecation arm in
 `translate_parse_error`, and `[corpus] schema_version` bumps only when readers
-must opt in. Enforced by `corpus-engine/tests/recipe_back_compat.rs`.
+must opt in. Enforced by `corpus-engine/tests/main/recipe_back_compat.rs`.
 
 Delta updates are `update/delta.rs`: per-document revision ids,
 `ManifestDiff::compute`, three-phase apply, `_update_progress.json` for
@@ -529,7 +548,7 @@ resume. Crawl safety is hardcoded and not per-recipe: robots.txt compliance,
 
 ## 4. Sovereign — the local agent
 
-Desktop, CLI, HTTP server or daemon against the same `Runtime`. No data leaves
+Desktop, CLI or daemon against the same `Runtime`. No data leaves
 the machine unless the user opts in to web search or a mesh.
 
 ### Trait architecture
@@ -584,7 +603,7 @@ without touching the trait.
 and chip phrasings, trace label, OICP `(capability hint, latency class)`,
 retrieval slot with and without evidence, output-budget floor, referential
 `Operation`, `ToolAccess`. Adding an intent is a variant, a row, and exemplars
-in `sovereign/router/exemplars.toml`. `IntentRow` has no `Default`, so a row
+in `sovereign/crates/sovereign-core/data/router/exemplars.toml`. `IntentRow` has no `Default`, so a row
 omitting a column does not compile. What did NOT move into it: handler
 dispatch (control flow over a closed set is what enums are for), payload
 guards, and `authority_guard::guard_story`.
@@ -626,7 +645,7 @@ embed cache keys the instruction into its hash. Per-turn embed count is three.
 
 `svrn router fit` is the calibration surface, sweeping exhaustively with
 candidate thresholds at midpoints between observed scores, against
-`bench/routing/calibration/axes_v1.toml` — a bank authored to fail somewhere
+`crates/sovereign-core/data/calibration/axes_v1.toml` — a bank authored to fail somewhere
 (74 cases, 32 `expect = "abstain"`). Two guards keep it honest: a margin floor
 clamped to ≥ 0, and `FitReport::underpowered()` on any axis with fewer than
 five cases per class. **The command writes no constant** — it names the
@@ -671,6 +690,10 @@ unknown id refuses listing what IS registered rather than falling back.
 `BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
 preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.
+Cold start and hot reload both reach it through ONE serving assembly,
+`sovereign_compute::assembly` (`assemble_serving`, `ReloadFactory::build`),
+which adds admission, llama's slot installs and the compute-child layer; a
+reload re-wraps the running compute children instead of spawning new ones.
 
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers
@@ -713,15 +736,27 @@ surface calls. `McpToolAdapter` infers effect and idempotency from a tool's
 name, so a browser `click` picks up the approval gate and replay ledger while
 a `snapshot` read does not.
 
-**Code intelligence** is served over MCP by `svrn project serve` or the
-daemon. Tools under `sovereign-tools/src/code/`: the code index (`symbols`,
+**Code intelligence** is served over MCP by `svrn code mcp` (also spelled
+`svrn serve` and `svrn project serve`: no model, no daemon, no mesh; its tool
+set is `sovereign-code`'s bundles behind the host kit's dispatcher) or, on
+the stock install, mounted on the daemon's one `:9741/mcp` through code's
+face (`sovereign_code::face`, pb-code-daemon-exit); a svrn daemon alone serves
+no code tool and names `svrn code mcp`. The editor door (`POST /v1/edit_predictions`) is code's too
+(`sovereign_code::edit_predictions`, pb-meshapp-rest): the stock binary mounts it on svrn's client
+surfaces, its model lane dials serve, and svrn alone answers it with a 503 naming the code server. So is the
+TDD solver (`sovereign_code::solve_http`, `/v1/solve/jobs*` and MCP `solve`, pb-meshapp-solve): its chat
+dials serve, no serve is a named refusal, and svrn alone answers the routes the same way. The tools live in their own crate, `sovereign-code` — 18,431 lines
+lifted out of `sovereign-tools` on 2026-09-21 (822681564), so that `svrn code`
+is a program with a boundary a gate can read rather than a module inside the
+knowledge server (docs/FIVE_PROGRAMS.md §2). Tools under
+`sovereign-code/src/`: the code index (`symbols`,
 `code_search`, `recent_changes`, `working_set`, `brief`), the session brief
 (`briefing`), the tree-sitter fact base (`facts`), the SCIP call graph
-(`callers`, `callees`, `blast_radius`), watchers, notes, ATOS lifecycle,
+(`callers`, `callees`, `blast_radius`), watchers, notes,
 drift, capability docs, project context, session reflection, and work-atlas
 coordination (`declare_scope`, `release_scope`, `work_in_flight`).
 
-The daemon's tool graph and the reindexer share ONE merged `ScipGraph` handle,
+Code's tool graph and the Reindexer share ONE merged `ScipGraph` handle,
 so updates are visible to `symbols`/`callers`/`blast` live. Each debounced
 save runs an embed-free tree-sitter overlay; the heavy rust-analyzer export is
 demoted (spawned, rate-limited, quiescence-gated, `nice +10`) and is
@@ -761,18 +796,30 @@ undocumented / drifted findings. The deterministic floor runs in public CI as
 
 | Frontend | Notes |
 |---|---|
-| `sovereign-cli` (+ siblings) | Dispatcher. `sovereign <verb>` execs into `sovereign-cli-daemon`, `-dev` or `-llm`. Unix execs (same PID); elsewhere spawn-and-wait. Discovery is `current_exe()`'s parent, overridable per sibling |
-| `sovereign-server` | Axum REST + WebSocket, multi-tenant with per-tenant isolation on corpora and documents. Binds `127.0.0.1:8080`; a non-loopback bind with `[auth]` disabled is refused at startup. **Two cargo features, both default ON, drop the surfaces whose safety rests on one operator owning the box**: `dev-routes` (privilege — `/v1/solve`, uploads taking a server-side path, the `/mcp*` routes, `ShellTool`) and `net-tools` (egress — the search tool's web fallback, `web_fetch`, `wikipedia_fetch`) |
+| `sovereign-cli` (+ siblings) | Dispatcher. `sovereign <verb>` execs into `sovereign-cli-daemon`, `-dev`, `-llm` or `-mesh`, and `svrn agent-bench` execs the `sovereign-agent-bench` binary the same way rather than linking that crate. Unix execs (same PID); elsewhere spawn-and-wait. Discovery is `current_exe()`'s parent, overridable per sibling (`SOVEREIGN_CLI_{DAEMON,DEV,LLM,MESH}_BIN`, `SOVEREIGN_AGENT_BENCH_BIN`) |
 | `sovereign-desktop` | Tauri 2 + Svelte 5, rail `Ask · Library · Reflect · Workshop · ⚙`. Layout is token-driven: `app.css` owns the scale and three global primitives (`.page-body`, `.page-measure`, `.page-header`). Do NOT re-declare padding or overflow on an element carrying `.page-body` — Svelte scoping wins silently and clips content with no way to scroll to it |
-| `sovereign-mobile` | Thin Tauri 2 client — no local inference, Runtime or corpus. Consumes `sovereign-turn-client` and nothing else on the wire. Named ceiling: the client family has no auth seam, so the phone reaches a DAEMON, not an api-key `sovereign-server` |
+| `sovereign-mobile` | Thin Tauri 2 client — no local inference, Runtime or corpus. Consumes `sovereign-turn-client` and nothing else on the wire. Named ceiling: the client family has no auth seam, so the phone reaches a DAEMON |
 
 Verbs by sibling: `sovereign-cli` holds the light delegators (`notes`,
 `status`, `drift`, `session`, `design`, `plan`, `init`, `reflect`, `memory`,
-`serve`) plus `code index` and `refresh` behind the `code-intel` feature;
+`serve`);
 `sovereign-cli-daemon` holds `daemon`, `setup`, `install-service`, `doctor`;
-`sovereign-cli-dev` holds `atos`, `tools`, the `code` analysis subcommands and
-the `project` lifecycle subcommands; `sovereign-cli-llm` holds everything that
-talks to a model or does heavy retrieval. `code converge` is the one verb
+`sovereign-cli-dev` holds `tools`, every `code` subcommand (`code index`
+included), `refresh` and the `project` lifecycle subcommands, and links no
+corpus-engine: `code index`, `code finalize` and `code watch` exec ingest's
+`svrn-ingest`; `sovereign-cli-llm` holds everything that
+talks to a model or does heavy retrieval, except bench's verbs: `sovereign-cli-bench`
+holds `bench`, `eval` and the `quality lane` lanes (pb-cli-llm-bench-move), and svrn's
+white-box lanes under those spellings (`bench judge-replay|resolver-precision`,
+`eval inner-chaos`) stay in `-llm`; and except ingest's verbs: `svrn-ingest`
+(sovereign-pipeline) holds `enrich`, `corpus`, `atlas`, `meta-atlas`, `recipe`,
+`pipeline`, `alignment` and `bench atlas` (pb-cli-llm-ingest-move), and the
+sub-verbs under those spellings that are svrn's (`enrich raptor|raptor-index|summary-atoms`,
+`atlas budget|status|list-corpora|list-atoms|show-atom|typed-extension`, `corpus
+ingest|share|pull|catalog|extract-entities|watch*`) stay in `-llm`, one table in
+the dispatcher's `ingest_bin.rs`; `sovereign-cli-mesh`, lifted out of
+`-llm` on 2026-09-21, holds `mesh` (guest grants and media among its
+subcommands), `meshapp`, `ring`, `job`, `publish`, `unpublish` and `run`. `code converge` is the one verb
 LINKED rather than exec'd, from `sovereign-cli-dev`'s `[lib]` target.
 
 ### Subsystems with their own docs
@@ -786,7 +833,6 @@ LINKED rather than exec'd, from `sovereign-cli-dev`'s `[lib]` target.
 | Retrieval redesign | [`docs/RETRIEVAL_REDESIGN.md`](./docs/RETRIEVAL_REDESIGN.md) |
 | Epistemic state / the epistemic index | [`docs/EPISTEMIC_STATE.md`](./docs/EPISTEMIC_STATE.md), [`docs/specs/EPISTEMIC_INDEX.md`](./docs/specs/EPISTEMIC_INDEX.md) |
 | Ontology primitives + migration | [`docs/specs/ONTOLOGY_PRIMITIVES.md`](./docs/specs/ONTOLOGY_PRIMITIVES.md), [`docs/specs/ONTOLOGY_MIGRATION.md`](./docs/specs/ONTOLOGY_MIGRATION.md) |
-| ATOS | [`docs/ATOS.md`](./docs/ATOS.md), [`docs/ATOS_RUNNER.md`](./docs/ATOS_RUNNER.md) |
 | Drift / correctness tooling | [`docs/DRIFT_DETECTION.md`](./docs/DRIFT_DETECTION.md), [`docs/CORRECTNESS_TOOLING.md`](./docs/CORRECTNESS_TOOLING.md) |
 | Work-atlas peer coordination | [`docs/WORK_ATLAS.md`](./docs/WORK_ATLAS.md) |
 | Desktop quality surface — START HERE to verify the desktop | [`crates/sovereign-desktop/QUALITY_SURFACE.md`](./crates/sovereign-desktop/QUALITY_SURFACE.md) |
@@ -810,66 +856,63 @@ open, and keeps the plan healthy as nodes come and go.
 
 ### Discovery and membership
 
-Every node persists an Ed25519 keypair; identity is mesh-independent and
-survives `leave` and every switch. mDNS advertises `_commonwealth._tcp.local`;
-gossip is a 10s epidemic loop over 2–3 random peers with timestamp-LWW
-conflict resolution; latency probing is UDP RTT every 30s.
+Since pb-mesh-exit-transport the node's one mesh endpoint is `cw-rails`: it
+holds the node's one Ed25519 key, the roster, gossip, joins, the known-mesh
+list and the ring round, and svrn neither accepts nor dials a peer itself
+(svrn reads the roster and reaches peers through the ports a distribution
+composes from cw-rails, `hosted_mesh`). Identity is mesh-independent and
+survives `leave` and every switch. mDNS advertises `_commonwealth._tcp.local`
+when `svrn mesh up` starts cw-rails with `--mdns`; gossip is a 10s round over
+3 peers (`select_peers`: active keyed members, Online first, rotated by round)
+with timestamp-LWW conflict resolution, and offline-decay reads this node's
+contact clock, never a peer's `last_seen`.
 
 `Mesh` carries **two** credentials and the split is load-bearing:
 `mesh_secret` authorizes gossip and never rotates; `invite_key_hash` admits
 joiners and rotates freely. A gossip round carries a keyed-BLAKE3 `mesh_proof`
 bound to the sender and a 30s window rather than the raw secret; an OFFERED
 proof that fails is a hard refusal, never a fall-through. Rotation is refused
-while the fleet is mixed, and the confirmation is local observation (the
-`GossipAuthArm` that won), never a peer's claim.
+while an Online peer is pre-split or unconfirmed (`?force` overrides), and the
+confirmation is local observation (each merge's `peer_pre_split`), never a
+peer's claim. `aliased_endpoint_keys` is the one implementation of "one
+endpoint key, one member row"; `merge_from_authenticated` refuses to ADMIT a
+collision, and `/v1/mesh/forget-member` retires one.
 
-**One endpoint key, one member row.** `aliased_endpoint_keys` is the one
-implementation; `merge_from_authenticated` refuses to ADMIT a collision while
-`gossip::one_row_per_endpoint_key` RESOLVES one at the dial site, because
-refusing there strands the machine. Selection fairness is a separate clock
-from liveness: offline-decay reads contact, `select_round_peers` reads
-`peer_last_attempt`, stamped before the dial so refusals and timeouts advance
-it too.
-
-**Encryption, and the honest gap.** A plaintext mesh is the default. A mesh
-created with `require_encryption` flips every node to the iroh dial-by-key
-transport in REQUIRE mode with no plaintext fallback, binds its listeners
-loopback-only, and admits joiners only over an encrypted founder-key-dialed
-channel. **NOT covered: the multi-host tensor-split RPC between
-`llama-server` and `rpc-server` is raw TCP, outside the transport seam, and is
-the sole residual plaintext on an encrypted mesh. Never claim blanket
-end-to-end encryption.** Surface-by-surface posture
+**Encryption.** Every mesh is encrypted: cw-rails founds no other kind, and
+every class rides iroh QUIC dialled by key, admitted against the roster. The
+daemon's internal API binds loopback only. The hops between a program and
+cw-rails, and between `llama-server` and its local bridge, are loopback
+plaintext on the host. Surface-by-surface posture
 [`../docs/THREAT_MODEL.md`](../docs/THREAT_MODEL.md).
 
 ### The PeerTransport seam
 
-`commonwealth-transport` resolves (peer, traffic class) → ordered base URLs in
-exactly one place. `IpTransport` is today's tailnet/LAN overlay;
-`IrohTransport` is dial-by-Ed25519-pubkey QUIC bridged to HTTP through
-localhost byte-tunnels; `RoutedTransport` composes them, concatenating
-candidates ahead of a default so a failed iroh dial degrades to the tailnet
-path on the same request. With iroh enabled every class is iroh-first with
-per-dial IP fallback, and `[iroh] enabled` absent means AUTO (on iff this node
-is in a mesh). Out of seam by design: the join handshake, worker-pod
-transport, loopback self-probes, and the raw-TCP tensor traffic above.
+`mesh-reach` names (peer, traffic class) → ordered base URLs in one trait.
+svrn and serve dial through `RailsTransport`, which asks cw-rails' reach door;
+cw-rails resolves through `commonwealth-transport`'s `IrohTransport`
+(dial-by-Ed25519-pubkey QUIC bridged to HTTP through localhost byte-tunnels).
+The plaintext IP overlay is gone with the plaintext mesh (phase-b-36). Out of
+seam by design: the join handshake, worker-pod transport and loopback
+self-probes.
 
-Six ALPNs carry the encrypted mesh, and what a STRANGER gets differs per
-ALPN — **holding the dial string is not a credential**, so the acceptor routes
-on `(ALPN, dialer)` and the key the QUIC handshake proved is the discriminator:
+Seven ALPNs carry the mesh, and what a STRANGER gets differs per ALPN —
+**holding the dial string is not a credential**, so cw-rails' acceptor routes
+on `(ALPN, dialer)` through its origin registry (each program registers its
+own loopback origin; the key the QUIC handshake proved is the discriminator):
 
 | ALPN | member | stranger |
 |---|---|---|
-| `cwth/client/0` | the PEER listener (no bearer — federated inference carries none, its key is the credential), serving the client router minus `/internal/*` | the bearer-checking listener |
-| `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing |
-| `cwth/media/0` | the declared `[iroh] media_origin` | REFUSED |
-| `cwth/app/0` | one of several named HTTP apps, chosen by first path segment | REFUSED |
-| `cwth/offer/0` | the declared `[iroh] offer_origin` | REFUSED — the dial string is gossiped, so a downgrade would publish a household's inventory |
-| `cwth/guest/0` | — | admitted; the listener reads the bearer |
-| `cwth/http/0` | internal router | internal router, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one |
+| `cwth/client/0` | serve's client origin (no bearer — federated inference carries none, its key is the credential) | svrn's guest listener (`Admit::MembersElse(cwth/guest/0)`) |
+| `cwth/rpc/0` | serve's ggml rpc worker | REFUSED — it authenticates nothing |
+| `cwth/media/0` | the `[media] origin` in cw-rails' rails.toml, for members inside `[media] allow` | REFUSED |
+| `cwth/app/0` | one of several named HTTP apps, chosen by first path segment; each app claim carries its publisher's allow list (svrn's `[iroh] app_allow`) | REFUSED |
+| `cwth/offer/0` | svrn's `[iroh] offer_origin`, for members inside `[iroh] offer_allow` | REFUSED — the dial string is gossiped, so a downgrade would publish a household's inventory |
+| `cwth/guest/0` | — | svrn's guest listener; it reads the bearer |
+| `cwth/http/0` | by registered prefix: gossip and join (any dialer), `/internal/ring` (members), each program's peer prefixes | gossip and join, DELIBERATELY — a joiner is not a member and `/internal/join` is how it becomes one; any other prefix refused by name |
 
 Federated media and named apps ride that surface: the holder declares an
-origin, the viewer asks its own daemon for a loopback bridge URL, and the
-acceptor tells the origin WHO is asking by rewriting request heads
+origin, the viewer asks cw-rails for a loopback bridge URL, and the acceptor
+tells the origin WHO is asking by rewriting request heads
 (`X-Mesh-Member`/`-Node`/`-Pubkey`, every client-supplied `x-mesh-*` header
 dropped first). Responses are a byte copy, which is why `Range` stays
 byte-exact. `svrn mesh offers` enumerates the roster, so a neighbour
@@ -881,11 +924,11 @@ Eight decision points, each with one home:
 
 | Decision | Where |
 |---|---|
-| Joiner decides a turn is offload-eligible | `sovereign-mesh/oicp_select.rs::offload_eligible` |
+| Joiner decides a turn is offload-eligible | `sovereign-scheduler/oicp_select.rs::offload_eligible` |
 | Joiner picks peer-vs-local | `sovereign-serving-host/src/peer_inference.rs::select_peers_ranked` |
 | Joiner resolves a *named* target | `peer_inference.rs::locate_named_model` — name resolution + min-in-flight, **not** the scorer. A HARD name is a constraint: unknown ⇒ error, never substitution |
 | Hub picks a local model for a peer request | `sovereign-daemon/src/routes_inference.rs::route_with_oicp` |
-| Serving peer picks Fast-vs-Slow slot | `oicp_select.rs::pick_slot_for_oicp` |
+| Serving peer picks Fast-vs-Slow slot | `sovereign-serving-host/src/slot_select.rs::pick_slot_for_oicp` |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` |
 | Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` |
 | Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` |
@@ -979,7 +1022,12 @@ until neither side moves.
 Verbs: `svrn ring` (new, roster add, dev, seal, log) and `svrn job` on the
 same rail — `ring` deploys an app to a trust ring, `job` hands that ring a
 unit of compute. Neither opens the journal directly: the roster the DAEMON
-loaded decides which acts are readable.
+loaded decides which acts are readable. `job status` folds `GET /v1/rail/log`
+with the same `commonwealth_work::projection::fold` that `cw-rails`' own
+donor loop runs (and serves at `GET /v1/work/projection`), so the terminal
+and the donor cannot disagree about who holds a lease. The donor is cw-rails'
+since pb-work-donor (`[work_offer]` in `rails.toml`); the daemon serves only
+the `ingest:v1` execute origin it forwards units to.
 
 ### HTTP API
 
@@ -995,19 +1043,33 @@ revocable, bound to a closed `Scope` enum whose `paths()` is the only route
 allowlist there is. A guest is not a mesh member and cannot mint further
 grants, because no `Scope` variant names `/internal/*`.
 
+A daemon holding on-prem API keys (`<data_dir>/client-tokens/<sub>.key`,
+written by `svrn daemon key`) is KEYED: `api_keys::seal` wraps every client
+listener (the guest door's in `guest_door::door_router`, so its own bind and
+the `GUEST_ALPN` forward take one sealed router), loopback grants nothing, a key resolves to `Principal::Asserted`,
+conversations are stored `{sub}:{id}`, a non-`admin` key reaches only
+`api_keys::KEY_SCOPE`, and `[retrieval] corpora` is every key's corpus grant.
+`granted_http` serves the grant: `GET /v1/corpora`, the reading window
+`GET /v1/corpora/{c}/chunks/{id}` (403 naming an ungranted corpus) and
+`GET /v1/tools`; `GET /health` is an unauthenticated `ok`. The daemon's calls
+to its own routes (the OCR cleanup pass) present
+`client_tokens::self_credential()`, a per-process admin key a keyed store
+admits and no disk holds; a CLI presents `SOVEREIGN_API_KEY`, read by
+`setup_config::client_credential` (`svrn corpus watch*` sends it).
+
 | Path | Notes |
 |---|---|
 | `POST /v1/chat/completions` | OpenAI-compatible; `LocalOnly` privacy → 400 |
 | `POST /v1/responses` | OpenAI Responses-API adapter |
 | `GET /v1/models` | Names this daemon can dispatch by name, built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not |
 | `POST /v1/embeddings` | What peers call via `embed_http::http_embed_fn` |
+| `POST /v1/rerank` (and each served kind's route) | Mounted from the served-kind registry (`sovereign_inference::served_kind`); answers with the rerank kind's slot or compute child |
 | `POST /v1/knowledge/search` | Determines target corpora, fans out, merges, reranks |
-| `/v1/apps*`, `/app/{app_id}/{*path}` | Mesh-app install/status + reverse proxy |
 | `GET /status` | Node / mesh / inference / knowledge summary, incl. `process.pid` + `run_id` |
 | `GET /oicp/v1/capabilities` | Provider manifest + federation info |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | Ollama-native compatibility shim, pure translation over the OpenAI handlers |
-| `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, and the LIVE lane (delivery, not record — nothing reaches a store or a disk) |
-| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list guest grants. On the Operator bind ONLY |
+| `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, and the LIVE lane (delivery, not record — nothing reaches a store or a disk). The journals live at `cw-rails` since fp-54: `/v1/rail/*` dials the rails daemon's doors through the rail port, and a guest's WRITE carries a `GuestAttestation` the daemon signs with its node key for the session's lifetime (`AppState::attest_guest`); rails verifies it against the namespace's roster and a refusal comes back by name (`signer_not_in_roster`, `expired`, …, 403) |
+| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list guest grants. On the Operator bind ONLY. The holder's side, `GET /internal/guest/route` (the base URL its stored link reaches, opening the mesh tunnel; 412/502 named absence otherwise), is serve's loopback router since pb-mesh-exit-mesh (`sovereign_serve::guest_route`) |
 | `/v1/mesh/*`, `/v1/admin/*`, `/mcp/*` | Loopback-only |
 
 **Which listener serves a route is the guard; "is the caller loopback" is
@@ -1030,7 +1092,7 @@ projections (`meshapp_http.rs`), the enrichment store (`enrich_http.rs`), the
 local-corpus registry (`lc_http.rs`), governance, insights, notes, features,
 recipe projects, MCP config, turn extras, documents, the corpus catalogue,
 recipe authoring and deep research. Parity is audited by
-`sovereign-mesh/tests/loopback_parity.rs`.
+`sovereign-daemon/tests/main/loopback_parity.rs`.
 
 **Internal API — :9742, plaintext under perimeter trust.** No per-request
 auth: gossip, scheduling intent and plans, model transfer, RPC warm, index
@@ -1044,6 +1106,10 @@ removed; never describe `:9742` as mTLS.**
 a pinned listener-shape test. The listener MUST use
 `.into_make_service_with_connect_info::<SocketAddr>()` — bare `axum::serve`
 leaves `ConnectInfo` absent and the guards fail closed for *every* caller.
+The guard lives in the host kit (`host_kit::shell::guard`, re-exported at
+`loopback_guard`), whose `shell::serve` always attaches `ConnectInfo`;
+cw-rails, the compute child, `meshapp dev` and `ring show` serve through it,
+and the daemon's listeners adopt it in pb-daemon-adopts.
 
 ### Admission and fairness
 
@@ -1051,8 +1117,9 @@ Two disjoint layers, so a request meets exactly one and is never double-gated.
 `peer_admission_layer` rations traffic that NAMES a node;
 `client_fairness_layer` rations traffic that does not, returning early when
 `X-Node-Id` is present. Both key the same
-`serving_policy::fair_sched::SchedCore<Principal>`, which also backs the chat
-server's turn scheduler, so every admission gate is fair by identical rules.
+`serving_policy_core::fair_sched::SchedCore<Principal>`, which also backs the
+daemon's serving part (`sovereign-daemon/src/state/serving/part.rs`), so every
+admission gate is fair by identical rules.
 Local requests admit unconditionally; peer requests get 503 + `Retry-After`
 when paused, yielding to recent local foreground work, or refused by the
 scheduler.
@@ -1080,8 +1147,12 @@ for the turn's whole life.
 
 ### Knowledge, ledgers, distributed state
 
-`MeshCorpusManager` / `ShardManager` install, list, remove, shard and
-consolidate. `merge_participants` is the ONE merge implementation, and it
+`ShardManager` (sovereign-grants) decides who takes part in a collaborative
+merge and pulls the peers' partitions; the merge and its finalize are
+ingest's, reached through `corpus_index::ingest_port::merge::PartitionMergePort`
+(pb-grants-merge). The daemon holds ingest as one `Arc<dyn
+corpus_index::ingest_port::daemon::IngestPort>` and hands each consumer the
+narrower port it names (pb-ingest-dial-daemon-ports). `merge_participants` is the ONE merge implementation, and it
 finishes the job: a merge that stops at written chunks produces a corpus
 `installed_indexes()` skips and gossip advertises nothing for, so
 `finalize_canonical` is the last step of the merge itself. When the merge
@@ -1098,16 +1169,25 @@ aggregation is pure. It gossips. Its siblings deliberately do not: the local
 **peer preferences** (per-peer affinity multipliers) are both in
 `GOSSIP_EXCLUDED_APP_IDS` — your own usage never leaves the machine.
 
-`commonwealth-state::MeshStore` is a SQLite KV that is a **local PROJECTION of
-the ring rail, not a replica**. Writes insert a `rail_outbox` row in the same
-transaction; the fold picks, per key, the act with the greatest
+`commonwealth-state::MeshStore` is a KV — a pure-Rust in-memory backend, with
+the SQLite file store (`MeshStore::open`) behind the default-off `sqlite`
+feature — that is a **local PROJECTION of the ring rail, not a replica**.
+Writes queue a `rail_outbox` row atomically with the row; the fold picks, per key, the act with the greatest
 `(t, actor, id)` among admitted non-voided ops, where `t` is the ORIGINAL
 write time, so a snapshot re-append after a seal does not hand every key to
 whoever snapshotted last. Acts this build cannot read are COUNTED, never
 dropped silently. Retention is part of the fold, because on a projection
 nothing else can be: a row a local sweep deletes has no incumbent and returns
-on the next round. `MeshStore` is `in_memory()` in production, so the pump's
-first act at boot is to rebuild it from the journals or hold nothing at all.
+on the next round. The node's replicated store and its pump are `cw-rails`'
+(`commonwealth-rails/src/kv.rs`): the store is `in_memory()`, so the pump's
+first act at start is to rebuild it from the journals or hold nothing at all,
+and a peer's ops reach it through the `/v1/rail/ingest` door and are folded on
+the next pump tick, not at a ring round. The `mesh-measurements` and `work`
+seal arms run on the same tick (`commonwealth-rails/src/plane_seal.rs`, the
+daemon's until pb-mesh-exit-mesh), and each tick runs on the blocking pool so
+a seal's synchronous snapshot never queues the API behind it (F13); the measurements live set is serve's, whose reconcile loop
+(`sovereign-serve/src/measurements_rail.rs`) re-appends it when the journal's
+digest moves.
 Which namespaces replicate is DECLARED in `DAEMON_OWN_NAMESPACES`; no property
 of a namespace string separates `inference` from `house-expenses`, so a rule
 would silently admit every member as an author of an app's journal.
@@ -1135,15 +1215,83 @@ one source of truth, and `load_graph` dispatches on what the index holds.
 bridge — a deferred milestone.
 
 `commonwealth-rails` (`cw-rails`) is the minimal daemon a shim author installs
-beside their media server: join an invite, run, serve three loopback routes.
-It deliberately does NOT admit joiners — a mesh is founded by a full daemon,
-and that absence is most of why it lifts (319 crates in its closure vs 743).
+beside their media server: join an invite, run, serve three loopback routes —
+plus, since five-programs fp-44, the ring rail's doors
+(`/v1/rail/{append,log,live}`) over journals under its own data root, signed
+with the same node key the mesh identity uses — and, since five-programs
+fp-46, the media-presence poll (credentials under the store
+`commonwealth_media::house_dir_under` derives, `GET /v1/mesh/media/presence`
+serving the reading into gossip) and the
+`/v1/mesh/offers` mount — and, since fp-77, a mesh store of its own:
+`/v1/mesh/kv/*` over an in-memory `MeshStore` projected from those journals
+and pumped back onto them (`commonwealth-rails/src/kv.rs`; it seals only the
+KV namespaces its own outbox feeds, and the daemon keeps serving its own
+store until fp-82; since fp-108 a start also rehydrates each local-only
+journal on disk through `MeshStore::apply_own_projection`, which merges
+only this node's own signed rows; since fp-109 a namespace the
+`/v1/rail/ingest` door took new ops for is re-projected on the pump's next
+tick, once per namespace, so a peer's write reaches the running store;
+since phase-b-5 `RailsDaemon::run` finishes that projection BEFORE the
+listener binds, so `/v1/mesh/status` answering means the store is loaded
+(`tests/ready.rs`), and the ed25519 stack builds optimized even in dev so
+a 12.9k-line store projects in under 2 s, not 118 s;
+since pc-solo-durable a door that changed the store drains the outbox onto
+the journal before it answers, so an acknowledged write survives a kill
+(`tests/kill_durable.rs`), and the tick keeps the seal check;
+since fp-87 `svrn portfolio` and `svrn newsworthy` read and write it through
+the daemon's `RailsKv`, after migrating their legacy SQLite files once —
+`sovereign-cli-mesh kv-export` reads, `sovereign-cli-llm/src/legacy_store.rs`
+writes — so neither the daemon nor cli-llm names commonwealth-state). Since fp-78 it also serves the typed ledger doors,
+`/v1/ledger/*` (`commonwealth-rails/src/ledger.rs`: contributions, activity,
+peer preferences, processed shards, inference state — each the
+commonwealth-state writer over that store, the writer's node id in the body)
+and runs the contributions `RetentionGc`; the daemon's dialing side is
+the daemon's own `ledger_port` + `rails_client/ledger.rs` (moved in from sovereign-mesh at pb-mesh-exit-mesh). Since pb-rails-untether
+(phase-b-31) svrn's boot and cli-llm's `rails_kv()` only dial it, and an absent one is a named
+absence; ONE opt-in verb brings it up, `svrn mesh up` (sovereign-cli-mesh `rails_up::ensure_rails`),
+a `ServingHost` bring-up of the binary `CW_RAILS_BIN`/sibling/PATH names, logging to `<data dir>/rails.log`;
+a refused dial never re-ensures, and nothing starts it by default; since pb-mesh-exit-transport `svrn mesh up`
+then enables a `cw-rails.service` user unit running the same argv (`rails_unit.rs`, through host-kit's `service`
+writer that `svrn install-service` also uses), and doctor's `rails_boot_unit` reads its state. Since phase-b-3 `ensure_rails` runs the daemon's one-time journal
+handover (`rail_migration::hand_over`) first, before any bring-up; with a cw-rails already answering it
+moves nothing and warns with the namespaces that wait. Until the handover runs, the daemon's boot log,
+`svrn daemon start|restart` and `svrn mesh status` name `svrn mesh up` (`node_identity::mesh_handover_notice`,
+keyed on the pre-handover `node_key` the identity handover renames; pb-distribution-f8). Since fp-solo-hermetic the bring-up is `run --listen <rails_base port>`,
+plus `--local-only` (`[relay] discovery = "none"`) on a local-only node, which also refuses an already
+running cw-rails whose `/v1/mesh/status` `relay.n0_services` is true; and `run` exits when its `rails.lock`
+is unlinked or replaced. Since phase-b pb-membership it founds (`cw-rails found`), serves its invite as
+`join_link` on `/v1/mesh/status`, admits at `/internal/join` through commonwealth-discovery's
+`accept_join_with_identity` (an admission it cannot persist is refused with a 500 naming the data dir,
+and rolled back), and speaks mDNS by key (`run --mdns`; a dial-less join browses for a keyed
+founder), all keyed by its own node key; its closure did not grow (319 crates vs 743 at the 2026-09-11
+measure; the rail doors cost three more). Since phase-b pb-rails-membership a running cw-rails also
+serves the daemon's membership doors (`/v1/mesh/{create,join,join/preview,rotate,leave,switch,forget}`,
+`commonwealth-rails/src/membership.rs`) over its own known-mesh store (`known.rs`, parked meshes under
+`<data-dir>/meshes/<id>/`), listed as `meshes` on its status. Since phase-b pb-rails-origins its acceptor holds no arm per
+protocol: `/v1/mesh/origins` registers any program's loopback origin (an ALPN, or `cwth/http/0` path
+prefixes) in commonwealth-media's `OriginRegistry`, from which the acceptor table, the advertised ALPNs
+and the gossiped capabilities are all read (a renew carrying `claims` replaces its registration's
+declaration, pb-mesh-exit-transport-claims); each registration is handed a tie (`X-Mesh-Tie`) its origin
+checks with `tied_pubkey`, and an unregistered ALPN or prefix is refused by name. svrn registers its peer
+routes there (`sovereign-daemon/src/peer_origin.rs`), declaring the gossip round's capabilities, anchor
+excepted, at every 10 s renew; its internal resolver believes a forward carrying
+that registration's live tie as it believes its own acceptor's mark. Outbound (pb-rails-reach),
+`GET /v1/mesh/reach?peer=&class=` answers any peer's endpoints for a traffic class from its own transport,
+and the `mesh-reach` leaf's `RailsTransport` is the `PeerTransport` that asks it, so a program that is not
+the mesh endpoint dials peers through this one. Since phase-b pb-rails-parity it runs the ring round itself
+(`commonwealth-rails/src/ring_sync.rs`, moved from sovereign-mesh; the daemon runs the same code over its
+rail port until the flip), woken by its append door, and serves `/internal/ring/{sync,live,checkpoint/{ns}}`
+to members under a standing `/internal/ring` prefix (`ring_routes.rs`) and `GET /v1/mesh/relay-candidates`
+(address discovery, moved to `commonwealth-discovery::mesh_discovery`). It also runs the reachability
+watchdog (`iroh_watchdog.rs`, moved from sovereign-mesh) over its own endpoint, whose rebuild re-binds and
+swaps the endpoint, transport and acceptor as one (`self_heal.rs`); `/v1/mesh/status` carries
+`self_reachability`.
 
 ---
 
 ## 6. How the four projects fit together
 
-**Sovereign standalone** — Tauri / CLI / server against `EmbeddedLlamaCpp`,
+**Sovereign standalone** — Tauri / CLI against `EmbeddedLlamaCpp`,
 knowledge via `MeshCorpusManager` (named for the mesh case but works without
 one).
 
@@ -1152,8 +1300,11 @@ client points at it. Ingest uses `embed_http::http_embed_fn`, so a node with
 no local embed model still indexes.
 
 **Integrated** — `EmbeddedDaemon` runs cmnwlth in-process; runtime inference
-is wrapped in `InferenceRouter`, which OICP-routes synthesis to peers when
-scoring favours them. Both sides share `oicp_select`, so the Joiner's selected
+is wrapped in `InferenceRouter`, built once by serve (`sovereign_serve::rank`)
+and handed to svrn by the stock distribution, which OICP-routes synthesis to
+peers when scoring favours them; svrn alone ranks nothing and relays, and a
+standalone serve ranks its own OpenAI face over cw-rails' roster (`RailsVenues`),
+reaching peers' member clients on `cwth/client/0`. Both sides share `oicp_select`, so the Joiner's selected
 model and the Founder's served slot cannot drift. Skills with
 `privacy = "local_only"` short-circuit to local.
 
@@ -1163,12 +1314,19 @@ desktop probes `/v1/models` and on success enters Attach: inference through
 `/v1/admin/reload`. **Boot is gated on identity, not on a port** —
 `ClientListener` is a watch (`Pending` / `Bound` / `Failed`) and
 `/status.process` carries `pid` + `run_id`, so a caller can ask WHO answered.
+On the dialing path `/status.serve_reach` names the follower's last read of
+serve's self-report (`answered`, `unreachable`, `did_not_answer_in_time`) and
+its age; `/status` never dials serve itself.
 A fixture daemon that loses the port, keeps running and logs success used to
 probe green while the app ingested into the operator's real daemon.
 
 `/v1/admin/reload` rebuilds only what changed: the three model slots swap
-atomically via `ProviderFactory`; `client_port`, `internal_port`,
-`client_bind`, `client_token` and `data.dir` answer `restart_required: true`.
+atomically via `ProviderFactory` (on the dialing path serve rebuilds, and the
+reload refuses, naming each slot, when serve's self-report does not hold what
+`[models]` asks for); `client_port`, `internal_port`,
+`client_bind`, `client_token` and `data.dir` answer `restart_required: true`;
+`[iroh] enabled`, `transport`, `media_origin` and `media_allow`, which nothing
+in svrn reads since cw-rails became the mesh endpoint, answer `unread_fields`.
 
 ---
 
@@ -1183,13 +1341,13 @@ root `Cargo.toml`. `sovereign/`, `commonwealth/` and the corpus-engine
 carve-outs are directories of member crates, not separate workspaces.
 
 ```sh
-cargo build --workspace                    # bundled assets copied via build.rs
+cargo build --workspace                    # recipes + assets compiled in by corpus-engine-recipes
 cargo check --workspace --all-targets      # what CI's `check` job runs
 
-# The CLI spans 4 binaries — rebuild all of them, since editing one and
+# The CLI spans 5 binaries — rebuild all of them, since editing one and
 # rebuilding only the dispatcher is a silent no-op:
 cargo build -p sovereign-cli -p sovereign-cli-daemon \
-            -p sovereign-cli-dev -p sovereign-cli-llm
+            -p sovereign-cli-dev -p sovereign-cli-llm -p sovereign-cli-mesh
 ```
 
 For local deployed-daemon iteration use `scripts/dev-release.sh` rather than
@@ -1198,9 +1356,9 @@ so a one-line change costs seconds instead of ~7.5 minutes. A custom cargo
 profile cannot do this — `llama-cpp-sys-4`'s build script panics under any.
 
 **The gate is the two scripts**, not bare cargo — they resolve the repo's real
-feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus
-`sovereign-mesh/mesh-sim` on the lint side) and carry guards bare cargo has no
-equivalent of.
+feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, and
+the per-crate flags `scripts/lib/cargo-scope.sh` resolves) and carry guards
+bare cargo has no equivalent of.
 
 ```sh
 ./scripts/sovereign-lint.sh --human [--full]   # scoped to your diff, or the workspace
@@ -1225,6 +1383,11 @@ gate appends a `cargo test --doc` pass because nextest cannot run doctests,
 and the JUnit report is deleted before a run so "no report" cannot replay a
 stale green.
 
+Tests that boot a daemon, in process or as the binary's `run`, share
+nextest's bounded `daemon-boot` group (`.config/nextest.toml`). Its filter
+is derived from test source by `binary_boot_rails_census.rs`, which fails
+when a booting file is outside it or a clause names none.
+
 No tests require GPU, models or network. Sovereign uses
 `DeterministicInference` + in-memory SQLite + real FTS5; cmnwlth's harness
 runs simulated meshes deterministically.
@@ -1234,7 +1397,7 @@ aborts on a billing failure is nearly indistinguishable from one that passed.
 Held to a one-minute budget, it scopes to the diff and runs rustfmt, the
 compile, the eight blocking xtask ratchets (docs / arch / boundary / layer /
 lock / layout / env / concept) and the desktop node gates concurrently, then
-two advisory size ratchets. Install via `scripts/install-git-hooks.sh`, which
+two advisory size ratchets and the advisory clone ratchet. Install via `scripts/install-git-hooks.sh`, which
 points `core.hooksPath` at the version-controlled `.githooks/`. It fails
 closed: a push range it cannot diff gates everything.
 
@@ -1255,7 +1418,6 @@ the shared report.
 | 9743 | The ring rail's loopback bind (`rail_port(client_port)`) |
 | 9743+ | `llama-server` instances |
 | 50051+ | `rpc-server` instances for layer shards |
-| 8080 | Sovereign HTTP server (configurable) |
 
 ---
 
@@ -1268,20 +1430,19 @@ the shared report.
 | Add a tool | `sovereign-contracts/src/traits.rs`, a file under `sovereign-tools/src/`, a `[[tool]]` block in `sovereign-contracts/tool-manifests/` |
 | Run a workflow | CLI `svrn workflow run` → `workflow-host::run_workflow_in_process`; desktop `workflow_commands.rs` → `run_workflow_with_provider` |
 | Add a corpus extractor / filter | `corpus-engine/src/extractors/` then register in `engine/ingest.rs`; `src/filters/` + `recipe.rs::FilterConfig` + `filters/loader.rs` |
-| Bundle a generated data file | `sovereign-recipes/<corpus>/data/`, append to `corpus-engine/build.rs::BUNDLED_ASSETS`, `include_bytes!` in `filters/assets.rs` |
+| Bundle a generated data file | `sovereign-recipes/<corpus>/data/`, a `pub const` `include_bytes!` line in `sovereign-recipes/src/lib.rs`, a key row in `corpus-engine/src/recipe_source/bundled.rs::ASSETS` |
 | Write a recipe | `sovereign-recipes/<id>/recipe.toml`, then `registry.toml` |
 | Add an investigation recipe | `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]` |
-| Write a skill / tune models per hardware | `sovereign/modes/<id>/skill.toml`; `sovereign/models.toml` |
+| Write a skill / tune models per hardware | `sovereign/modes/<id>/skill.toml`; `sovereign/crates/sovereign-contracts/data/models.toml` |
 | Understand the SCIP call graph | `corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`) |
 | Classify a symbol / detect trait dispatch | `corpus-engine-scip/src/descriptor.rs` — the ONE decider. Do NOT read `symbols.kind` (88.7% `unknown`) or `refs.ref_kind` (100% `direct`) |
 | Find a duplicated concept | IDENTITY `svrn code converge census` / `noun <Name>`; ROLE `converge roles`; SHAPE `converge shape`. Duplicated BEHAVIOUR is `code dry-report`; oversized FILES are `code suggest-seams` |
 | Understand index storage on disk | `corpus-index/src/index/mod.rs` |
 | Understand the v2 atlas pipeline | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `enrichment/pipeline/mod.rs` |
-| Drive v2 enrichment / build inside the daemon | `sovereign-cli-llm/src/enrich_cmd/`; `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) |
+| Drive v2 enrichment / build inside the daemon | `sovereign-pipeline/src/enrich_cmd/`; `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) |
 | Understand delta updates / scope expansion | `corpus-engine/src/update/delta.rs`, `engine/expand.rs` |
 | Understand KnowledgeView | `sovereign-tools/src/knowledge_view/`; injected at `LandscapeDigestProvider::splice_landscape_digests` |
-| Understand ATOS lifecycle | `sovereign-atos/src/local/orchestrator.rs` + [`docs/ATOS.md`](./docs/ATOS.md) |
-| Run the long-running daemon | `sovereign-cli-daemon/src/daemon_cmd/` + `contrib/launchd` + `contrib/systemd` |
+| Run the long-running daemon | `sovereign-cli-daemon/src/daemon_cmd/` + `sovereign-service/data/` |
 | Serve something the desktop used to compute in-process | the client-router families in `sovereign-daemon/src/*_http.rs` — §5 |
 | Prove a deleted twin cannot come back | `scripts/twin-census.py` over `quality/twin-plants.toml` |
 | Prove desktop and CLI answer one question alike | `sovereign-desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` |
@@ -1315,7 +1476,9 @@ accessors** — `sovereign_contracts::rebrand` (`svrnmesh_root`, `data_dir`,
 a `clippy.toml` `disallowed-methods` ban on hand-rolled `dirs::home_dir`
 joins. The `SVRNMESH_DATA_DIR` override applies INSIDE `svrnmesh_root`, so
 every accessor above it moves together. Env overrides are declared in
-`quality/env-flags.toml`, enforced by `cargo xtask env-gate`.
+`quality/env-flags.toml`, enforced by `cargo xtask env-gate`; a `removed` row
+warns at startup when still set (`kernel_types::env_bridge::REMOVED_ENV`,
+printed by `promote_legacy_env`).
 
 **Committed contracts (versioned, reviewed):**
 
@@ -1338,12 +1501,15 @@ every accessor above it moves together. Env overrides are declared in
 
 **Repo-local `.sovereign/`:** `project.toml` + `project.json`, `sovereign.toml`
 (per-repo daemon/watcher posture — watchers deliberately off in this repo),
-`notes.db`, `mesh.db`, `features.db`, `SOVEREIGN.md`.
+`notes.db`, `features.db`, `SOVEREIGN.md`. (No `mesh.db` since five-programs
+fp-33: the work-atlas store is cw-rails', dialed by the code program.)
 
 **Per-user root `~/.svrnmesh`:** `config.toml` (`SetupConfig` — THE per-user
 config), `work-atlas.toml`, `projects.json`, the indexes / drift / arch /
 capabilities / sessions trees, plus models, corpora, recipes and logs,
-`daemon.pid` and `worker_owner_key.bin`.
+`daemon.pid` and `worker_owner_key.bin`; `sovereign.db` is svrn's store,
+its memory notes included (lessons, the tool-decision dossier, commitments,
+svrn's MCP call log), and `notes.db` is the code program's (pb-notes-memory).
 
 **`[models]` is optional.** Absent — or present naming no primary — plus a
 `[node] entry` is `NodeClass::Terminal`: a full mesh member holding no weights
@@ -1406,9 +1572,6 @@ two-step, used only by `create_mesh` and `join_mesh`.
 - **KnowledgeView** — three-map landscape digest (personal memories, 180-day
   conversation history, institutional notes) spliced into the system prompt
   before each turn. Local-scope privacy is structural, not policy.
-- **ATOS** — Agent Task Orchestration System. **Charter** is its spec document;
-  committing it is approval. **Drift** is "spec changed since approval" —
-  warns next turn, does not block.
 - **Ring rail** — the append-only, Ed25519-authored total order per namespace
   carrying mesh state, work and measurements. **Work atlas** is cross-mesh
   peer awareness: `work_in_flight` / `declare_scope` / `release_scope`.

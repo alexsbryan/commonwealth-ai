@@ -28,7 +28,7 @@ use commonwealth_core::model::ModelInfo;
 /// `sovereign_mesh::ring_roster::DAEMON_OWN_NAMESPACES` declares which rings
 /// this daemon authors on, and a literal in each place is two answers to what
 /// this namespace is called (ARCH §10.6).
-pub const INFERENCE_APP_ID: &str = "inference";
+pub use oicp_types::inference_plan::INFERENCE_APP_ID;
 
 const APP_ID: &str = INFERENCE_APP_ID;
 

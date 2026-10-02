@@ -25,11 +25,11 @@ Everything you report — turn summaries, findings, session wrap-ups, notes — 
 
 ## MCP surface — inventory, aliases, CLI-only tools
 
-A Sovereign code intelligence server runs at `http://localhost:9741/mcp`. The MCP transport exposes **38 tools** — 32 canonical plus 6 deprecated aliases (see below). That covers code intelligence (`symbols`, `callers`, `callees`, `blast`, `code_search`, `facts`, `capability_map`, `arch_report`, `arch_posture`), notes (`note`, `notes`, `retire_note`, `briefing`, `session_state`), coordination (`work_in_flight`, `declare_scope`, `release_scope`), drift (`drift_findings`, `drift_posture`, `atos_verify`), build feedback (`lint_status`, `get_lint_output`, `build`), and `solve`.
+A Sovereign code intelligence server runs at `http://localhost:9741/mcp`. The MCP transport exposes **38 tools** — 32 canonical plus 6 deprecated aliases (see below). That covers code intelligence (`symbols`, `callers`, `callees`, `blast`, `code_search`, `facts`, `capability_map`, `arch_report`, `arch_posture`), notes (`note`, `notes`, `retire_note`, `briefing`, `session_state`), coordination (`work_in_flight`, `declare_scope`, `release_scope`), drift (`drift_findings`, `drift_posture`), build feedback (`lint_status`, `get_lint_output`, `build`), and `solve`.
 
 The build-feedback three are **dormant in this repo** — the lint/test watchers are off by design, so they have nothing to report. That is a supported posture, not a fault; see "Compilation and test feedback" for the gate that replaces them.
 
-A handful of tools are **CLI-only** — `sovereign tools list` shows them but they are NOT on the MCP surface, and calling one over MCP returns tool-not-found: `test_status`, `run_tests`, `get_run_output`, `recent_changes`, `project_context`, `session_reflection`. Reach those via `sovereign tools call <name>`.
+A handful of tools are **CLI-only** — `sovereign tools list` shows them but they are NOT on the MCP surface, and calling one over MCP returns tool-not-found: `test_status`, `run_tests`, `get_run_output`, `recent_changes`, `session_reflection`. Reach those via `sovereign tools call <name>`.
 
 Don't trust this paragraph over the wire: `tools/list` is the authoritative answer, and the served set is `registry ∩ allowlist`, so it varies by which server you're talking to (`svrn daemon` serves the largest set).
 
@@ -50,7 +50,6 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 
 1. **The compass is already loaded** — "The architectural compass" section above carries the ten + `ARCH_PRINCIPLES.md §0` + §15 + the section index, so there is no day-one read to perform. What you owe at session start is *routing*: when the task names a design decision, open the numbered section it maps to (the "Which door to open" table). When the task lands you in an area you have no model of, read `docs/ARCHITECTURE_TOUR.md` (227 lines) — not `SYSTEM_OVERVIEW.md`, which is 265KB and is a lookup surface, not a read.
 2. `recent_changes(hours: 24)` — see which subsystems are active
-3. `project_context("<user's stated task>")` — pull relevant conventions and architecture docs
 4. `notes(query: "<task area>")` — surface decisions and invariants from prior sessions
 5. `drift_posture()` — answer "is the latest drift report still current against the narrative docs?" Returns top critical findings + age. If `status=stale`, the architecture docs have been edited since the last drift run; cite findings carefully. If `status=fresh`, the drift findings (and `drift_findings()` queries below) reflect current state.
 6. `work_in_flight(scope="<task area>", match_mode="file")` — **when the task names a file or symbol**, check whether a peer agent or human on the mesh is already there. A non-empty result means another node is active; surface that to the user before proceeding rather than silently colliding. See the "Coordination — work atlas" section below for grades and what to do on overlap.
@@ -309,7 +308,7 @@ All fields except `task_summary` are optional. Be specific — vague reflections
 
 **Also at task end: release any claims you declared.** If you called `declare_scope` during the work, call `release_scope(claim_id)` now. The TTL would drop it eventually, but peers querying `work_in_flight` in the meantime would still see a stale claim. Use the `claim_id` returned by the original `declare_scope` call (or list them with `sovereign claim list --mine`).
 
-**Before using `blast` or `project_context` on a large task**, first check for known limitations:
+**Before using `blast` on a large task**, first check for known limitations:
 ```
 notes(kinds=["reflection"], query="blast")
 ```

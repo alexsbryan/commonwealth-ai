@@ -192,7 +192,7 @@ name          = "config"
 path          = "<root>/{config.toml,projects.json,mesh.json,join_key.secret}"
 capability    = "config-writer"
 writers_today = ["cli-setup", "daemon"]
-today         = '''SINGLE WRITER, ENFORCED SINCE 2026-08-24. mesh.json is written by daemon.shutdown() and read by try_resume() on next boot, so a second daemon would silently fight it. The second IMPLEMENTATION is gone (commonwealth-daemon, deleted 2026-08-24) and the run lock is now keyed on the DATA ROOT rather than on sovereign_root(), so two instances under different $HOMEs pointed at one root are refused instead of colliding — flock identity is the inode, so a symlinked spelling cannot claim twice (sovereign_contracts::run_lock). Still convention rather than a lease on two counts: the lock is taken by each writer rather than handed to it, and `cli-setup` writes config.toml without taking it at all.'''
+today         = '''SINGLE WRITER, ENFORCED SINCE 2026-08-24. mesh.json is written by daemon.shutdown() and read by try_resume() on next boot, so a second daemon would silently fight it. The second IMPLEMENTATION is gone (commonwealth-daemon, deleted 2026-08-24) and the run lock is now keyed on the DATA ROOT rather than on sovereign_root(), so two instances under different $HOMEs pointed at one root are refused instead of colliding — flock identity is the inode, so a symlinked spelling cannot claim twice (host_kit::RunLock). Still convention rather than a lease on two counts: the lock is taken by each writer rather than handed to it, and `cli-setup` writes config.toml without taking it at all.'''
 
 # ═════════════════════════════════════════════════════════════════════════════
 # CAPABILITIES

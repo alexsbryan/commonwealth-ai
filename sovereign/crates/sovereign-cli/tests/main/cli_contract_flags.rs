@@ -9,13 +9,9 @@
 //! because the reference is where the promise is written, not where it
 //! is kept.
 //!
-//! Measured when this module was written: six declared flags were
-//! parsed by nothing at all.
+//! Measured when this module was written, two declared flags were
+//! parsed by nothing at all:
 //!
-//!   atos run-ab --drivers   the parser builds `--driver` (ab.rs:317)
-//!   atos report --section   cmd_report reads positionals only
-//!   atos report --out       likewise
-//!   atos teardown --auto    the shared parser knows only --dry-run
 //!   recipe test --offline   belongs to cmd_validate / cmd_list
 //!   recipe test --verbose   never existed
 //!
@@ -42,9 +38,7 @@
 
 use sovereign_cli_shared::cli_contract::{Feature, Probe};
 
-use crate::cli_contract_code::{
-    combined, contract, help_argv, refs, run, siblings_built, verb_of, UNPROBED_VERBS,
-};
+use crate::cli_contract_code::{combined, contract, help_argv, refs, run, siblings_built};
 
 /// Is the cargo feature this command lives behind compiled into the
 /// binary under test?
@@ -60,9 +54,17 @@ fn feature_compiled_in(feature: Feature) -> bool {
     match feature {
         Feature::Default => true,
         Feature::DevTools => cfg!(feature = "dev-tools"),
-        Feature::Awareness => cfg!(feature = "awareness"),
+        Feature::Awareness => awareness_in_sibling(),
         Feature::CodeIntel => cfg!(feature = "code-intel"),
     }
+}
+
+/// `awareness` is served by the LLM sibling the dispatcher execs, behind
+/// that crate's feature (pb-cli-llm-ingest-move-remainder), so the sibling
+/// is asked: a build without it answers with its refusal.
+fn awareness_in_sibling() -> bool {
+    !combined(&run(&["awareness", "--help"]))
+        .contains("built only under the `awareness` cargo feature")
 }
 
 /// Flags that are declared but absent from their command's own `--help`.
@@ -77,24 +79,26 @@ fn feature_compiled_in(feature: Feature) -> bool {
 /// re-measure, run this test — the failure message prints the list.
 const HELP_GAP_BASELINE: usize = 11;
 
-/// Concatenated sources of the four CLI crates, for the SOURCE tier.
+/// Concatenated sources of the six CLI crates, for the SOURCE tier.
 ///
-/// All four, not just the declaring command's own binary: `drift
-/// accept` forwards to the `atos-spec-accept` sibling via
-/// `dev_bin::exec`, so its `--reason` is parsed in a crate the manifest
-/// does not name. Scoping this per-binary reported that as missing —
-/// a false positive that would have taught the next reader to distrust
-/// the gate.
+/// All six, not just the declaring command's own binary: a verb that
+/// execs a sibling parses its flags in the sibling's crate, which the
+/// manifest does not name. Scoping this per-binary reported that as
+/// missing — a false positive that would have taught the next reader
+/// to distrust the gate.
 fn cli_crate_sources() -> String {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("sovereign-cli has a parent crates dir");
+    let root = sovereign_cli_shared::repo::find_checkout_root()
+        .expect("this census runs inside the checkout whose CLI crates it reads")
+        .join("sovereign/crates");
     let mut all = String::new();
     for crate_name in [
         "sovereign-cli",
         "sovereign-cli-dev",
         "sovereign-cli-llm",
+        "sovereign-cli-bench",
         "sovereign-cli-daemon",
+        // ingest's CLI (`svrn-ingest`), since pb-cli-llm-ingest-move.
+        "sovereign-pipeline",
     ] {
         let src = root.join(crate_name).join("src");
         let mut stack = vec![src];
@@ -126,12 +130,9 @@ fn cli_crate_sources() -> String {
 
 /// Can this command be safely probed with `--help` offline?
 ///
-/// Mirrors `cli_contract_code`'s Direction-1 skip set rather than
-/// restating it: `Probe::Skip` opts out explicitly, and `atos`
-/// subcommands route into handlers that mutate, which is why they are
-/// in `UNPROBED_VERBS` there.
-fn help_probeable(path: &str, probe: Probe) -> bool {
-    probe != Probe::Skip && !UNPROBED_VERBS.contains(&verb_of(path))
+/// `Probe::Skip` opts out explicitly in the manifest.
+fn help_probeable(probe: Probe) -> bool {
+    probe != Probe::Skip
 }
 
 /// A declared flag, and whether anything backs it.
@@ -151,7 +152,7 @@ fn survey() -> Vec<FlagEvidence> {
         if cmd.flags.is_empty() || !feature_compiled_in(cmd.feature) {
             continue;
         }
-        let help = if help_probeable(&cmd.path, cmd.probe) {
+        let help = if help_probeable(cmd.probe) {
             let argv = help_argv(&cmd.path);
             Some(combined(&run(&refs(&argv))))
         } else {
@@ -221,7 +222,7 @@ fn flags_missing_from_their_own_help_do_not_grow() {
                 && c.canonical()
                     .find(|cmd| cmd.path == e.path)
                     .is_some_and(|cmd| {
-                        help_probeable(&cmd.path, cmd.probe) && feature_compiled_in(cmd.feature)
+                        help_probeable(cmd.probe) && feature_compiled_in(cmd.feature)
                     })
         })
         .map(|e| format!("svrn {} {}", e.path, e.flag))
@@ -254,6 +255,12 @@ fn flags_missing_from_their_own_help_do_not_grow() {
 /// source tree, a renamed crate — would read as "no phantom flags".
 #[test]
 fn the_gate_reports_a_flag_that_nothing_parses() {
+    // The SOURCE tier reads four programs' CLI crates, so it has a tree to
+    // read only in the monorepo checkout; svrn's lift carries svrn's alone.
+    if sovereign_cli_shared::repo::find_checkout_root().is_none() {
+        eprintln!("skip: not inside the monorepo checkout the SOURCE tier reads");
+        return;
+    }
     let sources = cli_crate_sources();
     let fabricated = "--definitely-not-a-real-sovereign-flag";
     assert!(

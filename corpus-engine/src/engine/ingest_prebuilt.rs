@@ -99,7 +99,7 @@ impl CorpusEngine {
             &sovereign_data_dir,
             &corpus_id,
             expected_sha,
-            &self.expected_embedding_model,
+            &self.expected_embedding_model(),
             recipe.index.embedding_dimensions,
             self.expected_embed_quirks.as_ref(),
         ) {
@@ -127,7 +127,7 @@ impl CorpusEngine {
             tracing::warn!(
                 corpus_id = %corpus_id,
                 snapshot_model = %outcome.manifest.embedding_model,
-                local_model = %self.expected_embedding_model,
+                local_model = %self.expected_embedding_model(),
                 "ingest: SOVEREIGN_FORCE_PREBUILT set — accepting the snapshot WITHOUT judging its embedding space"
             );
             crate::snapshot::SnapshotAcceptance::Accepted {
@@ -139,7 +139,7 @@ impl CorpusEngine {
                 &outcome.manifest,
                 &outcome.index_dir,
                 outcome.embedding_compat,
-                &self.expected_embedding_model,
+                &self.expected_embedding_model(),
                 Some(&self.embed),
                 self.batch_embed.as_ref(),
             )
@@ -154,7 +154,7 @@ impl CorpusEngine {
             tracing::warn!(
                 corpus_id = %corpus_id,
                 snapshot_model = %outcome.manifest.embedding_model,
-                local_model = %self.expected_embedding_model,
+                local_model = %self.expected_embedding_model(),
                 declared_embed_config = outcome.manifest.embed_quirks.is_some(),
                 verdict = %acceptance.describe(),
                 "ingest: prebuilt snapshot NOT accepted — discarding, full ingest"
@@ -169,7 +169,7 @@ impl CorpusEngine {
         tracing::info!(
             corpus_id = %corpus_id,
             snapshot_model = %outcome.manifest.embedding_model,
-            local_model = %self.expected_embedding_model,
+            local_model = %self.expected_embedding_model(),
             verdict = %acceptance.describe(),
             "ingest: prebuilt snapshot accepted"
         );

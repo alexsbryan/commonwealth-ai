@@ -116,8 +116,12 @@ pub fn mcp_config_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 async fn list_servers(_: LocalOnly, Extension(daemon): Extension<Arc<EmbeddedDaemon>>) -> Response {
     let configured = daemon.configured_mcp_servers().await;
 
-    // The live fold: tool ids in the daemon's own registry.
+    // The live fold: tool ids in the daemon's own registry. A sealed posture
+    // keeps the mount (for its notes store) but answers `/mcp` with a 503,
+    // so it reports what a caller of `/mcp` gets: not mounted, and why.
+    let withheld = daemon.posture().withheld().is_some();
     let (mounted, tool_ids) = match daemon.mcp_tool_ids() {
+        Some(_) if withheld => (false, Vec::new()),
         Some(ids) => (true, ids),
         None => (false, Vec::new()),
     };
@@ -138,7 +142,12 @@ async fn list_servers(_: LocalOnly, Extension(daemon): Extension<Arc<EmbeddedDae
         mount: McpMountStatus {
             mounted,
             total_tools: tool_ids.len(),
-            reason: MOUNT_REASON.to_string(),
+            reason: if withheld {
+                crate::posture::NO_MCP
+            } else {
+                MOUNT_REASON
+            }
+            .to_string(),
         },
     })
     .into_response()

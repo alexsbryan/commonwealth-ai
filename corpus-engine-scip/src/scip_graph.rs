@@ -481,24 +481,17 @@ impl ScipGraph {
     /// drop this rebuild attempt and let the current holder finish
     /// (the Reindexer's debouncer will re-fire after it's done).
     pub fn try_rebuild_lock(db_dir: &Path) -> std::io::Result<Option<RebuildLock>> {
-        use fs4::fs_std::FileExt;
-
         std::fs::create_dir_all(db_dir)?;
-        let lock_path = db_dir.join(".rebuild.lock");
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .read(true)
-            .truncate(false)
-            .open(&lock_path)?;
-
-        // fs4's flock wrapper returns Ok(()) on acquire and
-        // Err(WouldBlock) when another writer holds the lock — map
-        // the latter to `Ok(None)` for the caller's semantics.
-        match FileExt::try_lock_exclusive(&file) {
-            Ok(()) => Ok(Some(RebuildLock { _file: file })),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => Err(e),
+        // The host kit's one lock: `Held` (another writer) maps to
+        // `Ok(None)` for the caller's semantics; any other refusal is the
+        // io error it carries.
+        match host_kit::RunLock::acquire(db_dir, ".rebuild.lock") {
+            Ok(lock) => Ok(Some(RebuildLock { _lock: lock })),
+            Err(host_kit::RunLockError::Held { .. }) => Ok(None),
+            Err(
+                host_kit::RunLockError::Unopenable { source, .. }
+                | host_kit::RunLockError::Unlockable { source, .. },
+            ) => Err(source),
         }
     }
 
@@ -2223,7 +2216,7 @@ pub enum OpenError {
 /// Release is automatic on drop (and on process death — the kernel
 /// cleans up).
 pub struct RebuildLock {
-    _file: std::fs::File,
+    _lock: host_kit::RunLock,
 }
 
 fn sidecar_path(db_path: &Path, suffix: &str) -> PathBuf {

@@ -37,6 +37,10 @@ use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
 
 use crate::{identity, note_contact, RailsDaemon};
 
+mod merge;
+pub(crate) use merge::merge_round;
+pub use merge::{split_generation_of, SplitGenerations};
+
 /// How many peers one round talks to. Three is the inference daemon's fan and
 /// the reason a round is cheap on a mesh of any size; rotation (below) is
 /// what makes it converge anyway.
@@ -50,7 +54,11 @@ pub const PEERS_PER_ROUND: usize = 3;
 /// scheduler's input on the wire for a node that will never take a job.
 /// `available_for_mesh: false` and `inference_capable: false` say the same
 /// thing in the two fields a scheduler actually reads.
-pub fn minimal_capabilities(now: u64, origins: &[OriginKind]) -> NodeCapabilities {
+pub fn minimal_capabilities(
+    now: u64,
+    origins: &[OriginKind],
+    media_available: Option<f32>,
+) -> NodeCapabilities {
     NodeCapabilities {
         hardware: HardwareProfile {
             gpus: Vec::new(),
@@ -76,11 +84,14 @@ pub fn minimal_capabilities(now: u64, origins: &[OriginKind]) -> NodeCapabilitie
         loaded_models: Vec::new(),
         origins: origins.to_vec(),
         media_allow: Vec::new(),
-        media_available: None,
+        // The presence poll's last reading — `None` is "nobody answered",
+        // never "free" (`presence`).
+        media_available,
         embed_model: None,
         benchmark: None,
         current_in_flight: None,
         anchor: None,
+        storage_remaining_bytes: None,
     }
 }
 
@@ -114,7 +125,11 @@ pub async fn run_forever(daemon: Arc<RailsDaemon>) {
     let interval = Duration::from_secs(daemon.node.config.gossip_interval_secs);
     let mut round: u64 = 0;
     loop {
-        run_one_round(&daemon, round).await;
+        if daemon.is_solo() {
+            tracing::debug!(target: "gossip", round, "gossip: solo — no mesh, no round");
+        } else {
+            run_one_round(&daemon, round).await;
+        }
         round = round.wrapping_add(1);
         tokio::time::sleep(interval).await;
     }
@@ -128,7 +143,7 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
     let threshold = daemon.node.config.offline_threshold_secs;
 
     let dial = {
-        let addr = daemon.node.endpoint.addr();
+        let addr = daemon.endpoint().addr();
         // Each read is its OWN statement so the borrowing iterator
         // `relay_urls()` hands back is dropped at that statement's end. As a
         // struct literal in the block's tail expression this is E0597 —
@@ -140,17 +155,57 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
             direct_addrs,
         }
     };
-    let origins = if daemon.node.config.media.origin.is_some() {
-        vec![OriginKind::Media]
+    // Exactly the origin kinds whose ALPN a registration serves (media from
+    // `rails.toml`, apps while published, any program's offer), and what
+    // every live registration declares — never a guess of cw-rails' own.
+    let origins = daemon.origins.advertised_kinds();
+    let declared = daemon.origins.declared_claims();
+    // The node's own hardware, read once a registrant declares (a bare
+    // endpoint takes no job and keeps its zeroed report). Off the runtime:
+    // the detector walks disks and may spawn `nvidia-smi`.
+    let measured = if declared.is_empty() {
+        None
     } else {
-        Vec::new()
+        match tokio::task::spawn_blocking(crate::self_measure::SelfMeasurement::now).await {
+            Ok(m) => Some(m),
+            Err(e) => {
+                tracing::warn!(target: "gossip", round, error = %e,
+                               "gossip: the hardware reading failed; this round advertises no hardware");
+                None
+            }
+        }
     };
 
     // Step 1 + 2 + 3's selection, in ONE write-lock window. Nothing awaits a
-    // network inside it.
+    // network inside it. The presence reading is read here (never inside the
+    // lock — the cell is a plain std lock held for the copy only).
+    let media_available = *daemon
+        .media_presence
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let targets: Vec<(NodeId, String, PeerContact)> = {
         let mut mesh = daemon.mesh.write().await;
-        self_stamp(&mut mesh, self_id, now, &dial, &origins, &daemon.node.key);
+        self_stamp(
+            &mut mesh,
+            self_id,
+            now,
+            &dial,
+            &origins,
+            &daemon.node.key,
+            media_available,
+        );
+        // Absent self is already warned by `self_stamp`.
+        if let Some(me) = mesh.members.get_mut(&self_id) {
+            crate::origins::merge_declared(&mut me.capabilities, measured.as_ref(), &declared);
+            tracing::debug!(
+                target: "gossip",
+                round,
+                origins = ?me.capabilities.origins,
+                declarations = declared.len(),
+                inference_capable = me.capabilities.inference_capable,
+                "gossip: stamped what the registered origins declare"
+            );
+        }
         decay(
             &mut mesh,
             self_id,
@@ -183,125 +238,14 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
 
     let mut reached = 0usize;
     for (peer_id, peer_name, contact) in targets {
-        let endpoints = daemon
-            .transport
-            .endpoints(&contact, TrafficClass::Gossip)
-            .await;
-        let Some(ep) = endpoints.into_iter().next() else {
-            tracing::info!(
-                target: "gossip",
-                round,
-                peer = %peer_name,
-                node_id = %peer_id,
-                outcome = "no-addresses",
-                "gossip: peer gossips no relay and no direct address — nothing to dial"
-            );
-            continue;
-        };
-        // The snapshot is taken fresh per peer and the lock released before
-        // the POST. A round that held it would serialize the whole daemon on
-        // the slowest peer.
-        let body = {
-            let mesh = daemon.mesh.read().await;
-            GossipRequest {
-                // Redacted: this daemon is post-split by construction and
-                // only ever joins a mesh that minted a secret, so the raw
-                // credential never needs to ride our request. A peer that
-                // cannot authorize without it falls through to the legacy
-                // arm on the `invite_key_hash` both sides already carry.
-                mesh: MeshWire::for_peer(&mesh, SecretDisclosure::Redact),
-                from: Some(self_id),
-                mesh_proof: mesh.mesh_proof(self_id, now),
-            }
-        };
-        let url = format!("{}/internal/gossip", ep.base_url);
-        let response = match http.post(&url).json(&body).send().await {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::info!(
-                    target: "gossip",
-                    round,
-                    peer = %peer_name,
-                    node_id = %peer_id,
-                    via = %ep.label,
-                    outcome = "transport-error",
-                    error = %e,
-                    "gossip: round failed"
-                );
-                continue;
-            }
-        };
-        if !response.status().is_success() {
-            tracing::info!(
-                target: "gossip",
-                round,
-                peer = %peer_name,
-                node_id = %peer_id,
-                status = response.status().as_u16(),
-                outcome = "rejected",
-                "gossip: the peer refused our round (wrong mesh or invite hash)"
-            );
-            continue;
+        if exchange(daemon, &http, round, now, peer_id, &peer_name, &contact).await {
+            reached += 1;
         }
-        let parsed: GossipResponse = match response.json().await {
-            Ok(p) => p,
-            Err(e) => {
-                tracing::info!(
-                    target: "gossip",
-                    round,
-                    peer = %peer_name,
-                    outcome = "bad-response",
-                    error = %e,
-                    "gossip: the peer answered something that is not a GossipResponse"
-                );
-                continue;
-            }
-        };
-        // The reply is an authorization boundary in its own direction — we
-        // merge it, so it must prove itself. Having initiated the round says
-        // nothing about who answered.
-        let auth = GossipAuth {
-            sender: parsed.from,
-            proof: parsed.mesh_proof,
-            now_secs: now,
-        };
-        let incoming = parsed.mesh.into_mesh();
-        let report = {
-            let mut mesh = daemon.mesh.write().await;
-            mesh.merge_from_authenticated(self_id, &incoming, &auth)
-        };
-        if report.rejected() {
-            tracing::warn!(
-                target: "gossip",
-                round,
-                peer = %peer_name,
-                node_id = %peer_id,
-                outcome = "reply-rejected",
-                "gossip: the peer's REPLY did not authorize — nothing merged"
-            );
-            continue;
-        }
-        reached += 1;
-        for observed in report.observed() {
-            note_contact(&daemon.contacts, *observed, now).await;
-        }
-        if let Some(from) = parsed.from {
-            note_contact(&daemon.contacts, from, now).await;
-        }
-        note_contact(&daemon.contacts, peer_id, now).await;
-        tracing::info!(
-            target: "gossip",
-            round,
-            peer = %peer_name,
-            node_id = %peer_id,
-            via = %ep.label,
-            outcome = "reached",
-            added = report.added(),
-            updated = report.updated(),
-            "gossip: round complete"
-        );
     }
 
+    // Under the verbs lock: a `leave` or `switch` that landed during this
+    // round has already replaced the mesh, and a solo one is never written.
+    let _verbs = daemon.verbs.lock().await;
     let mesh = daemon.mesh.read().await;
     tracing::debug!(
         target: "gossip",
@@ -310,6 +254,10 @@ pub async fn run_one_round(daemon: &RailsDaemon, round: u64) {
         members = mesh.members.len(),
         "gossip: round summary"
     );
+    if daemon.is_solo() {
+        tracing::debug!(target: "gossip", round, "gossip: the node went solo mid-round — nothing written");
+        return;
+    }
     if let Err(e) = identity::save_mesh(&daemon.node.data_dir, &mesh) {
         tracing::warn!(target: "rails", error = %e, "gossip: could not persist the mesh");
     }
@@ -323,6 +271,7 @@ pub fn self_stamp(
     dial: &DialInfo,
     origins: &[OriginKind],
     key: &ed25519_dalek::SigningKey,
+    media_available: Option<f32>,
 ) {
     let pubkey = commonwealth_transport::identity::node_pubkey(key);
     let Some(me) = mesh.members.get_mut(&self_id) else {
@@ -336,7 +285,7 @@ pub fn self_stamp(
     me.last_seen = now;
     me.status = NodeStatus::Online;
     me.node_pubkey = Some(pubkey);
-    me.capabilities = minimal_capabilities(now, origins);
+    me.capabilities = minimal_capabilities(now, origins, media_available);
     let changed = me.relay_url != dial.relay_url || me.iroh_direct_addrs != dial.direct_addrs;
     me.relay_url = dial.relay_url.clone();
     me.iroh_direct_addrs = dial.direct_addrs.clone();
@@ -393,6 +342,198 @@ pub fn decay(
     }
 }
 
+/// Tell the online members this node is stepping out of the active mesh:
+/// `left` tombstones our row mesh-wide (a leave); otherwise it reads offline,
+/// because a switch parks the mesh and means to come back. The inference
+/// daemon's `announce_presence_change`, over this process's one exchange.
+/// Best-effort: a peer that misses it decays our row on its own threshold.
+/// Returns how many peers took it.
+pub async fn announce_departure(daemon: &RailsDaemon, left: bool) -> usize {
+    let self_id = daemon.node.self_id;
+    let now = unix_now_secs();
+    let targets: Vec<(NodeId, String, PeerContact)> = {
+        let mut mesh = daemon.mesh.write().await;
+        if let Some(me) = mesh.members.get_mut(&self_id) {
+            // STRICTLY newer than any copy of our row a peer can hold: a merge
+            // keeps the existing row on an equal event time, and a round or an
+            // admission in this same second already stamped `now` (watched:
+            // join, switch and leave inside one second left the founder
+            // holding the member online).
+            let event = now.max(me.event_time() + 1);
+            if left {
+                me.removed_at = Some(event);
+            }
+            me.status = NodeStatus::Offline;
+            me.last_seen = event;
+        }
+        mesh.members
+            .values()
+            .filter(|m| m.node_id != self_id && m.is_active() && m.node_pubkey.is_some())
+            .filter(|m| m.status == NodeStatus::Online)
+            .map(|m| (m.node_id, m.name.clone(), peer_contact(m)))
+            .collect()
+    };
+    let http = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(target: "gossip", error = %e, "gossip: no HTTP client — departure not announced");
+            return 0;
+        }
+    };
+    let mut told = 0usize;
+    for (peer_id, peer_name, contact) in &targets {
+        // Not a numbered round: the log field says which exchange this was.
+        if exchange(daemon, &http, u64::MAX, now, *peer_id, peer_name, contact).await {
+            told += 1;
+        }
+    }
+    tracing::info!(target: "gossip", left, told, online = targets.len(),
+                   "gossip: announced this node's departure from the active mesh");
+    told
+}
+
+/// One exchange with one peer: POST our snapshot, merge the proven reply.
+/// `true` when the peer answered and its reply merged.
+async fn exchange(
+    daemon: &RailsDaemon,
+    http: &reqwest::Client,
+    round: u64,
+    now: u64,
+    peer_id: NodeId,
+    peer_name: &str,
+    contact: &PeerContact,
+) -> bool {
+    let self_id = daemon.node.self_id;
+    let endpoints = daemon
+        .transport()
+        .endpoints(contact, TrafficClass::Gossip)
+        .await;
+    let Some(ep) = endpoints.into_iter().next() else {
+        tracing::info!(
+            target: "gossip",
+            round,
+            peer = %peer_name,
+            node_id = %peer_id,
+            outcome = "no-addresses",
+            "gossip: peer gossips no relay and no direct address — nothing to dial"
+        );
+        return false;
+    };
+    // The snapshot is taken fresh per peer and the lock released before
+    // the POST. A round that held it would serialize the whole daemon on
+    // the slowest peer.
+    let body = {
+        let mesh = daemon.mesh.read().await;
+        GossipRequest {
+            // Redacted: this daemon is post-split by construction and
+            // only ever joins a mesh that minted a secret, so the raw
+            // credential never needs to ride our request. A peer that
+            // cannot authorize without it falls through to the legacy
+            // arm on the `invite_key_hash` both sides already carry.
+            mesh: MeshWire::for_peer(&mesh, SecretDisclosure::Redact),
+            from: Some(self_id),
+            mesh_proof: mesh.mesh_proof(self_id, now),
+        }
+    };
+    let url = format!("{}/internal/gossip", ep.base_url);
+    let response = match http.post(&url).json(&body).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::info!(
+                target: "gossip",
+                round,
+                peer = %peer_name,
+                node_id = %peer_id,
+                via = %ep.label,
+                outcome = "transport-error",
+                error = %e,
+                "gossip: round failed"
+            );
+            return false;
+        }
+    };
+    if !response.status().is_success() {
+        tracing::info!(
+            target: "gossip",
+            round,
+            peer = %peer_name,
+            node_id = %peer_id,
+            status = response.status().as_u16(),
+            outcome = "rejected",
+            "gossip: the peer refused our round (wrong mesh or invite hash)"
+        );
+        return false;
+    }
+    let parsed: GossipResponse = match response.json().await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::info!(
+                target: "gossip",
+                round,
+                peer = %peer_name,
+                outcome = "bad-response",
+                error = %e,
+                "gossip: the peer answered something that is not a GossipResponse"
+            );
+            return false;
+        }
+    };
+    // The reply is an authorization boundary in its own direction — we
+    // merge it, so it must prove itself. Having initiated the round says
+    // nothing about who answered.
+    let auth = GossipAuth {
+        sender: parsed.from,
+        proof: parsed.mesh_proof,
+        now_secs: now,
+    };
+    let incoming = parsed.mesh.into_mesh();
+    let report = {
+        let mut mesh = daemon.mesh.write().await;
+        merge_round(
+            &mut mesh,
+            self_id,
+            &incoming,
+            &auth,
+            Some(peer_id),
+            &daemon.split_generation,
+            &daemon.ring_nudge,
+        )
+    };
+    if report.rejected() {
+        tracing::warn!(
+            target: "gossip",
+            round,
+            peer = %peer_name,
+            node_id = %peer_id,
+            outcome = "reply-rejected",
+            "gossip: the peer's REPLY did not authorize — nothing merged"
+        );
+        return false;
+    }
+    for observed in report.observed() {
+        note_contact(&daemon.contacts, *observed, now).await;
+    }
+    if let Some(from) = parsed.from {
+        note_contact(&daemon.contacts, from, now).await;
+    }
+    note_contact(&daemon.contacts, peer_id, now).await;
+    tracing::info!(
+        target: "gossip",
+        round,
+        peer = %peer_name,
+        node_id = %peer_id,
+        via = %ep.label,
+        outcome = "reached",
+        added = report.added(),
+        updated = report.updated(),
+        "gossip: round complete"
+    );
+    true
+}
+
 /// Step 3's pick: active members with a key, other than us, online first,
 /// rotated by round so a mesh larger than [`PEERS_PER_ROUND`] still converges.
 pub fn select_peers(
@@ -427,6 +568,8 @@ mod tests {
     use commonwealth_core::mesh::MemberRecord;
     use std::collections::HashMap;
 
+    mod select_tests;
+
     fn member(id: u128, name: &str, status: NodeStatus, keyed: bool) -> MemberRecord {
         MemberRecord {
             node_id: NodeId::from_u128(id),
@@ -435,7 +578,7 @@ mod tests {
             joined_at: 0,
             last_seen: 0,
             status,
-            capabilities: minimal_capabilities(0, &[]),
+            capabilities: minimal_capabilities(0, &[], None),
             addresses: Vec::new(),
             node_pubkey: keyed.then(|| commonwealth_core::ids::NodePubkey([id as u8; 32])),
             relay_url: None,
@@ -488,13 +631,29 @@ mod tests {
             relay_url: Some("https://relay.example/".into()),
             direct_addrs: vec!["192.168.1.8:41231".parse().unwrap()],
         };
-        self_stamp(&mut mesh, NodeId::from_u128(ME), 100, &dial, &[], &key());
+        self_stamp(
+            &mut mesh,
+            NodeId::from_u128(ME),
+            100,
+            &dial,
+            &[],
+            &key(),
+            None,
+        );
         let after_first = mesh.members[&NodeId::from_u128(ME)].clone();
         assert_eq!(after_first.dial_info_version, 1);
         assert!(after_first.dial_info_sig.is_some());
         assert_eq!(after_first.status, NodeStatus::Online);
 
-        self_stamp(&mut mesh, NodeId::from_u128(ME), 110, &dial, &[], &key());
+        self_stamp(
+            &mut mesh,
+            NodeId::from_u128(ME),
+            110,
+            &dial,
+            &[],
+            &key(),
+            None,
+        );
         let after_second = &mesh.members[&NodeId::from_u128(ME)];
         assert_eq!(after_second.dial_info_version, 1, "no content change");
         assert_eq!(after_second.dial_info_sig, after_first.dial_info_sig);
@@ -504,7 +663,15 @@ mod tests {
             relay_url: Some("https://other.example/".into()),
             ..dial.clone()
         };
-        self_stamp(&mut mesh, NodeId::from_u128(ME), 120, &moved, &[], &key());
+        self_stamp(
+            &mut mesh,
+            NodeId::from_u128(ME),
+            120,
+            &moved,
+            &[],
+            &key(),
+            None,
+        );
         assert_eq!(mesh.members[&NodeId::from_u128(ME)].dial_info_version, 2);
     }
 
@@ -518,7 +685,15 @@ mod tests {
             relay_url: None,
             direct_addrs: Vec::new(),
         };
-        self_stamp(&mut mesh, NodeId::from_u128(ME), 1, &dial, &[], &key());
+        self_stamp(
+            &mut mesh,
+            NodeId::from_u128(ME),
+            1,
+            &dial,
+            &[],
+            &key(),
+            None,
+        );
         assert!(mesh.members[&NodeId::from_u128(ME)]
             .capabilities
             .origins
@@ -530,6 +705,7 @@ mod tests {
             &dial,
             &[OriginKind::Media],
             &key(),
+            None,
         );
         assert_eq!(
             mesh.members[&NodeId::from_u128(ME)].capabilities.origins,

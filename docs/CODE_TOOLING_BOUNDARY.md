@@ -1,5 +1,18 @@
 # The code-intel package boundary
 
+> **The `[[package]] name = "code-intel"` row became `code` on 2026-09-21**
+> (`docs/FIVE_PROGRAMS.md` §9, the five-program declaration). Same crates, plus
+> `sovereign-cli-dev` — the sibling binary that owns the `tools`, `code`,
+> `project` and `atos` verbs, because a package that holds the library but not
+> the binary the user runs enforces half a program. The six `[[exception]]`
+> rows written hours earlier at ef227581f were deleted with the rename and
+> nothing was written in their place: `sovereign-code -> corpus-engine`,
+> `-> sovereign-atos`, `-> corpus-engine-atos`, `-> sovereign-work-atlas`,
+> `-> commonwealth-core` and `-> arch-layers` are RED LINES in
+> `cargo xtask boundary-gate` now. Their closing conditions are in ef227581f's
+> diff and in §2 and §9 below. The package's share of the 232 violations that
+> declaration produced is 24.
+
 `code-intel/` holds the **code intelligence package** — the stack a third party
 could lift out of this monorepo and run against any host that speaks an
 OpenAI-compatible HTTP surface. For that to stay true, the package must never

@@ -21,13 +21,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Instant;
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType};
-use corpus_engine::enrichment::atlas::cross_corpus::CrossCorpusEdge;
-use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
-use corpus_engine::enrichment::atlas::{
-    read_atlas_cross_corpus_edges, read_atlas_edges, StableAtomKey,
-};
+use corpus_engine_atlas_reader::cross_corpus::{read_atlas_cross_corpus_edges, CrossCorpusEdge};
 use serde::{Deserialize, Serialize};
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomType};
+use understanding_vocab::edges::{Edge, EdgeType};
+use understanding_vocab::read::read_atlas_edges;
+use understanding_vocab::stable_key::StableAtomKey;
 
 use super::atom_browse::{cached_atoms, AtomQueryError};
 use super::reader::{CurationStatus, FileAtlasReader};
@@ -473,7 +472,7 @@ fn build_referenced_atoms(
     // is the atom's own shape and has no atlas to ask. Doing it there would
     // mean guessing from the id's spelling, and a guess is what would put
     // "unidentified continental mint" in a link chip.
-    if let Some(attributes) = corpus_engine::enrichment::atlas::projection::attributes_of(atom) {
+    if let Some(attributes) = corpus_engine_atlas_reader::projection::attributes_of(atom) {
         for value in attributes.values() {
             let Some(candidate) = value.as_str() else {
                 continue;
@@ -523,20 +522,17 @@ fn build_evidence(atom: &AtomEnvelope) -> Vec<EvidenceExcerpt> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::atoms::{
-        AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity,
-    };
-    use corpus_engine::enrichment::atlas::cross_corpus::{
+    use corpus_engine_atlas_reader::cross_corpus::{
         CrossCorpusAtomRef, CrossCorpusEdge, CrossCorpusEdgesFile, MatchTrace,
     };
-    use corpus_engine::enrichment::atlas::edges::{
-        Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile,
-    };
-    use corpus_engine::enrichment::pipeline::atlas::{
-        ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus,
-    };
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
     use std::path::PathBuf;
     use tempfile::TempDir;
+    use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity};
+    use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
+    use understanding_vocab::taxonomy::{
+        ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus,
+    };
 
     fn entity(id: usize, name: &str, salience: f32) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {
@@ -623,7 +619,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("wiki").join("atlas");
         write_atoms(&atlas_dir, atoms);
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         (tmp, reader, atlas_dir)
     }
 
@@ -751,7 +750,10 @@ mod tests {
                 },
             ],
         );
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
             .await
@@ -804,7 +806,10 @@ mod tests {
                 provenance: EdgeProvenance::LlmExtraction,
             }],
         );
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
             .await
@@ -882,7 +887,10 @@ mod tests {
             e.participants.clear();
         }
         write_atoms(&atlas_dir, vec![hume.clone(), claim_with_attribution]);
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         let detail = reader
             .get_atom_detail("wiki", "claim-0001")
             .await
@@ -923,7 +931,10 @@ mod tests {
             evidence_kind: None,
         });
         write_atoms(&atlas_dir, vec![dangling_claim]);
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         let detail = reader
             .get_atom_detail("wiki", "claim-0001")
             .await
@@ -966,7 +977,10 @@ mod tests {
                 },
             }],
         );
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         let detail = reader
             .get_atom_detail("wiki", "entity-0001")
             .await

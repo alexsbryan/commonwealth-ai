@@ -8,6 +8,13 @@
 # ── Build artefacts ───────────────────────────────────────────────────────
 /target/
 
+# Nested cargo/wasm-pack output under the app tree. `sovereign/apps/ring-runtime`
+# is 2009 untracked files, ALL of them build output with no source beside them
+# (the crate lives elsewhere) — every worker session read it in `git status` and
+# one `git add -A` would have committed it. The anchored `/target/` above does not
+# reach a nested one. 2026-09-23.
+sovereign/apps/*/target/
+
 # Local desktop-release container rehearsal (scripts/build-desktop-linux.sh):
 # isolated cargo/npm caches + a separate CARGO_TARGET_DIR so container
 # compiles don't stomp the host's target/. All regenerable build output.
@@ -243,3 +250,6 @@ research/deep-research/demo/p5/runs-t1c/
 # §3 writes wall-qr.svg in the cwd). Short-lived credentials: never committed.
 wall-qr.svg
 phone-qr.svg
+
+# ralph pool lane worktrees (scripts/ralph.py Pool.run_lane: .ralph/wt/<unit>); whole checkouts, never committed
+.ralph/

@@ -33,13 +33,13 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::runtime::numeric_audit::numeric_tokens;
 use sovereign_core::types::{StepOutput, ToolContext};
 
-use corpus_engine::enrichment::atlas::analysis::sec_facts::{
+use corpus_engine_atlas_reader::sec_facts::{
     available_period_ends, calendar_period_in_question, change, coverage_summary,
-    discover_authoritative_stores, fmt_compact, fmt_full, fmt_pct, lookup, ratio, resolve_concept,
-    scope_qualifier_in_question, store_claims, SecFact, SecFactStore, SecRefusal,
+    discover_authoritative_stores_by, fmt_compact, fmt_full, fmt_pct, lookup, ratio,
+    resolve_concept, scope_qualifier_in_question, store_claims, SecFact, SecFactStore, SecRefusal,
     SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR,
 };
-use corpus_engine::CorpusEngine;
+use corpus_index::source::CorpusReadPort;
 use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::AuthorityClaim;
 
@@ -47,7 +47,7 @@ use sovereign_core::types::AuthorityClaim;
 /// identified by its recipe's `[authority]` declaration, not by the
 /// spelling of its corpus id.
 pub struct SecFactsTool {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn CorpusReadPort>,
     /// Lazily built claim index for the §7.3 authority pre-check:
     /// every installed corpus whose MATERIALIZED RECIPE
     /// declares `[authority] tool = "sec_facts"`, with its typed
@@ -58,7 +58,7 @@ pub struct SecFactsTool {
 }
 
 impl SecFactsTool {
-    pub fn new(engine: Arc<CorpusEngine>) -> Self {
+    pub fn new(engine: Arc<dyn CorpusReadPort>) -> Self {
         Self {
             engine,
             claim_stores: std::sync::OnceLock::new(),
@@ -70,7 +70,9 @@ impl SecFactsTool {
     /// recipe author declares; data placement does not).
     fn claim_stores(&self) -> &[(String, SecFactStore)] {
         self.claim_stores.get_or_init(|| {
-            discover_authoritative_stores(self.engine.index_dir(), self.engine.recipes_dir())
+            discover_authoritative_stores_by(self.engine.index_dir(), &|id| {
+                self.engine.declared_authority_tool(id)
+            })
         })
     }
 
@@ -791,7 +793,7 @@ mod tests {
         let map = crate::sec_facts_render::ConceptMap::from_toml(
             &std::fs::read_to_string(
                 std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../sovereign-recipes/sec-filings-company/concept-map.toml"),
+                    .join("data/sec-filings-company/concept-map.toml"),
             )
             .expect("concept map is committed"),
         )

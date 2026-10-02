@@ -37,8 +37,8 @@ its number as a product fact.
 
 `attached-doc` has no driver in this lane. `handle_attached_doc_turn`
 needs a Ready `DocumentAsset` plus a `DocumentSession` on the
-conversation — `bench_cmd::book_report::dispatch_question` is the
-working headless recipe, and the ingest that produces the asset does not
+conversation — svrn's attached probe (`svrn __probe`, attached mode;
+`probe_cmd::attached::dispatch_question`) is the working headless recipe, and the ingest that produces the asset does not
 fit a 50-second lane. A fixture declaring it is **refused at load**, and
 the run exits non-zero.
 

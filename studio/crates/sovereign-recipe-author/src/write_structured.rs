@@ -52,7 +52,7 @@ pub struct RecipeWriteStructuredTool {
     /// this tool carries no corpus-engine dependency).
     tester: Arc<dyn RecipeTester>,
     /// The injected recipe variant-catalog descriptor (the bytes of
-    /// `sovereign-recipes/schema/recipe_schema_descriptor.json`). The monolith
+    /// `corpus-engine/schema/recipe_schema_descriptor.json`). The monolith
     /// supplies `corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON`;
     /// this crate may not name `corpus-engine`, and the shared leaf may not
     /// embed the artifact (that embed escapes its crate root).

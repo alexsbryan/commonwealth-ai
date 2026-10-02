@@ -19,7 +19,7 @@
 //! replaces its chunks rather than doubling them — the right semantic for the
 //! per-item ingest model. Effect is `Write` (a real side effect, never cached).
 
-use corpus_engine::{CorpusIndex, InsertChunk};
+use corpus_index::index::{CorpusIndex, InsertChunk};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;

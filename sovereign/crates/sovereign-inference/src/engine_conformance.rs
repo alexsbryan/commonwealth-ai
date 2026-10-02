@@ -29,7 +29,7 @@
 //! ```no_run
 //! # use std::sync::Arc;
 //! # use sovereign_inference::engine_conformance::check_sync;
-//! # fn f(engine: Arc<dyn sovereign_core::traits::InferenceProvider>) {
+//! # fn f(engine: Arc<dyn sovereign_contracts::traits::InferenceProvider>) {
 //! let violations = check_sync(engine.as_ref());
 //! assert!(violations.is_empty(), "{violations:#?}");
 //! # }
@@ -37,8 +37,8 @@
 
 use futures::StreamExt;
 
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed, StreamFrame};
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::{CompletionRequest, Speed, StreamFrame};
 
 /// Sample text for the tokenizer check — long enough that any real
 /// tokenizer returns a positive count, short enough to cost nothing.
@@ -249,8 +249,8 @@ pub async fn check_serving(p: &dyn InferenceProvider) -> Vec<String> {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use sovereign_core::error::Result;
-    use sovereign_core::types::{CompletionResponse, ProviderCapabilities};
+    use sovereign_contracts::error::Result;
+    use sovereign_contracts::types::{CompletionResponse, ProviderCapabilities};
     use std::pin::Pin;
 
     fn echo_response(text: String) -> CompletionResponse {
@@ -292,7 +292,7 @@ mod tests {
                 max_context_tokens: 8192,
                 supports_structured_output: false,
                 relative_speed: Speed::Fast,
-                relative_reasoning: sovereign_core::types::Depth::Shallow,
+                relative_reasoning: sovereign_contracts::types::Depth::Shallow,
             }
         }
     }
@@ -341,7 +341,7 @@ mod tests {
                 max_context_tokens: 0,
                 supports_structured_output: false,
                 relative_speed: Speed::Fast,
-                relative_reasoning: sovereign_core::types::Depth::Shallow,
+                relative_reasoning: sovereign_contracts::types::Depth::Shallow,
             }
         }
         fn model_id_for(&self, _: Speed) -> String {

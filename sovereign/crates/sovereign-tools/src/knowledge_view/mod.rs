@@ -33,7 +33,6 @@ pub mod relational;
 pub mod splice_extension;
 pub mod strategic;
 pub mod timeline;
-pub mod tokens;
 pub mod view_kind;
 
 pub use manager::{
@@ -43,5 +42,5 @@ pub use manager::{
 pub use recipes::{
     conversation_history_recipe, institutional_notes_recipe, personal_knowledge_recipe,
 };
-pub use tokens::estimate_tokens;
+pub use sovereign_contracts::tokens::estimate_tokens;
 pub use view_kind::ViewKind;

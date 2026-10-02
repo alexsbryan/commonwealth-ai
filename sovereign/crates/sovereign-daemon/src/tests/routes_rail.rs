@@ -4,48 +4,23 @@
 //! Their own file because keeping them inline put that file into the
 //! 800-1200 approach band (ARCH §3.1). `#[path]`, so the names are unchanged.
 
-use std::future::Future;
-use std::pin::Pin;
-
-use commonwealth_rail::{Roster, RosterSource};
 use sovereign_grants::Scope;
 
 use super::*;
 
-/// Enough of a signer to build a rail. Nothing here signs anything: the
-/// refusal under test is decided before a signature exists.
-struct Unclaimed;
-impl commonwealth_rail::RingSigner for Unclaimed {
-    fn actor(&self) -> String {
-        "ab".repeat(32)
-    }
-    fn sign(&self, _ns: &str, _ts: i64, _seq: u64, _body: &str) -> String {
-        String::new()
-    }
-}
-
-/// A roster that is computed — the shape `mesh-measurements` installs.
-/// Empty, because a node that is in no mesh derives no members, which is
-/// exactly the state that reaches this refusal.
-struct Membership;
-impl RosterSource for Membership {
-    fn roster(&self) -> Pin<Box<dyn Future<Output = Result<Roster, RailError>> + Send + '_>> {
-        Box::pin(async { Ok(Roster::new(Default::default())) })
-    }
-}
-
-/// The refusal `append` would render for `ns`, asked of a real rail so the
-/// origin comes from `RingRail` and not from a fixture.
-fn refusal_on(ns: &str, derived: bool) -> String {
-    let rail = RingRail::new("/nonexistent", Arc::new(Unclaimed));
-    if derived {
-        rail.derive_roster(ns, Arc::new(Membership)).unwrap();
-    }
-    let e = RailError::NotInRoster {
-        actor: "ab".repeat(32),
-        namespace: ns.to_string(),
-    };
-    not_in_roster_refusal(rail.roster_origin(ns), &e)
+/// The refusal `append` would render for `ns` at `origin`. Post-flip the
+/// origin is read over the port from the rails daemon's rail, so the
+/// sentence's two arms are pinned against the ENUM directly — the origin's
+/// own derivation is the serving side's, and its tests live there
+/// (commonwealth-rails).
+fn refusal_on(ns: &str, origin: RosterOrigin) -> String {
+    not_in_roster_refusal(
+        origin,
+        &RailError::NotInRoster {
+            actor: "ab".repeat(32),
+            namespace: ns.to_string(),
+        },
+    )
 }
 
 /// The fix a refusal names has to be a command the reader can actually
@@ -53,7 +28,7 @@ fn refusal_on(ns: &str, derived: bool) -> String {
 /// naming it there sends the operator to a door that will not open.
 #[test]
 fn a_derived_namespace_is_refused_in_the_meshs_words_not_the_roster_files() {
-    let why = refusal_on("mesh-measurements", true);
+    let why = refusal_on("mesh-measurements", RosterOrigin::Derived);
     assert!(why.contains("svrn mesh"), "must name the mesh: {why}");
     assert!(
         !why.contains("roster add"),
@@ -66,7 +41,7 @@ fn a_derived_namespace_is_refused_in_the_meshs_words_not_the_roster_files() {
 /// this the test above passes for a renderer that says "mesh" always.
 #[test]
 fn a_file_namespace_still_names_the_roster_command() {
-    let why = refusal_on("house-expenses", false);
+    let why = refusal_on("house-expenses", RosterOrigin::File);
     assert!(
         why.contains("svrn ring roster add"),
         "must name the fix: {why}"
@@ -143,7 +118,7 @@ fn a_caller_without_a_session_cannot_name_somebody() {
 
 fn admitted(on_behalf_of: Option<&str>) -> AdmittedOp {
     AdmittedOp {
-        id: commonwealth_rail::OpId::from_raw("abc"),
+        id: commonwealth_rail_core::OpId::from_raw("abc"),
         actor: "ab".repeat(32),
         person: "BeefyMac".into(),
         seq: 0,
@@ -278,7 +253,7 @@ fn a_wall_grant_is_refused_a_namespace_nobody_declared() {
 /// is not the only guard (ARCH 5).
 #[test]
 fn a_daemon_owned_namespace_is_refused_even_when_the_registry_declares_it() {
-    let owned = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+    let owned = oicp_types::measurements::MEASUREMENTS_APP_ID;
     let pages = wall_of(&[(owned, open("/a")), ("work", open("/b"))]);
     let g = grant_with(vec![Scope::Wall]);
     for ns in [owned, "work"] {

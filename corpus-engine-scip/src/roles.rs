@@ -5,7 +5,7 @@
 //! Three discovery feeds, and they do not overlap:
 //!
 //!   1. [`crate::converge::census`]  duplicated NAME      — six `ChatMessage`
-//!   2. `sovereign_tools::code::dry_report`  duplicated BEHAVIOUR — bodies
+//!   2. `sovereign_code::dry_report`  duplicated BEHAVIOUR — bodies
 //!      that hash alike
 //!   3. this module            duplicated ROLE      — `AuditReport`,
 //!      `DriftReport` and `StalenessSummary` all answering "how much should

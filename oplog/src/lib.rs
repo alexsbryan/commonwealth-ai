@@ -437,38 +437,150 @@ impl<K: Journaled> Oplog<K> {
             if line.trim().is_empty() {
                 continue;
             }
-            let line_no = lineno as u64 + 1;
-            match serde_json::from_str::<Op<K>>(&line) {
-                Ok(op) if op.v > K::VERSION => {
-                    tracing::warn!(
-                        log = K::LABEL,
-                        path = %self.path.display(),
-                        line = line_no,
-                        v = op.v,
-                        "oplog: skipping op from a newer format version"
-                    );
-                    skipped.push(SkippedLine::NewerVersion {
-                        line: line_no,
-                        v: op.v,
-                    });
-                }
+            match self.parse_line(&line, lineno as u64 + 1) {
                 Ok(op) => out.push(op),
-                Err(err) => {
-                    tracing::warn!(
-                        log = K::LABEL,
-                        path = %self.path.display(),
-                        line = line_no,
-                        "oplog: malformed line skipped ({err})"
-                    );
-                    skipped.push(SkippedLine::Malformed {
-                        line: line_no,
-                        error: err.to_string(),
-                    });
-                }
+                Err(skip) => skipped.push(skip),
             }
         }
         Ok((out, skipped))
     }
+
+    /// The ops appended since `cursor`, and the cursor after them.
+    ///
+    /// For a tenant that keeps a fold of the log in memory and must not pay a
+    /// whole read per write (the ring journal's next-seq and held-id index).
+    /// Reads from the cursor's byte offset to the end of the last whole line,
+    /// so a line another process is still writing is left for the next call.
+    /// When the file is not the one the cursor was taken on (a
+    /// [`Self::replace_all`] renamed a new one over it) or is shorter than the
+    /// offset, the read starts again from the top and the returned
+    /// [`Tail::restarted`] says the caller's fold is void. Lines are judged by
+    /// the same rules as [`Self::read_all_with_skips`]; skipped ones are warned
+    /// and counted, with line numbers counted from where this read began.
+    pub fn read_since(&self, cursor: Cursor) -> Result<Tail<K>> {
+        use std::io::{Read, Seek, SeekFrom};
+        let mut file = match fs::File::open(&self.path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Tail {
+                    ops: Vec::new(),
+                    skipped: 0,
+                    cursor: Cursor::default(),
+                    restarted: cursor != Cursor::default(),
+                });
+            }
+            Err(e) => return Err(OplogError::Io(e)),
+        };
+        let meta = file.metadata().map_err(OplogError::Io)?;
+        let file_id = file_identity(&meta);
+        let restarted = file_id.is_none() || file_id != cursor.file || meta.len() < cursor.end;
+        let start = if restarted { 0 } else { cursor.end };
+        file.seek(SeekFrom::Start(start)).map_err(OplogError::Io)?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).map_err(OplogError::Io)?;
+        let whole = bytes.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
+        let text = std::str::from_utf8(&bytes[..whole])
+            .map_err(|e| OplogError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?;
+        let mut ops = Vec::new();
+        let mut skipped = 0usize;
+        for (lineno, line) in text.lines().enumerate() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            match self.parse_line(line, lineno as u64 + 1) {
+                Ok(op) => ops.push(op),
+                Err(_) => skipped += 1,
+            }
+        }
+        tracing::debug!(
+            log = K::LABEL,
+            path = %self.path.display(),
+            from = start,
+            bytes = whole,
+            ops = ops.len(),
+            skipped,
+            restarted,
+            "oplog: read since cursor"
+        );
+        Ok(Tail {
+            ops,
+            skipped,
+            cursor: Cursor {
+                file: file_id,
+                end: start + whole as u64,
+            },
+            restarted,
+        })
+    }
+
+    /// One line, judged: an op, or the reason it is not one. The one place
+    /// both readers decide which lines count.
+    fn parse_line(&self, line: &str, line_no: u64) -> std::result::Result<Op<K>, SkippedLine> {
+        match serde_json::from_str::<Op<K>>(line) {
+            Ok(op) if op.v > K::VERSION => {
+                tracing::warn!(
+                    log = K::LABEL,
+                    path = %self.path.display(),
+                    line = line_no,
+                    v = op.v,
+                    "oplog: skipping op from a newer format version"
+                );
+                Err(SkippedLine::NewerVersion {
+                    line: line_no,
+                    v: op.v,
+                })
+            }
+            Ok(op) => Ok(op),
+            Err(err) => {
+                tracing::warn!(
+                    log = K::LABEL,
+                    path = %self.path.display(),
+                    line = line_no,
+                    "oplog: malformed line skipped ({err})"
+                );
+                Err(SkippedLine::Malformed {
+                    line: line_no,
+                    error: err.to_string(),
+                })
+            }
+        }
+    }
+}
+
+/// Where a [`Oplog::read_since`] stopped: which file it read, and the byte
+/// after the last whole line. The default is "nothing read yet".
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Cursor {
+    file: Option<(u64, u64)>,
+    end: u64,
+}
+
+/// What [`Oplog::read_since`] found.
+#[derive(Debug)]
+pub struct Tail<K> {
+    /// The ops past the cursor, in append order.
+    pub ops: Vec<Op<K>>,
+    /// Lines past the cursor this build could not use (already warned).
+    pub skipped: usize,
+    /// Where the next read starts.
+    pub cursor: Cursor,
+    /// The read began at the top of the file, not at the cursor: whatever the
+    /// caller folded from earlier reads no longer describes this file.
+    pub restarted: bool,
+}
+
+/// The file's (device, inode), so a rename over the path is seen. Where the
+/// platform has no such pair every read restarts, which is a whole read: the
+/// cost this cursor exists to avoid, never a wrong answer.
+#[cfg(unix)]
+fn file_identity(meta: &fs::Metadata) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    Some((meta.dev(), meta.ino()))
+}
+
+#[cfg(not(unix))]
+fn file_identity(_meta: &fs::Metadata) -> Option<(u64, u64)> {
+    None
 }
 
 /// A line present in the journal that this build did not turn into an [`Op`].
@@ -725,5 +837,37 @@ mod tests {
         let empty: Oplog<Probe> = Oplog::new(dir.path().join("empty"));
         empty.append_all(&[]).unwrap();
         assert!(!empty.path().exists());
+    }
+
+    /// A cursor reads only what was appended after it, leaves a half-written
+    /// line for the next read, and starts over when a replace renames a new
+    /// file over the log.
+    #[test]
+    fn read_since_reads_the_tail_and_restarts_on_a_replace() {
+        let dir = tempfile::tempdir().unwrap();
+        let log: Oplog<Probe> = Oplog::new(dir.path());
+        let first = log.read_since(Cursor::default()).unwrap();
+        assert!(first.ops.is_empty() && !first.restarted);
+
+        let a = Op::new(touch("a"), 1, "ingest");
+        let b = Op::new(touch("b"), 2, "ingest");
+        log.append_all(&[a.clone(), b.clone()]).unwrap();
+        let both = log.read_since(first.cursor).unwrap();
+        assert_eq!(both.ops, vec![a.clone(), b.clone()]);
+        assert!(both.restarted, "the file did not exist at the first cursor");
+
+        let c = Op::new(touch("c"), 3, "ingest");
+        log.append(&c).unwrap();
+        let mut f = OpenOptions::new().append(true).open(log.path()).unwrap();
+        f.write_all(b"{\"id\":\"half").unwrap();
+        let tail = log.read_since(both.cursor).unwrap();
+        assert_eq!(tail.ops, vec![c.clone()], "only the line after the cursor");
+        assert!(!tail.restarted);
+        assert_eq!(tail.skipped, 0, "a half-written line is not judged yet");
+
+        log.replace_all(&[c.clone()]).unwrap();
+        let again = log.read_since(tail.cursor).unwrap();
+        assert!(again.restarted, "a replaced file voids the cursor");
+        assert_eq!(again.ops, vec![c]);
     }
 }

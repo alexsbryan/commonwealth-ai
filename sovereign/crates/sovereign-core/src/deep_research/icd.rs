@@ -30,7 +30,7 @@ pub const ICD_VERSION: u32 = 1;
 ///
 /// The other nine are adjudicated in the rung's landing verdict; most are
 /// correctly distinct (`facts_check::Verdict` carries a receipt,
-/// `mesh_measurements::Verdict` is valid/invalid-with-problems,
+/// `sovereign_serve::mesh_measurements::Verdict` is valid/invalid-with-problems,
 /// `flywheel::verify::Verdict` is a probe row).
 pub use kernel_types::Verdict;
 

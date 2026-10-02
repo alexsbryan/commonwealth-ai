@@ -20,7 +20,7 @@
 //! sequenced next) both depend on `extract_tokens` and the
 //! `EVIDENCE_*` constants exported here.
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 
 use crate::types::{Intent, Operation};
 
@@ -942,7 +942,7 @@ pub(crate) fn strip_leading_title_duplicate<'a>(body: &'a str, title: Option<&st
 #[cfg(test)]
 mod grounding_filter_tests {
     use super::is_grounding_candidate;
-    use corpus_engine::ScoredChunk;
+    use corpus_index::types::ScoredChunk;
     use std::collections::HashMap;
 
     fn chunk(corpus_id: &str, title: Option<&str>) -> ScoredChunk {
@@ -957,7 +957,7 @@ mod grounding_filter_tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -1078,7 +1078,7 @@ mod strip_title_tests {
 #[cfg(test)]
 mod evidence_shape_tests {
     use super::{compute_evidence_shape, route_from_evidence, SynthesisRoute};
-    use corpus_engine::ScoredChunk;
+    use corpus_index::types::ScoredChunk;
     use std::collections::HashMap;
 
     fn chunk(corpus: &str, title: &str, score: f32) -> ScoredChunk {
@@ -1093,7 +1093,7 @@ mod evidence_shape_tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -1630,7 +1630,7 @@ mod output_budget_tests {
     /// over vector-scored chunks only.
     #[test]
     fn top_cosine_from_vector_distances() {
-        let mk = |dist: Option<f32>| corpus_engine::ScoredChunk {
+        let mk = |dist: Option<f32>| corpus_index::types::ScoredChunk {
             content: "alpha beta".into(),
             title: Some("T".into()),
             url: None,
@@ -1641,7 +1641,7 @@ mod output_budget_tests {
             source_doc_id: None,
             vector_distance: dist,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         };
         let chunks = vec![mk(Some(0.4)), mk(None), mk(Some(0.9))];
         let shape = compute_evidence_shape(&chunks, "alpha");

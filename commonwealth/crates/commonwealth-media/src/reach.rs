@@ -108,6 +108,12 @@ pub enum MediaReachRefusal {
     NoOrigin(String, OriginKind),
     #[error("no iroh path to '{0}': {1}")]
     NoPath(String, String),
+    #[error(
+        "'{0}' is this node — what it serves is on this machine's loopback, not behind a bridge"
+    )]
+    IsSelfNode(String),
+    #[error("no {1} endpoint for '{0}': {2}")]
+    NoEndpoint(String, &'static str, String),
     #[error("transport handed back a non-loopback endpoint for '{0}' ({1}) — refusing")]
     NotLoopback(String, String),
     #[error("bad request: {0}")]
@@ -259,6 +265,26 @@ pub fn pick_member(
     query: &str,
     kind: OriginKind,
 ) -> Result<MediaCandidate, MediaReachRefusal> {
+    let picked = pick_one(candidates, query)?;
+    if picked.node_id == self_id {
+        return Err(MediaReachRefusal::IsSelf(picked.name, kind));
+    }
+    let picked = live(picked)?;
+    if !picked.has_identity {
+        return Err(MediaReachRefusal::NoIdentity(picked.name));
+    }
+    if !picked.offers(kind) {
+        return Err(MediaReachRefusal::NoOrigin(picked.name, kind));
+    }
+    Ok(picked)
+}
+
+/// The one member `query` names among the active candidates — no other
+/// check. [`pick_member`] and the reach door each add their own.
+fn pick_one(
+    candidates: &[MediaCandidate],
+    query: &str,
+) -> Result<MediaCandidate, MediaReachRefusal> {
     let matched: Vec<&MediaCandidate> = candidates
         .iter()
         .filter(|c| c.active && member_matches(c.node_id, &c.name, query))
@@ -275,21 +301,16 @@ pub fn pick_member(
             return Err(MediaReachRefusal::Ambiguous(query.to_string(), names));
         }
     };
-    if picked.node_id == self_id {
-        return Err(MediaReachRefusal::IsSelf(picked.name, kind));
-    }
-    match picked.status {
-        NodeStatus::Online | NodeStatus::Busy => {}
-        NodeStatus::Away => return Err(MediaReachRefusal::Offline(picked.name, "away")),
-        NodeStatus::Offline => return Err(MediaReachRefusal::Offline(picked.name, "offline")),
-    }
-    if !picked.has_identity {
-        return Err(MediaReachRefusal::NoIdentity(picked.name));
-    }
-    if !picked.offers(kind) {
-        return Err(MediaReachRefusal::NoOrigin(picked.name, kind));
-    }
     Ok(picked)
+}
+
+/// `picked`, if its gossiped status says a dial would be answered.
+fn live(picked: MediaCandidate) -> Result<MediaCandidate, MediaReachRefusal> {
+    match picked.status {
+        NodeStatus::Online | NodeStatus::Busy => Ok(picked),
+        NodeStatus::Away => Err(MediaReachRefusal::Offline(picked.name, "away")),
+        NodeStatus::Offline => Err(MediaReachRefusal::Offline(picked.name, "offline")),
+    }
 }
 
 /// The class chooses the ALPN, so the kind chooses the class.
@@ -385,6 +406,70 @@ pub async fn reach(
         via: ep.label,
         path,
     })
+}
+
+/// The reach door's answer (`GET /v1/mesh/reach`): every endpoint this node's
+/// transport yields for `query` on `class`, best first. It is
+/// [`pick_member`] without the origin-kind check, and without the identity
+/// check too, because the IP overlay dials by address. Whether the peer
+/// serves anything on that class is its registry's to say when the dial
+/// lands, not this roster's.
+pub async fn reach_class(
+    self_id: NodeId,
+    roster: &[(MediaCandidate, PeerContact)],
+    query: &str,
+    transport: &Arc<dyn PeerTransport>,
+    class: TrafficClass,
+) -> Result<(MediaCandidate, Vec<PeerEndpoint>), MediaReachRefusal> {
+    let candidates: Vec<MediaCandidate> = roster.iter().map(|(c, _)| c.clone()).collect();
+    let picked = pick_one(&candidates, query)?;
+    if picked.node_id == self_id {
+        return Err(MediaReachRefusal::IsSelfNode(picked.name));
+    }
+    let picked = live(picked)?;
+    let contact = roster
+        .iter()
+        .find(|(c, _)| c.node_id == picked.node_id)
+        .map(|(_, contact)| contact.clone())
+        .expect("picked from this roster");
+    let endpoints = transport.endpoints(&contact, class).await;
+    if endpoints.is_empty() {
+        let why = if contact.addresses.is_empty()
+            && contact.relay_url.is_none()
+            && contact.iroh_direct_addrs.is_empty()
+        {
+            "it gossips no iroh relay, no iroh direct address and no overlay address".to_string()
+        } else {
+            format!(
+                "no transport here carries {} to it — an iroh-only class needs an iroh path, \
+                 and the overlay carries only the classes it has a port for",
+                class.as_str()
+            )
+        };
+        tracing::info!(
+            target: "transport",
+            peer = %picked.name,
+            node_id = %picked.node_id,
+            class = class.as_str(),
+            why = %why,
+            "reach door: refused — no endpoint"
+        );
+        return Err(MediaReachRefusal::NoEndpoint(
+            picked.name,
+            class.as_str(),
+            why,
+        ));
+    }
+    tracing::info!(
+        target: "transport",
+        peer = %picked.name,
+        node_id = %picked.node_id,
+        class = class.as_str(),
+        first = %endpoints[0].label,
+        candidates = endpoints.len(),
+        "reach door: resolved"
+    );
+    Ok((picked, endpoints))
 }
 
 #[cfg(test)]

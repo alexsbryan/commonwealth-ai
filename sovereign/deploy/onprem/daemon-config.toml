@@ -1,7 +1,11 @@
-# svrnmesh daemon config for the on-prem legal pilot.
+# The on-prem legal pilot's one config file.
 # Installed to /etc/firm-rag/daemon-config.toml, loaded explicitly:
 #
-#   svrn daemon run --config /etc/firm-rag/daemon-config.toml
+#   sovereign-onprem run --config /etc/firm-rag/daemon-config.toml
+#
+# install.sh also links it as /var/lib/firm-rag/config.toml, the path the
+# `svrn` verbs read when SVRNMESH_DATA_DIR names the data dir, so the CLI
+# and the daemon read one file.
 #
 # ── Why --config and not the canonical path ──────────────────────────
 # The canonical path is `$HOME/.svrnmesh/config.toml`, resolved through
@@ -12,11 +16,13 @@
 # read-only: the auto-generated client token is written under the DATA
 # dir, not back into this file.
 #
-# ── THIS IS NOT THE SERVER'S CONFIG ──────────────────────────────────
-# This is `SetupConfig`. /etc/firm-rag/server-config.toml is
-# `ServerConfig` — a different schema. Keys do not transfer. In
-# particular `max_concurrent_turns` belongs to the SERVER and is
-# silently dropped if written here.
+# ── THE ONLY CONFIG ──────────────────────────────────────────────────
+# This is `SetupConfig`. The kit's old second file, server-config.toml,
+# retired with sovereign-server: its retrieval scope moved to
+# `[retrieval]` below, its API keys to the daemon's key store
+# (`svrn daemon key`), and every setting with no daemon equivalent is
+# named dropped in README.md ("Settings that moved"). A key copied from
+# it, like `max_concurrent_turns`, is silently ignored here.
 #
 # ── NO UNKNOWN-KEY REJECTION ─────────────────────────────────────────
 # No struct in this schema sets `deny_unknown_fields`. A typo'd key is
@@ -77,9 +83,11 @@ dir = "/var/lib/firm-rag"
 
 # ── Daemon ports and binds ───────────────────────────────────────────
 [daemon]
-# The client API. nginx never touches this — only sovereign-server does,
-# over loopback. Note that loopback callers are admitted with NO token,
-# by design, which is why nothing but loopback may reach it.
+# The client API, the one nginx proxies to. install.sh writes API keys
+# into the daemon's key store, and a daemon holding any key identifies
+# EVERY caller by key: loopback grants nothing, so nginx on the same host
+# lends no caller a trust it does not have. Bound to loopback all the
+# same — nginx is the TLS front door and the route allowlist.
 client_bind = "127.0.0.1"
 client_port = 9741
 
@@ -97,6 +105,13 @@ client_port = 9741
 # thing holding it.)
 internal_bind = "127.0.0.1"
 internal_port = 9742
+
+# Where the daemon would dial a cw-rails mesh daemon. This box runs none,
+# so nothing listens here; the process's few loopback calls to it (the
+# media-presence poll, the work-atlas store) are refused on 127.0.0.1 and
+# go nowhere else. Stated so that it names a port of THIS install, and
+# install.sh --port moves it with the others. See EGRESS.md.
+rails_base = "http://127.0.0.1:9747"
 
 # Keep the primary slot pinned for the daemon's lifetime. The default
 # 300s evicts after five idle minutes and re-pays a 10-90s model load on
@@ -129,6 +144,16 @@ max_concurrent_sweeps = 1
 # 300s, not 120s. A discovery share does not change every two minutes,
 # and each sweep walks the whole tree.
 default_sweep_interval_secs = 300
+
+# ── Retrieval scope ──────────────────────────────────────────────────
+# The corpus allow-list every API key is granted: what a turn retrieves
+# from, and what GET /v1/corpora lists. On a keyed daemon EMPTY GRANTS
+# NOTHING — it never means "every corpus". install.sh writes the ids it
+# installed (the restored legal corpus and the document share's watched
+# corpus, whose id the daemon mints from the share's path) in place of
+# the marker below; acceptance.sh check 2 proves each is listed.
+[retrieval]
+# __INSTALL_CORPORA__
 
 # ── Zero egress ──────────────────────────────────────────────────────
 

@@ -238,7 +238,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         i += 1;
     }
 
-    let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
+    let indexes_dir = sovereign_cli_base::dirs::sovereign_root().join("indexes");
     let corpus_id = match resolve_corpus(corpus_id, &indexes_dir) {
         Ok(c) => c,
         Err(code) => return code,
@@ -702,11 +702,8 @@ fn counted_extensions(defs: &[corpus_engine_scip::converge::TypeDef]) -> Vec<Str
 }
 
 fn git_stdout(args: &[&str]) -> Option<String> {
-    let out = std::process::Command::new("git").args(args).output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    String::from_utf8(out.stdout).ok()
+    let root = crate::repo::repo_root_here().ok()?;
+    crate::repo::git_stdout_in(&root, args)
 }
 
 /// Paths git reports as dirty in the working tree, including untracked ones.

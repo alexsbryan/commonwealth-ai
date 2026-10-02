@@ -7,6 +7,10 @@ license.workspace = true
 
 [dependencies]
 commonwealth-core = { workspace = true }
+# The dial vocabulary and the fan-out, re-exported at their historical paths
+# (pb-rails-reach).
+mesh-reach = { workspace = true }
+kernel-types = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 ed25519-dalek = { workspace = true }
@@ -18,8 +22,6 @@ hex = "0.4"
 # confined to src/iroh.rs, so version churn is a one-file change.
 iroh = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
-# `fanout` only: the per-peer rows are what a route serialises.
-serde = { workspace = true, optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
@@ -29,20 +31,20 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 # cfg switches) so iroh resolves with ONE feature set in every build scope.
 # With two, cargo-hakari lists iroh in workspace-hack, which links it into
 # every member — including corpus-mcp, whose closure test
-# (corpus-mcp/tests/no_inference_stack.rs) forbids it; excluding it from the
+# (corpus-engine/xtask/tests/no_inference_stack.rs) forbids it; excluding it from the
 # hack instead (`final-excludes`) drops its feature contributions to
 # ed25519-dalek/noq-udp/signature and re-opens the scoped-build drift the
 # hack exists to close (scope-drift.py 92 -> 180, `cargo hakari verify` red).
 # Cost: the two iroh features compile in production; the hack already did that.
-iroh = ["dep:iroh", "dep:tokio", "dep:rustls", "iroh/unstable-custom-transports", "iroh/test-utils"]
+iroh = ["mesh-reach/guest", "dep:iroh", "dep:tokio", "dep:rustls", "iroh/unstable-custom-transports", "iroh/test-utils"]
 # The generic peer fan-out (`fanout` module). Its own feature so a build that
 # only wants the `PeerTransport` seam links neither tokio nor serde.
-fanout = ["dep:tokio", "dep:serde"]
+fanout = ["mesh-reach/fanout"]
 # Bench/measurement-only: a PathSelector that pins traffic to the relay even
 # when hole-punching would succeed — the deterministic "relay floor" for the
 # distributed-inference path characterization (tunnel_bench --relay-only).
 # Rides iroh's unstable-custom-transports API; never enable in production.
-iroh-relay-only = ["iroh", "iroh/unstable-custom-transports"]
+iroh-relay-only = ["iroh", "mesh-reach/iroh-relay-only", "iroh/unstable-custom-transports"]
 # Enables iroh's in-process relay test server for the UDP-blocked
 # relay-carried-connectivity test (H-plan item c). Test-only; pulls in
 # `iroh/test-utils`. Run: cargo test -p commonwealth-transport

@@ -48,6 +48,7 @@ use std::sync::Mutex;
 
 use bytes::Bytes;
 use kernel_types::NodeId;
+use serde::{Deserialize, Serialize};
 
 /// Why a [`ReplicatedKv`] call could not be served.
 ///
@@ -70,22 +71,93 @@ impl std::fmt::Display for ReplicatedKvError {
 
 impl std::error::Error for ReplicatedKvError {}
 
+/// Rail namespaces whose WRITER and whose roster sit in different packages.
+///
+/// An `app_id` is a wire constant: a rename the roster does not follow stops
+/// replication with no error. One definition, on the seam both sides link.
+pub const NOTES_APP_ID: &str = "notes";
+/// Work-atlas records that gossip across the mesh.
+pub const WORK_ATLAS_APP_ID_PUBLIC: &str = "work-atlas";
+/// Work-atlas records excluded from gossip — cannot leak by construction.
+pub const WORK_ATLAS_APP_ID_PRIVATE: &str = "work-atlas-private";
+
 /// One record in a [`ReplicatedKv`], as the reader sees it.
 ///
 /// `origin` is which node wrote it — the field the daemon's ingest poller
 /// filters on so it does not re-ingest its own publications. `timestamp` is
 /// unix seconds and carries the last-write-wins ordering.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// The serde form is THE wire form: over the daemon's `/v1/mesh/kv` routes
+/// (fp-33) an entry crosses as itself — `value` base64-encoded through
+/// [`b64_bytes`], `origin` through `NodeId`'s own derive — so there is no
+/// twin wire struct to drift from this one (ARCH §10.6/§8).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReplicatedKvEntry {
     /// Namespace the record lives in.
     pub app_id: String,
     /// Key within the namespace.
     pub key: String,
     /// The stored bytes.
+    #[serde(with = "b64_bytes")]
     pub value: Bytes,
     /// Unix seconds of the write that produced this value.
     pub timestamp: u64,
     /// Node that originated the write.
+    pub origin: NodeId,
+}
+
+/// serde with-base64 for [`Bytes`] — the wire encoding of a KV record's
+/// value, shared by the daemon's `/v1/mesh/kv` handlers and the workbench's
+/// dialing client. One encoding, one definition.
+mod b64_bytes {
+    use base64::engine::general_purpose::STANDARD as B64;
+    use base64::Engine;
+    use bytes::Bytes;
+
+    pub fn serialize<S: serde::Serializer>(v: &Bytes, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&B64.encode(v))
+    }
+
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Bytes, D::Error> {
+        let s: String = serde::Deserialize::deserialize(d)?;
+        B64.decode(s.as_bytes())
+            .map(Bytes::from)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+// ── The /v1/mesh/kv request wire (five-programs fp-33) ──────────────────────
+// The daemon's mesh-KV serving surface (`sovereign-daemon/src/routes_mesh_kv.rs`)
+// and the one dialing client (`sovereign-turn-client/src/rails_kv.rs`)
+// must agree on every field name; one definition here — the svrn
+// serving-contract home (§12 decision 3a) — is what makes that structural.
+
+/// Lookup key of `GET /v1/mesh/kv/entry` and `DELETE /v1/mesh/kv/entry`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KvLookup {
+    pub app_id: String,
+    pub key: String,
+}
+
+/// Query of `GET /v1/mesh/kv/entries`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KvScanQuery {
+    pub app_id: String,
+    /// Key prefix; empty enumerates the namespace — the same semantics as
+    /// [`ReplicatedKv::scan`].
+    #[serde(default)]
+    pub prefix: String,
+}
+
+/// Body of `POST /v1/mesh/kv/entry`. `origin` is the WRITER's node id — the
+/// dialing client stamps its own resolved identity here, exactly as the
+/// in-process port call would.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KvSetBody {
+    pub app_id: String,
+    pub key: String,
+    #[serde(with = "b64_bytes")]
+    pub value: Bytes,
     pub origin: NodeId,
 }
 

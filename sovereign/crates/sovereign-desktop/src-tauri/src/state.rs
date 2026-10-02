@@ -241,6 +241,25 @@ impl AppState {
     pub fn internal_base_url(&self) -> String {
         format!("http://127.0.0.1:{}", self.internal_port())
     }
+    /// cw-rails' base, the mesh endpoint whose membership doors and
+    /// `/v1/mesh/status` the desktop dials since pb-mesh-exit-transport:
+    /// `[daemon] rails_base` through its one reader, from the config this
+    /// app booted on, else the node's config file.
+    pub fn rails_base_url(&self) -> String {
+        use crate::bootstrap::{BootstrapMode, ConfigSource};
+        use sovereign_contracts::setup_config::SetupConfig;
+        use sovereign_turn_client::rails_kv::resolve_rails_base;
+        match &self.bootstrap_mode {
+            BootstrapMode::Local {
+                source: ConfigSource::CliSetup(c),
+            } => resolve_rails_base(&c.daemon),
+            _ => resolve_rails_base(
+                &SetupConfig::load()
+                    .unwrap_or_else(|_| SetupConfig::unconfigured())
+                    .daemon,
+            ),
+        }
+    }
 
     // `AppState::store()` stood here and is GONE with the slots above
     // (thin-desktop R2). Its doc called it "daemon-convergence Phase 0: the

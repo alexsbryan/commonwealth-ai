@@ -12,8 +12,6 @@
 
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
-
 use super::identity_signals::{identity_blocking_key, signals_for_policy};
 use super::oplog::ReconciliationAct;
 use super::signals::{
@@ -26,92 +24,7 @@ use crate::oplog::Op;
 
 use super::oplog::ReconciliationOp;
 
-/// Policy knobs for the merger. Mirrors the
-/// `[enrichment.reconciliation]` TOML schema.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReconciliationPolicy {
-    /// Minimum overlap-similarity for a name match to count as a
-    /// candidate. Today the
-    /// [`super::signals::NameSimilaritySignal`] uses an exact
-    /// fold-match; future versions may swap a real similarity
-    /// function here.
-    #[serde(default = "default_name_similarity_threshold")]
-    pub name_similarity_threshold: f32,
-    /// Minimum *distinct* signals required for a cross-origin merge.
-    /// Two same-origin mentions (both LLM batch, both column header)
-    /// can merge on `name_similarity` alone; two cross-origin
-    /// mentions need a second signal (`email_header`, `org_role`, or
-    /// `judge_confirmed`).
-    ///
-    /// Default 2 — Phase 5 tunes against the train split. Set to 1
-    /// to recover the legacy single-signal behaviour.
-    #[serde(default = "default_cross_origin_required_signals")]
-    pub cross_origin_required_signals: u8,
-    /// When `true`, the policy escalates uncertain candidates to the
-    /// calibrated judge (`corpus-engine/assets/judges/business_entity_v1/`).
-    /// The judge is owned by the runner — this primitive captures the
-    /// outcome via `judge_callback`.
-    #[serde(default = "default_true")]
-    pub judge_when_uncertain: bool,
-    /// Trial count fed into the judge harness when escalation fires.
-    /// Matches `sovereign_agent_bench::judge_multi::run_judge_trials`'s
-    /// `trials` parameter.
-    #[serde(default = "default_judge_trials")]
-    pub judge_trials: u8,
-    /// Per-declared-type identity keys (ontology v1), already resolved through
-    /// `specializes` by `TypeIndex::effective_identity_policy`.
-    ///
-    /// Empty by default and empty for every corpus that declares no ontology,
-    /// which is what makes this addition invisible to Enron: with no keys the
-    /// signal stack is [`super::signals::default_signals`] term for term, the
-    /// blocking keys are the same four, and the strict gate below can never
-    /// fire. It is serialized into `reconciliation.json` so the criterion a
-    /// merge ran under is on disk beside the merge.
-    #[serde(default)]
-    pub identity: IdentityPolicy,
-}
-
-impl Default for ReconciliationPolicy {
-    fn default() -> Self {
-        Self {
-            name_similarity_threshold: default_name_similarity_threshold(),
-            cross_origin_required_signals: default_cross_origin_required_signals(),
-            judge_when_uncertain: default_true(),
-            judge_trials: default_judge_trials(),
-            identity: IdentityPolicy::default(),
-        }
-    }
-}
-
-fn default_name_similarity_threshold() -> f32 {
-    0.85
-}
-fn default_cross_origin_required_signals() -> u8 {
-    2
-}
-fn default_judge_trials() -> u8 {
-    3
-}
-fn default_true() -> bool {
-    true
-}
-
-/// Output record per canonical entity.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReconciledEntity {
-    pub canonical_id: AtomId,
-    pub canonical_name: String,
-    /// Every (surface_form, provenance) the merger collapsed under
-    /// `canonical_id`. Surface forms intentionally hold the verbatim
-    /// canonical_name from the input atom — the recipe-author can
-    /// inspect them for atypical surface variants.
-    pub surface_forms: Vec<(String, SignalProvenance)>,
-    pub signals_fired: Vec<MergeSignal>,
-    /// The atom ids the merger collapsed; the oplog already carries
-    /// these but we surface them here so a runtime read of the
-    /// reconciled atlas doesn't require also opening the oplog.
-    pub source_atom_ids: Vec<AtomId>,
-}
+pub use understanding_vocab::reconciliation::{ReconciledEntity, ReconciliationPolicy};
 
 /// One merge, in the shape the atlas can hold it.
 ///

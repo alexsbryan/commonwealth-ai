@@ -15,7 +15,11 @@
 //! the orchestrating entry points (`prepare_knowledge_context`,
 //! `retrieve_candidates`) and the small snapshot helpers they share.
 
-pub(crate) mod atlas_grounding;
+pub mod atlas_grounding;
+// The chunk → candidate-atlas-ids derivation (FIVE_PROGRAMS §12 decision 1:
+// svrn owns what it grounds on). Public so sovereign-tools' summary-atoms
+// writer reaches the one definition instead of a corpus-engine path.
+pub use atlas_grounding::candidate_atlas_ids;
 mod atom_enum;
 mod boosts;
 mod conv_tiered;
@@ -55,7 +59,7 @@ impl Runtime {
     /// callers degrade gracefully.
     pub(crate) async fn contested_titles_for_chunks(
         &self,
-        chunks: &[corpus_engine::ScoredChunk],
+        chunks: &[corpus_index::types::ScoredChunk],
         lane: &crate::runtime::Lane,
     ) -> std::collections::HashSet<String> {
         let mut out = std::collections::HashSet::new();
@@ -97,7 +101,7 @@ impl Runtime {
         message: &str,
         context: &ConversationContext,
         intent: &Intent,
-    ) -> Vec<corpus_engine::ScoredChunk> {
+    ) -> Vec<corpus_index::types::ScoredChunk> {
         let kc = self
             .prepare_knowledge_context(message, context, intent, None)
             .await;
@@ -106,7 +110,8 @@ impl Runtime {
     /// Search all knowledge sources, build the prompt with retrieved context,
     /// and assemble provenance metadata. Shared between the streaming and
     /// non-streaming response paths so they cannot diverge.
-    pub(crate) async fn prepare_knowledge_context(
+    #[doc(hidden)]
+    pub async fn prepare_knowledge_context(
         &self,
         message: &str,
         context: &ConversationContext,
@@ -252,7 +257,7 @@ impl Runtime {
         // defaults, so no callsite gates on the engine being
         // configured.
         let (kinds, display_categories): (
-            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, corpus_index::types::CorpusKind>,
             std::collections::HashMap<String, String>,
         ) = if let Some(engine) = &self.corpus_engine {
             let mut kinds_map = std::collections::HashMap::new();
@@ -314,8 +319,6 @@ impl Runtime {
             // conversation corpus. No-op when no reader wired or no
             // conv-category chunks present. Spec
             // `sovereign/docs/specs/CONV_TIERED_PORT.md`.
-            self.rerank_conv_chunks_via_ppr(message, &mut all_chunks, &display_categories, &lane)
-                .await;
             // Whole-work summaries, at the LATE position — appended
             // post-rerank so leaf ranking is untouched, then reserved to the
             // head of the pool. Both halves are load-bearing and were learnt
@@ -355,7 +358,7 @@ impl Runtime {
             let knowledge_char_budget = {
                 let mut budget = EXPANDED_KNOWLEDGE_CHARS;
                 if let Some(n_ctx) = self.inference.effective_context_size() {
-                    let reserved_output = self.inference_config.max_tokens as u32;
+                    let reserved_output = self.turn_inference_config().max_tokens as u32;
                     let system_overhead = self
                         .last_assembly(&context.conversation.id)
                         .map(|m| m.system_tokens.saturating_add(256))
@@ -408,7 +411,7 @@ impl Runtime {
             {
                 let admitted_idx: std::collections::HashSet<usize> =
                     formatted_doc.admitted.iter().map(|(i, _)| *i).collect();
-                let is_raptor = |c: &corpus_engine::ScoredChunk| {
+                let is_raptor = |c: &corpus_index::types::ScoredChunk| {
                     c.metadata
                         .get("source")
                         .map(|s| s == "raptor")
@@ -567,7 +570,7 @@ impl Runtime {
             let base = crate::runtime::build_synthesis_system_prompt(
                 false,
                 &gap_note,
-                self.inference_config.think_budget > 0,
+                self.turn_inference_config().think_budget > 0,
                 &budget_note,
             );
             self.build_primary_system_message(&base, context)

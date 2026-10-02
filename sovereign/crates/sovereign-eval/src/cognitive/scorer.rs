@@ -14,8 +14,8 @@
 
 use crate::cognitive::item::{Item, Scoring};
 use crate::cognitive::runner::ItemResult;
-use corpus_engine::enrichment::pipeline::extract_json_block;
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::oicp::tool_calls::extract_json_block;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Outcome {
@@ -401,7 +401,7 @@ fn score_tool_use(
 /// Parse a model response that's supposed to be JSON but may carry
 /// reasoning tags, fences, or prose around it.
 ///
-/// Delegates to `corpus_engine::enrichment::pipeline::extract_json_block`
+/// Delegates to `oicp_types::tool_calls::extract_json_block`
 /// — the canonical hardened extractor used across the v2 enrichment
 /// pipeline (≈40 call sites). Handles `<think>...</think>`, ` ```json `
 /// fences, balanced-brace recovery from prose.

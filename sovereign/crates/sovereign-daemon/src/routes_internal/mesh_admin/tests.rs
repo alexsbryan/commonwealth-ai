@@ -42,6 +42,18 @@ async fn hot_level_returns_204_no_content() {
     assert_eq!(status, HttpStatus::NO_CONTENT);
 }
 
+/// Every canonical level is accepted with 204, not only `hot`. Successor of
+/// the harness's `node_activity_endpoint_returns_204_for_all_known_levels`
+/// (a546a456b; pb-distribution-o3-tests).
+#[tokio::test]
+async fn every_known_level_returns_204_no_content() {
+    for level in ["hot", "warm", "cool", "idle"] {
+        let (_, app) = activity_router();
+        let status = post_activity(app, level, "o3_successor").await;
+        assert_eq!(status, HttpStatus::NO_CONTENT, "level '{level}'");
+    }
+}
+
 #[tokio::test]
 async fn hot_level_sets_availability_to_020() {
     let (state, app) = activity_router();
@@ -439,7 +451,7 @@ async fn models_load_registers_in_inference_store_for_v1_models() {
 
     // The store should now contain a ModelInfo whose name is
     // the model_id returned by the provider.
-    let models = state.inner.store.inference_store.list_models();
+    let models = state.list_models().await.unwrap();
     assert!(
         models.values().any(|m| m.name == "test-model"),
         "post-load: expected `test-model` in inference_store; got {:?}",
@@ -462,12 +474,12 @@ async fn models_unload_drops_from_inference_store() {
         "bulk",
         std::path::Path::new("/m/qwen.gguf"),
         "Qwen3.5-9B.Q8_0",
-    );
+    )
+    .await;
     assert!(state
-        .inner
-        .store
-        .inference_store
         .list_models()
+        .await
+        .unwrap()
         .values()
         .any(|m| m.name == "Qwen3.5-9B.Q8_0"));
 
@@ -484,7 +496,7 @@ async fn models_unload_drops_from_inference_store() {
     let response = app.oneshot(req).await.unwrap();
     assert_eq!(response.status(), HttpStatus::OK);
 
-    let models = state.inner.store.inference_store.list_models();
+    let models = state.list_models().await.unwrap();
     assert!(
         !models.values().any(|m| m.name == "Qwen3.5-9B.Q8_0"),
         "post-unload: model_id should no longer be in store; got {:?}",

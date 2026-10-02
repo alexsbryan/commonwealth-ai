@@ -9,13 +9,17 @@ license.workspace = true
 [dependencies]
 # Zero-dep leaf: canonical Unix-epoch wall-clock helpers.
 sovereign-time = { workspace = true }
-# Atoms, atlas readers, investigation graph, the corpus chunk index — the
-# meshapp ops are projections over corpus-engine reads. No `treesitter`: these
-# ops touch atoms/prose, never the SCIP code graph.
-corpus-engine = { workspace = true }
+# Atoms + the atlas read (understanding-vocab), the investigation graph and
+# parcel analytics (the atlas reader leaf), the turn-header grammar (the
+# sections leaf) — the meshapp ops are projections over atlas reads, and none
+# of them links corpus-engine (fp-67).
+understanding-vocab = { workspace = true, features = ["read"] }
+corpus-engine-atlas-reader = { workspace = true }
+corpus-engine-sections = { workspace = true }
+# Chunk-index rows + CorpusIndex live in the read-port leaf.
+corpus-index = { workspace = true }
 # The explorer DTOs live in `sovereign_contracts::daemon_wire::meshapp`; this
-# crate re-exports them at their historical path. Already reachable through
-# corpus-engine, so no new layer edge.
+# crate re-exports them at their historical path.
 sovereign-contracts = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

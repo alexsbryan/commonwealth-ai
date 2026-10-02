@@ -17,8 +17,8 @@
 //!   detach from the parent's controlling terminal via `setsid()`,
 //!   and exit 0 once the child is up. The dual-PID-file write lets
 //!   `svrn stop` find the process from inside *or* outside the
-//!   project tree, and lets `svrn daemon` take over `:9741`
-//!   without guessing.
+//!   project tree. The daemon does not stop it: whichever of the two
+//!   binds `:9741` second refuses by name (pb-code-server).
 //!
 //! ## Why setsid()
 //!
@@ -300,23 +300,7 @@ fn process_alive(_pid: i32) -> bool {
 /// Same lookup shape as `crate::dev_bin::exec` but returns the
 /// `PathBuf` rather than execing.
 fn locate_dev_bin_for_spawn() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("SOVEREIGN_CLI_DEV_BIN") {
-        let path = PathBuf::from(p);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Ok(real) = std::fs::canonicalize(&exe) {
-            if let Some(dir) = real.parent() {
-                let cand = dir.join("sovereign-cli-dev");
-                if cand.is_file() {
-                    return Some(cand);
-                }
-            }
-        }
-    }
-    which::which("sovereign-cli-dev").ok()
+    sovereign_turn_client::reach::locate_sibling("sovereign-cli-dev", "SOVEREIGN_CLI_DEV_BIN")
 }
 
 /// Bool wrapper over `crate::dev_bin::exec("project-daemon-is-running",

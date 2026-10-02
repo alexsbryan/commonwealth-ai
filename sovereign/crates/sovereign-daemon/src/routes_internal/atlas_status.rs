@@ -30,18 +30,21 @@ pub struct AtlasStatusResponse {
 pub async fn atlas_status(
     State(state): State<AppState>,
 ) -> Result<Json<AtlasStatusResponse>, (StatusCode, Json<serde_json::Value>)> {
-    let engine = state.inner.node.corpus_engine.as_ref().ok_or_else(|| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({"error": "no corpus engine on this node"})),
-        )
-    })?;
+    let (engine, atlas) = match (&state.inner.node.corpus_engine, &state.inner.node.atlas) {
+        (Some(engine), Some(atlas)) => (engine, atlas),
+        _ => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "no corpus engine on this node"})),
+            ))
+        }
+    };
     let indexes_dir = engine.index_dir().to_path_buf();
     // Enrichment dir is the indexes-dir's sibling (data_dir layout).
     let enrichment_dir = indexes_dir
         .parent()
         .map(|p| p.join("enrichment"))
         .unwrap_or_else(|| std::path::PathBuf::from("./enrichment"));
-    let corpora = compute_atlas_status(&indexes_dir, &enrichment_dir);
+    let corpora = compute_atlas_status(atlas.as_ref(), &indexes_dir, &enrichment_dir);
     Ok(Json(AtlasStatusResponse { corpora }))
 }

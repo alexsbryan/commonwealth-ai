@@ -441,7 +441,7 @@ examples = ["t1"]
 
     #[test]
     fn shipped_bank_parses_and_is_balanced() {
-        let raw = include_str!("../../../router/archive_examples.toml");
+        let raw = include_str!("../data/router/archive_examples.toml");
         let parsed: ArchiveExamplesFile = toml::from_str(raw).expect("shipped bank parses");
         assert!(
             parsed.archive.examples.len() >= 15,
@@ -460,7 +460,7 @@ examples = ["t1"]
     /// hide the architectural problem (scope_examples.toml principle 1).
     #[test]
     fn shipped_bank_is_disjoint_from_evaluation_sets() {
-        let raw = include_str!("../../../router/archive_examples.toml");
+        let raw = include_str!("../data/router/archive_examples.toml");
         let texts = ConversationArchiveClassifier::exemplar_texts(raw).expect("parse");
         let held_out = [
             // cells_v1 metalingual row — the hard gate.

@@ -28,8 +28,8 @@
 //! the assembly root (`daemon`, `daemon_services`), the 21 route shells, the
 //! edge leaves (`local_only`, `loopback_guard`, `http_response`, `types`,
 //! `slot_manifest`), the MCP mount (`mcp_router`, `mcp_config_http`) and the
-//! four files carrying the daemon's `impl EmbeddedDaemon` (`media_reach`,
-//! `origin_fanout`, `roster_repair`, `venue_host`) — one strongly-connected
+//! files carrying the daemon's `impl EmbeddedDaemon` (`venue_host` remains;
+//! the media, fan-out and roster-repair copies left with the flip) — one strongly-connected
 //! component, so it moved in one commit (ralph/DECISIONS.md 2026-09-17).
 //! Its `jobs` family followed at `dm-daemon-mesh-jobs` and its two `adapters`
 //! (`newsworthy_host`, `work_atlas_broadcaster`) at `dm-daemon-mesh-adapters`
@@ -42,7 +42,6 @@
 
 pub mod admin_http;
 pub mod assets_http;
-pub mod atlas_builder;
 pub mod atlas_http;
 /// The auto-collaborate pull loop and its heartbeat verdict — ingest run as
 /// background work (DAEMON_CORE.md §3.2, `jobs`).
@@ -51,32 +50,64 @@ pub mod auto_resume;
 /// The composition half of `sovereign-cli-daemon`'s `daemon_cmd`
 /// (DAEMON_CORE.md §4.1 row 4), moved whole at domains
 /// `dm-daemon-cli-composition` (2026-09-17): the bootstrap phases, the
-/// build/preflight pair, the tool registry, the solve surface, the
-/// work-atlas wiring and the runtime-support leaves. `run_daemon` itself
-/// stays with the binary — it owns log rotation, the memory watchdog and
-/// the process exit code (DC §4 preamble), and calls these.
+/// build/preflight pair (preflight since moved on to sovereign-compute), the
+/// tool registry, the solve surface and the runtime-support leaves (the
+/// work-atlas wiring left for the code program at pb-code-daemon-exit).
+/// `run_daemon` followed at the `dm-daemon-assembled-bin` cut (2026-09-21) —
+/// it lives in [`daemon_cmd`] now, beside the leaves it owns (log
+/// rotation, the memory watchdog, the process exit code).
 ///
-/// `bootstrap` and `tool_registry` are gated on `treesitter`: the bootstrap
-/// mounts `project_http` and the registry registers `sovereign-tools`' code
-/// tools, both of which are behind that feature. The daemon binary enables it
-/// unconditionally.
+/// `bootstrap` and `tool_registry` are gated on `treesitter`, which the
+/// daemon binary enables unconditionally.
 #[cfg(feature = "treesitter")]
 pub mod bootstrap;
 pub mod build;
+/// The canonical-index pull client — svrn's member act of fetching a peer's
+/// canonical (HUMAN-fp7 (a)), unpacking it through ingest's port.
+pub mod canonical_pull;
+/// The notes-rail convergence recorder (`MeshConvergence`), moved from
+/// sovereign-mesh.
+pub mod convergence;
 pub mod corpus_catalog_http;
 pub mod corpus_maintenance;
 pub mod corpus_watch_http;
 pub mod daemon;
+/// The assembled-host process's run path (the `sovereign-daemon` bin's
+/// core, moved from `sovereign-cli-daemon/src/daemon_cmd/` at the
+/// `dm-daemon-assembled-bin` cut): `run_daemon`, `shutdown_daemon`,
+/// `vram-plan` and the runtime-support leaves (log rotation, the memory
+/// watchdog, the panic hook). `pub` because the bin links this crate as
+/// an external library — every other consumer is inside the crate.
+/// Gated with `bootstrap`/`tool_registry`, which `run_daemon` mounts.
+#[cfg(feature = "treesitter")]
+pub mod daemon_cmd;
 pub mod daemon_services;
-pub mod discovery_policy;
 pub mod documents_http;
+/// Test doubles for the records the daemon's seeds take (pb-serve-ranks-tests-stock).
+#[cfg(feature = "test-doubles")]
+pub mod double;
 pub mod enrich_http;
+/// Fabric's part of the node's state (DC §4.2), moved from sovereign-mesh
+/// (pb-mesh-exit-mesh): the daemon is its only holder.
+pub mod fabric;
 pub mod features_http;
-pub mod governance_http;
-pub mod guest_door;
-pub mod http_response;
 /// The `ingest:v1` `JobExecutor` — one corpus partition per unit
 /// (DAEMON_CORE.md §3.2, `jobs`).
+pub mod foreground_post;
+pub mod governance_http;
+pub mod granted_http;
+pub mod guest_door;
+pub mod guest_origin;
+/// The code program as a distribution composes it into this process
+/// (pb-code-daemon-exit): what svrn mounts, and its absence when alone.
+pub mod hosted_code;
+/// Ingest's ports as a distribution composes them into this process
+/// (pb-ingest-dial-tools-close), and their named absence when alone.
+pub mod hosted_ingest;
+/// The node's mesh as a distribution composes it into this process
+/// (pb-mesh-exit-transport): cw-rails' roster and reach, or their absence.
+pub mod hosted_mesh;
+pub mod http_response;
 pub mod ingest_executor;
 /// The daemon's insight surface (sv-surface rung 6): clip/list/search/delete
 /// over the `InsightService` the commissioning host built.
@@ -86,13 +117,15 @@ pub mod insight_http;
 pub mod job_registry;
 pub mod landscape_digest_http;
 pub mod lc_http;
+/// The typed ledger ports the daemon's store fields hold (moved from
+/// sovereign-mesh beside their `rails_client::ledger` implementation).
+pub mod ledger_port;
 pub mod listener_watch;
 pub mod local_only;
 pub mod loopback_guard;
 pub mod mcp_config_http;
 pub mod mcp_router;
 pub mod media_presence;
-pub mod media_reach;
 pub mod mesh_http;
 pub mod meshapp_http;
 /// `corpus-engine`'s `NewsworthyHost` implemented over the roster, the
@@ -101,31 +134,37 @@ pub mod meshapp_http;
 pub mod newsworthy_host;
 pub mod notes_http;
 pub mod ocr_install;
-pub mod origin_fanout;
+pub mod openai_http;
+pub mod peer_origin;
+/// svrn's posture, the distribution's choice of which of svrn's own surfaces
+/// it serves (phase-b-87).
+pub mod posture;
 pub mod principal;
 #[cfg(feature = "treesitter")]
-pub mod project_http;
+pub mod process;
 pub mod provider;
-pub mod publish_http;
+pub mod published_origins;
+/// The ring rail's listener — the client router's fourth, untrusted-loopback
+/// bind (moved from sovereign-mesh).
+pub mod rail_bind;
+/// The ring rail's port, moved from sovereign-mesh beside its one
+/// implementation, `rails_client::RailsRingRail` (pb-mesh-exit-mesh).
+pub mod rail_port;
+pub mod rails_client;
 pub mod reading_http;
 pub mod recipe_http;
 pub mod recipe_project_http;
 pub mod research_http;
-pub mod roster_repair;
-pub mod rpc_warm_http;
-/// The daemon's `SlotManifest` port implementation over `sovereign-core`'s
-/// bundled manifest; supplied to the serving host's inference adapter and
-/// self-manifest advertisement (domains REVIEW-build-serving-move-adapter).
-pub mod slot_manifest;
-pub mod solve_http;
-pub mod solve_tools;
+pub mod serve_client;
 pub mod startup;
-pub mod supervise;
+/// Moved whole to the host kit (phase-b pb-notes-memory): the code program's
+/// notes rail runs under it too. Reachable at its historical path.
+pub use host_kit::supervise;
 /// The panic-boundary supervisor every long-running watcher runs under
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod supervised_task;
-/// The `/mcp` tool registry. Gated with `bootstrap`: it registers
-/// `sovereign-tools`' code-intel tools, which are behind `treesitter`.
+/// svrn's `/mcp` tool registry; code's tools mount beside it from
+/// [`hosted_code`]. Gated with `bootstrap`.
 #[cfg(feature = "treesitter")]
 pub mod tool_registry;
 pub mod turn_extras_http;
@@ -136,14 +175,10 @@ pub mod venue_host;
 /// (DAEMON_CORE.md §3.2, `jobs`).
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
-pub mod watcher_supervisor;
-/// `sovereign-work-atlas`'s `ClaimBroadcaster` over the rail — the adapter
-/// that hurries a claim onto the ring (DAEMON_CORE.md §4.3, `adapters`).
-pub mod work_atlas_broadcaster;
-/// The `work` donor loop — the node's own lease-and-run half of the work
-/// plane (DAEMON_CORE.md §3.2, `jobs`).
-pub mod work_donor;
-pub mod worker;
+/// The `ingest:v1` execute origin cw-rails' donor forwards units to — the
+/// daemon's half of the work plane since the donor moved to cw-rails
+/// (pb-work-donor; DAEMON_CORE.md §3.2, `jobs`).
+pub mod work_origin;
 pub mod workflow_trigger;
 pub mod workspace;
 
@@ -156,6 +191,8 @@ pub mod workspace;
 // (the corpus-ceiling resolver from the cli-composition move), so the HTTP
 // edge resolver landed beside it as `client_principal`.
 pub mod admission;
+/// The keyed daemon: identity by on-prem API key, loopback granting nothing.
+pub mod api_keys;
 pub mod client_auth;
 /// The HTTP edge's one request-to-principal resolver. Named apart from
 /// [`principal`] because the daemon already had a module by that name; the
@@ -173,17 +210,13 @@ pub mod internal_principal;
 pub mod mesh_principal_gate;
 /// The test that keeps `x-mesh-proof` to one minter and one reader.
 pub mod mesh_proof_header_gate;
-/// The outbound half of the mesh proof: `AppState` → the one stamp.
-pub mod mesh_proof_outbound;
-pub mod middleware;
 pub mod reshaping;
-pub mod routes_apps;
 pub mod routes_completions;
-pub mod routes_edit_predictions;
 pub mod routes_guest_ask;
 pub mod routes_guest_session;
 pub mod routes_inference;
 pub mod routes_internal;
+pub mod routes_kinds;
 pub mod routes_knowledge;
 pub mod routes_oicp;
 pub mod routes_oicp_ingest;
@@ -198,27 +231,16 @@ pub mod yield_hook;
 
 // The shims sovereign-api's lib.rs carried, re-homed here so the moved
 // modules' `crate::<name>` paths keep resolving.
-pub use code_next_edit::next_edit;
-pub use code_next_edit::next_edit_journal;
-pub use code_next_edit::next_edit_model;
-pub use code_next_edit::next_edit_symbols;
-pub use code_next_edit::next_edit_syntax;
-pub use commonwealth_core::{Error, Result};
-pub use commonwealth_transport::fanout;
+pub use mesh_reach::fanout;
 pub use oicp_types::openai_types;
 pub use oicp_types::responses_types;
 pub use sovereign_core::answering::turn_fidelity;
-pub use sovereign_grants::auto_recover;
 
 // Re-exports the moved modules reached through the mesh crate root, so their
 // own `crate::` paths keep resolving here (the leaves live in the serving host
-// and the scheduler, not in this crate).
+// and `sovereign-contracts`, not in this crate).
 pub use sovereign_core::deep_research::research_run_dir;
 pub use sovereign_core::turn_approval;
-pub use sovereign_scheduler::slot_aliases;
-pub use sovereign_serving_host::inference_adapter;
-pub use sovereign_serving_host::model_fetch;
-pub use sovereign_serving_host::worker_eligibility;
 
 pub use daemon::{ClientListener, EmbeddedDaemon};
 pub use daemon_services::{

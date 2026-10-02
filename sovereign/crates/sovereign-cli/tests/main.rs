@@ -22,19 +22,25 @@
 mod aliases;
 #[path = "main/cli_contract_code.rs"]
 mod cli_contract_code;
-#[path = "main/cli_contract_docs.rs"]
-mod cli_contract_docs;
 #[path = "main/cli_contract_flags.rs"]
 mod cli_contract_flags;
-#[path = "main/cli_contract_journeys.rs"]
-mod cli_contract_journeys;
 #[path = "main/cli_journey_dispatch.rs"]
 mod cli_journey_dispatch;
+#[cfg(all(feature = "code-intel", feature = "dev-tools"))]
+#[path = "main/code_index_e2e.rs"]
+mod code_index_e2e;
 #[path = "main/default_build_gate.rs"]
 mod default_build_gate;
+// The work doors' end to end (pb-work-doors); `quality` and the work
+// vocabulary are dev-tools'.
+#[cfg(feature = "dev-tools")]
+#[path = "main/distribute_e2e.rs"]
+mod distribute_e2e;
 #[path = "main/phase3_serve_lifecycle.rs"]
 mod phase3_serve_lifecycle;
 #[path = "main/phase4_daemon_setup.rs"]
 mod phase4_daemon_setup;
 #[path = "main/phase6_retired_ceremony.rs"]
 mod phase6_retired_ceremony;
+#[path = "main/retired_verbs.rs"]
+mod retired_verbs;

@@ -59,35 +59,8 @@ impl SourceFileManifest {
     }
 }
 
-/// Per-file entry in a [`SourceFileManifest`].
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SourceFileRecord {
-    /// Zero-based position in the sorted HuggingFace parquet shard list.
-    pub file_index: usize,
-    /// Filename only, e.g. `"train-00021-of-00041.parquet"`.
-    pub filename: String,
-    /// Raw file size at download time; used to estimate storage requirements.
-    pub size_bytes: u64,
-    pub status: SourceFileStatus,
-}
-
-/// Lifecycle state of a single source file within the ingestion pipeline.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "state")]
-pub enum SourceFileStatus {
-    Pending,
-    InProgress {
-        started_at: DateTime<Utc>,
-    },
-    Complete {
-        /// Number of chunks written to the LanceDB index from this file.
-        chunks_indexed: u64,
-        completed_at: DateTime<Utc>,
-    },
-    Failed {
-        reason: String,
-    },
-}
+// The ingest port's vocabulary lives beside the port (pb-ingest-dial-daemon-ports).
+pub use corpus_index::ingest_port::daemon::{SourceFileRecord, SourceFileStatus};
 
 // ─── Reconstruction report ─────────────────────────────────────────────────
 
@@ -127,8 +100,6 @@ pub enum ReconstructionMethod {
 /// `corpus_engine::IngestProgress` path is unchanged.
 pub use sovereign_contracts::daemon_wire::IngestProgress;
 
-/// Thread-safe progress callback. Must be `Sync` because the engine's
-/// async pipeline holds an `&Option<ProgressCallback>` across `.await`
-/// points, which requires the callback itself to be safe to share by
-/// reference between tasks.
-pub type ProgressCallback = Box<dyn Fn(IngestProgress) + Send + Sync>;
+/// Thread-safe progress callback, defined beside ingest's ports in the
+/// `corpus-index` leaf so a caller that holds only a port can build one.
+pub use corpus_index::ingest_port::ProgressCallback; // shim: moved by pb-ingest-dial-tools

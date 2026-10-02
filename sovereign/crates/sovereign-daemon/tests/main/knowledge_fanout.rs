@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test for `/v1/knowledge/search` fan-out.
 //!
-//! Builds two `AppState`s: *Host* owns a tiny real `CorpusEngine`
+//! Builds two `AppState`s: *Host* owns ingest's port double
 //! with one chunk in a corpus called `"sep"`; *Joiner* has no corpora
 //! but gossip-knows Host exists and hosts `sep`. We spin a real
 //! `internal_router` for Host on an ephemeral port so the fan-out's
@@ -13,24 +13,28 @@
 //! back, and surfaces it with the `peer_name` field set to `"Host"` so
 //! the UI can render `sep (1) via Host`. Also exercises the
 //! resilience path — an offline peer must not tank the query.
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-use commonwealth_core::ids::{MeshId, NodeId};
-use commonwealth_core::knowledge::CorpusShardInfo;
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_state::MeshStore;
-use corpus_engine::index::{CorpusIndex, InsertChunk};
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_index::ingest_port::double::IngestPortDouble;
+use corpus_index::{
+    index::{CorpusIndex, InsertChunk},
+    types::EmbedFn,
+};
+use kernel_types::NodeId;
+use mesh_reach::PeerContact;
+use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+use oicp_types::knowledge::CorpusShardInfo;
+use sovereign_contracts::daemon_wire::mesh::MemberStatus;
+use sovereign_contracts::membership::MembershipEntry;
 use sovereign_daemon::server::{client_router, internal_router};
 use sovereign_daemon::state::AppState;
-use sovereign_meshapp_registry::registry::AppRegistry;
 use tower::ServiceExt;
+
+use crate::common::ledger_double::RecordingLedger;
 
 /// 8-dim zero vector — matches what mock-embed-backed indexes ship
 /// with throughout the corpus-engine test suite.
@@ -38,15 +42,14 @@ fn mock_embed_fn() -> EmbedFn {
     Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 8]) }))
 }
 
-/// Construct a CorpusEngine rooted in `dir` with a single installed
+/// Ingest's port double reading `dir` with a single installed
 /// corpus `corpus_id` holding `chunks`. Completes ingestion so
 /// `installed_indexes()` returns it.
 async fn make_engine_with_corpus(
     dir: &std::path::Path,
     corpus_id: &str,
     chunks: Vec<InsertChunk>,
-) -> Arc<CorpusEngine> {
-    let recipes = dir.join("recipes");
+) -> Arc<IngestPortDouble> {
     let indexes = dir.join("indexes");
     std::fs::create_dir_all(&indexes).unwrap();
 
@@ -74,10 +77,7 @@ async fn make_engine_with_corpus(
     // an hour.
     index.mark_ingestion_complete().unwrap();
 
-    Arc::new(
-        CorpusEngine::new(recipes, indexes, mock_embed_fn())
-            .with_embedding_model("qwen3-embedding-0.6b"),
-    )
+    Arc::new(crate::common::reading_double(indexes, mock_embed_fn()))
 }
 
 /// Start a real TCP internal_router for `state`. Returns the bound
@@ -87,8 +87,8 @@ async fn spawn_internal_router(state: AppState) -> SocketAddr {
     let addr = listener.local_addr().unwrap();
     let router = internal_router(state);
     tokio::spawn(async move {
-        // `into_make_service_with_connect_info` exactly as `server::serve`
-        // does: `internal_gate` reads a missing `ConnectInfo` as "not
+        // `into_make_service_with_connect_info` exactly as `start_daemon`'s
+        // internal listener does:`internal_gate` reads a missing `ConnectInfo` as "not
         // loopback" and refuses, so a bare `axum::serve` here would test a
         // listener production does not have.
         let _ = axum::serve(
@@ -102,105 +102,95 @@ async fn spawn_internal_router(state: AppState) -> SocketAddr {
     addr
 }
 
-/// Build a `MemberRecord` with the given id, name, status, address,
-/// and `hosted_corpora`. Everything else is zero/default.
+/// A roster row with the given id, name, status, address, and
+/// `hosted_corpora`. Everything else is zero/default.
 fn member(
     id: NodeId,
     name: &str,
-    status: NodeStatus,
+    status: MemberStatus,
     addr: SocketAddr,
     hosted: Vec<String>,
-) -> MemberRecord {
-    MemberRecord {
-        removed_at: None,
-        node_pubkey: None,
-        relay_url: None,
-        iroh_direct_addrs: Vec::new(),
-        dial_info_version: 0,
-        dial_info_sig: None,
-        node_id: id,
-        name: name.into(),
-        invited_by: id,
-        joined_at: 0,
-        last_seen: 1_000,
-        status,
-        capabilities: NodeCapabilities {
-            hardware: HardwareProfile {
-                gpus: vec![],
-                system_ram_gb: 0,
-                cpu_cores: 0,
-                total_storage_gb: 0,
-                free_storage_gb: 0,
-                network_bandwidth_mbps: None,
-            },
-            available: AvailableResources::default(),
-            active_processes: vec![],
-            hosted_corpora: hosted
-                .into_iter()
-                .map(|corpus_id| CorpusShardInfo {
-                    corpus_id,
-                    chunk_range: None,
-                    is_replica: false,
-                    last_updated: 1_000,
-                    chunk_count: 0,
-                    canonical_fingerprint: None,
-                    total_shards: None,
-                    processed_shards: vec![],
-                    atlas_atom_count: 0,
-                    atlas_tier2_count: 0,
-                    atlas_fingerprint: None,
-                })
-                .collect(),
-            reported_at: 1_000,
-            inference_availability: 1.0,
-            inference_capable: false,
-            loaded_models: vec![],
-            origins: Vec::new(),
-            media_allow: Vec::new(),
-            media_available: None,
+) -> MembershipEntry<PeerContact> {
+    let mut row = crate::common::peer_row(id, name, status, caps(hosted), vec![addr]);
+    row.last_seen = 1_000;
+    row
+}
 
-            embed_model: None,
-            benchmark: None,
-            current_in_flight: None,
-            anchor: None,
+fn caps(hosted: Vec<String>) -> NodeCapabilities {
+    NodeCapabilities {
+        hardware: HardwareProfile {
+            gpus: vec![],
+            system_ram_gb: 0,
+            cpu_cores: 0,
+            total_storage_gb: 0,
+            free_storage_gb: 0,
+            network_bandwidth_mbps: None,
         },
-        addresses: vec![addr],
+        available: AvailableResources::default(),
+        active_processes: vec![],
+        hosted_corpora: hosted
+            .into_iter()
+            .map(|corpus_id| CorpusShardInfo {
+                corpus_id,
+                chunk_range: None,
+                is_replica: false,
+                last_updated: 1_000,
+                chunk_count: 0,
+                canonical_fingerprint: None,
+                total_shards: None,
+                processed_shards: vec![],
+                atlas_atom_count: 0,
+                atlas_tier2_count: 0,
+                atlas_fingerprint: None,
+            })
+            .collect(),
+        reported_at: 1_000,
+        inference_availability: 1.0,
+        inference_capable: false,
+        loaded_models: vec![],
+        origins: Vec::new(),
+        media_allow: Vec::new(),
+        media_available: None,
+
+        embed_model: None,
+        benchmark: None,
+        current_in_flight: None,
+        anchor: None,
+        storage_remaining_bytes: None,
     }
 }
 
 /// Build an `AppState` around `node_id`, optionally attached to a
-/// `CorpusEngine` and populated with a two-member `Mesh` that
-/// includes `peer` as an online member with `hosted_corpora`.
-fn make_state(node_id: NodeId, peer: MemberRecord, engine: Option<Arc<CorpusEngine>>) -> AppState {
-    let mesh_id = MeshId::from_u128(42);
-    let hash = [7u8; 32];
+/// port double, whose roster (cw-rails', through the port) holds self and
+/// `peer` as an online member with `hosted_corpora`.
+fn make_state(
+    node_id: NodeId,
+    peer: MembershipEntry<PeerContact>,
+    engine: Option<Arc<IngestPortDouble>>,
+) -> AppState {
     // Include self — otherwise the fan-out logic can't tell which
     // member is "us" and which are peers.
     let self_record = member(
         node_id,
         "Self",
-        NodeStatus::Online,
+        MemberStatus::Online,
         "127.0.0.1:0".parse().unwrap(),
         vec![],
     );
-    let mut members = HashMap::new();
-    members.insert(node_id, self_record);
-    members.insert(peer.node_id, peer);
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: mesh_id,
-        name: "Test".into(),
-        invite_key_hash: hash,
-        invite_version: 0,
-        require_encryption: false,
-        members,
-        peers: vec![],
+    let fabric = sovereign_daemon::state::FabricSeed {
+        peer_transport: sovereign_daemon::double::address_transport(),
+        membership: Some(crate::common::roster("Test", vec![self_record, peer])),
+        ..Default::default()
     };
-
-    let mesh_store = Arc::new(MeshStore::in_memory().unwrap());
-    let app_registry = Arc::new(AppRegistry::new());
-    AppState::new_with_platform_and_engine(node_id, mesh, mesh_store, app_registry, engine)
+    AppState::new_with_seeds(
+        node_id,
+        engine.map(|e| e as Arc<dyn corpus_index::ingest_port::daemon::IngestPort>),
+        None,
+        fabric,
+        Default::default(),
+        Default::default(),
+        Arc::new(RecordingLedger::new(node_id)).seed(),
+    )
 }
 
 /// Issue a `/v1/knowledge/search` POST against `state` via
@@ -260,7 +250,7 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
     let host_joiner_peer = member(
         NodeId::from_u128(200),
         "Joiner",
-        NodeStatus::Online,
+        MemberStatus::Online,
         "127.0.0.1:1".parse().unwrap(),
         vec![],
     );
@@ -272,7 +262,7 @@ async fn fanout_fetches_sep_chunk_from_peer_with_attribution() {
     let host_in_joiner_view = member(
         host_id,
         "mac-peer",
-        NodeStatus::Online,
+        MemberStatus::Online,
         host_addr,
         vec!["sep".into()],
     );
@@ -327,7 +317,7 @@ async fn fanout_survives_offline_peer() {
     let dead_peer = member(
         NodeId::from_u128(301),
         "ZombieFounder",
-        NodeStatus::Online,
+        MemberStatus::Online,
         dead_addr,
         vec!["sep".into()],
     );
@@ -381,7 +371,7 @@ async fn a_named_corpus_nobody_hosts_is_reported_unavailable_not_empty() {
     let peer = member(
         NodeId::from_u128(401),
         "SharesNothing",
-        NodeStatus::Online,
+        MemberStatus::Online,
         "127.0.0.1:1".parse().unwrap(),
         vec![],
     );
@@ -423,7 +413,7 @@ async fn an_unconstrained_search_reports_nothing_unavailable() {
     let peer = member(
         NodeId::from_u128(501),
         "SharesNothing",
-        NodeStatus::Online,
+        MemberStatus::Online,
         "127.0.0.1:1".parse().unwrap(),
         vec![],
     );

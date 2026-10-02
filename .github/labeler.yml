@@ -17,9 +17,7 @@
 
 "area: mesh":
   - changed-files:
-      - any-glob-to-any-file:
-          - "commonwealth/**"
-          - "sovereign/crates/sovereign-mesh/**"
+      - any-glob-to-any-file: "commonwealth/**"
 
 "area: desktop":
   - changed-files:

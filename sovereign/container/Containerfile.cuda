@@ -92,10 +92,12 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ARG CUDA_ARCHITECTURES="80;86;89;90"
 ENV CUDA_PATH=/usr/local/cuda
 ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
-# Git short-SHA stamp for sovereign-mesh's build.rs (`.git` is not in
-# the build context). The daemon logs it at startup, so a pod running a
-# stale image self-identifies instead of masquerading as a fresh bug
-# (2026-05-16 incident). Pass: --build-arg GIT_SHA=$(git rev-parse --short HEAD)
+# Git short-SHA stamp read by `sovereign-pods`'s worker daemon (`.git` is not
+# in the build context, and the crate no longer carries a build.rs to shell
+# git). It logs it at startup, so a pod running a stale image self-identifies
+# instead of masquerading as a fresh bug (2026-05-16 incident). Absent, the log
+# says `git_sha=unset-at-build` rather than inventing one.
+# Pass: --build-arg GIT_SHA=$(git rev-parse --short HEAD)
 ARG GIT_SHA=unknown
 ENV SOVEREIGN_GIT_SHA=${GIT_SHA}
 # Link-time discovery of `libcuda.so` (the CUDA driver stub). The
@@ -210,11 +212,11 @@ COPY sovereign-recipes/      ./sovereign-recipes/
 # members all live under crates/, but a few sovereign-rooted files are
 # pulled in via `include_str!` at compile time and must be present:
 #   - sovereign/models.toml              → sovereign-core::models_manifest
-#   - sovereign/contrib/{launchd,systemd}/ → sovereign-cli::service_install
 #   - sovereign/.opencode/               → sovereign-cli::doctor_cmd
+# The service templates moved into sovereign-service/data/ (2026-09-21) and
+# ride along in the crates/ copy — no separate COPY.
 COPY sovereign/models.toml ./sovereign/models.toml
 COPY sovereign/crates/    ./sovereign/crates/
-COPY sovereign/contrib/   ./sovereign/contrib/
 COPY sovereign/.opencode/ ./sovereign/.opencode/
 # sovereign-core include_str!s the router exemplar TOMLs + embed cache.
 COPY sovereign/router/    ./sovereign/router/
@@ -334,10 +336,12 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
     --mount=type=cache,target=/workspace/target \
     rm -rf /workspace/target/release/build/llama-cpp-sys-4-*/out/llama.cpp \
- && cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-cli-llm \
+ && cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-cli-llm --bin sovereign-stock --bin sovereign-pod-worker \
  && cp /workspace/target/release/sovereign-cli        /usr/local/bin/sovereign-cli \
  && cp /workspace/target/release/sovereign-cli-daemon /usr/local/bin/sovereign-cli-daemon \
  && cp /workspace/target/release/sovereign-cli-llm    /usr/local/bin/sovereign-cli-llm \
+ && cp /workspace/target/release/sovereign-stock      /usr/local/bin/sovereign-stock \
+ && cp /workspace/target/release/sovereign-pod-worker /usr/local/bin/sovereign-pod-worker \
  && sccache --show-stats
 
 # ─── CUDA preflight binary ───────────────────────────────────────────
@@ -424,6 +428,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=build /usr/local/bin/sovereign-cli        /usr/local/bin/sovereign-cli
 COPY --from=build /usr/local/bin/sovereign-cli-daemon /usr/local/bin/sovereign-cli-daemon
 COPY --from=build /usr/local/bin/sovereign-cli-llm    /usr/local/bin/sovereign-cli-llm
+# `daemon run` execs sovereign-stock and `daemon run --worker-mode` execs
+# sovereign-pod-worker (pb-pods-worker).
+COPY --from=build /usr/local/bin/sovereign-stock      /usr/local/bin/sovereign-stock
+COPY --from=build /usr/local/bin/sovereign-pod-worker /usr/local/bin/sovereign-pod-worker
 COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
 # NOTE: no llama.cpp shared-lib copy here anymore. The vendored
 # llama-cpp-4 dropped `dynamic-link` from its default features

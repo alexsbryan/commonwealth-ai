@@ -22,18 +22,18 @@
 //! with the same model, so `embedding_dimensions` is consistent
 //! across the installation.
 
-use sovereign_cli_shared::dirs::sovereign_root;
+use sovereign_cli_base::dirs::sovereign_root;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Run a `code` subcommand. Returns the exit code.
 pub async fn run_code(args: &[String]) -> i32 {
     if args.is_empty() {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
 
@@ -46,9 +46,12 @@ pub async fn run_code(args: &[String]) -> i32 {
     }
 
     match args[0].as_str() {
-        "index" => sovereign_cli_shared::code_index::cmd_index(&args[1..]).await,
+        "index" => crate::code_index::cmd_index(&args[1..]).await,
         "finalize" => cmd_finalize(&args[1..]).await,
         "watch" => cmd_watch(&args[1..]).await,
+        // The code server; `svrn serve` and `svrn project serve` are its
+        // other spellings (phase-b pb-code-server).
+        "mcp" => crate::project_cmd::cmd_serve(&args[1..]).await,
         "mcp-status" => cmd_mcp_status(&args[1..]).await,
         "search" => cmd_search(&args[1..]).await,
         "brief" => cmd_brief(&args[1..]).await,
@@ -67,7 +70,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "wire-check" => crate::refactor_wire::run(&args[1..]).await,
         other => {
             eprintln!("Unknown code subcommand: {other}");
-            sovereign_cli_shared::help::print(&HELP);
+            sovereign_cli_base::help::print(&HELP);
             1
         }
     }
@@ -89,35 +92,17 @@ async fn cmd_finalize(args: &[String]) -> i32 {
         );
         return if args.is_empty() { 1 } else { 0 };
     }
-    let corpus_id = args[0].clone();
-    let root = sovereign_root();
-    let data_dir = root.join("indexes");
-    let recipes_dir = root.join("recipes");
-
-    // `finalise_solo_ingest` only inspects the filesystem — no embed
-    // calls. A noop EmbedFn keeps the engine constructable without
-    // booting the daemon.
-    let noop_embed: corpus_engine::EmbedFn =
-        Arc::new(|_text: &str| Box::pin(async move { Ok(vec![0.0_f32; 1]) }));
-    let engine = corpus_engine::CorpusEngine::new(recipes_dir, data_dir, noop_embed);
-    match engine.finalise_solo_ingest(&corpus_id) {
-        Ok(true) => {
-            eprintln!("Promoted {corpus_id}-partition-local/ → {corpus_id}/");
-            0
-        }
-        Ok(false) => {
-            eprintln!(
-                "Nothing to do for '{corpus_id}': either no partition-local dir, \
-                 a peer partition is present (use `coordinate_merge`), or canonical \
-                 Lance is already finalized."
-            );
-            0
-        }
-        Err(e) => {
-            eprintln!("finalize failed: {e}");
-            1
-        }
-    }
+    // The promotion is an ingest act: ingest's CLI runs it (code F1 (a)).
+    let data_dir = sovereign_root().join("indexes");
+    crate::code_index::exec_ingest(
+        "finalize",
+        &[
+            args[0].clone(),
+            "--index-dir".to_string(),
+            data_dir.display().to_string(),
+        ],
+    )
+    .await
 }
 
 // ─── facts ────────────────────────────────────────────────────
@@ -506,7 +491,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
 
     let fuzzy = fuzzy_path.as_deref().map(load_fuzzy).unwrap_or_default();
 
-    let cfg = match sovereign_core::setup_config::SetupConfig::load() {
+    let cfg = match sovereign_contracts::setup_config::SetupConfig::load() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("check-spec: read config: {e}");
@@ -515,7 +500,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
     };
     let port = cfg.daemon.client_port;
     let chat_model = cfg.primary_model_stem().unwrap_or_default().to_string();
-    let (embed, _) = match sovereign_cli_shared::code_index::build_daemon_embed_fn().await {
+    let (embed, _) = match crate::code_index::node_embedder().await {
         Ok(e) => e,
         Err(e) => {
             eprintln!("check-spec: {e}");
@@ -610,7 +595,7 @@ async fn cmd_reflect(args: &[String]) -> i32 {
         args.first().map(String::as_str),
         Some("--help" | "-h" | "help")
     ) {
-        sovereign_cli_shared::help::print(&REFLECT_HELP);
+        sovereign_cli_base::help::print(&REFLECT_HELP);
         return 0;
     }
 
@@ -690,7 +675,7 @@ async fn cmd_reflect(args: &[String]) -> i32 {
     };
 
     // ── Open NoteStore + write ───────────────────────────────
-    let notes_path = sovereign_root().join("notes.db");
+    let notes_path = crate::notes_db::find_notes_db(None);
     let notes = match corpus_engine_notes::NoteStore::open(&notes_path) {
         Ok(n) => n,
         Err(e) => {
@@ -795,15 +780,15 @@ fn git_recent_commit_files(repo_root: &Path, hours: u64) -> Vec<String> {
     set.into_iter().collect()
 }
 
-const REFLECT_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const REFLECT_HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn code reflect",
     summary: "Write a session-end reflection note describing what changed during the session.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn code reflect [--hours N] [--repo-root <path>] [--feature-id <id>] \
              [--content <text>] [--quiet]",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             (
                 "--hours N",
                 "How far back to scan for recent commits. Default 4.",
@@ -814,7 +799,7 @@ const REFLECT_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
             ),
             (
                 "--feature-id <id>",
-                "Scope the reflection to this ATOS feature. Mirrors SOVEREIGN_FEATURE_ID.",
+                "Scope the reflection to this feature. Mirrors SOVEREIGN_FEATURE_ID.",
             ),
             (
                 "--content <text>",
@@ -822,7 +807,7 @@ const REFLECT_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
             ),
             ("--quiet", "Suppress info output (used by hooks)."),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Writes a `reflection` kind note to ~/.svrnmesh/notes.db via \
              NoteStore::write_reflection_scoped. The next session's brief queries \
              reflection alongside decision/invariant so this surfaces automatically. \
@@ -839,14 +824,14 @@ const REFLECT_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
 // and as the offline fallback when the daemon isn't reachable.
 
 async fn cmd_brief(args: &[String]) -> i32 {
-    use sovereign_tools::code::brief::{assemble_brief, BriefInputs};
-    use sovereign_tools::code::working_set::{detect_working_set, Strategy};
+    use sovereign_code::brief::{assemble_brief, BriefInputs};
+    use sovereign_code::working_set::{detect_working_set, Strategy};
 
     if matches!(
         args.first().map(String::as_str),
         Some("--help" | "-h" | "help")
     ) {
-        sovereign_cli_shared::help::print(&BRIEF_HELP);
+        sovereign_cli_base::help::print(&BRIEF_HELP);
         return 0;
     }
 
@@ -945,7 +930,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
     };
 
     // ── Notes store ───────────────────────────────────────────
-    let notes_path = sovereign_root().join("notes.db");
+    let notes_path = crate::notes_db::find_notes_db(None);
     let notes = match corpus_engine_notes::NoteStore::open(&notes_path) {
         Ok(n) => n,
         Err(e) => {
@@ -1008,9 +993,11 @@ async fn cmd_brief(args: &[String]) -> i32 {
 
     // ── Work in flight (best-effort) ──────────────────────────
     // Peer claims + edit observations overlapping the working set,
-    // read from the same mesh.db the daemon writes. Any failure
-    // (no daemon ever ran here, fresh checkout) degrades to an
-    // empty section — the brief must not fail on coordination
+    // read over the daemon's `/mcp` `work_in_flight` tool — the
+    // daemon's atlas store is the one peers, gossip, and
+    // CodeWatcher share (fp-33: there is no repo-local mesh.db to
+    // read). Any failure (daemon down, fresh install) degrades to
+    // an empty section — the brief must not fail on coordination
     // signals being unavailable.
     let work_in_flight = collect_brief_overlaps(&repo_root, &working_set).await;
 
@@ -1115,7 +1102,7 @@ fn resolve_cwd_repo_root() -> Result<PathBuf, String> {
 // Re-export from `sovereign-cli-shared::repo` so `daemon_cmd` and other
 // in-crate callers keep working through the existing `code_cmd::current_branch`
 // path. The new home is the canonical spot.
-pub(crate) use sovereign_cli_shared::repo::current_branch;
+pub(crate) use sovereign_cli_base::repo::current_branch;
 
 // ─── capability-map ───────────────────────────────────────────
 // Derive a clustered "what does this codebase do" map from the SCIP call graph.
@@ -1283,16 +1270,16 @@ async fn cmd_capability_map(args: &[String]) -> i32 {
     0
 }
 
-const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const BRIEF_HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn code brief",
     summary: "Assemble a working-set brief (markdown) for the current session.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn code brief [--strategy {branch|recent|explicit}] [--hours N] \
              [--budget N] [--repo-root <path>] [--atlas-id <id>] [--feature-id <id>] \
              [--output <md>] [--file <path>]...",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             (
                 "--strategy",
                 "branch (default; diff vs default branch), recent (last N hours), or explicit",
@@ -1311,7 +1298,7 @@ const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
             ),
             (
                 "--feature-id <id>",
-                "ATOS feature id, used to scope notes. Mirrors SOVEREIGN_FEATURE_ID env var.",
+                "Feature id, used to scope notes. Mirrors SOVEREIGN_FEATURE_ID env var.",
             ),
             ("--output <md>", "Write to this path instead of stdout."),
             (
@@ -1319,7 +1306,7 @@ const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
                 "(For --strategy explicit) Add a file to the working set. Repeat for multiple.",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Reads notes from ~/.svrnmesh/notes.db. Reads atoms + archaeology sidecar from \
              ~/.svrnmesh/indexes/<id>-self-atlas/atlas/ when --atlas-id is given. Walks git \
              history for the recent-activity section.",
@@ -1327,12 +1314,12 @@ const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
     ],
 };
 
-const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn code",
     summary: "Code intelligence tooling: index a repository, watch for changes, check MCP.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn code <subcommand> [args]"),
-        sovereign_cli_shared::help::HelpSection::Subcommands(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn code <subcommand> [args]"),
+        sovereign_cli_base::help::HelpSection::Subcommands(&[
             (
                 "index <path>",
                 "Index a local repository with tree-sitter — incremental by default, --full to rebuild",
@@ -1344,6 +1331,10 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             (
                 "watch <corpus-id>",
                 "Run a filesystem watcher that re-indexes on save",
+            ),
+            (
+                "mcp",
+                "Serve code intelligence over MCP on :9741 — no model, no daemon (also `svrn serve`)",
             ),
             (
                 "mcp-status",
@@ -1416,7 +1407,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
                 "Record a session reflection note (branch + diff + recent commits) to notes.db",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "`index` and `watch` take --corpus-id <id>, --data-dir <dir>, --root <path>.\n\
              `index` refreshes INCREMENTALLY when the corpus already exists and the root is a\n\
              git repo — only files changed since the last run are re-embedded. --full forces a\n\
@@ -1475,7 +1466,7 @@ async fn cmd_watch(args: &[String]) -> i32 {
     };
 
     let data_dir = data_dir
-        .or_else(sovereign_cli_shared::dirs::default_data_dir)
+        .or_else(sovereign_cli_base::dirs::default_data_dir)
         .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
 
     // Open the index to discover the source_path unless the caller
@@ -1491,7 +1482,7 @@ async fn cmd_watch(args: &[String]) -> i32 {
         return 1;
     }
 
-    let index = match corpus_engine::CorpusIndex::open(&index_path).await {
+    let index = match corpus_index::index::CorpusIndex::open(&index_path).await {
         Ok(i) => i,
         Err(e) => {
             eprintln!("error: cannot open index: {e}");
@@ -1520,71 +1511,28 @@ async fn cmd_watch(args: &[String]) -> i32 {
         );
         return 1;
     }
-    drop(index); // Watcher owns its own CorpusIndex handle via the engine.
+    drop(index);
 
-    // The watcher WRITES: every debounced file event runs `reindex_file`,
-    // which embeds the changed chunks and inserts them. So it needs the real
-    // embedder, exactly as `code index` does.
-    //
-    // This used to install a stub `EmbedFn` returning `vec![0.0; DEFAULT_EMBED_DIM]`.
-    // That silently poisoned the corpus: cosine similarity against a zero
-    // vector is meaningless, so semantic search quietly died for precisely the
-    // files being actively edited — the ones most likely to be searched. There
-    // was no error and no warning; the corpus just got worse the longer the
-    // watcher ran. `rebuild_code_corpus` already refuses to run rather than
-    // fall back to zero vectors; this path now holds the same line.
-    let (embed, embed_model_name) =
-        match sovereign_cli_shared::code_index::build_daemon_embed_fn().await {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("error: {e}");
-                eprintln!(
-                    "\n`svrn code watch` embeds every changed chunk through the daemon so the \
-                 watcher's writes land in the same embedding space as the rest of the corpus. \
-                 Start it with `svrn daemon run` and re-run — the watcher will not run with a \
-                 stub embedder, because that would silently degrade the index it is meant to \
-                 keep current."
-                );
-                return 1;
-            }
-        };
-    let recipes_dir = data_dir.clone(); // unused placeholder — engine requires one
-    let engine = Arc::new(
-        corpus_engine::CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
-            .with_embedding_model(&embed_model_name),
-    );
-
-    eprintln!("Watching {} for corpus '{corpus_id}'", root.display());
-    eprintln!("Embedding via the daemon ({embed_model_name}).");
-    eprintln!("Press Ctrl-C to stop.");
-
-    let watcher = corpus_engine::update::watch::CodeWatcher::new(
-        Arc::clone(&engine),
-        corpus_id.clone(),
-        root.clone(),
-    );
-
-    let handle = match watcher.start().await {
-        Ok(h) => h,
+    // The watcher WRITES (every debounced file event embeds and inserts the
+    // changed chunks), and writing is ingest's: ingest's CLI runs the
+    // watcher with the embedder `code index` gets, and refuses rather than
+    // fall back to zero vectors (code F1 (a)).
+    let mut ingest_args = vec![
+        "--index-dir".to_string(),
+        data_dir.display().to_string(),
+        "--corpus".to_string(),
+        corpus_id,
+        "--root".to_string(),
+        root.display().to_string(),
+    ];
+    match crate::code_index::embedder_args(false) {
+        Ok(more) => ingest_args.extend(more),
         Err(e) => {
-            eprintln!("error: failed to start watcher: {e}");
+            eprintln!("error: {e}");
             return 1;
         }
-    };
-
-    // Keep the process alive until Ctrl-C. The watcher handle aborts
-    // its background task on drop.
-    match tokio::signal::ctrl_c().await {
-        Ok(()) => {
-            eprintln!("\nShutting down watcher...");
-            handle.abort();
-            0
-        }
-        Err(e) => {
-            eprintln!("error: failed to install ctrl-c handler: {e}");
-            1
-        }
     }
+    crate::code_index::exec_ingest("watch", &ingest_args).await
 }
 
 // ─── mcp-status (P4) ──────────────────────────────────────────
@@ -1743,14 +1691,14 @@ async fn cmd_search(args: &[String]) -> i32 {
 /// `work_in_flight` tool. One prefix query on the absolute repo root
 /// catches all observations (stored absolute) and absolute-scoped
 /// claims; observations are then filtered to working-set membership
-/// client-side. Falls back to the repo-local `.sovereign/mesh.db`
-/// (which only ever holds CLI-written claims) and finally to an
+/// client-side. Falls back to the cw-rails-DIALED store (`mesh_kv_client`,
+/// pb-atlas-kv — there is no repo-local mesh.db) and finally to an
 /// empty section — the brief must never fail on coordination
 /// signals being unavailable.
 async fn collect_brief_overlaps(
     repo_root: &Path,
     working_set: &[PathBuf],
-) -> Vec<sovereign_tools::code::brief::WorkInFlightEntry> {
+) -> Vec<sovereign_code::brief::WorkInFlightEntry> {
     if let Some(entries) = daemon_brief_overlaps(repo_root, working_set).await {
         return entries;
     }
@@ -1765,7 +1713,7 @@ async fn collect_brief_overlaps(
 async fn daemon_brief_overlaps(
     repo_root: &Path,
     working_set: &[PathBuf],
-) -> Option<Vec<sovereign_tools::code::brief::WorkInFlightEntry>> {
+) -> Option<Vec<sovereign_code::brief::WorkInFlightEntry>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()
@@ -1782,12 +1730,25 @@ async fn daemon_brief_overlaps(
             }
         }
     });
-    let resp = client
+    let resp = match client
         .post("http://localhost:9741/mcp/message")
         .json(&body)
         .send()
         .await
-        .ok()?;
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            // The absence is NAMED here, not downstream: `None` reads as
+            // "fall through to the (empty) dialed store", and without this
+            // line a daemon-down brief shows an empty Work-in-flight
+            // section with no word of why.
+            eprintln!(
+                "warning: daemon unreachable — the brief's work-in-flight section is \
+                 empty; start the daemon to see live signals ({e})"
+            );
+            return None;
+        }
+    };
     if !resp.status().is_success() {
         return None;
     }
@@ -1799,7 +1760,7 @@ async fn daemon_brief_overlaps(
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    let mut acc = sovereign_tools::OverlapAccumulator::new(repo_root);
+    let mut acc = sovereign_code::OverlapAccumulator::new(repo_root);
     for c in payload["claims"].as_array()? {
         // Claims are repo-scoped signals; a live claim anywhere in
         // the repo is orientation-relevant, so no working-set filter.
@@ -1821,26 +1782,17 @@ async fn daemon_brief_overlaps(
     Some(acc.finish())
 }
 
-/// Fallback when the daemon is down: the repo-local `.sovereign/mesh.db`.
-/// Only ever holds claims written by CLI tool invocations on this
-/// machine — the daemon's live atlas is in-memory and unreachable
-/// here — but stale-claim visibility beats nothing.
+/// Fallback when the daemon is down. Since fp-33 there is no repo-local
+/// `mesh.db` to read — the store is cw-rails', dialed — so an
+/// unreachable cw-rails simply yields no overlaps; the daemon-first
+/// attempt upstream has already said so by name. Stale-claim
+/// visibility beats nothing only when the store is reachable.
 fn local_brief_overlaps(
     repo_root: &Path,
     working_set: &[PathBuf],
-) -> Vec<sovereign_tools::code::brief::WorkInFlightEntry> {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let Some(sovereign_dir) = sovereign_cli_shared::repo::find_sovereign_dir(&cwd) else {
-        return Vec::new();
-    };
-    let mesh_db = sovereign_dir.join("mesh.db");
-    if !mesh_db.exists() {
-        return Vec::new();
-    }
-    let Ok(mesh_store) = sovereign_mesh::peer_adapter::MeshReplicatedKv::open(&mesh_db) else {
-        return Vec::new();
-    };
+) -> Vec<sovereign_code::brief::WorkInFlightEntry> {
+    let mesh_store = crate::mesh_kv_client::atlas_kv();
     let node_id = crate::atlas_identity::atlas_node_id();
     let store = sovereign_work_atlas::WorkAtlasStore::new(Arc::new(mesh_store), node_id);
-    sovereign_tools::overlaps_for_working_set(&store, repo_root, working_set, None)
+    sovereign_code::overlaps_for_working_set(&store, repo_root, working_set, None)
 }

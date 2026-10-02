@@ -79,7 +79,7 @@ echo "$WORKSPACE_DIR" > "${SVRN_ROOT}/workspace"
 echo "✓ Daemon workspace pointer wired: ${SVRN_ROOT}/workspace → ${WORKSPACE_DIR}"
 
 # ── Adapter check ─────────────────────────────────────────────────────────
-ADAPTER_DIR="${WORKSPACE_DIR}/sovereign/crates/sovereign-tools/src/code/test_adapters"
+ADAPTER_DIR="${WORKSPACE_DIR}/sovereign/crates/sovereign-code/src/test_adapters"
 for adapter in sovereign-cargo-test-adapter sovereign-cargo-check-adapter \
                sovereign-nextest-junit-adapter; do
     if [[ ! -x "${ADAPTER_DIR}/${adapter}" ]]; then

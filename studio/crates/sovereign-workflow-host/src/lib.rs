@@ -132,11 +132,11 @@ pub fn first_comment_line(toml: &str) -> String {
 // does the daemon actually answer with it" (ARCH §10.6), shared with
 // `svrn corpus search`, `svrn recipe test --enrich` and `svrn chat`.
 
-pub mod daemon_models;
 pub use daemon_models::{
     discover_models, embed_candidate, looks_like_embed_model, resolve_embed_model,
     resolve_embed_model_with, DaemonModels, EmbedSource, ResolvedEmbedModel,
 };
+pub use oicp_client::daemon_models;
 
 /// Whether any step needs daemon-routed inference (so the daemon provider is
 /// assembled). Classifies via the typed `StepKind::resources()` — the exhaustive

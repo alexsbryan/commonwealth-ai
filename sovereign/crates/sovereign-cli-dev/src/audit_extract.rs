@@ -9,7 +9,7 @@
 //! 4. Otherwise: builds `git diff <last>..<current>`, feeds it to the
 //!    [`DiffDecisionExtractor`] with the supplied
 //!    [`DecisionExtractorBackend`] (production:
-//!    [`LocalLlmBackend`](sovereign_tools::notes::diff_extract_backend::LocalLlmBackend);
+//!    [`LocalLlmBackend`](corpus_engine_notes::mining::diff_extract_backend::LocalLlmBackend);
 //!    tests: stub), persists the resulting decisions as
 //!    `source='extracted'` notes, and advances
 //!    `last_extracted_head` to the current head.
@@ -40,13 +40,13 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
-use serde::{Deserialize, Serialize};
-use sovereign_tools::notes::diff_extract::{
+use corpus_engine_notes::mining::diff_extract::{
     DecisionExtraction, DecisionExtractorBackend, DiffDecisionExtractor, ExtractionRequest,
     MAX_DIFF_INPUT_BYTES,
 };
-use sovereign_tools::notes::diff_extract_backend::{LocalLlmBackend, LocalLlmConfig};
+use corpus_engine_notes::mining::diff_extract_backend::{LocalLlmBackend, LocalLlmConfig};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+use serde::{Deserialize, Serialize};
 
 /// Path of the audit state file inside the project's
 /// `.sovereign/` directory.
@@ -338,7 +338,7 @@ pub async fn run(
 /// committed / observed / inferred-via-recover) keep the floor
 /// non-empty even when this skips.
 pub async fn run_with_default_backend(repo_root: &Path, notes: &NoteStore) -> ExtractRunSummary {
-    let setup = match sovereign_core::setup_config::SetupConfig::load() {
+    let setup = match sovereign_contracts::setup_config::SetupConfig::load() {
         Ok(s) => s,
         Err(e) => {
             tracing::info!(

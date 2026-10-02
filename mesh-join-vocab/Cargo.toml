@@ -1,0 +1,31 @@
+[package]
+name = "mesh-join-vocab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Mesh join-key and deep-link FORMAT vocabulary — hash_join_key, validate_join_key_format and the deep_link URL grammar both ends of a mesh join must spell the same way. Layer 0; no fs, no store."
+
+# Minted 2026-09-23 (FIVE_PROGRAMS fp-9/fp-24). The join-link format is spoken
+# by [svrn] (cli-daemon's setup wizard) and [cmnwlth] (commonwealth-discovery,
+# commonwealth-rails) alike, and the two [[forbid]] rows
+# (`commonwealth-discovery → sovereign-*`, `commonwealth-rails → sovereign-*`)
+# pattern-match the `sovereign-*` prefix — so the shared home can be neither
+# sovereign-contracts (whose leaf budget carries no commonwealth-core error
+# type) nor any sovereign-named crate both sides shim through. A neutrally
+# named layer-0 leaf is the one shape every consumer reaches downward.
+#
+# The dependency rule mirrors kernel-types: this crate may name NOTHING from
+# sovereign, corpus-engine, commonwealth or studio. blake3 (the join-key hash)
+# and hex (the key segments) are the whole budget.
+#
+# `Error::InvalidJoinKey` stays commonwealth-core's — `accept_join` still
+# constructs it; the leaf's `JoinKeyError` is the format decider's own type and
+# callers map it where they must.
+
+[dependencies]
+blake3 = "1"
+hex = "0.4"
+
+[lints]
+workspace = true

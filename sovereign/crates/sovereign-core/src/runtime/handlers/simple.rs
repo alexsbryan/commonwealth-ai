@@ -116,7 +116,7 @@ impl Runtime {
             // that triggers the auto-`</think>` close on Qwen3.5-vOP.
             (witness_budget, Some(false))
         } else {
-            (self.inference_config.max_tokens, None)
+            (self.turn_inference_config().max_tokens, None)
         };
 
         let oicp = if matches!(intent, Intent::SimpleQuery) {
@@ -193,7 +193,7 @@ impl Runtime {
                         &kc.chunks,
                     ),
                 ) as _),
-                entity_anchored: crate::runtime::evidence_loop::question_is_corpus_deictic(message),
+                entity_anchored: crate::runtime::anchoring::question_is_corpus_deictic(message),
                 top_similarity: None,
                 chunk_sources: gate_parts.chunk_sources,
                 // The acquisition stamp in builder ordering (custody.md
@@ -330,6 +330,7 @@ impl Runtime {
                 crate::runtime::epistemic::EpistemicInputs {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
+                    answer: Some(&final_content),
                     ..crate::runtime::epistemic::EpistemicInputs::over(
                         crate::runtime::epistemic::pool_context(&kc.chunks),
                     )

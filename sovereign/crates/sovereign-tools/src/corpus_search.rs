@@ -22,7 +22,7 @@
 
 use std::collections::HashSet;
 
-use corpus_engine::CorpusIndex;
+use corpus_index::index::CorpusIndex;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;

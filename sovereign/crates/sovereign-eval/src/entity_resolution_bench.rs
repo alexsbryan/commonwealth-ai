@@ -4,7 +4,7 @@
 //!
 //! Reads `ground_truth_entities.jsonl` and applies the
 //! train/test/holdout discipline. The runner-side enforcement lives in
-//! `sovereign-cli-llm/src/bench_cmd`; this module owns the
+//! `sovereign-cli-bench/src/bench_cmd`; this module owns the
 //! data-model and the peek-budget primitive so they're reusable across
 //! future verticals (Firm Inbox ground-truth, sales-intel ground-truth,
 //! …) with the same shape.

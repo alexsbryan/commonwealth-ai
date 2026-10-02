@@ -55,7 +55,8 @@ async fn navigate_fixture(atlas_corpus_id: &str, question: &str) -> Vec<ChunkReq
 
     let tmp = tempfile::tempdir().unwrap();
     store::write_store_blocking(tmp.path(), atlas_corpus_id, &atoms, &[]).unwrap();
-    let graph = AtlasGraph::load_lance_from_disk(atlas_corpus_id, tmp.path()).unwrap();
+    let graph =
+        AtlasGraph::load_lance_from_disk(atlas_corpus_id, tmp.path(), Default::default()).unwrap();
 
     let ctx = AtlasContext {
         atlas_corpus_id: atlas_corpus_id.to_string(),

@@ -1,0 +1,315 @@
+{
+  "personal": {
+    "corpus": {
+      "id": "personal-knowledge",
+      "name": "Personal knowledge",
+      "description": "Enriched perspective on the memories table: persistent concerns, live tensions, open questions.",
+      "license": "local-only",
+      "mesh_sharing": false,
+      "scope": "local",
+      "query_sharing": false,
+      "grantable": false,
+      "size_compressed_gb": 0.0,
+      "size_indexed_gb": 0.0,
+      "schema_version": 1,
+      "kind": "knowledge",
+      "on_demand": false,
+      "parent_corpus_id": null
+    },
+    "acquire": {
+      "type": "custom",
+      "kind": "sqlite",
+      "params": {
+        "db_path": "/fixture/sovereign.db",
+        "query": "SELECT id, content, last_used AS version FROM memories WHERE deleted_at IS NULL AND confidence > 0.2 ORDER BY last_used DESC",
+        "content_column": "content",
+        "id_column": "id",
+        "version_column": "version"
+      }
+    },
+    "extract": {
+      "type": "jsonl",
+      "content_field": "content",
+      "title_field": null,
+      "filter": null,
+      "decompress": null
+    },
+    "chunk": {
+      "type": "passthrough"
+    },
+    "index": {
+      "fts": true,
+      "vector": true,
+      "embedding_model": "qwen3-embedding-0.6b",
+      "embedding_dimensions": 0
+    },
+    "enrichment": {
+      "enabled": true,
+      "type": "field_model",
+      "domain": "personal",
+      "pipeline": null,
+      "ontology": null,
+      "prompt_version": "v1",
+      "clustering": null,
+      "alignment": null,
+      "fault_lines": null,
+      "entity_types": [],
+      "relationship_types": [],
+      "patterns": [],
+      "reconciliation": null,
+      "normalization": null
+    },
+    "authority": null,
+    "update": null,
+    "prebuilt": null,
+    "catalog": null,
+    "filter": [],
+    "filter_mode": {
+      "mode": "any"
+    },
+    "parameters": {},
+    "display": null,
+    "retrieval": {
+      "dedup_by_source": false,
+      "personal_scope": false
+    }
+  },
+  "institutional": {
+    "corpus": {
+      "id": "institutional-notes",
+      "name": "Institutional knowledge",
+      "description": "Enriched perspective on the project's working notes: architectural decisions, invariants, live tensions, unresolved questions.",
+      "license": "local-only",
+      "mesh_sharing": false,
+      "scope": "local",
+      "query_sharing": false,
+      "grantable": false,
+      "size_compressed_gb": 0.0,
+      "size_indexed_gb": 0.0,
+      "schema_version": 1,
+      "kind": "knowledge",
+      "on_demand": false,
+      "parent_corpus_id": null
+    },
+    "acquire": {
+      "type": "custom",
+      "kind": "sqlite",
+      "params": {
+        "db_path": "/fixture/notes.db",
+        "query": "SELECT id, kind, content, updated_at AS version FROM notes WHERE retired_at IS NULL AND kind IN ('decision','invariant','postmortem_pointer','todo','uncertainty','redteam_finding') ORDER BY updated_at DESC",
+        "content_column": "content",
+        "id_column": "id",
+        "version_column": "version",
+        "metadata_columns": [
+          "kind"
+        ]
+      }
+    },
+    "extract": {
+      "type": "jsonl",
+      "content_field": "content",
+      "title_field": null,
+      "filter": null,
+      "decompress": null
+    },
+    "chunk": {
+      "type": "passthrough"
+    },
+    "index": {
+      "fts": true,
+      "vector": true,
+      "embedding_model": "qwen3-embedding-0.6b",
+      "embedding_dimensions": 0
+    },
+    "enrichment": {
+      "enabled": true,
+      "type": "field_model",
+      "domain": "institutional",
+      "pipeline": null,
+      "ontology": null,
+      "prompt_version": "v1",
+      "clustering": null,
+      "alignment": null,
+      "fault_lines": null,
+      "entity_types": [],
+      "relationship_types": [],
+      "patterns": [],
+      "reconciliation": null,
+      "normalization": null
+    },
+    "authority": null,
+    "update": null,
+    "prebuilt": null,
+    "catalog": null,
+    "filter": [],
+    "filter_mode": {
+      "mode": "any"
+    },
+    "parameters": {},
+    "display": null,
+    "retrieval": {
+      "dedup_by_source": false,
+      "personal_scope": false
+    }
+  },
+  "conversation": {
+    "corpus": {
+      "id": "conversation-history",
+      "name": "Conversation history",
+      "description": "Enriched perspective on the conversations + messages tables (180-day window): recurring topics, unresolved threads, cross-session connections.",
+      "license": "local-only",
+      "mesh_sharing": false,
+      "scope": "local",
+      "query_sharing": false,
+      "grantable": false,
+      "size_compressed_gb": 0.0,
+      "size_indexed_gb": 0.0,
+      "schema_version": 1,
+      "kind": "knowledge",
+      "on_demand": false,
+      "parent_corpus_id": null
+    },
+    "acquire": {
+      "type": "custom",
+      "kind": "sqlite",
+      "params": {
+        "db_path": "/fixture/sovereign.db",
+        "query": "SELECT c.id   AS conversation_id, c.updated_at AS version, ( '### [' || strftime('%Y-%m-%d %H:%M', m.created_at, 'unixepoch') || '] ' || m.role || char(10) || m.content ) AS content FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.deleted_at IS NULL AND c.updated_at > (strftime('%s','now') - 180*86400) ORDER BY c.updated_at DESC, m.created_at ASC",
+        "content_column": "content",
+        "id_column": "conversation_id",
+        "version_column": "version",
+        "group_column": "conversation_id",
+        "group_separator": "\n\n"
+      }
+    },
+    "extract": {
+      "type": "jsonl",
+      "content_field": "content",
+      "title_field": null,
+      "filter": null,
+      "decompress": null
+    },
+    "chunk": {
+      "type": "threaded_turns"
+    },
+    "index": {
+      "fts": true,
+      "vector": true,
+      "embedding_model": "qwen3-embedding-0.6b",
+      "embedding_dimensions": 0
+    },
+    "enrichment": {
+      "enabled": true,
+      "type": "atlas",
+      "domain": "conversational",
+      "pipeline": null,
+      "ontology": null,
+      "prompt_version": "v2",
+      "clustering": null,
+      "alignment": null,
+      "fault_lines": null,
+      "entity_types": [],
+      "relationship_types": [],
+      "patterns": [],
+      "reconciliation": null,
+      "normalization": null
+    },
+    "authority": null,
+    "update": null,
+    "prebuilt": null,
+    "catalog": null,
+    "filter": [],
+    "filter_mode": {
+      "mode": "any"
+    },
+    "parameters": {},
+    "display": {
+      "category": "conversation",
+      "icon": "chat-bubble"
+    },
+    "retrieval": {
+      "dedup_by_source": false,
+      "personal_scope": false
+    }
+  },
+  "conversation_local_only": {
+    "corpus": {
+      "id": "conversation-history",
+      "name": "Conversation history",
+      "description": "Enriched perspective on the conversations + messages tables (180-day window): recurring topics, unresolved threads, cross-session connections.",
+      "license": "local-only",
+      "mesh_sharing": false,
+      "scope": "local",
+      "query_sharing": false,
+      "grantable": false,
+      "size_compressed_gb": 0.0,
+      "size_indexed_gb": 0.0,
+      "schema_version": 1,
+      "kind": "knowledge",
+      "on_demand": false,
+      "parent_corpus_id": null
+    },
+    "acquire": {
+      "type": "custom",
+      "kind": "sqlite",
+      "params": {
+        "db_path": "/fixture/sovereign.db",
+        "query": "SELECT c.id   AS conversation_id, c.updated_at AS version, ( '### [' || strftime('%Y-%m-%d %H:%M', m.created_at, 'unixepoch') || '] ' || m.role || char(10) || m.content ) AS content FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.deleted_at IS NULL AND c.updated_at > (strftime('%s','now') - 180*86400) AND (c.skill_id IS NULL OR c.skill_id NOT IN ('inner-work', 'o''brien')) ORDER BY c.updated_at DESC, m.created_at ASC",
+        "content_column": "content",
+        "id_column": "conversation_id",
+        "version_column": "version",
+        "group_column": "conversation_id",
+        "group_separator": "\n\n"
+      }
+    },
+    "extract": {
+      "type": "jsonl",
+      "content_field": "content",
+      "title_field": null,
+      "filter": null,
+      "decompress": null
+    },
+    "chunk": {
+      "type": "threaded_turns"
+    },
+    "index": {
+      "fts": true,
+      "vector": true,
+      "embedding_model": "qwen3-embedding-0.6b",
+      "embedding_dimensions": 0
+    },
+    "enrichment": {
+      "enabled": true,
+      "type": "atlas",
+      "domain": "conversational",
+      "pipeline": null,
+      "ontology": null,
+      "prompt_version": "v2",
+      "clustering": null,
+      "alignment": null,
+      "fault_lines": null,
+      "entity_types": [],
+      "relationship_types": [],
+      "patterns": [],
+      "reconciliation": null,
+      "normalization": null
+    },
+    "authority": null,
+    "update": null,
+    "prebuilt": null,
+    "catalog": null,
+    "filter": [],
+    "filter_mode": {
+      "mode": "any"
+    },
+    "parameters": {},
+    "display": {
+      "category": "conversation",
+      "icon": "chat-bubble"
+    },
+    "retrieval": {
+      "dedup_by_source": false,
+      "personal_scope": false
+    }
+  }
+}

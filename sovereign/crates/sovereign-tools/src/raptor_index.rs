@@ -16,7 +16,8 @@
 
 use std::path::Path;
 
-use corpus_engine::{build_raptor_index, RaptorSummaryRow};
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_engine_atlas_reader::raptor_read::RaptorSummaryRow;
 use sovereign_store::sqlite::SqliteStateStore;
 
 /// Outcome of a `build_corpus_raptor_index` run, for transparent reporting.
@@ -53,6 +54,7 @@ impl std::fmt::Display for RaptorIndexOutcome {
 /// is a full, idempotent rebuild (the table is a pure derivative of the
 /// SQLite rows), so calling it repeatedly is safe.
 pub async fn build_corpus_raptor_index(
+    atlas: &dyn AtlasPort,
     store: &SqliteStateStore,
     corpus_dir: &Path,
     corpus_id: &str,
@@ -91,7 +93,10 @@ pub async fn build_corpus_raptor_index(
         })
         .collect();
 
-    match build_raptor_index(corpus_dir, &rows, source_version).await {
+    match atlas
+        .build_raptor_index(corpus_dir, &rows, source_version)
+        .await
+    {
         Ok(0) => RaptorIndexOutcome::Empty,
         Ok(rows_written) => RaptorIndexOutcome::Built { rows: rows_written },
         Err(e) => RaptorIndexOutcome::Failed {

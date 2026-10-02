@@ -82,15 +82,11 @@
 //!     contributions   what this node gave the mesh — gossiped, never scored
 //!     activity        what this node did locally — never leaves the machine
 //!     latency         the pairwise latency matrix
-//!     peer_health     quarantine a peer that keeps failing, then retry it
 //!
 //!   How do I reach a peer, and is it really that peer?
 //!     peer_addr       which of a peer's addresses to try first
 //!     dial_sig        signed reachability: only a node changes its own
 //!     ct              constant-time compare, in one place
-//!
-//!   Who does this piece of work?
-//!     partition       leader election and rendezvous hashing over the roster
 //!
 //!   Vocabulary shared with things built on top
 //!     knowledge       corpus shard plans and ingestion handoffs
@@ -125,9 +121,7 @@ pub mod mesh_identity;
 pub mod mesh_merge;
 pub mod model;
 pub mod peer_addr;
-pub mod peer_health;
 pub use oicp_types as oicp;
-pub mod partition;
 
 pub use clock::{Clock, SystemClock, TestClock};
 pub use error::{Error, Result};

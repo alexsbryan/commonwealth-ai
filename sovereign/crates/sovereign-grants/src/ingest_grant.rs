@@ -37,7 +37,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
-use commonwealth_core::ids::{HandoffId, NodeId};
+use kernel_types::{HandoffId, NodeId};
 
 /// Default grant TTL when the caller doesn't specify one: 6 hours. Generous
 /// enough that a massive vault's initial ingest completes inside one grant.

@@ -26,7 +26,7 @@ use async_trait::async_trait;
 
 use crate::oicp::manifest::EmbedModelInfo;
 
-/// The five answers `capabilities::build_local_capabilities` publishes to the
+/// The five answers svrn declares (sovereign-daemon `peer_origin::claims_source`) to the
 /// mesh as this node's `NodeCapabilities`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalClaims {

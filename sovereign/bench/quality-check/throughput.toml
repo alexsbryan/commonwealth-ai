@@ -91,6 +91,15 @@ max_tokens = 128
 [arm.bars."Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"]
 ttft_ms_max = 1000
 decode_tps_min = 40
+# The Q6_K stem the deployed node serves since 09-13 (phase-b-94): the same
+# ratio the bars above hold to their measurement (1000/430 on first token,
+# 40/50 on decode), applied to the committed main-era baseline, stack
+# 2ce389007280 (captured 2026-09-13, load 3.43, ef21e3a08, an ancestor of
+# main 18f783f44): 399.7 ms -> 929 -> rounded up to 1000; 46.37 tok/s ->
+# 37.1 -> rounded down to 37.
+[arm.bars."Qwen3.6-35B-A3B-MTP-UD-Q6_K"]
+ttft_ms_max = 1000
+decode_tps_min = 37
 
 [[arm]]
 id = "fast/short"

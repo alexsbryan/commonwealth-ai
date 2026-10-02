@@ -24,15 +24,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use corpus_engine::engine::CorpusEngine;
-use corpus_engine::enrichment::skeleton::FieldSkeleton;
-use corpus_engine::error::{Error as CorpusError, Result as CorpusResult};
-use corpus_engine::recipe::Recipe;
-use corpus_engine::types::{CorpusSpec, InferenceFn};
+use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
+use corpus_index::ingest_port::LocalCorpusPort;
 use sovereign_core::observer::StateStoreObserver;
 use sovereign_core::traits::LandscapeDigestProvider;
 use sovereign_core::types::{ConversationContext, LandscapeDigest};
 use tokio::sync::{mpsc, RwLock};
+use understanding_vocab::skeleton::FieldSkeleton;
 
 use super::acquirers::register_sqlite;
 use super::atlas_digest;
@@ -42,13 +40,11 @@ use super::digest::format_landscape;
 use super::recipes::{
     conversation_history_recipe, institutional_notes_recipe, personal_knowledge_recipe,
 };
-use super::tokens::estimate_tokens;
 use super::view_kind::ViewKind;
+use sovereign_contracts::tokens::estimate_tokens;
 
 #[cfg(feature = "treesitter")]
 use super::relational::{format_relational, RelationalNote};
-#[cfg(all(feature = "treesitter", feature = "atos"))]
-use super::splice_extension::AtosSnapshot;
 #[cfg(feature = "treesitter")]
 use super::splice_extension::{
     load_chunk_timestamps, relational_notes_for_entity, strategic_goals_for_entity,
@@ -58,10 +54,8 @@ use super::splice_extension::{
 use super::strategic::{format_strategic, StrategicGoal};
 #[cfg(feature = "treesitter")]
 use super::timeline::assemble_timelines_from_atlas;
-#[cfg(all(feature = "treesitter", feature = "atos"))]
-use corpus_engine_atos::features::FeatureStore;
 #[cfg(feature = "treesitter")]
-use corpus_engine_notes::notes::NoteStore;
+use sovereign_contracts::notes::AgentNotes;
 
 // ── Backwards-compatible string-id constants ────────────────────
 //
@@ -87,11 +81,10 @@ const CROSS_VIEW_BUDGET_TOKENS: usize = ViewKind::CrossView.default_budget_token
 
 /// One manager per running Sovereign instance. Cheap to clone via `Arc`.
 ///
-/// The inference function passed to `KnowledgeViewManager::new` is
-/// captured by the debouncer task — it is not stored on the manager
-/// itself since all enrichment paths flow through the debouncer.
+/// Enrichment runs in the debouncer task, through ingest's port, with the
+/// engine's own embedder and enrichment inference.
 pub struct KnowledgeViewManager {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn LocalCorpusPort>,
     views: Arc<RwLock<HashMap<String, ViewEntry>>>,
     triggers: mpsc::UnboundedSender<ViewEvent>,
     /// Skill ids whose declared `privacy = "local_only"` means the
@@ -110,32 +103,17 @@ pub struct KnowledgeViewManager {
     /// Sovereign state DB path. Held so the splice path can resolve
     /// chunk_ids → memory.last_used / conversation.updated_at.
     db_path: PathBuf,
-    /// Working-notes DB path. Held so the splice path can attach
-    /// commitment / follow_up / goal notes by `related_entity` to
-    /// the relational and strategic blocks.
-    notes_db_path: PathBuf,
-    /// ATOS feature DB path (typically `~/.svrnmesh/features.db`).
-    /// `None` = no feature lookup; the strategic block falls back to
-    /// initiative names without phase / drift annotation. Only read when
-    /// the `atos` feature is on (the strategic ATOS splice).
-    #[cfg_attr(not(feature = "atos"), allow(dead_code))]
-    features_db_path: Option<PathBuf>,
-    /// `.sovereign/project.toml` path. `None` = no project name in
-    /// scope; initiatives can still surface from atoms but they
-    /// won't link to a local project.
-    project_toml_path: Option<PathBuf>,
     /// Late-installed handles for the memory-pool RAPTOR rebuild
     /// (see [`Self::install_memory_atlas`]). Shared with the
     /// debouncer task; `None` until installed.
     mem_atlas_handles: Arc<RwLock<Option<crate::mem_atlas::MemAtlasHandles>>>,
-    /// Lazy NoteStore handle, opened on first splice. The store
-    /// itself is sharable across threads, so we hold an Arc.
+    /// svrn's memory notes, where the commissive handler's commitments
+    /// live (pb-notes-memory): the splice path attaches commitment /
+    /// follow_up / goal notes by `related_entity` to the relational and
+    /// strategic blocks. Installed by the host (see
+    /// [`Self::install_notes`]); `None` renders without them.
     #[cfg(feature = "treesitter")]
-    notes_handle: Arc<tokio::sync::Mutex<Option<Arc<NoteStore>>>>,
-    /// Lazy FeatureStore handle, opened on first splice when
-    /// `features_db_path` is set.
-    #[cfg(all(feature = "treesitter", feature = "atos"))]
-    features_handle: Arc<tokio::sync::Mutex<Option<Arc<FeatureStore>>>>,
+    notes: Arc<RwLock<Option<Arc<dyn AgentNotes>>>>,
 }
 
 /// One row of the digest cache. Stored body is the exact string
@@ -193,10 +171,11 @@ impl KnowledgeViewManager {
     /// `db_path` is the sovereign SQLite file (typically
     /// `~/.svrnmesh/sovereign.db`). `local_only_skill_ids` is the
     /// resolved set of skill ids whose conversations must be excluded
-    /// from the conversational view.
+    /// from the conversational view. Enrichment uses the engine's own
+    /// enrichment inference (`CorpusEngine::with_inference_fn`); an engine
+    /// with none reports it by name at each enrichment.
     pub async fn new(
-        engine: Arc<CorpusEngine>,
-        inference: InferenceFn,
+        engine: Arc<dyn LocalCorpusPort>,
         db_path: PathBuf,
         local_only_skill_ids: Vec<String>,
     ) -> Self {
@@ -204,14 +183,7 @@ impl KnowledgeViewManager {
             .parent()
             .map(|p| p.join("notes.db"))
             .unwrap_or_else(|| PathBuf::from("notes.db"));
-        Self::new_with_notes_path(
-            engine,
-            inference,
-            db_path,
-            notes_db_path,
-            local_only_skill_ids,
-        )
-        .await
+        Self::new_with_notes_path(engine, db_path, notes_db_path, local_only_skill_ids).await
     }
 
     /// Construct with an explicit path for the agent's working-notes
@@ -219,13 +191,12 @@ impl KnowledgeViewManager {
     /// when the notes file lives in a project-scoped directory rather
     /// than `~/.svrnmesh/`.
     pub async fn new_with_notes_path(
-        engine: Arc<CorpusEngine>,
-        inference: InferenceFn,
+        engine: Arc<dyn LocalCorpusPort>,
         db_path: PathBuf,
         notes_db_path: PathBuf,
         local_only_skill_ids: Vec<String>,
     ) -> Self {
-        register_sqlite(&engine);
+        register_sqlite(engine.as_ref());
 
         let local_refs: Vec<&str> = local_only_skill_ids.iter().map(|s| s.as_str()).collect();
         let mut views = HashMap::new();
@@ -260,13 +231,7 @@ impl KnowledgeViewManager {
         let views = Arc::new(RwLock::new(views));
 
         let mem_atlas_handles = Arc::new(RwLock::new(None));
-        spawn_debouncer(
-            engine.clone(),
-            inference,
-            views.clone(),
-            rx,
-            mem_atlas_handles.clone(),
-        );
+        spawn_debouncer(engine.clone(), views.clone(), rx, mem_atlas_handles.clone());
 
         Self {
             engine,
@@ -275,14 +240,9 @@ impl KnowledgeViewManager {
             local_only_skill_ids,
             digest_cache: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
             db_path,
-            notes_db_path,
-            features_db_path: None,
-            project_toml_path: None,
             mem_atlas_handles,
             #[cfg(feature = "treesitter")]
-            notes_handle: Arc::new(tokio::sync::Mutex::new(None)),
-            #[cfg(all(feature = "treesitter", feature = "atos"))]
-            features_handle: Arc::new(tokio::sync::Mutex::new(None)),
+            notes: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -303,27 +263,13 @@ impl KnowledgeViewManager {
         *slot = Some(crate::mem_atlas::MemAtlasHandles { store, inference });
     }
 
-    /// Set the ATOS feature DB path. When set + `with_project_toml_path`
-    /// is also set, the strategic digest will surface phase + drift
-    /// annotations on initiatives that match a local project or
-    /// feature. Caller chains this on the constructor:
-    ///
-    /// ```ignore
-    /// let mgr = KnowledgeViewManager::new(...).await
-    ///     .with_features_db_path(features_db_path)
-    ///     .with_project_toml_path(project_toml_path);
-    /// ```
-    pub fn with_features_db_path(mut self, path: PathBuf) -> Self {
-        self.features_db_path = Some(path);
-        self
-    }
-
-    /// Set the `.sovereign/project.toml` path. Used by the strategic
-    /// digest to match initiative entity names against the local
-    /// project name (with parent-dir fallback for v1 files).
-    pub fn with_project_toml_path(mut self, path: PathBuf) -> Self {
-        self.project_toml_path = Some(path);
-        self
+    /// Install svrn's memory notes for the splice path's relational and
+    /// strategic annotations (pb-notes-memory). Interior mutability, like
+    /// [`Self::install_memory_atlas`]: the store handle exists only in the
+    /// caller. Until this is called, the splice renders without them.
+    #[cfg(feature = "treesitter")]
+    pub async fn install_notes(&self, notes: Arc<dyn AgentNotes>) {
+        *self.notes.write().await = Some(notes);
     }
 
     /// Ingest each view. Safe to call repeatedly —
@@ -483,7 +429,7 @@ impl KnowledgeViewManager {
             rendered
         } else {
             let Some(skeleton) =
-                corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())?
+                corpus_engine_atlas_reader::field_model::load_field_skeleton(&index.path())?
             else {
                 let title = ViewKind::from_id(view_id)
                     .map(|k| k.title())
@@ -669,9 +615,8 @@ impl KnowledgeViewManager {
 
     /// Compose the Relational + Strategic digest blocks (Phase 4.B).
     /// Reads atoms / edges from the personal-knowledge and
-    /// conversation-history atlases, joins NoteStore records by
-    /// `related_entity`, and composes ATOS phase / drift via
-    /// `AtosSnapshot`. Soft-fails: any I/O error per source falls
+    /// conversation-history atlases and joins NoteStore records by
+    /// `related_entity`. Soft-fails: any I/O error per source falls
     /// through with a debug log; the splice continues without the
     /// affected block.
     #[cfg(feature = "treesitter")]
@@ -685,19 +630,7 @@ impl KnowledgeViewManager {
         let timestamps = load_chunk_timestamps(&self.db_path);
         let chunk_ts = |id: &str| timestamps.get(id).copied();
 
-        // 2. Build the ATOS snapshot (feature `atos`, off by default). When
-        //    on, timelines get phase/drift annotation from the FeatureStore +
-        //    project.toml. When off, a `NoAtosLookup` means no annotation —
-        //    the strategic block still renders from NoteStore-backed goals.
-        #[cfg(feature = "atos")]
-        let atos = {
-            let features = self.features_store_handle().await;
-            AtosSnapshot::build(features.as_ref(), self.project_toml_path.as_deref()).await
-        };
-        #[cfg(not(feature = "atos"))]
-        let atos = super::timeline::NoAtosLookup;
-
-        // 3. Pull timelines from both atlas sources. We compute the
+        // 2. Pull timelines from both atlas sources. We compute the
         //    per-corpus index directory directly (engine.index_dir +
         //    view_id) — calling `open_index_for_corpus` would attempt
         //    to open the LanceDB tables, which fails for a brand-new
@@ -707,7 +640,7 @@ impl KnowledgeViewManager {
         let mut timelines = Vec::new();
         for view_id in [ViewKind::Personal.id(), ViewKind::Conversational.id()] {
             let corpus_dir = self.engine.index_dir().join(view_id);
-            match assemble_timelines_from_atlas(&corpus_dir, &chunk_ts, &atos) {
+            match assemble_timelines_from_atlas(&corpus_dir, &chunk_ts) {
                 Ok(mut tls) => timelines.append(&mut tls),
                 Err(e) => {
                     tracing::debug!(
@@ -723,33 +656,36 @@ impl KnowledgeViewManager {
             return;
         }
 
-        // 4. NoteStore-backed `related_entity` resolver. We collect
+        // 3. NoteStore-backed `related_entity` resolver. We collect
         //    all needed (entity_name, kind-bucket) pairs and pre-load
         //    them into HashMaps so the formatters can stay sync.
-        let notes_handle = self.notes_store_handle().await;
+        let notes_handle = self.notes.read().await.clone();
+        if notes_handle.is_none() {
+            tracing::debug!("splice: no memory notes installed; relational annotations skipped");
+        }
         let mut relational_index: HashMap<String, Vec<RelationalNote>> = HashMap::new();
         let mut strategic_index: HashMap<String, Vec<StrategicGoal>> = HashMap::new();
         if let Some(notes) = notes_handle.as_ref() {
             for tl in &timelines {
                 let key = tl.entity_name.clone();
                 if !relational_index.contains_key(&key) {
-                    let r = relational_notes_for_entity(notes, &tl.entity_name).await;
+                    let r = relational_notes_for_entity(notes.as_ref(), &tl.entity_name).await;
                     relational_index.insert(key.clone(), r);
                 }
                 if let std::collections::hash_map::Entry::Vacant(e) = strategic_index.entry(key) {
-                    let g = strategic_goals_for_entity(notes, &tl.entity_name).await;
+                    let g = strategic_goals_for_entity(notes.as_ref(), &tl.entity_name).await;
                     e.insert(g);
                 }
             }
         }
 
-        // 5. In-conversation predicate from the current message thread.
+        // 4. In-conversation predicate from the current message thread.
         let corpus = ConversationCorpus::from_messages(conversation_messages.iter().cloned());
         let in_conv = |name: &str| corpus.contains_entity(name);
 
         let now = chrono::Utc::now().timestamp();
 
-        // 6. Render Relational.
+        // 5. Render Relational.
         let relational_lookup = |name: &str| -> Vec<RelationalNote> {
             relational_index.get(name).cloned().unwrap_or_default()
         };
@@ -767,7 +703,7 @@ impl KnowledgeViewManager {
             });
         }
 
-        // 7. Render Strategic.
+        // 6. Render Strategic.
         let strategic_lookup = |name: &str| -> Vec<StrategicGoal> {
             strategic_index.get(name).cloned().unwrap_or_default()
         };
@@ -797,8 +733,8 @@ impl KnowledgeViewManager {
     /// the decay path in that case to fall back to uniform decay.
     #[cfg(feature = "treesitter")]
     pub fn entity_inventory_from_atlases(&self) -> sovereign_core::memory::EntityInventory {
-        use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
-        use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
+        use understanding_vocab::atoms::AtomEnvelope;
+        use understanding_vocab::read::{read_atlas_atoms, ATLAS_DIRNAME};
 
         let mut names: Vec<String> = Vec::new();
         for kind in [ViewKind::Personal, ViewKind::Conversational] {
@@ -816,58 +752,6 @@ impl KnowledgeViewManager {
             }
         }
         sovereign_core::memory::entity_inventory_from_names(names)
-    }
-
-    /// Lazy NoteStore opener. Returns `None` when the underlying
-    /// file can't be opened — the splice path then renders without
-    /// `related_entity` annotations.
-    #[cfg(feature = "treesitter")]
-    async fn notes_store_handle(&self) -> Option<Arc<NoteStore>> {
-        let mut guard = self.notes_handle.lock().await;
-        if let Some(h) = guard.as_ref() {
-            return Some(h.clone());
-        }
-        match NoteStore::open(&self.notes_db_path) {
-            Ok(store) => {
-                let arc = Arc::new(store);
-                *guard = Some(arc.clone());
-                Some(arc)
-            }
-            Err(e) => {
-                tracing::debug!(
-                    path = %self.notes_db_path.display(),
-                    error = %e,
-                    "splice: NoteStore::open failed; relational annotations skipped"
-                );
-                None
-            }
-        }
-    }
-
-    /// Lazy FeatureStore opener. Returns `None` when no
-    /// `features_db_path` is configured or the file can't be opened.
-    #[cfg(all(feature = "treesitter", feature = "atos"))]
-    async fn features_store_handle(&self) -> Option<Arc<FeatureStore>> {
-        let path = self.features_db_path.as_ref()?;
-        let mut guard = self.features_handle.lock().await;
-        if let Some(h) = guard.as_ref() {
-            return Some(h.clone());
-        }
-        match FeatureStore::open(path) {
-            Ok(store) => {
-                let arc = Arc::new(store);
-                *guard = Some(arc.clone());
-                Some(arc)
-            }
-            Err(e) => {
-                tracing::debug!(
-                    path = %path.display(),
-                    error = %e,
-                    "splice: FeatureStore::open failed; ATOS phases skipped"
-                );
-                None
-            }
-        }
     }
 
     /// Build a cross-view resonance digest across `view_ids` at the
@@ -889,7 +773,7 @@ impl KnowledgeViewManager {
             let mtime = std::fs::metadata(index.path().join("field_skeleton.json"))
                 .and_then(|m| m.modified())
                 .ok();
-            match corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())? {
+            match corpus_engine_atlas_reader::field_model::load_field_skeleton(&index.path())? {
                 Some(sk) => {
                     skeletons.push((view_id.clone(), sk));
                     if let Some(mt) = mtime {
@@ -966,8 +850,12 @@ impl KnowledgeViewManager {
         // Serialise with any concurrent enrichment for this view.
         let _guard = lock.lock().await;
         let path = recipe_to_tempfile(&recipe)?;
-        let spec = CorpusSpec::RecipePath(path);
-        let result = self.engine.ingest(&spec, None).await.map(|_| ());
+
+        let result = self
+            .engine
+            .ingest_recipe_path(&path, None)
+            .await
+            .map(|_| ());
         // Ingest can change the index (and eventually the skeleton
         // via downstream enrich) — invalidate digest entries for
         // this view so the next splice re-reads. The Phase B
@@ -1021,9 +909,9 @@ impl LandscapeDigestProvider for KnowledgeViewManager {
     }
 }
 
-// ── Recipe → temp TOML (for CorpusSpec::RecipePath) ─────────
+// ── Recipe document → temp TOML (for the port's ingest_recipe_path) ─
 
-/// Materialise `recipe` as a TOML file for `CorpusSpec::RecipePath`.
+/// Materialise `recipe` as a TOML file for `LocalCorpusPort::ingest_recipe_path`.
 ///
 /// The filename is scoped to the CURRENT PROCESS (`<id>-<pid>.toml`), and that
 /// is load-bearing, not cosmetic. It used to be `<id>.toml` — one fixed path per
@@ -1044,12 +932,15 @@ impl LandscapeDigestProvider for KnowledgeViewManager {
 /// The file deliberately persists after ingest, as it always has: this function
 /// does not own the recipe's lifetime, and a stale file from a dead process is
 /// harmless — it is always written before it is read.
-fn recipe_to_tempfile(recipe: &Recipe) -> CorpusResult<PathBuf> {
+fn recipe_to_tempfile(recipe: &serde_json::Value) -> CorpusResult<PathBuf> {
     let toml_text = toml::to_string(recipe)
         .map_err(|e| CorpusError::Recipe(format!("serialize recipe: {e}")))?;
+    let corpus_id = recipe["corpus"]["id"]
+        .as_str()
+        .ok_or_else(|| CorpusError::Recipe("recipe document has no corpus.id".into()))?;
     let dir = std::env::temp_dir().join("sovereign-knowledge-view-recipes");
     std::fs::create_dir_all(&dir).map_err(CorpusError::Io)?;
-    let path = dir.join(format!("{}-{}.toml", recipe.corpus.id, std::process::id()));
+    let path = dir.join(format!("{corpus_id}-{}.toml", std::process::id()));
     std::fs::write(&path, toml_text).map_err(CorpusError::Io)?;
     Ok(path)
 }
@@ -1062,9 +953,10 @@ mod tests {
     //! their implementation (`digest.rs`, `tokens.rs`, `debouncer.rs`).
 
     use super::*;
-    use corpus_engine::enrichment::clustering::FieldModelStats;
-    use corpus_engine::enrichment::skeleton::{
-        CanonicalQuestion, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion, SkeletonPosition,
+    use corpus_index::ingest_port::double::IngestPortDouble;
+    use understanding_vocab::skeleton::{
+        CanonicalQuestion, FieldModelStats, FieldSkeleton, SkeletonFaultLine, SkeletonOpenQuestion,
+        SkeletonPosition,
     };
 
     /// Guards the fix for the cross-process recipe clobber: the materialised
@@ -1144,6 +1036,10 @@ mod tests {
         }
     }
 
+    /// Every manager here runs over the ingest ports' double: views open
+    /// under the index dir with the leaf's `CorpusIndex::open`, and plugin
+    /// registrations are kept. The engine's own open and registration are
+    /// proven on `CorpusEngine` (corpus-engine's `engine::tool_ports` tests).
     async fn bare_manager_with_local_only(local_only: Vec<String>) -> KnowledgeViewManager {
         let tmp = tempfile::TempDir::new().unwrap();
         let indexes_dir = tmp.path().join("indexes");
@@ -1152,18 +1048,12 @@ mod tests {
         std::fs::create_dir_all(&indexes_dir).unwrap();
         std::fs::create_dir_all(&recipes_dir).unwrap();
         let _ = std::fs::File::create(&db_path).unwrap();
-        let embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
-        });
-        let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
-            Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
-        });
-        let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
-            recipes_dir,
-            indexes_dir,
-            embed,
-        ));
-        KnowledgeViewManager::new(engine, infer, db_path, local_only).await
+        let engine = std::sync::Arc::new(
+            IngestPortDouble::new()
+                .with_index_dir(indexes_dir)
+                .opening_indexes_under_index_dir(),
+        );
+        KnowledgeViewManager::new(engine, db_path, local_only).await
     }
 
     fn tmp_context() -> sovereign_core::types::ConversationContext {
@@ -1341,14 +1231,10 @@ mod tests {
 
     #[cfg(feature = "treesitter")]
     fn seed_personal_atlas_with_entities(indexes_dir: &std::path::Path) {
-        use corpus_engine::enrichment::atlas::atoms::{
-            AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity,
-        };
-        use corpus_engine::enrichment::atlas::edges::{
-            Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile,
-        };
-        use corpus_engine::enrichment::atlas::writer::ATLAS_DIRNAME;
-        use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+        use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity};
+        use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
+        use understanding_vocab::read::ATLAS_DIRNAME;
+        use understanding_vocab::taxonomy::{EnrichmentDepth, EntityType};
 
         let atlas_dir = indexes_dir.join("personal-knowledge").join(ATLAS_DIRNAME);
         std::fs::create_dir_all(&atlas_dir).unwrap();
@@ -1461,19 +1347,12 @@ mod tests {
         seed_memories_table(&db_path);
         seed_personal_atlas_with_entities(&indexes_dir);
 
-        let embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
-        });
-        let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
-            Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
-        });
-        let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
-            recipes_dir,
-            indexes_dir.clone(),
-            embed,
-        ));
-        let mgr =
-            KnowledgeViewManager::new(engine, infer, db_path, vec!["inner-work".into()]).await;
+        let engine = std::sync::Arc::new(
+            IngestPortDouble::new()
+                .with_index_dir(indexes_dir.clone())
+                .opening_indexes_under_index_dir(),
+        );
+        let mgr = KnowledgeViewManager::new(engine, db_path, vec!["inner-work".into()]).await;
 
         let mut ctx = tmp_context();
         mgr.splice_into(&mut ctx, Some("research-analyst")).await;
@@ -1515,19 +1394,12 @@ mod tests {
         seed_memories_table(&db_path);
         seed_personal_atlas_with_entities(&indexes_dir);
 
-        let embed: corpus_engine::EmbedFn = std::sync::Arc::new(|_| {
-            Box::pin(async { Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; 4]) })
-        });
-        let infer: corpus_engine::InferenceFn = std::sync::Arc::new(|_, _: Option<u32>| {
-            Box::pin(async { Ok::<String, corpus_engine::Error>("{}".into()) })
-        });
-        let engine = std::sync::Arc::new(corpus_engine::CorpusEngine::new(
-            recipes_dir,
-            indexes_dir,
-            embed,
-        ));
-        let mgr =
-            KnowledgeViewManager::new(engine, infer, db_path, vec!["inner-work".into()]).await;
+        let engine = std::sync::Arc::new(
+            IngestPortDouble::new()
+                .with_index_dir(indexes_dir)
+                .opening_indexes_under_index_dir(),
+        );
+        let mgr = KnowledgeViewManager::new(engine, db_path, vec!["inner-work".into()]).await;
 
         let mut ctx = tmp_context();
         mgr.splice_into(&mut ctx, Some("inner-work")).await;

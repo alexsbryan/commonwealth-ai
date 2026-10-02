@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! The distributed-inference plan: which node serves which layers of which
+//! model.
+//!
+//! Moved here from `commonwealth_state::inference_plan` by pb-mesh-exit-core
+//! (FIVE_PROGRAMS §12 3a rung 2): it crosses cw-rails' ledger doors
+//! (commonwealth-rails ledger.rs) and the daemon's `/internal/scheduling/*`
+//! routes, so two programs speak it. `commonwealth_state::inference_plan`
+//! re-exports this module whole.
+use std::net::SocketAddr;
+
+use serde::{Deserialize, Serialize};
+
+use kernel_types::{ModelId, NodeId};
+
+/// The complete inference plan for the mesh — one shard plan per loaded model.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct InferencePlan {
+    pub model_plans: Vec<ShardPlan>,
+}
+
+/// How a single model is sharded across mesh nodes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShardPlan {
+    pub model: ModelId,
+    pub entry_node: NodeId,
+    pub assignments: Vec<ShardAssignment>,
+    pub estimated_tokens_per_sec: f32,
+    pub estimated_ttft_ms: u32,
+}
+
+/// A single node's assignment within a shard plan.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShardAssignment {
+    pub node_id: NodeId,
+    pub layers: LayerRange,
+    pub gpu_index: u32,
+    pub rpc_address: SocketAddr,
+}
+
+/// A contiguous range of model layers assigned to a node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LayerRange {
+    /// First layer (inclusive).
+    pub start: u32,
+    /// Last layer (exclusive).
+    pub end: u32,
+}
+
+impl LayerRange {
+    pub fn new(start: u32, end: u32) -> Self {
+        debug_assert!(start < end, "empty layer range: {start}..{end}");
+        Self { start, end }
+    }
+
+    pub fn count(&self) -> u32 {
+        self.end - self.start
+    }
+}
+
+/// The ring namespace inference plans and model rows replicate on. Federation
+/// wire (§12 3a rung 2), re-exported at `commonwealth_state::store_adapter`.
+pub const INFERENCE_APP_ID: &str = "inference";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn layer_range_count() {
+        let r = LayerRange::new(0, 32);
+        assert_eq!(r.count(), 32);
+    }
+
+    #[test]
+    fn layer_range_serde_roundtrip() {
+        let r = LayerRange::new(16, 48);
+        let json = serde_json::to_string(&r).unwrap();
+        let back: LayerRange = serde_json::from_str(&json).unwrap();
+        assert_eq!(r, back);
+    }
+
+    #[test]
+    fn shard_plan_serde_roundtrip() {
+        let plan = ShardPlan {
+            model: ModelId::from_u128(1),
+            entry_node: NodeId::from_u128(10),
+            assignments: vec![ShardAssignment {
+                node_id: NodeId::from_u128(10),
+                layers: LayerRange::new(0, 32),
+                gpu_index: 0,
+                rpc_address: "127.0.0.1:50051".parse().unwrap(),
+            }],
+            estimated_tokens_per_sec: 45.0,
+            estimated_ttft_ms: 1100,
+        };
+        let json = serde_json::to_string(&plan).unwrap();
+        let back: ShardPlan = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.assignments.len(), 1);
+        assert_eq!(back.assignments[0].layers.count(), 32);
+    }
+}

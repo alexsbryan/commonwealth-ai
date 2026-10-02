@@ -25,13 +25,13 @@ use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
-use sovereign_core::error::Error;
-use sovereign_core::model_family::{
+use sovereign_contracts::error::Error;
+use sovereign_contracts::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::*;
-use sovereign_core::Result;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::*;
+use sovereign_contracts::Result;
 
 use crate::hardware::HardwareProfile;
 
@@ -195,8 +195,8 @@ mod pick_slot_tests {
     //! is caught by `cargo test` long before it reaches a live
     //! llama.cpp load.
     use super::{pick_slot, should_batch_fast_short, SlotTarget, FAST_SHORT_MAX_INPUT_CHARS};
-    use sovereign_core::oicp::{CapabilityHint, InferenceRequirements};
-    use sovereign_core::types::{CompletionRequest, Speed};
+    use oicp_types::{CapabilityHint, InferenceRequirements};
+    use sovereign_contracts::types::{CompletionRequest, Speed};
 
     fn req(speed: Speed, hint: Option<CapabilityHint>) -> CompletionRequest {
         let mut r = CompletionRequest::new("hi");

@@ -26,15 +26,18 @@
 //! `commonwealth-rails` with none of that underneath.
 
 pub mod apps;
+pub mod claims;
 pub mod declared;
 pub mod fanout;
 pub mod identity;
+pub mod origins;
 pub mod presence;
 pub mod reach;
 
 pub use apps::{valid_app_name, AppClaim, PublishRefusal, PublishedApp, PublishedApps, Tier};
 pub use declared::{
-    dir_under, house_dir_under, read_declared_in, valid_header_name, write_declared_in,
+    dir_under, house_dir_under, rails_data_dir, read_declared_in, read_house_in, valid_header_name,
+    write_declared_in, write_viewer_in, RAILS_CONFIG_FILE, RAILS_DATA_DIR_ENV, VIEWER_FILE,
 };
 pub use identity::{
     admit_app, admit_media, admit_offer, admits_no_one, verified_headers, MemberCheck,

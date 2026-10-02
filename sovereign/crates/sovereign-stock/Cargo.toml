@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "sovereign-stock"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The stock distribution (docs/FIVE_PROGRAMS.md §2c; phase-b-29 Q1, Q2, Q4):
+# ONE process that runs svrn with serve and code hosted in it. A composition
+# root in no package, held to its faces by boundary-gate (`[[distribution]] stock` in
+# quality/ARCH_LAYERS.toml): svrn's process entry and serve's assembly. It
+# names no sovereign-contracts, so it never raises that crate's fan-in.
+
+[[bin]]
+name = "sovereign-stock"
+path = "src/main.rs"
+
+# svrn's LLM verbs with ingest composed in: what the dispatcher execs for
+# them (pb-cli-llm-ingest-move-compose).
+[[bin]]
+name = "sovereign-cli-llm-stock"
+path = "src/cli_llm.rs"
+
+[dependencies]
+# `treesitter`: the daemon's process entry mounts `daemon_cmd`, gated on it.
+sovereign-daemon = { workspace = true, features = ["treesitter"] }
+sovereign-serve = { workspace = true }
+# Code's face (`face::compose`), mounted on svrn's one `/mcp`
+# (pb-code-daemon-exit).
+sovereign-code = { workspace = true }
+# Ingest, composed for svrn (`hosted`): its enrichment-config port, enrichment
+# client, engine face and authoring harness, the one composition on-prem calls
+# too (phase-b-88). Both distribution rows claim that crate.
+sovereign-hosted-ingest = { workspace = true }
+# The grammar registry code's editor door takes as an input
+# (`extractors::code::language_for_extension`, pb-meshapp-rest); code may not
+# name corpus-engine, so the distribution supplies it.
+corpus-engine = { workspace = true, features = ["treesitter"] }
+# Ingest's recipe authoring (`port::compose`): the recipe-project store behind
+# its port and the recipe-authoring tools, over svrn's notes
+# (pb-ingest-rehome-daemon).
+sovereign-recipe-author = { workspace = true }
+# svrn's LLM verbs (`bin_main_with`), handed the same ingest composition.
+sovereign-cli-llm = { path = "../sovereign-cli-llm" }
+host-kit = { workspace = true, features = ["shell"] }
+tokio = { workspace = true }
+tracing = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+
+[dev-dependencies]
+# tests/pod_worker_e2e.rs mints the owner-signed bootstrap blob.
+ed25519-dalek = { workspace = true }
+reqwest = { workspace = true, features = ["blocking"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+# serve_latency_bars (moved from sovereign-daemon, pb-serve-distributes): the
+# stream and embed calls, serve's readiness probe, and the laps' subscriber.
+futures = { workspace = true }
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
+sovereign-turn-client = { workspace = true }
+tracing-subscriber = { workspace = true }
+# serve_routes (moved from sovereign-daemon, pb-serve-ranks-tests-stock): the
+# daemon routes serve's router and adapter answer. Serve's library by its own
+# paths through the empty-items face (phase-b-72), the daemon's seed records
+# from its `double`, ids from kernel-types and the manifest from oicp-types.
+sovereign-serving-host = { path = "../sovereign-serving-host" }
+sovereign-daemon = { workspace = true, features = ["treesitter", "test-doubles"] }
+kernel-types = { workspace = true }
+oicp-types = { workspace = true }
+corpus-index = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+# svrn_memory_without_code_e2e (moved from sovereign-daemon,
+# pb-distribution-svrn-lift-2): the lesson read back from svrn's store through
+# the turn path's reader, the empty-items faces below svrn's process face.
+sovereign-core = { workspace = true }
+sovereign-store = { workspace = true }
+
+[features]
+# `svrn awareness`, served by `sovereign-cli-llm-stock` since
+# pb-cli-llm-ingest-move-remainder; the feature is cli-llm's.
+awareness = ["sovereign-cli-llm/awareness"]
+# The Windows GPU backend of the process that loads the weights, which this is
+# (serve's selectors). The packaged desktop builds it with one
+# (`SOVEREIGN_SIDECAR_FEATURES`, stage-daemon-sidecar.sh; pb-distribution-setup).
+windows-vulkan = ["sovereign-serve/windows-vulkan"]
+windows-cuda = ["sovereign-serve/windows-cuda"]
+
+[lints]
+workspace = true

@@ -296,7 +296,7 @@ impl Runtime {
             self.store.as_ref(),
             conversation_id,
             message,
-            self.principal_scope(conversation_id),
+            self.principal_scope(conversation_id).await,
         )
         .await?;
         let intent = self
@@ -412,7 +412,6 @@ impl Runtime {
             hot_corpora,
             entities,
             meta_atlas_hits,
-            demand_plan,
             unavailable_corpora,
             atlas_summaries,
             atlas_walk,
@@ -425,12 +424,7 @@ impl Runtime {
         // decomposition), coverage-stamped against the composed pool.
         // Zero model calls; retained on the plan for ledger assembly.
         let demands = {
-            let mut d = crate::runtime::epistemic::build_demands(
-                message,
-                intent,
-                &entities,
-                demand_plan.as_ref(),
-            );
+            let mut d = crate::runtime::epistemic::build_demands(message, intent, &entities);
             crate::runtime::epistemic::stamp_coverage(&mut d, &chunks);
             d
         };
@@ -486,10 +480,28 @@ impl Runtime {
                     "KnowledgeQuery: empty pool over a lost corpus — disclosing in the prompt"
                 );
             }
-            tracing::info!("KnowledgeQuery: no chunks — answering from parametric knowledge");
+            // The one decider for this branch's general-knowledge fork; a
+            // situation-deictic question declines like the disclosure does.
+            let answers_from_gk =
+                crate::runtime::gk_rescue::zero_chunk_answers_from_gk(guidance.is_some(), message);
+            tracing::info!(
+                answers_from_gk,
+                "KnowledgeQuery: no chunks — parametric knowledge or decline"
+            );
             let corpora = context.installed_corpora_display();
             let prompt = match &guidance {
                 Some(g) => format!("The user asked: \"{message}\"\n\n{g}"),
+                None if !answers_from_gk => format!(
+                    "The user asked: \"{message}\"\n\n\
+                 A search of the installed sources ({corpora}) found nothing \
+                 relevant. The question asks about the user's own organization \
+                 or schedule, which only their own material can answer — no \
+                 public fact can. Do NOT answer from general knowledge and \
+                 never invent a name, room, number, date, rate, or time. Say in \
+                 one short sentence that you don't have that material, then \
+                 offer one concrete next step (such as adding the document \
+                 that records it). No preamble, and never emit tool-call syntax."
+                ),
                 None => format!(
                     "The user asked: \"{message}\"\n\n\
                  A search of the installed sources ({corpora}) found nothing \
@@ -548,11 +560,10 @@ impl Runtime {
                 // forbids ("do not answer from general knowledge or invent an
                 // answer"), so committing it there would make the structural
                 // prefix contradict the prompt it prefixes. A lost corpus is
-                // not a general-knowledge turn; it is a refusal.
-                assistant_prefix: match &guidance {
-                    Some(_) => None,
-                    None => Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string()),
-                },
+                // not a general-knowledge turn; it is a refusal. Nor is a
+                // situation-deictic question (`zero_chunk_answers_from_gk`).
+                assistant_prefix: answers_from_gk
+                    .then(|| crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string()),
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
@@ -593,10 +604,8 @@ impl Runtime {
                 // answering from parametric knowledge, so labelling it
                 // `ZeroChunk` would tell every downstream reader of this
                 // field that it did.
-                general_knowledge: match &guidance {
-                    Some(_) => None,
-                    None => Some(crate::runtime::types::GkReason::ZeroChunk),
-                },
+                general_knowledge: answers_from_gk
+                    .then_some(crate::runtime::types::GkReason::ZeroChunk),
                 demands,
                 query_embedding: embedding,
                 // Zero retrieval never reaches the admission stage — there
@@ -978,7 +987,7 @@ impl Runtime {
         const CHARS_PER_TOKEN: u32 = 4;
         let original_budget = knowledge_char_budget;
         if let Some(n_ctx) = self.inference.effective_context_size() {
-            let reserved_output = self.inference_config.max_tokens as u32;
+            let reserved_output = self.turn_inference_config().max_tokens as u32;
             // Phase 3 (budget-sensor redesign): when the assembly memo
             // has last turn's REAL system-message size for this
             // conversation, use it instead of the static cushion —
@@ -1065,7 +1074,7 @@ impl Runtime {
         // them. Best-effort: if `installed_indexes()` errors we fall
         // back to no-kinds formatting (pre-catalog behaviour).
         let (kinds, display_categories): (
-            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, corpus_index::types::CorpusKind>,
             std::collections::HashMap<String, String>,
         ) = if let Some(engine) = &self.corpus_engine {
             let mut kinds_map = std::collections::HashMap::new();
@@ -1089,8 +1098,6 @@ impl Runtime {
         let contested_titles: std::collections::HashSet<String> =
             self.contested_titles_for_chunks(&chunks, &lane).await;
         let folder_meta = self.folder_metadata_snapshot().await;
-        self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories, &lane)
-            .await;
         // Late summary injection: append whole-work summaries AFTER the full
         // leaf pipeline (reweight → … → ppr-rerank) so they cannot perturb leaf
         // retrieval/ranking — QA-neutral by construction. The position was
@@ -1144,15 +1151,6 @@ impl Runtime {
         // variable's loop-success semantics. See the construction below.
         let mut agentic_entity_anchored = false;
         let mut agentic_corpus_anchored = true;
-        if crate::runtime::evidence_loop::agentic_kq_enabled() {
-            let (merged, still_insufficient, entity_anchored, corpus_anchored) = self
-                .agentic_evidence_round(message, chunks, context, intent, scope)
-                .await;
-            chunks = merged;
-            agentic_still_insufficient = still_insufficient;
-            agentic_entity_anchored = entity_anchored;
-            agentic_corpus_anchored = corpus_anchored;
-        }
         let conv_briefing = self
             .build_conv_briefing_block(&chunks, &display_categories, &lane)
             .await;
@@ -1320,10 +1318,10 @@ impl Runtime {
                     system_message: Some(system),
                     preferred_speed: route_speed,
                     max_tokens: Some(output_budget.hard_ceiling),
-                    temperature: Some(self.inference_config.temperature),
+                    temperature: Some(self.turn_inference_config().temperature),
                     think_budget: Some(0),
                     structured_output: None,
-                    top_k: self.inference_config.top_k,
+                    top_k: self.turn_inference_config().top_k,
                     top_p: None,
                     // oicp=None lets the wire layer auto-derive
                     // latency_class=Fast from preferred_speed (per the
@@ -1358,7 +1356,7 @@ impl Runtime {
                 let base = crate::runtime::build_synthesis_system_prompt(
                     false,
                     &gap_note,
-                    self.inference_config.think_budget > 0,
+                    self.turn_inference_config().think_budget > 0,
                     &budget_note,
                 );
                 // Inc 4: on the first-class code route, sharpen the prompt to use
@@ -1375,10 +1373,10 @@ impl Runtime {
                     system_message: Some(system),
                     preferred_speed: route_speed,
                     max_tokens: Some(output_budget.hard_ceiling),
-                    temperature: Some(self.inference_config.temperature),
-                    think_budget: Some(self.inference_config.think_budget),
+                    temperature: Some(self.turn_inference_config().temperature),
+                    think_budget: Some(self.turn_inference_config().think_budget),
                     structured_output: None,
-                    top_k: self.inference_config.top_k,
+                    top_k: self.turn_inference_config().top_k,
                     top_p: None,
                     oicp: self.build_oicp(&Intent::KnowledgeQuery),
                     tools: None,
@@ -1567,24 +1565,26 @@ impl Runtime {
         // entity anchor does: with only metadata behind the answer, a confident
         // specific is a fabrication the gate must verify (and abstain on) rather
         // than release under an honest "from general knowledge:" caveat.
-        let catalog_only =
-            crate::runtime::evidence_loop::retrieval_is_catalog_only(&chunks, &kinds);
+        let catalog_only = crate::runtime::anchoring::retrieval_is_catalog_only(&chunks, &kinds);
         // Retrieval-derived anchor: the question names a specific entity that a
         // retrieved TITLE identifies, but no ingested body may ground the
         // specific. Catches the MIXED/full-text-miss case `catalog_only` misses
         // (one tangential body chunk disables the strict all-catalog rule).
         let title_anchored =
-            crate::runtime::evidence_loop::question_anchors_retrieved_title(message, &chunks);
+            crate::runtime::anchoring::question_anchors_retrieved_title(message, &chunks);
         // Break each contributing signal out (rather than fold them into the `||`)
         // so the glassbox decision line below can attribute WHICH one anchored.
-        let atlas_anchored = crate::runtime::evidence_loop::compute_entity_anchored(
+        let atlas_anchored = crate::runtime::anchoring::compute_entity_anchored(
             message,
             context.conversation.enabled_corpora.as_deref(),
             &chunks,
         );
-        let corpus_deictic = crate::runtime::evidence_loop::question_is_corpus_deictic(message);
-        let gate_entity_anchored =
-            atlas_anchored || corpus_deictic || catalog_only || title_anchored;
+        let corpus_deictic = crate::runtime::anchoring::question_is_corpus_deictic(message);
+        let situation_deictic = crate::runtime::anchoring::question_is_situation_deictic(message);
+        let gate_entity_anchored = atlas_anchored
+            || crate::runtime::anchoring::question_closes_gk_exemption(message)
+            || catalog_only
+            || title_anchored;
         // Glassbox: the entity-anchor decision strips the GK-caveat exemption and
         // forces specific-claim verification — a load-bearing trust decision, one
         // per turn. Emit it for EVERY knowledge query (not only when it flips), each
@@ -1597,13 +1597,14 @@ impl Runtime {
             gate_entity_anchored,
             atlas_anchored,
             corpus_deictic,
+            situation_deictic,
             catalog_only,
             title_anchored,
             agentic_loop = agentic_entity_anchored,
             "entity-anchor decision (GK-caveat exemption closed when true)"
         );
         crate::runtime::grounding::dbg(&format!(
-            "[KQDIAG] gate_entity_anchored={gate_entity_anchored} atlas={atlas_anchored} deictic={corpus_deictic} catalog_only={catalog_only} title_anchored={title_anchored} loop_value={agentic_entity_anchored}"
+            "[KQDIAG] gate_entity_anchored={gate_entity_anchored} atlas={atlas_anchored} deictic={corpus_deictic} situation={situation_deictic} catalog_only={catalog_only} title_anchored={title_anchored} loop_value={agentic_entity_anchored}"
         ));
         // Re-stamp demand coverage against the FINAL pool — the
         // agentic loop may have widened it since the post-pipeline
@@ -1857,6 +1858,7 @@ impl Runtime {
             hoisted_probe_verdict,
             plan.gate_entity_anchored,
             &plan.unavailable_corpora,
+            message,
         ) {
             if let Some(rescued) =
                 crate::runtime::gk_rescue::rescue_ood_answer(self.inference.as_ref(), message).await
@@ -2008,7 +2010,7 @@ impl Runtime {
             // response so the desktop chip lights up on length
             // truncation here too, not just on streaming surfaces.
             finish_reason: completion.finish_reason.clone(),
-            max_tokens_budget: Some(self.inference_config.max_tokens),
+            max_tokens_budget: Some(self.turn_inference_config().max_tokens),
             completion_tokens: completion.completion_tokens,
             // Ctx-budget glassbox — paired with `tokens_used` so the
             // desktop chat bubble can render `N / M (X%)` and brighten
@@ -2104,6 +2106,7 @@ impl Runtime {
                 crate::runtime::epistemic::EpistemicInputs {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
+                    answer: Some(&final_content),
                     general_knowledge,
                     demands,
                     gaps,

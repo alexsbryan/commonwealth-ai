@@ -64,18 +64,9 @@ impl From<std::io::Error> for RecipeProjectError {
 
 pub type Result<T> = std::result::Result<T, RecipeProjectError>;
 
-/// One row of the `recipe_projects` table. Field names match the subset of
-/// the former `FeatureRow` the recipe-author surface actually read, so the
-/// migration was a type swap, not a field rename.
-#[derive(Debug, Clone)]
-pub struct RecipeProjectRow {
-    pub id: String,
-    pub title: String,
-    pub charter_md: String,
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub archived_at: Option<i64>,
-}
+/// Moved to `sovereign-contracts` (pb-ingest-rehome-daemon), where a program
+/// reaching this store through its port reads it.
+pub use sovereign_contracts::recipe::project::RecipeProjectRow;
 
 /// SQLite store for recipe-author projects.
 pub struct RecipeProjectStore {

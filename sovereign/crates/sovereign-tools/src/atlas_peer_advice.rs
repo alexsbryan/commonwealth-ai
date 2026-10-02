@@ -37,7 +37,7 @@
 //! Among multiple eligible peers, pick the one with the highest
 //! `atlas_tier2_count` to maximize the work skipped.
 
-use commonwealth_core::knowledge::CorpusShardInfo;
+use oicp_types::knowledge::CorpusShardInfo;
 
 /// Minimum lead a peer must have over us before we recommend
 /// pulling. Set so a peer that's only 50 articles ahead doesn't
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn from_member_filters_by_corpus_and_atlas_presence() {
-        use commonwealth_core::knowledge::CorpusShardInfo;
+        use oicp_types::knowledge::CorpusShardInfo;
         let hosted = vec![
             // Wrong corpus.
             CorpusShardInfo {

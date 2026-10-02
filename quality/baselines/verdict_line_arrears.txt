@@ -5,8 +5,6 @@
 #   cargo run -p xtask -- instrument-gate --tighten
 co-sweep
 contract-nightly
-cw-rails-lift
-cw-work-lift
 daemon-concurrency-soak
 daemon-concurrency-soak-control
 daemon-concurrency-soak-selftest

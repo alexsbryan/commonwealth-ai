@@ -6,66 +6,30 @@
 //! dispatcher locates its sibling `sovereign-cli-llm` binary and
 //! execs into it. Same shape as `dev_bin::exec` — see that module
 //! for the discovery + fallback rationale.
+//!
+//! The sibling is the stock distribution's `sovereign-cli-llm-stock`: cli-llm
+//! with ingest composed in (pb-cli-llm-ingest-move-compose). The bare
+//! `sovereign-cli-llm` names ingest absent on every lane that reads corpora.
 
-use std::ffi::OsString;
 use std::path::PathBuf;
 
-const BIN_NAME: &str = "sovereign-cli-llm";
+const BIN_NAME: &str = "sovereign-cli-llm-stock";
 
 fn locate() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("SOVEREIGN_CLI_LLM_BIN") {
-        let path = PathBuf::from(p);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Ok(real) = std::fs::canonicalize(&exe) {
-            if let Some(dir) = real.parent() {
-                let cand = dir.join(BIN_NAME);
-                if cand.is_file() {
-                    return Some(cand);
-                }
-            }
-        }
-    }
-    which::which(BIN_NAME).ok()
+    sovereign_turn_client::reach::locate_sibling(BIN_NAME, "SOVEREIGN_CLI_LLM_BIN")
 }
 
 pub fn exec(verb: &str, args: &[String]) -> i32 {
     let Some(bin) = locate() else {
         eprintln!(
             "sovereign: cannot find sibling binary '{BIN_NAME}'. \
-             Build it with `cargo build -p sovereign-cli-llm --release`, \
+             Build it with `cargo build -p sovereign-stock`, \
              or set SOVEREIGN_CLI_LLM_BIN to its path."
         );
         return 127;
     };
 
-    crate::sibling::warn_if_stale(&bin, "sovereign-cli-llm");
+    crate::sibling::warn_if_stale(&bin, "sovereign-stock");
 
-    let mut argv: Vec<OsString> = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from(verb));
-    for a in args {
-        argv.push(OsString::from(a));
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        let err = std::process::Command::new(&bin).args(&argv).exec();
-        eprintln!("sovereign: exec {} failed: {err}", bin.display());
-        126
-    }
-
-    #[cfg(not(unix))]
-    {
-        match std::process::Command::new(&bin).args(&argv).status() {
-            Ok(status) => status.code().unwrap_or(1),
-            Err(e) => {
-                eprintln!("sovereign: spawn {} failed: {e}", bin.display());
-                126
-            }
-        }
-    }
+    crate::sibling::exec_into(&bin, verb, args)
 }

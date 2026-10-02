@@ -42,14 +42,12 @@ use serde::{Deserialize, Serialize};
 /// it so a publisher and a request path cannot disagree about what a name is.
 pub use commonwealth_transport::iroh_identity_forward::valid_app_name;
 
-/// TTL a claim gets when the caller names none. An hour: long enough that a
-/// laptop asleep for a coffee break does not lose its publish, short enough
-/// that a `kill -9`'d runner is gone before anyone notices it in a fan-out.
-pub const DEFAULT_CLAIM_TTL: Duration = Duration::from_secs(3600);
-/// The longest TTL a claim may ask for, matching the work atlas's own cap.
-/// Beyond this, the honest shape is `[iroh.apps]` — a durable assertion with
-/// an owner, not a claim renewed by nobody.
-pub const MAX_CLAIM_TTL: Duration = Duration::from_secs(24 * 3600);
+/// The claim lifecycle's constants, re-exported so every
+/// `commonwealth_media::apps::` path keeps working after the lifecycle moved
+/// to [`crate::claims`].
+pub use crate::claims::{DEFAULT_CLAIM_TTL, MAX_CLAIM_TTL};
+
+use crate::claims::{mint_claim_id, Claims};
 
 /// Which tier published an app, and therefore what makes it go away.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,36 +153,33 @@ struct Inner {
 #[derive(Default)]
 struct State {
     config: BTreeMap<String, SocketAddr>,
-    claimed: BTreeMap<String, ClaimRow>,
+    claimed: Claims<ClaimedApp>,
 }
 
-struct ClaimRow {
-    id: String,
+/// A claimed app's origin and who its publisher admits: members named in
+/// `allow` (by name or node-id prefix), every member when it is empty. The
+/// publisher's own list rides its claim, as `media_allow` rides the media
+/// origin's registration (phase-b-81 (3)).
+#[derive(Clone)]
+struct ClaimedApp {
     addr: SocketAddr,
-    deadline: Instant,
+    allow: Vec<String>,
 }
 
 impl State {
-    /// Drop every expired claim. Called on every read as well as every write,
-    /// so expiry is observed by the next question anyone asks rather than by
-    /// a timer that has to be running — a registry whose correctness depends
-    /// on a background task is a registry that is wrong whenever that task
-    /// dies (ARCH principle 10).
+    /// Drop every expired claim, on every read as well as every write (see
+    /// [`Claims::sweep`]).
     fn sweep(&mut self, now: Instant) {
-        self.claimed.retain(|name, row| {
-            let live = row.deadline > now;
-            if !live {
-                tracing::info!(
-                    target: "transport",
-                    app = %name,
-                    addr = %row.addr,
-                    claim = %row.id,
-                    "app registry: a claim's TTL expired — this app is no longer published. \
-                     The runner exited without releasing, or stopped renewing"
-                );
-            }
-            live
-        });
+        for (name, row) in self.claimed.sweep(now) {
+            tracing::info!(
+                target: "transport",
+                app = %name,
+                addr = %row.value.addr,
+                claim = %row.id,
+                "app registry: a claim's TTL expired — this app is no longer published. \
+                 The runner exited without releasing, or stopped renewing"
+            );
+        }
     }
 
     fn serving(&self) -> bool {
@@ -201,11 +196,8 @@ impl State {
         }
     }
 
-    fn find_claim(&self, claim_id: &str) -> Option<&str> {
-        self.claimed
-            .iter()
-            .find(|(_, row)| row.id == claim_id)
-            .map(|(name, _)| name.as_str())
+    fn find_claim(&self, claim_id: &str) -> Option<String> {
+        self.claimed.keys_of(claim_id).into_iter().next()
     }
 }
 
@@ -225,7 +217,7 @@ impl std::fmt::Debug for PublishedApps {
             .unwrap_or_else(PoisonError::into_inner);
         f.debug_struct("PublishedApps")
             .field("config", &state.config.len())
-            .field("claimed", &state.claimed.len())
+            .field("claimed", &state.claimed.iter().count())
             .finish()
     }
 }
@@ -282,8 +274,38 @@ impl PublishedApps {
     pub fn snapshot(&self) -> BTreeMap<String, SocketAddr> {
         self.with_state(|s| {
             let mut out = s.config.clone();
-            for (name, row) in &s.claimed {
-                out.insert(name.clone(), row.addr);
+            for (name, row) in s.claimed.iter() {
+                out.insert(name.clone(), row.value.addr);
+            }
+            out
+        })
+    }
+
+    /// [`Self::snapshot`] as `who` may reach it: the config tier, and each
+    /// claimed app whose publisher's allow list is empty or names `who`. A
+    /// non-member sees the whole map, and `admit_app` refuses it whole.
+    pub fn snapshot_for(
+        &self,
+        who: Option<&crate::identity::MemberIdentity>,
+    ) -> BTreeMap<String, SocketAddr> {
+        let Some(who) = who else {
+            return self.snapshot();
+        };
+        self.with_state(|s| {
+            let mut out = s.config.clone();
+            for (name, row) in s.claimed.iter() {
+                let allow = &row.value.allow;
+                if allow.is_empty() || allow.iter().any(|entry| who.named_by(entry)) {
+                    out.insert(name.clone(), row.value.addr);
+                } else {
+                    tracing::info!(
+                        target: "transport",
+                        app = %name,
+                        member = %who.name,
+                        allow = ?allow,
+                        "app registry: a member outside this app's allow list does not see it"
+                    );
+                }
             }
             out
         })
@@ -303,7 +325,7 @@ impl PublishedApps {
             });
             let claimed = s.claimed.iter().map(|(name, row)| PublishedApp {
                 name: name.clone(),
-                addr: row.addr,
+                addr: row.value.addr,
                 tier: Tier::Claimed,
                 claim_id: Some(row.id.clone()),
                 expires_in_secs: Some(row.deadline.saturating_duration_since(now).as_secs()),
@@ -333,6 +355,18 @@ impl PublishedApps {
         addr: SocketAddr,
         ttl: Duration,
     ) -> Result<AppClaim, PublishRefusal> {
+        self.claim_allowing(name, addr, ttl, Vec::new())
+    }
+
+    /// [`Self::claim`] for the members `allow` names only (empty = every
+    /// member): the publisher's own list, carried on its claim.
+    pub fn claim_allowing(
+        &self,
+        name: &str,
+        addr: SocketAddr,
+        ttl: Duration,
+        allow: Vec<String>,
+    ) -> Result<AppClaim, PublishRefusal> {
         if !valid_app_name(name.as_bytes()) {
             return Err(PublishRefusal::BadName(name.to_string()));
         }
@@ -345,14 +379,8 @@ impl PublishedApps {
                     tier,
                 });
             }
-            s.claimed.insert(
-                name.to_string(),
-                ClaimRow {
-                    id: id.clone(),
-                    addr,
-                    deadline: Instant::now() + ttl,
-                },
-            );
+            s.claimed
+                .insert(name.to_string(), &id, ClaimedApp { addr, allow }, ttl);
             Ok(AppClaim {
                 claim_id: id.clone(),
                 name: name.to_string(),
@@ -377,15 +405,15 @@ impl PublishedApps {
     pub fn renew(&self, claim_id: &str, ttl: Duration) -> Result<AppClaim, PublishRefusal> {
         let ttl = ttl.min(MAX_CLAIM_TTL);
         self.mutating(|s| {
-            let Some(name) = s.find_claim(claim_id).map(str::to_string) else {
+            let Some(name) = s.find_claim(claim_id) else {
                 return Err(PublishRefusal::NoSuchClaim(claim_id.to_string()));
             };
-            let row = s.claimed.get_mut(&name).expect("just found");
-            row.deadline = Instant::now() + ttl;
+            s.claimed.renew(claim_id, ttl);
+            let addr = s.claimed.get(&name).expect("just renewed").value.addr;
             Ok(AppClaim {
                 claim_id: claim_id.to_string(),
                 name,
-                addr: row.addr,
+                addr,
                 expires_in_secs: ttl.as_secs(),
             })
         })
@@ -398,10 +426,10 @@ impl PublishedApps {
     /// ctrl-C, rather than up to an hour later.
     pub fn release(&self, claim_id: &str) -> Result<String, PublishRefusal> {
         let name = self.mutating(|s| {
-            let Some(name) = s.find_claim(claim_id).map(str::to_string) else {
+            let Some(name) = s.find_claim(claim_id) else {
                 return Err(PublishRefusal::NoSuchClaim(claim_id.to_string()));
             };
-            s.claimed.remove(&name);
+            s.claimed.release(claim_id);
             Ok(name)
         })?;
         tracing::info!(
@@ -449,26 +477,6 @@ impl PublishedApps {
         }
         out
     }
-}
-
-/// A claim id: the name it holds, plus enough entropy that two runners of the
-/// same app on one box cannot collide.
-///
-/// Identity from essence and a random seed, never a counter (ARCH principle
-/// 8). It is not a secret and is not treated as one — every surface that
-/// takes it is loopback-only, and any process that can present a claim id
-/// could have taken the claim itself.
-fn mint_claim_id(name: &str) -> String {
-    use std::hash::{BuildHasher, Hasher};
-    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
-    h.write(name.as_bytes());
-    // The decider, not a hand-read clock (clock-gate). Milliseconds rather
-    // than the nanoseconds this read before: the collision defence here is
-    // `RandomState::new()`'s per-call seed plus the name — the doc above says
-    // so — and the timestamp is a secondary source, so the six orders of
-    // magnitude buy nothing a random seed is not already buying.
-    h.write_u64(commonwealth_core::clock::unix_now_millis());
-    format!("{name}-{:012x}", h.finish() & 0xffff_ffff_ffff)
 }
 
 #[cfg(test)]
@@ -549,6 +557,29 @@ mod tests {
             Some(&addr(8096)),
             "the refused claim must not have moved the config entry"
         );
+    }
+
+    /// `app_allow` rides the publisher's claim (phase-b-81 (3)): a member
+    /// outside a non-empty list does not see the app, one inside does, and an
+    /// app claimed with no list is every member's. Failing input: a snapshot
+    /// that ignores the claim's list.
+    #[test]
+    fn a_claims_allow_list_narrows_who_sees_the_app() {
+        use kernel_types::member::MemberIdentity;
+        let member = |name: &str, id: u128| MemberIdentity {
+            name: name.into(),
+            node_id: commonwealth_core::ids::NodeId::from_u128(id),
+        };
+        let apps = PublishedApps::default();
+        apps.claim_allowing("films", addr(5000), ttl(), vec!["Mira".into()])
+            .unwrap();
+        apps.claim("chores", addr(5001), ttl()).unwrap();
+        let outsider = apps.snapshot_for(Some(&member("Bob", 0xB0B)));
+        assert!(!outsider.contains_key("films"), "{outsider:?}");
+        assert!(outsider.contains_key("chores"), "{outsider:?}");
+        let mira = apps.snapshot_for(Some(&member("Mira", 0x111)));
+        assert_eq!(mira.get("films"), Some(&addr(5000)));
+        assert!(mira.contains_key("chores"));
     }
 
     #[test]

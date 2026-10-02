@@ -26,9 +26,9 @@ impl Runtime {
     /// those conditions — it just expands.
     pub(crate) async fn expand_from_dominant_source(
         &self,
-        initial: Vec<corpus_engine::ScoredChunk>,
+        initial: Vec<corpus_index::types::ScoredChunk>,
         shape: &EvidenceShape,
-    ) -> (Vec<corpus_engine::ScoredChunk>, usize, usize, usize) {
+    ) -> (Vec<corpus_index::types::ScoredChunk>, usize, usize, usize) {
         use std::collections::HashSet;
 
         let (top_corpus_id, top_title) = &shape.top_source_key;
@@ -88,7 +88,7 @@ impl Runtime {
         // makes the fetch query-aware. Appended neighbours carry the uniform
         // cohesion score (1.0), not query similarity.
         let t_fetch = std::time::Instant::now();
-        let mut by_id: std::collections::BTreeMap<u64, corpus_engine::ScoredChunk> =
+        let mut by_id: std::collections::BTreeMap<u64, corpus_index::types::ScoredChunk> =
             std::collections::BTreeMap::new();
         // `initial` is score-ordered; visit the dominant-source hits
         // best-first so the budget favours the most relevant regions.
@@ -170,7 +170,7 @@ impl Runtime {
         // BTreeMap iterates ascending id → natural document order. Dedupe by
         // content (re-ingestion can yield duplicate content under fresh ids).
         let mut seen_contents: HashSet<String> = HashSet::new();
-        let mut expanded_dominant: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        let mut expanded_dominant: Vec<corpus_index::types::ScoredChunk> = Vec::new();
         for (_id, c) in by_id {
             if seen_contents.insert(c.content.clone()) {
                 expanded_dominant.push(c);
@@ -201,7 +201,7 @@ impl Runtime {
         //    messages, system fragments, or extraction artifacts —
         //    not sources worth citing.
         let dominant_key = shape.top_source_key.clone();
-        let mut grounding: Vec<corpus_engine::ScoredChunk> = Vec::new();
+        let mut grounding: Vec<corpus_index::types::ScoredChunk> = Vec::new();
         let mut dropped_noise = 0usize;
         let mut dropped_conversation_history = 0usize;
         let mut dropped_untitled = 0usize;
@@ -320,9 +320,9 @@ impl Runtime {
     /// number of new chunks added (after dedupe).
     pub(crate) async fn expand_from_top_sources(
         &self,
-        initial: Vec<corpus_engine::ScoredChunk>,
+        initial: Vec<corpus_index::types::ScoredChunk>,
         message: &str,
-    ) -> (Vec<corpus_engine::ScoredChunk>, usize, usize) {
+    ) -> (Vec<corpus_index::types::ScoredChunk>, usize, usize) {
         use std::collections::{HashMap, HashSet};
 
         let engine = match &self.corpus_engine {
@@ -430,7 +430,7 @@ impl Runtime {
                         message,
                         crate::runtime::evidence::EVIDENCE_TITLE_MIN_TOKEN_LEN,
                     );
-                    let overlap = |c: &corpus_engine::ScoredChunk| -> usize {
+                    let overlap = |c: &corpus_index::types::ScoredChunk| -> usize {
                         let body = c.content.to_lowercase();
                         q_tokens
                             .iter()

@@ -23,6 +23,7 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::notes::AgentNotes;
 
 use crate::slot_policy::Workload;
 use crate::title::strip_think_blocks;
@@ -614,9 +615,7 @@ impl ActiveLessonSet {
 /// (newest-first, retired excluded — supersede is honored by
 /// construction; disabled and malformed rows are skipped). `None`
 /// store (CLI paths without notes wired) → empty set.
-pub async fn load_active_lessons(
-    store: Option<&corpus_engine_notes::NoteStore>,
-) -> ActiveLessonSet {
+pub async fn load_active_lessons(store: Option<&dyn AgentNotes>) -> ActiveLessonSet {
     let Some(store) = store else {
         return ActiveLessonSet::default();
     };
@@ -689,7 +688,7 @@ pub fn render_lesson_block(prompt_form: &str) -> String {
 /// turn. A failed stamp is traced and the whisper may repeat next
 /// turn (accepted: single-user desktop, one-UPDATE window).
 pub(crate) async fn note_first_applications(
-    store: Option<&corpus_engine_notes::NoteStore>,
+    store: Option<&dyn AgentNotes>,
     applied: &[&ActiveLesson],
     now: i64,
 ) -> Option<serde_json::Value> {
@@ -807,6 +806,7 @@ pub(crate) async fn capture_lesson(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_contracts::recipe::notes::{NoteScope, NoteSource, RecipeNotes};
 
     // ── Durative floor ────────────────────────────────────────────
 
@@ -1054,13 +1054,17 @@ mod tests {
         assert_eq!(set.adjust_soft_target(1500), (1500, false));
     }
 
-    // ── Loader + whisper against a real NoteStore ─────────────────
+    // ── Loader + whisper against a capturing note double ─────────────────
+    //
+    // Never SQL (fp-27): the real-SQL halves these flows lean on — payload
+    // persistence and retired-row hiding — live beside their owner in
+    // `corpus-engine-notes/tests/real_sql_flows.rs`. What stays here is the
+    // loader/whisper LOGIC and the payload shape it emits.
 
     async fn store_with_lesson(
         payload: &LessonPayload,
-    ) -> (tempfile::TempDir, corpus_engine_notes::NoteStore, String) {
-        let dir = tempfile::tempdir().unwrap();
-        let store = corpus_engine_notes::NoteStore::open(&dir.path().join("notes.db")).unwrap();
+    ) -> (sovereign_contracts::notes::fixtures::RecordingNotes, String) {
+        let store = sovereign_contracts::notes::fixtures::RecordingNotes::default();
         let json = serde_json::to_string(payload).unwrap();
         let id = store
             .write_note_full(
@@ -1069,22 +1073,22 @@ mod tests {
                 vec![],
                 vec![],
                 "s1",
-                corpus_engine_notes::NoteScope::Global,
+                NoteScope::Global,
                 None,
                 None,
-                corpus_engine_notes::NoteSource::Agent,
+                NoteSource::Agent,
                 None,
                 Some(&json),
             )
             .await
             .unwrap();
-        (dir, store, id)
+        (store, id)
     }
 
     #[tokio::test]
     async fn loader_honors_enabled_flag_and_supersede() {
         let lesson = length_lesson(serde_json::json!({"soft_target_cap": 300})).payload;
-        let (_dir, store, id_a) = store_with_lesson(&lesson).await;
+        let (store, id_a) = store_with_lesson(&lesson).await;
 
         // Active lesson loads into the param slot.
         let set = load_active_lessons(Some(&store)).await;
@@ -1100,7 +1104,11 @@ mod tests {
             .unwrap();
         assert!(load_active_lessons(Some(&store)).await.length.is_none());
 
-        // Supersede: a retired predecessor never loads.
+        // Supersede: the newest row per rung wins — the loader takes the
+        // first of the newest-first list. The store half ("a retired
+        // predecessor is hidden") is pinned in
+        // `corpus-engine-notes/tests/real_sql_flows.rs`; composing the two
+        // is what "a retired predecessor never loads" means.
         let json_b = serde_json::to_string(&lesson).unwrap();
         let id_b = store
             .write_note_full(
@@ -1109,17 +1117,13 @@ mod tests {
                 vec![],
                 vec![],
                 "s1",
-                corpus_engine_notes::NoteScope::Global,
+                NoteScope::Global,
                 None,
                 None,
-                corpus_engine_notes::NoteSource::Agent,
+                NoteSource::Agent,
                 Some(&id_a),
                 Some(&json_b),
             )
-            .await
-            .unwrap();
-        store
-            .retire_by_id(&id_a, &format!("superseded by {id_b}"))
             .await
             .unwrap();
         let set = load_active_lessons(Some(&store)).await;
@@ -1132,7 +1136,7 @@ mod tests {
     #[tokio::test]
     async fn whisper_fires_exactly_once() {
         let lesson = length_lesson(serde_json::json!({"soft_target_cap": 300})).payload;
-        let (_dir, store, _id) = store_with_lesson(&lesson).await;
+        let (store, _id) = store_with_lesson(&lesson).await;
 
         let set = load_active_lessons(Some(&store)).await;
         let active = set.length.as_ref().unwrap();

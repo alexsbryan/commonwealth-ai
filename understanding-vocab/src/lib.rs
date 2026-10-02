@@ -9,6 +9,10 @@
 //!   ArgumentReconstruction, Position, Opposition, Asset); the on-disk
 //!   shape of `atlas/atoms.json`.
 //! - [`edges`] — `Edge` / `EdgesFile`; the shape of `atlas/edges.json`.
+//! - [`axis_catalog`] — `TypedAxis` and `AXIS_CATALOG`, the typed axes the
+//!   resolver projects into `atoms.json` and the bench scores against.
+//!   Moved here from `corpus-engine-atlas-reader` by phase-b
+//!   `pb-cli-llm-bench-move`, so the bench reads it without the reader.
 //! - [`taxonomy`] — `EnrichmentDepth` and the kind vocabularies every atom
 //!   names.
 //! - [`ontology`] — `OntologyPolicies` (five axes + prose) and, under
@@ -51,11 +55,13 @@
 
 pub mod articulation;
 pub mod atoms;
+pub mod axis_catalog;
 pub mod canonical;
 pub mod edges;
 pub mod ontology;
 pub mod read;
 pub mod reading_formatters;
+pub mod reconciliation;
 pub mod skeleton;
 pub mod stable_key;
 pub mod taxonomy;

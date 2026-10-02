@@ -456,7 +456,7 @@ are the access boundary, so set them up if you haven't:
     "tag:cloud-peer":  ["autogroup:admin"]
   },
   "acls": [
-    { "action": "accept", "src": ["tag:cloud-peer"], "dst": ["tag:laptop:9742,9743"] }
+    { "action": "accept", "src": ["tag:cloud-peer"], "dst": ["tag:laptop:9743"] }
   ]
 }
 ```
@@ -474,8 +474,8 @@ Drop the `R2_*` env vars; replace with (or rely on the defaults for):
 | key | example | required |
 |---|---|---|
 | `TS_AUTHKEY`        | `tskey-auth-...`     | yes |
-| `MESH_SEED_ADDR`    | `100.64.0.2:9742` | yes |
-| `MODEL_SERVE_HOST`  | `100.64.0.2`      | no — defaults to host part of `MESH_SEED_ADDR` |
+| `MESH_INVITE`       | `sovereign://join/…` | yes — `svrn mesh status` on the laptop prints it; the pod runs `svrn mesh join` with it, which brings cw-rails up first |
+| `MODEL_SERVE_HOST`  | `100.64.0.2`      | yes |
 | `MODEL_SERVE_PORT`  | `9743`               | no — matches `cloud-peer-serve-models.sh` default |
 | `PRIMARY_GGUF`      | …                    | no — same defaults as R2 path |
 
@@ -494,6 +494,3 @@ mismatch), so re-runs on a warm container disk are free.
   eagerly on cold-start and stays resident. This trades a small bit
   of wall-time on every cold pod boot for instant chat-call latency
   once the daemon is up — the right call for ad-hoc burst workloads.
-- `node_role = "ephemeral-worker"` is metadata only — the mesh
-  doesn't currently branch on it. It's there so future role-aware
-  scheduling has somewhere to read from.

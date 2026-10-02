@@ -41,20 +41,18 @@ See and change the models the daemon loads, without hand-editing `config.toml` a
 
 ### `svrn project`
 
-Per-project code intelligence **and** the project-layer half of ATOS (charter + phases). See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md) for the indexing flow and [ATOS.md](ATOS.md) for the charter flow.
+Per-project code intelligence and charter/phase management. See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md) for the indexing flow.
 
 | Subcommand | Description |
 |---|---|
 | `init [--name <id>] [--no-scip] [--no-hooks] [--no-claude-config] [--workspace-root <dir>] [--port <port>]` | Set up code intelligence for the current workspace: symbol index, SCIP call graph, generated `.sovereign/`, `.claude`/`.opencode` wiring, daemon registration. Also available as `svrn init`. See [CODE_INTELLIGENCE.md](CODE_INTELLIGENCE.md). |
-| `design [--import <path>] [--via <agent>] [--solo\|--stopgap] [--port <port>]` | Agent-collaborative `DESIGN.md` session against the Commonwealth daemon. Default launches opencode with the session brief primed; `--solo` drives structural-parser CLI prompts and writes `OPEN_QUESTIONS.md`; `--stopgap` is a provisional in-terminal chat (always flagged as such); `--import <path>` copies an existing doc into `<repo>/DESIGN.md` with diff-confirm |
-| `plan [--allow-open]` | Compose `IMPLEMENTATION_PLAN.md` from `DESIGN.md` + `OPEN_QUESTIONS.md`; upsert rows into `.sovereign/plan.db` (`plan_items` table); defer stale rows from prior generations. Unanswered `OPEN_QUESTIONS.md` entries block unless `--allow-open` (then they surface as `Open risks` on the matching phase) |
 | `charter [--print]` | Create or edit `.sovereign/CHARTER.md` — the team's free-form governance/onboarding doc. First invocation writes a minimal skeleton and opens `$EDITOR`; subsequent invocations just open the existing file. `--print` outputs the current file without spawning the editor |
 | `status` | Show the status of code intelligence + ATOS scaffold (founded? current phase?) |
 | `refresh [--rebuild-index]` | Re-export the SCIP call graph. Auto-rebuilds the LanceDB corpus index when the on-disk meta is stale (missing `_corpus_meta.json`, or `embedding_dimensions == 768` from the legacy zero-vector code-index path); otherwise keeps LanceDB work fast by skipping it. `--rebuild-index` forces a full LanceDB rebuild even when the meta looks current. |
 | `serve` | Start a lightweight MCP server (no model required) |
 | `install-hooks` | Upgrade (or install) the post-commit hook |
 | `found` | **Retired** — founding is implicit now: `svrn init` plus a committed spec is sufficient |
-| `amend [charter\|design]` | `amend charter` (default): diff `CHARTER.md` section-by-section on save, run adversarial Q&A for changed sections, write amendment log + new hash. `amend design`: track edits to `DESIGN.md`'s curated sections (`Anchors`, `Data & interfaces`, `Open questions`), ask targeted adversarial questions, append the Q&A to `DESIGN.md`'s inline `## Amendment log` (newest on top; does NOT bump `charter_version`) |
+| `amend [charter]` | `amend charter` (default): diff `CHARTER.md` section-by-section on save, run adversarial Q&A for changed sections, write amendment log + new hash |
 | `phase status` | Show founding state + current phase |
 | `phase pass [N]` | Run phase N's stop condition from `PHASES.md`; write `phase-N.md` on green |
 | `audit` | One-page reviewer rollup: founding state, phases passed, notes by kind, open questions, drift status |
@@ -72,6 +70,7 @@ Manage the local Commonwealth mesh.
 
 | Subcommand | Description |
 |---|---|
+| `up` | Bring cw-rails up (rings, KV, work atlas); hands an upgraded node's rings over first. svrn never starts it |
 | `create [--name <name>]` | Promote the solo mesh to a joinable mesh; print invite |
 | `join <arg>` | Join an existing mesh (bare key, https url, or sovereign://) |
 | `rotate [--force]` | Mint a new invite key. Existing members stay connected — rotation changes only who may JOIN |
@@ -89,8 +88,13 @@ Manage the local Commonwealth mesh.
 | `logs` | Show mesh daemon logs |
 | `fetch-model <name>` | Pull a GGUF from a mesh peer over the tailnet |
 | `warm-cache <gguf>` | Pre-seed the RPC tensor cache from a local GGUF (offline) |
+| `fetch-ner [<model_id>]` | Fetch serve's NER (GLiNER) model from HuggingFace |
 | `plan <gguf>` | Work out whether a model fits, and which machine holds what — before you commit |
 | `bench` | Measure how fast the model you are running actually decodes, and record it |
+| `pod up` | Launch a Vast.ai pod with the sovereign CUDA image as an ephemeral worker, register it in the cost ledger |
+| `pod pool --pods <N> --manifest <units.jsonl>` | Fan a JSONL manifest of work units out across N Vast pods, drain completions, destroy the pods at the end |
+| `pod list` | Show every pod the ledger knows about with accrued cost |
+| `pod down <vast-id>` | Destroy a Vast pod, close its ledger entry, print final cost |
 
 `svrn mesh plan` answers the question you have before you download 80 GB: will this
 run on the machines I have? It reads only the GGUF's header table, so it needs no
@@ -342,13 +346,7 @@ sovereign alignment status               # check progress
 
 ### `svrn mobile`
 
-Serve the phone-facing API, riding on the daemon's already-loaded models. The phone talks HTTP + WebSocket to this bridge; no separate model load.
-
-| Subcommand | Description |
-|---|---|
-| `serve` | Start the phone-facing API server (HTTP + WS) backed by the daemon's models |
-| `status` | Show the mobile bridge status |
-| `pair` | Print the pairing string a phone uses to connect |
+Absent. This verb ran `sovereign-server`, the phone-facing API; that binary was deleted and no mobile host ships. Every subcommand (`serve`, `status`, `pair`) prints that absence and exits 1.
 
 ### `svrn code`
 
@@ -358,6 +356,7 @@ Lower-level code-intelligence primitives. `project init` wraps these for the typ
 |---|---|
 | `index <path>` | Index a local repository with tree-sitter |
 | `watch <corpus-id>` | Run a filesystem watcher that re-indexes on save |
+| `mcp` | Run the code MCP server (`svrn serve` is the same server) |
 | `mcp-status` | Ping the local MCP server and list exposed tools |
 | `search <query>` | (placeholder — use `svrn chat ask` or the MCP `code_search` tool for now) |
 
@@ -477,6 +476,10 @@ Session continuity (spec: `docs/specs/SESSION_CONTINUITY.md`). `session list` sh
 Beyond `list` and `distill`: `session frames` prints the index of live session frames (one pointer line each — what the boot hook injects), `session frames <id>` dereferences one whole, `session attach <id>` re-points the current terminal at that lineage, `session lineage` shows predecessor chains, and `session grade <id>` grades a frame against `quality/session-frame.golden.md` (exit 0 pass / 1 fail). The workflow they serve: [ground your agent — session continuity](../../docs/GROUND_YOUR_AGENT.md#session-continuity).
 | `--stdout` | Print the frame as well as writing it |
 
+### `svrn ingest`
+
+Build a corpus from a recipe against any OpenAI-compatible endpoint: acquire, extract, chunk, embed, index, then the atlas enrichment the recipe declares. `svrn ingest <recipe.toml>` execs ingest's own binary, `svrn-ingest` (crate `sovereign-pipeline`; override its path with `SOVEREIGN_INGEST_BIN`), so ingest in CI needs that binary and no svrn crate. Flags: `--base-url <url>` (one host for chat and embeddings), or `--chat-url` with `--embed-url` (two llama-server processes); with none, the Ollama → llama-server → OICP-daemon ladder runs. `--no-enrich` indexes only. `svrn-ingest ingest --help` lists the rest.
+
 ### `svrn recipe`
 
 Run and curate corpus ingestion recipes.
@@ -499,9 +502,7 @@ Generic ingestion-pipeline driver — durable worklist + retry + pause-resume. D
 | `run <recipe.toml>` | Seed + sweep + drive the recipe to completion. SIGINT/SIGTERM drains in-flight units, then exits cleanly. Re-running picks up where the previous run left off |
 | `status <recipe-id>` | Print pending/done/failed counts, last-hour throughput, ETA, failure buckets |
 | `list` | List every recipe-id known to the worklist DB |
-| `pod up` | Launch a Vast.ai pod with the sovereign CUDA image, join the mesh, register in the cost ledger |
-| `pod list` | Show every pod the ledger knows about with accrued cost |
-| `pod down <vast-id>` | Destroy a Vast pod, close its ledger entry, print final cost |
+| `pod …` | Moved to `svrn mesh pod`; the old spelling prints a pointer and exits 2 |
 
 Global flags: `--db <path>` (default `~/.svrnmesh/pipeline.db`), `--seed-only`, `--slugs <path>`, `--key <slug>` (repeatable). Failures bucket into `timeout` / `refused` / `vram_thrash` / `mismatch` / `model_missing` / `unknown` and retry up to `[dispatch].max_attempts` before landing in `failed`. Add an `[schedule]` block with `active_hours = "HH:MM-HH:MM"` to auto-pause outside that window.
 
@@ -602,9 +603,8 @@ Appends one CSV row per run to `~/.svrnmesh/eval/history.csv`. Exit code is non-
 
 ### `svrn drift`
 
-Two surfaces under one verb:
+One surface under this verb:
 
-- **`svrn drift <feature-id>`** / **`svrn drift accept <feature-id> --reason X`** — ATOS spec drift. Diff approved vs. on-disk `spec.md`; accept current spec as new approved content. Replaces `svrn atos spec diff` / `spec accept`.
 - **`svrn drift detect --code <path> --narrative <doc>...`** — narrative-vs-code architectural drift. Produces a unified drift digest. See [DRIFT_DETECTION.md](DRIFT_DETECTION.md).
 
 | `drift detect` flag | Description |
@@ -772,32 +772,6 @@ Common-law governance over a corpus — an event-sourced oplog of tensions and r
 
 The journey — what these are for and in what order: [govern a corpus](./GOVERN_A_CORPUS.md).
 
-### `svrn atos`
-
-Feature-layer orchestration — the Agent Task Orchestration System CLI. See [ATOS.md](ATOS.md) for the full flow; this is the command reference only.
-
-| Subcommand | Description |
-|---|---|
-| `provision <id> --charter <path>` | Parse a charter, seed the feature + milestones |
-| `next [<feature-id>]` | Find the next unfinished milestone and hand off to a driver (`claude` / `opencode`) |
-| `start-milestone <id> --brief <path>` | Open a run, spawn the driver; `--red-team` for red-team mode |
-| `end-milestone <id>` | Run the stop condition, close the run, write `milestone-<N>.md` |
-| `archive <id> --reason <text>` | Mark a feature archived |
-| `status [<id>]` | Feature list, or detailed status + artifact checklist for one feature |
-| `promote <note-id> --to feature\|global` | Lift a note to a wider scope |
-| `diff <feature-id> [--ordinal N]` | Side-by-side per-tool activity across A/B driver runs |
-| `run-ab <feature-id> --brief <path> [--driver <name>]` | Run each driver against the same milestone, then diff |
-| `probe-driver [--url <endpoint>]` | Trivial tool-use sanity check against an OpenAI-compatible server |
-| `report <feature-id>` | Render milestone / red-team / epistemic / all reports |
-| `teardown <feature-id> [--dry-run]` | Interactive note-classification pass; writes `epistemic-report.md` |
-| `feature approve <id>` | Commonwealth-native approval fallback (no git commit required) |
-| `spec diff <id>` | Unified diff of current spec vs. approved content |
-| `spec accept <id> [--reason <text>]` | Accept current spec as new approved content, log a `deviation` note |
-| `doctor` | Health check: repo, `.sovereign/`, DB schemas, plugin freshness, per-feature approval + drift |
-| `install-plugin` | (Re)install the opencode plugin at `.opencode/plugins/sovereign-atos.ts` |
-
-Related project-layer commands (under `svrn project`) for the charter-level flow: `found`, `amend`, `phase pass N`, `audit`.
-
 ### `svrn daemon`
 
 Long-running service, managed by launchd (macOS) or systemd (Linux). Lives in the `sovereign-cli-daemon` sibling binary; `svrn install-service` registers it with the OS service manager. You don't normally invoke this directly.
@@ -807,6 +781,7 @@ Long-running service, managed by launchd (macOS) or systemd (Linux). Lives in th
 | `run` (or bare `daemon`) | Run in the foreground; exits on SIGINT/SIGTERM |
 | `start` / `stop` / `status` / `restart` | Lifecycle management against the installed service |
 | `reload` | Apply config changes without a restart |
+| `key --add <sub> \| --revoke <sub> \| --list` | Add, revoke or list on-prem API keys. Writes the key store directly, no running daemon needed; takes effect at the next start |
 | `--setup-only` | Run the first-boot wizard and exit (what `svrn setup` aliases to) |
 
 Logs: `~/.svrnmesh/logs/daemon.log`. Rotated in-process — copy-truncate, 10 MiB cap, 5 backups, 30-min sweep loop; preserves the inode for launchd-held FDs.

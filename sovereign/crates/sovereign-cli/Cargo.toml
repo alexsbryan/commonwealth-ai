@@ -5,20 +5,22 @@ edition.workspace = true
 license.workspace = true
 
 # Slim dispatcher binary. After slices 1–5 (2026-05-22), the only
-# code that lives here is exec-dispatch (`atos_bin`, `llm_bin`),
-# pure-FS delegators (notes, status, drift, audit, ...), and a few
-# light commands (archaeology-eval, git-archaeology, rough-edges)
-# that touch SQLite + filesystem only. Every LLM-using surface
+# code that lives here is exec-dispatch (`dev_bin`, `llm_bin`),
+# pure-FS delegators (notes, status, drift, audit, ...) and light
+# commands that touch SQLite + filesystem only. The three archaeology
+# verbs left for `sovereign-cli-dev` 2026-09-21 — they are `svrn code`'s
+# and carried the only `corpus-engine-archaeology` edge. Every LLM-using surface
 # (bench, chat, eval, atlas, daemon, ...) moved to
-# `sovereign-cli-atos` or `sovereign-cli-llm` siblings.
+# `sovereign-cli-dev` or `sovereign-cli-llm` siblings.
 #
 # Dep surface shrank accordingly:
 #   removed: sovereign-inference (llama-cpp-2), sovereign-tools,
 #            sovereign-mesh, sovereign-pipeline, sovereign-work-atlas
 #   kept:    sovereign-core (light traits + types), sovereign-store
-#            (SqliteStateStore), sovereign-atos (approval helpers
-#            used by audit_cmd), sovereign-agent-bench (subprocess
-#            driver — light), corpus-engine (stores feature only).
+#            (SqliteStateStore). corpus-engine left with pb-code-index:
+#            `project init` execs the code program to index.
+#   also removed 2026-09-21: sovereign-agent-bench — `agent-bench` execs
+#            its own `[[bin]]` sibling instead (`agent_bench_bin`).
 
 [dependencies]
 sovereign-core = { workspace = true }
@@ -28,6 +30,9 @@ sovereign-store = { workspace = true }
 # (sovereign-tools) must compute the carried-item advisory identically, and
 # sovereign-cli cannot see sovereign-tools in a gated build.
 sovereign-contracts = { workspace = true }
+# The stale-sibling warning (`sibling::warn_if_stale`), shared with
+# cli-daemon; host-kit is a shared leaf (pb-distribution-f11-daemon-twins).
+host-kit = { workspace = true, features = ["sibling"] }
 # The neutral kernel — `posture` renders every row as a `Judgement`, so the
 # verdict vocabulary, the age format and the staleness band are one decider
 # rather than seven (noun-convergence rung nc-10-judgement). Layer 0, so this
@@ -39,33 +44,22 @@ sovereign-contracts = { workspace = true }
 # kernel so the four-dep budget holds for a lift of that leaf; `xtask` asks for
 # the same feature, so the workspace resolves ONE variant of kernel-types.
 kernel-types = { workspace = true, features = ["quality-registry"] }
-sovereign-agent-bench = { workspace = true, optional = true }
 sovereign-cli-shared = { workspace = true }
 # ── The work plane (cw-lift 5e) ──────────────────────────────────────
 # `svrn quality check --distribute` submits this venue's instrument rows as
-# `process:v1` units on the `work` ring and merges the verdicts back. All four
-# are OPTIONAL and pulled by `dev-tools` ONLY: `quality` is a dev-gated verb,
-# so the shipped end-user dispatcher links none of them.
+# `process:v1` units on the `work` ring and merges the verdicts back. OPTIONAL
+# and pulled by `dev-tools` ONLY: `quality` is a dev-gated verb, so the
+# shipped end-user dispatcher links none of it.
 #
-#   commonwealth-work   the vocabulary: Submission, the fold, may_take, and
-#                       ProcessPayload (feature `process`). NOT a second work
-#                       model — the same crate the daemon's donor loop and
-#                       `svrn job` use, so the three cannot disagree about who
-#                       holds a lease (ARCH §10.6).
-#   commonwealth-rail   `RailAct` — the typed wire form the daemon's append
-#                       door parses, so a caller cannot spell it wrong and
-#                       learn about it from a 422.
-#   (no commonwealth-core edge: `HandoffId` comes through commonwealth-work's
-#    re-export, so one constructor does not buy a dep on the god crate.)
-#   oicp-types          `JobKind` / `JobRequirements` / `JobUnit`, the job
-#                       vocabulary the seal takes.
+#   oicp-types          the job vocabulary (`JobKind` / `JobRequirements` /
+#                       `JobUnit`) and, since pb-work-doors, the work
+#                       vocabulary in `oicp_types::work` — the acts' types,
+#                       the folded queue, the refusal set, `ProcessPayload`.
 #
-# The HTTP half is not here: `sovereign-cli-shared/rail-client` is the one
-# operator-side rail client in the workspace and this verb is its third
-# caller. A second client against those two routes is the §10.6 violation this
-# rung must not commit.
-commonwealth-work = { workspace = true, features = ["process"], optional = true }
-commonwealth-rail = { workspace = true, optional = true }
+# NO commonwealth-work (pb-work-doors): sealing, the signed Submit, `may_take`
+# and the attribution method are decisions over the rail, and cw-rails runs
+# the one implementation of each behind its `/v1/work/*` doors. The HTTP half
+# is `sovereign-cli-shared/rail-client`, the one operator-side rail client.
 oicp-types = { workspace = true, optional = true }
 # Flag surfaces are declared as structs (`#[derive(clap::Parser)]`), not
 # hand-rolled `while i < args.len()` loops: the dispatcher's own `--help` /
@@ -73,68 +67,25 @@ oicp-types = { workspace = true, optional = true }
 # `sovereign_cli_shared::flag_surface::parse`, which owns the one prefix rule.
 # ~11 transitive crates on top of the 871 this binary already links.
 clap = { workspace = true }
-# The LLM sibling, LINKED rather than exec'd — the `awareness` feature only.
-# `awareness_cmd` used to live in THIS crate while importing
-# `crate::enrich_cmd::inference_client`, which lives over there; that import
-# stopped resolving when the 2026-05-22 slice-5 split moved `enrich_cmd` out,
-# and `--features awareness` has failed with two `E0433` ever since (nc-26,
-# 2026-08-21). The module moved to the crate it was reaching into, and the
-# dispatcher calls `sovereign_cli_llm::awareness_cmd::run_awareness` in its own
-# process — no exec hop, which is what nc-19 bought and this must not spend.
-#
-# Optional, and pulled ONLY by `awareness` — never by `default` or
-# `dev-tools`. That matters: unlike `sovereign-cli-dev`, this crate has no thin
-# `default-features = false` surface, so linking it means llama.cpp, the
-# grammars and arrow. The end-user dispatcher gains nothing, which is the whole
-# point of `awareness` being opt-in.
-#
-# Path dep rather than a `[workspace.dependencies]` entry: this is the crate's
-# first consumer, and the edge is easier to read where it is paid — same
-# reasoning as `sovereign-cli-dev` above.
-sovereign-cli-llm = { path = "../sovereign-cli-llm", optional = true }
-# The workbench, LINKED rather than exec'd. `sovereign-cli-dev` grew a `[lib]`
-# target on 2026-08-21; with `default-features = false` it is two workspace
-# crates wide (`corpus-engine-scip` + `sovereign-cli-shared`, both already
-# here), so `svrn code converge` runs in THIS process instead of exec'ing a
-# 414 MB sibling that may be stale. `workbench` — sovereign-mesh/llama.cpp,
-# sovereign-tools/arrow+parquet, corpus-engine's grammars — stays off; the
-# remaining `code` subcommands still exec. Optional + pulled by `dev-tools`
-# only, so the shipped end-user dispatcher gains nothing.
-#
-# Path dep rather than a `[workspace.dependencies]` entry: this is the crate's
-# first consumer, and the edge is easier to read where it is paid.
-sovereign-cli-dev = { path = "../sovereign-cli-dev", default-features = false, optional = true }
-corpus-engine = { workspace = true }
-# The enrichment store's on-disk layout — `corpus_state::inspect_corpus_state`
-# answers `svrn quality check`'s `CorpusInstalled` precondition. Optional and
-# pulled by `dev-tools` ONLY: the shipped end-user dispatcher has no `quality`
-# verb and must not pay for one. The alternative was a second
-# `data_dir().join("indexes")` at the precondition site — the re-derivation
-# that crate's own module doc records as having stranded the daemon's
-# watched-folder writes from the CLI's reads.
-sovereign-enrichment-catalog = { workspace = true, optional = true }
-corpus-engine-archaeology = { workspace = true, optional = true }
+corpus-index = { workspace = true }
 corpus-engine-scip = { workspace = true, optional = true }
-# The pure-HTTP OICP client — `RemoteApiProvider` for `code index`'s embed
-# calls. Depended on directly rather than through `sovereign-inference`, which
-# re-exports it while linking llama.cpp unconditionally.
+# The pure-HTTP OICP client — `deep-research`'s loopback calls. Depended on
+# directly rather than through `sovereign-inference`, which re-exports it while
+# linking llama.cpp unconditionally.
 oicp-client = { workspace = true, optional = true }
-corpus-engine-notes = { workspace = true }
-async-trait = { workspace = true }
-futures = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
 uuid = { workspace = true }
-arc-swap = { workspace = true }
 dirs = "5"
 hex = "0.4"
-hostname = { workspace = true }
 which = "7"
+# `reach::locate_sibling` — the one sibling locator the `*_bin` exec
+# dispatchers call. A [[package_leaf]], so the edge is free.
+sovereign-turn-client = { workspace = true }
 sha2 = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }
@@ -175,73 +126,36 @@ default = [
     "sovereign-cli-shared/mcp-client",
 ]
 # `dev-tools` re-enables the developer-toolchain verb surface (project
-# lifecycle, ATOS, code intelligence, archaeology) that the default
+# lifecycle, code intelligence, archaeology) that the default
 # (end-user) build gates out. Most gated verbs exec the
 # `sovereign-cli-dev` sibling at runtime; `deep-research` runs in-process
 # and pulls oicp-client (a pure reqwest leaf — no llama.cpp).
 dev-tools = [
-    "dep:corpus-engine-archaeology",
-    "dep:sovereign-agent-bench",
-    "dep:sovereign-enrichment-catalog",
-    # `svrn quality check --distribute` (cw-lift 5e). See the dep block above
-    # for why each of the five is here; `rail-client` is the ONE rail client.
-    "dep:commonwealth-work",
-    "dep:commonwealth-rail",
+    # `svrn quality check --distribute` (cw-lift 5e). See the dep block above;
+    # `rail-client` is the ONE rail client.
     "dep:oicp-types",
     "sovereign-cli-shared/rail-client",
-    # The linked workbench surface — `InProcessCodeVerb`. Thin by construction
-    # (`default-features = false`); see the dep comment above.
-    "dep:sovereign-cli-dev",
     "deep-research",
 ]
 # The thin local-only research loop (T1): gated corpus + web search,
 # custody-stamped fetch, gap-audited rounds. Talks to the daemon over
 # loopback HTTP only (oicp-client) — no llama.cpp, no mesh.
 deep-research = ["dep:oicp-client"]
-# `svrn code index` / `svrn refresh` in the SHIPPED binary. Three lines is the
-# entire cost: the index path talks to the daemon over loopback HTTP for
-# embeddings (`oicp-client`, pure reqwest — no llama.cpp), reads/writes the
-# SCIP db (`corpus-engine-scip` — rusqlite + prost, no grammars), and needs
-# corpus-engine's `treesitter` for the `code` extractor, which is
-# `#[cfg(feature = "treesitter")]`-gated and panics without it
-# (`corpus-engine/src/engine/ingest_factories.rs:295-303`).
+# `project init` in the SHIPPED binary. Its index step, `svrn code index`
+# and `svrn refresh` exec the code program, `sovereign-cli-dev`
+# (pb-code-index); init itself reads/writes the SCIP db
+# (`corpus-engine-scip` — rusqlite + prost, no grammars).
 #
-# Deliberately NOT pulling `sovereign-tools`/`-mesh`/`-atos`: none is on the
-# index path, and each would drag llama.cpp or LanceDB into an end-user
-# binary. The grammars are already in the shipped daemon and llm siblings, so
-# this is not a new cost to the tarball — see SYSTEM_OVERVIEW.
+# Deliberately NOT pulling `sovereign-tools`/`-mesh`: neither is on the
+# init path, and each would drag llama.cpp or LanceDB into an end-user
+# binary.
 code-intel = [
-    "dep:oicp-client",
     "dep:corpus-engine-scip",
-    "corpus-engine/treesitter",
-    # The verb itself. One implementation, shared with the workbench, which
-    # served a byte-drifting copy of it until 2026-08-20.
-    "sovereign-cli-shared/code-index",
-    # `project init` (2026-08-07) reads the project model — `observation` to
-    # derive what the repo IS, `project_toml` to persist it. Both live in
-    # sovereign-cli-shared because the workbench still reads what init writes.
-    "sovereign-cli-shared/project-model",
-    # …and probes `/mcp` at the end of its run. reqwest is already a
+    # `project init` reaches the project model by exec'ing the code program
+    # (`sovereign-cli-dev project-observe`, pb-code-cli-base), and probes `/mcp` at the end of its run. reqwest is already a
     # non-optional dep of this crate, so enabling this costs no new link.
     "sovereign-cli-shared/mcp-client",
 ]
-# `awareness` builds the heavy `svrn awareness` knowledge-view diagnostic CLI.
-# Opt-in and independent of `dev-tools` so the common developer build stays
-# light — linking the LLM sibling means llama.cpp and the grammars.
-#
-# This is now a PASS-THROUGH, not a definition. The subcommands live in
-# `sovereign-cli-llm` since 2026-08-21 (nc-26) because they need its
-# `enrich_cmd::inference_client`, so the real feature — and every heavy
-# dependency it turns on — is declared there. Two crates cannot both own one
-# feature's dependency list without drifting; that split-brain is exactly how
-# `awareness` came to have two disagreeing gates and stopped compiling for
-# three months (ARCH §10.6 — one decider, one name).
-#
-# The gate that watches this: `scripts/sovereign-lint.sh` now names
-# `sovereign-cli/awareness` in its workspace feature list. Nothing built the
-# feature before, which is the only reason a two-`E0433` break survived from
-# 2026-05-22 to 2026-08-21.
-awareness = ["dep:sovereign-cli-llm", "sovereign-cli-llm/awareness"]
 
 [lints]
 workspace = true

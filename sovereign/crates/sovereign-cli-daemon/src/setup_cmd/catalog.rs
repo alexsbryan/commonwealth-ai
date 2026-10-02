@@ -5,8 +5,8 @@
 
 use std::io::{self, BufRead as _, Write as _};
 
+use sovereign_contracts::daemon_wire::PrimaryOption;
 use sovereign_core::models_manifest::SlotConfig;
-use sovereign_inference::setup_planner::PrimaryOption;
 
 use super::emit::say;
 use super::Pick;

@@ -69,10 +69,10 @@ async fn the_wall_bearer_reaches_the_page_and_the_rail_on_a_and_nothing_else() {
     let dir_b = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
-        state_with_rail(dir_a.path(), &key),
+        state_with_rail(dir_a.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
-    let b = state_with_rail(dir_b.path(), &key);
+    let b = state_with_rail(dir_b.path(), &key).await;
     let (_root, page) = page_dir();
 
     // The page, with no bearer: a browser navigating cannot send one, and the
@@ -156,14 +156,14 @@ async fn the_wall_bearer_reaches_the_page_and_the_rail_on_a_and_nothing_else() {
             );
         }
     }
-    // The two exceptions, named so they cannot grow silently: the paths
+    // The three exceptions, named so they cannot grow silently: the paths
     // `client_auth` leaves open to ANY non-loopback caller on every surface
-    // (liveness and the federation handshake). The door inherits them with
+    // (liveness, bare `/health`, and the federation handshake). The door inherits them with
     // the Guest router; the room's WiFi can read them, as a LAN can on a
     // non-loopback `client_bind`.
     assert_eq!(
         sovereign_daemon::client_auth::AUTH_EXEMPT_PATHS,
-        &["/status", "/oicp/v1/capabilities"]
+        &["/status", "/oicp/v1/capabilities", "/health"]
     );
     // Without the bearer the rail is shut too.
     let (status, _) = door(
@@ -239,8 +239,8 @@ async fn the_door_mounts_no_operator_route() {
 async fn an_expired_wall_bearer_is_refused_at_the_door() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let state = state_with_rail(dir.path(), &key);
-    let now = commonwealth_core::clock::unix_now_millis();
+    let state = state_with_rail(dir.path(), &key).await;
+    let now = sovereign_time::unix_millis();
     // Issued ten seconds ago for one second.
     state.inner.node.guest_grants.issue(
         GUEST_TOKEN,
@@ -265,7 +265,7 @@ async fn an_expired_wall_bearer_is_refused_at_the_door() {
 async fn the_door_opens_at_the_first_rail_grant_and_closes_at_the_last_expiry() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let state = state_with_rail(dir.path(), &key);
+    let state = state_with_rail(dir.path(), &key).await;
     let addr = {
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         l.local_addr().unwrap()
@@ -291,7 +291,7 @@ async fn the_door_opens_at_the_first_rail_grant_and_closes_at_the_last_expiry() 
     assert!(log().await.is_err(), "the door is open with no grant out");
 
     // A models-only grant is not a wall grant: still shut.
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     state.inner.node.guest_grants.issue(
         "models-only-token-models-only-token-models-only-token-0000000000",
         vec![Scope::Models(vec!["m".into()])],
@@ -307,7 +307,7 @@ async fn the_door_opens_at_the_first_rail_grant_and_closes_at_the_last_expiry() 
         vec![Scope::Rails(NS.into())],
         Some("wall".into()),
         3,
-        commonwealth_core::clock::unix_now_millis(),
+        sovereign_time::unix_millis(),
     );
     let deadline = within(4);
     loop {
@@ -342,7 +342,7 @@ async fn the_door_claims_a_name_once_and_refuses_the_three_collisions() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (_root, page) = page_dir();
@@ -380,18 +380,10 @@ async fn the_door_claims_a_name_once_and_refuses_the_three_collisions() {
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert!(body.contains("already someone else in this room"), "{body}");
 
-    // The handle is accepted on the routes behind the door…
-    let act = serde_json::json!({
-        "op": "record",
-        "payload": { "kind": "doc-change", "doc": "ring-doc", "update": "AA==" },
-    });
-    let mut req = request(
-        "POST",
-        "/v1/rail/append",
-        LAN_PEER,
-        Some(GUEST_TOKEN),
-        Some(act),
-    );
+    // The handle is accepted on the routes behind the door — observed on a
+    // READ; the write it stamps is pinned in
+    // `the_door_stamps_the_guest_and_the_page_cannot`.
+    let mut req = request("GET", "/v1/rail/log", LAN_PEER, Some(GUEST_TOKEN), None);
     req.headers_mut().insert(
         axum::http::HeaderName::from_static("x-ring-session"),
         axum::http::HeaderValue::from_str(&handle).unwrap(),
@@ -412,73 +404,27 @@ async fn the_door_claims_a_name_once_and_refuses_the_three_collisions() {
 }
 
 /// **The door writes whose words an act was, and a lying page gets nowhere.**
-/// The page here sends a `guest` of its own in the payload — the field the
-/// rail used to believe — and the act is still attributed to the name the
-/// session holds. The log hands the finished name back, so an app renders
-/// `person` and is right without knowing guests exist.
-///
-/// This replaces the append-time member-name refusal: that check read a field
-/// the page supplied, and its subject now lives where the name is CLAIMED
-/// (`the_door_claims_a_name_once_and_refuses_the_three_collisions`).
+/// The page here sends a `guest` of its own in the payload and an
+/// `on_behalf_of` beside it, and the act is still attributed to the name the
+/// session holds. The journal lives where the door signs a
+/// `GuestAttestation` for it (decision five-programs-34), and the name that
+/// lands is the one the attestation carries. The log hands the finished name
+/// back, so an app renders `person` and is right without knowing guests
+/// exist.
 #[tokio::test]
 async fn the_door_stamps_the_guest_and_the_page_cannot() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (_root, page) = page_dir();
-
-    let (status, body) = door(
-        a.clone(),
-        &page,
-        request(
-            "POST",
-            "/v1/guest/session",
-            LAN_PEER,
-            Some(GUEST_TOKEN),
-            Some(serde_json::json!({ "name": "ana" })),
-        ),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    let handle = serde_json::from_str::<serde_json::Value>(&body).unwrap()["session"]
-        .as_str()
-        .expect("a handle")
-        .to_string();
-
-    let with_handle = |method: &str, path: &str, body: Option<serde_json::Value>| {
-        let mut req = request(method, path, LAN_PEER, Some(GUEST_TOKEN), body);
-        req.headers_mut().insert(
-            axum::http::HeaderName::from_static("x-ring-session"),
-            axum::http::HeaderValue::from_str(&handle).unwrap(),
-        );
-        req
-    };
-
-    // The page names somebody else, in the payload and beside it. Neither is
-    // read: the door already knows who is holding this phone.
-    let (status, body) = door(
-        a.clone(),
-        &page,
-        with_handle(
-            "POST",
-            "/v1/rail/append",
-            Some(serde_json::json!({
-                "op": "record",
-                "on_behalf_of": "zoe",
-                "payload": {
-                    "kind": "doc-change", "doc": "ring-doc", "update": "AA==", "guest": "zoe",
-                },
-            })),
-        ),
-    )
-    .await;
+    let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
+    let (status, body) = stamped_append(a.clone(), &page, &handle).await;
     assert_eq!(status, StatusCode::OK, "{body}");
 
-    let (_, log) = door(a, &page, with_handle("GET", "/v1/rail/log", None)).await;
-    let log: serde_json::Value = serde_json::from_str(&log).unwrap();
+    let log = guest_log(a, &page, &handle).await;
     let op = &log["ops"][0];
     let person = op["person"].as_str().expect("a person");
     assert!(
@@ -493,33 +439,102 @@ async fn the_door_stamps_the_guest_and_the_page_cannot() {
     assert!(!person.contains("zoe"), "the page's claim won: {person}");
 }
 
+/// A door whose key the namespace's roster does not name cannot vouch for a
+/// guest: the journal's writer refuses the attestation, the door hands the
+/// refusal's name through verbatim, and nothing lands under anyone's name
+/// (principle 6 — never read as success).
+#[tokio::test]
+async fn a_door_the_roster_does_not_name_is_refused_by_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let stranger = SigningKey::from_bytes(&[42u8; 32]);
+    let a = with_guest(
+        state_with_rail_attested_by(
+            dir.path(),
+            &key,
+            &stranger,
+            sovereign_grants::GuestSessionBinding::Door,
+            Default::default(),
+        )
+        .await,
+        vec![Scope::Rails(NS.into())],
+    );
+    let (_root, page) = page_dir();
+    let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
+    let (status, body) = stamped_append(a.clone(), &page, &handle).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(body["kind"], "signer_not_in_roster", "{body}");
+
+    let log = guest_log(a, &page, &handle).await;
+    assert_eq!(
+        log["ops"].as_array().map(Vec::len),
+        Some(0),
+        "no act may appear, attributed to anyone: {log}"
+    );
+}
+
+/// Append one act, under the session `handle`, whose page names "zoe" in the
+/// payload and beside it.
+async fn stamped_append(
+    state: AppState,
+    page: &std::path::Path,
+    handle: &str,
+) -> (StatusCode, String) {
+    door(
+        state,
+        page,
+        as_guest(
+            "POST",
+            "/v1/rail/append",
+            GUEST_TOKEN,
+            handle,
+            Some(serde_json::json!({
+                "op": "record",
+                "on_behalf_of": "zoe",
+                "payload": {
+                    "kind": "doc-change", "doc": "ring-doc", "update": "AA==", "guest": "zoe",
+                },
+            })),
+        ),
+    )
+    .await
+}
+
+/// The log as the guest holding `handle` sees it.
+async fn guest_log(state: AppState, page: &std::path::Path, handle: &str) -> serde_json::Value {
+    let (status, log) = door(
+        state,
+        page,
+        as_guest("GET", "/v1/rail/log", GUEST_TOKEN, handle, None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{log}");
+    serde_json::from_str(&log).unwrap()
+}
+
 /// The second app on this wall: its own grant, its own bearer, its own QR —
 /// because a grant names exactly one rail namespace.
 const DOC_TOKEN: &str = "1a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f7081";
 const DOC_NS: &str = "ring-doc";
 
 /// Put a second app's namespace on the same wall: a roster it can admit
-/// against, and a live grant of its own.
-fn second_app(state: &AppState, key: &SigningKey) {
+/// against, written where the wall's cw-rails (on `root`) reads it, and a
+/// live grant of its own.
+fn second_app(state: &AppState, root: &std::path::Path, key: &SigningKey) {
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
     members.insert(
         Person::from("bo"),
         vec!["bo-has-not-joined-yet".to_string()],
     );
-    state
-        .ring_rail()
-        .expect("a rail")
-        .journal(DOC_NS)
-        .unwrap()
-        .set_roster(&Roster::new(members))
-        .unwrap();
+    work_rails::write_roster(root, DOC_NS, &Roster::new(members));
     state.inner.node.guest_grants.issue(
         DOC_TOKEN,
         vec![Scope::Rails(DOC_NS.into())],
         Some("doc".into()),
         3_600,
-        commonwealth_core::clock::unix_now_millis(),
+        sovereign_time::unix_millis(),
     );
 }
 
@@ -574,10 +589,10 @@ async fn a_name_claimed_on_one_app_is_the_same_person_on_the_next() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let a = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
-    second_app(&a, &key);
+    second_app(&a, dir.path(), &key);
     let (_root, page) = page_dir();
 
     let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
@@ -648,10 +663,11 @@ async fn under_the_strict_binding_the_second_app_asks_again() {
             &key,
             sovereign_grants::GuestSessionBinding::Grant,
             Default::default(),
-        ),
+        )
+        .await,
         vec![Scope::Rails(NS.into())],
     );
-    second_app(&a, &key);
+    second_app(&a, dir.path(), &key);
     let (_root, page) = page_dir();
 
     let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
@@ -686,7 +702,7 @@ async fn under_the_strict_binding_the_second_app_asks_again() {
 async fn one_wall_bearer_reaches_every_declared_app_and_is_refused_the_rest() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let owned = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+    let owned = oicp_types::measurements::MEASUREMENTS_APP_ID;
     let a = with_guest(
         state_with_wall(
             dir.path(),
@@ -711,10 +727,11 @@ async fn one_wall_bearer_reaches_every_declared_app_and_is_refused_the_rest() {
                     sovereign_core::guest_pages::GuestPage::Open("/srv/c".into()),
                 ),
             ],
-        ),
+        )
+        .await,
         vec![Scope::Wall],
     );
-    second_app(&a, &key);
+    second_app(&a, dir.path(), &key);
     let (_root, page) = page_dir();
     let handle = claimed(a.clone(), &page, GUEST_TOKEN, "ana").await;
 

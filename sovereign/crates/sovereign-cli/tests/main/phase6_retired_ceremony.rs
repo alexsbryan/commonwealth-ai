@@ -2,16 +2,16 @@
 //! Phase 6 retirement tests.
 //!
 //! The CLI refactor's Phase 6 retires the explicit "founding" /
-//! "provision" ceremony. Both surfaces are now no-op + deprecation
-//! banner — the user types them, sees the banner, and learns that
+//! "provision" ceremony. Both surfaces are now refused (exit 2) with
+//! a retirement banner — the user types them, sees the banner, and learns that
 //! the new flow is just "init → write spec → commit → work."
 //!
 //! These tests spawn the actual `sovereign-cli` binary so the
 //! retirement banners are exercised end-to-end. Style mirrors
 //! `aliases.rs` (sibling test file).
 //!
-//! `project` / `atos` are developer-toolchain verbs — the default
-//! build intercepts them before the retirement shim runs (see
+//! `project` is a developer-toolchain verb — the default
+//! build intercepts it before the retirement shim runs (see
 //! `DEV_VERBS` in main.rs), so this suite only applies to dev builds.
 //! The intercept itself is covered by `default_build_gate.rs`.
 #![cfg(feature = "dev-tools")]
@@ -35,7 +35,7 @@ fn run(args: &[&str]) -> Output {
         .expect("spawn sovereign-cli")
 }
 
-/// Retired `project` / `atos` verbs print their banner from inside the
+/// Retired `project` verbs print their banner from inside the
 /// `sovereign-cli-dev` sibling (the dispatcher forwards there). `cargo
 /// test` builds the dispatcher but not the sibling bin, so without a
 /// prior `cargo build --bins` we skip rather than false-fail with
@@ -47,7 +47,8 @@ fn siblings_built() -> bool {
     [
         "sovereign-cli-dev",
         "sovereign-cli-daemon",
-        "sovereign-cli-llm",
+        "sovereign-cli-llm-stock",
+        "svrn-ingest",
     ]
     .iter()
     .all(|b| dir.join(b).is_file())
@@ -69,10 +70,10 @@ fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).to_string()
 }
 
-fn assert_exit_zero(out: &Output, label: &str) {
-    if !out.status.success() {
+fn assert_exit_refused(out: &Output, label: &str) {
+    if out.status.code() != Some(2) {
         panic!(
-            "expected exit 0 from {label}, got {:?}\nstdout:\n{}\nstderr:\n{}",
+            "expected exit 2 from {label}, got {:?}\nstdout:\n{}\nstderr:\n{}",
             out.status.code(),
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr),
@@ -81,14 +82,14 @@ fn assert_exit_zero(out: &Output, label: &str) {
 }
 
 /// `svrn project found` is retired — the banner fires and the
-/// command exits 0 without touching the filesystem. (No
+/// command exits 2 without touching the filesystem. (No
 /// `.sovereign/project.toml` is required; the old gate that
 /// demanded it is gone with the rest of the body.)
 #[test]
 fn project_found_is_retired_no_op() {
     require_siblings!();
     let out = run(&["project", "found"]);
-    assert_exit_zero(&out, "project found");
+    assert_exit_refused(&out, "project found");
     let err = stderr(&out);
     assert!(
         err.contains("`svrn project found`"),
@@ -106,27 +107,6 @@ fn project_found_is_retired_no_op() {
     );
 }
 
-/// Same retirement contract for `svrn atos provision`.
-#[test]
-fn atos_provision_is_retired_no_op() {
-    require_siblings!();
-    let out = run(&["atos", "provision"]);
-    assert_exit_zero(&out, "atos provision");
-    let err = stderr(&out);
-    assert!(
-        err.contains("`svrn atos provision`"),
-        "retirement banner should reference the old name; got:\n{err}"
-    );
-    assert!(
-        err.contains("retired"),
-        "retirement banner should say 'retired'; got:\n{err}"
-    );
-    assert!(
-        err.contains("spec") || err.contains("features.db"),
-        "retirement banner should hint at the new flow (spec / features.db not required); got:\n{err}"
-    );
-}
-
 /// The retirement banners' helpful pointer text obeys
 /// `SOVEREIGN_QUIET_DEPRECATIONS=1` (the title line still prints —
 /// we never silently swallow a retired command).
@@ -139,7 +119,7 @@ fn retirement_banner_pointer_obeys_quiet_env() {
         .args(["project", "found"])
         .output()
         .expect("spawn sovereign-cli");
-    assert_exit_zero(&out, "project found [QUIET=1]");
+    assert_exit_refused(&out, "project found [QUIET=1]");
     let err = stderr(&out);
     // Title line still fires — operator must know the command is gone.
     assert!(

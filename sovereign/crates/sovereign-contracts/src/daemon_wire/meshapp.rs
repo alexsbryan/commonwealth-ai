@@ -20,6 +20,40 @@
 
 use serde::{Deserialize, Serialize};
 
+// ─── The clamps (one decider, ARCH §10.6) ──────────────────────
+//
+// The route limits every `window.meshApp.*` explorer op answers under.
+// They moved here with the DTOs they clamp because every surface that
+// serves these ops — the daemon's routes and the `svrn meshapp dev`
+// server — must read the same numbers off the same names, and the dev
+// server must not link the daemon to do it.
+
+/// `meshapp_graph` / `meshapp_findings`-adjacent node listing.
+pub const GRAPH_LIMIT_DEFAULT: usize = 50;
+pub const GRAPH_LIMIT_MAX: usize = 500;
+/// `meshapp_search_entities`.
+pub const ENTITY_LIMIT_DEFAULT: usize = 25;
+pub const ENTITY_LIMIT_MAX: usize = 100;
+/// `meshapp_claims` / `meshapp_questions`.
+pub const ATOM_LIMIT_DEFAULT: usize = 100;
+pub const ATOM_LIMIT_MAX: usize = 500;
+/// `meshapp_subgraph`.
+pub const SUBGRAPH_LIMIT_DEFAULT: usize = 30;
+pub const SUBGRAPH_LIMIT_MAX: usize = 80;
+/// `meshapp_document_feed`.
+pub const FEED_DOCS_DEFAULT: usize = 14;
+pub const FEED_DOCS_MIN: usize = 1;
+pub const FEED_DOCS_MAX: usize = 90;
+
+/// `limit` → the applied value. An absent limit takes the default; an
+/// over-large one is CLAMPED and served, not refused.
+///
+/// Beside the consts so every serving surface applies the SAME clamp rather
+/// than re-inlining the literals (ARCH §10.6).
+pub fn clamp(requested: Option<usize>, default: usize, max: usize) -> usize {
+    requested.unwrap_or(default).min(max)
+}
+
 /// A degree-ranked node. `degree` = incident relationships; `alias_count` =
 /// surface forms the coalesce phase folded in.
 #[derive(Debug, Clone, Serialize, Deserialize)]

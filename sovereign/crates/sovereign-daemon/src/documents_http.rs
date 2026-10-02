@@ -9,7 +9,8 @@
 //! legacy fold and the promotion rule are minted here, because this is now
 //! their one implementation (§10.6).
 //!
-//! Loopback posture is `reading_http`'s, unchanged.
+//! Loopback posture is `reading_http`'s, unchanged; on a keyed daemon an API
+//! key reaches the routes `crate::api_keys::KEY_SCOPE` names instead.
 //!
 //! `upload_document_asset` crossed on 2026-09-11 as a JOB: `POST
 //! /v1/documents` runs `prepare` inline (no inference; answers the Pending
@@ -70,10 +71,10 @@ use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::DocumentAsset;
 use sovereign_tools::document_asset::DocumentAssetManager;
 
+use crate::api_keys::Caller;
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{json_error, Absence};
 use crate::job_registry::JobRegistry;
-use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 
 // ─── The wire projections ──────────────────────────────────────
 
@@ -113,7 +114,8 @@ pub struct PromoteLegacyRequest {
 
 /// `POST /v1/documents`'s body — the file to ingest as a document asset.
 /// A local PATH, the way `POST /internal/corpus/local` takes one: every
-/// route here is `LocalOnly`, and the daemon reads the same disk.
+/// route here is loopback-only, and the daemon reads the same disk. On a
+/// keyed daemon only an `admin` key reaches it (`crate::api_keys::KEY_SCOPE`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UploadDocumentRequest {
     pub path: String,
@@ -185,7 +187,9 @@ pub fn documents_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/documents/{id}/progress", get(ingest_progress))
         .route("/v1/documents/{id}/ask", post(ask_document))
         .route("/v1/documents/{id}/ask/{job_id}", get(ask_progress))
-        .localhost_only_with(daemon)
+        // Loopback, or an API key the keyed gate admitted (`crate::api_keys`).
+        .layer(axum::middleware::from_fn(crate::api_keys::local_or_keyed))
+        .layer(Extension(daemon))
 }
 
 // ─── Handlers ──────────────────────────────────────────────────
@@ -196,7 +200,7 @@ pub fn documents_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 /// rendered. Sorting here would be a presentation decision the caller
 /// owns.
 async fn list_documents(
-    _: LocalOnly,
+    _: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> Result<Response, Absence> {
     let store = store_for(&daemon)?;
@@ -216,7 +220,7 @@ async fn list_documents(
 /// — the same shape as an asset mid-ingest. Two different facts, and
 /// the pane offers a different remedy for each (§18.3).
 async fn get_document(
-    _: LocalOnly,
+    _: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(id): Path<String>,
 ) -> Result<Response, Absence> {
@@ -239,7 +243,7 @@ async fn get_document(
 /// implementation of the same delete and would leave the chunks behind
 /// (§10.6).
 async fn delete_document(
-    _: LocalOnly,
+    _: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(id): Path<String>,
 ) -> Result<Response, Absence> {
@@ -267,7 +271,7 @@ async fn delete_document(
 /// caller needs the record whose `state` and `document_type` the
 /// rebuild also moved.
 async fn rebuild_skeleton(
-    _: LocalOnly,
+    _: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(id): Path<String>,
 ) -> Result<Response, Absence> {
@@ -357,7 +361,7 @@ impl DocumentJob {
 /// desktop command documented. `run_ingest` is spawned; its frames land
 /// in the job log the progress route serves.
 async fn upload_document(
-    _: LocalOnly,
+    _: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(req): Json<UploadDocumentRequest>,
 ) -> Result<Response, Absence> {
@@ -435,7 +439,7 @@ async fn upload_document(
 /// job is on record for it (a daemon restart, or an id this daemon never
 /// prepared) — the record itself is still readable at `/v1/documents/{id}`.
 async fn ingest_progress(
-    _: LocalOnly,
+    _: Caller,
     Path(id): Path<String>,
     Query(query): Query<DocumentProgressQuery>,
 ) -> Result<Response, Absence> {
@@ -491,7 +495,7 @@ async fn ingest_progress(
 /// `Option` for the same reason). Answers the `source` the legacy listing
 /// will report it under.
 async fn ingest_legacy(
-    _: LocalOnly,
+    _: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(req): Json<IngestLegacyRequest>,
 ) -> Result<Response, Absence> {
@@ -571,11 +575,15 @@ impl AskJob {
 /// one that is not yet queryable — the command's `Err` for the same
 /// case, kept apart from "no such asset".
 async fn ask_document(
-    _: LocalOnly,
+    caller: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(id): Path<String>,
     Json(req): Json<AskDocumentRequest>,
 ) -> Result<Response, Absence> {
+    let req = AskDocumentRequest {
+        conversation_id: caller.scope(&req.conversation_id),
+        ..req
+    };
     let store = store_for(&daemon)?;
     let manager = manager_for(&daemon)?;
     let runtime = daemon.runtime().map(Arc::clone).ok_or_else(|| {
@@ -830,7 +838,7 @@ async fn run_ask(
 /// appended from the caller's cursor on, and its outcome once finished.
 /// 404 naming the job when none is on record for this asset.
 async fn ask_progress(
-    _: LocalOnly,
+    _: Caller,
     Path((id, job_id)): Path<(String, String)>,
     Query(query): Query<DocumentProgressQuery>,
 ) -> Result<Response, Absence> {
@@ -894,7 +902,7 @@ async fn ask_progress(
 /// count; a `corpus:` source is corpus content, not an upload, and an
 /// `asset:` source an asset already claims is that asset's own chunks.
 async fn list_legacy_documents(
-    _: LocalOnly,
+    _: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> Result<Response, Absence> {
     let store = store_for(&daemon)?;
@@ -952,7 +960,7 @@ async fn list_legacy_documents(
 /// which is honest — the structural pass has not run, and
 /// `POST /{id}/skeleton` is what runs it.
 async fn promote_legacy(
-    _: LocalOnly,
+    _: Caller,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(req): Json<PromoteLegacyRequest>,
 ) -> Result<Response, Absence> {

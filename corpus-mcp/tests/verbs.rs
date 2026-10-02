@@ -16,9 +16,9 @@
 //! - a `[[journey.step]]`'s `run` is argv handed to the `svrn` runner.
 //!
 //! `corpus-mcp` is a separate binary that `sovereign-cli` never dispatches, so
-//! a row for `corpus recipe new` is unrepresentable without widening the enum,
-//! the path semantics and `cli-journey-verify.sh`. (`corpus-mcp ingest`, landed
-//! at ei-5b, has no row either, for the same reason.) Widening a shared
+//! a row for `corpus serve` is unrepresentable without widening the enum,
+//! the path semantics and `cli-journey-verify.sh`. (`ingest` and `recipe`
+//! left this binary at pb-ingest-cli and answer with pointers.) Widening a shared
 //! quality instrument is not this order's to do; it is banked under
 //! `contract-census-cannot-represent-corpus-mcp`.
 //!
@@ -97,27 +97,13 @@ fn the_bare_form_still_takes_serves_flags() {
     }
 }
 
-// ── `recipe new` ────────────────────────────────────────────────────────────
+// ── `recipe` — scaffolding is `svrn recipe new`'s ─────────────────────────
 
+/// `recipe new` was a second copy of `svrn recipe new` (same flags, same
+/// `corpus_engine::recipe_templates`) and was deleted at pb-ingest-cli. The
+/// verb answers where scaffolding lives and exits 2; it never writes a file.
 #[test]
-fn recipe_new_lists_the_builtin_templates() {
-    let tmp = tempfile::tempdir().unwrap();
-    let r = run(tmp.path(), &["recipe", "new", "--ontology", "list"]);
-    assert_eq!(r.code, 0, "stderr: {}", r.stderr);
-    // Not a count: the set is generated from directories, so asserting on a
-    // number would break every time a template lands. Two that the spec's own
-    // worked examples name.
-    for name in ["numismatics", "literary"] {
-        assert!(
-            r.stdout.lines().any(|l| l.trim() == name),
-            "`--ontology list` did not name `{name}`:\n{}",
-            r.stdout
-        );
-    }
-}
-
-#[test]
-fn recipe_new_writes_id_dot_toml_with_the_id_substituted() {
+fn recipe_points_at_svrn_recipe_new() {
     let tmp = tempfile::tempdir().unwrap();
     let r = run(
         tmp.path(),
@@ -130,133 +116,59 @@ fn recipe_new_writes_id_dot_toml_with_the_id_substituted() {
             "my-coins",
         ],
     );
-    assert_eq!(r.code, 0, "stderr: {}", r.stderr);
-    let written = tmp.path().join("my-coins.toml");
-    assert!(written.is_file(), "no my-coins.toml:\n{}", r.stdout);
-    let text = std::fs::read_to_string(&written).unwrap();
+    assert_eq!(r.code, 2, "stderr: {}", r.stderr);
     assert!(
-        text.contains("id = \"my-coins\""),
-        "the id was not substituted into the scaffold:\n{text}"
-    );
-    // `path = "REPLACE_ME"` SURVIVES on purpose and this asserts that it does.
-    // `instantiate` substitutes identity (`id`, `name`) and nothing else; the
-    // source path is the one thing only the author knows, and a scaffold that
-    // guessed it would produce a recipe that ingests the wrong directory
-    // without ever asking. The stdout line below points at the fields to fill.
-    assert!(
-        text.contains("path = \"REPLACE_ME\""),
-        "the scaffold no longer leaves the source path for the author:\n{text}"
-    );
-    // The next command in the sequence, named. §4 is three commands and a
-    // person should not have to guess the second one.
-    assert!(
-        r.stdout.contains("corpus-mcp ingest"),
-        "the scaffold does not point at the next command:\n{}",
-        r.stdout
-    );
-}
-
-/// The one destructive mistake this verb could make. A scaffold that clobbers
-/// eats the types the author just spent an hour writing.
-#[test]
-fn recipe_new_never_overwrites() {
-    let tmp = tempfile::tempdir().unwrap();
-    let args = [
-        "recipe",
-        "new",
-        "--ontology",
-        "numismatics",
-        "--id",
-        "my-coins",
-    ];
-    assert_eq!(run(tmp.path(), &args).code, 0);
-    std::fs::write(tmp.path().join("my-coins.toml"), "MINE\n").unwrap();
-    let r = run(tmp.path(), &args);
-    assert_eq!(r.code, 1, "a second scaffold did not refuse:\n{}", r.stdout);
-    assert!(
-        r.stderr.contains("never overwrites"),
-        "the refusal does not say why:\n{}",
+        r.stderr.contains("svrn recipe new"),
+        "the pointer does not name `svrn recipe new`:\n{}",
         r.stderr
-    );
-    assert_eq!(
-        std::fs::read_to_string(tmp.path().join("my-coins.toml")).unwrap(),
-        "MINE\n",
-        "the refusal still overwrote the file"
-    );
-}
-
-/// ARCH §4: an unknown id is LOUD and names the whole set.
-#[test]
-fn recipe_new_refuses_an_unknown_ontology_and_names_the_real_ones() {
-    let tmp = tempfile::tempdir().unwrap();
-    let r = run(tmp.path(), &["recipe", "new", "--ontology", "nope"]);
-    assert_ne!(r.code, 0, "an unknown template exited 0");
-    assert!(
-        r.stderr.contains("nope") && r.stderr.contains("numismatics"),
-        "the error names neither the bad id nor the available ones:\n{}",
-        r.stderr
-    );
-}
-
-/// No `--id` and no `--out` means no name to give a file — so it goes to
-/// stdout rather than inventing `REPLACE_ME.toml` in someone's directory.
-#[test]
-fn recipe_new_without_an_id_writes_nothing_to_disk() {
-    let tmp = tempfile::tempdir().unwrap();
-    let r = run(tmp.path(), &["recipe", "new", "--ontology", "literary"]);
-    assert_eq!(r.code, 0, "stderr: {}", r.stderr);
-    assert!(
-        r.stdout.contains("[corpus]"),
-        "no recipe on stdout:\n{}",
-        r.stdout
     );
     let left: Vec<_> = std::fs::read_dir(tmp.path()).unwrap().collect();
-    assert!(left.is_empty(), "stdout form wrote {} file(s)", left.len());
+    assert!(left.is_empty(), "the pointer wrote {} file(s)", left.len());
 }
 
-// ── `ingest` — the endpoint combinations, none of which need an endpoint ────
+// ── pull-if-absent — ingest's `svrn-ingest pull`, named when missing ───────
 
-/// §18.3: a half-named pair is refused, never guessed at. Guessing would send
-/// phase 1's chat calls to the embedding process.
+/// `serve --corpus <absent>` installs through ingest's own CLI
+/// (pb-corpus-mcp-reads), so with no `svrn-ingest` reachable it refuses and
+/// names the binary and its override, before any endpoint is probed. The
+/// binary runs from a directory holding no sibling, with an override that
+/// points nowhere and an empty `PATH`: the three places the one locator looks.
 #[test]
-fn ingest_refuses_a_half_specified_endpoint_pair() {
-    let tmp = tempfile::tempdir().unwrap();
-    let recipe = tmp.path().join("r.toml");
-    std::fs::write(&recipe, "# never read: the refusal precedes any disk\n").unwrap();
-    let rp = recipe.to_str().unwrap();
-
-    let r = run(tmp.path(), &["ingest", rp, "--chat-url", "http://x/v1"]);
-    assert_ne!(r.code, 0);
-    assert!(
-        r.stderr.contains("--embed-url"),
-        "the refusal does not name the missing flag:\n{}",
-        r.stderr
+fn an_absent_corpus_without_the_pull_binary_is_refused_by_name() {
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let lone = dir.path().join("corpus-mcp");
+    if std::fs::hard_link(env!("CARGO_BIN_EXE_corpus-mcp"), &lone).is_err() {
+        std::fs::copy(env!("CARGO_BIN_EXE_corpus-mcp"), &lone).unwrap();
+    }
+    let data = dir.path().join("data");
+    let out = Command::new(&lone)
+        .args(["serve", "--corpus", "sep", "--data-dir"])
+        .arg(&data)
+        .env(
+            "SOVEREIGN_INGEST_BIN",
+            dir.path().join("no-such-svrn-ingest"),
+        )
+        .env("PATH", "")
+        .env("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:1")
+        .output()
+        .expect("corpus-mcp did not start");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_ne!(
+        out.status.code(),
+        Some(0),
+        "served an absent corpus:\n{stderr}"
     );
-
-    let r = run(tmp.path(), &["ingest", rp, "--embed-url", "http://x/v1"]);
-    assert_ne!(r.code, 0);
     assert!(
-        r.stderr.contains("--chat-url"),
-        "the refusal does not name the missing flag:\n{}",
-        r.stderr
+        stderr.contains("svrn-ingest") && stderr.contains("SOVEREIGN_INGEST_BIN"),
+        "the refusal does not name the pull binary and its override:\n{stderr}"
     );
-
-    let r = run(
-        tmp.path(),
-        &[
-            "ingest",
-            rp,
-            "--base-url",
-            "http://x/v1",
-            "--chat-url",
-            "http://y/v1",
-        ],
-    );
-    assert_ne!(r.code, 0);
     assert!(
-        r.stderr.contains("--base-url"),
-        "mixing --base-url with a half-pair was not refused by name:\n{}",
-        r.stderr
+        stderr.contains("sep"),
+        "the refusal does not name the absent corpus:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("11434"),
+        "the endpoint ladder ran before the local refusal:\n{stderr}"
     );
 }
 
@@ -315,22 +227,20 @@ fn a_named_endpoint_is_never_substituted() {
     }
 }
 
-/// `corpus ingest` with no flags at all is the literal §4 command line, so it
-/// walks the same ladder — one implementation of "which endpoint", shared with
-/// `serve` (ARCH §10.6). Same assertion, other verb: if `ingest` ever grew its
-/// own ladder, one of these two would drift.
+/// `ingest` moved to ingest's own CLI (pb-ingest-cli). The verb answers where
+/// it went and exits 2; it never reports an unknown subcommand and never
+/// starts a build.
 #[test]
-fn ingest_with_no_endpoint_walks_the_same_ladder() {
+fn ingest_points_at_its_new_home() {
     let tmp = tempfile::tempdir().unwrap();
-    let recipe = tmp.path().join("r.toml");
-    std::fs::write(&recipe, "# never read\n").unwrap();
-    let r = run(tmp.path(), &["ingest", recipe.to_str().unwrap()]);
-    assert_ne!(r.code, 0);
-    for rung in ["ollama", "llama-server", "oicp daemon"] {
-        assert!(
-            r.stderr.contains(rung),
-            "`ingest` did not walk the `{rung}` rung:\n{}",
-            r.stderr
-        );
-    }
+    let r = run(
+        tmp.path(),
+        &["ingest", "r.toml", "--base-url", "http://x/v1"],
+    );
+    assert_eq!(r.code, 2, "stderr: {}", r.stderr);
+    assert!(
+        r.stderr.contains("svrn ingest"),
+        "the pointer does not name the new home:\n{}",
+        r.stderr
+    );
 }

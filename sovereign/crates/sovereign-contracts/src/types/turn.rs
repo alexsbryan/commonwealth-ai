@@ -466,6 +466,21 @@ pub enum TurnRequest {
         /// never sent.
         #[serde(default, skip_serializing_if = "TurnMode::is_default")]
         mode: TurnMode,
+        /// Sampling pins for THIS turn only; a concurrent turn without them
+        /// runs at the host's own config. In-process a bench lane pinned
+        /// temperature 0 on its `Runtime`'s session-wide `InferenceConfig`;
+        /// a turn asked over the wire had no way to, so every dialed eval
+        /// would have run at the daemon's temperature. Absent is omitted
+        /// when writing, like `intent`, so existing clients' bytes are
+        /// unchanged. A host refuses a pin it cannot apply by name.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sampling: Option<SamplingOverrides>,
+        /// Rerank pins for THIS turn only, on `sampling`'s bargain: in-process
+        /// `svrn bench promote` set `SOVEREIGN_RERANK_*` before building its
+        /// own `Runtime`, which a dialed arm cannot, so both arms would score
+        /// the host's settings. Absent is omitted when writing.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rerank: Option<RerankOverrides>,
     },
     /// Answer a parked [`TurnFrame::Prompt`] — the reply carrying the
     /// same `id` the question arrived with.
@@ -607,4 +622,23 @@ pub const DEGENERATE_MESSAGE_HINT: &str =
 /// the oversize check.
 pub fn is_degenerate_message(message: &str) -> bool {
     !message.chars().any(|c| c.is_alphanumeric())
+}
+
+/// Per-turn and per-role sampling pins. Defined in `oicp-types` beside
+/// `CompletionRequest`, the wire that carries the same three knobs, so the
+/// bench package's agent-tools names it without linking this crate
+/// (decision phase-b-56).
+pub use oicp_types::completion::SamplingOverrides;
+
+/// Per-turn retrieval-rerank pins — `svrn bench promote`'s two `--param`s.
+/// An unset pin keeps the host's config.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct RerankOverrides {
+    /// `true` runs overfetch plus per-article dedup over every corpus the
+    /// turn searches; `false` turns reranking off for the turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// The overfetch pool size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidates_k: Option<u32>,
 }

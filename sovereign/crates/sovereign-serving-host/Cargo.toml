@@ -11,9 +11,9 @@ license.workspace = true
 # arithmetic over.
 sovereign-contracts = { workspace = true }
 oicp-types = { workspace = true }
-# `worker_state.rs` keys the pinned-worker reader on the neutral identity the
-# roster and the local reader both speak (a shared leaf, so the package
-# reaches it — `SERVING_BOUNDARY.md` "The two tiers").
+# `NodeId` (admission, ledger, state, the pinned readers) is the neutral
+# identity the roster and the local reader both speak (a shared leaf, so the
+# package reaches it — `SERVING_BOUNDARY.md` "The two tiers").
 kernel-types = { workspace = true }
 tracing = { workspace = true }
 # The recording sink is the host's (SERVING_BOUNDARY.md "Corrected
@@ -31,12 +31,12 @@ uuid = { workspace = true }
 # (SERVING_BOUNDARY.md "The five entries" (a)).
 async-trait = { workspace = true }
 # The four leavers moved host-side by domains dm-serving-move-leaves.
-# `worker_eligibility` and `model_fetch` key on commonwealth's identity and
-# model wire types (the grandfathered `commonwealth-core` edge);
+# `worker_eligibility` keys on `kernel_types::NodeId` and `model_fetch` on
+# `oicp_types::model_transfer` (phase-b pb-serve-sheds-core retired the
+# `commonwealth-core` edge; tests/main/sheds_commonwealth.rs pins it);
 # `source_content_validator` names the tool-call parser, now reached from
 # `oicp-types` (domains REVIEW-build-serving-drop-inference);
 # `model_fetch` streams a peer file through reqwest and hashes it on the fly.
-commonwealth-core = { workspace = true }
 # The remote provider the router reaches an endpoint through. Was
 # `sovereign_inference::remote::*`, which is itself nothing but
 # `pub use oicp_client::*` — the path swap domains
@@ -45,6 +45,10 @@ commonwealth-core = { workspace = true }
 # exception cleared when the remote provider was reached through
 # `oicp-client`).
 oicp-client = { workspace = true }
+# RPC-worker discovery's dial vocabulary: `PeerTransport`, `PeerContact`,
+# `TrafficClass` (a package leaf; pb-serve-distributes), and the guest dialer
+# `guest_source` opens a lend through (pb-serve-ranks).
+mesh-reach = { workspace = true, features = ["guest"] }
 reqwest = { workspace = true }
 urlencoding = "2"
 sha2 = { workspace = true }
@@ -81,6 +85,9 @@ tempfile = "3"
 # The pinned-pod snapshot/transport tests mint a bootstrap blob with a fixed
 # owner key (moved host-side by domains REVIEW-build-serving-move-peer).
 ed25519-dalek = { workspace = true }
+# `TestProvider`, the local-slot double the ranking and adapter tests drive
+# (phase-b pb-serve-ranks-tests-serve); never the daemon's test tree.
+sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 
 [lints]
 workspace = true

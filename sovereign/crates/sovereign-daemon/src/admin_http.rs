@@ -17,8 +17,9 @@
 //! The daemon can't rebuild a provider on its own (that would couple
 //! `sovereign-mesh` to `sovereign-inference` model-loading details
 //! that live in the CLI/desktop bootstrap). It delegates via a
-//! `ProviderFactory` trait: the CLI/desktop installs one at startup
-//! that knows how to call `EmbeddedLlamaCpp::load_full_with_families`.
+//! `ProviderFactory` trait: the daemon installs one at startup
+//! (`provider::LlamaCppFactory`) that rebuilds through the one serving
+//! assembly (`sovereign_compute::assembly::ReloadFactory::build`).
 //!
 //! Fields that need a full rebind (ports, data_dir) can't be hot-
 //! reloaded because `TcpListener` is already bound and SQLite handles
@@ -88,7 +89,7 @@ pub struct ChatActivityQuery {
 /// rolled up from the store THIS daemon serves turns against.
 ///
 /// Beside `context-window` for the same reason that route is here: both are
-/// a read of the serving process's own state that a Settings-style panel
+/// a read of this daemon's own state that a Settings-style panel
 /// renders, and both were computed inside the desktop from a handle on
 /// something that no longer answers a turn. The desktop called
 /// `SqliteStateStore::summarize_chat_activity` on the `sovereign.db` IT
@@ -198,6 +199,10 @@ pub struct ReloadResponse {
     /// non-empty. Clients can branch on this without inspecting the
     /// vector.
     pub restart_required: bool,
+    /// Keys that changed and that nothing in svrn reads, so neither a reload
+    /// nor a restart applies them (pb-distribution-f8).
+    #[serde(default)]
+    pub unread_fields: Vec<String>,
 }
 
 async fn admin_reload(
@@ -226,10 +231,9 @@ async fn admin_reload(
 #[derive(Debug, Default)]
 pub(crate) struct ConfigDiff {
     pub models_changed: Vec<&'static str>,
-    /// `[iroh] media_origin` / `media_allow`: applied by swapping the live
-    /// `MediaRoute`, no restart.
-    pub media_changed: Vec<&'static str>,
     pub restart_required: Vec<&'static str>,
+    /// Keys that changed and that nothing in svrn reads.
+    pub unread: Vec<&'static str>,
 }
 
 impl ConfigDiff {
@@ -332,40 +336,33 @@ impl ConfigDiff {
         if old.data.dir != new.data.dir {
             d.restart_required.push("data.dir");
         }
-        if old.iroh.enabled != new.iroh.enabled {
-            // The iroh endpoint is bound (or not) during start_daemon;
-            // the acceptor + RoutedTransport install can't be hot-swapped.
-            d.restart_required.push("iroh.enabled");
+        // Nothing in svrn reads these four since cw-rails became the mesh
+        // endpoint (sovereign-cli-mesh `iroh_config_migration`), so a restart
+        // applies nothing: a change is reported as unread, never as
+        // restart-required, and never as no change (pb-distribution-f8).
+        for (key, changed) in [
+            ("iroh.enabled", old.iroh.enabled != new.iroh.enabled),
+            ("iroh.transport", old.iroh.transport != new.iroh.transport),
+            (
+                "iroh.media_origin",
+                old.iroh.media_origin != new.iroh.media_origin,
+            ),
+            (
+                "iroh.media_allow",
+                old.iroh.media_allow != new.iroh.media_allow,
+            ),
+        ] {
+            if changed {
+                d.unread.push(key);
+            }
         }
-        if old.iroh.transport != new.iroh.transport {
-            // Per-class routing is baked into the RoutedTransport
-            // installed at startup.
-            d.restart_required.push("iroh.transport");
-        }
-        // The FIVE below reached the acceptor the same way `iroh.enabled` does
-        // — read once while it is constructed, never re-read — and until
-        // 2026-09-12 none of them was compared here. A change to any one made
-        // `is_noop()` true, so `svrn daemon reload` printed "no config changes
-        // detected" over a config that had demonstrably changed and the daemon
-        // silently kept the old value (ARCH §18.3: absence is reported, never
-        // defaulted). Observed setting `media_origin` on this host: the verb
-        // said stored, reload said nothing changed, the fanout still 401'd.
-        // The media two are live since ring-room (`MediaRoute`): reload
-        // applies them, so they are compared here and restart nothing.
-        if old.iroh.media_origin != new.iroh.media_origin {
-            d.media_changed.push("iroh.media_origin");
-        }
-        if old.iroh.media_allow != new.iroh.media_allow {
-            d.media_changed.push("iroh.media_allow");
-        }
-        // Compared IN THE SAME COMMIT that adds the key, for the reason the
-        // paragraph above records: the presence poll reads it per tick, so a
-        // reload that did not notice would leave the poll pointed at the
-        // previous viewer account and publish the house's playback as the
-        // holder's.
-        if old.iroh.media_viewer_user != new.iroh.media_viewer_user {
-            d.media_changed.push("iroh.media_viewer_user");
-        }
+        // The THREE below are read once while the daemon boots, never re-read,
+        // and until 2026-09-12 none of them was compared here. A change to any
+        // one made `is_noop()` true, so `svrn daemon reload` printed "no config
+        // changes detected" over a config that had demonstrably changed and the
+        // daemon silently kept the old value (ARCH §18.3: absence is reported,
+        // never defaulted). Observed setting `media_origin` on this host: the
+        // verb said stored, reload said nothing changed, the fanout still 401'd.
         if old.iroh.apps != new.iroh.apps {
             // `[iroh.apps]` is the durable publish tier; the ephemeral one
             // (`svrn run`) goes through `PublishedApps` and needs no restart.
@@ -387,9 +384,7 @@ impl ConfigDiff {
     }
 
     pub(crate) fn is_noop(&self) -> bool {
-        self.models_changed.is_empty()
-            && self.media_changed.is_empty()
-            && self.restart_required.is_empty()
+        self.models_changed.is_empty() && self.restart_required.is_empty() && self.unread.is_empty()
     }
 }
 

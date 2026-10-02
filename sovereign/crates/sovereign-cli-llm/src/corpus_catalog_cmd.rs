@@ -22,9 +22,10 @@
 
 use std::sync::Arc;
 
-use corpus_engine::recipe::CatalogConfig;
-use corpus_engine::types::CorpusKind;
-use corpus_engine::{CorpusEngine, EmbedFn, ScoredChunk};
+use corpus_index::ingest_port::daemon::IngestPort;
+use corpus_index::recipe::CatalogConfig;
+use corpus_index::source::CorpusReadPort;
+use corpus_index::types::{CorpusKind, ScoredChunk};
 use sovereign_tools::catalog::{partition_hits_by_kind, CatalogResolutionContext};
 use sovereign_tools::catalog_ingest::{
     run_catalog_ingest, CatalogIngestEvent, CatalogIngestRequest,
@@ -85,7 +86,7 @@ async fn cmd_query(args: &[String]) -> i32 {
         Ok(e) => e,
         Err(code) => return code,
     };
-    let report = match search_catalog(&engine, &query).await {
+    let report = match search_catalog(engine.as_ref(), &query).await {
         Ok(r) => r,
         Err(code) => return code,
     };
@@ -124,8 +125,14 @@ async fn cmd_simulate(args: &[String]) -> i32 {
         Ok(e) => e,
         Err(code) => return code,
     };
-    let engine = Arc::new(engine);
-    let report = match search_catalog(&engine, &query).await {
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
+    let report = match search_catalog(engine.as_ref(), &query).await {
         Ok(r) => r,
         Err(code) => return code,
     };
@@ -159,7 +166,7 @@ async fn cmd_simulate(args: &[String]) -> i32 {
             top.title,
             title_id = top.work_id,
         );
-        let confirmed = sovereign_cli_shared::prompts::confirm(&prompt, false);
+        let confirmed = sovereign_cli_base::prompts::confirm(&prompt, false);
         if !confirmed {
             println!("Skipping ingest. Run again later when you're ready.");
             return 0;
@@ -181,7 +188,7 @@ async fn cmd_simulate(args: &[String]) -> i32 {
         // the user sees a single deterministic ingest.
         expand_links: false,
     };
-    match run_catalog_ingest(engine, req).await {
+    match run_catalog_ingest(engine as _, atlas, req).await {
         Ok(corpus_id) => {
             println!();
             println!("✓ Ingested → corpus_id = {corpus_id}");
@@ -203,7 +210,7 @@ struct QueryReport {
     catalogs_present: Vec<String>,
 }
 
-async fn search_catalog(engine: &CorpusEngine, query: &str) -> Result<QueryReport, i32> {
+async fn search_catalog(engine: &dyn CorpusReadPort, query: &str) -> Result<QueryReport, i32> {
     let indexes = match engine.installed_indexes().await {
         Ok(ix) => ix,
         Err(e) => {
@@ -235,10 +242,8 @@ async fn search_catalog(engine: &CorpusEngine, query: &str) -> Result<QueryRepor
     for info in &indexes {
         if info.kind == CorpusKind::Catalog {
             catalogs_present.push(info.corpus_id.clone());
-            if let Ok(recipe) = engine.registry().fetch_recipe(&info.corpus_id).await {
-                if let Some(cat) = recipe.catalog {
-                    catalog_configs.insert(info.corpus_id.clone(), cat);
-                }
+            if let Ok(Some(cat)) = engine.catalog_config(&info.corpus_id).await {
+                catalog_configs.insert(info.corpus_id.clone(), cat);
             }
         }
     }
@@ -331,7 +336,7 @@ fn print_query_report(query: &str, report: &QueryReport) {
 }
 
 fn print_ingest_event(evt: &CatalogIngestEvent) {
-    use corpus_engine::progress::IngestProgress;
+    use sovereign_contracts::daemon_wire::IngestProgress;
     match evt {
         CatalogIngestEvent::Resolving {
             catalog_corpus_id,
@@ -426,12 +431,13 @@ fn print_ingest_event(evt: &CatalogIngestEvent) {
     }
 }
 
-fn build_engine() -> Result<CorpusEngine, i32> {
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+/// Ingest's engine for the catalog verbs and `corpus pull`'s unpack, through
+/// the process's one composition (`chat_cmd::ingest`). `None` there is the
+/// named absence.
+pub(crate) fn build_engine() -> Result<Arc<dyn IngestPort>, i32> {
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
-    let recipes_dir = data_dir.join("recipes");
-    let index_dir = data_dir.join("indexes");
 
     // Catalog query is FTS-only — we never call the embed function.
     // For simulate, the on-demand ingest path embeds the per-work
@@ -439,8 +445,65 @@ fn build_engine() -> Result<CorpusEngine, i32> {
     // here so `corpus catalog query` works on any install, and a
     // simulate that needs embeddings will fail-fast at the engine's
     // pre-flight (clear error instead of silent zero-vector ingest).
-    let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
-    let engine = CorpusEngine::new(recipes_dir, index_dir, noop_embed)
-        .with_embedding_model("qwen-embedding-0.6b");
-    Ok(engine)
+    // The engine writes no chunk entities here (no NER is composed), so
+    // its entity store is an in-memory one: these verbs never opened
+    // sovereign.db.
+    let store = match sovereign_store::sqlite::SqliteStateStore::open_in_memory() {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            eprintln!("error: open in-memory store: {e}");
+            return Err(1);
+        }
+    };
+    match crate::chat_cmd::ingest::compose(
+        data_dir,
+        Arc::new(FtsOnly),
+        "qwen-embedding-0.6b",
+        store,
+    ) {
+        Some(mount) => Ok(mount.port),
+        None => {
+            eprintln!("error: {}", crate::chat_cmd::ingest::NO_INGEST);
+            Err(1)
+        }
+    }
+}
+
+/// The catalog verbs' inference: the noop embed they always had (an empty
+/// vector, which the engine's pre-flight refuses), and no generation.
+struct FtsOnly;
+
+#[async_trait::async_trait]
+impl sovereign_core::traits::InferenceProvider for FtsOnly {
+    async fn complete(
+        &self,
+        _request: &sovereign_core::types::CompletionRequest,
+    ) -> sovereign_core::error::Result<sovereign_core::types::CompletionResponse> {
+        Err(sovereign_core::Error::Inference(
+            "the catalog verbs carry no generation".to_string(),
+        ))
+    }
+    async fn complete_stream(
+        &self,
+        _request: &sovereign_core::types::CompletionRequest,
+    ) -> sovereign_core::error::Result<
+        std::pin::Pin<
+            Box<dyn futures::Stream<Item = sovereign_core::error::Result<String>> + Send>,
+        >,
+    > {
+        Err(sovereign_core::Error::Inference(
+            "the catalog verbs carry no generation".to_string(),
+        ))
+    }
+    async fn embed(&self, _text: &str) -> sovereign_core::error::Result<Vec<f32>> {
+        Ok(Vec::new())
+    }
+    fn capabilities(&self) -> sovereign_core::types::ProviderCapabilities {
+        sovereign_core::types::ProviderCapabilities {
+            max_context_tokens: 0,
+            supports_structured_output: false,
+            relative_speed: sovereign_core::types::Speed::Fast,
+            relative_reasoning: sovereign_core::types::Depth::Shallow,
+        }
+    }
 }

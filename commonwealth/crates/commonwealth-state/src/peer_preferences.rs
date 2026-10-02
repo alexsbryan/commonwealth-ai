@@ -12,11 +12,10 @@
 //!
 //! 1. **Local only, never replicated.** The
 //!    `peer_preferences` `app_id` is excluded by the
-//!    [`is_gossip_excluded`] predicate, which `backend::enqueue_on`
-//!    applies inside the store's own write transaction — the
+//!    [`is_gossip_excluded`] predicate; it is local-only, so its writes
+//!    are journaled and the ring never offers them (fp-107) — the
 //!    structural invariant is pinned by
-//!    `gossip_excludes_peer_preferences_app_id` and, behaviourally, by
-//!    `store::tests::an_excluded_namespace_never_enters_the_outbox`.
+//!    `gossip_excludes_peer_preferences_app_id`.
 //!
 //! 2. **Multiplier clamped to `(0.0, 1.0]` at construction.** The
 //!    constructor returns `Err` for any other value — there is no
@@ -47,56 +46,19 @@ use crate::store::MeshStore;
 /// the local machine.
 pub const PEER_PREFERENCES_APP_ID: &str = "peer_preferences";
 
-/// A single peer preference. Constructed via [`PeerPreference::new`]
-/// which enforces the `(0.0, 1.0]` clamp; direct field
-/// construction is impossible because the type is a struct with
-/// private invariants.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct PeerPreference {
-    multiplier: f64,
-    reason: Option<String>,
-    set_at: u64,
-}
+// The record and its clamp live in `oicp_types::peer_preference` since
+// pb-mesh-exit-core; re-exported at its historical path.
+pub use oicp_types::peer_preference::PeerPreference;
 
-impl PeerPreference {
-    /// Construct a preference. `multiplier` must lie in
-    /// `(0.0, 1.0]` — values outside this range, NaN, and
-    /// non-finite f64s are all rejected with `Err`. The error path
-    /// is deliberately the *only* way to fail to set a preference;
-    /// callers don't have to defensively re-validate elsewhere.
-    pub fn new(multiplier: f64, reason: Option<String>) -> Result<Self> {
-        if !multiplier.is_finite() {
-            return Err(Error::Backend(format!(
-                "peer-preference multiplier must be finite, got {multiplier}"
-            )));
-        }
-        if multiplier <= 0.0 || multiplier > 1.0 {
-            return Err(Error::Backend(format!(
-                "peer-preference multiplier must be in (0.0, 1.0], got {multiplier}"
-            )));
-        }
-        let set_at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        Ok(Self {
-            multiplier,
-            reason,
-            set_at,
-        })
-    }
-
-    pub fn multiplier(&self) -> f64 {
-        self.multiplier
-    }
-
-    pub fn reason(&self) -> Option<&str> {
-        self.reason.as_deref()
-    }
-
-    pub fn set_at(&self) -> u64 {
-        self.set_at
-    }
+/// Construct a [`PeerPreference`] stamped with the wall clock now. The
+/// `(0.0, 1.0]` clamp is `PeerPreference::new`'s; a rejected multiplier is
+/// `Error::Backend` carrying that constructor's words, as before the move.
+pub fn peer_preference(multiplier: f64, reason: Option<String>) -> Result<PeerPreference> {
+    let set_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    PeerPreference::new(multiplier, reason, set_at).map_err(Error::Backend)
 }
 
 /// Local-only store of per-peer preferences. Backed by `MeshStore`
@@ -124,8 +86,8 @@ impl PeerPreferenceStore {
             .map_err(|e| Error::Backend(format!("serialize peer preference: {e}")))?;
         tracing::info!(
             peer = %fmt_peer(peer),
-            multiplier = pref.multiplier,
-            has_reason = pref.reason.is_some(),
+            multiplier = pref.multiplier(),
+            has_reason = pref.reason().is_some(),
             "peer_pref: set"
         );
         self.store.set(
@@ -224,25 +186,29 @@ impl PeerPreferenceStore {
 ///
 /// No cross-peer consumer (cw-lift 2b):
 ///
-/// - `wikipedia-newsworthy:status` — the per-node watcher tick
+/// - `wikipedia-newsworthy-status` — the per-node watcher tick
 ///   snapshot. Its key is the unsuffixed `last_tick` on EVERY node, so
 ///   under LWW the most recent peer's snapshot won and
 ///   `/internal/newsworthy/status` reported that peer's `node_id_str`
 ///   and `role_leader` as yours. Excluding it is the fix, not a
 ///   trade-off — the reader (`read_last_tick`) only ever wanted the
 ///   local tick.
-/// - `wikipedia-newsworthy:portal` — daily portal idempotency markers.
+/// - `wikipedia-newsworthy-portal` — daily portal idempotency markers.
 ///   Written and read inside the leader's own `run_leader_step`; the
 ///   only other reader is `svrn newsworthy status` against the
 ///   repo-local `.sovereign/mesh.db`.
-/// - `atos-sessions` — one row per opencode session, read back by
-///   local `session_id`. The row is mutated in place by the middleware
-///   chain on every request, so replicating it was a write per gated
-///   request for a key nothing else resolves.
-/// - `atos-approvals` — feature-approval rows. Written and read by the
-///   `svrn atos` CLI verbs against the repo-local `.sovereign/mesh.db`;
-///   the daemon-side reader (`ApprovalGate`) was never constructed with
-///   a store at all, so no row ever reached the gossiping instance.
+///
+/// The seven entries above are `commonwealth_rail_core::LOCAL_ONLY_NAMESPACES`
+/// (the ring never offers them either); the rest are
+/// [`RAIL_CARRIED_APP_IDS`]. This list is their union, built at compile time,
+/// so neither literal is spelled twice (five-programs-37).
+///
+/// Each entry is pinned by a test that asserts `is_gossip_excluded`
+/// returns `true` for it.
+pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &GOSSIP_EXCLUDED;
+
+/// Namespaces that left the KV gossip for the ring rail — excluded from
+/// gossip, and still offered on the ring.
 ///
 /// Moved to the ring rail (cw-lift 2d):
 ///
@@ -257,21 +223,26 @@ impl PeerPreferenceStore {
 ///   There is no writer left on this side (`sovereign_mesh::
 ///   measurements_rail` is the only publisher and it appends to the journal),
 ///   which is exactly the shape `notes-private` already has.
-///
-/// Each entry is pinned by a test that asserts `is_gossip_excluded`
-/// returns `true` for it.
-pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
-    PEER_PREFERENCES_APP_ID,
-    "work-atlas-private",
-    "notes-private",
-    "activity-private",
-    "portfolio-private",
-    "wikipedia-newsworthy:status",
-    "wikipedia-newsworthy:portal",
-    "atos-sessions",
-    "atos-approvals",
-    "mesh-measurements",
-];
+pub const RAIL_CARRIED_APP_IDS: &[&str] = &[oicp_types::measurements::MEASUREMENTS_APP_ID];
+
+const GOSSIP_EXCLUDED_LEN: usize =
+    commonwealth_rail_core::LOCAL_ONLY_NAMESPACES.len() + RAIL_CARRIED_APP_IDS.len();
+
+const GOSSIP_EXCLUDED: [&str; GOSSIP_EXCLUDED_LEN] = {
+    let local = commonwealth_rail_core::LOCAL_ONLY_NAMESPACES;
+    let mut out = [""; GOSSIP_EXCLUDED_LEN];
+    let mut i = 0;
+    while i < local.len() {
+        out[i] = local[i];
+        i += 1;
+    }
+    let mut j = 0;
+    while j < RAIL_CARRIED_APP_IDS.len() {
+        out[i + j] = RAIL_CARRIED_APP_IDS[j];
+        j += 1;
+    }
+    out
+};
 
 /// `app_id` namespace for a user's Proxy Voting portfolios — the named
 /// sets of corpus_ids they hold. Reserved + gossip-excluded (FR-11):
@@ -283,6 +254,14 @@ pub const PORTFOLIO_PRIVATE_APP_ID: &str = "portfolio-private";
 /// to hard-code the list — every caller goes through here.
 pub fn is_gossip_excluded(app_id: &str) -> bool {
     GOSSIP_EXCLUDED_APP_IDS.contains(&app_id)
+}
+
+/// Returns true when `app_id` left the KV rail for the ring rail
+/// ([`RAIL_CARRIED_APP_IDS`]) — the sender-side outbox guard's one decider.
+/// Local-only namespaces are NOT rail-carried: they are queued and journaled,
+/// and the ring never offers them (fp-107).
+pub fn is_rail_carried(app_id: &str) -> bool {
+    RAIL_CARRIED_APP_IDS.contains(&app_id)
 }
 
 fn node_key(peer: &NodeId) -> String {
@@ -319,33 +298,33 @@ mod tests {
 
     #[test]
     fn peer_preference_constructor_accepts_legal_range() {
-        assert!(PeerPreference::new(1.0, None).is_ok());
-        assert!(PeerPreference::new(0.5, None).is_ok());
-        assert!(PeerPreference::new(0.001, None).is_ok());
-        assert!(PeerPreference::new(0.999, Some("reason".into())).is_ok());
+        assert!(peer_preference(1.0, None).is_ok());
+        assert!(peer_preference(0.5, None).is_ok());
+        assert!(peer_preference(0.001, None).is_ok());
+        assert!(peer_preference(0.999, Some("reason".into())).is_ok());
     }
 
     #[test]
     fn peer_preference_constructor_rejects_out_of_range() {
         // Above 1.0 — no favoritism.
-        assert!(PeerPreference::new(1.0001, None).is_err());
-        assert!(PeerPreference::new(2.0, None).is_err());
-        assert!(PeerPreference::new(f64::INFINITY, None).is_err());
+        assert!(peer_preference(1.0001, None).is_err());
+        assert!(peer_preference(2.0, None).is_err());
+        assert!(peer_preference(f64::INFINITY, None).is_err());
         // At or below 0.0 — open lower bound (use `clear` to remove
         // a peer; do not zero them out structurally).
-        assert!(PeerPreference::new(0.0, None).is_err());
-        assert!(PeerPreference::new(-0.0001, None).is_err());
-        assert!(PeerPreference::new(-1.0, None).is_err());
-        assert!(PeerPreference::new(f64::NEG_INFINITY, None).is_err());
+        assert!(peer_preference(0.0, None).is_err());
+        assert!(peer_preference(-0.0001, None).is_err());
+        assert!(peer_preference(-1.0, None).is_err());
+        assert!(peer_preference(f64::NEG_INFINITY, None).is_err());
         // NaN.
-        assert!(PeerPreference::new(f64::NAN, None).is_err());
+        assert!(peer_preference(f64::NAN, None).is_err());
     }
 
     #[test]
     fn set_get_clear_round_trips() {
         let store = MeshStore::in_memory().unwrap();
         let prefs = PeerPreferenceStore::new(store, nid(1));
-        let pref = PeerPreference::new(0.5, Some("over-consuming".into())).unwrap();
+        let pref = peer_preference(0.5, Some("over-consuming".into())).unwrap();
         prefs.set(&nid(2), pref.clone()).unwrap();
         let got = prefs.get(&nid(2)).unwrap().unwrap();
         assert!((got.multiplier() - 0.5).abs() < 1e-12);
@@ -360,10 +339,10 @@ mod tests {
         let store = MeshStore::in_memory().unwrap();
         let prefs = PeerPreferenceStore::new(store, nid(1));
         prefs
-            .set(&nid(2), PeerPreference::new(0.8, None).unwrap())
+            .set(&nid(2), peer_preference(0.8, None).unwrap())
             .unwrap();
         prefs
-            .set(&nid(3), PeerPreference::new(0.5, None).unwrap())
+            .set(&nid(3), peer_preference(0.5, None).unwrap())
             .unwrap();
         let mut listed = prefs.list().unwrap();
         listed.sort_by_key(|(id, _)| id.as_bytes().to_vec());
@@ -398,11 +377,21 @@ mod tests {
     /// reader ever seeing two copies of one measurement from two transports.
     ///
     /// This pins the LIST, not the behaviour (ARCH §18.1). The outbound gate
-    /// is `store::tests::an_excluded_namespace_never_enters_the_outbox`,
-    /// which drives this whole list through the store's write door and fails
-    /// on the queued count; it carries this namespace.
+    /// is `store::tests::the_outbox_queues_local_only_writes_and_never_rail_carried_ones`,
+    /// which drives `RAIL_CARRIED_APP_IDS` through the store's write door.
     #[test]
     fn the_measurements_namespace_left_the_wire_for_the_rail() {
+        assert!(is_gossip_excluded("mesh-measurements"));
+    }
+
+    /// The gossip list is local-only plus rail-carried: private operator
+    /// state is never offered on the ring, measurements still are
+    /// (five-programs-37).
+    #[test]
+    fn local_only_is_the_gossip_list_minus_what_the_ring_carries() {
+        use commonwealth_rail_core::is_local_only;
+        assert!(is_local_only(PEER_PREFERENCES_APP_ID));
+        assert!(!is_local_only("mesh-measurements"));
         assert!(is_gossip_excluded("mesh-measurements"));
     }
 
@@ -414,22 +403,17 @@ mod tests {
     ///
     /// This pins the LIST, which is a register of decisions and their
     /// reasons; it is not the behavioural gate and should not be read
-    /// as one (ARCH §18.1). The gates are
-    /// `store::tests::an_excluded_namespace_never_enters_the_outbox`,
-    /// which drives the whole list through the store's write door and
-    /// fails on the queued count if any of these rejoins the wire, and
-    /// `store::tests::apply_projection_refuses_an_excluded_namespace`
-    /// for the inbound half. Both drive every namespace on this list.
+    /// as one (ARCH §18.1). The inbound gate is
+    /// `store::tests::apply_projection_refuses_an_excluded_namespace`,
+    /// which drives every namespace on this list; outbound, these are
+    /// local-only, journaled and never offered by the ring (fp-107).
     #[test]
     fn gossip_excludes_namespaces_with_no_cross_peer_consumer() {
         // Single unsuffixed `last_tick` key — replicating it made a
         // peer's tick render as yours.
-        assert!(is_gossip_excluded("wikipedia-newsworthy:status"));
+        assert!(is_gossip_excluded("wikipedia-newsworthy-status"));
         // Leader reads back its own marker inside `run_leader_step`.
-        assert!(is_gossip_excluded("wikipedia-newsworthy:portal"));
-        // Read back by local `session_id` / by the same CLI process.
-        assert!(is_gossip_excluded("atos-sessions"));
-        assert!(is_gossip_excluded("atos-approvals"));
+        assert!(is_gossip_excluded("wikipedia-newsworthy-portal"));
         // The tracked set is the newsworthy namespace that DOES have a
         // cross-peer consumer: the leader writes it, every node reads
         // it to pick its partition. It must keep replicating — which
@@ -449,13 +433,17 @@ mod tests {
         );
     }
 
-    /// **Structural invariant pin** for the work atlas privacy model.
-    /// Mirrored by a test in `sovereign-work-atlas` that asserts the
-    /// other half — `Privacy::Private.app_id()` returns this exact
-    /// literal. If either side drifts, one test fails.
+    /// **Structural invariant pin** for the work atlas privacy model, over
+    /// the constants both sides name: the atlas's `Privacy::app_id()`
+    /// returns `sovereign_contracts::peer::WORK_ATLAS_APP_ID_*`
+    /// (sovereign-work-atlas model.rs), and this list must exclude the
+    /// private one and carry the public one. `store/work_atlas_tests.rs`
+    /// drives both through the outbox and the projection.
     #[test]
     fn gossip_excludes_work_atlas_private_app_id() {
-        assert!(is_gossip_excluded("work-atlas-private"));
+        use sovereign_contracts::peer::{WORK_ATLAS_APP_ID_PRIVATE, WORK_ATLAS_APP_ID_PUBLIC};
+        assert!(is_gossip_excluded(WORK_ATLAS_APP_ID_PRIVATE));
+        assert!(!is_gossip_excluded(WORK_ATLAS_APP_ID_PUBLIC));
     }
 
     /// **Structural invariant pin** for the NoteStore mesh

@@ -8,12 +8,12 @@
 
 use super::*;
 
-const HELP_INSTALL_HOOKS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_INSTALL_HOOKS: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn project install-hooks",
     summary: "Upgrade (or install) the post-commit hook in the current repo.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn project install-hooks"),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Usage("svrn project install-hooks"),
+        sovereign_cli_base::help::HelpSection::Notes(
             "Use this when you've upgraded sovereign-cli and want the hook to pick up the new\n\
              binary without re-running `svrn project init`.",
         ),
@@ -26,8 +26,8 @@ const HELP_INSTALL_HOOKS: sovereign_cli_shared::help::Help = sovereign_cli_share
 /// running the full `project init` pipeline. Safe to re-run; detects and
 /// rewrites prior-version hook blocks in place.
 pub(super) async fn cmd_install_hooks(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_INSTALL_HOOKS);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_INSTALL_HOOKS);
         return 0;
     }
     // Deprecated. The daemon's Reindexer now keeps the graph fresh

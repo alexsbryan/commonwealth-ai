@@ -117,7 +117,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-daemon/treesitter,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli-llm/awareness,sovereign-daemon/treesitter,sovereign-turn-client/bundled-backend,host-kit/mcp,host-kit/shell,host-kit/task,host-kit/jobs,host-kit/service,host-kit/panic_hook,host-kit/memory,host-kit/sibling"
         return 0
     fi
 
@@ -165,11 +165,14 @@ if "sovereign-cli" in seen:
     # so the gate must compile it. Omitting it would leave `svrn code index`
     # and `svrn refresh` — code real users run — never built by any check.
     want.append("sovereign-cli/code-intel")
+if "sovereign-cli-llm" in seen:
     # Kept in step with sovereign-lint.sh. The two gates resolving DIFFERENT
     # feature sets for one crate is not a coverage question only — cargo
     # fingerprints on features, so alternating lint and test rebuilt
-    # sovereign-cli and sovereign-mesh on every switch.
-    want.append("sovereign-cli/awareness")
+    # sovereign-cli and sovereign-mesh on every switch. The feature lives on
+    # cli-llm since the dispatcher stopped linking it
+    # (pb-cli-llm-ingest-move-remainder).
+    want.append("sovereign-cli-llm/awareness")
 if "sovereign-daemon" in seen:
     # `treesitter` gates `pub mod bootstrap` (lib.rs:63) — and with it the
     # whole `rpc_worker_flag_tests` module. The daemon BINARY enables the
@@ -180,25 +183,6 @@ if "sovereign-daemon" in seen:
     # shape as the sovereign-mesh/treesitter hole below. Same value in both
     # gates, so no fingerprint flip.
     want.append("sovereign-daemon/treesitter")
-if "sovereign-mesh" in seen:
-    # `dst` compiles the fault-injection harness and, through it, the Tier-1
-    # scheduler simulator that moved to `sovereign-mesh-test-harness` (domains
-    # dm-mesh-sim-move) — both off by default so a production build never links
-    # them. tests/main/mesh_sim_scoreboard.rs (24) and scheduler_replay_agreement.rs
-    # (8) run under it; dst_scenarios.rs (7 — the mesh invariant pack under
-    # seeded fault injection) was in the same position with its CI job shelved
-    # since 2026-07-14. A harness nobody has watched fail is not a gate
-    # (ARCH_PRINCIPLES §18.1). Both are pure in-process compute — no GPU, no
-    # network, no weights (§12.4).
-    want.append("sovereign-mesh/dst")
-    # `treesitter` gates 30+ integration files of sovereign-mesh
-    # (the `#![cfg(feature = "treesitter")]` crate-gate: turn_surface.rs, knowledge_*,
-    # reading_http_e2e.rs, ...). A --workspace run gets it by unification
-    # from sovereign-cli-llm; a scoped `--package sovereign-mesh` run did
-    # not, so those files compiled to NOTHING and a filter naming one of
-    # their tests exited 4 ("no tests matched") with 880 others skipped —
-    # observed 2026-09-01. Same value both gates, so no fingerprint flip.
-    want.append("sovereign-mesh/treesitter")
 if "commonwealth-transport" in seen:
     # `fanout` is the generic peer fan-out (moved out of commonwealth-api in
     # the rails carve, 2026-09-11). Every workspace consumer turns it on, so
@@ -215,6 +199,34 @@ if "sovereign-turn-client" in seen:
     # `sv-no-daemon-management` gate (cargo tree over the desktop) reads the
     # same either way.
     want.append("sovereign-turn-client/bundled-backend")
+if "host-kit" in seen:
+    # `mcp` gates the MCP dispatcher in the host kit (phase-b pb-mcp).
+    # corpus-mcp turns it on, so a workspace run gets it by unification; a solo
+    # `--package host-kit` run compiled the module and its protocol tests to
+    # nothing. The feature adds only wire-leaf and async deps, so unifying it
+    # into a scoped cw-rails run moves no package closure.
+    want.append("host-kit/mcp")
+    # `shell` gates the server shell (phase-b pb-shell), for the same reason:
+    # the daemon and cw-rails turn it on, a solo run would compile it to nothing.
+    want.append("host-kit/shell")
+    # `task` gates the task supervisor (phase-b pb-notes-memory), for the same
+    # reason: the daemon and the code program turn it on, a solo run would
+    # compile it and its two restart tests to nothing.
+    want.append("host-kit/task")
+    # `jobs` gates the in-process job table (pb-serve-distributes), for the
+    # same reason: the daemon turns it on, a solo run would compile it and its
+    # three table tests to nothing.
+    want.append("host-kit/jobs")
+    # `service` gates the per-user unit writer (pb-mesh-exit-transport), for
+    # the same reason: sovereign-service and cli-mesh turn it on, a solo run
+    # would compile it and its install test to nothing. std only.
+    want.append("host-kit/service")
+    # `panic_hook`, `memory` and `sibling` (pb-distribution-f11-daemon-twins),
+    # for the same reason: the two daemon crates and the dispatcher turn them
+    # on, a solo run would compile the moved tests to nothing.
+    want.append("host-kit/panic_hook")
+    want.append("host-kit/memory")
+    want.append("host-kit/sibling")
 legal = [f for f in want if f.split("/", 1)[0] in nameable]
 dropped = [f for f in want if f not in legal]
 if dropped:

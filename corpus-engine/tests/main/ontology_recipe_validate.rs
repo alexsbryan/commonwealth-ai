@@ -13,7 +13,7 @@ use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use corpus_engine::testing::validate_recipe_offline;
 use corpus_engine::{recipe_templates, Recipe};
 
-use super::ontology_recipe::{policies_of, recipe_with_ontology, MAPLE_HOUSE};
+use super::ontology_recipe::{maple_house, policies_of, recipe_with_ontology};
 
 // ── validate: every rule, one red input each ────────────────────────────────
 
@@ -457,7 +457,7 @@ identity_fallback = ["name", "employer"]"#,
     );
 
     // A version-0 block derives nothing.
-    let v0 = Recipe::from_toml(MAPLE_HOUSE).unwrap();
+    let v0 = Recipe::from_toml(maple_house()).unwrap();
     assert!(validate_block(v0.ontology_block().unwrap())
         .notes
         .is_empty());

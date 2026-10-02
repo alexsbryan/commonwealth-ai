@@ -14,6 +14,12 @@ use crate::types::*;
 mod routing;
 pub use routing::RoutingStore;
 
+/// In-memory `ConversationStore` for logic tests — seeding, never SQL
+/// (fp-32; the `notes::fixtures::RecordingNotes` shape: an off-by-default
+/// double beside the trait, enabled per consumer with `test-fixtures`).
+#[cfg(any(test, feature = "test-fixtures"))]
+pub mod fixtures;
+
 // Re-export observer types so `sovereign_core::StateStoreObserver`
 // works alongside `sovereign_core::StateStore`.
 pub use crate::observer::{
@@ -118,6 +124,13 @@ pub trait PrincipalResolver: Send + Sync {
     /// turn. A host with no tenancy wires no resolver rather than returning
     /// `None` from one.
     fn principal_for(&self, conversation_id: &str) -> Option<String>;
+
+    /// The corpus ids this host grants its resolved callers, or `None` when
+    /// it grants every corpus their visibility allows. `Some(empty)` grants
+    /// nothing; it is never read as "every corpus".
+    fn corpus_grant(&self) -> Option<Vec<String>> {
+        None
+    }
 }
 
 /// Snapshot of one watched-folder corpus's user-facing metadata.
@@ -455,9 +468,9 @@ pub trait InferenceProvider: Send + Sync {
     /// Default returns `Err(Error::NotImplemented)` so providers
     /// without a reranker (remote API, mesh peer, stubs) satisfy the
     /// trait without lying about capability. `EmbeddedLlamaCpp`
-    /// overrides this when a rerank slot is configured — env-var only
-    /// (`SOVEREIGN_RERANK_MODEL_PATH` + `SOVEREIGN_RERANK_*`); there is
-    /// no `[rerank]` models.toml section.
+    /// overrides this when a rerank slot is configured
+    /// (`SOVEREIGN_RERANK_MODEL_PATH`, else `[models.kinds] rerank`), and
+    /// `oicp-client` implements it over a node's `/v1/rerank`.
     /// The `CorpusIndex::search_with_rerank` path
     /// catches the error and falls back to the un-reranked fusion
     /// result — enabling rerank is purely additive.
@@ -1597,7 +1610,7 @@ pub struct MeshScoredChunk {
 /// daemon's own `corpora_unavailable`). Both families are the same defect —
 /// the signal exists at the point of loss and used to die before the answer
 /// surface (`MESH_SCALE_100_USERS_1000_CORPORA.md` §9.6, note 89d5f75a).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum UnavailabilityReason {
     /// The index build never finished (ingest stalled / sync paused).
     NotBuilt,
@@ -1685,7 +1698,11 @@ impl UnavailabilityReason {
 /// THE one unavailability record. Every loss site writes this type and
 /// nothing else; the answer surface renders from it. ARCH §18.3 — absence is
 /// reported, never defaulted.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serde because svrn's retrieval probe (`crate::probe::PoolEvidence`)
+/// carries it to the bench that judges the pool, which refuses to score one
+/// that lost a corpus.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CorpusUnavailable {
     /// Corpus id as the request named it.
     pub corpus_id: String,

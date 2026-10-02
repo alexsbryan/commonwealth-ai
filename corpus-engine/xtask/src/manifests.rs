@@ -20,14 +20,47 @@ pub struct MemberCrate {
     pub dir: String,
 }
 
+/// The body of the root `members = […]` array, comments stripped.
+///
+/// The members list is annotated prose — every entry carries its why — and
+/// prose may contain brackets: the literal `[[package_leaf]]` inside a
+/// member's comment ended this scan early (found live 2026-09-22, fp-17),
+/// truncating the member set to the entries above the comment and sending
+/// four gates green over a six-crate workspace. So the closing bracket is
+/// found with comment state tracked: `#` outside a string skips to
+/// end-of-line.
+fn members_array_body(manifest: &str) -> Option<String> {
+    let rest = manifest.split_once("members = [")?.1;
+    let mut body = String::new();
+    let mut in_str = false;
+    let mut chars = rest.chars();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' => {
+                in_str = !in_str;
+                body.push(ch);
+            }
+            '#' if !in_str => {
+                for c in chars.by_ref() {
+                    if c == '\n' {
+                        body.push('\n');
+                        break;
+                    }
+                }
+            }
+            ']' if !in_str => return Some(body),
+            _ => body.push(ch),
+        }
+    }
+    Some(body) // unterminated array: parse what is there
+}
+
 /// Expand the root `members = […]` list (including `dir/*` globs) and read
 /// each member's package name.
 pub fn workspace_members(root: &Path) -> Vec<MemberCrate> {
     let manifest = std::fs::read_to_string(root.join("Cargo.toml")).unwrap_or_default();
     let mut dirs: Vec<String> = Vec::new();
-    if let Some(start) = manifest.find("members = [") {
-        let body = &manifest[start..];
-        let body = &body[..body.find(']').unwrap_or(body.len())];
+    if let Some(body) = members_array_body(&manifest) {
         for m in body.split('"').skip(1).step_by(2) {
             if let Some(parent) = m.strip_suffix("/*") {
                 if let Ok(rd) = std::fs::read_dir(root.join(parent)) {
@@ -284,8 +317,18 @@ pub fn deps_with_kinds(manifest: &str) -> Vec<(String, DepKind)> {
         let Some((name, _)) = t.split_once('=') else {
             continue;
         };
-        let name = name.trim().trim_matches('"');
-        if !name.is_empty() {
+        // A dotted key (`foo.workspace = true`) names the dep before its
+        // first `.`; until fp-55 it read as `foo.workspace`, matched no
+        // member, and dropped the edge silently. Cargo names hold no `.`.
+        // `foo.features = […]` beside it is the same dep, not a second edge.
+        let key = name.trim();
+        let dotted = key.split_once('.');
+        let name = dotted
+            .map_or(key, |(head, _)| head)
+            .trim()
+            .trim_matches('"');
+        let repeat = dotted.is_some() && out.iter().any(|(n, dk)| n == name && *dk == k);
+        if !name.is_empty() && !repeat {
             out.push((name.to_string(), k));
         }
     }
@@ -337,6 +380,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_bracket_in_a_members_comment_does_not_end_the_array() {
+        // fp-17: a member's why-comment carried the literal `[[package_leaf]]`;
+        // the old first-`]` scan ended the array there, truncating the member
+        // set to the entries above the comment — and the gates printed green
+        // over a six-crate workspace.
+        let manifest = "\
+members = [\n\
+    \"oicp-types\",\n\
+    # the arithmetic half, a [[package_leaf]] row in ARCH_LAYERS.toml\n\
+    \"serving-policy\",\n\
+]\n";
+        let body = members_array_body(manifest).unwrap();
+        let entries: Vec<&str> = body.split('"').skip(1).step_by(2).collect();
+        assert_eq!(entries, ["oicp-types", "serving-policy"]);
+    }
+
+    #[test]
     fn package_name_comes_from_package_section_only() {
         let manifest = "\
 [package]\n\
@@ -371,6 +431,29 @@ extra = [\"dep:serde\"]\n";
         assert!(deps.contains(&("winapi".into(), DepKind::Normal)));
         // [features] table entries are not deps.
         assert!(!deps.iter().any(|(n, _)| n == "extra"));
+    }
+
+    /// The shape sovereign-eval and sovereign-authoring-harness used to keep
+    /// `bench → corpus-engine` invisible to both gates until fp-55.
+    #[test]
+    fn dotted_key_deps_are_named_by_their_head() {
+        let manifest = "\
+[package]\n\
+version.workspace = true\n\
+[dependencies]\n\
+corpus-engine.workspace = true\n\
+corpus-engine.features = [\"treesitter\"]\n\
+serde = { workspace = true }\n\
+[dev-dependencies]\n\
+tempfile.workspace = true\n";
+        let deps = deps_with_kinds(manifest);
+        assert!(deps.contains(&("corpus-engine".into(), DepKind::Normal)));
+        assert!(deps.contains(&("tempfile".into(), DepKind::Dev)));
+        // Two dotted keys under one dep are one edge, not two.
+        assert_eq!(deps.iter().filter(|(n, _)| n == "corpus-engine").count(), 1);
+        // The dotted form never leaks through as a name, and [package]
+        // keys are not deps.
+        assert!(!deps.iter().any(|(n, _)| n.contains('.') || n == "version"));
     }
 
     #[test]

@@ -1,0 +1,70 @@
+[package]
+name = "host-kit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The host kit — what each program's binary owns about itself, starting with the single-writer lock on its data root. Every path and file name comes from the caller; it names no program's vocabulary."
+
+# Minted 2026-09-26 (phase-b pb-hostkit; FIVE_PROGRAMS §2c, §12 3a rung 4).
+# The one mechanism leaf: it may do fs work, owns no store, and names nothing
+# from sovereign, corpus-engine, commonwealth or studio, so commonwealth-rails
+# can take it past its `→ sovereign-*` [[forbid]].
+
+[features]
+# The MCP dispatcher (phase-b pb-mcp, decision phase-b-13): the protocol half
+# every MCP host shares, over a tool-host port. Optional, so a program that
+# serves no MCP (cw-rails) takes the kit without the wire vocabulary.
+mcp = ["dep:oicp-types", "dep:serde_json", "dep:tokio", "dep:tracing"]
+# The server shell (phase-b pb-shell): bind, loopback guard, peer address,
+# body limits, shutdown as a value, mount tracing. Optional, so a program
+# that serves no HTTP takes the kit without axum.
+shell = ["dep:axum", "dep:serde_json", "dep:tokio", "dep:tower-http", "dep:tracing"]
+# MCP's HTTP+SSE framing and the notifier behind `GET /mcp` (phase-b
+# pb-code-server): the dispatcher's second framing, beside stdio.
+http = ["mcp", "dep:axum", "dep:futures", "dep:tokio-stream"]
+# Panic-restart supervision of a program's own background tasks (phase-b
+# pb-notes-memory): moved whole from sovereign-daemon, whose notes rail moved
+# to the code program and runs under the same supervisor there.
+task = ["dep:tokio", "dep:tracing"]
+# The in-process job table a program's long routes keep their jobs in
+# (pb-serve-distributes): moved whole from sovereign-daemon, so serve's weight
+# downloads take the same table rather than a sixth copy.
+jobs = ["dep:tracing"]
+# The per-user systemd unit writer (pb-mesh-exit-transport): moved from
+# sovereign-service so `svrn install-service` and `svrn mesh up`'s cw-rails
+# unit write through one mechanism. std only.
+service = []
+# The process panic hook (pb-distribution-f11-daemon-twins): one copy, moved
+# from the two daemon crates that forked it at the de-embed.
+panic_hook = ["dep:serde_json"]
+# The memory soft limit and total-RAM probe (pb-distribution-f11-daemon-twins):
+# one derivation, read by the daemon's watcher and by doctor.
+memory = ["dep:libc"]
+# The stale-sibling warning for a binary that execs another
+# (pb-distribution-f11-daemon-twins): the dispatcher's and cli-daemon's twin,
+# one copy. std only.
+sibling = []
+
+[dependencies]
+axum = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+oicp-types = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tokio-stream = { version = "0.1", features = ["sync"], optional = true }
+tower-http = { workspace = true, optional = true, features = ["timeout"] }
+tracing = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = { version = "0.2", optional = true }
+
+[dev-dependencies]
+if-addrs = "0.13"
+reqwest = { workspace = true }
+tempfile = { workspace = true }
+tracing-subscriber = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "macros"] }
+
+[lints]
+workspace = true

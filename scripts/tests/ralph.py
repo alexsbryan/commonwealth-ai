@@ -6,7 +6,6 @@ notifiers are injected, so every gate runs in milliseconds and its failing
 input is explicit.
 """
 import contextlib
-from dataclasses import replace as dataclasses_replace
 import io
 import os
 import pathlib
@@ -20,6 +19,14 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import ralph  # noqa: E402
+
+
+def setUpModule():
+    # A pool test does not wait on this host's free memory; the split itself is
+    # tested against stubbed probes (PoolQueueTests.share).
+    patcher = mock.patch.object(ralph, "cargo_jobs_share", lambda lanes: (2, "test budget"))
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
 
 
 def write(root, rel, text):
@@ -51,6 +58,26 @@ class QueueTests(unittest.TestCase):
             q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
             self.assertEqual(q.current().id, "dm-a")
 
+    def test_a_ready_human_row_waits_while_the_rows_past_it_run(self):
+        # phase-b-31: HUMAN-pb-lanes-dials-serve at the head held 40 rows for 9 h.
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md",
+                  "- [ ] HUMAN-read — depends []\n- [ ] dm-after — depends [HUMAN-read]\n"
+                  "- [ ] dm-free — depends []\n")
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            self.assertEqual(q.current().id, "dm-free")
+            self.assertEqual(q.awaiting_operator(), ["HUMAN-read"])
+
+    def test_a_parked_row_waits_even_when_it_is_the_active_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md",
+                  "- [~] dm-stuck — depends []\n- [ ] dm-next — depends [dm-stuck]\n"
+                  "- [ ] dm-free — depends []\n")
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            self.assertEqual(q.current(frozenset({"dm-stuck"})).id, "dm-free")
+            self.assertEqual(q.awaiting_operator(frozenset({"dm-stuck"})), ["dm-stuck"])
+            self.assertIsNone(ralph.Queue(q.path).current(frozenset({"dm-stuck", "dm-free"})))
+
     def test_duplicate_id_is_an_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             write(tmp, "ralph/STATE.md",
@@ -79,6 +106,37 @@ class AuditCountTests(unittest.TestCase):
                                 "- [ ] REVIEW-audit-u-2 — depends []\n"     # not run: resets nothing
                                 "- [~] u-4 — depends []\n")
             self.assertEqual(q.units_since_audit(), 2)
+
+    def test_counts_closes_after_the_last_audit_close_not_rows_below_it(self):
+        # The failing input: u-old closed BEFORE the audit but sits BELOW it, as
+        # minted and parked rows do. Positionally that is 2 units; by time, 1.
+        with tempfile.TemporaryDirectory() as tmp:
+            git_repo(tmp)
+            state = "ralph/STATE.md"
+
+            def close(text, subject):
+                write(tmp, state, text)
+                subprocess.run(["git", "-C", tmp, "add", state], check=True)
+                subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", subject], check=True)
+
+            close("- [ ] u-new — depends []\n- [x] u-old abc0001 — depends []\n",
+                  "ralph: u-old done")
+            close("- [x] REVIEW-audit-u-auto-1 abc0002 — depends []\n"
+                  "- [ ] u-new — depends []\n- [x] u-old abc0001 — depends []\n",
+                  "ralph: REVIEW-audit-u-auto-1 done")
+            close("- [x] REVIEW-audit-u-auto-1 abc0002 — depends []\n"
+                  "- [x] u-new abc0003 — depends []\n- [x] u-old abc0001 — depends []\n",
+                  "ralph: u-new done")
+            q = ralph.Queue(pathlib.Path(tmp) / state)
+            self.assertEqual(q.units_since_audit(), 2)          # the positional reading
+            self.assertEqual(ralph.units_since_audit(ralph.Paths(pathlib.Path(tmp)), q), 1)
+
+    def test_a_queue_never_marked_through_git_keeps_the_positional_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            git_repo(tmp)
+            q = self.queue(tmp, "- [x] u-1 abcdef1 — depends []\n- [x] u-2 abcdef2 — depends []\n")
+            commit_all(tmp, "seed")
+            self.assertEqual(ralph.units_since_audit(ralph.Paths(pathlib.Path(tmp)), q), 2)
 
     def test_counts_from_the_top_when_no_audit_has_run(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -173,6 +231,16 @@ class QueueManifestTests(unittest.TestCase):
             write(tmp, "ralph/next/b/queue.toml", "")
             self.assertEqual(ralph.load_manifest(tmp, "a").audit_every, 2)
             self.assertIsNone(ralph.load_manifest(tmp, "b").audit_every)
+
+    def test_dispatch_requires_loads_as_a_tuple_and_refuses_a_bad_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/next/a/queue.toml", "dispatch_requires = ['trial:', 'finish:']\n")
+            self.assertEqual(ralph.load_manifest(tmp, "a").dispatch_requires,
+                             ("trial:", "finish:"))
+            for bad in ("dispatch_requires = 'trial:'\n", "dispatch_requires = ['']\n"):
+                write(tmp, "ralph/next/b/queue.toml", bad)
+                with self.assertRaisesRegex(ValueError, "dispatch_requires"):
+                    ralph.load_manifest(tmp, "b")
 
     def test_a_name_is_one_path_segment(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -500,6 +568,59 @@ class CampaignTests(unittest.TestCase):
             self.assertEqual(result.outcome, ralph.Outcome.HALT)
             self.assertIn("without a commit", result.reason)
 
+    def _quota_session(self, tmp, heads, calls, *, limited_sessions=1):
+        """A session whose first `limited_sessions` runs end on the plan's
+        usage limit with no commit; the next one commits and finishes."""
+        def session(args, prompt, log):
+            calls.append(log)
+            pathlib.Path(log).parent.mkdir(parents=True, exist_ok=True)
+            if len(calls) <= limited_sessions:
+                pathlib.Path(log).write_text("working...\nYou've hit your usage limit · resets 3am\n")
+            else:
+                heads["h"] = "b" * 40
+                write(tmp, "ralph/DONE", "")
+        return session
+
+    def test_a_usage_limit_waits_and_redispatches_the_unit_without_a_stall(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            heads, calls = {"h": "a" * 40}, []
+            c = self.make(tmp, "- [ ] dm-a — depends []\n", max_stall=1,
+                          marker_timeout=24 * 3600,
+                          session_run=self._quota_session(tmp, heads, calls))
+            c.model = "m"
+            probes = iter([(False, "usage limit"), (False, "usage limit"), (True, "")])
+            with mock.patch.object(ralph, "head_of", side_effect=lambda *_: heads["h"]), \
+                    mock.patch.object(ralph, "probe_model", side_effect=lambda *a, **k: next(probes)):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.DONE)
+            self.assertEqual(len(calls), 2)
+
+    def test_a_quota_shaped_tail_the_probe_answers_is_still_a_stall(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            heads, calls = {"h": "a" * 40}, []
+            c = self.make(tmp, "- [ ] dm-a — depends []\n", max_stall=1,
+                          session_run=self._quota_session(tmp, heads, calls, limited_sessions=9))
+            c.model = "m"
+            with mock.patch.object(ralph, "head_of", side_effect=lambda *_: heads["h"]), \
+                    mock.patch.object(ralph, "probe_model", return_value=(True, "")):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertIn("without a commit", result.reason)
+
+    def test_a_usage_limit_that_outlasts_the_wait_limit_halts_naming_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            heads, calls = {"h": "a" * 40}, []
+            c = self.make(tmp, "- [ ] dm-a — depends []\n", max_stall=1,
+                          marker_timeout=2 * ralph.QUOTA_POLL_S,
+                          session_run=self._quota_session(tmp, heads, calls, limited_sessions=9))
+            c.model = "m"
+            with mock.patch.object(ralph, "head_of", side_effect=lambda *_: heads["h"]), \
+                    mock.patch.object(ralph, "probe_model", return_value=(False, "usage limit")):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertIn("usage limit did not clear", result.reason)
+            self.assertEqual(len(calls), 1)
+
     def test_commit_progresses_to_done(self):
         with tempfile.TemporaryDirectory() as tmp:
             heads = {"h": "a" * 40}
@@ -522,6 +643,98 @@ class CampaignTests(unittest.TestCase):
                 result = c.run()
             self.assertEqual(result.outcome, ralph.Outcome.HALT)
             self.assertIn("HUMAN-design-review", result.reason)
+
+    def test_a_ready_human_row_is_skipped_and_the_next_ready_row_dispatches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seen = []
+            c = self.make(tmp, "- [ ] HUMAN-read — depends []\n- [ ] dm-b — depends []\n",
+                          session_run=lambda a, p, l: seen.append(p), max_stall=1)
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                c.run()
+            self.assertEqual(len(seen), 1)
+            self.assertIn("Your unit: dm-b", seen[0])
+
+    def test_only_waiting_rows_ready_halts_operator_only_and_names_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ran = []
+            c = self.make(tmp, "- [ ] HUMAN-read — depends []\n- [ ] dm-p — depends []\n"
+                               "- [ ] dm-q — depends [dm-p]\n",
+                          session_run=lambda *a: ran.append(a))
+            write(tmp, "ralph/parked/dm-p.md", "# bar missed\n")
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertIn("HUMAN-read, dm-p", result.reason)
+            self.assertEqual(ran, [])
+            self.assertIsNotNone(ralph.operator_only(pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md")))
+
+    def test_a_row_added_after_the_freeze_waits_and_splits_and_audits_do_not(self):
+        # phase-b-32: rows grew 26 -> 76 while 30 closed; a new row is the operator's.
+        with tempfile.TemporaryDirectory() as tmp:
+            seen = []
+            rows = ("- [ ] pb-new — depends []\n- [ ] pb-a-half — depends []\n"
+                    "- [ ] REVIEW-audit-q-1 — depends []\n")
+            c = self.make(tmp, rows, session_run=lambda a, p, l: seen.append(p), max_stall=1)
+            write(tmp, "ralph/next/q/queue.toml", 'scope_file = "ralph/scope.txt"\n')
+            write(tmp, "ralph/scope.txt", "pb-a  # the frozen set\n")
+            c.paths.manifest = ralph.load_manifest(tmp, "q")
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            self.assertEqual(ralph.out_of_scope(c.paths, q), frozenset({"pb-new"}))
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                c.run()
+            self.assertIn("Your unit: pb-a-half", seen[0])
+
+    def test_the_unit_note_names_the_parked_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seen = []
+            c = self.make(tmp, "- [ ] dm-p — depends []\n- [ ] dm-b — depends []\n",
+                          session_run=lambda a, p, l: seen.append(p), max_stall=1)
+            write(tmp, "ralph/parked/dm-p.md", "# bar missed\n")
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                c.run()
+            self.assertIn("Your unit: dm-b", seen[0])
+            self.assertIn("do not open them: dm-p", seen[0])
+
+    def with_requires(self, c, tmp, requires):
+        write(tmp, "ralph/next/q/queue.toml", f"dispatch_requires = {requires!r}\n")
+        c.paths.manifest = ralph.load_manifest(tmp, "q")
+        return c
+
+    def test_a_work_row_without_its_census_is_refused_by_name_and_never_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ran = []
+            rows = ("- [ ] pb-a — depends [] — OUTCOME: x\n  - finish: edge a\n"
+                    "- [ ] pb-b — depends [] — OUTCOME: y\n  - trial: COMPILE ok\n")
+            c = self.with_requires(self.make(tmp, rows, session_run=lambda *a: ran.append(a)),
+                                   tmp, ["trial:"])
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                result = c.run()
+            self.assertEqual(result.outcome, ralph.Outcome.HALT)
+            self.assertIn("pb-a", result.reason)
+            self.assertIn("'trial:'", result.reason)
+            self.assertEqual(ran, [])
+
+    def test_a_row_carrying_its_markers_dispatches_and_the_next_rows_do_not_lend_theirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seen = []
+            rows = ("- [ ] pb-a — depends [] — OUTCOME: x\n  - trial: COMPILE ok\n"
+                    "- [ ] pb-b — depends [] — OUTCOME: y\n")
+            c = self.with_requires(self.make(tmp, rows, max_stall=1,
+                                             session_run=lambda a, p, l: seen.append(p)),
+                                   tmp, ["trial:"])
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                c.run()
+            self.assertEqual(len(seen), 1)
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            self.assertEqual(q.unmet_requirements(q.by_id()["pb-b"], ("trial:",)), ["trial:"])
+
+    def test_reviews_and_human_rows_are_exempt_from_dispatch_requires(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md", "- [ ] REVIEW-x — depends []\n"
+                                         "- [ ] HUMAN-y — depends []\n")
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
+            for rid in ("REVIEW-x", "HUMAN-y"):
+                self.assertEqual(q.unmet_requirements(q.by_id()[rid], ("trial:",)), [])
 
     def test_stop_file_is_operator_stop(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -766,6 +979,22 @@ class RalphCheckTests(unittest.TestCase):
                 self.assertEqual(r.returncode, 2, (queue, r.stdout, r.stderr))
                 self.assertIn("usage:", r.stderr)
 
+    def test_a_pool_lanes_share_reaches_its_checks_without_the_env(self):
+        # `toolbox run` forwards no env, so the share is read from the lane's file.
+        with tempfile.TemporaryDirectory() as tmp:
+            self.fixture(tmp)
+            write(tmp, "ralph/next/a/queue.toml",
+                  '[checks]\njobs = ["sh", "-c", "echo $SOVEREIGN_LINT_JOBS/$SOVEREIGN_TEST_JOBS"]\n')
+            write(tmp, ralph.LANE_JOBS_FILE, "SOVEREIGN_LINT_JOBS=3\nSOVEREIGN_TEST_JOBS=3\n")
+            with mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("SOVEREIGN_LINT_JOBS", None)
+                os.environ.pop("SOVEREIGN_TEST_JOBS", None)
+                r = self.check(tmp, "a", "jobs")
+                self.assertIn("exit=0\n3/3\n", r.stdout)
+                os.environ["SOVEREIGN_LINT_JOBS"] = "1"        # an explicit value wins
+                r = self.check(tmp, "a", "jobs")
+                self.assertIn("exit=0\n1/3\n", r.stdout)
+
     def test_a_refused_manifest_fails_the_check_by_name(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.fixture(tmp)
@@ -773,6 +1002,19 @@ class RalphCheckTests(unittest.TestCase):
             r = self.check(tmp, "b", "hello")
             self.assertEqual(r.returncode, 2)
             self.assertIn("ralph/next/b/queue.toml", r.stderr)
+
+
+# The legacy queues' hand-made PROMPT.md files were factored from the base as
+# of 865cdc92b. five-programs-65 (1cc169511) moved the base on purpose, and
+# those files are their queues' to change, so the factoring proofs render
+# against the base they were factored from.
+FACTORED_BASE = "865cdc92b"
+
+
+def factored_base():
+    return subprocess.run(["git", "-C", str(REPO), "show",
+                           f"{FACTORED_BASE}:ralph/PROMPT.base.md"],
+                          capture_output=True, text=True, check=True).stdout
 
 
 class PromptRenderTests(unittest.TestCase):
@@ -785,7 +1027,7 @@ class PromptRenderTests(unittest.TestCase):
         # Nothing was lost in the factoring: base + ring-room's addendum, with the
         # legacy control files, IS the PROMPT.md its launch line still reads.
         rendered = ralph.render_prompt(
-            (REPO / "ralph/PROMPT.base.md").read_text(),
+            factored_base(),
             (REPO / "ralph/next/ring-room/PROMPT.addendum.md").read_text(),
             {"queue": "ring-room", "state": "ralph/next/ring-room/STATE.md",
              "control_dir": "ralph", "log_dir": "target/ralph"})
@@ -943,13 +1185,30 @@ class HostTests(unittest.TestCase):
 class ShimTests(unittest.TestCase):
     def test_a_dropped_variant_is_said_once(self):
         # The empty prompt makes the shim exit 2 BEFORE it reaches `claude`: no session.
+        # `thinking`/`fast` are opencode variants, not claude effort levels.
         r = subprocess.run([str(SCRIPTS / "ralph-claude-shim.sh"), "run", "--model", "m",
-                            "--variant", "high", "--variant", "max", ""],
+                            "--variant", "thinking", "--variant", "fast", ""],
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
         self.assertIn("empty prompt", r.stderr)
         self.assertEqual(r.stderr.count("--variant"), 1, r.stderr)
-        self.assertIn("high", r.stderr)
+        self.assertIn("thinking", r.stderr)
+
+    def test_an_effort_level_variant_reaches_claude_as_effort(self):
+        # A stub `claude` on PATH prints its argv, so this sees the call the shim makes.
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = pathlib.Path(tmp) / "claude"
+            stub.write_text('#!/bin/sh\necho "argv: $*" >&2\n')
+            stub.chmod(0o755)
+            env = {**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}",
+                   "RALPH_PERMISSION_BRIDGE": "0"}
+            r = subprocess.run([str(SCRIPTS / "ralph-claude-shim.sh"), "run", "--model", "m",
+                                "--variant", "medium", "do the unit"],
+                               capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("--effort medium", r.stderr)
+        self.assertIn("effort=medium", r.stderr)
+        self.assertNotIn("dropping --variant", r.stderr)
 
 
 class ReviewRoutingTests(unittest.TestCase):
@@ -997,9 +1256,10 @@ class Ei7Stage0MigrationTests(unittest.TestCase):
     def test_the_rendered_prompt_keeps_every_line_of_the_hand_made_one(self):
         _, paths = self.paths()
         self.assertEqual(paths.prompt_addendum, "ralph/next/ei7-stage0/PROMPT.addendum.md")
-        legacy = dataclasses_replace(paths, **ralph.Paths.control_files("ralph"),
-                                     log_dir="target/ralph")
-        rendered = set(ralph.prompt_text(legacy)[0].splitlines())
+        rendered = set(ralph.render_prompt(
+            factored_base(), (REPO / paths.prompt_addendum).read_text(),
+            {"queue": paths.queue, "state": paths.state, "control_dir": "ralph",
+             "log_dir": "target/ralph"}).splitlines())
         # The two lines the render is MEANT to change: the mark call no longer needs the
         # third argument (RALPH_STATE), and a sed-made anecdote that never happened to e7.
         meant = ("ralph-mark.sh <unit-id> <short-hash> ralph/next/ei7-stage0/STATE.md",
@@ -1286,6 +1546,41 @@ class SupervisorTests(unittest.TestCase):
             self.assertEqual(s.run(), 2)
             self.assertEqual(calls, [])
 
+    def test_operator_only_package_exits_two_without_resolver(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/NEEDS_HUMAN.md",
+                  "# bar miss\n\noperator-only: a pre-registered bar a row cannot meet\n")
+            calls = []
+            s = self.make(tmp, run_inner=lambda: calls.append("inner"),
+                          resolver_run=lambda *a: calls.append("resolver"))
+            self.assertEqual(s.run(), 2)
+            self.assertEqual(calls, [])
+
+    def test_a_director_that_marks_the_package_operator_only_ends_the_retries(self):
+        # phase-b 2026-09-26: four directors each appended a review, so the
+        # package's hash changed every time and "changed nothing" never fired.
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/NEEDS_HUMAN.md", "# bar miss\n")
+            pkg = pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md")
+            attempts = []
+
+            def resolver(attempt, reason):
+                attempts.append(attempt)
+                with pkg.open("a") as fh:
+                    fh.write(f"\n## director {attempt}\n"
+                             "operator-only: a pre-registered bar a row cannot meet\n")
+
+            s = self.make(tmp, run_inner=lambda: None, resolver_run=resolver, resolve_max=4)
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                self.assertEqual(s.run(), 2)
+            self.assertEqual(attempts, [1])
+
+    def test_a_package_that_only_mentions_the_mark_in_prose_still_resolves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/NEEDS_HUMAN.md",
+                  "# blocker\nthe charter's operator-only: list does not cover this\n")
+            self.assertIsNone(ralph.operator_only(pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md")))
+
     def test_noop_resolution_escalates_immediately(self):
         with tempfile.TemporaryDirectory() as tmp:
             write(tmp, "ralph/NEEDS_HUMAN.md", "# blocker\n")
@@ -1325,6 +1620,83 @@ class SupervisorTests(unittest.TestCase):
                 s.run()
             log = (pathlib.Path(tmp) / "ralph/.director-commits").read_text()
             self.assertIn("a" * 40 + ".." + f"{1:040x}", log)
+
+    def test_an_operator_only_package_parks_its_row_and_the_campaign_runs_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            calls = []
+            s = self.make(tmp, run_inner=lambda: calls.append("inner"),
+                          resolver_run=lambda *a: calls.append("resolver"))
+            write(tmp, "ralph/STATE.md", "- [~] dm-a — depends []\n- [ ] dm-b — depends []\n"
+                                         "- [ ] dm-c — depends [dm-a]\n")
+            write(tmp, "ralph/NEEDS_HUMAN.md",
+                  "# NEEDS_HUMAN — dm-a: first-token bar missed\n\n"
+                  "operator-only: a pre-registered bar a row cannot meet\n")
+            write(tmp, "ralph/STOP", "halt: dm-a\n")
+
+            def inner():
+                calls.append("inner")
+                write(tmp, "ralph/DONE", "")
+            s.run_inner = inner
+            with mock.patch.object(ralph, "commit_state", return_value=None):
+                self.assertEqual(s.run(), 0)
+            self.assertEqual(calls, ["inner"])
+            parked = pathlib.Path(tmp, "ralph/parked/dm-a.md").read_text()
+            self.assertIn("first-token bar missed", parked)
+            self.assertFalse(pathlib.Path(tmp, "ralph/NEEDS_HUMAN.md").exists())
+            self.assertFalse(pathlib.Path(tmp, "ralph/STOP").exists())
+            q = ralph.Queue(pathlib.Path(tmp, "ralph/STATE.md"))
+            self.assertIs(q.status_of("dm-a"), ralph.Status.PENDING)
+            self.assertEqual(q.current(ralph.parked_ids(s.paths)).id, "dm-b")
+
+    def test_a_package_naming_no_row_is_never_parked(self):
+        # A stall or a full disk is the loop's block, not a row's: parking on
+        # it would walk the loop through the whole queue.
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            write(tmp, "ralph/NEEDS_HUMAN.md", "# 3 iterations without a commit\n")
+            s = self.make(tmp, run_inner=lambda: None, resolver_run=lambda *a: None)
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40):
+                self.assertEqual(s.run(), 2)
+            self.assertFalse(pathlib.Path(tmp, "ralph/parked").exists())
+
+    def test_a_resolution_that_changes_nothing_parks_the_row_its_package_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            s = self.make(tmp, run_inner=lambda: None, resolver_run=lambda *a: None)
+            write(tmp, "ralph/STATE.md", "- [~] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            write(tmp, "ralph/NEEDS_HUMAN.md", "# NEEDS_HUMAN — dm-a: premise false\n")
+            runs = []
+
+            def inner():
+                runs.append(1)
+                if len(runs) > 1:
+                    write(tmp, "ralph/DONE", "")
+            s.run_inner = inner
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
+                    mock.patch.object(ralph, "commit_state", return_value=None):
+                self.assertEqual(s.run(), 0)
+            self.assertTrue(pathlib.Path(tmp, "ralph/parked/dm-a.md").exists())
+            self.assertEqual(len(runs), 2)
+
+    def test_parking_stops_after_max_parks_with_no_unit_done(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            s = self.make(tmp, run_inner=lambda: None, resolver_run=lambda *a: None)
+            s.max_parks = 1
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n"
+                                         "- [ ] dm-c — depends []\n")
+            n = {"i": 0}
+
+            def inner():
+                n["i"] += 1
+                row = ["dm-a", "dm-b", "dm-c"][n["i"] - 1]
+                write(tmp, "ralph/NEEDS_HUMAN.md",
+                      f"# NEEDS_HUMAN — {row}: blocked\n\noperator-only: a fork\n")
+            s.run_inner = inner
+            with mock.patch.object(ralph, "head_of", return_value="a" * 40), \
+                    mock.patch.object(ralph, "commit_state", return_value=None):
+                self.assertEqual(s.run(), 2)
+            self.assertEqual(sorted(p.name for p in pathlib.Path(tmp, "ralph/parked").iterdir()),
+                             ["dm-a.md"])
 
     def test_halt_stop_without_package_dispatches(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1392,6 +1764,29 @@ class WatchTests(unittest.TestCase):
             (pathlib.Path(tmp) / "ralph/NEEDS_HUMAN.md").unlink()
             w.run(state)
             self.assertEqual(state.read_text(), "")
+
+
+def in_tree_lanes(paths):
+    """The pool tests keep lane worktrees inside their temporary directory, so
+    nothing outlives it; production's default sits beside the main tree
+    (`lane_root_for`, LaneRootTests)."""
+    return paths.workdir / ".ralph" / "wt"
+
+
+class LaneRootTests(unittest.TestCase):
+    def test_lanes_live_beside_the_main_tree_not_under_it(self):
+        # Under the main tree cargo merges the main tree's .cargo/config.toml
+        # into every lane's, doubling target.rustflags, and every crates.io
+        # unit's identity changes with it.
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = pathlib.Path(tmp) / "repo"
+            workdir.mkdir()
+            root = ralph.lane_root_for(workdir)
+            self.assertEqual(root, workdir.resolve().parent / "repo-lanes")
+            self.assertNotIn(workdir.resolve(), root.parents)
+            pool = ralph.Pool(ralph.Paths(workdir), session_for=lambda cwd, env=None: None,
+                              notify_enabled=False)
+            self.assertEqual(pool.lane_root, root)
 
 
 class FakeLane:
@@ -1470,6 +1865,7 @@ class PoolTests(unittest.TestCase):
     def make(self, root, session_for, **kwargs):
         paths = ralph.Paths(root)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", sleep=lambda s: None, **kwargs)
 
     def test_pick_wave_excludes_reviews_deps_and_conflicts(self):
@@ -1484,6 +1880,19 @@ class PoolTests(unittest.TestCase):
             self.assertEqual(q.pick_wave(2, set()), ["dm-a", "dm-c"])
             self.assertEqual(q.pick_wave(4, {frozenset(("dm-a", "dm-c"))}),
                              ["dm-a", "dm-d"])
+
+    def test_a_row_marked_alone_shares_a_wave_with_no_row_added_before_or_after(self):
+        # phase-c's -measure rows paired themselves with every row by hand, and
+        # the seven rows added later were paired with nothing (2026-10-02).
+        with tempfile.TemporaryDirectory() as tmp:
+            state = pathlib.Path(tmp) / "ralph/STATE.md"
+            alone = ralph.conflict_pairs("dm-m *  # a reading: no lane compiles beside it\n")
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-m — depends []\n"
+                                         "- [ ] dm-late — depends []\n")
+            self.assertEqual(ralph.Queue(state).pick_wave(3, alone), ["dm-a", "dm-late"])
+            write(tmp, "ralph/STATE.md", "- [x] dm-a — depends []\n- [ ] dm-m — depends []\n"
+                                         "- [ ] dm-late — depends []\n")
+            self.assertEqual(ralph.Queue(state).pick_wave(3, alone), ["dm-m"])
 
     def test_a_conflicts_line_of_n_ids_means_every_pair(self):
         # ring-doc's line names three rows; until 2026-09-19 only the first two conflicted.
@@ -1565,6 +1974,22 @@ class PoolTests(unittest.TestCase):
             self.assertIn("merge conflict", pkg)
             self.assertIn("halt: merge conflict", (root / "ralph/STOP").read_text())
 
+    def test_a_failed_done_commit_halts_by_name_not_as_the_next_merge_conflict(self):
+        # phase-c-19: the done commit after one merge failed unchecked, the
+        # next lane's merge refused on the dirty index, and the halt read
+        # "merge conflict" for a merge that was clean.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            write(tmp, "hooks/commit-msg",
+                  "#!/bin/sh\ngrep -q '^ralph: dm-a done' \"$1\" && exit 1\nexit 0\n")
+            (root / "hooks/commit-msg").chmod(0o755)
+            subprocess.run(["git", "-C", tmp, "config", "core.hooksPath", "hooks"], check=True)
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
+            self.assertEqual(pool.run(), 3)
+            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
+            self.assertIn("merged dm-a, but its done commit failed", pkg)
+            self.assertNotIn("merge conflict", pkg)
+
     def test_review_runs_serially_and_completes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] REVIEW-a — depends []\n")
@@ -1601,6 +2026,7 @@ class PoolWaitingTests(unittest.TestCase):
         paths = ralph.Paths(root)
         kwargs.setdefault("sleep", lambda s: None)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", **kwargs)
 
     def test_a_waiting_end_does_not_count_as_a_failure(self):
@@ -1678,6 +2104,7 @@ class RosterProbeTests(unittest.TestCase):
         paths = ralph.Paths(root)
         kwargs.setdefault("sleep", lambda s: None)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", **kwargs)
 
     def test_a_dead_first_roster_falls_through_to_the_healthy_model(self):
@@ -1812,6 +2239,18 @@ class ProbeTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": shutil.which("echo")}):
                 self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
 
+    def test_a_declared_worker_bin_probes_a_bare_id_through_itself(self):
+        # The claude shim names models bare; the pool's dispatch probe refused
+        # `claude-opus-5-5` and halted phase-c before its first wave.
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = ralph.Paths(pathlib.Path(tmp),
+                                manifest=mock.Mock(worker_bin=shutil.which("echo")))
+            self.assertEqual(ralph.probe_model("claude-opus-5-5", paths), (True, ""))
+            paths.manifest.worker_bin = shutil.which("false")
+            ok, cause = ralph.probe_model("claude-opus-5-5", paths)
+            self.assertFalse(ok)
+            self.assertIn("exit 1", cause)
+
 
 class HaltTailTests(unittest.TestCase):
     """A strikeout halt carries the failing lane's last error-shaped
@@ -1833,6 +2272,7 @@ class HaltTailTests(unittest.TestCase):
         paths = ralph.Paths(root)
         kwargs.setdefault("sleep", lambda s: None)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", **kwargs)
 
     def test_a_lane_strikeout_halt_carries_the_last_error_line(self):
@@ -1930,6 +2370,30 @@ def two_queues(tmp):
         write(tmp, f"ralph/next/{name}/STATE.md", f"- [ ] {row} — depends [] — do it\n")
         write(tmp, f"ralph/next/{name}/PROMPT.md", f"prompt of {name}\n")
     write(tmp, "ralph/STATE.md", "- [ ] legacy-1 — depends [] — the default queue\n")
+
+
+class ExcludeTests(unittest.TestCase):
+    def test_a_linked_worktree_writes_the_common_exclude(self):
+        # The failing input: a linked worktree, whose `.git` is a file. On
+        # 2026-09-30 supervise died there on mkdir(<worktree>/.git/info).
+        with tempfile.TemporaryDirectory() as tmp:
+            main, side = os.path.join(tmp, "main"), os.path.join(tmp, "side")
+            git_repo(main)
+            write(main, "a.txt", "a\n")
+            commit_all(main)
+            subprocess.run(["git", "-C", main, "worktree", "add", "-q", "--detach", side],
+                           check=True)
+            ralph.ensure_excludes(side, ("ralph/STOP",))
+            ralph.ensure_excludes(main, ("ralph/DONE",))
+            lines = pathlib.Path(main, ".git", "info", "exclude").read_text().splitlines()
+            self.assertIn("ralph/STOP", lines)
+            self.assertIn("ralph/DONE", lines)
+            self.assertTrue(pathlib.Path(side, ".git").is_file())
+
+    def test_outside_a_repository_it_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ralph.ensure_excludes(tmp, ("ralph/STOP",))
+            self.assertFalse(pathlib.Path(tmp, ".git").exists())
 
 
 class PathsForTests(unittest.TestCase):
@@ -2052,6 +2516,366 @@ class PathsForTests(unittest.TestCase):
             p = ralph.paths_for(argparse.Namespace(workdir=d))
             self.assertEqual(p.state, "ralph/STATE.md")
             self.assertEqual(p.prompt, "ralph/PROMPT.md")
+
+
+class QueueLane(FakeLane):
+    """A lane that records the prompt it was handed."""
+
+    prompts = []
+
+    def run(self, model_args, prompt, log):
+        QueueLane.prompts.append(prompt)
+        return super().run(model_args, prompt, log)
+
+
+class PoolQueueTests(unittest.TestCase):
+    """`pool --queue <name>` runs that queue as `run`/`supervise` do: its
+    manifest, rendered prompt, heavy/conflict files and control files
+    (pc-pool-ready (5)-(9))."""
+
+    def fixture(self, tmp, rows, toml=""):
+        git_repo(tmp)
+        write(tmp, "ralph/PROMPT.base.md",
+              "<!-- section: intro -->\n# {{queue}} at {{state}}\n")
+        write(tmp, "ralph/next/q/PROMPT.addendum.md",
+              "<!-- section: intro append -->\nTHE-Q-ADDENDUM\n")
+        write(tmp, "ralph/next/q/queue.toml", toml)
+        write(tmp, "ralph/next/q/STATE.md", rows)
+        write(tmp, "seed.txt", "seed")
+        write(tmp, ".git/info/exclude", "ralph/next/q/ctl/\n.ralph/\ntarget/\n")
+        commit_all(tmp)
+        return pathlib.Path(tmp)
+
+    def make(self, root, session_for, **kwargs):
+        args = ralph.build_parser().parse_args(["pool", "--workdir", str(root), "--queue", "q"])
+        paths = ralph.paths_for(args)
+        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths), lanes=2,
+                          base_branch="main", sleep=lambda s: None, **kwargs)
+
+    def test_the_pool_runs_the_queue_it_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n")
+            write(tmp, "ralph/next/q/heavy.txt", "q-a\nq-b  # both move a crate\n")
+            QueueLane.prompts = []
+            pool = self.make(root, lambda cwd, env=None: QueueLane(cwd))
+            self.assertEqual(pool._heavy(), {"q-a", "q-b"})
+            self.assertEqual(pool.run(), 0)
+            self.assertEqual(len(QueueLane.prompts), 2)        # heavy: one per wave
+            for prompt in QueueLane.prompts:
+                self.assertIn("THE-Q-ADDENDUM", prompt)
+                self.assertIn("Do NOT edit ralph/next/q/STATE.md", prompt)
+                self.assertIn("ralph/next/q/ctl/NEEDS_HUMAN.md", prompt)
+            self.assertTrue(ralph.Queue(root / "ralph/next/q/STATE.md").all_done())
+            self.assertTrue((root / "ralph/next/q/ctl/DONE").exists())
+            self.assertFalse((root / "ralph/DONE").exists())
+
+    def test_a_lane_package_halts_into_the_queues_control_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+
+            class BlockedLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    write(self.cwd, "ralph/next/q/ctl/NEEDS_HUMAN.md", "# q-a is blocked\n")
+                    return 0
+
+            pool = self.make(root, lambda cwd, env=None: BlockedLane(cwd))
+            self.assertEqual(pool.run(), 3)
+            self.assertIn("q-a is blocked",
+                          (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
+            self.assertFalse((root / "ralph/NEEDS_HUMAN.md").exists())
+
+    def test_rows_outside_the_scope_and_parked_rows_never_dispatch(self):
+        # (8): the cleanup cut line holds in the pool as in the serial loop.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n"
+                                     "- [ ] q-cut — depends []\n",
+                                toml='scope_file = "ralph/next/q/scope.txt"\n')
+            write(tmp, "ralph/next/q/scope.txt", "q-a\nq-b\n")
+            write(tmp, "ralph/next/q/ctl/parked/q-b.md", "# q-b waits\n")
+            QueueLane.prompts = []
+            pool = self.make(root, lambda cwd, env=None: QueueLane(cwd))
+            self.assertEqual(pool.run(), 3)
+            self.assertEqual(len(QueueLane.prompts), 1)
+            q = ralph.Queue(root / "ralph/next/q/STATE.md")
+            self.assertEqual([r.id for r in q.rows if r.status is ralph.Status.DONE], ["q-a"])
+            self.assertIn("q-b, q-cut", (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
+
+    def test_a_row_refused_at_dispatch_parks_and_the_pool_runs_on(self):
+        # (13): the refusal is the row's, not the pool's.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends [] — census\n  - trial: none\n"
+                                     "- [ ] q-b — depends [] — no census yet\n",
+                                toml='dispatch_requires = ["- trial"]\n')
+            pool = self.make(root, lambda cwd, env=None: QueueLane(cwd))
+            self.assertEqual(pool.run(), 3)             # q-b waits on the operator
+            q = ralph.Queue(root / "ralph/next/q/STATE.md")
+            self.assertIs(q.status_of("q-a"), ralph.Status.DONE)
+            self.assertIs(q.status_of("q-b"), ralph.Status.PENDING)
+            self.assertIn("'- trial'",
+                          (root / "ralph/next/q/ctl/parked/q-b.md").read_text())
+            self.assertIn("waits on the operator: q-b",
+                          (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
+
+    def test_the_queues_audit_cadence_holds_in_the_pool(self):
+        # (11): audit_every = 2 inserts an audit after the first wave's two
+        # merges, and the review runs before the next wave.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "".join(f"- [ ] q-{u} — depends []\n" for u in "abcd"),
+                                toml="audit_every = 2\n")
+            order = []
+
+            class Review:
+                def __init__(self, cwd):
+                    self.cwd = cwd
+
+                def run(self, model_args, prompt, log):
+                    q = ralph.Queue(root / "ralph/next/q/STATE.md")
+                    unit = q.first_ready_review().id
+                    order.append(unit)
+                    q.set_status(unit, ralph.Status.DONE)
+                    commit_all(str(root), f"ralph: {unit} done")
+                    return 0
+
+            class Lane(QueueLane):
+                def run(self, model_args, prompt, log):
+                    order.append(self.cwd.name)
+                    return super().run(model_args, prompt, log)
+
+            def session_for(cwd, env=None):
+                return Lane(cwd) if pathlib.Path(cwd).parent.name == "wt" else Review(cwd)
+
+            self.assertEqual(self.make(root, session_for).run(), 0)
+            self.assertEqual((set(order[:2]), order[2], set(order[3:])),
+                             ({"q-a", "q-b"}, "REVIEW-audit-q-auto-1", {"q-c", "q-d"}))
+
+    def decisions_fixture(self, tmp):
+        root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n")
+        install_script(tmp, "ralph-decisions.py")
+        for part in ("_header.md", "_archive-ledger.md", "_flags.md", "_archive-appendices.md"):
+            write(tmp, f"ralph/decisions/{part}", f"{part}\n")
+        subprocess.run([sys.executable, "scripts/ralph-decisions.py", "--write"], cwd=tmp,
+                       check=True, capture_output=True)
+        commit_all(tmp, "decisions")
+        return root
+
+    class MintingLane(FakeLane):
+        """Each lane records a decision, as PROMPT's pool-lane section says: the
+        entry file only, minted in its own tree."""
+
+        def run(self, model_args, prompt, log):
+            subprocess.run([sys.executable, "scripts/ralph-decisions.py", "new", "q",
+                            "--subject", self.cwd.name, "--who", "worker",
+                            "--date", "2026-10-01"], cwd=self.cwd, check=True,
+                           capture_output=True)
+            return super().run(model_args, prompt, log)
+
+    def test_two_lanes_minting_one_id_both_merge_and_the_ledger_is_current(self):
+        # (3) and (10): both lanes mint q-1 from the same base.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.decisions_fixture(tmp)
+            pool = self.make(root, lambda cwd, env=None: self.MintingLane(cwd))
+            self.assertEqual(pool.run(), 0)
+            names = sorted(p.name for p in (root / "ralph/decisions").glob("q-*.md"))
+            self.assertEqual(names, ["q-1.md", "q-2.md"])
+            subjects = {(root / "ralph/decisions" / n).read_text().split(" · ")[2] for n in names}
+            self.assertEqual(subjects, {"q-a", "q-b"})
+            check = subprocess.run([sys.executable, "scripts/ralph-decisions.py", "--check"],
+                                   cwd=tmp, capture_output=True, text=True)
+            self.assertEqual(check.returncode, 0, check.stderr)
+            self.assertEqual(subprocess.run(["git", "-C", tmp, "status", "--porcelain",
+                                             "--untracked-files=no"],
+                                            capture_output=True, text=True).stdout, "")
+
+    def test_a_renumbered_lanes_citations_follow_its_entry(self):
+        # Each lane cites the id it minted in a tracked file of its own. After
+        # the merges each file names its own entry, a longer id that shares the
+        # prefix is untouched, and the renumbered entry records the old id its
+        # lane's commit bodies still carry.
+        class CitingLane(self.MintingLane):
+            def run(self, model_args, prompt, log):
+                write(self.cwd, f"notes/{self.cwd.name}.md",
+                      "Decision: ralph/decisions/q-1.md (q-1; not q-10)\n")
+                return super().run(model_args, prompt, log)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.decisions_fixture(tmp)
+            self.assertEqual(self.make(root, lambda cwd, env=None: CitingLane(cwd)).run(), 0)
+            decisions = root / "ralph/decisions"
+            by_subject = {(decisions / f"{i}.md").read_text().split(" · ")[2]: i
+                          for i in ("q-1", "q-2")}
+            for unit, eid in by_subject.items():
+                self.assertEqual((root / f"notes/{unit}.md").read_text(),
+                                 f"Decision: ralph/decisions/{eid}.md ({eid}; not q-10)\n")
+            self.assertIn("Minted as `q-1` in its lane", (decisions / "q-2.md").read_text())
+            self.assertNotIn("Minted as", (decisions / "q-1.md").read_text())
+            log = subprocess.run(["git", "-C", tmp, "log", "--format=%s"],
+                                 capture_output=True, text=True).stdout
+            self.assertIn("decision ids renumbered at merge (pool): q-1 → q-2", log)
+
+    def test_without_the_renumber_the_second_merge_halts(self):
+        # The failing input the renumber exists for (its PLANT, kept as a test).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.decisions_fixture(tmp)
+            pool = self.make(root, lambda cwd, env=None: self.MintingLane(cwd))
+            with mock.patch.object(pool, "_renumber_decisions", return_value=None):
+                self.assertEqual(pool.run(), 3)
+            self.assertIn("merge conflict", (root / "ralph/next/q/ctl/NEEDS_HUMAN.md").read_text())
+
+    def test_a_marker_left_on_the_base_by_an_earlier_round_does_not_finish_a_lane(self):
+        # A reopened row's first-round marker is on the base; a lane that ends
+        # without writing its own is not merged, one that writes it is.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "ralph/lanes/q-a.done", "first round\n")
+            commit_all(tmp, "q-a: first round's marker")
+
+            class StaleLane:
+                def __init__(self, cwd):
+                    self.cwd = pathlib.Path(cwd)
+
+                def run(self, model_args, prompt, log):
+                    write(self.cwd, "q-a.txt", "half done\n")
+                    commit_all(str(self.cwd), "q-a: half done")
+                    return 0
+
+            pool = self.make(root, lambda cwd, env=None: StaleLane(cwd), max_lane_failures=1)
+            self.assertEqual(pool.run(), 3)
+            self.assertFalse((root / "q-a.txt").exists())
+            self.assertIn("- [ ] q-a", (root / "ralph/next/q/STATE.md").read_text())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "ralph/lanes/q-a.done", "first round\n")
+            commit_all(tmp, "q-a: first round's marker")
+            self.assertEqual(self.make(root, lambda cwd, env=None: FakeLane(cwd)).run(), 0)
+            self.assertTrue((root / "q-a.txt").exists())
+
+    def test_a_lanes_evidence_outlives_its_worktree(self):
+        # (12): `git worktree remove --force` takes the lane's target/ with it.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+
+            class CheckingLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    write(self.cwd, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
+                    return super().run(model_args, prompt, log)
+
+            self.assertEqual(self.make(root, lambda cwd, env=None: CheckingLane(cwd)).run(), 0)
+            self.assertFalse((root / ".ralph/wt/q-a").exists())
+            self.assertEqual((root / "target/ralph/q/q-a/q/lint.log").read_text(),
+                             "exit=0 the lane's lint\n")
+
+    def test_a_new_lane_starts_from_a_clone_of_the_main_target(self):
+        # (1): the lane's target holds the main tree's artifacts, its evidence
+        # dir is not the main tree's, and every tracked file is newer than
+        # every cloned artifact, so cargo rebuilds the workspace crates once.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "target/debug/deps/libserde.rlib", "warm")
+            write(tmp, "target/ralph/q/lint.log", "the main tree's log")
+            seen = {}
+
+            class TargetLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    t = self.cwd / "target"
+                    seen["dep"] = (t / "debug/deps/libserde.rlib").read_text()
+                    seen["evidence"] = (t / "ralph/q/lint.log").exists()
+                    seen["fresh"] = ((self.cwd / "seed.txt").stat().st_mtime
+                                     >= (t / "debug/deps/libserde.rlib").stat().st_mtime)
+                    return super().run(model_args, prompt, log)
+
+            pool = self.make(root, lambda cwd, env=None: TargetLane(cwd))
+            # /tmp is no btrfs, so a plain copy; and the main tree finishes a build
+            # between the lane's checkout and its clone (the race the touch closes).
+            pool.CLONE_TARGET = ("sh", "-c", 'sleep 0.05; touch "$0/debug/deps/libserde.rlib"; '
+                                 'cp -a "$0" "$1"')
+            self.assertEqual(pool.run(), 0)
+            self.assertEqual(seen, {"dep": "warm", "evidence": False, "fresh": True})
+
+    def test_a_read_only_dir_in_the_cloned_target_neither_leaks_the_lane_nor_its_evidence(self):
+        # The main tree's target/ralph/phase-b/ship/esc/seed is dr-xr-xr-x; the
+        # clone copies it into the lane, where it stopped the evidence reset
+        # and `git worktree remove --force` alike (2026-10-02).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "target/debug/ro/lib.rlib", "warm")
+            write(tmp, "target/ralph/phase-b/ship/esc/seed/config.toml", "seed")
+            for d in ("target/debug/ro", "target/ralph/phase-b/ship/esc/seed"):
+                os.chmod(root / d, 0o555)
+
+            class CheckingLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    write(self.cwd, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
+                    return super().run(model_args, prompt, log)
+
+            pool = self.make(root, lambda cwd, env=None: CheckingLane(cwd))
+            pool.CLONE_TARGET = ("cp", "-a")
+            self.assertEqual(pool.run(), 0)
+            self.assertFalse((root / ".ralph/wt/q-a").exists())
+            kept = root / "target/ralph/q/q-a"
+            self.assertEqual(sorted(p.relative_to(kept).as_posix() for p in kept.rglob("*")),
+                             ["lane.env", "q", "q/lint.log"])
+
+    def test_a_target_that_cannot_be_cloned_is_named(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "target/debug/deps/libserde.rlib", "warm")
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
+            pool.CLONE_TARGET = ("false",)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            self.assertIn("target NOT cloned", out.getvalue())
+
+    def share(self, lanes, avail_gb, cores=32):
+        """lib/cargo-jobs.sh's split with the machine's probes stubbed."""
+        r = subprocess.run(
+            ["bash", "-c", 'source "$0"; stub_gb="$2" stub_cores="$3"; '
+             'cargo_jobs_available_gb() { echo "$stub_gb"; }; '
+             'cargo_jobs_cores() { echo "$stub_cores"; }; cargo_jobs_share "$1"; '
+             'echo "$CARGO_JOBS_SHARE"', str(ralph.CARGO_JOBS_LIB), str(lanes), str(avail_gb),
+             str(cores)], capture_output=True, text=True, check=True)
+        return int(r.stdout.split()[-1])
+
+    def test_one_budget_is_split_across_the_lanes_with_a_floor(self):
+        # (2) and (4): 4 GB a job, 2 jobs a lane at least, half the cores at most.
+        self.assertEqual(self.share(3, 41), 3)     # 10 jobs by memory, three lanes
+        self.assertEqual(self.share(3, 100), 5)    # 16 by the cores, three lanes
+        self.assertEqual(self.share(3, 24), 2)     # the floor exactly
+        self.assertEqual(self.share(3, 23), 0)     # under it: no wave
+        self.assertEqual(self.share(1, 8), 2)
+        self.assertEqual(self.share(2, 64, cores=4), 2)   # core-capped, never under the floor
+
+    def test_a_wave_waits_out_the_memory_floor_then_lanes_get_their_share(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n- [ ] q-b — depends []\n")
+            readings = iter([(0, "20GB available, under the 16GB floor"), (4, "8 jobs split")])
+            seen = {}
+
+            class JobsLane(FakeLane):
+                def __init__(self, cwd, env):
+                    super().__init__(cwd)
+                    seen[self.cwd.name] = (env.get("SOVEREIGN_TEST_JOBS"),
+                                           (self.cwd / ralph.LANE_JOBS_FILE).read_text())
+
+            pool = self.make(root, lambda cwd, env=None: JobsLane(cwd, env or {}),
+                             jobs_share=lambda lanes: next(readings))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(pool.run(), 0)
+            self.assertIn("pool: wave q-a, q-b not started — 20GB available", out.getvalue())
+            want = ("4", "SOVEREIGN_LINT_JOBS=4\nSOVEREIGN_TEST_JOBS=4\n")
+            self.assertEqual(seen, {"q-a": want, "q-b": want})
+
+    def test_the_legacy_pool_keeps_its_defaults(self):
+        args = ralph.build_parser().parse_args(["pool", "--workdir", "."])
+        with contextlib.redirect_stdout(io.StringIO()):
+            paths = ralph.paths_for(args)
+        self.assertEqual((paths.state, paths.prompt, paths.conflicts, paths.heavy, paths.stop),
+                         ("ralph/STATE.md", "ralph/PROMPT.md", "ralph/conflicts.txt",
+                          "ralph/heavy.txt", "ralph/STOP"))
+        self.assertEqual((args.label, args.session_timeout), ("campaign", 3600))
 
 
 if __name__ == "__main__":

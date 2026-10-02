@@ -37,5 +37,5 @@ pub(crate) fn atlas_dir_for(params: &serde_json::Value, corpus: &str) -> PathBuf
         .unwrap_or_else(default_index_dir);
     index_dir
         .join(corpus)
-        .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME)
+        .join(understanding_vocab::read::ATLAS_DIRNAME)
 }

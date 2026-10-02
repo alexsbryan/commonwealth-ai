@@ -96,6 +96,35 @@ pub type Digest = BTreeMap<String, u64>;
 /// refused.
 pub type Floors = BTreeMap<String, u64>;
 
+/// What one compaction removed, and the floors it removed by.
+///
+/// A count and not a `()` because "the journal is now shorter" and "there was
+/// nothing to shorten" are different facts, and a caller that cannot tell them
+/// apart cannot report either honestly. `removed: 0` is a normal, successful
+/// answer — it is what every ring that has never sealed gets.
+///
+/// Serde because the answer crosses the compact door in both directions: the
+/// serving side serialises what its prune did, and a dialing client reads the
+/// same struct back rather than a second spelling of it (ARCH §10.6). Lives
+/// here beside [`Floors`] — the map it carries through — rather than in the
+/// journal crate, so a caller that only names the vocabulary needs no storage.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct Compaction {
+    /// Lines deleted from the journal.
+    pub removed: usize,
+    /// Lines still on it afterwards.
+    pub kept: usize,
+    /// Gaps the journal had before and does not have now — refused lines that
+    /// sat below a floor their claimed author authenticated. Reported because
+    /// a gap vanishing is a change to what this node claims completeness over,
+    /// and a destructive path may not make that change silently (ARCH §18.3).
+    pub gaps_cleared: usize,
+    /// The AUTHENTICATED floors this prune deleted below — [`admit`]'s own map,
+    /// carried through rather than re-derived, so the number above and the
+    /// reason for it cannot disagree.
+    pub floors: Floors,
+}
+
 /// The ONE reading of a [`Seal`](crate::RailAct::Seal) (ARCH §10.6).
 ///
 /// An actor's floor is the `seq` of their own highest seal, because a seal

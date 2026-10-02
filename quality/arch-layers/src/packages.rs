@@ -37,6 +37,11 @@ pub struct Package {
     /// Repo-relative path to the package's contract document. Printed with
     /// every violation so the reader lands on the rules, not just the edge.
     pub doc: String,
+    /// The subset of the global `[[package_leaf]]` set this package's members
+    /// may name. Absent = the whole set. Leaves are global, so without this a
+    /// package cannot be held tighter than every other one (bench, §9).
+    #[serde(default)]
+    pub leaf_budget: Option<Vec<String>>,
 }
 
 /// A shared contract leaf, with its own tight internal-dependency budget.
@@ -52,6 +57,11 @@ pub struct PackageLeaf {
     /// Internal crates this leaf may itself depend on.
     #[serde(default)]
     pub allow: Vec<String>,
+    /// A fixed ceiling on the leaf's code lines, counted as size-gate counts
+    /// them. Absent = no cap. Unlike a ratchet it is never re-pinned: the
+    /// host kit's is the operator's to change (FIVE_PROGRAMS §12 3a rung 4).
+    #[serde(default)]
+    pub max_code_lines: Option<usize>,
 }
 
 /// The pseudo-package an `[[exception]]` names to grandfather a SHARED LEAF's
@@ -118,6 +128,20 @@ pub(crate) fn validate(map: &LayerMap) -> Result<(), String> {
                  package `{pkg}` — it must be one or the other",
                 leaf.name
             ));
+        }
+    }
+
+    // A budget naming a crate that is not a leaf would widen the closure past
+    // the leaf set while reading as a tightening.
+    for pkg in &map.packages {
+        for b in pkg.leaf_budget.iter().flatten() {
+            if !leaves.contains(b.as_str()) {
+                return Err(format!(
+                    "package `{}` leaf_budget names `{b}`, which is not a \
+                     [[package_leaf]] — a budget is a subset of the leaf set",
+                    pkg.name
+                ));
+            }
         }
     }
 
@@ -204,7 +228,10 @@ pub fn evaluate_packages(map: &LayerMap, edges: &[DepEdge]) -> Vec<Violation> {
         let (scope, doc, allowed): (&str, &str, BTreeSet<&str>) =
             if let Some(pkg) = owner.get(edge.from.as_str()) {
                 let mut a: BTreeSet<&str> = pkg.crates.iter().map(String::as_str).collect();
-                a.extend(leaf_names.iter().copied());
+                match &pkg.leaf_budget {
+                    Some(budget) => a.extend(budget.iter().map(String::as_str)),
+                    None => a.extend(leaf_names.iter().copied()),
+                }
                 (pkg.name.as_str(), pkg.doc.as_str(), a)
             } else if let Some(leaf) = map.package_leaves.iter().find(|l| l.name == edge.from) {
                 (
@@ -574,5 +601,38 @@ crates = ["pkg-a", "pkg-b"]
             evaluate_packages(&map, &[edge("oicp-types", "sovereign-contracts")]).len(),
             1
         );
+    }
+
+    /// A package's `leaf_budget` narrows the global leaf set for its members
+    /// only; absent, the whole set stays admitted (the other packages).
+    #[test]
+    fn a_package_leaf_budget_narrows_the_leaf_set_for_that_package_only() {
+        let budgeted = MAP.replace(
+            "crates = [\"pkg-a\", \"pkg-b\"]",
+            "crates = [\"pkg-a\", \"pkg-b\"]\nleaf_budget = [\"oicp-types\"]\n\
+             [[package]]\nname = \"open\"\ndoc = \"d\"\ncrates = [\"pkg-c\"]",
+        );
+        let map = parse(&budgeted).unwrap();
+        // Inside the budget, and a sibling member.
+        assert!(evaluate_packages(&map, &[edge("pkg-a", "oicp-types")]).is_empty());
+        assert!(evaluate_packages(&map, &[edge("pkg-a", "pkg-b")]).is_empty());
+        // A global leaf outside the budget is red for the budgeted package...
+        let v = evaluate_packages(&map, &[edge("pkg-a", "sovereign-contracts")]);
+        assert_eq!(v.len(), 1);
+        match &v[0] {
+            Violation::PackageEdge { package, .. } => assert_eq!(package, "demo"),
+            other => panic!("expected a package edge, got {other:?}"),
+        }
+        // ...and still admitted for a package that declares no budget.
+        assert!(evaluate_packages(&map, &[edge("pkg-c", "sovereign-contracts")]).is_empty());
+
+        // A budget naming a crate that is not a [[package_leaf]] is refused
+        // at load: it would widen the closure while reading as a tightening.
+        let err = parse(&MAP.replace(
+            "crates = [\"pkg-a\", \"pkg-b\"]",
+            "crates = [\"pkg-a\", \"pkg-b\"]\nleaf_budget = [\"corpus-engine\"]",
+        ))
+        .unwrap_err();
+        assert!(err.contains("not a [[package_leaf]]"), "{err}");
     }
 }

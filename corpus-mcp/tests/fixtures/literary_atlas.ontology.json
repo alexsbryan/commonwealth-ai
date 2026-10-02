@@ -1,0 +1,287 @@
+{
+  "schema_version": "1.0",
+  "ontology_version": 1,
+  "pipeline_id": "literary_atlas",
+  "policies": {
+    "shape": {
+      "types": [
+        {
+          "name": "concept",
+          "kind": "entity",
+          "description": "A named theme, motif, condition or load-bearing literary term the work is about. Phase 1 lifts these generously as concept entities; there is no finer subtype.",
+          "attributes": [],
+          "specializes": null,
+          "role_of": null,
+          "from": null,
+          "to": null,
+          "participants": {},
+          "of": null,
+          "source": null,
+          "label": "theme",
+          "identity": [],
+          "identity_fallback": [],
+          "force": null,
+          "deontic": [],
+          "subject": null,
+          "grades": [],
+          "anchors": [],
+          "scope": null
+        },
+        {
+          "name": "person",
+          "kind": "entity",
+          "description": "A character — any named person in the work, single-mention included. The narrator and the author are never entities.",
+          "attributes": [],
+          "specializes": null,
+          "role_of": null,
+          "from": null,
+          "to": null,
+          "participants": {},
+          "of": null,
+          "source": null,
+          "label": "character",
+          "identity": [],
+          "identity_fallback": [],
+          "force": null,
+          "deontic": [],
+          "subject": null,
+          "grades": [],
+          "anchors": [],
+          "scope": null
+        },
+        {
+          "name": "work",
+          "kind": "entity",
+          "description": "A cited work — a book, poem or play the text names.",
+          "attributes": [],
+          "specializes": null,
+          "role_of": null,
+          "from": null,
+          "to": null,
+          "participants": {},
+          "of": null,
+          "source": null,
+          "label": null,
+          "identity": [],
+          "identity_fallback": [],
+          "force": null,
+          "deontic": [],
+          "subject": null,
+          "grades": [],
+          "anchors": [],
+          "scope": null
+        },
+        {
+          "name": "place",
+          "kind": "entity",
+          "description": "A named setting.",
+          "attributes": [],
+          "specializes": null,
+          "role_of": null,
+          "from": null,
+          "to": null,
+          "participants": {},
+          "of": null,
+          "source": null,
+          "label": null,
+          "identity": [],
+          "identity_fallback": [],
+          "force": null,
+          "deontic": [],
+          "subject": null,
+          "grades": [],
+          "anchors": [],
+          "scope": null
+        },
+        {
+          "name": "institution",
+          "kind": "entity",
+          "description": "A named organisation, order or household.",
+          "attributes": [],
+          "specializes": null,
+          "role_of": null,
+          "from": null,
+          "to": null,
+          "participants": {},
+          "of": null,
+          "source": null,
+          "label": null,
+          "identity": [],
+          "identity_fallback": [],
+          "force": null,
+          "deontic": [],
+          "subject": null,
+          "grades": [],
+          "anchors": [],
+          "scope": null
+        }
+      ],
+      "max_entities_per_section": null
+    },
+    "assertion": {
+      "voices": {
+        "not_entities": [
+          "the narrator",
+          "the author"
+        ],
+        "self": null,
+        "attributed_to": []
+      },
+      "must_not": []
+    },
+    "identity": {
+      "identity": {},
+      "identity_fallback": {}
+    },
+    "change": {
+      "clock": "document_date",
+      "supersedes": {}
+    },
+    "derivation": {
+      "tension": {
+        "label": null,
+        "between": [],
+        "same": null,
+        "not_conflicts": []
+      },
+      "patterns": [],
+      "configurations": true,
+      "arguments": true
+    },
+    "prose": {
+      "guidance": "",
+      "terms": {
+        "concern_term": "canonical concern",
+        "position_term": "argument-through-narrative",
+        "tension_term": "structural tension",
+        "absence_term": "gap",
+        "evidence_term": "passage"
+      }
+    },
+    "navigation": {
+      "thematic": {
+        "seed": {
+          "kinds": [
+            "Configuration",
+            "Entity",
+            "Summary"
+          ],
+          "entity_types": [
+            "concept"
+          ],
+          "declared": false,
+          "budgets": {
+            "Summary": 8
+          }
+        },
+        "walk": [
+          "Involves",
+          "Tension",
+          "Configures"
+        ],
+        "hops": 2,
+        "budget": 12,
+        "exemplars": [
+          "what is this work about",
+          "what are its main themes",
+          "what does the work say as a whole",
+          "how does the work treat this theme"
+        ],
+        "summary_sources": [
+          "atoms",
+          "raptor"
+        ]
+      },
+      "trajectory": {
+        "seed": {
+          "kinds": [
+            "Entity",
+            "State"
+          ],
+          "entity_types": [],
+          "declared": false,
+          "budgets": {}
+        },
+        "walk": [
+          "Transition",
+          "Causes"
+        ],
+        "hops": 2,
+        "budget": 12,
+        "exemplars": [
+          "how does this character change",
+          "how does it develop over the course of the book",
+          "trace the arc of this relationship",
+          "what happens to them over time"
+        ],
+        "summary_sources": []
+      },
+      "tension": {
+        "seed": {
+          "kinds": [
+            "Claim",
+            "ArgumentReconstruction"
+          ],
+          "entity_types": [],
+          "declared": false,
+          "budgets": {}
+        },
+        "walk": [
+          "Tension",
+          "Involves"
+        ],
+        "hops": 1,
+        "budget": 12,
+        "exemplars": [
+          "where does the work contradict itself",
+          "which claims are in tension",
+          "what conflicts does it set up",
+          "where do two characters' views collide"
+        ],
+        "summary_sources": []
+      },
+      "enumeration": {
+        "seed": {
+          "kinds": [],
+          "entity_types": [],
+          "declared": true,
+          "budgets": {}
+        },
+        "walk": [],
+        "hops": 0,
+        "budget": 12,
+        "exemplars": [
+          "which characters are there",
+          "list all the places",
+          "how many themes does it record",
+          "enumerate the works it cites"
+        ],
+        "summary_sources": []
+      },
+      "lookup": {
+        "seed": {
+          "kinds": [
+            "Entity",
+            "Event",
+            "Relation"
+          ],
+          "entity_types": [],
+          "declared": false,
+          "budgets": {}
+        },
+        "walk": [
+          "Involves"
+        ],
+        "hops": 1,
+        "budget": 12,
+        "exemplars": [
+          "who is this character",
+          "tell me about this place",
+          "what is this thing",
+          "give me the entry for it"
+        ],
+        "summary_sources": []
+      }
+    }
+  }
+}

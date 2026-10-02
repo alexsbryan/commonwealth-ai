@@ -33,9 +33,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use corpus_engine::enrichment::tiered::{ConvBucket, TieredEnrichmentProvider};
-use corpus_engine::error::{Error, Result};
-use corpus_engine::index::EnrichmentChunkRow;
+use corpus_index::error::{Error, Result};
+use corpus_index::index::EnrichmentChunkRow;
+use corpus_index::ingest_port::tiered::{ConvBucket, TieredEnrichmentProvider};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{DocumentTypeTag, QuoteSpan, RaptorNode};
 // `DocumentTypeTag::Unknown` is the closest neutral tag; conversation
@@ -253,6 +253,9 @@ fn mean_vector(vectors: &[Vec<f32>]) -> Vec<f32> {
 pub struct FolderTieredProvider {
     store: Arc<SqliteStateStore>,
     inference: Arc<dyn InferenceProvider>,
+    /// Ingest's atlas port: the deferred typed-extension pass writes the
+    /// atlas through it.
+    atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
     /// Resolves the index directory for a given corpus id. Required
     /// for the generic `_enrichment_state.json` sink so the daemon
     /// (and any restart's stall sweeper) can see progress without the
@@ -303,10 +306,15 @@ impl IndexDirResolver for StaticIndexDirResolver {
 }
 
 impl FolderTieredProvider {
-    pub fn new(store: Arc<SqliteStateStore>, inference: Arc<dyn InferenceProvider>) -> Self {
+    pub fn new(
+        store: Arc<SqliteStateStore>,
+        inference: Arc<dyn InferenceProvider>,
+        atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
+    ) -> Self {
         Self {
             store,
             inference,
+            atlas,
             index_dir_resolver: None,
             doc_type: DocumentTypeTag::Unknown,
             summary_mode: crate::raptor_atlas::SummaryMode::Abstractive,
@@ -359,7 +367,7 @@ impl FolderTieredProvider {
     fn stamp_state(
         &self,
         corpus_id: &str,
-        phase: corpus_engine::enrichment::state::EnrichmentPhase,
+        phase: corpus_index::enrichment_state::EnrichmentPhase,
         step_current: u64,
         step_total: u64,
         message: Option<&str>,
@@ -370,7 +378,7 @@ impl FolderTieredProvider {
         let Some(index_dir) = resolver.resolve(corpus_id) else {
             return;
         };
-        if let Err(e) = corpus_engine::enrichment::state::EnrichmentStateFile::stamp(
+        if let Err(e) = corpus_index::enrichment_state::EnrichmentStateFile::stamp(
             &index_dir,
             corpus_id,
             Some("folder_tiered"),
@@ -408,7 +416,7 @@ impl FolderTieredProvider {
         embeddings: &[Vec<f32>],
     ) -> (
         Option<crate::raptor_checkpoint::RaptorCheckpointHandle>,
-        Option<Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
+        Option<Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink>>,
     ) {
         let Some(resolver) = self.index_dir_resolver.as_ref() else {
             return (None, None);
@@ -438,8 +446,8 @@ impl FolderTieredProvider {
         let checkpoint = crate::raptor_checkpoint::RaptorCheckpointHandle::at_note(
             &index_dir, conv_uuid, input_hash,
         );
-        let sink: Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink> =
-            Arc::new(corpus_engine::enrichment::state::StateFileSink::new(
+        let sink: Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink> =
+            Arc::new(corpus_index::enrichment_state::StateFileSink::new(
                 index_dir,
                 corpus_id.to_string(),
                 Some("folder_tiered".into()),
@@ -468,9 +476,9 @@ impl FolderTieredProvider {
         corpus_id: &str,
         source_doc_ids: &[String],
     ) -> Result<()> {
-        use corpus_engine::enrichment::tiered::ConvBucket;
-        use corpus_engine::enrichment::tiered::TieredEnrichmentProvider;
-        use corpus_engine::index::CorpusIndex;
+        use corpus_index::index::CorpusIndex;
+        use corpus_index::ingest_port::tiered::ConvBucket;
+        use corpus_index::ingest_port::tiered::TieredEnrichmentProvider;
 
         if source_doc_ids.is_empty() {
             return Ok(());
@@ -562,7 +570,7 @@ impl FolderTieredProvider {
         // Complete now that the touched notes have settled.
         self.stamp_state(
             corpus_id,
-            corpus_engine::enrichment::state::EnrichmentPhase::Complete,
+            corpus_index::enrichment_state::EnrichmentPhase::Complete,
             reenriched as u64,
             (reenriched + skipped_empty) as u64,
             Some(&format!("re-enriched {reenriched} changed notes")),
@@ -680,7 +688,7 @@ impl FolderTieredProvider {
         // progress ("Summarizing sections (17 / 45)").
         self.stamp_state(
             corpus_id,
-            corpus_engine::enrichment::state::EnrichmentPhase::RaptorTree,
+            corpus_index::enrichment_state::EnrichmentPhase::RaptorTree,
             0,
             chunks.len() as u64,
             Some(&format!(
@@ -720,8 +728,8 @@ impl FolderTieredProvider {
                     "__vault_synthesis__",
                     input_hash,
                 );
-                let sink: Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink> =
-                    Arc::new(corpus_engine::enrichment::state::StateFileSink::new(
+                let sink: Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink> =
+                    Arc::new(corpus_index::enrichment_state::StateFileSink::new(
                         index_dir,
                         corpus_id.to_string(),
                         Some("folder_tiered".into()),
@@ -815,7 +823,7 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
         embeddings: Vec<Vec<f32>>,
         bucket: ConvBucket,
     ) -> Result<()> {
-        use corpus_engine::enrichment::state::EnrichmentPhase;
+        use corpus_index::enrichment_state::EnrichmentPhase;
         let chunk_count = chunks.len();
         let updated_at = Utc::now().timestamp();
         // Durable summary-revision loop: consult the correction ledger
@@ -1110,11 +1118,12 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
         };
         let store = self.store.clone();
         let inference = self.inference.clone();
+        let atlas = Arc::clone(&self.atlas);
         let corpus = corpus_id.to_string();
         tokio::spawn(async move {
             let atlas_dir = index_dir.join("atlas");
             match crate::typed_extension::run_typed_extension(
-                &corpus, &store, &inference, &atlas_dir,
+                &*atlas, &corpus, &store, &inference, &atlas_dir,
             )
             .await
             {
@@ -1249,7 +1258,7 @@ async fn build_folder_artifacts(
     verify_policy: Option<crate::summary_verify::VerifyPolicy>,
     updated_at: i64,
     checkpoint: Option<&crate::raptor_checkpoint::RaptorCheckpointHandle>,
-    progress: Option<&Arc<dyn corpus_engine::enrichment::state::EnrichmentProgressSink>>,
+    progress: Option<&Arc<dyn corpus_index::enrichment_state::EnrichmentProgressSink>>,
     correction_hint: Option<&str>,
 ) -> std::result::Result<Vec<ConvRaptorNodeRow>, Error> {
     let raptor_chunks: Vec<ChunkInput> = chunks

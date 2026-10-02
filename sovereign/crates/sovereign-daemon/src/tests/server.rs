@@ -28,7 +28,7 @@ async fn a_paused_host_refuses_peer_embeddings_exactly_as_it_refuses_peer_chat()
     let state = test_app_state();
     // Paused far enough ahead that the window cannot lapse mid-test.
     state.set_contribution_paused_until(sovereign_time::unix_now() + 3600);
-    let peer = commonwealth_core::ids::NodeId::from_u128(0xBEEF).to_hex();
+    let peer = kernel_types::NodeId::from_u128(0xBEEF).to_hex();
 
     for path in ["/v1/chat/completions", "/v1/embeddings"] {
         let resp = mock_router(state.clone())
@@ -403,43 +403,24 @@ async fn warmup_route_is_on_the_client_port_not_the_peer_port() {
     );
 }
 
-/// The other half of that sentence, and the one that was false until
-/// 2026-08-28. Keeping warmup off `:9742` was never enough: a MEMBER
-/// dialling `CLIENT_ALPN` is forwarded to a bind of THIS router, and
-/// arrives wearing the acceptor's loopback address, so `client_auth`
-/// admits it before reading anything. The peer bind serves a router
-/// where the route does not exist.
+/// The other half of that sentence: a bind cw-rails forwards to over
+/// loopback (the guest listener, where a non-member dialling `CLIENT_ALPN`
+/// lands too since pb-mesh-exit-transport) serves a router where the
+/// operator-only routes do not exist. svrn binds no member listener; a
+/// member reaches serve's member client.
 ///
 /// Each surface is driven with a credential it ACCEPTS, so the only
 /// thing left to observe is whether the route is mounted. Asserting
 /// 404 through a refusal would prove nothing — a 401 also is not 200.
 #[tokio::test]
-async fn the_peer_and_guest_surfaces_do_not_serve_the_operator_only_routes() {
+async fn the_guest_and_rail_surfaces_do_not_serve_the_operator_only_routes() {
     const OPERATOR_ONLY: &[&str] = &[
         "/internal/inference/warmup",
         "/internal/guest/grant",
         "/internal/guest/grant/revoke",
+        "/internal/guest/route",
     ];
     const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
-
-    // `Peer` trusts a loopback caller — a member's key was already proved
-    // at the QUIC handshake — so the injected ConnectInfo admits us.
-    for path in OPERATOR_ONLY {
-        let response = mock_router_for(test_app_state(), ClientSurface::Peer)
-            .oneshot(
-                Request::post(*path)
-                    .header("content-type", "application/json")
-                    .body(Body::from("{}"))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            response.status(),
-            StatusCode::NOT_FOUND,
-            "peer surface must not serve {path}"
-        );
-    }
 
     // `Guest` and `Rail` do not trust loopback, so they need the daemon
     // token to get past auth. Once past it, the same routes are simply
@@ -499,7 +480,6 @@ async fn the_rail_surface_does_not_serve_the_general_client_routes() {
         ("POST", "/v1/chat/completions"),
         ("POST", "/v1/knowledge/search"),
         ("GET", "/v1/models"),
-        ("GET", "/v1/apps"),
         ("POST", "/api/chat"),
     ];
     const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
@@ -539,12 +519,54 @@ async fn the_rail_surface_does_not_serve_the_general_client_routes() {
     }
 }
 
+/// The `/v1/apps` registry and the `/app/{id}/*` proxy were dead: the port
+/// map behind them was never filled, so the proxy answered 503 on every
+/// request and the registry echoed a map nothing read (pb-meshapp-apps).
+/// Deleted, they answer 404 on the operator surface, the one that mounted
+/// them. `/v1/models` through the same probe is the control: a probe that
+/// 404s everything would pass the first half.
+#[tokio::test]
+async fn the_deleted_app_registry_answers_404() {
+    const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
+    let probe = |method: &str, path: &str| {
+        let state = test_app_state_with_token(Some(TOKEN.into()));
+        let req = Request::builder()
+            .method(method)
+            .uri(path)
+            .header("content-type", "application/json")
+            .header(axum::http::header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::from("{}"))
+            .unwrap();
+        async move {
+            mock_router_for(state, ClientSurface::Operator)
+                .oneshot(req)
+                .await
+                .unwrap()
+                .status()
+        }
+    };
+    for (method, path) in [
+        ("GET", "/v1/apps"),
+        ("POST", "/v1/apps/demo/install"),
+        ("GET", "/v1/apps/demo/status"),
+        ("DELETE", "/v1/apps/demo"),
+        ("GET", "/app/demo/index.html"),
+    ] {
+        assert_eq!(
+            probe(method, path).await,
+            StatusCode::NOT_FOUND,
+            "{method} {path} is deleted"
+        );
+    }
+    assert_ne!(probe("GET", "/v1/models").await, StatusCode::NOT_FOUND);
+}
+
 #[tokio::test]
 async fn models_endpoint_with_registered_model() {
     let state = test_app_state();
 
     // Register a model.
-    use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+    use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
     use oicp_types::{Capability, CapabilityProfile};
     use std::collections::HashMap;
 
@@ -552,7 +574,7 @@ async fn models_endpoint_with_registered_model() {
     caps.insert(Capability::Code, 4);
 
     let model = ModelInfo {
-        id: commonwealth_core::ModelId::from_u128(1),
+        id: kernel_types::ModelId::from_u128(1),
         name: "test-coder".into(),
         repo: "test/model".into(),
         file: "model.gguf".into(),
@@ -571,7 +593,7 @@ async fn models_endpoint_with_registered_model() {
         supports_parallel_instances: false,
         supports_pipeline_shard: false,
     };
-    state.register_model(model);
+    state.register_model(model).await.unwrap();
 
     let app = mock_router(state);
     let response = app
@@ -586,4 +608,73 @@ async fn models_endpoint_with_registered_model() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["data"].as_array().unwrap().len(), 1);
     assert_eq!(json["data"][0]["id"], "test-coder");
+}
+
+/// Every served kind's route is mounted — forwarded to serve's kind mount
+/// (pb-serve-distributes), at the paths the shared contract names and the
+/// registry is held equal to — and rerank is one of them. A kind path left
+/// unmounted would 404 here.
+#[tokio::test]
+async fn every_served_kind_route_is_mounted_and_rerank_is_served() {
+    let mut paths = sovereign_contracts::served_kinds::SERVED_KIND_PATHS.to_vec();
+    assert!(
+        paths.contains(&"/v1/rerank"),
+        "rerank must name its route; named: {paths:?}"
+    );
+    paths.sort();
+    for path in paths {
+        let resp = mock_router(test_app_state())
+            .oneshot(
+                Request::post(path)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"query":"q","documents":["d"]}"#))
+                    .unwrap(),
+            )
+            .await
+            .expect("the route must answer");
+        assert_ne!(
+            resp.status(),
+            StatusCode::NOT_FOUND,
+            "{path}: a registered kind's route must be mounted"
+        );
+    }
+}
+
+/// The internal-port routes the flip gave to cw-rails and serve answer 410
+/// naming the owner's base, never a bare 404 (pc-bare-404s). `svrn ring
+/// checkpoint` still dials the old port, so its error now says where to go.
+#[tokio::test]
+async fn internal_routes_the_flip_gave_away_answer_410_naming_their_owner() {
+    let state = test_app_state();
+    let rails = state.inner.node.rails_base.clone();
+    let serve = sovereign_turn_client::serve_self::default_serve_base();
+    let cases = [
+        ("/internal/gossip", rails.as_str()),
+        ("/internal/join", rails.as_str()),
+        ("/internal/ring/sync", rails.as_str()),
+        ("/internal/ring/live", rails.as_str()),
+        ("/internal/ring/checkpoint/demo", rails.as_str()),
+        ("/internal/rpc-warm", serve.as_str()),
+    ];
+    for (path, owner) in cases {
+        let resp = internal_router(state.clone())
+            .oneshot(
+                Request::post(path)
+                    .header("content-type", "application/json")
+                    .extension(axum::extract::ConnectInfo(SocketAddr::from((
+                        [127, 0, 0, 1],
+                        54321,
+                    ))))
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::GONE, "{path}");
+        let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["moved_to"], format!("{owner}{path}"), "{path}: {body}");
+    }
 }

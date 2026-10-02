@@ -132,7 +132,7 @@ fn plan_reset(root: &std::path::Path, _mode: ResetMode) -> ResetPlan {
         }
     }
     let sdb = state_db_path(root);
-    let ndb = notes_db_path();
+    let ndb = notes_db_path(root);
     ResetPlan {
         atlas_files,
         atlas_files_missing,
@@ -177,7 +177,7 @@ fn print_plan(plan: &ResetPlan, mode: ResetMode) {
         }
         if plan.notes_db_present {
             println!(
-                "  · {} → notes WHERE kind IN (commitment, follow_up, goal) AND related_entity IS NOT NULL",
+                "  · {} → memory_notes WHERE kind IN (commitment, follow_up, goal) AND related_entity IS NOT NULL",
                 display_path(&plan.notes_db_path)
             );
         } else {
@@ -219,13 +219,15 @@ fn truncate_state_db(path: &std::path::Path) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// The relational notes live in svrn's store, `memory_notes`
+/// (pb-notes-memory), not in the code program's `notes.db`.
 fn truncate_relational_notes(path: &std::path::Path) -> rusqlite::Result<()> {
     let conn = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;
     conn.execute(
-        "DELETE FROM notes
+        "DELETE FROM memory_notes
          WHERE kind IN ('commitment', 'follow_up', 'goal')
            AND related_entity IS NOT NULL",
         params![],
@@ -262,20 +264,20 @@ mod tests {
     #[test]
     fn truncate_relational_notes_removes_only_entity_linked_kinds() {
         let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("notes.db");
+        let path = tmp.path().join("sovereign.db");
         let conn = Connection::open(&path).unwrap();
         conn.execute_batch(
-            "CREATE TABLE notes (
+            "CREATE TABLE memory_notes (
                 id TEXT PRIMARY KEY,
                 kind TEXT NOT NULL,
                 content TEXT NOT NULL,
                 related_entity TEXT
             );
-            INSERT INTO notes VALUES ('1', 'commitment', 'a', 'Sarah');
-            INSERT INTO notes VALUES ('2', 'follow_up', 'b', 'Mike');
-            INSERT INTO notes VALUES ('3', 'goal', 'c', 'API migration');
-            INSERT INTO notes VALUES ('4', 'todo', 'd', NULL);
-            INSERT INTO notes VALUES ('5', 'commitment', 'e', NULL);
+            INSERT INTO memory_notes VALUES ('1', 'commitment', 'a', 'Sarah');
+            INSERT INTO memory_notes VALUES ('2', 'follow_up', 'b', 'Mike');
+            INSERT INTO memory_notes VALUES ('3', 'goal', 'c', 'API migration');
+            INSERT INTO memory_notes VALUES ('4', 'todo', 'd', NULL);
+            INSERT INTO memory_notes VALUES ('5', 'commitment', 'e', NULL);
             ",
         )
         .unwrap();
@@ -284,7 +286,7 @@ mod tests {
         truncate_relational_notes(&path).unwrap();
         let conn = Connection::open(&path).unwrap();
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM notes", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM memory_notes", [], |r| r.get(0))
             .unwrap();
         // Rows 4 and 5 should remain (todo without entity, commitment without entity).
         assert_eq!(count, 2);

@@ -42,10 +42,10 @@ impl Runtime {
         CompletionRequest {
             prompt,
             preferred_speed: Speed::Slow,
-            max_tokens: Some(self.inference_config.max_tokens),
-            temperature: Some(self.inference_config.temperature),
-            think_budget: Some(self.inference_config.think_budget),
-            top_k: self.inference_config.top_k,
+            max_tokens: Some(self.turn_inference_config().max_tokens),
+            temperature: Some(self.turn_inference_config().temperature),
+            think_budget: Some(self.turn_inference_config().think_budget),
+            top_k: self.turn_inference_config().top_k,
             oicp,
             ..Default::default()
         }
@@ -65,7 +65,7 @@ impl Runtime {
         completion_provenance(
             intent.into(),
             completion,
-            self.inference_config.max_tokens,
+            self.turn_inference_config().max_tokens,
             self.inference.effective_context_size(),
             self.router.stamp(),
         )

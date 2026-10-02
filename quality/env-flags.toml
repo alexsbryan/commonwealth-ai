@@ -40,6 +40,27 @@ third_party_allowlist = []
 # ── grounding ───────────────────────────────────────────────────────
 
 [[flag]]
+name = "SOVEREIGN_WORKSPACE_ROOT"
+cluster = "dev-gates"
+default = "the repo root (set by the workspace .cargo/config.toml)"
+purpose = "Root of the monorepo source tree corpus-engine's workspace-wide gates parse; a lifted package sets it or they panic naming it."
+status = "shipped"
+
+[[flag]]
+name = "SOVEREIGN_BENCH_ROOT"
+cluster = "bench"
+default = "sovereign/bench (set by the workspace .cargo/config.toml)"
+purpose = "Root of the bank/baseline tree sovereign-eval reads, and the fixture tree sovereign-cli-llm's inner-chaos and search-gym tests load; a lifted bench or svrn sets it."
+status = "shipped"
+
+[[flag]]
+name = "SOVEREIGN_CLI_CONTRACT"
+cluster = "infra-paths"
+default = "sovereign/docs/cli-contract.toml (set by the workspace .cargo/config.toml)"
+purpose = "The CLI contract file, fixed at compile time into cli_contract::manifest_path; a lifted svrn carries the file and sets it."
+status = "shipped"
+
+[[flag]]
 name = "SOVEREIGN_TENSOR_BUFT_OVERRIDE"
 cluster = "inference"
 default = "unset"
@@ -215,27 +236,6 @@ status = "guard"
 purpose = "The share of a longform draft's AUDITED claims that may fail and still be repaired by targeted surgery instead of a full 35B re-synthesis. 0.5 is derived, not tuned: the rule is 'surgery unless MOST claims fail', and a majority is more than half. Replaces SOVEREIGN_SURGICAL_MAX_FAILURES (absolute count, default 3) on 2026-08-13 — claim_budget scales the audited count with answer length, so an absolute cap inverted with length and structurally excluded longform (measured 51.2s fallback on a real desktop turn vs 1.7-2.7s when surgery engaged; NATIVE_GROUNDING_ECONOMY.md 7.3.1). Read in exactly one place (grounding/mod.rs surgical_max_failed_ratio); 0.0 forces full re-synthesis, 1.0 forces surgery, and those are the two positions the surgical calibration harness uses. Unparseable or out-of-range values warn and fall back to 0.5. Measured yield of the change over 8 warm desktop turns: 0 ms — it makes the code agree with its rationale, it did not make the query faster (ECONOMY 7.3.2)."
 
 [[flag]]
-name = "SOVEREIGN_AGENTIC_KQ"
-cluster = "grounding"
-default = "off"
-status = "experiment"
-purpose = "Round-0 → sufficiency-judge → sub-query formulation → round-2 retrieval loop on KnowledgeQuery (the agentic evidence loop)."
-
-[[flag]]
-name = "SOVEREIGN_AGENTIC_KQ_THRESHOLD"
-cluster = "grounding"
-default = "0.5"
-status = "experiment"
-purpose = "Insufficiency probability above which the agentic loop's round-2 formulation fires."
-
-[[flag]]
-name = "SOVEREIGN_SUFFICIENCY_CHUNKS"
-cluster = "grounding"
-default = "12"
-status = "experiment"
-purpose = "How many round-0 chunks the agentic loop's sufficiency judge reads."
-
-[[flag]]
 name = "SOVEREIGN_AGENTIC_KQ_DEBUG"
 cluster = "grounding"
 default = "off"
@@ -264,41 +264,6 @@ cluster = "retrieval"
 default = "off"
 status = "experiment"
 purpose = "Admit Claim atoms whose `claim_kind` names a DECLARED claim type into the atlas embedding bag. Narrower than SOVEREIGN_ATLAS_INCLUDE_CLAIMS; inert for a corpus that declares nothing. Flip conditions: sovereign/DEFAULTS_LEDGER.md."
-
-[[flag]]
-name = "SOVEREIGN_DEMAND_PLAN"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "One fast-slot structured-output call plans the turn's demands (sub_queries, entities, stance contrast); feeds the epistemic demand set."
-
-[[flag]]
-name = "SOVEREIGN_DEMAND_PLAN_FANOUT"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Fan the demand plan's sub_queries out into corpus search. Off after the 2026-07-19 A/B (2-3x slower for flat recall)."
-
-[[flag]]
-name = "SOVEREIGN_QUERY_DECOMP"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Pure-Rust question decomposition; each sub-query gets its own focused retrieval pass."
-
-[[flag]]
-name = "SOVEREIGN_DECOMP_DECAY"
-cluster = "retrieval"
-default = "1.0"
-status = "experiment"
-purpose = "Score decay applied to fanned-out sub-query hits (<1 = augment, never displace)."
-
-[[flag]]
-name = "SOVEREIGN_TITLE_EXPAND"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Fast-slot LLM names explicit article titles for abstract questions; titles are fan-out-searched and reserved through the merge."
 
 [[flag]]
 name = "SOVEREIGN_ATOM_ENUM"
@@ -382,7 +347,7 @@ name = "SOVEREIGN_CLIENT_FAIR_CONCURRENCY"
 cluster = "inference"
 default = "16"
 status = "shipped"
-purpose = "Concurrency budget divided equally among ACTIVE client principals to give each one its cap (fair_share_cap in serving-policy/src/fair_sched.rs). Derived from the slot queue's own shed bound: SOVEREIGN_MAX_QUEUE_WAIT_SECS=30 at a ~1.9s turn against one decode permit, i.e. the depth at which the host is fully committed but not yet refusing. Sized there on purpose so the cap only changes WHOSE turns fill the host, never whether it sheds. A lone principal is never capped at all regardless of this value. Zero or malformed is reported and falls back to the default."
+purpose = "Concurrency budget divided equally among ACTIVE client principals to give each one its cap (fair_share_cap in serving-policy-core/src/fair_sched.rs). Derived from the slot queue's own shed bound: SOVEREIGN_MAX_QUEUE_WAIT_SECS=30 at a ~1.9s turn against one decode permit, i.e. the depth at which the host is fully committed but not yet refusing. Sized there on purpose so the cap only changes WHOSE turns fill the host, never whether it sheds. A lone principal is never capped at all regardless of this value. Zero or malformed is reported and falls back to the default."
 
 [[flag]]
 name = "SOVEREIGN_PREFIX_STATE"
@@ -469,13 +434,6 @@ status = "experiment"
 purpose = "How many CORPORA an expansion fan-out may search when SOVEREIGN_EXPANSION_SCOPE is on. The scale-vs-recall dial: lower is cheaper and narrower, higher is closer to unscoped. The unit is corpora, not chunks — a chunk budget let one corpus monopolise the scope and cost the wikipedia bank 3 sources / 4 facts."
 
 [[flag]]
-name = "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Axis-aware structural-graph one-hop expansion (per-entity axis neighbors + co-citation bridges). Wikipedia-specific, never promoted."
-
-[[flag]]
 name = "SOVEREIGN_PPR_EXPAND"
 cluster = "retrieval"
 default = "on (dark without a reranker)"
@@ -488,20 +446,6 @@ cluster = "retrieval"
 default = "on"
 status = "shipped"
 purpose = "Demand-aware merge composition (pins + per-entity demand slots + greedy diminishing-returns selector) replacing the cap/reserve/truncate heuristic pile. =0 restores the legacy stack."
-
-[[flag]]
-name = "SOVEREIGN_META_BRIDGE"
-cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Cross-corpus bridge boost: question entities matching a bridge topic pull the linked corpus's framing via typed edges. Built by `sovereign meta-atlas align`."
-
-[[flag]]
-name = "SOVEREIGN_CONV_PPR_WEIGHT"
-cluster = "retrieval"
-default = "off (0.0)"
-status = "deprecated"
-purpose = "Post-pipeline PPR rerank weight for conversation-corpus chunks. DEFAULT FLIPPED 0.25 -> 0.0 (OFF) 2026-08-04: a 180-question paired bank could not separate it from off (49-31 p=0.0567 alone; 64-43 p=0.0527 under the strongest retrieval config). It re-ranks in place and never adds a document — B-in-pool and source_ratio were identical to 4dp with it on and off — while rebuilding a per-conversation entity graph from SQL on every query and forcing GLiNER to run eagerly at ingest. Code kept and working; set a non-zero weight to re-enable. See DEFAULTS_LEDGER.md."
 
 [[flag]]
 name = "SOVEREIGN_GATE_SUMMARY_EVIDENCE"
@@ -820,6 +764,13 @@ shadows = "client_token"
 purpose = "Daemon client auth token. Env-only override of the SetupConfig field — an auth secret living in a shadow precedence chain (declared debt; see CLEANUP.md)."
 
 [[flag]]
+name = "SOVEREIGN_API_KEY"
+cluster = "infra-paths"
+default = "unset"
+status = "shipped"
+purpose = "The API key a CLI client presents to a keyed (on-prem) daemon, which admits no caller without one, loopback included. Read by the ONE accessor sovereign_contracts::setup_config::client_credential (SVRNMESH_API_KEY is the post-rename spelling and loses to this one; blank counts as unset). `svrn corpus watch*` sends it as `Authorization: Bearer`. Distinct from SOVEREIGN_CLIENT_TOKEN, the token a daemon admits. Never logged."
+
+[[flag]]
 name = "SOVEREIGN_DAEMON_URL"
 cluster = "infra-paths"
 default = "http://localhost:9741"
@@ -842,14 +793,6 @@ status = "guard"
 purpose = "Which code corpus `cargo xtask concept-gate` asks for its duplicate-name count. The relayed `converge status --corpus-id` defaults to \"the sole indexed code corpus\", a default that expires the moment a second one is indexed — this host carried three on 2026-08-29 (commonwealth-ai plus two fixtures), so the command refused and the gate reported COULD-NOT-JUDGE while blaming a stale sibling binary. The gate now names the corpus, defaulting to the repo directory name because that is the registration convention here; set this when a repo is indexed under a different id. A guard rather than a knob: it exists so the gate can reach a verdict at all, not to tune anything."
 
 [[flag]]
-name = "SOVEREIGN_BIND"
-cluster = "infra-paths"
-default = "unset"
-status = "shipped"
-shadows = "daemon.client_bind"
-purpose = "Daemon bind address override."
-
-[[flag]]
 name = "SOVEREIGN_CORPORA_DIR"
 cluster = "infra-paths"
 default = "under data root"
@@ -862,13 +805,6 @@ cluster = "infra-paths"
 default = "under data root"
 status = "shipped"
 purpose = "Recipe registry directory override."
-
-[[flag]]
-name = "SOVEREIGN_DB_PATH"
-cluster = "infra-paths"
-default = "under data root"
-status = "shipped"
-purpose = "State-store DB path override (normally rebrand::state_db_path under the data root)."
 
 [[flag]]
 name = "SOVEREIGN_MODELS_DIR"
@@ -1178,7 +1114,7 @@ cluster = "inference"
 default = "unset"
 status = "experiment"
 shadows = "models.extra"
-purpose = "Cross-encoder reranker GGUF path — installs the rerank slot [models.extra] otherwise declares. Default-inert but wired into the production daemon. DECIDED, do not re-raise: REJECTED 2026-08-04 (DEFAULTS_LEDGER.md — quality passed, killed on +2.8s TTFT + 4th resident slot + 60x memory fragility; dedup_by_source shipped instead); operator re-affirmed no-proving-arm 2026-08-14 (ECONOMY §7.7 addendum). Re-open only for a NEW integration shape (off-TTFT-path margins, no in-turn slot) or new evidence class (docs/archive/RERANK_EXPERIMENT.md)."
+purpose = "Cross-encoder reranker GGUF path — installs the rerank slot [models.extra] otherwise declares. Read at serve's start only: `svrn chat` and inner-chaos recall rerank on serve's `/v1/rerank` and load nothing (pb-cli-llm). Default-inert but wired into the production daemon. DECIDED, do not re-raise: REJECTED 2026-08-04 (DEFAULTS_LEDGER.md — quality passed, killed on +2.8s TTFT + 4th resident slot + 60x memory fragility; dedup_by_source shipped instead); operator re-affirmed no-proving-arm 2026-08-14 (ECONOMY §7.7 addendum). Re-open only for a NEW integration shape (off-TTFT-path margins, no in-turn slot) or new evidence class (docs/archive/RERANK_EXPERIMENT.md)."
 
 [[flag]]
 name = "SOVEREIGN_CONTENT_TEMPERATURE"
@@ -1218,7 +1154,7 @@ name = "SOVEREIGN_CLI_LLM_BIN"
 cluster = "cli-binaries"
 default = "sibling of dispatcher"
 status = "shipped"
-purpose = "Path override for the sovereign-cli-llm sibling the dispatcher execs."
+purpose = "Path override for the LLM-verb sibling the dispatcher execs: the stock distribution's sovereign-cli-llm-stock, cli-llm with ingest composed in (pb-cli-llm-ingest-move-compose)."
 
 [[flag]]
 name = "SOVEREIGN_CLI_DEV_BIN"
@@ -1233,6 +1169,76 @@ cluster = "cli-binaries"
 default = "sibling of dispatcher"
 status = "shipped"
 purpose = "Path override for the sovereign-cli-daemon sibling."
+
+[[flag]]
+name = "SOVEREIGN_CLI_MESH_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for the sovereign-cli-mesh sibling, lifted out of sovereign-cli-llm 2026-09-21."
+
+[[flag]]
+name = "SOVEREIGN_SERVE_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for sovereign-serve, which the dispatcher execs for `svrn mesh warm-cache`, `svrn mesh fetch-model` (phase-b-22) and `svrn mesh fetch-ner` (pb-cli-llm). The svrn daemon no longer brings serve up (pb-stock-binary): the stock install hosts serve in its own process, and a standalone serve is started by whoever runs it."
+
+[[flag]]
+name = "SOVEREIGN_INGEST_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for svrn-ingest, ingest's own CLI (sovereign-pipeline), which the dispatcher execs for `svrn ingest` (pb-ingest-cli). The one locator of that binary: corpus-mcp serve's pull (pb-corpus-mcp-reads) and cli-llm's ingest verbs (pb-cli-llm-ingest-move) reuse it."
+
+[[flag]]
+name = "SOVEREIGN_CLI_BENCH_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for sovereign-cli-bench, bench's own CLI, which the dispatcher execs for `svrn bench`, `svrn eval` and `svrn quality lane` (pb-cli-llm-bench-move). svrn's white-box lanes under those spellings (`bench judge-replay|resolver-precision|atlas`, `eval inner-chaos`) stay on SOVEREIGN_CLI_LLM_BIN's binary."
+
+[[flag]]
+name = "SOVEREIGN_SERVE_PORT"
+cluster = "daemon-lifecycle"
+default = "9748 (sovereign_contracts::venue::DEFAULT_SERVE_PORT)"
+status = "shipped"
+purpose = "The loopback port serve listens on when no --listen is given, where the stock binary binds its hosted serve, and where a standalone svrn daemon dials it. Read once by sovereign_contracts::venue::serve_port, which both programs call. Set by svrn's lift smoke so it runs beside a host's own serve on 9748; a value that is not a nonzero port is warned and the default used."
+
+[[flag]]
+name = "SOVEREIGN_POD_WORKER_BIN"
+cluster = "cli-binaries"
+default = "sibling of the running program, then PATH"
+status = "shipped"
+purpose = "Path override for sovereign-pod-worker, the ephemeral pod's worker-mode binary (sovereign-pods), which `svrn daemon run --worker-mode` execs with its argv unchanged (sovereign-cli-daemon `daemon_bin::exec_pod_worker`, pb-pods-worker). Read through `sovereign_turn_client::reach::locate_sibling`."
+
+[[flag]]
+name = "CW_RAILS_DIR"
+cluster = "infra-paths"
+default = "~/.commonwealth-rails"
+status = "shipped"
+purpose = "cw-rails' data dir when its `--data-dir` flag is absent. One decider: `commonwealth_media::declared::rails_data_dir` (`RAILS_DATA_DIR_ENV`), which rails' own config and every process handing rails its inputs resolve through. Outside env-gate's SOVEREIGN_/SVRNMESH_ census, so registered by hand."
+
+[[flag]]
+name = "SOVEREIGN_DAEMON_BIN"
+cluster = "cli-binaries"
+default = "the `sovereign-stock` sibling of the running program, then PATH"
+status = "shipped"
+purpose = "Path override for what `svrn daemon run` execs (sovereign-cli-daemon `daemon_bin::locate`, through `sovereign_turn_client::reach::locate_sibling`): point it at a bare `sovereign-daemon` to run one that dials a configured serve. scripts/fim-smoke.sh reads it for the daemon it boots."
+
+[[flag]]
+name = "CW_RAILS_BIN"
+cluster = "cli-binaries"
+default = "sibling of the running program, then PATH"
+status = "shipped"
+purpose = "Path override for the cw-rails binary that `svrn mesh up` (sovereign-cli-mesh `rails_up::ensure_rails`) brings up when nothing answers on the rails base (fp-solo-clients, five-programs-63/-65). Read through `sovereign_turn_client::reach::locate_sibling`."
+
+[[flag]]
+name = "SOVEREIGN_AGENT_BENCH_BIN"
+cluster = "cli-binaries"
+default = "sibling of dispatcher"
+status = "shipped"
+purpose = "Path override for the sovereign-agent-bench sibling. `svrn agent-bench` execs it rather than linking the crate, which is how a bench-package crate left the svrn dispatcher."
 
 [[flag]]
 name = "SOVEREIGN_CLI_PATH"
@@ -1255,13 +1261,6 @@ default = "unset"
 status = "shipped"
 purpose = "Enrichment tool's path to the sovereign CLI. Synonym-cluster member (see SOVEREIGN_BIN)."
 
-[[flag]]
-name = "SOVEREIGN_SERVER_PATH"
-cluster = "cli-binaries"
-default = "unset"
-status = "shipped"
-purpose = "Mobile host's path to the sovereign server binary."
-
 # ── bench: harness selection ────────────────────────────────────────
 
 [[flag]]
@@ -1270,14 +1269,6 @@ cluster = "bench"
 default = "unset"
 status = "shipped"
 purpose = "Bench harness selector."
-
-[[flag]]
-name = "SOVEREIGN_FRONTDOOR"
-cluster = "bench"
-default = "unset"
-status = "deprecated"
-alias_of = "SOVEREIGN_HARNESS"
-purpose = "Backwards-compat alias for SOVEREIGN_HARNESS (tested + documented; the one legacy duplicate the 2026-07-13 audit named)."
 
 [[flag]]
 name = "SOVEREIGN_FRONTDOOR_AUTO_ALLOWLIST"
@@ -1679,3 +1670,136 @@ cluster = "dev-gates"
 default = "unset (no extra features — the sidecar builds with sovereign-cli-daemon's defaults)"
 status = "shipped"
 purpose = "Comma-separated cargo features scripts/stage-daemon-sidecar.sh forwards as `--features` when it builds the sovereign-cli-daemon Tauri sidecar. This is how the Windows GPU backend is selected since svt-7 (2026-09-12): `windows-vulkan` / `windows-cuda` are owned by sovereign-cli-daemon — the process that loads the weights — and forward from there to sovereign-inference (sovereign/SYSTEM_OVERVIEW.md:260). Only the Windows legs set it; `scripts/windows-crosscheck.sh:28` is the worked example. Unset means the default feature set, never a silent CPU fallback: a feature the crate does not have is a cargo build failure the script refuses to stage past."
+
+# ── removed ─────────────────────────────────────────────────────────
+# Nothing reads these any more. env-gate fails if one is read again, and
+# pins kernel_types::env_bridge::REMOVED_ENV to these rows, so a user who
+# still sets one gets a startup line printing `replacement` verbatim.
+
+[[flag]]
+name = "SOVEREIGN_AGENTIC_KQ"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled the round-2 agentic evidence loop on KnowledgeQuery."
+replacement = "retired: the agentic evidence loop was deleted (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_AGENTIC_KQ_THRESHOLD"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Insufficiency probability above which the agentic loop's round 2 fired."
+replacement = "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_BIND"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Bind address override for sovereign-server."
+replacement = "set [daemon] client_bind in config.toml; its reader, sovereign-server, was deleted (5cb09f22b)"
+
+[[flag]]
+name = "SOVEREIGN_CONV_PPR_WEIGHT"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Weight of conversation entity PPR in retrieval."
+replacement = "retired: conversation entity PPR was deleted at its default, 0 (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_DB_PATH"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "State-store DB path override for sovereign-server."
+replacement = "set SOVEREIGN_DATA_DIR; the state DB lives under the data root, and this var's reader, sovereign-server, was deleted (5cb09f22b)"
+
+[[flag]]
+name = "SOVEREIGN_DECOMP_DECAY"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Score decay for query-decomposition sub-query hits."
+replacement = "retired with SOVEREIGN_QUERY_DECOMP's step (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_DEMAND_PLAN"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled the demand-plan retrieval step."
+replacement = "retired: the demand-plan retrieval step was deleted (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_DEMAND_PLAN_FANOUT"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Fan-out width of the demand-plan step."
+replacement = "retired with SOVEREIGN_DEMAND_PLAN's step (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_FRONTDOOR"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Legacy alias that forced the opencode front-door profile."
+replacement = "set SOVEREIGN_HARNESS=opencode; the alias was cut (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled Wikipedia graph-neighbour expansion in retrieval."
+replacement = "retired: the graph-neighbour expansion step was deleted (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_META_BRIDGE"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled the meta-atlas bridge boost in retrieval."
+replacement = "retired: the meta-atlas bridge boost was deleted (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_QUERY_DECOMP"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled question decomposition and sub-query fan-out in retrieval."
+replacement = "retired: the query-decomposition retrieval step was deleted (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_SERVER_PATH"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Mobile host's path to the sovereign server binary."
+replacement = "retired: the mobile host that read it was deleted (efa709871)"
+
+[[flag]]
+name = "SOVEREIGN_SUFFICIENCY_CHARS"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Chars per chunk the agentic loop's sufficiency judge read."
+replacement = "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_SUFFICIENCY_CHUNKS"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "How many round-0 chunks the agentic loop's sufficiency judge read."
+replacement = "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_TITLE_EXPAND"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled LLM question-to-title expansion in retrieval."
+replacement = "retired: the title-expansion retrieval step was deleted (ac032e5bc)"

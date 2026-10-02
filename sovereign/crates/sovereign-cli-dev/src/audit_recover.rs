@@ -23,20 +23,22 @@
 //! Recovery surfaces two streams:
 //!
 //! 1. **`source='observed'`** — replay the
-//!    [`ToolPatternMatcher`](sovereign_tools::notes::patterns::ToolPatternMatcher)
+//!    [`ToolPatternMatcher`](corpus_engine_notes::mining::patterns::ToolPatternMatcher)
 //!    against `tool_call_log` rows for every session that has
 //!    them. Closes "daemon crashed mid-session, lost the
 //!    pattern matches the live path would have written."
 //!
-//! 2. **`source='inferred'`** — walk the
-//!    `sovereign_store::ConversationStore::messages` table and
+//! 2. **`source='inferred'`** — walk the daemon's conversation
+//!    history, dialled over `GET /v1/conversations` (the state store
+//!    is the daemon's — five-programs §4 rule 1 — so the workbench
+//!    never opens `state.db` itself), and
 //!    run [`response_mine::mine`] over each assistant-role row,
 //!    persisting decision-shaped sentences as inferred-source
 //!    notes (gap D, Phase 7.3). Closes "daemon crashed before
 //!    the per-turn `decision_extractor` middleware could
 //!    persist its candidate."
 //!
-//! The `conversation_id` from sovereign-store maps to the
+//! The daemon's `conversation_id` maps to the
 //! `session_id` column on the inferred notes verbatim. Two
 //! daemon-side identifiers (`X-Session-Id` for the inference
 //! pipeline, conversation_id for the persisted transcript) are
@@ -60,15 +62,15 @@
 //! already recorded") is success.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::Arc;
 
+use corpus_engine_notes::mining::patterns::{ObservedPattern, PatternRule, ToolPatternMatcher};
+use corpus_engine_notes::mining::response_mine;
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
-use sovereign_core::traits::ConversationStore;
-use sovereign_core::types::Role;
-use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_tools::notes::patterns::{ObservedPattern, PatternRule, ToolPatternMatcher};
-use sovereign_tools::notes::response_mine;
+use sovereign_contracts::traits::ConversationStore;
+use sovereign_contracts::types::Role;
+
+use crate::state_store_client::DaemonConversationStore;
 
 /// Maximum sessions inspected in a single recover run. The ring
 /// buffer caps at 10k rows — that's typically far fewer than 10k
@@ -96,7 +98,7 @@ const MAX_RECOVER_CONVERSATIONS: usize = 200;
 const MAX_INFERRED_PER_CONVERSATION: usize = 20;
 
 pub async fn cmd_audit_recover() -> i32 {
-    let Some(notes_db) = locate_notes_db() else {
+    let Some(notes_db) = Some(crate::notes_db::find_notes_db(None)).filter(|p| p.exists()) else {
         eprintln!(
             "  sovereign audit --recover: could not locate notes.db. \
              Run from inside an initialised sovereign repo, or run \
@@ -238,28 +240,25 @@ pub async fn cmd_audit_recover() -> i32 {
     0
 }
 
-/// Walk the `messages` table, run `response_mine::mine` on each
-/// assistant-role row, persist `source='inferred'` notes for every
-/// match that isn't already on file. Returns `(notes_written,
+/// Walk the daemon's conversation history, run `response_mine::mine`
+/// on each assistant-role row, persist `source='inferred'` notes for
+/// every match that isn't already on file. Returns `(notes_written,
 /// conversations_touched)`.
 ///
-/// Best-effort: opens the canonical state.db; a missing or
-/// unreadable store yields `(0, 0)` with a warn-level log. The
-/// caller's summary line then naturally reads "0 inferred notes"
-/// rather than the harvest crashing.
+/// Best-effort: dials the daemon's conversation store
+/// (`/v1/conversations`; the state store is the daemon's — five-programs
+/// §4 rule 1 — so this process never opens `state.db`). A daemon that
+/// cannot be reached yields `(0, 0)` with a warn-level log naming the
+/// URL — the pass could not run, and that is what the log says, never a
+/// quiet empty store (principle 6). The caller's summary line then
+/// naturally reads "0 inferred notes" rather than the harvest crashing.
 async fn recover_inferred_from_messages(notes: &Arc<NoteStore>) -> (usize, usize) {
-    let Some(state_db) = locate_state_db() else {
-        tracing::info!("audit_recover: no state.db reachable; skipping inferred-source pass");
-        return (0, 0);
-    };
-
-    let store = match SqliteStateStore::open(&state_db) {
+    let store = match DaemonConversationStore::new() {
         Ok(s) => Arc::new(s) as Arc<dyn ConversationStore>,
         Err(e) => {
             tracing::warn!(
-                state_db = %state_db.display(),
                 error = %e,
-                "audit_recover: cannot open state.db for inferred-source pass"
+                "audit_recover: no daemon conversation client; skipping inferred-source pass"
             );
             return (0, 0);
         }
@@ -355,28 +354,6 @@ async fn recover_inferred_with_store(
     (total_inferred, conversations_touched)
 }
 
-/// Find the canonical `state.db` for the current install. Mirrors
-/// the awareness commands' search order:
-///
-/// 1. `~/.svrnmesh/state.db` — the user-scoped store the daemon
-///    writes to by default.
-/// 2. `./.sovereign/state.db` if no home dir.
-fn locate_state_db() -> Option<PathBuf> {
-    let p = sovereign_cli_shared::dirs::sovereign_root().join("state.db");
-    if p.exists() {
-        return Some(p);
-    }
-    let cwd = std::env::current_dir()
-        .ok()?
-        .join(".sovereign")
-        .join("state.db");
-    if cwd.exists() {
-        Some(cwd)
-    } else {
-        None
-    }
-}
-
 /// First eight chars of a UUID-style id — short enough for the
 /// summary line, long enough to disambiguate.
 fn short_id(id: &str) -> String {
@@ -436,25 +413,6 @@ async fn persist_inferred(
         .map_err(|e| e.to_string())
 }
 
-/// Walk the standard search path for `notes.db`:
-///
-/// 1. `<repo>/.sovereign/notes.db` (project-scoped)
-/// 2. `~/.svrnmesh/notes.db` (user-scoped fallback for sessions
-///    that ran outside a repo)
-fn locate_notes_db() -> Option<PathBuf> {
-    if let Some(repo_root) = crate::project_cmd::find_repo_root() {
-        let p = repo_root.join(".sovereign").join("notes.db");
-        if p.exists() {
-            return Some(p);
-        }
-    }
-    let p = sovereign_cli_shared::dirs::sovereign_root().join("notes.db");
-    if p.exists() {
-        return Some(p);
-    }
-    None
-}
-
 /// Read the bodies of every active observed-source note for a
 /// given session. Used to dedup before persisting the matcher's
 /// output during recovery.
@@ -507,6 +465,10 @@ async fn persist_recovered(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The contracts test double (fp-32) — the workbench no longer links
+    // sovereign-store, so the in-memory state store is the trait's own
+    // fixture, shaped like `notes::fixtures::RecordingNotes`.
+    use sovereign_contracts::traits::fixtures::RecordingConversations;
     use std::sync::Arc;
 
     /// Recovery writes observed-source notes for sessions that
@@ -630,7 +592,7 @@ mod tests {
 
     // ─── Inferred-source recovery from messages table ─────────────
 
-    use sovereign_core::types::{Message, Role};
+    use sovereign_contracts::types::{Message, Role};
 
     fn assistant_msg(convo_id: &str, content: &str, idx: i64) -> Message {
         Message {
@@ -667,7 +629,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
 
-        let state = Arc::new(SqliteStateStore::open_in_memory().unwrap());
+        let state = Arc::new(RecordingConversations::default());
         let convo = "conv-decisions";
         // Two assistant rows with decision phrasing + one without
         // + one user row that should be ignored.
@@ -725,7 +687,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
 
-        let state = Arc::new(SqliteStateStore::open_in_memory().unwrap());
+        let state = Arc::new(RecordingConversations::default());
         state
             .save_message(&assistant_msg(
                 "c1",
@@ -751,7 +713,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
 
-        let state = Arc::new(SqliteStateStore::open_in_memory().unwrap());
+        let state = Arc::new(RecordingConversations::default());
         // Decision-shaped phrasing in a USER message — must be skipped.
         state
             .save_message(&user_msg(
@@ -781,7 +743,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
 
-        let state = Arc::new(SqliteStateStore::open_in_memory().unwrap());
+        let state = Arc::new(RecordingConversations::default());
         // Each row carries multiple decision phrases; together they
         // far exceed MAX_INFERRED_PER_CONVERSATION even after dedup.
         for i in 0..10 {
@@ -816,7 +778,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
 
-        let state = Arc::new(SqliteStateStore::open_in_memory().unwrap());
+        let state = Arc::new(RecordingConversations::default());
         let (wrote, touched) = recover_inferred_with_store(&notes, state.as_ref()).await;
         assert_eq!(wrote, 0);
         assert_eq!(touched, 0);

@@ -100,7 +100,7 @@ code paths:
 
 | Flag | Question it answers | Enforced at |
 |---|---|---|
-| `query_sharing` | may mesh peers run federated searches and receive cited snippets? | capability advertising (`sovereign-mesh/src/capabilities.rs`) |
+| `query_sharing` | may mesh peers run federated searches and receive cited snippets? | capability advertising (`sovereign-daemon/src/peer_origin/claims.rs`) |
 | `mesh_sharing` | may the index *bytes* replicate to peers? | storage-snapshot replication + index transfer |
 | `scope = "local"` | keep this corpus off-mesh entirely | both |
 
@@ -138,7 +138,7 @@ while it's in use.
 
 *Deep dive: SYSTEM_OVERVIEW §5; [`docs/THREAT_MODEL.md`](./THREAT_MODEL.md);
 hands-on: [`docs/TWO_NODE_QUICKSTART.md`](./TWO_NODE_QUICKSTART.md). The
-custody split is pinned by `sovereign-mesh/tests/knowledge_fanout_e2e.rs`
+custody split is pinned by `sovereign-daemon/tests/main/knowledge_fanout_e2e.rs`
 and `tests/local_only_corpus_locality.rs`.*
 
 ## 5. The trust machinery: every layer has a gate
@@ -187,7 +187,7 @@ answer-quality regression.**
 
 **Configuration & state, in one breath.** Everything mutable lives on four
 roots: committed contracts in the repo (`quality/*.toml`,
-`sovereign/docs/cli-contract.toml`, `sovereign/models.toml` — reviewed like
+`sovereign/docs/cli-contract.toml`, `sovereign/crates/sovereign-contracts/data/models.toml` — reviewed like
 code, several machine-enforced); the per-checkout `.sovereign/` dir (project
 identity, notes, ATOS state); the per-user root `~/.svrnmesh` (legacy
 `~/.svrnmesh` symlink) holding `config.toml` and every index, model, and

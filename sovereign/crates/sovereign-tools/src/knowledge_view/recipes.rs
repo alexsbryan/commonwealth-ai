@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Built-in `KnowledgeView` recipes.
 //!
-//! Each builder returns a `Recipe` that drives the corpus-engine
-//! ingest pipeline via the `AcquirerConfig::Custom` escape hatch.
+//! Each builder returns a recipe document (the recipe's serde form, the
+//! shape its TOML parses to) that drives ingest's pipeline via the
+//! `acquire = { type = "custom" }` escape hatch; ingest parses it, so svrn
+//! names no recipe type (pb-ingest-dial-tools-local). A fixture pins every
+//! document to the recipe the typed builders produced before
+//! (`tests/fixtures/knowledge_view_recipes.json`).
 //! Recipes are constructed in Rust (rather than read from TOML) so
 //! they can reference per-install state — the user's SQLite database
 //! path, the runtime list of `privacy = "local_only"` skills to filter
@@ -15,15 +19,83 @@
 
 use std::path::Path;
 
-use corpus_engine::recipe::{
-    AcquirerConfig, ChunkerConfig, CorpusMeta, EnrichmentConfig, ExtractorConfig, IndexConfig,
-    Recipe,
-};
-use serde_json::json;
+use serde_json::{json, Value};
+
+/// A view corpus's identity.
+struct ViewCorpus {
+    id: &'static str,
+    name: &'static str,
+    description: &'static str,
+}
+
+/// A view's enrichment declaration.
+struct ViewEnrichment {
+    enrichment_type: &'static str,
+    domain: &'static str,
+    prompt_version: &'static str,
+}
+
+/// The recipe document every view shares: a local-only, never-shared,
+/// never-granted SQLite-acquired JSONL corpus with the default index.
+/// Every key the typed recipe serialized is written out (none left to a
+/// serde default), and no null: the document round-trips through TOML.
+fn local_view_recipe(
+    corpus: ViewCorpus,
+    params: Value,
+    chunk: &str,
+    enrichment: ViewEnrichment,
+    display: Option<Value>,
+) -> Value {
+    let mut recipe = json!({
+        "corpus": {
+            "id": corpus.id,
+            "name": corpus.name,
+            "description": corpus.description,
+            "license": "local-only",
+            "mesh_sharing": false,
+            "scope": "local",
+            "query_sharing": false,
+            // Structural: KnowledgeView corpora may NEVER be lent to peers,
+            // even under a one-off ephemeral grant.
+            "grantable": false,
+            "size_compressed_gb": 0.0,
+            "size_indexed_gb": 0.0,
+            "schema_version": 1,
+            "kind": "knowledge",
+            "on_demand": false
+        },
+        "acquire": { "type": "custom", "kind": "sqlite", "params": params },
+        "extract": { "type": "jsonl", "content_field": "content" },
+        "chunk": { "type": chunk },
+        "index": {
+            "fts": true,
+            "vector": true,
+            "embedding_model": "qwen3-embedding-0.6b",
+            "embedding_dimensions": 0
+        },
+        "enrichment": {
+            "enabled": true,
+            "type": enrichment.enrichment_type,
+            "domain": enrichment.domain,
+            "prompt_version": enrichment.prompt_version,
+            "entity_types": [],
+            "relationship_types": [],
+            "patterns": []
+        },
+        "filter": [],
+        "filter_mode": { "mode": "any" },
+        "parameters": {},
+        "retrieval": { "dedup_by_source": false, "personal_scope": false }
+    });
+    if let Some(display) = display {
+        recipe["display"] = display;
+    }
+    recipe
+}
 
 /// The `personal-knowledge` view — one document per memory row,
 /// enriched with the `personal` domain.
-pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
+pub fn personal_knowledge_recipe(db_path: &Path) -> Value {
     let params = json!({
         "db_path": db_path.display().to_string(),
         "query": "\
@@ -37,70 +109,25 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
         "version_column": "version"
     });
 
-    Recipe {
-        corpus: CorpusMeta {
-            id: "personal-knowledge".into(),
-            name: "Personal knowledge".into(),
+    local_view_recipe(
+        ViewCorpus {
+            id: "personal-knowledge",
+            name: "Personal knowledge",
             description: "Enriched perspective on the memories table: \
-                          persistent concerns, live tensions, open questions."
-                .into(),
-            license: "local-only".into(),
-            mesh_sharing: false,
-            scope: Some("local".into()),
-            query_sharing: Some(false),
-            // Structural: KnowledgeView corpora may NEVER be lent to peers,
-            // even under a one-off ephemeral grant.
-            grantable: false,
-            size_compressed_gb: 0.0,
-            size_indexed_gb: 0.0,
-            schema_version: 1,
-            kind: Default::default(),
-            on_demand: false,
-            parent_corpus_id: None,
-            mutable_merge: None,
+                          persistent concerns, live tensions, open questions.",
         },
-        acquire: AcquirerConfig::Custom {
-            kind: "sqlite".into(),
-            params,
+        params,
+        "passthrough",
+        ViewEnrichment {
+            enrichment_type: "field_model",
+            domain: "personal",
+            prompt_version: "v1",
         },
-        extract: ExtractorConfig::Jsonl {
-            content_field: Some("content".into()),
-            title_field: None,
-            filter: None,
-            decompress: None,
-        },
-        chunk: ChunkerConfig::Passthrough,
-        index: IndexConfig::default(),
-        authority: None,
-        enrichment: Some(EnrichmentConfig {
-            enabled: true,
-            enrichment_type: "field_model".into(),
-            domain: Some("personal".into()),
-            pipeline: None,
-            ontology: None,
-            prompt_version: Some("v1".into()),
-            clustering: None,
-            alignment: None,
-            fault_lines: None,
-            entity_types: Vec::new(),
-            relationship_types: Vec::new(),
-            patterns: Vec::new(),
-            reconciliation: None,
-            normalization: None,
-        }),
-        update: None,
-        prebuilt: None,
-        catalog: None,
-        filters: Vec::new(),
-        filter_mode: Default::default(),
-        parameters: Default::default(),
-        resolved_parameters: Default::default(),
         // No display.category — KnowledgeView's personal-knowledge
         // view is a digest source, not a corpus the user browses in
         // Atlas View.
-        display: None,
-        retrieval: Default::default(),
-    }
+        None,
+    )
 }
 
 /// The `institutional-notes` view — one document per working-note
@@ -112,7 +139,7 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
 /// `db_path` is typically `~/.svrnmesh/notes.db`. The recipe
 /// filters out retired notes and the `reflection` kind (which is
 /// tool-calibration feedback, not institutional knowledge).
-pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
+pub fn institutional_notes_recipe(db_path: &Path) -> Value {
     let params = json!({
         "db_path": db_path.display().to_string(),
         "query": "\
@@ -132,70 +159,23 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
         "metadata_columns": ["kind"]
     });
 
-    Recipe {
-        corpus: CorpusMeta {
-            id: "institutional-notes".into(),
-            name: "Institutional knowledge".into(),
+    local_view_recipe(
+        ViewCorpus {
+            id: "institutional-notes",
+            name: "Institutional knowledge",
             description: "Enriched perspective on the project's working \
                           notes: architectural decisions, invariants, \
-                          live tensions, unresolved questions."
-                .into(),
-            license: "local-only".into(),
-            mesh_sharing: false,
-            scope: Some("local".into()),
-            query_sharing: Some(false),
-            // Structural: KnowledgeView corpora may NEVER be lent to peers,
-            // even under a one-off ephemeral grant.
-            grantable: false,
-            size_compressed_gb: 0.0,
-            size_indexed_gb: 0.0,
-            schema_version: 1,
-            kind: Default::default(),
-            on_demand: false,
-            parent_corpus_id: None,
-            mutable_merge: None,
+                          live tensions, unresolved questions.",
         },
-        acquire: AcquirerConfig::Custom {
-            kind: "sqlite".into(),
-            params,
+        params,
+        "passthrough",
+        ViewEnrichment {
+            enrichment_type: "field_model",
+            domain: "institutional",
+            prompt_version: "v1",
         },
-        extract: ExtractorConfig::Jsonl {
-            content_field: Some("content".into()),
-            title_field: None,
-            filter: None,
-            decompress: None,
-        },
-        chunk: ChunkerConfig::Passthrough,
-        index: IndexConfig::default(),
-        authority: None,
-        enrichment: Some(EnrichmentConfig {
-            enabled: true,
-            enrichment_type: "field_model".into(),
-            domain: Some("institutional".into()),
-            pipeline: None,
-            ontology: None,
-            prompt_version: Some("v1".into()),
-            clustering: None,
-            alignment: None,
-            fault_lines: None,
-            entity_types: Vec::new(),
-            relationship_types: Vec::new(),
-            patterns: Vec::new(),
-            reconciliation: None,
-            normalization: None,
-        }),
-        update: None,
-        prebuilt: None,
-        catalog: None,
-        filters: Vec::new(),
-        filter_mode: Default::default(),
-        parameters: Default::default(),
-        resolved_parameters: Default::default(),
-        // No display.category — institutional-notes is a digest
-        // source, not a corpus the user browses in Atlas View.
-        display: None,
-        retrieval: Default::default(),
-    }
+        None,
+    )
 }
 
 /// The `conversation-history` view — one document per conversation
@@ -208,7 +188,7 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
 /// startup so a future skill that declares `privacy = "local_only"`
 /// (e.g. a future `health-journal` skill) automatically participates
 /// in the guarantee without editing this recipe.
-pub fn conversation_history_recipe(db_path: &Path, local_only_skill_ids: &[&str]) -> Recipe {
+pub fn conversation_history_recipe(db_path: &Path, local_only_skill_ids: &[&str]) -> Value {
     let filter_clause = if local_only_skill_ids.is_empty() {
         String::new()
     } else {
@@ -256,89 +236,41 @@ pub fn conversation_history_recipe(db_path: &Path, local_only_skill_ids: &[&str]
         "group_separator": "\n\n"
     });
 
-    Recipe {
-        corpus: CorpusMeta {
-            id: "conversation-history".into(),
-            name: "Conversation history".into(),
+    local_view_recipe(
+        ViewCorpus {
+            id: "conversation-history",
+            name: "Conversation history",
             description: "Enriched perspective on the conversations + \
                           messages tables (180-day window): recurring \
                           topics, unresolved threads, cross-session \
-                          connections."
-                .into(),
-            license: "local-only".into(),
-            mesh_sharing: false,
-            scope: Some("local".into()),
-            query_sharing: Some(false),
-            // Structural: KnowledgeView corpora may NEVER be lent to peers,
-            // even under a one-off ephemeral grant.
-            grantable: false,
-            size_compressed_gb: 0.0,
-            size_indexed_gb: 0.0,
-            schema_version: 1,
-            kind: Default::default(),
-            on_demand: false,
-            parent_corpus_id: None,
-            mutable_merge: None,
+                          connections.",
         },
-        acquire: AcquirerConfig::Custom {
-            kind: "sqlite".into(),
-            params,
-        },
-        extract: ExtractorConfig::Jsonl {
-            content_field: Some("content".into()),
-            title_field: None,
-            filter: None,
-            decompress: None,
-        },
+        params,
         // Pair user + assistant turns into retrieval units. Same
         // chunker the `conversations-anthropic` recipe uses — keeps
         // the two corpora bit-compatible at the chunk layer so the
         // shared `conversation_atlas` pipeline (and the meta-atlas
         // Trace/Rolling bucket downstream) operates on uniform inputs.
-        chunk: ChunkerConfig::ThreadedTurns,
-        index: IndexConfig::default(),
+        "threaded_turns",
         // v2 atlas enrichment via the `conversational` domain →
         // `conversation_atlas` pipeline (see
         // `corpus-engine/src/enrichment/pipeline/pipelines/conversation_atlas.rs`).
         // Replaces the v1 `field_model` skeleton; KnowledgeView's
         // splice path now reads the digest from `atlas/atoms.json`
         // via `atlas_digest::render_atlas_digest`.
-        authority: None,
-        enrichment: Some(EnrichmentConfig {
-            enabled: true,
-            enrichment_type: "atlas".into(),
-            domain: Some("conversational".into()),
-            pipeline: None,
-            ontology: None,
-            prompt_version: Some("v2".into()),
-            clustering: None,
-            alignment: None,
-            fault_lines: None,
-            entity_types: Vec::new(),
-            relationship_types: Vec::new(),
-            patterns: Vec::new(),
-            reconciliation: None,
-            normalization: None,
-        }),
-        update: None,
-        prebuilt: None,
-        catalog: None,
-        filters: Vec::new(),
-        filter_mode: Default::default(),
-        parameters: Default::default(),
-        resolved_parameters: Default::default(),
+        ViewEnrichment {
+            enrichment_type: "atlas",
+            domain: "conversational",
+            prompt_version: "v2",
+        },
         // Atlas View rail groups every corpus declaring
         // `category = "conversation"` under one "Conversations"
         // header — so this corpus (the user's Sovereign-internal
         // chats) and `conversations-anthropic` (imported Claude
         // chats) appear side by side, regardless of which one they
         // originated from.
-        display: Some(corpus_engine::DisplayMeta {
-            category: Some("conversation".into()),
-            icon: Some("chat-bubble".into()),
-        }),
-        retrieval: Default::default(),
-    }
+        Some(json!({ "category": "conversation", "icon": "chat-bubble" })),
+    )
 }
 
 #[cfg(test)]
@@ -346,30 +278,79 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    // The assertions below read each view document structurally, as the
+    // keys and tables it carries. That a document of this shape parses as
+    // ingest's `Recipe` is corpus-engine's `a_knowledge_view_recipe_parses`
+    // (phase-b-48); the composed path is pb-ingest-dial-daemon's PROOF.
+
+    /// The `[acquire]` of a view document: always the custom `sqlite`
+    /// acquirer, so this returns its params.
+    fn sqlite_params(recipe: &Value) -> &Value {
+        assert_eq!(recipe["acquire"]["type"], "custom");
+        assert_eq!(recipe["acquire"]["kind"], "sqlite");
+        &recipe["acquire"]["params"]
+    }
+
+    /// Every key a document sets agrees with `typed`, the recipe the typed
+    /// builders serialized to (defaults filled in).
+    fn assert_subtree(doc: &Value, typed: &Value, at: &str) {
+        match doc {
+            Value::Object(map) => {
+                for (k, v) in map {
+                    assert_subtree(v, &typed[k.as_str()], &format!("{at}.{k}"));
+                }
+            }
+            _ => assert_eq!(doc, typed, "{at} drifted from the typed recipe"),
+        }
+    }
+
+    /// Every view document carries — directly and through the TOML file
+    /// `ingest_view` materialises — exactly the values the typed builders
+    /// produced before they became documents (the fixture was serialized
+    /// from those builders at 4849bfb01).
+    #[test]
+    fn view_recipe_documents_match_the_typed_recipes_they_replaced() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/knowledge_view_recipes.json"
+        ))
+        .expect("fixture parses");
+        let db = PathBuf::from("/fixture/sovereign.db");
+        let notes = PathBuf::from("/fixture/notes.db");
+        let docs = [
+            ("personal", super::personal_knowledge_recipe(&db)),
+            ("institutional", super::institutional_notes_recipe(&notes)),
+            ("conversation", super::conversation_history_recipe(&db, &[])),
+            (
+                "conversation_local_only",
+                super::conversation_history_recipe(&db, &["inner-work", "o'brien"]),
+            ),
+        ];
+        for (name, doc) in docs {
+            assert_subtree(&doc, &fixture[name], name);
+            let toml_text = toml::to_string(&doc).expect("document serializes as TOML");
+            let via_toml: Value = toml::from_str(&toml_text).expect("TOML parses back");
+            assert_eq!(via_toml, doc, "{name}: TOML round-trip drifted");
+        }
+    }
+
     #[test]
     fn personal_recipe_is_local_scope() {
         let recipe = personal_knowledge_recipe(&PathBuf::from("/tmp/x.db"));
-        assert_eq!(recipe.corpus.id, "personal-knowledge");
-        assert_eq!(recipe.corpus.scope.as_deref(), Some("local"));
-        assert!(!recipe.corpus.mesh_sharing);
-        assert_eq!(recipe.corpus.query_sharing, Some(false));
-        let enrichment = recipe.enrichment.unwrap();
-        assert_eq!(enrichment.domain.as_deref(), Some("personal"));
-        assert!(enrichment.enabled);
+        assert_eq!(recipe["corpus"]["id"], "personal-knowledge");
+        assert_eq!(recipe["corpus"]["scope"], "local");
+        assert_eq!(recipe["corpus"]["mesh_sharing"], false);
+        assert_eq!(recipe["corpus"]["query_sharing"], false);
+        assert_eq!(recipe["enrichment"]["domain"], "personal");
+        assert_eq!(recipe["enrichment"]["enabled"], true);
     }
 
     #[test]
     fn personal_recipe_uses_custom_sqlite_acquirer() {
         let recipe = personal_knowledge_recipe(&PathBuf::from("/tmp/x.db"));
-        match recipe.acquire {
-            AcquirerConfig::Custom { kind, params } => {
-                assert_eq!(kind, "sqlite");
-                assert_eq!(params["content_column"], "content");
-                assert_eq!(params["id_column"], "id");
-                assert_eq!(params["version_column"], "version");
-            }
-            other => panic!("expected Custom acquirer, got {other:?}"),
-        }
+        let params = sqlite_params(&recipe);
+        assert_eq!(params["content_column"], "content");
+        assert_eq!(params["id_column"], "id");
+        assert_eq!(params["version_column"], "version");
     }
 
     #[test]
@@ -378,29 +359,19 @@ mod tests {
             &PathBuf::from("/tmp/x.db"),
             &["inner-work", "personal-assistant"],
         );
-        match recipe.acquire {
-            AcquirerConfig::Custom { kind, params } => {
-                assert_eq!(kind, "sqlite");
-                let q = params["query"].as_str().unwrap();
-                assert!(q.contains("NOT IN ('inner-work', 'personal-assistant')"));
-                assert!(q.contains("180*86400"));
-                assert_eq!(params["group_column"], "conversation_id");
-                assert_eq!(params["group_separator"], "\n\n");
-            }
-            other => panic!("expected Custom acquirer, got {other:?}"),
-        }
+        let params = sqlite_params(&recipe);
+        let q = params["query"].as_str().unwrap();
+        assert!(q.contains("NOT IN ('inner-work', 'personal-assistant')"));
+        assert!(q.contains("180*86400"));
+        assert_eq!(params["group_column"], "conversation_id");
+        assert_eq!(params["group_separator"], "\n\n");
     }
 
     #[test]
     fn conversation_recipe_no_filter_when_list_empty() {
         let recipe = conversation_history_recipe(&PathBuf::from("/tmp/x.db"), &[]);
-        match recipe.acquire {
-            AcquirerConfig::Custom { params, .. } => {
-                let q = params["query"].as_str().unwrap();
-                assert!(!q.contains("NOT IN"));
-            }
-            _ => unreachable!(),
-        }
+        let q = sqlite_params(&recipe)["query"].as_str().unwrap();
+        assert!(!q.contains("NOT IN"));
     }
 
     #[test]
@@ -413,50 +384,44 @@ mod tests {
         // produce atom shapes byte-compatible with imported Claude
         // chats.
         let recipe = conversation_history_recipe(&PathBuf::from("/tmp/x.db"), &[]);
-        assert!(
-            matches!(recipe.chunk, ChunkerConfig::ThreadedTurns),
-            "expected ThreadedTurns chunker post-migration, got {:?}",
-            recipe.chunk,
+        assert_eq!(
+            recipe["chunk"]["type"], "threaded_turns",
+            "expected ThreadedTurns chunker post-migration, got {}",
+            recipe["chunk"],
         );
-        let enrichment = recipe
-            .enrichment
-            .as_ref()
-            .expect("conversation-history must declare enrichment");
-        assert_eq!(enrichment.enrichment_type, "atlas");
-        assert_eq!(enrichment.domain.as_deref(), Some("conversational"));
-        let display = recipe
-            .display
-            .as_ref()
-            .expect("conversation-history must declare [display]");
-        assert_eq!(display.category.as_deref(), Some("conversation"));
+        assert!(
+            recipe["enrichment"].is_object(),
+            "conversation-history must declare enrichment"
+        );
+        assert_eq!(recipe["enrichment"]["type"], "atlas");
+        assert_eq!(recipe["enrichment"]["domain"], "conversational");
+        assert!(
+            recipe["display"].is_object(),
+            "conversation-history must declare [display]"
+        );
+        assert_eq!(recipe["display"]["category"], "conversation");
     }
 
     #[test]
     fn institutional_recipe_filters_retired_and_reflections() {
         let recipe = institutional_notes_recipe(&PathBuf::from("/tmp/notes.db"));
-        assert_eq!(recipe.corpus.id, "institutional-notes");
-        assert_eq!(recipe.corpus.scope.as_deref(), Some("local"));
-        match recipe.acquire {
-            AcquirerConfig::Custom { kind, params } => {
-                assert_eq!(kind, "sqlite");
-                let q = params["query"].as_str().unwrap();
-                assert!(q.contains("retired_at IS NULL"));
-                assert!(q.contains("kind IN"));
-                assert!(q.contains("'decision'"));
-                assert!(q.contains("'invariant'"));
-                assert!(
-                    !q.contains("'reflection'"),
-                    "reflections are tool-calibration feedback, not institutional knowledge"
-                );
-                // metadata_columns must include `kind` so the
-                // InstitutionalDomain's metadata_in filter can run.
-                let cols = params["metadata_columns"].as_array().unwrap();
-                assert!(cols.iter().any(|v| v.as_str() == Some("kind")));
-            }
-            other => panic!("expected Custom acquirer, got {other:?}"),
-        }
-        let enrichment = recipe.enrichment.unwrap();
-        assert_eq!(enrichment.domain.as_deref(), Some("institutional"));
+        assert_eq!(recipe["corpus"]["id"], "institutional-notes");
+        assert_eq!(recipe["corpus"]["scope"], "local");
+        let params = sqlite_params(&recipe);
+        let q = params["query"].as_str().unwrap();
+        assert!(q.contains("retired_at IS NULL"));
+        assert!(q.contains("kind IN"));
+        assert!(q.contains("'decision'"));
+        assert!(q.contains("'invariant'"));
+        assert!(
+            !q.contains("'reflection'"),
+            "reflections are tool-calibration feedback, not institutional knowledge"
+        );
+        // metadata_columns must include `kind` so the
+        // InstitutionalDomain's metadata_in filter can run.
+        let cols = params["metadata_columns"].as_array().unwrap();
+        assert!(cols.iter().any(|v| v.as_str() == Some("kind")));
+        assert_eq!(recipe["enrichment"]["domain"], "institutional");
     }
 
     // Pins the §7.2 structural privacy invariant for all three
@@ -468,10 +433,10 @@ mod tests {
         let c = conversation_history_recipe(&PathBuf::from("/b"), &[]);
         let i = institutional_notes_recipe(&PathBuf::from("/c"));
         for r in [p, c, i] {
-            assert_eq!(r.corpus.scope.as_deref(), Some("local"));
-            assert!(!r.corpus.mesh_sharing);
-            assert_eq!(r.corpus.query_sharing, Some(false));
-            assert_eq!(r.corpus.license, "local-only");
+            assert_eq!(r["corpus"]["scope"], "local");
+            assert_eq!(r["corpus"]["mesh_sharing"], false);
+            assert_eq!(r["corpus"]["query_sharing"], false);
+            assert_eq!(r["corpus"]["license"], "local-only");
         }
     }
 
@@ -531,10 +496,10 @@ mod tests {
         .unwrap();
 
         let recipe = conversation_history_recipe(&db_path, &[]);
-        let query = match recipe.acquire {
-            AcquirerConfig::Custom { params, .. } => params["query"].as_str().unwrap().to_string(),
-            _ => unreachable!(),
-        };
+        let query = sqlite_params(&recipe)["query"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let mut stmt = conn.prepare(&query).unwrap();
         let rows: Vec<String> = stmt
@@ -558,13 +523,8 @@ mod tests {
     fn sql_injection_in_skill_id_is_escaped() {
         let nasty = "evil'); DROP TABLE conversations;--";
         let recipe = conversation_history_recipe(&PathBuf::from("/x"), &[nasty]);
-        match recipe.acquire {
-            AcquirerConfig::Custom { params, .. } => {
-                let q = params["query"].as_str().unwrap();
-                // Single quotes must be doubled, not closed.
-                assert!(q.contains("''); DROP TABLE conversations;--"));
-            }
-            _ => unreachable!(),
-        }
+        let q = sqlite_params(&recipe)["query"].as_str().unwrap();
+        // Single quotes must be doubled, not closed.
+        assert!(q.contains("''); DROP TABLE conversations;--"));
     }
 }

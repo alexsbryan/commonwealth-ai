@@ -1,0 +1,5 @@
+unit: pc-knowledge-gym-noresults
+commits: 489db423f (the loop closes searching after its second empty result),
+  6405a1bad (05's lookup bar 1 -> 2, readings and PLANT)
+what: 05 9/9 at bar 2; 01 and 06 9/9; first-empty recovery 9/9; PLANT red in
+  TEST(sovereign-core) and in gym 05 (a third lookup).

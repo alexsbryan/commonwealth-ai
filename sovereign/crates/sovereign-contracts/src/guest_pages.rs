@@ -21,7 +21,7 @@
 //!
 //! It is the declaration's *shape*, not its authority. Which namespaces a
 //! daemon owns and may therefore never declare guest-open is
-//! `sovereign_mesh::ring_roster::is_daemon_owned`, and the one reader that
+//! `crate::ring_namespaces::is_daemon_owned`, and the one reader that
 //! turns these entries into the door's page surface is
 //! `sovereign_daemon::guest_door::GuestPages::from_config`. Keeping the type
 //! here and both decisions there is what stops a second answer growing next to
@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 /// carries. `http://<guest_bind>/ring/#token=…` for a wall holding one app,
 /// `…/ring/<namespace>/#token=…` for one of several — and the same path a
 /// static origin serves the browser runtime from (svg the guest link composes,
-/// `sovereign_mesh::deep_link::wall_page_base`).
+/// [`wall_page`], with the fragment grammar `mesh_join_vocab::deep_link`'s).
 ///
 /// It lives here, with the page contract, because THREE crates need to agree
 /// on it and the only one they all depend on is this leaf: the daemon serves
@@ -127,6 +127,79 @@ impl GuestPage {
     }
 }
 
+/// The loopback port the ring rail listens on, derived from the client port.
+///
+/// **ONE derivation** (ARCH §10.6): the daemon binds it and `svrn ring dev`
+/// dials it, and if those two ever computed it separately a second daemon on a
+/// non-default client port would have its rail silently unreachable — the
+/// worst shape, because the app would get a connection refused and the
+/// operator would go looking at grants.
+///
+/// Derived rather than configured so there is no knob to set inconsistently.
+/// Loopback-only in M0, so it never needs to be advertised or firewalled.
+/// Moved from `commonwealth_core::config` with the bind it places
+/// (pb-mesh-exit-mesh): the svrn daemon binds it, `svrn ring dev` dials it.
+pub fn rail_port(client_port: u16) -> u16 {
+    client_port.saturating_add(2)
+}
+
+/// True when `base` already spells a page path — a runtime page origin the
+/// operator is pinning the link to (`https://svrnme.sh/ring/`) rather than a
+/// door origin the URL itself can address (`http://192.168.1.10:9744`).
+///
+/// Accepted with or without the trailing slash: the stripped form is exactly
+/// what a host with `trailingSlash: false` serves, so it must not be read as
+/// "no page path" (the 2026-09-22 wall outage, where that reading composed a
+/// 404 landing).
+pub fn spells_a_page(base: &str) -> bool {
+    base.contains(PAGE_PREFIX) || base.trim_end_matches('/').ends_with("/ring")
+}
+
+/// The address a phone opens: the door `--url` names, plus the page path of
+/// whatever this grant reaches — the app `--rail` names, or the door's own
+/// index under `--wall`, which lists every app the owner declared.
+///
+/// A base already spelling a page path is kept, with its directory slash
+/// ensured (`…/ring` → `…/ring/`): that form addresses the runtime page, and
+/// the door route the page should fetch rides the link as `path=` instead —
+/// see [`wall_page`], the one call a link composer takes.
+pub fn wall_page_base(base: &str, rail: Option<&str>, wall: bool) -> String {
+    if spells_a_page(base) {
+        return format!("{}/", base.trim_end_matches('/'));
+    }
+    let root = base.trim_end_matches('/');
+    match rail {
+        Some(ns) => format!("{root}{PAGE_PREFIX}{ns}/"),
+        None if wall => format!("{root}{PAGE_PREFIX}"),
+        None => base.to_string(),
+    }
+}
+
+/// The page a guest link opens and the door route it carries as `path=`,
+/// decided together so no composer can take the base without the path.
+///
+/// When the base is a runtime PAGE ([`spells_a_page`]), the link cannot also
+/// spell the door route in its path: the two collide (`/ring/ring-doc/` under
+/// `https://svrnme.sh/` is a 404 on the static origin — this shipped until
+/// 2026-09-22). So the page stays the runtime page and the door route — the
+/// app's page (`/ring/<ns>/`) or the wall index (`/ring/`) — is returned for
+/// the fragment. The fragment grammar is `mesh_join_vocab::deep_link`'s.
+pub fn wall_page(base: &str, rail: Option<&str>, wall: bool) -> (String, Option<String>) {
+    let path = if spells_a_page(base) {
+        match rail {
+            Some(ns) => Some(format!("{PAGE_PREFIX}{ns}/")),
+            None if wall => Some(PAGE_PREFIX.to_string()),
+            None => None,
+        }
+    } else {
+        None
+    };
+    (wall_page_base(base, rail, wall), path)
+}
+
+mod shim;
+pub use shim::{ring_shim, RING_SHIM};
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,6 +254,35 @@ guests = "readonly""#,
             parsed.is_err(),
             "a misspelled mode parsed as {:?} instead of being refused",
             parsed.map(|w| w.pages["a"].guests())
+        );
+    }
+
+    /// A door origin spells the route in the page and carries no `path=`; a
+    /// runtime page base keeps the page and hands the route back for the
+    /// fragment, stripped or not.
+    #[test]
+    fn the_page_and_its_door_route_are_decided_together() {
+        assert_eq!(
+            wall_page("http://h:9", Some("doc"), false),
+            ("http://h:9/ring/doc/".to_string(), None)
+        );
+        assert_eq!(
+            wall_page("https://svrnme.sh/ring/", Some("ring-doc"), false),
+            (
+                "https://svrnme.sh/ring/".to_string(),
+                Some("/ring/ring-doc/".to_string())
+            )
+        );
+        assert_eq!(
+            wall_page("https://svrnme.sh/ring", None, true),
+            (
+                "https://svrnme.sh/ring/".to_string(),
+                Some("/ring/".to_string())
+            )
+        );
+        assert_eq!(
+            wall_page("https://svrnme.sh/ring/", None, false),
+            ("https://svrnme.sh/ring/".to_string(), None)
         );
     }
 }

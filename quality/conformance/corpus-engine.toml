@@ -25,27 +25,6 @@ line = 377
 asserts = 4
 
 [[claim]]
-requirement = "EN-19"
-test = "corpus-engine::enrichment::governance_view::tests::pair_matched_disposition_survives_rebuild_edge_ids"
-file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 984
-asserts = 4
-
-[[claim]]
-requirement = "EN-19"
-test = "corpus-engine::enrichment::governance_view::tests::tension_with_superseded_endpoint_is_moot_not_open"
-file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 1026
-asserts = 3
-
-[[claim]]
-requirement = "EN-19"
-test = "corpus-engine::enrichment::governance_view::tests::vanished_pair_is_not_an_issue_but_missing_endpoint_atom_is"
-file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 1062
-asserts = 2
-
-[[claim]]
 requirement = "EN-4"
 test = "corpus-engine::enrichment::pipeline::phase_cache::tests::exactly_one_place_constructs_the_cache_model_identity"
 file = "corpus-engine/src/enrichment/pipeline/phase_cache.rs"
@@ -74,48 +53,6 @@ line = 33
 asserts = 10
 
 [[claim]]
-requirement = "GR-35"
-test = "corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::every_period_the_card_advertises_is_answerable_by_the_tool"
-file = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
-line = 325
-asserts = 2
-
-[[claim]]
-requirement = "GR-36"
-test = "corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::card_carries_no_percentage_and_no_tag_ratio"
-file = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
-line = 253
-asserts = 5
-
-[[claim]]
-requirement = "ST-25"
-test = "corpus-engine::enrichment::governance_view::tests::a_populated_join_is_present_and_silent"
-file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 1365
-asserts = 4
-
-[[claim]]
-requirement = "ST-25"
-test = "corpus-engine::enrichment::governance_view::tests::an_absent_manifest_is_no_structure_not_a_missing_join"
-file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 1324
-asserts = 3
-
-[[claim]]
-requirement = "ST-25"
-test = "corpus-engine::enrichment::governance_view::tests::an_empty_chapter_list_is_no_structure_not_a_fault"
-file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 1389
-asserts = 1
-
-[[claim]]
-requirement = "ST-25"
-test = "corpus-engine::enrichment::governance_view::tests::sections_with_no_chunk_ids_are_a_missing_join_and_say_so"
-file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 1340
-asserts = 4
-
-[[claim]]
 requirement = "ST-41"
 test = "corpus-engine::main::reindex_stamps_freshness::reindexing_a_document_stamps_its_recency_at_the_shared_convergence_point"
 file = "corpus-engine/tests/main/reindex_stamps_freshness.rs"
@@ -123,43 +60,36 @@ line = 67
 asserts = 9
 
 [[claim]]
-requirement = "ST-5"
-test = "corpus-engine::engine::tests::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical"
-file = "corpus-engine/src/engine/mod.rs"
-line = 3647
-asserts = 2
-
-[[claim]]
 requirement = "ST-6"
 test = "corpus-engine::engine::status::tests::a_stopped_ingest_that_never_built_indexes_is_not_ready"
 file = "corpus-engine/src/engine/status.rs"
-line = 516
+line = 491
 asserts = 1
 
 [[claim]]
 requirement = "ST-7"
 test = "corpus-engine::engine::status::tests::readiness_labels_are_stable_api"
 file = "corpus-engine/src/engine/status.rs"
-line = 496
+line = 471
 asserts = 4
 
 [[claim]]
 requirement = "ST-8"
 test = "corpus-engine::engine::tests::open_index_allows_model_mismatch_with_warning"
 file = "corpus-engine/src/engine/mod.rs"
-line = 3234
+line = 2643
 asserts = 1
 
 [[claim]]
 requirement = "ST-8"
 test = "corpus-engine::engine::tests::open_index_fails_closed_on_a_geometry_mismatch"
 file = "corpus-engine/src/engine/mod.rs"
-line = 3268
+line = 2677
 asserts = 4
 
 [[claim]]
 requirement = "ST-9"
 test = "corpus-engine::sharding::tests::merge_shards_rejects_two_distinct_non_empty_embedding_models"
 file = "corpus-engine/src/sharding.rs"
-line = 1965
+line = 1923
 asserts = 1

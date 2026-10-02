@@ -44,6 +44,8 @@
 //! path, the desktop could install a corpus the answering process cannot see
 //! — which reads as "no authority declared" and falls through to ungrounded
 //! KnowledgeQuery streaming, the exact fabrication this census exists to stop.
+//! The daemon boot moved to `sovereign-daemon` at the de-embed (2026-09-21),
+//! and the `DAEMON_RS` pin below follows it.
 //!
 //! # The chain LEFT THE DESKTOP at svt-6, and this is the third rewrite
 //!
@@ -106,11 +108,11 @@
 const STATE_RS: &str = include_str!("../src/state.rs");
 const RECIPE_RS: &str = include_str!("../../../sovereign-runtime-recipe/src/lib.rs");
 /// The process that ANSWERS a question about a corpus the desktop installed.
-const DAEMON_RS: &str = include_str!("../../../sovereign-cli-daemon/src/daemon_cmd/mod.rs");
-/// Where the engine that INGESTS is built — and therefore the only place an
-/// acquirer registration can do anything (svt-6). Moved to the host crate at
-/// domains `dm-daemon-cli-composition` (2026-09-17).
-const BOOTSTRAP_RS: &str = include_str!("../../../sovereign-daemon/src/bootstrap.rs");
+/// It also registers the acquirer on the ingest port it composes — the only
+/// place a registration can do anything (svt-6). It moved here from
+/// `bootstrap.rs` at pb-ingest-dial-daemon (a350a9a5d), when the engine build
+/// became ingest's `corpus_engine::face::compose`.
+const DAEMON_RS: &str = include_str!("../../../sovereign-daemon/src/daemon_cmd/boot.rs");
 /// The desktop's install request. It holds no engine; it asks the one that has
 /// the acquirer.
 const INSTALL_RS: &str = include_str!("../src/commands/corpus_install.rs");
@@ -130,7 +132,7 @@ fn bundle_body<'a>(src: &'a str, name: &str) -> Option<&'a str> {
 fn registering_the_sec_acquirer_obliges_registering_the_sec_facts_tool() {
     // Needles assembled at runtime so this test cannot satisfy itself by
     // matching the literals in its own body.
-    let acquirer = format!("sec_edgar::{}", "register(&engine_builder)");
+    let acquirer = format!("sec_edgar::{}", "register(mount.port.as_ref())");
     let tool = format!("sec_facts::{}", "SecFactsTool::new(");
     let baseline = format!("baseline_{}", "bundles(");
     let core = format!("CoreTurn{}", "Tools::new(");
@@ -149,11 +151,11 @@ fn registering_the_sec_acquirer_obliges_registering_the_sec_facts_tool() {
          own and this census must be rewritten to that path, not deleted."
     );
     assert!(
-        BOOTSTRAP_RS.contains(&acquirer),
-        "expected the sec_edgar acquirer registration in the daemon's \
-         bootstrap — if it moved, move this census with it rather than \
-         deleting it. It moved here from state.rs at svt-6 (2026-09-12) when \
-         the desktop stopped holding a CorpusEngine."
+        DAEMON_RS.contains(&acquirer),
+        "expected the sec_edgar acquirer registration on the ingest port the \
+         daemon's boot composes — if it moved, move this census with it \
+         rather than deleting it. It moved from state.rs at svt-6 \
+         (2026-09-12), then from bootstrap.rs at pb-ingest-dial-daemon."
     );
 
     // Hop 2a — and the desktop cannot grow a SECOND engine to install into.

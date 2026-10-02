@@ -49,8 +49,8 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine::engine::{CorpusEngine, CustomAcquirerFn};
-use corpus_engine::error::{Error, Result};
+use corpus_index::error::{Error, Result};
+use corpus_index::ingest_port::{CustomAcquirerFn, IngestPluginPort};
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 
@@ -117,7 +117,7 @@ fn dirs_home() -> Option<PathBuf> {
 /// Register the SQLite acquirer on `engine` under the `"sqlite"`
 /// kind. Call once at Runtime startup before any ingest of a
 /// `KnowledgeView` recipe. Idempotent: re-registering overwrites.
-pub fn register(engine: &CorpusEngine) {
+pub fn register(engine: &dyn IngestPluginPort) {
     let acquirer: CustomAcquirerFn = Arc::new(|params_blob, download_dir| {
         Box::pin(async move { acquire(params_blob, download_dir).await })
     });

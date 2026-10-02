@@ -37,8 +37,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use sovereign_cli_shared::dirs::sovereign_root;
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::dirs::sovereign_root;
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const MAP_HELP: Help = Help {
     command: "svrn code map",
@@ -144,7 +144,7 @@ pub async fn cmd_map(args: &[String]) -> i32 {
     // One load drives the data dir, the daemon URL we probe, and the
     // base_url we pin into config.json — so every stage agrees on the
     // same daemon. Defaults match a fresh `~/.svrnmesh` install.
-    let cfg = sovereign_core::setup_config::SetupConfig::load().ok();
+    let cfg = sovereign_contracts::setup_config::SetupConfig::load().ok();
     let data_dir = cfg
         .as_ref()
         .map(|c| c.data.dir.clone())

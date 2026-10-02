@@ -5,6 +5,10 @@
 //! 800-1200 approach band (ARCH §3.1). `#[path]`, so the names are unchanged.
 
 use super::*;
+use std::path::Path;
+// The shim's text lives in `sovereign_mesh::guest_pages` (fp-30's de-embed);
+// these pins read the same const the door and the dev servers serve.
+use sovereign_contracts::guest_pages::RING_SHIM;
 
 fn pages(default_dir: Option<&str>, named: &[(&str, &str)]) -> GuestPages {
     GuestPages::new(
@@ -115,10 +119,7 @@ fn the_un_namespaced_page_is_still_served_at_the_bare_prefix() {
 /// that quietly serves the machinery.
 #[test]
 fn a_daemon_owned_namespace_cannot_be_declared_open_to_guests() {
-    for owned in [
-        sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
-        "work",
-    ] {
+    for owned in [oicp_types::measurements::MEASUREMENTS_APP_ID, "work"] {
         let mut d = sovereign_core::setup_config::DaemonSection::default();
         d.guest_pages
             .insert(owned.to_string(), GuestPage::Open("/srv/x".into()));
