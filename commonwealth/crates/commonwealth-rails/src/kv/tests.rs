@@ -430,6 +430,77 @@ async fn a_door_write_is_journaled_before_its_answer_and_the_pump_seals_past_the
     assert!(again.store.scan(NS, "pad/").unwrap().is_empty());
 }
 
+/// The reading pc-rails-journal-linear's proof names, not a gate: the drain
+/// of 10 and 256 rows and the ingest of as many peer ops, each on a journal
+/// of ~5,000 lines. Run it with
+/// `cargo test -p commonwealth-rails --lib journal_cost_reading -- --ignored --nocapture`.
+#[tokio::test]
+#[ignore = "a timing reading, not a gate"]
+async fn journal_cost_reading() {
+    let dir = tempfile::tempdir().unwrap();
+    let mesh = solo_mesh();
+    let host = host_at(dir.path(), &mesh);
+    let me = NodeId::from_u128(ME);
+    let journal = host.rail.journal(NS).unwrap();
+    let roster = host.rail.roster(&journal).await.unwrap();
+    let base: Vec<RailAct> = (0..5_000)
+        .map(|i| RailAct::Record {
+            payload: rail_kv::to_payload(&format!("base/{i}"), Some(b"x".as_slice()), 1).unwrap(),
+        })
+        .collect();
+    journal
+        .append_all(base, host.rail.signer(), &roster, None)
+        .unwrap();
+    let peer = SigningKey::from_bytes(&[9; 32]);
+    let mut peer_seq = 0u64;
+    let mut peer_ops = |tag: &str, n: usize| -> Vec<_> {
+        (0..n)
+            .map(|i| {
+                peer_seq += 1;
+                super::projection_tests::kv_op(
+                    NS,
+                    &peer,
+                    peer_seq,
+                    &format!("{tag}/{i}"),
+                    Some(b"z".as_slice()),
+                    1,
+                )
+            })
+            .collect()
+    };
+    for n in [10usize, 256] {
+        for i in 0..n {
+            host.store
+                .set(NS, &format!("w{n}/{i}"), "y".into(), me)
+                .unwrap();
+        }
+        let t = std::time::Instant::now();
+        let out = host.journal_outbox().await;
+        let drain = t.elapsed();
+        assert_eq!(out.appended, n, "{out:?}");
+
+        let batch = peer_ops(&format!("b{n}"), n);
+        let t = std::time::Instant::now();
+        assert_eq!(journal.ingest_all(&batch).unwrap(), n);
+        let ingest_all = t.elapsed();
+
+        let singles = peer_ops(&format!("s{n}"), n);
+        let t = std::time::Instant::now();
+        for op in &singles {
+            assert!(journal.ingest(op).unwrap());
+        }
+        let ingest_each = t.elapsed();
+        let lines = journal.read().unwrap().0.len();
+        eprintln!(
+            "journal_cost_reading rows={n} log_lines={lines} drain_ms={} ingest_all_ms={} \
+             ingest_each_ms={}",
+            drain.as_millis(),
+            ingest_all.as_millis(),
+            ingest_each.as_millis()
+        );
+    }
+}
+
 /// **A live set over the bar seals once, not on every write after.** The
 /// snapshot re-appends the whole live set above the new floor; counted
 /// toward the bar, a live set of `SEAL_AFTER_OWN_OPS` or more cleared it by
