@@ -7,6 +7,11 @@ use std::process::ExitCode;
 use commonwealth_rails::cli;
 
 fn main() -> ExitCode {
+    // The SOVEREIGN_* <-> SVRNMESH_* mirror every sibling runs first: rails'
+    // closure reads SOVEREIGN_ADVERTISE_ADDR, _MESH_STRICT_AUTH and
+    // _IROH_RELAY_ONLY, which a directly launched rails otherwise misses
+    // under the SVRNMESH_ spelling.
+    kernel_types::env_bridge::promote_legacy_env();
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
