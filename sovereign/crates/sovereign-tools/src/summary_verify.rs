@@ -397,10 +397,20 @@ impl JudgeSummaryVerifier {
     }
 }
 
+/// The member texts the name veto and the whole-summary probe judge a summary
+/// against: every member the writer read (`raptor_atlas`'s
+/// `build_abstractive_request` reads full member text since 2026-10-02).
+/// [`MEMBER_CAP`] bounds the per-claim fan-out only; a judge reading the first
+/// 12 of a ~20-member cluster can reject a faithful summary for naming what
+/// members 13+ say.
+fn judged_members(member_texts: &[String]) -> Vec<String> {
+    member_texts.to_vec()
+}
+
 #[async_trait::async_trait]
 impl SummaryVerifier for JudgeSummaryVerifier {
     async fn verify(&self, summary: &str, member_texts: &[String]) -> Option<SummaryVerdict> {
-        let members: Vec<String> = member_texts.iter().take(MEMBER_CAP).cloned().collect();
+        let members = judged_members(member_texts);
         // The deterministic name veto FIRST: free, and decisive on the
         // corruption class the gestalt probe cannot see. The probe is
         // not spent behind an already-false verdict; `None` violation
@@ -460,7 +470,7 @@ impl SummaryVerifier for JudgeSummaryVerifier {
             // Clusters are small (leaf target ~20); members go in build
             // order — the faithfulness lane's claim-conditioned ranking
             // matters for 200-chunk windows, not here.
-            for passage in &members {
+            for passage in members.iter().take(MEMBER_CAP) {
                 match claim_chunk_support(
                     &self.inference,
                     passage,
@@ -686,6 +696,30 @@ mod tests {
         assert!(
             !vetoed.passed(),
             "a summary naming an entity its members never carry must not pass"
+        );
+    }
+
+    /// The veto judges against every member the writer read: a name carried
+    /// only by the 13th member is the cluster's own, not foreign.
+    #[test]
+    fn the_veto_sees_every_member_the_writer_read() {
+        let registry = SummaryNameRegistry {
+            entities: vec![EntityForms {
+                display: "Verloc".into(),
+                forms: vec!["verloc".into()],
+            }],
+        };
+        let mut members: Vec<String> = (0..MEMBER_CAP)
+            .map(|i| format!("Passage {i} follows the river."))
+            .collect();
+        members.push("Verloc keeps the shop.".into());
+        let window = judged_members(&members);
+        assert!(
+            registry
+                .violations("Verloc keeps a shop by the river.", &window)
+                .is_empty(),
+            "a name from member {} was judged foreign",
+            MEMBER_CAP + 1
         );
     }
 

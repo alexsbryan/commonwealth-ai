@@ -115,7 +115,23 @@ const SUMMARIZE_BUFFER: usize = 8;
 /// contributes a long tail of near-duplicate fragments that wash the
 /// summary out rather than sharpen it. Members are ranked by cosine to
 /// the centroid, so what survives is the cluster's core, not a prefix.
+///
+/// Since 2026-10-02 the WRITER no longer reads these previews — it reads
+/// `member_full_texts`, as the verifier does (see `build_abstractive_request`);
+/// descriptors now only order dispatch.
 const MAX_MEMBERS_IN_SUMMARY_PROMPT: usize = 13;
+
+/// Characters of member text the summary writer reads, whole members in
+/// order. Sized for the primary model's 32k-token context at ~4 chars per
+/// token with room for the instructions and the output; the pilot tree's
+/// largest leaf cluster is 72.5k chars.
+const SUMMARY_INPUT_CHAR_BUDGET: usize = 90_000;
+
+/// Summary length as a share of the text summarized — the RAPTOR paper's
+/// measured average (Sarthi et al. 2024, ~0.28), capped by
+/// [`SUMMARY_MAX_OUTPUT_TOKENS`].
+const SUMMARY_COMPRESSION_TARGET: f32 = 0.28;
+const SUMMARY_MAX_OUTPUT_TOKENS: u32 = 2048;
 
 /// Version stamp for the summarization prompt + grammar (T1 P1.3).
 /// BUMP THIS whenever the summary prompt text, the lark grammar, or
@@ -125,7 +141,7 @@ const MAX_MEMBERS_IN_SUMMARY_PROMPT: usize = 13;
 /// as `prompt_version`, which is what `enrich raptor --refresh-stale`
 /// compares to find outdated trees. Date-suffixed so two bumps in one
 /// initiative stay distinguishable.
-pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-07-31.1";
+pub const RAPTOR_PROMPT_VERSION: &str = "rpv-2026-10-02.1";
 
 /// How a node's summary text is produced (T1 P1.1).
 ///
@@ -968,13 +984,30 @@ fn build_abstractive_request(
     doc_type: &DocumentTypeTag,
     faithful_retry: bool,
 ) -> CompletionRequest {
-    let body = input
-        .member_descriptors
-        .iter()
-        .enumerate()
-        .map(|(i, d)| format!("[{i}] {d}"))
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    // The writer reads what the verifier reads. Writing from 280-char
+    // previews while the verifier judged full member text made them disagree
+    // by construction — at most 3.6k chars written against 17.8-72.5k judged
+    // on the pilot tree, where 13 of 14 nodes fell to the extractive floor.
+    let mut used = 0usize;
+    let mut parts: Vec<String> = Vec::new();
+    for (i, text) in input.member_full_texts.iter().enumerate() {
+        if !parts.is_empty() && used + text.len() > SUMMARY_INPUT_CHAR_BUDGET {
+            tracing::warn!(
+                level = input.level,
+                kept = parts.len(),
+                members = input.member_full_texts.len(),
+                budget = SUMMARY_INPUT_CHAR_BUDGET,
+                "raptor_atlas: cluster text over the summary budget; writing from the first members only"
+            );
+            break;
+        }
+        used += text.len();
+        parts.push(format!("[{i}] {text}"));
+    }
+    let body = parts.join("\n\n");
+    let output_budget = ((used as f32 / 4.0 * SUMMARY_COMPRESSION_TARGET) as u32)
+        .clamp(256, SUMMARY_MAX_OUTPUT_TOKENS)
+        + 128;
 
     let doc_cue = match doc_type {
         DocumentTypeTag::Narrative => {
@@ -1025,12 +1058,13 @@ fn build_abstractive_request(
 
     let prompt = format!(
         "You are summarizing a group of related passages from a {doc_type} document.\n\
-         Produce a {cue}. The summary is a paraphrase — do NOT include any quotation marks \
+         Write a summary of the passages, including as many key details as possible: a {cue}. \
+         The summary is a paraphrase — do NOT include any quotation marks \
          or verbatim quotations; we hold the source separately. Also list the primary entities \
          (characters, organizations, places, key concepts) by their canonical names as they \
          appear in the passages.\n\n\
          Respond with a single JSON object only:\n\
-         {{\"summary\": \"<2-4 sentences, no quote marks>\", \"primary_entities\": [\"Name1\", \"Name2\"]}}\n\n\
+         {{\"summary\": \"<the summary, no quote marks>\", \"primary_entities\": [\"Name1\", \"Name2\"]}}\n\n\
          {faithful_block}{correction_block}Passages:\n{body}\n\nJSON:",
         doc_type = doc_type.label(),
         cue = doc_cue,
@@ -1051,13 +1085,13 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
 "#
     .to_string();
 
-    // SLOT_POLICY §3 EnrichBulk (was ExtractDurable until 2026-07-24,
-    // turbocharge arc): high-volume grammar-constrained summarization —
-    // Fast-class routing lets `summarize_clusters_buffered`'s fan-out
-    // ride the FastShort batching lane instead of serializing on the
-    // pinned chat slot. Durability is protected by the grammar (shape
-    // cannot drift) and the 500-token budget fits the bundle's 512 cap.
-    let mut req = Workload::EnrichBulk.request(prompt).with_output_budget(500);
+    // SLOT_POLICY §3 ExtractDurable — the class the policy names for RAPTOR
+    // summaries (EnrichBulk 2026-07-24 to 2026-10-02 for throughput). Full
+    // member text cannot fit the FastShort lane's 6,000-char gate, and the
+    // paper's summaries are the primary model's (feature-fidelity R0.2).
+    let mut req = Workload::ExtractDurable
+        .request(prompt)
+        .with_output_budget(output_budget);
     req.temperature = Some(0.2);
     // Grammar constraint preserved verbatim (see the lark_grammar above):
     // enforces the JSON shape AND forbids the `\"` byte inside the summary
@@ -1135,6 +1169,8 @@ async fn summarize_one_cluster_abstractive(
                         level = input.level,
                         claims = first.claims_total,
                         unsupported = first.claims_unsupported,
+                        whole = ?first.whole_summary_violation,
+                        vetoed = ?first.name_violations,
                         "raptor_atlas: summary failed verification; retrying with faithful prompt"
                     );
                     let retry_req = build_abstractive_request(&input, &doc_type, true);
@@ -1159,6 +1195,8 @@ async fn summarize_one_cluster_abstractive(
                                     level = input.level,
                                     claims = v2.claims_total,
                                     unsupported = v2.claims_unsupported,
+                                    whole = ?v2.whole_summary_violation,
+                                    vetoed = ?v2.name_violations,
                                     "raptor_atlas: retry still unsupported; persisting extractive floor instead"
                                 );
                                 return extract_one_cluster(inference, input).await;
@@ -1900,6 +1938,23 @@ mod tests {
                 .verifier_failed
                 .load(std::sync::atomic::Ordering::Relaxed),
             1
+        );
+    }
+
+    /// The writer reads the full member text the verifier judges, not the
+    /// 280-char preview: on the pilot tree the preview-fed writer lost 13 of
+    /// 14 nodes to the extractive floor.
+    #[test]
+    fn the_summary_writer_reads_full_member_text() {
+        let tail = "the hidden detail past the preview";
+        let full = format!("{} {tail}", "lead ".repeat(80));
+        let mut input = extractive_test_input();
+        input.member_descriptors = vec![full.chars().take(280).collect()];
+        input.member_full_texts = vec![full];
+        let req = build_abstractive_request(&input, &DocumentTypeTag::Narrative, false);
+        assert!(
+            req.prompt.contains(tail),
+            "the writer's prompt lacks the text past the preview"
         );
     }
 
