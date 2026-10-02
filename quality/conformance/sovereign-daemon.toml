@@ -28,7 +28,7 @@ asserts = 4
 requirement = "FE-99"
 test = "sovereign-daemon::routes_status::process_status_tests::zero_bucket_row_names_rejected_header_and_expected_form"
 file = "sovereign/crates/sovereign-daemon/src/routes_status.rs"
-line = 762
+line = 773
 asserts = 4
 
 [[claim]]
