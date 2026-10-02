@@ -2101,6 +2101,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: the PROOF is read on what the outcome names: ten consecutive lifts whose TEST phase is green, host load recorded; a RUN-smoke red is recorded with its kept logs and counts neither way. Six are in (n1-n6 at 97a345a15), so the lane resumes for n7-n10. The self-heal timing is pc-cmnwlth-lift-flake-selfheal, a split of this row and so in scope by the split rule (`out_of_scope`, ralph.py:328): the PROOF as written already required green RUN phases, so the split re-chunks this row's scope rather than adding to it. Moving it below the cut line is the operator's to make if they read it otherwise.
 - Because: the PROOF's whole-lift count measured two defects with one number. The substitution is named here and on the row, not taken silently (principle 6), and the bar keeps its N (principle 7). The test-phase fix stands on a direct A/B: the lifted lib test binary looped 4 x 3 at host load ~3 went 12 runs / 4 red before 97a345a15 and 12 / 0 after, every red the one test. Retrying the smoke to green is not on offer.
 
+**phase-c-10 · 2026-10-02 · pc-deployed-turn-latency · director** — this commit
+- Needed: the lane's package (phase-c-9) asked what happens to the 316 `dr-estate-dr-*` deep-research run corpora, which every unscoped turn searches and which add nothing to the answer. It offered three choices: uninstall them (A), file a phase-d row (B), or rule them needed (C). It also asked that three findings be filed.
+- Chose: B. pd-scoped-run-corpora files the behaviour change for the operator's phase-d. The row closes as attributed: every stage is named, and the one cost that is neither needed nor removed is filed with its number. A stays open to the operator. The e2e-lane finding becomes pd-e2e-whole-turn, and the silent atlas spans become pc-atlas-grounding-silent-spans below the cut line.
+- Because: A deletes user data, and the charter leaves that and any irreversible step to the operator. Leaving run corpora out of the unscoped fan-out changes behaviour beyond what the row states ("Leave these for the operator"), and the charter sends that to phase-d as a filed `pd-` row ("A new finding is filed, never added above the line"). C would rule a measured 6.4 s of search for 0 survivors needed, and the evidence says otherwise. REVIEW-AFTER: closing a row whose outcome says "needed or removed" with one cost filed rather than removed is a reading of the outcome, not its letter.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13553,5 +13558,20 @@ The `.ralph/` code-watcher skip (b0004ed0e) and the `.gitignore` line now guard 
 <details><summary>reasoning, evidence, package</summary>
 
 The lane's reading of n6's kept founder.log (target/program-lift/cmnwlth/kept-20261001T215240-3494908): the joiner is killed at 04:50:10; gossip and ring sync keep dialing it every ~20s; gossip marks it Offline at 04:51:16; the iroh peer path is lost only at 04:52:37 (~147s), and the first escalation lands at 04:52:40, after the smoke's 150s poll (scripts/program-lift.toml:248-255). iroh 1.0.2 `ACTOR_MAX_IDLE_TIMEOUT` (60s, remote_state.rs:73) applies only with no active connection, and the founder's own re-dials keep one active. Observed: 1 red in 6 RUN phases here, 0 in the 6 pb-distribution's sweep ran at 327a8097b. Whether the watchdog or the smoke's budget is wrong is the new row's census.
+
+</details>
+
+## phase-c-10 · 2026-10-02 — the deployed turn's dr-estate cost goes to phase-d; the row closes as attributed
+
+<details><summary>reasoning, evidence, package</summary>
+
+The package's premise was re-read, not taken on trust. At 2026-10-02 on RuggedFox, `GET /v1/corpora` on :9741 returned 380 corpora, 316 of them with ids starting `dr-estate-dr-`. `ls ~/.sovereign/indexes` held 2,189 entries, 317 of them `dr-estate-dr-*`. The stage table, the per-corpus sums (dr-estate 6.4 s of 16.2 s, 0 of 20 survivors) and the clean-root comparison are the lane's phase-c-9 (25e3b4871), with raw files under the lane's target/ralph/phase-c/census/. I did not re-run the turns. The package's own n=3 readings were taken at loads of 2.4-2.9, and nothing in this decision depends on a number finer than "most of the fan-out's corpora, none of the answer".
+
+Filed:
+- pd-scoped-run-corpora (phase-d): per-run deep-research corpora stay out of the unscoped fan-out and out of the router's corpus list unless the turn names them.
+- pd-e2e-whole-turn (phase-d): the throughput lane's e2e arm times the whole turn, and it either holds "no corpus attached" or says it doesn't.
+- pc-atlas-grounding-silent-spans (cleanup, below the cut line): the two ~3.7 s atlas-grounding spans get an event each.
+
+What would falsify this: the operator ruling that run corpora are meant to be searched on every turn (then C, and pd-scoped-run-corpora is struck), or a deployed turn with the dr-estate corpora removed that is still slow for a reason the phase-c-9 table did not name.
 
 </details>
