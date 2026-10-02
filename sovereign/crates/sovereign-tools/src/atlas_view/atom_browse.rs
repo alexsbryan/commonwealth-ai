@@ -12,10 +12,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, AtomsFile};
-use corpus_engine::enrichment::atlas::{read_atlas_atoms, StableAtomKey};
-use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
 use serde::{Deserialize, Serialize};
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomType, AtomsFile};
+use understanding_vocab::read::read_atlas_atoms;
+use understanding_vocab::stable_key::StableAtomKey;
+use understanding_vocab::taxonomy::EnrichmentDepth;
 
 use super::reader::{CurationStatus, FileAtlasReader};
 use super::DISPLAY_NAME_TRUNCATION;
@@ -171,7 +172,7 @@ impl FileAtlasReader {
             // order, so a never-reindexed corpus renders unchanged.
             let freshness = atlas_dir
                 .parent()
-                .map(corpus_engine::freshness::load_doc_freshness)
+                .map(corpus_index::freshness::load_doc_freshness)
                 .unwrap_or_default();
             Ok(filter_and_page(
                 &corpus_id_owned,
@@ -300,7 +301,7 @@ fn filter_and_page(
             }
         }
         if !filter.subtypes.is_empty() {
-            let have = corpus_engine::enrichment::atlas::projection::subtype_of(atom);
+            let have = corpus_engine_atlas_reader::projection::subtype_of(atom);
             if !filter.subtypes.iter().any(|w| *w == have) {
                 continue;
             }
@@ -363,7 +364,7 @@ fn build_summary(
             // Empty means "this atom has no subtype", which is not the same as
             // a subtype spelled "" — the row carries `None` so a viewer can
             // fall back to the kind rather than render a blank chip.
-            let s = corpus_engine::enrichment::atlas::projection::subtype_of(atom);
+            let s = corpus_engine_atlas_reader::projection::subtype_of(atom);
             (!s.is_empty()).then_some(s)
         },
         display_name: atom.display_name(Some(DISPLAY_NAME_TRUNCATION)),
@@ -394,14 +395,15 @@ fn atom_freshness(atom: &AtomEnvelope, freshness: &HashMap<String, i64>) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::atoms::{
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+    use tempfile::TempDir;
+    use understanding_vocab::atoms::{
         AtomId, AtomsFile, ChunkRef, Claim, Entity, SectionPosition, SectionRange, State,
     };
-    use corpus_engine::enrichment::pipeline::atlas::{
+    use understanding_vocab::taxonomy::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
         StateType,
     };
-    use tempfile::TempDir;
 
     fn entity(id: usize, name: &str, salience: f32) -> AtomEnvelope {
         AtomEnvelope::Entity(Entity {
@@ -459,7 +461,10 @@ mod tests {
 
     fn make_atlas() -> (TempDir, FileAtlasReader) {
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         write_atoms(
             &tmp.path().join("wiki").join("atlas"),
             vec![
@@ -516,7 +521,10 @@ mod tests {
     #[tokio::test]
     async fn list_atoms_filters_by_declared_subtype() {
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         let typed = |id: usize, name: &str, t: &str| match entity(id, name, 0.5) {
             AtomEnvelope::Entity(mut e) => {
                 e.entity_type = EntityType::Other(t.into());
@@ -726,7 +734,10 @@ mod tests {
     #[tokio::test]
     async fn list_atoms_truncates_long_content_in_display_name() {
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         let long = "x".repeat(200);
         write_atoms(&tmp.path().join("c").join("atlas"), vec![claim(1, &long)]);
         let page = reader
@@ -819,7 +830,7 @@ mod tests {
         });
         assert_eq!(s.evidence().len() as u32, 3);
         // Event also has evidence + section_position; pin the shape.
-        let e = AtomEnvelope::Event(corpus_engine::enrichment::atlas::atoms::Event {
+        let e = AtomEnvelope::Event(understanding_vocab::atoms::Event {
             attributes: Default::default(),
             id: AtomId::event(1),
             description: "x".into(),
@@ -846,7 +857,10 @@ mod tests {
     #[tokio::test]
     async fn list_atoms_sorts_fresh_docs_first() {
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         let corpus_dir = tmp.path().join("news");
         // Insertion order: Alpha, Beta, Gamma.
         write_atoms(
@@ -863,7 +877,7 @@ mod tests {
         freshness.insert("Beta".to_string(), 2_000i64);
         freshness.insert("Gamma".to_string(), 3_000i64);
         std::fs::write(
-            corpus_dir.join(corpus_engine::freshness::DOC_FRESHNESS_FILE),
+            corpus_dir.join(corpus_index::freshness::DOC_FRESHNESS_FILE),
             serde_json::to_vec(&freshness).unwrap(),
         )
         .unwrap();
@@ -887,7 +901,10 @@ mod tests {
         // No `_doc_freshness.json` → empty map → no reordering, no
         // updated_at. Proves the feature is inert for baseline corpora.
         let tmp = tempfile::tempdir().unwrap();
-        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let reader = FileAtlasReader::new(
+            tmp.path().to_path_buf(),
+            std::sync::Arc::new(AtlasPortDouble::new().with_computed_summaries()),
+        );
         write_atoms(
             &tmp.path().join("c").join("atlas"),
             vec![

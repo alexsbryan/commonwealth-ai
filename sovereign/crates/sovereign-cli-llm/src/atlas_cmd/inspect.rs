@@ -18,10 +18,10 @@
 
 use std::path::PathBuf;
 
-use corpus_engine::enrichment::atlas::atoms::AtomType;
 use sovereign_tools::atlas_view::{AtomFilter, FileAtlasReader, PageCursor};
+use understanding_vocab::atoms::AtomType;
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const LIST_CORPORA_HELP: Help = Help {
     command: "svrn atlas list-corpora",
@@ -348,7 +348,14 @@ fn build_reader() -> Result<FileAtlasReader, i32> {
             return Err(1);
         }
     };
-    Ok(FileAtlasReader::new(indexes_dir))
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return Err(1);
+        }
+    };
+    Ok(FileAtlasReader::new(indexes_dir, atlas))
 }
 
 /// Resolve the indexes directory the same way other CLI commands do

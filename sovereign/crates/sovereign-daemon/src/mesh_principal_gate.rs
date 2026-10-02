@@ -18,7 +18,9 @@
 //! ARCH principle 10: make it structural, not remembered. A comment saying
 //! "don't read the header" is exactly what `admission.rs:306` used to say
 //! ("the verified node id") while the code below it did the opposite. This
-//! module fails the normal test run instead, and it greps for the LITERAL
+//! module fails the normal test run instead (the test is
+//! `corpus-engine/xtask/tests/mesh_principal_gate.rs`, which a lifted svrn
+//! does not carry: it scans the monorepo), and it greps for the LITERAL
 //! header as well as the parser's name, so moving the read behind a fresh
 //! helper does not satisfy it (bar `mp-no-decider-reads-the-header`'s named
 //! goodhart).
@@ -78,104 +80,3 @@ pub const WIRE_FORM: &[&str] = &["x-node-id", "X-Node-Id", "parse_x_node_id"];
 /// The published reader. Allowed in [`RESOLVERS`] only — naming it anywhere
 /// else is a decider reaching the header behind a helper.
 pub const READER: &str = "claimed_node_id";
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::{Path, PathBuf};
-
-    /// Walk `sovereign/crates` for `.rs` files that are not tests.
-    ///
-    /// "Not a test" is: not under a `tests/` directory, and not a file whose
-    /// own name says so. A `#[cfg(test)]` module INSIDE a production file is
-    /// deliberately still scanned — that is where a decider would hide.
-    fn production_sources(root: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(entries) = std::fs::read_dir(root) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let name = entry.file_name().to_string_lossy().to_string();
-            if path.is_dir() {
-                if name != "tests" && name != "target" {
-                    production_sources(&path, out);
-                }
-            } else if name.ends_with(".rs") && !name.ends_with("_tests.rs") && name != "tests.rs" {
-                out.push(path);
-            }
-        }
-    }
-
-    /// The repo root, found by walking up from this crate until `.git` appears.
-    fn repo_root() -> PathBuf {
-        let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        while !dir.join(".git").exists() {
-            assert!(dir.pop(), "no .git above {}", env!("CARGO_MANIFEST_DIR"));
-        }
-        dir
-    }
-
-    /// bar `mp-no-decider-reads-the-header`:
-    ///
-    /// THE failing input: restore any production read of `x-node-id` outside
-    /// the one allowed path and this goes red, naming the file and the line.
-    /// The comment this replaces asserted the same thing in English and was
-    /// false for as long as it stood.
-    #[test]
-    fn no_production_file_outside_the_one_allowed_path_reads_the_peer_header() {
-        let root = repo_root();
-        let mut files = Vec::new();
-        production_sources(&root.join("sovereign/crates"), &mut files);
-        assert!(
-            files.len() > 500,
-            "the walk found only {} files — it is not scanning the tree it \
-             claims to scan, which would make this gate pass vacuously",
-            files.len()
-        );
-
-        let mut hits = Vec::new();
-        for path in files {
-            let rel = path
-                .strip_prefix(&root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .replace('\\', "/");
-            if READ_ALLOWED.iter().any(|a| rel.ends_with(a)) || rel.ends_with(file!()) {
-                continue;
-            }
-            let is_resolver = RESOLVERS.iter().any(|a| rel.ends_with(a));
-            let is_sender = SENDERS.iter().any(|a| rel.ends_with(a));
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            for (n, line) in text.lines().enumerate() {
-                // Everything from the first `#[cfg(test)]` on is test code.
-                if line.trim_start().starts_with("#[cfg(test)]") {
-                    break;
-                }
-                // A doc comment or a prose comment may NAME the header — that
-                // is how the next reader learns why it is gone. Only code is
-                // scanned.
-                let code = line.trim_start();
-                if code.starts_with("//") || code.starts_with("*") {
-                    continue;
-                }
-                if line.contains(READER) && !is_resolver {
-                    hits.push(format!("{rel}:{}: {}", n + 1, line.trim()));
-                }
-                if WIRE_FORM.iter().any(|f| line.contains(f)) && !is_sender {
-                    hits.push(format!("{rel}:{}: {}", n + 1, line.trim()));
-                }
-            }
-        }
-
-        assert!(
-            hits.is_empty(),
-            "a production decider reads the peer header. It must read the \
-             attached `Principal` instead — the header is a CLAIM and the \
-             principal is what this daemon verified. The wire form lives in \
-             {READ_ALLOWED:?}; only {RESOLVERS:?} may call it.\n{}",
-            hits.join("\n")
-        );
-    }
-}

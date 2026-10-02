@@ -36,8 +36,6 @@ Running it on particular hardware or in the cloud:
 
 Building on the platform:
 
-- [`ATOS.md`](ATOS.md) — Agent Task Orchestration: design → plan → charter → phases → milestones
-- [`ATOS_RUNNER.md`](ATOS_RUNNER.md) — the runner loop, and [`ATOS_RUNNER_SMOKE.md`](ATOS_RUNNER_SMOKE.md), its smoke test
 - [`MESHAPP_AUTHORING.md`](MESHAPP_AUTHORING.md) — write a mesh app; [`MESHAPP_CONSUMER.md`](MESHAPP_CONSUMER.md) — install and run one
 
 ## Working on Sovereign
@@ -49,7 +47,7 @@ The rest of this folder is subsystem deep-dives and design notes, one feature or
 Subsystems:
 
 - [`inference.md`](inference.md) — slots, OICP scoring, harness adapters, cutoff legibility
-- [`retrieval-pipeline.md`](retrieval-pipeline.md) — the retrieval steps and their knobs (generated from the code)
+- [`retrieval-pipeline.md`](../crates/sovereign-core/docs/retrieval-pipeline.md) — the retrieval steps and their knobs (generated from the code)
 - [`TIERED_RETRIEVAL.md`](TIERED_RETRIEVAL.md) — the tiered retrieval surface
 - [`knowledge-view.md`](knowledge-view.md) — KnowledgeView: your terrain, not your transcript
 - [`notes-mesh.md`](notes-mesh.md) — how NoteStore propagates across the mesh

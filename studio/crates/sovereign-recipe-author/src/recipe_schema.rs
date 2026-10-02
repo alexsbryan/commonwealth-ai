@@ -16,7 +16,7 @@
 //!
 //! The discriminator strings and required fields for `acquire` / `extract` /
 //! `chunk` / `filter` / `enrichment.patterns` come from the generated
-//! descriptor `sovereign-recipes/schema/recipe_schema_descriptor.json`, which
+//! descriptor `corpus-engine/schema/recipe_schema_descriptor.json`, which
 //! `corpus-engine/tests/recipe_schema.rs` regenerates (drift-gated) from
 //! `corpus-engine/src/recipe.rs`'s actual `AcquirerConfig` / `ExtractorConfig`
 //! / `ChunkerConfig` / `FilterConfig` / `PatternDecl` / `Comparison` types. Add
@@ -105,7 +105,7 @@ fn variant_arm(key: &str, required: &[String], overlay: Value) -> Value {
 /// Top-level JSON Schema for a recipe.
 ///
 /// `descriptor_json` is the injected recipe variant-catalog descriptor (the
-/// bytes of `sovereign-recipes/schema/recipe_schema_descriptor.json`, supplied
+/// bytes of `corpus-engine/schema/recipe_schema_descriptor.json`, supplied
 /// by the monolith from `corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON`).
 pub fn recipe_json_schema(descriptor_json: &str) -> Value {
     let descriptor: Value = serde_json::from_str(descriptor_json)

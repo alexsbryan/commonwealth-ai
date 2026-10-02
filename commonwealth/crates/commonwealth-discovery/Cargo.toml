@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 commonwealth-core = { workspace = true }
+mesh-join-vocab = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
@@ -22,6 +23,15 @@ mdns-sd = "0.12"
 hostname = { workspace = true }
 
 
+
+# `mesh_discovery` (moved from sovereign-mesh, pb-rails-parity).
+# Enumerate ALL local network interfaces so a node on both WiFi
+# and Tailscale (the usual Commonwealth LAN-+-VPN topology) can
+# advertise both addresses in its `MemberRecord.addresses`. The
+# old UDP-connect trick only returned the default outbound IP,
+# which on an AP-isolated WiFi was unreachable from peers who
+# could only route via Tailscale.
+if-addrs = "0.13"
 
 # Hardware detection
 sysinfo = "0.35"

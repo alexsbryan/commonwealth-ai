@@ -12,13 +12,6 @@ use kernel_types::NodeId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Peer-store namespace for Public records. Gossips across the mesh.
-pub const APP_ID_PUBLIC: &str = "work-atlas";
-
-/// Peer-store namespace for Private records. Excluded from gossip via
-/// `GOSSIP_EXCLUDED_APP_IDS` — cannot leak by construction.
-pub const APP_ID_PRIVATE: &str = "work-atlas-private";
-
 /// Who created a session. Humans get one ambient session per
 /// workstation in Phase 1 (a CLI-synthesized session); Agents get
 /// per-MCP-token sessions.
@@ -69,8 +62,8 @@ impl Privacy {
 
     pub const fn app_id(&self) -> &'static str {
         match self {
-            Self::Public => APP_ID_PUBLIC,
-            Self::Private => APP_ID_PRIVATE,
+            Self::Public => sovereign_contracts::peer::WORK_ATLAS_APP_ID_PUBLIC,
+            Self::Private => sovereign_contracts::peer::WORK_ATLAS_APP_ID_PRIVATE,
         }
     }
 

@@ -1,0 +1,24 @@
+{
+ "corpus_id": "mixed-code",
+ "embedding_dimensions": 8,
+ "license": "private",
+ "rows": [
+  {
+   "source_doc_id": "src/widget.rs",
+   "title": "make_widget",
+   "url": null,
+   "metadata": {
+    "symbol_name": "make_widget",
+    "symbol_kind": "function",
+    "file_path": "src/widget.rs",
+    "line_start": 0,
+    "line_end": 1,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true,
+    "doc_comment": "The thing."
+   },
+   "content": "make_widget\n\n/// The thing.\npub fn make_widget(n: u32) -> u32 { n + 1 }"
+  }
+ ]
+}

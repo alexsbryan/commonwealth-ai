@@ -60,27 +60,9 @@ use sovereign_contracts::types::*;
 
 use super::project::{maintainer_inbox_dir, RecipeProject};
 
-/// Persisted shape of a capability request. Kept compatible with
-/// `serde_json::from_str` so the maintainer inbox CLI can read
-/// without depending on this crate.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CapabilityRequest {
-    pub request_id: String,
-    pub feature_id: String,
-    pub project_title: String,
-    pub format_or_source: String,
-    pub analysis: String,
-    pub existing_extractors_tried: Vec<String>,
-    pub failure_modes: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recipe_state_path: Option<String>,
-    pub blocked_recipe_parts: Vec<String>,
-    /// Submission status. v1 ships only `submitted` from the agent;
-    /// the maintainer flips this to `in_progress` / `resolved` /
-    /// `won't_fix` out-of-band by editing the inbox file.
-    pub status: String,
-    pub created_at: String,
-}
+/// The inbox file's shape, in contracts so svrn's `maintainer inbox` reads
+/// it without this crate (pb-ingest-rehome).
+pub use sovereign_contracts::recipe::project::CapabilityRequest;
 
 #[derive(Default)]
 pub struct CapabilityRequestTool {

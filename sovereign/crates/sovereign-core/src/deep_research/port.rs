@@ -23,8 +23,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine::index::CorpusIndex;
-use corpus_engine::Corpus;
+use corpus_index::{corpus::Corpus, index::CorpusIndex};
 use sovereign_contracts::types::{CompletionRequest, CompletionResponse, Speed};
 
 use super::acquisition::web_hit_relevance;

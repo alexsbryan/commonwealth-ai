@@ -4,36 +4,17 @@
 //!
 //! One implementation, called by every consumer (ARCH §10.6): the
 //! `sec_facts` tool's claim index and the desktop coverage card both
-//! resolve through here, so a corpus cannot be answerable by one and
-//! invisible to the other.
+//! resolve through the atlas reader's `authoritative_store_by`, so a corpus
+//! cannot be answerable by one and invisible to the other. What is the
+//! engine's is the recipe half — [`recipe_authority_tool`] — which the two
+//! wrappers here hand it (pb-ingest-dial-tools).
 
-use super::{SecFactStore, SEC_FACTS_SIDECAR};
+use corpus_engine_atlas_reader::sec_facts::{
+    authoritative_store_by, discover_authoritative_stores_by, SecFactStore,
+};
 
-// ---------------------------------------------------------------------
-// Discovery — ONE implementation, called by every consumer (§10.6)
-// ---------------------------------------------------------------------
-
-/// The tool id a recipe names in `[authority]` to declare this typed
-/// store authoritative for its corpus. One name (§10.6).
-pub const SEC_FACTS_AUTHORITY_TOOL: &str = "sec_facts";
-
-/// Read the typed store for `corpus_id` IF its recipe declares
-/// `[authority] tool = "sec_facts"` and the sidecar is present.
-///
-/// Authority is DECLARED by the recipe author (§7.3); a sidecar alone
-/// never grants it, and the corpus id's SPELLING never enters into it. A
-/// `sec-cik…` name prefix is an ADDRESS, not an essence (ARCH §7.5) — it
-/// breaks silently the day the id convention changes, and it was never
-/// the real predicate.
-pub fn authoritative_store(
-    index_dir: &std::path::Path,
-    recipes_dir: &std::path::Path,
-    corpus_id: &str,
-) -> Option<SecFactStore> {
-    let sidecar = index_dir.join(corpus_id).join(SEC_FACTS_SIDECAR);
-    if !sidecar.exists() {
-        return None;
-    }
+/// The `[authority] tool` `corpus_id`'s recipe declares, if any.
+pub fn recipe_authority_tool(recipes_dir: &std::path::Path, corpus_id: &str) -> Option<String> {
     // TWO SOURCES FOR THE RECIPE, BOTH LIVE, DISK FIRST — and the next
     // reader needs to know why both exist.
     //
@@ -61,72 +42,69 @@ pub fn authoritative_store(
         .and_then(|s| crate::Recipe::from_toml(&s).ok());
     let bundled = from_disk.is_none();
     let recipe = from_disk.or_else(|| {
-        crate::recipe_builtin::bundled_recipe_toml(corpus_id)
+        crate::recipe_source::default_source()
+            .recipe_toml(corpus_id)
             .and_then(|toml| crate::Recipe::from_toml(toml).ok())
     });
-    let declared = recipe
-        .and_then(|r| r.authority)
-        .is_some_and(|a| a.tool == SEC_FACTS_AUTHORITY_TOOL);
-    if !declared {
-        tracing::debug!(target: "sec_facts",
-            corpus_id = %corpus_id, recipe = %recipe_path.display(),
-            source = if bundled { "bundled" } else { "on-disk" },
-            "sec_facts: sidecar present but recipe declares no \
-             [authority] tool = \"sec_facts\" — not authoritative for it");
-        return None;
-    }
-    match std::fs::read_to_string(&sidecar)
-        .map_err(|e| e.to_string())
-        .and_then(|s| serde_json::from_str::<SecFactStore>(&s).map_err(|e| e.to_string()))
-    {
-        Ok(store) => {
-            tracing::debug!(target: "sec_facts",
-                corpus_id = %corpus_id, entity = %store.entity,
-                concepts = store.concepts.len(),
-                "sec_facts: loaded declared-authoritative typed store");
-            Some(store)
-        }
-        Err(err) => {
-            tracing::warn!(target: "sec_facts",
-                corpus_id = %corpus_id, error = %err,
-                "sec_facts: unreadable sidecar — excluded");
-            None
-        }
-    }
+    let tool = recipe.and_then(|r| r.authority).map(|a| a.tool);
+    tracing::debug!(target: "sec_facts",
+        corpus_id = %corpus_id, recipe = %recipe_path.display(),
+        source = if bundled { "bundled" } else { "on-disk" },
+        authority = ?tool,
+        "sec_facts: recipe authority resolved");
+    tool
+}
+
+/// Read the typed store for `corpus_id` IF its recipe declares
+/// `[authority] tool = "sec_facts"` and the sidecar is present.
+pub fn authoritative_store(
+    index_dir: &std::path::Path,
+    recipes_dir: &std::path::Path,
+    corpus_id: &str,
+) -> Option<SecFactStore> {
+    authoritative_store_by(index_dir, corpus_id, &|id| {
+        recipe_authority_tool(recipes_dir, id)
+    })
 }
 
 /// Every installed corpus this typed store is DECLARED authoritative for,
 /// id-sorted for determinism.
-///
-/// The single discovery rule: the `sec_facts` tool's claim index and the
-/// desktop coverage card both call this, so a corpus can never be
-/// answerable by one and invisible to the other (§10.6).
 pub fn discover_authoritative_stores(
     index_dir: &std::path::Path,
     recipes_dir: &std::path::Path,
 ) -> Vec<(String, SecFactStore)> {
-    let Ok(entries) = std::fs::read_dir(index_dir) else {
-        tracing::debug!(target: "sec_facts", index_dir = %index_dir.display(),
-            "sec_facts: index dir unreadable — no authoritative corpora");
-        return Vec::new();
-    };
-    let mut out: Vec<(String, SecFactStore)> = Vec::new();
-    for e in entries.flatten() {
-        let corpus_id = e.file_name().to_string_lossy().to_string();
-        if let Some(store) = authoritative_store(index_dir, recipes_dir, &corpus_id) {
-            out.push((corpus_id, store));
-        }
-    }
-    out.sort_by(|a, b| a.0.cmp(&b.0));
-    tracing::debug!(target: "sec_facts", declared = out.len(),
-        "sec_facts: discovery complete");
-    out
+    discover_authoritative_stores_by(index_dir, &|id| recipe_authority_tool(recipes_dir, id))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::atlas::analysis::sec_facts::fixtures::store;
+    use corpus_engine_atlas_reader::sec_facts::SEC_FACTS_SIDECAR;
+
+    /// A parseable sidecar. Discovery reads whether a store loads, never
+    /// what it holds; the Apple-shaped fixture is the atlas reader's, a
+    /// test-only module this crate cannot see.
+    fn store() -> SecFactStore {
+        serde_json::from_value(serde_json::json!({
+            "schema": 1,
+            "entity": "Apple Inc.",
+            "cik": "0000320193",
+            "as_of": {
+                "form": "10-K",
+                "accession": "0000320193-25-000079",
+                "filed": "2025-10-31",
+                "latest_period_end": "2025-09-27"
+            },
+            "concepts": {},
+            "coverage": {
+                "filer_tags_total": 0,
+                "covered_tags": 0,
+                "unmapped_tags": 0,
+                "consolidated_only": true
+            }
+        }))
+        .expect("fixture parses")
+    }
 
     // -----------------------------------------------------------------
     // Discovery (§7.3, ARCH §7.5) — declared authority, never the name

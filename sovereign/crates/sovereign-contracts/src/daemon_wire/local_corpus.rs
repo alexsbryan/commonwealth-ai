@@ -14,8 +14,8 @@
 //! is pure serde over primitives, and it is what the DESKTOP writes when a
 //! user drags a folder in, what the DAEMON persists, and what crosses
 //! `/internal/corpus/local/*`. Defining them above the wire meant a client
-//! that only wanted to spell a source type linked corpus-engine,
-//! sovereign-store and sovereign-atos to do it. `sovereign-tools` keeps every
+//! that only wanted to spell a source type linked corpus-engine and
+//! sovereign-store to do it. `sovereign-tools` keeps every
 //! behaviour — the manager, the pre-scanner, the clusterer, write-back, the
 //! recipe rendering — and re-exports each type at its historical path, so no
 //! importer in the monorepo changes (the dd8bb42e6 pattern).

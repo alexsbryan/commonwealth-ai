@@ -8,7 +8,7 @@
 //! those cannot — does the gate separate real questions in the real
 //! embedding space?
 //!
-//! Run it after touching `sovereign/router/archive_examples.toml`, the
+//! Run it after touching `sovereign/crates/sovereign-core/data/router/archive_examples.toml`, the
 //! archive thresholds, or the embedding model:
 //!
 //! ```text

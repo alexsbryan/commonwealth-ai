@@ -2,24 +2,13 @@
 //! Indirection seam for the work atlas's "make this claim visible now"
 //! requirement (§7 of the spec).
 //!
-//! The implementation lives in
-//! `sovereign_daemon::work_atlas_broadcaster::MeshBroadcaster` and needs
-//! `AppState`, which would create a circular crate-dep if the work-atlas tools
-//! called it directly. This trait lets the daemon wire the real one in from
-//! the outside while tests and standalone callers use [`NullBroadcaster`].
-//!
-//! It is not a fan-out any more. Until cw-lift rung 2e the implementation
-//! POSTed the entry to every online peer; now the claim write has already been
-//! queued for the ring by `MeshStore::set`, and what the implementation does
-//! is hurry the two hops that carry it (drain the outbox onto the journal,
-//! then ask the ring round to run). A dropped call therefore costs latency and
-//! never the write.
-//!
-//! The watcher coordinator starts before `AppState` is ready, so
-//! [`DeferredBroadcaster`] lets cmd_serve construct an empty
-//! broadcaster up-front, register it with the tools and observer,
-//! then swap in the real `MeshBroadcaster` once the daemon's
-//! `AppState` becomes available — no chicken-and-egg.
+//! No implementation is wired today. The daemon's `MeshBroadcaster` hurried
+//! the two hops that carry a claim (drain the outbox onto the journal, then
+//! ask the ring round to run); it was deleted in five-programs fp-83 because
+//! the store it drained was no longer the one the atlas writes. A claim now
+//! travels on cw-rails' 2 s pump tick plus the ring round, and the
+//! [`DeferredBroadcaster`] the tools and observer hold stays unset, a no-op.
+//! A dropped call costs latency and never the write.
 
 use std::sync::Arc;
 

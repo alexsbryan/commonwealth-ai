@@ -37,7 +37,7 @@
 //!   the new bootstrap blob has a new seed and the owner builds a
 //!   fresh `PinnedTransport` from it.
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use reqwest::Certificate;
 use sha2::{Digest, Sha256};
 

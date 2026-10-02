@@ -11,15 +11,12 @@
 //! explicit import list — every name it pulled is either shared plumbing or
 //! already lived in this binary from slices 1-2.
 //!
-//! Two things deliberately did NOT come along:
-//!   - The ATOS opencode plugin install. The ATOS verb tree stays gated to the
-//!     workbench, so writing `.opencode/plugins/sovereign-atos.ts` here would
-//!     install config for a surface the shipped binary does not have. It still
-//!     runs from `svrn atos install-plugin`.
-//!   - Nothing else. In particular `project_toml` DID come along (via
-//!     sovereign-cli-shared): `.sovereign/project.toml` is read by
-//!     sovereign-server, commonwealth-api's context injector and the desktop
-//!     knowledge view, so an `init` that skipped it would be broken.
+//! One thing deliberately did NOT come along: nothing. In particular
+//! `project_toml` DID (via sovereign-cli-shared; since pb-code-cli-base init
+//! reaches it by exec'ing the code program's `project-observe`):
+//! `.sovereign/project.toml` is read by sovereign-server,
+//! commonwealth-api's context injector and the desktop knowledge
+//! view, so an `init` that skipped it would be broken.
 
 mod scaffold;
 mod setup;
@@ -29,13 +26,9 @@ use setup::*;
 
 use std::io::{self, BufRead as _, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-
-use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
 
 use sovereign_cli_shared::dirs::default_data_dir;
 use sovereign_cli_shared::mcp_client::check_mcp_server;
-use sovereign_cli_shared::models::configured_embed_model_name;
 use sovereign_cli_shared::repo::{find_repo_root, remove_legacy_hook};
 
 // Already in this binary from slices 1-2 — reused rather than re-ported, so
@@ -272,19 +265,19 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // time — we don't re-badger). This read is intentionally
     // non-fatal: a missing or unreadable project.toml means "first
     // init", which is the common case.
-    let prior_project_toml_path = repo_root.join(".sovereign").join("project.toml");
-    let prior_git_declined: bool =
-        sovereign_cli_shared::project_toml::ProjectTomlFile::read(&prior_project_toml_path)
-            .map(|t| t.lifecycle.git_declined_at_init)
-            .unwrap_or(false);
+    // The project model is the code program's (pb-code-cli-base): its
+    // `project-lifecycle` arm does that read and answers with the flags.
+    let prior_git_declined: bool = match read_lifecycle(&repo_root) {
+        Ok(l) => l.git_declined_at_init,
+        Err(code) => return code,
+    };
     let design_md_path = repo_root.join("DESIGN.md");
     let design_exists = design_md_path.exists();
 
     // Git auto-with-confirm. Runs BEFORE the observation report so the
-    // report has an up-to-date `has_git` to render (either "✓ Git
-    // repository" or the deferred note). The design-doc presence is
-    // passed through because the prompt's kindness wording changes
-    // based on whether the user is about to start drafting a
+    // report has an up-to-date `has_git` to render. The design-doc
+    // presence is passed through because the prompt's kindness wording
+    // changes based on whether the user is about to start drafting a
     // DESIGN.md (the main value prop for git) or not.
     let git_outcome = resolve_git(
         &repo_root,
@@ -335,52 +328,32 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     //   READY      — everything the user doesn't need to act on
     //   ACTIONABLE — install commands, copy-pasteable, unindented
     //   DEFERRED   — things we note now but address in `found`
-    let mut observation = sovereign_cli_shared::observation::observe(&repo_root);
-    // If we just ran `git init` in this invocation, the observation
-    // (captured before resolve_git) is stale on the `has_git` axis.
-    // Patch it so the report reflects reality.
-    observation.has_git = has_git;
-    let report_ctx = ObservationReportContext {
-        design_exists,
-        git_declined: matches!(
-            git_outcome,
-            GitOutcome::DeclinedByUser | GitOutcome::DeclinedPreviously
-        ),
-    };
-    print_observation_report(&observation, &report_ctx);
-
-    // Persist observations BEFORE any indexing/SCIP work so the
-    // durable record survives even if downstream init steps fail.
-    // Read-modify-write: preserve any existing lifecycle fields so
-    // re-running init after `svrn project found` doesn't reset
-    // `founded`, `charter_version`, or `current_phase`.
-    let project_toml_path = repo_root.join(".sovereign").join("project.toml");
-    if let Err(e) =
-        std::fs::create_dir_all(project_toml_path.parent().unwrap_or_else(|| Path::new(".")))
-    {
-        eprintln!("    \u{2717} Cannot create .sovereign/: {e}");
-        return 1;
+    //
+    // The code program observes, prints the report and persists
+    // `.sovereign/project.toml` BEFORE any indexing/SCIP work, so the
+    // durable record survives even if downstream init steps fail
+    // (`sovereign-cli-dev project-observe`, pb-code-cli-base). `has_git`
+    // is ours: we may have just run `git init`.
+    let mut observe_args = vec![
+        repo_root.display().to_string(),
+        "--has-git".to_string(),
+        has_git.to_string(),
+    ];
+    if design_exists {
+        observe_args.push("--design-exists".to_string());
     }
-    let mut project_toml =
-        sovereign_cli_shared::project_toml::ProjectTomlFile::read(&project_toml_path)
-            .unwrap_or_else(|_| {
-                sovereign_cli_shared::project_toml::ProjectTomlFile::from_observation(&observation)
-            });
-    project_toml.update_observation(&observation, &project_toml_path);
-    // Persist a fresh git declination if the user just said "no" —
-    // but preserve a prior declination (user already said no before).
-    // Never un-set: once they've opted out, that stays opted out
-    // until they run `git init` themselves.
     if matches!(git_outcome, GitOutcome::DeclinedByUser) {
-        project_toml.lifecycle.git_declined_at_init = true;
+        observe_args.push("--git-declined".to_string());
     }
-    if let Err(e) = project_toml.write(&project_toml_path) {
-        eprintln!("    \u{2717} Cannot write project.toml: {e}");
+    let observed = crate::dev_bin::run("project-observe", &observe_args);
+    if observed != 0 {
+        tracing::debug!(code = observed, "init: project-observe failed");
+        return 1;
     }
 
     // Detect languages across all workspace roots for downstream
-    // SCIP + indexing logic. Display already handled by
-    // `print_observation_report` above — no second pass of ✓-lines.
+    // SCIP + indexing logic. Display already handled by the code
+    // program's observation report above — no second pass of ✓-lines.
     let langs: Vec<DetectedLanguage> = {
         let mut seen = std::collections::HashSet::new();
         let mut all = Vec::new();
@@ -446,6 +419,7 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // ── Step 2: Index symbols ───────────────────────────────────
     println!();
     println!("  Indexing symbols...");
+    println!("    Keyword-only (FTS) index: no embedder is used, so it holds no vectors.");
 
     // Remove existing index so re-init is idempotent. The ingest pipeline
     // creates tables from scratch and fails with "table already exists" if
@@ -470,36 +444,6 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
         }
     }
 
-    let recipe_toml = format!(
-        r#"[corpus]
-id = "{corpus_id}"
-name = "{corpus_id}"
-description = "Code corpus generated by `svrn project init`"
-license = "private"
-mesh_sharing = false
-size_compressed_gb = 0
-size_indexed_gb = 0
-
-[acquire]
-type = "local_file"
-path = "{path}"
-
-[extract]
-type = "code"
-context_lines = 3
-max_lines_per_chunk = 150
-
-[chunk]
-type = "passthrough"
-
-[index]
-fts = true
-vector = false
-"#,
-        corpus_id = corpus_id,
-        path = abs_path.display(),
-    );
-
     let tempdir = match tempfile_dir() {
         Ok(d) => d,
         Err(e) => {
@@ -507,92 +451,23 @@ vector = false
             return 1;
         }
     };
-    let recipe_path = tempdir.join(format!("{corpus_id}.toml"));
-    if let Err(e) = std::fs::write(&recipe_path, &recipe_toml) {
-        eprintln!("    \u{2717} Cannot write recipe: {e}");
+
+    // The index is the code program's: `sovereign-cli-dev code index`,
+    // keyword-only, which execs ingest's CLI to write it (pb-code-index).
+    let index_args = [
+        "index".to_string(),
+        abs_path.display().to_string(),
+        "--corpus-id".to_string(),
+        corpus_id.to_string(),
+        "--data-dir".to_string(),
+        data_dir.display().to_string(),
+        "--full".to_string(),
+        "--fts-only".to_string(),
+    ];
+    if crate::dev_bin::run("code", &index_args) != 0 {
+        eprintln!();
+        eprintln!("    \u{2717} Indexing failed (the reason is above)");
         return 1;
-    }
-
-    let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async {
-            Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
-        })
-    });
-    let recipes_dir = tempdir.clone();
-    let engine = CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
-        .with_embedding_model(&configured_embed_model_name());
-
-    // Progress callback — inline progress bar.
-    let progress: corpus_engine::ProgressCallback = Box::new(|p| match p {
-        IngestProgress::Extracting {
-            documents_processed,
-        } => {
-            eprint!("\r    Extracting... {documents_processed} files    ");
-        }
-        IngestProgress::Embedding {
-            chunks_embedded,
-            total,
-            ..
-        } => {
-            if total > 0 {
-                let pct = (chunks_embedded as f32 / total as f32 * 100.0).min(100.0);
-                let filled = (pct / 5.0) as usize;
-                let empty = 20usize.saturating_sub(filled);
-                eprint!(
-                    "\r    {}{} {:3.0}%  {} symbols embedded   ",
-                    "\u{2588}".repeat(filled),
-                    "\u{2591}".repeat(empty),
-                    pct,
-                    chunks_embedded,
-                );
-            } else {
-                eprint!("\r    Embedding... {chunks_embedded} symbols   ");
-            }
-        }
-        IngestProgress::Indexing {
-            chunks_indexed,
-            total,
-        } if total > 0 => {
-            let pct = (chunks_indexed as f32 / total as f32 * 100.0).min(100.0);
-            let filled = (pct / 5.0) as usize;
-            let empty = 20usize.saturating_sub(filled);
-            eprint!(
-                "\r    {}{} {:3.0}%  {} symbols indexed    ",
-                "\u{2588}".repeat(filled),
-                "\u{2591}".repeat(empty),
-                pct,
-                chunks_indexed,
-            );
-        }
-        IngestProgress::Complete {
-            total_chunks,
-            duration_secs,
-        } => {
-            eprintln!(
-                "\r    \u{2713} {} symbols indexed in {}s                ",
-                total_chunks, duration_secs
-            );
-        }
-        _ => {}
-    });
-
-    let spec = CorpusSpec::RecipePath(recipe_path);
-    match engine.ingest(&spec, Some(progress)).await {
-        Ok(result) => {
-            // Complete variant already printed by the callback, but
-            // if it wasn't triggered, print the summary now.
-            if result.chunks_created > 0 {
-                eprintln!(
-                    "\r    \u{2713} {} symbols indexed                           ",
-                    result.chunks_created
-                );
-            }
-        }
-        Err(e) => {
-            eprintln!();
-            eprintln!("    \u{2717} Indexing failed: {e}");
-            return 1;
-        }
     }
 
     // ── Step 3: Build call graph ────────────────────────────────
@@ -865,13 +740,6 @@ vector = false
                 }
                 Err(e) => eprintln!("    \u{26a0} Cannot write .opencode/opencode.json: {e}"),
             }
-
-            // The ATOS opencode plugin used to be written here. It stayed in
-            // the workbench with the rest of the ATOS surface: this binary has
-            // no `atos` verb tree, so installing its plugin would leave the
-            // user a `.opencode/plugins/sovereign-atos.ts` that injects
-            // `X-Feature-Id` for a pipeline they cannot drive. Developers who
-            // want it run `svrn atos install-plugin`, which is the same code.
         }
 
         // AGENTS.md — only write if absent; it's project-specific and users edit it.
@@ -931,7 +799,7 @@ vector = false
         // Build the watcher toggle block only when the user passed
         // `--watcher-ignore` — otherwise let the daemon use the
         // serde default (which already includes `.sovereign`).
-        // Built as JSON rather than a typed `sovereign_mesh::projects::
+        // Built as JSON rather than a typed `corpus_engine_watchers::projects::
         // WatcherToggles`: that struct is the only thing `init` ever wanted
         // from sovereign-mesh, and sovereign-mesh links llama.cpp
         // unconditionally — a whole inference stack in an end-user binary for
@@ -989,7 +857,11 @@ vector = false
     // when there's genuinely no DESIGN.md yet and the project isn't
     // already founded (no point suggesting `project design` to
     // someone who's already past that stage).
-    if !design_exists && !project_toml.lifecycle.founded {
+    let founded = match read_lifecycle(&repo_root) {
+        Ok(l) => l.founded,
+        Err(code) => return code,
+    };
+    if !design_exists && !founded {
         println!("  Next: `svrn project design` — I'll work with the agent on your DESIGN.md.");
         println!("        Bring a path to an existing doc with `--import <path>`, or start blank.");
         println!();
@@ -998,13 +870,46 @@ vector = false
     0
 }
 
+/// The two `.sovereign/project.toml` lifecycle flags init reads.
+struct Lifecycle {
+    git_declined_at_init: bool,
+    founded: bool,
+}
+
+/// Ask the code program for the lifecycle flags
+/// (`sovereign-cli-dev project-lifecycle`, pb-code-cli-base). `Err` is the
+/// exit code init returns; the reason is printed, never defaulted.
+fn read_lifecycle(repo_root: &Path) -> Result<Lifecycle, i32> {
+    let out = crate::dev_bin::output("project-lifecycle", &[repo_root.display().to_string()])?;
+    let v: serde_json::Value = serde_json::from_str(out.trim()).map_err(|e| {
+        eprintln!("    \u{2717} project-lifecycle answered unreadable JSON ({e}): {out}");
+        1
+    })?;
+    let flag = |k: &str| {
+        v.get(k)
+            .and_then(serde_json::Value::as_bool)
+            .ok_or_else(|| {
+                eprintln!("    \u{2717} project-lifecycle answered without `{k}`: {out}");
+                1
+            })
+    };
+    let l = Lifecycle {
+        git_declined_at_init: flag("git_declined_at_init")?,
+        founded: flag("founded")?,
+    };
+    tracing::debug!(
+        git_declined_at_init = l.git_declined_at_init,
+        founded = l.founded,
+        "init: lifecycle read"
+    );
+    Ok(l)
+}
+
 // ─── Design session ──────────────────────────────────────────
-//
-// Step 4 of the ATOS onboarding redesign. `cmd_design` is the
 
 /// Local-to-`project_cmd` language detection struct. Distinct from
-/// `sovereign_cli_shared::observation::LanguageObservation` which carries the
-/// human-readable `display` form used by `print_observation_report`;
+/// the code program's `observation::LanguageObservation` which carries the
+/// human-readable `display` form its observation report prints;
 /// here we only need the stable `id` to drive SCIP-tooling decisions.
 struct DetectedLanguage {
     id: &'static str,

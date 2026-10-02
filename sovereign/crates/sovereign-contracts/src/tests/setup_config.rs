@@ -56,110 +56,37 @@ fn compute_section_is_serialized_explicitly_so_unset_is_not_recoverable() {
     );
 }
 
-/// The same rule, extended to the sub-table `[compute.work_offer]` — and
-/// the reason it is a SECOND assertion rather than a line in the one
-/// above: a nested table is where the temptation returns. `accept` could
-/// have been an `Option<Vec<String>>` and `repos` a
-/// `skip_serializing_if = "Vec::is_empty"`, and both would have made
-/// "unset" recoverable in the one section where auto-arming means running
-/// somebody else's argv.
+/// `[compute.work_offer]` after pb-work-donor: the section is cw-rails'
+/// (`rails.toml` `[work_offer]`), and svrn only carries a table written
+/// before the move until `svrn mesh up` hands it over. Two failing inputs.
+/// A config with no section must not grow one on save, or the handover would
+/// find an inert section to move on every `mesh up`. A config with one must
+/// keep it verbatim through a load and save before the handover, repos
+/// array included, or the operator's offer is lost.
 ///
-/// It also pins the ORDER. `work_offer` is a table and `[compute]`'s two
-/// booleans are scalars; TOML emits a table's scalars before its
-/// sub-tables, so a field added after `work_offer` in the struct would be
-/// re-parented INTO `[compute.work_offer]` on the next `save_to` with
-/// nothing failing. Asserting the two booleans still parse back at the
-/// top level is what catches that.
+/// It also pins the ORDER: `[compute]`'s two booleans still parse back at
+/// the top level, not re-parented into the sub-table.
 #[test]
-fn the_work_offer_sub_table_is_serialized_explicitly_and_stays_a_sub_table() {
-    let toml = toml::to_string_pretty(&ComputeSection::default()).expect("serialize");
-    for key in [
-        "kinds = []",
-        "max_concurrent = 0",
-        "yield_to_foreground = true",
-        "accept = \"nobody\"",
-        "accept_from = []",
-    ] {
-        assert!(
-            toml.contains(key),
-            "expected an explicit `{key}` in:\n{toml}"
-        );
-    }
-    let back: ComputeSection = toml::from_str(&toml).expect("round-trip");
+fn the_work_offer_sub_table_is_carried_verbatim_and_never_recreated() {
+    let empty = toml::to_string_pretty(&ComputeSection::default()).expect("serialize");
+    assert!(!empty.contains("work_offer"), "not re-created:\n{empty}");
+
+    let written = "enabled = false\ndistributed_primary = false\n\n[work_offer]\n\
+                   kinds = [\"process:v1\"]\nmax_concurrent = 2\n\n\
+                   [[work_offer.repos]]\npath = \"/src/x\"\nurl = \"https://h/x.git\"\n";
+    let loaded: ComputeSection = toml::from_str(written).expect("parse");
+    let saved = toml::to_string_pretty(&loaded).expect("serialize");
+    let back: ComputeSection = toml::from_str(&saved).expect("round-trip");
     assert!(!back.enabled, "[compute] enabled stayed at the top level");
     assert!(
         !back.distributed_primary,
         "[compute] distributed_primary stayed at the top level, not inside \
-             [compute.work_offer]: {toml}"
+             [compute.work_offer]: {saved}"
     );
-    assert!(back.work_offer.kinds.is_empty());
-}
-
-/// The zero value donates nothing, stated three ways because any ONE of
-/// them is enough and a reader should not have to guess which.
-#[test]
-fn a_node_that_says_nothing_offers_nothing() {
-    let section = WorkOfferSection::default();
-    assert_eq!(section.accept, WorkAcceptFrom::Nobody);
-    assert_eq!(section.max_concurrent, 0);
-    assert_eq!(
-        section
-            .to_offer("linux", "x86_64", oicp_types::Isolation::Subprocess)
-            .expect("an empty section is not an error"),
-        None,
-        "no kinds means no offer at all — not an offer of nothing"
-    );
-}
-
-/// The tri-state survives the flat spelling. `Nobody` is `Some(∅)` and
-/// `Anyone` is `None`; collapsing either into the other is the defect the
-/// enum exists to prevent, and `accepts_from` reads them oppositely.
-#[test]
-fn the_accept_policy_carries_the_wire_tri_state() {
-    let key = "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29";
-    let mut section = WorkOfferSection {
-        kinds: vec!["process:v1".to_string()],
-        max_concurrent: 1,
-        accept_from: vec![key.to_string()],
-        ..Default::default()
-    };
-
-    let offer = |s: &WorkOfferSection| {
-        s.to_offer("linux", "x86_64", oicp_types::Isolation::Subprocess)
-            .expect("valid kind")
-            .expect("kinds are set")
-    };
-
-    section.accept = WorkAcceptFrom::Nobody;
-    let o = offer(&section);
-    assert_eq!(o.accept_from, Some(Vec::new()));
-    assert!(!o.accepts_from(key), "`nobody` accepts nobody");
-
-    section.accept = WorkAcceptFrom::Listed;
-    assert!(offer(&section).accepts_from(key));
-    assert!(!offer(&section).accepts_from("someone-else"));
-
-    section.accept = WorkAcceptFrom::Anyone;
-    assert_eq!(offer(&section).accept_from, None);
-    assert!(offer(&section).accepts_from("someone-else"));
-}
-
-/// The failing input: `process@1`, the spelling four parse-and-discard
-/// helpers in this tree accept. A donor booting on it would offer a kind
-/// no submitter can name.
-#[test]
-fn a_kind_that_is_not_id_vn_is_refused_naming_it() {
-    let section = WorkOfferSection {
-        kinds: vec!["process@1".to_string()],
-        ..Default::default()
-    };
-    let err = section
-        .to_offer("linux", "x86_64", oicp_types::Isolation::Subprocess)
-        .expect_err("`process@1` is not a job kind");
-    assert!(
-        err.to_string().contains("process@1"),
-        "the refusal must name the entry, got: {err}"
-    );
+    assert_eq!(back.work_offer, loaded.work_offer, "verbatim:\n{saved}");
+    let table = back.work_offer.expect("carried");
+    assert_eq!(table["max_concurrent"].as_integer(), Some(2));
+    assert_eq!(table["repos"].as_array().map(Vec::len), Some(1));
 }
 
 /// THE NO-REGRESSION BAR for per-slot windows (2026-08-25).
@@ -215,6 +142,7 @@ fn models(primary: &str, fast: Option<&str>, embed: &str) -> ModelsSection {
         max_extras_memory_gb: None,
         primary_pool: None,
         edit: None,
+        kinds: Default::default(),
     }
 }
 
@@ -610,6 +538,7 @@ fn roundtrip_minimal_config() {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: Some(ModelsSection {
             primary: PathBuf::from("/models/primary.gguf"),
             fast: Some(PathBuf::from("/models/fast.gguf")),
@@ -621,6 +550,7 @@ fn roundtrip_minimal_config() {
             max_extras_memory_gb: None,
             primary_pool: None,
             edit: None,
+            kinds: Default::default(),
         }),
         node: NodeSection::default(),
         daemon: DaemonSection::default(),
@@ -656,6 +586,7 @@ fn roundtrip_preserves_mcp_servers() {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: Some(ModelsSection {
             primary: PathBuf::from("/m/p.gguf"),
             fast: None,
@@ -667,6 +598,7 @@ fn roundtrip_preserves_mcp_servers() {
             max_extras_memory_gb: None,
             primary_pool: None,
             edit: None,
+            kinds: Default::default(),
         }),
         node: NodeSection::default(),
         daemon: DaemonSection::default(),

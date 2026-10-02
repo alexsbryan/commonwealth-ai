@@ -99,7 +99,7 @@ pub use seal::{seal, unit_hash, verify, WorkSealError};
 /// It is deliberately NOT added to `DAEMON_OWN_NAMESPACES`: that would flip
 /// the ring's roster to Derived and orphan the operator-written `roster.json`,
 /// and `refuse_derived_roster` hardcodes `measurements`, so nothing would warn.
-pub const WORK_NAMESPACE: &str = "work";
+pub use oicp_types::work::WORK_NAMESPACE;
 
 /// The tracing target every refusal, lost lease, expiry and unreadable row in
 /// this crate is emitted under (ARCH §9.1).

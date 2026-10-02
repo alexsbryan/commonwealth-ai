@@ -194,7 +194,7 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
             print!("  Did it pass? [y/N] ");
             use std::io::Write;
             let _ = std::io::stdout().flush();
-            let answer = sovereign_cli_shared::prompts::prompt_string("")
+            let answer = sovereign_cli_base::prompts::prompt_string("")
                 .unwrap_or_default()
                 .to_lowercase();
             let passed = matches!(answer.chars().next(), Some('y'));
@@ -222,8 +222,9 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
 
     // Durable decision note. Captures enough for `audit` to build
     // a rollup without re-parsing the phase artifact.
-    let sovereign_dir = repo_root.join(".sovereign");
-    if let Ok(note_store) = corpus_engine_notes::NoteStore::open(&sovereign_dir.join("notes.db")) {
+    if let Ok(note_store) =
+        corpus_engine_notes::NoteStore::open(&crate::notes_db::find_notes_db(None))
+    {
         let verdict = if outcome.passed { "PASSED" } else { "FAILED" };
         let body = format!(
             "Phase {} · {}\n\nVerdict: {}\nVerification: {}\nDate: {}\nCommitter: {}\n\nStop condition:\n{}\n",

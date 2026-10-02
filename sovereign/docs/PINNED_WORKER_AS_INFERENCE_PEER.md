@@ -28,7 +28,7 @@ backend, scored and selected by the same load balancer.
 
 **Why now.** With the ephemeral-worker pod stack landed
 (`worker_pod`, `worker_http`, `worker_daemon`, `worker_subprocess_runner`,
-`worker_controller`, `multi_pod_coordinator`, `pipeline pod up/pool`),
+`worker_controller`, `multi_pod_coordinator`, `mesh pod up/pool`),
 the pod's child daemon already exposes `/v1/chat/completions` on its
 `:9741` and proxies for it via the worker daemon's `:9742` TLS-pinned
 channel. The remaining gap is owner-side: nothing in
@@ -351,7 +351,7 @@ Revisit in Phase 2 if commodity-flow accounting needs it.
   Qwen3.5-2B GGUF or smaller for fast cold-load.
 
 ### Real Vast
-- `pipeline pod up` to provision a pod, then
+- `mesh pod up` to provision a pod, then
   `pipeline run sep-core-v1 --concurrency 3 --extra-worker pod://<id>`.
 - Smoke 5 SEP slugs and confirm the load balancer routes some
   to the pod, some to mac-peer, some local.

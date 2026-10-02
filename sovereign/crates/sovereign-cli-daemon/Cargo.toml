@@ -11,6 +11,10 @@ description = "Long-running daemon + setup + service install binary."
 #   sovereign install-service                — launchd / systemd register
 #   sovereign doctor                         — health check + integrity probe
 #
+# Since the de-embed (docs/internal/FIVE_PROGRAMS.md §11 step 10) `daemon run`
+# itself execs the `sovereign-daemon` sibling binary (src/daemon_bin.rs);
+# this crate keeps the verb surface, the wizard, and the pidfile plumbing.
+#
 # Lives apart from sovereign-cli-dev (workspace tooling) and
 # sovereign-cli-llm (model interaction) because the daemon binary
 # has a very different cadence: it's the long-running host process,
@@ -25,78 +29,42 @@ path = "src/main.rs"
 
 [dependencies]
 sovereign-core = { workspace = true }
-sovereign-inference = { workspace = true }
-# Compute-child process boundary (P1): the `--compute-child` re-exec arm in
-# run_with_args + the daemon-side ComputeChildManager/provider facade.
-sovereign-compute = { workspace = true }
 # OS service registration (launchd / systemd / Task Scheduler). Extracted from
 # this crate so a surface can register the daemon WITHOUT linking it — the
 # `sv-no-daemon-management` bar. The daemon is its first consumer, not its
 # owner (ARCH §10.6).
 sovereign-service = { workspace = true }
-sovereign-store = { workspace = true }
-sovereign-tools = { workspace = true, features = ["treesitter"] }
-sovereign-gliner = { workspace = true }
-sovereign-mesh = { workspace = true, features = ["treesitter"] }
-# The mesh host cluster (domains dm-daemon-mesh-edge): the assembly root, the
-# route shells and the edge. `treesitter` because `bootstrap.rs` mounts
-# `project_router`, which reads `sovereign_mesh::reindexer`.
+mesh-join-vocab = { workspace = true }
+# The daemon crate, post-de-embed (docs/internal/FIVE_PROGRAMS.md §11 step 10): no
+# longer the in-process run body (that forked to its own `[[bin]]`, which
+# `daemon_bin.rs` execs). The residue this crate still links: the pidfile
+# path + rpc-worker flag parser (`startup`, `bootstrap`), and doctor's
+# containment guard (`build::containment`). The wizard's join spawns the
+# sibling's `join` launch (setup_cmd/terminal/join_child.rs, fp-cond2-c).
 sovereign-daemon = { workspace = true, features = ["treesitter"] }
 # The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
 # reached directly rather than through sovereign-mesh's shim.
-sovereign-pods = { path = "../sovereign-pods" }
 # The scheduler half lifted out of sovereign-mesh (domains REVIEW-build-sched-move);
 # the daemon's slot-alias resolution reaches it directly rather than through
 # sovereign-mesh's shim (domains REVIEW-build-sched-repoint-daemon).
-sovereign-scheduler = { path = "../sovereign-scheduler" }
 # The serving host lifted out of sovereign-mesh (domains
-# REVIEW-build-serving-move-*); the daemon reaches the router and the ports
-# directly rather than through sovereign-mesh's shim (domains
-# REVIEW-build-serving-repoint-daemon).
-sovereign-serving-host = { path = "../sovereign-serving-host" }
-# THE `Runtime` recipe (TOPOLOGY.md §10 phase 5c) — the router classifier
-# stack, the turn tool registry and the enrichment lane. This is what lets
-# `sovereign daemon run` be the process that assembles a Runtime rather
-# than the process that has every ingredient for one. Capabilities — down.
-sovereign-runtime-recipe = { workspace = true }
-sovereign-workflow = { workspace = true }
-sovereign-workflow-host = { workspace = true }
-sovereign-work-atlas = { workspace = true }
-sovereign-cli-shared = { workspace = true, features = ["scip"] }
-# The atlas build orchestrator. The daemon runs `enrich build` in-process for
-# an `[enrichment] type = "atlas"` recipe, because a shipped desktop bundle
-# carries no `sovereign-cli` to shell out to (every such build exited 127).
-#
-# This was `sovereign-cli-llm` until 2026-09-01 — host to host, layer-legal but
-# dragging `bench_cmd`'s grandfathered `sovereign-eval` edge into this binary
-# and into the desktop bundle that embeds it. That was a NAMED substitution
-# (ARCH §18.3) with a §10.1e ledger row, and the operator funded the split
-# rather than keeping it. Now a capability, one layer down, and the interface
-# is two names: `build_with_progress_with_embedder` and `ParsedBuild`.
-sovereign-enrichment-build = { workspace = true }
-# `commonwealth-state`, `commonwealth-core` and `commonwealth-api` (now
-# `sovereign-api`) WERE HERE,
-# and cw-lift rung 3b deleted all three. The whole coupling was eleven lines in
-# two files: `NodeId` reached through `commonwealth_core::ids`'s re-export of
-# the kernel type (ARCH §8.3), one call to the pure `partition::should_host`,
-# and the two real types — `MeshStore` and `ConvergenceRecord`.
-#
-# What replaced them: `kernel-types` for `NodeId` directly;
-# `EmbeddedDaemon::host_role` for the host decision, asked of the handle that
-# owns both its inputs; and `sovereign-contracts::peer`'s two narrow ports for
-# the store and the convergence stamps, with `sovereign-mesh::peer_adapter`
-# supplying the mesh implementations. The mesh-of-one is untouched at RUNTIME —
-# the solo adapters are the honest N=1 answers, not skips — and what changed is
-# that a daemon with no mesh configured no longer LINKS the mesh substrate to
-# say so.
-#
-# `NodeId` straight from the neutral kernel, not through a re-export.
-kernel-types = { workspace = true }
-sovereign-tdd = { workspace = true }
-corpus-engine = { workspace = true, features = ["treesitter"] }
-corpus-engine-notes = { workspace = true }
+# REVIEW-build-serving-move-*); the daemon reached the router and the ports
+# directly rather than through sovereign-mesh's shim
+# (domains REVIEW-build-serving-repoint-daemon). Its tests moved with the
+# inference e2e to `sovereign-daemon`, so this crate no longer links it.
+sovereign-cli-shared = { workspace = true }
+# Dep-history note (kept from the atlas/enrich era): `commonwealth-state`,
+# `commonwealth-core` and `commonwealth-api` (now `sovereign-api`) WERE HERE
+# and cw-lift rung 3b deleted all three — the coupling was eleven lines in
+# two files, replaced by `kernel-types` for `NodeId` and
+# `sovereign-contracts::peer`'s narrow ports. The atlas builder itself
+# (`in_process_atlas_builder`) forked to `sovereign-daemon` with the run
+# body at the de-embed (docs/internal/FIVE_PROGRAMS.md §11 step 10). The
+# `corpus-engine` dep that fed doctor's SovereignConfig reads was dropped
+# 2026-09-21 when that config moved to `sovereign-contracts::config`;
+# corpus-index/scip below stay.
+corpus-index = { workspace = true }
 corpus-engine-scip = { workspace = true }
-corpus-engine-watchers = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }
@@ -104,58 +72,29 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
-tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
-uuid = { workspace = true }
-arc-swap = { workspace = true }
 dirs = "5"
-chrono = { workspace = true }
-sha2 = { workspace = true }
 hostname = { workspace = true }
-which = "7"
 tempfile = "3"
-# Path SSOT (`rebrand`) + the compute-child wire types. Promoted from
-# dev-dependencies 2026-08-10: the daemon's own path resolution now goes
-# through `rebrand`, so this is a real dependency, not a test-only one.
 sovereign-contracts = { workspace = true }
+# The client half of the wire: the wizard reads its join child's
+# `GET /v1/mesh/venues` through `TurnClient::mesh_venues`.
+sovereign-turn-client = { workspace = true }
+# doctor reads cw-rails' boot unit through the per-user unit writer's
+# `is-enabled` probe (pb-mesh-exit-transport). std only behind `service`.
+host-kit = { workspace = true, features = ["service", "panic_hook", "memory", "sibling"] }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
-
-[dev-dependencies]
-tower = { workspace = true, features = ["util"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [features]
-# OFF by default so the product daemon carries zero ATOS. When on, the daemon
-# registers the ATOS code-intel tools (project_context, design_signals) on its
-# MCP surface. The experimental ATOS subsystem is otherwise reached via the
-# `sovereign-cli-dev` workbench (`sovereign atos …`).
-#
-# Forwards to `sovereign-daemon` since the composition half moved there at
-# domains `dm-daemon-cli-composition` (2026-09-17) — the `#[cfg(feature =
-# "atos")]` gate is on the library's `tool_registry` now.
-atos = ["sovereign-daemon/atos"]
-
-# Bench/measurement-only: see sovereign-mesh's feature of the same name.
-iroh-relay-only = ["sovereign-mesh/iroh-relay-only"]
-
-# Windows GPU backend selectors, forwarded to sovereign-inference. No-op on
-# macOS/Linux, which hardcode their backend per-OS; see
-# sovereign-inference/Cargo.toml for the matrix.
-#
-# They MOVED here from `sovereign-desktop` at sv-surface svt-7 (2026-09-12).
-# The app forwarded them to a `sovereign-inference` it no longer has — and it
-# had been selecting a GPU backend for a process that loads no models. The
-# selection belongs to the build of the thing that does, which is this
-# binary: the Tauri SIDECAR. `scripts/stage-daemon-sidecar.sh` passes
-# `SOVEREIGN_SIDECAR_FEATURES` through to the build below, so the release
-# matrix's Windows GPU leg sets that env instead of
-# `cargo tauri build --features windows-vulkan`.
-windows-vulkan = ["sovereign-inference/windows-vulkan"]
-windows-cuda = ["sovereign-inference/windows-cuda"]
+# No Windows GPU selectors: this binary loads no model. They moved to the
+# loader, sovereign-stock (forwarded through sovereign-serve), which
+# `scripts/stage-daemon-sidecar.sh` builds with `SOVEREIGN_SIDECAR_FEATURES`
+# beside this sidecar (pb-distribution-setup).
 
 # Headless OCR. OFF by default: it pulls `ort` + `ndarray` + `imageproc` +
 # `i_overlay` into every daemon build, and the engine additionally needs

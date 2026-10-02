@@ -27,7 +27,7 @@
 use std::collections::BTreeMap;
 
 use serde_json::Value;
-use sovereign_core::types::{Effect, Scope, ToolContext, ToolDescriptor};
+use sovereign_contracts::types::{Effect, Scope, ToolContext, ToolDescriptor};
 
 mod args;
 mod format;
@@ -49,7 +49,13 @@ pub async fn run_tools(raw_args: &[String]) -> i32 {
 
     let rest = &raw_args[1..];
     match first.as_str() {
-        "list" => cmd_list(rest).await,
+        "list" => {
+            if sovereign_cli_base::help::wants_help(rest) {
+                print_help();
+                return 0;
+            }
+            cmd_list(rest).await
+        }
         "describe" => cmd_describe(rest).await,
         "call" => cmd_call(rest).await,
         other => {
@@ -302,11 +308,12 @@ async fn cmd_call(args: &[String]) -> i32 {
 
     // Coordination tools are only CORRECT against the daemon's
     // work-atlas store — the one peers, gossip, and CodeWatcher
-    // observations share. The in-process registry below writes a
-    // repo-local mesh.db nobody else reads (a claim declared there is
-    // invisible to every other process — root-caused 2026-07-31), so
-    // these four go daemon-first and fall back local only when no
-    // daemon answers, loudly.
+    // observations share. The in-process registry below holds the
+    // cw-rails-DIALED store (pb-atlas-kv — no repo-local mesh.db exists
+    // to write; a local island would be invisible to every other
+    // process, root-caused 2026-07-31), so these four go daemon-first
+    // and every operation a cw-rails-down session attempts reports the
+    // absence by name.
     const DAEMON_AUTHORITATIVE: &[&str] = &[
         "declare_scope",
         "release_scope",
@@ -314,7 +321,7 @@ async fn cmd_call(args: &[String]) -> i32 {
         "resource_may_i",
     ];
     if DAEMON_AUTHORITATIVE.contains(&id.as_str()) {
-        use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
+        use sovereign_cli_base::mcp_client::{daemon_tool_call, DaemonCallError};
         match daemon_tool_call(&id, params_value.clone()).await {
             Ok(payload) => {
                 match serde_json::to_string_pretty(&payload) {
@@ -347,9 +354,9 @@ async fn cmd_call(args: &[String]) -> i32 {
             }
             Err(DaemonCallError::Unreachable(e)) => {
                 eprintln!(
-                    "warning: daemon unreachable ({e}) — {id} falling back to the repo-local \
-                     store. Records written here are NOT visible to the daemon, MCP peers, or \
-                     the mesh; re-declare once the daemon is back if coordination matters."
+                    "warning: daemon unreachable ({e}) — {id} dialing the mesh's serving \
+                     process (cw-rails) directly. With cw-rails down too, the call reports \
+                     that absence by name."
                 );
             }
         }

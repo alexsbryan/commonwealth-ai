@@ -78,7 +78,13 @@ export const GOV_FIXTURE_INFO = path.join(RESULTS, "real-gov-fixture.json");
 // declared claim type with a `subject` (`attribution`), and a `ref` attribute
 // that resolves next to one that is just what the source said.
 const NUM_CORPUS_DIR = path.join(__dirname, "fixtures/numismatics-corpus");
-const NUM_ATLAS_FIXTURE = path.join(__dirname, "fixtures/numismatics-atlas");
+// Owned by the crate whose reader pins its census (sovereign-tools
+// src/atlas_view/reader.rs); boundary-gate rule 3c forbids the Rust side
+// climbing out of its crate root to reach here for it.
+const NUM_ATLAS_FIXTURE = path.join(
+  __dirname,
+  "../../../../sovereign-tools/tests/fixtures/numismatics-atlas",
+);
 const NUM_DISPLAY_NAME = "Marlow Field (E2E)";
 /** Specs read this to learn the numismatics corpus id. */
 export const NUM_FIXTURE_INFO = path.join(RESULTS, "real-num-fixture.json");

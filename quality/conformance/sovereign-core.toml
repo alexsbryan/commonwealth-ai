@@ -14,22 +14,8 @@
 requirement = "EN-20"
 test = "sovereign-core::runtime::retrieval_pipeline::tests::a_superseded_rules_chunks_leave_the_pool_and_the_note_says_how_many"
 file = "sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs"
-line = 2650
+line = 2338
 asserts = 8
-
-[[claim]]
-requirement = "FE-90"
-test = "sovereign-core::mesh_measurements::tests::a_witness_accounts_for_the_digest_it_was_built_from"
-file = "sovereign/crates/sovereign-core/src/mesh_measurements.rs"
-line = 2322
-asserts = 2
-
-[[claim]]
-requirement = "FE-92"
-test = "sovereign-core::mesh_measurements::tests::no_co_residents_is_reported_as_a_finding_not_as_silence"
-file = "sovereign/crates/sovereign-core/src/mesh_measurements.rs"
-line = 2984
-asserts = 2
 
 [[claim]]
 requirement = "GR-17"
@@ -56,7 +42,7 @@ asserts = 5
 requirement = "GR-2"
 test = "sovereign-core::runtime::grounding::tests::rewrite_note_includes_corrective_passages"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 2384
+line = 2410
 asserts = 3
 
 [[claim]]
@@ -126,8 +112,8 @@ asserts = 3
 requirement = "GR-50"
 test = "sovereign-core::runtime::grounding::call_census::tests::no_gate_module_calls_inference_complete_behind_the_censuss_back"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/call_census.rs"
-line = 459
-asserts = 1
+line = 463
+asserts = 2
 
 [[claim]]
 requirement = "GR-51"
@@ -140,7 +126,7 @@ asserts = 2
 requirement = "GR-6"
 test = "sovereign-core::runtime::grounding::tests::tombstoned_repair_releases_the_audited_draft_with_its_claims_marked"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 1324
+line = 1346
 asserts = 8
 
 [[claim]]
@@ -154,7 +140,7 @@ asserts = 2
 requirement = "RT-32"
 test = "sovereign-core::planner::schema::tests::a_tool_whose_params_cannot_be_masked_is_refused_not_widened"
 file = "sovereign/crates/sovereign-core/src/planner/schema.rs"
-line = 552
+line = 222
 asserts = 4
 
 [[claim]]

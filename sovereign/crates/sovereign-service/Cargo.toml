@@ -17,6 +17,9 @@ license.workspace = true
 # owner (ARCH §10.6).
 sovereign-contracts = { workspace = true }
 dirs = "5"
+# The per-user systemd unit writer (pb-mesh-exit-transport): the mechanism,
+# shared with `svrn mesh up`'s cw-rails unit. std only behind `service`.
+host-kit = { workspace = true, features = ["service"] }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [target.'cfg(unix)'.dependencies]

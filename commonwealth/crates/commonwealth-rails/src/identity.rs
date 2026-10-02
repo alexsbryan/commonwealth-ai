@@ -39,6 +39,10 @@ use commonwealth_core::mesh::{Mesh, MeshWire, SecretDisclosure};
 
 pub const NODE_ID_FILE: &str = "node_id";
 pub const MESH_FILE: &str = "mesh.json";
+/// The raw invite key, written by `cw-rails found` only. The mesh keeps just
+/// its hash, so this file is what lets the founder print an invite again. The
+/// name is the inference daemon's (`sovereign-mesh` persist.rs `JOIN_KEY_FILE`).
+pub const JOIN_KEY_FILE: &str = "join_key.secret";
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreRefusal {
@@ -132,6 +136,46 @@ pub fn save_mesh(data_dir: &Path, mesh: &Mesh) -> Result<(), StoreRefusal> {
     let text = serde_json::to_vec_pretty(&MeshWire::for_peer(mesh, SecretDisclosure::Disclose))
         .map_err(|e| StoreRefusal::BadMesh(target.clone(), e))?;
     write_atomic(&target, &text)
+}
+
+pub fn join_key_file(data_dir: &Path) -> PathBuf {
+    data_dir.join(JOIN_KEY_FILE)
+}
+
+/// The raw invite key this node founded its mesh with, or `None` when it
+/// joined one instead.
+pub fn load_join_key(data_dir: &Path) -> Result<Option<String>, StoreRefusal> {
+    let path = join_key_file(data_dir);
+    match std::fs::read_to_string(&path) {
+        Ok(t) => Ok(Some(t.trim().to_string())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(StoreRefusal::Io(path, e)),
+    }
+}
+
+pub fn save_join_key(data_dir: &Path, join_key: &str) -> Result<(), StoreRefusal> {
+    ensure_dir(data_dir)?;
+    write_atomic(&join_key_file(data_dir), join_key.as_bytes())
+}
+
+/// Remove the invite key, if there is one: a mesh this node did not found or
+/// rotate holds none, and a stale one would print an invite that opens nothing.
+pub fn clear_join_key(data_dir: &Path) -> Result<(), StoreRefusal> {
+    remove_if_present(&join_key_file(data_dir))
+}
+
+/// Remove `mesh.json` and the invite key: the next start is solo.
+pub fn clear_mesh(data_dir: &Path) -> Result<(), StoreRefusal> {
+    clear_join_key(data_dir)?;
+    remove_if_present(&mesh_file(data_dir))
+}
+
+fn remove_if_present(path: &Path) -> Result<(), StoreRefusal> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(StoreRefusal::Io(path.to_path_buf(), e)),
+    }
 }
 
 fn ensure_dir(data_dir: &Path) -> Result<(), StoreRefusal> {

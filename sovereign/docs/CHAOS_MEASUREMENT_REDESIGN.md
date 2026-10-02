@@ -185,9 +185,9 @@ front so the first run gives full gate-vs-model attribution.
 1. `sovereign-core/src/runtime/grounding/mod.rs` — record draft in gate meta
    (debug-gated). *(runtime; the only one)*
 2. `sovereign-eval/src/flywheel/det_checks.rs` — `gold_match` OR-groups + tests.
-3. `sovereign-cli-llm/src/bench_cmd/live_runner.rs` — recover `gate_action` +
+3. `sovereign-cli-bench/src/bench_cmd/live_runner.rs` — recover `gate_action` +
    `draft` onto `LiveAnswer`.
-4. `sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs` (`score_question`) — use
+4. `sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs` (`score_question`) — use
    `gate_action` for `AgentAction`; compute `retrieval_present` + `draft_correct`;
    scope value-presence off long-form; forms-first correctness w/ logged judge
    escalation.

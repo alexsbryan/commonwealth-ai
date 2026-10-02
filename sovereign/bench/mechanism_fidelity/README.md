@@ -15,7 +15,7 @@ Reference mechanism: **relocation under a wealth tax**.
 | Piece | Location |
 |---|---|
 | Case schema, structural prior, perturbation engine, scorer, pools | `sovereign-eval/src/mechanism_fidelity/` (pure Rust, fast tests) |
-| Elicitation adapter + orchestration | `sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs` |
+| Elicitation adapter + orchestration | `sovereign-cli-bench/src/bench_cmd/mechanism_fidelity.rs` |
 | Pre-registration (frozen thresholds) | `manifest.toml` (this dir) |
 | Tiered, power-annotated verdict | `verdict.py` (this dir; the only throwaway component) |
 | Run outputs | `results/*.jsonl` |

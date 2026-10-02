@@ -89,7 +89,7 @@ Every criterion has at least one calibration item except
 
 | Concern | File |
 |---|---|
-| CLI, flags, calibration mode | `crates/sovereign-cli-llm/src/bench_cmd/situated/mod.rs` |
+| CLI, flags, calibration mode | `crates/sovereign-cli-bench/src/bench_cmd/situated/mod.rs` |
 | Vocabulary load + type binding + ids | `…/situated/criteria.rs` |
 | Chaos transcript input | `…/situated/transcripts.rs` |
 | Judging loop | `…/situated/runner.rs` |

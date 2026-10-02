@@ -20,9 +20,9 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::ids::NodeId;
-use commonwealth_core::knowledge::IngestionHandoff;
-use commonwealth_core::mesh::NodeStatus;
+use crate::types::MemberStatus;
+use kernel_types::NodeId;
+use oicp_types::work_queue::IngestionHandoff;
 use sovereign_grants::knowledge_assignment::{
     build_work_units_hf, build_work_units_jsonl_sharded, build_work_units_jsonl_single,
     plan_collaborative_ingestion, plan_collaborative_ingestion_jsonl,
@@ -62,7 +62,7 @@ pub async fn corpus_collaborate(
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         )
     })?;
@@ -79,7 +79,7 @@ pub async fn corpus_collaborate(
     // stamped index — the post-create `grantable` stamp may not be written
     // yet during a fresh collaborative ingest.
     let recipe_privacy = engine
-        .load_recipe(req.corpus_id.as_str())
+        .recipe_sharing(req.corpus_id.as_str())
         .await
         .map_err(|e| {
             (
@@ -89,13 +89,13 @@ pub async fn corpus_collaborate(
                 }),
             )
         })?;
-    if !recipe_privacy.corpus.mesh_sharing {
+    if !recipe_privacy.mesh_sharing {
         // Local-only corpus. Require a live grant that authorizes exactly
         // the requested peer set. `grantable = false` (structural
         // KnowledgeView) can never pass — even a stray grant is refused.
-        let now_ms = commonwealth_core::clock::unix_now_millis();
+        let now_ms = sovereign_time::unix_millis();
         let requested = req.allowed_peers.clone().unwrap_or_default();
-        let authorized = recipe_privacy.corpus.grantable
+        let authorized = recipe_privacy.grantable
             && state
                 .inner
                 .ingest
@@ -119,22 +119,35 @@ pub async fn corpus_collaborate(
     }
 
     // Build local node view.
-    let mesh = state.inner.fabric.mesh.read().await;
+    let members = state.membership().members().await;
     let self_id = state.inner.fabric.identity.current();
-    let local_member = mesh.members.get(&self_id).cloned().ok_or_else(|| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorBody {
-                error: "local node not found in mesh".into(),
-            }),
-        )
-    })?;
+    let local_member = members
+        .iter()
+        .find(|m| m.node_id == self_id)
+        .cloned()
+        .ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    error: "local node not found in mesh".into(),
+                }),
+            )
+        })?;
 
     let local_embed_model = state
-        .inner
-        .store
-        .inference_store
-        .get_local_embed_model()
+        .local_embed_model()
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "corpus_collaborate: embed model unread; cannot plan");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorBody {
+                    error: format!(
+                        "inference state absent — cannot read this node's embed model: {e}"
+                    ),
+                }),
+            )
+        })?
         .ok_or_else(|| {
             (
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -164,12 +177,11 @@ pub async fn corpus_collaborate(
     // sees no collaboration, they can look here and see "Machine B
     // has qwen3-embed-0.6b; we have qwen3-embed-4b — mismatch".
     let mut rejected: Vec<(NodeId, &'static str)> = Vec::new();
-    let candidates: Vec<_> = mesh
-        .members
-        .values()
+    let candidates: Vec<_> = members
+        .iter()
         .filter(|m| m.node_id != self_id)
         .filter_map(|m| {
-            if m.status != NodeStatus::Online {
+            if m.status != MemberStatus::Online {
                 rejected.push((m.node_id, "offline"));
                 return None;
             }
@@ -186,7 +198,7 @@ pub async fn corpus_collaborate(
             }
         })
         .collect();
-    drop(mesh);
+    drop(members);
 
     // Per-job peer allowlist (ephemeral grant-scoped ingest). When the
     // caller pins a specific set of helper peers, drop any embed-compatible
@@ -230,11 +242,7 @@ pub async fn corpus_collaborate(
     //      collaboration *coordinator* — return 422 with a clear explanation so
     //      the caller doesn't interpret "No source manifest" as a data-loss error
     //      or prompt the user to run `reconstruct-manifest` unnecessarily.
-    let has_hf_manifest = engine
-        .source_manifest(req.corpus_id.as_str())
-        .ok()
-        .flatten()
-        .is_some();
+    let has_hf_manifest = engine.has_source_manifest(req.corpus_id.as_str());
     let jsonl_article_count = if !has_hf_manifest {
         engine.count_jsonl_articles(req.corpus_id.as_str()).ok()
     } else {
@@ -273,8 +281,8 @@ pub async fn corpus_collaborate(
             if shard_count > 1 {
                 // Union LOCAL processed_shards (this peer's partition
                 // dirs on disk) with PEER processed_shards (every
-                // other peer's last-published view, gossiped via
-                // MeshStore by `auto_ingest::publish_local_processed_shards`).
+                // other peer's last-published view, gossiped via the
+                // mesh store by `auto_ingest::publish_local_processed_shards`).
                 // Without the peer-side union, dispatch queues units
                 // for shards that another peer has already finished —
                 // observed in the wild: 8 of 33 distinct shards
@@ -283,10 +291,25 @@ pub async fn corpus_collaborate(
                     .corpus_processed_shards(req.corpus_id.as_str())
                     .into_iter()
                     .collect();
-                let peer_processed = commonwealth_state::union_processed_shards(
-                    &state.inner.fabric.mesh_store,
-                    req.corpus_id.as_str(),
-                );
+                let peer_processed = state
+                    .inner
+                    .store
+                    .processed_shards
+                    .union(req.corpus_id.as_str())
+                    .await
+                    .map_err(|e| {
+                        tracing::warn!(
+                            corpus = %req.corpus_id,
+                            error = %e,
+                            "corpus_collaborate: processed-shards ledger absent"
+                        );
+                        (
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            Json(ErrorBody {
+                                error: format!("processed-shards ledger absent: {e}"),
+                            }),
+                        )
+                    })?;
                 processed.extend(peer_processed);
                 let remaining: Vec<usize> = (0..shard_count)
                     .filter(|i| !processed.contains(i))
@@ -342,7 +365,7 @@ pub async fn corpus_collaborate(
                         }),
                     )
                 })?;
-            build_work_units_hf(&remaining)
+            build_work_units_hf(&remaining.iter().map(|f| f.file_index).collect::<Vec<_>>())
         };
 
         if units.is_empty() {
@@ -364,7 +387,7 @@ pub async fn corpus_collaborate(
             //       the existing handoff blob (still in `mesh_store`
             //       via gossip) and re-fire the merge so the corpus
             //       actually finishes.
-            let canonical_exists = engine.corpus(req.corpus_id.as_str()).is_installed();
+            let canonical_exists = engine.corpus_is_installed(req.corpus_id.as_str());
 
             if !canonical_exists {
                 if let Some(existing) =
@@ -379,7 +402,7 @@ pub async fn corpus_collaborate(
                     spawn_queue_merge(state.clone(), existing.handoff_id);
                     return Ok(Json(existing));
                 }
-                // No live handoff blob to re-fire from. The MeshStore
+                // No live handoff blob to re-fire from. The mesh store
                 // is in-memory on the daemon (see `daemon::start_daemon`)
                 // so any stranded handoff was wiped on restart, and
                 // gossip can't help if no peer still holds it. Try
@@ -389,6 +412,7 @@ pub async fn corpus_collaborate(
                 // discovery details. Cheap when nothing to do
                 // (deterministic short-circuits before the cooldown).
                 let outcome = sovereign_grants::auto_recover::try_recover_stranded_partitions(
+                    &**engine,
                     engine.index_dir(),
                     req.corpus_id.as_str(),
                 )
@@ -545,6 +569,7 @@ pub async fn corpus_collaborate(
             recipe_id.to_string(),
             local_embed_model.clone(),
             self_id,
+            sovereign_time::unix_millis(),
         );
         // Carry the per-job allowlist into the gossiped handoff so peers
         // self-enforce enrollment. A local-only corpus reaching this point
@@ -552,7 +577,7 @@ pub async fn corpus_collaborate(
         // `ephemeral` — peers wipe their partition working dir on teardown
         // instead of retaining it. Ordinary shared corpora stay non-ephemeral.
         handoff.allowed_peers = req.allowed_peers.clone();
-        handoff.ephemeral = !recipe_privacy.corpus.mesh_sharing;
+        handoff.ephemeral = !recipe_privacy.mesh_sharing;
 
         state
             .inner
@@ -612,7 +637,7 @@ pub async fn corpus_collaborate(
                 ));
             }
         };
-        let _ = state.inner.fabric.mesh_store.set(
+        let _ = state.inner.store.mesh_store.set(
             "corpus-engine",
             &gossip_key,
             bytes::Bytes::from(handoff_bytes),
@@ -639,7 +664,7 @@ pub async fn corpus_collaborate(
             handoff = %handoff.handoff_id,
             units = unit_count,
             // Eligible, not notified: this handler no longer sends
-            // anything — the handoff row is a `MeshStore` write, so the
+            // anything — the handoff row is a mesh-store write, so the
             // outbox and the ring carry it like any other.
             peers_eligible = candidates.len(),
             "corpus_collaborate: pull-based queue registered"
@@ -784,10 +809,23 @@ pub async fn corpus_collaborate(
             ));
         }
 
+        // grants' planner reads the manifest as data: indices by status, the
+        // count left and its bytes (pb-grants-merge).
+        use corpus_index::ingest_port::daemon::SourceFileStatus;
+        let indices = |keep: fn(&SourceFileStatus) -> bool| -> Vec<usize> {
+            remaining
+                .iter()
+                .filter(|f| keep(&f.status))
+                .map(|f| f.file_index)
+                .collect()
+        };
         plan_collaborative_ingestion(
             req.corpus_id.as_str(),
             recipe_id,
-            &remaining,
+            &indices(|s| matches!(s, SourceFileStatus::InProgress { .. })),
+            &indices(|s| matches!(s, SourceFileStatus::Pending)),
+            remaining.len(),
+            remaining.iter().map(|f| f.size_bytes).sum(),
             &local_member,
             &candidates,
             &local_embed_model,
@@ -822,11 +860,7 @@ pub async fn corpus_collaborate(
     // hook), which stitches remote shards in and renames to canonical.
     {
         let transport = state.peer_transport();
-        // Minted BEFORE the membership read below: the accessor takes the
-        // same lock, and a second read while one is held can deadlock behind
-        // a queued writer.
-        let stamp = state.mesh_proof_stamp().await;
-        let mesh = state.inner.fabric.mesh.read().await;
+        let members = state.membership().members().await;
         if let Some(local_partition) = handoff.partitions.iter().find(|p| p.node_id == self_id) {
             tracing::info!(
                 corpus = %handoff.corpus_id,
@@ -839,7 +873,7 @@ pub async fn corpus_collaborate(
             if partition.node_id == self_id {
                 continue;
             }
-            let Some(peer) = mesh.members.get(&partition.node_id) else {
+            let Some(peer) = members.iter().find(|m| m.node_id == partition.node_id) else {
                 tracing::warn!(
                     node = %partition.node_id,
                     "collaborate: peer not found in mesh — skipping notification"
@@ -854,10 +888,7 @@ pub async fn corpus_collaborate(
             // up unable to dispatch to B even though both machines
             // had routable Tailscale addresses advertised).
             let endpoints = transport
-                .endpoints(
-                    &commonwealth_transport::peer_contact(peer),
-                    commonwealth_transport::TrafficClass::ControlPlane,
-                )
+                .endpoints(&peer.dial, mesh_reach::TrafficClass::ControlPlane)
                 .await;
             if endpoints.is_empty() {
                 tracing::warn!(
@@ -875,7 +906,6 @@ pub async fn corpus_collaborate(
                 embed_model: handoff.embed_model.clone(),
             };
             let node_id = partition.node_id;
-            let stamp = stamp.clone();
             tokio::spawn(async move {
                 let client = match reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(10))
@@ -894,12 +924,7 @@ pub async fn corpus_collaborate(
                 let mut accepted = false;
                 for ep in &endpoints {
                     let peer_url = format!("{}/internal/corpus/ingest_partition", ep.base_url);
-                    let mut request = client.post(&peer_url).json(&payload);
-                    // Proof of membership for a plain-IP hop, minted once
-                    // outside this loop — see `mesh_proof_outbound`.
-                    if let Some((name, value)) = stamp.as_ref().map(|s| s.pair()) {
-                        request = request.header(name, value);
-                    }
+                    let request = client.post(&peer_url).json(&payload);
                     match request.send().await {
                         Ok(resp) if resp.status().is_success() => {
                             tracing::info!(
@@ -997,27 +1022,35 @@ pub async fn corpus_eligible_peers(
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         )
     })?;
 
     let grantable = engine
-        .load_recipe(req.corpus_id.as_str())
+        .recipe_sharing(req.corpus_id.as_str())
         .await
-        .map(|r| r.corpus.grantable)
+        .map(|r| r.grantable)
         .unwrap_or(false);
 
-    let local_embed_model = state.inner.store.inference_store.get_local_embed_model();
+    let local_embed_model = state.local_embed_model().await.map_err(|e| {
+        tracing::warn!(error = %e, "corpus_eligible_peers: embed model unread");
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody {
+                error: format!("inference state absent — cannot read this node's embed model: {e}"),
+            }),
+        )
+    })?;
 
-    let mesh = state.inner.fabric.mesh.read().await;
+    let members = state.membership().members().await;
     let self_id = state.inner.fabric.identity.current();
     let mut peers: Vec<EligibleDonorDto> = Vec::new();
-    for m in mesh.members.values() {
+    for m in &members {
         if m.node_id == self_id {
             continue;
         }
-        let online = m.status == NodeStatus::Online;
+        let online = m.status == MemberStatus::Online;
         let (eligible, reason) = if !online {
             (false, "offline")
         } else {
@@ -1041,7 +1074,6 @@ pub async fn corpus_eligible_peers(
             reason: reason.to_string(),
         });
     }
-    drop(mesh);
     // Eligible + online first, then by name — the picker checks these by default.
     peers.sort_by(|a, b| b.eligible.cmp(&a.eligible).then(a.name.cmp(&b.name)));
 

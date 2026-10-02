@@ -2,8 +2,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use corpus_engine::recipe::CatalogConfig;
-use corpus_engine::types::CorpusKind;
+use corpus_index::recipe::CatalogConfig;
+use corpus_index::types::CorpusKind;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
@@ -15,7 +15,7 @@ use sovereign_core::tool_manifest::DeclaredTool;
 pub struct KnowledgeTool {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
-    corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
 }
 
 impl KnowledgeTool {
@@ -28,7 +28,10 @@ impl KnowledgeTool {
     }
 
     /// Set an optional corpus engine for searching local corpus indexes.
-    pub fn with_corpus_engine(mut self, engine: Arc<corpus_engine::CorpusEngine>) -> Self {
+    pub fn with_corpus_engine(
+        mut self,
+        engine: Arc<dyn corpus_index::source::CorpusReadPort>,
+    ) -> Self {
         self.corpus_engine = Some(engine);
         self
     }
@@ -96,17 +99,15 @@ impl KnowledgeTool {
                     kinds.insert(info.corpus_id.clone(), info.kind);
                 }
                 // Resolve each catalog corpus's `[catalog]` block
-                // through the engine's recipe registry. Best-effort —
+                // through the read port (the recipe registry). Best-effort —
                 // a missing CatalogConfig drops the hit back into the
                 // full-text stream rather than dropping it outright
                 // (see `partition_hits_by_kind`).
                 let mut catalog_configs: HashMap<String, CatalogConfig> = HashMap::new();
                 for info in &indexes {
                     if info.kind == CorpusKind::Catalog {
-                        if let Ok(recipe) = engine.registry().fetch_recipe(&info.corpus_id).await {
-                            if let Some(cat) = recipe.catalog {
-                                catalog_configs.insert(info.corpus_id.clone(), cat);
-                            }
+                        if let Ok(Some(cat)) = engine.catalog_config(&info.corpus_id).await {
+                            catalog_configs.insert(info.corpus_id.clone(), cat);
                         }
                     }
                 }

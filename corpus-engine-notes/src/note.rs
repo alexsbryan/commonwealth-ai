@@ -231,7 +231,7 @@ pub struct Note {
     /// published the note through the mesh sink. `None` = never
     /// published — the write stayed node-local (or the row predates
     /// the v12 columns). The same value is carried on the wire
-    /// inside [`crate::notes::NotePropagationEvent::sent_at`].
+    /// inside [`corpus_index::types::NotePropagationEvent::sent_at`].
     pub sent_at: Option<i64>,
     /// Receipt stamp, receiver side: unix seconds when THIS node's
     /// daemon first applied the note from the wire

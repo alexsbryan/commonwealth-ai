@@ -23,7 +23,7 @@ const PASSAGE_SEP: &str = "\n---\n";
 /// # This is a calibration surface, not a string
 ///
 /// τ = 0.9 is calibrated against the bench critic
-/// (`sovereign-cli-llm/src/bench_cmd/live_runner.rs`), and the transfer
+/// (`sovereign-cli-bench/src/bench_cmd/live_runner.rs`), and the transfer
 /// argument in this module's header — "prompts are byte-identical to the bench
 /// critic, so the bench-calibrated threshold transfers" — is only true while
 /// the two registers really are identical. It used to be true by *coincidence

@@ -1,62 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use serde::{Deserialize, Serialize};
-use std::fmt;
 
-// The id shape moved to `kernel-types` (layer 0) on 2026-08-20,
-// noun-convergence rung nc-1-kernel. Why: `NodeId` is the one id all three
+// The id shapes moved to `kernel-types` (layer 0) — `NodeId` and the
+// `define_id` macro on 2026-08-20 (noun-convergence rung nc-1-kernel),
+// `NodePubkey` with fp-40 (2026-09-22) when `PeerContact` became contract
+// vocabulary and named it. Why: `NodeId` is the one id all three
 // product domains must be able to name — `kernel_types::Origin::served_by`
 // cannot say "a peer served this evidence" without it — and this crate sits
 // three layers above the kernel with nine dependencies including
 // `ed25519-dalek`, so the kernel cannot reach up to here.
 //
 // Pulling ONE id out of a six-member macro family leaves either a duplicated
-// macro or an orphan. Moving the MACRO down and leaving the five
-// mesh-specific ids here does neither: there is still exactly one
-// implementation (ARCH §10.6), the five ids below are unchanged, and `NodeId`
-// is re-exported so all 755 existing reference sites are untouched.
+// macro or an orphan. Moving the MACRO down and leaving the mesh-specific ids
+// here does neither: there is still exactly one implementation (ARCH §10.6),
+// and the ids that moved since (`HandoffId`, then `MeshId`, `ModelId` and
+// `ProcessId` with pb-mesh-exit-core) are re-exported so every existing
+// reference site is untouched. Only `PlanId` is still minted here.
 use kernel_types::define_id;
-pub use kernel_types::NodeId;
+pub use kernel_types::{HandoffId, MeshId, ModelId, NodeId, NodePubkey, ProcessId};
 
-define_id!(MeshId, "mesh");
-define_id!(ModelId, "model");
-define_id!(ProcessId, "proc");
 define_id!(PlanId, "plan");
-define_id!(HandoffId, "handoff");
-
-/// A node's Ed25519 verifying key — the mesh-wide cryptographic
-/// identity of a node, distinct from the opaque random [`NodeId`].
-///
-/// Why both exist: `NodeId` predates this key and is the join/gossip
-/// primary key everywhere; changing it is a wire bump across every
-/// surface. The pubkey is the *transport-grade* identity — it is,
-/// byte for byte, a valid iroh node id, so a future dial-by-key
-/// transport authenticates peers end-to-end with this exact value.
-/// Until then it travels alongside the record so the trust ring is
-/// transport-ready.
-///
-/// Serializes as a 32-byte array (same convention as
-/// `Mesh::invite_key_hash`). Display is full lowercase hex — this is
-/// public key material, never secret.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct NodePubkey(pub [u8; 32]);
-
-impl NodePubkey {
-    pub fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
-}
-
-impl fmt::Display for NodePubkey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(self.0))
-    }
-}
-
-impl fmt::Debug for NodePubkey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NodePubkey({})", self)
-    }
-}
 
 #[cfg(test)]
 mod tests {

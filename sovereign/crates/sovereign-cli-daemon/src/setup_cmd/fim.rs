@@ -37,15 +37,13 @@
 //! applies at any tier and the trade is not worth making. The Mellum2
 //! rungs remain addressable via `--quant`.
 
+use std::collections::BTreeMap;
 use std::io::{self, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use sovereign_contracts::daemon_wire::{FimPlan, ProfileName};
 use sovereign_core::models_manifest::SlotConfig;
-use sovereign_inference::hardware::{self, detect_hardware, HardwareProfile, ProfileName};
-use sovereign_inference::setup_planner::{
-    fim_rung_for_profile, fim_slot_for_rung, hf_download_url, next_fim_rung, resolve_slot, SlotKind,
-};
 
 use crate::setup_config::{DaemonSection, EditSection, SetupConfig};
 use sovereign_core::types::NextEditFormat;
@@ -76,6 +74,10 @@ struct Plan {
     profile: ProfileName,
     /// Ladder rung name, e.g. `"q6_k"`.
     rung: String,
+    /// The next rung up and its model, as the loader's ladder names it.
+    next: Option<(String, SlotConfig)>,
+    /// The loader's download URL by slot file.
+    urls: BTreeMap<String, String>,
     /// Whether `rung` came from `--quant` rather than the hardware.
     rung_overridden: bool,
     slot: SlotConfig,
@@ -233,10 +235,21 @@ pub(super) async fn run_fim_setup(opts: &Opts) -> i32 {
 async fn build_plan(opts: &Opts) -> Result<Plan, String> {
     eprint!("  Detecting hardware... ");
     io::stderr().flush().ok();
-    let hw = tokio::task::spawn_blocking(detect_hardware)
-        .await
-        .map_err(|e| format!("hardware detection panicked: {e}"))?;
-    let profile = hardware::select_profile(&hw);
+    // The loader detects the hardware and walks the ladder; an unknown
+    // `--quant` comes back refused, naming the rungs, before anything is
+    // fetched (pb-distribution-setup).
+    let quant = opts.quant.clone();
+    let probed = tokio::task::spawn_blocking(move || {
+        let args: Vec<&str> = match quant.as_deref() {
+            Some(q) => vec!["--quant", q],
+            None => Vec::new(),
+        };
+        super::probe::ask::<FimPlan>("fim", &args)
+    })
+    .await
+    .map_err(|e| format!("hardware detection panicked: {e}"))??;
+    let hw = &probed.hardware;
+    let profile = probed.profile;
     println!(
         "{}, {:.0}GB {}memory",
         match &hw.gpu_name {
@@ -249,19 +262,14 @@ async fn build_plan(opts: &Opts) -> Result<Plan, String> {
     );
 
     let rung_overridden = opts.quant.is_some();
-    let rung = opts
-        .quant
-        .clone()
-        .unwrap_or_else(|| fim_rung_for_profile(&profile).to_string());
-    // `parse_args` already rejected an unknown `--quant`, so a miss
-    // here means the ladder and the manifest disagree — a build-time
-    // bug, not operator error. Say which, so the report is useful.
-    let slot = fim_slot_for_rung(&rung).ok_or_else(|| {
-        format!(
-            "FIM rung '{rung}' is not in the bundled manifest — \
-             models.toml and setup_planner::FIM_RUNGS are out of sync"
-        )
-    })?;
+    let FimPlan {
+        rung,
+        slot,
+        embed,
+        next,
+        urls,
+        ..
+    } = probed;
 
     // Existing config decides the data dir and port; `--data-dir`
     // overrides; otherwise the standard root.
@@ -290,7 +298,7 @@ async fn build_plan(opts: &Opts) -> Result<Plan, String> {
     let (embed_download, embed_path) = match existing_embed {
         Some(p) => (None, p),
         None => {
-            let embed_slot = resolve_slot(&profile, SlotKind::Embed).ok_or_else(|| {
+            let embed_slot = embed.ok_or_else(|| {
                 "bundled manifest has no embed slot for this hardware".to_string()
             })?;
             let path = models_dir.join(&embed_slot.file);
@@ -311,6 +319,8 @@ async fn build_plan(opts: &Opts) -> Result<Plan, String> {
     Ok(Plan {
         profile,
         rung,
+        next,
+        urls,
         rung_overridden,
         slot,
         models_dir,
@@ -445,8 +455,12 @@ async fn download_models(plan: &Plan) -> Result<(), i32> {
     println!("  Downloading...");
     println!();
     let label = format!("{} {}", plan.slot.base_name, plan.slot.quant);
+    let url = super::url_for(&plan.urls, &plan.slot).map_err(|e| {
+        eprintln!("  \u{2717} {label}: {e}");
+        1
+    })?;
     if let Err(e) = download_with_progress(
-        &hf_download_url(&plan.slot),
+        &url,
         &plan.model_path,
         &label,
         plan.slot.size_gb,
@@ -462,7 +476,11 @@ async fn download_models(plan: &Plan) -> Result<(), i32> {
     }
 
     if let Some((slot, path)) = &plan.embed_download {
-        match download_silent(&hf_download_url(slot), path, slot.size_gb).await {
+        let url = super::url_for(&plan.urls, slot).map_err(|e| {
+            eprintln!("  \u{2717} embedder {}: {e}", slot.file);
+            1
+        })?;
+        match download_silent(&url, path, slot.size_gb).await {
             Ok(()) => println!("    \u{2713} {} (embedder)", slot.file),
             Err(e) => {
                 eprintln!("  \u{2717} embedder {}: {e}", slot.file);
@@ -977,7 +995,7 @@ fn build_vsix(dir: &Path) -> Option<PathBuf> {
 /// into a second answer (ARCH §10.6) — if this ever needs more than a
 /// boolean, call into that check rather than growing a rival.
 async fn any_scip_graph_populated() -> bool {
-    let dir = crate::daemon_cmd::sovereign_root().join("indexes");
+    let dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
     let Ok(entries) = std::fs::read_dir(&dir) else {
         return false;
     };
@@ -1075,7 +1093,7 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome, scip_popula
         "    svrn setup --fim --quant <rung>     # sweep_1_5b | mxfp4_moe | q4_k_m | q6_k | q8_0"
     );
     println!("    (only [models.edit] moves \u{2014} your chat model is left alone)");
-    if let Some((next_rung, next_slot)) = next_fim_rung(&plan.rung) {
+    if let Some((next_rung, next_slot)) = &plan.next {
         println!();
         println!("  Worth trying next");
         println!(
@@ -1166,6 +1184,8 @@ mod tests {
         Plan {
             profile: ProfileName::High,
             rung: "q6_k".into(),
+            next: None,
+            urls: BTreeMap::new(),
             rung_overridden: false,
             slot: slot("m.gguf", 10.88),
             models_dir: model.parent().unwrap().to_path_buf(),

@@ -4,7 +4,7 @@
 //!
 //! The multiplier scales every claim affinity this node advertises to one
 //! peer (`routes_oicp.rs:383 apply_peer_preference`), so it is a policy the
-//! DAEMON owns: it lives in the daemon's `MeshStore`, the daemon's OICP
+//! DAEMON owns: it lives in the daemon's mesh store, the daemon's OICP
 //! manifest path is its only reader, and the daemon's `PeerPreference::new`
 //! is the only constructor that can produce a valid one.
 //!
@@ -31,8 +31,8 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use commonwealth_core::ids::NodeId;
-use commonwealth_state::PeerPreference;
+use kernel_types::NodeId;
+use oicp_types::peer_preference::PeerPreference;
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
@@ -98,19 +98,25 @@ fn parse_node_id_hex(s: &str) -> Result<NodeId, (StatusCode, String)> {
 
 /// `GET /internal/peer-preference/list` — every preference this node holds.
 ///
-/// Order is the `MeshStore` scan order the store itself yields
+/// Order is the mesh-store scan order the store itself yields
 /// (`commonwealth-state/src/peer_preferences.rs:164`), unchanged: the CLI's
 /// `peer-preference list` reads the same call, and re-ordering here would
 /// make one of the two surfaces disagree with the store.
 pub async fn peer_preference_list(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<VenuePreferenceDto>>, (StatusCode, String)> {
-    let entries = state.inner.store.peer_preferences.list().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("peer_preference_list: {e}"),
-        )
-    })?;
+    let entries = state
+        .inner
+        .store
+        .peer_preferences
+        .list()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("peer_preference_list: {e}"),
+            )
+        })?;
     tracing::debug!(
         target: "peer_pref",
         count = entries.len(),
@@ -141,13 +147,14 @@ pub async fn peer_preference_set(
     Json(req): Json<SetVenuePreferenceRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     let target = parse_node_id_hex(&req.node_id)?;
-    let pref = PeerPreference::new(req.multiplier, req.reason)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("{e}")))?;
+    let pref = PeerPreference::new(req.multiplier, req.reason, sovereign_time::unix_now_u64())
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     state
         .inner
         .store
         .peer_preferences
         .set(&target, pref)
+        .await
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -173,6 +180,7 @@ pub async fn peer_preference_clear(
         .store
         .peer_preferences
         .clear(&target)
+        .await
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,

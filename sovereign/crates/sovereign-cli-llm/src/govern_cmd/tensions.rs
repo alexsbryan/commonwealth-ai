@@ -77,8 +77,8 @@ pub fn cmd_tensions(args: &[String]) -> i32 {
         .iter()
         .map(|r| (r.id.as_str(), r))
         .collect::<std::collections::HashMap<_, _>>();
-    let titles = corpus_engine::enrichment::governance_view::section_titles(
-        crate::enrich_cmd::paths::index_root(&corpus_id),
+    let titles = corpus_engine_atlas_reader::governance_view::section_titles(
+        sovereign_contracts::index_layout::index_root(&corpus_id),
     );
     // (section title, verbatim source clause) for a rule id, from its citation.
     let cite = |rid: &str| -> (String, Option<String>) {

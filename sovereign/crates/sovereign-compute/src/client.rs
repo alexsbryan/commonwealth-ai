@@ -14,7 +14,9 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
+use sovereign_contracts::oicp::openai_types::{RerankRequest, RerankResponse};
 use sovereign_contracts::{CompletionRequest, CompletionResponse, Error, Result, StreamFrame};
+use sovereign_inference::served_kind;
 use tokio::sync::mpsc;
 
 use crate::wire::{
@@ -22,6 +24,12 @@ use crate::wire::{
     HealthInfo, WireError, ROUTE_COMPLETE, ROUTE_COMPLETE_STREAM, ROUTE_EMBED, ROUTE_EMBED_BATCH,
     ROUTE_HEALTH,
 };
+
+/// How long one rerank call may wait on its child before it fails and the
+/// search falls back to fusion order. A bound on a wedged child, not a latency
+/// budget. The client itself carries no timeout: a streamed completion may
+/// legitimately run for minutes.
+pub const RERANK_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// A typed HTTP client for one compute child at `http://127.0.0.1:{port}`.
 #[derive(Debug, Clone)]
@@ -196,6 +204,42 @@ impl ComputeChildClient {
         Ok(body.embeddings)
     }
 
+    /// Score `docs` against `query` on the child's rerank kind route, which
+    /// speaks the public `/v1/rerank` wire (`served_kind::RERANK`).
+    pub async fn rerank(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        let resp = self
+            .rerank_request(query, docs)?
+            .send()
+            .await
+            .map_err(|e| Error::Inference(format!("compute child rerank request failed: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(error_from_response(resp).await);
+        }
+        let body: RerankResponse = resp
+            .json()
+            .await
+            .map_err(|e| Error::Inference(format!("compute child rerank decode failed: {e}")))?;
+        body.scores_in_input_order(docs.len())
+            .map_err(|e| Error::Inference(format!("compute child rerank: {e}")))
+    }
+
+    /// The rerank POST, bounded by [`RERANK_TIMEOUT`]: every search on a
+    /// node with a rerank child waits on this call.
+    fn rerank_request(&self, query: &str, docs: &[String]) -> Result<reqwest::RequestBuilder> {
+        let path = served_kind::RERANK
+            .route_path()
+            .ok_or_else(|| Error::NotImplemented("rerank has no route".to_string()))?;
+        Ok(self
+            .client
+            .post(format!("{}{path}", self.base_url))
+            .timeout(RERANK_TIMEOUT)
+            .json(&RerankRequest {
+                model: String::new(),
+                query: query.to_string(),
+                documents: docs.to_vec(),
+            }))
+    }
+
     /// Probe readiness + identity. Both 200 (ready) and 503 (loading)
     /// carry a [`HealthInfo`] body; a short timeout keeps a wedged socket
     /// from stalling readiness polling.
@@ -233,5 +277,22 @@ async fn error_from_response(resp: reqwest::Response) -> Error {
     match resp.json::<WireError>().await {
         Ok(w) => w.into_error(),
         Err(_) => Error::Inference(format!("compute child returned HTTP {status}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A wedged rerank child cannot hold a search forever.
+    #[test]
+    fn the_rerank_request_is_bounded() {
+        let client = ComputeChildClient::from_port(1).expect("client");
+        let request = client
+            .rerank_request("q", &["d".to_string()])
+            .expect("rerank has a route")
+            .build()
+            .expect("request");
+        assert_eq!(request.timeout(), Some(&RERANK_TIMEOUT));
     }
 }

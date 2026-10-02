@@ -265,7 +265,7 @@ def do_build():
     # the soak runs needs it. Without the flag cargo resolves sovereign-cli with
     # default features and overwrites target/debug/sovereign-cli — which is what
     # ~/.local/bin/sovereign symlinks — with an end-user binary carrying no
-    # `notes`, `code`, `project`, `atos` or `tools` verbs. The soak would still
+    # `notes`, `code`, `project` or `tools` verbs. The soak would still
     # run; the operator's code intelligence would break, minutes later, on an
     # unrelated command, reading as a missing feature rather than "the soak
     # downgraded your install." Building a superset here costs nothing and the

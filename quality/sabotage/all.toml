@@ -76,7 +76,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-6-the_bound_is_a_wait_bound_not_a_ban_on_s"
 requirement = "CI-6"
-target = "serving-policy/src/fair_sched.rs"
+target = "serving-policy-core/src/fair_sched.rs"
 find = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        let slots = (slots.max(1)) as u64;\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms).saturating_sub(in_flight_elapsed_ms)\n    }"
 replace = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        let slots = (slots.max(1)) as u64;\n        // Mutation: Remove the subtraction of elapsed time to violate CI-6\n        // The requirement states a cooldown MUST be stamped at the end of the run,\n        // implying that `in_flight_elapsed_ms` should reduce the predicted wait.\n        // By ignoring it, we fail to account for work already done, causing false positives on shedding.\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms)\n    }"
 mustFail = ["the_bound_is_a_wait_bound_not_a_ban_on_slow_turns"]
@@ -406,7 +406,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-46-validate_rejects_step_missing_goal"
 requirement = "CI-46"
-target = "sovereign/crates/sovereign-daemon/src/solve_tools.rs"
+target = "sovereign/crates/sovereign-code/src/solve_tools.rs"
 find = "    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {\n        for key in [\"workdir\", \"goal\"] {\n            if params.get(key).and_then(|v| v.as_str()).is_none() {\n                return Err(Error::InvalidInput(format!(\n                    \"solve requires a '{key}' string parameter\"\n                )));\n            }\n        }\n        Ok(())\n    }"
 replace = "    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {\n        // Mutation: Remove 'goal' from required keys to violate CI-46 requirement\n        for key in [\"workdir\"] {\n            if params.get(key).and_then(|v| v.as_str()).is_none() {\n                return Err(Error::InvalidInput(format!(\n                    \"solve requires a '{key}' string parameter\"\n                )));\n            }\n        }\n        Ok(())\n    }"
 mustFail = ["validate_rejects_step_missing_goal"]
@@ -616,7 +616,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-11-calibration_bank_rejects_single_class_ba"
 requirement = "EV-11"
-target = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs"
+target = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
 find = "    let yes = bank\n        .items\n        .iter()\n        .filter(|i| i.expected == Ballot::Yes)\n        .count();\n    let no = bank.items.len() - yes;\n    if yes < 4 || no < 4 {\n        return Err(format!(\n            \"calibration bank needs at least 4 items of each class (has {yes} yes / {no} no)\"\n        ));\n    }"
 replace = ""
 mustFail = ["calibration_bank_rejects_single_class_banks"]
@@ -996,7 +996,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-29-fairness_defaults_on_and_the_kill_switch"
 requirement = "FE-29"
-target = "sovereign/crates/sovereign-serving-host/src/admission.rs"
+target = "sovereign/crates/sovereign-daemon/src/admission/layers.rs"
 find = "pub fn client_fairness_enabled_from_env() -> bool {\n    match std::env::var(\"SOVEREIGN_CLIENT_FAIRNESS\") {\n        Err(_) => true,\n        Ok(v) => !matches!(\n            v.trim().to_ascii_lowercase().as_str(),\n            \"0\" | \"false\" | \"off\" | \"no\"\n        ),\n    }\n}"
 replace = "pub fn client_fairness_enabled_from_env() -> bool {\n    match std::env::var(\"SOVEREIGN_CLIENT_FAIRNESS\") {\n        Err(_) => false,\n        Ok(v) => matches!(\n            v.trim().to_ascii_lowercase().as_str(),\n            \"1\" | \"true\" | \"on\"\n        ),\n    }\n}"
 mustFail = ["fairness_defaults_on_and_the_kill_switch_is_explicit"]
@@ -1146,7 +1146,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-48-personal_chunk_must_not_reach_a_remote_p"
 requirement = "FE-48"
-target = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/egress_reds.rs"
+target = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/egress_reds.rs"
 find = "let err = result\n        .expect(\"complete must not hang \u2014 the boundary refuses before any request\")\n        .expect_err(\"the boundary must refuse a personal-custody chunk to a remote provider\");\n    let msg = err.to_string();\n    assert!(\n        msg.contains(\"personal\")\n            || msg.contains(\"custody\")\n            || msg.contains(\"consent\")\n            || msg.contains(\"grant\"),\n        \"the refusal must be typed and name what was withheld (personal custody / consent grant): {msg}\"\n    );"
 replace = "// MUTATION: Remove the assertion that checks for specific error message content.\n// This allows the code to pass even if it fails with a generic or unrelated error,\n// effectively violating the requirement that the rejection reason must clearly indicate\n// why the request was refused based on privacy/custody grounds."
 mustFail = ["personal_chunk_must_not_reach_a_remote_payload"]
@@ -1166,7 +1166,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-54-stamping_the_route_is_additive"
 requirement = "FE-54"
-target = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs"
+target = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs"
 find = "    if let Some(ri) = rec.get(\"routed_intent\").filter(|v| !v.is_null()) {\n        m.insert(\"routed_intent\".into(), ri.clone());\n    }"
 replace = "    // MUTATION: Always insert a default route, violating the requirement that\n    // absence should be reported rather than a default.\n    m.insert(\"routed_intent\".into(), serde_json::json!(\"DefaultRoute\"));"
 mustFail = ["stamping_the_route_is_additive"]

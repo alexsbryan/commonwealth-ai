@@ -17,12 +17,11 @@ path = "src/bin/main.rs"
 sovereign-time = { workspace = true }
 # Path SSOT: per-user svrnmesh paths come from `rebrand` (never hand-rolled $HOME).
 sovereign-contracts = { workspace = true }
-corpus-engine.workspace = true
-# The atlas vocabulary + its read door (`read_atlas_atoms`) — a two-crate leaf
-# closure, so the flywheel's claim-miner reads atoms.json without naming the
-# engine that writes it (domains dm-vocab-bypass-rest).
+# The atlas vocabulary WITHOUT its `std::fs` read door: the claim-miner reads
+# atoms.json itself and decodes it with `read::parse_atoms` (five-programs
+# fp-58, [bench] leaf_budget). The root entry turns defaults off, so this
+# crate does not name `read` (pb-bench-lift).
 understanding-vocab = { workspace = true }
-sovereign-authoring-harness.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

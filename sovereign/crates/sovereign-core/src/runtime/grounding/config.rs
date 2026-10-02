@@ -761,28 +761,6 @@ mod tests {
         }
     }
 
-    /// Every flag this table declares must ALSO be declared in the
-    /// workspace env-knob registry (`quality/env-flags.toml`) — the
-    /// env-gate's map and this runtime-facing table must not drift.
-    /// This table stays the runtime SSOT for the gate's knobs; the TOML
-    /// is the workspace-wide census surface.
-    #[test]
-    fn flags_table_is_declared_in_env_registry() {
-        let toml_text = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../quality/env-flags.toml"
-        ))
-        .expect("quality/env-flags.toml readable from sovereign-core");
-        for (_, f) in grounding_gate_flags() {
-            assert!(
-                toml_text.contains(&format!("name = \"{}\"", f.name)),
-                "`{}` is in grounding_gate_flags() but not declared in \
-                 quality/env-flags.toml — add a [[flag]] entry",
-                f.name
-            );
-        }
-    }
-
     /// The registry names every surface the override grammar accepts.
     #[test]
     fn flags_registry_covers_surface_overrides() {

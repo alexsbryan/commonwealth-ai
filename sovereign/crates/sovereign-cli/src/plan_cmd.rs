@@ -3,8 +3,8 @@
 //!
 //! Two surfaces:
 //!
-//! - `svrn plan [--allow-open]` — legacy: derive
-//!   IMPLEMENTATION_PLAN.md (delegates to project_cmd::cmd_plan).
+//! - `svrn plan` — retired (plan composition); refused from
+//!   `deprecation::RETIRED`.
 //! - `svrn plan validate <path>` — new: lint a plan markdown
 //!   file for the six alignment sections (Context, Principles at
 //!   stake, What this extends, What this removes, Restraint
@@ -25,7 +25,14 @@ use std::path::Path;
 pub async fn run(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         Some("validate") => cmd_validate(&args[1..]).await,
-        _ => crate::dev_bin::exec("project-plan", args),
+        _ => sovereign_cli_shared::deprecation::refuse_retired(&["plan"], args).unwrap_or_else(
+            || {
+                eprintln!(
+                    "  svrn plan requires a subcommand.\n\nUSAGE\n  svrn plan validate <path>"
+                );
+                2
+            },
+        ),
     }
 }
 

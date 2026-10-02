@@ -18,14 +18,14 @@
 //!
 //! Cycle note: storing this hook on the `CorpusEngine` that
 //! `AppStateInner` itself owns creates a reference cycle
-//! (`AppStateInner -> Arc<CorpusEngine> -> Arc<YieldHook> -> Arc<AppStateInner>`).
+//! (`AppStateInner -> Arc<dyn IngestPort> -> Arc<YieldHook> -> Arc<AppStateInner>`).
 //! The cycle is intentional and harmless: the daemon runs for the
 //! process lifetime, so `AppStateInner::drop` never fires. Tests
 //! that don't install the hook pay nothing.
 
 use std::sync::Arc;
 
-use corpus_engine::YieldHook;
+use corpus_engine_yield::YieldHook;
 
 use crate::state::AppStateInner;
 
@@ -77,7 +77,7 @@ impl YieldHook for AppStateYieldHook {
     }
 }
 
-/// [`corpus_engine::ForegroundSignal`] backed by the same `AppStateInner`
+/// [`corpus_engine_yield::ForegroundSignal`] backed by the same `AppStateInner`
 /// atomics the [`AppStateYieldHook`] reads — one source of truth for both
 /// halves. The daemon installs it on the corpus engine beside the hook;
 /// each turn holds a lease on it for its whole life.
@@ -96,7 +96,7 @@ impl AppStateForegroundSignal {
     }
 }
 
-impl corpus_engine::ForegroundSignal for AppStateForegroundSignal {
+impl corpus_engine_yield::ForegroundSignal for AppStateForegroundSignal {
     fn begin(&self) {
         self.app().foreground_begin();
     }
@@ -116,12 +116,12 @@ mod tests {
         // the timestamp the hook went idle 60 s in and background work
         // resumed under the turn (G5b, 2026-09-02: the newsworthy tick
         // resumed inside the claim-search fan-out). The lease holds it.
-        use corpus_engine::ForegroundLease;
+        use corpus_engine_yield::ForegroundLease;
         let app = test_app_state();
         app.set_yield_window_secs(60);
         let hook = AppStateYieldHook::new(app.inner.clone());
         assert!(!hook.should_yield());
-        let signal: Arc<dyn corpus_engine::ForegroundSignal> =
+        let signal: Arc<dyn corpus_engine_yield::ForegroundSignal> =
             AppStateForegroundSignal::new(app.inner.clone());
         let lease = ForegroundLease::acquire(signal);
         rewind_foreground_to(&app, 120);
@@ -295,7 +295,7 @@ mod tests {
     /// on how long deferring may go on.
     #[test]
     fn the_deferral_bound_ends_a_wait_the_window_never_would() {
-        use corpus_engine::{DeferralBudget, DeferralStep};
+        use corpus_engine_yield::{DeferralBudget, DeferralStep};
 
         let app = crate::state::test_app_state();
         app.set_yield_window_secs(60);

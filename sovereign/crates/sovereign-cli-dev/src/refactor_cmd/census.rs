@@ -253,16 +253,7 @@ pub fn strip_test_scope(src: &str) -> String {
 }
 
 pub fn repo_root() -> Result<PathBuf, String> {
-    let out = std::process::Command::new("git")
-        .args(["rev-parse", "--show-toplevel"])
-        .output()
-        .map_err(|e| format!("running git rev-parse: {e}"))?;
-    if !out.status.success() {
-        return Err("not inside a git repository".to_string());
-    }
-    Ok(PathBuf::from(
-        String::from_utf8_lossy(&out.stdout).trim().to_string(),
-    ))
+    crate::repo::repo_root_here()
 }
 
 /// Every `.rs` file under `root` outside the exclusion set, sorted for

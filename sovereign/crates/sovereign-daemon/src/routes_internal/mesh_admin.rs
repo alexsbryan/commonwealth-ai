@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-node admin endpoints: activity reporting, runtime model slot
 //! management, foreground-yield introspection, mesh quiesce flag,
-//! ingest budget throttle, and the join handshake.
+//! and the ingest and storage budgets.
 //!
 //! These handlers cluster together because they all mutate or read
 //! single-node state without touching corpus-collaborate ingestion.
@@ -9,7 +9,6 @@
 //! Tests for `node_activity` and the runtime model slot endpoints
 //! live at the bottom of this file.
 
-use std::net::SocketAddr;
 #[cfg(test)]
 use std::sync::Arc;
 
@@ -18,9 +17,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::ids::NodeId;
-use commonwealth_core::mesh::Mesh;
-use commonwealth_discovery::membership;
+use kernel_types::NodeId;
 
 use crate::state::AppState;
 
@@ -199,7 +196,7 @@ pub async fn models_load(
         Ok(model_id) => {
             // Reflect the new slot in the inference store so
             // `/v1/models` advertises it immediately.
-            register_extras_in_store(&state, &req.slot_name, &req.path, model_id.as_str());
+            register_extras_in_store(&state, &req.slot_name, &req.path, model_id.as_str()).await;
             Ok(Json(LoadModelResponse {
                 model_id,
                 slot_name: req.slot_name,
@@ -215,10 +212,7 @@ pub async fn models_load(
 /// loaded entries hash to the same id when the operator declares
 /// the same `(slot_name, path)` pair statically and dynamically.
 /// Keep both paths in sync.
-fn compute_extras_model_id(
-    slot_name: &str,
-    path: &std::path::Path,
-) -> commonwealth_core::ids::ModelId {
+fn compute_extras_model_id(slot_name: &str, path: &std::path::Path) -> kernel_types::ModelId {
     use std::hash::{DefaultHasher, Hash, Hasher};
     let role = format!("extras:{slot_name}");
     let mut h = DefaultHasher::new();
@@ -228,16 +222,16 @@ fn compute_extras_model_id(
     role.hash(&mut h);
     path.hash(&mut h);
     let hi = h.finish();
-    commonwealth_core::ids::ModelId::from_u128((u128::from(hi) << 64) | u128::from(lo))
+    kernel_types::ModelId::from_u128((u128::from(hi) << 64) | u128::from(lo))
 }
 
-fn register_extras_in_store(
+async fn register_extras_in_store(
     state: &AppState,
     slot_name: &str,
     path: &std::path::Path,
     model_id_str: &str,
 ) {
-    use commonwealth_core::model::{ModelArchitecture, ModelInfo};
+    use oicp_types::model_catalog::{ModelArchitecture, ModelInfo};
     use oicp_types::CapabilityProfile;
 
     let id = compute_extras_model_id(slot_name, path);
@@ -262,24 +256,34 @@ fn register_extras_in_store(
         supports_parallel_instances: false,
         supports_pipeline_shard: false,
     };
-    state.inner.store.inference_store.set_model_info(&info);
+    if let Err(e) = state.register_model(info).await {
+        tracing::warn!(
+            model = %id,
+            slot = slot_name,
+            error = %e,
+            "register_extras_in_store: the model did not reach inference_store"
+        );
+    }
 }
 
-fn deregister_extras_from_store(state: &AppState, model_id_str: &str) -> bool {
+async fn deregister_extras_from_store(
+    state: &AppState,
+    model_id_str: &str,
+) -> Result<bool, crate::ledger_port::LedgerAbsent> {
     // Look up the existing entry by advertised name, then remove
     // by ModelId. We don't have the original path here (the
     // `unload` request only carries the slot name), so we can't
     // recompute the deterministic id directly — name lookup is the
     // right path, and matches how `/v1/models` exposes the entries.
-    let models = state.inner.store.inference_store.list_models();
+    let models = state.list_models().await?;
     let target = models
         .into_iter()
         .find(|(_, info)| info.name == model_id_str);
     if let Some((id, _)) = target {
-        state.inner.store.inference_store.remove_model_info(id);
-        true
+        state.remove_model_info(id).await?;
+        Ok(true)
     } else {
-        false
+        Ok(false)
     }
 }
 
@@ -304,7 +308,17 @@ pub async fn models_unload(
         .map_err(|e| format!("{e}"))
     {
         Ok(Some(model_id)) => {
-            deregister_extras_from_store(&state, &model_id);
+            if let Err(e) = deregister_extras_from_store(&state, &model_id).await {
+                tracing::warn!(error = %e, %model_id, "models_unload: slot unloaded; store entry not dropped");
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!(
+                        "slot '{}' unloaded, but inference state is absent so '{model_id}' \
+                         may still appear on /v1/models: {e}",
+                        req.slot_name
+                    ),
+                ));
+            }
             Ok(Json(UnloadModelResponse {
                 model_id: Some(model_id),
                 slot_name: req.slot_name,
@@ -518,8 +532,8 @@ pub async fn ingest_budget_set(
 // User-set ceiling on how much disk Sovereign is allowed to use for
 // corpus storage. The desktop's Settings → Knowledge tab is the
 // primary writer. Enforcement happens in
-// `sovereign-mesh::capabilities::build_local_capabilities`, which
-// clamps the published `free_storage_gb` to the budget remaining —
+// cw-rails' merge (commonwealth-rails `self_measure::apply`) over the
+// budget left `peer_origin::claims_source` declares, which clamps the published `free_storage_gb` to the budget remaining —
 // every existing scheduler then refuses work that would push us
 // over without needing to know the budget exists.
 
@@ -574,7 +588,10 @@ fn current_free_disk_bytes() -> u64 {
     // Aggregating across all mounted disks matches what the gossiped
     // `HardwareProfile.free_storage_gb` reports — keeping the desktop
     // UI's "X of Y free" in sync with the value the scheduler sees.
-    commonwealth_discovery::hardware::read_disk_free_bytes()
+    // svrn's own read (fp-9): the same sum as commonwealth-discovery's
+    // `hardware::read_disk_free_bytes`, over the same sysinfo version.
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    disks.list().iter().map(|d| d.available_space()).sum()
 }
 
 /// `GET /internal/storage/budget` — current budget, observed usage,
@@ -618,156 +635,6 @@ pub async fn storage_budget_set(
         free_disk_bytes,
         recommended_bytes: recommended_storage_budget_bytes(free_disk_bytes),
     }))
-}
-
-// ── Mesh join handshake ─────────────────────────────────────
-//
-// The founder (or any existing member) receives a POST from a
-// would-be joiner carrying the raw `join_key`. We BLAKE3-hash it and
-// compare against `mesh.invite_key_hash`; on match we append the new
-// member and return the full mesh snapshot so the joiner can adopt
-// it locally. On mismatch we return 401 — the joiner treats this as
-// "wrong mesh, try the next mDNS candidate" and moves on.
-//
-// Security posture (v1):
-//   - Plain HTTP on the LAN. The join_key is exposed in transit to
-//     anyone sniffing the local network; acceptable under the same
-//     trust model as "I shared this link in a trusted chat".
-//   - mesh_id in mDNS TXT is public (not secret); knowing it does
-//     not grant membership. Only the raw key does, and it's hashed
-//     at rest via `Mesh::invite_key_hash`.
-//   - Timing-attack-resistant equality lives in `membership::verify_join_key`.
-
-// `JoinRequest` / `JoinResponse` / `JoinRejection` are
-// `commonwealth_core::mesh::wire` — one definition for every process that
-// speaks them, including a package-only member that never links this crate.
-// Re-exported so this module's callers are unchanged.
-pub use commonwealth_core::mesh::wire::{JoinRejection, JoinRequest, JoinResponse};
-
-/// Wire shape for the full mesh snapshot: the one projection in
-/// `commonwealth_core::mesh` (it had four declarations once — see its docs).
-pub use commonwealth_core::mesh::{MeshWire, SecretDisclosure};
-
-/// POST /internal/join — verify a join_key and (on match) admit the caller.
-pub async fn join(
-    State(state): State<AppState>,
-    Json(req): Json<JoinRequest>,
-) -> Result<Json<JoinResponse>, (StatusCode, Json<JoinRejection>)> {
-    let self_node_id = state.inner.fabric.identity.current();
-
-    // Identity proof of possession — verified BEFORE taking the mesh
-    // write lock. Only enforced when the joiner presents a pubkey:
-    // pre-identity joiners are admitted exactly as before. A pubkey
-    // with a missing/invalid proof is a loud 401 (never a silent
-    // admit-without-key), because admitting an unproven key would
-    // bind a transport identity the joiner may not control.
-    if let Some(pubkey) = req.node_pubkey.as_ref() {
-        let proven = match (req.proposed_node_id.as_ref(), req.pubkey_proof.as_deref()) {
-            (Some(node_id), Some(proof)) => commonwealth_transport::identity::verify_join_proof(
-                pubkey,
-                node_id,
-                &req.joining_node_name,
-                proof,
-            ),
-            // The proof binds the proposed_node_id; modern joiners
-            // always persist + send one. A pubkey without it (or
-            // without a proof) is malformed.
-            _ => false,
-        };
-        if !proven {
-            tracing::warn!(
-                joining_name = %req.joining_node_name,
-                pubkey = %pubkey,
-                "handshake_rejected: node_pubkey presented without a valid proof of possession"
-            );
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                Json(JoinRejection {
-                    reason: "node_pubkey proof of possession missing or invalid".into(),
-                }),
-            ));
-        }
-    }
-
-    let mut mesh = state.inner.fabric.mesh.write().await;
-
-    // Encrypted-mesh invites are short-lived: reject a join once the TTL has
-    // passed. Plaintext meshes set no expiry, so this is a no-op for them.
-    //
-    // The expiry is read from the MESH, not from this node's `AppState`. It
-    // used to live in per-node RAM, which meant it was armed only on the node
-    // that personally minted the invite and was lost entirely on restart — so
-    // a joiner aimed at any other member, or at the same member after a
-    // bounce, bypassed the TTL completely. Any member can admit (there is no
-    // founder check here and never was), so the expiry has to travel with the
-    // mesh for the check to mean anything.
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    if mesh.invite_expired_at(now) {
-        tracing::warn!(
-            joining_name = %req.joining_node_name,
-            expires_at = ?mesh.invite_expires_at,
-            now,
-            "handshake_rejected: invite link has expired"
-        );
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            Json(JoinRejection {
-                reason: "invite link has expired".into(),
-            }),
-        ));
-    }
-
-    match membership::accept_join_with_identity(
-        &mut mesh,
-        &req.join_key,
-        &req.joining_node_name,
-        req.joining_node_addresses,
-        self_node_id,
-        req.proposed_node_id,
-        req.node_pubkey,
-    ) {
-        Ok(new_id) => {
-            tracing::info!(
-                new_node = %new_id,
-                joining_name = %req.joining_node_name,
-                "handshake_accepted: admitted new mesh member"
-            );
-            // Persist IMMEDIATELY on join accept so the founder
-            // doesn't forget this member if it restarts within the
-            // 10s gossip-loop re-persist window. Hook is `None` in
-            // tests and the standalone daemon, so this is a no-op
-            // where persistence is managed elsewhere.
-            if let Some(hook) = state.inner.fabric.on_mesh_mutation.as_ref() {
-                hook(&mesh, self_node_id);
-            }
-            Ok(Json(JoinResponse {
-                assigned_node_id: new_id,
-                // Disclose, and now it SAYS so. A joiner has no other
-                // channel to obtain the gossip credential, so withholding it
-                // here would admit a node that can never authorize. This was
-                // previously correct by the absence of a redaction line —
-                // indistinguishable, to a reader, from the bug of forgetting
-                // one.
-                mesh: MeshWire::for_peer(&mesh, SecretDisclosure::Disclose),
-            }))
-        }
-        Err(e) => {
-            tracing::warn!(
-                error = %e,
-                joining_name = %req.joining_node_name,
-                "handshake_rejected: join request denied"
-            );
-            Err((
-                StatusCode::UNAUTHORIZED,
-                Json(JoinRejection {
-                    reason: e.to_string(),
-                }),
-            ))
-        }
-    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────

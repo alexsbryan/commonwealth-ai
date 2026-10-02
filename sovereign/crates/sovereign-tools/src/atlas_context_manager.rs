@@ -26,7 +26,9 @@
 //! entities run hundreds-to-thousands of chars. Operators tuning
 //! the filter can override via `AtlasContextManager::with_filter`.
 
-use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
+use corpus_engine_atlas_reader::context_filter::AtlasContextFilter;
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::enrich_config::EnrichConfigPort;
 use sovereign_core::atlas_context::{AtlasContext, AtlasContextProvider};
 use sovereign_core::traits::InferenceProvider;
 use std::collections::HashMap;
@@ -34,6 +36,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use understanding_vocab::read::ATLAS_DIRNAME;
 
 /// The walker's fallback for an atlas whose `ontology.json` has not been
 /// converted in yet (map-conversion rung 3): its enrichment config names the
@@ -44,55 +47,47 @@ use tokio::task::JoinHandle;
 /// no-op then), and a recipe-declared config (`ontology` present) is left
 /// alone: its map is the author's, written by the build.
 ///
-/// This host can read the config (`sovereign-enrichment-catalog`) and the
-/// registry (`corpus-engine`); it cannot reach the build crate's resolver,
-/// which is why the custom path is excluded rather than resolved here.
+/// This host reads the config and the pipeline registry through ingest's
+/// ports (enrichment config, atlas); it cannot reach the build crate's
+/// resolver, which is why the custom path is excluded rather than resolved
+/// here. With no ingest program in the process (`enrich_config` is `None`)
+/// there is no config to read, and the graph walks without the map.
 fn attach_pipeline_map(
+    atlas: Option<&dyn AtlasPort>,
+    enrich_config: Option<&dyn EnrichConfigPort>,
     graph: sovereign_core::atlas_context::AtlasGraph,
     corpus_id: &str,
 ) -> sovereign_core::atlas_context::AtlasGraph {
     if graph.navigation().is_some() {
         return graph;
     }
-    let Ok(Some(cfg)) = sovereign_enrichment_catalog::config::EnrichConfig::load(corpus_id) else {
+    let (Some(atlas), Some(enrich_config)) = (atlas, enrich_config) else {
+        tracing::debug!(
+            corpus = corpus_id,
+            "atlas-graph: no ontology.json and no ingest program in this process; \
+             the pipeline map is not attached"
+        );
         return graph;
     };
-    if cfg.ontology.is_some() {
+    let Ok(Some(cfg)) = enrich_config.load(corpus_id) else {
+        return graph;
+    };
+    if cfg.declares_ontology {
         return graph;
     }
-    match corpus_engine::enrichment::pipeline::PipelineRegistry::builtin().get(&cfg.pipeline_id) {
-        Some(p) => {
+    match atlas.pipeline_navigation(&cfg.pipeline_id) {
+        Some((pipeline, navigation)) => {
             tracing::debug!(
                 corpus = corpus_id,
-                pipeline = p.id(),
+                pipeline = pipeline.as_str(),
                 "atlas-graph: no ontology.json; walking under the pipeline's declared map \
                  (run `svrn atlas migrate-all` to write it beside the atoms)"
             );
-            graph.with_pipeline_map(p.id(), p.declared_ontology().navigation)
+            graph.with_pipeline_map(&pipeline, navigation)
         }
         None => graph,
     }
 }
-
-/// The ONE `atoms.json` → embedded-bag loader and the filter that governs it.
-/// Both moved DOWN to `corpus_engine::enrichment::atlas::context_loader`
-/// (order ei-5a-build-cut): every type they touch was already corpus-engine's,
-/// and the loader's only inference need is `embed_query`, which is
-/// `corpus_engine::EmbedFn`. Keeping the write in the inference stack bought
-/// nothing and cost every atlas writer a llama.cpp link.
-///
-/// Re-exported at the historical path — NOT copied (ARCH §10.6) — so
-/// `atlas_context_manager::{load_atlas_context, backfill_ann,
-/// AtlasContextFilter, …}` is still the one name every caller uses.
-///
-/// The one signature that changed: `backfill_ann` and `load_atlas_context`
-/// take `&EmbedFn` where they took `&dyn InferenceProvider`. Callers holding a
-/// provider adapt with the existing `sovereign_core::embed_fn::
-/// inference_to_embed_fn` — the adapter that was already there for exactly
-/// this (ARCH §19).
-pub use corpus_engine::enrichment::atlas::context_loader::{
-    backfill_ann, load_atlas_context, AtlasContextFilter, BackfillOutcome, LoadAtlasError,
-};
 
 /// Filename of the per-corpus query-bump map. Lives alongside
 /// `atoms.json` so it travels with the atlas (mesh transfer brings
@@ -103,6 +98,13 @@ pub const TRIAGE_BUMPS_FILE: &str = "triage_bumps.json";
 /// Daemon-side lifecycle for atlas-grounded retrieval.
 pub struct AtlasContextManager {
     indexes_dir: PathBuf,
+    /// Ingest's atlas port: the seed-table freshness check and the
+    /// pipeline map go through it. `None` (a svrn with no ingest program,
+    /// pb-ingest-dial-daemon) leaves both unchecked and says so at `debug`.
+    atlas: Option<Arc<dyn AtlasPort>>,
+    /// Ingest's enrichment-config port, when this process composes ingest
+    /// (`with_enrich_config`): the pipeline-map fallback reads through it.
+    enrich_config: Option<Arc<dyn EnrichConfigPort>>,
     inference: Arc<dyn InferenceProvider>,
     embed_model: String,
     filter: AtlasContextFilter,
@@ -138,7 +140,7 @@ pub struct AtlasContextManager {
     /// backend lands here with no change to this field.
     non_atom_providers: Arc<
         std::sync::RwLock<
-            HashMap<String, Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>>,
+            HashMap<String, Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider>>,
         >,
     >,
     /// Per-corpus query-bump map, in-memory mirror of each atlas's
@@ -167,9 +169,12 @@ impl AtlasContextManager {
         indexes_dir: PathBuf,
         inference: Arc<dyn InferenceProvider>,
         embed_model: String,
+        atlas: Option<Arc<dyn AtlasPort>>,
     ) -> Self {
         Self {
             indexes_dir,
+            atlas,
+            enrich_config: None,
             inference,
             embed_model,
             filter: AtlasContextFilter::default(),
@@ -179,6 +184,13 @@ impl AtlasContextManager {
             non_atom_providers: Arc::new(std::sync::RwLock::new(HashMap::new())),
             bumps: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Hand the manager ingest's enrichment-config port; `None` keeps it
+    /// absent (a svrn with no ingest program).
+    pub fn with_enrich_config(mut self, port: Option<Arc<dyn EnrichConfigPort>>) -> Self {
+        self.enrich_config = port;
+        self
     }
 
     /// Override the load filter (test surface; production uses defaults).
@@ -313,8 +325,8 @@ impl AtlasContextManager {
         // atom store is present (so the corpus COULD ground) and the table is
         // missing or older than `atoms.json`. Never embed here: `init()` walks
         // every installed atlas (1,770 SEP articles) at boot.
-        use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ann_table_present};
-        use corpus_engine::enrichment::atlas::store::ATOMS_LANCE_DIRNAME;
+        use corpus_engine_atlas_reader::ann_store::ann_table_present;
+        use corpus_engine_atlas_reader::store::ATOMS_LANCE_DIRNAME;
         if !ann_table_present(atlas_dir) {
             if atlas_dir.join(ATOMS_LANCE_DIRNAME).is_dir() {
                 tracing::warn!(
@@ -331,7 +343,18 @@ impl AtlasContextManager {
             }
             return false;
         }
-        if !ann_table_is_fresh(atlas_dir) {
+        let fresh = match &self.atlas {
+            Some(atlas) => atlas.ann_table_is_fresh(atlas_dir),
+            None => {
+                tracing::debug!(
+                    corpus = corpus_id,
+                    "atlas-context: no ingest program in this process; ANN seed-table \
+                     freshness is unchecked"
+                );
+                true
+            }
+        };
+        if !fresh {
             tracing::warn!(
                 corpus = corpus_id,
                 atlas = %atlas_dir.display(),
@@ -342,14 +365,22 @@ impl AtlasContextManager {
         let load_started = std::time::Instant::now();
         // Load the v2 store (atoms.lance + edges.csr). A corpus without one
         // (e.g. wikipedia — columnar WikipediaGraph, no atom store) is skipped.
-        let graph =
-            match sovereign_core::atlas_context::AtlasGraph::load_from_disk(corpus_id, atlas_dir) {
-                Ok(g) => attach_pipeline_map(g, corpus_id),
-                Err(e) => {
-                    tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
-                    return false;
-                }
-            };
+        let graph = match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
+            corpus_id,
+            atlas_dir,
+            corpus_engine_atlas_reader::context::read_section_rows(atlas_dir),
+        ) {
+            Ok(g) => attach_pipeline_map(
+                self.atlas.as_deref(),
+                self.enrich_config.as_deref(),
+                g,
+                corpus_id,
+            ),
+            Err(e) => {
+                tracing::debug!(corpus = corpus_id, error = %e, "atlas-graph: load skipped");
+                return false;
+            }
+        };
         // Attach the ANN seed table on THIS long-lived runtime (the held
         // lancedb::Table is queried later by `atlas_navigate_ann`).
         let graph = sovereign_core::atlas_context::open_and_attach_ann_seed_table(
@@ -591,9 +622,9 @@ impl AtlasContextProvider for AtlasContextManager {
     fn walk_provider(
         &self,
         atlas_corpus_id: &str,
-    ) -> Option<Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>> {
+    ) -> Option<Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider>> {
         if let Some(g) = self.graph(atlas_corpus_id) {
-            return Some(g as Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>);
+            return Some(g as Arc<dyn corpus_engine_atlas_reader::provider::AtlasProvider>);
         }
         if let Some(p) = self
             .non_atom_providers
@@ -608,7 +639,7 @@ impl AtlasContextProvider for AtlasContextManager {
         // and corpus-mcp cannot disagree about what a corpus is (ARCH §10.6).
         // Sync open through the atlas module's ONE async bridge; lifecycle
         // time, on the first query that reaches this corpus.
-        match corpus_engine::enrichment::atlas::open_walk_provider_blocking(
+        match corpus_engine_atlas_reader::opener::open_walk_provider_blocking(
             &self.indexes_dir,
             atlas_corpus_id,
         ) {
@@ -671,11 +702,19 @@ impl AtlasContextProvider for AtlasContextManager {
         // pre-init-completion query), it loads without ANN and the retrieval
         // gate (`has_ann_seed_table` over the whole pool) falls back to the v1
         // cosine seed — correct, just not the ANN win until the eager warm.
-        match sovereign_core::atlas_context::AtlasGraph::load_from_disk(atlas_corpus_id, &atlas_dir)
-        {
+        match sovereign_core::atlas_context::AtlasGraph::load_from_disk(
+            atlas_corpus_id,
+            &atlas_dir,
+            corpus_engine_atlas_reader::context::read_section_rows(&atlas_dir),
+        ) {
             Ok(graph) => {
                 let load_ms = load_started.elapsed().as_millis();
-                let graph = Arc::new(attach_pipeline_map(graph, atlas_corpus_id));
+                let graph = Arc::new(attach_pipeline_map(
+                    self.atlas.as_deref(),
+                    self.enrich_config.as_deref(),
+                    graph,
+                    atlas_corpus_id,
+                ));
                 tracing::info!(
                     corpus = atlas_corpus_id,
                     atoms = graph.atom_count(),
@@ -756,6 +795,8 @@ fn write_bump_state(atlas_dir: &Path, counts: &HashMap<String, u64>) -> std::io:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::fixtures;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
 
     #[test]
     fn filter_signature_is_stable_across_depth_orderings() {
@@ -875,40 +916,43 @@ mod tests {
         }
     }
 
-    /// `<indexes>/<corpus>/atlas/` with `atoms.json` plus the v2 store
-    /// (`atoms.lance` + `edges.csr`) so `AtlasGraph::load_from_disk` can load it
-    /// (ATLAS_STORAGE_V2 retired the `atoms.json` convert-on-load). A
-    /// deliberately-corrupt `atoms_json` (one that doesn't parse) is left
-    /// store-less on purpose — its `graph()` then Errs, which the lazy-load
-    /// eviction test relies on. No ANN table is written, so the corpus has no
-    /// seed bag (its graph stays lazy) — matching the "deferred graph" tests.
-    fn write_atlas_fixture(indexes: &Path, corpus: &str, atoms_json: &str) {
-        use corpus_engine::enrichment::atlas::{read_atlas_atoms, store};
-        let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
-        std::fs::create_dir_all(&atlas).unwrap();
-        std::fs::write(atlas.join("atoms.json"), atoms_json).unwrap();
-        if let Ok(file) = read_atlas_atoms(&atlas) {
-            store::write_store_blocking(&atlas, corpus, file.atoms(), &[]).unwrap();
-        }
+    /// `<indexes>/<corpus>/atlas/` holding the leaf's checked-in empty atom
+    /// store (`atoms.json` + `atoms.lance` + `edges.csr`) so
+    /// `AtlasGraph::load_from_disk` can load it (ATLAS_STORAGE_V2 retired the
+    /// `atoms.json` convert-on-load). Only ingest writes stores; that the
+    /// fixture reads like a freshly written one is corpus-engine's
+    /// `atlas_store_fixtures` test. No ANN table, so the corpus has no seed bag
+    /// (its graph stays lazy) — matching the "deferred graph" tests.
+    fn write_atlas_fixture(indexes: &Path, corpus: &str) {
+        fixtures::copy_store_fixture(fixtures::ATOM_STORE, &indexes.join(corpus)).unwrap();
     }
 
+    /// A deliberately-corrupt `atoms.json` with no store beside it: its
+    /// `graph()` then Errs, which the lazy-load eviction test relies on.
+    fn write_corrupt_atlas(indexes: &Path, corpus: &str) {
+        let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
+        std::fs::create_dir_all(&atlas).unwrap();
+        std::fs::write(atlas.join("atoms.json"), "{ not json").unwrap();
+    }
+
+    /// The manager over an atlas port no lazy-load path asks: every store it
+    /// opens here goes through the leaf's openers, never the port.
     fn manager_for(indexes: &Path) -> AtlasContextManager {
         AtlasContextManager::new(
             indexes.to_path_buf(),
             Arc::new(PanicInference),
             "test-embed".into(),
+            Some(Arc::new(AtlasPortDouble::new())),
         )
     }
-
-    const EMPTY_ATOMS: &str = r#"{"schema_version":"2","atoms":[]}"#;
 
     #[tokio::test]
     async fn init_defers_graphs_for_contextless_atlases() {
         let tmp = tempfile::tempdir().unwrap();
-        write_atlas_fixture(tmp.path(), "t1", EMPTY_ATOMS);
+        write_atlas_fixture(tmp.path(), "t1");
         // Filtered shapes: dot/underscore dirs and a dir without atlas/.
-        write_atlas_fixture(tmp.path(), ".hidden", EMPTY_ATOMS);
-        write_atlas_fixture(tmp.path(), "_scratch", EMPTY_ATOMS);
+        write_atlas_fixture(tmp.path(), ".hidden");
+        write_atlas_fixture(tmp.path(), "_scratch");
         std::fs::create_dir_all(tmp.path().join("no-atlas-here")).unwrap();
 
         let mgr = manager_for(tmp.path());
@@ -923,53 +967,13 @@ mod tests {
         assert!(dirs.contains_key("t1"));
     }
 
-    /// A wiki-class atlas: `articles.lance` + `edges.lance`, no atom store.
-    async fn write_wiki_fixture(indexes: &Path, corpus: &str) {
-        use corpus_engine::enrichment::atlas::wiki_store::build_wikipedia_columnar_store_from_chunks;
-        use corpus_engine::extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
-        use corpus_engine::index::StoredChunkWithMetadata;
-        let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
-        std::fs::create_dir_all(&atlas).unwrap();
-        let meta = |links: Vec<(&str, &str)>| {
-            serde_json::to_string(&WikipediaChunkMetadata {
-                section_name: "Lead".into(),
-                section_path: vec!["Lead".into()],
-                section_depth: 0,
-                section_type: "lead".into(),
-                citation_needed_count: None,
-                pov_count: None,
-                clarification_needed_count: None,
-                update_count: None,
-                is_flagged_stable: None,
-                outgoing_links: links
-                    .into_iter()
-                    .map(|(t, l)| WikiLink {
-                        target_title: t.into(),
-                        link_text: l.into(),
-                    })
-                    .collect(),
-                revision_id: Some(1),
-                wikidata_qid: None,
-                page_id: None,
-            })
-            .unwrap()
-        };
-        let ch = |id: u64, title: &str, m: String| StoredChunkWithMetadata {
-            id,
-            title: Some(title.into()),
-            url: None,
-            metadata_raw: Some(m),
-        };
-        build_wikipedia_columnar_store_from_chunks(
-            &atlas,
-            corpus,
-            vec![
-                ch(1, "Alpha", meta(vec![("Beta", "beta")])),
-                ch(2, "Beta", meta(vec![])),
-            ],
-        )
-        .await
-        .unwrap();
+    /// A wiki-class atlas: the leaf's checked-in `articles.lance` +
+    /// `edges.lance` (Alpha → Beta), no atom store. Its atom ids carry the
+    /// corpus id it was written under, so `corpus` is always
+    /// `fixtures::WIKI_STORE`.
+    fn write_wiki_fixture(indexes: &Path, corpus: &str) {
+        assert_eq!(corpus, fixtures::WIKI_STORE);
+        fixtures::copy_store_fixture(fixtures::WIKI_STORE, &indexes.join(corpus)).unwrap();
     }
 
     /// `walk_provider` resolves BY STORE, and each class gets its own.
@@ -982,8 +986,8 @@ mod tests {
     #[tokio::test]
     async fn walk_provider_serves_each_class_from_its_own_store_and_memoizes() {
         let tmp = tempfile::tempdir().unwrap();
-        write_atlas_fixture(tmp.path(), "atomish", EMPTY_ATOMS);
-        write_wiki_fixture(tmp.path(), "wikish").await;
+        write_atlas_fixture(tmp.path(), "atomish");
+        write_wiki_fixture(tmp.path(), "wikish");
         let mgr = manager_for(tmp.path());
         mgr.init_from_cache().await;
 
@@ -1008,7 +1012,7 @@ mod tests {
         let w = AtlasContextProvider::walk_provider(&mgr, "wikish")
             .expect("a wiki-class atlas must resolve through walk_provider");
         assert_eq!(w.atlas_corpus_id(), "wikish");
-        let alpha = corpus_engine::enrichment::atlas::wiki_store::wiki_atom_id("Alpha", "wikish");
+        let alpha = fixtures::WIKI_ALPHA_ATOM_ID.to_string();
         assert!(
             w.atom(&alpha).is_some(),
             "the wiki provider must serve atoms"
@@ -1036,7 +1040,7 @@ mod tests {
     #[tokio::test]
     async fn a_lazily_opened_wiki_provider_reports_its_missing_seed_table() {
         let tmp = tempfile::tempdir().unwrap();
-        write_wiki_fixture(tmp.path(), "wikish").await;
+        write_wiki_fixture(tmp.path(), "wikish");
         let mgr = manager_for(tmp.path());
         mgr.init_from_cache().await;
         let w = AtlasContextProvider::walk_provider(&mgr, "wikish").expect("wiki provider");
@@ -1058,7 +1062,7 @@ mod tests {
     #[tokio::test]
     async fn graph_lazy_loads_on_first_request_and_memoizes() {
         let tmp = tempfile::tempdir().unwrap();
-        write_atlas_fixture(tmp.path(), "t1", EMPTY_ATOMS);
+        write_atlas_fixture(tmp.path(), "t1");
         let mgr = manager_for(tmp.path());
         mgr.init_from_cache().await;
         assert_eq!(mgr.graphs.read().await.len(), 0);
@@ -1077,7 +1081,7 @@ mod tests {
     #[tokio::test]
     async fn graph_lazy_load_failure_evicts_discovery_entry() {
         let tmp = tempfile::tempdir().unwrap();
-        write_atlas_fixture(tmp.path(), "bad", "{ not json");
+        write_corrupt_atlas(tmp.path(), "bad");
         let mgr = manager_for(tmp.path());
         mgr.init_from_cache().await;
         assert!(mgr.graph_dirs.read().unwrap().contains_key("bad"));

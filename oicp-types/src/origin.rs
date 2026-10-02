@@ -18,6 +18,9 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+mod registration;
+pub use registration::{Admit, Framing, OriginClaim, OriginRegistration};
+
 /// A kind of local origin a node can serve to members over the mesh. A
 /// closed set (ARCH §2): every kind has one ALPN and one acceptor route, so a
 /// new kind is a new variant beside a new route, never a string.

@@ -53,7 +53,7 @@ pub fn actor_of(key: &SigningKey) -> String {
     hex::encode(key.verifying_key().to_bytes())
 }
 
-fn field(msg: &mut Vec<u8>, bytes: &[u8]) {
+pub(crate) fn field(msg: &mut Vec<u8>, bytes: &[u8]) {
     msg.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
     msg.extend_from_slice(bytes);
 }
@@ -124,7 +124,15 @@ pub(crate) fn verify_ring_op(
     body_json: &str,
     sig_hex: &str,
 ) -> bool {
-    let Ok(key_bytes) = hex::decode(actor) else {
+    let msg = ring_op_message(namespace, ts_unix, actor, seq, body_json);
+    verify_hex(actor, &msg, sig_hex)
+}
+
+/// Verify `sig_hex` over `msg` under the hex public key `signer`. The ONE
+/// place a hex key and a hex signature are parsed, shared by ring ops and
+/// guest attestations; `false` on any malformed input, never a panic.
+pub(crate) fn verify_hex(signer: &str, msg: &[u8], sig_hex: &str) -> bool {
+    let Ok(key_bytes) = hex::decode(signer) else {
         return false;
     };
     let Ok(key_arr) = <[u8; 32]>::try_from(key_bytes.as_slice()) else {
@@ -139,9 +147,8 @@ pub(crate) fn verify_ring_op(
     let Ok(sig_arr) = <[u8; 64]>::try_from(sig_bytes.as_slice()) else {
         return false;
     };
-    let msg = ring_op_message(namespace, ts_unix, actor, seq, body_json);
     verifying
-        .verify(&msg, &Signature::from_bytes(&sig_arr))
+        .verify(msg, &Signature::from_bytes(&sig_arr))
         .is_ok()
 }
 

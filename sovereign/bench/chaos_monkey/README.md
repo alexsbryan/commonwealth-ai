@@ -202,9 +202,9 @@ gate's own (`bench_cmd/h4/transcript.rs:74-81`) rather than a second copy.
 - Pure logic (schema + fairness validator + two-red-line scorer):
   `sovereign-eval/src/chaos_monkey/` — rebuilds and unit-tests in seconds.
 - Orchestrator (drives the live chat path, classifies answer-vs-abstain):
-  `sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs`.
+  `sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs`.
 - Baseline-relative CI gate (re-scores the artifact, diffs vs baseline):
-  `sovereign-cli-llm/src/bench_cmd/gate.rs` + `lane_baseline.rs` (the shared
+  `sovereign-cli-bench/src/bench_cmd/gate.rs` + `lane_baseline.rs` (the shared
   self-describing metric/direction/tolerance primitive, reused by all three
   absolute-verdict lanes).
 - The stable corpus recipe: `sovereign-recipes/chaos-secret-agent/recipe.toml`.

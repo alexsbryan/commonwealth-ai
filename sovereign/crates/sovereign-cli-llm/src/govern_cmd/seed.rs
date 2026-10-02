@@ -11,9 +11,10 @@
 
 use std::collections::HashSet;
 
-use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope, AtomId};
-use corpus_engine::enrichment::GovernanceOpKind;
-use corpus_engine::oplog::{Op, Oplog};
+use corpus_engine_atlas_reader::governance::GovernanceOpKind;
+use oplog::{Op, Oplog};
+use understanding_vocab::atoms::{AtomEnvelope, AtomId};
+use understanding_vocab::read::read_atlas_atoms;
 
 use super::{atlas_dir, now_unix};
 

@@ -11,8 +11,10 @@ license.workspace = true
 oicp-types = { workspace = true }
 # `venue.rs`: `InferenceVenue::node_id` is a `kernel_types::NodeId` (the
 # identity the roster and the local reader both speak), and the `VenueSource`
-# port is async.
+# port is async. The vocabulary itself moved to the contracts leaf (fp-1);
+# this crate keeps the ranker impls and re-exports the vocabulary.
 kernel-types = { workspace = true }
+sovereign-contracts = { workspace = true }
 async-trait = { workspace = true }
 # The scheduler half of sovereign-mesh moved in here (domains row
 # REVIEW-build-sched-move): the decision records and replay fixtures are

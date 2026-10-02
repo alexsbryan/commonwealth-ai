@@ -3,16 +3,19 @@ name = "sovereign-cli-llm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "LLM-heavy CLI surface (bench, chat, eval, atlas, enrich, mesh, corpus, pipeline) — sibling binary to sovereign."
+description = "svrn's LLM-heavy CLI surface (chat, workflow, govern, ...) — sibling binary to sovereign."
 
 # Sibling binary that owns the LLM-touching subcommands. Lives apart
 # from `sovereign-cli` so the dispatcher (notes / status / drift /
 # audit / etc.) stays lean and fast to compile.
 #
 # Hosted verbs (parent `sovereign` shim execs into this binary):
-#   bench, chat, eval, voice, reading-diag, search-gym, knowledge-gym,
-#   atlas, meta-atlas, enrich, newsworthy, recipe, recipe-agent,
-#   maintainer, pipeline, mcp, alignment, mesh, corpus
+#   bench and eval's white-box lanes (bench judge-replay | resolver-precision,
+#   eval inner-chaos; the rest of bench is sovereign-cli-bench's),
+#   chat, voice, reading-diag, search-gym, knowledge-gym, newsworthy,
+#   recipe-agent, maintainer, mcp, mesh, and svrn's sub-verbs of atlas, enrich
+#   and corpus (the rest of those, meta-atlas, recipe, pipeline, alignment and
+#   bench atlas are svrn-ingest's since pb-cli-llm-ingest-move)
 #
 # The REPL surface (`sovereign` with no subcommand) also lives here —
 # it constructs an EmbeddedLlamaCpp + Runtime, which is the heaviest
@@ -36,76 +39,49 @@ path = "src/main.rs"
 
 [dependencies]
 # Flag surfaces are declared as structs (`#[derive(clap::Parser)]`), not
-# parsed by hand. Already in this crate's build graph via sovereign-eval,
-# so this edge is free — it makes the existing dependency explicit.
+# parsed by hand.
 clap = { workspace = true }
 sovereign-core = { workspace = true }
-# The enrichment store below every host that reads it — `enrich_cmd::{config,
-# paths, catalog}` are re-exports of this crate (rung nc-16-shared-capability).
-sovereign-enrichment-catalog = { workspace = true }
-# The atlas build orchestrator + its phase drivers, moved DOWN out of this
-# crate 2026-09-01 (ontology-v1 P0.5) so the daemon and the desktop can reach
-# them without linking this host — and with it `bench_cmd`'s grandfathered
-# `sovereign-eval` edge. `enrich_cmd` keeps the `cmd_*` + HELP halves and
-# calls down; five modules with no CLI half are re-exported wholesale from
-# `enrich_cmd/mod.rs`.
-sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
+# `bench_cmd/ablate.rs` watches the daemon's data-root lock; `shell` is the
+# server shell and bundle guard `meshapp dev` serves through (pb-meshapp-apps).
+host-kit = { workspace = true, features = ["shell"] }
+# `svrn meshapp`: the corpus-explorer reads over svrn's corpora (a shared-leaf
+# closure), the dirs `meshapp_registry` resolves, and its `tar.zst` packing.
+sovereign-meshapp = { workspace = true }
+sovereign-cli-base = { workspace = true, features = ["corpus-install"] }
+tar = "0.4"
+zstd = "0.13"
 # `declare`: write this node's own origin credential to the 0600 secret
 # store. One implementation of where a declaration lives, shared with the
 # acceptor that reads it.
-commonwealth-media = { workspace = true }
 # Phase 6: the chat surface asks the daemon for a turn instead of building
 # a Runtime to run one itself (TOPOLOGY §10).
 sovereign-turn-client = { workspace = true }
-sovereign-inference = { workspace = true }
-# OICP feature-string constants (constraint:json_schema/json_object) for
-# discovery-driven StructuredOutputMode negotiation — see enrich_cmd/providers.rs.
-oicp-types = { workspace = true }
+# The OICP client every remote provider, rerank and NER dial goes through
+# (a shared leaf; pb-cli-llm).
+oicp-client = { workspace = true }
+sovereign-time = { workspace = true }
+# No sovereign-inference and no sovereign-gliner: this crate loads no model;
+# its embed, rerank and NER calls dial serve (`serve_dial.rs`, pb-cli-llm).
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
-sovereign-gliner = { workspace = true }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
-sovereign-mesh = { workspace = true, features = ["treesitter"] }
 # The mesh host cluster (domains dm-daemon-mesh-edge): the assembly root, the
 # route shells and the edge.
 sovereign-daemon = { workspace = true }
-# The rented-pod modules lifted out of sovereign-mesh (domains REVIEW-audit-3);
-# reached directly rather than through sovereign-mesh's shim.
-sovereign-pods = { path = "../sovereign-pods" }
 # THE `Runtime` recipe (TOPOLOGY.md §10 phase 5c). `chat_cmd::bootstrap`
 # carried its own ~450-line copy of it until 2026-08-25; what remains here
 # is only what this host resolves — which daemon, which models, which data
 # root. Capabilities layer — down.
 sovereign-runtime-recipe = { workspace = true }
-sovereign-pipeline = { workspace = true }
-sovereign-work-atlas = { workspace = true }
-# `recipe test` renders the deterministic authoring ladder. It reaches the
-# harness DIRECTLY rather than through `sovereign_eval::authoring_harness`,
-# which is only a compatibility alias: the crate was carved out of
-# sovereign-eval precisely so a product surface could use it without the
-# rusqlite/reqwest/clap weight, and going through the alias put a product verb
-# on a back-of-house crate for nothing.
-sovereign-authoring-harness = { workspace = true }
-# Back-of-house (quality/ARCH_LAYERS.toml `backstage`). Reached ONLY by
-# `bench_cmd`, pinned by `bench_cmd_is_the_only_module_naming_the_eval_harness`
-# in src/main.rs. Carried by the default build because bench_cmd shares this
-# crate with `chat`/`corpus`/`mesh` — see the [[exception]] in ARCH_LAYERS.toml.
-sovereign-eval = { workspace = true }
 # `meshapp dev` serves a bundle + proxies the explorer ops to this shared lib.
-sovereign-meshapp = { workspace = true }
-sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client", "rail-client"] }
+sovereign-cli-shared = { workspace = true, features = ["mcp-client", "rail-client"] }
 # The neutral kernel — `quality lane` rows are `Judgement`s, so the lane and
 # the runner that reads its trailing line speak one verdict vocabulary rather
 # than two (noun-convergence rung nc-10-judgement). Layer 0, edge points DOWN.
 kernel-types = { workspace = true }
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
-# `svrn ring` reads and writes the ring roster, and needs the node key the
-# ledger signs with. DIRECT deps on the crates that own `Roster`/`Person`
-# and `load_or_generate_node_key`, so this crate and the daemon cannot end
-# up on two versions of one logical type (ARCH §8.3).
 #
 # `commonwealth-knowledge` (now `sovereign-grants`) is ABSENT since cw-lift
 # 1d, and its absence is the
@@ -113,7 +89,6 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # the rail without the knowledge layer. The last thing holding that dep was a
 # rustdoc link from `ring_cmd`'s module header to `Scope::Rails` — no code, no
 # type, one link — and `ring dev` mints its grant over HTTP.
-commonwealth-rail = { workspace = true }
 # `svrn job` is a client of the work plane, not a second implementation of it:
 # the act codec, the unit seal and `WorkProjection::fold` all come from here, so
 # the terminal, the daemon's donor loop and a lifted third-party peer are three
@@ -126,13 +101,15 @@ commonwealth-rail = { workspace = true }
 # ["dep:tokio"]` and this crate already links tokio). If a submitter-only peer
 # ever needs the shape without the runner, the cut is to ungate `ProcessPayload`
 # and leave `ProcessExecutor` behind the flag.
-commonwealth-work = { workspace = true, features = ["process"] }
-commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
 bytes = { workspace = true }
-corpus-engine = { workspace = true, features = ["treesitter"] }
 # The atlas vocabulary leaf — the ONE `atoms.json` shape (§10.6).
-understanding-vocab = { workspace = true }
-corpus-engine-notes = { workspace = true }
+understanding-vocab = { workspace = true, features = ["read"] }
+# The retrieval read-port leaf: index/corpus/types/filters rows this host
+# reads directly instead of via corpus-engine's historical re-exports.
+corpus-index = { workspace = true }
+# The atlas read leaf: governance, context bag and section rows.
+corpus-engine-atlas-reader = { workspace = true }
+oplog = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }
@@ -140,43 +117,26 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
-toml_edit = { workspace = true }
-tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 # `stream` on top of the workspace features: `solve --watch` reads
 # the daemon's SSE round events via `bytes_stream()`.
 reqwest = { workspace = true, features = ["stream"] }
 uuid = { workspace = true }
-arc-swap = { workspace = true }
 dirs = "5"
 chrono = { workspace = true }
 sha2 = { workspace = true }
-# `meshapp publish/install` pack/unpack bundle artifacts (tar over zstd, like
-# corpus snapshots).
-tar = "0.4"
-zstd = "0.13"
 regex = { workspace = true }
 tempfile = { workspace = true }
-which = "7"
-hostname = { workspace = true }
 hex = "0.4"
-# `mesh grant --qr-svg`: the wall link as an SVG QR. `svg` is dependency-free;
-# never `image` (it pulls resvg).
-fast_qr = { version = "=0.14.0", default-features = false, features = ["svg"] }
-ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
 rand = "0.9"
 # ── `awareness`-only, and off in every ordinary build ──
 # `awareness_cmd` moved here from `sovereign-cli` on 2026-08-21 (nc-26)
-# together with the three dependencies only it needs. All three are optional
-# and none is in `default`, so the sibling binary's ordinary build — and the
-# dispatcher's, which links this crate only under its own `awareness`
-# pass-through — is byte-for-byte what it was.
+# together with the dependencies only it needs. Both are optional
+# and neither is in `default`, so the sibling binary's ordinary build —
+# and the dispatcher's, which links this crate only under its own
+# `awareness` pass-through — is byte-for-byte what it was.
 #
-# `sovereign-tools` above is already non-optional here with `treesitter`;
-# `awareness` adds only its `atos` flag, for the `AtosSnapshot` every
-# `knowledge_view::splice_extension` caller needs.
-corpus-engine-atos = { workspace = true, optional = true }
 # Direct SQLite reads in `awareness_cmd/{entities,reset,timeline}`. Production
 # paths go through StateStore; the diagnostic CLI reads the file.
 rusqlite = { version = "0.35", features = ["bundled"], optional = true }
@@ -195,25 +155,13 @@ libc = "0.2"
 # reason the two module gates could disagree without anything noticing.
 #
 # `knowledge_view::splice_extension` (which every awareness subcommand
-# imports) is `#[cfg(feature = "treesitter")]` in sovereign-tools, and its
-# `AtosSnapshot` needs `atos` on top. Neither was declared when this feature
-# lived on the dispatcher, so it could not compile even once its module gate
-# was fixed — rustc reported them as "found an item that was configured out".
-awareness = [
-    "sovereign-tools/atos",
-    "dep:corpus-engine-atos",
-    "dep:rusqlite",
-]
+# imports) is `#[cfg(feature = "treesitter")]` in sovereign-tools, pulled
+# by the non-optional `sovereign-tools` dep above.
+awareness = ["dep:rusqlite"]
 
 [dev-dependencies]
-# First dev-dependency this crate has needed. `test-support` exposes the ONE
-# `test_env::scoped_home` HOME lock: it moved down with `providers`' tests
-# and four test modules here still take it (egress_reds, errors, reset,
-# integration_tests). A feature rather than a second copy of the lock (§10.6).
-sovereign-enrichment-build = { workspace = true, features = ["test-support"] }
-# Decodes `--qr-svg` output back to the link. `default-features = false`: its
-# `img` default pulls `image`.
-rqrr = { version = "=0.11.0", default-features = false }
+# The local-only list `portfolio-private` must stay in (fp-87) — a leaf.
+commonwealth-rail-core = { workspace = true }
 
 [lints]
 workspace = true

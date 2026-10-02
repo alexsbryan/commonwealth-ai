@@ -25,7 +25,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use sovereign_grants::ingest_grant::DEFAULT_GRANT_TTL_SECS;
 
 use crate::state::AppState;
@@ -64,7 +64,7 @@ pub async fn corpus_grant_issue(
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         )
     })?;
@@ -73,7 +73,7 @@ pub async fn corpus_grant_issue(
     // always present at registration). A non-grantable corpus — a structural
     // KnowledgeView corpus — can NEVER be lent to peers, even under a grant.
     let recipe = engine
-        .load_recipe(req.corpus_id.as_str())
+        .recipe_sharing(req.corpus_id.as_str())
         .await
         .map_err(|e| {
             (
@@ -83,7 +83,7 @@ pub async fn corpus_grant_issue(
                 }),
             )
         })?;
-    if !recipe.corpus.grantable {
+    if !recipe.grantable {
         return Err((
             StatusCode::FORBIDDEN,
             Json(ErrorBody {
@@ -108,7 +108,7 @@ pub async fn corpus_grant_issue(
     })?;
 
     let ttl_secs = req.ttl_secs.unwrap_or(DEFAULT_GRANT_TTL_SECS);
-    let now_ms = commonwealth_core::clock::unix_now_millis();
+    let now_ms = sovereign_time::unix_millis();
     let grant = state.inner.ingest.grant_store.issue(
         req.corpus_id.clone(),
         allowed_peers,
@@ -173,7 +173,7 @@ pub async fn corpus_grant_revoke(
         let gossip_key = format!("handoff:{handoff_id}");
         let _ = state
             .inner
-            .fabric
+            .store
             .mesh_store
             .delete("corpus-engine", &gossip_key);
         tracing::info!(

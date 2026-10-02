@@ -194,7 +194,7 @@ impl AuditPass<'_> {
             audit_forensics(&serde_json::json!({
                 "kind": "audit",
                 "audit_id": audit_id,
-                "run": crate::run_identity::run_id(),
+                "run": sovereign_contracts::run_identity::run_id(),
                 "ts": chrono::Utc::now().to_rfc3339(),
                 "recheck": recheck,
                 "incremental": is_incremental,
@@ -301,7 +301,7 @@ impl AuditPass<'_> {
                 tracing::info!(
                     target: "grounding_gate",
                     event = "claim_search_fanout",
-                    run = crate::run_identity::run_id(),
+                    run = sovereign_contracts::run_identity::run_id(),
                     searches = n,
                     concurrency = config::claim_search_concurrency(),
                     elapsed_ms = fan_ms,

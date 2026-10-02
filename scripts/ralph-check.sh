@@ -28,6 +28,16 @@
 #   lint / test / layer / docs / testall — through scripts/with-cargo-lock.sh
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# A pool lane's share of the machine's one cargo budget, written by
+# scripts/ralph.py's Pool: a file, because `toolbox run` forwards no env. A
+# value already in the env wins, as the gate scripts' own flags do.
+if [ -r target/ralph/lane.env ]; then
+    while IFS='=' read -r k v; do
+        case "$k" in
+            SOVEREIGN_LINT_JOBS|SOVEREIGN_TEST_JOBS) [ -n "${!k:-}" ] || export "$k=$v" ;;
+        esac
+    done < target/ralph/lane.env
+fi
 logdir="target/ralph${RALPH_QUEUE:+/$RALPH_QUEUE}"
 mkdir -p target/ralph "$logdir"
 

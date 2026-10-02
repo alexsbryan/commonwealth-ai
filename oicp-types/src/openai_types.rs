@@ -159,6 +159,19 @@ pub struct ChatCompletionRequest {
     /// pin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stable_prefix_len: Option<usize>,
+    /// Commonwealth extension: the top-k sampling override
+    /// (`CompletionRequest.top_k`). Wire path: HTTP body field `top_k` →
+    /// here → `inference_adapter::build_completion_request` → the sampler.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<u32>,
+    /// Commonwealth extension: the id of the turn this host already
+    /// admitted, when this call continues it (`CompletionRequest.admission`).
+    /// Honoured only from a caller on this host: the listener that parses
+    /// the wire clears it for anyone else
+    /// (`sovereign_serving_host::turn_admission`), and only a daemon-backed
+    /// `RemoteApiProvider` writes it, never a third-party engine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_admission: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -458,7 +471,7 @@ pub enum StreamFrame {
 /// and curl working; the rich fields (`prefix`/`path`/`language`/
 /// `debug`) are what the first-party VSCode extension sends.
 /// `prefix` wins over `prompt` when both are present.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CompletionsRequestWire {
     /// Legacy: model id. Echoed in the response envelope, but the
     /// configured FIM slot always serves regardless.
@@ -494,6 +507,13 @@ pub struct CompletionsRequestWire {
     /// Opt-in glassbox payload on the terminal chunk / response.
     #[serde(default)]
     pub debug: Option<bool>,
+    /// The next-edit lane's whole prompt, decoded verbatim (the adapter's
+    /// `FimCompletionRequest::raw_prompt`). Honoured by serve's route, which
+    /// the svrn daemon dials for that lane's model call
+    /// (pb-svrn-dials-serve); the daemon's own editor door builds its
+    /// request field by field and never reads it.
+    #[serde(default)]
+    pub raw_prompt: Option<String>,
 }
 
 impl CompletionsRequestWire {
@@ -557,6 +577,63 @@ pub struct EmbeddingData {
     pub object: String,
     pub embedding: Vec<f32>,
     pub index: usize,
+}
+
+/// `/v1/rerank` request, in the shape llama-server, Jina and Cohere share:
+/// score each document against the query with the served cross-encoder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RerankRequest {
+    /// Echoed back; the node serves its one rerank model whatever it says.
+    #[serde(default)]
+    pub model: String,
+    /// The query every document is scored against.
+    pub query: String,
+    /// The documents, scored in this order.
+    pub documents: Vec<String>,
+}
+
+/// `/v1/rerank` response: one result per document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RerankResponse {
+    /// The request's `model`, echoed.
+    pub model: String,
+    /// One per input document, in input order.
+    pub results: Vec<RerankResult>,
+}
+
+impl RerankResponse {
+    /// The scores for a request of `documents` documents, in input order,
+    /// whatever order the server listed them in. Refuses a result that names
+    /// a document past the end and a document left without a score, so a
+    /// short answer never shifts scores onto the wrong documents. The one
+    /// decoder every `/v1/rerank` client reads.
+    pub fn scores_in_input_order(self, documents: usize) -> Result<Vec<f32>, String> {
+        let mut scores = vec![None; documents];
+        for result in self.results {
+            let slot = scores.get_mut(result.index).ok_or_else(|| {
+                format!(
+                    "rerank response names document {} of {documents}",
+                    result.index
+                )
+            })?;
+            *slot = Some(result.relevance_score);
+        }
+        scores
+            .into_iter()
+            .enumerate()
+            .map(|(i, s)| s.ok_or_else(|| format!("rerank response has no score for document {i}")))
+            .collect()
+    }
+}
+
+/// One document's score. Scores are model-specific logits; never compare
+/// them across models.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RerankResult {
+    /// The document's position in the request.
+    pub index: usize,
+    /// Higher is more relevant.
+    pub relevance_score: f32,
 }
 
 /// OpenAI-compatible model list response.
@@ -648,6 +725,34 @@ impl ErrorResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Scores land in input order, and a short answer is refused rather than
+    /// shifting the scores it does carry onto the wrong documents.
+    #[test]
+    fn rerank_scores_land_in_input_order_and_a_short_answer_is_refused() {
+        let response = |indices: &[usize]| RerankResponse {
+            model: String::new(),
+            results: indices
+                .iter()
+                .map(|&index| RerankResult {
+                    index,
+                    relevance_score: index as f32,
+                })
+                .collect(),
+        };
+        assert_eq!(
+            response(&[2, 0, 1]).scores_in_input_order(3),
+            Ok(vec![0.0, 1.0, 2.0])
+        );
+        assert_eq!(
+            response(&[2, 0]).scores_in_input_order(3),
+            Err("rerank response has no score for document 1".to_string())
+        );
+        assert_eq!(
+            response(&[0, 3]).scores_in_input_order(3),
+            Err("rerank response names document 3 of 3".to_string())
+        );
+    }
 
     #[test]
     fn chat_completion_request_deserialize_minimal() {

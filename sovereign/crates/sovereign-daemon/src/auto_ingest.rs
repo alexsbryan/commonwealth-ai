@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+use corpus_index::ingest_port::daemon::IngestPort;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::state::AppState;
-use commonwealth_core::clock::unix_now_millis as now_ms;
-use commonwealth_core::ids::{HandoffId, NodeId};
-use commonwealth_core::knowledge::{
+use crate::types::MemberStatus;
+use corpus_index::ingest_port::cancel::CancellationFlag;
+use kernel_types::HandoffId;
+use kernel_types::NodeId;
+use oicp_types::work_queue::{
     CompleteOutcome, HandoffPhase, IngestionHandoff, LeasedUnit, UnitId, WorkUnit,
 };
-use commonwealth_core::mesh::NodeStatus;
-use corpus_engine::CancellationFlag;
+use sovereign_time::unix_millis as now_ms;
 
 const CHECK_INTERVAL: Duration = Duration::from_secs(30);
 const COOLDOWN: Duration = Duration::from_secs(30 * 60);
@@ -37,7 +39,7 @@ const COOLDOWN: Duration = Duration::from_secs(30 * 60);
 /// called. That handler checks `active_ingests` itself and skips the
 /// local partition spawn while still dispatching work to the new peer.
 /// Handle to the spawned auto-collaborate task. Aborts the task when dropped,
-/// exactly like [`sovereign_mesh::gossip::GossipHandle`] beside it, so stopping the
+/// exactly like `sovereign_mesh::gossip::GossipHandle` beside it, so stopping the
 /// daemon tears this loop down with everything else.
 ///
 /// # Why this function returns a value at all
@@ -137,14 +139,14 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
 
         let self_id = identity.current();
 
-        let current_peers: HashSet<NodeId> = {
-            let mesh = state.inner.fabric.mesh.read().await;
-            mesh.members
-                .values()
-                .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-                .map(|m| m.node_id)
-                .collect()
-        };
+        let current_peers: HashSet<NodeId> = state
+            .membership()
+            .members()
+            .await
+            .into_iter()
+            .filter(|m| m.node_id != self_id && m.status == MemberStatus::Online)
+            .map(|m| m.node_id)
+            .collect();
         let new_peer_appeared = current_peers
             .iter()
             .any(|id| !last_known_peers.contains(id));
@@ -187,7 +189,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // Detect corpora with `<corpus>-partition-*/` dirs on disk
         // but no canonical, and try to merge them into a canonical
         // ourselves. The deadlock this catches: the queue-mode
-        // ingest's handoff blob lives in the in-memory MeshStore,
+        // ingest's handoff blob lives in the in-memory mesh store,
         // which is wiped on every daemon restart; if no peer in
         // the mesh still gossips the blob when we come back up,
         // the dispatcher's existing recovery path
@@ -219,7 +221,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // Folded ONCE per tick rather than once per corpus: admitting a
         // journal is not free, and every corpus in `stranded` asks the same
         // projection a different question.
-        let fold = crate::work_donor::fold_now(&state).await;
+        let fold = crate::ingest_executor::fold_now(&state).await;
         for corpus_id in &stranded {
             if active_for_recovery.contains(corpus_id) {
                 tracing::debug!(
@@ -351,12 +353,12 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
                     chunk_count = lead.chunk_count,
                     "auto_ingest: peer has healthier canonical — attempting pull"
                 );
-                match sovereign_mesh::canonical_pull::pull_canonical_from_peer(
+                match crate::canonical_pull::pull_canonical_from_peer(
+                    std::sync::Arc::clone(engine),
                     &lead.candidate_urls,
                     corpus_id,
                     engine.index_dir(),
                     Some(&lead.fingerprint),
-                    state.mesh_proof_stamp().await.as_ref(),
                 )
                 .await
                 {
@@ -408,6 +410,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             }
 
             let outcome = sovereign_grants::auto_recover::try_recover_stranded_partitions(
+                &**engine,
                 engine.index_dir(),
                 corpus_id,
             )
@@ -457,7 +460,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         last_known_in_progress = in_progress.clone();
 
         // Publish this node's per-corpus `processed_shards` into the
-        // gossip-replicated MeshStore so the coordinator can union
+        // gossip-replicated mesh store so the coordinator can union
         // every peer's progress when computing `remaining` in
         // `corpus_collaborate`. Without this, each peer dispatches
         // from its own local view (`engine.corpus_processed_shards`
@@ -474,9 +477,9 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // only the last-writer's entry. With it, each peer has its
         // own gossip slot and the dispatch-side scan unions across
         // them naturally. Publish runs every CHECK_INTERVAL; cheap
-        // (a small JSON read of the partition meta + a MeshStore
+        // (a small JSON read of the partition meta + a mesh store
         // write).
-        publish_local_processed_shards(&state, engine, self_id, &in_progress_vec).await;
+        publish_local_processed_shards(&state, engine, &in_progress_vec).await;
 
         let should_check = first_iteration || new_peer_appeared || new_ingest_appeared;
         first_iteration = false;
@@ -528,7 +531,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
             // nodes that only receive ingest_partition assignments from a
             // coordinator have neither — they must not attempt a local
             // install, and there is nothing to coordinate from here.
-            let has_local_source = engine.source_manifest(corpus_id).ok().flatten().is_some()
+            let has_local_source = engine.has_source_manifest(corpus_id)
                 || engine.count_jsonl_articles(corpus_id).is_ok();
 
             // Peer-only node: no source data means no collaborate role here.
@@ -688,7 +691,7 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
 async fn has_active_queue_handoff(state: &AppState, corpus_id: &str) -> bool {
     let entries = match state
         .inner
-        .fabric
+        .store
         .mesh_store
         .scan("corpus-engine", "handoff:")
     {
@@ -712,8 +715,7 @@ async fn has_active_queue_handoff(state: &AppState, corpus_id: &str) -> bool {
 
 async fn publish_local_processed_shards(
     state: &AppState,
-    engine: &std::sync::Arc<corpus_engine::CorpusEngine>,
-    self_id: NodeId,
+    engine: &std::sync::Arc<dyn IngestPort>,
     in_progress: &[String],
 ) {
     for corpus_id in in_progress {
@@ -724,27 +726,15 @@ async fn publish_local_processed_shards(
             // hazard if the publisher loses its meta file mid-run.
             continue;
         }
-        let key = commonwealth_state::processed_shards_key(corpus_id, self_id);
-        let payload = match serde_json::to_vec(&local) {
-            Ok(b) => b,
-            Err(e) => {
-                tracing::warn!(
-                    corpus = %corpus_id,
-                    error = %e,
-                    "auto_ingest: serialize processed_shards failed"
-                );
-                continue;
-            }
-        };
-        if let Err(e) = state.inner.fabric.mesh_store.set(
-            commonwealth_state::PROCESSED_SHARDS_APP_ID,
-            &key,
-            payload.into(),
-            self_id,
-        ) {
+        if let Err(e) = state
+            .inner
+            .store
+            .processed_shards
+            .publish(corpus_id, &local)
+            .await
+        {
             tracing::warn!(
                 corpus = %corpus_id,
-                key = %key,
                 error = %e,
                 "auto_ingest: publish processed_shards failed"
             );
@@ -753,7 +743,6 @@ async fn publish_local_processed_shards(
         tracing::debug!(
             corpus = %corpus_id,
             shard_count = local.len(),
-            key = %key,
             "auto_ingest: published processed_shards"
         );
     }
@@ -777,7 +766,7 @@ async fn spawn_local_ingest(state: AppState, corpus_id: String) {
 
 // ── Pull-based work queue peer side ─────────────────────────────────
 //
-// The coordinator gossips a pull-based handoff via its MeshStore under
+// The coordinator gossips a pull-based handoff via its mesh store under
 // `corpus-engine / handoff:{handoff_id}` with `phase: Open` and empty
 // `partitions`. Every auto-ingest tick, each peer scans that namespace,
 // filters to handoffs it's compatible with (embed model match, not yet
@@ -789,8 +778,7 @@ async fn spawn_local_ingest(state: AppState, corpus_id: String) {
 /// Heartbeat cadence: one third of the lease. DERIVED from `LEASE_MS` rather
 /// than hand-copied — it was `from_secs(100)` beside a comment saying it
 /// matched, which is two deciders agreeing by luck (ARCH §10.6).
-const HEARTBEAT_INTERVAL: Duration =
-    Duration::from_millis(commonwealth_core::knowledge::LEASE_MS / 3);
+const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(oicp_types::work_queue::LEASE_MS / 3);
 
 /// How many consecutive `next_unit` failures we tolerate before giving up
 /// on a handoff. Counts both 5xx responses (coordinator alive but broken)
@@ -812,13 +800,18 @@ const MAX_NEXT_UNIT_FAILURES: u32 = 5;
 async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_port: u16) {
     // Read the local embed model. If missing, we can't match any
     // handoff — skip silently (peer is still bootstrapping).
-    let Some(local_embed) = state.inner.store.inference_store.get_local_embed_model() else {
-        return;
+    let local_embed = match state.local_embed_model().await {
+        Ok(Some(m)) => m,
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!(error = %e, "pull_loops: embed model unread; skipping this tick");
+            return;
+        }
     };
 
     let entries = match state
         .inner
-        .fabric
+        .store
         .mesh_store
         .scan("corpus-engine", "handoff:")
     {
@@ -892,24 +885,36 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
             tracing::debug!(handoff = %handoff.handoff_id, "pull_loops: handoff has no merge_leader");
             continue;
         };
-        let coordinator_contact = {
-            let mesh = state.inner.fabric.mesh.read().await;
-            mesh.members
-                .get(&coordinator_id)
-                .map(commonwealth_transport::peer_contact)
-        };
-        // Best transport candidate (ranked by `peer_addr::rank`, so
-        // this matches the order used by gossip and inference
-        // fallback) — the pull loop pins one coordinator URL.
-        let coordinator_url = match &coordinator_contact {
-            Some(contact) => state
-                .peer_transport()
-                .endpoints(contact, commonwealth_transport::TrafficClass::ControlPlane)
+        // The coordinator is this node: its queue is on our own internal
+        // port. cw-rails resolves no reach for its own node (409 "is this
+        // node"), so asking the transport would leave the self-pull with no
+        // address (pb-distribution-f9-stock-collaborate-e2e).
+        let coordinator_url = if coordinator_id == self_id {
+            tracing::debug!(
+                handoff = %handoff.handoff_id,
+                daemon_port,
+                "pull_loops: this node coordinates — pulling over its own loopback"
+            );
+            Some(format!("http://127.0.0.1:{daemon_port}"))
+        } else {
+            let coordinator_contact = state
+                .membership()
+                .member(coordinator_id)
                 .await
-                .into_iter()
-                .next()
-                .map(|ep| ep.base_url),
-            None => None,
+                .map(|m| m.dial);
+            // Best transport candidate (ranked by `peer_addr::rank`, so
+            // this matches the order used by gossip and inference
+            // fallback) — the pull loop pins one coordinator URL.
+            match &coordinator_contact {
+                Some(contact) => state
+                    .peer_transport()
+                    .endpoints(contact, mesh_reach::TrafficClass::ControlPlane)
+                    .await
+                    .into_iter()
+                    .next()
+                    .map(|ep| ep.base_url),
+                None => None,
+            }
         };
         let Some(coordinator_url) = coordinator_url else {
             tracing::warn!(
@@ -979,16 +984,9 @@ async fn pull_loop(
             "handoff_id": handoff_id,
             "peer_id": self_id,
         });
-        // Stamped: the coordinator is a PEER, so on a plain-IP hop its
-        // internal-port gate has nothing else to tell a member from a
-        // stranger. Minted per request — the loop outlives the proof window.
-        let resp = match state
-            .stamped(
-                client
-                    .post(format!("{coordinator_url}/internal/corpus/next_unit"))
-                    .json(&next_req),
-            )
-            .await
+        let resp = match client
+            .post(format!("{coordinator_url}/internal/corpus/next_unit"))
+            .json(&next_req)
             .send()
             .await
         {
@@ -1040,7 +1038,7 @@ async fn pull_loop(
             // automatic — `merge_entry` accepts new versions — so the
             // delete is safe.
             let key = format!("handoff:{}", handoff_id);
-            if let Err(e) = state.inner.fabric.mesh_store.delete("corpus-engine", &key) {
+            if let Err(e) = state.inner.store.mesh_store.delete("corpus-engine", &key) {
                 tracing::warn!(
                     handoff = %handoff_id,
                     error = %e,
@@ -1106,7 +1104,6 @@ async fn pull_loop(
         // trigger abort if the coordinator reclaims our lease (410 Gone).
         let cancel_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let hb_task = spawn_heartbeat(
-            state.clone(),
             client.clone(),
             coordinator_url.clone(),
             handoff_id,
@@ -1151,7 +1148,7 @@ async fn pull_loop(
         // misleading (the real ingest had ~1.5M chunks committed).
         let progress_state = state.clone();
         let progress_cid = corpus_id.clone();
-        let progress_cb: corpus_engine::ProgressCallback = Box::new(move |p| {
+        let progress_cb: corpus_index::ingest_port::ProgressCallback = Box::new(move |p| {
             let progress_state = progress_state.clone();
             let progress_cid = progress_cid.clone();
             tokio::spawn(async move {
@@ -1201,13 +1198,9 @@ async fn pull_loop(
             "outcome": outcome,
             "reason": reason,
         });
-        match state
-            .stamped(
-                client
-                    .post(format!("{coordinator_url}/internal/corpus/complete_unit"))
-                    .json(&complete_req),
-            )
-            .await
+        match client
+            .post(format!("{coordinator_url}/internal/corpus/complete_unit"))
+            .json(&complete_req)
             .send()
             .await
         {
@@ -1287,10 +1280,6 @@ use self::heartbeat_verdict::{heartbeat_verdict, AbortCause, HeartbeatOutcome, H
 /// A thin loop over [`heartbeat_verdict`]; on any `Abort` it sets the
 /// cancellation flag so the ingest loop stops.
 fn spawn_heartbeat(
-    // Taken whole rather than a minted stamp: a unit's ingest runs for minutes
-    // and `PROOF_WINDOW_SECS` is 30 s, so one stamp handed in here would go
-    // stale mid-unit and every later beat would be refused.
-    state: AppState,
     client: reqwest::Client,
     coordinator_url: String,
     handoff_id: HandoffId,
@@ -1315,13 +1304,9 @@ fn spawn_heartbeat(
                 "peer_id": peer_id,
                 "unit_id": unit_id,
             });
-            let outcome = match state
-                .stamped(
-                    client
-                        .post(format!("{coordinator_url}/internal/corpus/heartbeat"))
-                        .json(&body),
-                )
-                .await
+            let outcome = match client
+                .post(format!("{coordinator_url}/internal/corpus/heartbeat"))
+                .json(&body)
                 .send()
                 .await
             {
@@ -1417,10 +1402,10 @@ async fn find_best_peer_canonical(
     state: &crate::state::AppState,
     corpus_id: &str,
 ) -> Option<CanonicalAtlasLead> {
-    let mesh = state.inner.fabric.mesh.read().await;
+    let members = state.membership().members().await;
     let self_id = state.identity_reader().current();
     let mut best: Option<CanonicalAtlasLead> = None;
-    for member in mesh.members.values() {
+    for member in &members {
         // Skip ourselves — gossip echoes our own capability report.
         if member.node_id == self_id {
             continue;
@@ -1428,10 +1413,7 @@ async fn find_best_peer_canonical(
         // Skip offline peers — even if they advertised hosted_corpora
         // recently, the pull will time out. The mesh's status field
         // is updated by gossip-driven liveness probes.
-        if !matches!(
-            member.status,
-            commonwealth_core::mesh::NodeStatus::Online | commonwealth_core::mesh::NodeStatus::Busy
-        ) {
+        if !matches!(member.status, MemberStatus::Online | MemberStatus::Busy) {
             continue;
         }
         for shard_info in &member.capabilities.hosted_corpora {
@@ -1454,10 +1436,7 @@ async fn find_best_peer_canonical(
             // etc.) doesn't strand the request on a dead address.
             let candidate_urls: Vec<String> = state
                 .peer_transport()
-                .endpoints(
-                    &commonwealth_transport::peer_contact(member),
-                    commonwealth_transport::TrafficClass::ControlPlane,
-                )
+                .endpoints(&member.dial, mesh_reach::TrafficClass::ControlPlane)
                 .await
                 .into_iter()
                 .map(|ep| ep.base_url)

@@ -15,26 +15,13 @@
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use commonwealth_core::ids::{MeshId, NodeId};
-use commonwealth_core::mesh::Mesh;
+use kernel_types::NodeId;
 use sovereign_daemon::server::internal_router;
 use sovereign_daemon::state::AppState;
-use std::collections::HashMap;
 use tower::ServiceExt;
 
 fn fresh_state() -> AppState {
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(1),
-        name: "Test Mesh".into(),
-        invite_key_hash: [0u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
-    };
-    AppState::new(NodeId::from_u128(1), mesh)
+    AppState::new(NodeId::from_u128(1))
 }
 
 async fn get_storage_budget(state: AppState) -> (StatusCode, serde_json::Value) {
@@ -179,13 +166,12 @@ async fn budget_unset_returns_no_remaining() {
 // the user-visible outcome — no partition lands on the over-budget
 // node.
 
-use commonwealth_core::mesh::MemberRecord;
-use commonwealth_core::oicp::EmbedModelInfo;
-use corpus_engine::{SourceFileRecord, SourceFileStatus};
+use oicp_types::EmbedModelInfo;
+use sovereign_contracts::membership::MembershipEntry;
 use sovereign_grants::knowledge_assignment::plan_collaborative_ingestion;
 
 fn embed() -> EmbedModelInfo {
-    use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};
+    use oicp_types::{NormalizationStrategy, PoolingStrategy};
     EmbedModelInfo {
         model_id: "qwen3-embedding-0.6b".into(),
         dimensions: 1024,
@@ -195,22 +181,16 @@ fn embed() -> EmbedModelInfo {
     }
 }
 
-fn planner_member(id: u128, free_storage_gb: u32) -> MemberRecord {
-    use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
-    use commonwealth_core::mesh::NodeStatus;
-    MemberRecord {
-        removed_at: None,
-        node_pubkey: None,
-        relay_url: None,
-        iroh_direct_addrs: Vec::new(),
-        dial_info_version: 0,
-        dial_info_sig: None,
+fn planner_member(id: u128, free_storage_gb: u32) -> MembershipEntry<()> {
+    use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+    use sovereign_contracts::daemon_wire::MemberStatus;
+    MembershipEntry {
         node_id: NodeId::from_u128(id),
         name: format!("node-{id}"),
-        invited_by: NodeId::from_u128(1),
-        joined_at: 100,
+        status: MemberStatus::Online,
+        active: true,
         last_seen: 100,
-        status: NodeStatus::Online,
+        dialable: true,
         capabilities: NodeCapabilities {
             hardware: HardwareProfile {
                 gpus: vec![],
@@ -234,20 +214,18 @@ fn planner_member(id: u128, free_storage_gb: u32) -> MemberRecord {
             benchmark: None,
             current_in_flight: None,
             anchor: None,
+            storage_remaining_bytes: None,
         },
-        addresses: vec!["192.168.1.10:9742".parse().unwrap()],
+        dial: (),
     }
 }
 
-fn pending_files(n: usize) -> Vec<SourceFileRecord> {
-    (0..n)
-        .map(|i| SourceFileRecord {
-            file_index: i,
-            filename: format!("part-{i}.jsonl"),
-            size_bytes: 1_000_000,
-            status: SourceFileStatus::Pending,
-        })
-        .collect()
+/// Each pending file's size.
+const FILE_BYTES: u64 = 1_000_000;
+
+/// `n` pending files' indices.
+fn pending_files(n: usize) -> Vec<usize> {
+    (0..n).collect()
 }
 
 #[test]
@@ -260,7 +238,10 @@ fn planner_skips_node_whose_free_storage_was_clamped_to_zero() {
     let handoff = plan_collaborative_ingestion(
         "wiki",
         "wikipedia-en",
+        &[],
         &pending_files(10),
+        10,
+        10 * FILE_BYTES,
         &alice,
         std::slice::from_ref(&bob),
         &embed(),
@@ -290,7 +271,10 @@ fn planner_skips_only_clamped_nodes_when_others_have_room() {
     let handoff = plan_collaborative_ingestion(
         "openalex",
         "openalex-works",
+        &[],
         &pending_files(40),
+        40,
+        40 * FILE_BYTES,
         &alice,
         &[bob.clone(), carol.clone()],
         &embed(),

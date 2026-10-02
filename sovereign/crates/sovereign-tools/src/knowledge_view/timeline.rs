@@ -13,27 +13,18 @@
 //! structure — it is computed on demand from the atlas's atom and
 //! edge graph").
 //!
-//! ATOS composition lives behind [`AtosLookup`]: for `Initiative`
-//! entities, the assembler asks the caller "is there an ATOS project
-//! or feature whose name matches this initiative?" The caller
-//! resolves against the local FeatureStore + project state. When the
-//! match is ambiguous or absent, the timeline's `atos_project` is
-//! `None` — the digest renders the conversational context alone, no
-//! "phase: n/a" filler.
-//!
 //! This module is intentionally pure: no SQLite handles, no async
 //! I/O during assembly. The caller injects the chunk-timestamp
-//! resolver as a closure, and the ATOS lookup as a small typed
-//! interface. Tests exercise the assembly logic against in-memory
-//! atoms without spinning up a state store.
+//! resolver as a closure. Tests exercise the assembly logic against
+//! in-memory atoms without spinning up a state store.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, Entity};
-use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
-use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
+use understanding_vocab::atoms::{AtomEnvelope, Entity};
+use understanding_vocab::edges::{Edge, EdgeType};
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
+use understanding_vocab::taxonomy::EntityType;
 
 // ── Public types ────────────────────────────────────────────────
 
@@ -54,9 +45,6 @@ pub struct InteractionTimeline {
     pub participants: Vec<String>,
     /// Chronological list of mentions, oldest first.
     pub interactions: Vec<Interaction>,
-    /// ATOS project / feature link for `Initiative` entities. Always
-    /// `None` for Person and Organization.
-    pub atos_project: Option<AtosLink>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,62 +65,6 @@ pub struct Interaction {
     pub source_chunk_id: String,
 }
 
-/// Composition surface for ATOS state. The assembler hands an
-/// initiative's normalised name to the caller; the caller answers
-/// with `Some(AtosLink)` when there's a confident match against a
-/// project name (from `.sovereign/project.toml`) or a provisioned
-/// feature id, and `None` otherwise.
-///
-/// Trait, not a struct, so callers can wire whatever ATOS reader
-/// shape fits their context — sync against an in-memory ProjectState
-/// + FeatureStore handle, async against a remote, or a stub in tests.
-pub trait AtosLookup {
-    fn lookup(&self, initiative_name_normalised: &str) -> Option<AtosLink>;
-}
-
-#[derive(Debug, Clone)]
-pub struct AtosLink {
-    pub kind: AtosLinkKind,
-    /// For `Project` — the project name. For `Feature` — the
-    /// feature id (e.g. "knowledge-view-relational").
-    pub id: String,
-    /// Current phase index, when the project / feature publishes one
-    /// (1-based, from PHASES.md / feature_milestones).
-    pub current_phase: Option<u32>,
-    /// Total phases declared, when known.
-    pub total_phases: Option<u32>,
-    pub charter_status: CharterStatus,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AtosLinkKind {
-    Project,
-    Feature,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CharterStatus {
-    /// Spec / charter on disk matches the last-approved hash.
-    Clean,
-    /// Spec / charter has drifted from the approved hash. Surfaces
-    /// in the strategic digest with a "(drift)" annotation per
-    /// requirements §4.3.
-    Drifted,
-    /// No approval baseline recorded — equivalent to Clean for
-    /// digest purposes; the assembler returns this when the caller
-    /// can't find an approval row.
-    Unapproved,
-}
-
-/// A no-op lookup. Used when ATOS composition is intentionally
-/// disabled (tests, headless servers without a project root).
-pub struct NoAtosLookup;
-impl AtosLookup for NoAtosLookup {
-    fn lookup(&self, _: &str) -> Option<AtosLink> {
-        None
-    }
-}
-
 // ── Assembly ────────────────────────────────────────────────────
 
 /// Read the atlas at `corpus_index_dir/atlas/` and assemble one
@@ -148,7 +80,6 @@ impl AtosLookup for NoAtosLookup {
 pub fn assemble_timelines_from_atlas(
     corpus_index_dir: &Path,
     chunk_timestamp: &dyn Fn(&str) -> Option<i64>,
-    atos: &dyn AtosLookup,
 ) -> std::io::Result<Vec<InteractionTimeline>> {
     let atlas_dir = corpus_index_dir.join(ATLAS_DIRNAME);
     if !atlas_dir.exists() {
@@ -165,7 +96,6 @@ pub fn assemble_timelines_from_atlas(
         &atoms_file.atoms(),
         &edges_file.edges,
         chunk_timestamp,
-        atos,
     ))
 }
 
@@ -175,7 +105,6 @@ pub fn assemble(
     atoms: &[AtomEnvelope],
     edges: &[Edge],
     chunk_timestamp: &dyn Fn(&str) -> Option<i64>,
-    atos: &dyn AtosLookup,
 ) -> Vec<InteractionTimeline> {
     // Index entities by atom id for participant-name lookup.
     let mut by_id: BTreeMap<String, &Entity> = BTreeMap::new();
@@ -243,13 +172,6 @@ pub fn assemble(
             .filter_map(|aid| by_id.get(aid.as_str()).map(|e| e.canonical_name.clone()))
             .collect();
 
-        // ATOS link — initiatives only.
-        let atos_project = if matches!(kind, TimelineEntityKind::Initiative) {
-            atos.lookup(&fold_name(&entity.canonical_name))
-        } else {
-            None
-        };
-
         timelines.push(InteractionTimeline {
             entity_id: entity.id.as_str().to_string(),
             entity_name: entity.canonical_name.clone(),
@@ -258,7 +180,6 @@ pub fn assemble(
             role: entity.role.clone(),
             participants,
             interactions,
-            atos_project,
         });
     }
 
@@ -274,10 +195,6 @@ fn entity_kind(t: &EntityType) -> Option<TimelineEntityKind> {
         // relational+strategic digest.
         _ => None,
     }
-}
-
-fn fold_name(s: &str) -> String {
-    s.trim().to_lowercase()
 }
 
 // ── Convenience helpers ──────────────────────────────────────────
@@ -309,9 +226,9 @@ pub fn interactions_within(timeline: &InteractionTimeline, since: i64, now: i64)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::atoms::{AtomId, ChunkRef};
-    use corpus_engine::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
-    use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+    use understanding_vocab::atoms::{AtomId, ChunkRef};
+    use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+    use understanding_vocab::taxonomy::{EnrichmentDepth, EntityType};
 
     fn person(idx: usize, name: &str, affiliation: Option<&str>, role: Option<&str>) -> Entity {
         Entity {
@@ -392,7 +309,7 @@ mod tests {
         let atoms: Vec<AtomEnvelope> = Vec::new();
         let edges: Vec<Edge> = Vec::new();
         let ts = |_id: &str| -> Option<i64> { None };
-        let result = assemble(&atoms, &edges, &ts, &NoAtosLookup);
+        let result = assemble(&atoms, &edges, &ts);
         assert!(result.is_empty());
     }
 
@@ -414,7 +331,7 @@ mod tests {
             involves_edge(4, &AtomId::entity(3), "200"),
         ];
         let ts = |id: &str| -> Option<i64> { id.parse::<i64>().ok() };
-        let timelines = assemble(&atoms, &edges, &ts, &NoAtosLookup);
+        let timelines = assemble(&atoms, &edges, &ts);
 
         assert_eq!(timelines.len(), 3);
 
@@ -429,7 +346,6 @@ mod tests {
         // Sorted oldest-first: 100 < 200.
         assert_eq!(sarah.interactions[0].timestamp, Some(100));
         assert_eq!(sarah.interactions[1].timestamp, Some(200));
-        assert!(sarah.atos_project.is_none(), "people never get ATOS link");
 
         let init = timelines
             .iter()
@@ -456,7 +372,7 @@ mod tests {
                 id.parse::<i64>().ok()
             }
         };
-        let timelines = assemble(&atoms, &edges, &ts, &NoAtosLookup);
+        let timelines = assemble(&atoms, &edges, &ts);
         let inters = &timelines[0].interactions;
         assert_eq!(inters.len(), 3);
         assert_eq!(inters[0].timestamp, Some(100));
@@ -487,7 +403,6 @@ mod tests {
                     source_chunk_id: "c".into(),
                 },
             ],
-            atos_project: None,
         };
         assert_eq!(last_seen_at(&tl), Some(500));
         assert_eq!(interactions_within(&tl, 0, 200), 1);
@@ -497,61 +412,6 @@ mod tests {
         tl.interactions.retain(|i| i.timestamp.is_none());
         assert_eq!(last_seen_at(&tl), None);
         assert_eq!(interactions_within(&tl, 0, 1000), 0);
-    }
-
-    #[test]
-    fn initiative_atos_link_consults_lookup_with_normalised_name() {
-        struct StubLookup {
-            calls: std::cell::RefCell<Vec<String>>,
-        }
-        impl AtosLookup for StubLookup {
-            fn lookup(&self, name: &str) -> Option<AtosLink> {
-                self.calls.borrow_mut().push(name.to_string());
-                if name == "api migration" {
-                    Some(AtosLink {
-                        kind: AtosLinkKind::Project,
-                        id: "api-migration".into(),
-                        current_phase: Some(2),
-                        total_phases: Some(4),
-                        charter_status: CharterStatus::Drifted,
-                    })
-                } else {
-                    None
-                }
-            }
-        }
-        let stub = StubLookup {
-            calls: std::cell::RefCell::new(Vec::new()),
-        };
-
-        let atoms = vec![
-            AtomEnvelope::Entity(initiative(1, "API Migration", &[])),
-            AtomEnvelope::Entity(initiative(2, "Q3 Push", &[])),
-        ];
-        let edges: Vec<Edge> = Vec::new();
-        let ts = |_id: &str| -> Option<i64> { None };
-        let timelines = assemble(&atoms, &edges, &ts, &stub);
-
-        // Both initiatives queried; the lookup folded the name to
-        // lowercase before passing it.
-        let calls = stub.calls.borrow();
-        assert!(calls.contains(&"api migration".into()));
-        assert!(calls.contains(&"q3 push".into()));
-
-        let api = timelines
-            .iter()
-            .find(|t| t.entity_name == "API Migration")
-            .unwrap();
-        let link = api.atos_project.as_ref().unwrap();
-        assert_eq!(link.id, "api-migration");
-        assert_eq!(link.current_phase, Some(2));
-        assert_eq!(link.charter_status, CharterStatus::Drifted);
-
-        let q3 = timelines
-            .iter()
-            .find(|t| t.entity_name == "Q3 Push")
-            .unwrap();
-        assert!(q3.atos_project.is_none());
     }
 
     #[test]
@@ -567,7 +427,7 @@ mod tests {
         ];
         let edges = vec![involves_edge(1, &AtomId::entity(2), "10")];
         let ts = |id: &str| -> Option<i64> { id.parse().ok() };
-        let timelines = assemble(&atoms, &edges, &ts, &NoAtosLookup);
+        let timelines = assemble(&atoms, &edges, &ts);
         assert_eq!(timelines.len(), 1);
         assert_eq!(timelines[0].entity_name, "Sarah");
     }

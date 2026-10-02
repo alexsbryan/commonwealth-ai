@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Epistemic tools — `claim_search` and `epistemic_landscape`.
 //!
-//! Both tools wrap a `corpus_engine::CorpusEngine` to expose field model
+//! Both tools wrap the read port (`CorpusReadPort`) to expose field model
 //! enrichment data to the `ReasonWithTools` loop. They query the
 //! `field_skeleton.json` artifact and the enriched `chunks.lance/` table
 //! with position-aware filtered vector search.
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::{StepOutput, ToolContext};
 
-use corpus_engine::CorpusEngine;
+use corpus_index::source::CorpusReadPort;
 use sovereign_core::tool_manifest::DeclaredTool;
 
 // ─── ClaimSearchTool ─────────────────────────────────────
@@ -20,11 +20,11 @@ use sovereign_core::tool_manifest::DeclaredTool;
 /// status and attribution. Use when you need to know what positions
 /// exist on a topic and who holds them — not just find text passages.
 pub struct ClaimSearchTool {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn CorpusReadPort>,
 }
 
 impl ClaimSearchTool {
-    pub fn new(engine: Arc<CorpusEngine>) -> Self {
+    pub fn new(engine: Arc<dyn CorpusReadPort>) -> Self {
         Self { engine }
     }
 }
@@ -81,7 +81,7 @@ impl ClaimSearchTool {
             };
 
             let skeleton =
-                match corpus_engine::index::field_skeleton::load_field_skeleton(&index.path()) {
+                match corpus_engine_atlas_reader::field_model::load_field_skeleton(&index.path()) {
                     Ok(Some(s)) => s,
                     _ => continue,
                 };
@@ -210,11 +210,11 @@ fn format_position_results(results: &[PositionResult]) -> String {
 /// lines, and open questions. Use for contested philosophical, scientific,
 /// or policy questions.
 pub struct EpistemicLandscapeTool {
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn CorpusReadPort>,
 }
 
 impl EpistemicLandscapeTool {
-    pub fn new(engine: Arc<CorpusEngine>) -> Self {
+    pub fn new(engine: Arc<dyn CorpusReadPort>) -> Self {
         Self { engine }
     }
 }
@@ -262,7 +262,7 @@ impl EpistemicLandscapeTool {
             };
 
             let skeleton =
-                match corpus_engine::index::field_skeleton::load_field_skeleton(&index.path()) {
+                match corpus_engine_atlas_reader::field_model::load_field_skeleton(&index.path()) {
                     Ok(Some(s)) => s,
                     _ => continue,
                 };

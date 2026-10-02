@@ -26,7 +26,7 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 OUT="${BUILD_PROBE_OUT:-$PWD/target/build-probe}"; mkdir -p "$OUT/logs" "$OUT/timings"
 LOCK=scripts/with-cargo-lock.sh
-GATE="corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
+GATE="corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli-llm/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-turn-client/bundled-backend"
 BUILDF="corpus-engine/treesitter,sovereign-cli/dev-tools"
 MODE="${1:-warm}"
 N=$RANDOM

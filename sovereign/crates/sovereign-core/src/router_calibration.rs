@@ -1250,7 +1250,7 @@ expect = "abstain"
     /// data rots silently.
     #[test]
     fn shipped_calibration_bank_parses_and_keeps_its_shape() {
-        const SHIPPED: &str = include_str!("../../../bench/routing/calibration/axes_v1.toml");
+        const SHIPPED: &str = include_str!("../data/calibration/axes_v1.toml");
         let bank = parse_bank(SHIPPED).expect("shipped calibration bank must parse");
 
         // Every axis must be exercised — a gate with no cases is a

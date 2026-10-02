@@ -291,7 +291,11 @@ impl AdmittedOp {
 
 /// What admission produced: the acts in their agreed order, and the honest
 /// account of what could not be read.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+///
+/// `Deserialize` because the answer crosses the sync doors as this type: a
+/// caller that dialled `/v1/rail/admit` reads back the same struct the
+/// serving side admitted from, not a second spelling of it (ARCH §10.6).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Admission {
     /// Every admitted op in the total order `(ts_unix, actor, seq, id)`, voided
     /// ones included and marked. An app folds this; it never sorts it.

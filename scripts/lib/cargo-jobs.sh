@@ -98,12 +98,15 @@ cargo_jobs_available_gb() {
 # for rustc alone but this budget also governs the TEST phase, where a
 # binary that loads a model dwarfs any compile. Cheap insurance: on an
 # idle box the core cap binds first and this term costs nothing.
+CARGO_JOBS_GB_PER_JOB=4
+CARGO_JOBS_FLOOR=2
+
 resolve_cargo_jobs() {
     local override="${1:-}"
     local cores avail cap_cores cap_mem
-    local -r GB_PER_JOB=4
+    local -r GB_PER_JOB="$CARGO_JOBS_GB_PER_JOB"
     local -r CEILING=16
-    local -r FLOOR=2
+    local -r FLOOR="$CARGO_JOBS_FLOOR"
 
     if [[ -n "$override" ]]; then
         if [[ ! "$override" =~ ^[0-9]+$ ]]; then
@@ -154,5 +157,32 @@ resolve_cargo_jobs() {
         CARGO_JOBS_REASON="capped at ${CEILING} (${cores} cores)"
     fi
 
+    return 0
+}
+
+# Split the one budget across $1 lanes that start together (scripts/ralph.py
+# Pool). Each lane resolving its own budget from the same MemAvailable is how
+# three lanes over-commit: every one of them sees all of it (the 2026-10-01
+# OOM). Sets two globals:
+#   CARGO_JOBS_SHARE         — jobs per lane; 0 when free memory cannot give
+#                              every lane FLOOR jobs at GB_PER_JOB (do not start)
+#   CARGO_JOBS_SHARE_REASON  — which term decided it
+cargo_jobs_share() {
+    local lanes="${1:-}" avail need
+    if [[ ! "$lanes" =~ ^[1-9][0-9]*$ ]]; then
+        echo "cargo-jobs: lane count must be a positive integer (got '$lanes')" >&2
+        return 2
+    fi
+    resolve_cargo_jobs "" || return $?
+    avail="$(cargo_jobs_available_gb)"
+    need=$(( lanes * CARGO_JOBS_FLOOR * CARGO_JOBS_GB_PER_JOB ))
+    if [[ -n "$avail" && "$avail" -lt "$need" ]]; then
+        CARGO_JOBS_SHARE=0
+        CARGO_JOBS_SHARE_REASON="${avail}GB available, under the ${need}GB floor for ${lanes} lane(s) (${CARGO_JOBS_FLOOR} jobs x ${CARGO_JOBS_GB_PER_JOB}GB each)"
+        return 0
+    fi
+    CARGO_JOBS_SHARE=$(( CARGO_JOBS / lanes ))
+    [[ "$CARGO_JOBS_SHARE" -lt "$CARGO_JOBS_FLOOR" ]] && CARGO_JOBS_SHARE="$CARGO_JOBS_FLOOR"
+    CARGO_JOBS_SHARE_REASON="${CARGO_JOBS} jobs (${CARGO_JOBS_REASON}) split across ${lanes} lane(s)"
     return 0
 }

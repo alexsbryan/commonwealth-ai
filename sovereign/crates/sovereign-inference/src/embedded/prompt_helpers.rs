@@ -25,13 +25,13 @@ use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
-use sovereign_core::error::Error;
-use sovereign_core::model_family::{
+use sovereign_contracts::error::Error;
+use sovereign_contracts::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::*;
-use sovereign_core::Result;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::*;
+use sovereign_contracts::Result;
 
 use crate::hardware::HardwareProfile;
 

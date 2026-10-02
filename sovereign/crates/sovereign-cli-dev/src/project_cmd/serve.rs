@@ -1,21 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn project serve` — the lightweight MCP server for locally-indexed
-//! projects (no model required), plus `scip_graph_reloader`, the 30s poller
-//! that hot-swaps the SCIP call graph on disk changes. `load_merged_graph` /
-//! `snapshot_graph_mtimes` stay re-exported from `super`. Split out of
+//! projects (no model required). Its graph stays fresh through the code
+//! program's Reindexer (`sovereign_code::freshness`), whose `/v1/projects/*`
+//! it mounts beside `/mcp`. Split out of
 //! `project_cmd` (2026-07-13); pure move. Shared plumbing via `use super::*`.
 
 use super::*;
+use host_kit::shell::guard::LoopbackRouter as _;
 
-const HELP_SERVE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
-    command: "svrn project serve",
-    summary: "Start a lightweight MCP server for locally-indexed projects (no model required).",
+const HELP_SERVE: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
+    command: "svrn code mcp",
+    summary: "Serve code intelligence over MCP for locally-indexed projects: no model, no \
+              daemon, no mesh. Also spelled `svrn serve` and `svrn project serve`.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
-            "svrn project serve [--port <port>] [--data-dir <dir>]\n    \
+        sovereign_cli_base::help::HelpSection::Usage(
+            "svrn code mcp [--port <port>] [--data-dir <dir>]\n    \
              [--sovereign-dir <dir>]",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             ("--port <port>", "Listen port (default: 9741)"),
             (
                 "--data-dir <dir>",
@@ -32,34 +34,9 @@ const HELP_SERVE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
 // ─── Serve ───────────────────────────────────────────────────
 
 pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_SERVE);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_SERVE);
         return 0;
-    }
-
-    // Check whether the daemon already owns :9741. If so, running
-    // the legacy in-process server on top collides (silent bind
-    // failure) and degrades the user's MCP surface. Refuse to
-    // start and redirect to the daemon workflow.
-    if daemon_is_running().await {
-        eprintln!();
-        eprintln!("  `svrn project serve` is superseded.");
-        eprintln!();
-        eprintln!("  The running sovereign daemon already serves MCP on :9741 and");
-        eprintln!("  owns freshness (FS watcher + git HEAD poll + startup catch-up).");
-        eprintln!("  There's no need to run a second server on top of it.");
-        eprintln!();
-        eprintln!("  To have the daemon watch this project:");
-        eprintln!("    sovereign project register");
-        eprintln!();
-        eprintln!("  To inspect watcher state:");
-        eprintln!("    sovereign project watch status");
-        eprintln!();
-        eprintln!("  If you really want the legacy in-process server (e.g. the daemon");
-        eprintln!("  is broken and you need a fallback), stop the daemon first:");
-        eprintln!("    launchctl stop com.svrnmesh.daemon   # macOS");
-        eprintln!("    systemctl --user stop sovereign       # Linux");
-        return 1;
     }
 
     let mut port: u16 = 9741;
@@ -110,16 +87,10 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     eprintln!("  Sovereign Code Intelligence MCP Server");
     eprintln!("  {}", "─".repeat(54));
 
-    // ── Build CorpusEngine (zero-vector, no model) ──────────────
+    // ── Index source (the leaf's filesystem reader, no model) ───
 
-    let embed: EmbedFn = Arc::new(|_text: &str| {
-        Box::pin(async {
-            Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
-        })
-    });
-    let recipes_dir = data_dir.clone();
     let engine = Arc::new(
-        CorpusEngine::new(recipes_dir, data_dir.clone(), embed)
+        corpus_index::fs_source::FsIndexSource::new(data_dir.clone())
             .with_embedding_model(&configured_embed_model_name()),
     );
 
@@ -152,27 +123,12 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Discover and merge SCIP graphs ──────────────────────────
 
+    // Loaded when a tool first reads it (phase-b pb-code-freshness).
     eprintln!();
-    eprintln!("  Call graph:");
-
-    let (initial_graph, _summary) = load_merged_graph(&data_dir, true).await;
-    let merged_graph: sovereign_tools::ScipGraphHandle =
-        Arc::new(ArcSwap::from_pointee(initial_graph));
-    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
-        &merged_graph,
-    )));
-
-    // Spawn the background reloader: every 30s, stat each scip_graph.db,
-    // and if any mtime changed (or a file appeared/disappeared) rebuild the
-    // merged graph and swap it in atomically. Tools grab `load_full()` per
-    // query so the swap is lock-free.
-    {
-        let handle = Arc::clone(&merged_graph);
-        let dir = data_dir.clone();
-        tokio::spawn(async move {
-            scip_graph_reloader(handle, dir).await;
-        });
-    }
+    eprintln!(
+        "  Call graph:       loads on first read from {}",
+        data_dir.display()
+    );
 
     // ── Repo root + sovereign config ────────────────────────────
     //
@@ -192,81 +148,21 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| cwd.clone());
-    let sovereign_cfg = corpus_engine::SovereignConfig::load_or_default(&sovereign_dir);
 
-    // ── Open result stores (SQLite, always-on) ──────────────────
     eprintln!();
     eprintln!("  Stores:");
 
-    let test_store =
-        match corpus_engine_watchers::TestResultStore::open(&data_dir.join("test_results.db")) {
-            Ok(s) => {
-                eprintln!("  test_results.db  ✓");
-                Arc::new(s)
-            }
-            Err(e) => {
-                eprintln!("  warning: could not open test results DB: {e}");
-                Arc::new(
-                    corpus_engine_watchers::TestResultStore::open(std::path::Path::new(":memory:"))
-                        .expect("in-memory test store"),
-                )
-            }
-        };
-
-    let lint_store =
-        match corpus_engine_watchers::LintResultStore::open(&data_dir.join("lint_results.db")) {
-            Ok(s) => {
-                eprintln!("  lint_results.db  ✓");
-                Arc::new(s)
-            }
-            Err(e) => {
-                eprintln!("  warning: could not open lint results DB: {e}");
-                Arc::new(
-                    corpus_engine_watchers::LintResultStore::open(std::path::Path::new(":memory:"))
-                        .expect("in-memory lint store"),
-                )
-            }
-        };
-
     // ── Notes store ─────────────────────────────────────────────
 
-    let notes_db_path = sovereign_dir.join("notes.db");
+    let notes_db_path = crate::notes_db::find_notes_db(None);
     let notes_store = match corpus_engine_notes::NoteStore::open(&notes_db_path) {
         Ok(s) => {
             eprintln!("  notes.db         ✓");
-            // Write a pointer file so `svrn reflect` can find this
-            // database from any working directory, regardless of where the
-            // user invokes it from.
-            let pointer_dir = sovereign_cli_shared::dirs::sovereign_root();
-            let _ = std::fs::create_dir_all(&pointer_dir);
-            let _ = std::fs::write(
-                pointer_dir.join("active_notes_db"),
-                notes_db_path.to_string_lossy().as_bytes(),
-            );
             Arc::new(s)
         }
         Err(e) => {
-            eprintln!("  warning: could not open notes DB: {e}");
-            Arc::new(
-                corpus_engine_notes::NoteStore::open(std::path::Path::new(":memory:"))
-                    .expect("in-memory notes store"),
-            )
-        }
-    };
-
-    // ── Feature store (ATOS charters + milestones) ─────────────
-    let features_db_path = sovereign_dir.join("features.db");
-    let features_store = match corpus_engine_atos::FeatureStore::open(&features_db_path) {
-        Ok(s) => {
-            eprintln!("  features.db      ✓");
-            Arc::new(s)
-        }
-        Err(e) => {
-            eprintln!("  warning: could not open features DB: {e}");
-            Arc::new(
-                corpus_engine_atos::FeatureStore::open(std::path::Path::new(":memory:"))
-                    .expect("in-memory features store"),
-            )
+            eprintln!("error: cannot open {}: {e}", notes_db_path.display());
+            return 1;
         }
     };
 
@@ -321,357 +217,68 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             }
         };
 
-    // ── Build background watchers ───────────────────────────────
-
-    // Shared run slot so lint + test cargo invocations serialize
-    // instead of double-spawning on every debounced edit flush.
-    let run_slot = Arc::new(tokio::sync::Semaphore::new(1));
-
-    let test_watcher: Option<Arc<corpus_engine_watchers::TestWatcher>> =
-        sovereign_cfg.test_runner.as_ref().map(|cfg| {
-            let working_dir = cfg.working_dir.as_ref().map(|d| {
-                let p = PathBuf::from(d);
-                if p.is_absolute() {
-                    p
-                } else {
-                    repo_root.join(p)
-                }
-            });
-            eprintln!(
-                "  test_runner      ✓  {}",
-                cfg.command.chars().take(60).collect::<String>()
-            );
-            Arc::new(
-                corpus_engine_watchers::TestWatcher::new(
-                    &cfg.command,
-                    working_dir,
-                    cfg.timeout_secs.unwrap_or(300),
-                    Arc::clone(&test_store),
-                )
-                .with_run_slot(Arc::clone(&run_slot)),
-            )
-        });
-
-    let lint_watcher: Option<Arc<corpus_engine_watchers::LintWatcher>> =
-        sovereign_cfg.lint_runner.as_ref().map(|cfg| {
-            let working_dir = cfg.working_dir.as_ref().map(|d| {
-                let p = PathBuf::from(d);
-                if p.is_absolute() {
-                    p
-                } else {
-                    repo_root.join(p)
-                }
-            });
-            eprintln!(
-                "  lint_runner      ✓  {}",
-                cfg.command.chars().take(60).collect::<String>()
-            );
-            Arc::new(
-                corpus_engine_watchers::LintWatcher::new(
-                    &cfg.command,
-                    working_dir,
-                    cfg.timeout_secs.unwrap_or(120),
-                    Arc::clone(&lint_store),
-                )
-                .with_run_slot(Arc::clone(&run_slot)),
-            )
-        });
-
-    if test_watcher.is_none() && lint_watcher.is_none() {
-        eprintln!(
-            "  warning: no watchers configured — add [test_runner] / [lint_runner] \
-             to {}",
-            sovereign_dir.join("sovereign.toml").display()
-        );
-    }
-
-    // Scope strings for lint/test status tools — shown to agents so they can
-    // confirm the watcher covers the crates they just edited.
-    let test_watched_scope: Option<String> = sovereign_cfg
-        .test_runner
-        .as_ref()
-        .map(|c| c.command.clone());
-    let lint_watched_scope: Option<String> = sovereign_cfg
-        .lint_runner
-        .as_ref()
-        .map(|c| c.command.clone());
-
-    // Shared flag: set to true after coordinator.start() succeeds. Tools expose
-    // this as watcher_active so agents know the FS watcher is live.
-    let watcher_active_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-
-    // ── Register tools ──────────────────────────────────────────
-
-    let mut tools = sovereign_core::ToolRegistry::new();
-    tools.register(Box::new(
-        sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::CodeSearchTool::new(Arc::clone(&engine)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::RecentChangesTool::new(Arc::clone(&engine)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
-    ));
-    // Capability map — derived "what the codebase does" overview.
-    tools.register(Box::new(
-        sovereign_tools::CapabilityMapTool::new().declared(),
-    ));
-    // Architecture observability (quality program) — report + posture.
-    tools.register(Box::new(sovereign_tools::ArchReportTool::new().declared()));
-    tools.register(Box::new(sovereign_tools::ArchPostureTool::new().declared()));
-
-    // ── Test / lint watcher tools ───────────────────────────────
-
-    {
-        let mut tool = sovereign_tools::TestStatusTool::new(Arc::clone(&test_store))
-            .with_watcher_active(Arc::clone(&watcher_active_flag));
-        if let Some(scope) = test_watched_scope {
-            tool = tool.with_watched_scope(scope);
-        }
-        tools.register(Box::new(tool.declared()));
-    }
-    if let Some(ref watcher) = test_watcher {
-        tools.register(Box::new(
-            sovereign_tools::RunTestsTool::new(Arc::clone(watcher)).declared(),
-        ));
-    }
-    tools.register(Box::new(
-        sovereign_tools::GetRunOutputTool::new(Arc::clone(&test_store)).declared(),
-    ));
-
-    {
-        let mut tool = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
-            .with_watcher_active(Arc::clone(&watcher_active_flag))
-            .with_workspace_root(repo_root.clone());
-        if let Some(scope) = lint_watched_scope {
-            tool = tool.with_watched_scope(scope);
-        }
-        tools.register(Box::new(tool.declared()));
-    }
-    tools.register(Box::new(
-        sovereign_tools::DriftPostureTool::new()
-            .with_workspace_root(repo_root.clone())
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::GetLintOutputTool::new(Arc::clone(&lint_store)).declared(),
-    ));
-
-    // ── Agent partnership tools (notes, blast radius, project context) ──
-
-    tools.register(Box::new(
-        sovereign_tools::WriteNoteTool::new(Arc::clone(&notes_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::ReadNotesTool::new(Arc::clone(&notes_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::DeleteNoteTool::new(Arc::clone(&notes_store)).declared(),
-    ));
-    // Work atlas — coordination layer for agents sharing this repo.
-    // The serve path runs the GC loop and exposes the three claim
-    // tools alongside the code-intel surface. Per spec §10 the
-    // origin-remote MUST gate is checked at *boot*: a repo with no
-    // origin still gets a serve, but every `declare_scope` call
-    // fails with an actionable error rather than silently writing
-    // partial state.
-    let atlas_mesh_db = sovereign_dir.join("mesh.db");
-    if let Some(parent) = atlas_mesh_db.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let atlas_mesh_store = Arc::new(
-        sovereign_mesh::peer_adapter::MeshReplicatedKv::open(&atlas_mesh_db)
-            .or_else(|_| sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory())
-            .expect("work atlas mesh store"),
-    );
-    let atlas_node_id = crate::atlas_identity::atlas_node_id();
-    let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&atlas_mesh_store) as Arc<dyn sovereign_work_atlas::ReplicatedKv>,
-        atlas_node_id,
-    ));
-    let atlas_cfg_path = sovereign_cli_shared::dirs::work_atlas_toml();
-    let atlas_cfg = sovereign_work_atlas::WorkAtlasConfig::load_or_default(&atlas_cfg_path)
-        .unwrap_or_else(|e| {
-            tracing::warn!(
-                error = %e,
-                path = %atlas_cfg_path.display(),
-                "work_atlas: failed to load config, falling back to defaults"
-            );
-            sovereign_work_atlas::WorkAtlasConfig::defaults()
-        });
-    let atlas_broadcaster: Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
-        Arc::new(sovereign_work_atlas::tools::NullBroadcaster);
-    let (atlas_repo_root, atlas_repo_id) =
-        match sovereign_work_atlas::resolve_repo_id_allowing_local(&repo_root) {
-            Ok((root, id, source)) => {
-                if let Some(caveat) = source.caveat() {
-                    tracing::info!(caveat, "work_atlas: using a machine-local repo id");
-                }
-                (root, id)
-            }
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "work_atlas:repo_id_missing — not inside a git repo, so claims \
-                     cannot be scoped to one"
-                );
-                (repo_root.clone(), String::new())
-            }
-        };
-    let atlas_branch = crate::code_cmd::current_branch(&atlas_repo_root);
-    tools.register(Box::new(
-        sovereign_work_atlas::tools::DeclareScopeTool::new(
-            Arc::clone(&atlas_store),
-            atlas_cfg.clone(),
-            Arc::clone(&atlas_broadcaster),
-            atlas_repo_root.clone(),
-            atlas_repo_id.clone(),
-            atlas_branch.clone(),
-        )
-        .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_work_atlas::tools::ReleaseScopeTool::new(
-            Arc::clone(&atlas_store),
-            Arc::clone(&atlas_broadcaster),
-        )
-        .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_work_atlas::tools::WorkInFlightTool::new(Arc::clone(&atlas_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_work_atlas::tools::ResourceMayITool::new(Arc::clone(&atlas_store)).declared(),
-    ));
-    // GC loop. Holds onto the handle so dropping it aborts cleanly
-    // when serve terminates.
-    let _atlas_gc_handle =
-        sovereign_work_atlas::gc::WorkAtlasGc::new(Arc::clone(&atlas_store), atlas_cfg.clone())
-            .spawn();
-
-    tools.register(Box::new(
-        sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
-            .with_project_root(repo_root.clone())
-            .with_health_checker(Arc::clone(&health_checker))
-            .with_atlas(Arc::clone(&atlas_store))
-            .declared(),
-    ));
-    if let Some(ref ds) = docs_store {
-        tools.register(Box::new(
-            sovereign_tools::ProjectContextTool::new(Arc::clone(ds))
-                .with_features(Arc::clone(&features_store))
-                .declared(),
-        ));
-    }
-
-    // ── ATOS feature management ─────────────────────────────────
-    tools.register(Box::new(
-        sovereign_tools::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::ReadNoteByIdTool::new(Arc::clone(&notes_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::PromoteNoteTool::new(Arc::clone(&notes_store)).declared(),
-    ));
-    // ReadNoteDigestTool runs in fallback (header-only) mode here —
-    // `svrn project serve` doesn't load a model, so the Fast-slot
-    // summarization path is unavailable. The banner in the fallback
-    // digest makes the degraded state visible to agents. The daemon
-    // binary wires inference in via `.with_inference(...)`.
-    tools.register(Box::new(
-        sovereign_tools::ReadNoteDigestTool::new(Arc::clone(&notes_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
-    ));
-    // atos_plan_emit intentionally NOT registered — see runtime
-    // tools_cmd/registry.rs for rationale (markdown plan path
-    // replaced structured-JSON path).
-    tools.register(Box::new(
-        sovereign_tools::WriteRedteamFindingTool::new(Arc::clone(&notes_store)).declared(),
-    ));
-
-    // ── Session reflection (feedback loop) ─────────────────────────────
-    tools.register(Box::new(
-        sovereign_tools::SessionReflectionTool::new(Arc::clone(&notes_store)).declared(),
-    ));
-
-    // ── DESIGN.md structural signals ────────────────────────────────────
-    //
-    // Project-scoped: bound to this repo's DESIGN.md by default, so the
-    // agent can call `design_signals_extract()` with no args and get the
-    // right file. Absolute paths still work — the tool resolves them
-    // verbatim, bypassing project_root.
-    tools.register(Box::new(
-        sovereign_tools::DesignSignalsExtractTool::new()
-            .with_project_root(repo_root.clone())
-            .declared(),
-    ));
-
-    // ── Start watcher coordinator ───────────────────────────────
-
-    let debounce_ms = sovereign_cfg
-        .test_runner
-        .as_ref()
-        .and_then(|c| c.debounce_ms)
-        .or_else(|| {
-            sovereign_cfg
-                .lint_runner
-                .as_ref()
-                .and_then(|c| c.debounce_ms)
+    // ── Code, composed: result stores, Reindexer, watchers, work atlas,
+    // code's bundles and its MCP dispatch (`sovereign_code::face`, the one the
+    // stock binary composes too). The docs indexer is this server's own.
+    let docs_watchers = docs_store
+        .iter()
+        .map(|ds| {
+            Arc::new(corpus_engine_watchers::ProjectIndexWatcher::new(
+                Arc::clone(ds),
+                repo_root.clone(),
+            )) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>
         })
-        .unwrap_or(500);
-
-    let mut coordinator = corpus_engine_watchers::WatcherCoordinator::new(debounce_ms);
-    if let Some(ref w) = test_watcher {
-        coordinator.register(Arc::clone(w) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
-    }
-    if let Some(ref w) = lint_watcher {
-        coordinator.register(Arc::clone(w) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
-    }
-    if let Some(ref ds) = docs_store {
-        let pw =
-            corpus_engine_watchers::ProjectIndexWatcher::new(Arc::clone(ds), repo_root.clone());
-        coordinator.register(Arc::new(pw) as Arc<dyn corpus_engine_watchers::BackgroundWatcher>);
-    }
-
-    let _coordinator_handle = if !coordinator.registered_ids().is_empty() {
-        match coordinator.start(vec![repo_root.clone()]).await {
-            Ok(handle) => {
-                eprintln!("  Watcher started (watching {})", repo_root.display());
-                watcher_active_flag.store(true, std::sync::atomic::Ordering::Release);
-                Some(handle)
-            }
-            Err(e) => {
-                eprintln!("  warning: could not start watcher: {e}");
-                None
-            }
+        .collect();
+    let face = match sovereign_code::face::compose(sovereign_code::face::CodeParts {
+        indexes_dir: data_dir.clone(),
+        stores_dir: data_dir.clone(),
+        notes: Some(Arc::clone(&notes_store)),
+        index: Arc::clone(&engine) as Arc<dyn sovereign_code::CodeIndexSource>,
+        workspace: Some(repo_root.clone()),
+        sovereign_dir: Some(sovereign_dir.clone()),
+        session_prefix: "serve",
+        extra_watchers: docs_watchers,
+        // Code alone: the rail dials cw-rails and wires no host model.
+        notes_rail: Default::default(),
+        // Code alone holds no grammar registry: the editor door names its
+        // syntax filter and symbol lane unjudged (pb-meshapp-rest).
+        grammar: None,
+    })
+    .await
+    {
+        Ok(face) => face,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
         }
-    } else {
-        None
     };
+    for line in &face.banner {
+        eprintln!("  {line}");
+    }
 
-    let tools = Arc::new(tools);
+    let tools = Arc::clone(&face.tools);
     eprintln!();
     eprintln!("  Tools: {} registered", tools.count());
 
     // ── Start MCP HTTP server ───────────────────────────────────
+
+    // `:9741/mcp` is the one MCP address (phase-b-33). Whichever of this
+    // server and the svrn daemon binds it second refuses by name; neither
+    // stops the other (principle 12).
+    let addr: std::net::SocketAddr = ([127, 0, 0, 1], port).into();
+    let listener = match host_kit::shell::bind_with_retry(addr, "code MCP").await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("error: {e}");
+            if e.kind() == std::io::ErrorKind::AddrInUse {
+                eprintln!(
+                    "  Port {port} is taken — the svrn daemon serves /mcp there too. Use it, \
+                     stop it, or pass --port."
+                );
+            }
+            return 1;
+        }
+    };
 
     let bind_addr = format!("127.0.0.1:{port}");
     eprintln!("  Listening on http://{bind_addr}/mcp");
@@ -689,30 +296,15 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     eprintln!("    }}");
     eprintln!();
 
-    // Stable session ID for this server run — used by tool_call_log to group
-    // calls from the same sovereign project serve invocation.
-    let mcp_session_id = format!("serve-{}", uuid::Uuid::new_v4());
-
-    // Phase 5: standalone `svrn serve` always knows its project
-    // root (resolved above as `repo_root`). Pass it as the
-    // FeatureRoot so `tools/list` consults
-    // `.sovereign/features/*/spec.md` and only advertises the
-    // spec-gated tools (`spec`, `drift`) when a spec exists. Cache
-    // is process-global so repeated `tools/list` calls amortise the
-    // stat against a 1-second TTL.
-    let feature_root = sovereign_daemon::mcp_router::FeatureRoot::new(Some(repo_root.clone()));
-    // Phase 5b: build a notifier and wire it to a SpecWatcher rooted
-    // at repo_root. The watcher's on_change closure publishes to the
-    // notifier; the notifier fans the JSON-RPC frame out to every
-    // subscribed SSE client. Result: when the user creates
-    // `.sovereign/features/foo/spec.md` (or edits ARCHITECTURE.md),
-    // every connected MCP agent sees `notifications/tools/list_changed`
-    // within ~100ms and refetches `tools/list` — surfacing `spec` and
-    // `drift` without a restart.
-    let notifier = sovereign_daemon::mcp_router::McpNotifier::new();
+    // The notifier behind `GET /mcp`, wired to a SpecWatcher rooted at
+    // repo_root: when the user creates `.sovereign/features/foo/spec.md`
+    // (or edits ARCHITECTURE.md), every connected MCP agent sees
+    // `notifications/tools/list_changed` within ~100ms and refetches
+    // `tools/list` — surfacing `spec` and `drift` without a restart.
+    let notifier = host_kit::mcp::http::McpNotifier::new();
     let watcher_notifier = notifier.clone();
     let _spec_watcher =
-        match sovereign_tools::spec_watcher::SpecWatcher::start(&repo_root, move || {
+        match sovereign_code::spec_watcher::SpecWatcher::start(&repo_root, move || {
             watcher_notifier.notify_tools_list_changed()
         }) {
             Ok(w) => Some(w),
@@ -730,21 +322,19 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
                 None
             }
         };
-    let app = sovereign_daemon::mcp_router::mcp_router(
-        tools,
-        Arc::clone(&notes_store),
-        mcp_session_id,
-        feature_root,
-        notifier,
-    );
-
-    let listener = match tokio::net::TcpListener::bind(&bind_addr).await {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("error: cannot bind to {bind_addr}: {e}");
-            return 1;
-        }
-    };
+    // Code's dispatcher, behind the kit's HTTP+SSE framing. `listChanged`
+    // is advertised because the spec watcher above pushes it.
+    let dispatcher = face.mcp.list_changed(true);
+    // Held for the server's life: dropping it stops the Reindexer, the
+    // watchers and the atlas GC.
+    let _code_runtime = face.runtime;
+    let app = host_kit::mcp::http::routes(Arc::new(dispatcher), notifier)
+        .route("/mcp/stats", axum::routing::get(super::mcp_host::mcp_stats))
+        .merge(face.routes)
+        .merge(face.edit_routes)
+        .localhost_only()
+        .layer(axum::Extension(tools))
+        .layer(tower_http::cors::CorsLayer::permissive());
 
     let service = app.into_make_service_with_connect_info::<std::net::SocketAddr>();
     if let Err(e) = axum::serve(listener, service).await {
@@ -757,48 +347,6 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     drop(_spec_watcher);
 
     0
-}
-
-// ─── SCIP graph loading & hot-reload ──────────────────────────
-
-/// Poll `data_dir` for SCIP graph file changes every 30 seconds. On any
-/// change, rebuild the merged graph out-of-band and atomically swap it
-/// into `handle`. Tools (FindCalleesTool, FindCallersTool) pick up the
-/// new graph on their next `load_full()`.
-async fn scip_graph_reloader(handle: sovereign_tools::ScipGraphHandle, data_dir: PathBuf) {
-    const POLL_INTERVAL: Duration = Duration::from_secs(30);
-
-    let mut last_seen = snapshot_graph_mtimes(&data_dir);
-    tracing::debug!(
-        watched = last_seen.len(),
-        "scip reloader: polling scip_graph.db files every 30s"
-    );
-
-    loop {
-        tokio::time::sleep(POLL_INTERVAL).await;
-
-        let current = snapshot_graph_mtimes(&data_dir);
-        if current == last_seen {
-            continue;
-        }
-
-        tracing::info!(
-            prev_graphs = last_seen.len(),
-            current_graphs = current.len(),
-            "scip reloader: change detected, rebuilding merged graph"
-        );
-
-        let (fresh, summary) = load_merged_graph(&data_dir, false).await;
-        handle.store(Arc::new(fresh));
-        last_seen = current;
-
-        tracing::info!(
-            graphs = summary.graphs_found,
-            symbols = summary.total_symbols,
-            edges = summary.total_refs,
-            "scip reloader: merged graph swapped"
-        );
-    }
 }
 
 // ─── sovereign project found (Phase 6: retired) ─────────────

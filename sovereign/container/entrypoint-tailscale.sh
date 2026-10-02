@@ -14,16 +14,12 @@
 #
 # Required env:
 #   TS_AUTHKEY        Tailscale auth key (reusable, ephemeral).
-#   MESH_SEED_ADDR    host:port of the founder daemon's internal port.
-#                     e.g. 100.64.0.2:9742.  Used unchanged for mesh.
-#                     The host portion is also used as the default
-#                     GGUF source — see MODEL_SERVE_HOST below.
+#   MESH_INVITE       The founder's invite link (`svrn mesh status` on
+#                     any member prints it). This pod joins with
+#                     `svrn mesh join`, which brings cw-rails up first.
+#   MODEL_SERVE_HOST  Tailnet host serving the GGUFs (the laptop).
 #
 # Optional env:
-#   MODEL_SERVE_HOST  Host serving GGUFs. Defaults to the host part
-#                     of MESH_SEED_ADDR (laptop). Override if your
-#                     laptop's GGUFs live on a different machine in
-#                     the tailnet.
 #   MODEL_SERVE_PORT  Port the laptop's HTTP server is bound to.
 #                     Default 9743 (matches scripts/cloud-peer-serve-models.sh).
 #   PRIMARY_GGUF      Filename of the primary GGUF on the source.
@@ -35,21 +31,18 @@
 #   PRIMARY_COPIES    Number of primary slot copies to load.
 #                     Default 1.
 #   CONTEXT_SIZE      n_ctx for all loaded slots. Default 32768.
-#   NODE_ROLE         Mesh node role tag. Default: ephemeral-worker.
 set -euo pipefail
 
 : "${TS_AUTHKEY:?TS_AUTHKEY is required}"
-: "${MESH_SEED_ADDR:?MESH_SEED_ADDR is required (host:port of the founder daemon internal port)}"
+: "${MESH_INVITE:?MESH_INVITE is required (the invite link svrn mesh status prints on a member)}"
+: "${MODEL_SERVE_HOST:?MODEL_SERVE_HOST is required (the tailnet host serving the GGUFs)}"
 
 PRIMARY_COPIES="${PRIMARY_COPIES:-1}"
 CONTEXT_SIZE="${CONTEXT_SIZE:-32768}"
 PRIMARY_GGUF="${PRIMARY_GGUF:-FINAL-Bench_Darwin-36B-Opus-Q6_K.gguf}"
 FAST_GGUF="${FAST_GGUF:-Darwin-9B-Opus.Q8_0.gguf}"
 EMBED_GGUF="${EMBED_GGUF:-Qwen3-Embedding-0.6B-Q8_0.gguf}"
-NODE_ROLE="${NODE_ROLE:-ephemeral-worker}"
 
-# Default model source = host portion of MESH_SEED_ADDR. Strip :port.
-MODEL_SERVE_HOST="${MODEL_SERVE_HOST:-${MESH_SEED_ADDR%:*}}"
 MODEL_SERVE_PORT="${MODEL_SERVE_PORT:-9743}"
 MODEL_SERVE_URL="http://${MODEL_SERVE_HOST}:${MODEL_SERVE_PORT}"
 
@@ -155,15 +148,16 @@ yield_to_foreground_secs = 0
 
 [data]
 dir = "${DATA_DIR}"
-
-[mesh]
-seed_addrs = ["${MESH_SEED_ADDR}"]
-node_role = "${NODE_ROLE}"
 EOF
 
 echo "[entrypoint-tailscale] config written:"
 sed -E 's/(authkey)([^=]*)=.*/\1\2 = <redacted>/' "$CONFIG"
 
-# ─── 4. Launch daemon ────────────────────────────────────────────────
+# ─── 4. Join the mesh ────────────────────────────────────────────────
+# The mesh and the node key are cw-rails'; `mesh join` brings it up first.
+echo "[entrypoint-tailscale] joining the mesh through cw-rails"
+sovereign-cli mesh join "$MESH_INVITE"
+
+# ─── 5. Launch daemon ────────────────────────────────────────────────
 echo "[entrypoint-tailscale] launching sovereign-cli daemon"
 exec sovereign-cli daemon run

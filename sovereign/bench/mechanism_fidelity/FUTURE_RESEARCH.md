@@ -201,7 +201,7 @@ shape (so scorer/verdict/cards/early-stopping all work unchanged), plus the mand
 |---|---|
 | Build state / how to pick up | `HANDOFF.md` |
 | Pure logic (classes, scorer, stopping, cards) | `sovereign-eval/src/mechanism_fidelity/` |
-| Orchestrator (inference-coupled) | `sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs` |
+| Orchestrator (inference-coupled) | `sovereign-cli-bench/src/bench_cmd/mechanism_fidelity.rs` |
 | Pre-registration bands | `manifest.toml` |
 | Verdict reader | `verdict.py` |
 | Cards | `~/.svrnmesh/model-fidelity-cards/<model>.json` |

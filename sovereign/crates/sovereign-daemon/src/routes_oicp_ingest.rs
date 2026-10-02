@@ -4,7 +4,7 @@
 //! Thin adapters that expose the daemon's corpus-install lifecycle over the
 //! *protocol* surface (`/oicp/v1/...` on the client port :9741), distinct
 //! from the internal `/internal/corpus/*` routes on :9742 that carry
-//! `corpus_engine::IngestProgress` on the wire. Here we translate to the
+//! `sovereign_contracts::daemon_wire::IngestProgress` on the wire. Here we translate to the
 //! protocol DTOs (`CorpusIngestProgress`, `RecipeTestReport`) so a client
 //! built only against `oicp-types` — one that never links the reference
 //! corpus engine — can drive an install and dry-run a recipe.
@@ -19,7 +19,7 @@ use axum::Json;
 
 use oicp_types::{
     CorpusIngestProgress, CorpusInstallRequest, CorpusInstallResponse, CorpusProgressResponse,
-    IngestPhase, RecipeStageReport, RecipeTestReport, RecipeTestRequest,
+    IngestPhase, RecipeTestReport, RecipeTestRequest,
 };
 
 use crate::routes_internal::{progress_fraction, spawn_corpus_install_with_parameters, ErrorBody};
@@ -41,7 +41,7 @@ pub async fn corpus_install(
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         ));
     }
@@ -76,7 +76,7 @@ pub async fn recipe_test(
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorBody {
-                error: "no corpus engine available on this node".into(),
+                error: crate::hosted_ingest::NO_INGEST.into(),
             }),
         ));
     };
@@ -110,18 +110,8 @@ pub async fn recipe_test(
     } else {
         req.options.sample_limit.unwrap_or(DEFAULT_TEST_SAMPLE) as usize
     };
-    let options = corpus_engine::testing::TestOptions {
-        sample_size,
-        embed: false,
-        queries: None,
-        output: None,
-        offline: req.options.offline,
-        verbose: false,
-        parameters: std::collections::BTreeMap::new(),
-    };
-
     let report = engine
-        .test_recipe(&recipe_path, &options)
+        .test_recipe_report(&recipe_path, sample_size, req.options.offline)
         .await
         .map_err(|e| {
             (
@@ -131,15 +121,25 @@ pub async fn recipe_test(
                 }),
             )
         })?;
-    Ok(Json(map_test_report(&report)))
+    // The port hands the protocol report over as its wire JSON (its leaf
+    // cannot name oicp-types); this is the same bytes read back.
+    let report: RecipeTestReport = serde_json::from_value(report).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                error: format!("recipe test report did not decode: {e}"),
+            }),
+        )
+    })?;
+    Ok(Json(report))
 }
 
 /// Project one internal `IngestProgress` onto the coarse protocol phase.
 /// The finer engine phases (extract, chunk) collapse into `Downloading`
 /// (the "acquiring & preparing" band) with the true phase in `detail`, so
 /// the protocol's monotone phase ladder holds while nothing is lost.
-fn map_progress(p: &corpus_engine::IngestProgress) -> CorpusIngestProgress {
-    use corpus_engine::IngestProgress as P;
+fn map_progress(p: &sovereign_contracts::daemon_wire::IngestProgress) -> CorpusIngestProgress {
+    use sovereign_contracts::daemon_wire::IngestProgress as P;
     let (phase, detail) = match p {
         P::Downloading { .. } => (IngestPhase::Downloading, None),
         P::Extracting {
@@ -173,82 +173,6 @@ fn map_progress(p: &corpus_engine::IngestProgress) -> CorpusIngestProgress {
     }
 }
 
-/// Project the engine's rich `TestReport` onto the protocol per-stage
-/// report. A stage appears only if it ran (acquisition / extraction /
-/// chunking are each `Option`), mirroring the state the engine reached.
-fn map_test_report(r: &corpus_engine::testing::TestReport) -> RecipeTestReport {
-    let mut stages = vec![RecipeStageReport {
-        name: "validate".into(),
-        docs_in: 0,
-        docs_out: 0,
-        misses: r.validation.errors.clone(),
-        // Advisory warnings aren't "misses"; surface them where the author
-        // will still see them rather than dropping them on the wire.
-        sample: r.validation.warnings.clone(),
-    }];
-
-    if let Some(acq) = &r.acquisition {
-        stages.push(RecipeStageReport {
-            name: "acquire".into(),
-            docs_in: 0,
-            docs_out: acq.records_fetched as u32,
-            misses: Vec::new(),
-            sample: vec![format!(
-                "{} records, {} bytes from {}",
-                acq.records_fetched, acq.bytes_downloaded, acq.source_url
-            )],
-        });
-    }
-
-    if let Some(ext) = &r.extraction {
-        stages.push(RecipeStageReport {
-            name: "extract".into(),
-            docs_in: ext.records_attempted as u32,
-            docs_out: ext.records_succeeded as u32,
-            misses: ext
-                .failed_examples
-                .iter()
-                .map(|f| format!("record {}: {}", f.index, f.reason))
-                .collect(),
-            sample: Vec::new(),
-        });
-    }
-
-    if let Some(ch) = &r.chunking {
-        let mut misses: Vec<String> = r
-            .section_misses
-            .iter()
-            .map(|m| format!("{} / {}: {}", m.file, m.section, m.description))
-            .collect();
-        // Chunks over the recipe's configured `max_chars` are a soft miss
-        // the author will want to tune the chunker for.
-        if ch.chunks_over_limit > 0 {
-            misses.push(format!(
-                "{} chunk(s) exceed max_chars={}",
-                ch.chunks_over_limit, ch.recipe_max_chars
-            ));
-        }
-        stages.push(RecipeStageReport {
-            name: "chunk".into(),
-            docs_in: r
-                .extraction
-                .as_ref()
-                .map(|e| e.records_succeeded as u32)
-                .unwrap_or(0),
-            docs_out: ch.total_chunks as u32,
-            misses,
-            sample: r.sample_chunks.iter().map(|s| s.preview.clone()).collect(),
-        });
-    }
-
-    // A recipe is "ok" iff it validated clean and produced chunks — the
-    // end-to-end signal an author cares about.
-    let ok =
-        r.validation.errors.is_empty() && r.chunking.as_ref().is_some_and(|c| c.total_chunks > 0);
-
-    RecipeTestReport { stages, ok }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,14 +182,14 @@ mod tests {
     // protocol ladder, and `detail` preserves the true phase.
     #[test]
     fn extract_and_chunk_fold_onto_downloading_band() {
-        let extracting = corpus_engine::IngestProgress::Extracting {
+        let extracting = sovereign_contracts::daemon_wire::IngestProgress::Extracting {
             documents_processed: 7,
         };
         let m = map_progress(&extracting);
         assert_eq!(m.phase, IngestPhase::Downloading);
         assert!(m.detail.as_deref().unwrap().contains("extracting"));
 
-        let embedding = corpus_engine::IngestProgress::Embedding {
+        let embedding = sovereign_contracts::daemon_wire::IngestProgress::Embedding {
             chunks_embedded: 5,
             total: 10,
             docs_processed: 2,
@@ -276,7 +200,7 @@ mod tests {
         assert_eq!(m.phase, IngestPhase::Embedding);
         assert_eq!(m.fraction, Some(0.5));
 
-        let complete = corpus_engine::IngestProgress::Complete {
+        let complete = sovereign_contracts::daemon_wire::IngestProgress::Complete {
             total_chunks: 100,
             duration_secs: 12,
         };

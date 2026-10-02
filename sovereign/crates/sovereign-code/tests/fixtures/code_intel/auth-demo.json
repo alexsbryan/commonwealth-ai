@@ -1,0 +1,255 @@
+{
+ "corpus_id": "auth-demo",
+ "embedding_dimensions": 1024,
+ "license": "private",
+ "rows": [
+  {
+   "source_doc_id": "src/auth/refresh.rs",
+   "title": "refresh_if_expired",
+   "url": null,
+   "metadata": {
+    "symbol_name": "refresh_if_expired",
+    "symbol_kind": "function",
+    "file_path": "src/auth/refresh.rs",
+    "line_start": 0,
+    "line_end": 14,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true,
+    "doc_comment": "If the access token is expired but a valid refresh token exists in the\nsession store, issues a new token pair and returns new claims."
+   },
+   "content": "refresh_if_expired\n\n/// If the access token is expired but a valid refresh token exists in the\n/// session store, issues a new token pair and returns new claims.\npub async fn refresh_if_expired(expired_token: &str) -> Result<Claims, AuthError> {\n    let user_id = extract_user_id_from_expired(expired_token)?;\n    let session = get_session(user_id).await?;\n    if !session.refresh_valid() {\n        return Err(AuthError::RefreshExpired);\n    }\n    rotate_refresh_token(user_id, &session).await?;\n    let pair = issue_token_pair(user_id).await?;\n    Ok(Claims::new(user_id))\n}\n\n/// Rotates the refresh token: revokes old, issues new (one-time use).\nasync fn rotate_refresh_token("
+  },
+  {
+   "source_doc_id": "src/auth/refresh.rs",
+   "title": "rotate_refresh_token",
+   "url": null,
+   "metadata": {
+    "symbol_name": "rotate_refresh_token",
+    "symbol_kind": "function",
+    "file_path": "src/auth/refresh.rs",
+    "line_start": 11,
+    "line_end": 20,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": false,
+    "doc_comment": "Rotates the refresh token: revokes old, issues new (one-time use)."
+   },
+   "content": "rotate_refresh_token\n\n}\n\n/// Rotates the refresh token: revokes old, issues new (one-time use).\nasync fn rotate_refresh_token(\n    user_id: Uuid,\n    session: &Session,\n) -> Result<(), AuthError> {\n    revoke_session(session.id).await?;\n    Ok(())\n}"
+  },
+  {
+   "source_doc_id": "src/auth/tokens.rs",
+   "title": "validate_access_token",
+   "url": null,
+   "metadata": {
+    "symbol_name": "validate_access_token",
+    "symbol_kind": "function",
+    "file_path": "src/auth/tokens.rs",
+    "line_start": 0,
+    "line_end": 11,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true,
+    "doc_comment": "Validates an access token. Returns claims on success.\nCalls refreshIfExpired if the token has expired but refresh is available."
+   },
+   "content": "validate_access_token\n\n/// Validates an access token. Returns claims on success.\n/// Calls refreshIfExpired if the token has expired but refresh is available.\npub async fn validate_access_token(token: &str) -> Result<Claims, AuthError> {\n    match decode_jwt(token, &JWT_PUBLIC_KEY) {\n        Ok(claims)  => Ok(claims),\n        Err(JwtError::Expired) => refresh_if_expired(token).await,\n        Err(e)      => Err(AuthError::InvalidToken(e.to_string())),\n    }\n}\n\n/// Issue a new token pair (access + refresh) for an authenticated user.\npub async fn issue_token_pair(user_id: Uuid) -> Result<TokenPair, AuthError> {"
+  },
+  {
+   "source_doc_id": "src/auth/tokens.rs",
+   "title": "issue_token_pair",
+   "url": null,
+   "metadata": {
+    "symbol_name": "issue_token_pair",
+    "symbol_kind": "function",
+    "file_path": "src/auth/tokens.rs",
+    "line_start": 8,
+    "line_end": 19,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true,
+    "doc_comment": "Issue a new token pair (access + refresh) for an authenticated user."
+   },
+   "content": "issue_token_pair\n\n}\n\n/// Issue a new token pair (access + refresh) for an authenticated user.\npub async fn issue_token_pair(user_id: Uuid) -> Result<TokenPair, AuthError> {\n    let access_token  = sign_jwt(Claims::new(user_id), &JWT_PRIVATE_KEY)?;\n    let refresh_token = generate_refresh_token();\n    store_session(user_id, &refresh_token).await?;\n    Ok(TokenPair { access_token, refresh_token })\n}\n\nfn decode_jwt(token: &str, key: &DecodingKey) -> Result<Claims, JwtError> {\n    jsonwebtoken::decode::<Claims>(token, key, &RS256_VALIDATION)"
+  },
+  {
+   "source_doc_id": "src/auth/tokens.rs",
+   "title": "decode_jwt",
+   "url": null,
+   "metadata": {
+    "symbol_name": "decode_jwt",
+    "symbol_kind": "function",
+    "file_path": "src/auth/tokens.rs",
+    "line_start": 15,
+    "line_end": 25,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "decode_jwt\n\n    Ok(TokenPair { access_token, refresh_token })\n}\n\nfn decode_jwt(token: &str, key: &DecodingKey) -> Result<Claims, JwtError> {\n    jsonwebtoken::decode::<Claims>(token, key, &RS256_VALIDATION)\n        .map(|d| d.claims)\n        .map_err(JwtError::from)\n}\n\nfn sign_jwt(claims: Claims, key: &EncodingKey) -> Result<String, AuthError> {\n    jsonwebtoken::encode(&Header::new(RS256), &claims, key)"
+  },
+  {
+   "source_doc_id": "src/auth/tokens.rs",
+   "title": "sign_jwt",
+   "url": null,
+   "metadata": {
+    "symbol_name": "sign_jwt",
+    "symbol_kind": "function",
+    "file_path": "src/auth/tokens.rs",
+    "line_start": 21,
+    "line_end": 27,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "sign_jwt\n\n        .map_err(JwtError::from)\n}\n\nfn sign_jwt(claims: Claims, key: &EncodingKey) -> Result<String, AuthError> {\n    jsonwebtoken::encode(&Header::new(RS256), &claims, key)\n        .map_err(|e| AuthError::SigningFailed(e.to_string()))\n}"
+  },
+  {
+   "source_doc_id": "src/middleware/auth.rs",
+   "title": "auth_middleware",
+   "url": null,
+   "metadata": {
+    "symbol_name": "auth_middleware",
+    "symbol_kind": "function",
+    "file_path": "src/middleware/auth.rs",
+    "line_start": 0,
+    "line_end": 15,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true,
+    "doc_comment": "JWT authentication middleware.\nValidates the Authorization header, refreshes if expired,\nand attaches the authenticated user to the request context."
+   },
+   "content": "auth_middleware\n\n/// JWT authentication middleware.\n/// Validates the Authorization header, refreshes if expired,\n/// and attaches the authenticated user to the request context.\npub async fn auth_middleware(\n    req: Request,\n    next: Next,\n) -> Result<Response, AuthError> {\n    let token = extract_bearer_token(&req)?;\n    let claims = validate_access_token(&token).await?;\n    let user = find_user_by_id(claims.sub).await?;\n    let req = attach_user_to_request(req, user);\n    Ok(next.run(req).await)\n}\n\nfn extract_bearer_token(req: &Request) -> Result<String, AuthError> {\n    req.headers()"
+  },
+  {
+   "source_doc_id": "src/middleware/auth.rs",
+   "title": "extract_bearer_token",
+   "url": null,
+   "metadata": {
+    "symbol_name": "extract_bearer_token",
+    "symbol_kind": "function",
+    "file_path": "src/middleware/auth.rs",
+    "line_start": 11,
+    "line_end": 21,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "extract_bearer_token\n\n    Ok(next.run(req).await)\n}\n\nfn extract_bearer_token(req: &Request) -> Result<String, AuthError> {\n    req.headers()\n        .get(\"Authorization\")\n        .and_then(|v| v.to_str().ok())\n        .and_then(|v| v.strip_prefix(\"Bearer \"))\n        .map(|s| s.to_string())\n        .ok_or(AuthError::MissingToken)\n}"
+  },
+  {
+   "source_doc_id": "src/models/user.rs",
+   "title": "User",
+   "url": null,
+   "metadata": {
+    "symbol_name": "User",
+    "symbol_kind": "struct",
+    "file_path": "src/models/user.rs",
+    "line_start": 0,
+    "line_end": 7,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "User\n\npub struct User {\n    pub id:            Uuid,\n    pub email:         String,\n    pub password_hash: String,\n}\n\npub async fn find_by_email(email: &str) -> Result<Option<User>, DbError> {\n    sqlx::query_as(\"SELECT id, email, password_hash FROM users WHERE email = ?\")"
+  },
+  {
+   "source_doc_id": "src/models/user.rs",
+   "title": "find_by_email",
+   "url": null,
+   "metadata": {
+    "symbol_name": "find_by_email",
+    "symbol_kind": "function",
+    "file_path": "src/models/user.rs",
+    "line_start": 3,
+    "line_end": 14,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "find_by_email\n\n    pub password_hash: String,\n}\n\npub async fn find_by_email(email: &str) -> Result<Option<User>, DbError> {\n    sqlx::query_as(\"SELECT id, email, password_hash FROM users WHERE email = ?\")\n        .bind(email)\n        .fetch_optional(&DB).await\n        .map_err(DbError::from)\n}\n\npub async fn create_user(params: CreateUserParams) -> Result<User, DbError> {\n    sqlx::query_as("
+  },
+  {
+   "source_doc_id": "src/models/user.rs",
+   "title": "create_user",
+   "url": null,
+   "metadata": {
+    "symbol_name": "create_user",
+    "symbol_kind": "function",
+    "file_path": "src/models/user.rs",
+    "line_start": 10,
+    "line_end": 23,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "create_user\n\n        .map_err(DbError::from)\n}\n\npub async fn create_user(params: CreateUserParams) -> Result<User, DbError> {\n    sqlx::query_as(\n        \"INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)\n         RETURNING id, email, password_hash\"\n    )\n    .bind(Uuid::new_v4())\n    .bind(params.email)\n    .bind(params.password_hash)   // <- stored as-is\n    .fetch_one(&DB).await\n    .map_err(DbError::from)\n}"
+  },
+  {
+   "source_doc_id": "src/routes/auth.rs",
+   "title": "login_handler",
+   "url": null,
+   "metadata": {
+    "symbol_name": "login_handler",
+    "symbol_kind": "function",
+    "file_path": "src/routes/auth.rs",
+    "line_start": 0,
+    "line_end": 12,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true,
+    "doc_comment": "POST /auth/login\nValidates credentials, issues token pair on success."
+   },
+   "content": "login_handler\n\n/// POST /auth/login\n/// Validates credentials, issues token pair on success.\npub async fn login_handler(\n    Json(body): Json<LoginRequest>,\n) -> Result<Json<TokenPair>, AuthError> {\n    let user = find_by_email(&body.email).await?;\n    verify_password(&body.password, &user.password_hash)?;\n    let tokens = issue_token_pair(user.id).await?;\n    Ok(Json(tokens))\n}\n\n/// POST /auth/refresh\n/// Refreshes an expired access token using the refresh token."
+  },
+  {
+   "source_doc_id": "src/routes/auth.rs",
+   "title": "refresh_handler",
+   "url": null,
+   "metadata": {
+    "symbol_name": "refresh_handler",
+    "symbol_kind": "function",
+    "file_path": "src/routes/auth.rs",
+    "line_start": 10,
+    "line_end": 23,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true,
+    "doc_comment": "POST /auth/refresh\nRefreshes an expired access token using the refresh token."
+   },
+   "content": "refresh_handler\n\n\n/// POST /auth/refresh\n/// Refreshes an expired access token using the refresh token.\npub async fn refresh_handler(\n    Json(body): Json<RefreshRequest>,\n) -> Result<Json<TokenPair>, AuthError> {\n    let session = get_session_by_refresh_token(&body.refresh_token).await?;\n    rotate_refresh_token(session.user_id, &session).await?;\n    let tokens = issue_token_pair(session.user_id).await?;\n    Ok(Json(tokens))\n}\n\nfn verify_password(input: &str, hash: &str) -> Result<(), AuthError> {\n    bcrypt::verify(input, hash)"
+  },
+  {
+   "source_doc_id": "src/routes/auth.rs",
+   "title": "verify_password",
+   "url": null,
+   "metadata": {
+    "symbol_name": "verify_password",
+    "symbol_kind": "function",
+    "file_path": "src/routes/auth.rs",
+    "line_start": 19,
+    "line_end": 26,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "verify_password\n\n    Ok(Json(tokens))\n}\n\nfn verify_password(input: &str, hash: &str) -> Result<(), AuthError> {\n    bcrypt::verify(input, hash)\n        .map_err(|_| AuthError::InvalidCredentials)?;\n    Ok(())\n}"
+  },
+  {
+   "source_doc_id": "src/routes/users.rs",
+   "title": "register_user",
+   "url": null,
+   "metadata": {
+    "symbol_name": "register_user",
+    "symbol_kind": "function",
+    "file_path": "src/routes/users.rs",
+    "line_start": 2,
+    "line_end": 18,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true,
+    "doc_comment": "POST /users/register\nCreates a new user account.\n\nNOTE: Legacy endpoint \u2014 predates the OAuth flow.\nRetained for backwards compatibility."
+   },
+   "content": "register_user\n\n///\n/// NOTE: Legacy endpoint \u2014 predates the OAuth flow.\n/// Retained for backwards compatibility.\npub async fn register_user(\n    Json(body): Json<RegisterRequest>,\n) -> Result<Json<UserId>, AppError> {\n    let existing = find_by_email(&body.email).await?;\n    if existing.is_some() {\n        return Err(AppError::EmailAlreadyExists);\n    }\n    // Store user with provided password\n    let user = create_user(CreateUserParams {\n        email:         body.email,\n        password_hash: body.password,   // <- NOT hashed\n    }).await?;\n    Ok(Json(user.id))\n}"
+  }
+ ]
+}

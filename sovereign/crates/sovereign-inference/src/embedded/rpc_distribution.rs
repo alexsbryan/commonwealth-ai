@@ -33,13 +33,13 @@ use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
-use sovereign_core::error::Error;
-use sovereign_core::model_family::{
+use sovereign_contracts::error::Error;
+use sovereign_contracts::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::*;
-use sovereign_core::Result;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::*;
+use sovereign_contracts::Result;
 
 use crate::hardware::HardwareProfile;
 
@@ -1715,7 +1715,9 @@ pub(crate) fn local_fit_verdict(
     reserve_bytes: u64,
 ) -> Option<LocalFitShortfall> {
     const MIB: u64 = 1024 * 1024;
-    let need = model_bytes + overhead_bytes.unwrap_or(model_bytes / 8 + 1024 * MIB);
+    // Saturating: `total_model_bytes` answers u64::MAX for a file it cannot
+    // stat, which must refuse as unfit, not overflow.
+    let need = model_bytes.saturating_add(overhead_bytes.unwrap_or(model_bytes / 8 + 1024 * MIB));
     let usable = available_bytes.saturating_sub(reserve_bytes);
     (need > usable).then_some(LocalFitShortfall {
         need_mb: need / MIB,
@@ -1883,12 +1885,13 @@ fn classify_placement(
 /// `/status`. Set on every distributable (primary) load by `resolve_placement`,
 /// so an operator can query placement outright instead of inferring it from
 /// `free` deltas or decode-latency signatures.
-static LAST_PRIMARY_PLACEMENT: std::sync::Mutex<Option<sovereign_core::traits::SlotPlacement>> =
-    std::sync::Mutex::new(None);
+static LAST_PRIMARY_PLACEMENT: std::sync::Mutex<
+    Option<sovereign_contracts::traits::SlotPlacement>,
+> = std::sync::Mutex::new(None);
 
 /// Read the last primary placement (for `/status`). `None` before the first
 /// primary load.
-pub(crate) fn last_primary_placement() -> Option<sovereign_core::traits::SlotPlacement> {
+pub(crate) fn last_primary_placement() -> Option<sovereign_contracts::traits::SlotPlacement> {
     LAST_PRIMARY_PLACEMENT
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -1899,8 +1902,8 @@ pub(crate) fn last_primary_placement() -> Option<sovereign_core::traits::SlotPla
 /// for a distributed load, the per-device block split and which worker holds
 /// what. The block count comes straight from the plan the load ENFORCES via
 /// `-ot`, so it is ground truth, not an estimate.
-fn summarize_placement(placement: &LoadPlacement) -> sovereign_core::traits::SlotPlacement {
-    use sovereign_core::traits::{SlotPlacement, WorkerPlacement};
+fn summarize_placement(placement: &LoadPlacement) -> sovereign_contracts::traits::SlotPlacement {
+    use sovereign_contracts::traits::{SlotPlacement, WorkerPlacement};
     let bare = |mode: &str| SlotPlacement {
         mode: mode.to_string(),
         total_blocks: 0,
@@ -2981,6 +2984,11 @@ mod rpc_prune_tests {
         // box: need ≈ 23.5 GiB vs 40−8 = 32 GiB usable → fits. Existing
         // working configs must not regress.
         assert_eq!(local_fit_verdict(20 * GIB, None, 40 * GIB, 8 * GIB), None);
+
+        // A GGUF `total_model_bytes` cannot stat is sized u64::MAX: refused,
+        // with or without a projected overhead, never an overflow panic.
+        assert!(local_fit_verdict(u64::MAX, None, 110 * GIB, 16 * GIB).is_some());
+        assert!(local_fit_verdict(u64::MAX, Some(GIB), 110 * GIB, 16 * GIB).is_some());
 
         // Reserve is honoured: same numbers with the reserve eating the
         // margin flips the verdict.

@@ -83,16 +83,10 @@ pub trait RosterSource: Send + Sync {
     fn roster(&self) -> Pin<Box<dyn Future<Output = Result<Roster, RailError>> + Send + '_>>;
 }
 
-/// Which reader answered [`RingRail::roster`], so the decision is visible at
-/// `tracing=debug` and a caller that needs to know (the CLI refusing to write
-/// a file nothing reads) can ask without re-deriving it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RosterOrigin {
-    /// `<ring>/roster.json`, written by `svrn ring roster add`.
-    File,
-    /// A [`RosterSource`] installed for this namespace; the file is ignored.
-    Derived,
-}
+// `RosterOrigin` moved to the fold (fp-54: the rails daemon reports the
+// origin beside the roster, and a fold-only consumer still reads it); the
+// glob re-export below keeps every historical path spelling it through this
+// crate.
 
 // ── The rail's storage ───────────────────────────────────────
 
@@ -199,6 +193,12 @@ impl RingRail {
         self.signer.as_ref()
     }
 
+    /// The root this rail journals under — for [`namespaces_in`], the
+    /// unfiltered disk list a local-only rehydrate reads (fp-108).
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     /// Declare that `namespace`'s roster is computed by `source`, not read
     /// from its `roster.json`.
     ///
@@ -261,8 +261,19 @@ impl RingRail {
     ///
     /// A missing `rings/` directory is an empty list, not an error: a daemon
     /// that has never hosted a ring is a normal daemon.
+    ///
+    /// A local-only namespace ([`is_local_only`]) is journaled here but never
+    /// offered, so it is not on this list.
     pub fn namespaces(&self) -> Result<Vec<String>, RailError> {
-        namespaces_in(&self.root)
+        let mut out = namespaces_in(&self.root)?;
+        out.retain(|ns| {
+            let local = is_local_only(ns);
+            if local {
+                tracing::debug!(namespace = %ns, "ring rail: local-only journal, not offered");
+            }
+            !local
+        });
+        Ok(out)
     }
 }
 
@@ -307,29 +318,11 @@ impl RingRail {
 }
 
 // ── What a compaction did ────────────────────────────────────
-
-/// What one [`RingJournal::compact`] removed, and the floors it removed by.
-///
-/// A count and not a `()` because "the journal is now shorter" and "there was
-/// nothing to shorten" are different facts, and a caller that cannot tell them
-/// apart cannot report either honestly. `removed: 0` is a normal, successful
-/// answer — it is what every ring that has never sealed gets.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Compaction {
-    /// Lines deleted from the journal.
-    pub removed: usize,
-    /// Lines still on it afterwards.
-    pub kept: usize,
-    /// Gaps the journal had before and does not have now — refused lines that
-    /// sat below a floor their claimed author authenticated. Reported because
-    /// a gap vanishing is a change to what this node claims completeness over,
-    /// and a destructive path may not make that change silently (ARCH §18.3).
-    pub gaps_cleared: usize,
-    /// The AUTHENTICATED floors this prune deleted below — [`admit`]'s own map,
-    /// carried through rather than re-derived, so the number above and the
-    /// reason for it cannot disagree.
-    pub floors: Floors,
-}
+//
+// `Compaction` moved to `commonwealth-rail-core` beside the `Floors` map it
+// carries through: it is vocabulary, not storage, and the compact door's
+// answer crosses back to a dialing client as this type. The glob re-export
+// above keeps `commonwealth_rail::Compaction` resolving.
 
 /// One [`RingJournal::seal`]: the seal act, and the prune it authorises.
 ///
@@ -355,5 +348,13 @@ pub struct Sealed {
 mod journal;
 pub use journal::RingJournal;
 
+// The v1 checkpoint document's one composer (moved from sovereign-mesh,
+// phase-b pb-rails-parity).
+pub mod ring_checkpoint;
+
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_local_only;
+#[cfg(test)]
+mod tests_write_index;

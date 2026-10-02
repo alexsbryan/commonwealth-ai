@@ -45,7 +45,7 @@ custody story this quickstart demonstrates:
 
 Those are two independently enforced gates, not one flag: fan-out
 advertising filters on `query_sharing`
-(`sovereign-mesh/src/capabilities.rs`), while the replication and
+(`sovereign-daemon/src/peer_origin/claims.rs`), while the replication and
 storage-snapshot paths filter on `mesh_sharing`. A corpus can be
 queryable-but-never-copied (sep), or fully private (both `false`, or
 `scope = "local"` to keep it off-mesh entirely).

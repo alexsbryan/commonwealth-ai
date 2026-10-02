@@ -8,7 +8,7 @@
 //!
 //!   1. Searches our own local `CorpusEngine` for any requested
 //!      corpus we host (cheap path, no HTTP).
-//!   2. Walks the live mesh `MemberRecord`s — specifically each
+//!   2. Walks the live mesh membership (`AppState::membership`) — each
 //!      member's `capabilities.hosted_corpora` — to find peers that
 //!      host corpora we don't, and fires `/internal/knowledge/search`
 //!      at them in parallel.
@@ -25,8 +25,10 @@ use std::time::Duration;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use commonwealth_core::ids::NodeId;
-use commonwealth_core::mesh::{MemberRecord, NodeStatus};
+use sovereign_contracts::membership::MembershipEntry;
+
+use crate::types::MemberStatus;
+use kernel_types::NodeId;
 use oicp_types::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 
 use crate::state::AppState;
@@ -75,13 +77,16 @@ pub async fn knowledge_search(
                 Json(empty_knowledge_response()),
             );
         };
-        let prefix = state
-            .inner
-            .store
-            .inference_store
-            .get_local_embed_model()
-            .map(|e| e.query_instruction_prefix)
-            .unwrap_or_default();
+        let prefix = match state.local_embed_model().await {
+            Ok(m) => m.map(|e| e.query_instruction_prefix).unwrap_or_default(),
+            Err(e) => {
+                tracing::warn!(error = %e, "knowledge search: embed model unread; cannot embed the query in its space");
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(empty_knowledge_response()),
+                );
+            }
+        };
         match local
             .embed(&format!("{prefix}{}", request.query_text))
             .await
@@ -124,12 +129,16 @@ pub async fn knowledge_search(
     // federate because no complete corpora are published from that
     // side. If they're missing from the roster entirely, gossip
     // hasn't converged yet.
+    // A roster miss is named in the plan below, never read as no peers (F13).
+    let (members, roster_absent) = match state.membership().read_roster().await {
+        Ok((_, members)) => (members, None),
+        Err(why) => (Vec::new(), Some(why)),
+    };
     let (peer_offerings, target_corpora_if_unconstrained, peer_roster) = {
-        let mesh = state.inner.fabric.mesh.read().await;
         let mut offerings: Vec<PeerOffering> = Vec::new();
         let mut union: HashSet<String> = local_corpora.clone();
         let mut roster: Vec<(String, String, Vec<String>)> = Vec::new();
-        for (_, member) in mesh.members.iter() {
+        for member in &members {
             if member.node_id == self_id {
                 continue;
             }
@@ -154,7 +163,7 @@ pub async fn knowledge_search(
                 offerings.push(PeerOffering {
                     node_id: member.node_id,
                     node_name: member.name.clone(),
-                    contact: commonwealth_transport::peer_contact(member),
+                    contact: member.dial.clone(),
                     corpora,
                 });
             }
@@ -162,12 +171,19 @@ pub async fn knowledge_search(
         (offerings, union, roster)
     };
 
-    tracing::info!(
-        local_corpora = ?local_corpora,
-        peer_roster = ?peer_roster,
-        offerings = peer_offerings.len(),
-        "knowledge: fan-out plan — peer roster & local view"
-    );
+    match &roster_absent {
+        None => tracing::info!(
+            local_corpora = ?local_corpora,
+            peer_roster = ?peer_roster,
+            offerings = peer_offerings.len(),
+            "knowledge: fan-out plan — peer roster & local view"
+        ),
+        Some(why) => tracing::warn!(
+            local_corpora = ?local_corpora,
+            roster_absent = %why,
+            "knowledge: fan-out plan — local view only; the peer roster is absent"
+        ),
+    }
 
     // Step 3: resolve the actual target set. If the caller passed
     // `corpora`, honour it; otherwise search every corpus reachable
@@ -259,10 +275,8 @@ pub async fn knowledge_search(
     // locally OR want to broaden the hit set — for v1 we only fan
     // out for corpora WE DON'T HAVE. Broadening to replicas is a
     // future refinement once the merge-dedupe is proven.
-    let mut fanout_jobs: HashMap<
-        NodeId,
-        (String, commonwealth_transport::PeerContact, Vec<String>),
-    > = HashMap::new();
+    let mut fanout_jobs: HashMap<NodeId, (String, mesh_reach::PeerContact, Vec<String>)> =
+        HashMap::new();
     for offering in &peer_offerings {
         let relevant: Vec<String> = offering
             .corpora
@@ -412,7 +426,7 @@ pub async fn knowledge_search(
 struct PeerOffering {
     node_id: NodeId,
     node_name: String,
-    contact: commonwealth_transport::PeerContact,
+    contact: mesh_reach::PeerContact,
     corpora: Vec<String>,
 }
 
@@ -444,7 +458,7 @@ struct PeerServed {
 #[allow(clippy::too_many_arguments)]
 async fn fanout_one_peer(
     http: reqwest::Client,
-    transport: std::sync::Arc<dyn commonwealth_transport::PeerTransport>,
+    transport: std::sync::Arc<dyn mesh_reach::PeerTransport>,
     requester_id: NodeId,
     target: crate::fanout::FanoutTarget,
     corpora: Vec<String>,
@@ -479,7 +493,7 @@ async fn fanout_one_peer(
         &transport,
         node_id,
         &target.contact,
-        commonwealth_transport::TrafficClass::KnowledgeSearch,
+        mesh_reach::TrafficClass::KnowledgeSearch,
         |ep| {
             let http = http.clone();
             let body = &body;
@@ -609,9 +623,9 @@ fn build_response(
 /// A member is fan-out-worthy if we think they can answer us. We're
 /// permissive with `Busy` (a node serving inference still answers
 /// knowledge search cheaply) and strict with `Offline`.
-fn is_queryable(m: &MemberRecord) -> bool {
+fn is_queryable(m: &MembershipEntry<mesh_reach::PeerContact>) -> bool {
     // `is_dialable` accepts an iroh-only peer (pubkey + relay/direct,
     // no gossiped IP — the no-VPN case); the seam still decides the
     // KnowledgeSearch route per dial.
-    matches!(m.status, NodeStatus::Online | NodeStatus::Busy) && m.is_dialable()
+    matches!(m.status, MemberStatus::Online | MemberStatus::Busy) && m.dialable
 }

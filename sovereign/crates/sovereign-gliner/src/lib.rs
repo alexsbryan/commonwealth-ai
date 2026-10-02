@@ -11,9 +11,6 @@
 //! exactly the four binaries that need it and absent everywhere else, so
 //! there is no feature and no unification split.
 //!
-//! - [`bounded_input`] — the input bound every ingest path applies
-//!   before inference: a per-chunk char ceiling and a per-call batch
-//!   ceiling, with over-cap chunks REFUSED and counted, never truncated.
 //! - [`session_bound`] — the ONE way this crate builds an ONNX
 //!   session, and the honest statement of what `ort 2.0.0-rc.9` does not
 //!   let anyone bound.
@@ -23,25 +20,25 @@
 //! - [`gliner2`] — the GLiNER2 backend on bare `ort` (P2.1). Faster
 //!   (2.52×) and ~4.8× lighter than v1, measured 2026-08-02; not yet the
 //!   default on any ingest path.
-//! - [`GlinerChunkExtractor`] — the corpus-engine `ChunkEntityExtractor`
-//!   impl for the daemon ingest path.
-//! - [`load_gliner_extractor`] — the daemon/desktop bootstrap that wires
-//!   both together over the canonical state store.
+//! - [`load_gliner_extractor`] — the NER served kind's loader
+//!   (`sovereign_compute::ner::NER`).
+//!
+//! The per-chunk adapter (`GlinerChunkExtractor`) and its input bound
+//! live in corpus-engine (`enrichment::chunk_ner`, `chunk_ner_bound`) since
+//! pb-serving-ner: they are pure over the NER port in sovereign-contracts,
+//! and this crate links no corpus-engine.
 //!
 //! The two backends are separate types, not one type with a model knob:
 //! the generations have different ONNX input contracts, and each
 //! constructor refuses the other's model ids by generation rather than
 //! failing deep inside `ort` with a shape error.
 
-pub mod bounded_input;
 pub mod gliner2;
 pub mod gliner_ner;
 pub mod labeled;
 pub mod session_bound;
 
 mod bootstrap;
-mod chunk_extractor;
 
 pub use bootstrap::load_gliner_extractor;
-pub use chunk_extractor::GlinerChunkExtractor;
 pub use labeled::{configured_model_id, load_labeled_extractor, LabeledEntityExtractor};

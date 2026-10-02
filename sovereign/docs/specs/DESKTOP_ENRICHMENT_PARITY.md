@@ -65,7 +65,7 @@ load-bearing paths fired locally (`atom_enum_overview count=16`,
 `post-apply_atlas_grounding n_chunks=59`, `atom_enum_survived=16`) — the same
 `apply_atlas_grounding` step that was a dead no-op pre-fix.
 
-- **Phase 0 — DONE.** `sovereign-cli-llm/src/bench_cmd/parity_compare.rs`
+- **Phase 0 — DONE.** `sovereign-cli-bench/src/bench_cmd/parity_compare.rs`
   (`bench parity-compare`). Added `metadata: serde_json::Value` to `LiveAnswer`
   (populated from the persisted `message.metadata` on the bench path and
   `complete["metadata"]` on the bridge path) so one extractor reads both
@@ -173,7 +173,7 @@ Desktop build (`state.rs`, in the `.with_*` chain after
   wiring does). Both attach-safe (local probe / build artifact).
 - Flip `SOVEREIGN_ATOM_ENUM_OVERVIEW` default-on (gate in
   `retrieval.rs::enumerate_typed_atom_chunks` → `!= Some("0")`; registry
-  `default:"on"`; regen `docs/retrieval-pipeline.md`).
+  `default:"on"`; regen `sovereign-core/docs/retrieval-pipeline.md`).
 
 ### Phase 2 — Attach-mode field_model digests
 Mount/confirm the daemon `/v1/knowledge/landscape_digest` handler so
@@ -206,14 +206,14 @@ unit test: desktop wired-seam set ⊇ bench's.
 - Reference to mirror: `sovereign-cli-llm/src/chat_cmd/bootstrap.rs`
   (414-481, the `load_wikipedia_graph` helper), `sovereign-server/src/main.rs`
   (590-655).
-- Harness: `sovereign-cli-llm/src/bench_cmd/{live_runner.rs, desktop_bridge.rs,
+- Harness: `sovereign-cli-bench/src/bench_cmd/{live_runner.rs, desktop_bridge.rs,
   chaos_monkey.rs}` + new `parity.rs`.
 - field_model surface: `sovereign-tools/src/knowledge_view/{digest.rs,
   manager.rs}`, `sovereign-core/src/runtime/{turn.rs, streaming.rs,
   system_message.rs}`.
 - Attach endpoint: `sovereign-daemon/src/landscape_digest_http.rs`.
 - Flags/docs: `sovereign-core/src/runtime/{retrieval.rs, retrieval_pipeline.rs}`,
-  `sovereign/docs/retrieval-pipeline.md`.
+  `sovereign/crates/sovereign-core/docs/retrieval-pipeline.md`.
 
 ## Verification
 1. **Freshness first**: re-sync SEP (or scope the bank to maple-house [atlas],

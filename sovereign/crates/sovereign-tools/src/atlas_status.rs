@@ -15,7 +15,8 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::atlas::{read_or_compute_atlas_summary, AtlasSummary};
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_engine_atlas_reader::summary::AtlasSummary;
 use serde::{Deserialize, Serialize};
 
 /// One corpus's atlas readiness snapshot. Serializes cleanly so the
@@ -73,7 +74,11 @@ pub struct Tier2Progress {
 /// `enrichment_dir` is typically `<data_dir>/enrichment` and is the
 /// sibling of `indexes_dir`. Used to find Tier-2 workspaces and
 /// their token sidecars.
-pub fn compute_atlas_status(indexes_dir: &Path, enrichment_dir: &Path) -> Vec<AtlasStatusRow> {
+pub fn compute_atlas_status(
+    atlas: &dyn AtlasPort,
+    indexes_dir: &Path,
+    enrichment_dir: &Path,
+) -> Vec<AtlasStatusRow> {
     let mut rows = Vec::new();
     let entries = match std::fs::read_dir(indexes_dir) {
         Ok(rd) => rd,
@@ -96,15 +101,20 @@ pub fn compute_atlas_status(indexes_dir: &Path, enrichment_dir: &Path) -> Vec<At
         if name.ends_with("-tier2") {
             continue;
         }
-        rows.push(compute_one(name, &path, enrichment_dir));
+        rows.push(compute_one(atlas, name, &path, enrichment_dir));
     }
     rows.sort_by(|a, b| a.corpus_id.cmp(&b.corpus_id));
     rows
 }
 
-fn compute_one(corpus_id: &str, corpus_dir: &Path, enrichment_dir: &Path) -> AtlasStatusRow {
+fn compute_one(
+    port: &dyn AtlasPort,
+    corpus_id: &str,
+    corpus_dir: &Path,
+    enrichment_dir: &Path,
+) -> AtlasStatusRow {
     let atlas_dir = corpus_dir.join("atlas");
-    let atlas = read_or_compute_atlas_summary(&atlas_dir).ok().flatten();
+    let atlas = port.atlas_summary(&atlas_dir).ok().flatten();
     let embed_cache_present = atlas_dir.join("atoms.embeddings.bin").exists();
 
     let workspace_dir = enrichment_dir.join(format!("{corpus_id}-tier2"));
@@ -167,6 +177,7 @@ fn read_tier2_progress(
 /// Look up just one corpus's status. Convenience wrapper for the
 /// CLI's `sovereign atlas status <corpus>` mode.
 pub fn status_for_corpus(
+    atlas: &dyn AtlasPort,
     indexes_dir: &Path,
     enrichment_dir: &Path,
     corpus_id: &str,
@@ -175,7 +186,7 @@ pub fn status_for_corpus(
     if !corpus_dir.is_dir() {
         return None;
     }
-    Some(compute_one(corpus_id, &corpus_dir, enrichment_dir))
+    Some(compute_one(atlas, corpus_id, &corpus_dir, enrichment_dir))
 }
 
 /// Default data-dir layout helper — convenient for callers that
@@ -187,11 +198,19 @@ pub fn default_paths(data_dir: PathBuf) -> (PathBuf, PathBuf) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+
+    /// The port answers summaries by the leaf's read; the cache ingest
+    /// persists beside it is proven on `IngestAtlas` (corpus-engine's
+    /// atlas_port_parity tests).
+    fn summaries() -> AtlasPortDouble {
+        AtlasPortDouble::new().with_computed_summaries()
+    }
 
     #[test]
     fn empty_indexes_dir_returns_empty() {
         let tmp = tempfile::tempdir().unwrap();
-        let rows = compute_atlas_status(tmp.path(), tmp.path());
+        let rows = compute_atlas_status(&summaries(), tmp.path(), tmp.path());
         assert!(rows.is_empty());
     }
 
@@ -200,17 +219,15 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(tmp.path().join("wikipedia")).unwrap();
         std::fs::create_dir_all(tmp.path().join("wikipedia-tier2")).unwrap();
-        let rows = compute_atlas_status(tmp.path(), tmp.path());
+        let rows = compute_atlas_status(&summaries(), tmp.path(), tmp.path());
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].corpus_id, "wikipedia");
     }
 
     #[test]
     fn records_atlas_summary_when_present() {
-        use corpus_engine::enrichment::atlas::atoms::{
-            AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity,
-        };
-        use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+        use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity};
+        use understanding_vocab::taxonomy::{EnrichmentDepth, EntityType};
 
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("wikipedia").join("atlas");
@@ -238,7 +255,7 @@ mod tests {
         )
         .unwrap();
 
-        let rows = compute_atlas_status(tmp.path(), tmp.path());
+        let rows = compute_atlas_status(&summaries(), tmp.path(), tmp.path());
         assert_eq!(rows.len(), 1);
         assert!(rows[0].atlas.is_some());
         assert_eq!(rows[0].atlas.as_ref().unwrap().tier2_count, 1);

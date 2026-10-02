@@ -4,6 +4,7 @@
 //! chunk-entity methods the enrichment provider writes through.
 
 use super::*;
+use sovereign_core::daemon_wire::conv_tiered::ChunkEntityStore;
 
 // The browse half (sv-surface D4). Every method here delegates to the
 // inherent method of the same name — `SqliteStateStore::foo(self, ..)`
@@ -105,6 +106,51 @@ impl ConvTieredReader for SqliteStateStore {
         corpus_id: &str,
     ) -> sovereign_core::error::Result<Vec<sovereign_core::conv_tiered::VaultThemeRow>> {
         SqliteStateStore::list_vault_themes_for_corpus(self, corpus_id).await
+    }
+}
+
+// The port's single impl — thin delegation to the inherent methods, no new logic.
+#[async_trait::async_trait]
+impl ChunkEntityStore for SqliteStateStore {
+    async fn list_ner_processed_chunk_ids(
+        &self,
+        corpus_id: &str,
+    ) -> Result<std::collections::HashSet<u64>> {
+        SqliteStateStore::list_ner_processed_chunk_ids(self, corpus_id).await
+    }
+
+    async fn save_chunk_entities(
+        &self,
+        rows: &[sovereign_core::conv_tiered::ChunkEntityRow],
+    ) -> Result<()> {
+        SqliteStateStore::save_chunk_entities(self, rows).await
+    }
+
+    async fn record_ner_processed_chunks(&self, corpus_id: &str, chunk_ids: &[u64]) -> Result<()> {
+        SqliteStateStore::record_ner_processed_chunks(self, corpus_id, chunk_ids).await
+    }
+
+    async fn get_chunk_entity_progress(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<sovereign_core::conv_tiered::ChunkEntityProgressRow>> {
+        SqliteStateStore::get_chunk_entity_progress(self, corpus_id).await
+    }
+
+    async fn upsert_chunk_entity_progress(
+        &self,
+        row: &sovereign_core::conv_tiered::ChunkEntityProgressRow,
+    ) -> Result<()> {
+        SqliteStateStore::upsert_chunk_entity_progress(self, row).await
+    }
+
+    async fn save_chunk_entities_for_conv(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        rows: &[sovereign_core::conv_tiered::ChunkEntityRow],
+    ) -> Result<()> {
+        SqliteStateStore::save_chunk_entities_for_conv(self, corpus_id, conv_uuid, rows).await
     }
 }
 

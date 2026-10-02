@@ -19,7 +19,7 @@
 
 use std::path::PathBuf;
 
-use corpus_engine::enrichment::GovernanceView;
+use corpus_engine_atlas_reader::governance_view::GovernanceView;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 pub mod accept;
@@ -91,8 +91,8 @@ pub async fn run_govern(args: &[String]) -> i32 {
 /// daemon's `CorpusEngine` reads, so an oplog the CLI appends here is
 /// seen by `govern ask`'s active-set retrieval filter.
 pub(crate) fn atlas_dir(corpus_id: &str) -> PathBuf {
-    crate::enrich_cmd::paths::index_root(corpus_id)
-        .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME)
+    sovereign_contracts::index_layout::index_root(corpus_id)
+        .join(understanding_vocab::read::ATLAS_DIRNAME)
 }
 
 /// Load the governance read-model for a corpus, or a friendly error

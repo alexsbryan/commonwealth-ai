@@ -12,13 +12,11 @@
 //!
 //! Every command moved into the flat `svrn <leaf>` namespace
 //! must ALSO keep working under its old `svrn project <leaf>`
-//! / `svrn atos <leaf>` / `svrn reflect` form for the
-//! indefinite alias period.
+//! / `svrn reflect` form for the indefinite alias period.
 //!
 //! These tests spawn the actual `sovereign-cli` binary so the
 //! dispatch wiring (main.rs match arms + alias shims in
-//! `project_cmd::run_project` / `atos_cmd::run_atos`) is exercised
-//! end-to-end.
+//! `project_cmd::run_project`) is exercised end-to-end.
 //!
 //! Two probe styles, one per direction:
 //!
@@ -27,8 +25,8 @@
 //!    `svrn <leaf> --help` exits 0 without touching the
 //!    filesystem. This verifies the dispatch arm exists.
 //!
-//! 2. **Old name no-args**: most underlying handlers (especially
-//!    inside `atos_cmd`) don't recognise `--help` — they treat it
+//! 2. **Old name no-args**: some underlying handlers don't
+//!    recognise `--help` — they treat it
 //!    as an unknown subcommand and exit non-zero. We can't change
 //!    that without touching their behaviour, so the alias probe
 //!    instead invokes the OLD command with no further args. The
@@ -87,7 +85,8 @@ fn siblings_built() -> bool {
     [
         "sovereign-cli-dev",
         "sovereign-cli-daemon",
-        "sovereign-cli-llm",
+        "sovereign-cli-llm-stock",
+        "svrn-ingest",
     ]
     .iter()
     .all(|b| dir.join(b).is_file())
@@ -196,28 +195,6 @@ fn alias_amend() {
 }
 
 #[test]
-fn alias_design() {
-    require_siblings!();
-    help_runs(&["design"]);
-    banner_fires(
-        &["project", "design", "--help"],
-        "svrn project design",
-        "svrn design",
-    );
-}
-
-#[test]
-fn alias_plan() {
-    require_siblings!();
-    help_runs(&["plan"]);
-    banner_fires(
-        &["project", "plan", "--help"],
-        "svrn project plan",
-        "svrn plan",
-    );
-}
-
-#[test]
 fn alias_serve() {
     require_siblings!();
     help_runs(&["serve"]);
@@ -241,34 +218,15 @@ fn alias_refresh() {
 
 // ─── Tier-2: spec commands ──────────────────────────────────────
 //
-// `svrn atos end-milestone` and `svrn atos spec` don't
-// recognise `--help` — they exit 2 with "missing <id>" /
-// "unknown subcommand". The banner still fires inside the alias
-// shim before the handler runs, so we probe with no args (and
-// ignore the resulting non-zero exit).
-
-#[test]
-fn alias_milestone() {
-    require_siblings!();
-    help_runs(&["milestone"]);
-    // The banner's "new name" hint is the full positional shape so
-    // copy-paste lands the user in a working invocation.
-    banner_fires(
-        &["atos", "end-milestone"],
-        "svrn atos end-milestone",
-        "svrn milestone <feature-id> <N>",
-    );
-}
-
-#[test]
-fn alias_drift() {
-    require_siblings!();
-    help_runs(&["drift"]);
-    banner_fires(&["atos", "spec"], "svrn atos spec", "svrn drift");
-}
+// Legacy alias probes for commands whose underlying handlers don't
+// recognise `--help`: the banner still fires inside the alias shim
+// before the handler runs, so we probe with no args (and ignore the
+// resulting non-zero exit).
 
 #[test]
 fn alias_notes() {
+    // Both verbs exec the code program, sovereign-cli-dev (pb-notes-verbs).
+    require_siblings!();
     help_runs(&["notes"]);
     // `svrn reflect` is the legacy entry point for the
     // reflection view that `svrn notes` now owns. The banner

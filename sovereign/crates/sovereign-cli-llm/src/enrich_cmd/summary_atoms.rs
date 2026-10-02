@@ -13,7 +13,7 @@
 //! this box most RAPTOR nodes have no surviving tree and an atom count alone
 //! cannot tell that from a writer that dropped them.
 
-use sovereign_cli_shared::help;
+use sovereign_cli_base::help;
 use sovereign_tools::summary_atoms::write_summary_atoms;
 
 pub async fn cmd_summary_atoms(args: &[String]) -> i32 {
@@ -30,7 +30,7 @@ pub async fn cmd_summary_atoms(args: &[String]) -> i32 {
         }
     };
 
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");
@@ -42,8 +42,18 @@ pub async fn cmd_summary_atoms(args: &[String]) -> i32 {
         return 1;
     }
 
+    // Ingest's atlas port, handed in by the composed binary; a bare
+    // sovereign-cli-llm names the absence (pb-cli-llm-ingest-move).
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
+
     println!("Projecting RAPTOR summaries into '{corpus_id}' atlases…");
-    match write_summary_atoms(&indexes_dir, &corpus_id).await {
+    match write_summary_atoms(atlas.as_ref(), &indexes_dir, &corpus_id).await {
         Ok(report) => {
             println!("  {}", report.describe());
             // A run that read rows and CHANGED NOTHING is not a success to

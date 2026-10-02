@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use axum::extract::State;
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use oicp_types::features::{self, EMBEDDED_FEATURES};
 use oicp_types::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,
@@ -149,7 +150,11 @@ pub(crate) fn synthesize_fingerprint(
 /// embed model (with its query-instruction prefix), and — when a corpus
 /// engine is wired — advertise the ingest endpoints (§5) that
 /// `routes_oicp_ingest` serves.
-fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut ProviderManifest) {
+async fn apply_v04_enrichment(
+    state: &AppState,
+    embedded: bool,
+    manifest: &mut ProviderManifest,
+) -> Result<(), crate::ledger_port::LedgerAbsent> {
     // §2 features.
     let mut feats: Vec<String> = if embedded {
         EMBEDDED_FEATURES
@@ -192,7 +197,7 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
     // instruction prefix) already lives in the inference store, set by the
     // daemon at bootstrap; a client reconstructs bit-compatible query
     // embeddings from it for federated search.
-    let embed_model = state.inner.store.inference_store.get_local_embed_model();
+    let embed_model = state.local_embed_model().await?;
     if embed_model.is_some() || ingest.is_some() {
         match &mut manifest.knowledge {
             Some(k) => {
@@ -213,6 +218,21 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
             }
         }
     }
+    Ok(())
+}
+
+/// The inference state did not answer: a named 503 in place of a manifest
+/// that would advertise nothing (principle 6).
+fn inference_state_absent(e: &crate::ledger_port::LedgerAbsent) -> Response {
+    tracing::warn!(error = %e, "capabilities: inference state unread");
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(crate::openai_types::ErrorResponse::new(
+            format!("the inference state did not answer: {e}"),
+            "inference_state_absent",
+        )),
+    )
+        .into_response()
 }
 
 /// GET /oicp/v1/capabilities — OICP provider manifest per spec §4.
@@ -228,8 +248,8 @@ fn apply_v04_enrichment(state: &AppState, embedded: bool, manifest: &mut Provide
 /// and routes elsewhere on its own.
 pub async fn capabilities(
     State(state): State<AppState>,
-    attached: Option<axum::Extension<sovereign_serving_host::admission::AttachedPrincipal>>,
-) -> Json<ProviderManifest> {
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
+) -> Response {
     let requester = crate::admission::requester(attached);
 
     // If we have a local inference service (Sovereign's
@@ -243,39 +263,43 @@ pub async fn capabilities(
             // Enrich provider name with the mesh name so peer
             // MeshAwareSelector can tell "this is mac-peer's
             // Sovereign" vs a generic provider.
-            let mesh = state.inner.fabric.mesh.read().await;
             if manifest.provider.is_none() {
                 manifest.provider = Some(ProviderInfo {
-                    name: Some(mesh.name.clone()),
+                    name: Some(state.membership().mesh_name().await),
                     provider_type: Some(ProviderType::Mesh),
                 });
             }
-            drop(mesh);
-            apply_v04_enrichment(&state, true, &mut manifest);
-            apply_peer_preference(&state, &requester, &mut manifest);
-            return Json(manifest);
+            if let Err(e) = apply_v04_enrichment(&state, true, &mut manifest).await {
+                return inference_state_absent(&e);
+            }
+            apply_peer_preference(&state, &requester, &mut manifest).await;
+            return Json(manifest).into_response();
         }
     }
 
-    let mesh = state.inner.fabric.mesh.read().await;
-    let models = state.inner.store.inference_store.list_models();
-    let plan = state
-        .inner
-        .store
-        .inference_store
-        .get_plan()
-        .unwrap_or_default();
+    // Read before taking the mesh lock: these reads may cross a process.
+    let read = async {
+        let models = state.list_models().await?;
+        let plan = state.inference_plan().await?.unwrap_or_default();
+        let mut addressed = std::collections::HashSet::new();
+        for id in models.keys() {
+            if state.get_llama_server_address(*id).await?.is_some() {
+                addressed.insert(*id);
+            }
+        }
+        Ok::<_, crate::ledger_port::LedgerAbsent>((models, plan, addressed))
+    };
+    let (models, plan, addressed) = match read.await {
+        Ok(r) => r,
+        Err(e) => return inference_state_absent(&e),
+    };
+    let mesh_name = state.membership().mesh_name().await;
 
     let model_entries: Vec<ProviderModel> = models
         .values()
         .map(|model| {
             let shard_plan = plan.model_plans.iter().find(|p| p.model == model.id);
-            let loaded = state
-                .inner
-                .store
-                .inference_store
-                .get_llama_address(model.id)
-                .is_some();
+            let loaded = addressed.contains(&model.id);
 
             let claims = synthesize_default_claims(
                 &model.name,
@@ -311,32 +335,9 @@ pub async fn capabilities(
         })
         .collect();
 
-    // NOT routed through the PeerTransport seam, deliberately: this
-    // formats an *advertised* URL for a federated peer MESH
-    // (`MeshPeering.contact_nodes` — no `MemberRecord`/`NodeId`
-    // exists), embedded in the manifest for clients to read. It is
-    // content, not a dial this daemon performs. NOTE (no-VPN mesh):
-    // this stays IP-shaped on purpose — cross-mesh federation is a
-    // separate, IP-reachable trust domain. This node's OWN
-    // capabilities dial (peer inference scoring) rides the seam via
-    // `peer_inference_endpoints`/`TrafficClass::Inference`, so a
-    // no-IP peer is scored correctly; only the advertised
-    // cross-mesh federation URL here is IP-shaped, and that is not a
-    // W-track dial. Do not "seam-ify" this without a federation
-    // trust-model change.
-    let peers: Vec<FederatedMeshDescriptor> = mesh
-        .peers
-        .iter()
-        .map(|p| FederatedMeshDescriptor {
-            name: p.peer_mesh_name.clone(),
-            capabilities_url: p
-                .contact_nodes
-                .first()
-                .map(|addr| format!("http://{}:9741/oicp/v1/capabilities", addr.ip()))
-                .unwrap_or_default(),
-            trust_level: Some(format!("{:?}", p.trust_level).to_lowercase()),
-        })
-        .collect();
+    // The advertised federation URLs are rendered by the membership reader
+    // (`sovereign_mesh::membership`, which keeps the why of their IP shape).
+    let peers: Vec<FederatedMeshDescriptor> = state.membership().federated_meshes().await;
 
     let federation = if peers.is_empty() {
         None
@@ -347,7 +348,7 @@ pub async fn capabilities(
     let mut manifest = ProviderManifest {
         oicp_version: OICP_VERSION.to_string(),
         provider: Some(ProviderInfo {
-            name: Some(mesh.name.clone()),
+            name: Some(mesh_name),
             provider_type: Some(ProviderType::Mesh),
         }),
         models: model_entries,
@@ -360,17 +361,18 @@ pub async fn capabilities(
         federation,
         features: Vec::new(),
     };
-    drop(mesh);
-    apply_v04_enrichment(&state, false, &mut manifest);
-    apply_peer_preference(&state, &requester, &mut manifest);
-    Json(manifest)
+    if let Err(e) = apply_v04_enrichment(&state, false, &mut manifest).await {
+        return inference_state_absent(&e);
+    }
+    apply_peer_preference(&state, &requester, &mut manifest).await;
+    Json(manifest).into_response()
 }
 
 /// Apply any local-only peer preference for `requester` to the
 /// outbound manifest, multiplying every claim's `affinity` by the
 /// stored multiplier. No-op when the requester is unidentified or
 /// the operator hasn't set a preference for them.
-fn apply_peer_preference(
+async fn apply_peer_preference(
     state: &AppState,
     requester: &Option<NodeId>,
     manifest: &mut ProviderManifest,
@@ -378,7 +380,7 @@ fn apply_peer_preference(
     let Some(requester_id) = requester else {
         return;
     };
-    let pref = match state.inner.store.peer_preferences.get(requester_id) {
+    let pref = match state.inner.store.peer_preferences.get(requester_id).await {
         Ok(Some(p)) => p,
         Ok(None) => return,
         Err(e) => {
@@ -416,10 +418,14 @@ fn fmt_requester(id: &NodeId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use commonwealth_state::{PeerPreference, PeerPreferenceStore};
+    use oicp_types::peer_preference::PeerPreference;
     use oicp_types::{
         CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderManifest, ProviderModel,
     };
+
+    fn peer_preference(multiplier: f64) -> PeerPreference {
+        PeerPreference::new(multiplier, None, sovereign_time::unix_now_u64()).unwrap()
+    }
 
     fn nid(byte: u8) -> NodeId {
         NodeId::from_u128(byte as u128)
@@ -503,11 +509,12 @@ mod tests {
             .inner
             .store
             .peer_preferences
-            .set(&target, PeerPreference::new(0.5, None).unwrap())
+            .set(&target, peer_preference(0.5))
+            .await
             .unwrap();
         let mut manifest = manifest_with_affinity(0.8);
         // Apply for the matching requester.
-        apply_peer_preference(&state, &Some(target), &mut manifest);
+        apply_peer_preference(&state, &Some(target), &mut manifest).await;
         let scaled = manifest.models[0].claims[0].affinity;
         assert!((scaled - 0.4).abs() < 1e-6, "got {scaled}");
     }
@@ -519,11 +526,12 @@ mod tests {
             .inner
             .store
             .peer_preferences
-            .set(&nid(0x11), PeerPreference::new(0.5, None).unwrap())
+            .set(&nid(0x11), peer_preference(0.5))
+            .await
             .unwrap();
         let mut manifest = manifest_with_affinity(0.8);
         // Different requester — preference shouldn't apply.
-        apply_peer_preference(&state, &Some(nid(0x22)), &mut manifest);
+        apply_peer_preference(&state, &Some(nid(0x22)), &mut manifest).await;
         assert!((manifest.models[0].claims[0].affinity - 0.8).abs() < 1e-6);
     }
 
@@ -534,11 +542,12 @@ mod tests {
             .inner
             .store
             .peer_preferences
-            .set(&nid(0x11), PeerPreference::new(0.5, None).unwrap())
+            .set(&nid(0x11), peer_preference(0.5))
+            .await
             .unwrap();
         let mut manifest = manifest_with_affinity(0.8);
         // No `X-Node-Id` from the requester — manifest unchanged.
-        apply_peer_preference(&state, &None, &mut manifest);
+        apply_peer_preference(&state, &None, &mut manifest).await;
         assert!((manifest.models[0].claims[0].affinity - 0.8).abs() < 1e-6);
     }
 
@@ -546,7 +555,7 @@ mod tests {
     async fn manifest_endpoint_applies_preference_when_x_node_id_present() {
         // Full GET roundtrip through the router. test_app_state has
         // no models registered; we set a preference via the
-        // PeerPreferenceStore on AppState and verify the helper
+        // peer-preferences port on AppState and verify the helper
         // path runs cleanly with `X-Node-Id` set. Empty-model
         // manifests pass the multiplier loop without panicking,
         // proving the integration is wired even when there are no
@@ -559,9 +568,9 @@ mod tests {
             .inner
             .store
             .peer_preferences
-            .set(&nid(0x33), PeerPreference::new(0.25, None).unwrap())
+            .set(&nid(0x33), peer_preference(0.25))
+            .await
             .unwrap();
-        let _store = PeerPreferenceStore::new;
         let app = crate::server::mock_router(state);
         let resp = app
             .oneshot(

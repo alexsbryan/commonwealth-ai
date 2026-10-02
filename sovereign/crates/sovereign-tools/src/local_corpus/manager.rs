@@ -23,7 +23,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, SensitiveCorpusOracle, StateStore};
 use tokio::sync::RwLock;
 
-use corpus_engine::{CorpusEngine, CorpusSpec, ScoredChunk};
+use corpus_index::ingest_port::LocalCorpusPort;
+use corpus_index::types::ScoredChunk;
 
 use super::config::{recipe_toml, LocalCorpusConfig};
 use super::extract_stage::{self, default_staging_path};
@@ -107,7 +108,7 @@ pub(crate) fn should_fire_auto_rebuild(
 pub struct LocalCorpusManager {
     /// `pub(super)` for `atlas_dispatch`, which carries the `enrich_now`
     /// half of this impl; private otherwise.
-    pub(super) engine: Arc<CorpusEngine>,
+    pub(super) engine: Arc<dyn LocalCorpusPort>,
     store: Arc<dyn StateStore>,
     #[allow(dead_code)]
     inference: Option<Arc<dyn InferenceProvider>>,
@@ -241,7 +242,7 @@ impl LocalCorpusManager {
     /// the same path the engine reads from — otherwise sweeps error
     /// with `No registry entry for corpus '…'`.
     pub async fn init(
-        engine: Arc<CorpusEngine>,
+        engine: Arc<dyn LocalCorpusPort>,
         store: Arc<dyn StateStore>,
         inference: Option<Arc<dyn InferenceProvider>>,
         data_dir: PathBuf,
@@ -269,7 +270,7 @@ impl LocalCorpusManager {
     /// keep the two in sync without colocating production-layout
     /// constants in two crates.
     pub async fn init_with_recipes_dir(
-        engine: Arc<CorpusEngine>,
+        engine: Arc<dyn LocalCorpusPort>,
         store: Arc<dyn StateStore>,
         inference: Option<Arc<dyn InferenceProvider>>,
         data_dir: PathBuf,
@@ -302,7 +303,7 @@ impl LocalCorpusManager {
             if !dir.join("_corpus_meta.json").exists() {
                 continue; // registered but never ingested
             }
-            match corpus_engine::index::backfill_personal_scope(&dir, true) {
+            match corpus_index::index::backfill_personal_scope(&dir, true) {
                 Ok(true) => tracing::info!(
                     corpus = %corpus_id,
                     "backfilled personal_scope=true onto local corpus meta"
@@ -317,7 +318,7 @@ impl LocalCorpusManager {
             }
             if let Some(display) = super::config::display_meta(&cfg.source_type) {
                 let category = display.category.clone();
-                match corpus_engine::index::backfill_display(&dir, display) {
+                match corpus_index::index::backfill_display(&dir, display) {
                     Ok(true) => tracing::info!(
                         corpus = %corpus_id,
                         category = category.as_deref().unwrap_or(""),
@@ -381,6 +382,16 @@ impl LocalCorpusManager {
         builder: Arc<dyn super::watched::enrich::AtlasBuildRunner>,
     ) {
         self.enrichment_driver.set_atlas_builder(builder).await;
+    }
+
+    /// Install ingest's enrichment-config port (pb-ingest-dial-tools-close).
+    /// Passthrough to the driver; without it the config sites report ingest
+    /// absent by name.
+    pub async fn set_enrich_config(
+        &self,
+        port: Arc<dyn corpus_index::ingest_port::enrich_config::EnrichConfigPort>,
+    ) {
+        self.enrichment_driver.set_enrich_config(port).await;
     }
 
     /// Install in-process tiered-enrichment deps (FolderTieredProvider
@@ -754,7 +765,7 @@ impl LocalCorpusManager {
         // `~/.svrnmesh/indexes/<corpus>/atlas/` directory. Idempotent
         // on missing dirs, so disable-after-failed-build is safe.
         let index_dir = self.engine_index_dir();
-        if let Err(e) = corpus_engine::atlas_teardown(&index_dir, corpus_id) {
+        if let Err(e) = self.engine.atlas_teardown(&index_dir, corpus_id) {
             tracing::warn!(
                 corpus_id = %corpus_id,
                 "disable_enrichment: atlas_teardown failed: {e}"
@@ -812,7 +823,7 @@ impl LocalCorpusManager {
             guard.remove(corpus_id);
         }
         let state_path =
-            corpus_engine::enrichment::state::EnrichmentStateFile::path(&index_dir.join(corpus_id));
+            corpus_index::enrichment_state::EnrichmentStateFile::path(&index_dir.join(corpus_id));
         if state_path.exists() {
             if let Err(e) = std::fs::remove_file(&state_path) {
                 tracing::warn!(
@@ -934,7 +945,7 @@ impl LocalCorpusManager {
     /// non-terminal, which is exactly the signal we key off here).
     ///
     /// **Signal.** The corpus's own `_enrichment_state.json`
-    /// ([`corpus_engine::enrichment::state::EnrichmentPhase::is_resumable_interruption`]):
+    /// ([`corpus_index::enrichment_state::EnrichmentPhase::is_resumable_interruption`]):
     /// a finished build
     /// stamps `Complete` (skip); a genuine total failure stamps `Failed`
     /// (skip — the operator retries deliberately, we don't auto-loop);
@@ -950,7 +961,7 @@ impl LocalCorpusManager {
     /// Best-effort + serialized (the driver's single-permit semaphore
     /// runs one build at a time). Returns the number of corpora kicked.
     pub async fn resume_interrupted_enrichment(&self) -> usize {
-        use corpus_engine::enrichment::state::EnrichmentStateFile;
+        use corpus_index::enrichment_state::EnrichmentStateFile;
         let mut kicked = 0usize;
         for cfg in self.list_reconcilable().await {
             let corpus_id = cfg.id.clone();
@@ -1028,7 +1039,7 @@ impl LocalCorpusManager {
 
         // 1. Generic enrichment state file — the surface
         //    `/internal/enrichment/status` reads.
-        let state_path = corpus_engine::enrichment::state::EnrichmentStateFile::path(&index_dir);
+        let state_path = corpus_index::enrichment_state::EnrichmentStateFile::path(&index_dir);
         if state_path.exists() {
             if let Err(e) = std::fs::remove_file(&state_path) {
                 tracing::warn!(
@@ -1203,7 +1214,7 @@ impl LocalCorpusManager {
                 .read()
                 .expect("active_ingests poisoned")
                 .contains_key(id);
-            let engine_busy = self.engine.cancel_registry().get(id).is_some();
+            let engine_busy = self.engine.ingest_in_flight(id);
             if !manager_busy && !engine_busy {
                 break;
             }
@@ -1289,7 +1300,7 @@ impl LocalCorpusManager {
         std::fs::write(&recipe_path, &recipe)
             .map_err(|e| Error::Execution(format!("write recipe: {e}")))?;
         self.engine
-            .ensure_empty_index(&CorpusSpec::RecipePath(recipe_path))
+            .ensure_empty_index(&recipe_path)
             .await
             .map_err(|e| Error::Execution(format!("ensure empty index: {e}")))?;
         Ok(())
@@ -1472,14 +1483,14 @@ impl LocalCorpusManager {
         // 4. Delegate to engine.
         let engine = Arc::clone(&self.engine);
         let started = std::time::Instant::now();
-        let ingest_cb: Option<corpus_engine::ProgressCallback> = Some({
+        let ingest_cb: Option<corpus_index::ingest_port::ProgressCallback> = Some({
             let progress = progress.clone();
             Box::new(move |p| {
                 progress(ingest_progress_to_local(p));
             })
         });
         let ingest_result = engine
-            .ingest(&CorpusSpec::RecipePath(recipe_path.clone()), ingest_cb)
+            .ingest_recipe_path(&recipe_path, ingest_cb)
             .await
             .map_err(|e| Error::Execution(format!("engine ingest: {e}")))?;
 
@@ -1543,8 +1554,8 @@ impl LocalCorpusManager {
                 "clustering requires an inference provider; none is configured".to_string(),
             )
         })?;
-        let inference_fn = crate::corpus::inference_to_inference_fn(inference);
-        let clusterer = super::clusterer::Clusterer::new(Arc::clone(&self.engine), inference_fn);
+        let prompt_fn = self.engine.prompt_fn(inference);
+        let clusterer = super::clusterer::Clusterer::new(Arc::clone(&self.engine), prompt_fn);
         let result = clusterer.run(id, config, on_progress).await?;
         // Cache for subsequent `get_preview` calls so the UI doesn't
         // have to hand the whole result blob back through Tauri.
@@ -1767,33 +1778,19 @@ impl LocalCorpusManager {
     /// non-`Complete` entries — surfaced on relaunch via the
     /// ResumePrompt.
     pub async fn incomplete_jobs(&self) -> Vec<IncompleteJob> {
-        use corpus_engine::progress::SourceFileManifest;
         let mut out = Vec::new();
         for config in self.corpora.read().await.values() {
-            let status = self.engine.corpus_disk_status(&config.id);
             // Paths the engine writes manifests to: canonical, or the
-            // partition-of-self. `corpus_disk_status` doesn't expose
-            // the manifest directly, so re-read from the expected
-            // locations.
+            // partition-of-self.
             for candidate in [
                 self.engine_index_dir().join(&config.id),
                 self.engine_index_dir()
                     .join(format!("{}-partition-local", config.id)),
             ] {
-                let Ok(Some(manifest)) = SourceFileManifest::load(&candidate) else {
+                let Some(progress) = self.engine.source_file_progress(&candidate) else {
                     continue;
                 };
-                let total = manifest.files.len();
-                let done = manifest
-                    .files
-                    .iter()
-                    .filter(|f| {
-                        matches!(
-                            f.status,
-                            corpus_engine::progress::SourceFileStatus::Complete { .. }
-                        )
-                    })
-                    .count();
+                let (done, total) = (progress.done, progress.total);
                 if total > 0 && done < total {
                     out.push(IncompleteJob {
                         corpus_id: config.id.clone(),
@@ -1802,7 +1799,6 @@ impl LocalCorpusManager {
                         files_total: total,
                     });
                 }
-                let _ = status.canonical_in_progress; // quiet "unused" until we surface.
                 break; // One manifest per corpus is enough.
             }
         }
@@ -2234,8 +2230,10 @@ use sovereign_core::time::unix_now_u64 as now_unix;
 
 // ─── Progress bridge ─────────────────────────────────────────────────
 
-fn ingest_progress_to_local(p: corpus_engine::progress::IngestProgress) -> LocalCorpusProgress {
-    use corpus_engine::progress::IngestProgress::*;
+fn ingest_progress_to_local(
+    p: sovereign_contracts::daemon_wire::IngestProgress,
+) -> LocalCorpusProgress {
+    use sovereign_contracts::daemon_wire::IngestProgress::*;
     match p {
         Downloading {
             bytes_downloaded,

@@ -24,17 +24,34 @@
 //!   configs.
 //! - [`stream_axes`] — the per-corpus stability metadata.
 //! - [`chunkers`] — `CommittedChunk`, the `{id, content_hash}` row.
+//! - [`embed_http`] — `POST /v1/embeddings` as an `EmbedFn`.
+//! - [`host`] — the ONE embeddings-endpoint decider: the discovery ladder
+//!   and the probe, shared by corpus-mcp's `serve` and ingest's CLI
+//!   (pb-ingest-cli).
+//! - [`v1_models`] — is the daemon up, and which listed ids are its default
+//!   chat and embed models (`GET /v1/models`; moved from
+//!   sovereign-enrichment-build's `inference_client`, pb-code-clean).
 //!
 //! The engine re-exports every item at its historical path, so no importer in
 //! the monorepo changed.
 
 pub mod chunkers;
 pub mod corpus;
+pub mod embed_fn;
+pub mod embed_http;
+pub mod enrichment_state;
 pub mod error;
 pub mod filters;
+pub mod freshness;
+pub mod fs_source;
+pub mod host;
 pub mod index;
+pub mod ingest_port;
+pub mod prompt;
 pub mod recipe;
+pub mod source;
 pub mod stream_axes;
 pub mod types;
+pub mod v1_models;
 
 pub use error::{Error, Result};

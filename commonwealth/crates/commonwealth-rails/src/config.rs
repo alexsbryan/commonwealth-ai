@@ -12,16 +12,23 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+#[path = "config/work_offer.rs"]
+mod work_offer;
+pub use work_offer::{
+    InvalidWorkOffer, WorkAcceptFrom, WorkOfferSection, DEFAULT_YIELD_TO_FOREGROUND,
+};
+
 /// The loopback API port. 9741..9745 belong to the inference daemon family
 /// (mesh, internal, client, desktop bridge, mobile), so a rails daemon on the
 /// same machine as one must not land in that range.
 pub const DEFAULT_LISTEN: u16 = 9747;
 
 /// Env var naming the data dir when `--data-dir` is absent.
-pub const DATA_DIR_ENV: &str = "CW_RAILS_DIR";
+pub const DATA_DIR_ENV: &str = commonwealth_media::RAILS_DATA_DIR_ENV;
 
-/// File name under the data dir.
-pub const CONFIG_FILE: &str = "rails.toml";
+/// File name under the data dir: commonwealth-media's one spelling, which the
+/// handover that writes `[work_offer]` here also names (pb-work-donor).
+pub const CONFIG_FILE: &str = commonwealth_media::RAILS_CONFIG_FILE;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -41,6 +48,10 @@ pub struct Config {
     pub gossip_interval_secs: u64,
     #[serde(default = "default_offline_threshold")]
     pub offline_threshold_secs: u64,
+    /// What this node donates to the mesh's work plane. Inert unless `kinds`
+    /// names something (pb-work-donor; see [`WorkOfferSection`]).
+    #[serde(default)]
+    pub work_offer: WorkOfferSection,
 }
 
 /// iroh reachability posture. Maps to
@@ -105,6 +116,7 @@ impl Default for Config {
             media: MediaSection::default(),
             gossip_interval_secs: default_gossip_interval(),
             offline_threshold_secs: default_offline_threshold(),
+            work_offer: WorkOfferSection::default(),
         }
     }
 }
@@ -127,19 +139,15 @@ pub enum ConfigRefusal {
 }
 
 impl Config {
-    /// Resolve the data dir: the flag, then `$CW_RAILS_DIR`, then
-    /// `~/.commonwealth-rails`.
+    /// Resolve the data dir: the flag, then the default
+    /// [`commonwealth_media::rails_data_dir`] (`$CW_RAILS_DIR`, then
+    /// `~/.commonwealth-rails`) — the one decider the processes that write
+    /// rails' inputs resolve too.
     pub fn resolve_data_dir(flag: Option<&Path>) -> PathBuf {
         if let Some(d) = flag {
             return d.to_path_buf();
         }
-        if let Some(d) = std::env::var_os(DATA_DIR_ENV) {
-            return PathBuf::from(d);
-        }
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("."));
-        home.join(".commonwealth-rails")
+        commonwealth_media::rails_data_dir()
     }
 
     /// Load `<data_dir>/rails.toml`, or `path` when one is named. An absent
@@ -168,6 +176,9 @@ impl Config {
         if cfg.gossip_interval_secs == 0 {
             return Err(ConfigRefusal::ZeroInterval(file));
         }
+        // The `[relay] discovery` spelling is refused HERE, at load (C2), so
+        // every later reader of the posture holds a value that parsed.
+        cfg.relay_config()?;
         tracing::info!(
             target: "rails",
             path = %file.display(),
@@ -299,9 +310,42 @@ allow = ["LittleMac", "node-44ae"]
         ));
     }
 
+    /// C2 at load: a typo'd `[relay] discovery` refuses to LOAD, naming the
+    /// value — never a quiet n0 default that a later posture read inherits.
+    #[test]
+    fn an_unknown_discovery_refuses_at_load() {
+        let d = dir();
+        std::fs::write(
+            d.path().join(CONFIG_FILE),
+            "[relay]\ndiscovery = \"carrier-pigeon\"\n",
+        )
+        .unwrap();
+        match Config::load(d.path(), None).unwrap_err() {
+            ConfigRefusal::BadDiscovery(why) => assert!(why.contains("carrier-pigeon"), "{why}"),
+            other => panic!("expected BadDiscovery, got {other}"),
+        }
+    }
+
     #[test]
     fn the_data_dir_precedence_is_flag_then_env_then_home() {
         let flag = PathBuf::from("/tmp/explicit");
         assert_eq!(Config::resolve_data_dir(Some(&flag)), flag);
+    }
+
+    /// fp-70: with no flag, rails resolves the ONE default the writers of its
+    /// inputs (`svrn mesh media offer`, the daemon's migrations) resolve.
+    #[test]
+    fn the_default_data_dir_is_the_shared_decider() {
+        let home = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", home.path());
+        std::env::remove_var(DATA_DIR_ENV);
+        assert_eq!(
+            Config::resolve_data_dir(None),
+            home.path().join(".commonwealth-rails")
+        );
+        assert_eq!(
+            Config::resolve_data_dir(None),
+            commonwealth_media::rails_data_dir()
+        );
     }
 }

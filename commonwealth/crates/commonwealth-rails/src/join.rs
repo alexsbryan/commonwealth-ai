@@ -17,14 +17,16 @@
 //! punch a second set of paths, and hand the founder reachability that dies
 //! with the command.
 //!
-//! # The refusal that is a scope statement
+//! # An invite with no dial: the LAN, still by key
 //!
-//! **An invite with no iroh dial is refused by name.** The legacy forms —
-//! a `relay=` host:port POSTed directly, and mDNS polling for a founder on
-//! the LAN — are how a pre-iroh mesh was joined, and they are out of scope
-//! for this daemon: both mean speaking plaintext HTTP to an address, which is
-//! the whole posture this process exists not to have. The refusal says so
-//! rather than failing at a connect timeout that reads like a network fault.
+//! **An invite with no iroh dial finds its founder on mDNS or is refused by
+//! name.** The join browses the LAN for [`lan::LAN_WAIT`] and dials each
+//! member that advertises a node pubkey, over iroh ([`lan`]). The legacy
+//! forms stay out of scope: a `relay=` host:port POSTed directly, and a
+//! daemon's plaintext mDNS port, both mean speaking plaintext HTTP to an
+//! address, which is the posture this process exists not to have. With no
+//! keyed founder on the LAN the refusal says so rather than failing at a
+//! connect timeout that reads like a network fault.
 
 use std::path::Path;
 use std::time::Duration;
@@ -36,7 +38,7 @@ use commonwealth_discovery::deep_link::{parse_join_argument, DeepLink};
 use commonwealth_transport::identity::{node_pubkey, sign_join_proof};
 use commonwealth_transport::iroh::{parse_dial_string, HttpBridge, ALPN};
 
-use crate::{identity, RailsNode};
+use crate::{identity, lan, RailsNode};
 
 /// How long the founder has to answer. The handshake is one round trip
 /// through an already-established tunnel; fifteen seconds is the inference
@@ -53,12 +55,16 @@ pub enum JoinRefusal {
     )]
     NotAJoinLink(String),
     #[error(
-        "that invite carries no iroh dial string, so there is nobody to dial by key. \
-         cw-rails joins over iroh only — a LAN/mDNS join means speaking plaintext HTTP \
-         to an address, which is the posture this daemon exists not to have. Ask for an \
-         invite from a daemon with iroh on (`svrn mesh invite` on an encrypted mesh)."
+        "that invite carries no iroh dial string, and no member advertised a key on \
+         the LAN (mDNS), so there is nobody to dial by key. cw-rails joins over iroh \
+         only — a plaintext join means speaking HTTP to an address, which is the \
+         posture this daemon exists not to have. Ask for an invite with a dial \
+         (`join_link` on a founder's /v1/mesh/status, or `svrn mesh invite` on an \
+         encrypted mesh), or run the founder with `cw-rails run --mdns`."
     )]
     NoIrohDial,
+    #[error("that invite carries no dial string, and mDNS could not browse the LAN: {0}")]
+    NoLan(String),
     #[error("the invite's dial string is malformed: {0}")]
     BadDial(String),
     #[error("could not open a tunnel to the founder: {0}")]
@@ -80,28 +86,66 @@ pub struct Joined {
 
 /// Parse an invite down to the dial string a join needs, refusing by name.
 pub fn dial_of(invite: &str) -> Result<(String, String), JoinRefusal> {
+    let (join_key, _, dial) = parts_of(invite)?;
+    dial.map(|dial| (join_key, dial))
+        .ok_or(JoinRefusal::NoIrohDial)
+}
+
+/// An invite's join key, the mesh it names, and its dial string if it
+/// carries one.
+fn parts_of(invite: &str) -> Result<(String, Option<String>, Option<String>), JoinRefusal> {
     // A `let ... else` rather than a `match` with a catch-all arm: this reads
     // ONE variant of a link vocabulary that other kinds of link live in
     // (`guest`, and whatever is minted next), and a `Some(_)` arm would be an
     // unreachable pattern the day that vocabulary has only this one.
     let Some(DeepLink::Join {
         join_key,
+        mesh_name,
         iroh_dial,
         ..
     }) = parse_join_argument(invite)
     else {
         return Err(JoinRefusal::NotAJoinLink(invite.to_string()));
     };
-    iroh_dial
-        .map(|dial| (join_key, dial))
-        .ok_or(JoinRefusal::NoIrohDial)
+    Ok((join_key, mesh_name, iroh_dial))
 }
 
 /// Run the handshake on `node`'s endpoint and return what the founder said.
+/// An invite with no dial tries every keyed founder mDNS finds, in turn.
 /// Nothing is written to disk here — see [`join_and_persist`].
 pub async fn join(node: &RailsNode, invite: &str) -> Result<Joined, JoinRefusal> {
-    let (join_key, dial) = dial_of(invite)?;
-    let target = parse_dial_string(&dial).map_err(JoinRefusal::BadDial)?;
+    let (join_key, mesh_name, dial) = parts_of(invite)?;
+    let dials = match dial {
+        Some(dial) => vec![dial],
+        None => {
+            tracing::info!(target: "rails", mesh = ?mesh_name, wait = ?lan::LAN_WAIT,
+                           "join: the invite has no dial — browsing the LAN for a keyed founder");
+            let found = lan::founders(mesh_name.as_deref(), lan::LAN_WAIT)
+                .await
+                .map_err(JoinRefusal::NoLan)?;
+            if found.is_empty() {
+                return Err(JoinRefusal::NoIrohDial);
+            }
+            found
+        }
+    };
+    let mut last = JoinRefusal::NoIrohDial;
+    for dial in dials {
+        match handshake(node, &join_key, &dial).await {
+            Ok(joined) => return Ok(joined),
+            Err(e) => {
+                tracing::warn!(target: "rails", dial = %dial, error = %e, "join: this founder did not admit us");
+                last = e;
+            }
+        }
+    }
+    Err(last)
+}
+
+/// One join handshake against one dial string.
+async fn handshake(node: &RailsNode, join_key: &str, dial: &str) -> Result<Joined, JoinRefusal> {
+    let join_key = join_key.to_string();
+    let target = parse_dial_string(dial).map_err(JoinRefusal::BadDial)?;
     let name = node.config.name.clone();
     let pubkey = node_pubkey(&node.key);
 

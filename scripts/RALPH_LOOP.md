@@ -110,6 +110,19 @@ instead ends holding `ralph/waiting` naming a `*.done` marker (a detached
 field run still going) is WAITING — no strike against the 3-failure bound;
 the tick resumes it when the marker appears and escalates past 48h.
 
+`pool --queue <name>` runs a queue's manifest as `run` does: its prompt
+(base + addendum), heavy.txt, conflicts.txt, scope_file and parked rows (held
+out of every wave), dispatch_requires (a refused row is parked, the pool runs
+on), audit_every, and its ctl/ for halts. A new lane's `target/` is a reflink
+clone of the main tree's with every tracked file touched, so only workspace
+crates rebuild. Each wave gets one cargo budget split across its lanes
+(lib/cargo-jobs.sh `cargo_jobs_share`, written to the lane's
+`target/ralph/lane.env` for ralph-check.sh) and does not start while free
+memory is under 8 GB a lane. Lanes write `ralph/decisions/<id>.md` only: the
+pool renumbers an id the main tree already holds before the merge, regenerates
+ralph/DECISIONS.md after it, and copies the lane's `target/ralph/` to
+`target/ralph/<queue>/<unit>/` before removing the worktree.
+
 ## Models and tests
 
 `ralph/models.env` (per-host, gitignored) holds `MODEL`, `REVIEW_MODEL` and

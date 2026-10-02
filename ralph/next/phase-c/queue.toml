@@ -1,0 +1,69 @@
+# phase-c as a queue manifest: Phase B's bugs and the cleanup above the
+# operator's cut line (phase-b-97, phase-b-102). Two launches, in this order,
+# from the repo root. Two loops are live in this repo: check
+# `pgrep -f 'ralph.py supervise'` and the cargo lock before either.
+#
+# 1. pc-pool-ready, alone, on the serial loop (every other in-scope row
+#    depends on it, phase-b-103):
+#
+#   nohup python3 scripts/ralph.py supervise --workdir . --queue phase-c \
+#     -- python3 scripts/ralph.py run --workdir . --queue phase-c --max-stall 3 \
+#     >> ralph/log-phase-c.txt 2>&1 &
+#
+#    Stop it at `ralph: pc-pool-ready done` (`ralph.py stop --queue phase-c`
+#    between rows; an empty ctl/STOP kills an in-flight worker).
+# 2. The pool at 3 lanes (phase-b-103: 8 waves; 4 lanes saves one and the
+#    measured memory headroom does not carry it):
+#
+#   nohup python3 scripts/ralph.py supervise --workdir . --queue phase-c \
+#     -- python3 scripts/ralph.py pool --workdir . --queue phase-c --lanes 3 \
+#     >> ralph/log-phase-c.txt 2>&1 &
+#
+# The worker prompt is ralph/PROMPT.base.md + this directory's addendum
+# (print it: python3 scripts/ralph.py prompt --queue phase-c).
+label = "phase-c"
+# Rows are outcomes (PROMPT.base §2, five-programs-65); a [~] row resumes in
+# the next session.
+session_timeout = 7200
+# Audits every 10 units, not 5 (phase-b-32). The serial loop inserts them
+# (`_insert_audit`, as REVIEW-audit-pc-auto-N); the pool runs REVIEW rows
+# serially in the main tree.
+audit_every = 10
+# Census before code, refused by name at dispatch (phase-b-29, -30). Bare
+# "- finish", no colon: a director annotating the bullet broke the literal
+# match twice on 2026-09-28. Every row's premises were written against an
+# earlier tree; the census re-verifies them against the tree of that day.
+dispatch_requires = ["- finish", "- trial"]
+# The frozen scope with the cleanup cut line (phase-b-102): a row scope.txt
+# does not list waits on the operator and never dispatches. Moving the line is
+# the operator adding ids there.
+scope_file = "ralph/next/phase-c/scope.txt"
+# conflicts.txt and heavy.txt (phase-b-103) are not declared here:
+# load_manifest derives every MANIFEST_PATH_KEYS path from this directory
+# (ralph/next/phase-c/conflicts.txt, heavy.txt, ctl/, CHARTER.md), and naming
+# them would be a second spelling of that default. `pool --queue` reads both
+# from there (pc-pool-ready).
+worker_bin = "scripts/ralph-claude-shim.sh"
+settings = "ralph/claude-settings.json"
+
+[models]
+worker = "claude-opus-5-5"
+review = "claude-opus-5-5"
+resolve = "claude-opus-5-5"
+variant = "medium"
+
+# Phase B's gates, unchanged. BOUNDARY reads 0 since Phase B and stays 0; its
+# line goes in every commit body. `lift` takes a program name
+# (`scripts/ralph-check.sh lift cmnwlth`). Its sandbox and target live under
+# ~/.cache/program-lift, never /tmp, a 63G RAM-backed tmpfs here (1d611fcab);
+# the target persists so crates.io deps stay warm, the sandbox is fresh each
+# run (phase-b-8). The sandbox path is stable per lift: a pid-keyed path left
+# reused test binaries' CARGO_MANIFEST_DIR pointing at a deleted sandbox
+# (seat 2026-09-26, 1db9a6e12).
+[checks]
+# clone-gate rides on boundary (phase-b-99): one reading shows both, and a
+# copy that closes an edge turns clone-gate red. It never rises in phase-c; a
+# collapse banks its drop with `clone-gate --tighten` (phase-b-105).
+boundary = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc 'cd corpus-engine && cargo xtask boundary-gate; cargo xtask clone-gate; true'"]
+compile = ["bash", "-c", "toolbox run -c sovereign-vulkan bash -lc './scripts/sovereign-lint.sh --human'"]
+lift = ['bash', '-c', 'mkdir -p "$HOME/.cache/program-lift" && toolbox run -c sovereign-vulkan bash -lc "TMPDIR=$HOME/.cache/program-lift ./scripts/program-lift.sh --sandbox $0 --dir $HOME/.cache/program-lift/sandbox-$0 --target-dir $HOME/.cache/program-lift/target"']

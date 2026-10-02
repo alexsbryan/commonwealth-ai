@@ -26,7 +26,7 @@
 //! nothing" or "atom spans are empty for a chunk that obviously
 //! mentions Alyosha."
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 use serde::Deserialize;
 
 // The reading surface's OWN response types — the host's, not a mirror.
@@ -388,8 +388,8 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
         .await
         .map_err(|e| format!("embed query: {e}"))?;
 
-    let indexes = session
-        .corpus_engine
+    let corpus = session.corpus()?;
+    let indexes = corpus
         .installed_indexes()
         .await
         .map_err(|e| format!("list installed indexes: {e}"))?;
@@ -410,7 +410,7 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
         // emit them as citations, but the count is informative.
         let chat_eligible = matches!(
             info.kind,
-            corpus_engine::CorpusKind::Knowledge | corpus_engine::CorpusKind::Catalog
+            corpus_index::types::CorpusKind::Knowledge | corpus_index::types::CorpusKind::Catalog
         );
         let skip_reason = if !chat_eligible {
             Some("Code-kind corpus — runtime filters out of chat retrieval")
@@ -438,7 +438,7 @@ async fn run_diag(session: &ChatSession, args: &CmdArgs) -> DiagResult<DiagRepor
 
         let query_vec: &[f32] = if dim_match { &embedding } else { &[] };
         let hybrid = dim_match && !embedding.is_empty();
-        let idx = match session.corpus_engine.open_index(&info.path).await {
+        let idx = match corpus.open_index(&info.path).await {
             Ok(i) => i,
             Err(e) => {
                 eprintln!(

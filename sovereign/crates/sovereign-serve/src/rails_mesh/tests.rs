@@ -1,0 +1,362 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+use super::*;
+use sovereign_contracts::launch::RpcServe;
+
+const ME: &str = "0000000000000000000000000000000a";
+const PEER: &str = "0000000000000000000000000000000b";
+
+/// A `/v1/mesh/status` document in cw-rails' shape (commonwealth-rails
+/// api.rs `status`): self, mesh, and one member per row.
+fn doc(peer_hex: Option<&str>) -> serde_json::Value {
+    let caps = |anchor: serde_json::Value| {
+        serde_json::json!({
+            "hardware": {"gpus": [], "system_ram_gb": 0, "cpu_cores": 0,
+                         "total_storage_gb": 0, "free_storage_gb": 0},
+            "available": {"free_vram_gb": 0.0, "free_ram_gb": 0.0, "free_storage_gb": 0.0,
+                          "gpu_utilization": 0.0, "cpu_utilization": 0.0,
+                          "available_for_mesh": false},
+            "hosted_corpora": [], "reported_at": 0, "anchor": anchor
+        })
+    };
+    let mut peer = serde_json::json!({
+        "name": "worker", "node_id": "node-0000000000000000", "status": "online",
+        "last_seen": 7, "is_self": false,
+        "capabilities": caps(serde_json::json!({"can_anchor": true, "vram_gb": 8,
+                                                "rpc_port": 50060, "rpc_iroh": true})),
+        "dial": {"relay_url": null, "iroh_direct_addrs": ["192.168.1.20:41000"]}
+    });
+    if let Some(hex) = peer_hex {
+        peer["node_id_hex"] = hex.into();
+    }
+    serde_json::json!({
+        "self": {"node_id": "node-0000000000000000", "node_id_hex": ME, "name": "host"},
+        "mesh": {"id": "m", "name": "lift-mesh"},
+        "members": [
+            {"name": "host", "node_id": "node-0000000000000000", "node_id_hex": ME,
+             "status": "online", "last_seen": 9, "is_self": true,
+             "capabilities": caps(serde_json::Value::Null),
+             "dial": {"relay_url": null, "iroh_direct_addrs": []}},
+            peer
+        ]
+    })
+}
+
+#[test]
+fn a_roster_row_becomes_a_member_with_its_full_id_anchor_and_direct_addresses() {
+    let reading = parse(serde_json::from_value(doc(Some(PEER))).expect("doc")).expect("reading");
+    assert_eq!(reading.mesh_name, "lift-mesh");
+    assert_eq!(reading.self_id, NodeId::from_hex(ME).unwrap());
+    let peer = reading
+        .members
+        .iter()
+        .find(|m| m.name == "worker")
+        .expect("the worker row");
+    assert_eq!(peer.node_id, NodeId::from_hex(PEER).unwrap());
+    assert_eq!(peer.dial.node_id, peer.node_id);
+    assert!(peer.dialable, "a member with a direct address is dialable");
+    assert!(
+        peer.dial.addresses.is_empty(),
+        "cw-rails fills no overlay address"
+    );
+    assert_eq!(
+        peer.dial.iroh_direct_addrs,
+        vec!["192.168.1.20:41000".parse::<SocketAddr>().unwrap()]
+    );
+    let anchor = peer
+        .capabilities
+        .anchor
+        .as_ref()
+        .expect("the anchor record");
+    assert_eq!((anchor.rpc_port, anchor.rpc_iroh), (Some(50060), true));
+    // The member that is this node has no path of its own to dial.
+    let me = reading.members.iter().find(|m| m.name == "host").unwrap();
+    assert!(!me.dialable);
+}
+
+#[test]
+fn a_cw_rails_without_full_ids_is_named_not_an_empty_roster() {
+    let err = parse(serde_json::from_value(doc(None)).expect("doc")).expect_err("no full id");
+    assert!(
+        err.contains("node_id_hex") && err.contains("worker"),
+        "{err}"
+    );
+}
+
+#[test]
+fn serve_registers_its_peer_prefixes_and_its_rpc_worker_only_when_it_binds() {
+    let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
+    let member: Option<SocketAddr> = Some("127.0.0.1:18001".parse().unwrap());
+    let off = registrations_for(listen, member, RpcServe::resolve(None, false), None);
+    assert_eq!(off.len(), 2, "no worker bind, no rpc origin: {off:?}");
+    assert_eq!(off[0].alpn, "cwth/http/0");
+    assert_eq!(off[0].port, 18000);
+    assert_eq!(
+        off[0].prefixes,
+        vec![
+            "/internal/v1/models".to_string(),
+            "/internal/rpc-warm".to_string()
+        ]
+    );
+    assert_eq!(off[0].framing, Framing::Http);
+    // The member client, whole on the ALPN the Inference class rides, at its
+    // own listener rather than serve's.
+    assert_eq!(off[1].alpn, "cwth/client/0");
+    assert_eq!(
+        (off[1].port, off[1].framing, off[1].prefixes.len()),
+        (18001, Framing::Http, 0)
+    );
+
+    let on = registrations_for(
+        listen,
+        member,
+        RpcServe::resolve(Some("127.0.0.1:50060"), false),
+        None,
+    );
+    let rpc = on
+        .iter()
+        .find(|r| r.alpn == "cwth/rpc/0")
+        .expect("the rpc origin");
+    assert_eq!((rpc.port, rpc.framing), (50060, Framing::Bytes));
+    let anchor = rpc
+        .claims
+        .as_ref()
+        .and_then(|c| c.anchor.as_ref())
+        .expect("the rpc origin declares the anchor record");
+    assert!(anchor.can_anchor);
+    assert_eq!((anchor.rpc_port, anchor.rpc_iroh), (Some(50060), true));
+    assert!(
+        !anchor.rpc_direct,
+        "a loopback worker declares no direct bind"
+    );
+}
+
+/// pc-rpc-probe-identity: the anchor record declares a direct bind only for a
+/// worker the operator let past loopback; a host probes the member's address
+/// for no other. Failing input: declare `rpc_direct` unconditionally.
+#[test]
+fn only_a_worker_bound_past_loopback_declares_a_direct_bind() {
+    let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
+    let direct = |rpc: RpcServe| {
+        registrations_for(listen, None, rpc, None)
+            .iter()
+            .find(|r| r.alpn == "cwth/rpc/0")
+            .and_then(|r| r.claims.as_ref()?.anchor.as_ref().map(|a| a.rpc_direct))
+    };
+    assert_eq!(
+        direct(RpcServe::resolve(Some("127.0.0.1:50060"), false)),
+        Some(false)
+    );
+    assert_eq!(
+        direct(RpcServe::resolve(Some("0.0.0.0:50060"), true)),
+        Some(true)
+    );
+    assert_eq!(
+        direct(RpcServe::resolve(Some("0.0.0.0:50060"), false)),
+        None,
+        "refused: no worker"
+    );
+}
+
+/// The `cwth/http/0` registration declares the VRAM figure it was handed as
+/// one GPU entry, and nothing else; no figure declares no GPU (phase-b-90
+/// (B)). Failing input: declare no claims there.
+#[test]
+fn the_peer_registration_declares_the_loaders_vram_figure() {
+    let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
+    let declared = |vram| {
+        registrations_for(listen, None, RpcServe::resolve(None, false), vram)[0]
+            .claims
+            .clone()
+            .expect("the peer registration declares")
+    };
+    let with = declared(Some(124));
+    let gpus: Vec<(String, u32)> = with
+        .hardware
+        .gpus
+        .iter()
+        .map(|g| (g.name.clone(), g.vram_gb))
+        .collect();
+    assert_eq!(gpus, vec![("GPU".to_string(), 124)]);
+    assert_eq!(
+        (
+            with.hardware.system_ram_gb,
+            with.anchor,
+            with.storage_remaining_bytes
+        ),
+        (0, None, None)
+    );
+    assert!(declared(None).hardware.gpus.is_empty());
+}
+
+#[test]
+fn an_unspecified_listener_is_reached_on_loopback() {
+    assert_eq!(
+        origin_addr("0.0.0.0:7000".parse().unwrap()),
+        "127.0.0.1:7000".parse::<SocketAddr>().unwrap()
+    );
+    assert_eq!(
+        origin_addr("127.0.0.1:7001".parse().unwrap()),
+        "127.0.0.1:7001".parse::<SocketAddr>().unwrap()
+    );
+}
+
+/// A stand-in cw-rails: `doc(Some(PEER))` on its roster route, and a reach
+/// door that answers every Inference ask with one bridge, the class it was
+/// asked for in the label.
+async fn stub_rails() -> String {
+    use axum::extract::Query;
+    async fn reach(
+        Query(q): Query<mesh_reach::door::ReachQuery>,
+    ) -> axum::Json<mesh_reach::door::Reach> {
+        axum::Json(mesh_reach::door::Reach {
+            peer: "worker".into(),
+            node_id: q.peer,
+            class: q.class.clone(),
+            endpoints: vec![mesh_reach::PeerEndpoint {
+                base_url: "http://127.0.0.1:4242".into(),
+                label: format!("stub:{}", q.class),
+            }],
+        })
+    }
+    let app = axum::Router::new()
+        .route(
+            "/v1/mesh/status",
+            axum::routing::get(|| async { axum::Json(doc(Some(PEER))) }),
+        )
+        .route(mesh_reach::door::REACH_PATH, axum::routing::get(reach));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    base
+}
+
+/// A standalone serve ranks the roster's peers, each at the bridge cw-rails'
+/// reach door hands for the Inference class, and never itself; its node id
+/// is cw-rails'. Failing inputs: a venue for this node, or a base URL that
+/// did not come through the door.
+#[tokio::test]
+async fn rails_venues_are_the_rosters_peers_reached_through_cw_rails() {
+    use sovereign_contracts::venue::VenueSource;
+    use sovereign_contracts::venue_host::VenueHost;
+    let venues = RailsVenues::new(RailsRoster::new(stub_rails().await));
+    let got = venues.candidates().await;
+    assert_eq!(got.len(), 1, "one peer, and never this node: {got:?}");
+    assert_eq!(got[0].node_id, NodeId::from_hex(PEER).unwrap());
+    assert_eq!(
+        got[0].base_urls,
+        vec!["http://127.0.0.1:4242/v1".to_string()]
+    );
+    assert!(!got[0].pinned_transport);
+    assert_eq!(venues.local_node_id().await, NodeId::from_hex(ME));
+    assert!(venues.ledger_emitter().await.is_none());
+}
+
+/// No cw-rails answering: no peer venue and no node id, so the router
+/// serves this node's own models.
+#[tokio::test]
+async fn rails_venues_with_no_cw_rails_rank_no_peer() {
+    use sovereign_contracts::venue::VenueSource;
+    use sovereign_contracts::venue_host::VenueHost;
+    let venues = RailsVenues::new(RailsRoster::new("http://127.0.0.1:9"));
+    assert!(venues.candidates().await.is_empty());
+    assert!(venues.local_node_id().await.is_none());
+}
+
+/// F13: a cw-rails that holds its port and does not answer is named slow,
+/// inside the one bound, never read as a mesh of nobody. Failing inputs: an
+/// `Ok` empty roster, or a read that waits past `STATUS_TIMEOUT`.
+#[tokio::test]
+async fn a_cw_rails_that_does_not_answer_is_named_slow_within_the_bound() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    // Accept and hold every connection without a byte back: a stalled API.
+    tokio::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((sock, _)) = listener.accept().await {
+            held.push(sock);
+        }
+    });
+    let started = std::time::Instant::now();
+    let got = RailsRoster::new(base).read_roster().await;
+    let waited = started.elapsed();
+    let why = got.expect_err("a stalled cw-rails has no roster");
+    assert!(why.starts_with("cw-rails slow"), "{why}");
+    assert!(
+        waited < STATUS_TIMEOUT + Duration::from_secs(1),
+        "the read is bounded: {waited:?}"
+    );
+}
+
+/// F13: a stopped cw-rails is named absent; `members()` alone could only
+/// answer an empty roster.
+#[tokio::test]
+async fn a_stopped_cw_rails_is_named_absent() {
+    let why = RailsRoster::new("http://127.0.0.1:9")
+        .read_roster()
+        .await
+        .expect_err("nothing listens on port 9");
+    assert!(why.starts_with("cw-rails absent"), "{why}");
+}
+
+/// One read answers both the name and the members.
+#[tokio::test]
+async fn read_roster_answers_name_and_members_from_one_read() {
+    let (name, members) = RailsRoster::new(stub_rails().await)
+        .read_roster()
+        .await
+        .expect("the stub answers");
+    assert_eq!(name, "lift-mesh");
+    assert_eq!(members.len(), 2, "{members:?}");
+}
+
+/// A member asking serve's member client for a route svrn served it before
+/// the flip reads a 410 naming what the member client serves; any other
+/// path a named 404; a served path is still served (pc-bare-404s).
+#[tokio::test]
+async fn the_member_client_names_what_a_member_lost_and_what_it_serves() {
+    use tower::ServiceExt;
+    let app = host_kit::shell::mount(vec![
+        host_kit::shell::RouteBundle::new("served")
+            .route("/v1/models", axum::routing::get(|| async { "models" })),
+        member_client_absence(),
+    ]);
+    let ask = |path: &str| {
+        let app = app.clone();
+        let request = axum::http::Request::post(path)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        async move {
+            let resp = app.oneshot(request).await.unwrap();
+            let status = resp.status();
+            let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+                .await
+                .unwrap();
+            (status, String::from_utf8_lossy(&bytes).into_owned())
+        }
+    };
+    for path in [
+        "/v1/responses",
+        "/v1/knowledge/search",
+        "/status",
+        "/api/chat",
+        "/oicp/v1/corpus/install",
+    ] {
+        let (status, body) = ask(path).await;
+        assert_eq!(status, axum::http::StatusCode::GONE, "{path}: {body}");
+        assert!(body.contains("/v1/chat/completions"), "{path}: {body}");
+    }
+    let (status, body) = ask("/v1/nothing").await;
+    assert_eq!(status, axum::http::StatusCode::NOT_FOUND, "{body}");
+    assert!(body.contains("not a member route"), "{body}");
+    let resp = app
+        .clone()
+        .oneshot(
+            axum::http::Request::get("/v1/models")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), axum::http::StatusCode::OK);
+}

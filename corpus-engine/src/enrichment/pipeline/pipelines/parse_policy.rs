@@ -190,9 +190,9 @@ pub(super) fn state_is_of_relation(policies: &OntologyPolicies, t: &OntologyType
 }
 
 /// Reserved attribute key carrying a directive claim's deontic normal form.
-/// `pub(crate)` since ontology-v1 P5: `governance_view::project_claim` reads
-/// the same key off the atom, and one spelling is the point (§10.6).
-pub(crate) const ATTR_DEONTIC: &str = "deontic";
+/// Defined beside its reader, `governance_view::project_claim`, in the
+/// atlas-reader leaf since fp-60; one spelling is the point (§10.6).
+pub(crate) use corpus_engine_atlas_reader::governance_view::ATTR_DEONTIC;
 /// Reserved attribute key carrying a claim's evidence grade.
 pub(super) const ATTR_GRADE: &str = "grade";
 

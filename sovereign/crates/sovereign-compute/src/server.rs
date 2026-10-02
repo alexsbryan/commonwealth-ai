@@ -13,10 +13,14 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::{header::CONTENT_TYPE, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, post, MethodRouter};
 use axum::{Json, Router};
 use futures::StreamExt;
+use host_kit::shell::RouteBundle;
+use sovereign_contracts::oicp::openai_types::ErrorResponse;
 use sovereign_contracts::{CompletionRequest, Error, InferenceProvider, StreamFrame};
+use sovereign_inference::served_kind::{self, KindRoute, KindServeError, ServedKind};
+use tracing::{debug, warn};
 
 use crate::wire::{
     self, EmbedBatchRequest, EmbedBatchResponse, EmbedMode, EmbedRequest, EmbedResponse,
@@ -49,18 +53,134 @@ pub fn router(
     ready: Arc<AtomicBool>,
     meta: ChildMeta,
 ) -> Router {
+    host_kit::shell::mount(vec![bundle(provider, ready, meta)])
+}
+
+/// [`router`]'s routes as the host kit's named bundle, which `child_main`
+/// serves through the kit's shell.
+pub fn bundle(
+    provider: Arc<dyn InferenceProvider>,
+    ready: Arc<AtomicBool>,
+    meta: ChildMeta,
+) -> RouteBundle {
     let state = ChildServerState {
         provider,
         ready,
         meta,
     };
-    Router::new()
-        .route(ROUTE_COMPLETE, post(handle_complete))
-        .route(ROUTE_COMPLETE_STREAM, post(handle_complete_stream))
-        .route(ROUTE_EMBED, post(handle_embed))
-        .route(ROUTE_EMBED_BATCH, post(handle_embed_batch))
-        .route(ROUTE_HEALTH, get(handle_health))
+    // The native wire is loopback-only, whatever its host binds: its one
+    // caller is the supervisor on 127.0.0.1 (`ComputeChildClient::from_port`).
+    let guard = || axum::middleware::from_fn(host_kit::shell::guard::loopback_only);
+    let bundle = RouteBundle::new("compute_child")
+        .route(ROUTE_COMPLETE, post(handle_complete).layer(guard()))
+        .route(
+            ROUTE_COMPLETE_STREAM,
+            post(handle_complete_stream).layer(guard()),
+        )
+        .route(ROUTE_EMBED, post(handle_embed).layer(guard()))
+        .route(ROUTE_EMBED_BATCH, post(handle_embed_batch).layer(guard()))
+        .route(ROUTE_HEALTH, get(handle_health));
+    // Each served kind answers on its own route path, from its registration,
+    // so a child hosting a kind speaks the same wire as the public route.
+    kind_routes(child_provider, wire_refusal)
+        .into_iter()
+        .fold(bundle, |bundle, (path, handler)| {
+            bundle.route(path, handler)
+        })
         .with_state(state)
+}
+
+/// How a host renders a kind route's refusal on its own wire: the status,
+/// the message, and the OpenAI error type.
+pub type KindRefusal = fn(StatusCode, String, &'static str) -> Response;
+
+/// Where a host's kind route finds the provider it serves against, or the
+/// host's own sentence for why it has none.
+pub type KindProvider<S> = fn(&S, &ServedKind) -> Result<Arc<dyn InferenceProvider>, String>;
+
+/// `(path, handler)` for every registered kind with a route: the ONE kind
+/// mount, read from the registry (phase-b-16). Every host that serves kinds
+/// (the daemon, the compute child, `serve`) mounts through it, so a refusal
+/// maps to one status and one event wherever it happens: a bad body is 400,
+/// a backend failure is 503 with a warn. Only the envelope is the host's
+/// (`refuse`), because the child's client reads a [`WireError`] and a public
+/// route answers OpenAI's error shape. A kind whose route is a named absence
+/// mounts nothing, and says why at debug.
+pub fn kind_routes<S>(
+    provider: KindProvider<S>,
+    refuse: KindRefusal,
+) -> Vec<(&'static str, MethodRouter<S>)>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    served_kind::served_kinds()
+        .into_iter()
+        .filter_map(|kind| match kind.route {
+            KindRoute::Served { path, serve } => {
+                debug!(target: "served_kind", kind = kind.role, path, "mounting served kind route");
+                let handler = post(
+                    move |State(st): State<S>, Json(body): Json<serde_json::Value>| async move {
+                        let backend = match provider(&st, &kind) {
+                            Ok(backend) => backend,
+                            Err(why) => {
+                                return refuse(
+                                    StatusCode::SERVICE_UNAVAILABLE,
+                                    why,
+                                    "no_local_inference_backend",
+                                )
+                            }
+                        };
+                        match serve(backend, body).await {
+                            Ok(value) => {
+                                debug!(target: "served_kind", kind = kind.role, "served kind request answered");
+                                Json(value).into_response()
+                            }
+                            Err(KindServeError::BadRequest(message)) => {
+                                refuse(StatusCode::BAD_REQUEST, message, "invalid_request_error")
+                            }
+                            Err(KindServeError::Backend(message)) => {
+                                warn!(target: "served_kind", kind = kind.role, error = %message, "served kind request failed");
+                                refuse(StatusCode::SERVICE_UNAVAILABLE, message, "backend_error")
+                            }
+                        }
+                    },
+                );
+                Some((path, handler))
+            }
+            KindRoute::Absent { reason } => {
+                debug!(target: "served_kind", kind = kind.role, reason, "served kind has no route");
+                None
+            }
+        })
+        .collect()
+}
+
+/// A kind route's refusal in OpenAI's error shape, for a public route.
+pub fn openai_refusal(status: StatusCode, message: String, error_type: &'static str) -> Response {
+    (
+        status,
+        Json(serde_json::to_value(ErrorResponse::new(message, error_type)).unwrap_or_default()),
+    )
+        .into_response()
+}
+
+/// A kind route's refusal on the native wire, which the child's client
+/// decodes into a typed [`Error`].
+fn wire_refusal(status: StatusCode, message: String, _error_type: &'static str) -> Response {
+    let err = if status == StatusCode::BAD_REQUEST {
+        Error::InvalidInput(message)
+    } else {
+        Error::Inference(message)
+    };
+    (status, Json(WireError::from_error(&err))).into_response()
+}
+
+/// The child serves every kind against the one provider it loaded.
+fn child_provider(
+    st: &ChildServerState,
+    _kind: &ServedKind,
+) -> Result<Arc<dyn InferenceProvider>, String> {
+    Ok(Arc::clone(&st.provider))
 }
 
 /// Map a contract [`Error`] to an HTTP status + wire envelope.
@@ -151,4 +271,93 @@ async fn handle_health(State(st): State<ChildServerState>) -> Response {
         StatusCode::SERVICE_UNAVAILABLE
     };
     (status, Json(info)).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::pin::Pin;
+
+    use async_trait::async_trait;
+    use futures::Stream;
+    use sovereign_contracts::{CompletionResponse, Depth, ProviderCapabilities, Result, Speed};
+
+    /// A reranker whose backend has gone away.
+    struct FailingReranker;
+
+    #[async_trait]
+    impl InferenceProvider for FailingReranker {
+        async fn complete(&self, _: &CompletionRequest) -> Result<CompletionResponse> {
+            Err(Error::NotImplemented("rerank only".into()))
+        }
+        async fn complete_stream(
+            &self,
+            _: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("rerank only".into()))
+        }
+        async fn embed(&self, _: &str) -> Result<Vec<f32>> {
+            Err(Error::NotImplemented("rerank only".into()))
+        }
+        async fn rerank_batch(&self, _: &str, _: &[String]) -> Result<Vec<f32>> {
+            Err(Error::Inference("the device is gone".into()))
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 0,
+                supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Shallow,
+            }
+        }
+    }
+
+    /// The child's kind route goes through the one kind mount: a backend
+    /// failure is 503 with a warn under `served_kind`, as on the daemon, and
+    /// the body is still the native envelope the child's client decodes.
+    /// Before the one mount the child answered 500 and logged nothing.
+    #[test]
+    fn a_kind_backend_failure_on_the_child_is_503_and_logged() {
+        let ((status, body), logs) = crate::logged_under("served_kind=warn", || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("runtime");
+            rt.block_on(async {
+                let app = router(
+                    Arc::new(FailingReranker),
+                    Arc::new(AtomicBool::new(true)),
+                    ChildMeta {
+                        role: "rerank".into(),
+                        model_id: String::new(),
+                    },
+                );
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                    .await
+                    .expect("bind");
+                let addr = listener.local_addr().expect("addr");
+                tokio::spawn(async move { axum::serve(listener, app).await });
+                let resp = reqwest::Client::new()
+                    .post(format!("http://{addr}/v1/rerank"))
+                    .json(&serde_json::json!({"model": "", "query": "q", "documents": ["d"]}))
+                    .send()
+                    .await
+                    .expect("the child answers");
+                let status = resp.status().as_u16();
+                (
+                    status,
+                    resp.json::<WireError>().await.expect("a WireError body"),
+                )
+            })
+        });
+        assert_eq!(status, 503, "a backend failure is 503 on every host");
+        match body.into_error() {
+            Error::Inference(m) => assert!(m.contains("the device is gone"), "got: {m}"),
+            other => panic!("expected an Inference error, got {other:?}"),
+        }
+        assert!(
+            logs.contains("served kind request failed"),
+            "the failure must reach the log: {logs:?}"
+        );
+    }
 }

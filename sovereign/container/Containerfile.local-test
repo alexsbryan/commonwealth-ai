@@ -16,7 +16,8 @@
 #   scripts/pod build -t sovereign-worker-local:test \
 #     -f sovereign/container/Containerfile.local-test .
 #
-# Prereq: target/release/sovereign-cli must exist. The Cargo build
+# Prereq: target/release/{sovereign-cli,sovereign-cli-daemon,sovereign-stock,
+# sovereign-pod-worker} must exist (the worker-mode exec chain, pb-pods-worker). The Cargo build
 # happens on the host (in the toolbox), not inside this image —
 # building Rust in here would add 5-10 minutes per iteration with
 # no benefit, since we're not testing the build.
@@ -44,7 +45,10 @@ FROM quay.io/fedora/fedora-minimal:43
 # Pre-built release binary. The build context is the workspace root
 # so this path resolves. We COPY with --chmod to avoid a second RUN
 # step that would also hit the setgroups() block in the toolbox.
-COPY --chmod=0755 target/release/sovereign-cli /usr/local/bin/sovereign-cli
+COPY --chmod=0755 target/release/sovereign-cli          /usr/local/bin/sovereign-cli
+COPY --chmod=0755 target/release/sovereign-cli-daemon   /usr/local/bin/sovereign-cli-daemon
+COPY --chmod=0755 target/release/sovereign-stock        /usr/local/bin/sovereign-stock
+COPY --chmod=0755 target/release/sovereign-pod-worker   /usr/local/bin/sovereign-pod-worker
 
 # Entrypoint script. Same one used by Containerfile.cuda — kept
 # identical so a green smoke here means the production entrypoint

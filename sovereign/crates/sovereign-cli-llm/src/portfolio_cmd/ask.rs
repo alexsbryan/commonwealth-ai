@@ -54,12 +54,16 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
             }
         };
         match super::get_portfolio(&store, name) {
-            Some(c) if !c.is_empty() => c,
-            Some(_) => {
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+            Ok(Some(c)) if !c.is_empty() => c,
+            Ok(Some(_)) => {
                 eprintln!("error: portfolio `{name}` is empty — add corpora with `svrn portfolio add {name} <corpus-id ...>`");
                 return 1;
             }
-            None => {
+            Ok(None) => {
                 eprintln!("error: no portfolio named `{name}`");
                 return 1;
             }
@@ -161,7 +165,14 @@ async fn render_sources(
         return;
     }
     eprintln!("  sources ({} passage(s) from {corpus_id}):", ids.len());
-    if let Ok(index) = session.corpus_engine.open_index_for_corpus(corpus_id).await {
+    let corpus = match session.corpus() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("  (passage bodies not read: {e})");
+            return;
+        }
+    };
+    if let Ok(index) = corpus.open_index_for_corpus(corpus_id).await {
         for chid in ids.iter().take(4) {
             if let Ok(mut rows) = index.chunks_by_ids(&[*chid]).await {
                 if let Some(row) = rows.pop() {

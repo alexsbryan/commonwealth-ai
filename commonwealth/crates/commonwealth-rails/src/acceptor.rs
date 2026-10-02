@@ -4,45 +4,42 @@
 //! An iroh endpoint accepts anyone — the dial string rides in every invite
 //! and is gossiped as `node_pubkey`, so holding it is not a credential. What
 //! the connection DOES carry is the dialer's key, verified by the QUIC
-//! handshake. Two protocols, two different answers:
+//! handshake. That key and the negotiated ALPN are all this consults.
 //!
-//! - `cwth/http/0` is spliced to the internal gossip listener for ANY dialer.
-//!   That listener authenticates for itself: `merge_from_authenticated`
-//!   refuses a payload whose mesh or invite hash is not ours, so a stranger's
-//!   round is a 401 rather than something the acceptor had to predict. It is
-//!   also the only way a peer that has just been ADMITTED can reach us at
-//!   all, before our roster knows its key — the same reasoning as
-//!   `sovereign-mesh/src/iroh_access.rs`.
-//! - `cwth/media/0` is the origin, and there the decision is
-//!   `commonwealth_media::admit_media` — the one implementation of it, shared
-//!   with the inference daemon. A non-member is closed (the origin
-//!   authenticates nothing, so there is no safe downgrade), and a member
-//!   outside a non-empty `media_allow` is closed and logged with the list.
-//! - `cwth/app/0` is the same shape against a DIFFERENT list and a live
-//!   registry: `commonwealth_media::admit_app`, again the one implementation.
-//!   Which app is not decided here — that is per request, among the origins
-//!   this node publishes at the moment the request arrives.
+//! **The table is the origin registry** ([`OriginRegistry::forward_for`];
+//! phase-b pb-rails-origins, FIVE_PROGRAMS §4 rule 8). There is no arm per
+//! protocol here: every ALPN this endpoint serves, who may reach it and where
+//! it goes is a registration — this endpoint's own gossip and join routes and
+//! its `rails.toml` media origin (`crate::origins::stand_own`), the app entry,
+//! and each program's registered origin. The endpoint advertises exactly the
+//! registered ALPNs and re-advertises when they change, because a negotiated
+//! protocol with nothing behind it turns a clean refusal into a hang.
 //!
-//! **A rails node publishes apps through the loopback API, never through
+//! - `cwth/http/0` forwards by registered path prefix to ANY dialer: a joiner
+//!   is not a member yet, and the gossip merge authorizes for itself. A
+//!   members-only prefix is refused to a stranger by name; an unregistered
+//!   prefix is refused by name, so nothing unregistered is forwarded.
+//! - `cwth/media/0` and `cwth/offer/0` go through the one members-and-allow
+//!   decider (`commonwealth_media::admit_spliced_origin`), shared with the
+//!   inference daemon. `cwth/app/0` is `admit_app` against the live app
+//!   registry; which app is decided per request.
+//!
+//! **A rails node publishes through the loopback API, never through
 //! `rails.toml`.** An `[apps]` table there would make an un-upgraded daemon
 //! REFUSE TO BOOT on a config a newer one wrote, because `Config` and
 //! `MediaSection` are `#[serde(deny_unknown_fields)]` — the same hazard
 //! `commonwealth_media::declared` sidesteps by putting the value in a file
 //! whose NAME is the key. The claim tier sidesteps it the same way, by
 //! needing no config key at all: the registration lives in the process, which
-//! is where the truth about a running app was anyway.
-//!
-//! Anything else is closed loudly. An unknown ALPN on a two-ALPN endpoint
-//! means something dialed a protocol this build does not serve, and silence
-//! there reads to the dialer exactly like a network fault.
+//! is where the truth about a running origin was anyway.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use commonwealth_core::ids::NodePubkey;
 use commonwealth_core::mesh::Mesh;
+use commonwealth_media::origins::OriginRegistry;
 use commonwealth_media::{MemberCheck, MemberIdentity};
-use commonwealth_transport::iroh::{Endpoint, Forward, IrohAcceptor, ALPN, APP_ALPN, MEDIA_ALPN};
+use commonwealth_transport::iroh::{Endpoint, IrohAcceptor};
 use tokio::sync::RwLock;
 
 /// The roster consult the media arm makes on EVERY dial. Not cached: a member
@@ -65,90 +62,34 @@ pub fn member_check(mesh: Arc<RwLock<Mesh>>) -> MemberCheck {
     })
 }
 
-/// Spawn the accept loop. Dropping the returned acceptor stops it.
-pub fn spawn(
-    endpoint: Endpoint,
-    internal_addr: SocketAddr,
-    mesh: Arc<RwLock<Mesh>>,
-    media_origin: Option<SocketAddr>,
-    media_allow: Vec<String>,
-    media_declared: Vec<(String, String)>,
-    apps: commonwealth_media::PublishedApps,
-) -> IrohAcceptor {
+/// Spawn the accept loop over `origins`. Dropping the returned acceptor
+/// stops it.
+pub fn spawn(endpoint: Endpoint, mesh: Arc<RwLock<Mesh>>, origins: OriginRegistry) -> IrohAcceptor {
     let check = member_check(mesh);
-    // `cwth/app/0` is advertised only while something is published, and the
-    // set is updated live because the claim tier changes it while the daemon
-    // runs. Base list without it, so the hook below can add and remove it
-    // without having to know what else the endpoint serves.
     {
         let endpoint = endpoint.clone();
-        apps.on_serving_change(Arc::new(move |serving| {
-            let mut set = vec![ALPN.to_vec(), MEDIA_ALPN.to_vec()];
-            if serving {
-                set.push(APP_ALPN.to_vec());
-            }
+        origins.on_alpns_change(Arc::new(move |set| {
             tracing::info!(
                 target: "rails",
-                serving_apps = serving,
-                "acceptor: app publishing changed — the endpoint now {} cwth/app/0",
-                if serving { "serves" } else { "does not serve" }
+                alpns = ?set.iter().map(|a| String::from_utf8_lossy(a).into_owned()).collect::<Vec<_>>(),
+                "acceptor: the endpoint now serves exactly the registered ALPNs"
             );
             endpoint.set_alpns(set);
         }));
     }
-    tracing::info!(
-        target: "rails",
-        internal = %internal_addr,
-        media_origin = ?media_origin,
-        media_allow = ?media_allow,
-        // NAMES only. The values are this node's credentials for its own
-        // origin; whether one is set is operational, what it is never is.
-        media_declared = ?media_declared.iter().map(|(n, _)| n).collect::<Vec<_>>(),
-        "acceptor: serving cwth/http/0 (gossip) and cwth/media/0 (origin)"
-    );
-    let media_declared = Arc::new(media_declared);
     IrohAcceptor::spawn_admitting_forward(endpoint, move |alpn, dialer| {
         let check = check.clone();
-        let allow = media_allow.clone();
-        let declared = media_declared.clone();
-        let apps = apps.clone();
+        let origins = origins.clone();
         async move {
-            if alpn == ALPN {
-                tracing::debug!(
-                    target: "rails",
-                    dialer = %hex::encode(dialer.0),
-                    "acceptor: gossip dial spliced to the internal listener \
-                     (the merge authorizes, not this)"
-                );
-                return Some(Forward::Splice(internal_addr));
-            }
-            if alpn == MEDIA_ALPN {
-                let who = check(dialer).await;
-                return commonwealth_media::admit_media(
-                    who.as_ref(),
-                    dialer,
-                    media_origin,
-                    &allow,
-                    &declared,
-                );
-            }
-            if alpn == APP_ALPN {
-                let who = check(dialer).await;
-                // Every member, because a rails node has no `app_allow` key
-                // to narrow it with and inventing one is the config hazard
-                // above. The narrower grant is the inference daemon's
-                // `[iroh] app_allow`; here the honest statement is that
-                // publishing an app on a rails node offers it to the mesh.
-                return commonwealth_media::admit_app(who.as_ref(), dialer, &apps.snapshot(), &[]);
-            }
-            tracing::warn!(
+            let who = check(dialer).await;
+            tracing::debug!(
                 target: "rails",
                 alpn = %String::from_utf8_lossy(&alpn),
                 dialer = %hex::encode(dialer.0),
-                "acceptor: unknown ALPN — closing. This build serves cwth/http/0, \
-                 cwth/media/0 and cwth/app/0"
+                member = who.as_ref().map(|w| w.name.as_str()),
+                "acceptor: dial — the registry decides"
             );
-            None
+            origins.forward_for(&alpn, who.as_ref(), dialer)
         }
     })
 }
@@ -168,7 +109,7 @@ mod tests {
             joined_at: 100,
             last_seen: 100,
             status: NodeStatus::Online,
-            capabilities: crate::gossip::minimal_capabilities(100, &[OriginKind::Media]),
+            capabilities: crate::gossip::minimal_capabilities(100, &[OriginKind::Media], None),
             addresses: Vec::new(),
             node_pubkey: key,
             relay_url: None,

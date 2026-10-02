@@ -4,48 +4,23 @@
 //! Their own file because keeping them inline put that file into the
 //! 800-1200 approach band (ARCH §3.1). `#[path]`, so the names are unchanged.
 
-use std::future::Future;
-use std::pin::Pin;
-
-use commonwealth_rail::{Roster, RosterSource};
 use sovereign_grants::Scope;
 
 use super::*;
 
-/// Enough of a signer to build a rail. Nothing here signs anything: the
-/// refusal under test is decided before a signature exists.
-struct Unclaimed;
-impl commonwealth_rail::RingSigner for Unclaimed {
-    fn actor(&self) -> String {
-        "ab".repeat(32)
-    }
-    fn sign(&self, _ns: &str, _ts: i64, _seq: u64, _body: &str) -> String {
-        String::new()
-    }
-}
-
-/// A roster that is computed — the shape `mesh-measurements` installs.
-/// Empty, because a node that is in no mesh derives no members, which is
-/// exactly the state that reaches this refusal.
-struct Membership;
-impl RosterSource for Membership {
-    fn roster(&self) -> Pin<Box<dyn Future<Output = Result<Roster, RailError>> + Send + '_>> {
-        Box::pin(async { Ok(Roster::new(Default::default())) })
-    }
-}
-
-/// The refusal `append` would render for `ns`, asked of a real rail so the
-/// origin comes from `RingRail` and not from a fixture.
-fn refusal_on(ns: &str, derived: bool) -> String {
-    let rail = RingRail::new("/nonexistent", Arc::new(Unclaimed));
-    if derived {
-        rail.derive_roster(ns, Arc::new(Membership)).unwrap();
-    }
-    let e = RailError::NotInRoster {
-        actor: "ab".repeat(32),
-        namespace: ns.to_string(),
-    };
-    not_in_roster_refusal(rail.roster_origin(ns), &e)
+/// The refusal `append` would render for `ns` at `origin`. Post-flip the
+/// origin is read over the port from the rails daemon's rail, so the
+/// sentence's two arms are pinned against the ENUM directly — the origin's
+/// own derivation is the serving side's, and its tests live there
+/// (commonwealth-rails).
+fn refusal_on(ns: &str, origin: RosterOrigin) -> String {
+    not_in_roster_refusal(
+        origin,
+        &RailError::NotInRoster {
+            actor: "ab".repeat(32),
+            namespace: ns.to_string(),
+        },
+    )
 }
 
 /// The fix a refusal names has to be a command the reader can actually
@@ -53,7 +28,7 @@ fn refusal_on(ns: &str, derived: bool) -> String {
 /// naming it there sends the operator to a door that will not open.
 #[test]
 fn a_derived_namespace_is_refused_in_the_meshs_words_not_the_roster_files() {
-    let why = refusal_on("mesh-measurements", true);
+    let why = refusal_on("mesh-measurements", RosterOrigin::Derived);
     assert!(why.contains("svrn mesh"), "must name the mesh: {why}");
     assert!(
         !why.contains("roster add"),
@@ -66,7 +41,7 @@ fn a_derived_namespace_is_refused_in_the_meshs_words_not_the_roster_files() {
 /// this the test above passes for a renderer that says "mesh" always.
 #[test]
 fn a_file_namespace_still_names_the_roster_command() {
-    let why = refusal_on("house-expenses", false);
+    let why = refusal_on("house-expenses", RosterOrigin::File);
     assert!(
         why.contains("svrn ring roster add"),
         "must name the fix: {why}"
@@ -144,7 +119,7 @@ fn a_caller_without_a_session_cannot_name_somebody() {
 
 fn admitted(on_behalf_of: Option<&str>) -> AdmittedOp {
     AdmittedOp {
-        id: commonwealth_rail::OpId::from_raw("abc"),
+        id: commonwealth_rail_core::OpId::from_raw("abc"),
         actor: "ab".repeat(32),
         person: "BeefyMac".into(),
         seq: 0,
@@ -279,7 +254,7 @@ fn a_wall_grant_is_refused_a_namespace_nobody_declared() {
 /// is not the only guard (ARCH 5).
 #[test]
 fn a_daemon_owned_namespace_is_refused_even_when_the_registry_declares_it() {
-    let owned = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+    let owned = oicp_types::measurements::MEASUREMENTS_APP_ID;
     let pages = wall_of(&[(owned, open("/a")), ("work", open("/b"))]);
     let g = grant_with(vec![Scope::Wall]);
     for ns in [owned, "work"] {
@@ -317,272 +292,7 @@ fn a_read_only_entry_refuses_a_guests_append_and_nobody_elses() {
     assert!(refuse_read_only(&pages, Some(&g), "undeclared").is_none());
 }
 
-/// **C1: a guest's words must say whose they are** (ROOT_CAUSE_FIXES C1).
-/// The name is stamped from the session the door authenticated, never the
-/// wire — and a guest who claimed none is REFUSED rather than published as
-/// the host's words. Watched failing first: the append landed and read as
-/// the host's.
-#[tokio::test]
-async fn a_guest_append_with_no_name_is_refused_by_name() {
-    use sovereign_grants::GuestGrant;
-
-    let dir = tempfile::tempdir().unwrap();
-    let rail = Arc::new(RingRail::new(dir.path(), Arc::new(Unclaimed)));
-    let state = crate::state::test_app_state_with_seed(crate::state::fabric::FabricSeed {
-        ring_rail: Some(rail.clone()),
-        ..Default::default()
-    });
-    let guest = crate::client_auth::Guest {
-        grant: Arc::new(GuestGrant {
-            token: "t".into(),
-            scopes: vec![Scope::Rails("ring-doc".into())],
-            label: None,
-            issued_at_ms: 0,
-            expires_at_ms: u64::MAX,
-            revoked: false,
-        }),
-        session: None,
-    };
-    let resp = append(
-        State(state),
-        Some(axum::Extension(guest)),
-        Query(RailQuery {
-            namespace: Some("ring-doc".into()),
-        }),
-        Json(serde_json::json!({"op": "record", "payload": {"kind": "thing", "what": "hi"}})),
-    )
-    .await;
-    assert_eq!(
-        resp.status(),
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "refused by name"
-    );
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let text = String::from_utf8_lossy(&body);
-    assert!(
-        text.contains("whose words"),
-        "the sentence names the fix: {text}"
-    );
-    let (ops, _) = rail.journal("ring-doc").unwrap().read().unwrap();
-    assert!(ops.is_empty(), "a refused write leaves no trace: {ops:?}");
-}
-
-/// The rail's own key, for tests that need signatures admission accepts.
-fn member_key(seed: u8) -> commonwealth_rail::SigningKey {
-    commonwealth_rail::SigningKey::from_bytes(&[seed; 32])
-}
-
-/// One rail whose seed names Ada alone, on a namespace the tests below own.
-async fn ada_rail(dir: &std::path::Path) -> (Arc<RingRail>, commonwealth_rail::SigningKey) {
-    let ada = member_key(1);
-    let rail = Arc::new(RingRail::new(dir, Arc::new(ada.clone())));
-    let mut members = std::collections::BTreeMap::new();
-    members.insert(
-        commonwealth_rail::Person::from("Ada"),
-        vec![commonwealth_rail::actor_of(&ada)],
-    );
-    rail.journal(HOUSE)
-        .unwrap()
-        .set_roster(&Roster::new(members))
-        .unwrap();
-    (rail, ada)
-}
-
-/// The namespace the membership tests write into. Its roster is the file,
-/// so the contrast under test — standing the file does not carry — is real.
-const HOUSE: &str = "house-ring";
-
-/// The membership route answers from ACTS, not the roster file: a stranger
-/// holds standing through an `Admit` the seed never names, which is the
-/// read demo 5 (ra-5) does on three nodes. Failing input: a route that
-/// renders `roster.json` back — the stranger is absent there, and the
-/// leak-undo sitting would have nothing to watch fall.
-#[tokio::test]
-async fn membership_reads_standing_from_acts_not_the_roster_file() {
-    let dir = tempfile::tempdir().unwrap();
-    let (rail, ada) = ada_rail(dir.path()).await;
-    let stranger = member_key(7);
-    let j = rail.journal(HOUSE).unwrap();
-    let roster = rail.roster(&j).await.unwrap();
-    j.append(
-        commonwealth_rail::RailAct::Admit {
-            person: commonwealth_rail::Person::from("Sam"),
-            key: commonwealth_rail::actor_of(&stranger),
-        },
-        &ada,
-        &roster,
-        None,
-        &commonwealth_rail::Ed25519Verifier,
-    )
-    .unwrap();
-
-    let state = crate::state::test_app_state_with_seed(crate::state::fabric::FabricSeed {
-        ring_rail: Some(rail.clone()),
-        ..Default::default()
-    });
-    let resp = membership(
-        State(state),
-        None,
-        Query(RailQuery {
-            namespace: Some(HOUSE.into()),
-        }),
-    )
-    .await;
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    let m = &v["membership"];
-    let standing = m["standing"].as_array().expect("standing is a list");
-    let stranger_hex = commonwealth_rail::actor_of(&stranger);
-    assert!(
-        standing
-            .iter()
-            .any(|s| s.as_str() == Some(stranger_hex.as_str())),
-        "the stranger stands through the Admit: {v}"
-    );
-    // The contrast that makes this a test of ACTS: the file does not carry
-    // them, and the same response shows it.
-    assert!(
-        j.roster_file()
-            .expect("the seed roster reads back")
-            .person_for(&stranger_hex)
-            .is_none(),
-        "the fixture lost its point: the seed names the stranger"
-    );
-    assert_eq!(m["bindings"][stranger_hex.as_str()], "Sam");
-    // The seed ships beside the walk, so a reader can see the difference.
-    assert!(
-        !v["roster"]["members"]["Sam"].is_array(),
-        "the roster half must not carry the stranger: {v}"
-    );
-}
-
-/// Voiding one `Admit` is the leak-undo: standing falls, and because a
-/// voided op never enters the walk, no binding is created either — the
-/// stranger was never in (the cumulative-binding rule belongs to the
-/// `Remove` cut, leg 4).
-#[tokio::test]
-async fn voiding_the_admit_drops_standing_and_keeps_the_name() {
-    let dir = tempfile::tempdir().unwrap();
-    let (rail, ada) = ada_rail(dir.path()).await;
-    let stranger = member_key(7);
-    let j = rail.journal(HOUSE).unwrap();
-    let roster = rail.roster(&j).await.unwrap();
-    let admit = j
-        .append(
-            commonwealth_rail::RailAct::Admit {
-                person: commonwealth_rail::Person::from("Sam"),
-                key: commonwealth_rail::actor_of(&stranger),
-            },
-            &ada,
-            &roster,
-            None,
-            &commonwealth_rail::Ed25519Verifier,
-        )
-        .unwrap();
-    j.append(
-        commonwealth_rail::RailAct::Correct {
-            corrects: admit.id.clone(),
-            replacement: None,
-        },
-        &ada,
-        &roster,
-        None,
-        &commonwealth_rail::Ed25519Verifier,
-    )
-    .unwrap();
-
-    let state = crate::state::test_app_state_with_seed(crate::state::fabric::FabricSeed {
-        ring_rail: Some(rail.clone()),
-        ..Default::default()
-    });
-    let resp = membership(
-        State(state),
-        None,
-        Query(RailQuery {
-            namespace: Some(HOUSE.into()),
-        }),
-    )
-    .await;
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    let m = &v["membership"];
-    let stranger_hex = commonwealth_rail::actor_of(&stranger);
-    let standing = m["standing"].as_array().expect("standing is a list");
-    assert!(
-        !standing
-            .iter()
-            .any(|s| s.as_str() == Some(stranger_hex.as_str())),
-        "the void dropped the stranger: {v}"
-    );
-    // A voided `Admit` never happened: no binding was ever created (the walk
-    // filters voided ops out before it runs), so the name is ABSENT — not
-    // kept. The cumulative-binding rule is the OTHER cut: a `Remove`-cut key
-    // keeps its binding and only loses standing (leg 4).
-    assert!(
-        m["bindings"][stranger_hex.as_str()].is_null(),
-        "a voided Admit leaves no binding: {v}"
-    );
-}
-
-/// **C3b: a replayed append yields one act** (ROOT_CAUSE_FIXES C3b). The
-/// key rides OUTSIDE the act — door state, never the permanent journal —
-/// and the door replays the recorded answer. Watched failing first: two
-/// POSTs minted two acts. Exactly-once per DOOR PROCESS is the honest
-/// scope; the journal's dedupe covers byte-identical re-ingest.
-#[tokio::test]
-async fn a_replayed_append_yields_one_act() {
-    use commonwealth_rail::RingSigner;
-
-    let dir = tempfile::tempdir().unwrap();
-    let rail = Arc::new(RingRail::new(dir.path(), Arc::new(Unclaimed)));
-    let ns = "ring-doc";
-    let mut members = std::collections::BTreeMap::new();
-    members.insert(
-        commonwealth_rail::Person::from("alex"),
-        vec![Unclaimed.actor()],
-    );
-    rail.journal(ns)
-        .unwrap()
-        .set_roster(&Roster::new(members))
-        .unwrap();
-    let state = crate::state::test_app_state_with_seed(crate::state::fabric::FabricSeed {
-        ring_rail: Some(rail.clone()),
-        ..Default::default()
-    });
-    let body = serde_json::json!({
-        "op": "record",
-        "payload": {"kind": "thing", "what": "hi"},
-        "idempotency_key": "k1",
-    });
-    let call = |payload: serde_json::Value| {
-        append(
-            State(state.clone()),
-            None,
-            Query(RailQuery {
-                namespace: Some(ns.into()),
-            }),
-            Json(payload),
-        )
-    };
-    let r1 = call(body.clone()).await;
-    assert_eq!(r1.status(), StatusCode::OK, "the first write lands");
-    let r2 = call(body.clone()).await;
-    assert_eq!(r2.status(), StatusCode::OK, "the replay is answered");
-    let b1 = axum::body::to_bytes(r1.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let b2 = axum::body::to_bytes(r2.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    assert_eq!(b1, b2, "the recorded answer — not a second act's answer");
-    let (ops, _) = rail.journal(ns).unwrap().read().unwrap();
-    assert_eq!(ops.len(), 1, "one act, not two");
-}
+// The door's write contract (C1 + C3b) and the membership route are proven
+// end to end in `tests/rail_e2e/door_contract.rs`, against a real cw-rails
+// behind the rail port: the journals are cw-rails' since
+// pb-mesh-exit-transport, so an in-process `RingRail` is not this daemon's.

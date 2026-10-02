@@ -12,23 +12,25 @@
 //! deterministic leaf.) The LLM classification pass that promotes candidates to
 //! real `Tension` edges is a separate `model:` step.
 
-use corpus_engine::enrichment::atlas::{
-    analysis::tensions::{
-        drop_same_named_speaker_pairs, select_candidates, CandidateSelectionInput,
-        TensionCandidatesOutput,
-    },
-    read_atlas_atoms, write_tension_candidates, AtomEnvelope,
-};
+use corpus_engine_atlas_reader::ports::AtlasPort;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
+use understanding_vocab::read::read_atlas_atoms;
 
 use crate::atlas_phase::atlas_dir_for;
 use sovereign_core::tool_manifest::DeclaredTool;
 use std::sync::Arc;
 
-pub struct AtlasTensionsTool;
+pub struct AtlasTensionsTool {
+    atlas: Arc<dyn AtlasPort>,
+}
 
 impl AtlasTensionsTool {
+    /// The tool over ingest's atlas port.
+    pub fn new(atlas: Arc<dyn AtlasPort>) -> Self {
+        Self { atlas }
+    }
+
     /// Bind this tool's state to its `atlas_tensions` manifest row.
     ///
     /// The declared half — id, schema, permissions, retry — is the row in
@@ -56,38 +58,14 @@ impl AtlasTensionsTool {
             ))
         })?;
 
-        // Claim + State drive the entity-overlap signal; Entity atoms feed the
-        // cross-position concept-overlap signal.
-        let mut claims = Vec::new();
-        let mut states = Vec::new();
-        let mut entities = Vec::new();
-        for a in atoms.atoms().to_vec() {
-            match a {
-                AtomEnvelope::Claim(c) => claims.push(c),
-                AtomEnvelope::State(s) => states.push(s),
-                AtomEnvelope::Entity(e) => entities.push(e),
-                _ => {}
-            }
-        }
-
-        let mut candidates = select_candidates(CandidateSelectionInput {
-            claims: &claims,
-            states: &states,
-            // Intra-cluster candidates aren't wired in the deterministic path
-            // (same as the bespoke command — pending a stable sketch→atom map).
-            claim_clusters: &[],
-            entities: &entities,
-        });
-        // De-noise: drop pairs where both claims share a named speaker.
-        drop_same_named_speaker_pairs(&mut candidates, &claims, &entities);
-
-        let out = TensionCandidatesOutput::new(candidates);
-        let n = out.candidates.len();
-        let path = write_tension_candidates(&atlas_dir, &out).map_err(|e| {
-            Error::Execution(format!(
-                "atlas_tensions: write tension_candidates.json: {e}"
-            ))
-        })?;
+        let (n, path) = self
+            .atlas
+            .write_tension_candidates(&atlas_dir, atoms.atoms())
+            .map_err(|e| {
+                Error::Execution(format!(
+                    "atlas_tensions: write tension_candidates.json: {e}"
+                ))
+            })?;
 
         Ok(StepOutput::Text(format!(
             "atlas_tensions: wrote {n} candidate pair(s) to {}",
@@ -99,12 +77,14 @@ impl AtlasTensionsTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+    use std::sync::Mutex;
 
-    /// The leaf wraps the real graph-strategy candidate selector: read atoms →
-    /// `select_candidates` + de-noise → write `tension_candidates.json`, on the
-    /// canonical atlas paths. Hermetic: a fresh atlas with no atoms yields zero
-    /// candidates and a well-formed file (the selection logic itself is covered
-    /// by corpus-engine's own tests).
+    /// The tool reads atoms on the canonical atlas paths, hands them to the
+    /// port, and reports what the port wrote. Candidate selection and the
+    /// tension_candidates.json schema are ingest's, proven on `IngestAtlas`
+    /// (corpus-engine's atlas_port_parity
+    /// `write_tension_candidates_writes_the_schema_the_classifier_reads`).
     #[tokio::test]
     async fn atlas_tensions_reads_selects_and_writes_on_canonical_paths() {
         let dir = tempfile::tempdir().unwrap();
@@ -116,33 +96,37 @@ mod tests {
         )
         .unwrap();
 
+        let seen: Arc<Mutex<Vec<std::path::PathBuf>>> = Arc::default();
+        let seen_in = Arc::clone(&seen);
+        let port = AtlasPortDouble::new().on_write_tension_candidates(move |dir, atoms| {
+            seen_in.lock().unwrap().push(dir.to_path_buf());
+            Ok((atoms.len(), dir.join("tension_candidates.json")))
+        });
         let params = serde_json::json!({
             "corpus": "c1",
             "index_dir": dir.path().to_string_lossy()
         });
-        let out = AtlasTensionsTool
+        let out = AtlasTensionsTool::new(Arc::new(port))
             .run(&params, &ToolContext::default())
             .await
             .unwrap();
         match out {
-            StepOutput::Text(t) => assert!(t.contains("0 candidate"), "{t}"),
+            StepOutput::Text(t) => {
+                assert!(t.contains("0 candidate"), "{t}");
+                assert!(t.contains("tension_candidates.json"), "{t}");
+            }
             o => panic!("unexpected output: {o:?}"),
         }
+        assert_eq!(*seen.lock().unwrap(), vec![atlas.clone()]);
 
-        // tension_candidates.json is written in the schema the classifier reads.
-        let v: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(atlas.join("tension_candidates.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(v["candidates"].as_array().unwrap().len(), 0);
-        assert_eq!(v["schema_version"], "2.0");
-
-        // A missing atlas is a loud error.
+        // A missing atlas is a loud error, and the port is never asked.
         let bad =
             serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
-        assert!(AtlasTensionsTool
+        let port = Arc::new(AtlasPortDouble::new());
+        assert!(AtlasTensionsTool::new(port.clone())
             .run(&bad, &ToolContext::default())
             .await
             .is_err());
+        assert!(port.calls().is_empty());
     }
 }

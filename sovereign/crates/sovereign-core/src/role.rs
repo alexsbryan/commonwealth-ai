@@ -98,17 +98,7 @@ impl Tier {
     }
 }
 
-/// Per-role sampling overrides — lifted from the agent-tools shape. `None`
-/// fields fall back to the caller's inference config.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct SamplingOverrides {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_tokens: Option<u32>,
-}
+pub use crate::types::SamplingOverrides;
 
 /// The data carrier for a synthesis role's invocation shape. Lifts the
 /// agent-tools `RoleProfile` shape, swapping the agent-loop's

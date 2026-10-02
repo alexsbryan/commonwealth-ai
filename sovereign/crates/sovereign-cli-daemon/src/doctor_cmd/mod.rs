@@ -192,13 +192,30 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     // when the daemon is down: an unsupervised daemon that crashed is
     // the incident this check exists to prevent.
     results.push(sov::check_daemon_supervised());
+    results.push(cw::check_rails_boot_unit());
     if probe::tcp_connectable("127.0.0.1", 9741).await {
         results.push(cw::check_daemon_running().await);
         results.push(sov::check_daemon_memory(&client_url).await);
         results.push(cw::check_mesh_member(&client_url).await);
-        results.push(cw::check_iroh_egress(&client_url).await);
+        // The relay posture is cw-rails' (pb-mesh-exit-transport), read at
+        // `[daemon] rails_base` through its one reader.
+        let rails_url = sovereign_turn_client::rails_kv::resolve_rails_base(
+            &sovereign_contracts::setup_config::SetupConfig::load()
+                .unwrap_or_else(|_| sovereign_contracts::setup_config::SetupConfig::unconfigured())
+                .daemon,
+        );
+        results.push(cw::check_iroh_egress(&rails_url).await);
         results.push(cw::check_inference_capable(&client_url).await);
-        results.push(cw::check_activity_reporting(&internal_url).await);
+        results.push(match &internal_url {
+            Ok(url) => cw::check_activity_reporting(url).await,
+            Err(e) => CheckResult {
+                name: "activity_reporting",
+                layer: Layer::Commonwealth,
+                status: CheckStatus::Failed,
+                message: e.clone(),
+                repair: Repair::None,
+            },
+        });
     }
     // else: daemon not running — skip layer silently
 
@@ -482,6 +499,34 @@ mod tests {
         match Repair::executable("svrn code index /tmp/repo --corpus-id demo") {
             Repair::Executable(cmd) => assert!(cmd.ends_with("--corpus-id demo")),
             other => panic!("expected Executable, got {other:?}"),
+        }
+    }
+
+    /// A disabled cw-rails unit is the node leaving the mesh at the next
+    /// reboot, so it warns and names the one repair; only an enabled unit
+    /// passes (phase-b-51).
+    #[test]
+    fn the_rails_boot_unit_passes_only_when_enabled() {
+        use host_kit::service::UnitState;
+        let enabled = cw::rails_boot_unit_result(Some(UnitState::Enabled));
+        assert_eq!(enabled.status, CheckStatus::Passed, "{}", enabled.message);
+        let disabled = cw::rails_boot_unit_result(Some(UnitState::Disabled("disabled".into())));
+        assert_eq!(disabled.status, CheckStatus::Warning);
+        assert!(
+            disabled.message.contains("off the mesh after a reboot"),
+            "{}",
+            disabled.message
+        );
+        assert!(matches!(&disabled.repair, Repair::Executable(c) if c == "svrn mesh up"));
+        for other in [
+            Some(UnitState::NotInstalled),
+            Some(UnitState::Unknown("bus".into())),
+            None,
+        ] {
+            assert_ne!(
+                cw::rails_boot_unit_result(other).status,
+                CheckStatus::Passed
+            );
         }
     }
 }

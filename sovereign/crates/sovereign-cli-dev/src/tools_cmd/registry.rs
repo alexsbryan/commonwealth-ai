@@ -18,7 +18,8 @@
 //! Per ARCH_PRINCIPLES §3.2, this is the seam where a shared
 //! registry-setup helper will eventually live. The
 //! highest-divergence-risk piece — the MCP allowlist + alias map
-//! — was centralised into [`sovereign_tools::mcp_surface`] in the
+//! — was centralised into `mcp_surface` (code's list now in
+//! [`sovereign_code::mcp_surface`], pb-code-freshness) in the
 //! Phase 2 refactor, so the daemon's `mcp_router` and the
 //! standalone `routes_mcp` server now agree on exactly the same
 //! exposed surface without a manual sync.
@@ -30,23 +31,18 @@
 //! other, descriptors drift. Extracting that into a shared
 //! `sovereign-tools::registry_builder` is tracked as a follow-up.
 //! The path-resolution helpers / SCIP loader prerequisite landed
-//! with the `sovereign-cli-shared` crate split — `load_merged_graph`,
-//! `find_sovereign_dir`, and `default_data_dir` now live there and
-//! are imported below.
+//! with the `sovereign-cli-shared` crate split — `find_sovereign_dir`
+//! and `default_data_dir` now live there and are imported below; the
+//! graph is a `sovereign_code::LazyScipGraph`, loaded on first read.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use arc_swap::ArcSwap;
-
-use corpus_engine::{CorpusEngine, EmbedFn};
-use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::{NoteStore, ProjectDocsStore};
 use corpus_engine_watchers::{LintResultStore, TestResultStore};
-use sovereign_cli_shared::{
-    dirs::default_data_dir, repo::find_sovereign_dir, scip::load_merged_graph,
-};
-use sovereign_core::registry::ToolRegistry;
+use corpus_index::fs_source::FsIndexSource;
+use sovereign_cli_base::{dirs::default_data_dir, repo::find_sovereign_dir};
+use sovereign_contracts::registry::ToolRegistry;
 
 /// Small bundle of handles held open across a single `svrn tools`
 /// invocation. Built once in `open_tools_registry`, shared across the
@@ -79,15 +75,12 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // stale orphan DB and report `running` indefinitely while the
     // daemon's actual store reflects fresh results — observed
     // 2026-05-06 with rows untouched since Apr 21.
-    let flat_stores_dir = sovereign_cli_shared::dirs::sovereign_root();
+    let flat_stores_dir = sovereign_cli_base::dirs::sovereign_root();
 
-    // Embed function: prefer the running daemon's embed slot so
+    // Notes embed function: prefer the running daemon's embed slot so
     // `tools call notes` benefits from T1 semantic blend on the
-    // CLI side just like the MCP-over-HTTP path does. Falls back
-    // to zero-vector when the daemon is unreachable — every tool
-    // here either ignores embeddings (pure SQL/FTS) or treats
-    // zero vectors as "no semantic signal" and returns FTS-only
-    // results, so the offline mode stays correct.
+    // CLI side just like the MCP-over-HTTP path does. `None` when the
+    // daemon is unreachable, and the notes store stays FTS-only.
     // THE accessor (§10.6, TOPOLOGY §10 phase 6/10). This read its own
     // `SOVEREIGN_DAEMON_URL` and had drifted from `daemon_base_url()` in two
     // ways that both point at the WRONG DAEMON rather than at no daemon:
@@ -101,10 +94,11 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     //
     // An env read at point of use is invisible to go-to-definition, which is
     // the whole reason the environment axis is a phase.
-    let daemon_url = sovereign_cli_shared::urls::daemon_base_url();
-    let embed: EmbedFn = build_daemon_embed_fn_or_zero(&daemon_url).await;
+    let daemon_url = sovereign_cli_base::urls::daemon_base_url()?;
     let notes_embed = build_daemon_notes_embed_fn_or_none(&daemon_url).await;
-    let engine = Arc::new(CorpusEngine::new(data_dir.clone(), data_dir.clone(), embed));
+    // The code tools read installed indexes only (list + open), so the
+    // leaf's filesystem source serves them; no engine, no embedder.
+    let engine = Arc::new(FsIndexSource::new(data_dir.clone()));
 
     // Stores — open each; degrade to in-memory on error so the CLI
     // still works in a cold repo.
@@ -118,19 +112,11 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
             .or_else(|_| LintResultStore::open(std::path::Path::new(":memory:")))
             .map_err(|e| format!("lint results store: {e}"))?,
     );
-    // NoteStore lives at `~/.svrnmesh/notes.db` — the same path
-    // the daemon writes to, NOT the project-local `<repo>/.sovereign/`.
-    // Notes are agent-global working memory (per ATOS), not
-    // per-repo state. Two physical DBs split the corpus + leave
-    // the CLI reading 15-note fragments while the daemon's
-    // canonical store holds the full 298+ history. Other CLI
-    // surfaces (audit_recover.rs, code_cmd.rs, reflect_cmd.rs)
-    // already use `sovereign_cli_shared::dirs::sovereign_root().join("notes.db")`;
-    // registry.rs was the lone outlier. Aligning here unifies
-    // both CLI tool invocations + the daemon-side MCP path on a
-    // single physical SQLite file (WAL-mode concurrent-safe).
+    // NoteStore lives at code's data root, NOT the project-local
+    // `<repo>/.sovereign/`: notes are agent-global working memory, and two
+    // physical DBs split the corpus. The path is `notes_db`'s one decider.
     let notes_store = {
-        let inner = NoteStore::open(&flat_stores_dir.join("notes.db"))
+        let inner = NoteStore::open(&crate::notes_db::find_notes_db(None))
             .or_else(|_| NoteStore::open(std::path::Path::new(":memory:")))
             .map_err(|e| format!("notes store: {e}"))?;
         let inner = match notes_embed {
@@ -139,23 +125,17 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         };
         Arc::new(inner)
     };
-    let features_store = Arc::new(
-        FeatureStore::open(&sovereign_dir.join("features.db"))
-            .or_else(|_| FeatureStore::open(std::path::Path::new(":memory:")))
-            .map_err(|e| format!("feature store: {e}"))?,
-    );
     let docs_store = ProjectDocsStore::open(&data_dir.join("project_docs.db"))
         .ok()
         .map(Arc::new);
 
-    // SCIP call graph — empty default if no graph files exist yet.
+    // SCIP call graph, loaded when a tool first reads it (phase-b
+    // pb-code-freshness): a verb that never reads it never pays the merge.
     // Tools like find_callers gracefully report empty when unmerged.
-    let (initial_graph, _summary) = load_merged_graph(&data_dir, false).await;
-    let merged_graph: sovereign_tools::ScipGraphHandle =
-        Arc::new(ArcSwap::from_pointee(initial_graph));
-    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
-        &merged_graph,
-    )));
+    let merged_graph = sovereign_code::LazyScipGraph::deferred(data_dir.clone());
+    let health_checker = Arc::new(sovereign_code::IndexHealthChecker::new(
+        merged_graph.clone(),
+    ));
 
     // No `watcher_active` flag wired here: the CLI binary isn't
     // running a watcher of its own — it's a thin reader over the
@@ -170,62 +150,68 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // Code index (LanceDB-backed): identical construction to
     // project_cmd so ids, descriptors, examples all match.
     tools.register(Box::new(
-        sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::SymbolLookupTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            merged_graph.clone(),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::CodeSearchTool::new(Arc::clone(&engine)).declared(),
+        sovereign_code::CodeSearchTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::RecentChangesTool::new(Arc::clone(&engine)).declared(),
+        sovereign_code::RecentChangesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>
+        )
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::FindCalleesTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            merged_graph.clone(),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
+        sovereign_code::FindCallersTool::new(
+            Arc::clone(&engine) as std::sync::Arc<dyn sovereign_code::CodeIndexSource>,
+            merged_graph.clone(),
+        )
+        .with_health_checker(Arc::clone(&health_checker))
+        .declared(),
     ));
     // Capability map — derived "what the codebase does" overview.
     tools.register(Box::new(
-        sovereign_tools::CapabilityMapTool::new().declared(),
+        sovereign_code::CapabilityMapTool::new().declared(),
     ));
     // Architecture observability (quality program): the SCIP-observed layer
     // check + coupling report, and the cheap persisted-posture reader. The
     // repo root unlocks declared-deps/layer-map/filesystem/git sections.
     tools.register(Box::new(
-        sovereign_tools::ArchReportTool::new()
+        sovereign_code::ArchReportTool::new()
             .with_project_root(repo_root.clone())
             .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::ArchPostureTool::new()
+        sovereign_code::ArchPostureTool::new()
             .with_project_root(repo_root.clone())
             .declared(),
     ));
     // Work atlas — coordination layer for agents sharing the repo.
-    // Best-effort: `.sovereign/mesh.db` is the REPO-LOCAL atlas, and
-    // it is NOT the store a running daemon writes — that is the whole
-    // reason the note four lines down is true. `code_cmd.rs:1825` has
-    // the right framing (a fallback for when the daemon is down);
-    // this comment claimed the opposite and then contradicted itself
-    // in its own last sentence. Falling back to in-memory keeps the
-    // CLI usable in a fresh checkout, with the understanding that
-    // nothing the CLI writes here is visible to a separately-running
-    // daemon.
-    let mesh_db = sovereign_dir.join("mesh.db");
-    if let Some(parent) = mesh_db.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let mesh_store = Arc::new(
-        sovereign_mesh::peer_adapter::MeshReplicatedKv::open(&mesh_db)
-            .or_else(|_| sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory())
-            .map_err(|e| format!("work atlas mesh store: {e}"))?,
-    );
+    // The store is cw-rails', dialed (pb-atlas-kv): claims declared
+    // through these tools land in the store the mesh's rails daemon
+    // holds, not in a repo-local mesh.db nobody else read. With
+    // cw-rails down, every claim operation reports the absence by
+    // name — the tools stay registered so `svrn tools list` still
+    // shows the surface. The client builds no blocking runtime, so
+    // this async path cannot panic on it (the fp-33 twin did).
+    let mesh_store: Arc<dyn sovereign_work_atlas::ReplicatedKv> =
+        Arc::new(crate::mesh_kv_client::atlas_kv());
     // Identity MUST come from the ROOT data dir with the daemon's full
     // precedence (node_id file → mesh.json → generate). Resolving
     // against `data_dir` (= <root>/indexes) minted a SECOND node id for
@@ -233,7 +219,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // (2026-07-31).
     let node_id = crate::atlas_identity::atlas_node_id();
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&mesh_store) as Arc<dyn sovereign_work_atlas::ReplicatedKv>,
+        Arc::clone(&mesh_store),
         node_id,
     ));
     let atlas_cfg = sovereign_work_atlas::WorkAtlasConfig::defaults();
@@ -279,24 +265,24 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // Session-orientation brief — same registration as the daemon's,
     // so `svrn tools call briefing` and the MCP surface agree.
     tools.register(Box::new(
-        sovereign_tools::BriefingTool::new(Arc::clone(&notes_store))
+        sovereign_code::BriefingTool::new(Arc::clone(&notes_store))
             .with_workspace_root(repo_root.clone())
-            .with_atlas(Arc::clone(&atlas_store))
+            .with_atlas(Arc::clone(&atlas_store) as std::sync::Arc<dyn sovereign_code::PeerWork>)
             .declared(),
     ));
     // Encode-time session-frame upsert — `svrn tools call
     // session_state` is the scriptable/hook path to write-path 1.
     tools.register(Box::new(
-        sovereign_tools::SessionStateTool::new()
+        sovereign_code::SessionStateTool::new()
             .with_workspace_root(repo_root.clone())
             .declared(),
     ));
 
     tools.register(Box::new(
-        sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
+        sovereign_code::BlastRadiusTool::new(merged_graph.clone())
             .with_project_root(repo_root.clone())
             .with_health_checker(Arc::clone(&health_checker))
-            .with_atlas(Arc::clone(&atlas_store))
+            .with_atlas(Arc::clone(&atlas_store) as std::sync::Arc<dyn sovereign_code::PeerWork>)
             .declared(),
     ));
 
@@ -314,10 +300,12 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // the displayed scope) is correct per tool — the heartbeat is shared
     // across lint+test, so a live coordinator alone doesn't tell us
     // whether THIS tool's runner exists.
-    let sov_cfg = corpus_engine::SovereignConfig::load_or_default(&repo_root.join(".sovereign"));
+    let sov_cfg = sovereign_contracts::config::SovereignConfig::load_or_default(
+        &repo_root.join(".sovereign"),
+    );
     let lint_scope = sov_cfg.lint_runner.as_ref().map(|c| c.command.clone());
     let test_scope = sov_cfg.test_runner.as_ref().map(|c| c.command.clone());
-    let mut lint_status = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
+    let mut lint_status = sovereign_code::LintStatusTool::new(Arc::clone(&lint_store))
         .with_workspace_root(repo_root.clone())
         .with_heartbeat(Arc::clone(&heartbeat_reader));
     if let Some(ref scope) = lint_scope {
@@ -329,7 +317,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // hook query this; the orchestrator writes the fingerprint after
     // a successful run.
     tools.register(Box::new(
-        sovereign_tools::DriftPostureTool::new()
+        sovereign_code::DriftPostureTool::new()
             .with_workspace_root(repo_root.clone())
             .declared(),
     ));
@@ -340,112 +328,82 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // the canonical ~/.svrnmesh/drift/latest.md.json the
     // orchestrator now mirrors after every run.
     tools.register(Box::new(
-        sovereign_tools::DriftFindingsTool::new().declared(),
+        sovereign_code::DriftFindingsTool::new().declared(),
     ));
     // Capability-reconciliation freshness + findings — siblings to drift_*,
     // over the `enrich capability-reconcile` artifact (corroborated /
     // undocumented / drifted, derived capabilities vs the architecture docs).
     tools.register(Box::new(
-        sovereign_tools::CapabilityPostureTool::new()
+        sovereign_code::CapabilityPostureTool::new()
             .with_workspace_root(repo_root.clone())
             .declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::CapabilityFindingsTool::new().declared(),
+        sovereign_code::CapabilityFindingsTool::new().declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::GetLintOutputTool::new(Arc::clone(&lint_store)).declared(),
+        sovereign_code::GetLintOutputTool::new(Arc::clone(&lint_store)).declared(),
     ));
     // `build` — single-call lint-status + top-error view. Wraps
     // the same lint store as `lint_status`; the agent sees one
     // canonical tool while the legacy ids stay reachable during
     // the alias window.
-    let mut build_tool = sovereign_tools::BuildTool::new(Arc::clone(&lint_store))
+    let mut build_tool = sovereign_code::BuildTool::new(Arc::clone(&lint_store))
         .with_heartbeat(Arc::clone(&heartbeat_reader));
     if let Some(ref scope) = lint_scope {
         build_tool = build_tool.with_watched_scope(scope.clone());
     }
     tools.register(Box::new(build_tool.declared()));
-    let mut test_status = sovereign_tools::TestStatusTool::new(Arc::clone(&test_store))
+    let mut test_status = sovereign_code::TestStatusTool::new(Arc::clone(&test_store))
         .with_heartbeat(Arc::clone(&heartbeat_reader));
     if let Some(ref scope) = test_scope {
         test_status = test_status.with_watched_scope(scope.clone());
     }
     tools.register(Box::new(test_status.declared()));
     tools.register(Box::new(
-        sovereign_tools::GetRunOutputTool::new(Arc::clone(&test_store)).declared(),
+        sovereign_code::GetRunOutputTool::new(Arc::clone(&test_store)).declared(),
     ));
 
-    // Notes + ATOS lifecycle tools.
+    // Notes tools.
     tools.register(Box::new(
-        sovereign_tools::WriteNoteTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::WriteNoteTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::ReadNotesTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::ReadNotesTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::DeleteNoteTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::DeleteNoteTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::RetireNoteTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::RetireNoteTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::ReadNoteByIdTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::ReadNoteByIdTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::PromoteNoteTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::PromoteNoteTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::ReadNoteDigestTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::ReadNoteDigestTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
+        sovereign_code::WriteRedteamFindingTool::new(Arc::clone(&notes_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_tools::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
-    ));
-    // `atos_plan_emit` was added then withdrawn the same session
-    // after a first-principles check: forcing the agent through a
-    // structured-JSON tool for plan emission solved a problem we
-    // didn't actually have. PLAN.md as the source of truth (the
-    // agent's `write` tool, markdown the model is fluent in) won
-    // out. The tool's source stays in `sovereign-tools` as an
-    // escape hatch for future work where rigid structure matters,
-    // but it is intentionally NOT registered with the live MCP
-    // surface so opencode stops advertising it.
-    tools.register(Box::new(
-        sovereign_tools::WriteRedteamFindingTool::new(Arc::clone(&notes_store)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::SessionReflectionTool::new(Arc::clone(&notes_store)).declared(),
+        sovereign_code::SessionReflectionTool::new(Arc::clone(&notes_store)).declared(),
     ));
 
-    // Project context + doc health — both require the docs store.
-    if let Some(ref ds) = docs_store {
-        tools.register(Box::new(
-            sovereign_tools::ProjectContextTool::new(Arc::clone(ds))
-                .with_features(Arc::clone(&features_store))
-                .declared(),
-        ));
-    }
     // `spec` — single-call active-spec + ARCHITECTURE.md +
-    // CHARTER.md reader. Wraps the same docs store as
-    // `project_context` so future Phase 5 polish can fold in
-    // search-style related-doc excerpts without another
-    // registration site.
+    // CHARTER.md reader. Takes the docs store so future polish
+    // can fold in search-style related-doc excerpts without
+    // another registration site.
     {
-        let mut tool = sovereign_tools::SpecTool::new();
+        let mut tool = sovereign_code::SpecTool::new();
         if let Some(ref ds) = docs_store {
             tool = tool.with_docs(Arc::clone(ds));
         }
         tools.register(Box::new(tool.declared()));
     }
-    // `drift` — calls `sovereign_atos::approval::detect_drift`
-    // for every feature directory. Stateless; no store needed.
-    tools.register(Box::new(sovereign_tools::DriftTool::new().declared()));
 
     Ok(ToolsEnv { registry: tools })
 }
@@ -462,60 +420,6 @@ fn find_git_root(start: &std::path::Path) -> Option<PathBuf> {
         return None;
     }
     Some(PathBuf::from(String::from_utf8_lossy(&out.stdout).trim()))
-}
-
-/// Build a `corpus_engine::EmbedFn` backed by the running daemon's
-/// `/v1/embeddings`. Probes once; if the daemon's offline at CLI
-/// startup, returns the zero-vector fallback so SQL/FTS tools
-/// stay correct and embedding-sensitive tools degrade to FTS-only
-/// behavior. Per call, the closure retries (no probe latch).
-async fn build_daemon_embed_fn_or_zero(daemon_url: &str) -> EmbedFn {
-    let reachable = probe_daemon(daemon_url).await;
-    if !reachable {
-        return Arc::new(|_text: &str| {
-            Box::pin(async {
-                Ok::<Vec<f32>, corpus_engine::Error>(vec![0.0; corpus_engine::DEFAULT_EMBED_DIM])
-            })
-        });
-    }
-    let url = format!("{}/v1/embeddings", daemon_url);
-    let model = "qwen-embedding-0.6b".to_string();
-    Arc::new(move |text: &str| {
-        let url = url.clone();
-        let model = model.clone();
-        let input = text.to_string();
-        Box::pin(async move {
-            let resp = reqwest::Client::new()
-                .post(&url)
-                .json(&serde_json::json!({ "model": model, "input": input }))
-                .timeout(std::time::Duration::from_secs(10))
-                .send()
-                .await
-                .map_err(|e| corpus_engine::Error::Embed(format!("daemon: {e}")))?;
-            if !resp.status().is_success() {
-                return Err(corpus_engine::Error::Embed(format!(
-                    "daemon HTTP {}",
-                    resp.status()
-                )));
-            }
-            let body: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| corpus_engine::Error::Embed(format!("daemon parse: {e}")))?;
-            body.get("data")
-                .and_then(|v| v.get(0))
-                .and_then(|v| v.get("embedding"))
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_f64().map(|f| f as f32))
-                        .collect::<Vec<f32>>()
-                })
-                .ok_or_else(|| {
-                    corpus_engine::Error::Embed("daemon: no embedding in response".into())
-                })
-        })
-    })
 }
 
 /// Build a `corpus_engine_notes::EmbedFn` adapter for the daemon's
@@ -542,17 +446,18 @@ async fn build_daemon_notes_embed_fn_or_none(
                 .send()
                 .await
                 .map_err(|e| {
-                    corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                    corpus_index::Error::Io(std::io::Error::other(format!(
                         "daemon notes embed: {e}"
                     )))
                 })?;
             if !resp.status().is_success() {
-                return Err(corpus_engine_notes::Error::Io(std::io::Error::other(
-                    format!("daemon notes embed HTTP {}", resp.status()),
-                )));
+                return Err(corpus_index::Error::Io(std::io::Error::other(format!(
+                    "daemon notes embed HTTP {}",
+                    resp.status()
+                ))));
             }
             let body: serde_json::Value = resp.json().await.map_err(|e| {
-                corpus_engine_notes::Error::Io(std::io::Error::other(format!(
+                corpus_index::Error::Io(std::io::Error::other(format!(
                     "daemon notes embed parse: {e}"
                 )))
             })?;
@@ -566,7 +471,7 @@ async fn build_daemon_notes_embed_fn_or_none(
                         .collect::<Vec<f32>>()
                 })
                 .ok_or_else(|| {
-                    corpus_engine_notes::Error::Io(std::io::Error::other(
+                    corpus_index::Error::Io(std::io::Error::other(
                         "daemon notes embed: no embedding in response",
                     ))
                 })

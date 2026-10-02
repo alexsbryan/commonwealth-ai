@@ -19,16 +19,36 @@ license.workspace = true
 # CompletionResponse / StreamFrame cross the process boundary verbatim, and
 # the child server wraps an `Arc<dyn InferenceProvider>`.
 sovereign-contracts = { workspace = true }
+# The server shell the child serves through (phase-b pb-shell); `task`: the
+# discovery loop and the self-manifest refresh run under the kit's supervisor.
+host-kit = { workspace = true, features = ["shell", "jobs", "task"] }
 # The compute child embeds the real engine: EmbeddedLlamaCpp (generate) /
-# EmbedOnlyProvider (embed), plus fast_exit_skip_destructors on the abort
-# path. sovereign-core supplies ModelFamily. Both are runtime-layer (same
-# layer as this crate), so the dependency direction is legal.
+# EmbedOnlyProvider (embed), plus fast_exit_skip_destructors on the abort path.
+# Runtime-layer, same layer as this crate, so the direction is legal.
 sovereign-inference = { workspace = true }
-sovereign-core = { workspace = true }
+# The NER served kind's loader (`ner.rs`, phase-b pb-serving-ner). This crate's
+# only dependent is sovereign-daemon, so the ONNX stack links nowhere new.
+sovereign-gliner = { workspace = true }
+# `RemoteNer`, the NER kind's client, re-exported at `ner::RemoteNer`
+# (pb-cli-llm moved it beside rerank; a shared leaf).
+oicp-client = { workspace = true }
+# The mesh RPC-worker discovery loop (pb-serve-distributes): discovery and
+# the eligibility gate it feeds, the mesh ports it reads (serving-host), the
+# shared-model host election and node ids (kernel-types `partition::should_host`).
+sovereign-serving-host = { workspace = true }
+kernel-types = { workspace = true }
+# The warm orchestrator's dial vocabulary (`PeerEndpoint`, `TrafficClass`;
+# a package leaf), and the model-file URL both ends of a warm build
+# (oicp-types `model_transfer`).
+mesh-reach = { workspace = true }
+oicp-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
+uuid = { workspace = true }
+sha2 = { workspace = true }
+tokio-util = { version = "0.7", features = ["io", "io-util"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 axum = { workspace = true }
@@ -44,6 +64,7 @@ libc = "0.2"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+tower = { workspace = true, features = ["util"] }
 
 [lints]
 workspace = true

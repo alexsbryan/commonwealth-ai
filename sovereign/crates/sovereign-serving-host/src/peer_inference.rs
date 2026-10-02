@@ -428,7 +428,7 @@ pub struct InferenceRouter {
     /// linearly-backed-off cooldown. Filtered out of routing
     /// candidates while quarantined; one successful response clears
     /// the state. See [`peer_health`] for the policy.
-    peer_health: Arc<commonwealth_core::peer_health::PeerHealthTracker>,
+    peer_health: Arc<sovereign_scheduler::peer_health::PeerHealthTracker>,
     /// "Do I hold a live guest grant for this model id?"
     ///
     /// Defaults to [`NoGuestLenders`] — almost every node has no link, and a
@@ -481,8 +481,8 @@ pub struct InferenceRouter {
     /// fallback to local, and any other dispatch that ultimately runs
     /// against the local provider's slots.
     ///
-    /// Published over gossip in [`commonwealth_core::capabilities::
-    /// NodeCapabilities::current_in_flight`] so a remote scheduler
+    /// Published over gossip in commonwealth-core's
+    /// `NodeCapabilities::current_in_flight` so a remote scheduler
     /// (e.g. the founder selecting a peer) can see this node's
     /// *actual* load — including local-user traffic the remote side
     /// never originated. Without this, a workstation serving its own
@@ -695,7 +695,7 @@ impl InferenceRouter {
             peer_observations: Arc::new(RwLock::new(std::collections::HashMap::new())),
             local_observations: Arc::new(RwLock::new(local_obs)),
             extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
-            peer_health: Arc::new(commonwealth_core::peer_health::PeerHealthTracker::new()),
+            peer_health: Arc::new(sovereign_scheduler::peer_health::PeerHealthTracker::new()),
             guest: std::sync::RwLock::new(Arc::new(crate::guest_lender::NoGuestLenders)
                 as Arc<dyn crate::guest_lender::GuestLenderSource>),
             yield_backoff: Arc::new(sovereign_scheduler::yield_backoff::YieldBackoff::new()),
@@ -4002,7 +4002,7 @@ mod tests {
     /// simply the failure that made this path reachable in practice.)
     fn dead_peer() -> InferenceVenue {
         InferenceVenue {
-            node_id: commonwealth_core::ids::NodeId::from_u128(7),
+            node_id: kernel_types::NodeId::from_u128(7),
             name: "DeadPeer".into(),
             base_urls: vec!["http://127.0.0.1:1/v1".into()],
             system_ram_gb: 64,

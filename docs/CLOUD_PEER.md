@@ -131,7 +131,7 @@ The join link — the mesh key plus the founder's iroh dial string — is writte
 into the Vast onstart script, so **Vast can read it**. The blast radius is
 bounded: on an encrypted mesh every peer is dialed by key, and a stranger
 holding the link can join but cannot reach a corpus flagged
-`query_sharing = false` (`sovereign/crates/sovereign-mesh/src/capabilities.rs`
+`query_sharing = false` (`sovereign/crates/sovereign-daemon/src/peer_origin/claims.rs`
 decides that, per corpus, and it gates advertising rather than serving).
 
 **End a `--mesh` flight by rotating the invite:**

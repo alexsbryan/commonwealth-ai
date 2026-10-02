@@ -404,6 +404,12 @@ lines = 178
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-mesh/src/guest_pages.rs"
+context = "fabric"
+lines = 295
+note = "the guest page's browser side (moved out of sovereign-daemon guest_door by fp-30); the door re-exports it"
+
+[[module]]
 path = "sovereign/crates/sovereign-daemon/src/documents_http.rs"
 context = "host"
 lines = 1172
@@ -597,6 +603,12 @@ lines = 219
 note = "retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mesh host cluster's move (E0116, impl EmbeddedDaemon) and splits back to Fabric by REVIEW-build-daemon-embedded-split"
 
 [[module]]
+path = "sovereign/crates/sovereign-mesh/src/measurements_wire.rs"
+context = "fabric"
+lines = 54
+note = "the /v1/mesh/measurements answer shapes beside mesh_measurements (moved out of sovereign-daemon mesh_http by fp-30)"
+
+[[module]]
 path = "sovereign/crates/sovereign-mesh/src/mesh_discovery.rs"
 context = "fabric"
 lines = 475
@@ -605,13 +617,13 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/mesh_http.rs"
 context = "host"
-lines = 1838
+lines = 1812
 note = "membership routes - the mesh's own; was fabric; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/meshapp_http.rs"
 context = "host"
-lines = 587
+lines = 571
 note = "app-registry explorer, not a membership/ring/rail route"
 
 [[module]]
@@ -827,7 +839,7 @@ note = "retagged host at dm-daemon-mesh-edge (2026-09-17): the file rode the mes
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/rpc_warm_http.rs"
 context = "host"
-lines = 1225
+lines = 511
 note = "*_http but the decision is Serving's - distributed-inference auto-warm orchestration; was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
@@ -958,6 +970,12 @@ path = "sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs"
 context = "serving"
 lines = 1195
 note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
+
+[[module]]
+path = "sovereign/crates/sovereign-serving-host/src/rpc_discovery.rs"
+context = "serving"
+lines = 575
+note = "moved from sovereign-daemon daemon.rs (pb-serve-distributes)"
 
 [[module]]
 path = "sovereign/crates/sovereign-pods/src/worker_http.rs"
@@ -1233,19 +1251,19 @@ lines = 602
 note = "was serving; route shell — DAEMON_CORE.md §4 placement test (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/routes_edit_predictions.rs"
+path = "sovereign/crates/sovereign-code/src/edit_predictions.rs"
 context = "workbench"
-lines = 1357
-note = "the host route shell (DAEMON_CORE.md §4.1 placement test) for POST /v1/edit_predictions; its grammar lookup adapter (grammar_for) is the port the package crate takes. It moves to sovereign-daemon with server.rs at dm-daemon-api-edge. The wire contract split to wire.rs at REVIEW-audit-4 (ARCH 3.1: the file had grown past arch-gate's slack)"
+lines = 794
+note = "the route shell (DAEMON_CORE.md §4.1 placement test) for POST /v1/edit_predictions; its grammar lookup is the port the package crate takes. It moves to sovereign-daemon with server.rs at dm-daemon-api-edge. The wire contract split to wire.rs at REVIEW-audit-4 (ARCH 3.1: the file had grown past arch-gate's slack). Moved to code with its tests (edit_predictions/tests.rs) at pb-meshapp-rest; the grammar lookup arrives from the host and the model lane dials serve (edit_predictions/serve_dial.rs)"
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/routes_edit_predictions/wire.rs"
+path = "sovereign/crates/sovereign-code/src/edit_predictions/wire.rs"
 context = "workbench"
 lines = 133
 note = "the /v1/edit_predictions wire contract — the request shapes, their caps and validate_wire — split out of routes_edit_predictions.rs at REVIEW-audit-4 (ARCH 3.1: the route file had grown past arch-gate's slack). Same shapes, same caps; the route module re-exports the public names at the historical path"
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/routes_edit_predictions/outcome.rs"
+path = "sovereign/crates/sovereign-code/src/edit_predictions/outcome.rs"
 context = "workbench"
 lines = 159
 note = "the host route shell for POST /v1/edit_predictions/outcome, split out of next_edit_journal.rs at dm-next-edit-move so the pure journal policy could leave for code-next-edit"
@@ -1558,12 +1576,6 @@ context = "serving"
 lines = 415
 note = "the local slot pick; split out of oicp_select by REVIEW-build-sched-split-pick-slot (2026-09-15)"
 
-[[module]]
-path = "sovereign/crates/sovereign-serving-host/src/worker_state.rs"
-context = "serving"
-lines = 87
-note = "the WorkerState reader port — a pinned pod's bootstrap state by synthetic node id, the daemon implements it; the payload type is the shared leaf's sovereign-contracts::worker_pod (REVIEW-build-serving-worker-port, 2026-09-15)"
-
 
 
 
@@ -1665,8 +1677,8 @@ why = "Fabric-internal, inside the package; doc at :397 says 'trust between peer
 
 [[noun]]
 name = "PeerHealthTracker"
-crate = "commonwealth-core"
-file = "commonwealth/crates/commonwealth-core/src/peer_health.rs:142"
+crate = "sovereign-scheduler"
+file = "sovereign/crates/sovereign-scheduler/src/peer_health.rs:142"
 visibility = "pub"
 concept = "C3"
 context = "serving"
@@ -1676,8 +1688,8 @@ why = "32 refs / 7 files. Zero Fabric consumers; only is_quarantined/health_weig
 
 [[noun]]
 name = "PeerHealth"
-crate = "commonwealth-core"
-file = "commonwealth/crates/commonwealth-core/src/peer_health.rs:83"
+crate = "sovereign-scheduler"
+file = "sovereign/crates/sovereign-scheduler/src/peer_health.rs:83"
 visibility = "private"
 concept = "C3"
 context = "serving"
@@ -1996,7 +2008,7 @@ why = "6 refs / 2 files. Doc at :489 - keyed by NodeId from X-Node-Id, 'the ONLY
 [[noun]]
 name = "NoPeers"
 crate = "sovereign-cli-daemon"
-file = "sovereign/crates/sovereign-cli-daemon/tests/main/named_model_routes_after_child_serves_e2e.rs:112"
+file = "sovereign/crates/sovereign-daemon/tests/main/named_model_routes_after_child_serves_e2e.rs:112"
 visibility = "test"
 concept = "C10"
 context = "serving"
@@ -2425,7 +2437,7 @@ why = "7 refs / 3 files. peer_tier2_count vs local_tier2_count at :92-96 decide 
 [[noun]]
 name = "MeshPeer"
 crate = "sovereign-work-atlas"
-file = "sovereign/crates/sovereign-work-atlas/tests/cross_node.rs:43"
+file = "sovereign/crates/sovereign-work-atlas/tests/port_fake.rs:1"
 visibility = "test"
 concept = "C10"
 context = "workspace"
@@ -2951,7 +2963,7 @@ recipe selects both independently, so merging them merges two extension points.
 family = "Seed"
 context = "understanding"
 definitions = [
-  "NAVIGATION SEED (where a walk starts): understanding-vocab/src/ontology/navigation.rs:134 SeedPolicy; corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-llm/src/eval_cmd/atlas_ann.rs:21 SeedMode",
+  "NAVIGATION SEED (where a walk starts): understanding-vocab/src/ontology/navigation.rs:134 SeedPolicy; corpus-engine/src/enrichment/atlas/seed_population.rs:77 SeedPopulation; .../atlas/ann_store.rs:124 SeedOutcome; sovereign-cli-bench/src/eval_cmd/atlas_ann.rs:21 SeedMode",
   "EXTRACTION SEED (the Stage 1a entity list -> cache/seed.json): corpus-engine/src/enrichment/pipeline/atlas.rs:285 SeedEntity, :300 SeedEntities, :322 SeedOrigin, :348 SeedStrategy; sovereign-enrichment-build/src/seed_cmd.rs:31 SeedError, :61 SeedReport",
   "HOMONYMS: sovereign-cli-dev/src/refactor_cmd/spec.rs:42 SeedEdit; .../refactor_cmd/discover.rs:127 SeededFile; sovereign-cli-llm/src/voice_eval/scenarios.rs:78 SeedMemory; sovereign-mesh/src/governance_http.rs:181 SeededResponse; sovereign-turn-client/src/lib.rs:3758 SeededWire; sovereign-cli-llm/src/awareness_cmd/seed.rs:159 SeedPlan",
 ]
@@ -3027,7 +3039,7 @@ definitions = [
   "DESKTOP local-corpus ingest preview (13): sovereign-contracts/src/daemon_wire/local_corpus.rs:73 ClusterProgressView, .../local_corpus/clusterer.rs:14 ClusterConfig, :41 MultiClusterStrategy, :66 LabeledCluster, .../preview.rs:32 ClusterSummary, :80 ClusterConfidence, .../progress.rs:94 ClusterStage; sovereign-tools/src/local_corpus/clusterer.rs:45 LabeledClusterResult, :69 Clusterer; sovereign-mesh/src/lc_http.rs:172 ClusterRequest, :181 ClusterProgressQuery, :192 ClusterProgress (alias), :687 ClusterJob",
   "WORKBENCH (3): sovereign-tools/src/code/suggest_seams.rs:74 Cluster, .../code/dry_report.rs:99 NearCluster, sovereign-cli-dev/src/code_fieldglass/model.rs:142 DupClusterSummary",
   "RAPTOR rollup (3): sovereign-tools/src/raptor_atlas.rs:890 ClusterSummarizationInput, .../raptor_checkpoint.rs:79 LevelClustering, sovereign-eval/src/entity_resolution_score.rs:41 type Clustering",
-  "OTHER (8): corpus-engine/src/recipe.rs:730 ClusteringToml; sovereign-core/src/conv_briefing.rs:122 ClusterSignpost; sovereign-cli-dev/src/intent.rs:111 IntentCluster; sovereign-eval/src/flywheel/generators/adversarial.rs:84 EntityCluster; sovereign-enrichment-build/src/atlas_phase_cmd.rs:31 ParsedCluster, :37 ClusterReport, :634 AtlasClusterTool; sovereign-cli-llm/src/enrich_cmd/workflow_primitives.rs:146 AtlasClustersTool, :187 AtlasClusterExcerptsTool",
+  "OTHER (8): corpus-engine/src/recipe.rs:730 ClusteringToml; sovereign-core/src/conv_briefing.rs:122 ClusterSignpost; sovereign-cli-dev/src/intent.rs:111 IntentCluster; sovereign-eval/src/flywheel/generators/adversarial.rs:84 EntityCluster; sovereign-enrichment-build/src/atlas_phase_cmd.rs:31 ParsedCluster, :37 ClusterReport, :634 AtlasClusterTool; sovereign-pipeline/src/enrich_cmd/workflow_primitives.rs:146 AtlasClustersTool, :187 AtlasClusterExcerptsTool",
 ]
 verdict = "delete"
 survivor = ""
@@ -4030,8 +4042,8 @@ paths = [
     "corpus-engine/src/enrichment/atlas/analysis/mod.rs",
     "corpus-engine/src/enrichment/atlas/analysis/parcel_analytics.rs",
     "corpus-engine/src/enrichment/atlas/analysis/patterns_adapter.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs",
-    "corpus-engine/src/enrichment/atlas/analysis/sec_facts/fixtures.rs",
+    "corpus-engine-atlas-reader/src/sec_facts/coverage.rs",
+    "corpus-engine-atlas-reader/src/sec_facts/fixtures.rs",
     "corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs",
     "corpus-engine/src/enrichment/atlas/analysis/starter_questions.rs",
     "corpus-engine/src/enrichment/atlas/analysis/tension_classifier.rs",
@@ -6547,8 +6559,8 @@ lines = 129
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/peer_health.rs"
-context = "fabric"
+path = "sovereign/crates/sovereign-scheduler/src/peer_health.rs"
+context = "serving"
 lines = 510
 note = ""
 
@@ -8305,8 +8317,8 @@ lines = 2861
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/build/containment.rs"
-context = "host"
+path = "sovereign/crates/sovereign-compute/src/containment.rs"
+context = "serving"
 lines = 348
 note = ""
 
@@ -8329,8 +8341,8 @@ lines = 293
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/discovery_policy.rs"
-context = "host"
+path = "sovereign/crates/sovereign-compute/src/discovery_policy.rs"
+context = "serving"
 lines = 689
 note = ""
 
@@ -8371,16 +8383,16 @@ lines = 48
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/solve_http.rs"
+path = "sovereign/crates/sovereign-code/src/solve_http.rs"
 context = "host"
-lines = 1150
-note = ""
+lines = 851
+note = "Moved to code from the svrn daemon with its tests (solve_http/tests.rs) at pb-meshapp-solve."
 
 [[module]]
-path = "sovereign/crates/sovereign-daemon/src/solve_tools.rs"
+path = "sovereign/crates/sovereign-code/src/solve_tools.rs"
 context = "host"
 lines = 171
-note = ""
+note = "Moved to code from the svrn daemon at pb-meshapp-solve."
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/startup.rs"
@@ -8395,10 +8407,10 @@ lines = 433
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/vram_plan.rs"
+path = "sovereign/crates/sovereign-serve/src/vram_plan.rs"
 context = "host"
 lines = 310
-note = ""
+note = "Moved to serve from cli-daemon with its tests at pb-distribution-setup: sizing is placement."
 
 [[module]]
 path = "sovereign/crates/sovereign-daemon/src/worker.rs"
@@ -9025,13 +9037,13 @@ lines = 608
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs"
+path = "sovereign/crates/sovereign-pipeline/src/alignment_cmd.rs"
 context = "host"
 lines = 779
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/backfill_ann.rs"
+path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/backfill_ann.rs"
 context = "host"
 lines = 349
 note = ""
@@ -9043,13 +9055,13 @@ lines = 384
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/build_doc_index.rs"
+path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs"
 context = "host"
 lines = 109
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/enable_incremental.rs"
+path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/enable_incremental.rs"
 context = "host"
 lines = 169
 note = ""
@@ -9061,37 +9073,37 @@ lines = 429
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/kind.rs"
+path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/kind.rs"
 context = "host"
 lines = 738
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/map_check.rs"
+path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/map_check.rs"
 context = "host"
 lines = 150
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/migrate_all.rs"
+path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_all.rs"
 context = "host"
 lines = 534
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/migrate_ids.rs"
+path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs"
 context = "host"
 lines = 167
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/mod.rs"
+path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/mod.rs"
 context = "host"
 lines = 144
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/stats.rs"
+path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/stats.rs"
 context = "host"
 lines = 163
 note = ""
@@ -9109,7 +9121,7 @@ lines = 294
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/atlas_cmd/wikipedia.rs"
+path = "sovereign/crates/sovereign-pipeline/src/atlas_cmd/wikipedia.rs"
 context = "host"
 lines = 623
 note = ""
@@ -9259,313 +9271,313 @@ lines = 403
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/ablate.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/ablate.rs"
 context = "host"
 lines = 1187
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/adjudicate.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/adjudicate.rs"
 context = "host"
 lines = 448
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/all.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/all.rs"
 context = "host"
 lines = 1781
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/atlas.rs"
+path = "sovereign/crates/sovereign-pipeline/src/bench_atlas.rs"
 context = "host"
 lines = 824
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/baselines.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/baselines.rs"
 context = "host"
 lines = 304
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/book_report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/book_report.rs"
 context = "host"
 lines = 2543
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs"
 context = "host"
 lines = 2278
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/desktop_bridge.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs"
 context = "host"
 lines = 249
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/discover.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/discover.rs"
 context = "host"
 lines = 467
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/enron.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/enron.rs"
 context = "host"
 lines = 854
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/faithfulness.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/faithfulness.rs"
 context = "host"
 lines = 574
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/flywheel.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/flywheel.rs"
 context = "host"
 lines = 399
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/gate.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/gate.rs"
 context = "host"
 lines = 801
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/governance.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/governance.rs"
 context = "host"
 lines = 400
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/judge_replay.rs"
+path = "sovereign/crates/sovereign-cli-llm/src/judge_replay.rs"
 context = "host"
 lines = 499
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/lane_baseline.rs"
 context = "host"
 lines = 759
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/live_runner.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/live_runner.rs"
 context = "host"
 lines = 876
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/mechanism_fidelity.rs"
 context = "host"
 lines = 1357
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/mod.rs"
 context = "host"
 lines = 224
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/model_resolve.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/model_resolve.rs"
 context = "host"
 lines = 239
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/mod.rs"
 context = "host"
 lines = 277
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/report.rs"
 context = "host"
 lines = 288
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/runner.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/runner.rs"
 context = "host"
 lines = 157
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/moral/scenarios.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/moral/scenarios.rs"
 context = "host"
 lines = 305
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/obsidian.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/obsidian.rs"
 context = "host"
 lines = 376
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/parity_compare.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/parity_compare.rs"
 context = "host"
 lines = 528
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/promote.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/promote.rs"
 context = "host"
 lines = 597
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/proxy_bench.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/proxy_bench.rs"
 context = "host"
 lines = 119
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/redteam.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/redteam.rs"
 context = "host"
 lines = 748
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/render.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/render.rs"
 context = "host"
 lines = 637
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/report.rs"
 context = "host"
 lines = 874
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/resolver_precision/mod.rs"
+path = "sovereign/crates/sovereign-cli-llm/src/resolver_precision/mod.rs"
 context = "host"
 lines = 650
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/resolver_precision/transcript.rs"
+path = "sovereign/crates/sovereign-cli-llm/src/resolver_precision/transcript.rs"
 context = "host"
 lines = 279
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/resource_meter.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/resource_meter.rs"
 context = "host"
 lines = 791
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/routing_replay.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/routing_replay.rs"
 context = "host"
 lines = 283
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/judge.rs"
 context = "host"
 lines = 723
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/mod.rs"
 context = "host"
 lines = 44
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/paired.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/paired.rs"
 context = "host"
 lines = 621
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/report.rs"
 context = "host"
 lines = 207
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/score.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/score.rs"
 context = "host"
 lines = 444
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/test_support.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/rubric/test_support.rs"
 context = "host"
 lines = 58
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/scaffold.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/scaffold.rs"
 context = "host"
 lines = 658
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/scaffolding_param.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/scaffolding_param.rs"
 context = "host"
 lines = 282
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/criteria.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/criteria.rs"
 context = "host"
 lines = 431
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/mod.rs"
 context = "host"
 lines = 333
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/report.rs"
 context = "host"
 lines = 447
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/runner.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/runner.rs"
 context = "host"
 lines = 192
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/situated/transcripts.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/situated/transcripts.rs"
 context = "host"
 lines = 272
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/smoke_subset.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/smoke_subset.rs"
 context = "host"
 lines = 368
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/uap.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/uap.rs"
 context = "host"
 lines = 781
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/vault_report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs"
 context = "host"
 lines = 1917
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/verifier.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/bench_cmd/verifier.rs"
 context = "host"
 lines = 700
 note = ""
@@ -9637,13 +9649,13 @@ lines = 446
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/diagnostics.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/diagnostics.rs"
 context = "host"
 lines = 1140
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/fmt.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/fmt.rs"
 context = "host"
 lines = 53
 note = ""
@@ -9655,43 +9667,43 @@ lines = 139
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/inventory.rs"
 context = "host"
 lines = 704
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/mod.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/mod.rs"
 context = "host"
 lines = 132
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs"
 context = "host"
 lines = 425
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/partitions.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/partitions.rs"
 context = "host"
 lines = 1057
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/recipe_source.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/recipe_source.rs"
 context = "host"
 lines = 23
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/search.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/search.rs"
 context = "host"
 lines = 125
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/status.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_cmd/status.rs"
 context = "host"
 lines = 110
 note = ""
@@ -9709,13 +9721,13 @@ lines = 181
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_scrub_cmd.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_scrub_cmd.rs"
 context = "host"
 lines = 460
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs"
+path = "sovereign/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs"
 context = "host"
 lines = 1471
 note = ""
@@ -9727,265 +9739,265 @@ lines = 974
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_configuration.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_configuration.rs"
 context = "host"
 lines = 56
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_cross_corpus.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_cross_corpus.rs"
 context = "host"
 lines = 372
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_drift_report.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_drift_report.rs"
 context = "host"
 lines = 1765
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_eval.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_eval.rs"
 context = "host"
 lines = 562
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_gaps.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_gaps.rs"
 context = "host"
 lines = 58
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_patch_code.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_patch_code.rs"
 context = "host"
 lines = 529
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_phase_cmd.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_phase_cmd.rs"
 context = "host"
 lines = 87
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_query.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_query.rs"
 context = "host"
 lines = 558
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_reconcile.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_reconcile.rs"
 context = "host"
 lines = 263
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_resolve.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_resolve.rs"
 context = "host"
 lines = 78
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_tensions.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions.rs"
 context = "host"
 lines = 58
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/atlas_tensions_classify.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_tensions_classify.rs"
 context = "host"
 lines = 76
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/backfill_sections.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/backfill_sections.rs"
 context = "host"
 lines = 683
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/build.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/build.rs"
 context = "host"
 lines = 284
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/capability_doc.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_doc.rs"
 context = "host"
 lines = 560
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/capability_reconcile.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/capability_reconcile.rs"
 context = "host"
 lines = 790
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/cascade.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/cascade.rs"
 context = "host"
 lines = 239
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/classify.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/classify.rs"
 context = "host"
 lines = 388
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/code_intel.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/code_intel.rs"
 context = "host"
 lines = 146
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/delta_cmd.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs"
 context = "host"
 lines = 1247
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/diagnose.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/diagnose.rs"
 context = "host"
 lines = 656
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/diff.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/diff.rs"
 context = "host"
 lines = 266
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/egress_reds.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/egress_reds.rs"
 context = "host"
 lines = 142
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/errors.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/errors.rs"
 context = "host"
 lines = 714
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/adjudicate.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/adjudicate.rs"
 context = "host"
 lines = 389
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/args.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/args.rs"
 context = "host"
 lines = 96
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/axis_driver.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/axis_driver.rs"
 context = "host"
 lines = 575
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/golden.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/golden.rs"
 context = "host"
 lines = 430
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/matching.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/matching.rs"
 context = "host"
 lines = 256
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/mod.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/mod.rs"
 context = "host"
 lines = 806
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/scorers.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/scorers.rs"
 context = "host"
 lines = 1155
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval/snapshot.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval/snapshot.rs"
 context = "host"
 lines = 233
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/eval_median.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/eval_median.rs"
 context = "host"
 lines = 652
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/exemplars.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/exemplars.rs"
 context = "host"
 lines = 106
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/extract.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/extract.rs"
 context = "host"
 lines = 108
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/extract_typed.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/extract_typed.rs"
 context = "host"
 lines = 636
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/field_atoms.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/field_atoms.rs"
 context = "host"
 lines = 183
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/ingest.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/ingest.rs"
 context = "host"
 lines = 383
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/init.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/init.rs"
 context = "host"
 lines = 1310
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/investigation.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/investigation.rs"
 context = "host"
 lines = 600
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/mod.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/mod.rs"
 context = "host"
 lines = 305
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/phase_cmd.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/phase_cmd.rs"
 context = "host"
 lines = 211
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/promote.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/promote.rs"
 context = "host"
 lines = 527
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/query.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/query.rs"
 context = "host"
 lines = 255
 note = ""
@@ -10003,55 +10015,55 @@ lines = 76
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/reset.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/reset.rs"
 context = "host"
 lines = 579
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/schema_review.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/schema_review.rs"
 context = "host"
 lines = 104
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/seed_cmd.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/seed_cmd.rs"
 context = "host"
 lines = 68
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/sep_ingest.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/sep_ingest.rs"
 context = "host"
 lines = 431
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/sheets_ingest.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/sheets_ingest.rs"
 context = "host"
 lines = 237
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/show.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/show.rs"
 context = "host"
 lines = 420
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/spec_intel.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs"
 context = "host"
 lines = 502
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/spec_reconcile.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs"
 context = "host"
 lines = 1171
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/status.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/status.rs"
 context = "host"
 lines = 61
 note = ""
@@ -10063,85 +10075,85 @@ lines = 83
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/templates/mod.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/templates/mod.rs"
 context = "host"
 lines = 221
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/triage.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/triage.rs"
 context = "host"
 lines = 367
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/validate.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/validate.rs"
 context = "host"
 lines = 241
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/enrich_cmd/workflow_primitives.rs"
+path = "sovereign/crates/sovereign-pipeline/src/enrich_cmd/workflow_primitives.rs"
 context = "host"
 lines = 792
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/atlas_ann.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/atlas_ann.rs"
 context = "host"
 lines = 27
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/attribution.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/attribution.rs"
 context = "host"
 lines = 159
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/bank.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/bank.rs"
 context = "host"
 lines = 581
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/lost_corpora.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/lost_corpora.rs"
 context = "host"
 lines = 119
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/mod.rs"
 context = "host"
 lines = 1109
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/report.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/report.rs"
 context = "host"
 lines = 670
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/routing_metrics.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/routing_metrics.rs"
 context = "host"
 lines = 502
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/runner.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner.rs"
 context = "host"
 lines = 2074
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/runner_threads.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner_threads.rs"
 context = "host"
 lines = 809
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/eval_cmd/score.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs"
 context = "host"
 lines = 1152
 note = ""
@@ -10411,7 +10423,7 @@ lines = 468
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/meta_atlas_cmd.rs"
+path = "sovereign/crates/sovereign-pipeline/src/meta_atlas_cmd.rs"
 context = "host"
 lines = 630
 note = ""
@@ -10429,7 +10441,7 @@ lines = 165
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs"
+path = "sovereign/crates/sovereign-pipeline/src/pipeline_cmd.rs"
 context = "host"
 lines = 1745
 note = ""
@@ -10465,25 +10477,25 @@ lines = 589
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/bench_lane.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/bench_lane.rs"
 context = "host"
 lines = 1225
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/chat_ask.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/chat_ask.rs"
 context = "host"
 lines = 1796
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/mod.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/mod.rs"
 context = "host"
 lines = 196
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/quality_lane_cmd/throughput.rs"
+path = "sovereign/crates/sovereign-cli-bench/src/quality_lane_cmd/throughput.rs"
 context = "host"
 lines = 1059
 note = ""
@@ -10507,19 +10519,19 @@ lines = 1848
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/recipe_cmd.rs"
+path = "sovereign/crates/sovereign-pipeline/src/recipe_cmd.rs"
 context = "host"
 lines = 680
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/recipe_cmd/authoring.rs"
+path = "sovereign/crates/sovereign-pipeline/src/recipe_cmd/authoring.rs"
 context = "host"
 lines = 195
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-llm/src/recipe_cmd/publish.rs"
+path = "sovereign/crates/sovereign-pipeline/src/recipe_cmd/publish.rs"
 context = "host"
 lines = 222
 note = ""
@@ -10675,19 +10687,19 @@ lines = 732
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/code_index.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/code_index.rs"
 context = "unknown"
 lines = 886
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/code_index_incremental.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/code_index_incremental.rs"
 context = "unknown"
 lines = 605
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/deprecation.rs"
+path = "sovereign/crates/sovereign-cli-base/src/deprecation.rs"
 context = "unknown"
 lines = 125
 note = ""
@@ -10729,31 +10741,31 @@ lines = 68
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/mcp_client.rs"
+path = "sovereign/crates/sovereign-cli-base/src/mcp_client.rs"
 context = "unknown"
 lines = 124
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/models.rs"
+path = "sovereign/crates/sovereign-cli-base/src/models.rs"
 context = "unknown"
 lines = 37
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/observation.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/observation.rs"
 context = "unknown"
 lines = 684
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/project_toml.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/project_toml.rs"
 context = "unknown"
 lines = 402
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/prompts.rs"
+path = "sovereign/crates/sovereign-cli-base/src/prompts.rs"
 context = "unknown"
 lines = 205
 note = ""
@@ -10765,19 +10777,13 @@ lines = 222
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/repo.rs"
+path = "sovereign/crates/sovereign-cli-base/src/repo.rs"
 context = "unknown"
 lines = 130
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/scip.rs"
-context = "unknown"
-lines = 109
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-cli-shared/src/tracing_init.rs"
+path = "sovereign/crates/sovereign-cli-base/src/tracing_init.rs"
 context = "unknown"
 lines = 48
 note = ""
@@ -10819,13 +10825,7 @@ lines = 10
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli/src/code_index_cmd.rs"
-context = "host"
-lines = 41
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-cli/src/code_refresh.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/code_refresh.rs"
 context = "host"
 lines = 561
 note = ""
@@ -10927,7 +10927,7 @@ lines = 93
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli/src/notes_cmd.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/notes_cmd.rs"
 context = "host"
 lines = 2205
 note = ""
@@ -11023,7 +11023,7 @@ lines = 224
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-cli/src/reflect_cmd.rs"
+path = "sovereign/crates/sovereign-cli-dev/src/reflect_cmd.rs"
 context = "host"
 lines = 811
 note = ""
@@ -11170,6 +11170,30 @@ note = ""
 path = "sovereign/crates/sovereign-compute/src/distribution.rs"
 context = "serving"
 lines = 297
+note = ""
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/distributed_discovery.rs"
+context = "serving"
+lines = 464
+note = "moved from sovereign-daemon bootstrap.rs (pb-serve-distributes)"
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/distributed_warm.rs"
+context = "serving"
+lines = 521
+note = "the rpc-warm orchestrator and wire, moved from sovereign-daemon rpc_warm_http (pb-serve-distributes)"
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/distributed_role.rs"
+context = "serving"
+lines = 143
+note = "moved from sovereign-daemon bootstrap.rs (pb-serve-distributes)"
+
+[[module]]
+path = "sovereign/crates/sovereign-compute/src/distributed_respawn.rs"
+context = "serving"
+lines = 320
 note = ""
 
 [[module]]
@@ -11449,6 +11473,12 @@ lines = 825
 note = ""
 
 [[module]]
+path = "sovereign/crates/sovereign-contracts/src/launch/rpc_worker_flag.rs"
+context = "kernel"
+lines = 63
+note = "moved from sovereign-daemon bootstrap.rs (pb-serve-distributes)"
+
+[[module]]
 path = "sovereign/crates/sovereign-contracts/src/lessons.rs"
 context = "kernel"
 lines = 139
@@ -11575,7 +11605,7 @@ lines = 437
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-contracts/src/run_lock.rs"
+path = "host-kit/src/lib.rs"
 context = "kernel"
 lines = 275
 note = ""
@@ -13041,7 +13071,7 @@ note = ""
 [[module]]
 path = "sovereign/crates/sovereign-enrichment-build/src/build/mod.rs"
 context = "unknown"
-lines = 186
+lines = 183
 note = ""
 
 [[module]]
@@ -13489,13 +13519,13 @@ lines = 78
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-gliner/src/bounded_input.rs"
+path = "corpus-engine/src/enrichment/chunk_ner_bound.rs"
 context = "unknown"
 lines = 368
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-gliner/src/chunk_extractor.rs"
+path = "corpus-engine/src/enrichment/chunk_ner.rs"
 context = "unknown"
 lines = 336
 note = ""
@@ -13876,30 +13906,6 @@ note = ""
 path = "sovereign/crates/sovereign-mesh-test-harness/src/simulated_node.rs"
 context = "back-of-house"
 lines = 250
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-meshapp-registry/src/lib.rs"
-context = "unknown"
-lines = 15
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-meshapp-registry/src/manifest.rs"
-context = "unknown"
-lines = 75
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-meshapp-registry/src/proxy.rs"
-context = "unknown"
-lines = 66
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-meshapp-registry/src/registry.rs"
-context = "unknown"
-lines = 94
 note = ""
 
 [[module]]
@@ -15037,12 +15043,6 @@ lines = 168
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-tools/src/index_validator.rs"
-context = "unknown"
-lines = 345
-note = ""
-
-[[module]]
 path = "sovereign/crates/sovereign-tools/src/knowledge.rs"
 context = "unknown"
 lines = 224
@@ -15493,14 +15493,8 @@ lines = 101
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-tools/src/recipe_notes_adapter.rs"
-context = "unknown"
-lines = 275
-note = ""
-
-[[module]]
-path = "sovereign/crates/sovereign-tools/src/recipe_tester_adapter.rs"
-context = "unknown"
+path = "corpus-engine/src/recipe_tester.rs"
+context = "ingest"
 lines = 91
 note = ""
 
@@ -15529,7 +15523,7 @@ lines = 650
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-tools/src/spec_watcher.rs"
+path = "sovereign/crates/sovereign-code/src/spec_watcher.rs"
 context = "unknown"
 lines = 380
 note = ""

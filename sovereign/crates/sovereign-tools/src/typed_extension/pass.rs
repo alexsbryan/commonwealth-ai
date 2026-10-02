@@ -18,21 +18,13 @@
 
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::SourceCitation;
-use corpus_engine::enrichment::pipeline::atlas::{
-    ArgumentativeExtension, SectionExtraction, TypeExtension,
-};
-use corpus_engine::enrichment::pipeline::typed_schemas::argumentative::{
-    parse_phase1_argumentative, phase1_argumentative_schema, PHASE1_ARGUMENTATIVE_SYSTEM,
-};
-use corpus_engine::enrichment::pipeline::typed_schemas::render_source_recovery_block;
+use corpus_engine_atlas_reader::citation::SourceCitation;
+use corpus_engine_atlas_reader::ports::{ArgumentativeResponse, AtlasPort};
 use serde::Deserialize;
 use sovereign_core::conv_tiered::{ConvRaptorNodeRow, VaultThemeRow};
 use sovereign_core::traits::InferenceProvider;
 
 use crate::typed_call::{TypedCallError, TypedLlmCall};
-
-use super::synth_section;
 
 /// Minimum summary length for a leaf to be eligible for Pass A.
 /// Tiny-bucket nodes (synthetic single-node RAPTOR) carry the chunk
@@ -83,30 +75,33 @@ pub(super) fn leaf_is_extractable(node: &ConvRaptorNodeRow) -> bool {
 /// - `Err(reason)` — every retry budget exhausted without a parseable
 ///   response; caller logs as a soft failure
 pub(super) async fn pass_a_one_leaf(
+    atlas: &dyn AtlasPort,
     corpus_id: &str,
     leaf: &ConvRaptorNodeRow,
     member_excerpts: &[String],
     figure_sentences: &[String],
     inference: &Arc<dyn InferenceProvider>,
-) -> Result<Option<(SectionExtraction, SourceCitation)>, String> {
+) -> Result<Option<(ArgumentativeResponse, SourceCitation)>, String> {
     let primary_entities = parse_primary_entities(&leaf.primary_entities_json);
     let quote_spans = parse_quote_spans(&leaf.quote_spans_json);
     let quote_texts: Vec<String> = quote_spans.iter().map(|q| q.text.clone()).collect();
     let user = build_pass_a_user_body(
+        atlas,
         &leaf.summary,
         &primary_entities,
         &quote_texts,
         member_excerpts,
         figure_sentences,
     );
-    let extension = call_argumentative(
-        PHASE1_ARGUMENTATIVE_SYSTEM,
+    let (response_text, atom_count) = call_argumentative(
+        atlas,
+        false,
         &user,
         inference,
         Some(format!("typed_extension_pass_a:{}", leaf.node_id)),
     )
     .await?;
-    if extension.atom_count() == 0 {
+    if atom_count == 0 {
         tracing::debug!(
             corpus = corpus_id,
             node_id = %leaf.node_id,
@@ -116,8 +111,12 @@ pub(super) async fn pass_a_one_leaf(
     }
     let citation = citation_from_quote_spans(&leaf.node_id, &quote_spans);
     let section_id = citation.section_id.clone();
-    let section = synth_section(section_id, TypeExtension::Argumentative(extension));
-    Ok(Some((section, citation)))
+    let response = ArgumentativeResponse {
+        section_id,
+        response_text,
+        cross_leaf_only: false,
+    };
+    Ok(Some((response, citation)))
 }
 
 /// Pass B — typed extraction over one vault_theme summary. Keeps
@@ -132,29 +131,24 @@ pub(super) async fn pass_a_one_leaf(
 /// `member_excerpts = &[]` to skip the source-recovery block when
 /// the orchestrator can't reach the underlying RAPTOR rows.
 pub(super) async fn pass_b_one_theme_with_excerpts(
+    atlas: &dyn AtlasPort,
     corpus_id: &str,
     theme: &VaultThemeRow,
     member_quotes: &[ParsedQuoteSpan],
     inference: &Arc<dyn InferenceProvider>,
-) -> Result<Option<(SectionExtraction, SourceCitation)>, String> {
+) -> Result<Option<(ArgumentativeResponse, SourceCitation)>, String> {
     let member_texts: Vec<String> = member_quotes.iter().map(|q| q.text.clone()).collect();
-    let user = build_pass_b_user_body(&theme.summary, &member_texts);
-    let extension = call_argumentative(
-        PHASE1_ARGUMENTATIVE_SYSTEM,
+    let user = build_pass_b_user_body(atlas, &theme.summary, &member_texts);
+    // `true`: keep only oppositions + concessions.
+    let (response_text, atom_count) = call_argumentative(
+        atlas,
+        true,
         &user,
         inference,
         Some(format!("typed_extension_pass_b:{}", theme.theme_id)),
     )
     .await?;
-    // Drop everything except oppositions + concessions.
-    let trimmed = ArgumentativeExtension {
-        positions: Vec::new(),
-        mechanisms: Vec::new(),
-        evidence_invocations: Vec::new(),
-        oppositions: extension.oppositions,
-        concessions: extension.concessions,
-    };
-    if trimmed.atom_count() == 0 {
+    if atom_count == 0 {
         tracing::debug!(
             corpus = corpus_id,
             theme_id = %theme.theme_id,
@@ -164,29 +158,39 @@ pub(super) async fn pass_b_one_theme_with_excerpts(
     }
     let citation = citation_from_quote_spans(&format!("theme:{}", theme.theme_id), member_quotes);
     let section_id = citation.section_id.clone();
-    let section = synth_section(section_id, TypeExtension::Argumentative(trimmed));
-    Ok(Some((section, citation)))
+    let response = ArgumentativeResponse {
+        section_id,
+        response_text,
+        cross_leaf_only: true,
+    };
+    Ok(Some((response, citation)))
 }
 
 /// Drive the LLM call with the shared `TypedLlmCall` helper. Returns
-/// the parsed extension OR a string error suitable for the
+/// the accepted response and its atom count (ingest parses it, with
+/// `cross_leaf_only` applied) OR a string error suitable for the
 /// orchestrator's `soft_failures` list. The helper handles budget
 /// retry + parse-or-retry + chat-error short-circuit per the typed-
 /// call invariant; this wrapper just collapses the structured
 /// `TypedCallError<P>` shape into the string the orchestrator wants.
 async fn call_argumentative(
-    system: &str,
+    atlas: &dyn AtlasPort,
+    cross_leaf_only: bool,
     user: &str,
     inference: &Arc<dyn InferenceProvider>,
     trace_subject: Option<String>,
-) -> Result<ArgumentativeExtension, String> {
+) -> Result<(String, usize), String> {
     let user_owned = user.to_string();
-    let mut call = TypedLlmCall::new(system, phase1_argumentative_schema());
+    let mut call = TypedLlmCall::new(atlas.argumentative_system(), atlas.argumentative_schema());
     call.trace_subject = trace_subject;
     call.run(
         inference,
         |_budget| async { user_owned.clone() },
-        |response_text| parse_phase1_argumentative(response_text).map_err(|e| format!("{e}")),
+        |response_text| {
+            atlas
+                .argumentative_atom_count(response_text, cross_leaf_only)
+                .map(|n| (response_text.to_string(), n))
+        },
     )
     .await
     .map(|report| report.value)
@@ -201,6 +205,7 @@ async fn call_argumentative(
 }
 
 fn build_pass_a_user_body(
+    atlas: &dyn AtlasPort,
     summary: &str,
     primary_entities: &[String],
     quote_spans: &[String],
@@ -229,7 +234,7 @@ fn build_pass_a_user_body(
         .take(PASS_A_MAX_QUOTES)
         .map(String::as_str)
         .collect();
-    body.push_str(&render_source_recovery_block(&trimmed));
+    body.push_str(&atlas.render_source_recovery_block(&trimmed));
     body.push_str("\n\n");
 
     if !member_excerpts.is_empty() {
@@ -282,7 +287,11 @@ fn build_pass_a_user_body(
     body
 }
 
-fn build_pass_b_user_body(summary: &str, member_excerpts: &[String]) -> String {
+fn build_pass_b_user_body(
+    atlas: &dyn AtlasPort,
+    summary: &str,
+    member_excerpts: &[String],
+) -> String {
     let mut body = String::new();
     body.push_str("# Vault-wide theme — cross-leaf typed extension\n\n");
     body.push_str("**Theme summary (synthesised across multiple notes):**\n\n");
@@ -295,7 +304,7 @@ fn build_pass_b_user_body(summary: &str, member_excerpts: &[String]) -> String {
         .take(PASS_B_MAX_MEMBER_EXCERPTS)
         .map(String::as_str)
         .collect();
-    body.push_str(&render_source_recovery_block(&trimmed));
+    body.push_str(&atlas.render_source_recovery_block(&trimmed));
     body.push_str("\n\n");
     body.push_str(
         "Return a single JSON object with the typed-extension collections per the \
@@ -369,6 +378,17 @@ pub(super) fn citation_from_quote_spans(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_atlas_reader::ports::double::AtlasPortDouble;
+
+    /// The port renders the source-recovery block as a marker that carries
+    /// exactly the excerpts it was handed. The block's own wording and its
+    /// quote truncation are ingest's, proven on `IngestAtlas`
+    /// (corpus-engine's atlas_port_parity
+    /// `render_source_recovery_block_carries_the_naming_discipline`).
+    fn port() -> AtlasPortDouble {
+        AtlasPortDouble::new()
+            .on_render_source_recovery_block(|ex| format!("<recovery {}>", ex.join(" | ")))
+    }
 
     fn mk_leaf(node_id: &str, summary: &str, primaries: &[&str]) -> ConvRaptorNodeRow {
         ConvRaptorNodeRow {
@@ -409,6 +429,7 @@ mod tests {
     #[test]
     fn pass_a_user_body_carries_summary_and_entities() {
         let body = build_pass_a_user_body(
+            &port(),
             "Spread pricing is a PBM mechanism that buys cheap, bills high.",
             &["spread pricing".into(), "PBM".into()],
             &[],
@@ -424,6 +445,7 @@ mod tests {
     #[test]
     fn pass_a_user_body_surfaces_verbatim_quote_spans() {
         let body = build_pass_a_user_body(
+            &port(),
             "PBMs extract opaque rents through their intermediation role.",
             &["PBM".into()],
             &[
@@ -433,12 +455,12 @@ mod tests {
             &[],
             &[],
         );
-        assert!(body.contains("Verbatim source excerpts"));
-        assert!(body.contains("spread pricing"));
-        assert!(body.contains("$1.4B"));
-        // The naming-discipline block must reach the prompt.
-        assert!(body.contains("Atom-naming discipline"));
-        assert!(body.contains("Prefer verbatim phrasings"));
+        // Both quote spans reach the port's recovery block, in order.
+        assert!(
+            body.contains("<recovery The practice known as spread pricing"),
+            "{body}"
+        );
+        assert!(body.contains(" | FTC documented $1.4B"), "{body}");
     }
 
     #[test]
@@ -448,6 +470,7 @@ mod tests {
         // paraphrased summary when NAMING atoms — the golden resolves
         // on the source's own labels.
         let body = build_pass_a_user_body(
+            &port(),
             "The essay contrasts two governance framings.",
             &[],
             &[],
@@ -460,32 +483,54 @@ mod tests {
         assert!(body.contains("prefer THESE"));
 
         // Empty excerpts = v1 body shape, no stray heading.
-        let v1 = build_pass_a_user_body("summary", &[], &[], &[], &[]);
+        let v1 = build_pass_a_user_body(&port(), "summary", &[], &[], &[], &[]);
         assert!(!v1.contains("Member chunk excerpts"));
     }
 
     #[test]
     fn pass_a_user_body_truncates_overly_long_quotes() {
-        use corpus_engine::enrichment::pipeline::typed_schemas::SOURCE_RECOVERY_QUOTE_CHAR_CAP;
-        let long = "a".repeat(SOURCE_RECOVERY_QUOTE_CHAR_CAP + 50);
-        let body =
-            build_pass_a_user_body("summary text here is long enough", &[], &[long], &[], &[]);
-        // Body carries an ellipsis token confirming truncation engaged.
-        assert!(body.contains('…'));
+        // Truncation is the recovery block's (ingest's): the body hands a
+        // long quote to the port whole, and caps only the NUMBER of quotes.
+        let long = "a".repeat(2_000);
+        let quotes: Vec<String> = (0..PASS_A_MAX_QUOTES + 2)
+            .map(|i| {
+                if i == 0 {
+                    long.clone()
+                } else {
+                    format!("q{i}")
+                }
+            })
+            .collect();
+        let seen: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+        let seen_in = std::sync::Arc::clone(&seen);
+        let port = AtlasPortDouble::new().on_render_source_recovery_block(move |ex| {
+            *seen_in.lock().unwrap() = ex.iter().map(|s| s.to_string()).collect();
+            String::new()
+        });
+        build_pass_a_user_body(
+            &port,
+            "summary text here is long enough",
+            &[],
+            &quotes,
+            &[],
+            &[],
+        );
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), PASS_A_MAX_QUOTES);
+        assert_eq!(seen[0], long);
     }
 
     #[test]
     fn pass_b_user_body_constrains_axes_and_carries_excerpts() {
         let body = build_pass_b_user_body(
+            &port(),
             "Themes around markets-vs-regulation across notes.",
             &["markets vs governments is the durable framing the vault returns to.".into()],
         );
         assert!(body.contains("oppositions"));
         assert!(body.contains("concessions"));
         assert!(body.contains("CROSS-NOTE"));
-        assert!(body.contains("Verbatim source excerpts"));
-        assert!(body.contains("markets vs governments"));
-        assert!(body.contains("Atom-naming discipline"));
+        assert!(body.contains("<recovery markets vs governments"), "{body}");
     }
 
     #[test]
@@ -494,9 +539,15 @@ mod tests {
         // (e.g. when the orchestrator can't reach the underlying
         // RAPTOR rows). The body must still parse and carry the
         // axis-constraint instructions.
-        let body = build_pass_b_user_body("Theme summary text without any verbatim excerpts.", &[]);
+        let body = build_pass_b_user_body(
+            &port(),
+            "Theme summary text without any verbatim excerpts.",
+            &[],
+        );
         assert!(body.contains("CROSS-NOTE"));
-        assert!(!body.contains("Verbatim source excerpts"));
+        // The port is handed no excerpts; what it renders for none is
+        // ingest's (no excerpt heading, proven on `IngestAtlas`).
+        assert!(body.contains("<recovery >"), "{body}");
     }
 
     #[test]

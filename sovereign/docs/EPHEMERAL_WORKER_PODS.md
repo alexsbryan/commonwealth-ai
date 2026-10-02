@@ -4,7 +4,7 @@
 
 **MVP implemented.** 2026-05-15. Wire-protocol seam and full
 single-pod lifecycle are live and unit-tested (28 tests across
-`sovereign-mesh::worker_*` + `sovereign-cli::worker_pod_provider`)
+`sovereign-mesh::worker_*` + `sovereign-cli-mesh::mesh_pod::provider`)
 with a real-TLS end-to-end integration test
 (`sovereign/crates/sovereign-mesh/tests/worker_e2e.rs`) covering:
 
@@ -19,12 +19,19 @@ Outstanding from the MVP plan:
 - Desktop wizard Tauri commands (`worker_pod_create/status/destroy`).
   The Rust controller surface is ready; the Tauri glue is a thin
   follow-up.
-- `pipeline pod dispatch <id>` + `pipeline pod poll <id>` commands.
+- `mesh pod dispatch <id>` + `mesh pod poll <id>` commands.
   `pod up` boots the pod into "uploads ready" state; dispatch +
   polling are not yet exposed as CLI subcommands (the controller
   helpers are public — wiring the CLI is mechanical).
 
 Landed since the original MVP plan:
+
+- **Worker binary** (pb-pods-worker) — worker mode is its own
+  `sovereign-pod-worker` binary in `sovereign-pods`; `sovereign-cli
+  daemon run --worker-mode` execs it with the argv unchanged, and the
+  svrn daemon no longer serves worker mode. An image carries
+  `sovereign-cli`, `sovereign-cli-daemon`, `sovereign-stock` and
+  `sovereign-pod-worker`.
 
 - **Runner Phase 1** — `WorkerState::spawn_disk_dump_watcher` (in
   `worker_http`): on full upload completion, atomically dumps GGUFs
@@ -59,7 +66,7 @@ Landed since the original MVP plan:
   `PoolHandle`. `PoolHandle::poll_until_complete` is a fan-in
   drain with per-pod cursors and a stall timeout;
   `destroy_all` is a fan-out teardown. CLI:
-  `sovereign pipeline pod pool --pods N --manifest <units.jsonl>
+  `sovereign mesh pod pool --pods N --manifest <units.jsonl>
   [--output <results.jsonl>] [--keep-alive]`. Tested with 3 real
   TLS pods running EchoRunner.
 - **`MultiOfferVastWorkerProvider`** — companion `WorkerProvider`
@@ -88,7 +95,7 @@ Landed since the original MVP plan:
   images build their own binary against the matching GPU stack
   and skip all of this fixup.
 
-Successor to the legacy `pipeline pod up` flow that joined every Vast
+Successor to the legacy `mesh pod up` flow that joined every Vast
 pod to the mesh as a full peer. That approach was shoehorned: it
 worked because Tailscale gave us symmetric reachability for free, but
 it forced a single-owner ephemeral worker through the same
@@ -322,8 +329,8 @@ token plumbing.
 ### Modified: pipeline_cmd.rs
 **`sovereign/crates/sovereign-cli/src/pipeline_cmd.rs::pod_up`** —
 becomes a thin wrapper over `WorkerController::create` for backward
-compatibility with the existing `sovereign pipeline pod up` CLI.
-Operators using `pipeline pod up` keep their workflow; under the
+compatibility with the existing `sovereign mesh pod up` CLI.
+Operators using `mesh pod up` keep their workflow; under the
 hood it's the new transport.
 
 ### Modified: desktop wizard
@@ -355,7 +362,7 @@ mints in-process.
 
 This is additive: persistent peers keep their mesh (gossip,
 symmetric Tailscale-or-equivalent transport, load-aware peer
-inference). Existing `sovereign pipeline pod up` invocations route
+inference). Existing `sovereign mesh pod up` invocations route
 to the new controller; old containers still on the join-the-mesh
 pattern keep working until they're rebuilt. No wire-protocol
 breakage for the persistent-peer mesh.
@@ -536,7 +543,7 @@ Risks:
 - TLS pin recovery if seed is lost: same as today's
   "lost-mesh-join-key" recovery — destroy and re-create the pod.
 - Migration period where some operators are still using
-  `pipeline pod up` against old containers: both paths coexist
+  `mesh pod up` against old containers: both paths coexist
   until containers are rebuilt; no flag day.
 
 Loss vs. today's mesh-pod approach:

@@ -458,7 +458,7 @@ async fn continue_truncated_synthesis(
 /// First few distinct chunk titles in rank order — the "what was
 /// pulled" payload for `RetrievalComplete.top_titles`, so the waiting
 /// UI can show the user's own document titles instead of bare counts.
-fn top_passage_titles(chunks: &[corpus_engine::ScoredChunk], cap: usize) -> Vec<String> {
+fn top_passage_titles(chunks: &[corpus_index::types::ScoredChunk], cap: usize) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut out: Vec<String> = Vec::new();
     for c in chunks {
@@ -941,7 +941,7 @@ impl Runtime {
         }
 
         // Prior history only — no working-memory / topic shaping.
-        let scope = self.principal_scope(conversation_id);
+        let scope = self.principal_scope(conversation_id).await;
         let mut context =
             build_context(self.store.as_ref(), conversation_id, message, scope).await?;
 
@@ -961,7 +961,7 @@ impl Runtime {
         // System = minimal assistant preamble + the user's persona
         // (custom instructions) when set. Nothing else.
         let mut system = "You are a helpful assistant.".to_string();
-        if let Some(ci) = self.inference_config.custom_instructions.as_deref() {
+        if let Some(ci) = self.turn_inference_config().custom_instructions.as_deref() {
             let ci = ci.trim();
             if !ci.is_empty() {
                 system.push_str("\n\n");
@@ -1328,13 +1328,13 @@ impl Runtime {
         // THIS turn's channel, read here in the turn's own task — the spawn
         // below does not inherit the task-local it comes from.
         let approval = self.turn_approval();
-        let inference_config = self.inference_config.clone();
+        let inference_config = self.turn_inference_config().into_owned();
         // Tool-Mastery Layer 3 — cloned so the nested
         // post-stream gap-check spawn can write a
         // `tool_decision` outcome note after refinement
         // resolves. Soft-fail when no NoteStore is wired
         // (test harnesses): `record_tool_outcome` no-ops.
-        let notes_for_outcome: Option<Arc<corpus_engine_notes::NoteStore>> =
+        let notes_for_outcome: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>> =
             self.note_store.clone();
         // Cloned into the outer spawn so the post-stream gap-
         // check can emit narration chips that reach the desktop
@@ -1901,6 +1901,7 @@ impl Runtime {
                 hoisted_probe_verdict,
                 gate_entity_anchored,
                 &unavailable_corpora,
+                &gate_question,
             ) {
                 if let Some(rescued) =
                     crate::runtime::gk_rescue::rescue_ood_answer(inference.as_ref(), &gate_question)
@@ -2345,6 +2346,7 @@ impl Runtime {
                     crate::runtime::epistemic::EpistemicInputs {
                         gate_meta: grounding_gate_meta.as_ref(),
                         gate_claims: gate_claims.as_deref(),
+                        answer: Some(&full_text),
                         general_knowledge,
                         demands: demands_for_ledger,
                         gaps,
@@ -2910,10 +2912,10 @@ impl Runtime {
             system_message: Some(kc.system),
             preferred_speed: kc.speed,
             max_tokens: Some(synth_max),
-            temperature: Some(self.inference_config.temperature),
-            think_budget: Some(self.inference_config.think_budget),
+            temperature: Some(self.turn_inference_config().temperature),
+            think_budget: Some(self.turn_inference_config().think_budget),
             structured_output: None,
-            top_k: self.inference_config.top_k,
+            top_k: self.turn_inference_config().top_k,
             top_p: None,
             oicp,
             tools: None,
@@ -2998,7 +3000,7 @@ impl Runtime {
         // handle ride into the spawn for the post-gate transform,
         // metadata, and whisper-once stamping.
         let lessons = kc.lessons;
-        let notes_for_lessons: Option<Arc<corpus_engine_notes::NoteStore>> =
+        let notes_for_lessons: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>> =
             self.note_store.clone();
         // Answerable-context gate for the refusal-retry: only retry a refusal
         // when evidence WAS retrieved (a genuine "no sources" must still be an
@@ -3060,7 +3062,7 @@ impl Runtime {
         let store = Arc::clone(&self.store);
         // THIS turn's channel — read before the spawn, as above.
         let approval = self.turn_approval();
-        let inference_config = self.inference_config.clone();
+        let inference_config = self.turn_inference_config().into_owned();
         // Engine handle for acquisition-route resolution on the
         // post-stream gap-check card (EPISTEMIC_STATE.md §4.3).
         let engine_for_routes = self.corpus_engine.clone();
@@ -3513,6 +3515,7 @@ impl Runtime {
                     crate::runtime::epistemic::EpistemicInputs {
                         gate_meta: grounding_gate_meta.as_ref(),
                         gate_claims: gate_claims.as_deref(),
+                        answer: Some(&full_text),
                         ..crate::runtime::epistemic::EpistemicInputs::over(deep_pool)
                     },
                 )
@@ -3848,7 +3851,7 @@ impl Runtime {
         // fetched by this turn's own post-stream spawns via `current()`.
         let _ = self.post_stream_preemption.begin_turn(conversation_id);
         // 1. Build context.
-        let scope = self.principal_scope(conversation_id);
+        let scope = self.principal_scope(conversation_id).await;
         let mut context =
             build_context(self.store.as_ref(), conversation_id, message, scope).await?;
         tracing::debug!(
@@ -4208,11 +4211,11 @@ impl Runtime {
         // retrieval); KnowledgeQuery's own ground-or-abstain handles the rest, so
         // an over-escalation degrades to a normal grounded answer, never a leak.
         if matches!(intent, Intent::MetalingualQuery)
-            && (crate::runtime::evidence_loop::compute_entity_anchored(
+            && (crate::runtime::anchoring::compute_entity_anchored(
                 message,
                 context.conversation.enabled_corpora.as_deref(),
                 &[],
-            ) || crate::runtime::evidence_loop::question_is_corpus_deictic(message))
+            ) || crate::runtime::anchoring::question_is_corpus_deictic(message))
         {
             tracing::info!(
                 from = ?intent,

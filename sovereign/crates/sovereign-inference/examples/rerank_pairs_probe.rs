@@ -15,8 +15,8 @@
 //! Timing: model load excluded; one warm batch first; then batched and
 //! sequential passes over the 100 chunks, ms/pair = wall / n.
 
-use sovereign_core::model_family::ModelFamily;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::model_family::ModelFamily;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_inference::reranker_standalone::StandaloneReranker;
 use std::env;
 use std::time::Instant;

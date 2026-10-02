@@ -313,7 +313,7 @@ this demo shows the boundary held, not the crossing.
 |---|---|
 | Link grammar as built: token, exp, summary — fragment only | `commonwealth/crates/commonwealth-discovery/src/deep_link.rs:224-238` |
 | A token outside the fragment is not read | `deep_link.rs:243-259` |
-| Page path composed by the minting verb; `/ring/<ns>/`, `/ring/` index | `sovereign/crates/sovereign-cli-llm/src/mesh_guest_link.rs:16-27` |
+| Page path composed by the minting verb; `/ring/<ns>/`, `/ring/` index | `sovereign/crates/sovereign-mesh/src/deep_link.rs:74-84` (`wall_page_base`) |
 | Grant liveness and expiry checked per request | `sovereign/crates/sovereign-daemon/src/client_auth.rs:258-331` |
 | Session handle header; 409 on a lapsed handle | `sovereign/crates/sovereign-daemon/src/routes_guest_session.rs:59`, `client_auth.rs:282-330` |
 | A namespace the grant does not name is refused with a sentence | `sovereign/crates/sovereign-daemon/src/routes_rail.rs:100-117` |

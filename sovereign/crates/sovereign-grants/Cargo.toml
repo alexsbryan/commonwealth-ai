@@ -5,9 +5,13 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
-corpus-engine = { workspace = true }
+kernel-types = { workspace = true }
+oicp-types = { workspace = true }
+corpus-engine-yield = { workspace = true }
+corpus-index = { workspace = true }
+# `ReplicatedKv` for the handoff/processed-shards KV and `ShardTransferLedger`
+# for the one ledger write — the store seam (five-programs fp-94, -53).
+sovereign-contracts = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 dirs = "5"
@@ -22,6 +26,9 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# `IngestPortDouble`: grants' tests drive their own code against ingest's
+# merge port; the merge itself is proven on the engine (phase-b-47).
+corpus-index = { workspace = true, features = ["test-doubles"] }
 
 [lints]
 workspace = true

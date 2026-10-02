@@ -64,6 +64,8 @@ pub(crate) mod text_utils;
 // the pure policy layer, decomposed 2026-06-10 (see prompts.rs).
 mod prompts;
 pub(crate) use self::prompts::*;
+// The prompts' web offers, kept only when the built registry reaches the web.
+mod web_reach;
 
 pub(crate) use self::collaboration::{
     emit_ask_deliberation_chip, run_collaboration, run_post_stream_refinement, ContradictionCheck,
@@ -91,10 +93,9 @@ pub(crate) use self::question_analysis::{
     COARSE_CONVERSATION_LOCATOR_EMBED,
 };
 pub(crate) use self::retrieval_helpers::{
-    apply_cross_corpus_discipline, atlas_grounding_enabled, blend_query_aware,
-    build_per_corpus_k_overrides, build_retrieval_query, collect_hot_corpora,
-    cross_corpus_sort_cmp, drop_no_overlap_chunks, inject_meta_atlas_hits,
-    reweight_by_query_relevance,
+    apply_cross_corpus_discipline, atlas_grounding_enabled, build_per_corpus_k_overrides,
+    build_retrieval_query, collect_hot_corpora, cross_corpus_sort_cmp, drop_no_overlap_chunks,
+    inject_meta_atlas_hits, reweight_by_query_relevance,
 };
 pub use self::types::ATLAS_WALK_META_KEY;
 pub use self::types::{
@@ -114,13 +115,13 @@ pub mod acquisition;
 /// "this host already accepted this turn", so the model-slot queue parks a
 /// continuation instead of shedding it. Nothing branches on it but that.
 mod admission;
+mod anchoring;
 pub mod capabilities;
 mod code_trace;
 mod collaboration;
 mod coverage_first;
 pub mod epistemic;
 mod evidence;
-mod evidence_loop;
 mod gk_rescue;
 pub(crate) mod grounding;
 // The gold-free value-presence primitive — shared by the gate (decides) and the
@@ -205,7 +206,7 @@ pub(crate) mod authority_guard;
 pub mod numeric_audit;
 mod prompt_budget;
 mod question_analysis;
-mod retrieval;
+pub mod retrieval;
 mod retrieval_helpers;
 /// The pipeline's accounting — what a step may do to the pool, what it says
 /// it did, and the invariants between. Public for the same reason
@@ -286,13 +287,13 @@ pub struct Runtime {
     /// coach-A/B dead-turn class, 2026-07-11). See
     /// `collaboration::PostStreamPreemption`.
     pub(crate) post_stream_preemption: collaboration::PostStreamPreemption,
-    pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    pub corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
     /// Optional note store. Populated by the daemon bootstrap; absent
     /// in the chat-CLI path where commitment persistence isn't wired.
     /// Consumed by `handle_commissive_query` to write `kind="commitment"`
     /// and `kind="todo"` notes anchored to `working_memory.current_goal`
     /// (or honestly anchorless when no situated goal is loaded).
-    pub note_store: Option<Arc<corpus_engine_notes::NoteStore>>,
+    pub note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     /// Optional rolling-summary compaction worker. When present,
     /// `end_conversation` notifies it after writing extracted
     /// memories so a conversation that crossed the threshold gets
@@ -456,8 +457,8 @@ pub struct RuntimeParts {
     pub inference_config: InferenceConfig,
     /// The turn's enrichment stack, in one value (Phase 4b).
     pub lane: lane::LaneSources,
-    pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
-    pub note_store: Option<Arc<corpus_engine_notes::NoteStore>>,
+    pub corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
+    pub note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     pub compaction: Option<Arc<crate::memory_compaction::CompactionWorker>>,
     pub mesh_knowledge: Option<Arc<dyn crate::traits::MeshKnowledgeSource>>,
     pub landscape_digests: Option<Arc<dyn crate::traits::LandscapeDigestProvider>>,
@@ -670,7 +671,16 @@ impl Runtime {
 
     /// Resolve this turn's caller into the scope [`build_context`] consumes;
     /// [`PrincipalScope`] carries why an unattributable caller refuses.
-    pub(crate) fn principal_scope(&self, conversation_id: &str) -> PrincipalScope {
+    ///
+    /// Where a resolver is wired the ceiling is read from the corpus registry,
+    /// so the registry is first brought up to the engine: a corpus ingested
+    /// while this host runs is in the very next turn's ceiling, not the next
+    /// boot's (pc-corpus-registry-live).
+    pub(crate) async fn principal_scope(&self, conversation_id: &str) -> PrincipalScope {
+        if let (Some(_), Some(engine)) = (&self.corpus_principal, &self.corpus_engine) {
+            crate::corpus_registry::reconcile_corpus_registry(engine.as_ref(), self.store.as_ref())
+                .await;
+        }
         PrincipalScope::from_resolver(self.corpus_principal.as_deref(), conversation_id)
     }
 
@@ -800,7 +810,10 @@ impl Runtime {
     /// (the field is interior-mutable for exactly this). Idempotent;
     /// overwrites any prior index. A poisoned lock is recovered rather
     /// than panicking — a failed warm must never wedge retrieval.
-    pub fn install_meta_atlas(&self, index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>) {
+    pub fn install_meta_atlas(
+        &self,
+        index: Arc<corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex>,
+    ) {
         self.lane_sources.meta_atlas.store(Some(index));
     }
 
@@ -1042,7 +1055,6 @@ mod enrichment_seam_invariant {
             ("atlas_context", l.atlas_context.is_some()),
             ("wikipedia_graph", l.wikipedia_graph.is_some()),
             ("meta_atlas", l.meta_atlas.load().is_some()),
-            ("bridge", l.bridge.is_some()),
             ("rerank", l.rerank.f.is_some()),
             ("gliner", l.gliner.is_some()),
             ("conv_tiered", l.conv_tiered.is_some()),
@@ -1071,7 +1083,7 @@ mod enrichment_seam_invariant {
     /// silently.
     #[test]
     fn lane_seam_count_is_stable() {
-        assert_eq!(lane_seams(&lane::LaneSources::none()).len(), 7);
+        assert_eq!(lane_seams(&lane::LaneSources::none()).len(), 6);
     }
 
     /// An empty lane reports every seam absent — the instrument reads real
@@ -1092,7 +1104,7 @@ mod enrichment_seam_invariant {
         l.rerank.f = Some(std::sync::Arc::new(|_q: &str, docs: Vec<String>| {
             Box::pin(async move { Ok(vec![0.0_f32; docs.len()]) })
                 as std::pin::Pin<
-                    Box<dyn std::future::Future<Output = corpus_engine::Result<Vec<f32>>> + Send>,
+                    Box<dyn std::future::Future<Output = corpus_index::Result<Vec<f32>>> + Send>,
                 >
         }));
         assert!(lane_seams(&l).iter().any(|(n, p)| *n == "rerank" && *p));
@@ -1107,7 +1119,7 @@ mod enrichment_seam_invariant {
         l.rerank.f = Some(std::sync::Arc::new(|_q: &str, docs: Vec<String>| {
             Box::pin(async move { Ok(vec![0.0_f32; docs.len()]) })
                 as std::pin::Pin<
-                    Box<dyn std::future::Future<Output = corpus_engine::Result<Vec<f32>>> + Send>,
+                    Box<dyn std::future::Future<Output = corpus_index::Result<Vec<f32>>> + Send>,
                 >
         }));
         assert!(l.snapshot().rerank.active(), "snapshot dropped `rerank`");

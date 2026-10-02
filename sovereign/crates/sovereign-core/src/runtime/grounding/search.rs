@@ -21,11 +21,12 @@ use super::super::Runtime;
 /// decisions inside `search_corpus` (kill-switch, kind filter, allow-list
 /// seal, permit ordering, the concurrency bound, the round-robin cap) be
 /// tested against a fake instead of a real `CorpusEngine` with real indexes
-/// (ARCH §5.3, §12.2). Production has one implementor, `CorpusEngine`.
+/// (ARCH §5.3, §12.2). Production derives it from the corpus read port's
+/// list/open half (`corpus_index::source::IndexSource`) — not a second port.
 #[async_trait::async_trait]
 pub(crate) trait SealedIndexSource: Send + Sync {
-    async fn usable(&self) -> corpus_engine::Result<Vec<SealedIndexRef>>;
-    async fn open(&self, path: &Path) -> corpus_engine::Result<Arc<dyn SealedIndex>>;
+    async fn usable(&self) -> corpus_index::Result<Vec<SealedIndexRef>>;
+    async fn open(&self, path: &Path) -> corpus_index::Result<Arc<dyn SealedIndex>>;
 }
 
 /// One opened index: hybrid search, contents only — the searcher never reads
@@ -37,21 +38,23 @@ pub(crate) trait SealedIndex: Send + Sync {
         embedding: &[f32],
         query: &str,
         k: usize,
-    ) -> corpus_engine::Result<Vec<String>>;
+    ) -> corpus_index::Result<Vec<String>>;
 }
 
 /// The three facts about an index the searcher decides on.
 #[derive(Debug, Clone)]
 pub(crate) struct SealedIndexRef {
     pub corpus_id: String,
-    pub kind: corpus_engine::CorpusKind,
+    pub kind: corpus_index::types::CorpusKind,
     pub path: PathBuf,
 }
 
+/// Over `Arc<T>` so an `Arc<dyn CorpusReadPort>` wraps without a newtype.
 #[async_trait::async_trait]
-impl SealedIndexSource for corpus_engine::CorpusEngine {
-    async fn usable(&self) -> corpus_engine::Result<Vec<SealedIndexRef>> {
+impl<T: corpus_index::source::IndexSource + ?Sized> SealedIndexSource for Arc<T> {
+    async fn usable(&self) -> corpus_index::Result<Vec<SealedIndexRef>> {
         Ok(self
+            .as_ref()
             .usable_indexes()
             .await?
             .into_iter()
@@ -63,21 +66,21 @@ impl SealedIndexSource for corpus_engine::CorpusEngine {
             .collect())
     }
 
-    async fn open(&self, path: &Path) -> corpus_engine::Result<Arc<dyn SealedIndex>> {
+    async fn open(&self, path: &Path) -> corpus_index::Result<Arc<dyn SealedIndex>> {
         Ok(Arc::new(self.open_index(path).await?))
     }
 }
 
 #[async_trait::async_trait]
-impl SealedIndex for corpus_engine::CorpusIndex {
+impl SealedIndex for corpus_index::index::CorpusIndex {
     async fn search(
         &self,
         embedding: &[f32],
         query: &str,
         k: usize,
-    ) -> corpus_engine::Result<Vec<String>> {
+    ) -> corpus_index::Result<Vec<String>> {
         Ok(
-            corpus_engine::CorpusIndex::search(self, embedding, query, k)
+            corpus_index::index::CorpusIndex::search(self, embedding, query, k)
                 .await?
                 .into_iter()
                 .map(|c| c.content)
@@ -211,7 +214,7 @@ impl Runtime {
     pub(crate) fn claim_searcher(
         &self,
         enabled_corpora: Option<&[String]>,
-        chunks: &[corpus_engine::ScoredChunk],
+        chunks: &[corpus_index::types::ScoredChunk],
     ) -> ClaimSearcher {
         let allowed: Vec<String> = match enabled_corpora {
             Some(ids) if !ids.is_empty() => ids.to_vec(),
@@ -231,7 +234,7 @@ impl Runtime {
             engine: self
                 .corpus_engine
                 .clone()
-                .map(|e| e as Arc<dyn SealedIndexSource>),
+                .map(|e| Arc::new(e) as Arc<dyn SealedIndexSource>),
             allowed_corpora: allowed,
             pinned: Vec::new(),
         }
@@ -409,7 +412,8 @@ impl ClaimSearcher {
         for info in indexes {
             if !matches!(
                 info.kind,
-                corpus_engine::CorpusKind::Knowledge | corpus_engine::CorpusKind::Catalog
+                corpus_index::types::CorpusKind::Knowledge
+                    | corpus_index::types::CorpusKind::Catalog
             ) {
                 continue;
             }
@@ -574,7 +578,7 @@ mod tests {
                 corpora: (0..n)
                     .map(|i| SealedIndexRef {
                         corpus_id: format!("c{i}"),
-                        kind: corpus_engine::CorpusKind::Knowledge,
+                        kind: corpus_index::types::CorpusKind::Knowledge,
                         path: PathBuf::from(format!("/fake/c{i}")),
                     })
                     .collect(),
@@ -601,10 +605,10 @@ mod tests {
 
     #[async_trait::async_trait]
     impl SealedIndexSource for FakeSource {
-        async fn usable(&self) -> corpus_engine::Result<Vec<SealedIndexRef>> {
+        async fn usable(&self) -> corpus_index::Result<Vec<SealedIndexRef>> {
             Ok(self.corpora.clone())
         }
-        async fn open(&self, path: &Path) -> corpus_engine::Result<Arc<dyn SealedIndex>> {
+        async fn open(&self, path: &Path) -> corpus_index::Result<Arc<dyn SealedIndex>> {
             self.opens.fetch_add(1, SeqCst);
             let cur = self.in_flight.fetch_add(1, SeqCst) + 1;
             self.peak.fetch_max(cur, SeqCst);
@@ -622,7 +626,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl SealedIndex for FakeIndex {
-        async fn search(&self, _: &[f32], _: &str, k: usize) -> corpus_engine::Result<Vec<String>> {
+        async fn search(&self, _: &[f32], _: &str, k: usize) -> corpus_index::Result<Vec<String>> {
             Ok((0..self.hits.min(k))
                 .map(|r| format!("{}#{r}", self.corpus_id))
                 .collect())
@@ -691,7 +695,7 @@ mod tests {
     #[tokio::test]
     async fn non_knowledge_indexes_are_never_opened() {
         let mut src = FakeSource::knowledge(2, 0, 1);
-        Arc::get_mut(&mut src).unwrap().corpora[1].kind = corpus_engine::CorpusKind::Code;
+        Arc::get_mut(&mut src).unwrap().corpora[1].kind = corpus_index::types::CorpusKind::Code;
         let out = searcher(Arc::clone(&src), &["c0", "c1"])
             .search_corpus("x")
             .await;

@@ -17,13 +17,13 @@
 //!
 //! | What | Whose |
 //! |---|---|
-//! | reading the summary rows | `corpus_engine::scan_raptor_summaries` |
-//! | `conv_uuid` → article title | `corpus_engine::raptor_article_title` |
-//! | title → per-article atlas id | `ground::candidate_atlas_ids` |
+//! | reading the summary rows | ingest's `AtlasPort::scan_raptor_summaries` |
+//! | `conv_uuid` → article title | ingest's `AtlasPort::raptor_article_title` |
+//! | title → per-article atlas id | `sovereign_core::…atlas_grounding::candidate_atlas_ids` |
 //! | the tree (children, evidence chunks) | `RaptorCheckpointHandle::load_all_nodes` |
-//! | writing atoms + edges | `atlas::write_atlas_edges` + `write_atlas_atoms` |
+//! | writing atoms + edges | `AtlasPort::write_atlas_edges` + `write_atlas_atoms` |
 //! | the seed row | `AnnSeedTable::append_rows` |
-//! | which kinds the table seeds | `seed_population::seed_population` |
+//! | which kinds the table seeds | `AtlasPort::write_population_marker` |
 //!
 //! ## The tree is mostly gone, and that is REPORTED, not defaulted
 //!
@@ -55,18 +55,14 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::atlas::ann_store::{ann_table_dir, AnnSeedTable};
-use corpus_engine::enrichment::atlas::atoms::{
-    AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef, Summary,
-};
-use corpus_engine::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
-use corpus_engine::enrichment::atlas::ground::candidate_atlas_ids;
-use corpus_engine::enrichment::atlas::seed_population::{seed_population, write_population_marker};
-use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_edges, write_atlas_atoms, write_atlas_edges,
-};
-use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
-use corpus_engine::{raptor_article_title, scan_raptor_summaries};
+use corpus_engine_atlas_reader::ann_store::{ann_table_dir, AnnSeedTable};
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_engine_atlas_reader::raptor_read::RaptorSummaryRow;
+use sovereign_core::runtime::retrieval::atlas_grounding::candidate_atlas_ids;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef, Summary};
+use understanding_vocab::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges};
+use understanding_vocab::taxonomy::EnrichmentDepth;
 
 use crate::raptor_checkpoint::RaptorCheckpointHandle;
 
@@ -217,13 +213,15 @@ fn load_tree(corpus_dir: &Path) -> BTreeMap<String, (Vec<u32>, Vec<String>)> {
 /// (ARCH §10.6) and the cosine sample this order carries is what proves the
 /// two agree.
 pub async fn write_summary_atoms(
+    atlas: &dyn AtlasPort,
     index_root: &Path,
     corpus_id: &str,
 ) -> Result<SummaryProjection, String> {
     let corpus_dir = index_root.join(corpus_id);
     let mut report = SummaryProjection::default();
 
-    let rows = scan_raptor_summaries(&corpus_dir)
+    let rows = atlas
+        .scan_raptor_summaries(&corpus_dir)
         .await
         .map_err(|e| format!("read raptor_summaries.lance({corpus_id}): {e}"))?;
     report.rows_read = rows.len();
@@ -288,9 +286,9 @@ pub async fn write_summary_atoms(
     // self-hosted, and grouping by article would then rewrite that same
     // growing file once per article — 284 rebuilds of one table on the ei-7a
     // subset fixture, each larger than the last.
-    let mut by_atlas: BTreeMap<PathBuf, Vec<corpus_engine::RaptorSummaryRow>> = BTreeMap::new();
+    let mut by_atlas: BTreeMap<PathBuf, Vec<RaptorSummaryRow>> = BTreeMap::new();
     for row in rows {
-        let title = raptor_article_title(&row.conv_uuid);
+        let title = atlas.raptor_article_title(&row.conv_uuid);
         match atlas_dir_for(index_root, corpus_id, &title) {
             Some(dir) => by_atlas.entry(dir).or_default().push(row),
             None => report.unresolved_article += 1,
@@ -471,13 +469,15 @@ pub async fn write_summary_atoms(
         // Edges FIRST: `write_atlas_atoms` rebuilds `atoms.lance` from the
         // atoms it is handed and the edges it reads back off disk, so the
         // other order would build the store without the new `Composes` edges.
-        write_atlas_edges(&atlas_dir, &edges_file)
+        atlas
+            .write_atlas_edges(&atlas_dir, &edges_file)
             .map_err(|e| format!("write edges to {}: {e}", atlas_dir.display()))?;
-        write_atlas_atoms(
-            &atlas_dir,
-            &AtomsFile::from_atoms(existing.schema_version.clone(), merged),
-        )
-        .map_err(|e| format!("write atoms to {}: {e}", atlas_dir.display()))?;
+        atlas
+            .write_atlas_atoms(
+                &atlas_dir,
+                &AtomsFile::from_atoms(existing.schema_version.clone(), merged),
+            )
+            .map_err(|e| format!("write atoms to {}: {e}", atlas_dir.display()))?;
 
         if !seeds.is_empty() {
             match AnnSeedTable::append_rows(&ann_table_dir(&atlas_dir), &seeds).await {
@@ -502,7 +502,7 @@ pub async fn write_summary_atoms(
         // daemon's backfill through `build_persistent_ann_seed_table`, which
         // REPLACES the table and would delete the rows just appended. Stamping
         // it here is what makes the append durable.
-        if let Err(e) = write_population_marker(&atlas_dir, &seed_population(&atlas_dir)) {
+        if let Err(e) = atlas.write_population_marker(&atlas_dir) {
             report.degradations.push(format!(
                 "{}: population marker not written ({e}) — the next backfill will \
                  rebuild this seed table and drop the appended Summary rows",

@@ -44,10 +44,10 @@ const PROBE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 /// the daemon can answer at all:
 ///
 /// * the service manager's own relaunch delay — launchd `ThrottleInterval`
-///   10s (`contrib/launchd/com.svrnmesh.daemon.plist`, the KeepAlive note),
-///   systemd `RestartSec=10` (`contrib/systemd/svrnmesh.service`), and
+///   10s (`sovereign-service/data/launchd/com.svrnmesh.daemon.plist`, KeepAlive),
+///   systemd `RestartSec=10` (`sovereign-service/data/systemd/svrnmesh.service`), and
 ///   Task Scheduler `RestartOnFailure/Interval` `PT1M`
-///   (`contrib/windows/SvrnmeshDaemon.xml`, whose minimum IS one minute).
+///   (`sovereign-service/data/windows/SvrnmeshDaemon.xml`, min IS one minute).
 ///   Worst case across the three: 60s.
 /// * the daemon's own readiness budget — 120s by default
 ///   (`sovereign-cli-daemon` `daemon_cmd/lifecycle.rs::parse_ready_timeout`,

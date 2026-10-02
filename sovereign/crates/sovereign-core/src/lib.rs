@@ -2,7 +2,7 @@
 // The atlas traversal surface is corpus-engine's — it imports nothing from
 // sovereign — and moved there in noun-convergence rung 6. Re-exported at its
 // historical path so every `sovereign_core::atlas_context::*` import stands.
-pub use corpus_engine::enrichment::atlas::context as atlas_context;
+pub use corpus_engine_atlas_reader::context as atlas_context;
 pub mod answering;
 pub mod approval_desk;
 pub mod context;
@@ -10,18 +10,19 @@ pub mod conv_briefing;
 pub mod conv_entity_graph;
 pub mod conv_frame;
 pub mod conv_tiered;
+pub mod corpus_registry;
 pub mod dossier;
-pub mod embed_fn;
+// `embed_fn` — the one InferenceProvider->EmbedFn adapter — lives in
+// `corpus-index` beside `types::EmbedFn` (fp-5); re-exported at its
+// historical path.
+pub use corpus_index::embed_fn;
 pub mod executor;
-pub mod guest_link;
 pub mod health_monitor;
 pub mod insight;
 pub mod memory;
 pub mod memory_compaction;
-pub mod mesh_measurements;
-pub use sovereign_contracts::mobile_host;
 pub use sovereign_contracts::model_family;
-pub mod models_manifest;
+pub use sovereign_contracts::models_manifest;
 pub mod quote_verification;
 pub use oicp_types as oicp;
 pub mod archive_classifier;
@@ -49,7 +50,6 @@ pub mod router_drift;
 pub mod router_embed;
 pub mod router_embed_cache;
 pub mod router_instruction;
-pub mod run_identity;
 pub mod runtime;
 pub mod scope_classifier;
 pub mod searched_sources;
@@ -119,18 +119,21 @@ pub use sovereign_contracts::self_claims;
 // that a contracts module is reachable at its `sovereign_core::` path.
 pub use sovereign_contracts::peer;
 
-// The middleware seam, at `sovereign_core::middleware`. Added 2026-09-16 for
-// `sovereign-api` and `sovereign-atos`, which name `Middleware`,
-// `PipelineContext`, `MiddlewareSession`, `MiddlewareError`, `ResponseView` and
-// the `ArtifactDelta` payload the session carries (domains
+// The agent-notes port and its DTOs, at `sovereign_core::{notes, recipe}`.
+// Added for `sovereign-store`, whose `SqliteStateStore` implements
+// `AgentNotes` and `RecipeNotes` over svrn's memory notes (phase-b
+// pb-notes-memory). Same fan-in rule as `peer` above: a contracts module is
+// reachable at its `sovereign_core::` path, at no new edge.
+pub use sovereign_contracts::{notes, recipe};
+
+// The middleware seam, at `sovereign_core::middleware` (domains
 // `REVIEW-build-middleware-seam`). The seam lives in `sovereign-contracts`
 // because the Workspace decision extractor's home (`corpus-engine-notes`) may
 // name only that one sovereign crate (`quality/DAEMON_CORE.md` §4.2 "Risks
-// carried"); naming it directly from `sovereign-api`/`sovereign-atos` would
-// grow that crate's fan-in and `cargo xtask layer-gate` refuses it — the same
-// refusal the `identity` block above records — while this re-export costs no
-// new edge, following the rule that a contracts module is reachable at its
-// `sovereign_core::` path.
+// carried"); naming it directly would grow that crate's fan-in and
+// `cargo xtask layer-gate` refuses it — the same refusal the `identity`
+// block above records — while this re-export costs no new edge, following
+// the rule that a contracts module is reachable at its `sovereign_core::` path.
 pub use sovereign_contracts::middleware;
 
 // Re-export commonly used items at the crate root.

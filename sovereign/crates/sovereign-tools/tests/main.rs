@@ -18,34 +18,29 @@
 //! need process isolation, or a `.config/nextest.toml` override keys on
 //! their binary name. Do not fold those in.
 
-#[path = "main/brief_fixtures.rs"]
-mod brief_fixtures;
+#[path = "main/atlas_step_reachability.rs"]
+mod atlas_step_reachability;
 #[path = "main/corpus_store_readiness.rs"]
 mod corpus_store_readiness;
 #[path = "main/delegate_browser_worker.rs"]
 mod delegate_browser_worker;
 #[path = "main/duckduckgo_real_e2e.rs"]
 mod duckduckgo_real_e2e;
-#[path = "main/e2e_code_intel.rs"]
-mod e2e_code_intel;
 #[path = "main/enrichment_health_e2e.rs"]
 mod enrichment_health_e2e;
 #[path = "main/knowledge_view_e2e.rs"]
 mod knowledge_view_e2e;
 #[path = "main/local_corpus_e2e.rs"]
 mod local_corpus_e2e;
-#[path = "main/mcp_surface_e2e.rs"]
-mod mcp_surface_e2e;
+mod local_corpus_port_double {
+    pub use corpus_index::ingest_port::double::leaf_backed_double;
+}
 #[path = "main/obsidian_live_sync_e2e.rs"]
 mod obsidian_live_sync_e2e;
 #[path = "main/playwright_actuator.rs"]
 mod playwright_actuator;
 #[path = "main/rag_tests.rs"]
 mod rag_tests;
-#[path = "main/recipe_author_tools.rs"]
-mod recipe_author_tools;
-#[path = "main/recipe_schema.rs"]
-mod recipe_schema;
 #[path = "main/smoke_tests.rs"]
 mod smoke_tests;
 #[path = "main/tavily_real_e2e.rs"]
@@ -54,5 +49,7 @@ mod tavily_real_e2e;
 mod tier2_resume_gate;
 #[path = "main/tool_tests.rs"]
 mod tool_tests;
+#[path = "main/turn_foreground_lease.rs"]
+mod turn_foreground_lease;
 #[path = "main/watched_folder_e2e.rs"]
 mod watched_folder_e2e;

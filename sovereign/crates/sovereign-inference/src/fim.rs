@@ -33,7 +33,7 @@
 // `sovereign_inference::fim::<Item>` stays valid for every caller.
 pub use sovereign_contracts::fim::*;
 
-use sovereign_core::types::FimStyle;
+use sovereign_contracts::types::FimStyle;
 
 use crate::llama::cpp::model::{AddBos, LlamaModel};
 

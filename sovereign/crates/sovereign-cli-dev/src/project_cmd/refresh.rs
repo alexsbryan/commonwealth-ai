@@ -7,14 +7,14 @@
 
 use super::*;
 
-const HELP_REFRESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_REFRESH: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn project refresh",
     summary: "Re-export the SCIP call graph + rebuild the LanceDB index when embeddings are stale.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn project refresh [--quiet] [--rebuild-index]",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             (
                 "--quiet",
                 "Suppress progress output (use from hook scripts)",
@@ -25,7 +25,7 @@ const HELP_REFRESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
                  even when the on-disk embed model matches the current daemon.",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Runs automatically on commit via the installed hook (SCIP only; the hook does \
              NOT force a LanceDB rebuild). The nudge path VERIFIES the rebuild completes: \
              it reports a named failure when the export cannot finish (never a silent no-op) \
@@ -40,8 +40,8 @@ const HELP_REFRESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
 // ─── Refresh ─────────────────────────────────────────────────
 
 pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_REFRESH);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_REFRESH);
         return 0;
     }
     let mut quiet = false;
@@ -219,7 +219,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
     let repo_root = match &explicit_name {
         None => repo_root,
         Some(name) => {
-            let registry = match sovereign_mesh::projects::Registry::load() {
+            let registry = match corpus_engine_watchers::projects::Registry::load() {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("  error: could not read the project registry: {e}");
@@ -684,7 +684,7 @@ async fn maybe_rebuild_lancedb_corpus(
     quiet: bool,
 ) -> i32 {
     let meta_path = data_dir.join(corpus_id).join("_corpus_meta.json");
-    let current_embed_stem = sovereign_core::setup_config::SetupConfig::load()
+    let current_embed_stem = sovereign_contracts::setup_config::SetupConfig::load()
         .ok()
         .and_then(|c| c.embed_model_stem());
 
@@ -705,8 +705,7 @@ async fn maybe_rebuild_lancedb_corpus(
         eprintln!();
         eprintln!("  Rebuilding LanceDB corpus index: {reason}");
     }
-    match sovereign_cli_shared::code_index::rebuild_code_corpus(abs_repo, corpus_id, data_dir).await
-    {
+    match crate::code_index::rebuild_code_corpus(abs_repo, corpus_id, data_dir, false).await {
         Ok(stats) => {
             if !quiet {
                 eprintln!(

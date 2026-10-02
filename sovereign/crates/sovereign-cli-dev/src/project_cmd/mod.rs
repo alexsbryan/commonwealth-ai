@@ -9,10 +9,6 @@
 use std::io::{self, BufRead as _, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
-
-use arc_swap::ArcSwap;
-use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
 
 // ─── Command submodules (god-file breakup — see quality/CLEANUP.md) ───
 mod audit;
@@ -25,29 +21,31 @@ pub(crate) mod charter_amend;
 pub(crate) use charter_amend::{cmd_amend, cmd_charter};
 mod hooks;
 use hooks::cmd_install_hooks;
+pub(crate) mod mcp_host;
 mod serve;
 pub(crate) use serve::cmd_serve;
 mod refresh;
 pub(crate) use refresh::cmd_refresh;
-mod design_plan;
-pub(crate) use design_plan::{cmd_design, cmd_plan};
 // `init` + `scaffold` moved to `sovereign-cli::project_init` (2026-08-07) —
 // `svrn init` and `svrn project init` are served by the shipped dispatcher
-// now, so this binary is never asked for them.
+// now, so this binary is never asked for them. Init's project-model step is
+// still this program's: it execs the two arms in `observe` (pb-code-cli-base).
+mod observe;
+pub(crate) use observe::{cmd_lifecycle, cmd_observe};
 
 /// Human-readable identifier for the embed model this user has set up,
-/// used as the `expected_embedding_model` on the `CorpusEngine` so the
+/// used as the `expected_embedding_model` on the index source so the
 /// log line and `_corpus_meta.json` reflect what they actually loaded
 /// (e.g. `qwen3-embedding-0.6b-q8_0`) instead of the engine's default.
 ///
 /// Sources `SetupConfig::load()` and falls back to the default when
 /// the user hasn't run `svrn setup` yet (in which case the
 /// engine's default is harmless — code indexes are FTS-only).
-// Moved to `sovereign_cli_shared::models` (2026-08-07): `project init` now
+// Moved to `sovereign_cli_shared::models` (2026-08-07; its home is `sovereign_cli_base::models` since pb-code-cli-base): `project init` now
 // stamps the same label from the shipped dispatcher, and the two binaries must
 // agree on the embed model's name or a corpus's metadata contradicts the
 // daemon that built it.
-use sovereign_cli_shared::models::configured_embed_model_name;
+use sovereign_cli_base::models::configured_embed_model_name;
 
 // ─── Dispatch ────────────────────────────────────────────────
 
@@ -56,11 +54,11 @@ pub async fn run_project(args: &[String]) -> i32 {
     // Specific sub-subcommand help (e.g. `project init --help`) is
     // handled inside each cmd_* function via `util::help::wants_help`.
     if args.is_empty() {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 1;
     }
     if matches!(args[0].as_str(), "--help" | "-h" | "help") {
-        sovereign_cli_shared::help::print(&HELP);
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
 
@@ -70,21 +68,15 @@ pub async fn run_project(args: &[String]) -> i32 {
     // and forward to the same handler the new top-level arm uses,
     // so behaviour is identical modulo the banner. Suppress with
     // SOVEREIGN_QUIET_DEPRECATIONS=1.
-    use sovereign_cli_shared::deprecation::announce;
+    use sovereign_cli_base::deprecation::announce;
+    if let Some(code) = sovereign_cli_base::deprecation::refuse_retired(&["project"], args) {
+        return code;
+    }
     match args[0].as_str() {
-        "design" => {
-            announce("svrn project design", "svrn design");
-            cmd_design(&args[1..]).await
-        }
-        "plan" => {
-            announce("svrn project plan", "svrn plan");
-            cmd_plan(&args[1..]).await
-        }
         "charter" => {
             announce("svrn project charter", "svrn charter");
             cmd_charter(&args[1..]).await
         }
-        "found" => cmd_found(&args[1..]).await,
         "amend" => {
             announce("svrn project amend", "svrn amend");
             cmd_amend(&args[1..]).await
@@ -109,24 +101,22 @@ pub async fn run_project(args: &[String]) -> i32 {
         "install-hooks" => cmd_install_hooks(&args[1..]).await,
         other => {
             eprintln!("Unknown project subcommand: {other}");
-            sovereign_cli_shared::help::print(&HELP);
+            sovereign_cli_base::help::print(&HELP);
             1
         }
     }
 }
 
-const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn project",
     summary: "Per-project code intelligence: indexes, call graphs, and the MCP tool server.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn project <subcommand> [flags]"),
-        sovereign_cli_shared::help::HelpSection::Subcommands(&[
+        sovereign_cli_base::help::HelpSection::Usage("svrn project <subcommand> [flags]"),
+        sovereign_cli_base::help::HelpSection::Subcommands(&[
             // `init` is absent on purpose: it ships in the dispatcher
             // (`svrn init` / `svrn project init`) and never reaches this
             // binary, so listing it here would advertise a verb we'd reject.
-            ("design",         "Agent-collaborative DESIGN.md session (opencode-first). --solo to skip the agent"),
-            ("plan",           "Compose IMPLEMENTATION_PLAN.md from DESIGN.md + OPEN_QUESTIONS.md; indexes plan items in .sovereign/plan.db"),
-            ("charter",        "Write / edit the free-form team CHARTER.md (governance, culture, onboarding); separate from DESIGN.md"),
+            ("charter",        "Write / edit the free-form team CHARTER.md (governance, culture, onboarding)"),
             ("found",          "Once per project: structured conversation that produces CHARTER.md + PHASES.md"),
             ("amend",          "Edit CHARTER.md with an adversarial review — every amendment logs who, why, and what was argued against"),
             ("phase",          "phase status | phase pass [N] — track PHASES.md progression, run stop conditions, write phase-N.md"),
@@ -140,16 +130,16 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ("watch",          "Inspect or control watchers: `watch status | restart | logs`"),
             ("install-hooks",  "Deprecated — the daemon now owns freshness; prints migration hint"),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Run `svrn project <subcommand> --help` for subcommand-specific flags.",
         ),
     ],
 };
 
-const HELP_STATUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP_STATUS: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn project status",
     summary: "Show the status of code intelligence for the current project.",
-    sections: &[sovereign_cli_shared::help::HelpSection::Usage(
+    sections: &[sovereign_cli_base::help::HelpSection::Usage(
         "svrn project status",
     )],
 };
@@ -157,8 +147,8 @@ const HELP_STATUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
 // ─── Status ──────────────────────────────────────────────────
 
 pub(crate) async fn cmd_status(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP_STATUS);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP_STATUS);
         return 0;
     }
     let mut data_dir: Option<PathBuf> = None;
@@ -207,7 +197,7 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     // Index
     let index_path = data_dir.join(&corpus_id);
     if index_path.exists() {
-        match corpus_engine::CorpusIndex::open(&index_path).await {
+        match corpus_index::index::CorpusIndex::open(&index_path).await {
             Ok(idx) => match idx.info().await {
                 Ok(info) => {
                     let age = format_age(info.last_updated);
@@ -288,7 +278,7 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     // both reporting ✓ on a repo that had been unregistered since June.
     // Same failure the lint/test surface fixed with `watcher.live` /
     // `watcher_down`; the code-intel surface never got it.
-    match sovereign_mesh::projects::Registry::load() {
+    match corpus_engine_watchers::projects::Registry::load() {
         Ok(registry) => match registry.entries().iter().find(|e| e.corpus_id == corpus_id) {
             Some(entry) if entry.root == repo_root => {
                 let mut on: Vec<&str> = Vec::new();
@@ -403,23 +393,9 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     0
 }
 
-// `MergedGraphSummary`, `load_merged_graph`, and `snapshot_graph_mtimes`
-// moved to `sovereign-cli-shared::scip` so the new `sovereign-cli-atos`
-// binary can share one implementation with `tools_cmd::registry`. The
-// re-exports below preserve the prior `crate::project_cmd::…` call sites.
-pub(crate) use sovereign_cli_shared::scip::{load_merged_graph, snapshot_graph_mtimes};
-
-// `--orchestrate` (which sequenced DESIGN.md + CHARTER.md +
-// IMPLEMENTATION_PLAN.md + PHASES.md composition) is retired in
-// favour of the explicit `svrn design` / `svrn charter`
-// / `svrn plan` triad.
-async fn cmd_found(_args: &[String]) -> i32 {
-    sovereign_cli_shared::deprecation::announce_retired(
-        "svrn project found",
-        "Founding is implicit now: `svrn init` + a committed          spec is sufficient. Use `svrn charter` if you want          to define team conventions, or `svrn plan` to write          PHASES.md from a design doc.",
-    );
-    0
-}
+// `load_merged_graph` is `corpus_engine_scip::merged_graph`'s (the
+// `sovereign-cli-shared::scip` re-export went with pb-code-cli-base); the code tools load it lazily through
+// `sovereign_code::LazyScipGraph` (phase-b pb-code-freshness).
 
 fn git_committer_identity_for_amend(repo_root: &Path) -> Option<String> {
     let name = std::process::Command::new("git")
@@ -468,7 +444,7 @@ fn derive_project_id(repo_root: &Path) -> String {
         .to_string()
 }
 
-use sovereign_core::time::unix_now as unix_now_secs;
+use sovereign_time::unix_now as unix_now_secs;
 
 // ─── Observation report (M6.1) ──────────────────────────────
 //
@@ -481,7 +457,7 @@ use sovereign_core::time::unix_now as unix_now_secs;
 // ─── Git helpers ─────────────────────────────────────────────
 // Implementations moved to `sovereign-cli-shared::repo`; re-exported
 // for in-crate callers that reference `project_cmd::find_*`.
-pub(crate) use sovereign_cli_shared::repo::{find_repo_root, find_sovereign_dir};
+pub(crate) use sovereign_cli_base::repo::{find_repo_root, find_sovereign_dir};
 
 /// Base URL the CLI uses to talk to the local daemon.
 ///
@@ -494,7 +470,7 @@ pub(crate) use sovereign_cli_shared::repo::{find_repo_root, find_sovereign_dir};
 /// way; this side simply had not been updated. Found 2026-07-28 by the
 /// journey harness's sandbox, which runs its daemon on :19741.
 fn daemon_base() -> String {
-    let port = sovereign_core::setup_config::SetupConfig::load()
+    let port = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741);
     format!("http://127.0.0.1:{port}")
@@ -540,7 +516,10 @@ pub(crate) async fn daemon_get(path: &str) -> Result<serde_json::Value, String> 
     Ok(body)
 }
 
-async fn daemon_post(path: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) async fn daemon_post(
+    path: &str,
+    body: serde_json::Value,
+) -> Result<serde_json::Value, String> {
     let url = format!("{}{path}", daemon_base());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
@@ -565,7 +544,8 @@ async fn daemon_post(path: &str, body: serde_json::Value) -> Result<serde_json::
 
 /// Cheap TCP + `GET /v1/models` probe. Matches what the desktop's
 /// bootstrap does (see `sovereign-desktop/src-tauri/src/bootstrap.rs`).
-/// Used by `cmd_serve` to decide whether to refuse the legacy path.
+/// Used by `svrn serve --background` (the `project-daemon-is-running` arm)
+/// to skip spawning a server the daemon already stands in for.
 pub(crate) async fn daemon_is_running() -> bool {
     let tcp = tokio::time::timeout(
         std::time::Duration::from_secs(1),
@@ -597,10 +577,10 @@ pub(crate) async fn daemon_is_running() -> bool {
 /// found. If the hook file contains both sovereign content and
 /// other content, we leave it alone — the user is expected to
 /// clean it up manually.
-// Moved to `sovereign_cli_shared::repo` (2026-08-07). `project init` (shipped
+// Moved to `sovereign_cli_shared::repo` (2026-08-07; its home is `sovereign_cli_base::repo` since pb-code-cli-base). `project init` (shipped
 // dispatcher) removes legacy hooks and `project install-hooks` (here) writes
 // them, so the marker they agree on cannot live in one binary.
-pub(crate) use sovereign_cli_shared::repo::{remove_legacy_hook, SOVEREIGN_HOOK_MARKER};
+pub(crate) use sovereign_cli_base::repo::{remove_legacy_hook, SOVEREIGN_HOOK_MARKER};
 
 // ─── Git hooks (deprecated installer — kept for migration tests only) ──
 //
@@ -618,16 +598,16 @@ pub(crate) use sovereign_cli_shared::repo::{remove_legacy_hook, SOVEREIGN_HOOK_M
 // real user with a legacy hook installed by an older binary.
 // ─── MCP check ───────────────────────────────────────────────
 
-// Moved to `sovereign_cli_shared::mcp_client` (2026-08-07) alongside
+// Moved to `sovereign_cli_shared::mcp_client` (2026-08-07; its home is `sovereign_cli_base::mcp_client` since pb-code-cli-base) alongside
 // `remove_legacy_hook` — `project init` probes the same endpoint at the tail
 // of its run, from the other binary.
-use sovereign_cli_shared::mcp_client::check_mcp_server;
+use sovereign_cli_base::mcp_client::check_mcp_server;
 
 // ─── Helpers ─────────────────────────────────────────────────
 
 // `default_data_dir` lives in `sovereign-cli-shared::dirs`; re-exported
 // for `crate::project_cmd::default_data_dir` callers.
-pub(crate) use sovereign_cli_shared::dirs::default_data_dir;
+pub(crate) use sovereign_cli_base::dirs::default_data_dir;
 
 fn tempfile_dir() -> std::io::Result<PathBuf> {
     let base = std::env::temp_dir();
@@ -667,26 +647,5 @@ fn format_age(unix_ts: u64) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── git hook helpers ─────────────────────────────────────────
-
-    #[tokio::test]
-    async fn snapshot_graph_mtimes_tracks_files() {
-        let tmp = tempfile::tempdir().unwrap();
-        let corpus_dir = tmp.path().join("test-corpus");
-        std::fs::create_dir(&corpus_dir).unwrap();
-        let graph_path = corpus_dir.join("scip_graph.db");
-        std::fs::write(&graph_path, b"stub").unwrap();
-
-        let snap = snapshot_graph_mtimes(tmp.path());
-        assert_eq!(snap.len(), 1);
-        assert!(snap.contains_key(&graph_path));
-
-        // Empty dir → empty snapshot.
-        let empty_tmp = tempfile::tempdir().unwrap();
-        let empty_snap = snapshot_graph_mtimes(empty_tmp.path());
-        assert!(empty_snap.is_empty());
-    }
-}
+#[path = "retired_tests.rs"]
+mod retired_tests;

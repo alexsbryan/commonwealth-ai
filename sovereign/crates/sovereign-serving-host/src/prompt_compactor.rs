@@ -320,6 +320,8 @@ mod tests {
             evidence_id_allowlist: None,
             lark_grammar: None,
             stable_prefix_len: None,
+            top_k: None,
+            turn_admission: None,
         }
     }
 

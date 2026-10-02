@@ -27,7 +27,7 @@
 # penalised for correctly reading the text. The scoping must live in the SOURCE
 # DOCUMENT, not in a flag, because the weekly `--rebuild` tier shells
 # `svrn enrich build <corpus_id>` with no chapter selection
-# (sovereign-cli-llm/src/bench_cmd/all.rs::rebuild_corpus).
+# (sovereign-cli-bench/src/bench_cmd/all.rs::rebuild_corpus).
 #
 # Usage:  scripts/setup-literary-corpus.sh [--bin <cli>] [--verify-only] [--mirror-recipe]
 

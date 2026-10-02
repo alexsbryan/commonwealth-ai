@@ -11,7 +11,7 @@
 //!
 //! # What is here and what is not
 //!
-//! No walk logic is here. The walk is `corpus_engine::enrichment::atlas::
+//! No walk logic is here. The walk is `corpus_engine_atlas_reader::
 //! ground`, the same function `sovereign-core`'s `apply_atlas_grounding`
 //! calls; this file supplies the two fetches ([`IndexEvidenceFetcher`]) and
 //! the rendering. That is the whole point of ei-4: one walk, two hosts. A
@@ -28,11 +28,11 @@
 //! result body and a field in `structuredContent`. A caller must never have to
 //! infer from a short list that something was missing (§18.3).
 
-use corpus_engine::enrichment::atlas::ground::{Degradation, Grounding, MapNode};
-use corpus_engine::enrichment::atlas::{EvidenceFetcher, ResolvedChunk};
-use corpus_engine::CorpusId;
+use corpus_engine_atlas_reader::ground::{Degradation, Grounding, MapNode};
+use corpus_engine_atlas_reader::resolve::{EvidenceFetcher, ResolvedChunk};
 use corpus_index::index::CorpusIndex;
 use corpus_index::types::ScoredChunk;
+use kernel_types::CorpusId;
 use serde_json::{json, Value};
 
 use crate::tools::ToolOutcome;
@@ -296,10 +296,9 @@ pub fn render(
         }
     }
 
-    ToolOutcome {
-        text: text.trim_end().to_string(),
-        is_error: false,
-        structured: Some(json!({
+    ToolOutcome::answer(
+        text.trim_end(),
+        Some(json!({
             "question": question,
             "passages": passages,
             "map": {
@@ -329,7 +328,7 @@ pub fn render(
             },
             "degradations": degradations,
         })),
-    }
+    )
 }
 
 fn push_passage(text: &mut String, rows: &mut Vec<Value>, rank: usize, p: &AskPassage) {
@@ -368,9 +367,7 @@ fn truncate(s: &str, n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::ground::{
-        MapSection, PolicySource, WalkLedger, WalkSelection,
-    };
+    use corpus_engine_atlas_reader::ground::{MapSection, PolicySource, WalkLedger, WalkSelection};
     use understanding_vocab::atoms::AtomType;
     use understanding_vocab::ontology::{NavigationPolicy, QuestionKind};
 
@@ -397,7 +394,7 @@ mod tests {
             kind: AtomType::Entity,
             subtype: "concept".into(),
             hop,
-            via: (hop > 0).then_some(corpus_engine::enrichment::atlas::EdgeType::Involves),
+            via: (hop > 0).then_some(understanding_vocab::edges::EdgeType::Involves),
             from: (hop > 0).then(|| "atom-seed".to_string()),
             score: 0.9 - (hop as f32) * 0.1,
         }

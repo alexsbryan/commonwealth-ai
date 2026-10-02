@@ -1,0 +1,34 @@
+[Unit]
+Description=cw-rails — this node's mesh endpoint (installed by `svrn mesh up`)
+After=network-online.target
+Wants=network-online.target
+
+# A cw-rails that fails on every start (a held port, a second cw-rails on
+# the same data root refused by its rails.lock) must not relaunch forever:
+# stop after 5 failures inside 10 minutes and stay down until the operator
+# intervenes (`systemctl --user reset-failed cw-rails`).
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# Written by sovereign-cli-mesh rails_unit.rs, which substitutes {EXEC} with
+# the binary and argv `svrn mesh up` brought cw-rails up with, {PATH} with the
+# installing shell's PATH and {RAILS_DIR} with the data root it resolved.
+
+[Service]
+Type=simple
+ExecStart={EXEC}
+Environment="PATH={PATH}"
+Environment="CW_RAILS_DIR={RAILS_DIR}"
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cw-rails
+
+[Install]
+# `default.target` is the user manager's login target; the install also turns
+# lingering on (host-kit `SystemdUser::ensure_linger`), so the unit starts at
+# boot with no login. If the install warned that it could not, run
+# `loginctl enable-linger $USER`.
+WantedBy=default.target

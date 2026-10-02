@@ -29,21 +29,18 @@
 
 use std::collections::{HashMap, HashSet};
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, Entity};
-use corpus_engine::enrichment::atlas::edges::Edge;
-use corpus_engine::enrichment::atlas::writer::{
-    read_atlas_atoms, read_atlas_edges, write_atlas, ATLAS_DIRNAME,
-};
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
-use corpus_engine::enrichment::pipeline::ChatPrompt;
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::prompt::{ChatPrompt, InferenceFn};
 use serde_json::json;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, Entity};
+use understanding_vocab::edges::Edge;
+use understanding_vocab::read::{read_atlas_atoms, read_atlas_edges, ATLAS_DIRNAME};
+use understanding_vocab::taxonomy::EntityType;
 
 use super::args::parse_args;
 use super::render::display_path;
 use super::store_open::{atlas_dir_for, sovereign_root};
-use crate::enrich_cmd::inference_client::{
-    probe_daemon, resolve_default_models, DaemonInferenceClient,
-};
+use corpus_index::v1_models::{probe_daemon, resolve_default_models};
 use sovereign_cli_shared::args::Parsed;
 use sovereign_cli_shared::urls::{v1_url, DEFAULT_CLIENT_PORT};
 
@@ -60,10 +57,19 @@ pub(super) async fn cmd_filter(args: &[String]) -> i32 {
     let verbose = flags.has("verbose");
     let dry_run = flags.has("dry-run");
 
+    // Ingest's atlas port rewrites the atlases; refused before the daemon.
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("awareness filter: {e}");
+            return 1;
+        }
+    };
+
     // The filter pass uses grammar-constrained generation
     // (`response_format: json_schema`) to force the model to emit a
-    // decision per candidate. The InferenceFn API can't carry the
-    // schema, so the filter talks to DaemonInferenceClient directly.
+    // decision per candidate. The schema rides on the `ChatPrompt`, which
+    // ingest's daemon client sends as `response_format`.
     let client = match build_filter_client(&flags).await {
         Ok(c) => c,
         Err(e) => {
@@ -86,7 +92,7 @@ pub(super) async fn cmd_filter(args: &[String]) -> i32 {
 
         println!();
         println!("─── {} ───", view_id);
-        match filter_atlas(&atlas_dir, &client, verbose, dry_run).await {
+        match filter_atlas(atlas.as_ref(), &atlas_dir, &client, verbose, dry_run).await {
             Ok(report) => {
                 report.print();
                 total_kept += report.kept.len();
@@ -159,7 +165,7 @@ impl FilterReport {
     }
 }
 
-async fn build_filter_client(flags: &Parsed) -> Result<DaemonInferenceClient, String> {
+async fn build_filter_client(flags: &Parsed) -> Result<InferenceFn, String> {
     let base_url = flags
         .value("daemon-url")
         .map(|s| s.to_string())
@@ -209,14 +215,15 @@ async fn build_filter_client(flags: &Parsed) -> Result<DaemonInferenceClient, St
         "awareness filter: daemon at {base_url}, model = {chat_model}, max_tokens = {max_output_tokens}"
     );
 
-    DaemonInferenceClient::new(base_url, chat_model, embed_model)
-        .map(|c| c.with_max_output_tokens(max_output_tokens))
-        .map_err(|e| format!("build daemon client: {e}"))
+    // Ingest's enrichment client, through the composition.
+    let daemon_chat = &crate::chat_cmd::ingest::calls()?.daemon_chat;
+    daemon_chat(&base_url, &chat_model, &embed_model, max_output_tokens)
 }
 
 async fn filter_atlas(
+    atlas: &dyn AtlasPort,
     atlas_dir: &std::path::Path,
-    client: &DaemonInferenceClient,
+    client: &InferenceFn,
     verbose: bool,
     dry_run: bool,
 ) -> Result<FilterReport, String> {
@@ -267,8 +274,7 @@ async fn filter_atlas(
         eprintln!("─────────────────────────────────────────────────────");
     }
 
-    let response = client
-        .complete(&chat_prompt)
+    let response = client(&chat_prompt, None)
         .await
         .map_err(|e| format!("inference: {e}"))?;
     if verbose {
@@ -323,7 +329,8 @@ async fn filter_atlas(
         .filter(|edge| !dropped_ids.contains(&edge.target))
         .collect();
 
-    write_atlas(atlas_dir, &new_entities, &[], &new_edges)
+    atlas
+        .write_atlas(atlas_dir, &new_entities, &[], &new_edges)
         .map_err(|e| format!("write atlas: {e}"))?;
 
     Ok(FilterReport {
@@ -617,8 +624,8 @@ mod tests {
 
     #[test]
     fn build_prompt_includes_chunk_and_participant_counts() {
-        use corpus_engine::enrichment::atlas::atoms::ChunkRef;
-        use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
+        use understanding_vocab::atoms::ChunkRef;
+        use understanding_vocab::taxonomy::EnrichmentDepth;
 
         let entity = Entity {
             id: AtomId::entity(1),

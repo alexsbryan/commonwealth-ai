@@ -1,0 +1,3 @@
+$088d28d1-5611-4e1b-9f10-ac36c537fcff²Œatom_id ÿÿÿÿÿÿÿÿÿ*string8title ÿÿÿÿÿÿÿÿÿ*string8%wikidata_qid ÿÿÿÿÿÿÿÿÿ*string8#revision_id ÿÿÿÿÿÿÿÿÿ*int648in_scope ÿÿÿÿÿÿÿÿÿ*bool8!	pov_total ÿÿÿÿÿÿÿÿÿ*int648&citation_total ÿÿÿÿÿÿÿÿÿ*int648#is_contested ÿÿÿÿÿÿÿÿÿ*bool8!chunk_id ÿÿÿÿÿÿÿÿÿ*string8"!
+lance.auto_cleanup.interval20"'
+lance.auto_cleanup.older_than14days

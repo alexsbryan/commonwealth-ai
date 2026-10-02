@@ -20,7 +20,8 @@
 # "permission auto-rejections" warning. Extend the settings file, not this.
 #
 # Also on purpose:
-#   - --variant is opencode-only and is dropped, with one line on stderr (the iter log) saying so.
+#   - --variant maps to claude's --effort when it names an effort level; any
+#     other value is opencode-only and is dropped, with one line on stderr (the iter log) saying so.
 #   - NOT --bare: --bare skips the credential read and reports "Not logged in".
 #   - The nested-session vars are unset so the worker is a root session, not
 #     a child of whichever Claude Code seat launched the loop.
@@ -32,12 +33,19 @@ settings="${RALPH_CLAUDE_SETTINGS:-$here/ralph/claude-settings.json}"
 verb="${1:-}"; shift || true
 [ "$verb" = "run" ] || { echo "ralph-claude-shim: only 'run' is supported, got '$verb'" >&2; exit 2; }
 
-model=""; dropped=""
+model=""; effort=""; dropped=""
 while [ $# -gt 1 ]; do
     case "$1" in
         --model)   model="$2"; shift 2 ;;
-        --variant) [ -n "$dropped" ] || echo "ralph-claude-shim: dropping --variant $2 (opencode-only; claude -p has no such flag) — this session runs at the model's default effort" >&2
-                   dropped=1; shift 2 ;;
+        # The manifest's `variant` is the queue's effort knob. claude -p spells
+        # it --effort and accepts exactly these levels; any other value is an
+        # opencode-only variant and is dropped, said once on stderr (the iter log).
+        --variant) case "$2" in
+                       low|medium|high|xhigh|max) effort="$2" ;;
+                       *) [ -n "$dropped" ] || echo "ralph-claude-shim: dropping --variant $2 (not a claude effort level: low|medium|high|xhigh|max) — this session runs at the model's default effort" >&2
+                          dropped=1 ;;
+                   esac
+                   shift 2 ;;
         *) echo "ralph-claude-shim: unknown flag $1" >&2; exit 2 ;;
     esac
 done
@@ -47,6 +55,9 @@ prompt="${1:-}"
 
 args=(-p --settings "$settings" --output-format stream-json --verbose)
 [ -n "$model" ] && args+=(--model "$model")
+[ -n "$effort" ] && args+=(--effort "$effort")
+# claude's init event names the model but not the effort, so the iter log gets both from here.
+echo "ralph-claude-shim: model=${model:-default} effort=${effort:-default}" >&2
 # A print-mode session exits the moment the model ends its turn, and its
 # background children die with it. Watched 2026-09-18 00:39Z: the worker
 # backgrounded `ralph-check.sh demo` (longer than the Bash tool's 2 min

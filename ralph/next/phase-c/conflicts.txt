@@ -1,0 +1,17 @@
+# phase-c conflict pairs (operator, phase-b-103): a line of N ids means every pair among them may not share a wave.
+# Rows that edit the same files, so the pool's serial merge does not halt on a conflict:
+pc-partial-decline-verdict pc-gk-rescue-fabrication   # sovereign-core runtime/grounding (epistemic.rs, decline.rs, gk_rescue)
+pc-partial-decline-verdict pc-onprem-followups        # the sealed posture's prompt text; on-prem check 4 reads the verdict
+pc-bare-404s pc-split-deploy-honesty                  # sovereign-daemon routes
+pc-bare-404s pc-onprem-followups                      # named absences in the daemon's routes
+pc-removed-env-warn pc-cli-config-load-silent-default # sovereign-contracts setup_config and its env reads
+pc-rpc-probe-identity pc-fetch-model-peer-discovery   # sovereign-serve's peer dialing
+pc-value-presence-admission pc-partial-decline-verdict pc-gk-rescue-fabrication  # sovereign-core runtime/grounding
+pc-gate-gk-exemption-deictic pc-partial-decline-verdict pc-value-presence-admission  # sovereign-core runtime/grounding and the gate
+# Readings run alone (`<id> *`: no other row shares the wave, so no lane compiles beside it,
+# whenever that row was added; the hand-written pairs this replaced missed seven later rows):
+pc-partial-decline-verdict-measure *   # quality reading, host load recorded
+pc-gk-rescue-fabrication-measure *     # quality reading, host load recorded
+pc-deployed-turn-latency *             # turn timings on the deployed node against a clean root
+pc-gk-rescue-fabrication-measure-2 *   # the re-read after the reopened fix (phase-c-15)
+pc-partial-decline-verdict-measure-2 *  # the re-read after the reopened fix (phase-c-17)

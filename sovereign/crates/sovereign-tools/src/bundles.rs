@@ -95,7 +95,9 @@ pub enum WebReach {
 pub struct CoreTurnTools {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
-    corpus_engine: Arc<corpus_engine::CorpusEngine>,
+    /// Ingest's read port; `None` (a svrn with no ingest program) withholds
+    /// the four corpus tools by name (pb-ingest-dial-daemon).
+    corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
     web: WebReach,
 }
 
@@ -105,7 +107,7 @@ impl CoreTurnTools {
     pub fn new(
         store: Arc<dyn StateStore>,
         inference: Arc<dyn InferenceProvider>,
-        corpus_engine: Arc<corpus_engine::CorpusEngine>,
+        corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
         web: WebReach,
     ) -> Self {
         Self {
@@ -135,25 +137,37 @@ impl ToolBundle for CoreTurnTools {
                 .declared(),
             )),
         );
-        r = r.record(reg.register_reporting(Box::new(
-            crate::ClaimSearchTool::new(Arc::clone(&self.corpus_engine)).declared(),
-        )));
-        r = r.record(reg.register_reporting(Box::new(
-            crate::EpistemicLandscapeTool::new(Arc::clone(&self.corpus_engine)).declared(),
-        )));
-        // Deterministic land-value-tax analytics over parcel corpora — pre-cited
-        // figures the ComplexTask synthesizer quotes verbatim.
-        r = r.record(
-            reg.register_reporting(Box::new(
-                crate::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&self.corpus_engine))
-                    .declared(),
-            )),
-        );
-        // Typed SEC-filing figures with basis + accession, or first-class
-        // refusals (FINANCIAL_CORPORA §6).
-        r = r.record(reg.register_reporting(Box::new(
-            crate::sec_facts::SecFactsTool::new(Arc::clone(&self.corpus_engine)).declared(),
-        )));
+        match &self.corpus_engine {
+            Some(corpus_engine) => {
+                r = r.record(reg.register_reporting(Box::new(
+                    crate::ClaimSearchTool::new(Arc::clone(corpus_engine)).declared(),
+                )));
+                r = r.record(reg.register_reporting(Box::new(
+                    crate::EpistemicLandscapeTool::new(Arc::clone(corpus_engine)).declared(),
+                )));
+                // Deterministic land-value-tax analytics over parcel corpora —
+                // pre-cited figures the ComplexTask synthesizer quotes verbatim.
+                r = r.record(
+                    reg.register_reporting(Box::new(
+                        crate::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(
+                            corpus_engine,
+                        ))
+                        .declared(),
+                    )),
+                );
+                // Typed SEC-filing figures with basis + accession, or
+                // first-class refusals (FINANCIAL_CORPORA §6).
+                r = r.record(reg.register_reporting(Box::new(
+                    crate::sec_facts::SecFactsTool::new(Arc::clone(corpus_engine)).declared(),
+                )));
+            }
+            None => {
+                r = r.withheld(
+                    "claim_search, epistemic_landscape, parcel_analytics, sec_facts",
+                    "no ingest program is composed in this process, and these read its corpora",
+                );
+            }
+        }
 
         match &self.web {
             WebReach::Granted(client) => {
@@ -217,16 +231,23 @@ impl ToolBundle for WebTools {
 /// articles out of that corpus and has no reason to fetch them over the
 /// network, while still wanting `web_fetch` for urls a user pastes.
 ///
-/// The corpus engine backs the local cache lookup this makes before it reaches
+/// Ingest's catalog port backs the catalog lookup this makes before it reaches
 /// the network.
 pub struct WikipediaTools {
-    corpus_engine: Arc<corpus_engine::CorpusEngine>,
+    corpus_engine: Arc<dyn corpus_index::ingest_port::CatalogIngestPort>,
+    atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
 }
 
 impl WikipediaTools {
-    /// Build the family.
-    pub fn new(corpus_engine: Arc<corpus_engine::CorpusEngine>) -> Self {
-        Self { corpus_engine }
+    /// Build the family over ingest's catalog and atlas ports.
+    pub fn new(
+        corpus_engine: Arc<dyn corpus_index::ingest_port::CatalogIngestPort>,
+        atlas: Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>,
+    ) -> Self {
+        Self {
+            corpus_engine,
+            atlas,
+        }
     }
 }
 
@@ -237,9 +258,15 @@ impl ToolBundle for WikipediaTools {
     }
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
-        BundleReport::new(self.name()).record(reg.register_reporting(Box::new(
-            crate::WikipediaFetchTool::new(Arc::clone(&self.corpus_engine)).declared(),
-        )))
+        BundleReport::new(self.name()).record(
+            reg.register_reporting(Box::new(
+                crate::WikipediaFetchTool::new(
+                    Arc::clone(&self.corpus_engine),
+                    Arc::clone(&self.atlas),
+                )
+                .declared(),
+            )),
+        )
     }
 }
 
@@ -275,7 +302,7 @@ impl ToolBundle for ShellTools {
 pub struct KnowledgeFrontDoor {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
-    notes: Option<Arc<corpus_engine_notes::NoteStore>>,
+    notes: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     escalation: WebEscalation,
 }
 
@@ -288,7 +315,7 @@ impl KnowledgeFrontDoor {
     pub fn new(
         store: Arc<dyn StateStore>,
         inference: Arc<dyn InferenceProvider>,
-        notes: Option<Arc<corpus_engine_notes::NoteStore>>,
+        notes: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
         escalation: WebEscalation,
     ) -> Self {
         Self {
@@ -355,132 +382,6 @@ impl ToolBundle for KnowledgeFrontDoor {
                     .declared(),
                 )),
             )
-    }
-}
-
-/// Code intelligence over a SCIP graph and a code corpus.
-///
-/// Behind `treesitter`, like the tools it registers: a build without it has
-/// no code-intel surface to compose.
-///
-/// **The privilege is the handle.** This bundle cannot be constructed without
-/// a [`ScipGraphHandle`](crate::ScipGraphHandle) and a corpus engine, so a
-/// host may only offer code intel over an index it actually owns. That is why
-/// "should the shared registry carry code intel on a multi-tenant hub?" is not
-/// a policy question: a tenant-scoped host has no other tenant's handle to
-/// compose from.
-#[cfg(feature = "treesitter")]
-pub struct CodeIntelTools {
-    corpus_engine: Arc<corpus_engine::CorpusEngine>,
-    inference: Arc<dyn InferenceProvider>,
-    scip_graph: crate::ScipGraphHandle,
-}
-
-#[cfg(feature = "treesitter")]
-impl CodeIntelTools {
-    /// Build the family over a graph handle the host owns.
-    pub fn new(
-        corpus_engine: Arc<corpus_engine::CorpusEngine>,
-        inference: Arc<dyn InferenceProvider>,
-        scip_graph: crate::ScipGraphHandle,
-    ) -> Self {
-        Self {
-            corpus_engine,
-            inference,
-            scip_graph,
-        }
-    }
-}
-
-#[cfg(feature = "treesitter")]
-#[async_trait]
-impl ToolBundle for CodeIntelTools {
-    fn name(&self) -> &'static str {
-        "code-intel"
-    }
-
-    async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
-        let health = Arc::new(crate::IndexHealthChecker::new(Arc::clone(&self.scip_graph)));
-        BundleReport::new(self.name())
-            .record(
-                reg.register_reporting(Box::new(
-                    crate::SymbolLookupTool::new(
-                        Arc::clone(&self.corpus_engine),
-                        Arc::clone(&self.scip_graph),
-                    )
-                    .with_health_checker(Arc::clone(&health))
-                    .declared(),
-                )),
-            )
-            .record(
-                reg.register_reporting(Box::new(
-                    crate::CodeSearchTool::new(Arc::clone(&self.corpus_engine))
-                        .with_inference(Arc::clone(&self.inference))
-                        .declared(),
-                )),
-            )
-            .record(reg.register_reporting(Box::new(
-                crate::RecentChangesTool::new(Arc::clone(&self.corpus_engine)).declared(),
-            )))
-            .record(
-                reg.register_reporting(Box::new(
-                    crate::FindCalleesTool::new(
-                        Arc::clone(&self.corpus_engine),
-                        Arc::clone(&self.scip_graph),
-                    )
-                    .with_health_checker(Arc::clone(&health))
-                    .declared(),
-                )),
-            )
-            .record(
-                reg.register_reporting(Box::new(
-                    crate::FindCallersTool::new(
-                        Arc::clone(&self.corpus_engine),
-                        Arc::clone(&self.scip_graph),
-                    )
-                    .with_health_checker(Arc::clone(&health))
-                    .declared(),
-                )),
-            )
-            .record(reg.register_reporting(Box::new(crate::CapabilityMapTool::new().declared())))
-    }
-}
-
-/// Working notes — persist across sessions, used for session attribution.
-///
-/// Takes an ALREADY-OPEN store: one writer per data root (TOPOLOGY phase 1),
-/// so a bundle never opens a database.
-#[cfg(feature = "treesitter")]
-pub struct NotesTools {
-    notes: Arc<corpus_engine_notes::NoteStore>,
-}
-
-#[cfg(feature = "treesitter")]
-impl NotesTools {
-    /// Build the family over a note store the host opened.
-    pub fn new(notes: Arc<corpus_engine_notes::NoteStore>) -> Self {
-        Self { notes }
-    }
-}
-
-#[cfg(feature = "treesitter")]
-#[async_trait]
-impl ToolBundle for NotesTools {
-    fn name(&self) -> &'static str {
-        "notes"
-    }
-
-    async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
-        BundleReport::new(self.name())
-            .record(reg.register_reporting(Box::new(
-                crate::WriteNoteTool::new(Arc::clone(&self.notes)).declared(),
-            )))
-            .record(reg.register_reporting(Box::new(
-                crate::ReadNotesTool::new(Arc::clone(&self.notes)).declared(),
-            )))
-            .record(reg.register_reporting(Box::new(
-                crate::DeleteNoteTool::new(Arc::clone(&self.notes)).declared(),
-            )))
     }
 }
 
@@ -553,159 +454,5 @@ impl ToolBundle for DocumentOperations {
             }
         }
         r.record(reg.register_reporting(Box::new(tool.declared())))
-    }
-}
-
-/// The recipe-authoring workspace, driven headlessly over the conversation
-/// API by a conversation tagged `skill_id = "recipe-author"`.
-///
-/// Two of its stores are optional and their absence is a DEGRADATION, not a
-/// decision: `notes.db` backs the decision-log and research-finding tools,
-/// `features.db` backs checkpoint and capability-request. A host that could
-/// not open one composes the bundle without it, and the missing tools come
-/// back in the [`BundleReport`] with the reason — which is what the server's
-/// scattered `tracing::warn!` calls used to do, in a place nothing could read
-/// back (ARCH §18.3).
-pub struct RecipeAuthoringTools {
-    notes: Option<Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>>,
-    features: Option<Arc<sovereign_recipe_author::recipe_project_store::RecipeProjectStore>>,
-    /// The injected recipe variant-catalog descriptor. `sovereign-tools` is the
-    /// only crate holding both the grammar (via `sovereign-recipe-author`) and
-    /// the descriptor (via `corpus-engine`), so the seam is implemented HERE:
-    /// the package tools take the value and never read the repo.
-    descriptor_json: &'static str,
-    /// The injected bundled registry snapshot, same seam as `descriptor_json`.
-    registry_toml: &'static str,
-}
-
-impl Default for RecipeAuthoringTools {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl RecipeAuthoringTools {
-    /// The seven tools that need no store.
-    pub fn new() -> Self {
-        Self {
-            notes: None,
-            features: None,
-            descriptor_json: corpus_engine::recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON,
-            registry_toml: corpus_engine::registry::BUNDLED_REGISTRY_TOML,
-        }
-    }
-
-    /// Add the note-backed tools. The adapter, not the concrete store: the
-    /// recipe-author tools take the `RecipeNotes` contract.
-    pub fn with_notes(
-        mut self,
-        notes: Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>,
-    ) -> Self {
-        self.notes = Some(notes);
-        self
-    }
-
-    /// Add the feature-store-backed tools. Requires notes as well — both
-    /// `CheckpointTool` and `CapabilityRequestTool` take the pair.
-    pub fn with_features(
-        mut self,
-        features: Arc<sovereign_recipe_author::recipe_project_store::RecipeProjectStore>,
-    ) -> Self {
-        self.features = Some(features);
-        self
-    }
-}
-
-#[async_trait]
-impl ToolBundle for RecipeAuthoringTools {
-    fn name(&self) -> &'static str {
-        "recipe-authoring"
-    }
-
-    async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
-        use crate::recipe_author::{
-            CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool, RecipeReadTool,
-            RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool,
-            RegistryBrowseTool, ResearchFindingTool,
-        };
-        use crate::recipe_tester_adapter::CorpusEngineRecipeTester;
-
-        let mut r = BundleReport::new(self.name());
-        r = r.record(reg.register_reporting(Box::new(RecipeReadTool::new())));
-        r = r.record(reg.register_reporting(Box::new(RecipeWriteTool::new())));
-        r = r.record(
-            reg.register_reporting(Box::new(RecipeWriteStructuredTool::new(
-                Arc::new(CorpusEngineRecipeTester::new()),
-                self.descriptor_json,
-            ))),
-        );
-        r = r.record(
-            reg.register_reporting(Box::new(RecipeValidateTool::new(Arc::new(
-                CorpusEngineRecipeTester::new(),
-            )))),
-        );
-        r = r.record(
-            reg.register_reporting(Box::new(RecipeTestTool::new(Arc::new(
-                CorpusEngineRecipeTester::new(),
-            )))),
-        );
-        r = r.record(reg.register_reporting(Box::new(RegistryBrowseTool::new(self.registry_toml))));
-        r = r.record(reg.register_reporting(Box::new(ProbeUrlTool::new())));
-
-        match &self.notes {
-            Some(notes) => {
-                r =
-                    r.record(reg.register_reporting(Box::new(DecisionLogTool::with_notes(
-                        Arc::clone(notes),
-                    ))));
-                r = r.record(
-                    reg.register_reporting(Box::new(ResearchFindingTool::with_notes(Arc::clone(
-                        notes,
-                    )))),
-                );
-                match &self.features {
-                    Some(features) => {
-                        r = r.record(reg.register_reporting(Box::new(
-                            CheckpointTool::with_stores(Arc::clone(notes), Arc::clone(features)),
-                        )));
-                        // The inbox directory is derived from the sovereign
-                        // root, not supplied by the host — so wiring it here
-                        // is what makes a submitted capability request land
-                        // where `svrn maintainer inbox` reads it on EVERY
-                        // host. Only the desktop called this, so a request
-                        // submitted through the server or the daemon was
-                        // written and then unreadable (ARCH §10.6).
-                        let mut cap = CapabilityRequestTool::with_stores(
-                            Arc::clone(notes),
-                            Arc::clone(features),
-                        );
-                        match crate::recipe_author::maintainer_inbox_dir() {
-                            Ok(dir) => cap = cap.with_inbox_dir(dir),
-                            Err(e) => {
-                                r = r.withheld(
-                                    "capability_request:inbox",
-                                    format!("maintainer inbox dir unresolved: {e}"),
-                                )
-                            }
-                        }
-                        r = r.record(reg.register_reporting(Box::new(cap)));
-                    }
-                    None => {
-                        r = r.withheld(
-                            "checkpoint, capability_request",
-                            "no recipe feature store on this host",
-                        );
-                    }
-                }
-            }
-            None => {
-                r = r.withheld(
-                    "decision_log, research_finding, checkpoint, capability_request",
-                    "no note store on this host",
-                );
-            }
-        }
-
-        r
     }
 }

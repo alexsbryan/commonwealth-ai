@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::path::PathBuf;
 
-use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::CompletionRequest;
+use sovereign_contracts::traits::InferenceProvider;
+use sovereign_contracts::types::CompletionRequest;
 use sovereign_inference::embedded::{EmbeddedLlamaCpp, SlotWindows};
 
 fn print_usage() {
@@ -135,7 +135,7 @@ async fn main() {
         admission: None,
         prompt: args.prompt.clone(),
         system_message: None,
-        preferred_speed: sovereign_core::types::Speed::Slow,
+        preferred_speed: sovereign_contracts::types::Speed::Slow,
         max_tokens: Some(args.max_tokens),
         temperature: Some(args.temperature),
         structured_output: None,

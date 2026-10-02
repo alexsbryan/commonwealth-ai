@@ -132,7 +132,7 @@ def check_harness_config(rep):
     except FileNotFoundError:
         rep.add("FAIL", "harness .mcp.json", "MISSING — agents have NO MCP tools in-session",
                 'create .mcp.json at repo root: {"mcpServers": {"sovereign": '
-                '{"type": "http", "url": "http://localhost:9741/mcp"}}}')
+                '{"type": "http", "url": "http://127.0.0.1:9741/mcp"}}}')
     except Exception as e:
         rep.add("FAIL", "harness .mcp.json", f"unparseable: {e}", "fix the JSON")
 

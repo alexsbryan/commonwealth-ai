@@ -42,6 +42,7 @@ mod audit_pass;
 mod call_census;
 mod citation;
 mod citation_attribution;
+mod decline;
 // `pub(crate)` so the evidence loop can reach `debug_enabled` — one reader of
 // `SOVEREIGN_AGENTIC_KQ_DEBUG` for the whole crate (TOPOLOGY §10 phase 10).
 pub(crate) mod config;
@@ -85,7 +86,7 @@ pub use config::{grounding_gate_flags, grounding_gate_threshold};
 #[allow(unused_imports)]
 pub(crate) use judge::{verify_grounding, GateVerdict};
 // THE CALIBRATED FORCED-CHOICE REGISTER, exported for the bench critic
-// (`sovereign-cli-llm/src/bench_cmd/live_runner.rs`). This module's header
+// (`sovereign-cli-bench/src/bench_cmd/live_runner.rs`). This module's header
 // claims the two are byte-identical so that tau=0.9's calibration transfers;
 // before this export that identity was two copies of a literal in two crates,
 // kept in step by hand. Sharing the renderer is what makes the claim
@@ -133,6 +134,11 @@ pub use replay::{
     replay_claims_support_batched, replay_judge_system_turn, replay_render_batched_claims_prompt,
     replay_render_claim_prompt, replay_scan_unsupported_specifics,
 };
+// Decline detection keeps its historical `grounding::` paths: the gate
+// modules (`use super::*`), `runtime.rs`'s re-export up, and the moved tests
+// all reach these through this façade.
+pub(crate) use decline::{abstention_action, declines_asked_fact};
+pub use decline::{answer_declines, released_pure_decline};
 // `ClaimSearcher` is constructed via `Runtime::claim_searcher`; the
 // type re-exports are for call sites that name them.
 #[allow(unused_imports)]
@@ -149,7 +155,7 @@ use std::sync::Arc;
 // same door this file already takes `ScoredChunk` through. Replaced the
 // local `EvidenceSource` enum 2026-08-20 (rung nc-4-evidence): two
 // variants, identical meaning, one of them a copy.
-use corpus_engine::Grain;
+use kernel_types::Grain;
 
 use crate::traits::InferenceProvider;
 use crate::types::CitationTarget;
@@ -350,9 +356,9 @@ pub(crate) struct GateEvidenceParts {
 /// (the pre-Fix-B A/B baseline) keeps summaries in retrieval ORDER and
 /// marked Leaf — byte-identical to the historical baseline.
 pub(crate) fn gate_evidence_with_sources(
-    chunks: &[corpus_engine::ScoredChunk],
+    chunks: &[corpus_index::types::ScoredChunk],
 ) -> GateEvidenceParts {
-    let labels_of = |c: &corpus_engine::ScoredChunk| {
+    let labels_of = |c: &corpus_index::types::ScoredChunk| {
         let mut labels = Vec::with_capacity(2);
         if let Some(t) = c.title.as_deref() {
             let t = t.trim();
@@ -372,9 +378,9 @@ pub(crate) fn gate_evidence_with_sources(
     // machinery disengaged below — `stamped_custody` is `Option` precisely
     // so this site keeps that distinction; a pool where nothing is stamped
     // must not become a pool where everything refuses.
-    let custody_of = |c: &corpus_engine::ScoredChunk| c.provenance.stamped_custody();
-    let url_of = |c: &corpus_engine::ScoredChunk| c.url.clone();
-    let member_of = |c: &corpus_engine::ScoredChunk| c.metadata.get("peer").cloned();
+    let custody_of = |c: &corpus_index::types::ScoredChunk| c.provenance.stamped_custody();
+    let url_of = |c: &corpus_index::types::ScoredChunk| c.url.clone();
+    let member_of = |c: &corpus_index::types::ScoredChunk| c.metadata.get("peer").cloned();
     let exclude_raptor = std::env::var("SOVEREIGN_GATE_EXCLUDE_RAPTOR")
         .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
         .unwrap_or(true);
@@ -398,7 +404,7 @@ pub(crate) fn gate_evidence_with_sources(
     // `metadata["source"] == "raptor"`, which matched an indexed rollup row
     // and an in-process one by accident of a shared tag; `grain()` answers
     // for both arms on purpose.
-    let is_summary = |c: &corpus_engine::ScoredChunk| c.provenance.grain() == Grain::Summary;
+    let is_summary = |c: &corpus_index::types::ScoredChunk| c.provenance.grain() == Grain::Summary;
     // Resolved once over the ORIGINAL indices, then carried through the same
     // filter and reordering below, so `chunk_locators[i]` always names
     // `chunks[i]`.
@@ -462,7 +468,7 @@ pub(crate) fn gate_evidence_with_sources(
 /// yields `Some` target and `None` locator, and such a citation is openable
 /// even though it can name no chapter.
 pub(crate) fn gate_evidence_targets(
-    chunks: &[corpus_engine::ScoredChunk],
+    chunks: &[corpus_index::types::ScoredChunk],
 ) -> Vec<Option<CitationTarget>> {
     chunks
         .iter()
@@ -503,8 +509,10 @@ pub(crate) fn gate_evidence_targets(
 /// rather than a wrong one.
 ///
 /// Manifests are read at most once per (corpus, document) per turn.
-pub(crate) fn gate_evidence_locators(chunks: &[corpus_engine::ScoredChunk]) -> Vec<Option<String>> {
-    use corpus_engine::enrichment::governance_view::{chunk_to_section_map, section_titles};
+pub(crate) fn gate_evidence_locators(
+    chunks: &[corpus_index::types::ScoredChunk],
+) -> Vec<Option<String>> {
+    use corpus_engine_atlas_reader::governance_view::{chunk_to_section_map, section_titles};
     use std::collections::HashMap;
 
     let indexes_root = crate::setup_config::SetupConfig::load()
@@ -550,7 +558,9 @@ pub(crate) fn gate_evidence_locators(chunks: &[corpus_engine::ScoredChunk]) -> V
 /// naming a source by its corpus or section title is not mistaken for a fabrication.
 /// RAPTOR summaries are NOT excluded here: a summary's title/corpus is still a real
 /// label, and since labels never narrow groundedness, including them is always safe.
-pub(crate) fn gate_evidence_source_labels(chunks: &[corpus_engine::ScoredChunk]) -> Vec<String> {
+pub(crate) fn gate_evidence_source_labels(
+    chunks: &[corpus_index::types::ScoredChunk],
+) -> Vec<String> {
     let mut out = Vec::with_capacity(chunks.len() * 2);
     for c in chunks {
         if let Some(t) = c.title.as_deref() {
@@ -1111,87 +1121,6 @@ fn short_specifics_scan_enabled() -> bool {
             .as_deref(),
         Some("1") | Some("true") | Some("on")
     )
-}
-
-/// True when a released short answer is itself an honest abstention / decline
-/// ("the sources don't cover it", "I'm not certain", the `grounded_abstention`
-/// prose). Such an answer asserts no verifiable value, so the specifics scan has
-/// nothing to fabricate-check — running it only surfaces kind-(3) noise (the
-/// scan second-guessing a correct "not in sources" as a false claim ABOUT the
-/// evidence). Skipping is a latency optimisation and errs fail-open: a false
-/// skip just preserves prior behaviour. Measured 2026-07-01: 6/7 short-band scan
-/// flags on GOOD answers were exactly these honest abstentions.
-pub fn answer_declines(text: &str) -> bool {
-    let h = text.trim_start().to_lowercase();
-    const DECLINES: &[&str] = &[
-        "i don't have reliable information",
-        "i do not have reliable information",
-        "i am not certain",
-        "i'm not certain",
-        "i do not have information",
-        "i don't have information",
-        "couldn't confirm an answer", // grounded_abstention prose (current)
-        "could not confirm an answer", // grounded_abstention prose (current)
-        "none of them actually cover it", // grounded_abstention prose (legacy, still in-the-wild)
-        "i'd rather not guess",       // grounded_abstention prose (legacy)
-        "do not contain",
-        "does not contain",
-        "not recorded there",
-        "the sources do not",
-        "the sources don't",
-        "sources do not contain",
-        "no passage",
-        "not in your sources",
-    ];
-    DECLINES.iter().any(|d| h.contains(d))
-}
-
-/// True when a NO_CLAIM release is a pure provenance-flagged decline — the
-/// model saying "I don't have reliable information in my knowledge base"
-/// over retrieved-but-useless evidence. Such a turn asserts nothing, so
-/// releasing it as an answer mis-states the turn's epistemic standing: the
-/// ledger derives `Unverified` (evidence present, nothing audited), the
-/// coverage probe never runs (`gap_turn=false`), and a genuine knowledge
-/// gap defaults to `ClaimUncovered` (bench/gap_check/DECISION.md, bug 2).
-/// A 0-holding decline IS an abstention — reclassify the ACTION, keep the
-/// model's own (honest, already provenance-flagged) prose.
-///
-/// Deliberately narrower than [`answer_declines`]: a caveated parametric
-/// answer ("Not in your sources — from general knowledge: Canberra…")
-/// declines-then-ANSWERS, and must keep releasing — so the caveat is
-/// stripped first and any remaining "from general knowledge" pivot vetoes
-/// the reclassification.
-/// Did a claim-free release actually abstain?
-///
-/// ONE decider, on both arms of the native-grounding flag: the incumbent
-/// 17-phrase zoo, which recovers the decision the system made but never
-/// carried.
-///
-/// **Why the typed verdict is not consulted here.** It used to be: when
-/// H1 had run, its `decision` supplied the action directly and the zoo was
-/// skipped. P1 retired that (`NATIVE_GROUNDING_PARITY_PLAN.md` §4.1 —
-/// admission is telemetry, "decisions traced, never enforced"), because
-/// letting it stand made the flag change a turn's *action* in both
-/// directions: a prose decline under a typed `Answer` stayed `released`
-/// on the flag-on arm while flag-off reclassified it, and the epistemic
-/// ledger, the collaboration surface and the honesty scorer all read that
-/// string. That divergence is exactly what A1's arm-identity check
-/// forbids, and A1 is the plan's pre-registered kill for the whole phase.
-/// The typed path returns at P3c, when a verdict is enforced again by a
-/// signal that earned it.
-///
-/// Returns the legacy action string to reclassify to, or `None` to leave
-/// the action alone. Pure — no model, no env, no clock.
-pub(crate) fn abstention_action(text: &str) -> Option<&'static str> {
-    released_pure_decline(text).then_some("abstained_decline")
-}
-
-pub fn released_pure_decline(text: &str) -> bool {
-    let stripped = strip_gk_caveat(text);
-    if stripped.to_lowercase().contains("from general knowledge") {
-        return false;
-    }
-    answer_declines(&stripped)
 }
 
 #[cfg(test)]

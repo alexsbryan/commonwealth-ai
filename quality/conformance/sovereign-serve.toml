@@ -1,0 +1,25 @@
+# Conformance tags in `sovereign-serve` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "FE-90"
+test = "sovereign-serve::mesh_measurements::tests::witness::a_witness_accounts_for_the_digest_it_was_built_from"
+file = "sovereign/crates/sovereign-serve/src/mesh_measurements/tests/witness.rs"
+line = 46
+asserts = 2
+
+[[claim]]
+requirement = "FE-92"
+test = "sovereign-serve::mesh_measurements::tests::witness::no_co_residents_is_reported_as_a_finding_not_as_silence"
+file = "sovereign/crates/sovereign-serve/src/mesh_measurements/tests/witness.rs"
+line = 708
+asserts = 2

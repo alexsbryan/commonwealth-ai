@@ -24,6 +24,9 @@ description = "The retrieval read-port leaf — the index directory's shape, its
 [dependencies]
 # The neutral kernel — `CorpusId`/`Custody`/`Grain`/`ContentHash`/`Origin`.
 kernel-types = { workspace = true }
+# The `InferenceProvider` half of `embed_fn`'s one adapter (fp-5) — the
+# `EmbedFn` half is this crate's own `types::EmbedFn`.
+sovereign-contracts = { workspace = true }
 # The append-only journal. `Error` carries a `From<oplog::OplogError>` bridge
 # moved here with the error type; oplog is itself a leaf.
 oplog = { workspace = true }
@@ -34,7 +37,11 @@ corpus-engine-yield = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# The endpoint decider (`host`) reports its refusals as `anyhow` errors, as it
+# did in corpus-mcp before pb-ingest-cli moved it here.
+anyhow = { workspace = true }
 
+async-trait = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 
@@ -49,10 +56,19 @@ arrow-schema = { workspace = true }
 chrono = { workspace = true }
 blake3 = "1"
 sha2 = { workspace = true }
+toml = { workspace = true, optional = true }
+
+[features]
+# `ingest_port::double::IngestPortDouble`, for the svrn crates' tests
+# (phase-b-47). `toml` reads a recipe's head for `leaf_backed_double`.
+test-doubles = ["dep:toml"]
 
 [dev-dependencies]
+toml = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = { workspace = true }
+# tests/evidence_reds.rs: `Evidence::acquired` stays crate-private.
+trybuild = "1"
 
 [lints]
 workspace = true

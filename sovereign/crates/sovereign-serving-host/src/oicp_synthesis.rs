@@ -85,7 +85,7 @@ pub fn resolve_primary_model_name(provider: &dyn InferenceProvider) -> String {
 /// Build this node's OICP `ProviderManifest` — one `ProviderModel`
 /// entry per loaded chat slot (Fast + Slow), each with the
 /// capability profile + size_gb declared for it in
-/// `sovereign/models.toml`. Shared between the server adapter (what
+/// `sovereign/crates/sovereign-contracts/data/models.toml`. Shared between the server adapter (what
 /// peers fetch at `/oicp/v1/capabilities`) and the client-side
 /// `InferenceRouter` (what local scores itself against) so
 /// the two never disagree about our own declared capabilities.
@@ -246,7 +246,7 @@ pub fn build_self_manifest(
                 (caps, None)
             }
         };
-        for alias_id in sovereign_scheduler::slot_aliases::advertised_alias_ids("primary") {
+        for alias_id in sovereign_contracts::venue::advertised_alias_ids("primary") {
             if !seen_ids.insert(alias_id.clone()) {
                 continue;
             }
@@ -304,7 +304,7 @@ pub fn build_self_manifest(
                 (caps, None)
             }
         };
-        for alias_id in sovereign_scheduler::slot_aliases::advertised_alias_ids("fast") {
+        for alias_id in sovereign_contracts::venue::advertised_alias_ids("fast") {
             if !seen_ids.insert(alias_id.clone()) {
                 continue;
             }
@@ -1191,7 +1191,7 @@ mod self_manifest_tests {
     /// resolution map (also table-derived) may not honour.
     #[test]
     fn manifest_advertises_exactly_the_policy_alias_set() {
-        use sovereign_scheduler::slot_aliases::{
+        use sovereign_contracts::venue::{
             advertised_alias_ids, resolution_alias_keys, SLOT_ALIAS_POLICY,
         };
 

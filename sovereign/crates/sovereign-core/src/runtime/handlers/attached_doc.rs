@@ -196,7 +196,7 @@ impl Runtime {
             briefing_entity_names
                 .iter()
                 .any(|n| n.len() > 2 && q.contains(&n.to_lowercase()))
-                || crate::runtime::evidence_loop::question_is_corpus_deictic(message)
+                || crate::runtime::anchoring::question_is_corpus_deictic(message)
         };
         // Distinct (lowercased, trimmed) query strings the model has
         // actually issued this turn. Used to enforce the
@@ -1450,6 +1450,7 @@ impl Runtime {
                 crate::runtime::epistemic::EpistemicInputs {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
+                    answer: Some(text),
                     // The attached asset is local: no member.
                     ..crate::runtime::epistemic::EpistemicInputs::over(
                         crate::runtime::epistemic::PoolContext {

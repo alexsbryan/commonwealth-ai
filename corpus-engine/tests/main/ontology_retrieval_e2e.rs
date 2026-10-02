@@ -31,12 +31,19 @@ fn numismatics_policies() -> OntologyPolicies {
         .expect("numismatics is a shipped ontology template")
 }
 
-/// `sovereign-recipes/wessex-hoard/truth.json`, vendored by `build.rs` beside
+/// `sovereign-recipes/wessex-hoard/truth.json`, compiled into corpus-engine-recipes beside
 /// the recipe it belongs to. THE truth file, not a transcription of it: until
 /// 2026-09-03 the seven catalogue rows were re-typed here, so an edit to the
 /// manifest the eval bank and the chain proof both read left this test
 /// asserting the old hoard.
-const TRUTH_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/recipes/wessex-hoard/truth.json"));
+fn truth_json() -> &'static str {
+    let found = corpus_engine_recipes::TRUTH
+        .iter()
+        .find(|(id, _)| *id == "wessex-hoard");
+    found
+        .map(|(_, json)| *json)
+        .expect("wessex-hoard truth.json bundled")
+}
 
 /// One catalogue coin, typed under the author's noun.
 fn coin(idx: usize, name: &str, subtype: &str, metal: &str, salience: f32) -> Entity {
@@ -65,7 +72,7 @@ fn coin(idx: usize, name: &str, subtype: &str, metal: &str, salience: f32) -> En
 /// in file order. Salience descends so the walk's sort is deterministic; it is
 /// not a truth field.
 fn wessex_hoard() -> Vec<Entity> {
-    let truth: serde_json::Value = serde_json::from_str(TRUTH_JSON).expect("truth.json parses");
+    let truth: serde_json::Value = serde_json::from_str(truth_json()).expect("truth.json parses");
     let coins = truth["entities"]["coin"]
         .as_array()
         .expect("truth.json declares entities.coin");
@@ -89,7 +96,7 @@ fn wessex_hoard() -> Vec<Entity> {
 /// `truth.json`'s `enumeration_probe`: the question the chain must answer, and
 /// how many coins the answer must carry.
 fn enumeration_probe() -> (String, usize) {
-    let truth: serde_json::Value = serde_json::from_str(TRUTH_JSON).expect("truth.json parses");
+    let truth: serde_json::Value = serde_json::from_str(truth_json()).expect("truth.json parses");
     let probe = &truth["enumeration_probe"];
     (
         probe["question"]

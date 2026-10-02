@@ -42,7 +42,7 @@ Also see the memory file `~/.claude/projects/.../memory/project_mechanism_fideli
 - `card.rs` — **(Phase 3)** `FidelityCard` + `grade_class` (mirrors `verdict.py` tiering) + per-model JSON I/O at `~/.svrnmesh/model-fidelity-cards/`.
 - `mod.rs` — `Pool{Train,Dev,Test}` + re-exports. **Module is still named `mechanism_fidelity`** (the plan's rename to `reasoning_fidelity` is cosmetic and was deferred to avoid import churn).
 
-**Inference-coupled orchestrator** (`sovereign/crates/sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs`):
+**Inference-coupled orchestrator** (`sovereign/crates/sovereign-cli-bench/src/bench_cmd/mechanism_fidelity.rs`):
 - `cmd_mechanism_fidelity` / `run` — CLI `sovereign bench mechanism-fidelity run`.
 - `elicit` (K-sampling, legacy), `elicit_logprob` (**Phase 0**, the K-killer), `preflight`, `build_rows`, `print_glassbox_summary`, checkpoint/resume (`CheckpointAgg`, `load_checkpoint`, `open_checkpoint`, `append_checkpoint`).
 - Registered in `bench_cmd/mod.rs` (`"mechanism-fidelity" => …`).

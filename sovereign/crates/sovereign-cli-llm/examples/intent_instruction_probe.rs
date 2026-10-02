@@ -64,11 +64,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use sovereign_core::model_family::ModelFamily;
 use sovereign_core::router_axis::{AxisGate, AxisScore};
 use sovereign_core::router_calibration::{evaluate, fit, parse_bank, Objective, ScoredCase};
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::embedded::EmbedOnlyProvider;
 
 /// Candidate instructions, each a hypothesis about what the vector
 /// should encode.
@@ -122,19 +120,28 @@ const CANDIDATES: &[(&str, &str)] = &[
 /// a `[label] examples = [...]` TOML. Measured because question 3 above
 /// turns entirely on whether a router-tuned instruction damages them.
 const BINARY_AXES: &[(&str, &str)] = &[
-    ("scope", "sovereign/router/scope_examples.toml"),
-    ("effort", "sovereign/router/effort_examples.toml"),
+    (
+        "scope",
+        "sovereign/crates/sovereign-core/data/router/scope_examples.toml",
+    ),
+    (
+        "effort",
+        "sovereign/crates/sovereign-core/data/router/effort_examples.toml",
+    ),
     (
         "current_info",
-        "sovereign/router/current_info_examples.toml",
+        "sovereign/crates/sovereign-core/data/router/current_info_examples.toml",
     ),
-    ("archive", "sovereign/router/archive_examples.toml"),
+    (
+        "archive",
+        "sovereign/crates/sovereign-core/data/router/archive_examples.toml",
+    ),
 ];
 
 const BANKS: &[(&str, &str)] = &[
     (
         "axes_v1",
-        "sovereign/bench/routing/calibration/axes_v1.toml",
+        "sovereign/crates/sovereign-core/data/calibration/axes_v1.toml",
     ),
     (
         "holdout",
@@ -179,7 +186,8 @@ fn main() {
     };
 
     let intent_rows = parse_intent_exemplars(
-        &std::fs::read_to_string("sovereign/router/exemplars.toml").expect("read exemplars"),
+        &std::fs::read_to_string("sovereign/crates/sovereign-core/data/router/exemplars.toml")
+            .expect("read exemplars"),
     );
     let banks: Vec<(&str, Vec<(String, String, Option<String>)>)> = BANKS
         .iter()
@@ -209,9 +217,14 @@ fn main() {
         model.display()
     );
 
-    let provider =
-        EmbedOnlyProvider::load(&model, ModelFamily::Qwen3Embedding).expect("load embed model");
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+    // serve holds the model (pb-cli-llm); `--model` names the one it must hold.
+    let provider = rt
+        .block_on(sovereign_cli_llm::serve_dial::serve_embedder(
+            "intent_instruction_probe",
+            &model,
+        ))
+        .unwrap_or_else(|e| panic!("{e}"));
     let embed = |instruction: &str, texts: &[String]| -> Vec<Vec<f32>> {
         let prefixed: Vec<String> = texts.iter().map(|t| format!("{instruction}{t}")).collect();
         let mut v = rt

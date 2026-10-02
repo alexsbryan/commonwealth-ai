@@ -17,7 +17,7 @@ impl Runtime {
         &self,
         conversation_id: &str,
     ) -> Option<Vec<String>> {
-        let notes = self.note_store.as_ref()?;
+        let notes = self.note_store.as_deref()?;
         let payloads = crate::memory::read_recent_tool_decisions(notes, Some(conversation_id), 32)
             .await
             .ok()?;
@@ -143,7 +143,8 @@ impl Runtime {
         // audit line has to be able to tell "the atlas served it" from "the
         // un-migrated v1 file served it" — same digest, different fact
         // (ARCH §18.3).
-        let mut sources: Vec<corpus_engine::enrichment::field_atoms::FieldModelSource> = Vec::new();
+        let mut sources: Vec<corpus_engine_atlas_reader::field_model::FieldModelSource> =
+            Vec::new();
         for corpus_id in &corpora {
             let index = match engine.open_index_for_corpus(corpus_id).await {
                 Ok(idx) => idx,
@@ -159,7 +160,7 @@ impl Runtime {
             // field-atoms <corpus>` moves it — so this port cannot take an
             // un-migrated corpus's digest dark.
             let Some((skeleton, source)) =
-                corpus_engine::enrichment::field_atoms::load_field_model(&index.path(), corpus_id)
+                corpus_engine_atlas_reader::field_model::load_field_model(&index.path(), corpus_id)
             else {
                 continue;
             };
@@ -189,7 +190,7 @@ impl Runtime {
         // digest fired for this turn.
         let from_atlas = sources
             .iter()
-            .filter(|s| **s == corpus_engine::enrichment::field_atoms::FieldModelSource::Atlas)
+            .filter(|s| **s == corpus_engine_atlas_reader::field_model::FieldModelSource::Atlas)
             .count();
         tracing::info!(
             target: "retrieval_audit",

@@ -51,6 +51,14 @@ on:
           - both
           - cli
           - desktop
+      intel:
+        description: "CLI macOS Intel leg: self-hosted (needs the Intel Mac running ./run.sh) or skip (fill it with scripts/release-cli-local.sh)."
+        required: true
+        default: self-hosted
+        type: choice
+        options:
+          - self-hosted
+          - skip
 
 permissions:
   contents: write # push the bump commit + tags; reused workflows create draft Releases
@@ -100,6 +108,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Identity FIRST, for both paths: `bump: none` creates missing
+          # annotated tags below, and `git tag -a` refuses without a
+          # committer. Watched failing in run 35934063369 (2026-09-23): the
+          # config used to live only in the bump branch, so the one path that
+          # is supposed to be able to skip the bump could not tag.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           bump="${{ inputs.bump }}"
           if [ "$bump" = "none" ]; then
             # Old flow: version already bumped + committed by hand. Verify.
@@ -125,8 +140,6 @@ jobs:
             # lockfile. `update --workspace` rewrites only the member
             # entries — no dependency changes, no network, no compilation.
             cargo update --workspace
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add Cargo.toml Cargo.lock \
               sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json \
               sovereign/crates/sovereign-desktop/package.json
@@ -135,12 +148,23 @@ jobs:
 
           # Tag only the selected targets — a desktop-only release must not
           # mint a cli-v tag that was never built.
+          #
+          # Fetch tags FIRST: actions/checkout does not fetch them, so a guard
+          # run after a previous cut saw no local tag, minted a NEW object, and
+          # the atomic push was rejected — "cli-v0.8.0 already exists", run
+          # 35935119143 (2026-09-23). And an existing tag must point where it
+          # should; this step never silently moves one.
+          git fetch --tags origin
           tags=()
           [ "${{ steps.plan.outputs.cli }}" = "true" ]     && tags+=("cli-v${version}")
           [ "${{ steps.plan.outputs.desktop }}" = "true" ] && tags+=("desktop-v${version}")
           for t in "${tags[@]}"; do
             if git rev-parse -q --verify "refs/tags/$t" >/dev/null; then
-              echo "tag $t already exists — leaving it as-is"
+              # Wherever it points is the release commit: main moves after a
+              # tag (workflow fix-ups land; the tag stays), and the build
+              # checks the TAG out below. Requiring equality with HEAD failed
+              # this release on its own follow-up commits (run 35936227476).
+              echo "tag $t exists ($(git rev-parse "$t^{}")) — leaving it as-is"
             else
               git tag -a "$t" -m "$t"
             fi
@@ -160,6 +184,7 @@ jobs:
     uses: ./.github/workflows/cli-release.yml
     with:
       tag: cli-v${{ needs.guard.outputs.version }}
+      intel: ${{ inputs.intel }}
     secrets: inherit
 
   desktop:

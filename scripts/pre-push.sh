@@ -154,9 +154,11 @@ fi
 # scripts/tests/pre-push-fail-closed.sh, all four directions.
 CHANGED="$(git diff --name-only "$RANGE" 2>/dev/null)"
 diff_status=$?
+GATE_ALL=0
 if (( diff_status != 0 )); then
     say "could not diff ${RANGE} (git exit ${diff_status}) — gating EVERYTHING rather than assuming it is clean"
     CHANGED="$(git ls-files)"
+    GATE_ALL=1
 elif [[ -z "$CHANGED" ]]; then
     if (( HAND_RUN )); then
         CHANGED="$( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } 2>/dev/null | sort -u)"
@@ -204,7 +206,25 @@ fi
 #
 # Cost is a warm no-op when nothing it depends on moved, and when something
 # did move this is the run that should have happened anyway.
-export SOVEREIGN_CHANGED_PATHS="$(printf '%s\n' "$CHANGED" | tr '\n' ':')sovereign/crates/sovereign-desktop/src-tauri/src/main.rs:"
+#
+# The set travels as ONE env string, and Linux refuses to exec with any single
+# string of 131072 bytes or more (MAX_ARG_STRLEN; the edge measured
+# 2026-09-25): the runner then dies E2BIG before running a line, and the push
+# is blocked by a message that names no gate. `git ls-files` above always
+# crosses it. So past the limit, and on that branch, no set is handed down:
+# unset is what both readers take as "gate everything" (quality_check_cmd/
+# select.rs::changed_paths; sovereign-lint.sh with SOVEREIGN_LINT_FULL). The
+# desktop is a workspace member, so the whole workspace still covers it.
+# Watched in scripts/tests/pre-push-fail-closed.sh case 4.
+CHANGED_ENV="$(printf '%s\n' "$CHANGED" | tr '\n' ':')sovereign/crates/sovereign-desktop/src-tauri/src/main.rs:"
+env_bytes=$(printf '%s' "SOVEREIGN_CHANGED_PATHS=$CHANGED_ENV" | wc -c | tr -d ' ')
+if (( GATE_ALL || env_bytes >= 131072 )); then
+    (( GATE_ALL )) || say "the change set is ${env_bytes} bytes as one env string, past the kernel's 131072 — gating the WHOLE workspace instead"
+    unset SOVEREIGN_CHANGED_PATHS SVRNMESH_CHANGED_PATHS
+    export SOVEREIGN_LINT_FULL=1
+else
+    export SOVEREIGN_CHANGED_PATHS="$CHANGED_ENV"
+fi
 
 "$SVRN" quality check --trigger prepush
 rc=$?

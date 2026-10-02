@@ -25,14 +25,14 @@ use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
-use sovereign_core::error::Error;
-use sovereign_core::model_family::{
+use sovereign_contracts::error::Error;
+use sovereign_contracts::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
-use sovereign_core::setup_config::{fim_defaults, EditSection};
-use sovereign_core::traits::{frames_to_text_stream, InferenceProvider, ResidentSlot};
-use sovereign_core::types::*;
-use sovereign_core::Result;
+use sovereign_contracts::setup_config::{fim_defaults, EditSection};
+use sovereign_contracts::traits::{frames_to_text_stream, InferenceProvider, ResidentSlot};
+use sovereign_contracts::types::*;
+use sovereign_contracts::Result;
 
 use super::idle_slot::IdleSlot;
 use crate::hardware::{detect_hardware, HardwareProfile};
@@ -663,14 +663,12 @@ pub struct EmbeddedLlamaCpp {
     /// written through either surface vouch under the same id.
     /// `None` when no embed slot is configured.
     embed_model_id: Option<String>,
-    /// Optional cross-encoder reranker slot. Behind a Mutex<Option<…>>
-    /// rather than `Option<Arc<…>>` so it can be installed lazily
-    /// after the inference provider is constructed — the daemon
-    /// reads its path from `models.toml` or
-    /// `SOVEREIGN_RERANK_MODEL_PATH` and calls
-    /// `install_rerank_slot()`. Inference reads via a brief lock,
-    /// clones the inner Arc, and releases.
-    rerank_slot: std::sync::Mutex<Option<Arc<RerankSlot>>>,
+    /// Optional cross-encoder reranker: its model id and the provider the
+    /// rerank kind's loader built (`served_kind::RERANK`). Behind a
+    /// Mutex<Option<…>> so the serving assembly can install it after the
+    /// engine is constructed (`install_rerank`). Inference reads via a brief
+    /// lock, clones the inner Arc, and releases.
+    rerank_slot: std::sync::Mutex<Option<(String, Arc<dyn InferenceProvider>)>>,
     hardware: HardwareProfile,
     /// Quirks for the fast slot — controls thinking injection and sampling defaults.
     fast_quirks: ModelQuirks,
@@ -877,7 +875,7 @@ pub(crate) fn pick_slot(
         .oicp
         .as_ref()
         .and_then(|o| o.capability_hint.as_ref())
-        .map(|h| h.as_str() == sovereign_core::oicp::CapabilityHint::CODE)
+        .map(|h| h.as_str() == oicp_types::CapabilityHint::CODE)
         .unwrap_or(false);
     if wants_code && has_code {
         return SlotTarget::Code;
@@ -1701,36 +1699,25 @@ impl EmbeddedLlamaCpp {
         }
     }
 
-    /// Install (or replace) the cross-encoder reranker slot at
-    /// runtime. Loads the GGUF eagerly so the first rerank call
-    /// doesn't pay the model-load latency. Family defaults to
-    /// `ModelFamily::Reranker` quirks (8192 ctx, max_batch 50);
-    /// pass `Some(_)` to override per-deployment.
+    /// Install (or replace) the cross-encoder reranker: a provider the rerank
+    /// kind's loader already built (`served_kind::RERANK`, fit check
+    /// included), advertised as `model_id`. The engine never loads a reranker
+    /// itself.
     ///
-    /// Returns the model_id (file stem) of the installed reranker,
-    /// matching the pattern other slot installers use.
-    ///
-    /// Replacing an in-use reranker is safe: the old `Arc<RerankSlot>`
-    /// drops when the last in-flight rerank call finishes (RAII via
-    /// Arc cloning in the `rerank_batch` hot path).
-    pub fn install_rerank_slot(&self, path: PathBuf, family: ModelFamily) -> Result<String> {
-        let rerank_quirks = family.default_quirks().rerank;
-        tracing::info!(
-            slot = "rerank",
-            path = %path.display(),
-            family = ?family,
-            "installing rerank slot"
-        );
-        let slot = RerankSlot::load(&self.primary_backend, &path, self.gpu_layers, rerank_quirks)?;
-        let model_id = slot.model_id.clone();
-        let arc = Arc::new(slot);
+    /// Replacing an in-use reranker is safe: the old provider drops when the
+    /// last in-flight rerank call finishes (Arc cloning in `rerank_batch`).
+    pub fn install_rerank(
+        &self,
+        model_id: String,
+        provider: Arc<dyn InferenceProvider>,
+    ) -> Result<()> {
         let mut guard = self
             .rerank_slot
             .lock()
             .map_err(|e| Error::Inference(format!("rerank slot lock poisoned: {e}")))?;
-        *guard = Some(arc);
+        *guard = Some((model_id.clone(), provider));
         tracing::info!(slot = "rerank", model_id = %model_id, "rerank slot installed");
-        Ok(model_id)
+        Ok(())
     }
 
     /// Returns the model_id of the currently installed reranker, if any.
@@ -1738,7 +1725,7 @@ impl EmbeddedLlamaCpp {
         self.rerank_slot
             .lock()
             .ok()
-            .and_then(|g| g.as_ref().map(|s| s.model_id.clone()))
+            .and_then(|g| g.as_ref().map(|(model_id, _)| model_id.clone()))
     }
 
     /// Add (or replace) a single extras slot at runtime. Returns
@@ -2180,10 +2167,10 @@ impl EmbeddedLlamaCpp {
 
         // ── rerank (lazily installed; std Mutex) ──
         if let Ok(guard) = self.rerank_slot.try_lock() {
-            if let Some(slot) = guard.as_ref() {
+            if let Some((model_id, _)) = guard.as_ref() {
                 out.push(ResidentSlot {
-                    role: "rerank".to_string(),
-                    model_id: slot.model_id.clone(),
+                    role: crate::served_kind::RERANK.role.to_string(),
+                    model_id: model_id.clone(),
                     resident: true,
                     size_bytes: None,
                     transitioning: false,
@@ -2268,7 +2255,7 @@ impl EmbeddedLlamaCpp {
     async fn acquire_lazy(
         &self,
         phase: &'static str,
-        admission: Option<&sovereign_core::types::TurnAdmission>,
+        admission: Option<&sovereign_contracts::types::TurnAdmission>,
     ) -> Result<super::model_slot::SlotPermit> {
         super::model_slot::acquire_with_queue_gauge(&self.lazy_queue, phase, admission).await
     }
@@ -2940,8 +2927,8 @@ mod fast_alias_guard_tests {
 #[cfg(test)]
 mod edit_lane_tests {
     use super::edit_lanes;
-    use sovereign_core::setup_config::fim_defaults;
-    use sovereign_core::types::{FimStyle, NextEditFormat};
+    use sovereign_contracts::setup_config::fim_defaults;
+    use sovereign_contracts::types::{FimStyle, NextEditFormat};
 
     /// Next-edit needs only a prompt dialect, so it is available on any
     /// loaded model. This is the whole basis of graceful degradation:
@@ -4025,43 +4012,26 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         .map_err(|e| Error::Inference(format!("Embed batch task failed: {e}")))?
     }
 
-    /// Reranker override. Routes to the lazily-installed `RerankSlot`
-    /// when present; returns `Error::NotImplemented` otherwise so the
-    /// caller (corpus-engine `search_with_rerank`) falls back to the
-    /// un-reranked fusion result without surfacing a hard error.
+    /// Reranker override. Routes to the installed rerank provider when
+    /// present; returns `Error::NotImplemented` otherwise so the caller
+    /// (corpus-engine `search_with_rerank`) falls back to the un-reranked
+    /// fusion result without surfacing a hard error.
     async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        let slot = {
+        let reranker = {
             let guard = self
                 .rerank_slot
                 .lock()
                 .map_err(|e| Error::Inference(format!("rerank slot lock poisoned: {e}")))?;
-            guard.as_ref().map(Arc::clone)
+            guard.as_ref().map(|(_, provider)| Arc::clone(provider))
         };
-        let slot = slot.ok_or_else(|| {
+        let reranker = reranker.ok_or_else(|| {
             Error::NotImplemented(
-                "No reranker model is installed. Set rerank.path in models.toml \
-                 (or SOVEREIGN_RERANK_MODEL_PATH) and restart the daemon."
+                "No reranker model is installed. Set `[models.kinds] rerank` in \
+                 config.toml (or SOVEREIGN_RERANK_MODEL_PATH) and restart the daemon."
                     .to_string(),
             )
         })?;
-        let query = query.to_string();
-        let docs = docs.to_vec();
-        tokio::task::spawn_blocking(move || {
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                slot.score_batch(&query, &docs)
-            }));
-            match result {
-                Ok(Ok(v)) => Ok(v),
-                Ok(Err(e)) => Err(e),
-                Err(_) => Err(Error::Inference(
-                    "Rerank inference panicked — model may be incompatible with \
-                     pooling=rank, or an input pair exceeded its context."
-                        .to_string(),
-                )),
-            }
-        })
-        .await
-        .map_err(|e| Error::Inference(format!("Rerank task failed: {e}")))?
+        reranker.rerank_batch(query, docs).await
     }
 
     fn model_id_for(&self, speed: Speed) -> String {

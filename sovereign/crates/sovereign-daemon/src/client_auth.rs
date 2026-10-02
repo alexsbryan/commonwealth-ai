@@ -31,7 +31,9 @@
 //!   `ConnectInfo<SocketAddr>` peer address — NOT a request header.
 //!   (The old local-vs-peer split keyed off the *presence* of the
 //!   spoofable `X-Node-Id` header, which meant "omit the header" was a
-//!   full-trust bypass. That footgun dies here.)
+//!   full-trust bypass. That footgun dies here.) Not on a KEYED daemon:
+//!   there [`crate::api_keys`] wraps every client listener and admits only an
+//!   API key, so loopback grants nothing.
 //! - **Remote caller** → must present `Authorization: Bearer <token>`
 //!   matching a NAMED token ([`crate::client_tokens`], one per device and
 //!   revocable alone) or the daemon's configured token (constant-time compare
@@ -80,11 +82,14 @@
 //! `CLIENT_ALPN` → the trusting listener, which is what lets their federated
 //! inference (which carries no `Authorization` at all) keep working.
 
-use commonwealth_core::ct::constant_time_eq;
+use sovereign_contracts::principal::Principal;
 use sovereign_grants::{GuestGrant, GuestSession};
-use sovereign_serving_host::admission::Principal;
+use std::fs;
+use std::io::Write;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 
 use axum::extract::{ConnectInfo, Request, State};
 use axum::http::StatusCode;
@@ -93,11 +98,6 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 
 use crate::state::AppState;
-
-/// Re-exported so daemon entries can source the client token without
-/// taking a direct `commonwealth-transport` dependency — the token's
-/// load/persist lives next to `node_key` in that crate.
-pub use commonwealth_transport::identity::load_or_create_client_token;
 
 /// Per-listener auth posture. See the module docs: the daemon binds the
 /// client router more than once, and the binds differ only in whether a
@@ -147,12 +147,13 @@ impl ClientAuthState {
 }
 
 /// Exact request paths that remain reachable without a token, even
-/// from a non-loopback caller. Both are read-only and advertise-by-
+/// from a non-loopback caller. All are read-only and advertise-by-
 /// design: `/oicp/v1/capabilities` is the federation handshake a peer
-/// reads to decide whether to peer, and `/status` is the liveness /
-/// pairing surface. Matched by EXACT equality (not prefix), so no
-/// child path inherits the exemption.
-pub const AUTH_EXEMPT_PATHS: &[&str] = &["/status", "/oicp/v1/capabilities"];
+/// reads to decide whether to peer, `/status` is the liveness /
+/// pairing surface, and `/health` is bare liveness for a proxy's edge.
+/// Matched by EXACT equality (not prefix), so no child path inherits
+/// the exemption.
+pub const AUTH_EXEMPT_PATHS: &[&str] = &["/status", "/oicp/v1/capabilities", "/health"];
 
 /// Extract the bearer token from an `Authorization` header value, if
 /// present and well-formed (`Bearer <token>`, case-insensitive scheme).
@@ -264,7 +265,7 @@ pub async fn client_auth_layer(
         // returns only the non-secret fingerprint, not the grant itself.
         Principal::Guest { .. } => {
             if let Some(p) = presented {
-                let now = commonwealth_core::clock::unix_now_millis();
+                let now = sovereign_time::unix_millis();
                 match state.inner.node.guest_grants.live(p, now) {
                     Some(grant) if grant.permits_path(request.uri().path()) => {
                         // Debug, not info: the ring page drains its live lane
@@ -348,7 +349,7 @@ pub async fn client_auth_layer(
                     return next.run(request).await;
                 }
                 if let Some(expected) = configured.as_ref() {
-                    if constant_time_eq(p.as_bytes(), expected.as_bytes()) {
+                    if bool::from(p.as_bytes().ct_eq(expected.as_bytes())) {
                         if state.inner.node.client_tokens.admits_shared_token() {
                             return next.run(request).await;
                         }
@@ -357,6 +358,10 @@ pub async fn client_auth_layer(
                 }
             }
         }
+        // An API key. Only a keyed daemon holds keys, and there
+        // `crate::api_keys::seal` wraps every client listener, so the key was
+        // already admitted and scoped by the time it reaches this layer.
+        Principal::Asserted { .. } => return next.run(request).await,
         // A member, a local owner or an anonymous caller is not admitted on a
         // remote gated path by this layer.
         _ => {}
@@ -523,23 +528,10 @@ mod tests {
         use axum::body::Body;
         use axum::routing::get;
         use axum::Router;
-        use commonwealth_core::ids::{MeshId, NodeId};
-        use commonwealth_core::mesh::Mesh;
-        use std::collections::HashMap;
+        use kernel_types::NodeId;
         use tower::ServiceExt;
 
-        let mesh = Mesh {
-            mesh_secret: [0u8; 32],
-            invite_expires_at: None,
-            id: MeshId::from_u128(1),
-            name: "Attach Test".into(),
-            invite_key_hash: [0u8; 32],
-            invite_version: 0,
-            require_encryption: false,
-            members: HashMap::new(),
-            peers: vec![],
-        };
-        let state = AppState::new(NodeId::from_u128(1), mesh);
+        let state = AppState::new(NodeId::from_u128(1));
 
         let app = Router::new()
             .route(
@@ -578,5 +570,116 @@ mod tests {
             b"owner:desktop",
             "the edge must attach the resolved principal for the inner layers"
         );
+    }
+}
+/// Filename of the client-API bearer token, a sibling of `node_key`
+/// under `<data_dir>`.
+pub const CLIENT_TOKEN_FILE: &str = "client-token";
+
+fn client_token_path(data_dir: &Path) -> std::path::PathBuf {
+    data_dir.join(CLIENT_TOKEN_FILE)
+}
+
+/// Load the persisted client-API bearer token, or generate + persist a
+/// fresh one (256-bit, hex-encoded) on first call. Used to authenticate
+/// non-loopback callers of `:9741` when the daemon binds a routable
+/// address — see this module's docs.
+///
+/// Mirrors the node key's persistence shape
+/// (`commonwealth_transport::identity::load_or_generate_node_key`): atomic
+/// write via a `.tmp` rename, `0600` on unix. Unlike the node key, the
+/// token is a shared secret distributed to mesh peers / remote clients
+/// (the symmetric-token tier — node-identity auth is a later milestone),
+/// so it is stored in cleartext by design: the daemon must present it
+/// verbatim to compare against an incoming `Authorization: Bearer`.
+pub fn load_or_create_client_token(data_dir: &Path) -> std::io::Result<String> {
+    let path = client_token_path(data_dir);
+    match fs::read_to_string(&path) {
+        Ok(s) => {
+            let token = s.trim().to_string();
+            if token.is_empty() {
+                // An empty/corrupt file is worse than none — a blank
+                // secret would match a blank bearer. Regenerate.
+                save_client_token(data_dir)
+            } else {
+                Ok(token)
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => save_client_token(data_dir),
+        Err(e) => Err(e),
+    }
+}
+
+/// Mint a fresh bearer token: 256 bits of OS entropy, hex-encoded.
+///
+/// THE definition of what a bearer this daemon accepts looks like, shared by
+/// the persisted client token below and by ephemeral guest grants
+/// (`sovereign_grants::guest_grant`). Both land in the same
+/// `Authorization: Bearer` header and are compared by the same
+/// `client_auth_layer`, so two generators would be two answers to one
+/// question (ARCH §10.6) — and the weaker one would set the real strength.
+pub fn generate_bearer_token() -> std::io::Result<String> {
+    let mut raw = [0u8; 32];
+    getrandom::fill(&mut raw)
+        .map_err(|e| std::io::Error::other(format!("bearer-token entropy failed: {e}")))?;
+    Ok(hex::encode(raw))
+}
+
+fn save_client_token(data_dir: &Path) -> std::io::Result<String> {
+    let token = generate_bearer_token()?;
+
+    fs::create_dir_all(data_dir)?;
+    let target = client_token_path(data_dir);
+    let tmp = target.with_extension("tmp");
+    {
+        let mut f = fs::File::create(&tmp)?;
+        f.write_all(token.as_bytes())?;
+        f.sync_all()?;
+    }
+    fs::rename(&tmp, &target)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&target, fs::Permissions::from_mode(0o600));
+    }
+    Ok(token)
+}
+
+#[cfg(test)]
+mod token_tests {
+    use super::*;
+
+    #[test]
+    fn client_token_persists_and_is_stable_across_calls() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = load_or_create_client_token(dir.path()).unwrap();
+        let second = load_or_create_client_token(dir.path()).unwrap();
+        assert_eq!(first, second, "token must be stable across boots");
+        assert_eq!(first.len(), 64, "256-bit hex token");
+        assert!(first.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(dir.path().join(CLIENT_TOKEN_FILE).exists());
+    }
+
+    #[test]
+    fn empty_token_file_is_regenerated_not_returned_blank() {
+        // A blank secret would match a blank bearer — must never be
+        // returned as-is.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(CLIENT_TOKEN_FILE), b"   \n").unwrap();
+        let token = load_or_create_client_token(dir.path()).unwrap();
+        assert_eq!(token.len(), 64, "blank file regenerated into a real token");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn client_token_file_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let _ = load_or_create_client_token(dir.path()).unwrap();
+        let mode = std::fs::metadata(dir.path().join(CLIENT_TOKEN_FILE))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
     }
 }

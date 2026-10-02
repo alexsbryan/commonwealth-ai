@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Bridge `WatchedDiff` → `corpus_engine::update::CorpusUpdater::apply_update`.
+//! Bridge `WatchedDiff` → ingest's `LocalCorpusPort::apply_watched_update`
+//! (the engine's `CorpusUpdater::apply_update`).
 //!
-//! Builds a `VersionManifest` from the fresh walk snapshot, builds a
-//! `ManifestDiff` from the per-doc verdict, and constructs the
+//! Builds the new version's entries from the fresh walk snapshot and the
+//! delta from the per-doc verdict, and constructs the
 //! `fetch_content` closure that re-stages a single file through
 //! `extract_stage::extract_one` (which already wraps the
 //! `safe_extract_pdf_text` panic guard).
@@ -16,12 +17,10 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use sovereign_core::error::{Error, Result};
-use tokio::sync::mpsc;
 
-use corpus_engine::update::delta::{
-    CorpusUpdater, ManifestDiff, UpdatePhase, UpdateProgress, VersionManifest,
+use corpus_index::ingest_port::{
+    DocFetchFn, LocalCorpusPort, WatchedUpdate, WatchedUpdateProgressFn, WatchedUpdateStage,
 };
-use corpus_engine::CorpusEngine;
 
 use super::diff::WatchedDiff;
 use super::events::{EventSink, WatchedFolderEvent};
@@ -48,7 +47,7 @@ use crate::local_corpus::ocr::OcrCtx;
 /// nothing useful to the index. The worker filters scanned PDFs out
 /// of the diff in that case via `collect_failed_files`.
 pub async fn apply_watched_diff(
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn LocalCorpusPort>,
     cfg: &LocalCorpusConfig,
     diff: &WatchedDiff,
     snapshot: &WalkSnapshot,
@@ -56,19 +55,16 @@ pub async fn apply_watched_diff(
     sink: &EventSink,
     now_unix: u64,
 ) -> Result<()> {
-    // 1. Build the new VersionManifest from the snapshot.
+    // 1 + 2. The new version's entries from the snapshot, and the
+    //    WatchedDiff as the update's delta (1:1 field rename).
     let entries: std::collections::HashMap<String, String> = snapshot
         .iter()
         .map(|(k, v)| (k.clone(), v.content_hash.clone()))
         .collect();
-    let new_manifest = VersionManifest {
+    let update = WatchedUpdate {
         corpus_id: cfg.id.clone(),
         version: format!("watched-{now_unix}"),
         entries,
-    };
-
-    // 2. Translate WatchedDiff → ManifestDiff (1:1 field rename).
-    let mdiff = ManifestDiff {
         new_documents: diff.added.clone(),
         updated_documents: diff.modified.clone(),
         deleted_documents: diff.removed.clone(),
@@ -87,14 +83,14 @@ pub async fn apply_watched_diff(
     let snapshot_arc = Arc::new(snapshot.clone());
     let cfg_arc = Arc::new(cfg.clone());
     let ocr_ctx_arc = Arc::new(ocr_ctx);
-    let fetch = move |doc_id: &str| {
+    let fetch: DocFetchFn = Arc::new(move |doc_id: &str| {
         let snap = snapshot_arc.clone();
         let cfg = cfg_arc.clone();
         let ocr_ctx = ocr_ctx_arc.clone();
         let id = doc_id.to_owned();
         let fut = async move {
             let entry = snap.get(&id).ok_or_else(|| {
-                corpus_engine::error::Error::Extraction(format!(
+                corpus_index::error::Error::Extraction(format!(
                     "watched_folder: doc_id '{id}' missing from sweep snapshot"
                 ))
             })?;
@@ -108,9 +104,7 @@ pub async fn apply_watched_diff(
             })
             .await
             .map_err(|e| {
-                corpus_engine::error::Error::Extraction(format!(
-                    "watched_folder: extract task: {e}"
-                ))
+                corpus_index::error::Error::Extraction(format!("watched_folder: extract task: {e}"))
             })?;
 
             let is_pdf = path
@@ -127,7 +121,7 @@ pub async fn apply_watched_diff(
                         // for scanned PDFs where pdf-extract panics.
                         String::new()
                     } else {
-                        return Err(corpus_engine::error::Error::Extraction(format!(
+                        return Err(corpus_index::error::Error::Extraction(format!(
                             "watched_folder: extract '{id}': {e}"
                         )));
                     }
@@ -167,7 +161,7 @@ pub async fn apply_watched_diff(
                 )
                 .await
                 .map_err(|e| {
-                    corpus_engine::error::Error::Extraction(format!(
+                    corpus_index::error::Error::Extraction(format!(
                         "watched_folder: ocr '{id}': {e}"
                     ))
                 });
@@ -177,41 +171,32 @@ pub async fn apply_watched_diff(
         };
         Box::pin(fut)
             as Pin<
-                Box<dyn std::future::Future<Output = corpus_engine::error::Result<String>> + Send>,
+                Box<dyn std::future::Future<Output = corpus_index::error::Result<String>> + Send>,
             >
-    };
-
-    // 4. Bridge engine progress channel into our EventSink.
-    let (tx, mut rx) = mpsc::channel::<UpdateProgress>(32);
-    let sink_for_pump = sink.clone();
-    let corpus_id = cfg.id.clone();
-    let pump = tokio::spawn(async move {
-        while let Some(p) = rx.recv().await {
-            sink_for_pump(WatchedFolderEvent::PhaseProgress {
-                corpus_id: corpus_id.clone(),
-                phase: phase_to_local(p.phase),
-                done: p.current,
-                total: p.total,
-            });
-        }
     });
 
-    let updater = CorpusUpdater::new(engine).with_progress_tx(tx);
-    let result = updater
-        .apply_update(&cfg.id, &mdiff, &new_manifest, fetch)
-        .await
-        .map_err(|e| Error::Execution(format!("watched_folder apply_update: {e}")));
+    // 4. Bridge engine progress into our EventSink.
+    let sink_for_pump = sink.clone();
+    let corpus_id = cfg.id.clone();
+    let progress: WatchedUpdateProgressFn = Box::new(move |stage, done, total| {
+        sink_for_pump(WatchedFolderEvent::PhaseProgress {
+            corpus_id: corpus_id.clone(),
+            phase: phase_to_local(stage),
+            done,
+            total,
+        });
+    });
 
-    // Drop the sender (held inside `updater`) so the pump exits.
-    drop(updater);
-    let _ = pump.await;
-    result
+    engine
+        .apply_watched_update(&update, fetch, progress)
+        .await
+        .map_err(|e| Error::Execution(format!("watched_folder apply_update: {e}")))
 }
 
-fn phase_to_local(p: UpdatePhase) -> SweepPhase {
+fn phase_to_local(p: WatchedUpdateStage) -> SweepPhase {
     match p {
-        UpdatePhase::Deletions => SweepPhase::Deleting,
-        UpdatePhase::Updates => SweepPhase::Updating,
-        UpdatePhase::Additions => SweepPhase::Adding,
+        WatchedUpdateStage::Deletions => SweepPhase::Deleting,
+        WatchedUpdateStage::Updates => SweepPhase::Updating,
+        WatchedUpdateStage::Additions => SweepPhase::Adding,
     }
 }

@@ -38,7 +38,7 @@
 //! resamples.
 //!
 //! **The instrument is the reranker this runtime already carries.**
-//! `RuntimeContext::rerank_fn` is a `corpus_engine::RerankFn` —
+//! `RuntimeContext::rerank_fn` is a `corpus_index::types::RerankFn` —
 //! `(query, docs) -> Vec<f32>` of raw cross-encoder logits, the exact
 //! function the kill gate scored through (`inference_to_rerank_fn` wraps
 //! `InferenceProvider::rerank_batch`, and so did the bench). No new model,
@@ -57,7 +57,7 @@ use serde::Deserialize;
 use sovereign_contracts::types::{DeciderId, GroundingDecision, GroundingVerdict};
 use std::sync::OnceLock;
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 
 /// The env knob. Read here and nowhere else, so "is the native path on?"
 /// has one implementation and one name (ARCH §10.6).
@@ -76,7 +76,7 @@ const POOL_K: usize = 8;
 /// reader, so there is exactly one Platt fit and one pair of thresholds
 /// in the workspace.
 const CALIBRATION_JSON: &str =
-    include_str!("../../../../../../bench/calibration/h1-port/h1_admission_calibration.json");
+    include_str!("../../../../data/calibration/h1_admission_calibration.json");
 
 #[derive(Debug, Deserialize)]
 struct Calibration {
@@ -334,7 +334,7 @@ pub(crate) fn decide_from_margin(margin: f32) -> (GroundingDecision, f32) {
 pub(crate) async fn admit(
     question: &str,
     chunks: &[ScoredChunk],
-    rerank_fn: Option<&corpus_engine::RerankFn>,
+    rerank_fn: Option<&corpus_index::types::RerankFn>,
 ) -> AdmissionOutcome {
     if !native_grounding_enabled() {
         return AdmissionOutcome::Disabled;
@@ -625,7 +625,7 @@ mod tests {
     /// threshold error.
     #[test]
     fn the_committed_operating_point_reproduces_the_frozen_honesty_recall() {
-        let scores = include_str!("../../../../../../bench/calibration/h1-port/h1_scores.jsonl");
+        let scores = include_str!("../../../../data/calibration/h1_scores.jsonl");
         let (mut absent, mut absent_abstained) = (0u32, 0u32);
         let (mut answerable, mut answerable_abstained) = (0u32, 0u32);
         for line in scores.lines().filter(|l| !l.trim().is_empty()) {

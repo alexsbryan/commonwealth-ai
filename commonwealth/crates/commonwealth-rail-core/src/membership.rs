@@ -43,7 +43,7 @@ use crate::admit::derived_id;
 use crate::{OpId, Person, RailAct, Roster, SignedOp};
 
 /// What one fold of the membership acts concludes.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Membership {
     /// key → person, from the seed and every counting `Admit`. CUMULATIVE: a
     /// cut key keeps its binding — names stay stable and every past act keeps

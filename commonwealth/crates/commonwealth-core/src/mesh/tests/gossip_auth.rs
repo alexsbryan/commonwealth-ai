@@ -79,11 +79,12 @@ fn a_pre_split_peer_authorizes_on_the_legacy_predicate() {
     assert!(
         report.peer_pre_split(),
         "the merge must REPORT that this peer is pre-split — it is the \
-         only moment that fact is visible, and rotate_invite depends on it"
+         only moment that fact is visible, and rotate's guard depends on it"
     );
 }
 
-/// The signal `rotate_invite`'s guard stands on. Reported per merge,
+/// The signal rotate's pre-split guard (cw-rails `membership::rotate`) stands
+/// on. Reported per merge,
 /// because it describes the SENDER's build and nothing in any member
 /// record carries it.
 #[test]
@@ -254,7 +255,7 @@ fn a_valid_proof_authorizes_without_any_raw_secret_on_the_wire() {
 /// post-split peer, a zeroed `mesh_secret` on the wire stops meaning "old
 /// build" and starts meaning "upgraded peer, deliberately withholding".
 /// Reading the payload alone flips two upgraded nodes to pre-split, which
-/// (a) blocks `rotate_invite` on both sides forever and (b) makes each
+/// (a) blocks rotation on both sides forever and (b) makes each
 /// resume sending the credential it had just stopped sending. The proof
 /// settles it: only a holder of the current secret can produce one.
 #[test]
@@ -367,7 +368,7 @@ fn a_bad_proof_is_refused_and_does_not_fall_back_to_the_legacy_arm() {
 /// every upgraded build still sent the secret. Once an upgraded peer began
 /// withholding it ON PURPOSE, a zeroed field inverted in meaning and the
 /// three cases collapsed into one "legacy" answer. Two modern nodes then
-/// reported each other pre-split, blocked `rotate_invite` on both sides
+/// reported each other pre-split, blocked rotation on both sides
 /// forever, and each resumed sending the credential it had just stopped
 /// sending.
 ///

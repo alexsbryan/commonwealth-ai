@@ -37,8 +37,8 @@ pub(super) async fn check_precondition(p: &Precondition, base: &str) -> bool {
         .is_ok(),
         Precondition::SlotDecodes(slot) => slot_decodes(base, slot).await,
         Precondition::CorpusInstalled(id) => {
-            use sovereign_enrichment_catalog::corpus_state::{inspect_corpus_state, CorpusState};
-            inspect_corpus_state(id) != CorpusState::Unindexed
+            use sovereign_contracts::index_layout::{inspect_corpus_index_state, CorpusIndexState};
+            inspect_corpus_index_state(id) != CorpusIndexState::Unindexed
         }
         Precondition::Binary(name) => locate_binary(name).is_some(),
         // The shell harnesses' spelling, which the lane runner lacked until

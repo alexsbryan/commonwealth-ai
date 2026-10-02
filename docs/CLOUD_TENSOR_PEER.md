@@ -111,7 +111,7 @@ curl -s -X POST localhost:9741/v1/mesh/rotate
 
 ## Known limits / follow-ups
 
-- `svrn pipeline pod up` is NOT this path (hardwires `--worker-mode` +
+- `svrn mesh pod up` is NOT this path (hardwires `--worker-mode` +
   bootstrap entrypoint; no mesh join, invisible to `discover_rpc_workers`).
   Productizing pod-as-tensor-peer through the pipeline tool is a named
   follow-up.

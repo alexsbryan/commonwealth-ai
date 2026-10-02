@@ -48,13 +48,15 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use sovereign_contracts::skills::SkillRegistry;
 use sovereign_contracts::tool_bundle::{ToolBundle, Withheld};
+use sovereign_contracts::traits::{ApprovalChannel, InferenceProvider, StateStore};
+use sovereign_contracts::types::InferenceConfig;
+use sovereign_contracts::ToolRegistry;
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::runtime::lane::LaneSources;
 use sovereign_core::runtime::Runtime;
-use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
-use sovereign_core::types::InferenceConfig;
-use sovereign_core::{RuntimeParts, SkillRegistry, ToolRegistry};
+use sovereign_core::RuntimeParts;
 use sovereign_tools::atlas_context_manager::AtlasContextManager;
 use sovereign_tools::bundles::{
     CoreTurnTools, KnowledgeFrontDoor, WebEscalation, WebReach, WebTools,
@@ -224,38 +226,6 @@ impl LaneScope {
     }
 }
 
-/// Where this host's cross-encoder rerank comes from — or why it has none.
-///
-/// `SOVEREIGN_RERANK_MODEL_PATH` names ONE GGUF and TWO different things load
-/// it, in two different ways, and which is correct depends on the host:
-///
-/// - `sovereign daemon run` installs it as a slot **inside its embedded
-///   llama.cpp engine** (`install_rerank_slot`, `sovereign-daemon/src/build/inference.rs`).
-/// - `svrn chat` loads a **standalone** `StandaloneReranker`, because its
-///   provider is remote — a `SplitInferenceProvider` speaks HTTP to the daemon
-///   and does not support rerank at all.
-///
-/// A host that does both puts the same weights in one process twice. That is
-/// not hypothetical: it is exactly what the daemon would have done the moment
-/// it started using this recipe, and the VRAM pre-flight would not have caught
-/// it, because the pre-flight plans one rerank slot and there would have been
-/// two.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RerankWiring {
-    /// Load a standalone cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH`, if
-    /// set and if it fits. Correct when the host's provider cannot rerank.
-    Standalone,
-    /// Do not load one: this host's provider already owns a rerank slot from
-    /// the same variable.
-    ///
-    /// The turn therefore gets NO cross-encoder rerank today — reaching the
-    /// host's own slot means handing the lane a `rerank_fn` over the host
-    /// provider, which is a separate change. This arm exists so that gap is a
-    /// sentence a reader can find rather than a doubled resident model an
-    /// operator discovers from RSS (ARCH §18.3).
-    AlreadyInProvider,
-}
-
 /// What a host must resolve before the recipe can run.
 ///
 /// Total by construction, like [`RuntimeParts`] itself: every field is one the
@@ -273,10 +243,21 @@ pub struct RecipeInputs {
     /// `InMemoryStateStore` does not). `None` is a real answer, not a
     /// forgotten wire — spec `sovereign/docs/specs/CONV_TIERED_PORT.md`.
     pub conv_tiered: Option<Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>>,
-    /// The corpus engine this process retrieves through.
-    pub corpus_engine: Arc<corpus_engine::CorpusEngine>,
+    /// The corpus engine this process retrieves through. `None` is a svrn
+    /// with no ingest program (pb-ingest-dial-daemon): the turn has no corpus
+    /// to retrieve from, and the recipe says so rather than inventing one.
+    pub corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
+    /// Ingest's atlas port: the atlas context manager's write-or-derive
+    /// reads (the seed-table freshness check) go through it. `None` exactly
+    /// when `corpus_engine` is.
+    pub atlas: Option<Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>>,
+    /// Ingest's enrichment-config port, when this host composes ingest: the
+    /// atlas manager's pipeline-map fallback reads through it. `None` (a svrn
+    /// with no ingest program) walks an unconverted atlas without the map
+    /// and logs why (pb-ingest-dial-tools-close).
+    pub enrich_config: Option<Arc<dyn corpus_index::ingest_port::enrich_config::EnrichConfigPort>>,
     /// Backing store for the per-conversation `tool_decision` write hook.
-    pub note_store: Option<Arc<corpus_engine_notes::NoteStore>>,
+    pub note_store: Option<Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     /// The skill registry the router and planner classify against.
     pub skills: Arc<SkillRegistry>,
     /// How a step that needs a human answer gets one.
@@ -335,9 +316,19 @@ pub struct RecipeInputs {
     /// nobody sees in a wall-clock lane total; an under-broad scope on a
     /// service silently drops the cross-corpus boost.
     pub scope: LaneScope,
-    /// Rerank wiring — see [`RerankWiring`]. Getting it wrong loads the same
-    /// GGUF twice in one process.
-    pub rerank: RerankWiring,
+    /// The cross-encoder this host's turns rerank with, as a port: any
+    /// provider whose `rerank_batch` answers (`sovereign_tools::corpus::
+    /// inference_to_rerank_fn` is provider-agnostic). The host decides where
+    /// it lives — its own engine's slot, a standalone load, a compute child
+    /// or `/v1/rerank` on a serving node — so no GGUF loads twice in one
+    /// process. `None`: this host's turns run without one.
+    pub rerank: Option<Arc<dyn InferenceProvider>>,
+    /// The NER port this host's turns extract entities through, for
+    /// entity-aware retrieval-over-history. The host decides where it comes
+    /// from — the daemon hands in its served NER kind's handle
+    /// (`sovereign_compute::ner::served_ner`), so the model loads once per
+    /// process and this crate loads none. `None`: retrieval runs cosine + MMR.
+    pub ner: Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
 }
 
 /// Whether a person's tool switches govern this host's turn registry.
@@ -398,6 +389,8 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         store,
         conv_tiered,
         corpus_engine,
+        atlas,
+        enrich_config,
         note_store,
         skills,
         approval,
@@ -410,9 +403,13 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         warmth,
         scope,
         rerank,
+        ner,
     } = inputs;
 
-    log_installed_corpora(&corpus_engine, progress).await;
+    match &corpus_engine {
+        Some(engine) => log_installed_corpora(engine.as_ref(), progress).await,
+        None => progress.note("Corpora:     none (no ingest program in this process)"),
+    }
 
     let (tools, mcp) = build_tools(&tool_bundles, switches, mcp_extra, progress).await;
     let (router, planner) =
@@ -420,18 +417,21 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
     let (lane, atlas_context) = build_lane(
         conv_tiered,
         &corpus_engine,
+        atlas,
+        enrich_config,
         &inference,
         &indexes_dir,
         &embed_model,
         warmth,
         scope,
         rerank,
+        ner,
         progress,
     )
     .await;
 
     let parts = RuntimeParts {
-        corpus_engine: Some(Arc::clone(&corpus_engine)),
+        corpus_engine: corpus_engine.clone().map(|e| e as _),
         note_store,
         ..RuntimeParts::new(
             inference,
@@ -490,7 +490,7 @@ pub fn baseline_bundles(deps: BaselineDeps<'_>) -> Vec<Box<dyn ToolBundle>> {
         Box::new(CoreTurnTools::new(
             Arc::clone(store),
             Arc::clone(inference),
-            Arc::clone(corpus_engine),
+            corpus_engine,
             web,
         )),
         web_family,
@@ -514,12 +514,13 @@ pub struct BaselineDeps<'a> {
     pub store: &'a Arc<dyn StateStore>,
     /// The provider the search and lookup tools infer through.
     pub inference: &'a Arc<dyn InferenceProvider>,
-    /// The corpus this host retrieves from.
-    pub corpus_engine: &'a Arc<corpus_engine::CorpusEngine>,
+    /// The corpus this host retrieves from; `None` withholds the corpus
+    /// tools by name (pb-ingest-dial-daemon).
+    pub corpus_engine: Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
     /// The open note store, when this host has one. Wires
     /// `knowledge_lookup`'s third evidence channel; `None` is reported as a
     /// withholding rather than passed over in silence.
-    pub note_store: Option<&'a Arc<corpus_engine_notes::NoteStore>>,
+    pub note_store: Option<&'a Arc<dyn sovereign_contracts::notes::AgentNotes>>,
     /// Whether this host may reach the open internet, and if not, why.
     pub web: WebReach,
     /// Whether thin local results may escalate to a web search on their own.
@@ -541,7 +542,7 @@ async fn build_tools(
     // Tier 4 — shared tool-result cache. Per-conversation cache slices, 5-turn
     // TTL. Idempotent tools (knowledge_lookup, code-intel reads) hit the cache
     // when the model re-calls with the same args within the window.
-    let tool_cache = Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
+    let tool_cache = Arc::new(sovereign_contracts::tool_result_cache::ToolResultCache::new());
     let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     match switches {
         ToolSwitches::Chosen(permitted) => {
@@ -609,7 +610,7 @@ async fn build_router_and_planner(
     skills: &Arc<SkillRegistry>,
     tools: Arc<ToolRegistry>,
     progress: &dyn RecipeProgress,
-) -> (Box<dyn sovereign_core::traits::Router>, LlmPlanner) {
+) -> (Box<dyn sovereign_contracts::traits::Router>, LlmPlanner) {
     // Built through the shared `router_bootstrap` helper so every host wires
     // the SAME classifiers (parity by construction). `from_env_and_repo` keeps
     // the `$SOVEREIGN_*` overlay + repo-relative exemplars for dev tuning; a
@@ -632,7 +633,7 @@ async fn build_router_and_planner(
     ));
     // Authority probe (FINANCIAL_CORPORA §7.3): the router consults the
     // registry's deterministic claims before intent classification.
-    let router: Box<dyn sovereign_core::traits::Router> =
+    let router: Box<dyn sovereign_contracts::traits::Router> =
         Box::new(llm_router.with_authority_probe(tools));
     let planner = LlmPlanner::new(Arc::clone(inference), Arc::clone(skills));
     (router, planner)
@@ -649,20 +650,31 @@ async fn build_router_and_planner(
 /// is complete.
 async fn build_lane(
     conv_tiered: Option<Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>>,
-    corpus_engine: &Arc<corpus_engine::CorpusEngine>,
+    corpus_engine: &Option<Arc<dyn corpus_index::source::CorpusReadPort>>,
+    atlas: Option<Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>>,
+    enrich_config: Option<Arc<dyn corpus_index::ingest_port::enrich_config::EnrichConfigPort>>,
     inference: &Arc<dyn InferenceProvider>,
     indexes_dir: &Path,
     embed_model: &str,
     warmth: LaneWarmth,
     scope: LaneScope,
-    rerank: RerankWiring,
+    rerank: Option<Arc<dyn InferenceProvider>>,
+    ner: Option<Arc<dyn sovereign_contracts::ner::LabeledEntityExtractor>>,
     progress: &dyn RecipeProgress,
 ) -> (LaneSources, Arc<AtlasContextManager>) {
     progress.phase(RecipePhase::BuildingLane);
     progress.note(&format!("Lane scope:  {}", scope.label()));
     let mut lane = LaneSources::none();
     lane.conv_tiered = conv_tiered;
-    lane.gliner = load_gliner(warmth);
+    // The host's NER port, read through the one narrow adapter.
+    tracing::debug!(
+        installed = ner.is_some(),
+        "runtime_recipe: entity extractor from the host's NER port"
+    );
+    lane.gliner = ner.map(|n| {
+        Arc::new(sovereign_contracts::ner::NerEntities(n))
+            as Arc<dyn sovereign_contracts::traits::EntityExtractor>
+    });
 
     // Atlas Layer 0: the installed Wikipedia link graph, if one is built.
     //
@@ -672,7 +684,14 @@ async fn build_lane(
     // gets its graph, and one sealed to a 316-chunk bench corpus probes one
     // corpus instead of forty-eight. Measured on the authoring host, 51,845
     // articles / 7,853,503 edges = 2.2 s.
-    if let Some(graph) = load_wikipedia_graph(corpus_engine, indexes_dir, &scope, progress).await {
+    let graph = match corpus_engine {
+        Some(engine) => load_wikipedia_graph(engine.as_ref(), indexes_dir, &scope, progress).await,
+        None => {
+            progress.note("Wiki graph:  not loaded (no ingest program in this process)");
+            None
+        }
+    };
+    if let Some(graph) = graph {
         progress.note(&format!(
             "Wiki graph:  {} articles, {} edges",
             graph.article_count().await,
@@ -685,11 +704,15 @@ async fn build_lane(
     // cached on disk; cold-start embed work is deliberately NOT done here (it
     // belongs in the post-install hook, so the first user query has a
     // deterministic latency rather than waiting on a wiki-scale embed pass).
-    let atlas_mgr = Arc::new(AtlasContextManager::new(
-        indexes_dir.to_path_buf(),
-        Arc::clone(inference),
-        embed_model.to_string(),
-    ));
+    let atlas_mgr = Arc::new(
+        AtlasContextManager::new(
+            indexes_dir.to_path_buf(),
+            Arc::clone(inference),
+            embed_model.to_string(),
+            atlas,
+        )
+        .with_enrich_config(enrich_config),
+    );
     lane.atlas_context =
         Some(Arc::clone(&atlas_mgr)
             as Arc<
@@ -744,21 +767,6 @@ fn load_cross_corpus_members(
     // Cross-corpus meta-atlas (Move 5). Empty / absent file → the boost is a
     // no-op and retrieval falls back to cosine + existing entity-boost.
     load_meta_atlas(lane, warmth, progress);
-
-    // Cross-corpus bridge edges (Phase 6). Empty/absent → bridge_boost is a
-    // no-op; the boost only runs at all when `SOVEREIGN_META_BRIDGE` is set.
-    let bridge_index = match corpus_engine::meta_atlas::BridgeIndex::load(None) {
-        Ok(idx) => Arc::new(idx),
-        Err(e) => {
-            progress.note(&format!("Bridge: load failed ({e}); bridge boost disabled"));
-            Arc::new(corpus_engine::meta_atlas::BridgeIndex::empty())
-        }
-    };
-    progress.note(&format!(
-        "Bridge:      {} cross-corpus edges",
-        bridge_index.len()
-    ));
-    lane.bridge = Some(Arc::clone(&bridge_index));
 }
 
 /// Fill (or arrange to fill) `lane.meta_atlas` — see [`LaneWarmth`] for why
@@ -769,13 +777,13 @@ fn load_cross_corpus_members(
 /// it, and so the desktop's can be deleted when it lands on this recipe (ARCH
 /// §10.6).
 fn load_meta_atlas(lane: &LaneSources, warmth: LaneWarmth, progress: &dyn RecipeProgress) {
-    fn read() -> corpus_engine::meta_atlas::MetaAtlasIndex {
-        let path = corpus_engine::meta_atlas::default_meta_atlas_path();
-        match corpus_engine::meta_atlas::MetaAtlasIndex::load(path.as_deref()) {
+    fn read() -> corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex {
+        let path = corpus_engine_atlas_reader::meta_atlas::default_meta_atlas_path();
+        match corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex::load(path.as_deref()) {
             Ok(idx) => idx,
             Err(e) => {
                 tracing::warn!(error = %e, "runtime_recipe: meta-atlas load failed; boost disabled");
-                corpus_engine::meta_atlas::MetaAtlasIndex::empty()
+                corpus_engine_atlas_reader::meta_atlas::MetaAtlasIndex::empty()
             }
         }
     }
@@ -820,78 +828,15 @@ fn load_meta_atlas(lane: &LaneSources, warmth: LaneWarmth, progress: &dyn Recipe
     }
 }
 
-/// GLiNER entity extractor for entity-aware retrieval-over-history, at the
-/// warmth this host asked for. Probe first; a missing model soft-falls-through
-/// to pure cosine + MMR.
-///
-/// # Why this takes `warmth`
-///
-/// `lane.gliner` is a lane member, so [`LaneWarmth`] governs it like every
-/// other one. It did not until 2026-08-26, and the gap was a §10.6 split-brain
-/// rather than a policy choice: `sovereign daemon run` declares
-/// [`LaneWarmth::Deferred`] and this one member read it as `Eager`, so a host
-/// that had explicitly asked to reach `listening` promptly still blocked ~950 ms
-/// on a model load. One declaration, two readings.
-///
-/// The deferred arm's degradation is not new and is already accepted in
-/// `LaneWarmth`'s own words: until the model is warm the extractor returns no
-/// entities, which is EXACTLY what a host with no GLiNER installed does —
-/// retrieval falls back to cosine + MMR, "a degradation in ranking and never a
-/// wrong answer". `LaneWarmth` says that about a ~1 GB JSON parse; this is a
-/// ~950 ms load that is warm within ~1 s, well before a first query.
-///
-/// This is also what lets the desktop stop hand-rolling its own bootstrap: its
-/// wiring WAS the deferred arm, written out by hand.
-fn load_gliner(warmth: LaneWarmth) -> Option<Arc<dyn sovereign_core::traits::EntityExtractor>> {
-    let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
-    if !sovereign_gliner::gliner_ner::probe_model_available(model_id) {
-        tracing::debug!(
-            model = model_id,
-            "runtime_recipe: GLiNER model not installed; entity-aware \
-             retrieval disabled (falls back to cosine+MMR)"
-        );
-        return None;
-    }
-    match warmth {
-        // Install now, warm behind. `new_default_deferred` cannot fail
-        // synchronously — the thread logs a load error and leaves the
-        // extractor permanently in the same fallback the `Eager` arm's `Err`
-        // branch produces, so absence is reported identically on both paths.
-        LaneWarmth::Deferred => {
-            tracing::info!(
-                model = model_id,
-                "runtime_recipe: GLiNER entity extractor installed (background warm)"
-            );
-            Some(
-                Arc::new(sovereign_gliner::gliner_ner::LazyGlinerExtractor::new_default_deferred())
-                    as Arc<dyn sovereign_core::traits::EntityExtractor>,
-            )
-        }
-        LaneWarmth::Eager => match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
-            Ok(g) => {
-                tracing::info!(
-                    model = model_id,
-                    "runtime_recipe: GLiNER entity extractor loaded"
-                );
-                Some(Arc::new(g) as Arc<dyn sovereign_core::traits::EntityExtractor>)
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "runtime_recipe: GLiNER probe ok but load failed; entity-aware retrieval disabled");
-                None
-            }
-        },
-    }
-}
-
 /// Probe `<indexes_dir>/<corpus_id>/wikipedia_graph.db` (or the columnar
 /// atlas store) for each installed corpus and return the first graph that
 /// opens cleanly.
 async fn load_wikipedia_graph(
-    engine: &corpus_engine::CorpusEngine,
+    engine: &dyn corpus_index::source::CorpusReadPort,
     indexes_dir: &Path,
     scope: &LaneScope,
     progress: &dyn RecipeProgress,
-) -> Option<Arc<dyn corpus_engine::WikipediaGraphApi>> {
+) -> Option<Arc<dyn corpus_engine_atlas_reader::wikipedia_graph::WikipediaGraphApi>> {
     // Memory-pressure escape hatch. The graph is a 7M-edge sqlite mmap; on a
     // host already running the daemon, loading it twice has tipped past
     // available RAM in practice.
@@ -912,7 +857,12 @@ async fn load_wikipedia_graph(
             continue;
         }
         probed += 1;
-        if let Some(g) = corpus_engine::open_wikipedia_graph(indexes_dir, &info.corpus_id).await {
+        if let Some(g) = corpus_engine_atlas_reader::wikipedia_columnar::open_wikipedia_graph(
+            indexes_dir,
+            &info.corpus_id,
+        )
+        .await
+        {
             return Some(g);
         }
     }
@@ -923,7 +873,7 @@ async fn load_wikipedia_graph(
 }
 
 async fn log_installed_corpora(
-    engine: &corpus_engine::CorpusEngine,
+    engine: &dyn corpus_index::source::CorpusReadPort,
     progress: &dyn RecipeProgress,
 ) {
     match engine.installed_indexes().await {
@@ -939,33 +889,33 @@ async fn log_installed_corpora(
     }
 }
 
-/// The optional cross-encoder reranker, and the dedup-only ablation that
-/// takes precedence over it.
-fn load_reranker(lane: &mut LaneSources, wiring: RerankWiring, progress: &dyn RecipeProgress) {
-    if wiring == RerankWiring::AlreadyInProvider {
-        // See `RerankWiring::AlreadyInProvider`. The dedup-only ablation below
-        // is skipped too: it is a rerank CONFIG, and configuring a rerank this
-        // host will not run is the kind of half-set state this document exists
-        // to remove.
-        tracing::debug!(
-            "runtime_recipe: no standalone reranker — this host's provider \
-             already owns the slot"
-        );
-        return;
-    }
+/// Is the dedup-only rerank ablation on (`SOVEREIGN_RERANK_DEDUP_ONLY=1`)?
+/// It takes precedence over a cross-encoder, so a host that loads its own
+/// reads this first and skips a load the turn would not use.
+pub fn rerank_dedup_only() -> bool {
+    std::env::var("SOVEREIGN_RERANK_DEDUP_ONLY")
+        .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// The host's cross-encoder, and the dedup-only ablation that takes
+/// precedence over it.
+fn load_reranker(
+    lane: &mut LaneSources,
+    rerank: Option<Arc<dyn InferenceProvider>>,
+    progress: &dyn RecipeProgress,
+) {
     // Dedup-only ablation: `SOVEREIGN_RERANK_DEDUP_ONLY=1` enables overfetch +
     // per-article dedup using ONLY the fusion ordering — the experiment that
     // asks whether the SEP source-recall lift is the dedup mechanism or the
     // cross-encoder logits (`sovereign/docs/RERANK_EXPERIMENT.md`). It takes
     // precedence so an operator can A/B without touching two env vars.
-    let dedup_only = std::env::var("SOVEREIGN_RERANK_DEDUP_ONLY")
-        .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+    let dedup_only = rerank_dedup_only();
     let dedup_filter = sovereign_tools::corpus::rerank_dedup_filter_from_env();
     let dedup_picker = sovereign_tools::corpus::rerank_dedup_picker_from_env();
 
     if dedup_only {
-        let mut cfg = corpus_engine::RerankConfig::default();
+        let mut cfg = corpus_index::types::RerankConfig::default();
         cfg.enabled = true;
         cfg.per_article = true;
         cfg.dedup_corpus_filter = dedup_filter.clone();
@@ -988,37 +938,24 @@ fn load_reranker(lane: &mut LaneSources, wiring: RerankWiring, progress: &dyn Re
         return;
     }
 
-    // ONE loader, and it now carries the capacity pre-flight this recipe used
-    // to carry alone (`sovereign_inference::reranker_standalone::load_from_env`
-    // — see its docs for the mirror that was not one). The refusal MESSAGE
-    // comes back rather than being logged and swallowed, because the caller
-    // with a banner is the one that can show it to a person.
-    match sovereign_inference::reranker_standalone::load_from_env() {
-        sovereign_inference::reranker_standalone::RerankLoad::Loaded(reranker) => {
-            let rerank_fn = sovereign_tools::corpus::inference_to_rerank_fn(reranker);
-            let cfg = sovereign_tools::corpus::rerank_config_from_env();
-            progress.note(&format!(
-                "Reranker:    candidates_k={}, alpha={:.2}, per_article={}, \
-                 atlas_weight={:.2}, dedup_corpora={:?}, min_score={:?}",
-                cfg.candidates_k,
-                cfg.alpha,
-                cfg.per_article,
-                cfg.atlas_weight,
-                sorted_corpora(cfg.dedup_corpus_filter.as_ref()),
-                cfg.min_score
-            ));
-            lane.rerank.f = Some(rerank_fn);
-            lane.rerank.config = cfg;
-        }
-        sovereign_inference::reranker_standalone::RerankLoad::Refused { message } => {
-            progress.note(&format!("Reranker:    REFUSED — {message}"));
-        }
-        sovereign_inference::reranker_standalone::RerankLoad::Failed { message } => {
-            progress.note(&format!("Reranker:    {message}"));
-        }
-        // Opt-in, and nobody opted in. Nothing to say.
-        sovereign_inference::reranker_standalone::RerankLoad::NotConfigured => {}
-    }
+    let Some(reranker) = rerank else {
+        tracing::debug!("runtime_recipe: this host supplied no cross-encoder");
+        return;
+    };
+    let rerank_fn = sovereign_tools::corpus::inference_to_rerank_fn(reranker);
+    let cfg = sovereign_tools::corpus::rerank_config_from_env();
+    progress.note(&format!(
+        "Reranker:    candidates_k={}, alpha={:.2}, per_article={}, \
+         atlas_weight={:.2}, dedup_corpora={:?}, min_score={:?}",
+        cfg.candidates_k,
+        cfg.alpha,
+        cfg.per_article,
+        cfg.atlas_weight,
+        sorted_corpora(cfg.dedup_corpus_filter.as_ref()),
+        cfg.min_score
+    ));
+    lane.rerank.f = Some(rerank_fn);
+    lane.rerank.config = cfg;
 }
 
 /// Deterministic rendering of the dedup allowlist. A `HashSet`'s iteration
@@ -1048,6 +985,10 @@ mod warmth_census {
     /// The compiler does NOT hold this: dropping the parameter and its argument
     /// together compiles clean and silently restores eager-always. Watched to
     /// fail by reverting `load_gliner(warmth)` to `load_gliner()`.
+    ///
+    /// `load_gliner` left the list at pb-serving-ner: NER is a host port now
+    /// (`RecipeInputs::ner`), so the host's own load carries its warmth and
+    /// this crate loads no model to defer.
     #[test]
     fn every_deferrable_lane_member_honours_the_declared_warmth() {
         let src = include_str!("lib.rs");
@@ -1060,17 +1001,23 @@ mod warmth_census {
             })
             .collect();
 
-        for member in ["load_meta_atlas", "load_gliner"] {
-            let decl = code
+        for member in ["load_meta_atlas"] {
+            let start = code
                 .iter()
-                .find(|l| l.contains(&format!("fn {member}(")))
+                .position(|l| l.contains(&format!("fn {member}(")))
                 .unwrap_or_else(|| {
                     panic!("{member} is gone — drop it here or say what replaced it")
                 });
+            let sig_end = code[start..]
+                .iter()
+                .position(|l| l.contains(')'))
+                .map(|o| start + o)
+                .unwrap_or(code.len() - 1);
+            let sig = code[start..=sig_end].join(" ");
             assert!(
-                decl.contains("warmth: LaneWarmth"),
+                sig.contains("warmth: LaneWarmth"),
                 "{member} no longer takes the host's declared warmth, so a host \
-                 asking to reach `listening` promptly will block on it anyway:\n  {decl}"
+                 asking to reach `listening` promptly will block on it anyway:\n  {sig}"
             );
 
             let calls: Vec<&&str> = code

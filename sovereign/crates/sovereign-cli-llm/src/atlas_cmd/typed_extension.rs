@@ -22,8 +22,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::remote::RemoteApiProvider;
+use oicp_client::RemoteApiProvider;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::typed_extension::{run_typed_extension, ExtractionStatus};
 
@@ -38,8 +38,11 @@ use sovereign_tools::typed_extension::{run_typed_extension, ExtractionStatus};
 ///
 /// Keeps the `/v1` suffix the flag has always carried — this endpoint is the
 /// OpenAI-shape ROOT, not the daemon base.
-fn default_endpoint() -> String {
-    format!("{}/v1", sovereign_core::setup_config::client_daemon_base())
+fn default_endpoint() -> Result<String, String> {
+    Ok(format!(
+        "{}/v1",
+        sovereign_contracts::setup_config::client_daemon_base()?
+    ))
 }
 
 /// Context window the OpenAI-shape RemoteApiProvider claims. The
@@ -61,6 +64,13 @@ pub async fn run(args: &[String]) -> i32 {
         print_help();
         return 0;
     }
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
 
     // Resolve data dir → state db + atlas dir for this corpus.
     let data_dir = match resolve_data_dir() {
@@ -142,13 +152,15 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     let started = std::time::Instant::now();
-    let report = match run_typed_extension(&corpus_id, &store, &inference, &atlas_dir).await {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("error: typed extension failed: {e}");
-            return 1;
-        }
-    };
+    let report =
+        match run_typed_extension(atlas.as_ref(), &corpus_id, &store, &inference, &atlas_dir).await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: typed extension failed: {e}");
+                return 1;
+            }
+        };
     let elapsed_ms = started.elapsed().as_millis();
 
     println!();
@@ -213,7 +225,7 @@ struct Args {
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut corpus_id: Option<String> = None;
-    let mut endpoint = default_endpoint();
+    let mut endpoint: Option<String> = None;
     let mut help = false;
     let mut force = false;
     let mut iter = args.iter();
@@ -222,7 +234,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "--help" | "-h" => help = true,
             "--force" => force = true,
             "--endpoint" => match iter.next() {
-                Some(v) => endpoint = v.clone(),
+                Some(v) => endpoint = Some(v.clone()),
                 None => return Err("--endpoint requires a URL".into()),
             },
             other if other.starts_with("--") => {
@@ -238,7 +250,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     }
     Ok(Args {
         corpus_id: corpus_id.unwrap_or_default(),
-        endpoint,
+        endpoint: endpoint.map_or_else(default_endpoint, Ok)?,
         help,
         force,
     })
@@ -248,7 +260,7 @@ fn print_help() {
     // Resolved, not compiled: the help must print the endpoint this
     // invocation would actually use, or it documents a daemon the operator
     // has already pointed away from.
-    let endpoint_default = default_endpoint();
+    let endpoint_default = default_endpoint().unwrap_or_else(|e| format!("none ({e})"));
     println!(
         "svrn atlas typed-extension <corpus> [--endpoint <url>]\n\
          \n\

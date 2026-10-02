@@ -5,7 +5,7 @@
 //! round-trip 422s, and the two speakers live in different crates: the
 //! receiving route (in the daemon) and the sending loop (in `sovereign-mesh`).
 //! A leaf both may name is the only home that does not make one the other's
-//! dependency. Four items live here (domains `dm-daemon-api-edge` (a)):
+//! dependency. Five items live here (domains `dm-daemon-api-edge` (a)):
 //!
 //! - [`MAX_REQUEST_BODY_BYTES`] — the receiver's `DefaultBodyLimit`, the ONE
 //!   decider the sender's payload gauge warns against.
@@ -13,11 +13,14 @@
 //!   derived from the body limit rather than re-typed.
 //! - [`RingSyncRequest`] / [`RingSyncResponse`] — the anti-entropy exchange's
 //!   two bodies.
+//! - [`LiveEnvelope`] — the live lane's peer body (moved from the daemon's
+//!   `routes_rail_live` when cw-rails began serving `/internal/ring/live`).
 //!
 //! The join and gossip bodies are NOT here: they already live in
 //! `commonwealth_core::mesh::wire` and are re-exports at their old paths.
 
-use commonwealth_rail::{Digest, Op, SignedOp};
+// The FOLD half, not the journal: `-rail` reads a disk and this crate must not.
+use commonwealth_rail_core::{Digest, Op, SignedOp};
 use serde::{Deserialize, Serialize};
 
 /// The receiver's request-body cap — the ONE decider for "how big may one
@@ -75,4 +78,14 @@ pub struct RingSyncResponse {
     /// before it stopped declaring its own copy of this struct.
     #[serde(default)]
     pub ingested: usize,
+}
+
+/// What one peer posts to another's `/internal/ring/live`: the payload and
+/// the namespace the SENDER's grant resolved it under. Built by
+/// `push_ephemeral`, read by `routes_internal::ring_live` and by cw-rails'
+/// `ring_routes::ring_live`.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct LiveEnvelope {
+    pub namespace: String,
+    pub payload: String,
 }

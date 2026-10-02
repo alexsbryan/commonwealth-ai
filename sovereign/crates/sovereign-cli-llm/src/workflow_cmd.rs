@@ -11,7 +11,7 @@
 //! P0+P1 of `docs/specs/WORKFLOW_SUBSTRATE.md`; durable/distributed execution
 //! is P2 (the pipeline tool as an outer loop).
 
-use corpus_engine::RecipeRegistry;
+use sovereign_contracts::recipe::registry::{merged_catalog, RegistryEntryView};
 // The registry assembly, runner, and workflow catalog live in
 // `sovereign-workflow-host` (the daemon's workflow home); the CLI is a
 // thin presenter on top.
@@ -22,16 +22,7 @@ use sovereign_workflow_host::{
 // Inc3 surface unification: `workflow run <recipe-id>` delegates to the *same*
 // install client `corpus install` uses, and shapes its `--param` values the same
 // way. Two backends, one surface — the recipe install path stays intact.
-use crate::corpus_cmd::{param_json_value, submit_install_request};
-
-/// The daemon this CLI talks to, resolved through the ONE decider — env
-/// (`SOVEREIGN_DAEMON_URL`), then `[daemon] client_port`, then the compiled
-/// default. Was a compiled literal, so the flag below was the only way to
-/// move it and a session pointed at a second daemon silently missed this
-/// verb (§10.6).
-fn default_daemon() -> String {
-    sovereign_core::setup_config::client_daemon_base()
-}
+use sovereign_cli_base::corpus_install::{param_json_value, submit_install_request};
 
 /// A name on the unified `workflow` surface resolves to one of two artifact kinds,
 /// each with its own backend: a **workflow** (run in-process by the workflow host)
@@ -52,12 +43,12 @@ enum ResolvedArtifact {
 fn classify_artifact(
     name: &str,
     workflow: Option<(String, String)>,
-    registry: &RecipeRegistry,
+    registry: &[RegistryEntryView],
 ) -> std::result::Result<ResolvedArtifact, String> {
     if let Some((toml, origin)) = workflow {
         return Ok(ResolvedArtifact::Workflow { toml, origin });
     }
-    if let Some(e) = registry.find_entry(name) {
+    if let Some(e) = registry.iter().find(|e| e.id == name) {
         return Ok(ResolvedArtifact::Recipe {
             id: e.id.clone(),
             name: e.name.clone(),
@@ -73,21 +64,28 @@ fn classify_artifact(
 /// (`resolve_workflow_source`) and the recipe registry.
 fn resolve_artifact(name: &str) -> std::result::Result<ResolvedArtifact, String> {
     let workflow = resolve_workflow_source(name).ok();
-    classify_artifact(name, workflow, &recipe_registry())
+    let recipes = match crate::chat_cmd::ingest::recipe_author() {
+        Ok(seams) => recipe_registry(seams.registry_toml),
+        // Without ingest the recipe backend cannot answer: say so, rather
+        // than reporting a recipe that may exist as missing.
+        Err(why) if workflow.is_none() => {
+            return Err(format!(
+                "no workflow named `{name}`, and recipes cannot be resolved here: {why}"
+            ))
+        }
+        Err(_) => Vec::new(),
+    };
+    classify_artifact(name, workflow, &recipes)
 }
 
-/// The recipe catalog: the compiled-in bundled snapshot plus the user's published
-/// `~/.svrnmesh/recipes/registry.toml`. No network — `find_entry`/`list_entries`
-/// read the bundled snapshot; `with_local_registry` silently no-ops when the user
-/// has none. Mirrors `recipe_cmd`'s construction so the two surfaces see the same
-/// catalog.
-fn recipe_registry() -> RecipeRegistry {
-    let local_dir = RecipeRegistry::default_local_recipes_dir();
-    let mut registry = RecipeRegistry::from_bundled(local_dir.clone());
-    if let Some(d) = &local_dir {
-        registry = registry.with_local_registry(&d.join("registry.toml"));
-    }
-    registry
+/// The recipe catalog: ingest's bundled snapshot plus the user's published
+/// `~/.svrnmesh/recipes/registry.toml`, local entries first. No network, as
+/// before: the live registry was never refreshed here.
+fn recipe_registry(bundled_toml: &str) -> Vec<RegistryEntryView> {
+    merged_catalog(bundled_toml)
+        .into_iter()
+        .map(|row| row.entry)
+        .collect()
 }
 
 pub async fn run_workflow(args: &[String]) -> i32 {
@@ -119,7 +117,7 @@ pub async fn run_workflow(args: &[String]) -> i32 {
 /// server-side and returns the partner-facing reply. One authoring turn — re-run
 /// with more detail (or edit the saved TOML) to iterate.
 async fn cmd_author(args: &[String]) -> i32 {
-    let mut daemon = default_daemon();
+    let mut daemon: Option<String> = None;
     let mut desc: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
@@ -127,7 +125,7 @@ async fn cmd_author(args: &[String]) -> i32 {
             "--daemon" => {
                 i += 1;
                 match args.get(i) {
-                    Some(u) => daemon = u.clone(),
+                    Some(u) => daemon = Some(u.clone()),
                     None => {
                         eprintln!("--daemon needs a URL");
                         return 1;
@@ -142,6 +140,9 @@ async fn cmd_author(args: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(daemon) = sovereign_cli_base::urls::daemon_base_or_refuse(daemon) else {
+        return 1;
+    };
     let Some(desc) = desc else {
         eprintln!("Usage: svrn workflow author \"<describe the workflow you want>\"");
         eprintln!(
@@ -270,7 +271,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
 async fn cmd_run(args: &[String]) -> i32 {
     let mut file: Option<String> = None;
     let mut concurrency = 4usize;
-    let mut daemon = default_daemon();
+    let mut daemon: Option<String> = None;
     let mut no_cache = false;
     let mut params: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     let mut i = 0;
@@ -290,7 +291,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             "--daemon" => {
                 i += 1;
                 match args.get(i) {
-                    Some(u) => daemon = u.clone(),
+                    Some(u) => daemon = Some(u.clone()),
                     None => {
                         eprintln!("--daemon needs a URL");
                         return 1;
@@ -358,6 +359,9 @@ async fn cmd_run(args: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(daemon) = sovereign_cli_base::urls::daemon_base_or_refuse(daemon) else {
+        return 1;
+    };
 
     let Some(file) = file else {
         eprintln!("Usage: svrn workflow run <name|file.toml> [--folder <dir>] …");
@@ -429,8 +433,13 @@ fn cmd_list() -> i32 {
     // Recipes: the corpus catalog (bundled snapshot + the user's published
     // recipes). Surfaced on the same list so the user sees the full menu of names
     // `run` accepts — the surface is unified even though the backends stay separate.
-    for e in recipe_registry().list_entries() {
-        rows.push((e.id.clone(), "recipe", e.description.clone()));
+    match crate::chat_cmd::ingest::recipe_author() {
+        Ok(seams) => {
+            for e in recipe_registry(seams.registry_toml) {
+                rows.push((e.id, "recipe", e.description));
+            }
+        }
+        Err(why) => eprintln!("recipes: not listed ({why})"),
     }
 
     rows.sort();
@@ -727,12 +736,18 @@ mod artifact_tests {
     use super::*;
 
     // `classify_artifact` is pure (data-in/data-out), so these run hermetically
-    // against the compiled-in bundled registry snapshot — no ~/.svrnmesh, no
-    // network. "sep" is a known bundled recipe id (see corpus-engine registry tests).
+    // against a one-entry registry — no ~/.svrnmesh, no network, and no
+    // ingest: the bundled snapshot is ingest's, handed in by the composition.
+
+    fn registry() -> Vec<RegistryEntryView> {
+        sovereign_contracts::recipe::registry::parse_registry(
+            "[[recipes]]\nid = \"sep\"\nname = \"Stanford Encyclopedia of Philosophy\"\n",
+        )
+    }
 
     #[test]
     fn workflow_match_classifies_as_workflow() {
-        let reg = RecipeRegistry::from_bundled(None);
+        let reg = registry();
         let got = classify_artifact(
             "notebook",
             Some((
@@ -747,7 +762,7 @@ mod artifact_tests {
 
     #[test]
     fn known_recipe_id_classifies_as_recipe_when_no_workflow() {
-        let reg = RecipeRegistry::from_bundled(None);
+        let reg = registry();
         let got = classify_artifact("sep", None, &reg).expect("resolves");
         match got {
             ResolvedArtifact::Recipe { id, .. } => assert_eq!(id, "sep"),
@@ -759,7 +774,7 @@ mod artifact_tests {
     fn workflow_shadows_a_same_named_recipe() {
         // A workflow named "sep" wins over the "sep" recipe — authored/local intent
         // takes precedence, the same way a user workflow shadows a shipped starter.
-        let reg = RecipeRegistry::from_bundled(None);
+        let reg = registry();
         let got = classify_artifact(
             "sep",
             Some(("[workflow]\nname = \"sep\"\n".into(), "user:sep".into())),
@@ -774,7 +789,7 @@ mod artifact_tests {
 
     #[test]
     fn unknown_name_is_an_error_naming_both_backends() {
-        let reg = RecipeRegistry::from_bundled(None);
+        let reg = registry();
         let err = classify_artifact("definitely-not-a-thing-xyz", None, &reg).unwrap_err();
         assert!(err.contains("no workflow or recipe"), "got: {err}");
     }

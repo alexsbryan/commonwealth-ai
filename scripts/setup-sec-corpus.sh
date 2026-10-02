@@ -10,7 +10,7 @@
 #   - a second acquire path: data.sec.gov companyfacts JSON, rendered to
 #     per-concept fact .txt files by THE one decider — now Rust:
 #     sovereign_tools::sec_facts_render (driven by
-#     sovereign-recipes/sec-filings-company/concept-map.toml), reached here
+#     sovereign/crates/sovereign-tools/data/sec-filings-company/concept-map.toml), reached here
 #     through its I/O shell, the `sec_facts_render` example binary.
 #     (It replaced scripts/sec_facts.py, deleted at order
 #     sec-facts-decider-port with a parity test standing in its place.)
@@ -33,7 +33,7 @@ CONTACT_UA="commonwealth-ai/0.1 (sec-filings-corpus; alexbryan01@gmail.com)"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CANONICAL_RECIPE="${REPO_ROOT}/sovereign-recipes/sec-filings-company/recipe.toml"
-CONCEPT_MAP="${REPO_ROOT}/sovereign-recipes/sec-filings-company/concept-map.toml"
+CONCEPT_MAP="${REPO_ROOT}/sovereign/crates/sovereign-tools/data/sec-filings-company/concept-map.toml"
 # THE one decider's I/O shell. An example, not a product CLI verb: the
 # decider's real consumer is the ticker-driven install (which calls
 # `render` in-process), and this script is the path that supersedes.

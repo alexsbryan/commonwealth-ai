@@ -377,30 +377,10 @@ pub struct MeshPeering {
     pub contact_nodes: Vec<SocketAddr>,
 }
 
-/// Resolve an operator's `<node>` argument against a member row: exact
-/// name, or a node_id prefix of at least 4 hex characters (the `node-`
-/// prefix is optional on either side).
-///
-/// The prefix is matched against the FULL 32-hex id (`to_hex`), not the
-/// 16-hex `Display` form: status tables print 22 characters and the collision
-/// warning prints all 32, and until 2026-09-22 neither resolved — only a
-/// prefix of 16 or fewer did, so the id the repair hint told you to paste
-/// answered "No member matching".
-///
-/// A prefix shorter than 4 is refused rather than matched loosely — a
-/// one-character prefix is very nearly "any member", and the callers act on the answer (`forget-member` writes a
-/// tombstone; `mesh media <peer>` mints a bridge; `media_allow` admits a
-/// dial). One implementation so every `<peer>` argument on every surface
-/// resolves the same way (ARCH §10.6) — it lives here rather than in
-/// `sovereign-mesh` because the package crates resolve the same argument
-/// with no sovereign runtime under them.
-pub fn member_matches(node_id: NodeId, name: &str, query: &str) -> bool {
-    if name == query {
-        return true;
-    }
-    let q = query.trim_start_matches("node-");
-    q.len() >= 4 && node_id.to_hex().starts_with(q)
-}
+// `member_matches` moved to `kernel_types::member` by five-programs fp-46
+// (§12 decision 3 — the member view crosses the package line); this is the
+// historical path (ARCH §10.6).
+pub use kernel_types::member::member_matches;
 
 /// Level of trust between peered meshes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -423,8 +403,8 @@ use crate::mesh_merge::{MemberOutcome, MergeArm, RefusalReason, SkipReason};
 /// — and one of the three sites was correct only by CONTAINING NO SUCH LINE
 /// (`mesh_admin.rs`, the join reply, where the joiner legitimately needs the
 /// secret). A rule spread across three sites, one of them an absence, is a
-/// rule that gets forgotten, and this one was: `routes_internal/gossip.rs`
-/// records that the credential rode the wire every 10s between two fully
+/// rule that gets forgotten, and this one was: the daemon's gossip route
+/// (cw-rails' `internal::gossip` since pb-mesh-exit-transport) recorded that the credential rode the wire every 10s between two fully
 /// upgraded nodes because "the request half of P4b stopped sending it and the
 /// reply half did not". Making it an argument is ARCH §7 / §10 —
 /// structural, not remembered.
@@ -598,7 +578,7 @@ impl Mesh {
             self.require_encryption = true;
         }
 
-        // Carry a rotation. `rotate_invite`'s doc says it mutates the live mesh
+        // Carry a rotation. cw-rails' `membership::rotate` mutates the live mesh
         // and lets "the ordinary gossip round carry it" — this is the line that
         // makes that true. Without it the claim was false: the round carried
         // the new hash on the wire and the merge dropped it on the floor.

@@ -1,0 +1,236 @@
+{
+  "NodeCapabilities": [
+    {
+      "hardware": {
+        "gpus": [{"name": "gfx1151", "vram_gb": 96, "compute_type": "vulkan", "estimated_tflops": 59.5}],
+        "system_ram_gb": 128,
+        "cpu_cores": 16,
+        "total_storage_gb": 2000,
+        "free_storage_gb": 900,
+        "network_bandwidth_mbps": 1000
+      },
+      "available": {
+        "free_vram_gb": 80.5,
+        "free_ram_gb": 64.0,
+        "free_storage_gb": 900.0,
+        "gpu_utilization": 0.25,
+        "cpu_utilization": 0.5,
+        "available_for_mesh": true
+      },
+      "active_processes": [
+        {"process_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7], "kind": "llama_server", "pid": 4242},
+        {"process_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8], "kind": "rpc_server", "pid": 4243}
+      ],
+      "hosted_corpora": [
+        {
+          "corpus_id": "sep",
+          "chunk_range": {"start_id": 0, "end_id": 100},
+          "is_replica": false,
+          "last_updated": 1700000000,
+          "chunk_count": 100,
+          "canonical_fingerprint": "fp-sep",
+          "total_shards": 4,
+          "processed_shards": [0, 1],
+          "atlas_atom_count": 12,
+          "atlas_tier2_count": 3,
+          "atlas_fingerprint": "atlas-fp"
+        }
+      ],
+      "reported_at": 1700000001,
+      "inference_availability": 0.75,
+      "inference_capable": true,
+      "loaded_models": ["qwen3-4b"],
+      "origins": ["media"],
+      "media_allow": ["peer-a"],
+      "media_available": 0.5,
+      "embed_model": {
+        "model_id": "nomic-embed",
+        "dimensions": 768,
+        "pooling": "mean",
+        "normalization": "application",
+        "query_instruction_prefix": "search_query: "
+      },
+      "benchmark": {
+        "baseline_model_id": "qwen3-4b",
+        "baseline_size_gb": 2.5,
+        "pp_tok_s": 512.0,
+        "tg_tok_s": 48.0,
+        "measured_at": 1700000002
+      },
+      "current_in_flight": 2,
+      "anchor": {"can_anchor": true, "vram_gb": 96, "model_resident": "qwen3.5-122b"}
+    },
+    {
+      "hardware": {
+        "gpus": [{"name": "m2", "vram_gb": 32, "compute_type": "metal", "estimated_tflops": 13.5}],
+        "system_ram_gb": 32,
+        "cpu_cores": 10,
+        "total_storage_gb": 1000,
+        "free_storage_gb": 100,
+        "network_bandwidth_mbps": null
+      },
+      "available": {
+        "free_vram_gb": 0.0,
+        "free_ram_gb": 0.0,
+        "free_storage_gb": 0.0,
+        "gpu_utilization": 0.0,
+        "cpu_utilization": 0.0,
+        "available_for_mesh": true
+      },
+      "active_processes": [],
+      "hosted_corpora": [],
+      "reported_at": 0,
+      "inference_availability": 1.0,
+      "inference_capable": false,
+      "loaded_models": []
+    }
+  ],
+  "KnowledgeShardAssignment": [
+    {
+      "node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      "corpus_id": "sep",
+      "chunk_range": {"start_id": 0, "end_id": 10},
+      "is_replica": true
+    }
+  ],
+  "IngestionHandoff": [
+    {
+      "handoff_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9],
+      "corpus_id": "sep",
+      "recipe_id": "sep-recipe",
+      "embed_model": {"model_id": "nomic-embed", "dimensions": 768, "pooling": "cls", "normalization": "server"},
+      "partitions": [
+        {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "file_indices": [0, 2], "status": {"state": "Assigned"}},
+        {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2], "file_indices": [], "article_range": [5, 10], "status": {"state": "InProgress", "started_at": 11}},
+        {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3], "file_indices": [1], "status": {"state": "Complete", "completed_at": 12}},
+        {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4], "file_indices": [3], "status": {"state": "Failed", "reason": "disk"}}
+      ],
+      "merge_leader": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      "phase": {"phase": "Open"},
+      "queue_version": 0,
+      "allowed_peers": null,
+      "ephemeral": false,
+      "created_at": 1700000000000,
+      "updated_at": 1700000000001
+    },
+    {
+      "handoff_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10],
+      "corpus_id": "wiki",
+      "recipe_id": "wiki-recipe",
+      "embed_model": {"model_id": "nomic-embed", "dimensions": 768, "pooling": "last", "normalization": "server"},
+      "partitions": [],
+      "merge_leader": null,
+      "phase": {"phase": "Failed", "reason": "merge failed"},
+      "queue_version": 3,
+      "allowed_peers": [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]],
+      "ephemeral": true,
+      "created_at": 1,
+      "updated_at": 2
+    }
+  ],
+  "HandoffPhase": [
+    {"phase": "Open"},
+    {"phase": "Draining"},
+    {"phase": "Merging"},
+    {"phase": "Complete"},
+    {"phase": "Failed", "reason": "r"}
+  ],
+  "WorkUnit": [
+    {"kind": "HfFile", "value": 3},
+    {"kind": "JsonlShard", "value": 4},
+    {"kind": "JsonlRange", "value": {"start": 0, "end": 1000}}
+  ],
+  "UnitStatus": [
+    {"state": "Queued", "prior_attempts": 1},
+    {"state": "Leased", "peer": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2], "leased_at_ms": 1, "last_heartbeat_ms": 2, "expires_at_ms": 3, "attempts": 1},
+    {"state": "Complete", "peer": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2], "completed_at_ms": 4},
+    {"state": "Failed", "last_peer": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3], "reason": "oom", "attempts": 3}
+  ],
+  "CompleteOutcome": ["complete", "failed"],
+  "LeasedUnit": [
+    {"unit_id": 5, "unit": {"kind": "JsonlShard", "value": 5}, "lease_expires_at_ms": 300000}
+  ],
+  "ModelInfo": [
+    {
+      "id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      "name": "Qwen3-Coder-30B",
+      "repo": "Qwen/Qwen3-Coder-30B-GGUF",
+      "file": "qwen3-coder-30b-q4_k_m.gguf",
+      "size_bytes": 17000000000,
+      "total_layers": 64,
+      "architecture": "qwen",
+      "available_on": {},
+      "oicp_capabilities": {},
+      "quantization": "Q4_K_M",
+      "min_memory_gb": 32,
+      "preferred_memory_gb": 48,
+      "supports_parallel_instances": true,
+      "supports_pipeline_shard": false
+    }
+  ],
+  "ModelArchitecture": ["llama", "qwen", "mistral", "phi", "gemma", "other"],
+  "ModelAvailability": ["available", "loaded", "downloading"],
+  "LedgerEvent": [
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 10, "kind": {"type": "InferenceServed", "for_node": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2], "model_id": "qwen3-4b", "tokens_generated": 100, "wall_seconds": 1.5}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2], "timestamp": 11, "kind": {"type": "InferenceReceived", "from_node": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "model_id": "qwen3-4b", "tokens_generated": 100}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 12, "kind": {"type": "KnowledgeQueryServed", "for_node": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2], "corpus_id": "sep", "chunks_returned": 8}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 13, "kind": {"type": "ShardTransferred", "from_node": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "to_node": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2], "corpus_id": "sep", "bytes": 4096}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 14, "kind": {"type": "StorageSnapshot", "corpora": [["sep", 1.25]]}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3], "timestamp": 15, "kind": {"type": "JobUnitCompleted", "handoff": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9], "unit_hash": "abc123", "donor_actor": "node:03", "kind": "rust-test:v1", "wall_seconds": 2.5}}
+  ],
+  "NodeContributions": [
+    {
+      "window_days": 30,
+      "inference_served": {"requests": 2, "total_tokens_generated": 200, "wall_seconds": 3.5},
+      "inference_consumed": {"requests": 1, "total_tokens_generated": 50, "wall_seconds": 0.5},
+      "corpora_hosted": [{"corpus_id": "sep", "corpus_name": "SEP", "size_gb": 1.25, "queries_served": 7, "is_sole_host": true}],
+      "bytes_served": 4096,
+      "bytes_received": 1024,
+      "compute_donated": {"units": 3, "wall_seconds": 7.5}
+    }
+  ],
+  "ActivityEvent": [
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 20, "kind": {"type": "LocalInferenceServed", "model_id": "qwen3-4b", "prompt_tokens": 10, "completion_tokens": 20, "wall_seconds": 0.25}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 21, "kind": {"type": "EmbeddingsServed", "served_for": {"actor": "local"}, "n_texts": 4, "tokens": 40}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 22, "kind": {"type": "EmbeddingsServed", "served_for": {"actor": "peer", "node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]}, "n_texts": 1, "tokens": 9}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 23, "kind": {"type": "LocalKnowledgeServed", "corpus_id": "sep", "chunks_returned": 6}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 24, "kind": {"type": "ChunksIngested", "corpus_id": "sep", "chunks": 100, "duration_secs": 30}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 25, "kind": {"type": "CorpusEnriched", "corpus_id": "sep", "atoms": 50, "duration_secs": 60}},
+    {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], "timestamp": 26, "kind": {"type": "NewsworthyFetched", "articles": 12, "portal_ingested": true}}
+  ],
+  "ActivitySummary": [
+    {
+      "window_days": 7,
+      "local_inference_requests": 3,
+      "local_tokens_generated": 60,
+      "local_inference_wall_seconds": 0.75,
+      "embeddings": {"local_requests": 1, "peer_requests": 1, "local_units": 4, "peer_units": 1},
+      "local_knowledge_queries": 2,
+      "local_chunks_served": 12,
+      "corpora": [{"corpus_id": "sep", "chunks_ingested": 100, "ingest_runs": 1, "ingest_seconds": 30, "enrich_runs": 1, "enrich_atoms": 50, "enrich_seconds": 60}],
+      "total_chunks_ingested": 100,
+      "newsworthy_fetches": 1,
+      "newsworthy_articles": 12
+    }
+  ],
+  "InferencePlan": [
+    {
+      "model_plans": [
+        {
+          "model": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+          "entry_node": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10],
+          "assignments": [
+            {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10], "layers": {"start": 0, "end": 32}, "gpu_index": 0, "rpc_address": "10.0.0.1:50052"},
+            {"node_id": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11], "layers": {"start": 32, "end": 64}, "gpu_index": 1, "rpc_address": "[::1]:50053"}
+          ],
+          "estimated_tokens_per_sec": 14.75,
+          "estimated_ttft_ms": 900
+        }
+      ]
+    }
+  ],
+  "PeerPreference": [
+    {"multiplier": 0.5, "reason": "slow", "set_at": 1700000000},
+    {"multiplier": 1.0, "reason": null, "set_at": 0}
+  ]
+}

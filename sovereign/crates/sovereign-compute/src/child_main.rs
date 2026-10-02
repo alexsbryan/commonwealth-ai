@@ -21,20 +21,19 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures::Stream;
 use sovereign_contracts::{
-    CompletionRequest, CompletionResponse, Depth, Error, FinishReason, InferenceProvider,
-    ProviderCapabilities, Result, Speed, StreamFrame,
+    CompletionRequest, CompletionResponse, Depth, Error, InferenceProvider, ProviderCapabilities,
+    Result, Speed, StreamFrame,
 };
-use sovereign_core::model_family::ModelFamily;
-use sovereign_inference::embedded::{EmbedOnlyProvider, EmbeddedLlamaCpp};
 use sovereign_inference::fast_exit_skip_destructors;
+use sovereign_inference::served_kind::{self, ServedKind};
 use tracing::{error, info};
 
-use crate::distribution::DistributionHandoff;
-use crate::server::{router, ChildMeta};
+use crate::mock::MockProvider;
+use crate::server::{bundle, ChildMeta};
 use crate::supervisor::HANDSHAKE_PREFIX;
 
 /// The kind of provider a child hosts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 enum Role {
     /// Full generative engine (`EmbeddedLlamaCpp`), serves `/internal/complete*`.
     Generate,
@@ -42,6 +41,9 @@ enum Role {
     Embed,
     /// Model-free canned provider for the crash-isolation e2e.
     Mock,
+    /// A served model kind hosted under its registered child role
+    /// (`sovereign_inference::served_kind`), serving its kind route.
+    Kind(ServedKind),
 }
 
 impl Role {
@@ -50,6 +52,7 @@ impl Role {
             Role::Generate => "generate",
             Role::Embed => "embed",
             Role::Mock => "mock",
+            Role::Kind(kind) => kind.child_role().unwrap_or(kind.role),
         }
     }
 }
@@ -64,7 +67,7 @@ struct ChildArgs {
     bind: String,
     mock_tokens: usize,
     mock_token_delay_ms: u64,
-    /// Path to a [`DistributionHandoff`] written by the daemon. Present iff
+    /// Path to a [`crate::distribution::DistributionHandoff`] written by the daemon. Present iff
     /// this child hosts the mesh's DISTRIBUTED primary: it names the warmed
     /// RPC workers and the shard plan they were warmed against. The path is
     /// visible in `ps` and the file is plain JSON, so "what was this child
@@ -107,7 +110,10 @@ impl ChildArgs {
                         "generate" => Role::Generate,
                         "embed" => Role::Embed,
                         "mock" => Role::Mock,
-                        other => return Err(format!("unknown --role: {other}")),
+                        other => match served_kind::kind_for_child_role(other) {
+                            Some(kind) => Role::Kind(kind),
+                            None => return Err(format!("unknown --role: {other}")),
+                        },
                     })
                 }
                 "--name" => name = Some(take_value(&mut it, "--name")?),
@@ -211,7 +217,9 @@ pub fn run(args: &[String]) -> i32 {
 fn init_child_tracing() {
     use tracing_subscriber::{fmt, EnvFilter};
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new("sovereign_compute=info,sovereign_inference=info,compute_child=info")
+        EnvFilter::new(
+            "sovereign_compute=info,sovereign_inference=info,compute_child=info,host_kit=info",
+        )
     });
     // try_init: never panic if a subscriber is somehow already set.
     let _ = fmt()
@@ -293,7 +301,7 @@ async fn serve(cfg: ChildArgs) -> i32 {
         });
     }
 
-    let app = router(lazy, ready, meta);
+    let routes = bundle(lazy, ready, meta);
     info!(
         target: "compute_child",
         child = %cfg.name,
@@ -319,10 +327,7 @@ async fn serve(cfg: ChildArgs) -> i32 {
         }
     };
 
-    if let Err(e) = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown)
-        .await
-    {
+    if let Err(e) = host_kit::shell::serve([listener], vec![routes], shutdown).await {
         error!(target: "compute_child", error = %e, "axum serve error");
         return 1;
     }
@@ -347,43 +352,19 @@ fn load_provider(
         Role::Generate => {
             let path = model
                 .ok_or_else(|| Error::InvalidInput("--model required for role=generate".into()))?;
-            let Some(handoff_path) = distribution else {
-                // Single model into the fast slot (no separate primary).
-                // Grammar/structured-output are honoured per-request by
-                // build_sampler.
-                let engine = EmbeddedLlamaCpp::load_dual(&path, None, ctx, gpu_layers)?;
-                return Ok(Arc::new(engine));
-            };
-
-            // Distributed primary. The daemon has already planned the shards
-            // and warmed every worker's cache; we load across them. Install the
-            // handoff FIRST — it is what makes `resolve_placement` see workers
-            // at all, and what pins the daemon's plan so our `-ot` overrides cut
-            // the blocks exactly where the warm caches expect.
-            let handoff = DistributionHandoff::read(&handoff_path).map_err(|e| {
-                Error::InvalidInput(format!("--distribution {}: {e}", handoff_path.display()))
-            })?;
-            info!(
-                target: "compute_child",
-                workers = handoff.endpoints.len(),
-                endpoints = ?handoff.endpoints,
-                handoff = %handoff_path.display(),
-                "distributed primary: installing the daemon's worker set + shard plan"
-            );
-            handoff.install(&path);
-            let engine = EmbeddedLlamaCpp::load_single_distributed(
-                &path,
-                ctx,
-                gpu_layers,
-                ModelFamily::Unknown,
-            )?;
-            Ok(Arc::new(engine))
+            crate::assembly::assemble_child_generate(&path, ctx, gpu_layers, distribution)
         }
         Role::Embed => {
             let path = model
                 .ok_or_else(|| Error::InvalidInput("--model required for role=embed".into()))?;
-            let engine = EmbedOnlyProvider::load(&path, ModelFamily::Unknown)?;
-            Ok(Arc::new(engine))
+            crate::assembly::assemble_child_embed(&path)
+        }
+        Role::Kind(kind) => {
+            let path = model.ok_or_else(|| {
+                Error::InvalidInput(format!("--model required for role={}", kind.role))
+            })?;
+            info!(target: "compute_child", kind = kind.role, path = %path.display(), "loading served kind");
+            kind.load_provider(&path)
         }
         Role::Mock => Ok(Arc::new(MockProvider {
             tokens: mock_tokens.max(1),
@@ -465,6 +446,13 @@ impl InferenceProvider for LazyProvider {
         }
     }
 
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        match self.current() {
+            Some(p) => p.rerank_batch(query, docs).await,
+            None => Err(self.unavailable()),
+        }
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         match self.current() {
             Some(p) => p.capabilities(),
@@ -474,61 +462,6 @@ impl InferenceProvider for LazyProvider {
                 relative_speed: Speed::Fast,
                 relative_reasoning: Depth::Shallow,
             },
-        }
-    }
-}
-
-/// Model-free provider: streams `tokens` canned tokens with `delay` between
-/// them (so a crash-isolation test can `kill -9` mid-stream), and answers
-/// `complete`/`embed` with fixed values.
-struct MockProvider {
-    tokens: usize,
-    delay: Duration,
-}
-
-#[async_trait]
-impl InferenceProvider for MockProvider {
-    async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
-        Ok(CompletionResponse {
-            text: "mock response".to_string(),
-            tokens_used: self.tokens,
-            prompt_tokens: 0,
-            model_id: "mock".to_string(),
-            latency_ms: 0,
-            oicp_meta: None,
-            finish_reason: Some(FinishReason::Stop),
-            completion_tokens: Some(self.tokens as u32),
-        })
-    }
-
-    async fn complete_stream(
-        &self,
-        _request: &CompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        let n = self.tokens;
-        let delay = self.delay;
-        let s = futures::stream::unfold(0usize, move |i| async move {
-            if i >= n {
-                return None;
-            }
-            if delay > Duration::ZERO {
-                tokio::time::sleep(delay).await;
-            }
-            Some((Ok(format!("tok{i} ")), i + 1))
-        });
-        Ok(Box::pin(s))
-    }
-
-    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
-        Ok(vec![0.0; 8])
-    }
-
-    fn capabilities(&self) -> ProviderCapabilities {
-        ProviderCapabilities {
-            max_context_tokens: 2048,
-            supports_structured_output: false,
-            relative_speed: Speed::Fast,
-            relative_reasoning: Depth::Shallow,
         }
     }
 }

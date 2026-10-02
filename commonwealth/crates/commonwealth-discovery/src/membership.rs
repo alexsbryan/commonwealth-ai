@@ -6,6 +6,7 @@ use commonwealth_core::capabilities::{AvailableResources, HardwareProfile, NodeC
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
 use commonwealth_core::{Error, Result};
+pub use mesh_join_vocab::join_key::{hash_join_key, validate_join_key_format};
 
 /// Generate a human-readable join key in the format `cwth-XXXX-XXXX-XXXX`.
 pub fn generate_join_key() -> String {
@@ -17,11 +18,6 @@ pub fn generate_join_key() -> String {
         hex::encode(&bytes[2..4]),
         hex::encode(&bytes[4..6]),
     )
-}
-
-/// Hash a join key using BLAKE3. The raw key is never persisted — only the hash.
-pub fn hash_join_key(key: &str) -> [u8; 32] {
-    *blake3::hash(key.as_bytes()).as_bytes()
 }
 
 /// Mint a fresh mesh secret for a brand-new mesh — the gossip-auth credential
@@ -52,29 +48,30 @@ pub fn derive_legacy_mesh_secret(mesh_id: &MeshId, invite_key_hash: &[u8; 32]) -
     *hasher.finalize().as_bytes()
 }
 
+/// How long an encrypted mesh's invite admits joiners after it is minted or
+/// rotated. The one TTL: the inference daemon and cw-rails both arm it.
+pub const INVITE_TTL_SECS: u64 = 24 * 60 * 60;
+
+/// Does an operator-typed `reference` name the mesh `(name, id_hex)`?
+///
+/// Name case-insensitively, the full id hex, or an id prefix of at least 8
+/// hex characters. Below 8 it refuses rather than guesses, because the wrong
+/// match switches or DELETES the wrong mesh. One rule for every known-mesh
+/// list (svrn's `persist::resolve_known`, cw-rails' `known::resolve`), so a
+/// reference that switches a mesh can always forget it.
+pub fn names_mesh(name: &str, id_hex: &str, reference: &str) -> bool {
+    let needle = reference.trim().to_lowercase();
+    !needle.is_empty()
+        && (name.to_lowercase() == needle
+            || id_hex == needle
+            || (needle.len() >= 8 && id_hex.starts_with(&needle)))
+}
+
 /// Verify a join key against a stored hash.
 pub fn verify_join_key(key: &str, expected_hash: &[u8; 32]) -> bool {
     // blake3::Hash equality is constant-time (prevents timing attacks);
     // a raw `[u8; 32] ==` would short-circuit on the first mismatch.
     blake3::hash(key.as_bytes()) == blake3::Hash::from(*expected_hash)
-}
-
-/// Parse and validate join key format (`cwth-XXXX-XXXX-XXXX` where X is hex).
-pub fn validate_join_key_format(key: &str) -> Result<()> {
-    let parts: Vec<&str> = key.split('-').collect();
-    if parts.len() != 4 || parts[0] != "cwth" {
-        return Err(Error::InvalidJoinKey(
-            "expected format cwth-XXXX-XXXX-XXXX".into(),
-        ));
-    }
-    for part in &parts[1..] {
-        if part.len() != 4 || hex::decode(part).is_err() {
-            return Err(Error::InvalidJoinKey(
-                "each segment must be 4 hex characters".into(),
-            ));
-        }
-    }
-    Ok(())
 }
 
 use commonwealth_core::clock::unix_now_secs as now_secs;
@@ -157,6 +154,7 @@ pub fn init_mesh_with_identity(
             benchmark: None,
             current_in_flight: None,
             anchor: None,
+            storage_remaining_bytes: None,
         },
         addresses,
     };
@@ -222,8 +220,8 @@ pub fn accept_join(
 ///     persisted a stable install-local ID.
 ///   - and `id` IS already in `mesh.members` with a matching
 ///     `new_node_name` → update the existing record's addresses +
-///     last_seen + status and return the same id. This is the
-///     "same machine rejoining" case — no zombie entry created.
+///     last_seen + status, clear a tombstone, and return the same id.
+///     This is the "same machine rejoining" case — no zombie entry created.
 ///   - and `id` IS already in `mesh.members` with a DIFFERENT
 ///     name → refuse (the ID would collide with someone else's
 ///     machine on this mesh). Fall back to generating a fresh ID.
@@ -280,6 +278,17 @@ pub fn accept_join_with_identity(
                 let mut refreshed = existing.clone();
                 refreshed.addresses = new_node_addresses;
                 refreshed.last_seen = now;
+                if let Some(removed_at) = refreshed.removed_at.take() {
+                    // A member that left comes back live. The admission is the
+                    // founder's act on a verified invite, not the subject's own
+                    // gossip, and a refused id would be admitted fresh anyway.
+                    // STRICTLY newer than the tombstone, which `leave` may
+                    // stamp a second ahead, so the merge LWW carries the
+                    // rejoin to every peer still holding it.
+                    refreshed.last_seen = now.max(existing.event_time() + 1);
+                    tracing::info!(node = %id, removed_at, last_seen = refreshed.last_seen,
+                                   "join: a same-id rejoin clears the member's tombstone");
+                }
                 refreshed.status = NodeStatus::Online;
                 if node_pubkey.is_some() {
                     refreshed.node_pubkey = node_pubkey;
@@ -334,6 +343,7 @@ pub fn accept_join_with_identity(
             benchmark: None,
             current_in_flight: None,
             anchor: None,
+            storage_remaining_bytes: None,
         },
         addresses: new_node_addresses,
     };
@@ -423,23 +433,21 @@ mod tests {
         let key = generate_join_key();
         assert!(key.starts_with("cwth-"));
         assert_eq!(key.len(), 19); // "cwth-" + 4 + "-" + 4 + "-" + 4
-        validate_join_key_format(&key).unwrap();
+        let parts: Vec<_> = key.split('-').collect();
+        assert_eq!(parts.len(), 4);
+        assert!(parts[1..]
+            .iter()
+            .all(|part| part.len() == 4 && hex::decode(part).is_ok()));
     }
 
     #[test]
     fn invite_key_hash_and_verify() {
-        let key = generate_join_key();
-        let hash = hash_join_key(&key);
-        assert!(verify_join_key(&key, &hash));
-        assert!(!verify_join_key("cwth-0000-0000-0000", &hash));
-    }
-
-    #[test]
-    fn validate_join_key_format_rejects_bad_keys() {
-        assert!(validate_join_key_format("not-a-key").is_err());
-        assert!(validate_join_key_format("cwth-zzzz-0000-0000").is_err());
-        assert!(validate_join_key_format("cwth-00-0000-0000").is_err());
-        assert!(validate_join_key_format("").is_err());
+        let (mesh, key) = init_mesh("Test", "Alice", vec![]);
+        assert!(verify_join_key(&key, &mesh.invite_key_hash));
+        assert!(!verify_join_key(
+            "cwth-0000-0000-0000",
+            &mesh.invite_key_hash
+        ));
     }
 
     #[test]
@@ -451,8 +459,6 @@ mod tests {
         );
         assert_eq!(mesh.name, "Test Mesh");
         assert_eq!(mesh.members.len(), 1);
-        validate_join_key_format(&key).unwrap();
-
         let founder = mesh.members.values().next().unwrap();
         assert_eq!(founder.name, "Alice's Desktop");
         assert_eq!(founder.status, NodeStatus::Online);
@@ -521,6 +527,36 @@ mod tests {
         assert_eq!(bob.removed_at, Some(1_000));
         assert!(!bob.is_active());
         assert_eq!(bob.status, NodeStatus::Offline);
+    }
+
+    /// A member that left and rejoins under its own id is active again, and
+    /// its record out-ranks the tombstone in the merge LWW even when `leave`
+    /// stamped it a second ahead of the founder's clock.
+    #[test]
+    fn a_same_id_rejoin_after_leave_clears_the_tombstone() {
+        let (mut mesh, key) = init_mesh("Test", "Alice", vec![]);
+        let founder_id = *mesh.members.keys().next().unwrap();
+        let bob_id = NodeId::from_u128(42);
+        accept_join_with_proposed_id(&mut mesh, &key, "Bob", vec![], founder_id, Some(bob_id))
+            .unwrap();
+
+        let ahead = now_secs() + 1;
+        let bob = mesh.members.get_mut(&bob_id).unwrap();
+        bob.removed_at = Some(ahead);
+        bob.last_seen = ahead;
+        bob.status = NodeStatus::Offline;
+
+        let rejoined =
+            accept_join_with_proposed_id(&mut mesh, &key, "Bob", vec![], founder_id, Some(bob_id))
+                .unwrap();
+        assert_eq!(rejoined, bob_id, "the same id, no zombie");
+        let bob = &mesh.members[&bob_id];
+        assert!(bob.is_active(), "the rejoin clears the tombstone");
+        assert_eq!(bob.status, NodeStatus::Online);
+        assert!(
+            bob.event_time() > ahead,
+            "the rejoin must out-rank the tombstone peers still hold"
+        );
     }
 
     #[test]

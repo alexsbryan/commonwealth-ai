@@ -1,0 +1,11 @@
+unit: pc-removed-env-warn
+commits: 5b6e8bbba (bridge moves to kernel-types), 3b10e9908 (removed status +
+  startup warning + env-gate pin), 059deeffe (CW_RAILS_DIR, SOVEREIGN_DAEMON_BIN
+  registered), 41c2bf665 (serve, cw-rails, pod worker run the bridge),
+  ef8b725a8 (a warned var leaves the env), 07899ab41 (SUFFICIENCY_CHARS, the
+  twelfth), c7ad7545b (docs and scripts), 8c333810b (cw-rails speaks as itself)
+what: sixteen `removed` rows in quality/env-flags.toml, each with a
+  `replacement`; every binary's startup bridge prints one line per removed var
+  set under either spelling, then drops it; env-gate fails a removed var that
+  is still read and pins REMOVED_ENV to the registry. No doc or script tells a
+  user to set one. Decision: ralph/decisions/phase-c-4.md (the kernel-types home).

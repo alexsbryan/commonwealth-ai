@@ -172,22 +172,25 @@ async fn every_listed_id_is_advertised_by_some_manifest() {
 #[tokio::test]
 async fn a_store_entry_no_manifest_carries_is_not_listed() {
     let state = test_app_state_with_inference(Arc::new(TwoNodeMesh));
-    state.register_model(commonwealth_core::model::ModelInfo {
-        id: commonwealth_core::ModelId::from_u128(7),
-        name: "ghost-from-gossip".into(),
-        repo: String::new(),
-        file: "ghost.gguf".into(),
-        size_bytes: 1,
-        total_layers: 0,
-        architecture: commonwealth_core::model::ModelArchitecture::Other,
-        available_on: std::collections::HashMap::new(),
-        oicp_capabilities: Default::default(),
-        quantization: String::new(),
-        min_memory_gb: 0,
-        preferred_memory_gb: 0,
-        supports_parallel_instances: false,
-        supports_pipeline_shard: false,
-    });
+    state
+        .register_model(oicp_types::model_catalog::ModelInfo {
+            id: kernel_types::ModelId::from_u128(7),
+            name: "ghost-from-gossip".into(),
+            repo: String::new(),
+            file: "ghost.gguf".into(),
+            size_bytes: 1,
+            total_layers: 0,
+            architecture: oicp_types::model_catalog::ModelArchitecture::Other,
+            available_on: std::collections::HashMap::new(),
+            oicp_capabilities: Default::default(),
+            quantization: String::new(),
+            min_memory_gb: 0,
+            preferred_memory_gb: 0,
+            supports_parallel_instances: false,
+            supports_pipeline_shard: false,
+        })
+        .await
+        .unwrap();
 
     let resp = list_models(State(state), None).await.into_response();
     let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
@@ -296,22 +299,25 @@ async fn a_held_but_unloaded_model_lists_as_cold_not_missing() {
 #[tokio::test]
 async fn no_local_inference_falls_back_to_the_store() {
     let state = test_app_state();
-    state.register_model(commonwealth_core::model::ModelInfo {
-        id: commonwealth_core::ModelId::from_u128(9),
-        name: "orchestrated".into(),
-        repo: String::new(),
-        file: "o.gguf".into(),
-        size_bytes: 1,
-        total_layers: 0,
-        architecture: commonwealth_core::model::ModelArchitecture::Other,
-        available_on: std::collections::HashMap::new(),
-        oicp_capabilities: Default::default(),
-        quantization: String::new(),
-        min_memory_gb: 0,
-        preferred_memory_gb: 0,
-        supports_parallel_instances: false,
-        supports_pipeline_shard: false,
-    });
+    state
+        .register_model(oicp_types::model_catalog::ModelInfo {
+            id: kernel_types::ModelId::from_u128(9),
+            name: "orchestrated".into(),
+            repo: String::new(),
+            file: "o.gguf".into(),
+            size_bytes: 1,
+            total_layers: 0,
+            architecture: oicp_types::model_catalog::ModelArchitecture::Other,
+            available_on: std::collections::HashMap::new(),
+            oicp_capabilities: Default::default(),
+            quantization: String::new(),
+            min_memory_gb: 0,
+            preferred_memory_gb: 0,
+            supports_parallel_instances: false,
+            supports_pipeline_shard: false,
+        })
+        .await
+        .unwrap();
     let resp = list_models(State(state), None).await.into_response();
     let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
         .await
@@ -360,6 +366,7 @@ async fn chat_as_guest(model: Option<&str>, granted: &[&str]) -> (StatusCode, se
         HeaderMap::new(),
         None,
         guest_for(granted),
+        None,
         Json(request),
     )
     .await;
@@ -509,7 +516,7 @@ async fn dispatchable_ids_matches_what_an_ungated_listing_reports() {
     )
     .unwrap();
     let mut from_listing: Vec<String> = listed.data.iter().map(|m| m.id.clone()).collect();
-    let mut from_mint_gate = dispatchable_ids(&state).await;
+    let mut from_mint_gate = dispatchable_ids(&state).await.unwrap();
     from_listing.sort();
     from_mint_gate.sort();
     assert_eq!(from_mint_gate, from_listing);

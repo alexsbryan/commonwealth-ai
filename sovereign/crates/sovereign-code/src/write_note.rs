@@ -1,0 +1,296 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `write_note` — persist an agent working note.
+//!
+//! Notes survive across sessions and can be retrieved by `read_notes`.
+//! Use `kind = "todo"` for tasks that span multiple sessions — they appear
+//! in the startup summary when the MCP server starts.
+
+use std::sync::Arc;
+
+use serde_json::json;
+
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::*;
+
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+use sovereign_contracts::tool_manifest::DeclaredTool;
+
+/// Kinds the tool admits in `validate()`. Single source of truth for
+/// the schema-`enum` field, the validator, and any future test that
+/// wants to exercise round-tripping. New kinds land here in the same
+/// PR as the corpus-engine schema migration that adds them — drift
+/// between the two is the bug class this constant prevents (see
+/// ARCH_PRINCIPLES §2.1).
+pub(crate) const WRITE_NOTE_KINDS: &[&str] = &[
+    "decision",
+    "attempt",
+    "invariant",
+    "todo",
+    "commitment",
+    "follow_up",
+    "goal",
+];
+
+pub struct WriteNoteTool {
+    store: Arc<NoteStore>,
+}
+
+impl WriteNoteTool {
+    pub fn new(store: Arc<NoteStore>) -> Self {
+        Self { store }
+    }
+}
+
+impl WriteNoteTool {
+    /// Bind this tool's state to its `note` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_contracts::tool_manifest::declared("note", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
+    }
+
+    /// The executable half of `note`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+        let kind = params
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("missing 'kind'".to_string()))?;
+        let content = params
+            .get("content")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("missing 'content'".to_string()))?;
+
+        let symbols: Vec<String> = params
+            .get("symbols")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let files: Vec<String> = params
+            .get("files")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let session_id = params
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("mcp");
+
+        let scope = params
+            .get("scope")
+            .and_then(|v| v.as_str())
+            .and_then(NoteScope::parse)
+            .unwrap_or(NoteScope::Global);
+        let feature_id = params
+            .get("feature_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+        let related_entity = params
+            .get("related_entity")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+        let supersedes = params
+            .get("supersedes")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+
+        let id = self
+            .store
+            .write_note_with_source(
+                kind,
+                content,
+                symbols,
+                files,
+                session_id,
+                scope,
+                feature_id,
+                related_entity,
+                NoteSource::Agent,
+                supersedes,
+            )
+            .await
+            .map_err(|e| Error::Tool {
+                tool_id: "note".to_string(),
+                message: e.to_string(),
+            })?;
+
+        // Auto-retire the superseded note. Declaring B supersedes A means A is
+        // now stale, so hide it from read_notes (set retired_at) while keeping
+        // the row for the gossip-propagated supersedes chain. Without this the
+        // link is recorded but both notes still surface and contradict — the
+        // exact accretion this closes. Non-fatal: if the old id is missing or
+        // already retired, the supersedes link on the new note still stands.
+        let mut retired: Option<&str> = None;
+        if let Some(old_id) = supersedes {
+            match self
+                .store
+                .retire_by_id(old_id, &format!("superseded by note {id}"))
+                .await
+            {
+                Ok(true) => retired = Some(old_id),
+                Ok(false) => {} // not found or already retired — link still recorded
+                Err(e) => tracing::warn!(
+                    target: "notes",
+                    old_id,
+                    error = %e,
+                    "supersede: retire of superseded note failed"
+                ),
+            }
+        }
+
+        // The created_at timestamp can be retrieved via read_notes if needed.
+        Ok(StepOutput::Json(json!({
+            "id": id,
+            "kind": kind,
+            "scope": scope.as_str(),
+            "feature_id": feature_id,
+            "related_entity": related_entity,
+            "supersedes": supersedes,
+            "retired": retired,
+        })))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        let kind = params
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("write_note requires 'kind'".to_string()))?;
+        if !WRITE_NOTE_KINDS.contains(&kind) {
+            return Err(Error::InvalidInput(format!(
+                "invalid kind '{kind}': must be one of {}",
+                WRITE_NOTE_KINDS.join(", ")
+            )));
+        }
+        params
+            .get("content")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                Error::InvalidInput("write_note requires non-empty 'content'".to_string())
+            })?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sovereign_contracts::types::ToolContext;
+
+    fn ctx() -> ToolContext {
+        ToolContext {
+            conversation_id: "write-note-test".into(),
+            task_id: None,
+            working_directory: None,
+            in_reasoning_loop: false,
+            agent_session_token: None,
+            turn_index: 0,
+            ..Default::default()
+        }
+    }
+
+    fn id_of(out: &StepOutput) -> String {
+        match out {
+            StepOutput::Json(v) => v["id"].as_str().unwrap().to_string(),
+            other => panic!("expected Json output, got {other:?}"),
+        }
+    }
+
+    /// Declaring B supersedes A must (1) record the supersedes link on B and
+    /// (2) auto-retire A so it stops surfacing in read_notes — the whole point
+    /// of exposing supersedes over MCP. Without the auto-retire, both notes
+    /// would coexist and contradict.
+    #[tokio::test]
+    async fn supersedes_records_link_and_auto_retires_the_old_note() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
+        let tool = WriteNoteTool::new(Arc::clone(&store));
+
+        let a_id = id_of(
+            &tool
+                .run(
+                    &json!({"kind": "decision", "content": "A: original decision"}),
+                    &ctx(),
+                )
+                .await
+                .unwrap(),
+        );
+        // A is live before it is superseded.
+        assert!(store
+            .read_note_by_id(&a_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .retired_at
+            .is_none());
+
+        let out_b = tool
+            .run(
+                &json!({"kind": "decision", "content": "B: replaces A", "supersedes": a_id}),
+                &ctx(),
+            )
+            .await
+            .unwrap();
+        let b_id = id_of(&out_b);
+        let retired = match &out_b {
+            StepOutput::Json(v) => v["retired"].as_str().map(String::from),
+            _ => None,
+        };
+
+        // Response reports A retired; A is hidden; B records the link.
+        assert_eq!(retired.as_deref(), Some(a_id.as_str()));
+        let a_row = store.read_note_by_id(&a_id).await.unwrap().unwrap();
+        assert!(
+            a_row.retired_at.is_some(),
+            "superseded note must be retired"
+        );
+        let b_row = store.read_note_by_id(&b_id).await.unwrap().unwrap();
+        assert_eq!(b_row.supersedes.as_deref(), Some(a_id.as_str()));
+    }
+
+    /// A supersedes pointing at a nonexistent id must not fail the write — the
+    /// new note is still created and its link recorded; `retired` is null.
+    #[tokio::test]
+    async fn supersedes_missing_target_still_writes_the_new_note() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
+        let tool = WriteNoteTool::new(Arc::clone(&store));
+
+        let out = tool
+            .run(
+                &json!({"kind": "invariant", "content": "X", "supersedes": "does-not-exist"}),
+                &ctx(),
+            )
+            .await
+            .unwrap();
+        match out {
+            StepOutput::Json(v) => {
+                assert!(v["id"].as_str().is_some(), "note still created");
+                assert!(
+                    v["retired"].is_null(),
+                    "nothing retired for a missing target"
+                );
+            }
+            other => panic!("expected Json, got {other:?}"),
+        }
+    }
+}

@@ -21,7 +21,7 @@ use corpus_engine_archaeology::git_archaeology::{compute_co_evolution, CommitRec
 use corpus_engine_scip::arch_metrics::{normalize_crate_name, ArchMetrics, DepDelta};
 use corpus_engine_scip::capability_map::{pkg_and_desc, short};
 use corpus_engine_scip::scip_graph::{ScipRefRecord, ScipSymbolRecord};
-use sovereign_tools::code::arch_report::DeclaredInfo;
+use sovereign_code::arch_report::DeclaredInfo;
 
 use super::layout::{seriate, UnionFind};
 use super::model::AgentStat;

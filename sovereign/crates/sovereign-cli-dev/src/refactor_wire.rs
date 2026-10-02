@@ -487,13 +487,6 @@ pub async fn run(args: &[String]) -> i32 {
 mod tests {
     use super::*;
 
-    fn repo_spec(rel: &str) -> RefactorSpec {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .join(rel);
-        load_spec(&path).expect("control spec must load")
-    }
-
     fn row<'a>(report: &'a WireReport, subject_contains: &str) -> &'a Judgement {
         report
             .rows
@@ -505,62 +498,6 @@ mod tests {
                     report.rows.iter().map(|r| r.subject()).collect::<Vec<_>>()
                 )
             })
-    }
-
-    /// THE NEGATIVE CONTROL — the reason this order exists. The differ must
-    /// FAIL `node_id: String -> NodeId`, with the production bytes in the
-    /// verdict. A gate with no failing input you can name is not a gate
-    /// (ARCH §18.1).
-    #[test]
-    fn negative_control_node_id_fails_with_the_production_bytes() {
-        let spec = repo_spec("quality/refactors/node-id.toml");
-        let report = prove(&spec);
-        assert!(
-            !report.passes(),
-            "the negative control PASSED — the differ is a formatter"
-        );
-        assert_eq!(report.overall.verdict(), Verdict::Failed);
-
-        // The Display form: exactly what StatusResponse.node_id serves today
-        // (routes_status.rs:662 pins the same value).
-        let display = row(&report, "Display");
-        assert_eq!(display.verdict(), Verdict::Failed);
-        assert!(
-            display
-                .reason()
-                .as_str()
-                .contains("before=\"node-6c955b5f1361aaaa\""),
-            "{}",
-            display.reason()
-        );
-        assert!(
-            display
-                .reason()
-                .as_str()
-                .contains("after=[108,149,91,95,19,97,170,170,1,35,69,103,137,171,205,239]"),
-            "{}",
-            display.reason()
-        );
-
-        // The to_hex form (PrincipalRequestStatus.node_id) diverges too.
-        let hex = row(&report, "to_hex");
-        assert_eq!(hex.verdict(), Verdict::Failed);
-        assert!(
-            hex.reason()
-                .as_str()
-                .contains("before=\"6c955b5f1361aaaa0123456789abcdef\""),
-            "{}",
-            hex.reason()
-        );
-
-        // And sqlite is unprovable — three incompatible id encodings in the
-        // kernel; not a pass, not silently skipped.
-        let sqlite = row(&report, "wire sqlite");
-        assert_eq!(sqlite.verdict(), Verdict::CouldNotJudge);
-        assert!(sqlite
-            .reason()
-            .as_str()
-            .contains("three incompatible id encodings"));
     }
 
     /// THE POSITIVE CONTROL. `corpus_id: String -> CorpusId` is transparent

@@ -3,11 +3,11 @@
 //! (thin-desktop order, 2026-09-11): the enriched-corpus inventory and the
 //! starter questions mined from a corpus's atlas.
 //!
-//! Both read the DAEMON's data root. `enrich_commands.rs` read
-//! `sovereign_enrichment_catalog::paths::enrichment_dir()` — this process's
-//! default data root, which on an attached boot is the laptop's, not the
-//! host's — and pulled every atom of a corpus over the wire to pick six
-//! questions out of it. Same loopback posture as `reading_http`.
+//! Both read the DAEMON's data root. The desktop's `enrich_commands.rs` read
+//! its own process's default enrichment root — which on an attached boot is
+//! the laptop's, not the host's — and pulled every atom of a corpus over the
+//! wire to pick six questions out of it. Same loopback posture as
+//! `reading_http`.
 
 use std::sync::Arc;
 
@@ -18,9 +18,9 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
 
-use corpus_engine::enrichment::atlas::analysis::starter_questions::rank_starter_questions;
-use corpus_engine::enrichment::atlas::read_atlas_atoms;
-use corpus_engine::CorpusEngine;
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::daemon::IngestPort;
+use understanding_vocab::read::read_atlas_atoms;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::Absence;
@@ -59,7 +59,7 @@ async fn enriched(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> Result<Response, Absence> {
     let root = daemon.data_dir().join("enrichment");
-    let rows = sovereign_enrichment_catalog::catalog::list_enriched_corpora_in(&root)
+    let rows = sovereign_contracts::daemon_wire::enrich_catalog::list_enriched_corpora_in(&root)
         .map_err(|e| Absence::internal(format!("enrichment catalog: {e}")))?;
     tracing::debug!(root = %root.display(), returned = rows.len(), "enrich_http: enriched corpora listed");
     Ok((StatusCode::OK, Json(rows)).into_response())
@@ -84,7 +84,7 @@ async fn starter_questions(
         .limit
         .unwrap_or(STARTER_QUESTIONS_DEFAULT)
         .min(STARTER_QUESTIONS_MAX);
-    let starters = rank_starter_questions(&file.atoms(), limit);
+    let starters = atlas_for(&daemon)?.rank_starter_questions(&file.atoms(), limit);
     tracing::debug!(
         corpus = %corpus,
         total_atoms = file.atoms().len(),
@@ -95,7 +95,13 @@ async fn starter_questions(
     Ok((StatusCode::OK, Json(starters)).into_response())
 }
 
-fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<CorpusEngine>, Absence> {
+fn atlas_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<dyn AtlasPort>, Absence> {
+    daemon
+        .atlas()
+        .ok_or_else(|| Absence::unavailable("corpus engine not initialised"))
+}
+
+fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<dyn IngestPort>, Absence> {
     daemon
         .corpus_engine()
         .ok_or_else(|| Absence::unavailable("corpus engine not initialised"))
@@ -104,7 +110,7 @@ fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<&Arc<CorpusEngine>, Absenc
 /// The corpus's `atlas/` under the DAEMON's index dir. Two absences named
 /// apart: not installed, and installed with no atlas.
 async fn atlas_dir_for(
-    engine: &Arc<CorpusEngine>,
+    engine: &Arc<dyn IngestPort>,
     corpus_id: &str,
 ) -> Result<std::path::PathBuf, Absence> {
     let installed = engine

@@ -22,8 +22,8 @@ point them at your data.
 
 ## This repo is the single source of truth
 
-These recipes are the **only** authored copy. corpus-engine vendors this tree at
-build time (`build.rs` → `OUT_DIR` → `include_str!`) to bundle an offline copy
+These recipes are the **only** authored copy. This directory is also the
+`corpus-engine-recipes` crate, which `include_str!`s the tree to bundle an offline copy
 into the binary and the desktop app — that bundle is a build artifact regenerated
 from this tree on every build, so there is no second copy to keep in sync.
 
@@ -45,6 +45,8 @@ sovereign-recipes/
 │                              #   THE DIRECTORY IS THE CATALOG: build.rs discovers it,
 │                              #   `--ontology list` names them. Not listed here — a fourth
 │                              #   copy of the list is a fourth thing to forget.
+│                              #   A new directory (template or recipe) also takes a line in
+│                              #   src/lib.rs; its tree test names the one that is missing.
 ├── wikipedia/recipe.toml      # one directory per corpus
 ├── sep/recipe.toml
 └── …
@@ -69,9 +71,9 @@ When you `sovereign corpus install <id>`, the engine takes the first hit:
 2. Move the directory here: `sovereign-recipes/<id>/recipe.toml`.
 3. Add a `[[recipes]]` entry to `registry.toml` (copy a neighbor; set `id`, `name`,
    `description`, `license`, sizes, `catalog_status`).
-4. To ship inside the app's offline bundle, add the id to the `RecipeId` enum in
-   `corpus-engine/src/recipe_builtin.rs`. The
-   `bundled_recipe_covers_every_snapshot_entry` test flags anything you missed.
+4. Add the id's line to `RECIPES` in `src/lib.rs`, which ships it inside the
+   app's offline bundle. The tree test there and
+   `bundled_recipe_covers_every_snapshot_entry` flag anything you missed.
 5. `sovereign recipe test <path> --sample-size 50 --output TEST_REPORT.md`, commit
    the report, open a PR.
 

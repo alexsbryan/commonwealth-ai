@@ -311,7 +311,7 @@ impl WorkerController {
                 if let Err(destroy_err) = self.provider.destroy(&instance.instance_id) {
                     eprintln!(
                         "[controller] WARNING: auto-destroy failed for instance {}: {destroy_err}\n\
-                         [controller] manually destroy with: `sovereign pipeline pod down {}` \
+                         [controller] manually destroy with: `sovereign mesh pod down {}` \
                          or `vastai destroy instance {}`",
                         instance.instance_id,
                         instance.instance_id,

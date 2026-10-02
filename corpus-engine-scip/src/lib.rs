@@ -51,6 +51,8 @@ pub mod error;
 /// dm-mesh-workbench-move-scip): it is code intelligence over the graph, not
 /// mesh machinery.
 pub mod lsp_tier;
+/// The one merged-graph loader over `<indexes>/*/scip_graph.db`.
+pub mod merged_graph;
 /// Duplicated concept ROLE over the graph — the third feed, seeing what
 /// neither a name census nor a behaviour report can. See the module docs.
 pub mod roles;

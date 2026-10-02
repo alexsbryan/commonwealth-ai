@@ -3,19 +3,18 @@
 //   * dev_bin / llm_bin — exec dispatchers into the two sibling
 //     binaries (`sovereign-cli-dev`, `sovereign-cli-llm`).
 //   * Pure delegators that translate the new flat CLI surface
-//     (`svrn status`, `svrn drift accept`, etc.) into the
-//     legacy `atos`/`project`/`code` handler arguments before exec'ing.
+//     (`svrn status`, `svrn drift detect`, etc.) into the
+//     legacy `project`/`code` handler arguments before exec'ing.
 //   * Light commands that touch only SQLite stores + filesystem
 //     (notes, claim, reflect, rough-edges, archaeology-eval,
 //     git-archaeology).
 //
-// Slice 1 → sovereign-cli-dev: atos_cmd, atos_plugin.
 // Slice 2 → sovereign-cli-dev: project_cmd, code_cmd, amend, phases,
 //   observation, project_toml, plan_composer, plan_enricher,
 //   design_session, design_onboarding, audit_extract, audit_recover,
 //   drift_cmd_orchestrator. (`honesty`, `doc_fetcher` and `found` also
 //   moved in this slice and were deleted on 2026-08-26 — the first two
-//   unreachable since `de34eb36`, `found` retired to `announce_retired`.)
+//   unreachable since `de34eb36`, `found` retired to a `deprecation::RETIRED` row.)
 // Slice 3 → sovereign-cli-dev: tools_cmd.
 // Slice 4 → sovereign-cli-dev: daemon_cmd, doctor_cmd,
 //   install_service_cmd, service_install, setup_cmd, setup_config.
@@ -28,46 +27,35 @@
 //   corpus_watch_cmd, worker_pod_provider, REPL Runtime construction.
 
 mod amend_cmd;
-#[cfg(feature = "dev-tools")]
-mod archaeology_eval_cmd;
 mod audit_cmd;
 // `awareness_cmd` is NOT here any more (nc-26, 2026-08-21). It lives in
 // `sovereign-cli-llm`, which owns the `enrich_cmd::inference_client` two of
 // its files import — an import that had not resolved from this crate since
 // the 2026-05-22 split, because `crate::enrich_cmd` names nothing here. The
-// dispatch arm below calls it across the link, in this process.
+// dispatch arm below execs the LLM sibling for it.
 mod cache_audit_cmd;
 mod charter_cmd;
-// `svrn code index` in the shipped binary. Gated on `code-intel` rather than
-// `dev-tools`: the index path needs corpus-engine's grammars and the SCIP db,
-// but none of the workbench's heavy crates. The gate is here and ONLY here —
-// no inner `#![cfg]` in the module, which is the bug that makes
-// `--features awareness` alone fail to compile.
-#[cfg(feature = "code-intel")]
-mod code_index_cmd;
-#[cfg(feature = "code-intel")]
-#[cfg(feature = "code-intel")]
-mod code_refresh;
 // `svrn init` / `svrn project init`. Same gate as the index path it drives —
 // init's whole job is to produce a corpus, so a build that cannot index has
 // nothing to offer it.
 #[cfg(feature = "dev-tools")]
+#[cfg(feature = "dev-tools")]
+mod agent_bench_bin;
+mod bench_bin;
 mod conformance_cmd;
 mod contract_cmd;
 mod daemon_bin;
 #[cfg(feature = "deep-research")]
 mod deep_research_cmd;
-mod design_cmd;
 mod dev_bin;
 mod drift_cmd;
-#[cfg(feature = "dev-tools")]
-mod git_archaeology_cmd;
+mod ingest_bin;
 mod init;
 mod journal_cmd;
 mod llm_bin;
 mod memory_cmd;
+mod mesh_bin;
 mod milestone_cmd;
-mod notes_cmd;
 mod notes_retrieval_cmd;
 mod path_cmd;
 mod plan_cmd;
@@ -83,12 +71,10 @@ mod quality_map_cmd;
 // zero dependencies and is the one thing a `curl | sh` user needs to reach
 // the code-intelligence pipeline the daemon already runs.
 mod project_registry;
-mod reflect_cmd;
 mod refresh_cmd;
 mod report_audit;
-#[cfg(feature = "dev-tools")]
-mod rough_edges_cmd;
 mod seat_cmd;
+mod serve_bin;
 mod serve_cmd;
 mod session_cmd;
 mod session_lineage;
@@ -202,7 +188,7 @@ const HELP: Help = Help {
             ),
             (
                 "mobile",
-                "Serve the phone-facing API, riding on the daemon's models (serve / status / pair)",
+                "Absent: the mobile host (sovereign-server) was deleted; no mobile host ships",
             ),
             (
                 "alignment",
@@ -221,6 +207,10 @@ const HELP: Help = Help {
             (
                 "path",
                 "Print where per-user data lives (root / data / mesh-data / config)",
+            ),
+            (
+                "ingest",
+                "Build a corpus from a recipe (ingest's own CLI, svrn-ingest)",
             ),
             ("recipe", "Run a corpus ingestion recipe"),
             (
@@ -276,7 +266,7 @@ const HELP: Help = Help {
 };
 
 /// Verbs that belong to the **developer toolchain** — project lifecycle,
-/// ATOS orchestration, code intelligence, git archaeology, agent benches.
+/// code intelligence, git archaeology, agent benches.
 /// They are gated out of the default (end-user) build: most exec the
 /// `sovereign-cli-dev` sibling that a public build does not ship; the rest
 /// are in-process dev tooling kept off the product surface. A default build
@@ -284,10 +274,9 @@ const HELP: Help = Help {
 /// `--features dev-tools`. Kept disjoint from the public `HELP` subcommands
 /// by the `public_help_advertises_no_dev_verb` test.
 const DEV_VERBS: &[&str] = &[
-    // Neither `code` nor `project` is here. Both are SPLIT surfaces whose
-    // dispatch arms do their own per-subcommand routing across the four
-    // (code-intel × dev-tools) build combinations; a blanket intercept here
-    // would refuse `code index` in a build that can actually serve it.
+    // Neither `code` nor `project` is here. Every `code` subcommand execs the
+    // code program, `sovereign-cli-dev`, in every build (pb-code-index); a
+    // blanket intercept here would refuse `code index` in the shipped build.
     // `project` is NOT here. Its registry subcommands ship in the default
     // build (`project_registry`), so a blanket intercept would refuse verbs
     // this binary can actually serve. The `project` dispatch arm does its own
@@ -299,11 +288,9 @@ const DEV_VERBS: &[&str] = &[
     // dispatch arm is `#[cfg(feature = "deep-research")]`; a build without
     // the feature falls to the unknown-verb catch-all, like the other
     // feature-gated arms.
-    "atos",
     "tools",
     "status",
     "charter",
-    "design",
     "plan",
     "amend",
     "milestone",
@@ -347,7 +334,6 @@ const ALL_VERBS: &[&str] = &[
     "amend",
     "archaeology-eval",
     "atlas",
-    "atos",
     "audit",
     "awareness",
     "backlog",
@@ -362,13 +348,13 @@ const ALL_VERBS: &[&str] = &[
     "corpus",
     "daemon",
     "deep-research",
-    "design",
     "doctor",
     "drift",
     "enrich",
     "eval",
     "git-archaeology",
     "govern",
+    "ingest",
     "init",
     "install-service",
     "job",
@@ -435,18 +421,13 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
         "tools",
         "Invoke code-intelligence tools (list / describe / call)",
     ),
-    (
-        "atos",
-        "Agent task orchestration (charter → plan → milestones)",
-    ),
-    ("status", "Project / ATOS status report"),
+    ("status", "Project status report"),
     ("charter", "Create or amend a project charter"),
-    ("design", "Capture a design session"),
-    ("plan", "Compose + align a project plan"),
+    ("plan", "Validate a project plan"),
     ("amend", "Amend a charter or plan"),
-    ("milestone", "Advance or close an ATOS milestone"),
-    ("drift", "Architectural-drift detection + spec accept"),
-    ("audit", "Audit rollup / recover / teardown"),
+    ("milestone", "Close a project phase"),
+    ("drift", "Narrative-vs-code drift detection"),
+    ("audit", "Audit rollup / recover"),
     ("refresh", "Rebuild the project code index"),
     (
         "seat",
@@ -865,7 +846,7 @@ async fn async_main() {
             if DEV_VERBS.contains(&first.as_str()) {
                 eprintln!(
                     "{first}: part of the Sovereign developer toolchain (project \
-                     lifecycle, ATOS orchestration, code intelligence). It is not \
+                     lifecycle, code intelligence). It is not \
                      in the default build. Restore it with `cargo build -p \
                      sovereign-cli --features dev-tools` (the `-p` matters — \
                      without it you rebuild the workspace default, not this \
@@ -884,72 +865,39 @@ async fn async_main() {
             // execs into it without setting up a tracing subscriber —
             // the sibling's main() installs the appropriate filter for
             // each verb.
-            "mesh" | "meshapp" | "ring" | "job" | "mobile" | "alignment" | "corpus"
-            | "meta-atlas" | "mcp" | "recipe" | "pipeline" | "recipe-agent" | "maintainer"
-            | "publish" | "unpublish" | "run" => {
+            // ingest's own CLI (pb-cli-llm-ingest-move): its verbs, except
+            // svrn's sub-verbs under those spellings, which fall through to
+            // sovereign-cli-llm below (one table, `ingest_bin::owns`).
+            "enrich" | "corpus" | "atlas" | "meta-atlas" | "recipe" | "pipeline" | "alignment"
+            | "bench"
+                if ingest_bin::owns(first, &raw_args[1..]) =>
+            {
+                let code = ingest_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "mobile" | "corpus" | "mcp" | "recipe-agent" | "maintainer" | "meshapp" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
+            // ingest's own CLI (phase-b pb-ingest-cli).
+            "ingest" => {
+                let code = ingest_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // cmnwlth's verbs — the mesh sibling (FIVE_PROGRAMS §9).
+            // serve's weight verbs keep their `svrn mesh` spelling (phase-b-22).
+            "mesh" | "ring" | "job" | "publish" | "unpublish" | "run" => {
+                let code = match serve_bin::mesh_verb(first, &raw_args[1..]) {
+                    Some(verb) => serve_bin::exec(verb, &raw_args[2..]),
+                    None => mesh_bin::exec(first, &raw_args[1..]),
+                };
+                std::process::exit(code);
+            }
             "code" => {
-                // Split surface, same shape as `project`: `code index` runs
-                // here under `code-intel`; `code converge` runs here too since
-                // 2026-08-21 — linked, not exec'd; the remaining analysis
-                // subcommands stay in the workbench sibling.
-                #[cfg(feature = "code-intel")]
-                let handled = code_index_cmd::try_run(&raw_args[1..]).await;
-                #[cfg(not(feature = "code-intel"))]
-                let handled: Option<i32> = None;
-
-                // `sovereign-cli-dev` grew a `[lib]` target, so a workbench
-                // verb whose whole dependency surface this build already
-                // carries runs in THIS process: no exec, no 414 MB sibling,
-                // and no way for that sibling to be stale (the trap
-                // `sibling::warn_if_stale` exists to soften). The list of such
-                // verbs lives in `InProcessCodeVerb`, over in the workbench,
-                // so this router and the workbench's own cannot disagree.
-                #[cfg(feature = "dev-tools")]
-                let handled = match handled {
-                    Some(c) => Some(c),
-                    None => match raw_args
-                        .get(1)
-                        .and_then(|sub| sovereign_cli_dev::InProcessCodeVerb::parse(sub))
-                    {
-                        Some(verb) => {
-                            // The workbench binary installs no subscriber for
-                            // this path, so the dispatch decision was
-                            // invisible until now. WARN by default keeps the
-                            // verb's own stdout report clean; `RUST_LOG` wins.
-                            util::tracing_init::init_tracing(
-                                "sovereign_cli=warn,corpus_engine_scip=warn",
-                            );
-                            tracing::debug!(
-                                target: "sovereign_cli::dispatch",
-                                verb = verb.as_str(),
-                                "code verb served in-process from the linked \
-                                 workbench lib (no sibling exec)"
-                            );
-                            Some(verb.run(&raw_args[2..]).await)
-                        }
-                        None => None,
-                    },
-                };
-
-                let code = match handled {
-                    Some(c) => c,
-                    None if cfg!(feature = "dev-tools") => dev_bin::exec("code", &raw_args[1..]),
-                    #[cfg(feature = "code-intel")]
-                    None => code_index_cmd::refuse_workbench_subcommand(
-                        raw_args.get(1).map(String::as_str),
-                    ),
-                    #[cfg(not(feature = "code-intel"))]
-                    None => {
-                        eprintln!(
-                            "svrn code: not available in this build. Rebuild with \
-                             `--features code-intel` for `code index`."
-                        );
-                        2
-                    }
-                };
+                // Every `svrn code` subcommand is the code program's, `code
+                // index` included (pb-code-index): exec `sovereign-cli-dev`,
+                // which names itself when it is not installed.
+                let code = dev_bin::exec("code", &raw_args[1..]);
                 std::process::exit(code);
             }
             "init" => {
@@ -987,7 +935,13 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "notes" => {
-                let code = notes_cmd::run(&raw_args[1..]).await;
+                // Code's verb over code's notes store (pb-notes-verbs): exec
+                // `sovereign-cli-dev`. `retrieval-audit` is not code's and
+                // stays in this process.
+                let code = match raw_args.get(1).map(String::as_str) {
+                    Some("retrieval-audit") => notes_retrieval_cmd::run(&raw_args[2..]).await,
+                    _ => dev_bin::exec("notes", &raw_args[1..]),
+                };
                 std::process::exit(code);
             }
             "seat" => {
@@ -1070,22 +1024,23 @@ async fn async_main() {
                 // fingerprint inputs, each precondition probe, each lane's
                 // cap and exit — is a debug event under `sovereign_cli`.
                 util::tracing_init::init_tracing("sovereign_cli=info");
-                let code = quality_check_cmd::run_verb(&raw_args[1..], llm_bin::exec).await;
+                // `quality lane` is bench's (pb-cli-llm-bench-move).
+                let code = quality_check_cmd::run_verb(&raw_args[1..], bench_bin::exec).await;
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]
             "rough-edges" => {
-                let code = rough_edges_cmd::run(&raw_args[1..]).await;
+                let code = dev_bin::exec("rough-edges", &raw_args[1..]);
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]
             "git-archaeology" => {
-                let code = git_archaeology_cmd::run(&raw_args[1..]).await;
+                let code = dev_bin::exec("git-archaeology", &raw_args[1..]);
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]
             "archaeology-eval" => {
-                let code = archaeology_eval_cmd::run(&raw_args[1..]).await;
+                let code = dev_bin::exec("archaeology-eval", &raw_args[1..]);
                 std::process::exit(code);
             }
             "charter" => {
@@ -1095,22 +1050,18 @@ async fn async_main() {
             "claim" => {
                 // Moved to sovereign-cli-llm (uses sovereign-mesh +
                 // sovereign-work-atlas, both heavy).
-                let code = llm_bin::exec("claim", &raw_args[1..]);
+                let code = dev_bin::exec("claim", &raw_args[1..]);
                 std::process::exit(code);
             }
             "solve" => {
                 // Daemon-hosted TDD solver client (docs/specs/SOLVE_UX.md).
                 // Lives in sovereign-cli-llm with the other daemon-HTTP
                 // clients (chat, claim).
-                let code = llm_bin::exec("solve", &raw_args[1..]);
+                let code = dev_bin::exec("solve", &raw_args[1..]);
                 std::process::exit(code);
             }
             "amend" => {
                 let code = amend_cmd::run(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "design" => {
-                let code = design_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "plan" => {
@@ -1149,17 +1100,24 @@ async fn async_main() {
                 // pipeline they drive. The heavier lifecycle subcommands
                 // (`init`, `serve`, `status`, `found`, …) still live in the
                 // workbench sibling.
-                let code = match project_registry::try_run(&raw_args[1..]).await {
+                let retired =
+                    sovereign_cli_shared::deprecation::refuse_retired(&["project"], &raw_args[1..]);
+                let code = match retired {
                     Some(c) => c,
-                    None if cfg!(feature = "dev-tools") => dev_bin::exec("project", &raw_args[1..]),
-                    None => project_registry::refuse_workbench_subcommand(
-                        raw_args.get(1).map(String::as_str),
-                    ),
+                    None => match project_registry::try_run(&raw_args[1..]).await {
+                        Some(c) => c,
+                        None if cfg!(feature = "dev-tools") => {
+                            dev_bin::exec("project", &raw_args[1..])
+                        }
+                        None => project_registry::refuse_workbench_subcommand(
+                            raw_args.get(1).map(String::as_str),
+                        ),
+                    },
                 };
                 std::process::exit(code);
             }
             "reflect" => {
-                let code = reflect_cmd::run_reflect(&raw_args[1..]).await;
+                let code = dev_bin::exec("reflect", &raw_args[1..]);
                 std::process::exit(code);
             }
             "journal" => {
@@ -1172,52 +1130,48 @@ async fn async_main() {
                 let code = journal_cmd::run(&raw_args[1..]);
                 std::process::exit(code);
             }
-            "atos" => {
-                // Lives in the `sovereign-cli-dev` sibling binary now.
-                // exec() replaces the current process on Unix; child
-                // exit on other platforms.
-                let code = dev_bin::exec("atos", &raw_args[1..]);
-                std::process::exit(code);
-            }
             "memory" => {
                 util::tracing_init::init_tracing("sovereign_cli=info,sovereign_store=info");
                 let code = memory_cmd::run_memory(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "awareness" => {
-                #[cfg(feature = "awareness")]
-                {
-                    util::tracing_init::init_tracing(
-                        "sovereign_cli=info,sovereign_tools=debug,corpus_engine=debug",
-                    );
-                    // LINKED, not exec'd — `sovereign_cli_llm` is a library
-                    // dependency under this feature, so this runs in the
-                    // dispatcher's own process. Adding an exec hop here
-                    // would spend exactly what nc-19 bought.
-                    let code =
-                        sovereign_cli_llm::awareness_cmd::run_awareness(&raw_args[1..]).await;
-                    std::process::exit(code);
-                }
-                #[cfg(not(feature = "awareness"))]
-                {
-                    eprintln!(
-                        "awareness: built only under the `awareness` cargo feature\n\
-                         (it pulls the heavy knowledge-view surface). Rebuild with\n\
-                         `cargo build --features awareness` to enable."
-                    );
-                    std::process::exit(2);
-                }
+                // Exec'd into the composed LLM sibling, which holds ingest's
+                // atlas port for the subcommands that write an atlas
+                // (pb-cli-llm-ingest-move-remainder); the sibling gates the
+                // verb on its own `awareness` feature.
+                let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
             }
             "tools" => {
                 // Moved to the sovereign-cli-dev sibling.
                 let code = dev_bin::exec("tools", &raw_args[1..]);
                 std::process::exit(code);
             }
+            // bench's own CLI (pb-cli-llm-bench-move): `bench` and `eval`,
+            // except svrn's white-box lanes under those spellings, which fall
+            // through to sovereign-cli-llm below.
+            "bench" | "eval" if bench_bin::owns(first, &raw_args[1..]) => {
+                let code = bench_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
             // ── LLM cluster (continued) → sovereign-cli-llm ──
-            "backlog" | "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym"
-            | "knowledge-gym" | "chat" | "reading-diag" | "newsworthy" | "govern"
-            | "router-cache" | "proxy" | "portfolio" | "workflow" => {
+            "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym" | "knowledge-gym"
+            | "chat" | "reading-diag" | "newsworthy" | "govern" | "router-cache" | "proxy"
+            | "portfolio" | "workflow" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // Hidden, like the introspection verbs above: svrn's probe of its
+            // own internals, which `eval run`'s white-box modes exec and score
+            // (phase-b-58). Not in HELP or ALL_VERBS.
+            "__probe" => {
+                let code = llm_bin::exec(first, &raw_args[1..]);
+                std::process::exit(code);
+            }
+            // `backlog` is `svrn code`'s: its items are notes-store todos.
+            "backlog" => {
+                let code = dev_bin::exec("backlog", &raw_args[1..]);
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]
@@ -1225,8 +1179,8 @@ async fn async_main() {
                 // Eleven-problem coding battery; subprocess-driven
                 // pi / opencode / codex runners. See SYSTEM_OVERVIEW §4
                 // and `sovereign/crates/sovereign-agent-bench/`.
-                let code = sovereign_agent_bench::run_agent_bench(&raw_args[1..]).await;
-                std::process::exit(code as i32);
+                let code = agent_bench_bin::exec(&raw_args[1..]);
+                std::process::exit(code);
             }
             "nudge" => {
                 let code = run_nudge(&raw_args[1..]).await;
@@ -1273,7 +1227,11 @@ async fn async_main() {
     // linking llama-cpp-2 + lance.
     //
     // Bare `sovereign` now prints usage and exits. Users who want the
-    // interactive shell type `svrn chat`.
+    // interactive shell type `svrn chat`. A removed verb (`atos`,
+    // `design`) is refused by name first, never answered with usage.
+    if let Some(code) = sovereign_cli_shared::deprecation::refuse_retired(&[], &raw_args) {
+        std::process::exit(code);
+    }
     print_usage();
     std::process::exit(1);
 }
@@ -1402,6 +1360,17 @@ mod tests {
     /// lists — `DEV_VERBS` and the `HELP` subcommand table — so the dump
     /// cannot drift from the `match` arms without a test going red. Also pins
     /// sorted + dedup so the reverse check's output is stable.
+    /// `svrn __probe` is wire between svrn and bench, not a verb a user types.
+    #[test]
+    fn the_probe_verb_is_hidden() {
+        assert!(!ALL_VERBS.contains(&"__probe"));
+        for section in HELP.sections {
+            if let HelpSection::Subcommands(entries) = section {
+                assert!(entries.iter().all(|(name, _)| !name.contains("probe")));
+            }
+        }
+    }
+
     #[test]
     fn all_verbs_is_complete_and_sorted() {
         for v in DEV_VERBS {
@@ -1429,30 +1398,5 @@ mod tests {
             ALL_VERBS,
             "ALL_VERBS must be kept sorted"
         );
-    }
-
-    /// `svrn code converge` is served BY THIS BINARY — linked out of the
-    /// workbench's `[lib]` target, not `exec`'d into the sibling. The test
-    /// exists because the linkage is invisible in the dispatch `match`: it is
-    /// a Cargo edge plus a `default-features = false`, and losing either would
-    /// silently fall back to the exec path. It also pins the other half of the
-    /// contract — verbs that still need `sovereign-tools` or the tree-sitter
-    /// grammars must NOT be claimed, because this binary never links them.
-    #[cfg(feature = "dev-tools")]
-    #[test]
-    fn code_converge_is_linked_from_the_workbench_lib_not_exec_d() {
-        use sovereign_cli_dev::InProcessCodeVerb;
-
-        assert_eq!(
-            InProcessCodeVerb::parse("converge"),
-            Some(InProcessCodeVerb::Converge),
-            "the dispatcher must resolve `code converge` to the linked verb"
-        );
-        for still_the_siblings in ["brief", "fieldglass", "arch-report", "dry-report", "map"] {
-            assert!(
-                InProcessCodeVerb::parse(still_the_siblings).is_none(),
-                "`code {still_the_siblings}` must keep exec'ing the sibling"
-            );
-        }
     }
 }

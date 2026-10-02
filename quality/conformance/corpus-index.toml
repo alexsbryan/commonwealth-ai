@@ -1,0 +1,18 @@
+# Conformance tags in `corpus-index` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "ST-5"
+test = "corpus-index::fs_source::tests::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical"
+file = "corpus-index/src/fs_source/tests.rs"
+line = 19
+asserts = 2

@@ -5,7 +5,7 @@
 //! replaced the answer-bearing passage. Hash the full body, not the title or
 //! the 200-character eval snippet; emit no source text into the trace.
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 use sha2::{Digest, Sha256};
 
 pub(super) fn question_fingerprint(question: &str) -> String {
@@ -78,7 +78,7 @@ mod tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("trace_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("trace_fixture"),
         };
         let gold = content_fingerprints(&[first.clone()]);
         first.content = "A different coin in the same section".into();
@@ -97,7 +97,7 @@ mod tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("trace_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("trace_fixture"),
         };
         let mut second = first.clone();
         second.content = "A different passage under the same title".into();

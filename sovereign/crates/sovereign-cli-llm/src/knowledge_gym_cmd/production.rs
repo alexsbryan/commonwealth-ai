@@ -45,9 +45,9 @@ use std::sync::Mutex;
 
 use serde_json::Value;
 
+use sovereign_contracts::traits::{InferenceProvider, StateStore};
+use sovereign_contracts::types::{Plan, Speed, Step, StepKind, StepOutput, Task, TaskStatus};
 use sovereign_core::executor::{AutoApprovalChannel, Executor, TaskContext};
-use sovereign_core::traits::{InferenceProvider, StateStore};
-use sovereign_core::types::{Plan, Speed, Step, StepKind, StepOutput, Task, TaskStatus};
 use sovereign_core::{SkillRegistry, ToolRegistry};
 
 use super::ledger::{ToolLedgerEntry, TurnLedger};
@@ -99,8 +99,8 @@ impl ExecutorHost {
     /// ask the same model the same question.
     pub fn connect(base_url: &str, chat_model: &str, sabotage: Option<Sabotage>) -> Self {
         let v1 = format!("{}/v1", base_url.trim_end_matches('/'));
-        let inference: Arc<dyn InferenceProvider> = Arc::new(
-            sovereign_inference::remote::SplitInferenceProvider::new_with_bearer(
+        let inference: Arc<dyn InferenceProvider> =
+            Arc::new(oicp_client::SplitInferenceProvider::new_with_bearer(
                 &v1,
                 None,
                 chat_model.to_string(),
@@ -112,8 +112,7 @@ impl ExecutorHost {
                 "embed".to_string(),
                 8192,
                 String::new(),
-            ),
-        );
+            ));
         Self {
             inference,
             store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),

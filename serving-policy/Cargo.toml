@@ -3,25 +3,20 @@ name = "serving-policy"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "How a host decides to SERVE a request: fair-share scheduling (SchedCore, EtaEwma, reciprocity) and pipeline alias resolution. A Tier-0 leaf that names only `oicp-types`, the family-neutral floor — it is consumed across the commonwealth/sovereign family line, which is exactly why it may name neither side."
+description = "The serving cluster's re-export of the shared serving-policy arithmetic (serving-policy-core) at its historical paths. The arithmetic itself lives in the serving-policy-core [[package_leaf]], which the daemon names directly; this shim keeps `sovereign-inference` and `sovereign-serving-host` on their pre-existing `serving_policy::` paths."
 
-# The contract, restated 2026-09-16 (domains REVIEW-build-middleware-seam):
-# this crate names only `oicp-types`, the family-neutral floor — never
-# `sovereign-*` or `commonwealth-*`, which the two [[forbid]] rows pin
-# structurally. `PipelineContextConfig` moved DOWN to `oicp-types` so the
-# middleware seam in `sovereign-contracts` can name it without a
-# `sovereign-contracts -> serving-policy` edge, which the thin-surface closure
-# refuses; the old path is re-exported from `pipeline_aliases`. The crate
-# exists because `fair_sched` sat in `commonwealth-core` while its consumers
-# were `sovereign-inference` and `sovereign-server` — two runtime-tier crates
-# whose ENTIRE reference to commonwealth was this one module.
+# The contract, restated 2026-09-22 (FIVE_PROGRAMS fp-17): the fair-sched
+# arithmetic and the pipeline_aliases table moved DOWN to `serving-policy-core`
+# so the daemon (a member of the `svrn` package) stops naming a [cmnwlth]
+# package crate. This shim names only `serving-policy-core`, which names only
+# `oicp-types`, the family-neutral floor — never `sovereign-*` or
+# `commonwealth-*`, which the two [[forbid]] rows below (ARCH_LAYERS.toml)
+# still pin structurally. The crate exists because `fair_sched` sat in
+# `commonwealth-core` while its consumers were `sovereign-inference` and
+# `sovereign-server` — two runtime-tier crates whose ENTIRE reference to
+# commonwealth was this one module.
 [dependencies]
-oicp-types = { workspace = true }
-serde = { workspace = true }
-# `PipelineAliasTable::from_toml` parses the operator's override file and the
-# embedded `default_pipelines.toml`. Third-party, so it costs the crate no
-# in-repo edge — which is the only budget this crate keeps.
-toml = { workspace = true }
+serving-policy-core = { workspace = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [lints]

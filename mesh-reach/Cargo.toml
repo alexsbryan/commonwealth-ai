@@ -1,0 +1,57 @@
+[package]
+name = "mesh-reach"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "How a program reaches a mesh peer — TrafficClass, PeerContact, PeerEndpoint and the PeerTransport port, the generic peer fan-out, and RailsTransport, which resolves a peer's origin through cw-rails' reach door, and the guest dialer with the one iroh HTTP bridge. Layer 0; no fs, no store."
+
+# Minted 2026-09-27 (phase-b pb-rails-reach, decision phase-b-30 Group 3; leaf
+# count 22 → 23). svrn and serve dial peers through cw-rails and must name the
+# same dial vocabulary cmnwlth speaks, and neither may link
+# commonwealth-transport (a cross-package edge). The workspace budget is
+# kernel-types (for `NodeId`/`NodePubkey`) and nothing else; third-party deps
+# come as the contents need them, each behind the feature that needs it
+# (phase-b-33 item 6). A workspace dependency beyond kernel-types means this is
+# a mechanism, not vocabulary, and the leaf is wrong.
+
+[features]
+# The generic peer fan-out — tokio-shaped, so its own feature.
+fanout = ["dep:tokio", "dep:serde"]
+# The reach door's wire (`door`), which cw-rails serves.
+wire = ["dep:serde"]
+# `RailsTransport`: `PeerTransport::endpoints` over cw-rails' reach door.
+rails = ["wire", "dep:reqwest"]
+# The guest dialer and the one iroh HTTP bridge (`guest`), moved from
+# commonwealth-transport iroh.rs (pb-reach-guest, phase-b-35). iroh's two
+# features must equal commonwealth-transport's, or cargo-hakari lists iroh in
+# workspace-hack (see that crate's `[features]` comment).
+guest = ["dep:iroh", "dep:tokio", "dep:rustls", "dep:hex", "dep:rand", "iroh/unstable-custom-transports", "iroh/test-utils"]
+# Bench-only relay-pinned posture; commonwealth-transport's feature forwards here.
+iroh-relay-only = ["guest"]
+
+[dependencies]
+kernel-types = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+iroh = { workspace = true, optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true }
+hex = { version = "0.4", optional = true }
+rand = { version = "0.9", optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+axum = { workspace = true }
+iroh = { workspace = true, features = ["unstable-custom-transports", "test-utils"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+hex = "0.4"
+rand = "0.9"
+
+[lints]
+workspace = true

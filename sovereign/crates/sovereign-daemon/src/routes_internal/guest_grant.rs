@@ -180,7 +180,16 @@ pub async fn guest_grant_issue(
     // nothing advertises is born broken: it looks fine to the operator, and
     // 403s on the guest's first request with a message about scope that sends
     // them hunting in the wrong place.
-    let dispatchable = crate::routes_inference::dispatchable_ids(&state).await;
+    let dispatchable = crate::routes_inference::dispatchable_ids(&state)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorBody {
+                    error: format!("the inference state did not answer: {e}"),
+                }),
+            )
+        })?;
     for scope in &scopes {
         let ids = match scope {
             Scope::Models(ids) => ids,
@@ -206,7 +215,7 @@ pub async fn guest_grant_issue(
         }
     }
 
-    let token = commonwealth_transport::identity::generate_bearer_token().map_err(|e| {
+    let token = crate::client_auth::generate_bearer_token().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody {
@@ -216,7 +225,7 @@ pub async fn guest_grant_issue(
     })?;
 
     let ttl_secs = req.ttl_secs.unwrap_or(DEFAULT_GUEST_TTL_SECS);
-    let now_ms = commonwealth_core::clock::unix_now_millis();
+    let now_ms = sovereign_time::unix_millis();
     let grant = state
         .inner
         .node
@@ -230,9 +239,10 @@ pub async fn guest_grant_issue(
         "guest_grant: issued an ephemeral guest grant"
     );
 
-    // The link a phone opens, when the caller named a base. ONE composer
-    // (`sovereign_mesh::deep_link::wall_https_link`) — the same string the CLI
-    // writes into its QR — so the desktop can display a link it cannot build
+    // The link a phone opens, when the caller named a base. ONE page decision
+    // (`sovereign_contracts::guest_pages::wall_page`) and ONE fragment grammar
+    // (`mesh_join_vocab::deep_link`) — the same string the CLI writes into its
+    // QR — so the desktop can display a link it cannot build
     // (it is an HTTP client; it does not link the mesh crates). The dial is
     // the caller's, read from this daemon's own status; see the field doc.
     let link = guest_link(
@@ -299,7 +309,7 @@ pub struct GuestGrantRow {
 /// the question this surface exists to answer, and a list that silently omits
 /// them cannot.
 pub async fn guest_grant_list(State(state): State<AppState>) -> Json<Vec<GuestGrantRow>> {
-    let now_ms = commonwealth_core::clock::unix_now_millis();
+    let now_ms = sovereign_time::unix_millis();
     Json(
         state
             .inner
@@ -321,8 +331,10 @@ pub async fn guest_grant_list(State(state): State<AppState>) -> Json<Vec<GuestGr
 
 /// The link a guest opens, or `None` when the caller named no base.
 ///
-/// ONE composer: [`sovereign_mesh::deep_link::wall_https_link`], the same one
-/// the CLI's QR encodes — so a link the desktop displays from this response
+/// The page and its door route are ONE decision
+/// ([`sovereign_contracts::guest_pages::wall_page`]) and the fragment ONE
+/// grammar (`mesh_join_vocab::deep_link::build_https_guest_link`), the pair the
+/// CLI's QR encodes — so a link the desktop displays from this response
 /// and a link the CLI prints cannot disagree. `dial` is this node's own
 /// reachability string; absent when iroh is not running, in which case the
 /// link is the direct (plain-HTTP) form.
@@ -335,15 +347,15 @@ fn guest_link(
     expires_at_secs: u64,
     summary: &str,
 ) -> Option<String> {
-    let base = url?;
-    Some(sovereign_mesh::deep_link::wall_https_link(
+    let (page, path) = sovereign_contracts::guest_pages::wall_page(url?, rail, wall);
+    Some(mesh_join_vocab::deep_link::build_https_guest_link(
         token,
-        base,
-        rail,
-        wall,
+        &page,
         expires_at_secs,
         (!summary.is_empty()).then_some(summary),
+        None,
         dial,
+        path.as_deref(),
     ))
 }
 
@@ -370,8 +382,8 @@ mod tests {
         assert!(link.starts_with("https://svrnme.sh/ring/"), "{link}");
         assert!(link.contains("token=tok"), "{link}");
         assert!(link.contains("iroh="), "{link}");
-        match sovereign_mesh::deep_link::parse_https_guest_link(&link) {
-            Some(sovereign_mesh::deep_link::DeepLink::Guest { token, dial, .. }) => {
+        match mesh_join_vocab::deep_link::parse_https_guest_link(&link) {
+            Some(mesh_join_vocab::deep_link::DeepLink::Guest { token, dial, .. }) => {
                 assert_eq!(token, "tok");
                 assert!(dial.is_some());
             }
@@ -400,6 +412,39 @@ mod tests {
         assert!(
             railed.starts_with("http://10.0.0.1:19947/ring/house-expenses/"),
             "{railed}"
+        );
+    }
+
+    /// A runtime page base keeps the page and carries the door route as
+    /// `path=` — byte for byte the strings sovereign-mesh's `wall_https_link`
+    /// pins, so the grant response and the CLI's QR cannot drift apart.
+    #[test]
+    fn a_runtime_page_base_carries_the_door_route_in_the_fragment() {
+        let app = guest_link(
+            Some("https://svrnme.sh/ring/"),
+            Some("ring-doc"),
+            false,
+            None,
+            "tok",
+            1,
+            "",
+        );
+        assert_eq!(
+            app.as_deref(),
+            Some("https://svrnme.sh/ring/#token=tok&exp=1&path=%2Fring%2Fring-doc%2F")
+        );
+        let wall = guest_link(
+            Some("https://svrnme.sh/ring"),
+            None,
+            true,
+            None,
+            "tok",
+            1,
+            "",
+        );
+        assert_eq!(
+            wall.as_deref(),
+            Some("https://svrnme.sh/ring/#token=tok&exp=1&path=%2Fring%2F")
         );
     }
 }

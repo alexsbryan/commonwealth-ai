@@ -341,7 +341,6 @@ pub fn print_report(report: &CalibrationReport) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     fn row(
         id: &str,
@@ -373,7 +372,7 @@ mod tests {
 
     #[test]
     fn committed_calibration_bank_loads_and_covers_every_red_line() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../bench/inner_work");
+        let dir = super::super::personas::committed_bench_dir();
         let cases =
             load_calibration(&dir.join("calibration.toml")).expect("calibration.toml loads");
         assert!(cases.len() >= 12, "bank should stay substantial");

@@ -582,7 +582,7 @@ impl LlmRouter {
     ///
     /// Skill-based trigger phrases were retired alongside the
     /// skills-as-menu UI; the wisdom they encoded was migrated into
-    /// the embed-exemplar bank (`sovereign/router/exemplars.toml`)
+    /// the embed-exemplar bank (`sovereign/crates/sovereign-core/data/router/exemplars.toml`)
     /// where it informs classification at every turn rather than
     /// only when the matching skill happened to be activated.
     fn build_pass1_prompt(

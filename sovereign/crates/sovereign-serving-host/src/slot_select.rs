@@ -39,8 +39,9 @@ pub struct SlotManifestInfo {
 /// and a third means the boundary is drawn in the wrong place — K4). The
 /// declared facts per loaded model file are what the host reads from the
 /// manifest — the slot pick needs the capability profile, and advertising
-/// needs the size beside it — so they arrive through this trait: the daemon,
-/// which owns the manifest, implements it.
+/// needs the size beside it — so they arrive through this trait. The one
+/// implementation is [`crate::slot_manifest::CoreSlotManifest`], over the
+/// manifest `sovereign-contracts` bundles; tests supply their own.
 pub trait SlotManifest: Send + Sync {
     /// The declared capability profile for a loaded model file, or `None`
     /// when the manifest has no entry for it (the BYOM case).

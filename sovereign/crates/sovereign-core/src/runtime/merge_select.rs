@@ -34,7 +34,7 @@
 //! `SOVEREIGN_MERGE_SELECT` while the A/B against the legacy stack
 //! runs; the legacy path is byte-identical when the flag is off.
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 
 /// Rank-value smoothing constant. Deliberately steeper than RRF's
 /// k=60 (that heritage is for fusing MANY rank lists; here rank is
@@ -276,9 +276,9 @@ mod tests {
             // because that is where the routing pin reads it.
             provenance: match tag {
                 Some("raptor") => {
-                    corpus_engine::index::ChunkProvenance::manufactured_summary("raptor_summary")
+                    corpus_index::index::ChunkProvenance::manufactured_summary("raptor_summary")
                 }
-                _ => corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+                _ => corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
             },
         }
     }

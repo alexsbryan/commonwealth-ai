@@ -98,7 +98,7 @@ pub(super) fn check_skill_file() -> CheckResult {
                     status: CheckStatus::Failed,
                     message: format!("SKILL.md missing from {}", skill_dir.display()),
                     repair: Repair::Manual(
-                        "Copy SKILL.md from sovereign/.opencode/skills/sovereign-code/".into(),
+                        "Run `svrn doctor --fix` — it writes the template this binary embeds".into(),
                     ),
                 },
                 Err(e) => CheckResult {

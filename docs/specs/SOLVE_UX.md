@@ -1,8 +1,9 @@
 # SOLVE — give the daemon a coding goal, get a green tree back
 
-Status: built + live-verified 2026-07-07, both paths. Daemon job
-host in `sovereign-daemon/src/solve_http.rs` (+ MCP
-tools in `solve_tools.rs`, CLI in `sovereign-cli-llm/src/solve_cmd.rs`,
+Status: built + live-verified 2026-07-07, both paths. Job host in
+`sovereign-code/src/solve_http.rs` since pb-meshapp-solve, the svrn
+daemon's until then (+ MCP tools in `solve_tools.rs`, CLI in
+`sovereign-cli-dev/src/solve_cmd.rs`,
 composition in `sovereign-tdd/src/tasks/solve.rs`). Fix path:
 failing tests → reached with a minimal diff, rounds streamed live.
 Pin-then-green path: no tests → synthesized failing tests → reached
@@ -77,8 +78,10 @@ CLI: `sovereign solve <workdir> "goal" [--watch]`.
 
 ## Implementation notes (for the builder, not the user)
 
-Daemon links `sovereign-tdd` (leaf crate); backend = its own /v1
-chat endpoint. Default path = `tasks::bdd_cycle` composition (failing
+The code program links `sovereign-tdd` (leaf crate); backend = serve's
+/v1 chat endpoint on this host, and no serve is a submit-time refusal
+naming serve and the base (pb-meshapp-solve; svrn's own chat endpoint
+until then). Default path = `tasks::bdd_cycle` composition (failing
 tests → MaximizePassing; none → Red then green). `run_trial` gains
 one optional round-observer hook — the only engine change. In-memory
 job table, ring-buffered events, 1 job per workdir / 2 global.

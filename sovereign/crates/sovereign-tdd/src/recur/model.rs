@@ -339,8 +339,9 @@ impl ModelEvaluator {
         format!("start: {}\n{}", arms.join(" | "), rules)
     }
 
-    /// The prompt, and the byte length of its pinned prefix as the daemon's
-    /// flattener sees it (`"User: "` + instruction [+ frame-id line]).
+    /// The prompt, and the byte length of its pinned prefix: the instruction
+    /// [+ frame-id line]. The ask is one user turn, which the serving
+    /// adapter's flattener passes to the engine verbatim.
     fn build_prompt(
         &self,
         req: &EvalRequest,
@@ -357,7 +358,7 @@ impl ModelEvaluator {
         if let Some(id) = frame_id {
             p.push_str(&format!("frame-id: {id}\n"));
         }
-        let pin_bytes = "User: ".len() + p.len();
+        let pin_bytes = p.len();
         // The stack is NOT in the prompt: the grammar excludes it, and listing
         // it made the frame O(depth) (measured 4063 → 7312 bytes, ring 2).
         p.push_str("\n## FRAME\n");

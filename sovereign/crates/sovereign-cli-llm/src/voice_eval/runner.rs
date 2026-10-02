@@ -34,12 +34,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+use oicp_client::RemoteApiProvider;
 use sovereign_core::error::Result;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::Memory;
 use sovereign_core::SkillRegistry;
-use sovereign_inference::remote::RemoteApiProvider;
 
 use crate::chat_cmd::bootstrap::{build_session_with_skills, ChatSession};
 
@@ -202,7 +202,8 @@ async fn build_scenario_session(
         sovereign_core::error::Error::Serialization(format!("create voice-eval tempdir: {e}"))
     })?;
 
-    let mut globals = crate::chat_cmd::config::default_globals_for_voice_eval();
+    let mut globals = crate::chat_cmd::config::default_globals_for_voice_eval()
+        .map_err(sovereign_core::error::Error::InvalidInput)?;
     if let Some(base) = &opts.daemon_base {
         globals.daemon_base = base.clone();
     }

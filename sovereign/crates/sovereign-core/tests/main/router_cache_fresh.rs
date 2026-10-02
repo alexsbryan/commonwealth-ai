@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! CI freshness gate for the pre-built router-embed cache.
 //!
-//! The desktop ships `sovereign/router/router-embed-cache.json` baked into the
+//! The desktop ships `sovereign/crates/sovereign-core/data/router/router-embed-cache.json` baked into the
 //! binary so first launch HITS the cache instead of re-embedding ~310 router
 //! exemplars sequentially (minutes on a CPU-only embed slot — the prescriptive
 //! worst case). This test is the GUARANTEE that the committed artifact never
@@ -27,7 +27,7 @@ fn committed_router_embed_cache_is_fresh() {
 
     if let Err(reason) = check_cache_fresh(BAKED_ROUTER_EMBED_CACHE, &specs, &fingerprint) {
         panic!(
-            "\nsovereign/router/router-embed-cache.json is STALE:\n  {reason}\n\n\
+            "\nsovereign/crates/sovereign-core/data/router/router-embed-cache.json is STALE:\n  {reason}\n\n\
              Regenerate it:\n  \
              cargo build -p sovereign-cli-llm && sovereign router-cache rebuild\n\n\
              (scripts/bump-desktop-version.sh runs this automatically at release.)\n"

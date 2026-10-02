@@ -90,7 +90,7 @@ else
   "mcp": {
     "sovereign": {
       "type": "remote",
-      "url": "http://localhost:9741/mcp"
+      "url": "http://127.0.0.1:9741/mcp"
     }
   }
 }

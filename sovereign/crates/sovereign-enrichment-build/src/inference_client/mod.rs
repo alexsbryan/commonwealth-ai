@@ -24,22 +24,23 @@ use super::providers::{
     local_daemon_base, parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider,
 };
 
-mod discovery;
 mod wire;
 
-// `discovery`'s two probes are free functions every caller runs BEFORE it
-// has a client, so they surface here rather than as methods. `wire` holds the
+// The two `/v1/models` probes are free functions every caller runs BEFORE it
+// has a client, so they surface here rather than as methods. They live in the
+// corpus-index leaf (`corpus_index::v1_models`, pb-code-clean) so a program
+// that does not link this crate reaches the same decider. `wire` holds the
 // two provider dialects as a second `impl DaemonInferenceClient` block and
 // exports nothing: its methods are `pub(super)`, reachable from this module
 // and no further.
-pub use discovery::{probe_daemon, resolve_default_models};
+pub use corpus_index::v1_models::{probe_daemon, resolve_default_models};
 
 // The three-way probe (order enrich-probe-timeout) stays INSIDE the
 // crate: `probe_daemon`'s bool signature is frozen by the ~20
 // `sovereign-cli-llm` call sites that reach this module through the
 // re-export there, so the slow-vs-down split surfaces only to this
 // crate's own callers (extract) — it must not escape the module.
-pub(crate) use discovery::{probe_daemon_status, DaemonProbe, V1_MODELS_TIMEOUT};
+pub(crate) use corpus_index::v1_models::{probe_daemon_status, DaemonProbe, V1_MODELS_TIMEOUT};
 
 /// Default chat request timeout. Phase 1 extract on a 27B-Q6 model
 /// emitting up to 16k tokens of structured JSON can run 5–15 minutes

@@ -46,18 +46,13 @@ mod corpus_ingest;
 mod corpus_queue;
 mod corpus_sync;
 mod enrichment_status;
-mod gossip;
 mod guest_grant;
 mod knowledge;
 mod mesh_admin;
-mod model_files;
 mod newsworthy_status;
 mod peer_preference;
 mod pipeline_pause;
-mod ring_checkpoint;
-mod ring_live;
-mod ring_sync;
-mod rpc_warm;
+mod scheduling;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
 pub use client_token::routes as client_token_routes;
@@ -71,9 +66,6 @@ pub use corpus_ingest::{
     ProgressSnapshotResponse,
 };
 pub use guest_grant::{guest_grant_issue, guest_grant_list, guest_grant_revoke};
-pub use ring_checkpoint::ring_checkpoint;
-pub use ring_live::ring_live;
-pub use ring_sync::ring_sync;
 // The ring-sync wire body lives in the shared leaf both ends can name
 // (domains dm-daemon-api-edge (a)); re-exported here so the routes' existing
 // `super::RingSyncRequest` paths keep resolving.
@@ -89,26 +81,20 @@ pub use corpus_queue::{
 };
 pub use corpus_sync::{index_serve, index_transfer, model_transfer};
 pub use enrichment_status::{enrichment_status, EnrichmentStatusResponse};
-pub use gossip::{
-    gossip, scheduling_intent, scheduling_plan, GossipRejection, GossipRequest, GossipResponse,
-    SchedulingIntent, SchedulingIntentResponse,
-};
 pub use knowledge::{knowledge_search, latency_probe};
 pub use mesh_admin::{
     activity_recent, activity_summary, contribution_ceiling_set, contribution_pause,
     contribution_recent, contribution_resume, contribution_status, contribution_view,
-    foreground_state, inference_warmup, ingest_budget_get, ingest_budget_set, join,
-    mesh_quiesce_get, mesh_quiesce_set, models_inventory, models_load, models_unload,
-    node_activity, recommended_storage_budget_bytes, storage_budget_get, storage_budget_set,
+    foreground_state, inference_warmup, ingest_budget_get, ingest_budget_set, mesh_quiesce_get,
+    mesh_quiesce_set, models_inventory, models_load, models_unload, node_activity,
+    recommended_storage_budget_bytes, storage_budget_get, storage_budget_set,
     ContributionStatusResponse, CorpusHostingView, ForegroundStateResponse, IngestBudgetState,
-    InventoryEntry, InventoryResponse, JoinRejection, JoinRequest, JoinResponse, LoadModelRequest,
-    LoadModelResponse, MeshQuiesceState, MeshWire, NodeActivityPayload, NodeContributionsView,
-    PauseContributionsRequest, RecentContributionsParams, RecentContributionsResponse,
-    SetContributionCeilingRequest, SetIngestBudgetRequest, SetMeshQuiesceRequest,
-    SetStorageBudgetRequest, StorageBudgetState, UnloadModelRequest, UnloadModelResponse,
-    WarmupResponse,
+    InventoryEntry, InventoryResponse, LoadModelRequest, LoadModelResponse, MeshQuiesceState,
+    NodeActivityPayload, NodeContributionsView, PauseContributionsRequest,
+    RecentContributionsParams, RecentContributionsResponse, SetContributionCeilingRequest,
+    SetIngestBudgetRequest, SetMeshQuiesceRequest, SetStorageBudgetRequest, StorageBudgetState,
+    UnloadModelRequest, UnloadModelResponse, WarmupResponse,
 };
-pub use model_files::{list_model_files, serve_model_file, ModelFileInfo, ModelFileListing};
 pub use newsworthy_status::{
     newsworthy_status, newsworthy_tick, NewsworthyStatusResponse, NewsworthyTickResponse,
 };
@@ -119,7 +105,9 @@ pub use peer_preference::{
 pub use pipeline_pause::{
     pipeline_pause, NodePauseResult, PipelinePauseRequest, PipelinePauseResponse,
 };
-pub use rpc_warm::rpc_warm;
+pub use scheduling::{
+    scheduling_intent, scheduling_plan, SchedulingIntent, SchedulingIntentResponse,
+};
 
 // Queue helpers re-exported intra-module so `corpus_collaborate` can keep
 // reaching for `super::find_local_handoff_for_corpus` /
@@ -130,7 +118,7 @@ pub(super) use corpus_queue::{find_local_handoff_for_corpus, spawn_queue_merge};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IngestPartitionRequest {
-    pub handoff_id: commonwealth_core::ids::HandoffId,
+    pub handoff_id: kernel_types::HandoffId,
     pub corpus_id: String,
     pub recipe_id: String,
     pub file_indices: Vec<usize>,

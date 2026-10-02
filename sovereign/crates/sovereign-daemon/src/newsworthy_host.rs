@@ -7,14 +7,14 @@
 //!
 //! - Mesh-state queries (`is_leader`, `is_owner_of`) read the
 //!   `Arc<RwLock<Mesh>>` carried on `AppStateInner` and run the
-//!   answer through `commonwealth_core::partition::{is_leader,
+//!   answer through `kernel_types::partition::{is_leader,
 //!   is_owner}`.
-//! - KV operations forward to `MeshStore` directly. SQLite is
+//! - KV operations forward to the mesh store port directly. SQLite is
 //!   blocking-friendly under tokio's full runtime; the existing
 //!   `peer_preferences` store does the same and ships in production
 //!   today.
 //!
-//! The watcher itself never sees `MeshStore`, `Mesh`, or `NodeId` —
+//! The watcher itself never sees the mesh store, `Mesh`, or `NodeId` —
 //! the trait keeps `corpus-engine` free of any Commonwealth dependency
 //! per the architectural seam in §6 of `SYSTEM_OVERVIEW.md`.
 
@@ -22,15 +22,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::state::AppState;
+use crate::types::MemberStatus;
 use bytes::Bytes;
-use commonwealth_core::contributions::{LedgerEvent, LedgerEventKind};
-use commonwealth_core::ids::NodeId;
-use commonwealth_core::mesh::NodeStatus;
-use commonwealth_core::partition;
-use commonwealth_state::MeshStore;
-use corpus_engine::error::{Error as CorpusError, Result as CorpusResult};
-use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
+use corpus_index::error::{Error as CorpusError, Result as CorpusResult};
+use corpus_index::ingest_port::newsworthy::{CommittedDocs, NewsworthyHost};
+use kernel_types::partition;
+use kernel_types::NodeId;
+use oicp_types::contributions::{LedgerEvent, LedgerEventKind};
 use sovereign_contracts::identity::IdentityReader;
+use sovereign_contracts::peer::ReplicatedKv;
 
 pub struct MeshNewsworthyHost {
     app_state: AppState,
@@ -57,8 +57,8 @@ impl MeshNewsworthyHost {
         }
     }
 
-    fn mesh_store(&self) -> &Arc<MeshStore> {
-        &self.app_state.inner.fabric.mesh_store
+    fn mesh_store(&self) -> &Arc<dyn ReplicatedKv> {
+        &self.app_state.inner.store.mesh_store
     }
 
     fn self_node_id(&self) -> NodeId {
@@ -71,11 +71,13 @@ impl MeshNewsworthyHost {
     /// election, so we follow suit to keep behaviour consistent across
     /// daemons.
     async fn online_members(&self) -> Vec<NodeId> {
-        let mesh = self.app_state.inner.fabric.mesh.read().await;
-        mesh.members
-            .iter()
-            .filter(|(_, m)| m.status != NodeStatus::Offline)
-            .map(|(id, _)| *id)
+        self.app_state
+            .membership()
+            .members()
+            .await
+            .into_iter()
+            .filter(|m| m.status != MemberStatus::Offline)
+            .map(|m| m.node_id)
             .collect()
     }
 
@@ -128,18 +130,24 @@ impl MeshNewsworthyHost {
         // `target_corpus_id`. Snapshots are gossiped hourly, so a
         // freshly-installed peer may not show up for up to an hour —
         // acceptable for a daily watcher tick.
-        let events: Vec<LedgerEvent> =
-            match self.app_state.inner.fabric.contribution_emitter.events() {
-                Ok(ev) => ev,
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        "newsworthy.host: contribution_emitter.events failed; \
-                         leader pool falls back to self-only"
-                    );
-                    return holders;
-                }
-            };
+        let events: Vec<LedgerEvent> = match self
+            .app_state
+            .inner
+            .store
+            .contribution_emitter
+            .events()
+            .await
+        {
+            Ok(ev) => ev,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "newsworthy.host: contribution_emitter.events failed; \
+                     leader pool falls back to self-only"
+                );
+                return holders;
+            }
+        };
 
         let mut latest_per_node: HashMap<NodeId, (&LedgerEvent, &Vec<(String, f64)>)> =
             HashMap::new();
@@ -195,7 +203,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
         match self
             .mesh_store()
             .get(app_id, key)
-            .map_err(|e| CorpusError::Database(format!("MeshStore.get: {e}")))?
+            .map_err(|e| CorpusError::Database(format!("mesh store get: {e}")))?
         {
             Some(entry) => Ok(Some(entry.value.to_vec())),
             None => Ok(None),
@@ -206,14 +214,14 @@ impl NewsworthyHost for MeshNewsworthyHost {
         self.mesh_store()
             .set(app_id, key, Bytes::from(value), self.self_node_id())
             .map(|_| ())
-            .map_err(|e| CorpusError::Database(format!("MeshStore.set: {e}")))
+            .map_err(|e| CorpusError::Database(format!("mesh store set: {e}")))
     }
 
     fn store_scan(&self, app_id: &str, prefix: &str) -> CorpusResult<Vec<(String, Vec<u8>)>> {
         let entries = self
             .mesh_store()
             .scan(app_id, prefix)
-            .map_err(|e| CorpusError::Database(format!("MeshStore.scan: {e}")))?;
+            .map_err(|e| CorpusError::Database(format!("mesh store scan: {e}")))?;
         Ok(entries
             .into_iter()
             .map(|e| (e.key, e.value.to_vec()))
@@ -223,7 +231,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
     fn store_delete(&self, app_id: &str, key: &str) -> CorpusResult<bool> {
         self.mesh_store()
             .delete(app_id, key)
-            .map_err(|e| CorpusError::Database(format!("MeshStore.delete: {e}")))
+            .map_err(|e| CorpusError::Database(format!("mesh store delete: {e}")))
     }
 
     /// Schedule a structural atlas rebuild for each affected corpus.
@@ -238,7 +246,10 @@ impl NewsworthyHost for MeshNewsworthyHost {
     /// would overlap and the second would block on Lance file
     /// contention until the first finished.
     fn on_chunks_committed(&self, affected: &[(String, &'static str)]) {
-        let Some(engine) = self.app_state.inner.node.corpus_engine.clone() else {
+        let (Some(engine), Some(atlas)) = (
+            self.app_state.inner.node.corpus_engine.clone(),
+            self.app_state.inner.node.atlas.clone(),
+        ) else {
             tracing::warn!(
                 affected_count = affected.len(),
                 "newsworthy.atlas_rebuild_skipped — no corpus_engine on AppState; refreshed chunks landed but atlas stays stale"
@@ -260,6 +271,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
                     "newsworthy.atlas_rebuild_start"
                 );
                 let outcome = sovereign_tools::atlas_postinstall::rebuild_structural_atlas(
+                    atlas.as_ref(),
                     corpus_id,
                     indexes_dir.clone(),
                     recipes_dir.clone(),
@@ -363,7 +375,10 @@ impl NewsworthyHost for MeshNewsworthyHost {
             return;
         }
 
-        let Some(engine) = self.app_state.inner.node.corpus_engine.clone() else {
+        let (Some(engine), Some(atlas)) = (
+            self.app_state.inner.node.corpus_engine.clone(),
+            self.app_state.inner.node.atlas.clone(),
+        ) else {
             tracing::warn!(
                 committed_count = committed.len(),
                 "newsworthy.atlas_delta_skipped — no corpus_engine on AppState"
@@ -374,14 +389,15 @@ impl NewsworthyHost for MeshNewsworthyHost {
         let work = incremental_work;
         tokio::spawn(async move {
             for c in &work {
-                let outcome = apply_incremental(
-                    engine.clone(),
-                    indexes_dir.clone(),
-                    c.corpus_id.clone(),
-                    c.role,
-                    c.doc_ids.clone(),
-                )
-                .await;
+                let outcome = engine
+                    .apply_newsworthy_incremental(
+                        caching_opener(&engine),
+                        indexes_dir.clone(),
+                        c.corpus_id.clone(),
+                        c.role,
+                        c.doc_ids.clone(),
+                    )
+                    .await;
                 match outcome {
                     Ok(()) => {}
                     Err(reason) if c.role == "portal" => {
@@ -415,14 +431,15 @@ impl NewsworthyHost for MeshNewsworthyHost {
                         // logged; no further fallback for portal
                         // because the legacy path is structurally
                         // wrong for this corpus shape.
-                        let retry = apply_incremental(
-                            engine.clone(),
-                            indexes_dir.clone(),
-                            c.corpus_id.clone(),
-                            c.role,
-                            c.doc_ids.clone(),
-                        )
-                        .await;
+                        let retry = engine
+                            .apply_newsworthy_incremental(
+                                caching_opener(&engine),
+                                indexes_dir.clone(),
+                                c.corpus_id.clone(),
+                                c.role,
+                                c.doc_ids.clone(),
+                            )
+                            .await;
                         if let Err(e) = retry {
                             tracing::warn!(
                                 corpus_id = %c.corpus_id,
@@ -446,6 +463,7 @@ impl NewsworthyHost for MeshNewsworthyHost {
                         let recipes_dir = indexes_dir.clone();
                         let started = std::time::Instant::now();
                         let res = sovereign_tools::atlas_postinstall::rebuild_structural_atlas(
+                            atlas.as_ref(),
                             &c.corpus_id,
                             indexes_dir.clone(),
                             recipes_dir,
@@ -483,136 +501,15 @@ impl NewsworthyHost for MeshNewsworthyHost {
     }
 }
 
-/// Move 6 P5.a.1 incremental computation. Returns `Err(reason)` if
-/// the caller should fall back to a full rebuild; `Ok(())` on
-/// success (or on no-op when the delta carried no doc_ids).
-async fn apply_incremental(
-    engine: std::sync::Arc<corpus_engine::engine::CorpusEngine>,
-    indexes_dir: std::path::PathBuf,
-    corpus_id: String,
-    role: &'static str,
-    doc_ids: Vec<String>,
-) -> Result<(), String> {
-    use corpus_engine::enrichment::atlas::atoms_delta::apply_atom_delta;
-    use corpus_engine::enrichment::atlas::strategies::newsworthy_events::extract_atoms_for_portal_chunks;
-    use corpus_engine::enrichment::atlas::strategies::structure_first::{
-        aggregate_articles_from_chunks, extract_atoms_for_articles, StructureFirstConfig,
-    };
-    use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
-    use corpus_engine::meta_atlas::rebuild_for_corpus;
-
-    if doc_ids.is_empty() {
-        return Ok(());
-    }
-
-    let started = std::time::Instant::now();
-    let atlas_dir = indexes_dir.join(&corpus_id).join(ATLAS_DIRNAME);
-
-    // Pre-flight: only run the incremental path against an atlas
-    // that's already migrated to content-hash ids. Sequential-id
-    // atlases mix with content-hash atoms badly (apply_atom_delta
-    // would leave the legacy atoms orphaned).
-    let atoms_file = match read_atlas_atoms(&atlas_dir) {
-        Ok(a) => a,
-        Err(e) => return Err(format!("read atoms.json at {}: {e}", atlas_dir.display())),
-    };
-    if !atoms_file.atoms().is_empty()
-        && !atoms_file
-            .atoms()
-            .iter()
-            .all(|env| env.id().is_content_hash())
-    {
-        return Err(
-            "atoms.json contains sequential-id atoms; run `sovereign atlas migrate-ids` first"
-                .to_string(),
-        );
-    }
-    let atoms_before = atoms_file.atoms().len();
-    drop(atoms_file);
-
-    // Query LanceDB for the tick's chunks.
-    let index = engine
-        .open_index_for_corpus(&corpus_id)
-        .await
-        .map_err(|e| format!("open_index_for_corpus({corpus_id}): {e}"))?;
-    let chunks = index
-        .chunks_by_source_doc_ids(&doc_ids)
-        .await
-        .map_err(|e| format!("chunks_by_source_doc_ids({} ids): {e}", doc_ids.len()))?;
-    let chunk_count = chunks.len();
-
-    // Strategy dispatch keyed off the watcher-supplied role.
-    //
-    // `portal` → wikipedia-newsworthy daily Portal:Current_events pages.
-    //   Each chunk IS a single event bullet — extract per-bullet Event
-    //   atoms + wikilink Entity placeholders via `newsworthy_events`.
-    //
-    // `refresh` → the parent `wikipedia` corpus's tracked-window
-    //   articles. Each chunk is a section of a real article — keep the
-    //   structure_first one-Entity-per-article shape.
-    //
-    // Any future role falls back to structure_first; new roles should
-    // add their dispatch branch here together with the extractor that
-    // matches the corpus's chunk shape.
-    let (delta_atoms, delta_edges, articles_count) = if role == "portal" {
-        let delta = extract_atoms_for_portal_chunks(&chunks, &corpus_id);
-        let event_count = delta
-            .atoms_delta
-            .upserted_docs
-            .iter()
-            .filter(|(d, _)| d != "_placeholders")
-            .map(|(_, atoms)| atoms.len())
-            .sum::<usize>();
-        (delta.atoms_delta, delta.edges, event_count)
-    } else {
-        let agg = aggregate_articles_from_chunks(&chunks);
-        let cfg = StructureFirstConfig {
-            source_corpus_id: corpus_id.clone(),
-            ..Default::default()
-        };
-        let delta = extract_atoms_for_articles(&agg.articles, &corpus_id, &cfg);
-        (delta.atoms_delta, delta.edges, agg.articles.len())
-    };
-    // edges already live inside delta_atoms.added_edges; drop the
-    // separate handle to silence dead-code warnings on the `portal`
-    // branch where we don't apply edges twice.
-    let _ = delta_edges;
-
-    // Apply.
-    let summary = apply_atom_delta(&atlas_dir, delta_atoms)
-        .map_err(|e| format!("apply_atom_delta({}): {e}", atlas_dir.display()))?;
-
-    // Meta-atlas: refresh anchors for this corpus only.
-    let meta_outcome = match rebuild_for_corpus(&indexes_dir, &corpus_id, None) {
-        Ok(_) => "ok",
-        Err(e) => {
-            tracing::warn!(
-                corpus_id = %corpus_id,
-                role = %role,
-                error = %e,
-                "newsworthy.atlas_meta_partial_rebuild_failed — meta-atlas anchors may lag until next full build"
-            );
-            "failed"
-        }
-    };
-
-    tracing::info!(
-        corpus_id = %corpus_id,
-        role = %role,
-        doc_count = doc_ids.len(),
-        chunk_count,
-        articles_aggregated = articles_count,
-        atoms_before = summary.atoms_before,
-        atoms_after = summary.atoms_after,
-        atoms_added = summary.atoms_added,
-        atoms_removed = summary.atoms_removed,
-        docs_upserted = summary.docs_upserted,
-        meta_atlas = meta_outcome,
-        wall_ms = started.elapsed().as_millis() as u64,
-        atoms_before_query = atoms_before,
-        "newsworthy.atlas_incremental_complete"
-    );
-    Ok(())
+/// The open the delta used when it lived here: the handle's caching read, so
+/// the served newsworthy corpus keeps its cached handle.
+fn caching_opener(
+    engine: &Arc<dyn corpus_index::ingest_port::daemon::IngestPort>,
+) -> corpus_index::ingest_port::daemon::IndexOpener {
+    let engine = Arc::clone(engine);
+    Box::new(move |corpus_id| {
+        Box::pin(async move { engine.open_index_for_corpus(&corpus_id).await })
+    })
 }
 
 /// Delete every file inside the corpus's atlas dir, leaving the
@@ -628,7 +525,7 @@ async fn apply_incremental(
 /// — the caller logs and skips the retry rather than rebuilding on
 /// a half-wiped directory.
 fn wipe_atlas_dir(indexes_dir: &std::path::Path, corpus_id: &str) -> Result<(), String> {
-    use corpus_engine::enrichment::atlas::writer::ATLAS_DIRNAME;
+    use understanding_vocab::read::ATLAS_DIRNAME;
     let atlas_dir = indexes_dir.join(corpus_id).join(ATLAS_DIRNAME);
     if !atlas_dir.exists() {
         return Ok(());

@@ -114,10 +114,10 @@ impl Runtime {
             // for Slow on extended turns applies equally to a long story).
             preferred_speed: Speed::Slow,
             max_tokens: Some(2048),
-            temperature: Some(self.inference_config.temperature),
+            temperature: Some(self.turn_inference_config().temperature),
             think_budget: Some(0),
             structured_output: None,
-            top_k: self.inference_config.top_k,
+            top_k: self.turn_inference_config().top_k,
             top_p: None,
             oicp: None,
             tools: None,

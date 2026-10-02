@@ -11,7 +11,7 @@
 //!   * the desktop app's embedded daemon (`sovereign-desktop` state init).
 //!
 //! Before this module the desktop wired *neither* the engine-side tiered
-//! provider nor the folder driver's [`TieredDeps`], so
+//! provider nor the folder driver's `TieredDeps`, so
 //! `LocalCorpusManager::enable_enrichment` fell back to the legacy
 //! `sovereign-cli enrich` subprocess — which does not exist in a shipped
 //! bundle (exit 127) and, even in a dev tree, left the enrichment state
@@ -28,16 +28,16 @@ use std::sync::Arc;
 
 use sovereign_core::traits::InferenceProvider;
 
-use corpus_engine::enrichment::tiered::{ChunkEntityExtractor, TieredEnrichmentProvider};
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::tiered::TieredEnrichmentProvider;
 
 use crate::conv_tiered_provider::{FolderTieredProvider, IndexDirResolver, StaticIndexDirResolver};
-use crate::local_corpus::watched::enrich::TieredDeps;
 
 /// Construct the `FolderTieredProvider` over the canonical state store,
 /// resolving per-corpus index dirs under `<data_dir>/indexes`. This is the
 /// engine-side tiered provider (wired via
 /// `CorpusEngine::with_tiered_provider`) AND the provider the folder driver
-/// holds inside [`TieredDeps`]. `None` when the store can't be opened —
+/// holds inside `TieredDeps` (built by the daemon). `None` when the store can't be opened —
 /// tiered enrichment then degrades to dispatch-plan-only / legacy fallback.
 ///
 /// `FolderTieredProvider` is the sole provider (the conversation-only
@@ -49,6 +49,7 @@ use crate::local_corpus::watched::enrich::TieredDeps;
 pub fn build_folder_tiered_provider(
     data_dir: &Path,
     provider: Arc<dyn InferenceProvider>,
+    atlas: Arc<dyn AtlasPort>,
 ) -> Option<Arc<dyn TieredEnrichmentProvider>> {
     let db_path = data_dir.join("sovereign.db");
     match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
@@ -67,7 +68,7 @@ pub fn build_folder_tiered_provider(
             // 0.0000 (runs/prodAB, 2026-07-31). Attached documents keep
             // abstractive (fluency is the product there) — their path pins
             // the mode explicitly in `document_asset`.
-            let prov = FolderTieredProvider::new(store_arc, provider)
+            let prov = FolderTieredProvider::new(store_arc, provider, atlas)
                 .with_index_dir_resolver(resolver)
                 .with_summary_mode(crate::raptor_atlas::SummaryMode::Extractive);
             Some(Arc::new(prov) as Arc<dyn TieredEnrichmentProvider>)
@@ -81,25 +82,4 @@ pub fn build_folder_tiered_provider(
             None
         }
     }
-}
-
-/// Build the folder-driver [`TieredDeps`]: the shared
-/// [`build_folder_tiered_provider`] plus the (optional) GLiNER extractor.
-/// Installed on the `LocalCorpusManager` via `set_tiered_deps` so
-/// `enable_enrichment` routes through `start_tiered_build` instead of the
-/// legacy subprocess. `None` (legacy fallback) when the state store can't
-/// be opened.
-pub fn build_folder_tiered_deps(
-    data_dir: &Path,
-    provider: Arc<dyn InferenceProvider>,
-    chunk_entity_extractor: Option<Arc<dyn ChunkEntityExtractor>>,
-) -> Option<TieredDeps> {
-    let tiered_provider = build_folder_tiered_provider(data_dir, provider)?;
-    tracing::info!(
-        "enrichment_bootstrap: folder tiered deps constructed — FolderTieredProvider wired"
-    );
-    Some(TieredDeps {
-        tiered_provider,
-        gliner_extractor: chunk_entity_extractor,
-    })
 }

@@ -53,7 +53,7 @@ lands:
 `SCHEMA.md` regenerates from it under a CI gate. Two more hand copies
 exist today and drift: the recipe-author tool schema
 (`studio/crates/sovereign-recipe-author/src/recipe_schema.rs:395-430`)
-and the descriptor menu (`sovereign-recipes/schema/recipe_schema_descriptor.json`,
+and the descriptor menu (`corpus-engine/schema/recipe_schema_descriptor.json`,
 which has no enrichment section at all). Phase 1 adds a test that both
 agree with the AST, because a June note records the tool grammar
 silently blocking the agent from emitting `ontology` when it lagged.

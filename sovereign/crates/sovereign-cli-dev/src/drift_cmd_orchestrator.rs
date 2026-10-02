@@ -39,7 +39,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use sovereign_cli_shared::dirs::sovereign_root;
+use sovereign_cli_base::dirs::sovereign_root;
 use tracing::{debug, info, warn};
 
 /// Path to the `sovereign` binary used for subprocess fan-out.
@@ -83,8 +83,8 @@ struct DetectArgs {
 }
 
 pub async fn cmd_detect(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
-        sovereign_cli_shared::help::print(&HELP);
+    if sovereign_cli_base::help::wants_help(args) {
+        sovereign_cli_base::help::print(&HELP);
         return 0;
     }
 
@@ -92,7 +92,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         Ok(p) => p,
         Err(msg) => {
             eprintln!("error: {msg}");
-            sovereign_cli_shared::help::print(&HELP);
+            sovereign_cli_base::help::print(&HELP);
             return 2;
         }
     };
@@ -295,7 +295,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         // honest. The two directories are exactly the pair this file's own
         // partial-extract remediation already tells operators to wipe.
         let atlas_source = narrative_source_hash_path(&nid);
-        let current_hash = sovereign_tools::hash_file(narrative_path).ok();
+        let current_hash = sovereign_code::hash_file(narrative_path).ok();
         let built_from = std::fs::read_to_string(&atlas_source)
             .ok()
             .map(|s| s.trim().to_string());
@@ -614,7 +614,11 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         .iter()
         .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.clone()))
         .collect();
-    match sovereign_tools::write_fingerprint(&drift_dir, &narrative_abs, &output_path) {
+    match sovereign_contracts::drift_fingerprint::write_fingerprint(
+        &drift_dir,
+        &narrative_abs,
+        &output_path,
+    ) {
         Ok(fp_path) => {
             info!(
                 fingerprint = %fp_path.display(),
@@ -702,7 +706,11 @@ fn mirror_to_canonical(
     // `drift_posture::compute_posture(~/.svrnmesh/drift/, ...)`
     // reads. Using `dest_md` as the recorded `output_path` so
     // the posture report points at the canonical mirror.
-    let _ = sovereign_tools::write_fingerprint(canonical_dir, narrative_abs, &dest_md)?;
+    let _ = sovereign_contracts::drift_fingerprint::write_fingerprint(
+        canonical_dir,
+        narrative_abs,
+        &dest_md,
+    )?;
     Ok(dest_md)
 }
 
@@ -1257,14 +1265,14 @@ fn parse_args(args: &[String]) -> Result<DetectArgs, String> {
     Ok(out)
 }
 
-const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
+const HELP: sovereign_cli_base::help::Help = sovereign_cli_base::help::Help {
     command: "svrn drift detect",
     summary: "Generate a narrative-vs-code drift report end-to-end. Resilient: idempotent, auto-recovers from common failures, surfaces concrete remediation.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage(
+        sovereign_cli_base::help::HelpSection::Usage(
             "svrn drift detect --code <path> --narrative <doc>... [--output <md>] [--project-id <id>] [--chat-model <slot>]",
         ),
-        sovereign_cli_shared::help::HelpSection::Flags(&[
+        sovereign_cli_base::help::HelpSection::Flags(&[
             ("--code <path>", "Path to the codebase to compare against. Indexed if not already cached."),
             ("--narrative <doc>", "Path to a markdown narrative document. Repeat for multiple. Each becomes its own atlas."),
             ("--output <md>", "Path for the markdown digest. Default: ./drift_report.md (JSON sidecar at <output>.json)."),
@@ -1272,13 +1280,13 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ("--chat-model <slot>", "Override chat-slot probe (default: fast, fallback: primary). Drift detect targets `fast` by default so it scales to operators without a heavyweight primary model; pass `--chat-model primary` for peak quality at the cost of ~5-10× LLM wall time."),
             ("--sovereign-bin <path>", "Path to the `sovereign` binary used for subprocess fan-out. Default: env SOVEREIGN_BIN, else this binary's own path."),
         ]),
-        sovereign_cli_shared::help::HelpSection::Examples(&[
+        sovereign_cli_base::help::HelpSection::Examples(&[
             (
                 "svrn drift detect --code /path/to/repo --narrative /path/to/ARCH.md --narrative /path/to/OVERVIEW.md",
                 "Compare two narrative docs against the repo. Re-runs short-circuit on cached steps.",
             ),
         ]),
-        sovereign_cli_shared::help::HelpSection::Notes(
+        sovereign_cli_base::help::HelpSection::Notes(
             "Idempotent: every step checks for cached output before running. Re-runs after a failure pick up where they left off. Auto-recovers from `enrich build` halting on too-short-section skips by running cluster+name+resolve directly.",
         ),
     ],

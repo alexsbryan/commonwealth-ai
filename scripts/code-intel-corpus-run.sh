@@ -3,7 +3,7 @@
 #
 # WHY A LAUNCHD ONE-SHOT: this is ~11h of model calls. An agent harness reaps
 # the process tree it tracks, so a run started from a session dies with the
-# session. launchd owns this instead (see contrib/launchd/, and the sibling
+# session. launchd owns this instead (see sovereign-service/data/launchd/, and the sibling
 # plist ai.sovereign.enrich.code-intel-<corpus>.plist).
 #
 # CACHE-ONLY BY DESIGN (SOVEREIGN_ENRICH_SKIP_INDEX=1). The expensive half is

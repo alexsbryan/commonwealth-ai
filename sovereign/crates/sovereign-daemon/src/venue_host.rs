@@ -4,30 +4,34 @@
 //! `DeferredDaemon` handle that stands in for the daemon before it is
 //! commissioned.
 //!
-//! The ports themselves now live in `sovereign_serving_host::venue_host`
-//! (`InferenceRouter` holds them, and it moved host-side by domains
+//! The ports themselves now live in `sovereign_contracts::venue_host`
+//! (fp-16; `InferenceRouter` holds them, and they moved host-side by domains
 //! `REVIEW-build-serving-move-peer`). What stays here is the half that names
-//! `commonwealth_core` / `commonwealth_state` / `EmbeddedDaemon`, which the
+//! `commonwealth_core` / `EmbeddedDaemon`, which the
 //! serving package may not (`sovereign/SERVING_BOUNDARY.md` rule 5): the
 //! `EmbeddedDaemon` impls and the deferred handle.
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use sovereign_scheduler::venue::{InferenceVenue, VenueSource};
-use sovereign_serving_host::ledger::LedgerEmitter;
-use sovereign_serving_host::venue_host::VenueHost;
+use sovereign_contracts::venue::{InferenceVenue, VenueSource};
+use sovereign_contracts::venue_host::{LedgerEmitter, ShardTransferLedger, VenueHost};
 
 use crate::daemon::EmbeddedDaemon;
+use crate::state::AppState;
 
 /// The daemon's implementation of the host's ledger port.
 ///
-/// This is the only place the `commonwealth_state` emitter is named on the
+/// This is the only place the contribution ledger is named on the
 /// serving path (`quality/DAEMON_CORE.md` §4.2 "The facts rule" — no context
 /// outside Fabric names `ContributionEmitter`; Serving emits facts and Fabric
 /// prices them). The host mints the fact from `RoutingOutcome` and this
 /// records it.
+///
+/// `LedgerEmitter` is sync and the port is async, so the write rides the
+/// current runtime and its failure is traced — the shape of
+/// `InferenceCache::set_model_info` (rails_client/ledger.rs).
 struct DaemonLedger {
-    emitter: commonwealth_state::ContributionEmitter,
+    emitter: Arc<dyn crate::ledger_port::ContributionLedgerPort>,
 }
 
 impl LedgerEmitter for DaemonLedger {
@@ -37,14 +41,75 @@ impl LedgerEmitter for DaemonLedger {
         model_id: &str,
         tokens_generated: u64,
     ) {
-        self.emitter.record(
-            commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
-                from_node: *from_node,
-                model_id: model_id.to_string(),
-                tokens_generated,
-            },
-        );
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            tracing::warn!(
+                model = %model_id,
+                "venue ledger: no runtime to carry the InferenceReceived write; it did not reach the ledger"
+            );
+            return;
+        };
+        let emitter = Arc::clone(&self.emitter);
+        let kind = oicp_types::contributions::LedgerEventKind::InferenceReceived {
+            from_node: *from_node,
+            model_id: model_id.to_string(),
+            tokens_generated,
+        };
+        let model_id = model_id.to_string();
+        runtime.spawn(async move {
+            if let Err(e) = emitter.record(kind).await {
+                tracing::warn!(
+                    model = %model_id,
+                    error = %e,
+                    "venue ledger: the InferenceReceived write did not reach the ledger"
+                );
+            }
+        });
     }
+}
+
+/// The same daemon ledger as `sovereign-grants`' shard-transfer fact port
+/// (fp-94, five-programs-53): grants reports the fact, this records it.
+impl ShardTransferLedger for DaemonLedger {
+    fn record_shard_transferred(
+        &self,
+        from_node: &kernel_types::NodeId,
+        to_node: &kernel_types::NodeId,
+        corpus_id: &str,
+        bytes: u64,
+    ) {
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            tracing::warn!(
+                corpus = %corpus_id,
+                "shard ledger: no runtime to carry the ShardTransferred write; it did not reach the ledger"
+            );
+            return;
+        };
+        let emitter = Arc::clone(&self.emitter);
+        let kind = oicp_types::contributions::LedgerEventKind::ShardTransferred {
+            from_node: *from_node,
+            to_node: *to_node,
+            corpus_id: corpus_id.to_string(),
+            bytes,
+        };
+        let corpus_id = corpus_id.to_string();
+        runtime.spawn(async move {
+            if let Err(e) = emitter.record(kind).await {
+                tracing::warn!(
+                    corpus = %corpus_id,
+                    error = %e,
+                    "shard ledger: the ShardTransferred write did not reach the ledger"
+                );
+            }
+        });
+    }
+}
+
+/// The shard-transfer fact port over this node's contribution ledger, for the
+/// `ShardManager`s and `FoldRecovery` the daemon hands `sovereign-grants`.
+pub(crate) fn shard_transfer_ledger(state: &AppState) -> Arc<dyn ShardTransferLedger> {
+    Arc::new(DaemonLedger {
+        emitter: Arc::clone(&state.inner.store.contribution_emitter),
+    })
 }
 
 #[async_trait]
@@ -56,14 +121,14 @@ impl VenueSource for EmbeddedDaemon {
 
 #[async_trait]
 impl VenueHost for EmbeddedDaemon {
-    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
+    async fn local_node_id(&self) -> Option<kernel_types::NodeId> {
         EmbeddedDaemon::self_node_id(self).await
     }
 
     async fn ledger_emitter(&self) -> Option<Arc<dyn LedgerEmitter>> {
         let app_state = self.app_state().await?;
         Some(Arc::new(DaemonLedger {
-            emitter: app_state.inner.fabric.contribution_emitter.clone(),
+            emitter: Arc::clone(&app_state.inner.store.contribution_emitter),
         }))
     }
 }
@@ -72,7 +137,7 @@ impl VenueHost for EmbeddedDaemon {
 /// a [`VenueSource`] in the meantime.
 ///
 /// Production wiring is genuinely cyclic and always was: the daemon serves
-/// peers through a [`InferenceRouter`](sovereign_serving_host::peer_inference::InferenceRouter),
+/// peers through serve's `InferenceRouter` (`sovereign_serve::rank`),
 /// and that provider routes through the daemon. One of the two has to exist
 /// first. Before 2026-08-24 the cycle was broken by leaving the daemon's
 /// provider slot empty and punching it in afterwards, which is what made "no
@@ -130,7 +195,7 @@ impl VenueSource for DeferredDaemon {
 
 #[async_trait]
 impl VenueHost for DeferredDaemon {
-    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
+    async fn local_node_id(&self) -> Option<kernel_types::NodeId> {
         EmbeddedDaemon::self_node_id(self.daemon.get()?).await
     }
 

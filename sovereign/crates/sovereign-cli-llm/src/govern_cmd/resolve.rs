@@ -11,8 +11,8 @@
 //! v1 supersedes via an *existing* rule (`--keep`); authoring a brand-new
 //! superseding rule (`--draft`) is deferred — see the `--draft` arm.
 
-use corpus_engine::enrichment::GovernanceOpKind;
-use corpus_engine::oplog::{Op, Oplog};
+use corpus_engine_atlas_reader::governance::GovernanceOpKind;
+use oplog::{Op, Oplog};
 
 use super::{atlas_dir, load_view, now_unix};
 

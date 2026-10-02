@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Thin shim; the logic lives in scripts/commit-msg.sh (see its header).
+exec "$(git rev-parse --show-toplevel)/scripts/commit-msg.sh" "$@"

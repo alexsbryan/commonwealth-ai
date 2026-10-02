@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use sovereign_tools::atlas_status::{compute_atlas_status, status_for_corpus};
 
-use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_cli_base::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
     command: "svrn atlas status",
@@ -64,19 +64,27 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
 
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
+
     let data_dir = parsed.data_dir.unwrap_or_else(default_data_dir);
     let indexes_dir = data_dir.join("indexes");
     let enrichment_dir = data_dir.join("enrichment");
 
     let rows = match parsed.corpus_id.as_deref() {
-        Some(cid) => match status_for_corpus(&indexes_dir, &enrichment_dir, cid) {
+        Some(cid) => match status_for_corpus(atlas.as_ref(), &indexes_dir, &enrichment_dir, cid) {
             Some(row) => vec![row],
             None => {
                 eprintln!("no corpus '{cid}' under {}", indexes_dir.display());
                 return 1;
             }
         },
-        None => compute_atlas_status(&indexes_dir, &enrichment_dir),
+        None => compute_atlas_status(atlas.as_ref(), &indexes_dir, &enrichment_dir),
     };
 
     if parsed.json {

@@ -7,8 +7,9 @@ license.workspace = true
 
 [dependencies]
 serde = { workspace = true }
-# The ring rail's op and digest vocabulary — what a ring-sync exchange carries.
-commonwealth-rail = { workspace = true }
+# The rail's FOLD half (vocabulary, no I/O) — `commonwealth-rail` holds the
+# journal and a filesystem, so this leaf names `-core` directly.
+commonwealth-rail-core = { workspace = true }
 
 [lints]
 workspace = true

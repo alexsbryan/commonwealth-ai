@@ -192,9 +192,9 @@ When a local recipe earns its keep, promote it:
 2. Add a `[[recipes]]` entry to [`registry.toml`](./registry.toml) — copy a
    nearby entry and set `id`, `name`, `description`, `license`, the size
    estimates, and `catalog_status` (`featured` | `preview` | `hidden`).
-3. If the recipe should ship inside the app's offline bundle, add it to the
-   `RecipeId` enum in `corpus-engine/src/recipe_builtin.rs` (the
-   `bundled_recipe_covers_every_snapshot_entry` test tells you if you missed a
+3. Add its line to `RECIPES` in [`src/lib.rs`](./src/lib.rs), which ships it
+   inside the app's offline bundle (the tree test there and
+   `bundled_recipe_covers_every_snapshot_entry` tell you if you missed a
    step).
 4. `svrn recipe test … --output TEST_REPORT.md` and commit the report.
 5. Open a pull request.

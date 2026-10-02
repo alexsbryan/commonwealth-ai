@@ -898,7 +898,7 @@ impl CorpusIndex {
         // `kind:"knowledge"` with a `scip_graph.db` by design.
         // Consumers that want "is this a code corpus?" must ask the
         // robust question — an on-disk `scip_graph.db` — via
-        // `sovereign_tools::code::has_code_graph`.
+        // `sovereign_code::has_code_graph`.
         let kind = meta.kind.unwrap_or_else(|| {
             if meta.source_path.is_some() {
                 crate::types::CorpusKind::Code
@@ -1806,7 +1806,7 @@ mod tests {
     /// questions through the knowledge path. Promoting it to `Code` here
     /// silently deletes the repo from chat. `commonwealth-ai` ships in
     /// exactly this shape. Consumers wanting "is this a code corpus?" ask
-    /// `sovereign_tools::code::has_code_graph` instead.
+    /// `sovereign_code::has_code_graph` instead.
     #[tokio::test]
     async fn info_kind_keeps_explicit_knowledge_tag_despite_source_path() {
         let dir = tempdir().unwrap();

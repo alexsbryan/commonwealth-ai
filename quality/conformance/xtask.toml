@@ -1,0 +1,39 @@
+# Conformance tags in `xtask` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "EV-30"
+test = "xtask::cli_contract_journeys::every_live_journey_asserts_output_somewhere"
+file = "corpus-engine/xtask/tests/cli_contract_journeys.rs"
+line = 803
+asserts = 1
+
+[[claim]]
+requirement = "EV-30"
+test = "xtask::cli_contract_journeys::live_read_steps_assert_output"
+file = "corpus-engine/xtask/tests/cli_contract_journeys.rs"
+line = 762
+asserts = 1
+
+[[claim]]
+requirement = "EV-30"
+test = "xtask::cli_contract_journeys::live_steps_all_assert_something"
+file = "corpus-engine/xtask/tests/cli_contract_journeys.rs"
+line = 732
+asserts = 1
+
+[[claim]]
+requirement = "EV-30"
+test = "xtask::cli_contract_journeys::steps_no_lane_runs_do_not_grow"
+file = "corpus-engine/xtask/tests/cli_contract_journeys.rs"
+line = 845
+asserts = 1

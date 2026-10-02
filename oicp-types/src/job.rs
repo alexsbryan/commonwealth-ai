@@ -453,15 +453,36 @@ mod precondition_labels {
         let labels = Vec::<String>::deserialize(deserializer)?;
         labels
             .iter()
-            .map(|label| {
-                // An unknown word is a parse ERROR naming the row, never a
-                // silently-dropped field — the discipline the registry's own
-                // reader states (ARCH §18.3).
-                Precondition::parse(label).ok_or_else(|| {
-                    serde::de::Error::custom(format!("unknown precondition: {label}"))
-                })
-            })
+            .map(|label| super::precondition_label::parse(label))
             .collect()
+    }
+}
+
+/// Wire form for ONE precondition — the same label, for a field that holds a
+/// single one (`work::UnmetRequirement::Precondition`, which the refusals
+/// door answers typed).
+pub(crate) mod precondition_label {
+    use super::*;
+
+    pub fn serialize<S: Serializer>(
+        value: &Precondition,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        value.label().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Precondition, D::Error> {
+        parse(&String::deserialize(deserializer)?)
+    }
+
+    /// An unknown word is a parse ERROR naming the row, never a
+    /// silently-dropped field — the discipline the registry's own reader
+    /// states (ARCH §18.3).
+    pub(super) fn parse<E: serde::de::Error>(label: &str) -> Result<Precondition, E> {
+        Precondition::parse(label)
+            .ok_or_else(|| E::custom(format!("unknown precondition: {label}")))
     }
 }
 

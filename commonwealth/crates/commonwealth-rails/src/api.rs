@@ -2,8 +2,14 @@
 //! The loopback routes a shim author touches, and nothing else.
 //!
 //! `GET /v1/mesh/status` · `GET /v1/mesh/media[?peer=]` ·
-//! `GET /v1/mesh/app[?peer=]` · `POST /v1/mesh/fanout` (and its media
-//! spelling) · the four `/v1/mesh/publish` routes. Every answer is
+//! `GET /v1/mesh/app[?peer=]` · `GET /v1/mesh/reach?peer=&class=` ·
+//! `POST /v1/mesh/fanout` (and its media
+//! spelling) · the four `/v1/mesh/publish` routes · the four
+//! `/v1/mesh/origins` routes, in [`crate::origins`] · the two roster verbs ·
+//! the ring rail's doors, `/v1/rail/{append,log,live}`, in [`crate::rail`] ·
+//! the mesh store's `/v1/mesh/kv/*`, in [`crate::kv`] ·
+//! `GET /v1/mesh/relay-candidates` · the membership
+//! doors, in [`crate::membership`]. Every answer is
 //! `commonwealth_media`'s — the same functions the inference daemon's
 //! `/v1/mesh/*` routes call, so a shim written against one daemon behaves the
 //! same against the other (ARCH §10.6), and `svrn run` publishes into either
@@ -28,6 +34,9 @@ use commonwealth_core::capabilities::OriginKind;
 use commonwealth_media::apps::PublishRefusal;
 use commonwealth_media::fanout::FanoutRequest;
 use commonwealth_media::MediaReachRefusal;
+use commonwealth_transport::TrafficClass;
+use host_kit::shell::RouteBundle;
+use mesh_reach::door::{Reach, ReachQuery};
 use serde::Deserialize;
 
 use crate::{RailsDaemon, Refusal};
@@ -38,11 +47,39 @@ pub fn bind_addr(port: u16) -> SocketAddr {
     ([127, 0, 0, 1], port).into()
 }
 
+/// The routes this API serves, as the shell's named bundles: the mesh and
+/// rail doors, the mesh store's, and the ledger's.
+pub fn bundles(daemon: Arc<RailsDaemon>) -> Vec<RouteBundle> {
+    vec![
+        mesh_bundle(daemon.clone()),
+        // Create, join, rotate, leave and the known-mesh verbs
+        // (pb-rails-membership), on the same loopback API.
+        crate::membership::bundle(daemon.clone()),
+        // The mesh store's doors (fp-77), over its own state.
+        crate::kv::router(daemon.kv.clone()),
+        // The typed ledger doors (fp-78), over the same store.
+        crate::ledger::router(crate::ledger::LedgerDoors::new(daemon.kv.store.clone())),
+    ]
+}
+
+/// Every bundle, mounted as one router.
 pub fn router(daemon: Arc<RailsDaemon>) -> Router {
-    Router::new()
+    host_kit::shell::mount(bundles(daemon))
+}
+
+fn mesh_bundle(daemon: Arc<RailsDaemon>) -> RouteBundle {
+    RouteBundle::new("mesh")
         .route("/v1/mesh/status", get(status))
         .route("/v1/mesh/media", get(media))
         .route("/v1/mesh/app", get(app))
+        // The offer catalogue (five-programs fp-46): what the house has going
+        // spare, behind its own origin kind and its own allow list — the same
+        // kind-generic answer the media and app spellings serve.
+        .route("/v1/mesh/offers", get(offers))
+        // The presence poll's last reading (five-programs fp-46):
+        // `media_available` as this node's own poll read it, `null` when
+        // nobody answered — "could not ask", never "free".
+        .route("/v1/mesh/media/presence", get(media_presence))
         // One handler, two paths: the media spelling is the generic body with
         // `kind` absent, not a second implementation.
         .route("/v1/mesh/fanout", post(origin_fanout))
@@ -55,6 +92,72 @@ pub fn router(daemon: Arc<RailsDaemon>) -> Router {
             axum::routing::delete(unpublish_app),
         )
         .route("/v1/mesh/publish/{claim_id}/renew", post(renew_app))
+        // The reach door (pb-rails-reach): any peer's endpoints for any
+        // traffic class, so a program that is not the mesh endpoint dials
+        // peers through this one (`mesh_reach::rails::RailsTransport`).
+        .route(mesh_reach::door::REACH_PATH, get(reach))
+        // The host's reachable addresses for an invite's `?relay=` hint
+        // (pb-rails-parity; the daemon's route answers the same rows).
+        .route("/v1/mesh/relay-candidates", get(relay_candidates))
+        // Any program's loopback origin, served to members by ALPN or by
+        // `cwth/http/0` prefix (pb-rails-origins); the app doors above are
+        // this registry's app entry.
+        .route(
+            "/v1/mesh/origins",
+            get(crate::origins::listing).post(crate::origins::register),
+        )
+        .route(
+            "/v1/mesh/origins/{claim_id}",
+            axum::routing::delete(crate::origins::release),
+        )
+        .route(
+            "/v1/mesh/origins/{claim_id}/renew",
+            post(crate::origins::renew),
+        )
+        // The roster verbs (FIVE_PROGRAMS fp-6 / §12 decision 2): retiring a
+        // member row and the ring-roster membership test are the MESH's to
+        // answer — the inference daemon dials these instead of mutating its
+        // own copy. Same paths and bodies as the daemon's routes, so a client
+        // works against either.
+        .route("/v1/mesh/forget-member", post(forget_member))
+        .route("/v1/mesh/roster-names/{pubkey}", get(roster_names))
+        // The ring rail's doors (FIVE_PROGRAMS fp-44): durable append and
+        // log over this node's own journals, and the live lane's local
+        // buffer half. The bodies mirror the daemon's `routes_rail` doors;
+        // the guest half does not exist here — the namespace is always the
+        // caller's explicit one. The sync doors (fp-54) are the round's
+        // read/write surface over the same journals — rail-core JSON, no
+        // sovereign-* wire types.
+        // The append door wakes the ring round after a signed write.
+        .route("/v1/rail/append", post(crate::ring_sync::append))
+        .route("/v1/rail/log", get(crate::rail::log))
+        .route(
+            "/v1/rail/live",
+            post(crate::rail::live_push).get(crate::rail::live_drain),
+        )
+        .route("/v1/rail/namespaces", get(crate::rail::namespaces))
+        .route("/v1/rail/actor", get(crate::rail::actor))
+        .route("/v1/rail/digest", get(crate::rail::journal_digest))
+        .route("/v1/rail/roster", get(crate::rail::journal_roster))
+        .route("/v1/rail/read", get(crate::rail::journal_read))
+        .route("/v1/rail/missing", post(crate::rail::journal_missing))
+        .route("/v1/rail/ingest", post(crate::rail::journal_ingest))
+        .route("/v1/rail/admit", post(crate::rail::journal_admit))
+        .route("/v1/rail/compact", post(crate::rail::journal_compact))
+        // The node's signed word for a program's guest (pb-mesh-exit-transport).
+        .route("/v1/rail/attest", post(crate::rail::attest))
+        // The `work` queue, folded where its journal lives (fp-45).
+        .route("/v1/work/projection", get(crate::work::projection))
+        // The submitter's doors (pb-work-doors): seal, submit, the refusal
+        // survey and the attribution reference, each over the one
+        // implementation in commonwealth-work.
+        .route("/v1/work/seal", post(crate::work::seal_units))
+        .route("/v1/work/submit", post(crate::work::submit))
+        .route("/v1/work/refusals", post(crate::work::refusals))
+        .route("/v1/work/attribution", get(crate::work::attribution))
+        // The foreground deadline a program on this node publishes; the
+        // donor's take reads it (pb-work-donor).
+        .route("/v1/work/yield", post(crate::work::hold_yield))
         .with_state(daemon)
 }
 
@@ -78,9 +181,10 @@ pub async fn serve(
     let listener = tokio::net::TcpListener::bind(listen)
         .await
         .map_err(|e| Refusal::Listen(listen, e))?;
-    let app = router(daemon);
+    let bundles = bundles(daemon);
     Ok(tokio::spawn(async move {
-        if let Err(e) = axum::serve(listener, app).await {
+        let forever = std::future::pending::<()>();
+        if let Err(e) = host_kit::shell::serve([listener], bundles, forever).await {
             tracing::error!(target: "rails", error = %e, "api: listener stopped");
         }
     }))
@@ -89,6 +193,22 @@ pub async fn serve(
 /// `GET /v1/mesh/status` — who I am, who is on the roster, who offers media.
 pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse {
     let mesh = daemon.mesh.read().await;
+    // The summary counts svrn's `/v1/mesh/status` carried, under the same
+    // names, so its clients (`sovereign_contracts::daemon_wire::
+    // MeshStatusSummary`) read this answer unchanged once the route is
+    // cw-rails' (pb-mesh-exit-transport; additive).
+    let members_total = mesh
+        .members
+        .values()
+        .filter(|m| m.removed_at.is_none())
+        .count();
+    let members_online = mesh
+        .members
+        .values()
+        .filter(|m| {
+            m.removed_at.is_none() && m.status == commonwealth_core::mesh::NodeStatus::Online
+        })
+        .count();
     let members: Vec<serde_json::Value> = {
         let mut rows: Vec<_> = mesh
             .members
@@ -101,6 +221,10 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
                 serde_json::json!({
                     "name": m.name,
                     "node_id": m.node_id.to_string(),
+                    // The full id (`node_id` is the truncated display form),
+                    // for a roster reader to key on and name in a reach
+                    // query (pb-serve-distributes-standalone; additive).
+                    "node_id_hex": m.node_id.to_hex(),
                     "status": m.status,
                     // The catalogue's fact, read from the gossiped record
                     // rather than derived a second way here. `offers_media`
@@ -111,23 +235,82 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
                     "offers": commonwealth_media::candidate_of(m).origins,
                     "last_seen": m.last_seen,
                     "is_self": m.node_id == daemon.node.self_id,
+                    // What the member advertises and how it is dialled, from
+                    // the gossiped record, for a program's discovery to read
+                    // (phase-b pb-serve-distributes; additive, phase-b-50).
+                    "capabilities": m.capabilities,
+                    "dial": {
+                        "relay_url": m.relay_url,
+                        "iroh_direct_addrs": m.iroh_direct_addrs,
+                    },
+                    // The member's key, full hex, so a program behind this
+                    // endpoint names the member cw-rails' forward carries in
+                    // `X-Mesh-Pubkey` (pb-mesh-exit-transport; additive).
+                    // Absent for a pre-identity member.
+                    "node_pubkey": m.node_pubkey.map(|k| hex::encode(k.0)),
                 })
             })
             .collect()
     };
-    let addr = daemon.node.endpoint.addr();
+    let addr = daemon.endpoint().addr();
+    // The posture the endpoint was bound with (`RailsNode::bind` reads the
+    // same `relay_config`), so a client can refuse an n0-homed cw-rails.
+    let relay = daemon
+        .node
+        .config
+        .relay_config()
+        .expect("discovery is refused at Config::load (C2)");
+    let dial = commonwealth_transport::iroh::format_dial_string(&addr);
+    // The invite, with the daemon's field name, or why there is none.
+    let invite = crate::found::invite_link(daemon.join_key().as_deref(), &mesh, dial.as_deref());
+    // Every mesh this node belongs to; a store that does not read is named,
+    // never listed as none.
+    let meshes = crate::membership::listing(&daemon, &mesh);
+    // The endpoint's self-heal, as the daemon's status reports it; absent,
+    // by name, until `run` has spawned the watchdog.
+    let reachability = daemon.self_reachability().await;
     Json(serde_json::json!({
         "self": {
             "node_id": daemon.node.self_id.to_string(),
+            "node_id_hex": daemon.node.self_id.to_hex(),
             "name": daemon.node.config.name,
             "pubkey": hex::encode(daemon.node.pubkey().0),
-            "dial": commonwealth_transport::iroh::format_dial_string(&addr),
+            "dial": dial,
             "media_origin": daemon.node.config.media.origin,
         },
         "mesh": { "id": mesh.id.to_string(), "name": mesh.name },
+        "running": true,
+        "mesh_name": mesh.name,
+        "members_online": members_online,
+        "members_total": members_total,
+        "join_link": invite.as_ref().ok(),
+        "join_link_absent": invite.as_ref().err().map(|a| a.reason()),
+        "mdns": match &daemon.lan {
+            None => serde_json::Value::Null,
+            Some(Err(why)) => serde_json::json!({ "advertising": false, "reason": why }),
+            Some(Ok(lan)) => serde_json::json!({
+                "advertising": true,
+                "peers": lan.mdns.discovered_peers().iter().map(|p| serde_json::json!({
+                    "name": p.name,
+                    "mesh_name": p.mesh_name,
+                    "address": p.address.to_string(),
+                    "keyed": p.node_pubkey.is_some(),
+                })).collect::<Vec<_>>(),
+            }),
+        },
         "members": members,
+        "meshes": meshes.as_ref().ok(),
+        "meshes_absent": meshes.as_ref().err().map(|e| e.to_string()),
         "fanout_inflight": daemon.gauge.load(Ordering::Relaxed),
         "internal_listener": daemon.internal_addr.to_string(),
+        "self_reachability": reachability,
+        "self_reachability_absent": reachability
+            .is_none()
+            .then_some("the reachability watchdog is not running"),
+        "relay": {
+            "n0_services": relay.n0_services,
+            "relay_urls": relay.relay_urls,
+        },
     }))
 }
 
@@ -162,6 +345,30 @@ pub async fn app(state: State<Arc<RailsDaemon>>, q: Query<MediaQuery>) -> impl I
     origin(state, q, OriginKind::App).await
 }
 
+/// `GET /v1/mesh/offers` — the same two questions for OFFERED ORIGINS, the
+/// third kind: what this node has going spare, behind `cwth/offer/0` and its
+/// own `offer_allow` grant. One handler with the other two spellings because
+/// the catalogue, the reach and the refusals ARE one implementation
+/// (`origin` is kind-generic); only the kind differs.
+pub async fn offers(state: State<Arc<RailsDaemon>>, q: Query<MediaQuery>) -> impl IntoResponse {
+    origin(state, q, OriginKind::Offer).await
+}
+
+/// `GET /v1/mesh/media/presence` — the presence poll's last reading.
+///
+/// `{"media_available": <number|null>}`: `1.0` free, `0.0` the holder is
+/// watching, `null` nobody answered. `null` is served as a VALUE, never as a
+/// refusal, so a client reads the field the same way it reads the gossiped
+/// capability — and a poll that cannot ask is reported, not defaulted
+/// (principle 6).
+pub async fn media_presence(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse {
+    let reading = *daemon
+        .media_presence
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    Json(serde_json::json!({ "media_available": reading }))
+}
+
 async fn origin(
     State(daemon): State<Arc<RailsDaemon>>,
     Query(q): Query<MediaQuery>,
@@ -178,11 +385,54 @@ async fn origin(
         )
             .into_response();
     };
-    match commonwealth_media::reach(self_id, &roster, peer, &daemon.transport, &paths, kind).await {
+    match commonwealth_media::reach(self_id, &roster, peer, &daemon.transport(), &paths, kind).await
+    {
         Ok(reach) => (StatusCode::OK, Json(serde_json::json!(reach))).into_response(),
         // A name nobody has is the one refusal that is about the REQUEST.
         Err(e @ MediaReachRefusal::UnknownMember(_)) => refusal(StatusCode::NOT_FOUND, e),
         // Everything else is coherent and the mesh's state is what says no.
+        Err(e) => refusal(StatusCode::CONFLICT, e),
+    }
+}
+
+/// `GET /v1/mesh/reach?peer=<name|id>&class=<class>` — the endpoints this
+/// node's transport yields for one peer and one traffic class, best first.
+/// It is `origin` without the origin-kind check: whether the peer serves the
+/// class is its registry's answer when the dial lands.
+pub async fn reach(
+    State(daemon): State<Arc<RailsDaemon>>,
+    Query(q): Query<ReachQuery>,
+) -> axum::response::Response {
+    let Some(class) = TrafficClass::from_name(q.class.trim()) else {
+        let known: Vec<&str> = TrafficClass::ALL.iter().map(|c| c.as_str()).collect();
+        return refusal(
+            StatusCode::BAD_REQUEST,
+            MediaReachRefusal::BadRequest(format!(
+                "unknown traffic class '{}' — one of {}",
+                q.class,
+                known.join(", ")
+            )),
+        );
+    };
+    let roster = daemon.roster().await;
+    let self_id = daemon.node.self_id;
+    match commonwealth_media::reach::reach_class(
+        self_id,
+        &roster,
+        q.peer.trim(),
+        &daemon.transport(),
+        class,
+    )
+    .await
+    {
+        Ok((picked, endpoints)) => Json(Reach {
+            peer: picked.name,
+            node_id: picked.node_id.to_hex(),
+            class: class.as_str().to_string(),
+            endpoints,
+        })
+        .into_response(),
+        Err(e @ MediaReachRefusal::UnknownMember(_)) => refusal(StatusCode::NOT_FOUND, e),
         Err(e) => refusal(StatusCode::CONFLICT, e),
     }
 }
@@ -199,7 +449,7 @@ pub async fn origin_fanout(
         daemon.node.self_id,
         &roster,
         req,
-        daemon.transport.clone(),
+        daemon.transport(),
         daemon.gauge.clone(),
     )
     .await
@@ -229,7 +479,7 @@ pub async fn publish_app(
     let addr: SocketAddr = ([127, 0, 0, 1], req.port).into();
     match daemon
         .published_apps
-        .claim(&req.name, addr, ttl_of(req.ttl_secs))
+        .claim_allowing(&req.name, addr, ttl_of(req.ttl_secs), req.allow)
     {
         Ok(claim) => (StatusCode::OK, Json(serde_json::json!(claim))).into_response(),
         Err(e) => publish_refusal(e),
@@ -264,6 +514,112 @@ pub async fn unpublish_app(
     }
 }
 
+/// `POST /v1/mesh/forget-member` body — the same shape the inference daemon's
+/// route takes, so its client posts one body to either.
+#[derive(Debug, Deserialize)]
+pub struct ForgetMemberRequest {
+    /// Member name, or a node_id prefix of at least 4 hex characters.
+    pub member: String,
+    /// Retire the row even though the member is online and not aliased.
+    #[serde(default)]
+    pub force: bool,
+}
+
+/// `POST /v1/mesh/forget-member` — retire one member row: tombstone it in
+/// THIS process's mesh (the one the roster readers converge on), persist the
+/// mesh file, and let gossip carry the removal. The mutation is
+/// [`commonwealth_core::mesh_identity::Mesh::forget_member`] — the same
+/// implementation the daemon's fabric delegate calls — so the refusal arms
+/// cannot drift between the two processes (ARCH §10.6).
+///
+/// Status codes match the daemon's route: 404 for an unknown member, 409 for
+/// the two "coherent but refused" arms. The body carries a `kind` beside the
+/// sentence so a client can tell those two arms apart without parsing prose.
+pub async fn forget_member(
+    State(daemon): State<Arc<RailsDaemon>>,
+    Json(req): Json<ForgetMemberRequest>,
+) -> axum::response::Response {
+    let now = commonwealth_core::clock::unix_now_secs();
+    let outcome = {
+        let mut mesh = daemon.mesh.write().await;
+        mesh.forget_member(daemon.node.self_id, &req.member, req.force, now)
+    };
+    match outcome {
+        Ok(outcome) => {
+            let mesh = daemon.mesh.read().await;
+            if let Err(e) = crate::identity::save_mesh(&daemon.node.data_dir, &mesh) {
+                tracing::warn!(
+                    target: "rails",
+                    error = %e,
+                    "forget-member: mesh.json could not be written"
+                );
+            }
+            tracing::info!(
+                target: "rails",
+                member = %outcome.name,
+                node_id = %outcome.node_id,
+                was_aliased = outcome.was_aliased,
+                already_retired = outcome.already_retired,
+                "forget-member: member row retired; gossip carries the tombstone"
+            );
+            (StatusCode::OK, Json(serde_json::json!(outcome))).into_response()
+        }
+        Err(e @ commonwealth_core::mesh_identity::ForgetMemberError::UnknownMember(_)) => {
+            forget_refusal(StatusCode::NOT_FOUND, "unknown-member", e)
+        }
+        Err(e @ commonwealth_core::mesh_identity::ForgetMemberError::CannotForgetSelf) => {
+            forget_refusal(StatusCode::CONFLICT, "cannot-forget-self", e)
+        }
+        Err(e @ commonwealth_core::mesh_identity::ForgetMemberError::MemberStillLive(_)) => {
+            forget_refusal(StatusCode::CONFLICT, "member-still-live", e)
+        }
+    }
+}
+
+/// The refusal shape for `forget-member`: the sentence under `error` (the
+/// same sentence the daemon's own route would have carried — one
+/// implementation), plus `kind` naming the arm.
+fn forget_refusal(
+    code: StatusCode,
+    kind: &'static str,
+    e: commonwealth_core::mesh_identity::ForgetMemberError,
+) -> axum::response::Response {
+    tracing::info!(target: "rails", status = code.as_u16(), error = %e, "api: forget-member refused");
+    (
+        code,
+        Json(serde_json::json!({ "error": e.to_string(), "kind": kind })),
+    )
+        .into_response()
+}
+
+/// `GET /v1/mesh/roster-names/{pubkey}` — does the mesh's membership name
+/// this key? This is the ring-roster membership test (fp-6): a ring roster
+/// derived from membership keeps TOMBSTONED rows — a departed member's
+/// journal lines still count, and dropping them would turn its signing
+/// history into gaps — so unlike `/status` this answer does not filter
+/// `removed_at`. The key is `NodePubkey`'s own lowercase-hex `Display`.
+pub async fn roster_names(
+    State(daemon): State<Arc<RailsDaemon>>,
+    axum::extract::Path(pubkey): axum::extract::Path<String>,
+) -> axum::response::Response {
+    let key = match hex::decode(pubkey.trim())
+        .map_err(|_| "the key is not hex")
+        .and_then(|bytes| <[u8; 32]>::try_from(bytes).map_err(|_| "the key is not 32 bytes"))
+    {
+        Ok(bytes) => commonwealth_core::ids::NodePubkey(bytes),
+        Err(why) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": why })),
+            )
+                .into_response()
+        }
+    };
+    let mesh = daemon.mesh.read().await;
+    let named = mesh.members.values().any(|m| m.node_pubkey == Some(key));
+    (StatusCode::OK, Json(serde_json::json!({ "named": named }))).into_response()
+}
+
 /// `POST /v1/mesh/publish` body — the same shape the inference daemon takes,
 /// because `svrn run` posts one body to whichever daemon answered.
 #[derive(Debug, Clone, Deserialize)]
@@ -272,6 +628,10 @@ pub struct ClaimRequest {
     pub port: u16,
     #[serde(default)]
     pub ttl_secs: Option<u64>,
+    /// Who the publisher admits, by member name or node-id prefix; empty is
+    /// every member. svrn sends its `[iroh] app_allow` (phase-b-81 (3)).
+    #[serde(default)]
+    pub allow: Vec<String>,
 }
 
 /// `POST /v1/mesh/publish/{claim_id}/renew` body. An empty body is valid.
@@ -281,7 +641,7 @@ pub struct RenewRequest {
     pub ttl_secs: Option<u64>,
 }
 
-fn ttl_of(secs: Option<u64>) -> std::time::Duration {
+pub(crate) fn ttl_of(secs: Option<u64>) -> std::time::Duration {
     secs.map(std::time::Duration::from_secs)
         .unwrap_or(commonwealth_media::apps::DEFAULT_CLAIM_TTL)
 }
@@ -330,4 +690,24 @@ mod tests {
             check_loopback(local.parse().unwrap()).expect(local);
         }
     }
+}
+
+/// `GET /v1/mesh/relay-candidates` — this host's reachable IPs, ranked
+/// (Tailscale, LAN, IPv6), each with the `host:port` an invite's `?relay=`
+/// carries. Ranked by the one enumerator the daemon's route calls
+/// (`commonwealth_discovery::mesh_discovery::relay_candidates`). The port is
+/// this endpoint's own direct port; an endpoint with no direct address yet
+/// names that absence rather than a port it does not have.
+pub async fn relay_candidates(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse {
+    let port = daemon.endpoint().addr().ip_addrs().next().map(|a| a.port());
+    let Some(port) = port else {
+        tracing::info!(target: "rails", "relay candidates: the endpoint has no direct address yet");
+        return Json(serde_json::json!({
+            "candidates": [],
+            "absent": "the endpoint has no direct address yet, so no candidate has a port",
+        }));
+    };
+    let candidates = commonwealth_discovery::mesh_discovery::relay_candidates(port);
+    tracing::debug!(target: "rails", port, count = candidates.len(), "relay candidates: answered");
+    Json(serde_json::json!({ "candidates": candidates }))
 }

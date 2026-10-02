@@ -1,0 +1,11 @@
+unit: pc-onprem-followups
+commits: 265118f98 (OCR cleanup presents the daemon's own key), 0cbc69c2c
+  (the CLI presents SOVEREIGN_API_KEY), 6686bef8e (no web offer without a
+  web-reaching tool), aee8ca125 (sealed absences name what the box can do),
+  a64befcc3 (rustfmt), 9b3905bed (SYSTEM_OVERVIEW + kit README)
+what: on a keyed daemon the OCR cleanup call is admitted by a per-process
+  self credential in the one key store; `svrn corpus watch*` sends
+  SOVEREIGN_API_KEY; a turn whose registry reaches no web search carries no
+  web offer in its system message or `search` description; every sealed 503
+  points at /v1/conversations and `/v1/mcp/servers` agrees with `/mcp`.
+  Decision: ralph/decisions/phase-c-6.md.

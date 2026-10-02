@@ -18,7 +18,7 @@ libc = "0.2"
 # install its own subscriber, the same reason sovereign-compute's
 # `child_main` carries it. Workspace-pinned, so no version skew (§8.2).
 tracing-subscriber = { workspace = true }
-sovereign-core = { workspace = true }
+sovereign-time = { workspace = true }
 # The pure-HTTP OICP client (RemoteApiProvider / SplitInferenceProvider) was
 # extracted here; re-exported at `sovereign_inference::remote::*`.
 oicp-client = { workspace = true }
@@ -187,7 +187,13 @@ windows-vulkan = ["llama-cpp-4/vulkan"]
 windows-cuda = ["llama-cpp-4/cuda"]
 
 [dev-dependencies]
+# `llguidance_parity`'s F3 fixture proves the plan schema compiles under the
+# real engine; the schema moved to `sovereign-contracts::planner_schema`
+# 2026-09-21, so the dev-dep on the runtime hub is gone.
 tempfile = "3"
+# `download_gguf`'s stub server (setup_planner/setup_tests.rs, moved from
+# cli-daemon's setup tests at pb-distribution-setup).
+axum = { workspace = true }
 
 [[example]]
 name = "complete"

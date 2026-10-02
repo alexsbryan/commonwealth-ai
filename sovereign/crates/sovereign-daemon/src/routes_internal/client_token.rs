@@ -62,7 +62,7 @@ pub async fn client_token_issue(
     State(state): State<AppState>,
     Json(req): Json<ClientTokenRequest>,
 ) -> Result<Json<ClientTokenResponse>, (StatusCode, Json<ErrorBody>)> {
-    let token = commonwealth_transport::identity::generate_bearer_token().map_err(|e| {
+    let token = crate::client_auth::generate_bearer_token().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody {

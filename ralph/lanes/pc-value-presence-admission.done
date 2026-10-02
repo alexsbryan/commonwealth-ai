@@ -1,0 +1,9 @@
+unit: pc-value-presence-admission
+commits: 4a2d9c5e4 (extraction through gate_call: stamped, counted as value_extraction),
+  8bf9149d9 (failed extraction is ValuePresence::Unchecked, not NoValue),
+  fcb993672 (funnel test walks every .rs in grounding/), af2c7f2ab (rustfmt)
+checks: CLEAN 0, LINT 0, TEST(sovereign-core) 1567/0, PLANT red then green
+  (bare inference.complete in a new grounding file -> funnel test FAIL at
+  call_census.rs:503), BOUNDARY 0 violations, clone-gate 13776 <= 13792.
+gate suppression unchanged (every consumer treats Unchecked as it did the
+  failed-extraction NoValue), so the grounding battery was not owed.

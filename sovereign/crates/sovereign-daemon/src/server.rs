@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+#[cfg(test)]
 use std::net::SocketAddr;
 
-use axum::routing::{any, delete, get, post};
+use axum::routing::{get, post};
 use axum::Router;
-use tokio::net::TcpListener;
-use tracing::info;
+use host_kit::shell::BodyLimits;
 
-use crate::routes_apps;
 use crate::routes_completions;
-use crate::routes_edit_predictions;
 use crate::routes_inference;
 use crate::routes_internal;
+use crate::routes_kinds;
 use crate::routes_knowledge;
 use crate::routes_oicp;
 use crate::routes_oicp_ingest;
@@ -131,7 +130,11 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     // probing federation health, and an exempt path that answered would be
     // the one route it could reach without a credential.
     let general: Router<AppState> = if surface.serves_general_client_routes() {
-        Router::new()
+        let edit_door = match state.inner.node.edit_door.clone() {
+            Some(door) => door,
+            None => crate::hosted_code::edit_door_absent_router(state.inner.node.posture),
+        };
+        let general = Router::new()
             // OpenAI-compatible inference endpoints.
             .route(
                 "/v1/chat/completions",
@@ -147,24 +150,19 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
             // FIM inline completion (INLINE_COMPLETION.md). Loopback-tokenless
             // like the rest of :9741 — the extension talks to its own daemon.
             .route("/v1/completions", post(routes_completions::completions))
-            // Next-edit prediction, both lanes (NEXT_EDIT.md §3). The rule
-            // lane is pure string work, but the model lane consults the
-            // resident FIM slot, so this endpoint carries the same
-            // admission gate as every other inference route — a peer must
-            // not drive local inference through it while the operator has
-            // contribution paused. Local requests (no `X-Node-Id`) are
-            // always admitted, so the editor path is untouched. The tighter
-            // body limit overrides the router-wide 8 MB frontdoor: the
-            // handler's documented caps (512 KiB text, 32 units) are a
-            // contract check, and the transport should refuse a body that
-            // could never satisfy them before serde allocates it.
+            // Next-edit prediction, both lanes (NEXT_EDIT.md §3): code's
+            // editor door, mounted as code's router (pb-meshapp-rest) — its
+            // handlers, body limit and one-in-flight model budget are code's,
+            // and svrn alone mounts the named absence pointing at `svrn code`.
+            // The model lane consults serve's edit slot, so this endpoint
+            // keeps the same admission gate as every other inference route —
+            // a peer must not drive local inference through it while the
+            // operator has contribution paused. Local requests (no
+            // `X-Node-Id`) are always admitted, so the editor path is
+            // untouched.
             .route(
                 "/v1/edit_predictions",
-                post(routes_edit_predictions::edit_predictions)
-                    .layer(axum::extract::DefaultBodyLimit::max(
-                        routes_edit_predictions::MAX_BODY_BYTES,
-                    ))
-                    .layer(admission()),
+                axum::routing::any_service(edit_door.clone()).layer(admission()),
             )
             // What the developer did with a suggestion. Deliberately NOT
             // behind `admission()`: it is a local editor reporting on a
@@ -173,7 +171,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
             // failure rather than protection (decision note `09599af1`).
             .route(
                 "/v1/edit_predictions/outcome",
-                post(routes_edit_predictions::outcome::edit_prediction_outcome),
+                axum::routing::any_service(edit_door),
             )
             // Behind `admission()` for the same reason `/v1/edit_predictions`
             // is: it drives local inference on this box. It was the ONE
@@ -206,6 +204,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
             )
             // Status endpoint.
             .route("/status", get(routes_status::status))
+            .route("/health", get(routes_status::health))
             // The operator-only surface, mounted on the `Operator` bind and
             // NOWHERE else. Empty on `Peer` and `Guest`, so those listeners
             // 404 these paths rather than gating them — the distinction
@@ -248,14 +247,14 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
                 post(routes_ollama::generate).layer(admission()),
             )
             .route("/api/embed", post(routes_ollama::embed))
-            .route("/api/embeddings", post(routes_ollama::embeddings))
-            // App management endpoints.
-            .route("/v1/apps", get(routes_apps::list_apps))
-            .route("/v1/apps/{app_id}/install", post(routes_apps::install_app))
-            .route("/v1/apps/{app_id}/status", get(routes_apps::app_status))
-            .route("/v1/apps/{app_id}", delete(routes_apps::uninstall_app))
-            // Reverse proxy to locally running apps.
-            .route("/app/{app_id}/{*path}", any(routes_apps::proxy_app))
+            .route("/api/embeddings", post(routes_ollama::embeddings));
+        // Served model kinds (`/v1/rerank`, …), mounted from the kind
+        // registry, behind the admission gate every inference route carries.
+        routes_kinds::served_kind_routes()
+            .into_iter()
+            .fold(general, |router, (path, handler)| {
+                router.route(path, handler.layer(admission()))
+            })
     } else {
         Router::new()
     };
@@ -324,10 +323,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
         ))
         // Outermost frontdoor: bound request-body size + slow-dribble time
         // before any handler or auth work runs.
-        .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
-            REQUEST_BODY_READ_TIMEOUT,
-        ))
-        .layer(axum::extract::DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
+        .body_limits(MAX_REQUEST_BODY_BYTES, REQUEST_BODY_READ_TIMEOUT)
         .with_state(state)
 }
 
@@ -342,9 +338,8 @@ pub fn internal_router(state: AppState) -> Router {
         crate::admission::peer_knowledge_read_layer::<AppState>,
     );
 
-    Router::new()
-        .route("/internal/gossip", post(routes_internal::gossip))
-        .route("/internal/join", post(routes_internal::join))
+    // The routes the flip gave to cw-rails and serve, each a 410 naming them.
+    crate::mesh_http::internal_moved(Router::new())
         .route(
             "/internal/scheduling/intent",
             post(routes_internal::scheduling_intent),
@@ -357,19 +352,8 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/model/transfer",
             post(routes_internal::model_transfer),
         )
-        // Peer-to-peer GGUF distribution. See routes_internal::model_files.
-        .route(
-            commonwealth_core::model::MODELS_LIST_PATH,
-            get(routes_internal::list_model_files),
-        )
-        .route(
-            commonwealth_core::model::MODEL_FILE_ROUTE,
-            get(routes_internal::serve_model_file),
-        )
-        // Distributed-inference auto-warm: a host asks this worker to seed its
-        // RPC tensor cache with its shard before a distributed load. The worker
-        // fetches the GGUF (or its byte ranges) from the model-file route above.
-        .route("/internal/rpc-warm", post(routes_internal::rpc_warm))
+        // Model files and the worker's rpc-warm are serve's, on serve's own
+        // cw-rails registration (`sovereign_serve::rails_mesh::join`).
         .route(
             "/internal/index/transfer",
             post(routes_internal::index_transfer),
@@ -504,25 +488,6 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/node/activity",
             post(routes_internal::node_activity),
         )
-        // Ring-ledger anti-entropy — the ONE receiver of replicated state.
-        // `/internal/app/state` sat beside it until cw-lift rung 2e and took
-        // a full mesh-store snapshot from every online peer every 10s; the
-        // store is a projection of these journals now, so a ledger that only
-        // grows is carried by digest instead of by snapshot.
-        .route("/internal/ring/sync", post(routes_internal::ring_sync))
-        // The live lane's receiver. Deliberately NOT beside `ring/sync` in
-        // the census of replicated-state senders: what arrives here reaches
-        // the bounded in-memory buffer on `AppState` and nothing else, so a
-        // restart is the whole of its retention policy.
-        .route("/internal/ring/live", post(routes_internal::ring_live))
-        // One ring's record, frozen — the v1 checkpoint document. A READ,
-        // not a replicated-state sender: a peer syncs by digest, it does not
-        // freeze copies of this node's record, so this serves the loopback
-        // callers the gate admits and nobody finer-grained.
-        .route(
-            "/internal/ring/checkpoint/{ns}",
-            get(routes_internal::ring_checkpoint),
-        )
         // Runtime slot management — load/unload extras chat slots
         // without daemon restart. Complements the static
         // `[models.extra]` config table (loaded at startup) by
@@ -638,8 +603,8 @@ pub fn internal_router(state: AppState) -> Router {
         // usage, raw free disk, and a recommended baseline; POST
         // accepts `{ "budget_bytes": <≥1 GiB | null> }`. The
         // enforcement point is the gossip-tick capabilities builder
-        // (`sovereign-mesh::capabilities::build_local_capabilities`)
-        // which clamps the published `free_storage_gb` to budget
+        // (commonwealth-rails `self_measure::apply`, over the budget left
+        // `peer_origin::claims_source` declares) which clamps the published `free_storage_gb` to budget
         // remaining — every existing scheduler picks up the cap
         // automatically.
         .route(
@@ -649,10 +614,7 @@ pub fn internal_router(state: AppState) -> Router {
         // Frontdoor bound on the perimeter-trusted internal port too — its
         // routes (gossip, app-state, knowledge) carry no auth gate, so this is
         // their resource ceiling.
-        .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(
-            REQUEST_BODY_READ_TIMEOUT,
-        ))
-        .layer(axum::extract::DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
+        .body_limits(MAX_REQUEST_BODY_BYTES, REQUEST_BODY_READ_TIMEOUT)
         // INSIDE the resolver, so it reads what the resolver attached: whether
         // this caller may reach the port at all (`internal_gate`).
         .layer(axum::middleware::from_fn_with_state(
@@ -666,48 +628,6 @@ pub fn internal_router(state: AppState) -> Router {
             crate::internal_principal::internal_principal_layer,
         ))
         .with_state(state)
-}
-
-/// Start both API servers. Returns when both are shut down.
-pub async fn serve(
-    state: AppState,
-    client_addr: SocketAddr,
-    internal_addr: SocketAddr,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // CRITICAL: the client router's `client_auth` layer extracts
-    // `ConnectInfo<SocketAddr>` to decide loopback-vs-remote (and fails
-    // closed if it's absent). Bare `axum::serve` does NOT attach
-    // ConnectInfo, so the client listener MUST use
-    // `into_make_service_with_connect_info` or every request — even
-    // loopback — 500s. (The sovereign-mesh daemon already does this on
-    // its own listener; this is the standalone-daemon / test-harness
-    // path. Same requirement the loopback guard documents.)
-    let client_app =
-        client_router(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
-    // ConnectInfo on the internal listener too: `internal_principal_layer`
-    // decides "is this hop my own acceptor's" partly from the peer address,
-    // and a missing one resolves every caller `Unverified` (fail closed).
-    let internal_app = internal_router(state).into_make_service_with_connect_info::<SocketAddr>();
-
-    let client_listener = TcpListener::bind(client_addr).await?;
-    let internal_listener = TcpListener::bind(internal_addr).await?;
-
-    info!(
-        client = %client_addr,
-        internal = %internal_addr,
-        "API servers starting"
-    );
-
-    tokio::select! {
-        result = axum::serve(client_listener, client_app) => {
-            result?;
-        }
-        result = axum::serve(internal_listener, internal_app) => {
-            result?;
-        }
-    }
-
-    Ok(())
 }
 
 /// Test-only: `client_router` plus a `MockConnectInfo` layer supplying

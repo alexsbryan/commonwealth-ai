@@ -2,9 +2,9 @@
 //! The recipe-author **project composition** over the wire —
 //! `/v1/recipe-projects` (sv-surface D8, third family).
 //!
-//! All seven `recipe_author_commands.rs` commands, each composing
-//! `sovereign_tools::recipe_author::RecipeProject` over three roots the
-//! daemon already owns: the note store, the feature store, and the artifact
+//! All seven `recipe_author_commands.rs` commands, each composing a recipe
+//! project through ingest's recipe-project port (pb-ingest-rehome-daemon)
+//! over three roots: the note store, the feature store, and the artifact
 //! tree under `svrnmesh_root()` resolved IN THIS PROCESS. No path crosses the
 //! wire and no root is a parameter — a caller names a `feature_id`.
 //! `features_http` keeps its three store routes; nothing here re-derives
@@ -33,14 +33,12 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::Recipe;
+use corpus_index::ingest_port::daemon::IngestPort;
+use sovereign_contracts::daemon_wire::ArtifactKind;
 use sovereign_contracts::recipe::notes::{Note, NoteScope, RecipeNotes, ScopeFilter};
-use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
-use sovereign_tools::recipe_author::{
-    self, checkpoint::restore_checkpoint as do_restore_checkpoint, ArtifactKind, CheckpointMeta,
-    ProjectSummary, RecipeProject,
+use sovereign_contracts::recipe::project::{
+    ProjectSummary, RecipeProjectHandle, RecipeProjectPort, RecipeProjectRow,
 };
-use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{internal_error, not_found, Absence};
@@ -51,6 +49,13 @@ use crate::loopback_guard::{LocalOnly, LoopbackRouter};
 const WORKFLOW_UNJUDGED: &str =
     "this host does not link the workflow parser (sovereign-mesh takes no studio workflow dep — \
      sv-surface rung 5), so a workflow artifact's TOML is not judged here. No verdict is inferred.";
+
+/// Why a recipe's TOML carries no verdict from this host: the recipe parser
+/// is ingest's, reached through its port, and no ingest program is composed
+/// in this process (pb-ingest-dial-daemon).
+const INGEST_UNJUDGED: &str =
+    "no ingest program is composed in this process, and the recipe parser is ingest's, so a \
+     recipe artifact's TOML is not judged here. No verdict is inferred.";
 
 // ─── Wire types ────────────────────────────────────────────────
 
@@ -204,18 +209,17 @@ async fn list_projects(
     _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> Result<Response, Absence> {
-    let (notes, features) = handles(&daemon)?;
+    let (_notes, features) = handles(&daemon)?;
     let rows = match features.list(false).await {
         Ok(r) => r,
         Err(e) => return Ok(internal_error(&format!("list projects: {e}"))),
     };
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        let summary =
-            match RecipeProject::load(&row.id, Arc::clone(&notes), Arc::clone(&features)).await {
-                Ok(p) => p.read_summary().unwrap_or_else(|_| default_summary(&row)),
-                Err(_) => default_summary(&row),
-            };
+        let summary = match features.load(&row.id).await {
+            Ok(p) => p.read_summary().unwrap_or_else(|_| default_summary(&row)),
+            Err(_) => default_summary(&row),
+        };
         out.push(list_entry_from_row_and_summary(&row, summary));
     }
     out.sort_by_key(|e| std::cmp::Reverse(e.updated_at));
@@ -226,28 +230,24 @@ async fn list_projects(
 /// POST `/v1/recipe-projects` — provision the row AND the artifact tree,
 /// then answer the sidebar entry a refresh would render.
 ///
-/// The id is minted by `RecipeProject::new_with_kind` from the project's
-/// essence, here, on the host that provisions — one identity decider
-/// (ARCH §7.5). `features_http`'s `POST` takes a caller-supplied id
-/// precisely because it is the STORE's door and this is the composition's.
+/// The id is minted by the port's `create` (the implementor's
+/// `RecipeProject::new_with_kind`) from the project's essence, on the host
+/// that provisions — one identity decider (ARCH §7.5). `features_http`'s
+/// `POST` takes a caller-supplied id precisely because it is the STORE's
+/// door and this is the composition's.
 async fn new_project(
     _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(body): Json<NewProjectRequest>,
 ) -> Result<Response, Absence> {
-    let (notes, features) = handles(&daemon)?;
+    let (_notes, features) = handles(&daemon)?;
     let title = body.title.trim();
     if title.is_empty() {
         return Err(Absence::invalid("title cannot be empty"));
     }
-    let project = match RecipeProject::new_with_kind(
-        title,
-        &body.charter_md,
-        body.artifact_kind,
-        Arc::clone(&notes),
-        Arc::clone(&features),
-    )
-    .await
+    let project = match features
+        .create(title, &body.charter_md, body.artifact_kind)
+        .await
     {
         Ok(p) => p,
         Err(e) => return Ok(internal_error(&format!("new project: {e}"))),
@@ -280,7 +280,7 @@ async fn dashboard_state(
     AxumPath(feature_id): AxumPath<String>,
 ) -> Result<Response, Absence> {
     let (notes, features) = handles(&daemon)?;
-    let project = load_project(&feature_id, &notes, &features).await?;
+    let project = load_project(&feature_id, &features).await?;
     let row = match features.get(&feature_id).await {
         Ok(Some(r)) => r,
         Ok(None) => return Ok(not_found(&format!("no recipe project `{feature_id}`"))),
@@ -291,7 +291,7 @@ async fn dashboard_state(
         .unwrap_or_else(|_| default_summary(&row));
 
     let (recipe_path, recipe_toml) = match summary.recipe_id.as_deref() {
-        Some(aid) => match artifact_toml_path(summary.artifact_kind, aid) {
+        Some(aid) => match artifact_toml_path(features.as_ref(), summary.artifact_kind, aid) {
             Some(path) => {
                 let text = std::fs::read_to_string(&path).ok();
                 (Some(path.to_string_lossy().into_owned()), text)
@@ -338,8 +338,11 @@ async fn dashboard_state(
         Err(e) => return Ok(internal_error(&format!("list checkpoints: {e}"))),
     };
 
-    let (validation, validation_unavailable) =
-        validate_artifact_toml(summary.artifact_kind, recipe_toml.as_deref());
+    let (validation, validation_unavailable) = validate_artifact_toml(
+        daemon.corpus_engine().map(|e| e.as_ref()),
+        summary.artifact_kind,
+        recipe_toml.as_deref(),
+    );
 
     tracing::debug!(
         %feature_id,
@@ -389,8 +392,8 @@ async fn save_edited_toml(
     AxumPath(feature_id): AxumPath<String>,
     Json(body): Json<SaveTomlRequest>,
 ) -> Result<Response, Absence> {
-    let (notes, features) = handles(&daemon)?;
-    let project = load_project(&feature_id, &notes, &features).await?;
+    let (_notes, features) = handles(&daemon)?;
+    let project = load_project(&feature_id, &features).await?;
     let summary = match project.read_summary() {
         Ok(s) => s,
         Err(e) => return Ok(internal_error(&format!("read summary: {e}"))),
@@ -403,7 +406,11 @@ async fn save_edited_toml(
         )));
     };
 
-    let (report, unavailable) = validate_artifact_toml(kind, Some(&body.edited_toml));
+    let (report, unavailable) = validate_artifact_toml(
+        daemon.corpus_engine().map(|e| e.as_ref()),
+        kind,
+        Some(&body.edited_toml),
+    );
     let Some(report) = report else {
         return Err(Absence::unsupported(
             unavailable.unwrap_or_else(|| WORKFLOW_UNJUDGED.to_string()),
@@ -416,7 +423,7 @@ async fn save_edited_toml(
     // `.part` → rename, mirroring the structured-write tools, so an agent
     // write and a hand edit are indistinguishable on disk and the prelude
     // picks either up on its next disk re-read.
-    let Some(path) = artifact_toml_path(kind, &artifact_id) else {
+    let Some(path) = artifact_toml_path(features.as_ref(), kind, &artifact_id) else {
         return Ok(internal_error(
             "cannot locate the artifact directory (no home dir)",
         ));
@@ -454,13 +461,13 @@ async fn link_recent_artifact(
     AxumPath(feature_id): AxumPath<String>,
     Json(body): Json<LinkRecentRequest>,
 ) -> Result<Response, Absence> {
-    let (notes, features) = handles(&daemon)?;
-    let project = load_project(&feature_id, &notes, &features).await?;
+    let (_notes, features) = handles(&daemon)?;
+    let project = load_project(&feature_id, &features).await?;
     let mut summary = match project.read_summary() {
         Ok(s) => s,
         Err(e) => return Ok(internal_error(&format!("read summary: {e}"))),
     };
-    let dir = match artifact_root(summary.artifact_kind) {
+    let dir = match artifact_root(features.as_ref(), summary.artifact_kind) {
         Some(d) => d,
         None => {
             return Ok(internal_error(
@@ -500,28 +507,23 @@ async fn restore_checkpoint(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     AxumPath((feature_id, checkpoint_id)): AxumPath<(String, String)>,
 ) -> Result<Response, Absence> {
-    let (notes, features) = handles(&daemon)?;
-    let project = load_project(&feature_id, &notes, &features).await?;
+    let (_notes, features) = handles(&daemon)?;
+    let project = load_project(&feature_id, &features).await?;
     // Best-effort: a project with no artifact yet just gets a
     // restore-anchor checkpoint without touching disk. The write path is
     // resolved by the project's kind inside `restore_checkpoint`.
     let artifact_id = project.read_summary().ok().and_then(|s| s.recipe_id);
     let session_id = format!("daemon-recipe-author-{feature_id}");
     Ok(
-        match do_restore_checkpoint(
-            &project,
-            &checkpoint_id,
-            artifact_id.as_deref(),
-            None,
-            &session_id,
-        )
-        .await
+        match project
+            .restore_checkpoint(&checkpoint_id, artifact_id.as_deref(), &session_id)
+            .await
         {
-            Ok(outcome) => {
-                tracing::info!(%feature_id, %checkpoint_id, new = %outcome.checkpoint_id,
+            Ok(new_checkpoint_id) => {
+                tracing::info!(%feature_id, %checkpoint_id, new = %new_checkpoint_id,
                 "recipe_project_http: checkpoint restored");
                 Json(RestoreCheckpointOutcome {
-                    new_checkpoint_id: outcome.checkpoint_id,
+                    new_checkpoint_id,
                     source_checkpoint_id: checkpoint_id,
                 })
                 .into_response()
@@ -541,9 +543,9 @@ async fn prelude(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     AxumPath(feature_id): AxumPath<String>,
 ) -> Result<Response, Absence> {
-    let (notes, features) = handles(&daemon)?;
-    let project = load_project(&feature_id, &notes, &features).await?;
-    let situated = match recipe_author::situated_context::render(&project).await {
+    let (_notes, features) = handles(&daemon)?;
+    let project = load_project(&feature_id, &features).await?;
+    let situated = match project.situated_context().await {
         Ok(s) => s,
         Err(e) => return Ok(internal_error(&format!("render situated context: {e}"))),
     };
@@ -553,29 +555,35 @@ async fn prelude(
     };
     let label = summary.artifact_kind.label();
     let (artifact_block, validation_block) = match &summary.recipe_id {
-        Some(artifact_id) => match artifact_toml_path(summary.artifact_kind, artifact_id) {
-            Some(path) => match std::fs::read_to_string(&path) {
-                Ok(toml) => (
-                    format!(
-                        "\n[Current {label} TOML]\nPath: {}\n```toml\n{}\n```\n",
-                        path.display(),
-                        toml.trim_end(),
+        Some(artifact_id) => {
+            match artifact_toml_path(features.as_ref(), summary.artifact_kind, artifact_id) {
+                Some(path) => match std::fs::read_to_string(&path) {
+                    Ok(toml) => (
+                        format!(
+                            "\n[Current {label} TOML]\nPath: {}\n```toml\n{}\n```\n",
+                            path.display(),
+                            toml.trim_end(),
+                        ),
+                        inline_validate(
+                            daemon.corpus_engine().map(|e| e.as_ref()),
+                            summary.artifact_kind,
+                            &toml,
+                        ),
                     ),
-                    inline_validate(summary.artifact_kind, &toml),
-                ),
-                Err(e) => (
-                    format!(
-                        "\n[Current {label} TOML]\nNot readable at {}: {e}\n",
-                        path.display()
+                    Err(e) => (
+                        format!(
+                            "\n[Current {label} TOML]\nNot readable at {}: {e}\n",
+                            path.display()
+                        ),
+                        String::new(),
                     ),
+                },
+                None => (
+                    format!("\n[Current {label} TOML]\nNo artifact directory on this host.\n"),
                     String::new(),
                 ),
-            },
-            None => (
-                format!("\n[Current {label} TOML]\nNo artifact directory on this host.\n"),
-                String::new(),
-            ),
-        },
+            }
+        }
         None => (
             format!(
                 "\n[Current {label} TOML]\n(no {label} drafted yet — use \
@@ -604,6 +612,7 @@ async fn prelude(
 /// pill over a recipe that cannot extract what it declares is a false
 /// verdict.
 fn validate_artifact_toml(
+    ingest: Option<&dyn IngestPort>,
     kind: ArtifactKind,
     artifact_toml: Option<&str>,
 ) -> (Option<RecipeValidationReport>, Option<String>) {
@@ -613,22 +622,23 @@ fn validate_artifact_toml(
         return (Some(validation_nothing_drafted()), None);
     };
     match kind {
-        ArtifactKind::Recipe => match Recipe::from_toml(toml_str) {
-            Ok(recipe) => {
-                let v = corpus_engine::testing::validate_recipe_offline(&recipe);
-                (
-                    Some(RecipeValidationReport {
-                        ok: v.errors.is_empty(),
-                        errors: v.errors,
-                        no_recipe: false,
-                        enrichment_ready: recipe.produces_enriched_atoms(),
-                        warnings: v.warnings,
-                        notes: v.notes,
-                    }),
-                    None,
-                )
+        ArtifactKind::Recipe => match ingest.map(|port| port.validate_recipe_toml(toml_str)) {
+            None => {
+                tracing::debug!("recipe_project_http: recipe unjudged, no ingest program");
+                (None, Some(INGEST_UNJUDGED.to_string()))
             }
-            Err(e) => (
+            Some(Ok(v)) => (
+                Some(RecipeValidationReport {
+                    ok: v.errors.is_empty(),
+                    errors: v.errors,
+                    no_recipe: false,
+                    enrichment_ready: v.enrichment_ready,
+                    warnings: v.warnings,
+                    notes: v.notes,
+                }),
+                None,
+            ),
+            Some(Err(e)) => (
                 Some(validation_failed(split_parse_errors(&e.to_string()))),
                 None,
             ),
@@ -643,11 +653,13 @@ fn validate_artifact_toml(
 /// a paragraph about the host's crate graph is not project state. The
 /// dashboard is where the unjudged fact is reported to a caller that can
 /// act on it.
-fn inline_validate(kind: ArtifactKind, toml: &str) -> String {
+fn inline_validate(ingest: Option<&dyn IngestPort>, kind: ArtifactKind, toml: &str) -> String {
     match kind {
-        ArtifactKind::Recipe => match Recipe::from_toml(toml) {
-            Ok(_) => String::new(),
-            Err(e) => format!("\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n"),
+        ArtifactKind::Recipe => match ingest.map(|port| port.validate_recipe_toml(toml)) {
+            None | Some(Ok(_)) => String::new(),
+            Some(Err(e)) => {
+                format!("\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n")
+            }
         },
         ArtifactKind::Workflow => String::new(),
     }
@@ -671,20 +683,21 @@ fn split_parse_errors(message: &str) -> Vec<String> {
 
 // ─── Artifact tree ─────────────────────────────────────────────
 
-/// The root a kind's artifacts live under, on THIS host.
-fn artifact_root(kind: ArtifactKind) -> Option<PathBuf> {
-    match kind {
-        ArtifactKind::Recipe => recipe_author::local_recipes_dir().ok(),
-        ArtifactKind::Workflow => recipe_author::local_workflows_dir().ok(),
-    }
+/// The root a kind's artifacts live under, on THIS host: the port's.
+fn artifact_root(projects: &dyn RecipeProjectPort, kind: ArtifactKind) -> Option<PathBuf> {
+    projects.artifact_root(kind)
 }
 
 /// The on-disk TOML for `(kind, artifact_id)`: a recipe at
 /// `<root>/<id>/recipe.toml`, a workflow at `<root>/<id>.toml`.
 ///
 /// THE one resolver — see the header on the desktop's two spellings.
-fn artifact_toml_path(kind: ArtifactKind, artifact_id: &str) -> Option<PathBuf> {
-    let root = artifact_root(kind)?;
+fn artifact_toml_path(
+    projects: &dyn RecipeProjectPort,
+    kind: ArtifactKind,
+    artifact_id: &str,
+) -> Option<PathBuf> {
+    let root = artifact_root(projects, kind)?;
     Some(match kind {
         ArtifactKind::Recipe => root.join(artifact_id).join("recipe.toml"),
         ArtifactKind::Workflow => root.join(format!("{artifact_id}.toml")),
@@ -744,43 +757,45 @@ fn find_recent_artifact(
 /// The daemon's note + feature handles, as the composition wants them.
 /// ONE lookup site, so no handler can compose over a different pair.
 ///
-/// The 503 names WHICH store is missing: `notes.db` and `features.db` are
-/// opened by different code with different failure modes, and one message
-/// covering both would send an operator to the wrong file.
+/// The 503 names WHICH store is missing: svrn's store (where recipe
+/// authoring keeps its notes while it runs daemon-side, pb-notes-memory) and
+/// `features.db` are opened by different code with different failure modes,
+/// and one message covering both would send an operator to the wrong file.
+/// The feature store's 503 names why it is absent: it would not open, or
+/// no ingest program is composed (pb-ingest-rehome-daemon).
 fn handles(
     daemon: &Arc<EmbeddedDaemon>,
-) -> Result<(Arc<dyn RecipeNotes>, Arc<RecipeProjectStore>), Absence> {
+) -> Result<(Arc<dyn RecipeNotes>, Arc<dyn RecipeProjectPort>), Absence> {
     let Some(note_store) = daemon.notes_store().map(Arc::clone) else {
         return Err(Absence::unavailable(
-            "this daemon has no note store (notes.db did not open) — the recipe-author \
-             workspace composes over it",
+            "this daemon has no note store (no /mcp mount) — the recipe-author workspace \
+             composes over it",
         ));
     };
-    let Some(features) = daemon.features_store().map(Arc::clone) else {
-        return Err(Absence::unavailable(
-            "this daemon has no recipe-author store (features.db did not open)",
-        ));
+    let features = match daemon.features_store() {
+        Ok(port) => Arc::clone(port),
+        Err(why) => {
+            tracing::debug!(reason = why, "recipe_project_http: no recipe-project port");
+            return Err(Absence::unavailable(why));
+        }
     };
-    // Wrap the concrete NoteStore in the seam adapter so the recipe-author
-    // crate sees the contract, not corpus-engine.
-    let notes: Arc<dyn RecipeNotes> = Arc::new(NoteStoreRecipeNotes::new(note_store));
+    let notes: Arc<dyn RecipeNotes> = note_store;
     Ok((notes, features))
 }
 
 /// Load a project, or say which absence it is.
 ///
-/// `RecipeProject::load` folds "no such row" and "the state machine
-/// refuses this row" into one error, so an unknown id and a project in a
-/// wrong state both arrive as text. The id is echoed into a 404 when the
-/// row genuinely is not there, which the caller distinguishes by the
-/// message; the STRUCTURAL fix is a typed error in the recipe-author
-/// crate and it belongs in that crate's commit.
+/// The port's `load` folds "no such row" and "the state machine refuses
+/// this row" into one error, so an unknown id and a project in a wrong
+/// state both arrive as text. The id is echoed into a 404 when the row
+/// genuinely is not there, which the caller distinguishes by the message;
+/// the STRUCTURAL fix is a typed error in the recipe-author crate and it
+/// belongs in that crate's commit.
 async fn load_project(
     feature_id: &str,
-    notes: &Arc<dyn RecipeNotes>,
-    features: &Arc<RecipeProjectStore>,
-) -> Result<RecipeProject, Absence> {
-    match RecipeProject::load(feature_id, Arc::clone(notes), Arc::clone(features)).await {
+    features: &Arc<dyn RecipeProjectPort>,
+) -> Result<Box<dyn RecipeProjectHandle>, Absence> {
+    match features.load(feature_id).await {
         Ok(p) => Ok(p),
         Err(e) => {
             let msg = e.to_string();

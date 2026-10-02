@@ -595,6 +595,15 @@ mod tests {
     use super::*;
     use std::path::Path;
 
+    /// The gym's committed fixtures: the bench tree the `SOVEREIGN_BENCH_ROOT`
+    /// knob names (the workspace .cargo/config.toml sets it, the svrn lift
+    /// carries the tree), never the checkout found from where the test stands.
+    fn committed_fixtures_dir() -> std::path::PathBuf {
+        let root = std::env::var_os("SOVEREIGN_BENCH_ROOT")
+            .expect("SOVEREIGN_BENCH_ROOT names the bench tree that carries search-gym");
+        std::path::PathBuf::from(root).join("search-gym/fixtures")
+    }
+
     #[test]
     fn fixture_load_reports_missing_files_with_path() {
         let tmp = tempfile::tempdir().unwrap();
@@ -644,13 +653,7 @@ mod tests {
         ];
 
         // Walk every fixture under sovereign/bench/search-gym/fixtures/.
-        // Find the path the same way the gym does (workspace root +
-        // fixed offset) so tests run from any cwd.
-        let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .canonicalize()
-            .expect("workspace root resolvable");
-        let fixtures_dir = workspace_root.join("sovereign/bench/search-gym/fixtures");
+        let fixtures_dir = committed_fixtures_dir();
 
         let mut mismatches: Vec<String> = Vec::new();
         for entry in std::fs::read_dir(&fixtures_dir)
@@ -730,11 +733,7 @@ mod tests {
 
         const INTENTIONAL_FORKS: &[&str] = &[];
 
-        let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../..")
-            .canonicalize()
-            .expect("workspace root resolvable");
-        let fixtures_dir = workspace_root.join("sovereign/bench/search-gym/fixtures");
+        let fixtures_dir = committed_fixtures_dir();
 
         let mut mismatches: Vec<String> = Vec::new();
         for entry in std::fs::read_dir(&fixtures_dir)

@@ -21,7 +21,7 @@
 //! - Identical-prompt re-prefill starvation (sampler needs ≥1 fresh
 //!   logit) → [`compute_lcp`]
 
-use sovereign_core::types::CompletionRequest;
+use sovereign_contracts::types::CompletionRequest;
 
 use super::capabilities::{ModelCapabilities, PartialKvVerdict};
 use super::model_slot::forced_choice_candidates;
@@ -519,7 +519,7 @@ pub(crate) fn push_sliding_tail(tail: &mut String, piece: &str) {
 mod tests {
     use super::*;
     use crate::embedded::capabilities::{FastShortCapability, Provenance};
-    use sovereign_core::types::{CompletionRequest, ToolSchema};
+    use sovereign_contracts::types::{CompletionRequest, ToolSchema};
 
     /// env closure over a fixed (name, value) list.
     fn env(vars: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {

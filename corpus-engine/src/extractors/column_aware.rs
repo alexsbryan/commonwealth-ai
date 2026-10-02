@@ -16,6 +16,10 @@
 //! verticals plug into; this module is the tabular instance.
 
 use std::collections::BTreeMap;
+
+// The one L2 normalisation moved to the atlas-reader leaf 2026-09-21
+// (FIVE_PROGRAMS §12 decision 1 — the question-kind classifier uses it too).
+use corpus_engine_atlas_reader::linalg::l2_normalize;
 use std::fs::File;
 use std::path::Path;
 
@@ -346,15 +350,6 @@ async fn centroid(exemplars: &[&str], embed: &crate::types::EmbedFn) -> Result<V
 
 fn dot(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
-}
-
-pub(crate) fn l2_normalize(v: &mut [f32]) {
-    let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if n > 0.0 {
-        for x in v.iter_mut() {
-            *x /= n;
-        }
-    }
 }
 
 /// Run the column-aware extraction over a parsed XLSX parquet cache.

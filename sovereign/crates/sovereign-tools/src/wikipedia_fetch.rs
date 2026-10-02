@@ -20,10 +20,10 @@
 //! retrieval scoring doesn't currently produce reliably). The
 //! tool path keeps the policy in the model where it's adjustable.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
+use corpus_engine_atlas_reader::ports::AtlasPort;
+use corpus_index::ingest_port::CatalogIngestPort;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
@@ -37,20 +37,15 @@ use sovereign_core::tool_manifest::DeclaredTool;
 pub const WIKIPEDIA_CATALOG_CORPUS_ID: &str = "wikipedia-catalog";
 
 pub struct WikipediaFetchTool {
-    engine: Arc<CorpusEngine>,
-    /// Where per-article corpora land. Defaults to the engine's
-    /// configured indexes dir; surfaced for tests.
-    #[allow(dead_code)]
-    indexes_dir: PathBuf,
+    /// Ingest's catalog port (pb-ingest-dial-tools).
+    engine: Arc<dyn CatalogIngestPort>,
+    /// Ingest's atlas port: the post-ingest structural atlas.
+    atlas: Arc<dyn AtlasPort>,
 }
 
 impl WikipediaFetchTool {
-    pub fn new(engine: Arc<CorpusEngine>) -> Self {
-        let indexes_dir = engine.index_dir().to_path_buf();
-        Self {
-            engine,
-            indexes_dir,
-        }
+    pub fn new(engine: Arc<dyn CatalogIngestPort>, atlas: Arc<dyn AtlasPort>) -> Self {
+        Self { engine, atlas }
     }
 }
 
@@ -108,14 +103,15 @@ impl WikipediaFetchTool {
             expand_links,
         };
 
-        // run_catalog_ingest takes Arc<CorpusEngine> + the request;
+        // run_catalog_ingest takes ingest's catalog port + the request;
         // it handles resolution + recipe load + ingest + (optional)
         // enrich + atlas summary in one call. Returns the new
         // corpus id on success; we re-shape into a tool-output
         // string so the agent can quote it back to the user.
-        let new_corpus_id = run_catalog_ingest(Arc::clone(&self.engine), req)
-            .await
-            .map_err(|e| Error::Execution(format!("wikipedia_fetch: {e}")))?;
+        let new_corpus_id =
+            run_catalog_ingest(Arc::clone(&self.engine), Arc::clone(&self.atlas), req)
+                .await
+                .map_err(|e| Error::Execution(format!("wikipedia_fetch: {e}")))?;
 
         Ok(StepOutput::Text(format!(
             "Fetched \"{title}\" from Wikipedia and appended to the shared `{new_corpus_id}` \

@@ -88,7 +88,7 @@ LLM-in-the-loop knob cannot be judged by single-run fitness.
 ## The cells — 13 arms, fixed here
 
 Drawn from the experimental-OFF and tunable buckets of
-`sovereign/docs/retrieval-pipeline.md` (generated, freshness-gated). Each is
+`sovereign/crates/sovereign-core/docs/retrieval-pipeline.md` (generated, freshness-gated). Each is
 one `sovereign bench all --prod-pipeline --isolate` run over the EVOLUTION set
 with the named environment set and everything else at HEAD default.
 

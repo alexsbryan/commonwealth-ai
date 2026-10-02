@@ -304,16 +304,18 @@ mod tests {
         // The two SP3 seed files are the lane's oldest data — if this
         // breaks, the appender schema drifted from what's on disk.
         // Skips (loudly, via eprintln) on partial checkouts.
-        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../bench/faithfulness");
+        let root = crate::bench_root::require_bench_root()
+            .expect("bench tests need the bench tree")
+            .join("faithfulness")
+            .display()
+            .to_string();
         for (file, n_claims, n_unsupported) in [
             ("obsidian_fast_seed.jsonl", 959, 141),
             ("obsidian_primary_sample_seed.jsonl", 197, 21),
         ] {
             let path = format!("{root}/{file}");
-            let Ok(raw) = std::fs::read_to_string(&path) else {
-                eprintln!("seed file {path} absent — skipping");
-                continue;
-            };
+            let raw = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("seed file {path} unreadable: {e}"));
             let records: Vec<ClaimRecord> = raw
                 .lines()
                 .map(|l| serde_json::from_str(l).unwrap())

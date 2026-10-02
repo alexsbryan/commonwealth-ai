@@ -7,9 +7,10 @@
 #   4 financial_state → COMPOUND question → showcases query decomposition
 #   5 counterparties  → network (exercises the reconciled org entities)
 #
-# Run captured with:
-#   SOVEREIGN_TITLE_EXPAND=1 SOVEREIGN_DECOMP_DECAY=0.6 \
-#     sovereign bench all --synth --isolate --filter enron/qa_demo
+# Run with:
+#   sovereign bench all --synth --isolate --filter enron/qa_demo
+# (the original capture also set SOVEREIGN_TITLE_EXPAND / _DECOMP_DECAY, cut
+# with their retrieval steps in ac032e5bc)
 [bank]
 name = "enron-demo-v0"
 corpus = "enron-sample-multi-wide"

@@ -28,7 +28,7 @@
 //! 5f builds it in a sandbox outside this monorepo. The trait is the whole of
 //! what the package owns; the kind, the payload and the body live here, on
 //! the sovereign side of that line, and reach the fold through
-//! [`crate::work_donor::donor_registry`].
+//! [`crate::work_origin`], the execute origin cw-rails' donor forwards units to.
 //!
 //! # Why this executor declares `InProcess`
 //!
@@ -38,7 +38,7 @@
 //! daemon's own threads, so a panic or a leak is the daemon's. Declaring
 //! anything stronger would be a claim with no mechanism behind it.
 //! `Isolation::covers` is an "at least as strong" comparison, so a donor
-//! offering [`crate::work_donor::DONOR_ISOLATION`] (`Subprocess`) covers this
+//! offering `Subprocess` (cw-rails' `donor::DONOR_ISOLATION`) covers this
 //! requirement and boot passes — the weaker requirement is the one that is
 //! satisfiable, not the one that is refused.
 //!
@@ -79,20 +79,22 @@ use std::time::Duration;
 
 use std::collections::BTreeSet;
 
-use commonwealth_core::ids::HandoffId;
-use commonwealth_core::knowledge::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
-use commonwealth_work::actor::ActorKey;
-use commonwealth_work::executor::{subject_of, ExecuteFuture, JobContext, JobError, JobExecutor};
-use commonwealth_work::projection::{WorkHandoff, WorkProjection, WorkUnitStatus};
-use commonwealth_work::refusal::WorkRefusal;
-use corpus_engine::{CorpusEngine, IngestProgress, ProgressCallback};
+use corpus_index::ingest_port::daemon::IngestPort;
+use corpus_index::ingest_port::ProgressCallback;
 use kernel_types::quality::VerdictSource;
+use kernel_types::ActorKey;
+use kernel_types::HandoffId;
 use kernel_types::{Judgement, Reason};
 use kernel_types::{NodeId, Server};
+use oicp_types::work_queue::{HandoffPhase, UnitId, WorkUnit, LEASE_MS, MAX_UNIT_ATTEMPTS};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sovereign_contracts::daemon_wire::IngestProgress;
+use sovereign_contracts::oicp::work::exec::{subject_of, JobContext, JobError};
+use sovereign_contracts::oicp::work::projection::{WorkHandoff, WorkProjection, WorkUnitStatus};
+use sovereign_contracts::oicp::work::refusal::WorkRefusal;
 // Through `sovereign_contracts`' re-export, not a direct dep on `oicp-types`
-// (ARCH §8.3) — the rule `work_donor` already follows for the same types.
+// (ARCH §8.3).
 use sovereign_contracts::oicp::{
     Idempotency, Isolation, JobExecutorDescriptor, JobKind, JobUnit, ToolExample,
 };
@@ -109,11 +111,11 @@ pub const INGEST_KIND: &str = "ingest:v1";
 
 /// The tracing target for everything this module decides.
 ///
-/// `commonwealth_work`'s own, the way [`crate::work_donor`] does it: a reader
+/// `commonwealth_work`'s own, the way cw-rails' donor does it: a reader
 /// debugging "why did this ingest unit not run" turns on ONE filter
 /// (`RUST_LOG=commonwealth_work=debug`) and sees the fold's refusals and this
 /// executor's in the same stream (ARCH §9.1).
-pub const TRACE_TARGET: &str = commonwealth_work::TRACE_TARGET;
+pub const TRACE_TARGET: &str = "commonwealth_work";
 
 /// How often the running unit is asked whether the donor has cancelled it.
 ///
@@ -134,7 +136,7 @@ const CANCEL_POLL: Duration = Duration::from_millis(500);
 /// are two units. That is what makes the fold's idempotency-per-`unit_hash`
 /// line up with the merge step's dedupe-per-`unit_id`.
 ///
-/// **`unit` is `commonwealth_core::knowledge::WorkUnit`, reused rather than
+/// **`unit` is `oicp_types::work_queue::WorkUnit`, reused rather than
 /// re-spelled.** That enum and its [`WorkUnit::to_ingest_args`] are already
 /// the one decider for "which shards / which article range does this slice
 /// mean"; writing `file_indices` and `article_range` into this payload
@@ -184,7 +186,7 @@ impl IngestPayload {
     pub fn parse(payload: &Value) -> Result<IngestPayload, String> {
         let parsed: IngestPayload = serde_json::from_value(payload.clone()).map_err(|e| {
             // The variant names are PascalCase because
-            // `commonwealth_core::knowledge::WorkUnit` is
+            // `oicp_types::work_queue::WorkUnit` is
             // `#[serde(tag = "kind", content = "value")]` with no
             // `rename_all` (`knowledge.rs:318`). This text said `hf-file` /
             // `jsonl-shard` / `jsonl-range` until 2026-09-09 — three spellings
@@ -219,7 +221,7 @@ impl IngestPayload {
 /// Runs one corpus slice through this node's own [`CorpusEngine`].
 pub struct IngestExecutor {
     kind: JobKind,
-    engine: Arc<CorpusEngine>,
+    engine: Arc<dyn IngestPort>,
 }
 
 impl IngestExecutor {
@@ -231,7 +233,7 @@ impl IngestExecutor {
     // unreachable arm on the boot path instead. Same call, same reason, as
     // `ProcessExecutor::new`.
     #[allow(clippy::expect_used)]
-    pub fn new(engine: Arc<CorpusEngine>) -> IngestExecutor {
+    pub fn new(engine: Arc<dyn IngestPort>) -> IngestExecutor {
         IngestExecutor {
             kind: JobKind::parse(INGEST_KIND)
                 .expect("`ingest:v1` is a valid JobKind by construction"),
@@ -387,7 +389,7 @@ impl IngestExecutor {
             // The donor asked, so this node no longer holds the lease.
             // `run_unit` publishes nothing for a `Cancelled` — a report from a
             // non-lessee is what the fold counts `unreadable`.
-            Err(corpus_engine::Error::Cancelled(_)) if ctx.cancel_requested() => {
+            Err(corpus_index::Error::Cancelled(_)) if ctx.cancel_requested() => {
                 debug!(
                     target: TRACE_TARGET,
                     unit_hash = %unit.unit_hash,
@@ -427,8 +429,11 @@ impl IngestExecutor {
     }
 }
 
-impl JobExecutor for IngestExecutor {
-    fn descriptor(&self) -> JobExecutorDescriptor {
+// The executor seam's three answers, as inherent methods: the trait is
+// commonwealth-work's and this crate links no rail since pb-work-donor. The
+// execute origin (`crate::work_origin`) serves each one on its door.
+impl IngestExecutor {
+    pub fn descriptor(&self) -> JobExecutorDescriptor {
         JobExecutorDescriptor {
             kind: self.kind.clone(),
             // See the module doc: this runs on the daemon's own threads.
@@ -464,7 +469,7 @@ impl JobExecutor for IngestExecutor {
                     },
                     "unit": {
                         "type": "object",
-                        "description": "Which slice. `commonwealth_core::knowledge::WorkUnit`, externally tagged.",
+                        "description": "Which slice. `oicp_types::work_queue::WorkUnit`, externally tagged.",
                         "required": ["kind", "value"],
                         "properties": {
                             "kind": {"enum": ["HfFile", "JsonlShard", "JsonlRange"]},
@@ -524,7 +529,7 @@ impl JobExecutor for IngestExecutor {
         }
     }
 
-    fn validate(&self, unit: &JobUnit) -> Result<(), WorkRefusal> {
+    pub fn validate(&self, unit: &JobUnit) -> Result<(), WorkRefusal> {
         if unit.kind != self.kind {
             let refusal = if unit.kind.is_skew_of(&self.kind) {
                 WorkRefusal::VersionSkew {
@@ -556,8 +561,12 @@ impl JobExecutor for IngestExecutor {
         Ok(())
     }
 
-    fn execute<'a>(&'a self, unit: &'a JobUnit, ctx: &'a JobContext) -> ExecuteFuture<'a> {
-        Box::pin(self.run(unit, ctx))
+    pub async fn execute(
+        &self,
+        unit: &JobUnit,
+        ctx: &JobContext,
+    ) -> Result<(Judgement, Value), JobError> {
+        self.run(unit, ctx).await
     }
 }
 
@@ -591,7 +600,7 @@ impl JobExecutor for IngestExecutor {
 /// interchangeable. [`WorkUnitStatus::Complete::lessee`] is an [`ActorKey`] —
 /// the Ed25519 key ADMISSION VERIFIED. `provenance.host` is a [`Server`]
 /// carrying a [`NodeId`] and is SELF-REPORTED by whoever ran the unit.
-/// `work_donor.rs:941-944` already draws exactly this line.
+/// The donor's credit (cw-rails `donor.rs`, `credit_for`) draws exactly this line.
 ///
 /// So: **the verified `lessee` decides whether a contribution counts, and the
 /// self-reported `host` only says where to look for it.** [`Self::expected`]
@@ -716,6 +725,51 @@ pub fn fold_coverage_for(
         });
     }
     None
+}
+
+/// The `work` namespace, folded as it stands right now, for
+/// [`fold_coverage_for`].
+///
+/// The fold runs where the journal lives — `cw-rails`' `/v1/work/projection`
+/// behind the port since fp-45 — so this reads the folded queue and never
+/// admits the journal itself. Moved here from the donor when the donor moved
+/// to cw-rails (pb-work-donor); `auto_ingest`'s tick is its one caller.
+///
+/// `None` when this node has no rail, or the rails daemon could not fold
+/// (unreadable roster, a journal that will not admit, the process absent) —
+/// each traced, and each a condition that heals, so the tick falls through
+/// to its disk-and-gossip path rather than failing.
+pub(crate) async fn fold_now(
+    app_state: &crate::state::AppState,
+) -> Option<(
+    Arc<dyn crate::rail_port::RingRailPort>,
+    WorkProjection,
+    ActorKey,
+    u64,
+)> {
+    let rail = app_state.ring_rail()?;
+    let proj = match rail.work_projection().await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(target: TRACE_TARGET, error = %e, "fold coverage: the `work` queue could not be folded");
+            return None;
+        }
+    };
+    let self_actor = match rail.actor().await {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(target: TRACE_TARGET, error = %e, "fold coverage: the rails daemon did not name this node's signing identity");
+            return None;
+        }
+    };
+    let self_key = match ActorKey::parse(&self_actor) {
+        Ok(k) => k,
+        Err(e) => {
+            tracing::warn!(target: TRACE_TARGET, error = %e, "fold coverage: this node's own signing key is not an actor key");
+            return None;
+        }
+    };
+    Some((rail, proj, self_key, sovereign_time::unix_millis()))
 }
 
 /// The corpus every unit in `handoff` belongs to.

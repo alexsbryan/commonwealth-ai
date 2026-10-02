@@ -46,7 +46,7 @@
 //! Every time-dependent method takes `now_ms`, and [`GuestGrantStore::issue`]
 //! takes the token rather than minting it. Same reason for both: the store
 //! stays deterministically testable without a wall clock or an RNG. The token
-//! comes from `commonwealth_transport::identity::generate_bearer_token`, which
+//! comes from `sovereign_daemon::client_auth::generate_bearer_token`, which
 //! is the one definition of what a bearer this daemon accepts looks like.
 
 use std::collections::HashMap;
@@ -298,7 +298,7 @@ impl GuestGrantStore {
     ///
     /// The token is a parameter, not minted here: entropy is injected for the
     /// same reason `now_ms` is, so this store is testable without an RNG. Mint
-    /// with `commonwealth_transport::identity::generate_bearer_token`.
+    /// with `sovereign_daemon::client_auth::generate_bearer_token`.
     ///
     /// Unlike an ingest grant (one per corpus, re-issue supersedes), each call
     /// creates a SEPARATE grant — the key is the token, and two links handed to
@@ -391,7 +391,7 @@ impl GuestGrantStore {
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 interval.tick().await;
-                let swept = self.drain_dead(commonwealth_core::clock::unix_now_millis());
+                let swept = self.drain_dead(corpus_engine_yield::time::unix_millis());
                 if !swept.is_empty() {
                     tracing::info!(
                         count = swept.len(),

@@ -1,6 +1,6 @@
 # SEP enrichment on a Vast.ai peer — runbook
 
-> **Worker-mode rewrite — 2026-05-15.** `pipeline pod up` no longer
+> **Worker-mode rewrite — 2026-05-15.** `mesh pod up` no longer
 > joins pods to the mesh. Pods are now owner-only ephemeral workers
 > over a TLS-pinned channel; see
 > [`sovereign/docs/EPHEMERAL_WORKER_PODS.md`](../../sovereign/docs/EPHEMERAL_WORKER_PODS.md)
@@ -13,7 +13,7 @@
 >
 > ```bash
 > # 1. Mint pod (owner uploads happen in the same command — no R2)
-> sovereign pipeline pod up \
+> sovereign mesh pod up \
 >     --image ghcr.io/<you>/sovereign-cuda:latest \
 >     --gpu L40S --disk 80 --max-price 0.80 \
 >     --upload ~/sovereign/models/FINAL-Bench_Darwin-36B-Opus-Q6_K.gguf \
@@ -21,11 +21,11 @@
 >
 > # 2. The command prints a worker token + pinned thumbprint. The
 > #    pod is in "uploads ready" state; dispatch + poll commands
-> #    (`pipeline pod dispatch`, `pipeline pod poll`) are the
+> #    (`mesh pod dispatch`, `mesh pod poll`) are the
 > #    follow-up surface tracked in EPHEMERAL_WORKER_PODS.md.
 >
 > # 3. Tear down — same as legacy:
-> sovereign pipeline pod down <vast-id>
+> sovereign mesh pod down <vast-id>
 > ```
 
 The pipeline driver runs locally; one or more Vast.ai pods receive
@@ -45,7 +45,7 @@ in confusing ways:
   daemon lives here, because llama.cpp's Vulkan backend can't find
   `libamdhip64` from the host systemd unit (see memory:
   [project_wiki_tier2_500_atlas]). The `sovereign` CLI you'll run
-  for `pipeline run` / `pipeline status` / `pipeline pod up` is the
+  for `pipeline run` / `pipeline status` / `mesh pod up` is the
   one on `~/.local/bin/sovereign` inside this toolbox.
 - **Host**. Where Tailscale runs (`tailscaled` is a host service),
   where `podman` / `docker` lives, and where `vastai` is installed.
@@ -114,7 +114,7 @@ sovereign daemon start
 
 ### 4. Env-var contract for `pod up`
 
-`sovereign pipeline pod up` validates the following at start and
+`sovereign mesh pod up` validates the following at start and
 fails fast with the complete missing-set if anything's absent.
 The CLI reads them from the shell env and re-exports them into
 the pod's onstart command. The pod entrypoint
@@ -191,7 +191,7 @@ sovereign corpus install sep   # ~1 GB parquet
 # 1) Spin up a Vast pod. Defaults: L40S, $0.80/hr cap, sep-core-v1.
 #    The CLI prints what it's about to do; pass --dry-run first if
 #    you want to inspect the onstart command without paying.
-sovereign pipeline pod up --gpu L40S --recipe-id sep-core-v1 --max-price 0.80
+sovereign mesh pod up --gpu L40S --recipe-id sep-core-v1 --max-price 0.80
 
 # 2) Capture the vast id from the output. IMMEDIATELY tail logs in
 #    another shell — pod logs are NOT preserved after destruction:
@@ -261,7 +261,7 @@ primary slots) for a good ceiling.
 sovereign pipeline status sep-core-v1
 
 # Live pod cost.
-sovereign pipeline pod list
+sovereign mesh pod list
 
 # Tail the driver itself for the per-tick status line + failure logs.
 tail -f ~/.svrnmesh/logs/pipeline/sep-core-v1-*.log
@@ -305,8 +305,8 @@ resumes it.
 ## Done — destroy the pod
 
 ```bash
-sovereign pipeline pod list           # find the vast id
-sovereign pipeline pod down <id>      # destroys + closes ledger + prints final $
+sovereign mesh pod list           # find the vast id
+sovereign mesh pod down <id>      # destroys + closes ledger + prints final $
 ```
 
 The pod is gone; the ingest's progress is preserved in the worklist DB

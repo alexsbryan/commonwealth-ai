@@ -28,12 +28,12 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::{StepOutput, ToolContext};
 
 use crate::model::ClaimRecord;
 use crate::store::{ScopeMatch, WorkAtlasStore};
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 /// Default TTL for a RESOURCE claim (`claim take`), in seconds —
 /// 30 minutes. One implementation per threshold (§10.6): this is the
@@ -217,7 +217,7 @@ impl ResourceMayITool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("resource_may_i", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("resource_may_i", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -260,7 +260,7 @@ impl ResourceMayITool {
     }
 }
 
-use sovereign_core::time::unix_now_u64 as now_secs;
+use sovereign_time::unix_now_u64 as now_secs;
 
 #[cfg(test)]
 mod tests {
@@ -268,7 +268,7 @@ mod tests {
     use crate::model::{AgentKind, Privacy, SessionRecord, SymbolRef};
     use kernel_types::NodeId;
     use sovereign_contracts::peer::{ReplicatedKv, SoloReplicatedKv};
-    use sovereign_core::types::{ConversationId, ToolContext};
+    use sovereign_contracts::types::{ConversationId, ToolContext};
     use std::path::PathBuf;
     use uuid::Uuid;
 

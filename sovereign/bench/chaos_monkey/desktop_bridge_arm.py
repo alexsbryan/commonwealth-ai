@@ -4,7 +4,7 @@ command bridge (:9745), fresh conversation per turn, one jsonl row per turn.
 Seat-run instrument (orders gate-tombstone-ladder / drafter-attribution-
 discipline / judge-calibration-replay 2026-08-13; audit-economy ladder-shadow
 2026-08-14). Modeled byte-for-byte on
-sovereign-cli-llm/src/bench_cmd/desktop_bridge.rs::run_bridge_live.
+sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs::run_bridge_live.
 
 VERSIONED 2026-08-14 out of the gitignored runs/ tree, where three arms' worth
 of instrument was one `rm -rf` from gone. Pair it with capture_shadow_rows.sh

@@ -69,7 +69,7 @@
 //! |---|---|---|
 //! | CORE | cannot serve at all | `corpus_engine`, `inference_provider` |
 //! | POLICY | serves *wrongly* | `SetupConfig` (bind, token, peer-inflight ceiling), `advertise_embed` |
-//! | CAPABILITY | can do less | `mcp`, `project_http`, `corpus_watch_http`, `workflow_http`, `+knowledge_view_http`, `+solve_http` |
+//! | CAPABILITY | can do less | `mcp`, `project_http`, `corpus_watch_http`, `workflow_http`, `+knowledge_view_http` (`+solve_http` left for code at pb-meshapp-solve) |
 //! | RAILS | a surface reports something untrue | `provider_factory`, `mesh_store`, `convergence_recorder` |
 //!
 //! `SetupConfig` sits on the daemon rather than in a variant because all three
@@ -86,10 +86,9 @@
 
 use std::sync::Arc;
 
-use corpus_engine::CorpusEngine;
-use corpus_engine_notes::NoteStore;
+use corpus_index::ingest_port::daemon::IngestPort;
 
-use commonwealth_core::oicp::EmbedModelInfo;
+use oicp_types::EmbedModelInfo;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 
@@ -101,10 +100,17 @@ use crate::admin_http::ProviderFactory;
 #[derive(Clone)]
 pub struct McpMount {
     pub tools: Arc<ToolRegistry>,
-    pub notes: Arc<NoteStore>,
-    /// Groups this process's tool calls in `NoteStore::log_tool_call`
+    /// svrn's own store: its memory notes (`/v1/notes*`, the dossier) and
+    /// its MCP call log (pb-notes-memory). The same handle as the serving
+    /// core's state store: one writer per data root.
+    pub notes: Arc<sovereign_store::sqlite::SqliteStateStore>,
+    /// Groups this process's tool calls in svrn's call log
     /// (e.g. `daemon-<uuid>`, `desktop-<uuid>`).
     pub session_id: String,
+    /// The code program's tools, when a distribution composed code into
+    /// this process: listed and called on the same `/mcp`, logged by code.
+    /// `None`: this `/mcp` names `svrn code mcp` for a code tool.
+    pub code: Option<Arc<dyn host_kit::mcp::McpMountedTools>>,
 }
 
 /// Whether `/mcp` is mounted, and — when it is not — *why*.
@@ -156,13 +162,20 @@ impl EmbedAdvertisement {
 // ring cannot produce a half-built neighbour.
 // ─────────────────────────────────────────────────────────────────────────
 
-/// **Ring 1 — CORE.** Absence means the daemon cannot serve at all: without an
-/// engine `/v1/knowledge/search` and `/internal/knowledge/search` answer 503
-/// and gossip advertises no `hosted_corpora`; without a provider
-/// `/v1/chat/completions` has nothing behind it. Neither is an `Option`, in
-/// this struct or anywhere downstream.
+/// **Ring 1 — CORE.** Without a provider `/v1/chat/completions` has nothing
+/// behind it, so it is not an `Option`. The engine is ingest's, composed by a
+/// distribution (`process::HostedIngest`, pb-ingest-dial-daemon): `None` is a
+/// svrn with no ingest program, where `/v1/knowledge/search` and
+/// `/internal/knowledge/search` answer 503, gossip advertises no
+/// `hosted_corpora`, and the ingest routes name the absence.
 pub struct ServingCore {
-    pub corpus_engine: Arc<CorpusEngine>,
+    pub corpus_engine: Option<Arc<dyn IngestPort>>,
+    /// Ingest's atlas port, composed beside the engine; `None` exactly when
+    /// the engine is.
+    pub atlas: Option<Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>>,
+    /// The recipe authoring harness over that engine. `None` answers the
+    /// harness route with a named 503; every production host composes it.
+    pub recipe_harness: Option<Arc<dyn corpus_index::ingest_port::daemon::RecipeHarnessPort>>,
     /// `sovereign.db` at this daemon's data root — conversations, sessions,
     /// tiered-memory rows. CORE, not an optional extra: the reading surface
     /// resolves `conversation-history` chunks through it, and a turn cannot be
@@ -180,6 +193,11 @@ pub struct ServingCore {
     /// daemon holds it behind a lock only because `POST /v1/admin/reload`
     /// swaps it; a host installs it here, once, or not at all.
     pub inference_provider: Arc<dyn InferenceProvider>,
+    /// svrn's OpenAI face over that provider, handed in with it
+    /// (pb-serve-ranks): the adapter over the router that ranks here, or the
+    /// relay to the server svrn dials. `None` answers the OpenAI routes with
+    /// their named 503.
+    pub local_inference: Option<Arc<dyn crate::state::LocalInferenceService>>,
     /// The node's in-flight gauge, created by the bootstrap *before* the
     /// `InferenceRouter` and handed to both the router and `AppState` — one
     /// atomic the provider's guards write and gossip reads
@@ -209,19 +227,19 @@ pub struct ServingCore {
     /// concrete store handle; this field is the door, not a second decider.
     pub insights: Option<Arc<sovereign_core::insight::InsightService>>,
     /// The recipe-author project layer — `features.db` at this daemon's
-    /// data root (sv-surface D6). `None` on a commission that could not
-    /// open it, which `features_http` renders as a named 503; the same
-    /// warn-and-skip posture `sovereign daemon run` already took at
-    /// `daemon_cmd/mod.rs:947`, now visible in the type instead of only
-    /// in a log line.
+    /// data root (sv-surface D6), reached through ingest's recipe-project
+    /// port (pb-ingest-rehome-daemon). `Err` carries why there is none —
+    /// the store would not open, or no ingest program is composed — which
+    /// `features_http` renders as a named 503; the same warn-and-skip
+    /// posture `sovereign daemon run` already took, visible in the type
+    /// instead of only in a log line.
     ///
-    /// `Option` for the `insights` reason, not for a different one: a
-    /// serving daemon without an authoring surface is a real shape, and
+    /// A serving daemon without an authoring surface is a real shape, and
     /// "the file would not open" must stay a different fact from "this
     /// route is not mounted" (ARCH §18.3). The store itself is
-    /// `sovereign-recipe-author`'s, reached through `sovereign-store`;
-    /// this field is the door, not a second decider.
-    pub features: Option<Arc<sovereign_store::recipe_project_store::RecipeProjectStore>>,
+    /// `sovereign-recipe-author`'s; this field is the door, not a second
+    /// decider.
+    pub features: Result<Arc<dyn sovereign_contracts::recipe::project::RecipeProjectPort>, String>,
 }
 
 /// **Ring 2 — CAPABILITY.** What the daemon can *do* beyond answering: the
@@ -248,9 +266,17 @@ pub struct ServingCore {
 /// rung 5, 2026-09-09).
 pub struct ServingCapability {
     pub mcp: McpSurface,
+    /// svrn's posture (phase-b-87): under `Sealed` the `/mcp` ROUTE answers a
+    /// named 503 while the mount stays, because its notes store backs the
+    /// notes and tool-outcome routes.
+    pub posture: crate::posture::Posture,
     pub project_http: axum::Router,
     pub corpus_watch_http: axum::Router,
     pub workflow_http: axum::Router,
+    /// Code's editor door when a distribution composed code here
+    /// (pb-meshapp-rest). Not a host router: it reaches every general client
+    /// surface through `NodeSeed::edit_door`, not the operator's merge.
+    pub edit_door: Option<axum::Router>,
 }
 
 /// Rings 1–3 as every serving daemon has them, whichever host runs it. The
@@ -264,6 +290,10 @@ pub struct ServingProfile {
     /// otherwise fall back to a default model id and partition collaborative
     /// ingestion here anyway.
     pub advertise_embed: EmbedAdvertisement,
+    /// The node's mesh as svrn reads it: cw-rails' roster and reach door,
+    /// composed by the distribution (pb-mesh-exit-transport), or their
+    /// absence on svrn alone.
+    pub mesh: crate::hosted_mesh::MeshAccess,
 }
 
 /// Three handles `sovereign daemon run` must share with writers that live
@@ -273,21 +303,21 @@ pub struct ServingProfile {
 ///   `models.*` change. The desktop has never had one; that is why this rail
 ///   is on the headless variant and the desktop's reload names its profile in
 ///   the refusal instead of reporting a missing installation.
-/// - `mesh_store` — the store the work atlas writes into, so its entries reach
-///   the rail outbox and travel. Without it the daemon builds a private
-///   in-memory store and atlas data is invisible across the mesh.
+/// - `mesh_store` — the ONE `RailsKv` (five-programs fp-88): the work atlas,
+///   the notes sink and poller, and `AppState`'s KV port all dial cw-rails
+///   through it, so their writes cross the mesh from the rails daemon.
 /// - `convergence_recorder` — the ONE convergence record the notes publish
 ///   sink, the ingest poller and `/status` all stamp and read. A second copy
 ///   would let the status section disagree with the sink.
 ///
-/// Both are the mesh ADAPTERS from [`sovereign_mesh::peer_adapter`], not the
-/// commonwealth types they wrap: the daemon builds them, hands them here, and
-/// talks to them through `sovereign-contracts::peer`'s ports, so its own
+/// Both are held as ports — the dial, and the mesh ADAPTER from
+/// `sovereign_mesh::peer_adapter` — never the commonwealth types: the daemon
+/// builds them, hands them here, and talks to them through `sovereign-contracts::peer`'s ports, so its own
 /// bootstrap names no `commonwealth-*` type at all (cw-lift 3b).
 pub struct HeadlessRails {
     pub provider_factory: Arc<dyn ProviderFactory>,
-    pub mesh_store: Arc<sovereign_mesh::peer_adapter::MeshReplicatedKv>,
-    pub convergence_recorder: Arc<sovereign_mesh::peer_adapter::MeshConvergence>,
+    pub mesh_store: Arc<dyn sovereign_contracts::peer::ReplicatedKv>,
+    pub convergence_recorder: Arc<crate::convergence::MeshConvergence>,
 }
 
 // `DesktopServices` WAS HERE, and is deleted (daemon-convergence Phase 3).
@@ -301,17 +331,15 @@ pub struct HeadlessRails {
 
 /// Everything `sovereign daemon run` supplies **beyond** a [`ServingProfile`].
 ///
-/// This is the nesting made literal: Headless = Desktop + rails + two routes.
+/// This is the nesting made literal: Headless = Desktop + rails + one route.
+/// (`/v1/solve/jobs*` was the second until pb-meshapp-solve moved the solver
+/// to code, whose routes arrive in `project_http`.)
 pub struct HeadlessServices {
     pub serving: ServingProfile,
     pub rails: HeadlessRails,
     /// Ring 2 extension — `POST /v1/knowledge/landscape_digest`. Hosted only
     /// here because only this bootstrap owns a `KnowledgeViewManager`.
     pub knowledge_view_http: axum::Router,
-    /// Ring 2 extension — `/v1/solve/jobs*`, the daemon-hosted TDD solver.
-    /// Hosted only here because only this bootstrap owns the job table and the
-    /// `sovereign-tdd` dependency.
-    pub solve_http: axum::Router,
 }
 
 /// Which host built this daemon, and everything that host supplies.
@@ -326,8 +354,9 @@ pub enum DaemonServices {
     /// inference and no host routes — and that emptiness is the shape, not a
     /// set of holes.
     ///
-    /// The payload is a [`MeshAdminWitness`], which carries no data and exists
-    /// only so this variant cannot be *named into being* outside this crate.
+    /// The payload is a [`MeshAdminWitness`], which carries only the node's
+    /// mesh and exists so this variant cannot be *named into being* outside
+    /// this crate.
     /// See that type for why a bare variant was the last open door.
     MeshAdmin(MeshAdminWitness),
     /// The desktop's in-process daemon (`Local` bootstrap mode) — a
@@ -362,8 +391,17 @@ pub enum DaemonServices {
 /// not the hazard; *deciding* it outside the assembler is. So
 /// `matches!(services, DaemonServices::MeshAdmin(_))` compiles anywhere, and
 /// `DaemonServices::MeshAdmin(..)` cannot be built anywhere but here.
-#[derive(Debug)]
-pub struct MeshAdminWitness(());
+pub struct MeshAdminWitness {
+    /// The node's mesh as the distribution composed it, so the wizard's join
+    /// child reads cw-rails' roster for its venues (pb-mesh-exit-transport).
+    mesh: crate::hosted_mesh::MeshAccess,
+}
+
+impl std::fmt::Debug for MeshAdminWitness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("MeshAdminWitness")
+    }
+}
 
 impl DaemonServices {
     // `pub` -> `pub(crate)` (daemon-convergence Phase 4b). Nothing outside this
@@ -371,8 +409,8 @@ impl DaemonServices {
     // [`assemble`] and it decides the shape. Phase 7 closed the last door on
     // 2026-08-25: `MeshAdmin` now carries a [`MeshAdminWitness`] whose only
     // mint is [`assemble`], so all three variants are unreachable from outside.
-    pub(crate) fn mesh_admin() -> Self {
-        Self::MeshAdmin(MeshAdminWitness(()))
+    pub(crate) fn mesh_admin(mesh: crate::hosted_mesh::MeshAccess) -> Self {
+        Self::MeshAdmin(MeshAdminWitness { mesh })
     }
 
     pub(crate) fn desktop(serving: ServingProfile) -> Self {
@@ -394,7 +432,7 @@ impl DaemonServices {
 
     /// True for the two variants that serve a host HTTP surface. The
     /// mesh-admin one-shot mounts nothing beyond the base client/internal
-    /// routers.
+    /// routers and `GET /v1/mesh/venues`.
     pub fn serves_host_surface(&self) -> bool {
         !matches!(self, Self::MeshAdmin(_))
     }
@@ -421,6 +459,15 @@ impl DaemonServices {
     // The three below survive because each names a REAL fork a reader has to
     // know about. Callers now match once on one of them and read plain fields
     // off `&ServingProfile` / `&HeadlessRails`.
+
+    /// The node's mesh as the distribution composed it, on every shape.
+    pub fn mesh(&self) -> &crate::hosted_mesh::MeshAccess {
+        match self {
+            Self::MeshAdmin(w) => &w.mesh,
+            Self::Desktop(serving) => &serving.mesh,
+            Self::Headless(h) => &h.serving.mesh,
+        }
+    }
 
     pub fn serving(&self) -> Option<&ServingProfile> {
         match self {
@@ -461,7 +508,6 @@ impl DaemonServices {
                 "corpus_watch_http",
                 "workflow_http",
                 "knowledge_view_http",
-                "solve_http",
             ],
         }
     }
@@ -480,7 +526,6 @@ impl DaemonServices {
                 h.serving.capability.corpus_watch_http.clone(),
                 h.serving.capability.workflow_http.clone(),
                 h.knowledge_view_http.clone(),
-                h.solve_http.clone(),
             ],
         }
     }
@@ -492,12 +537,15 @@ impl DaemonServices {
 /// into, and only for the invocation this process actually is.
 pub enum LaunchParts {
     /// This invocation serves nothing. `svrn mesh create` / `svrn mesh join`
-    /// mutate membership, print, and exit — the emptiness is the shape.
-    Admin,
+    /// mutate membership, print, and exit — the emptiness is the shape. `mesh`
+    /// is the node's mesh as the distribution composed it.
+    Admin {
+        mesh: crate::hosted_mesh::MeshAccess,
+    },
     /// A serving daemon's parts. `headless` is `Some` exactly on the
     /// `sovereign daemon run` bootstrap, which is the only one that owns a
-    /// `ProviderFactory`, a shared mesh store, a convergence recorder, a
-    /// `KnowledgeViewManager` and the solve job table.
+    /// `ProviderFactory`, a shared mesh store, a convergence recorder and a
+    /// `KnowledgeViewManager`.
     Serving {
         serving: ServingProfile,
         headless: Option<HeadlessExtras>,
@@ -510,7 +558,6 @@ pub enum LaunchParts {
 pub struct HeadlessExtras {
     pub rails: HeadlessRails,
     pub knowledge_view_http: axum::Router,
-    pub solve_http: axum::Router,
 }
 
 /// Why a launch mode and a set of parts could not be composed.
@@ -577,9 +624,8 @@ pub fn assemble(
     match launch {
         // `sovereign daemon run`, and the desktop's supervised child, which is
         // the identical entry (`--daemon-child` IS `daemon run`; pinned by
-        // `Launch::parse`'s own tests). `Worker` routes with it: it is the same
-        // bootstrap with distributed inference on.
-        Launch::Daemon { .. } | Launch::Worker { .. } => match parts {
+        // `Launch::parse`'s own tests).
+        Launch::Daemon { .. } => match parts {
             LaunchParts::Serving {
                 serving,
                 headless: Some(extras),
@@ -587,14 +633,13 @@ pub fn assemble(
                 serving,
                 rails: extras.rails,
                 knowledge_view_http: extras.knowledge_view_http,
-                solve_http: extras.solve_http,
             })),
             LaunchParts::Serving { headless: None, .. } => Err(AssemblyRefusal::Mismatch {
                 launch: name,
-                wanted: "a headless daemon (rails + knowledge-view + solve)",
+                wanted: "a headless daemon (rails + knowledge-view)",
                 got: "a serving profile with no rails",
             }),
-            LaunchParts::Admin => Err(AssemblyRefusal::Mismatch {
+            LaunchParts::Admin { .. } => Err(AssemblyRefusal::Mismatch {
                 launch: name,
                 wanted: "a headless daemon",
                 got: "mesh-admin parts",
@@ -618,7 +663,7 @@ pub fn assemble(
                 wanted: "a serving profile",
                 got: "headless rails, which the desktop has never had",
             }),
-            LaunchParts::Admin => Err(AssemblyRefusal::Mismatch {
+            LaunchParts::Admin { .. } => Err(AssemblyRefusal::Mismatch {
                 launch: name,
                 wanted: "a serving profile",
                 got: "mesh-admin parts",
@@ -627,9 +672,10 @@ pub fn assemble(
 
         // `svrn mesh create` / `svrn mesh join` reaching this far means no
         // daemon was listening, so the verb builds a one-shot that mutates
-        // membership and exits.
-        Launch::Verb { .. } => match parts {
-            LaunchParts::Admin => Ok(DaemonServices::mesh_admin()),
+        // membership and exits. `AdminJoin` is the setup wizard's join as a
+        // child process: the same admin shape, serving until stopped.
+        Launch::Verb { .. } | Launch::AdminJoin { .. } => match parts {
+            LaunchParts::Admin { mesh } => Ok(DaemonServices::mesh_admin(mesh)),
             LaunchParts::Serving { .. } => Err(AssemblyRefusal::Mismatch {
                 launch: name,
                 wanted: "a mesh-admin one-shot",
@@ -637,12 +683,12 @@ pub fn assemble(
             }),
         },
 
-        // The remaining five assemble nothing. `Server` is RESIDENT but is a
-        // surface, not an assembler — the distinction that widened the first
-        // number from seven to eight without touching the second (§10).
-        Launch::Server
-        | Launch::ComputeChild { .. }
+        // The remaining five assemble nothing. Worker mode is its own
+        // `sovereign-pod-worker` binary (pb-pods-worker).
+        Launch::ComputeChild { .. }
         | Launch::RpcWorker { .. }
+        | Launch::SetupProbe { .. }
+        | Launch::Worker { .. }
         | Launch::Smoketest { .. }
         | Launch::Bare => Err(AssemblyRefusal::NotAnAssembler { launch: name }),
     }
@@ -652,435 +698,8 @@ pub fn assemble(
 /// `#[cfg(test)]`: nothing outside this crate's unit tests can reach them, so
 /// no production path can obtain a services value it did not assemble itself.
 #[cfg(test)]
-pub(crate) mod fixtures {
-    use super::*;
-    use async_trait::async_trait;
-    use sovereign_core::error::Result as SovResult;
-    use sovereign_core::types::{
-        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
-    };
-
-    pub(crate) struct NullProvider;
-
-    #[async_trait]
-    impl InferenceProvider for NullProvider {
-        async fn complete(&self, _r: &CompletionRequest) -> SovResult<CompletionResponse> {
-            unimplemented!("fixture")
-        }
-        async fn complete_stream(
-            &self,
-            _r: &CompletionRequest,
-        ) -> SovResult<std::pin::Pin<Box<dyn futures::Stream<Item = SovResult<String>> + Send>>>
-        {
-            unimplemented!("fixture")
-        }
-        async fn embed(&self, _t: &str) -> SovResult<Vec<f32>> {
-            unimplemented!("fixture")
-        }
-        fn capabilities(&self) -> ProviderCapabilities {
-            ProviderCapabilities {
-                max_context_tokens: 0,
-                supports_structured_output: false,
-                relative_speed: Speed::Fast,
-                relative_reasoning: Depth::Shallow,
-            }
-        }
-    }
-
-    pub(crate) struct NullFactory;
-
-    #[async_trait]
-    impl ProviderFactory for NullFactory {
-        async fn build_provider(
-            &self,
-            _cfg: &sovereign_core::setup_config::SetupConfig,
-        ) -> Result<Arc<dyn InferenceProvider>, String> {
-            Ok(Arc::new(NullProvider))
-        }
-    }
-
-    pub(crate) fn engine() -> Arc<CorpusEngine> {
-        let tmp = std::env::temp_dir().join("sovereign-mesh-services-fixture");
-        Arc::new(CorpusEngine::new(
-            tmp.join("recipes"),
-            tmp.join("indexes"),
-            Arc::new(|_: &str| Box::pin(async { Ok(vec![0.0_f32; 4]) })),
-        ))
-    }
-
-    /// The cheapest `Runtime` that is still a real one: core's own stub
-    /// router and planner, an empty tool registry, no enrichment lane. It
-    /// loads no model and touches no disk, which is the whole point — a
-    /// fixture that had to commission the production recipe would make every
-    /// variant test a boot test.
-    pub(crate) fn runtime() -> Arc<sovereign_core::runtime::Runtime> {
-        Arc::new(sovereign_core::runtime::Runtime::new(
-            sovereign_core::RuntimeParts::new(
-                Arc::new(NullProvider),
-                Box::new(sovereign_core::stubs::PassthroughRouter),
-                Box::new(sovereign_core::stubs::NoOpPlanner),
-                Arc::new(sovereign_core::ToolRegistry::new()),
-                Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
-                Arc::new(sovereign_core::SkillRegistry::new()),
-                Arc::new(sovereign_core::executor::AutoApprovalChannel),
-                sovereign_core::types::InferenceConfig::default(),
-                sovereign_core::runtime::lane::LaneSources::none(),
-            ),
-        ))
-    }
-
-    pub(crate) fn serving() -> ServingProfile {
-        serving_with_provider(Arc::new(NullProvider))
-    }
-
-    /// `serving()` with a caller-supplied provider, for the tests that
-    /// need one whose answers differ from `NullProvider`'s trait
-    /// defaults — otherwise "the slot said nothing" and "there is no
-    /// slot" are the same observation and a test cannot tell them apart.
-    pub(crate) fn serving_with_provider(
-        inference_provider: Arc<dyn InferenceProvider>,
-    ) -> ServingProfile {
-        serving_with(
-            inference_provider,
-            Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
-        )
-    }
-
-    /// `serving()` with a caller-supplied STORE, for the routes whose
-    /// answer is a rollup the in-memory store declines
-    /// (`summarize_chat_activity` defaults to `Err(NotImplemented)`).
-    /// A test that could only reach that default could only assert the
-    /// refusal, which is the weak half of a pair (ARCH principle 5).
-    pub(crate) fn serving_with_store(state_store: Arc<dyn StateStore>) -> ServingProfile {
-        serving_with(Arc::new(NullProvider), state_store)
-    }
-
-    /// The one `ServingProfile` literal — same rule as `headless_from`
-    /// below, and for the same reason: a second copy is how one of them
-    /// quietly stops setting a field the struct grows.
-    fn serving_with(
-        inference_provider: Arc<dyn InferenceProvider>,
-        state_store: Arc<dyn StateStore>,
-    ) -> ServingProfile {
-        ServingProfile {
-            core: ServingCore {
-                corpus_engine: engine(),
-                inference_provider,
-                in_flight_gauge: None,
-                state_store,
-                runtime: runtime(),
-                insights: None,
-                features: None,
-            },
-            capability: ServingCapability {
-                mcp: McpSurface::Unavailable {
-                    reason: "fixture".into(),
-                },
-                project_http: axum::Router::new(),
-                corpus_watch_http: axum::Router::new(),
-                workflow_http: axum::Router::new(),
-            },
-            advertise_embed: EmbedAdvertisement::Unavailable {
-                reason: "fixture".into(),
-            },
-        }
-    }
-
-    pub(crate) fn desktop() -> DaemonServices {
-        DaemonServices::desktop(serving())
-    }
-
-    pub(crate) fn headless() -> DaemonServices {
-        headless_with_factory(Arc::new(NullFactory))
-    }
-
-    /// Headless, serving on a caller-supplied provider.
-    pub(crate) fn headless_with_provider(
-        inference_provider: Arc<dyn InferenceProvider>,
-    ) -> DaemonServices {
-        headless_from(
-            serving_with_provider(inference_provider),
-            Arc::new(NullFactory),
-        )
-    }
-
-    /// Headless, serving over a caller-supplied store.
-    pub(crate) fn headless_with_store(state_store: Arc<dyn StateStore>) -> DaemonServices {
-        headless_from(serving_with_store(state_store), Arc::new(NullFactory))
-    }
-
-    pub(crate) fn headless_with_factory(
-        provider_factory: Arc<dyn ProviderFactory>,
-    ) -> DaemonServices {
-        headless_from(serving(), provider_factory)
-    }
-
-    /// The one `HeadlessServices` literal. Both helpers above vary one
-    /// half of it and share the rest; a second copy of this is how one of
-    /// them quietly stops setting a field the struct grows (which is
-    /// exactly what happened to `solve_http` when a copy was made).
-    fn headless_from(
-        serving: ServingProfile,
-        provider_factory: Arc<dyn ProviderFactory>,
-    ) -> DaemonServices {
-        DaemonServices::headless(HeadlessServices {
-            serving,
-            rails: HeadlessRails {
-                provider_factory,
-                mesh_store: Arc::new(
-                    sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory()
-                        .expect("in-memory MeshStore"),
-                ),
-                convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),
-            },
-            knowledge_view_http: axum::Router::new(),
-            solve_http: axum::Router::new(),
-        })
-    }
-
-    /// Every variant, so a test can enumerate the whole space rather than
-    /// spot-check the arms it happened to think of.
-    pub(crate) fn every_variant() -> Vec<DaemonServices> {
-        vec![DaemonServices::mesh_admin(), desktop(), headless()]
-    }
-}
+#[path = "daemon_services/fixtures_tests.rs"]
+pub(crate) mod fixtures;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    use sovereign_contracts::launch::Launch;
-
-    fn headless_extras() -> HeadlessExtras {
-        HeadlessExtras {
-            rails: HeadlessRails {
-                provider_factory: std::sync::Arc::new(fixtures::NullFactory),
-                mesh_store: Arc::new(
-                    sovereign_mesh::peer_adapter::MeshReplicatedKv::in_memory()
-                        .expect("in-memory MeshStore"),
-                ),
-                convergence_recorder: Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new()),
-            },
-            knowledge_view_http: axum::Router::new(),
-            solve_http: axum::Router::new(),
-        }
-    }
-
-    /// **Soundness, behaviourally.** Every variant is produced by some launch —
-    /// run, not grepped. The census in `tests/daemon_variant_census.rs` can
-    /// only see that an ARM EXISTS; this sees what the arm returns, which is
-    /// the half that catches an arm wired to the wrong variant.
-    #[test]
-    fn each_assembling_launch_produces_its_variant() {
-        let cases: Vec<(Launch, LaunchParts, &str)> = vec![
-            (
-                Launch::Daemon {
-                    args: vec!["run".into()],
-                },
-                LaunchParts::Serving {
-                    serving: fixtures::serving(),
-                    headless: Some(headless_extras()),
-                },
-                "headless",
-            ),
-            (
-                Launch::Worker {
-                    args: vec!["run".into(), "--worker-mode".into()],
-                },
-                LaunchParts::Serving {
-                    serving: fixtures::serving(),
-                    headless: Some(headless_extras()),
-                },
-                "headless",
-            ),
-            (
-                Launch::Desktop,
-                LaunchParts::Serving {
-                    serving: fixtures::serving(),
-                    headless: None,
-                },
-                "desktop",
-            ),
-            (
-                Launch::Verb {
-                    name: "mesh".into(),
-                    args: vec!["create".into()],
-                },
-                LaunchParts::Admin,
-                "mesh-admin",
-            ),
-        ];
-        let mut produced = std::collections::HashSet::new();
-        for (launch, parts, expected) in cases {
-            let got = assemble(&launch, parts)
-                .unwrap_or_else(|e| panic!("{} should assemble: {e}", launch.as_str()));
-            assert_eq!(got.label(), expected, "launch {}", launch.as_str());
-            produced.insert(got.label());
-        }
-        // Every declared shape came out of some launch. A variant nobody can
-        // produce is the representable-but-dead configuration TOPOLOGY §4
-        // calls unsound.
-        assert_eq!(produced.len(), fixtures::every_variant().len());
-    }
-
-    /// The four launches that assemble NOTHING say so rather than being given
-    /// a plausible daemon. `Server` is the one worth naming: it is RESIDENT —
-    /// it binds a long-lived listener and owns tenant state — and it is still
-    /// not an assembler. Conflating those two questions is what left an
-    /// orphaned server on `0.0.0.0:8080` for six days with no run lock and no
-    /// crash reporting (§10, hazards 4 and 10).
-    #[test]
-    fn a_launch_that_assembles_nothing_refuses() {
-        for launch in [
-            Launch::Server,
-            Launch::Bare,
-            Launch::ComputeChild { args: Vec::new() },
-            Launch::Smoketest { argv: Vec::new() },
-        ] {
-            let err = assemble(&launch, LaunchParts::Admin)
-                .err()
-                .unwrap_or_else(|| panic!("{} must not assemble a daemon", launch.as_str()));
-            assert!(
-                matches!(err, AssemblyRefusal::NotAnAssembler { .. }),
-                "{} refused with the wrong reason: {err}",
-                launch.as_str()
-            );
-        }
-    }
-
-    /// The mismatches, which are the states the assembler exists to make
-    /// unrepresentable-in-practice: a desktop launch carrying headless rails,
-    /// a daemon launch with none, and a verb launch carrying a serving
-    /// profile. Each refuses and NAMES both sides (§18.3) rather than
-    /// substituting the nearest plausible variant — a daemon that came up as
-    /// the wrong shape is the hazard itself.
-    #[test]
-    fn every_illegal_pairing_refuses_and_names_both_sides() {
-        let cases: Vec<(Launch, LaunchParts)> = vec![
-            (
-                Launch::Desktop,
-                LaunchParts::Serving {
-                    serving: fixtures::serving(),
-                    headless: Some(headless_extras()),
-                },
-            ),
-            (
-                Launch::Daemon {
-                    args: vec!["run".into()],
-                },
-                LaunchParts::Serving {
-                    serving: fixtures::serving(),
-                    headless: None,
-                },
-            ),
-            (
-                Launch::Verb {
-                    name: "mesh".into(),
-                    args: Vec::new(),
-                },
-                LaunchParts::Serving {
-                    serving: fixtures::serving(),
-                    headless: None,
-                },
-            ),
-            (Launch::Desktop, LaunchParts::Admin),
-        ];
-        for (launch, parts) in cases {
-            let name = launch.as_str();
-            let err = assemble(&launch, parts)
-                .err()
-                .unwrap_or_else(|| panic!("{name} + mismatched parts must refuse"));
-            assert!(
-                matches!(err, AssemblyRefusal::Mismatch { .. }),
-                "{name} refused with the wrong reason: {err}"
-            );
-            let text = err.to_string();
-            assert!(
-                text.contains(name),
-                "a refusal must name the launch it refused; got: {text}"
-            );
-            assert!(
-                text.contains("but was handed"),
-                "a refusal must name what it was handed, not only what it wanted; got: {text}"
-            );
-        }
-    }
-
-    /// The differential falsifier of `TOPOLOGY.md §4`, soundness half: every
-    /// variant carries exactly the capability set measured on its live path,
-    /// no more and no less. Written as a table so a reader checks it against
-    /// the matrix in the module docs without running anything — and driven off
-    /// `every_variant()`, so adding a fourth variant fails here until someone
-    /// states what it carries.
-    #[test]
-    fn each_variant_declares_exactly_its_measured_capability_set() {
-        // label, core, rails, host routers
-        //
-        // The `state_store` column was DELETED here by Phase 3, and its
-        // deletion is the proof the phase landed. It read `. Y .` — the one
-        // column that was not a subset relation down the rows, which is what
-        // "the two serving shapes cross rather than nest" meant concretely.
-        // The store now sits in `ServingCore`, so the column is the `core`
-        // column and asserting it separately would be a check that cannot
-        // disagree with its neighbour (the defect retired above).
-        let expected: &[(&str, bool, bool, usize)] = &[
-            ("mesh-admin", false, false, 0),
-            ("desktop", true, false, 3),
-            ("headless", true, true, 5),
-        ];
-        let variants = fixtures::every_variant();
-        assert_eq!(
-            variants.len(),
-            expected.len(),
-            "a variant was added without a row in the measured table"
-        );
-
-        for (s, (label, core, rails, routers)) in variants.iter().zip(expected) {
-            assert_eq!(s.label(), *label);
-            // ONE question, not three. Until 2026-08-24 this asserted
-            // `corpus_engine().is_some()`, `inference_provider().is_some()` and
-            // `serving().is_some()` separately against the SAME `core` column —
-            // three checks that could not disagree, because all three read one
-            // variant through one-line `.map()` wrappers. Deleting the wrappers
-            // is what made that visible.
-            assert_eq!(s.serving().is_some(), *core, "{label}: serving profile");
-            // Likewise ONE question, not four: `provider_factory`, `mesh_store`
-            // and `convergence_recorder` all read `rails`.
-            assert_eq!(s.rails().is_some(), *rails, "{label}: rails");
-            assert_eq!(s.host_routers().len(), *routers, "{label}: host routers");
-            assert_eq!(
-                s.host_router_names().len(),
-                *routers,
-                "{label}: router names must match router count"
-            );
-            assert_eq!(
-                s.serves_host_surface(),
-                *core,
-                "{label}: a variant serves a host surface iff it has a core"
-            );
-        }
-    }
-
-    // RETIRED 2026-08-24 — `a_serving_variant_never_has_half_a_core`.
-    //
-    // It asserted `corpus_engine().is_some() == inference_provider().is_some()`
-    // — "core is one ring, not two independent slots". Both accessors are now
-    // deleted, and the only way to reach either field is through
-    // `serving()`, which yields a `&ServingProfile` whose `core` holds both as
-    // plain `Arc`s. There is no longer an input that could make this test fail:
-    // half a core is not writable. A check with no nameable failing input is
-    // not a gate (§18.1), so it is deleted rather than left to read as
-    // assurance. The property it guarded is now carried by the type.
-
-    #[test]
-    fn named_absence_is_not_a_bare_option() {
-        let m = McpSurface::Unavailable {
-            reason: "notes.db locked".into(),
-        };
-        assert!(m.mount().is_none());
-        let e = EmbedAdvertisement::Unavailable {
-            reason: "no embed model configured".into(),
-        };
-        assert!(e.info().is_none());
-    }
-}
+mod tests;

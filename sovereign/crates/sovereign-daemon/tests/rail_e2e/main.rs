@@ -18,32 +18,29 @@
 //! the loopback-vs-remote split must not depend on the CI box having a
 //! routable NIC.
 //!
-//! The replication drills go through `internal_router`, which is where the
-//! receiver's `DefaultBodyLimit` lives — see §"the convergence ceiling", the
-//! only place in the tree that says what happens when one exchange outgrows
-//! it.
+//! A guest's act is attested by the node's key, which is cw-rails' since
+//! pb-mesh-exit-transport: [`attest_door`] stands in for cw-rails'
+//! `POST /v1/rail/attest`, signing with the key a test names.
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use commonwealth_core::ids::{MeshId, NodeId};
-use commonwealth_core::mesh::Mesh;
-use commonwealth_rail::{
-    Digest, Ed25519Verifier, Op, Payload, Person, RailAct, RingJournal, RingRail, RingSigner,
-    Roster, SignedOp,
-};
+use commonwealth_rail_core::{Person, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
-use sovereign_daemon::routes_internal::{
-    RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES,
-};
+use kernel_types::NodeId;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use sovereign_grants::Scope;
 use tower::ServiceExt;
+
+#[allow(dead_code)]
+#[path = "../main/common/work_rails.rs"]
+mod work_rails;
+
+use work_rails::WorkRails;
 
 const LOOPBACK: &str = "127.0.0.1:55001";
 const LAN_PEER: &str = "192.168.1.50:44444";
@@ -56,64 +53,90 @@ fn bare_state() -> AppState {
         sovereign_daemon::state::FabricSeed::default(),
         sovereign_grants::GuestSessionBinding::Door,
         Default::default(),
+        None,
     )
 }
 
 /// [`bare_state`] with Fabric's construction seed — the rail is a construction
 /// argument now, not a post-construction install (DC §4.2 "Construction is
-/// staged, and parts are total").
+/// staged, and parts are total") — and, when `rails_base` names one, the
+/// cw-rails the guest door asks for attestations.
 fn bare_state_with_seed(
     seed: sovereign_daemon::state::FabricSeed,
     sessions: sovereign_grants::GuestSessionBinding,
     pages: sovereign_daemon::guest_door::GuestPages,
+    rails_base: Option<String>,
 ) -> AppState {
     let node = NodeId::from_u128(1);
-    let mesh = Mesh {
-        mesh_secret: [0u8; 32],
-        invite_expires_at: None,
-        id: MeshId::from_u128(7),
-        name: "Test".into(),
-        invite_key_hash: [3u8; 32],
-        invite_version: 0,
-        require_encryption: false,
-        members: HashMap::new(),
-        peers: vec![],
+    let mut node_seed = sovereign_daemon::state::NodeSeed {
+        client_token: Some(Arc::<str>::from(TOKEN)),
+        guest_sessions: sessions,
+        guest_pages: pages,
+        internal_auth: Default::default(),
+        ..Default::default()
     };
-    AppState::new_with_platform_and_engine_and_gauge_and_fabric_and_serving_and_node(
+    if let Some(base) = rails_base {
+        node_seed.rails_base = base;
+    }
+    AppState::new_with_seeds(
         node,
-        mesh,
-        Arc::new(commonwealth_state::MeshStore::in_memory().unwrap()),
-        Arc::new(sovereign_meshapp_registry::registry::AppRegistry::new()),
         None,
         None,
         seed,
         sovereign_daemon::state::ServingSeed::default(),
-        sovereign_daemon::state::NodeSeed {
-            client_token: Some(Arc::<str>::from(TOKEN)),
-            guest_sessions: sessions,
-            guest_pages: pages,
-            internal_auth: Default::default(),
-            ..Default::default()
-        },
+        node_seed,
+        Arc::new(ledger_double::RecordingLedger::new(node)).seed(),
     )
 }
 
-/// A daemon with ring storage under `root`, signing as `key`, and a roster
-/// that says that key is Alex. Its door binds guest sessions the default way:
+/// A stand-in for cw-rails' `POST /v1/rail/attest`, signing with `key`: the
+/// node's key is cw-rails' since pb-mesh-exit-transport, and svrn's guest door
+/// asks it for each attestation (`rails_client::attest_guest`). Returns its
+/// base. Needs the test's runtime.
+fn attest_door(key: &SigningKey) -> String {
+    let key = key.clone();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = axum::Router::new().route(
+        "/v1/rail/attest",
+        axum::routing::post(move |axum::Json(b): axum::Json<serde_json::Value>| {
+            let key = key.clone();
+            async move {
+                axum::Json(commonwealth_rail_core::GuestAttestation::sign(
+                    &key,
+                    b["name"].as_str().unwrap_or_default(),
+                    b["namespace"].as_str().unwrap_or_default(),
+                    b["expires_at"].as_i64().unwrap_or_default(),
+                ))
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    format!("http://{addr}")
+}
+
+/// A daemon whose ring rail is a real cw-rails on `root`, signing as `key`,
+/// and a roster that says that key is Alex. A second state on the same root
+/// reads the same journals, as a restarted daemon would. Its door binds guest sessions the default way:
 /// a name claimed on one of this wall's links is the same person on the next.
-fn state_with_rail(root: &std::path::Path, key: &SigningKey) -> AppState {
+async fn state_with_rail(root: &std::path::Path, key: &SigningKey) -> AppState {
     state_with_rail_sessions(
         root,
         key,
         sovereign_grants::GuestSessionBinding::Door,
         Default::default(),
     )
+    .await
 }
 
 /// [`state_with_rail`] on a wall whose owner DECLARED `pages` — what a wall
 /// grant is scoped by. A test that mints `Scope::Wall` against a state with no
 /// registry is testing a door with nothing on it.
-fn state_with_wall(
+async fn state_with_wall(
     root: &std::path::Path,
     key: &SigningKey,
     pages: &[(&str, sovereign_core::guest_pages::GuestPage)],
@@ -131,39 +154,51 @@ fn state_with_wall(
             Default::default(),
         ),
     )
+    .await
 }
 
 /// [`state_with_rail`] with the session binding named — the `[daemon]
 /// guest_sessions` knob, so both settings are driven by a test.
-fn state_with_rail_sessions(
+async fn state_with_rail_sessions(
     root: &std::path::Path,
     key: &SigningKey,
     sessions: sovereign_grants::GuestSessionBinding,
     pages: sovereign_daemon::guest_door::GuestPages,
 ) -> AppState {
-    let rail = Arc::new(RingRail::new(root, Arc::new(key.clone())));
+    state_with_rail_attested_by(root, key, key, sessions, pages).await
+}
+
+/// [`state_with_rail_sessions`] whose guest door attests with `attest_key`
+/// rather than the rail's own key — a door the roster may not admit.
+async fn state_with_rail_attested_by(
+    root: &std::path::Path,
+    key: &SigningKey,
+    attest_key: &SigningKey,
+    sessions: sovereign_grants::GuestSessionBinding,
+    pages: sovereign_daemon::guest_door::GuestPages,
+) -> AppState {
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
     members.insert(
         Person::from("bo"),
         vec!["bo-has-not-joined-yet".to_string()],
     );
-    rail.journal(NS)
-        .unwrap()
-        .set_roster(&Roster::new(members))
-        .unwrap();
+    let rails = Arc::new(
+        WorkRails::spawn_keyed(Some(root), Some(key), &[(NS, &Roster::new(members))], "").await,
+    );
     bare_state_with_seed(
         sovereign_daemon::state::FabricSeed {
-            ring_rail: Some(rail),
+            ring_rail: Some(rails.ring_rail()),
             ..Default::default()
         },
         sessions,
         pages,
+        Some(attest_door(attest_key)),
     )
 }
 
 fn with_guest(state: AppState, scopes: Vec<Scope>) -> AppState {
-    let now = commonwealth_core::clock::unix_now_millis();
+    let now = sovereign_time::unix_millis();
     state
         .inner
         .node
@@ -278,17 +313,6 @@ fn groceries() -> serde_json::Value {
     })
 }
 
-fn expense_payload(payer: &str, cents: i64, what: &str) -> Payload {
-    Payload::new(serde_json::json!({
-        "kind": "expense",
-        "payer": payer,
-        "amount_cents": cents,
-        "description": what,
-        "participants": ["alex", "bo"],
-    }))
-    .unwrap()
-}
-
 // ── the outcome the whole rail exists for ────────────────────
 
 /// **A ring app writes an act and reads it back attributed to a PERSON.**
@@ -301,7 +325,7 @@ async fn a_ring_app_appends_an_act_and_reads_it_back_attributed_to_a_person() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
 
@@ -347,14 +371,14 @@ async fn the_journal_outlives_the_state_that_wrote_it() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
     for _ in 0..2 {
         let state = with_guest(
-            state_with_rail(dir.path(), &key),
+            state_with_rail(dir.path(), &key).await,
             vec![Scope::Rails(NS.into())],
         );
         let (status, body) = named_append(state.clone(), LAN_PEER, GUEST_TOKEN, groceries()).await;
         assert_eq!(status, StatusCode::OK, "{body}");
     }
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (_, log) = call(
@@ -376,7 +400,7 @@ async fn an_app_cannot_reach_another_apps_namespace() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (status, body) = call(
@@ -407,7 +431,7 @@ async fn the_rail_token_is_refused_on_every_privileged_path() {
         "/v1/chat/completions",
     ] {
         let state = with_guest(
-            state_with_rail(dir.path(), &key),
+            state_with_rail(dir.path(), &key).await,
             vec![Scope::Rails(NS.into())],
         );
         let (status, _) = call(
@@ -428,7 +452,7 @@ async fn a_revoked_rail_grant_fails_closed_on_the_next_call() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (before, _) = call(
@@ -475,7 +499,7 @@ async fn a_payload_with_no_canonical_form_is_refused_in_a_sentence() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (status, body) = call(
@@ -517,7 +541,7 @@ async fn an_act_the_app_would_refuse_is_still_the_apps_problem_not_the_rails() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let state = with_guest(
-        state_with_rail(dir.path(), &key),
+        state_with_rail(dir.path(), &key).await,
         vec![Scope::Rails(NS.into())],
     );
     let (status, body) = named_append(
@@ -547,7 +571,7 @@ async fn an_act_the_app_would_refuse_is_still_the_apps_problem_not_the_rails() {
 async fn an_operator_names_the_namespace_and_is_refused_without_one() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let state = state_with_rail(dir.path(), &key);
+    let state = state_with_rail(dir.path(), &key).await;
 
     let (named, body) = call(
         state.clone(),
@@ -573,7 +597,7 @@ async fn an_operator_names_the_namespace_and_is_refused_without_one() {
 async fn a_namespace_that_is_a_path_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let state = state_with_rail(dir.path(), &key);
+    let state = state_with_rail(dir.path(), &key).await;
     let (status, body) = call(
         state,
         request(
@@ -588,19 +612,24 @@ async fn a_namespace_that_is_a_path_is_refused() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 }
 
-// The replication + sealing half lives in a sibling file: together they put
-// this one into the 800-1200 approach band (ARCH §3.1).
+// The store ports ride the daemon's recording double.
+use sovereign_daemon::double::ledger_double;
+
+// The sealing half lives in a sibling file: together they put this one into
+// the 800-1200 approach band (ARCH §3.1).
 mod replication;
 
-// `sync_raw` / `sync_once` moved with the replication suite; the sibling
-// suites below reach them through `use super::*`, as they always did.
-use replication::{sync_once, sync_raw};
-
-mod ceiling;
-
-// The ring-sync route's OWN refusal, driven at the handler because the gate in
-// front never lets the case reach the mounted route.
-mod roster_refusal;
+// The rail bind's own refusals.
+mod rail_bind;
 
 // The guest door rides the same helpers: the rail on a LAN-reachable bind.
 mod guest_door;
+
+// The door's own bind on a keyed daemon: sealed like the client listener.
+mod guest_door_keyed;
+
+// The live lane's drain: the grant decides, cw-rails holds the buffer.
+mod live_drain;
+
+// The append door's write contract (C1 + C3b) and `/v1/rail/membership`.
+mod door_contract;

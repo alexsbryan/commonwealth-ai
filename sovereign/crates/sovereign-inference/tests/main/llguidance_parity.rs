@@ -666,7 +666,8 @@ fn additional_properties_walker_does_not_rescue_a_broken_oneof() {
 
 // ─── F3 — the planner's plan schema ────────────────────────────────────
 //
-// `sovereign_core::planner::plan_schema` is the newest live
+// `sovereign_contracts::planner_schema::plan_schema` (re-exported from
+// sovereign-core's planner at its historical path) is the newest live
 // `structured_output` site and the first one built dynamically (the
 // `tool_id` enum is the caller's tool list). A schema that fails to
 // compile no longer degrades to free-form prose — since F1 it refuses
@@ -677,7 +678,7 @@ fn additional_properties_walker_does_not_rescue_a_broken_oneof() {
 /// Descriptors shaped like the real registry: `plan_schema` embeds each
 /// tool's `parameters` verbatim, so a fixture of bare ids would prove
 /// nothing about the thing under test.
-fn tools(ids: &[&str]) -> Vec<sovereign_core::types::ToolDescriptor> {
+fn tools(ids: &[&str]) -> Vec<sovereign_contracts::types::ToolDescriptor> {
     ids.iter()
         .map(|id| {
             tool_with(
@@ -692,8 +693,11 @@ fn tools(ids: &[&str]) -> Vec<sovereign_core::types::ToolDescriptor> {
         .collect()
 }
 
-fn tool_with(id: &str, parameters: serde_json::Value) -> sovereign_core::types::ToolDescriptor {
-    use sovereign_core::types::*;
+fn tool_with(
+    id: &str,
+    parameters: serde_json::Value,
+) -> sovereign_contracts::types::ToolDescriptor {
+    use sovereign_contracts::types::*;
     ToolDescriptor {
         id: id.to_string(),
         name: id.to_string(),
@@ -708,8 +712,8 @@ fn tool_with(id: &str, parameters: serde_json::Value) -> sovereign_core::types::
     }
 }
 
-fn plan_schema(t: &[sovereign_core::types::ToolDescriptor]) -> serde_json::Value {
-    sovereign_core::planner::plan_schema(t).expect("plan_schema must build")
+fn plan_schema(t: &[sovereign_contracts::types::ToolDescriptor]) -> serde_json::Value {
+    sovereign_contracts::planner_schema::plan_schema(t).expect("plan_schema must build")
 }
 
 /// Drive a byte prefix in and return the matcher, without asserting the

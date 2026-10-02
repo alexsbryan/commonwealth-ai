@@ -16,7 +16,7 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_contracts::setup_config::SetupConfig;
 
 // ─── Wire types ──────────────────────────────────────────────────
 //
@@ -29,10 +29,10 @@ use sovereign_core::setup_config::SetupConfig;
 //
 // `RegisterRequest`'s config is the OTHER direction and is where the live bug
 // was: see `build_watch_config`.
+use sovereign_contracts::daemon_wire::local_corpus::config::{SyncMode, WatchedFolderConfig};
 use sovereign_daemon::corpus_watch_http::{
     AckResponse, ListResponse, RegisterResponse, StateResponse, StatusResponse,
 };
-use sovereign_tools::local_corpus::config::{SyncMode, WatchedFolderConfig};
 use sovereign_tools::local_corpus::watched::status::WatchedFolderStatus;
 
 /// The daemon on THIS host — deliberately NOT env-overridable.
@@ -75,10 +75,33 @@ fn build_client() -> reqwest::Client {
 }
 
 fn build_client_with_timeout(secs: u64) -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(secs))
-        .build()
-        .expect("reqwest client builds")
+    let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(secs));
+    if let Some(headers) =
+        credential_headers(sovereign_contracts::setup_config::client_credential())
+    {
+        builder = builder.default_headers(headers);
+    }
+    builder.build().expect("reqwest client builds")
+}
+
+/// The `Authorization` header a keyed daemon admits, from the CLI's one
+/// credential (`client_credential`): on an on-prem box every route needs a
+/// key, loopback included. `None` with no key set, and with a key no header
+/// can carry, which is named on stderr rather than sent mangled.
+fn credential_headers(key: Option<String>) -> Option<reqwest::header::HeaderMap> {
+    let key = key?;
+    let Ok(mut value) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")) else {
+        eprintln!(
+            "warning: SOVEREIGN_API_KEY holds characters an HTTP header cannot carry; \
+             sending no key"
+        );
+        return None;
+    };
+    value.set_sensitive(true);
+    tracing::debug!("corpus watch: presenting the API key from SOVEREIGN_API_KEY");
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(reqwest::header::AUTHORIZATION, value);
+    Some(headers)
 }
 
 /// Format a reqwest error into a human hint, distinguishing the
@@ -109,7 +132,7 @@ fn describe_request_error(err: &reqwest::Error, url: &str) -> String {
 // ─── `svrn corpus watch <PATH> [flags]` ────────────────
 
 pub async fn run_register(args: &[String]) -> i32 {
-    if args.is_empty() || sovereign_cli_shared::help::wants_help(args) {
+    if args.is_empty() || sovereign_cli_base::help::wants_help(args) {
         print_register_help();
         return if args.is_empty() { 1 } else { 0 };
     }
@@ -393,7 +416,7 @@ async fn attach_consent(workflow: &str, allow: bool) -> std::result::Result<bool
 }
 
 pub async fn run_list(args: &[String]) -> i32 {
-    if sovereign_cli_shared::help::wants_help(args) {
+    if sovereign_cli_base::help::wants_help(args) {
         eprintln!("svrn corpus watch-list");
         eprintln!();
         eprintln!("List every registered watched-folder corpus and its current status.");
@@ -807,6 +830,19 @@ fn format_relative(unix_secs: u64) -> String {
 mod tests {
     use super::*;
 
+    /// A set key becomes a sensitive `Bearer` header; none sends none.
+    /// Failing input: build the header without the key and a keyed daemon
+    /// 401s every `svrn corpus watch*` call.
+    #[test]
+    fn a_set_credential_is_presented_as_a_bearer() {
+        let headers = credential_headers(Some("k-it".into())).expect("a header");
+        let auth = &headers[reqwest::header::AUTHORIZATION];
+        assert_eq!(auth.to_str().unwrap(), "Bearer k-it");
+        assert!(auth.is_sensitive());
+        assert!(credential_headers(None).is_none());
+        assert!(credential_headers(Some("k\nx".into())).is_none());
+    }
+
     #[tokio::test]
     async fn timeout_error_says_timed_out_not_could_not_contact() {
         // Regression: previously a 30s register timeout against a
@@ -912,7 +948,7 @@ mod tests {
         assert!(cfg.sensitive, "--sensitive must reach the daemon");
         assert_eq!(
             cfg.sync_mode,
-            sovereign_tools::local_corpus::config::SyncMode::Manual,
+            sovereign_contracts::daemon_wire::local_corpus::config::SyncMode::Manual,
             "--manual must reach the daemon"
         );
         assert_eq!(cfg.run_on_changes.as_deref(), Some("reindex"));

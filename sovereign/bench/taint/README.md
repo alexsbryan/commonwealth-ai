@@ -191,7 +191,7 @@ findings as evidence the depth surfaces real things. Not full breadth by design.
 | # | severity | conf | site | shape |
 |---|---|---|---|---|
 | 1 | med | high (shape); invariant unproven | `sovereign-tools/src/atlas_postinstall.rs:608,615,616` | `tier_counts[(tier as usize)-1]` into `[0usize;6]` → panics if `tier==0` (underflow) or `tier>6` (OOB); nothing locally validates `tier ∈ 1..=6` |
-| 2 | low | high (shape); empty-reachability unproven | `sovereign-cli-llm/src/bench_cmd/atlas.rs:517,519` | `by_len[0]` / `by_len[len-1]` panic if `build_tasks` is called with empty `chapters` |
+| 2 | low | high (shape); empty-reachability unproven | `sovereign-cli-bench/src/bench_cmd/atlas.rs:517,519` | `by_len[0]` / `by_len[len-1]` panic if `build_tasks` is called with empty `chapters` |
 | 3 | — (verifier) | untrusted-reachable, UNCERTAIN | `sovereign-desktop/.../import_commands.rs:858` and `sovereign-meshapp/src/wrapped.rs:512,523,525` | imported-archive / tauri path → `fs::read_dir`/`fs::write`/`create_dir_all`; path-sanitation unproven (needs injection guard §A) |
 | 4 | — (verifier) | UNCERTAIN | `commonwealth-api/src/frontdoor.rs:3449` | `stripped[start..end]` — `end` find-derived, `start` unknown |
 

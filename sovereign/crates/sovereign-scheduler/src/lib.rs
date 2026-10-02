@@ -5,7 +5,8 @@
 //! no I/O. Receives the scheduler half of `sovereign-mesh` —
 //! `scheduler_core`, `oicp_select`, `predicted_time`, `tier`, `decision_log`,
 //! `decision_replay`, `decision_trace`, `slot_aliases`,
-//! `yield_backoff` — while the recorder sink, the local slot pick and the
+//! `yield_backoff`, and `peer_health` (from commonwealth-core, phase-b
+//! pb-serve-sheds-core) — while the recorder sink, the local slot pick and the
 //! throughput stream observer stay with `sovereign-serving-host`
 //! (`sovereign/SERVING_BOUNDARY.md` "The two tiers").
 
@@ -13,6 +14,7 @@ pub mod decision_log;
 pub mod decision_replay;
 pub mod decision_trace;
 pub mod oicp_select;
+pub mod peer_health;
 pub mod predicted_time;
 pub mod scheduler_core;
 pub mod slot_aliases;

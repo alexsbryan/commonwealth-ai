@@ -559,8 +559,8 @@ impl Detector for BehaviourDetector {
     fn settings_digest(&self) -> String {
         format!(
             "min_lines={};near_threshold={}",
-            sovereign_tools::code::dry_report::DEFAULT_MIN_LINES,
-            sovereign_tools::code::dry_report::DEFAULT_NEAR_THRESHOLD
+            sovereign_code::dry_report::DEFAULT_MIN_LINES,
+            sovereign_code::dry_report::DEFAULT_NEAR_THRESHOLD
         )
     }
 
@@ -593,7 +593,7 @@ impl Detector for BehaviourDetector {
     }
 
     async fn fire(&self, ctx: &DetectorCtx<'_>) -> Result<FireReport, String> {
-        use sovereign_tools::code::dry_report::{
+        use sovereign_code::dry_report::{
             build_dry_report, short_hash, DryInputs, DEFAULT_MIN_LINES, DEFAULT_NEAR_THRESHOLD,
         };
         let report = build_dry_report(DryInputs {
@@ -1518,7 +1518,7 @@ mod tests {
     fn the_behaviour_token_is_the_rendered_short_hash() {
         let full = "2e0ac3170ee6aabbccddeeff00112233";
         assert_eq!(
-            sovereign_tools::code::dry_report::short_hash(full),
+            sovereign_code::dry_report::short_hash(full),
             BehaviourDetector.control().token,
             "control token must be the 12-char rendered form"
         );

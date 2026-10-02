@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Notes CRUD over the wire — `/v1/notes/…` (sv-surface D6, first half).
 //!
-//! Six routes over [`crate::daemon::EmbeddedDaemon::notes_store`] — the same
-//! `notes.db` `/mcp` and `POST /v1/notes/tool-outcome` already write, and
-//! which the desktop's lesson pane opened a SECOND handle on. `retire` is the
-//! sixth because a supersede writes the successor AND retires the
-//! predecessor, and a retired row survives struck through where a delete does
-//! not. The LIST is a POST: `read_notes` filters on three lists whose members
-//! may contain commas, so no flat query string expresses it (§10.6).
+//! Six routes over svrn's memory notes in svrn's own store
+//! ([`crate::daemon::EmbeddedDaemon::notes_store`], pb-notes-memory): the
+//! lessons, the `tool_decision` dossier `POST /v1/notes/tool-outcome` writes,
+//! and the commissive handler's commitments and todos. A request for any other
+//! kind is a request for the code program's decision notes, which live in
+//! code's `notes.db`; it is answered with a pointer to code's `notes` tool,
+//! never with an empty list that reads as "there are none" (principle 6).
+//! `retire` is the sixth route because a supersede writes the successor AND
+//! retires the predecessor, and a retired row survives struck through where
+//! a delete does not. The LIST is a POST: `read_notes` filters on three lists
+//! whose members may contain commas, so no flat query string expresses it
+//! (§10.6).
 //!
 //! Loopback posture is `reading_http`'s, unchanged.
 //!
@@ -24,7 +29,9 @@ use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine_notes::{Note, NoteScope, NoteSource, NoteStore};
+use sovereign_contracts::notes::AgentNotes;
+use sovereign_contracts::recipe::notes::{NoteScope, NoteSource};
+use sovereign_store::sqlite::{is_memory_note_kind, SqliteStateStore, MEMORY_NOTE_KINDS};
 
 use crate::daemon::EmbeddedDaemon;
 use crate::http_response::{bad_request, internal_error, not_found, Absence};
@@ -40,46 +47,42 @@ const LIST_LIMIT_DEFAULT: usize = 50;
 /// One note on the wire. Defined in `sovereign-contracts` so a client can
 /// parse a note without linking this crate; re-exported here so the routes
 /// below and their tests keep naming it at this path (sv-surface svt-3).
-///
-/// The PROJECTION stays here — see [`note_entry`]. `corpus_engine_notes::Note`
-/// is a store type three layers above `sovereign-contracts`, so the `From`
-/// impl cannot travel with the struct.
+/// svrn's store reads rows straight into it.
 pub use sovereign_contracts::daemon_wire::NoteEntry;
 
-/// Project a stored note onto the wire shape.
-///
-/// A free function rather than `impl From<Note> for NoteEntry`: both types
-/// are foreign to this crate now that [`NoteEntry`] lives in
-/// `sovereign-contracts`, and the orphan rule forbids the impl. Still the ONE
-/// projection for the family — the two routes below are its only callers.
-pub fn note_entry(n: Note) -> NoteEntry {
-    NoteEntry {
-        id: n.id,
-        kind: n.kind,
-        content: n.content,
-        symbols: n.symbols,
-        files: n.files,
-        session_id: n.session_id,
-        created_at: n.created_at,
-        tool_name: n.tool_name,
-        retired_at: n.retired_at,
-        retired_by: n.retired_by,
-        scope: n.scope,
-        feature_id: n.feature_id,
-        promoted_from: n.promoted_from,
-        related_entity: n.related_entity,
-        source: n.source,
-        supersedes: n.supersedes,
-        payload_json: n.payload_json,
-        origin_node_id: n.origin_node_id,
-        sent_at: n.sent_at,
-        received_at: n.received_at,
+/// Where a request for one of the code program's kinds is pointed.
+const CODE_NOTES: &str = "the code program's `notes` tool (`svrn code mcp`)";
+
+/// Where a code note is pointed: `open`, naming [`CODE_NOTES`], on an open
+/// install; on a sealed one, which ships no code program, what the box does.
+fn code_notes(posture: crate::posture::Posture, open: String) -> String {
+    match posture.withheld() {
+        None => open,
+        Some(_) => posture.code_pointer().to_string(),
     }
+}
+
+/// The named absence for a kind svrn does not keep.
+fn code_kind(kind: &str, posture: crate::posture::Posture) -> Absence {
+    tracing::debug!(
+        kind,
+        ?posture,
+        "notes_http: a code kind was asked of svrn's memory"
+    );
+    Absence::missing(format!(
+        "kind `{kind}` is not one svrn's memory keeps ({MEMORY_NOTE_KINDS:?}); {}",
+        code_notes(
+            posture,
+            format!(
+                "the code program's decision notes are in its notes.db, served by {CODE_NOTES}"
+            )
+        )
+    ))
 }
 
 // ─── Request / response shapes ─────────────────────────────────
 
-/// Body of `POST /v1/notes/query` — `NoteStore::read_notes`'s six
+/// Body of `POST /v1/notes/query` — `AgentNotes::read_notes`'s six
 /// arguments. Every key defaults, so `{}` is "the most recent notes,
 /// unfiltered".
 #[derive(Debug, Default, Deserialize)]
@@ -107,9 +110,8 @@ pub struct NoteListResponse {
     pub notes: Vec<NoteEntry>,
 }
 
-/// `POST /v1/notes` — the twelve arguments of
-/// `NoteStore::write_note_full_v9`, which is the store's single write
-/// chokepoint. Nothing here is defaulted on the caller's behalf beyond
+/// `POST /v1/notes` — the twelve arguments of svrn's store's one write,
+/// `SqliteStateStore::write_memory_note`. Nothing here is defaulted on the caller's behalf beyond
 /// the serde defaults named below; `scope` and `source` are REQUIRED
 /// because guessing either is how a note ends up on the mesh that was
 /// meant to stay local.
@@ -134,8 +136,8 @@ pub struct CreateNoteRequest {
     pub supersedes: Option<String>,
     #[serde(default)]
     pub payload_json: Option<String>,
-    /// Persisted locally, never gossiped. Defaults to `false`, which is
-    /// what `write_note_full_v9` documents as the safe default.
+    /// Kept with the row; svrn's store gossips nothing, so today it changes
+    /// nothing. Defaults to `false`.
     #[serde(default)]
     pub private: bool,
 }
@@ -207,10 +209,13 @@ async fn list_notes(
 ) -> Result<Response, Absence> {
     let store = store_for(&daemon)?;
     let q = body.map(|Json(q)| q).unwrap_or_default();
+    if let Some(kind) = q.kinds.iter().find(|k| !is_memory_note_kind(k)) {
+        return Err(code_kind(kind, daemon.posture()));
+    }
     let limit = q.limit.unwrap_or(LIST_LIMIT_DEFAULT);
     Ok(
         match store
-            .read_notes(
+            .memory_note_entries(
                 q.query.as_deref(),
                 &q.symbols,
                 &q.files,
@@ -228,10 +233,7 @@ async fn list_notes(
                     returned = rows.len(),
                     "notes_http: notes listed",
                 );
-                Json(NoteListResponse {
-                    notes: rows.into_iter().map(note_entry).collect(),
-                })
-                .into_response()
+                Json(NoteListResponse { notes: rows }).into_response()
             }
             Err(e) => internal_error(&e.to_string()),
         },
@@ -240,37 +242,44 @@ async fn list_notes(
 
 /// GET `/v1/notes/{id}` — one note. Wire form of `read_note_by_id`.
 ///
-/// 404 when the id is not in the store, with that reason — never an
-/// empty-shaped 200, which a caller cannot tell from a note whose every
-/// field happens to be blank.
+/// 404 when the id is not in svrn's store, with that reason and a pointer
+/// to code's notes — never an empty-shaped 200, which a caller cannot tell
+/// from a note whose every field happens to be blank.
 async fn get_note(
     _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(id): Path<String>,
 ) -> Result<Response, Absence> {
     let store = store_for(&daemon)?;
-    Ok(match store.read_note_by_id(&id).await {
-        Ok(Some(note)) => Json(note_entry(note)).into_response(),
-        Ok(None) => not_found(&format!("no note `{id}`")),
+    Ok(match store.memory_note_entry(&id).await {
+        Ok(Some(note)) => Json(note).into_response(),
+        Ok(None) => not_found(format!(
+            "no note `{id}` in svrn's memory; {}",
+            code_notes(
+                daemon.posture(),
+                format!("a decision note of the code program is served by {CODE_NOTES}")
+            )
+        )),
         Err(e) => internal_error(&e.to_string()),
     })
 }
 
-/// POST `/v1/notes` — create. Wire form of `write_note_full_v9`.
+/// POST `/v1/notes` — create, in svrn's memory. A code kind is refused
+/// with the pointer to code's notes.
 ///
 /// `scope` and `source` are parsed through the enums' own
 /// `parse` — one decider for what those closed sets contain (ARCH §2,
 /// §10.6) — and an unrecognised value is a 400 naming the value, not a
-/// silent fall back to `Global`/`Agent`. The store applies its own
-/// lifecycle policy on top (operational-exhaust kinds are forced to
-/// `Session` regardless of what is asked for); that policy stays where
-/// every writer already meets it.
+/// silent fall back to `Global`/`Agent`.
 async fn create_note(
     _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Json(body): Json<CreateNoteRequest>,
 ) -> Result<Response, Absence> {
     let store = store_for(&daemon)?;
+    if !is_memory_note_kind(&body.kind) {
+        return Err(code_kind(&body.kind, daemon.posture()));
+    }
     let Some(scope) = NoteScope::parse(&body.scope) else {
         return Ok(bad_request(&format!(
             "scope `{}` is not one of global/feature/session",
@@ -285,7 +294,7 @@ async fn create_note(
     };
     Ok(
         match store
-            .write_note_full_v9(
+            .write_memory_note(
                 &body.kind,
                 &body.content,
                 body.symbols,
@@ -353,7 +362,7 @@ async fn retire_note(
     Json(body): Json<RetireRequest>,
 ) -> Result<Response, Absence> {
     let store = store_for(&daemon)?;
-    Ok(match store.retire_by_id(&id, &body.reason).await {
+    Ok(match store.retire_memory_note(&id, &body.reason).await {
         Ok(existed) => {
             tracing::info!(note_id = %id, existed, reason = %body.reason,
                 "notes_http: note retired");
@@ -375,7 +384,7 @@ async fn delete_note(
     Path(id): Path<String>,
 ) -> Result<Response, Absence> {
     let store = store_for(&daemon)?;
-    Ok(match store.delete_note(&id).await {
+    Ok(match store.delete_memory_note(&id).await {
         Ok(existed) => {
             tracing::info!(note_id = %id, existed, "notes_http: note deleted");
             Json(AffectedResponse { existed }).into_response()
@@ -386,11 +395,11 @@ async fn delete_note(
 
 // ─── Helpers ───────────────────────────────────────────────────
 
-/// The daemon's own `NoteStore`. One lookup site, so no handler can
-/// reach a different `notes.db` than the `/mcp` surface and
-/// `/v1/notes/tool-outcome` already write to.
-fn store_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<NoteStore>, Absence> {
-    daemon.notes_store().map(Arc::clone).ok_or_else(|| {
-        Absence::unavailable("this daemon has no note store (notes.db did not open)")
-    })
+/// svrn's own store. One lookup site, so no handler can reach a different
+/// store than svrn's call log and `/v1/notes/tool-outcome` already write to.
+fn store_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<SqliteStateStore>, Absence> {
+    daemon
+        .notes_store()
+        .map(Arc::clone)
+        .ok_or_else(|| Absence::unavailable("this daemon serves no memory notes (no /mcp mount)"))
 }

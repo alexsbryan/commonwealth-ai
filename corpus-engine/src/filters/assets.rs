@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Bundled filter artefacts compiled into the crate via `include_bytes!`.
+//! Bundled filter artefacts, served through the asset port
+//! ([`crate::recipe_source::default_assets`]).
 //!
-//! Source files live in the sibling `sovereign-recipes` repo (where
-//! their generator scripts live), copied into Cargo's `OUT_DIR` by
-//! [`build.rs`](../../build.rs) at compile time. corpus-engine itself
-//! tracks no generated artefacts — single source of truth in
+//! Source files live in `sovereign-recipes/` (where their generator
+//! scripts live) and are compiled in by the `corpus-engine-recipes` data
+//! crate (`sovereign-recipes/src/lib.rs`). corpus-engine itself tracks no
+//! generated artefacts — single source of truth in
 //! `sovereign-recipes/wikipedia/data/`.
 //!
 //! ## What ships bundled
@@ -37,51 +38,21 @@
 //!   filter implementation — still generic and future-proof, just not
 //!   bundled with stale data.
 //!
-//! ## Build-time resolution
+//! ## Adding an asset
 //!
-//! The `build.rs` looks for source files in this order:
-//!   1. `$CORPUS_ENGINE_DATA_DIR` (escape hatch for standalone /
-//!      airgapped builds — set this to a directory containing the
-//!      filenames in `BUNDLED_ASSETS` in `build.rs`).
-//!   2. `<corpus-engine>/../sovereign-recipes/wikipedia/data/` — the
-//!      common workspace-sibling path.
-//! If neither resolves, the build fails with a remediation hint
-//! pointing at the regenerator script.
+//! A `pub const` in `sovereign-recipes/src/lib.rs` plus a row in
+//! `recipe_source/bundled.rs::ASSETS`; the `@bundled:<key>` it answers is
+//! that row's key.
 
-/// Newline-delimited Wikipedia Vital Articles Level 5 titles. The
-/// `OUT_DIR`-relative include path is what makes this consume the
-/// build-script-copied file rather than a tracked-in-crate artefact.
-pub const VITAL_ARTICLES_L5: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/vital_articles_l5.txt"));
-
-/// Wikipedia Vital Articles Level 1 — the curator-canonical "ten
-/// most vital" articles. Used as the highest-priority tier in the
-/// atlas triage prior.
-pub const VITAL_ARTICLES_L1: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/vital_articles_l1.txt"));
-
-/// Wikipedia Vital Articles Level 2 — ~100 curator-canonical titles.
-pub const VITAL_ARTICLES_L2: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/vital_articles_l2.txt"));
-
-/// Wikipedia Vital Articles Level 3 — ~1,000 curator-canonical titles.
-pub const VITAL_ARTICLES_L3: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/vital_articles_l3.txt"));
-
-/// Wikipedia Vital Articles Level 4 — ~10,000 curator-canonical titles.
-pub const VITAL_ARTICLES_L4: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/vital_articles_l4.txt"));
+/// Newline-delimited Wikipedia Vital Articles titles, Levels 1–5 — the
+/// data crate's bytes, re-exported at their historical path.
+pub use crate::recipe_source::bundled::{
+    VITAL_ARTICLES_L1, VITAL_ARTICLES_L2, VITAL_ARTICLES_L3, VITAL_ARTICLES_L4, VITAL_ARTICLES_L5,
+};
 
 /// Look up a bundled asset by its `@bundled:<key>` shorthand.
 pub fn lookup_bundled(key: &str) -> Option<&'static [u8]> {
-    match key {
-        "vital_articles_l1" => Some(VITAL_ARTICLES_L1),
-        "vital_articles_l2" => Some(VITAL_ARTICLES_L2),
-        "vital_articles_l3" => Some(VITAL_ARTICLES_L3),
-        "vital_articles_l4" => Some(VITAL_ARTICLES_L4),
-        "vital_articles_l5" => Some(VITAL_ARTICLES_L5),
-        _ => None,
-    }
+    crate::recipe_source::default_assets().bundled_asset(key)
 }
 
 #[cfg(test)]

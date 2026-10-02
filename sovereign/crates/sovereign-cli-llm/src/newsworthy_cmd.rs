@@ -8,30 +8,30 @@
 //!   the most recent leader, last portal date ingested, and per-self
 //!   ownership count.
 //!
-//! The watcher writes its state to `MeshStore` under three app_ids
-//! (`wikipedia-newsworthy-tracked`, `:portal`, `:job` — the first is
-//! colon-free because it replicates, and a replicating app_id is a ring
-//! namespace, which is a directory name). This command
-//! reads the same store directly so the operator sees ground truth
-//! without going via the running daemon's HTTP surface.
-//!
-//! **Caveat (v0).** `EmbeddedDaemon::start_daemon` currently
-//! constructs an in-memory `MeshStore` (cf. sovereign-mesh's Cargo
-//! comment). Disk-backed inspection only works against
-//! `commonwealth-daemon`'s `~/.commonwealth/store.db`. When the
-//! embedded daemon eventually persists MeshStore to disk, this
-//! command's `--store-path` flag picks the right file automatically;
-//! until then operators rely on `tracing::info!` events emitted by
-//! the watcher (`newsworthy.tick`, `newsworthy.tracked_state_change`,
-//! `newsworthy.portal_ingested`).
+//! The watcher writes its state to the mesh store under three app_ids
+//! (`wikipedia-newsworthy-tracked`, `-portal`, `-status` — colon-free because
+//! a ring namespace is a directory name). This command reads cw-rails' mesh
+//! store through `/v1/mesh/kv/*` (five-programs fp-87), after migrating the
+//! legacy SQLite file (`--store-path`, default
+//! `commonwealth-daemon`'s `~/.commonwealth/store.db`) into it once.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use commonwealth_state::MeshStore;
-use corpus_engine::update::newsworthy_watcher::{
-    Lifecycle, PortalMarker, TrackedArticle, APP_ID_PORTAL, APP_ID_TRACKED,
+use corpus_index::ingest_port::newsworthy::{
+    Lifecycle, PortalMarker, TrackedArticle, APP_ID_PORTAL, APP_ID_STATUS, APP_ID_TRACKED,
 };
+use sovereign_contracts::peer::ReplicatedKv;
+
+/// Each legacy app_id the migration reads and the one it is written under:
+/// the current spellings, and fp-106's renames of the two colon forms.
+const MIGRATED_APP_IDS: &[(&str, &str)] = &[
+    (APP_ID_TRACKED, APP_ID_TRACKED),
+    (APP_ID_PORTAL, APP_ID_PORTAL),
+    (APP_ID_STATUS, APP_ID_STATUS),
+    ("wikipedia-newsworthy:portal", APP_ID_PORTAL),
+    ("wikipedia-newsworthy:status", APP_ID_STATUS),
+];
 
 pub async fn run(args: &[String]) -> i32 {
     let subcommand = args.first().map(String::as_str).unwrap_or("");
@@ -55,28 +55,24 @@ fn print_help() {
          Subcommands:\n  \
            status [--store-path PATH]    Print tracked-set summary by lifecycle\n  \
            help                          This message\n\n\
-         The default store path is `~/.commonwealth/store.db` (the \
-         commonwealth-daemon location). Override with `--store-path` to \
-         inspect a different MeshStore SQLite file."
+         Reads cw-rails' mesh store. A legacy MeshStore SQLite file is \
+         migrated into it once first: `~/.commonwealth/store.db` (the \
+         commonwealth-daemon location), or the file `--store-path` names."
     );
 }
 
 async fn run_status(args: &[String]) -> i32 {
     let store_path = parse_store_path(args).unwrap_or_else(default_store_path);
-    if !store_path.exists() {
-        eprintln!(
-            "newsworthy: no MeshStore at {} — run a daemon first, or pass --store-path",
-            store_path.display()
-        );
+    let store = crate::legacy_store::rails_kv();
+    if let Err(e) = crate::legacy_store::migrate_if_needed(
+        &store_path,
+        MIGRATED_APP_IDS,
+        &store,
+        crate::legacy_store::export_via_cli_mesh,
+    ) {
+        eprintln!("newsworthy: {e}");
         return 1;
     }
-    let store = match MeshStore::open(&store_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("newsworthy: open {} failed: {e}", store_path.display());
-            return 1;
-        }
-    };
 
     // ── Tracked articles by lifecycle ─────────────────────────────
     let tracked_entries = match store.scan(APP_ID_TRACKED, "tracked:") {
@@ -101,7 +97,13 @@ async fn run_status(args: &[String]) -> i32 {
     }
 
     // ── Most recent portal ingest ─────────────────────────────────
-    let portal_entries = store.scan(APP_ID_PORTAL, "portal:").unwrap_or_default();
+    let portal_entries = match store.scan(APP_ID_PORTAL, "portal:") {
+        Ok(rows) => rows,
+        Err(e) => {
+            eprintln!("newsworthy: scan portal: {e}");
+            return 1;
+        }
+    };
     let latest_portal = portal_entries
         .iter()
         .filter_map(|e| serde_json::from_slice::<PortalMarker>(&e.value).ok())
@@ -109,7 +111,7 @@ async fn run_status(args: &[String]) -> i32 {
 
     println!("Wikipedia Newsworthy — operator status");
     println!("{}", "─".repeat(60));
-    println!("  store: {}", store_path.display());
+    println!("  store: cw-rails' mesh store");
     println!(
         "  tracked entries: {} (decode errors: {decode_errors})",
         total_known

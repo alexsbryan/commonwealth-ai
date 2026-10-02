@@ -15,9 +15,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, ResolutionStatus};
-use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
-use corpus_engine::enrichment::atlas::read_atlas_edges;
+use understanding_vocab::atoms::{AtomEnvelope, AtomId, AtomType, ResolutionStatus};
+use understanding_vocab::edges::{Edge, EdgeType};
+use understanding_vocab::read::read_atlas_edges;
 
 use super::atom_browse::{cached_atoms, AtomFilter, AtomQueryError, PageCursor};
 use super::reader::FileAtlasReader;

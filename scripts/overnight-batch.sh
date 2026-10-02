@@ -91,7 +91,7 @@ note "started $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 if [ "$DRY" = "1" ]; then
   note ""
   note "DRY RUN — plan only, nothing executed."
-  wants 1 && note "  block1 head-to-head   5 arms x 180 questions   ~20m"
+  wants 1 && note "  block1 head-to-head   3 arms x 180 questions   ~12m (5 arms took ~20m)"
   wants 2 && note "  block2 desktop-smoke  full, Phase 4 is the prize ~3h"
   wants 3 && note "  block3 desktop-soak   120m dual + judge calib   ~2.2h"
   wants 4 && note "  block4 overflow       confirmatory bank + report ~1h"
@@ -102,7 +102,7 @@ fi
 # BLOCK 1 — retrieval head-to-head
 # ─────────────────────────────────────────────────────────────────────────
 if wants 1; then
-  hdr "BLOCK 1 — retrieval head-to-head (5 arms)"
+  hdr "BLOCK 1 — retrieval head-to-head (3 arms)"
   B1="$OUT/block1"; mkdir -p "$B1"
   RERANK_GGUF="$REPO/sovereign/models/qwen3-reranker-0.6b-q8_0.gguf"
 
@@ -119,31 +119,28 @@ if wants 1; then
       local out="$B1/arm-$name.json"
       note "  arm $name"
       if [ -f "$out" ]; then note "    (already present, skipping)"; return 0; fi
-      ( export "$@"; "$CLI" eval run --bank "$BANK" --prod-pipeline --isolate \
+      ( [ $# -eq 0 ] || export "$@"; "$CLI" eval run --bank "$BANK" --prod-pipeline --isolate \
           --limit 50 --output "$out" ) > "$B1/arm-$name.log" 2>&1
       local rc=$?
       [ $rc -eq 0 ] || note "    arm $name exited $rc — see block1/arm-$name.log"
       return $rc
     }
 
-    # PPR weight is read PER CALL (conv_tiered.rs:32); every rerank knob is a
-    # STARTUP read (chat_cmd/bootstrap.rs:534-590), so each arm is its own
-    # process regardless.
+    # Every rerank knob is a STARTUP read (chat_cmd/bootstrap.rs:534-590), so
+    # each arm is its own process. The ppr-off/ppr-high arms left with
+    # conversation PPR itself (cc78b933b): SOVEREIGN_CONV_PPR_WEIGHT is read by
+    # nothing, so they ran bit-identical to baseline.
     #
     # SOVEREIGN_RERANK_DEDUP_CORPORA MUST name this corpus. It defaults to
     # {"sep"} (sovereign-tools/src/corpus/mod.rs:52), so a dedup arm without it
     # is bit-identical to baseline and the analyzer will (correctly) call it
     # VACUOUS.
     ok=0
-    run_arm baseline    SOVEREIGN_CONV_PPR_WEIGHT=0.25 && ok=$((ok+1))
-    run_arm ppr-off     SOVEREIGN_CONV_PPR_WEIGHT=0    && ok=$((ok+1))
-    run_arm ppr-high    SOVEREIGN_CONV_PPR_WEIGHT=0.5  && ok=$((ok+1))
-    run_arm dedup-only  SOVEREIGN_CONV_PPR_WEIGHT=0.25 \
-                        SOVEREIGN_RERANK_DEDUP_ONLY=1 \
+    run_arm baseline && ok=$((ok+1))
+    run_arm dedup-only  SOVEREIGN_RERANK_DEDUP_ONLY=1 \
                         SOVEREIGN_RERANK_DEDUP_CORPORA=conversations-anthropic && ok=$((ok+1))
     if [ -f "$RERANK_GGUF" ]; then
-      run_arm reranker  SOVEREIGN_CONV_PPR_WEIGHT=0.25 \
-                        SOVEREIGN_RERANK_MODEL_PATH="$RERANK_GGUF" \
+      run_arm reranker  SOVEREIGN_RERANK_MODEL_PATH="$RERANK_GGUF" \
                         SOVEREIGN_RERANK_PER_ARTICLE=1 \
                         SOVEREIGN_RERANK_ALPHA=0.7 \
                         SOVEREIGN_RERANK_DEDUP_CORPORA=conversations-anthropic && ok=$((ok+1))
@@ -152,7 +149,7 @@ if wants 1; then
     fi
 
     ARGS=""
-    for a in baseline ppr-off ppr-high dedup-only reranker; do
+    for a in baseline dedup-only reranker; do
       [ -f "$B1/arm-$a.json" ] && ARGS="$ARGS $a=$B1/arm-$a.json"
     done
     if [ -n "$ARGS" ] && [ -f "$B1/arm-baseline.json" ]; then
@@ -260,13 +257,12 @@ if wants 4; then
   else
     for a in baseline reranker; do
       case "$a" in
-        baseline) envs=("SOVEREIGN_CONV_PPR_WEIGHT=0.25");;
-        reranker) envs=("SOVEREIGN_CONV_PPR_WEIGHT=0.25"
-                        "SOVEREIGN_RERANK_MODEL_PATH=$REPO/sovereign/models/qwen3-reranker-0.6b-q8_0.gguf"
+        baseline) envs=();;
+        reranker) envs=("SOVEREIGN_RERANK_MODEL_PATH=$REPO/sovereign/models/qwen3-reranker-0.6b-q8_0.gguf"
                         "SOVEREIGN_RERANK_PER_ARTICLE=1" "SOVEREIGN_RERANK_ALPHA=0.7"
                         "SOVEREIGN_RERANK_DEDUP_CORPORA=conversations-anthropic");;
       esac
-      ( export "${envs[@]}"; "$CLI" eval run --bank "$REAL_BANK" --prod-pipeline --isolate \
+      ( [ ${#envs[@]} -eq 0 ] || export "${envs[@]}"; "$CLI" eval run --bank "$REAL_BANK" --prod-pipeline --isolate \
           --limit 50 --output "$B4/real-$a.json" ) > "$B4/real-$a.log" 2>&1
     done
     if [ -f "$B4/real-baseline.json" ]; then

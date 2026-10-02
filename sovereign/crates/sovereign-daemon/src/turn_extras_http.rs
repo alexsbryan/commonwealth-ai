@@ -181,8 +181,8 @@ async fn last_turn_provenance(
 /// Reaches the registry `serve_turn` reads, which is the whole point:
 /// `SkillRegistry::primary_skill_id_for_conversation` decides which
 /// agent loop the NEXT turn routes into, and until D9a the desktop's
-/// toggle wrote a config file that, on an attached boot, no serving
-/// process ever read.
+/// toggle wrote a config file that, on an attached boot, no running
+/// daemon ever read.
 ///
 /// A 404 for an unregistered id, not a silent no-op: `activate` is
 /// deliberately tolerant of an id it does not know (it records the

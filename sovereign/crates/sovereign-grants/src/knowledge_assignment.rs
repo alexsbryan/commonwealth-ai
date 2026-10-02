@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use commonwealth_core::ids::NodeId;
-use commonwealth_core::knowledge::{
-    IngestionHandoff, IngestionPartition, PartitionStatus, WorkUnit,
-};
-use commonwealth_core::mesh::MemberRecord;
-use commonwealth_core::oicp::EmbedModelInfo;
-use corpus_engine::SourceFileRecord;
+use kernel_types::NodeId;
+use oicp_types::work_queue::{IngestionHandoff, IngestionPartition, PartitionStatus, WorkUnit};
+use oicp_types::EmbedModelInfo;
+use sovereign_contracts::membership::MembershipEntry;
 
 // ─── Collaborative ingestion planner ─────────────────────────────────────────
 
@@ -35,17 +32,24 @@ pub enum CollaborativeIngestionError {
 ///    all nodes (`N = all_nodes.len()`), assigning the remainder to the
 ///    first nodes.
 /// 4. Set `merge_assigned_to` to the node with the lowest `NodeId`.
-pub fn plan_collaborative_ingestion(
+///
+/// The remaining files arrive as data, the way ingest's manifest counts them
+/// (the caller reads the manifest): `in_progress` and `pending` are their
+/// indices into the sorted parquet shard list, `remaining_files` is how many
+/// files are left of any status, and `remaining_bytes` their total size.
+#[allow(clippy::too_many_arguments)]
+pub fn plan_collaborative_ingestion<D>(
     corpus_id: &str,
     recipe_id: &str,
-    remaining_files: &[SourceFileRecord],
-    local_node: &MemberRecord,
-    candidates: &[MemberRecord],
+    in_progress: &[usize],
+    pending: &[usize],
+    remaining_files: usize,
+    remaining_bytes: u64,
+    local_node: &MembershipEntry<D>,
+    candidates: &[MembershipEntry<D>],
     local_embed_model: &EmbedModelInfo,
 ) -> Result<IngestionHandoff, CollaborativeIngestionError> {
-    use corpus_engine::SourceFileStatus;
-
-    if remaining_files.is_empty() {
+    if remaining_files == 0 {
         return Err(CollaborativeIngestionError::AlreadyComplete(
             corpus_id.to_string(),
         ));
@@ -56,10 +60,10 @@ pub fn plan_collaborative_ingestion(
     // `embed_model` so the common call path feeds only compatible
     // peers in. But this function has several direct callers (tests,
     // the CLI's `sovereign mesh collaborate` subcommand) that pass
-    // raw `MemberRecord` sets without running the coordinator's
+    // raw membership entries without running the coordinator's
     // filter. Repeating the check here means a mismatched peer
     // never ends up in `all_nodes` regardless of entry point.
-    let compatible_peers: Vec<&MemberRecord> = candidates
+    let compatible_peers: Vec<&MembershipEntry<D>> = candidates
         .iter()
         .filter(|peer| {
             if peer.capabilities.hardware.free_storage_gb == 0 {
@@ -80,18 +84,8 @@ pub fn plan_collaborative_ingestion(
 
     let n = all_nodes.len();
 
-    // Separate InProgress (pinned to local) from Pending (distributable).
-    let in_progress: Vec<&SourceFileRecord> = remaining_files
-        .iter()
-        .filter(|f| matches!(f.status, SourceFileStatus::InProgress { .. }))
-        .collect();
-    let pending: Vec<&SourceFileRecord> = remaining_files
-        .iter()
-        .filter(|f| matches!(f.status, SourceFileStatus::Pending))
-        .collect();
-
     // Estimate total storage needed: sum of file sizes * 1.3 (index overhead).
-    let total_bytes: u64 = remaining_files.iter().map(|f| f.size_bytes).sum();
+    let total_bytes = remaining_bytes;
     let needed_gb = total_bytes as f64 / 1024.0_f64.powi(3) * 1.3;
 
     // Check if any single node (or the collective) has enough storage.
@@ -127,8 +121,8 @@ pub fn plan_collaborative_ingestion(
         .collect();
 
     // Pin InProgress to local node (partition[0]).
-    for f in &in_progress {
-        partitions[0].file_indices.push(f.file_index);
+    for f in in_progress {
+        partitions[0].file_indices.push(*f);
     }
 
     // Distribute pending files in contiguous blocks.
@@ -140,7 +134,7 @@ pub fn plan_collaborative_ingestion(
         for (i, partition) in partitions.iter_mut().enumerate() {
             let count = base + if i < remainder { 1 } else { 0 };
             for f in &pending[offset..offset + count] {
-                partition.file_indices.push(f.file_index);
+                partition.file_indices.push(*f);
             }
             offset += count;
         }
@@ -156,6 +150,7 @@ pub fn plan_collaborative_ingestion(
         recipe_id,
         local_embed_model.clone(),
         partitions,
+        corpus_engine_yield::time::unix_millis(),
     ))
 }
 
@@ -175,13 +170,13 @@ pub fn plan_collaborative_ingestion(
 ///
 /// Machine A always gets `[current_article_pos, split)` and Machine B
 /// gets `[split, total_articles)` where split ≈ the midpoint of remaining work.
-pub fn plan_collaborative_ingestion_jsonl(
+pub fn plan_collaborative_ingestion_jsonl<D>(
     corpus_id: &str,
     recipe_id: &str,
     current_article_pos: u64,
     total_articles: u64,
-    local_node: &MemberRecord,
-    candidates: &[MemberRecord],
+    local_node: &MembershipEntry<D>,
+    candidates: &[MembershipEntry<D>],
     local_embed_model: &EmbedModelInfo,
 ) -> Result<IngestionHandoff, CollaborativeIngestionError> {
     let remaining = total_articles.saturating_sub(current_article_pos);
@@ -198,7 +193,7 @@ pub fn plan_collaborative_ingestion_jsonl(
     // would get an article range it silently refuses to process,
     // leaving those articles stranded and the overall ingest
     // permanently incomplete.
-    let compatible: Vec<&MemberRecord> = candidates
+    let compatible: Vec<&MembershipEntry<D>> = candidates
         .iter()
         .filter(|peer| match peer.capabilities.embed_model.as_ref() {
             Some(em) => em == local_embed_model,
@@ -246,6 +241,7 @@ pub fn plan_collaborative_ingestion_jsonl(
         recipe_id,
         local_embed_model.clone(),
         partitions,
+        corpus_engine_yield::time::unix_millis(),
     ))
 }
 
@@ -269,12 +265,12 @@ pub fn plan_collaborative_ingestion_jsonl(
 ///
 /// Each partition carries `file_indices` = its assigned shard indices
 /// and `article_range` = None.
-pub fn plan_collaborative_ingestion_jsonl_sharded(
+pub fn plan_collaborative_ingestion_jsonl_sharded<D>(
     corpus_id: &str,
     recipe_id: &str,
     remaining_shards: Vec<usize>,
-    local_node: &MemberRecord,
-    candidates: &[MemberRecord],
+    local_node: &MembershipEntry<D>,
+    candidates: &[MembershipEntry<D>],
     local_embed_model: &EmbedModelInfo,
 ) -> Result<IngestionHandoff, CollaborativeIngestionError> {
     let mut shards = remaining_shards;
@@ -290,7 +286,7 @@ pub fn plan_collaborative_ingestion_jsonl_sharded(
     // Embed-model filter: identical to the non-sharded JSONL planner.
     // A mismatched peer would accept the partition and then silently
     // reject at ingest_partition; keep them out of the split upfront.
-    let compatible: Vec<&MemberRecord> = candidates
+    let compatible: Vec<&MembershipEntry<D>> = candidates
         .iter()
         .filter(|peer| match peer.capabilities.embed_model.as_ref() {
             Some(em) => em == local_embed_model,
@@ -335,6 +331,7 @@ pub fn plan_collaborative_ingestion_jsonl_sharded(
         recipe_id,
         local_embed_model.clone(),
         partitions,
+        corpus_engine_yield::time::unix_millis(),
     ))
 }
 
@@ -347,14 +344,11 @@ pub fn plan_collaborative_ingestion_jsonl_sharded(
 // weighted naturally by each peer's pull rate. Feasibility checks (embed-
 // model match, storage capacity) still live at the collaborate handler.
 
-/// Build work units for a Hugging Face parquet corpus from the list of
+/// Build work units for a Hugging Face parquet corpus from the indices of the
 /// source files that still need processing. One unit per file — the unit's
 /// payload is the file's index in the recipe's sorted manifest.
-pub fn build_work_units_hf(remaining: &[SourceFileRecord]) -> Vec<WorkUnit> {
-    remaining
-        .iter()
-        .map(|f| WorkUnit::HfFile(f.file_index))
-        .collect()
+pub fn build_work_units_hf(remaining: &[usize]) -> Vec<WorkUnit> {
+    remaining.iter().map(|&i| WorkUnit::HfFile(i)).collect()
 }
 
 /// Build work units for a multi-shard JSONL corpus (Wikipedia ZIP's 76
@@ -397,14 +391,7 @@ mod work_unit_tests {
 
     #[test]
     fn hf_builder_one_unit_per_file() {
-        let files: Vec<SourceFileRecord> = (0..5)
-            .map(|i| SourceFileRecord {
-                file_index: i,
-                filename: format!("shard-{i}.parquet"),
-                size_bytes: 0,
-                status: corpus_engine::SourceFileStatus::Pending,
-            })
-            .collect();
+        let files: Vec<usize> = (0..5).collect();
         let units = build_work_units_hf(&files);
         assert_eq!(units.len(), 5);
         assert_eq!(units[0], WorkUnit::HfFile(0));
@@ -452,7 +439,7 @@ mod tests {
     use super::*;
 
     fn qwen_embed() -> EmbedModelInfo {
-        use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};
+        use oicp_types::{NormalizationStrategy, PoolingStrategy};
         EmbedModelInfo {
             model_id: "qwen3-embedding-0.6b".into(),
             dimensions: 1024,
@@ -463,7 +450,7 @@ mod tests {
     }
 
     fn other_embed() -> EmbedModelInfo {
-        use commonwealth_core::oicp::{NormalizationStrategy, PoolingStrategy};
+        use oicp_types::{NormalizationStrategy, PoolingStrategy};
         EmbedModelInfo {
             model_id: "nomic-embed-text-v2".into(),
             dimensions: 768,
@@ -473,24 +460,16 @@ mod tests {
         }
     }
 
-    fn member(id: u128, embed: Option<EmbedModelInfo>) -> MemberRecord {
-        use commonwealth_core::capabilities::{
-            AvailableResources, HardwareProfile, NodeCapabilities,
-        };
-        use commonwealth_core::mesh::NodeStatus;
-        MemberRecord {
-            removed_at: None,
-            node_pubkey: None,
-            relay_url: None,
-            iroh_direct_addrs: Vec::new(),
-            dial_info_version: 0,
-            dial_info_sig: None,
+    fn member(id: u128, embed: Option<EmbedModelInfo>) -> MembershipEntry<()> {
+        use oicp_types::capabilities::{AvailableResources, HardwareProfile, NodeCapabilities};
+        use sovereign_contracts::daemon_wire::MemberStatus;
+        MembershipEntry {
             node_id: NodeId::from_u128(id),
             name: format!("node-{id}"),
-            invited_by: NodeId::from_u128(1),
-            joined_at: 100,
+            status: MemberStatus::Online,
+            active: true,
             last_seen: 100,
-            status: NodeStatus::Online,
+            dialable: true,
             capabilities: NodeCapabilities {
                 hardware: HardwareProfile {
                     gpus: vec![],
@@ -514,8 +493,9 @@ mod tests {
                 benchmark: None,
                 current_in_flight: None,
                 anchor: None,
+                storage_remaining_bytes: None,
             },
-            addresses: vec!["192.168.1.10:9742".parse().unwrap()],
+            dial: (),
         }
     }
 

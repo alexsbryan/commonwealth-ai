@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 /// Which build is answering, as published on `GET /status`
 /// (`commonwealth_api::routes_status::ProcessStatus::build`) and minted by
-/// `sovereign_core::run_identity::stamp`.
+/// `sovereign_contracts::run_identity::stamp`.
 ///
 /// Published because only the answering process can know it: a port names a
 /// listener, never the code behind it.

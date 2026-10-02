@@ -9,11 +9,20 @@ description = "Authoring-harness verdict policy + render — Pass/Fail ladder ov
 path = "src/lib.rs"
 
 [dependencies]
+async-trait.workspace = true
 corpus-engine.workspace = true
+# The daemon's harness port (src/port.rs, pb-ingest-dial-daemon-ports).
+corpus-index.workspace = true
+sovereign-time.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
+
+[dev-dependencies]
+# port.rs's tests: the daemon's recipe_surface harness case, on the implementor.
+tempfile.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

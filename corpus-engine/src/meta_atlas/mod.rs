@@ -27,7 +27,9 @@ pub mod builder;
 // `classifier` is PURE and moved to `understanding-atlas` by domains
 // `dm-understanding-pure-1`. Re-exported at the historical path.
 pub use understanding_atlas::meta_atlas::classifier;
-pub mod index;
+// The read half (`MetaAtlasIndex`) lives in the reader leaf (five-programs
+// fp-63); re-exported at the historical path.
+pub use corpus_engine_atlas_reader::meta_atlas::index;
 
 /// Cross-corpus topic-to-topic ontological bridge (SEP ↔ Wikipedia) —
 /// promotes the name-equality meta-atom into a typed concept-alignment

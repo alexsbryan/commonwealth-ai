@@ -7,6 +7,72 @@
 use super::probe::{http_get_json, http_post_json, tcp_connectable};
 use super::{CheckResult, CheckStatus, Layer, Repair};
 
+/// Is cw-rails started at boot? After the flip it is the node's mesh endpoint,
+/// and nothing but its own unit restarts it, so a node whose unit is disabled
+/// leaves the mesh at the next reboot (phase-b-51). `svrn mesh up` installs the
+/// unit; a node that never ran it has none, which is reported, not failed.
+pub(super) fn check_rails_boot_unit() -> CheckResult {
+    let state = if cfg!(target_os = "linux") {
+        Some(
+            host_kit::service::SystemdUser::system()
+                .state(sovereign_turn_client::rails_kv::RAILS_UNIT),
+        )
+    } else {
+        None
+    };
+    tracing::debug!(state = ?state, "doctor: cw-rails boot unit");
+    rails_boot_unit_result(state)
+}
+
+/// The check's verdict for one `is-enabled` reading (`None`: no systemd user
+/// units on this platform).
+pub(super) fn rails_boot_unit_result(state: Option<host_kit::service::UnitState>) -> CheckResult {
+    use host_kit::service::UnitState;
+    let unit = sovereign_turn_client::rails_kv::RAILS_UNIT;
+    let up = sovereign_turn_client::rails_kv::RAILS_BRING_UP_VERB;
+    let (status, message, repair) = match state {
+        Some(UnitState::Enabled) => (
+            CheckStatus::Passed,
+            format!("{unit} is enabled: cw-rails starts at boot"),
+            Repair::None,
+        ),
+        Some(UnitState::Disabled(how)) => (
+            CheckStatus::Warning,
+            format!(
+                "{unit} is {how}: cw-rails will NOT start at boot, so this node is off \
+                 the mesh after a reboot until `{up}` runs"
+            ),
+            Repair::executable(up),
+        ),
+        Some(UnitState::NotInstalled) => (
+            CheckStatus::Skipped,
+            format!("no {unit}: this node has not run `{up}`, which installs it"),
+            Repair::None,
+        ),
+        Some(UnitState::Unknown(why)) => (
+            CheckStatus::Warning,
+            format!("could not read {unit}'s state: {why}"),
+            Repair::None,
+        ),
+        None => (
+            CheckStatus::Skipped,
+            format!(
+                "no {unit} on {}: only systemd user units are written; cw-rails starts \
+                 at boot only under a service manager you set up",
+                std::env::consts::OS
+            ),
+            Repair::None,
+        ),
+    };
+    CheckResult {
+        name: "rails_boot_unit",
+        layer: Layer::Commonwealth,
+        status,
+        message,
+        repair,
+    }
+}
+
 pub(super) async fn check_daemon_running() -> CheckResult {
     let up = tcp_connectable("127.0.0.1", 9741).await;
     if up {
@@ -78,12 +144,13 @@ pub(super) async fn check_mesh_member(client_url: &str) -> CheckResult {
     }
 }
 
-/// H3 egress posture: report whether mesh traffic is on iroh and via
-/// which path, plus whether an HTTP(S) proxy is engaged for the relay
-/// (credentials redacted). Informational — a mesh on the IP path is
-/// perfectly valid; this exists so a netops operator can confirm from
-/// one command what the node touches.
-pub(super) async fn check_iroh_egress(client_url: &str) -> CheckResult {
+/// H3 egress posture: the relay posture cw-rails, the node's one mesh
+/// endpoint since pb-mesh-exit-transport, reports on its `/v1/mesh/status`
+/// (`relay.n0_services`, `relay.relay_urls`), plus whether an HTTP(S) proxy
+/// is engaged for the relay (credentials redacted). Informational; this
+/// exists so a netops operator can confirm from one command what the node
+/// touches.
+pub(super) async fn check_iroh_egress(rails_url: &str) -> CheckResult {
     // Local proxy posture, mirroring iroh's HTTPS_PROXY→HTTP_PROXY
     // precedence, userinfo redacted.
     let proxy = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]
@@ -98,25 +165,25 @@ pub(super) async fn check_iroh_egress(client_url: &str) -> CheckResult {
         None => String::new(),
     };
 
-    let url = format!("{client_url}/v1/mesh/status");
+    let url = format!("{rails_url}/v1/mesh/status");
     match http_get_json(&url).await {
         Some(json) => {
-            let paths: Vec<&str> = json["iroh_transport"]
-                .as_array()
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|p| p["path"]["path"].as_str())
-                        .collect()
-                })
-                .unwrap_or_default();
-            let msg = if paths.is_empty() {
-                format!("mesh on the IP path (iroh not carrying peer traffic){proxy_note}")
-            } else {
-                format!(
-                    "mesh carrying traffic over iroh — peer paths: {}{proxy_note}",
-                    paths.join(", ")
-                )
+            let relay = &json["relay"];
+            let n0 = match relay["n0_services"].as_bool() {
+                Some(true) => "on",
+                Some(false) => "off",
+                None => "unreported",
             };
+            let relays: Vec<&str> = relay["relay_urls"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|u| u.as_str()).collect())
+                .unwrap_or_default();
+            let relays = if relays.is_empty() {
+                "none configured".to_string()
+            } else {
+                relays.join(", ")
+            };
+            let msg = format!("cw-rails: n0 services {n0}; relays {relays}{proxy_note}");
             CheckResult {
                 name: "iroh_egress",
                 layer: Layer::Commonwealth,
@@ -130,7 +197,7 @@ pub(super) async fn check_iroh_egress(client_url: &str) -> CheckResult {
             layer: Layer::Commonwealth,
             status: CheckStatus::Warning,
             message: format!("could not read mesh status from {url}{proxy_note}"),
-            repair: Repair::None,
+            repair: Repair::executable(sovereign_turn_client::rails_kv::RAILS_BRING_UP_VERB),
         },
     }
 }

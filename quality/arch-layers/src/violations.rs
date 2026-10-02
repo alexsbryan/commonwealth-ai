@@ -62,6 +62,16 @@ pub enum Violation {
         from: String,
         to: String,
     },
+    /// A `[[distribution]]` crate naming a crate outside its own, the shared
+    /// leaves and its faces' crates. A direct-edge rule: the distribution
+    /// reaches each program whole through its face.
+    DistributionEdge {
+        distribution: String,
+        doc: String,
+        from: String,
+        to: String,
+        kind: DepKind,
+    },
     /// A declared thin surface that can REACH a crate it may not become.
     ///
     /// The only variant keyed on a closure rather than an edge, because the
@@ -185,6 +195,24 @@ impl Violation {
                 "[[exception]] (package = \"{package}\") {from} → {to} no \
                  longer matches any edge — the package got cleaner; delete \
                  the entry from quality/ARCH_LAYERS.toml"
+            ),
+            Violation::DistributionEdge {
+                distribution,
+                doc,
+                from,
+                to,
+                kind,
+            } => format!(
+                "[{distribution}] {from} → {to}: {} dependency outside the \
+                 distribution's own crates, the shared leaves and its faces \
+                 ({doc}) — a composition root composes programs through their \
+                 declared faces; reach `{to}` through the program that owns it, \
+                 or declare that program's face on the [[distribution]] row",
+                match kind {
+                    DepKind::Normal => "a normal",
+                    DepKind::Build => "a build",
+                    DepKind::Dev => "a dev",
+                }
             ),
             Violation::SurfaceReach {
                 surface,

@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use sovereign_tools::knowledge_view::relational::{format_relational, RelationalNote};
 use sovereign_tools::knowledge_view::splice_extension::{
-    load_chunk_timestamps, relational_notes_for_entity, strategic_goals_for_entity, AtosSnapshot,
+    load_chunk_timestamps, relational_notes_for_entity, strategic_goals_for_entity,
     ConversationCorpus,
 };
 use sovereign_tools::knowledge_view::strategic::{format_strategic, StrategicGoal};
@@ -35,10 +35,7 @@ use sovereign_tools::knowledge_view::view_kind::ViewKind;
 
 use super::args::parse_args;
 use super::render::display_path;
-use super::store_open::{
-    notes_db_path, project_toml_path, sovereign_root, state_db_path, try_open_features,
-    try_open_notes,
-};
+use super::store_open::{sovereign_root, state_db_path, try_open_notes};
 
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
@@ -79,15 +76,6 @@ pub(super) async fn cmd_digest(args: &[String]) -> i32 {
     let chunk_ts = load_chunk_timestamps(&db_path);
     let resolver = move |id: &str| -> Option<i64> { chunk_ts.get(id).copied() };
 
-    let toml_path = project_toml_path();
-    let toml_path_opt = if toml_path.exists() {
-        Some(toml_path.as_path())
-    } else {
-        None
-    };
-    let features = try_open_features();
-    let atos = AtosSnapshot::build(features.as_ref(), toml_path_opt).await;
-
     // Walk both atlas dirs.
     let mut all_timelines: Vec<InteractionTimeline> = Vec::new();
     let mut atlases_seen = 0usize;
@@ -98,7 +86,7 @@ pub(super) async fn cmd_digest(args: &[String]) -> i32 {
             continue;
         }
         atlases_seen += 1;
-        match assemble_timelines_from_atlas(&corpus_dir, &resolver, &atos) {
+        match assemble_timelines_from_atlas(&corpus_dir, &resolver) {
             Ok(mut t) => all_timelines.append(&mut t),
             Err(e) => {
                 eprintln!(
@@ -124,17 +112,7 @@ pub(super) async fn cmd_digest(args: &[String]) -> i32 {
     }
 
     // Notes lookups via NoteStore.
-    let notes_path = notes_db_path();
-    let notes_arc = if notes_path.exists() {
-        match sovereign_tools::knowledge_view::splice_extension::AtosSnapshot::empty() {
-            // Tiny dummy to remind the reader: AtosSnapshot construction
-            // is async; if you change this block, async-await it.
-            _ => {}
-        }
-        try_open_notes()
-    } else {
-        None
-    };
+    let notes_arc = try_open_notes(&root);
 
     // Pre-compute the per-entity note set so the formatter can stay
     // sync. Builds two indexes: relational (commitments/follow-ups/
@@ -149,11 +127,11 @@ pub(super) async fn cmd_digest(args: &[String]) -> i32 {
             .map(|t| t.entity_name.clone())
             .collect();
         for name in &names {
-            let rel = relational_notes_for_entity(&notes, name).await;
+            let rel = relational_notes_for_entity(notes.as_ref(), name).await;
             if !rel.is_empty() {
                 rel_index.insert(name.clone(), rel);
             }
-            let goals = strategic_goals_for_entity(&notes, name).await;
+            let goals = strategic_goals_for_entity(notes.as_ref(), name).await;
             if !goals.is_empty() {
                 strat_index.insert(name.clone(), goals);
             }

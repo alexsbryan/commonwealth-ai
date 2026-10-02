@@ -11,11 +11,11 @@
 use serde::{Deserialize, Serialize};
 
 /// Alias for the candidate chunk shape the Retriever produces.
-/// `corpus_engine::ScoredChunk` already carries content + provenance
+/// `corpus_index::types::ScoredChunk` already carries content + provenance
 /// + score; the pipeline doesn't need a wrapper, just a stable name
 /// per the plan's vocabulary so reading the curator code lines up
 /// with the spec.
-pub type RetrievedChunk = corpus_engine::ScoredChunk;
+pub type RetrievedChunk = corpus_index::types::ScoredChunk;
 
 /// One section of the Drafter's response skeleton. The Curator
 /// authors these from the question's intent and the candidate
@@ -306,7 +306,7 @@ mod tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 

@@ -13,6 +13,9 @@
 //! `corpus-engine` re-exports these at `corpus_engine::chunkers::sectioned::*`,
 //! so its existing callers are unaffected.
 
+pub mod strip;
+pub mod turns;
+
 use std::collections::HashMap;
 
 use regex::Regex;

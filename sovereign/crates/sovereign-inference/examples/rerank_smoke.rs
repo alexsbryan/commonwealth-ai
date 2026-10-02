@@ -13,8 +13,8 @@
 //! clearly irrelevant ones. Absolute magnitude is model-specific
 //! (rank logit, not a probability).
 
-use sovereign_core::model_family::ModelFamily;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_contracts::model_family::ModelFamily;
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_inference::reranker_standalone::StandaloneReranker;
 use std::env;
 

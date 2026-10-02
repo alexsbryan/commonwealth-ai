@@ -4,9 +4,9 @@
 //!
 //! corpus-engine owns the recipe types (`recipe.rs`), so `tests/recipe_schema.rs`
 //! regenerates the checked-in artifact
-//! `sovereign-recipes/schema/recipe_schema_descriptor.json` from those types
-//! (drift-gated). `build.rs` vendors that artifact into `OUT_DIR`, and this
-//! module embeds it from there — no cross-crate source-tree path.
+//! `corpus-engine/schema/recipe_schema_descriptor.json` from those types
+//! (drift-gated), and this module embeds it from inside the crate root — no
+//! cross-crate source-tree path.
 //!
 //! The recipe-authoring package cannot carry a `corpus-engine` dependency, so
 //! it receives this descriptor INJECTED (the monolith holds both sides). The
@@ -18,5 +18,7 @@
 //! *across* the crate boundary to parse `corpus-engine/src/recipe.rs` with
 //! `syn` at build time — a source-tree path no package split survived.)
 
-pub const RECIPE_SCHEMA_DESCRIPTOR_JSON: &str =
-    include_str!(concat!(env!("OUT_DIR"), "/recipe_schema_descriptor.json"));
+pub const RECIPE_SCHEMA_DESCRIPTOR_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/schema/recipe_schema_descriptor.json"
+));

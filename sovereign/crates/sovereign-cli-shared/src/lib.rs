@@ -11,7 +11,6 @@
 //! Filesystem + repo:
 //! - [`dirs`]: canonical filesystem layout (`~/.svrnmesh/…`).
 //! - [`repo`]: git-repo path resolution + branch lookup.
-//! - [`scip`]: merged SCIP graph loader for code-intelligence tools.
 //!
 //! CLI plumbing (was `sovereign-cli/src/util/`):
 //! - [`cli_contract`]: loader for the CLI contract manifest (`docs/cli-contract.toml`).
@@ -23,46 +22,38 @@
 //! - [`deprecation`]: standard deprecation / retired announcements.
 //! - [`prompts`]: interactive confirm / line-read helpers.
 //! - [`tracing_init`]: one-line `init_tracing(default_filter)`.
-//! - [`code_index`] (`code-index`): the whole `svrn code index` verb. Both the
-//!   dispatcher and the workbench serve it, so both used to carry a copy;
-//!   gated because it is the one module here that is NOT cheap (corpus-engine
-//!   + oicp-client), and only those two binaries enable it.
-//! - [`code_index_incremental`]: the plan/stamp model behind `svrn code
-//!   index`'s incremental refresh. Shared because BOTH the shipped dispatcher
-//!   (`sovereign-cli`) and the workbench (`sovereign-cli-dev`) run that verb;
-//!   until 2026-08-20 each carried a byte-identical 597-line copy of this
-//!   module, which is two deciders for one plan (§10.6). std + serde only, so
-//!   it costs every CLI binary nothing.
-//! - [`observation`] / [`project_toml`] (`project-model`): what a repo IS
-//!   (languages, dependencies, SCIP tooling) and the durable
-//!   `.sovereign/project.toml` record derived from it. Shared because
-//!   `project init` writes the file and `found` / `phase` / `audit` /
-//!   `charter amend` read it back — across two binaries since 2026-08-07.
+//! - [`code_index`]: `tempfile_dir` only. The `svrn code index` verb and its
+//!   incremental plan/stamp model moved to the code program,
+//!   `sovereign-cli-dev` (pb-code-index); `project init` still takes its
+//!   scratch directory from here.
+//!
+//! `dirs`, `repo`, `help`, `deprecation`, `prompts`, `tracing_init`,
+//! `models`, `mcp_client` and `code_index` live in the leaf
+//! `sovereign-cli-base` and are re-exported here at their historical paths
+//! (pb-code-cli-base); so do `flag_surface` and `host_load`, and
+//! `lane_verdict` re-exports `sovereign_contracts::lane_verdict`
+//! (pb-cli-llm-bench-move). The project model (`observation`, `project_toml`)
+//! moved to the code program, `sovereign-cli-dev`, whose `project-observe`
+//! arm `project init` execs; the `scip` re-export went with no reader left.
 
 pub mod args;
 pub mod cli_contract;
 pub mod cli_contract_report;
-#[cfg(feature = "code-index")]
-pub mod code_index;
-pub mod code_index_incremental;
-pub mod deprecation;
-pub mod dirs;
-pub mod flag_surface;
-pub mod help;
-pub mod host_load;
+pub use sovereign_cli_base::code_index;
+pub use sovereign_cli_base::deprecation;
+pub use sovereign_cli_base::dirs;
+pub use sovereign_cli_base::dispatcher;
+pub use sovereign_cli_base::flag_surface;
+pub use sovereign_cli_base::guest_link;
+pub use sovereign_cli_base::help;
+pub use sovereign_cli_base::host_load;
 pub mod lane_verdict;
 #[cfg(feature = "mcp-client")]
-pub mod mcp_client;
-pub mod models;
-#[cfg(feature = "project-model")]
-pub mod observation;
-#[cfg(feature = "project-model")]
-pub mod project_toml;
-pub mod prompts;
+pub use sovereign_cli_base::mcp_client;
+pub use sovereign_cli_base::models;
+pub use sovereign_cli_base::prompts;
 #[cfg(feature = "rail-client")]
-pub mod rail;
-pub mod repo;
-#[cfg(feature = "scip")]
-pub mod scip;
-pub mod tracing_init;
-pub mod urls;
+pub use sovereign_cli_base::rail;
+pub use sovereign_cli_base::repo;
+pub use sovereign_cli_base::tracing_init;
+pub use sovereign_cli_base::urls;

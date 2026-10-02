@@ -72,6 +72,7 @@ fn write_cfg(dir: &TempDir, primary: &str) -> PathBuf {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: Some(ModelsSection {
             primary: PathBuf::from(primary),
             fast: Some(PathBuf::from("/m/fast.gguf")),
@@ -83,6 +84,7 @@ fn write_cfg(dir: &TempDir, primary: &str) -> PathBuf {
             extra: std::collections::BTreeMap::new(),
             primary_pool: None,
             edit: None,
+            kinds: Default::default(),
         }),
         node: Default::default(),
         daemon: DaemonSection::default(),
@@ -99,11 +101,12 @@ fn write_cfg(dir: &TempDir, primary: &str) -> PathBuf {
 }
 
 #[test]
-fn config_diff_flags_iroh_changes_as_restart_required() {
+fn config_diff_reports_unread_iroh_changes_as_unread() {
     let base = SetupConfig {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: Some(ModelsSection {
             primary: PathBuf::from("/m/primary.gguf"),
             fast: None,
@@ -115,6 +118,7 @@ fn config_diff_flags_iroh_changes_as_restart_required() {
             extra: std::collections::BTreeMap::new(),
             primary_pool: None,
             edit: None,
+            kinds: Default::default(),
         }),
         node: Default::default(),
         daemon: DaemonSection::default(),
@@ -130,13 +134,18 @@ fn config_diff_flags_iroh_changes_as_restart_required() {
     let mut enabled_flipped = base.clone();
     enabled_flipped.iroh.enabled = Some(true);
     let d = ConfigDiff::diff(&base, &enabled_flipped);
-    assert_eq!(d.restart_required, vec!["iroh.enabled"]);
+    assert!(
+        d.restart_required.is_empty(),
+        "no reader, so a restart applies nothing"
+    );
+    assert_eq!(d.unread, vec!["iroh.enabled"]);
     assert!(d.models_changed.is_empty());
 
     let mut class_pinned = base.clone();
     class_pinned.iroh.transport.inference = Some("ip".into());
     let d = ConfigDiff::diff(&base, &class_pinned);
-    assert_eq!(d.restart_required, vec!["iroh.transport"]);
+    assert_eq!(d.unread, vec!["iroh.transport"]);
+    assert!(!d.is_noop(), "an unread change is still a change");
 
     let d = ConfigDiff::diff(&base, &base.clone());
     assert!(d.restart_required.is_empty());
@@ -158,6 +167,7 @@ fn an_origin_config_change_is_never_reported_as_no_change() {
         engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         models: None,
         node: Default::default(),
         daemon: DaemonSection::default(),
@@ -170,24 +180,22 @@ fn an_origin_config_change_is_never_reported_as_no_change() {
         mcp_servers: Vec::new(),
     };
 
+    // The media origin reloaded live into the daemon's acceptor until
+    // pb-mesh-exit-transport; cw-rails serves media now and reads its own
+    // rails.toml `[media]`, so a change here is reported as unread, never as
+    // restart-required (pb-distribution-f8).
     let mut origin_set = base.clone();
     origin_set.iroh.media_origin = Some("127.0.0.1:8096".into());
     let d = ConfigDiff::diff(&base, &origin_set);
-    assert_eq!(d.media_changed, vec!["iroh.media_origin"]);
-    assert!(
-        d.restart_required.is_empty(),
-        "the media origin reloads live"
-    );
+    assert_eq!(d.unread, vec!["iroh.media_origin"]);
+    assert!(d.restart_required.is_empty());
     assert!(!d.is_noop(), "a changed config must never read as a no-op");
 
     let mut allow_set = base.clone();
     allow_set.iroh.media_allow = vec!["LittleMac".into()];
     let d = ConfigDiff::diff(&base, &allow_set);
-    assert_eq!(d.media_changed, vec!["iroh.media_allow"]);
-    assert!(
-        d.restart_required.is_empty(),
-        "the media allow list reloads live"
-    );
+    assert_eq!(d.unread, vec!["iroh.media_allow"]);
+    assert!(d.restart_required.is_empty());
     assert!(!d.is_noop());
 
     let mut app_published = base.clone();
@@ -383,7 +391,7 @@ async fn context_window_reports_absence_rather_than_echoing_configured() {
         "absence must not be reported as agreement with the config"
     );
     // And `configured` is the DAEMON's own, from the config it was
-    // commissioned with — not a re-read of the serving process's
+    // commissioned with — not a re-read of the serving daemon's
     // `~/.svrnmesh/config.toml`.
     assert_eq!(body.configured, initial_ctx);
 }

@@ -16,6 +16,17 @@
 use std::pin::Pin;
 use std::time::Instant;
 
+pub mod daemon_inference;
+pub mod daemon_models;
+mod ner;
+pub use ner::RemoteNer;
+pub mod openai_passthrough;
+mod pinned_provider;
+pub use pinned_provider::provider_for_model;
+mod rerank;
+mod serve_loopback;
+mod turn_admission;
+
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use serde::Deserialize;
@@ -242,6 +253,8 @@ pub struct RemoteApiProvider {
     /// to a peer — `peer_inference.rs::provider_for_peer` is the one
     /// caller that sets it.
     node_id: Option<String>,
+    /// Writes the turn's admission id onto the chat wire; see `turn_admission.rs`.
+    carries_turn_admission: bool,
     context_size: u32,
     /// Query-side instruction prefix for this model, resolved once at
     /// construction from the bundled manifest (empty for chat / non-embedding
@@ -314,10 +327,12 @@ impl RemoteApiProvider {
         // client already refuses to make on a 503 body (§18.3).
         let req = self.stamped(self.client.post(&url).json(&body));
 
+        let lap = sovereign_contracts::engine_state::Lap::start("client", "embed");
         let response = req
             .send()
             .await
             .map_err(|e| Error::Inference(format!("Batch embedding request failed: {e}")))?;
+        lap.mark("headers");
 
         if !response.status().is_success() {
             return Err(Error::NotImplemented(format!(
@@ -340,6 +355,7 @@ impl RemoteApiProvider {
         let parsed: EmbedResponse = response.json().await.map_err(|e| {
             Error::Inference(format!("Failed to parse batch embedding response: {e}"))
         })?;
+        lap.mark("body parsed");
 
         if parsed.data.len() != texts.len() {
             return Err(Error::Inference(format!(
@@ -377,6 +393,7 @@ impl RemoteApiProvider {
             api_key,
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
+            carries_turn_admission: false,
             node_id: None,
             context_size,
             // The embed query-instruction prefix is model-family knowledge
@@ -412,6 +429,7 @@ impl RemoteApiProvider {
             api_key,
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
+            carries_turn_admission: false,
             node_id: None,
             context_size,
             query_instruction: String::new(),
@@ -447,6 +465,7 @@ impl RemoteApiProvider {
             api_key: Some(bearer),
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
+            carries_turn_admission: false,
             node_id: None,
             context_size,
             // The embed query-instruction prefix is model-family knowledge
@@ -841,6 +860,33 @@ impl RemoteApiProvider {
             body["tool_choice"] = tc.clone();
         }
 
+        // The sampler and constraint fields the chat wire already carries
+        // and serve's `build_completion_request` already reads. Unwritten,
+        // each was dropped on every turn that crossed this client
+        // (sovereign-serve tests/chat_round_trip.rs).
+        if let Some(p) = request.top_p {
+            body["top_p"] = serde_json::json!(p);
+        }
+        if let Some(k) = request.top_k {
+            body["top_k"] = serde_json::json!(k);
+        }
+        self.write_turn_admission(&mut body, request);
+        if let Some(mode) = request.sampling_mode {
+            body["sampling_mode"] = serde_json::json!(mode);
+        }
+        if let Some(prefix) = &request.assistant_prefix {
+            body["assistant_prefix"] = serde_json::json!(prefix);
+        }
+        if let Some(prefix) = &request.cmd_prefix {
+            body["cmd_prefix"] = serde_json::json!(prefix);
+        }
+        if let Some(urls) = &request.url_allowlist {
+            body["url_allowlist"] = serde_json::json!(urls);
+        }
+        if let Some(ids) = &request.evidence_id_allowlist {
+            body["evidence_id_allowlist"] = serde_json::json!(ids);
+        }
+
         body
     }
 
@@ -1135,12 +1181,14 @@ impl InferenceProvider for RemoteApiProvider {
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
 
+        let lap = sovereign_contracts::engine_state::Lap::start("client", "chat");
         let response = self
             .send_honouring_shed(
                 || self.stamped(self.client.post(&url).json(&body)),
                 "Remote typed stream request",
             )
             .await?;
+        lap.mark("headers");
 
         let byte_stream = response.bytes_stream();
         // Carry parser state across the byte-stream's filter_map by
@@ -1158,6 +1206,7 @@ impl InferenceProvider for RemoteApiProvider {
             let mut usage: Option<StreamUsage> = None;
             'outer: while let Some(chunk) = byte_stream.next().await {
                 let Ok(bytes) = chunk else { continue };
+                lap.first("first byte");
                 buf.push_str(&String::from_utf8_lossy(&bytes));
                 // Process complete lines; leave the tail in buf for
                 // the next iteration so a chunk-split SSE line
@@ -1183,6 +1232,7 @@ impl InferenceProvider for RemoteApiProvider {
                     }
                     for choice in parsed.choices {
                         if let Some(text) = choice.delta.content {
+                            lap.first("first frame parsed");
                             if !text.is_empty() && tx.send(StreamFrame::Token(text)).await.is_err()
                             {
                                 return;
@@ -1305,6 +1355,11 @@ impl InferenceProvider for RemoteApiProvider {
             .ok_or(Error::Inference(
                 "No embedding data in response".to_string(),
             ))
+    }
+
+    /// The rerank kind's client method (`rerank.rs`).
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        self.rerank_over_route(query, docs).await
     }
 
     /// Embed many texts with ONE request per chunk of
@@ -1482,6 +1537,8 @@ pub struct SplitInferenceProvider {
     ///
     /// [`ServingLocus`]: sovereign_contracts::traits::ServingLocus
     locus: sovereign_contracts::traits::ServingLocus,
+    /// serve's self-report, in the loopback mode only (`serve_loopback`).
+    served: Option<sovereign_contracts::engine_state::ServedSelf>,
 }
 
 /// Does this `/v1` endpoint point at something on this machine?
@@ -1507,58 +1564,9 @@ fn endpoint_is_loopback(endpoint: &str) -> bool {
         || host.eq_ignore_ascii_case("ip6-localhost")
 }
 
+// In a sibling file for lib.rs's arch-gate ceiling; the names are unchanged.
 #[cfg(test)]
-mod loopback_tests {
-    use super::endpoint_is_loopback;
-
-    /// The forms a daemon endpoint actually takes on this fleet.
-    #[test]
-    fn loopback_endpoints_are_recognised() {
-        for e in [
-            "http://localhost:9741/v1",
-            "http://127.0.0.1:9741/v1",
-            "http://127.0.0.1:9741",
-            "https://localhost:9741/v1",
-            "http://[::1]:9741/v1",
-            "http://127.9.9.9:9841/v1",
-        ] {
-            assert!(endpoint_is_loopback(e), "{e} is on this machine");
-        }
-    }
-
-    /// A `terminal`'s entry node, and the shapes that must not be mistaken for
-    /// loopback. `localhost.example.com` is the one worth a test: a prefix or
-    /// `contains` check would call it local and let a `local_only` turn cross
-    /// the network.
-    #[test]
-    fn remote_endpoints_are_not_loopback() {
-        for e in [
-            "http://halo:9741/v1",
-            "http://192.168.1.10:9741/v1",
-            "http://localhost.example.com:9741/v1",
-            "http://notlocalhost:9741/v1",
-            "https://10.0.0.4:9741",
-        ] {
-            assert!(!endpoint_is_loopback(e), "{e} is another machine");
-        }
-    }
-
-    /// Anything unparseable counts as OFF-box.
-    ///
-    /// The asymmetry is deliberate (§18.3): a wrong "off-box" reading refuses a
-    /// turn that could have run, which the operator sees and can act on. A
-    /// wrong "on-box" reading carries a `local_only` prompt across the network,
-    /// which nobody sees at all.
-    #[test]
-    fn an_unreadable_endpoint_fails_toward_refusal() {
-        for e in ["", "://", "http://", "garbage"] {
-            assert!(
-                !endpoint_is_loopback(e),
-                "{e:?} cannot be shown to be local, so it must not be treated as local"
-            );
-        }
-    }
-}
+mod loopback_tests;
 
 impl SplitInferenceProvider {
     /// Build the daemon-backed pair from an explicit context window and embed
@@ -1623,7 +1631,8 @@ impl SplitInferenceProvider {
         // dropped.
         let chat = std::sync::Arc::new(
             RemoteApiProvider::new(endpoint_v1, bearer.clone(), &chat_model_id, context_size)
-                .waiting_out_sheds(),
+                .waiting_out_sheds()
+                .carrying_turn_admission(),
         );
         // The embed slot carries the query-instruction prefix so
         // `embed_query` stays bit-identical to the embedded engine. The chat
@@ -1647,6 +1656,7 @@ impl SplitInferenceProvider {
             } else {
                 sovereign_contracts::traits::ServingLocus::ForwardsOffBox
             },
+            served: None,
         }
     }
 
@@ -1723,6 +1733,7 @@ impl SplitInferenceProvider {
             embed_model_id,
             context_size,
             locus,
+            served: None,
         }
     }
 
@@ -1788,6 +1799,7 @@ impl SplitInferenceProvider {
             } else {
                 sovereign_contracts::traits::ServingLocus::ForwardsOffBox
             },
+            served: None,
         }
     }
 
@@ -1880,6 +1892,9 @@ impl InferenceProvider for SplitInferenceProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
+        if serve_loopback::wants_raw_completion(&self.served, request) {
+            return self.chat.raw_completion_stream(request).await;
+        }
         self.chat.complete_stream_with_finish(request).await
     }
 
@@ -1908,11 +1923,43 @@ impl InferenceProvider for SplitInferenceProvider {
         self.embed.embed_query(query).await
     }
 
-    fn model_id_for(&self, _speed: Speed) -> String {
+    /// Rerank on the serving node, which is the chat endpoint's host.
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        self.chat.rerank_batch(query, docs).await
+    }
+
+    fn model_id_for(&self, speed: Speed) -> String {
+        if let Some(served) = &self.served {
+            return serve_loopback::model_id_for(served, speed);
+        }
         // Only one chat slot over HTTP; the daemon's own engine maps the
         // request (Speed / max_tokens) to its loaded fast/primary slots.
         // Reporting the request model is the most honest client-side signal.
         self.chat_model_id.clone()
+    }
+
+    fn resident_slots(&self) -> Vec<ResidentSlot> {
+        serve_loopback::resident_slots(&self.served)
+    }
+
+    fn edit_slot_info(&self) -> Option<EditSlotInfo> {
+        serve_loopback::edit_slot_info(&self.served)
+    }
+
+    fn load_extra_slot(&self, _: String, _: std::path::PathBuf, _: u32) -> Result<String> {
+        Err(serve_loopback::slot_refusal(&self.served, "load"))
+    }
+
+    fn unload_extra_slot(&self, _: &str) -> Result<Option<String>> {
+        Err(serve_loopback::slot_refusal(&self.served, "unload"))
+    }
+
+    fn code_model_id(&self) -> Option<String> {
+        serve_loopback::code_model_id(&self.served)
+    }
+
+    fn compute_children(&self) -> Vec<sovereign_contracts::oicp::ComputeChildStatus> {
+        serve_loopback::compute_children(&self.served)
     }
 
     fn embed_model_id(&self) -> String {
@@ -1958,6 +2005,9 @@ impl InferenceProvider for SplitInferenceProvider {
     /// immediately before synthesis, and a narration frame is never
     /// worth delaying the answer it narrates.
     async fn primary_slot_status(&self) -> Option<ResidentSlot> {
+        if let Some(served) = &self.served {
+            return serve_loopback::primary_slot(served);
+        }
         #[derive(Deserialize)]
         struct StatusBody {
             inference: StatusInference,

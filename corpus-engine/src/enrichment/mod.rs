@@ -8,6 +8,8 @@
 pub mod alignment;
 pub mod atlas;
 pub mod checkpoint;
+pub mod chunk_ner;
+pub mod chunk_ner_bound;
 pub mod clustering;
 pub mod code_intel;
 pub mod domain;
@@ -19,13 +21,15 @@ pub mod field_atoms;
 pub mod field_engine;
 pub mod filter;
 pub mod governance;
-pub mod governance_change;
-pub mod governance_view;
+// The governance read model lives in the atlas-reader leaf since fp-60
+// (FIVE_PROGRAMS §12 decision 1); re-exported at the historical paths.
+pub use corpus_engine_atlas_reader::{governance_change, governance_view};
 pub mod investigation;
 pub mod ontology;
 pub mod open_questions;
 pub mod pass;
 pub mod pipeline;
+pub mod provider_inference;
 pub mod reconciliation;
 pub mod sep;
 pub use understanding_vocab::skeleton; // shim: moved by domains REVIEW-build-field-skeleton-vocab

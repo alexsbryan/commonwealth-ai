@@ -24,7 +24,7 @@ use std::path::Path;
 use understanding_vocab::atoms::AtomEnvelope;
 use understanding_vocab::read::read_atlas_atoms;
 
-use super::tokens::estimate_tokens;
+use sovereign_contracts::tokens::estimate_tokens;
 
 /// Bullets per section. Mirrors the v1 cap at
 /// [`super::digest::format_landscape`] so the digest looks the same

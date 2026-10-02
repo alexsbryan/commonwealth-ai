@@ -8,14 +8,16 @@
 //! tiers").
 
 pub mod admission;
-pub mod entry_endpoint;
 pub mod fim_adapter;
+pub mod fim_http;
 pub mod guest_lender;
+pub mod guest_source;
 pub mod inference_adapter;
 pub mod ledger;
 pub mod local_inflight;
 pub mod model_fetch;
 pub mod oicp_synthesis;
+pub mod openai_http;
 pub mod peer_inference;
 pub mod pinned_pod_snapshot;
 pub mod pinned_transport;
@@ -23,11 +25,13 @@ pub mod pinned_worker_source;
 pub mod prompt_compactor;
 pub mod recorder;
 pub mod router_builder;
+pub mod rpc_discovery;
+pub mod slot_manifest;
 pub mod slot_select;
 pub mod source_content_validator;
 pub mod state;
 pub mod throughput_tracking;
 pub mod tool_profile;
+pub use sovereign_contracts::turn_admission;
 pub mod venue_host;
 pub mod worker_eligibility;
-pub mod worker_state;

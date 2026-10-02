@@ -28,17 +28,14 @@ pub mod chunkers;
 /// the one decider of corpus-engine's on-disk layout (see the module docs for
 /// the 156 hand-joins it replaces).
 pub mod corpus;
-pub mod embed_http;
+pub use corpus_index::embed_http;
 pub mod engine;
 pub mod enrichment;
 pub mod error;
 pub mod extractors;
-pub use code_facts::facts; // shim: moved by domains REVIEW-build-code-facts
-#[cfg(feature = "treesitter")]
-pub use code_facts::facts_check; // shim: moved by domains REVIEW-build-code-facts
-/// SQLite-backed, per-file-patchable home for the fact base (rusqlite → `stores`).
-#[cfg(feature = "stores")]
-pub use code_facts::facts_store; // shim: moved by domains REVIEW-build-code-facts
+pub mod face;
+// The `facts`/`facts_check`/`facts_store` shims are gone: zero importers reached
+// them in-monorepo, so `code-facts` is a feature-forward edge only (Cargo.toml).
 pub mod filters;
 pub mod freshness;
 pub mod harness;
@@ -54,12 +51,13 @@ pub use ::oplog;
 pub mod pii;
 pub mod progress;
 pub mod recipe;
-pub mod recipe_builtin;
 pub mod recipe_install;
 pub mod recipe_ontology;
 mod recipe_parsing;
 pub mod recipe_schema;
+pub mod recipe_source;
 pub mod recipe_templates;
+pub mod recipe_tester;
 pub mod registry;
 pub mod safety;
 pub mod sharding;
@@ -129,7 +127,7 @@ pub use corpus_engine_yield::{
 };
 pub use engine::{
     CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn,
-    CustomExtractorFn,
+    CustomExtractorFn, FolderTiered, IngestAtlas,
 };
 pub use enrichment::atlas::atlas_teardown;
 pub use enrichment::{

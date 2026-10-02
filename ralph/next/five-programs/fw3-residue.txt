@@ -1,0 +1,600 @@
+# fw-3 residue census (2026-09-24, boundary-gate 62 at a892db844) — every corpus_engine:: path leaf in the eight fold consumers whose leaf name is NOT defined in understanding-vocab or corpus-engine-atlas-reader. Format: path [count] file:line… (crate-relative). Carved leaves (repointable, deliberately NOT repointed — PROMPT standing fact) are counted only.
+== sovereign-tools: carved 202, residue 281 (158 distinct)
+   CorpusEngine  [29] src/atlas_postinstall.rs:32, src/bundles.rs:108, src/bundles.rs:223 …
+   CorpusEngine::ingest  [1] src/catalog_ingest.rs:14
+   CorpusIndex  [1] src/enrichment_checker.rs:36
+   CorpusSpec  [2] src/local_corpus/manager.rs:26, tests/main/enrichment_health_e2e.rs:51
+   CorpusSpec::Inline  [1] src/catalog_ingest.rs:15
+   CustomExtractorFn  [1] src/local_corpus/recipe_extractor.rs:14
+   EnrichmentProgress  [1] src/knowledge_view/debouncer.rs:23
+   InferenceFn  [6] src/corpus/mod.rs:223, src/knowledge_view/manager.rs:1074, src/knowledge_view/manager.rs:1383 …
+   ProgressCallback  [2] src/atlas_postinstall.rs:32, src/local_corpus/manager.rs:1476
+   RaptorSummaryRow  [3] src/raptor_index.rs:19, src/summary_atoms.rs:229, src/summary_atoms.rs:423
+   Recipe::from_toml  [6] src/local_corpus/config.rs:462, src/local_corpus/config.rs:471, src/local_corpus/config.rs:522 …
+   TestOptions  [1] src/recipe_tester_adapter.rs:20
+   append_partition_to_canonical  [1] src/catalog_ingest.rs:359
+   atlas_teardown  [3] src/local_corpus/manager.rs:744, src/local_corpus/manager.rs:758, src/local_corpus/watched/enrich.rs:32
+   build_raptor_index  [2] src/raptor_index.rs:19, src/summary_atoms.rs:423
+   engine::CorpusEngine  [4] src/knowledge_view/acquirers/sqlite.rs:52, src/knowledge_view/debouncer.rs:19, src/knowledge_view/manager.rs:27 …
+   engine::CustomAcquirerFn  [2] src/knowledge_view/acquirers/sqlite.rs:52, src/sec_edgar.rs:65
+   enrichment::atlas::AtlasIngestionConfig  [1] src/atlas_postinstall.rs:27
+   enrichment::atlas::AtlasIngestionRegistry  [1] src/atlas_postinstall.rs:27
+   enrichment::atlas::analysis::FlagKind  [1] src/parcel_analytics.rs:24
+   enrichment::atlas::analysis::compute_aggregates  [1] src/parcel_analytics.rs:24
+   enrichment::atlas::analysis::flags  [1] src/parcel_analytics.rs:24
+   enrichment::atlas::analysis::gaps::GapDetectionInput  [1] src/atlas_phase/gaps.rs:12
+   enrichment::atlas::analysis::gaps::GapsOutpu  [1] src/atlas_phase/gaps.rs:12
+   enrichment::atlas::analysis::gaps::detect_deterministic_gaps  [1] src/atlas_phase/gaps.rs:12
+   enrichment::atlas::analysis::sec_facts::AsOf  [1] src/sec_facts_render.rs:70
+   enrichment::atlas::analysis::sec_facts::ConceptFacts  [1] src/sec_facts_render.rs:70
+   enrichment::atlas::analysis::sec_facts::ConceptKind  [1] src/sec_facts_render.rs:70
+   enrichment::atlas::analysis::sec_facts::Coverage  [1] src/sec_facts_render.rs:70
+   enrichment::atlas::analysis::sec_facts::Period  [1] src/sec_facts_render.rs:70
+   enrichment::atlas::analysis::sec_facts::SEC_FACTS_AUTHORITY_TOOL  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::SEC_FACTS_SIDECAR  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::SecFact  [2] src/sec_facts.rs:36, src/sec_facts_render.rs:70
+   enrichment::atlas::analysis::sec_facts::SecFactStore  [3] src/sec_edgar.rs:1264, src/sec_facts.rs:36, src/sec_facts_render.rs:70
+   enrichment::atlas::analysis::sec_facts::SecRefusal  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::available_period_ends  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::calendar_period_in_question  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::change  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::coverage_summary  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::discover_authoritative_stores  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::fmt_compact  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::fmt_full  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::fmt_pct  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::normalize_concept_phrase  [1] src/sec_edgar.rs:66
+   enrichment::atlas::analysis::sec_facts::ratio  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::resolve_concept  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::scope_qualifier_in_question  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::sec_facts::store_claims  [1] src/sec_facts.rs:36
+   enrichment::atlas::analysis::tensions::CandidateSelectionInput  [1] src/atlas_phase/tensions.rs:15
+   enrichment::atlas::analysis::tensions::TensionCandidatesOutput  [1] src/atlas_phase/tensions.rs:15
+   enrichment::atlas::analysis::tensions::drop_same_named_speaker_pairs  [1] src/atlas_phase/tensions.rs:15
+   enrichment::atlas::analysis::tensions::select_candidates  [1] src/atlas_phase/tensions.rs:15
+   enrichment::atlas::ann_store::AtlasSeeding  [1] src/typed_extension/mod.rs:31
+   enrichment::atlas::ann_store::ann_table_is_fresh  [2] src/atlas_context_manager.rs:316, src/atlas_view/reader.rs:239
+   enrichment::atlas::append_atoms_and_edges  [1] src/summary_atoms.rs:62
+   enrichment::atlas::atoms::Entit  [1] src/atlas_postinstall.rs:1173
+   enrichment::atlas::context::read_section_rows  [2] src/atlas_context_manager.rs:348, src/atlas_context_manager.rs:680
+   enrichment::atlas::context_loader::BackfillOutcome  [1] src/atlas_context_manager.rs:93
+   enrichment::atlas::context_loader::backfill_ann  [1] src/atlas_context_manager.rs:93
+   enrichment::atlas::cross_corpus::CrossCorpusAtomRef  [1] src/atlas_view/atom_detail.rs:529
+   enrichment::atlas::cross_corpus::CrossCorpusEdge  [2] src/atlas_view/atom_detail.rs:25, src/atlas_view/atom_detail.rs:529
+   enrichment::atlas::cross_corpus::CrossCorpusEdgesFile  [1] src/atlas_view/atom_detail.rs:529
+   enrichment::atlas::cross_corpus::MatchTrace  [1] src/atlas_view/atom_detail.rs:529
+   enrichment::atlas::ontology_coverage::OntologyCoverage  [1] src/atlas_view/reader.rs:116
+   enrichment::atlas::open_walk_provider_blocking  [1] src/atlas_context_manager.rs:614
+   enrichment::atlas::read_atlas_cross_corpus_edges  [1] src/atlas_view/atom_detail.rs:27
+   enrichment::atlas::read_or_compute_atlas_summary  [2] src/atlas_status.rs:18, src/atlas_view/reader.rs:14
+   enrichment::atlas::read_schema_validation_report  [1] src/atlas_view/reader.rs:234
+   enrichment::atlas::resolution::TypeExtensionResolveOutput  [1] src/typed_extension/mod.rs:34
+   enrichment::atlas::resolution::apply_citations_to_resolved  [1] src/typed_extension/mod.rs:500
+   enrichment::atlas::resolution::resolve_type_extensions  [2] src/typed_extension/mod.rs:12, src/typed_extension/mod.rs:34
+   enrichment::atlas::seed_population::population_marker_is_current  [1] src/summary_atoms.rs:542
+   enrichment::atlas::seed_population::seed_population  [2] src/summary_atoms.rs:551, src/summary_atoms.rs:61
+   enrichment::atlas::seed_population::write_population_marker  [1] src/summary_atoms.rs:61
+   enrichment::atlas::vital_tier  [2] examples/triage_dump.rs:14, src/atlas_postinstall.rs:27
+   enrichment::atlas::wiki_store::build_wikipedia_columnar_store_from_chunks  [1] src/atlas_context_manager.rs:934
+   enrichment::atlas::wiki_store::wiki_atom_id  [1] src/atlas_context_manager.rs:1017
+   enrichment::atlas::writer::write_atlas_full  [2] src/typed_extension/mod.rs:15, src/typed_extension/mod.rs:37
+   enrichment::cluster_embeddings  [1] src/local_corpus/clusterer.rs:4
+   enrichment::clustering::ClusterResultasEngineClusterResult  [1] src/local_corpus/clusterer.rs:21
+   enrichment::clustering::EnrichmentProgress  [1] src/local_corpus/clusterer.rs:21
+   enrichment::clustering::cluster_embeddings  [1] src/local_corpus/clusterer.rs:21
+   enrichment::domain::ClusteringConfig  [1] src/local_corpus/clusterer.rs:24
+   enrichment::field_atoms::load_field_model  [1] src/enrichment_checker.rs:273
+   enrichment::field_engine::FieldModelEngine  [1] src/knowledge_view/debouncer.rs:20
+   enrichment::pass  [1] src/local_corpus/atlas_dispatch.rs:27
+   enrichment::pass::EnrichmentPassRegistry  [1] src/local_corpus/atlas_dispatch.rs:6
+   enrichment::pipeline::BuildStep  [2] src/enrich.rs:40, src/local_corpus/atlas_dispatch.rs:200
+   enrichment::pipeline::ChatPrompt  [4] src/corpus/mod.rs:224, src/local_corpus/clusterer.rs:25, tests/main/enrichment_health_e2e.rs:50 …
+   enrichment::pipeline::EnrichProgress  [5] src/catalog_ingest.rs:21, src/catalog_ingest.rs:85, src/enrich.rs:40 …
+   enrichment::pipeline::PipelineRegistry::builtin  [1] src/atlas_context_manager.rs:63
+   enrichment::pipeline::atlas::ArgumentativeExtension  [1] src/typed_extension/pass.rs:22
+   enrichment::pipeline::atlas::SectionExtraction  [2] src/typed_extension/mod.rs:39, src/typed_extension/pass.rs:22
+   enrichment::pipeline::atlas::TypeExtension  [2] src/typed_extension/mod.rs:39, src/typed_extension/pass.rs:22
+   enrichment::pipeline::progress::wire  [1] src/enrich.rs:40
+   enrichment::pipeline::runner::phase_1_  [1] src/typed_call.rs:9
+   enrichment::pipeline::typed_schemas::SOURCE_RECOVERY_QUOTE_CHAR_CAP  [1] src/typed_extension/pass.rs:469
+   enrichment::pipeline::typed_schemas::argumentative  [1] src/typed_extension/mod.rs:10
+   enrichment::pipeline::typed_schemas::argumentative::PHASE1_ARGUMENTATIVE_SYSTEM  [1] src/typed_extension/pass.rs:25
+   enrichment::pipeline::typed_schemas::argumentative::parse_phase1_argumentative  [1] src/typed_extension/pass.rs:25
+   enrichment::pipeline::typed_schemas::argumentative::phase1_argumentative_schema  [1] src/typed_extension/pass.rs:25
+   enrichment::pipeline::typed_schemas::render_source_recovery_block  [1] src/typed_extension/pass.rs:28
+   enrichment::state::EnrichmentHeartbeat::spawn  [1] src/local_corpus/watched/enrich.rs:643
+   enrichment::state::EnrichmentPhase  [4] src/conv_tiered_provider.rs:362, src/conv_tiered_provider.rs:818, src/local_corpus/atlas_dispatch.rs:29 …
+   enrichment::state::EnrichmentPhase::Complete  [1] src/conv_tiered_provider.rs:565
+   enrichment::state::EnrichmentPhase::EntityExtraction  [1] src/local_corpus/watched/enrich.rs:667
+   enrichment::state::EnrichmentPhase::Failed  [1] src/atlas_postinstall.rs:1354
+   enrichment::state::EnrichmentPhase::RaptorTree  [1] src/conv_tiered_provider.rs:683
+   enrichment::state::EnrichmentPhase::is_resumable_interruption  [1] src/local_corpus/manager.rs:938
+   enrichment::state::EnrichmentProgressSink  [7] src/conv_tiered_provider.rs:1252, src/conv_tiered_provider.rs:411, src/conv_tiered_provider.rs:441 …
+   enrichment::state::EnrichmentStateFile  [2] src/local_corpus/atlas_dispatch.rs:29, src/local_corpus/manager.rs:954
+   enrichment::state::EnrichmentStateFile::declared_dead_at  [1] src/atlas_postinstall.rs:1111
+   enrichment::state::EnrichmentStateFile::fail  [2] src/atlas_postinstall.rs:1006, src/local_corpus/watched/enrich.rs:742
+   enrichment::state::EnrichmentStateFile::path  [2] src/local_corpus/manager.rs:1032, src/local_corpus/manager.rs:816
+   enrichment::state::EnrichmentStateFile::stamp  [2] src/conv_tiered_provider.rs:373, src/local_corpus/watched/enrich.rs:663
+   enrichment::tiered::ChunkEntityExtractor  [2] src/enrichment_bootstrap.rs:31, src/local_corpus/watched/enrich.rs:226
+   enrichment::tiered::ConvBucket  [2] src/conv_tiered_provider.rs:36, src/conv_tiered_provider.rs:471
+   enrichment::tiered::TieredEnrichmentProvider  [5] src/conv_tiered_provider.rs:36, src/conv_tiered_provider.rs:4, src/conv_tiered_provider.rs:472 …
+   enrichment::tiered::report_refused_over_cap  [1] src/local_corpus/watched/enrich.rs:686
+   enrichment::tiered::run_folder_tiered_enrichment  [2] src/conv_tiered_provider.rs:233, src/local_corpus/watched/enrich.rs:715
+   extractors::strip_html  [2] src/corpus/mod.rs:25, src/corpus/mod.rs:330
+   extractors::wikipedia_types::WikiLink  [1] src/atlas_context_manager.rs:935
+   extractors::wikipedia_types::WikipediaChunkMetadata  [1] src/atlas_context_manager.rs:935
+   extractors::xml::strip_mediawiki  [1] src/corpus/wikipedia.rs:21
+   filters::normalize_title  [2] src/atlas_postinstall.rs:686, src/atlas_postinstall.rs:718
+   freshness::DOC_FRESHNESS_FILE  [1] src/atlas_view/atom_browse.rs:866
+   freshness::load_doc_freshness  [1] src/atlas_view/atom_browse.rs:174
+   index::field_skeleton::load_field_skeleton  [4] src/epistemic.rs:265, src/epistemic.rs:84, src/knowledge_view/manager.rs:441 …
+   index::field_skeleton::write_field_skeleton  [2] tests/main/knowledge_view_e2e.rs:237, tests/main/knowledge_view_e2e.rs:524
+   progress::IngestProgress  [3] src/atlas_postinstall.rs:31, src/catalog_ingest.rs:38, src/local_corpus/manager.rs:2238
+   progress::IngestProgress::*  [1] src/local_corpus/manager.rs:2239
+   progress::ProgressCallback  [2] src/catalog_ingest.rs:315, src/catalog_ingest.rs:318
+   progress::SourceFileManifest  [1] src/local_corpus/manager.rs:1771
+   progress::SourceFileStatus::Complete  [1] src/local_corpus/manager.rs:1794
+   raptor_article_title  [2] src/summary_atoms.rs:21, src/summary_atoms.rs:64
+   recipe::AcquirerConfig  [3] src/catalog_ingest.rs:852, src/knowledge_view/recipes.rs:18, tests/main/knowledge_view_e2e.rs:41
+   recipe::AcquirerConfig::BulkDownload  [1] src/catalog_ingest.rs:775
+   recipe::CatalogConfig  [3] src/catalog.rs:34, src/catalog_ingest.rs:584, src/knowledge.rs:5
+   recipe::ChunkerConfig  [2] src/catalog_ingest.rs:852, src/knowledge_view/recipes.rs:18
+   recipe::CorpusMeta  [2] src/catalog_ingest.rs:852, src/knowledge_view/recipes.rs:18
+   recipe::EnrichmentConfig  [1] src/knowledge_view/recipes.rs:18
+   recipe::ExtractorConfig  [2] src/catalog_ingest.rs:852, src/knowledge_view/recipes.rs:18
+   recipe::IndexConfig  [2] src/catalog_ingest.rs:852, src/knowledge_view/recipes.rs:18
+   recipe::Recipe  [4] src/catalog_ingest.rs:39, src/knowledge_view/debouncer.rs:21, src/knowledge_view/manager.rs:29 …
+   recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON  [7] src/bundles.rs:467, tests/main/recipe_author_tools.rs:193, tests/main/recipe_author_tools.rs:238 …
+   registry::BUNDLED_REGISTRY_TOML  [3] src/bundles.rs:468, tests/recipe_author_loop.rs:229, tests/recipe_author_loop.rs:53
+   scan_raptor_summaries  [2] src/summary_atoms.rs:20, src/summary_atoms.rs:64
+   types::CorpusSpec  [2] src/catalog_ingest.rs:40, src/knowledge_view/manager.rs:30
+   types::InferenceFn  [3] src/knowledge_view/debouncer.rs:22, src/knowledge_view/manager.rs:30, tests/main/enrichment_health_e2e.rs:146
+   update::CorpusUpdater  [1] src/local_corpus/watched/mod.rs:7
+   update::CorpusUpdater::apply_update  [1] src/local_corpus/watched/apply.rs:2
+   update::ManifestDiff  [1] src/local_corpus/watched/diff.rs:4
+   update::delta::CorpusUpdater  [1] src/local_corpus/watched/apply.rs:21
+   update::delta::ManifestDiff  [1] src/local_corpus/watched/apply.rs:21
+   update::delta::UpdatePhase  [1] src/local_corpus/watched/apply.rs:21
+   update::delta::UpdateProgress  [1] src/local_corpus/watched/apply.rs:21
+   update::delta::VersionManifest  [1] src/local_corpus/watched/apply.rs:21
+   wikipedia_graph_present  [1] src/atlas_context_manager.rs:589
+== sovereign-cli-llm: carved 194, residue 397 (275 distinct)
+   CorpusEngine  [13] examples/epistemic_demo.rs:83, src/atlas_cmd/wikipedia.rs:13, src/chat_cmd/bootstrap.rs:49 …
+   CorpusSpec::Inline  [1] src/recipe_cmd.rs:377
+   InferenceFn  [7] src/awareness_cmd/extract.rs:317, src/awareness_cmd/inference.rs:31, src/awareness_cmd/scenario.rs:31 …
+   IngestProgress  [2] src/alignment_cmd.rs:31, src/enrich_cmd/ingest.rs:17
+   MergePhaseProgress  [1] src/corpus_cmd/partitions.rs:539
+   MergePhaseProgress::BuildSubPhase  [1] src/corpus_cmd/partitions.rs:562
+   MergePhaseProgress::Complete  [1] src/corpus_cmd/partitions.rs:567
+   MergePhaseProgress::DiscoveryComplete  [1] src/corpus_cmd/partitions.rs:541
+   MergePhaseProgress::MergeComplete  [1] src/corpus_cmd/partitions.rs:546
+   MergePhaseProgress::MetaStamped  [1] src/corpus_cmd/partitions.rs:555
+   ProgressCallback  [1] src/enrich_cmd/ingest.rs:17
+   PublishDeclaration::Declare  [1] src/corpus_snapshot_cmd.rs:490
+   PublishDeclaration::Refuse  [1] src/corpus_snapshot_cmd.rs:518
+   PublishDeclaration::Undeclared  [1] src/corpus_snapshot_cmd.rs:502
+   Recipe  [2] src/recipe_cmd.rs:20, src/recipe_cmd/publish.rs:194
+   Recipe::from_file  [2] src/enrich_cmd/init.rs:151, src/recipe_cmd/publish.rs:65
+   RecipeRegistry  [2] src/recipe_cmd.rs:20, src/workflow_cmd.rs:14
+   RecipeRegistry::default_local_recipes_dir  [1] src/recipe_cmd/publish.rs:106
+   RecipeRegistry::from_bundled  [1] src/recipe_cmd/publish.rs:127
+   ReconstructionMethod  [1] src/corpus_cmd/partitions.rs:9
+   SourceFileStatus::Complete  [1] src/corpus_cmd/partitions.rs:712
+   SourceFileStatus::InProgress  [1] src/corpus_cmd/partitions.rs:718
+   SourceFileStatus::Pending  [1] src/corpus_cmd/partitions.rs:724
+   TestOptions  [1] src/recipe_cmd.rs:20
+   asset_store::FilesystemAssetStore  [1] src/enrich_cmd/sheets_ingest.rs:19
+   atlas_traversal  [1] src/enrich_cmd/atlas_query.rs:19
+   atlas_traversal::QueryPlan  [1] src/enrich_cmd/atlas_query.rs:19
+   atlas_traversal::classify_query_with  [1] src/enrich_cmd/atlas_query.rs:19
+   atlas_traversal::engine::AtlasView  [1] src/enrich_cmd/atlas_query.rs:19
+   atlas_traversal::traverse  [1] src/enrich_cmd/atlas_query.rs:19
+   chunkers::sectioned::ChapterRegexDetector  [1] src/enrich_cmd/init.rs:23
+   chunkers::sectioned::SectionedChunker  [1] src/enrich_cmd/init.rs:23
+   chunkers::sectioned::SectionedChunker::with_detector  [1] src/enrich_cmd/backfill_sections.rs:264
+   chunkers::sectioned::TocAnchoredDetector::DEFAULT_END  [1] src/enrich_cmd/init.rs:1017
+   chunkers::sectioned::TocAnchoredDetector::DEFAULT_START  [1] src/enrich_cmd/init.rs:1014
+   chunkers::sectioned::TocAnchoredDetector::with_markers  [1] src/enrich_cmd/init.rs:281
+   chunkers::threaded_turns  [1] src/eval_cmd/bank.rs:97
+   chunkers::threaded_turns::ThreadedTurnsChunker  [1] src/eval_cmd/attribution.rs:5
+   decide_publish_declaration  [1] src/corpus_snapshot_cmd.rs:485
+   embed_http::http_embed_fn  [2] src/corpus_snapshot_cmd.rs:1139, src/corpus_snapshot_cmd.rs:473
+   engine  [1] src/enrich_cmd/atlas_drift_report.rs:1684
+   engine::status  [4] src/corpus_cmd/status.rs:10, tests/corpus_status_one_decider.rs:3, tests/corpus_status_one_decider.rs:49 …
+   engine::status::CorpusReadiness  [2] src/corpus_cmd/inventory.rs:13, src/corpus_cmd/status.rs:16
+   engine::status::corpus_chunk_count  [1] src/quality_lane_cmd/chat_ask.rs:688
+   engine::status::corpus_readiness  [1] src/corpus_cmd/inventory.rs:13
+   engine::status::scan_corpus_rows  [1] src/corpus_cmd/status.rs:16
+   enrichment::EnrichmentProgress  [1] src/awareness_cmd/extract.rs:30
+   enrichment::GovernanceOpKind  [4] src/govern_cmd/accept.rs:9, src/govern_cmd/ask.rs:21, src/govern_cmd/resolve.rs:14 …
+   enrichment::GovernanceView  [1] src/govern_cmd/mod.rs:22
+   enrichment::RuleStatus  [1] src/govern_cmd/ask.rs:21
+   enrichment::atlas::AtlasData  [1] src/enrich_cmd/ingest.rs:16
+   enrichment::atlas::AtlasIngestionConfig  [1] src/enrich_cmd/ingest.rs:16
+   enrichment::atlas::AtlasIngestionRegistry  [1] src/enrich_cmd/ingest.rs:16
+   enrichment::atlas::CrossCorpusEdgesFile  [1] src/enrich_cmd/atlas_cross_corpus.rs:23
+   enrichment::atlas::CrossCorpusInput  [1] src/enrich_cmd/atlas_cross_corpus.rs:23
+   enrichment::atlas::ResolutionFailuresFile  [1] src/enrich_cmd/errors.rs:28
+   enrichment::atlas::RowFit::Fits  [1] src/atlas_cmd/map_check.rs:75
+   enrichment::atlas::RowFit::Inert  [1] src/atlas_cmd/map_check.rs:76
+   enrichment::atlas::analysis::configuration::ConfigurationsOutput  [2] src/enrich_cmd/diagnose.rs:18, src/enrich_cmd/eval/mod.rs:41
+   enrichment::atlas::analysis::configuration::Phase8ParseItem  [1] src/enrich_cmd/workflow_primitives.rs:22
+   enrichment::atlas::analysis::gaps::Gap  [2] src/enrich_cmd/diagnose.rs:19, src/enrich_cmd/eval/mod.rs:42
+   enrichment::atlas::analysis::gaps::GapKind  [2] src/enrich_cmd/diagnose.rs:19, src/enrich_cmd/eval/mod.rs:42
+   enrichment::atlas::analysis::gaps::GapsOutput  [2] src/enrich_cmd/diagnose.rs:19, src/enrich_cmd/eval/mod.rs:42
+   enrichment::atlas::analysis::tensions::TensionCandidatesOutput  [1] src/enrich_cmd/diagnose.rs:20
+   enrichment::atlas::ann_store::ann_table_is_fresh  [1] src/atlas_cmd/migrate_all.rs:43
+   enrichment::atlas::append_atoms_and_edges  [1] src/enrich_cmd/atlas_reconcile.rs:24
+   enrichment::atlas::atoms::ResolutionStatus::Contested  [1] src/enrich_cmd/eval/scorers.rs:587
+   enrichment::atlas::atoms::ResolutionStatus::Dissolved  [1] src/enrich_cmd/eval/scorers.rs:591
+   enrichment::atlas::atoms::ResolutionStatus::Open  [2] src/enrich_cmd/eval/scorers.rs:1057, src/enrich_cmd/eval/scorers.rs:590
+   enrichment::atlas::atoms::ResolutionStatus::Resolved  [1] src/enrich_cmd/eval/scorers.rs:584
+   enrichment::atlas::atoms_delta::AtomsDelta  [1] src/enrich_cmd/delta_cmd.rs:47
+   enrichment::atlas::atoms_delta::apply_atom_delta  [2] src/enrich_cmd/atlas_patch_code.rs:41, src/enrich_cmd/delta_cmd.rs:47
+   enrichment::atlas::context::read_section_rows  [2] src/enrich_cmd/atlas_query.rs:227, src/eval_cmd/mod.rs:911
+   enrichment::atlas::detect_grounding  [1] src/enrich_cmd/atlas_cross_corpus.rs:23
+   enrichment::atlas::doc_to_atoms  [3] src/atlas_cmd/build_doc_index.rs:9, src/atlas_cmd/stats.rs:11, src/enrich_cmd/atlas_patch_code.rs:46
+   enrichment::atlas::migrate_ids::MigrationSummary  [1] src/atlas_cmd/migrate_ids.rs:9
+   enrichment::atlas::migrate_ids::migrate_atlas_ids  [2] src/atlas_cmd/migrate_ids.rs:9, src/enrich_cmd/delta_cmd.rs:48
+   enrichment::atlas::open_walk_provider_blocking  [1] src/atlas_cmd/kind.rs:37
+   enrichment::atlas::read_or_compute_atlas_summary  [2] src/atlas_cmd/kind.rs:37, src/corpus_cmd/inventory.rs:628
+   enrichment::atlas::store::build_and_write_store  [2] src/atlas_cmd/migrate_all.rs:44, src/enrich_cmd/atlas_patch_code.rs:42
+   enrichment::atlas::store::store_needs_build  [1] src/atlas_cmd/migrate_all.rs:44
+   enrichment::atlas::strategies::code_walk::CodeWalkConfig  [1] src/enrich_cmd/atlas_patch_code.rs:43
+   enrichment::atlas::strategies::code_walk::extract_atoms_for_symbols  [1] src/enrich_cmd/atlas_patch_code.rs:43
+   enrichment::atlas::strategies::code_walk::read_code_walk_visibility  [1] src/enrich_cmd/atlas_patch_code.rs:43
+   enrichment::atlas::wiki_store::build_borrowed_ann_seed_table  [1] src/atlas_cmd/wikipedia.rs:605
+   enrichment::atlas::wiki_store::build_wikipedia_columnar_store_from_chunks  [1] src/atlas_cmd/wikipedia.rs:12
+   enrichment::atlas::write_atlas_cross_corpus_edges  [1] src/enrich_cmd/atlas_cross_corpus.rs:23
+   enrichment::atlas::write_atlas_failures  [1] src/enrich_cmd/errors.rs:623
+   enrichment::atlas::write_atlas_ontology  [1] src/atlas_cmd/kind.rs:705
+   enrichment::atlas::writer::write_atlas  [2] src/awareness_cmd/extract.rs:23, src/awareness_cmd/filter.rs:34
+   enrichment::code_intel::SymbolEnrichment  [3] src/enrich_cmd/atlas_patch_code.rs:48, src/enrich_cmd/capability_doc.rs:22, src/enrich_cmd/spec_reconcile.rs:43
+   enrichment::code_intel::body_hash  [1] src/enrich_cmd/spec_intel.rs:25
+   enrichment::code_intel::diff_code_intel_caches  [1] src/enrich_cmd/atlas_patch_code.rs:48
+   enrichment::code_intel::pass::run_code_intel_for_corpus  [2] src/enrich_cmd/atlas_patch_code.rs:47, src/enrich_cmd/code_intel.rs:12
+   enrichment::domain::Domain  [1] src/awareness_cmd/extract.rs:26
+   enrichment::domains::conversational::ConversationalDomain  [1] src/awareness_cmd/extract.rs:27
+   enrichment::domains::personal::PersonalDomain  [1] src/awareness_cmd/extract.rs:28
+   enrichment::entity_extraction::EntityExtractionResult  [1] src/awareness_cmd/extract.rs:29
+   enrichment::entity_extraction::run_entity_extraction  [1] src/awareness_cmd/extract.rs:29
+   enrichment::field_atoms::publish_to_atlas  [1] src/enrich_cmd/field_atoms.rs:27
+   enrichment::field_atoms::skeleton_from_atoms  [1] src/enrich_cmd/field_atoms.rs:27
+   enrichment::governance_view::JoinStatus  [1] src/corpus_snapshot_cmd.rs:802
+   enrichment::governance_view::chunk_to_section_map  [1] src/govern_cmd/ask.rs:156
+   enrichment::governance_view::chunk_to_section_map_status  [1] src/corpus_snapshot_cmd.rs:802
+   enrichment::governance_view::section_titles  [3] src/govern_cmd/ask.rs:157, src/govern_cmd/ask.rs:236, src/govern_cmd/tensions.rs:80
+   enrichment::investigation  [1] src/enrich_cmd/investigation.rs:23
+   enrichment::investigation::ChunkInput  [1] src/enrich_cmd/investigation.rs:29
+   enrichment::investigation::INVESTIGATION_DIRNAME  [1] src/enrich_cmd/investigation.rs:29
+   enrichment::investigation::graphasinvestigation_graph  [1] src/enrich_cmd/investigation.rs:29
+   enrichment::investigation::normalize::Normalizer  [1] src/enrich_cmd/investigation.rs:29
+   enrichment::investigation::recoalesce  [1] src/enrich_cmd/investigation.rs:29
+   enrichment::investigation::run_investigation  [1] src/enrich_cmd/investigation.rs:29
+   enrichment::ontology::TypeIndex  [1] src/enrich_cmd/atlas_reconcile.rs:27
+   enrichment::pass::INVESTIGATION  [1] src/enrich_cmd/investigation.rs:181
+   enrichment::pipeline  [2] src/enrich_cmd/backfill_sections.rs:54, src/enrich_cmd/workflow_primitives.rs:13
+   enrichment::pipeline::Atlas  [2] src/enrich_cmd/query.rs:7, src/enrich_cmd/validate.rs:9
+   enrichment::pipeline::BuildStep  [1] src/enrich_cmd/build.rs:19
+   enrichment::pipeline::CascadeStep  [1] src/enrich_cmd/cascade.rs:13
+   enrichment::pipeline::ChapterInput  [1] src/bench_cmd/atlas.rs:35
+   enrichment::pipeline::ChapterManifest  [2] src/enrich_cmd/backfill_sections.rs:54, src/enrich_cmd/init.rs:24
+   enrichment::pipeline::ChapterManifest::load  [1] src/enrich_cmd/delta_cmd.rs:574
+   enrichment::pipeline::ChapterSelection  [1] src/enrich_cmd/cascade.rs:13
+   enrichment::pipeline::ChatPrompt  [11] src/awareness_cmd/filter.rs:38, src/awareness_cmd/inference.rs:30, src/awareness_cmd/scenario.rs:30 …
+   enrichment::pipeline::CustomAtlasSpec  [3] src/enrich_cmd/init.rs:140, src/enrich_cmd/init.rs:146, src/enrich_cmd/init.rs:159
+   enrichment::pipeline::EnrichProgress  [1] src/enrich_cmd/build.rs:19
+   enrichment::pipeline::EnrichProgressFn  [1] src/enrich_cmd/build.rs:19
+   enrichment::pipeline::Exemplar  [1] src/enrich_cmd/promote.rs:12
+   enrichment::pipeline::ExemplarBank  [2] src/enrich_cmd/exemplars.rs:10, src/enrich_cmd/promote.rs:12
+   enrichment::pipeline::ExemplarKind  [1] src/enrich_cmd/promote.rs:12
+   enrichment::pipeline::ExtractedQuestion  [2] src/enrich_cmd/diff.rs:12, src/enrich_cmd/diff.rs:212
+   enrichment::pipeline::Phase1Failure  [1] src/enrich_cmd/errors.rs:624
+   enrichment::pipeline::Phase1Output  [6] src/enrich_cmd/delta_cmd.rs:50, src/enrich_cmd/diff.rs:12, src/enrich_cmd/diff.rs:212 …
+   enrichment::pipeline::Phase2AtlasOutput  [1] src/enrich_cmd/errors.rs:29
+   enrichment::pipeline::Phase2Output  [2] src/enrich_cmd/errors.rs:29, src/enrich_cmd/show.rs:6
+   enrichment::pipeline::Phase3AtlasOutput  [1] src/enrich_cmd/errors.rs:29
+   enrichment::pipeline::Phase3Output  [2] src/enrich_cmd/errors.rs:29, src/enrich_cmd/show.rs:6
+   enrichment::pipeline::Phase4Output  [2] src/enrich_cmd/errors.rs:29, src/enrich_cmd/show.rs:6
+   enrichment::pipeline::Phase5Output  [2] src/enrich_cmd/errors.rs:29, src/enrich_cmd/show.rs:6
+   enrichment::pipeline::Phase6Output  [2] src/enrich_cmd/errors.rs:29, src/enrich_cmd/show.rs:6
+   enrichment::pipeline::Phase7Output  [2] src/enrich_cmd/errors.rs:29, src/enrich_cmd/show.rs:6
+   enrichment::pipeline::PhaseCache  [3] src/enrich_cmd/errors.rs:624, src/enrich_cmd/show.rs:6, src/enrich_cmd/status.rs:4
+   enrichment::pipeline::PhaseCacheStatus  [1] src/enrich_cmd/status.rs:4
+   enrichment::pipeline::PhaseFailure  [1] src/enrich_cmd/errors.rs:29
+   enrichment::pipeline::PhaseFailureKind  [1] src/enrich_cmd/errors.rs:29
+   enrichment::pipeline::PhaseRunner  [2] src/enrich_cmd/cascade.rs:13, src/enrich_cmd/phase_cmd.rs:13
+   enrichment::pipeline::Pipeline  [1] src/bench_cmd/atlas.rs:35
+   enrichment::pipeline::PipelinePhase  [9] src/enrich_cmd/cascade.rs:13, src/enrich_cmd/delta_cmd.rs:50, src/enrich_cmd/errors.rs:29 …
+   enrichment::pipeline::PipelineRegistry  [2] src/atlas_cmd/kind.rs:706, src/enrich_cmd/build.rs:19
+   enrichment::pipeline::PipelineRegistry::builtin  [3] src/atlas_cmd/kind.rs:202, src/atlas_cmd/kind.rs:271, src/enrich_cmd/init.rs:230
+   enrichment::pipeline::QueryBattery  [1] src/enrich_cmd/validate.rs:9
+   enrichment::pipeline::RunOutputWriter  [3] src/enrich_cmd/cascade.rs:13, src/enrich_cmd/extract_typed.rs:55, src/enrich_cmd/phase_cmd.rs:13
+   enrichment::pipeline::SectionExtraction  [1] src/bench_cmd/atlas.rs:752
+   enrichment::pipeline::SeedStrategy  [1] src/enrich_cmd/build.rs:19
+   enrichment::pipeline::atlas::EntityType::Concept  [1] src/bench_cmd/scaffold.rs:210
+   enrichment::pipeline::atlas::EntityType::Person  [1] src/bench_cmd/scaffold.rs:198
+   enrichment::pipeline::atlas::EntityType::Work  [1] src/bench_cmd/scaffold.rs:220
+   enrichment::pipeline::atlas::SectionExtraction  [2] src/enrich_cmd/extract_typed.rs:599, src/enrich_cmd/workflow_primitives.rs:13
+   enrichment::pipeline::atlas::SeedEntitie  [1] src/enrich_cmd/workflow_primitives.rs:13
+   enrichment::pipeline::atlas::TypeExtension  [1] src/enrich_cmd/extract_typed.rs:27
+   enrichment::pipeline::pipelines::configurable_atlas::PIPELINE_ID  [2] src/enrich_cmd/init.rs:205, src/enrich_cmd/init.rs:214
+   enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline  [1] src/bench_cmd/atlas.rs:35
+   enrichment::pipeline::progress::wire  [1] src/enrich_cmd/build.rs:19
+   enrichment::pipeline::run_battery  [1] src/enrich_cmd/validate.rs:9
+   enrichment::pipeline::section_classifier::classify_section_axes  [1] src/enrich_cmd/classify.rs:23
+   enrichment::pipeline::section_classifier::content_hash  [2] src/enrich_cmd/classify.rs:23, src/enrich_cmd/extract_typed.rs:28
+   enrichment::pipeline::traverse_atlas  [1] src/enrich_cmd/query.rs:7
+   enrichment::pipeline::typed_schemas  [1] src/enrich_cmd/extract_typed.rs:14
+   enrichment::pipeline::typed_schemas::argumentative::PHASE1_ARGUMENTATIVE_SYSTEM  [1] src/enrich_cmd/extract_typed.rs:29
+   enrichment::pipeline::typed_schemas::argumentative::parse_phase1_argumentative_extension  [1] src/enrich_cmd/extract_typed.rs:29
+   enrichment::pipeline::typed_schemas::argumentative::phase1_argumentative_schema  [1] src/enrich_cmd/extract_typed.rs:29
+   enrichment::pipeline::typed_schemas::descriptive::PHASE1_DESCRIPTIVE_SYSTEM  [1] src/enrich_cmd/extract_typed.rs:32
+   enrichment::pipeline::typed_schemas::descriptive::parse_phase1_descriptive_extension  [1] src/enrich_cmd/extract_typed.rs:32
+   enrichment::pipeline::typed_schemas::descriptive::phase1_descriptive_schema  [1] src/enrich_cmd/extract_typed.rs:32
+   enrichment::pipeline::typed_schemas::lyric::PHASE1_LYRIC_SYSTEM  [1] src/enrich_cmd/extract_typed.rs:35
+   enrichment::pipeline::typed_schemas::lyric::parse_phase1_lyric_extension  [1] src/enrich_cmd/extract_typed.rs:35
+   enrichment::pipeline::typed_schemas::lyric::phase1_lyric_schema  [1] src/enrich_cmd/extract_typed.rs:35
+   enrichment::pipeline::typed_schemas::modulators::ModulatorContext  [1] src/enrich_cmd/extract_typed.rs:38
+   enrichment::pipeline::typed_schemas::modulators::apply_modulators  [1] src/enrich_cmd/extract_typed.rs:38
+   enrichment::pipeline::typed_schemas::narrative::PHASE1_NARRATIVE_SYSTEM  [1] src/enrich_cmd/extract_typed.rs:41
+   enrichment::pipeline::typed_schemas::narrative::parse_phase1_narrative_extension  [1] src/enrich_cmd/extract_typed.rs:41
+   enrichment::pipeline::typed_schemas::narrative::phase1_narrative_schema  [1] src/enrich_cmd/extract_typed.rs:41
+   enrichment::pipeline::typed_schemas::procedural::PHASE1_PROCEDURAL_SYSTEM  [1] src/enrich_cmd/extract_typed.rs:44
+   enrichment::pipeline::typed_schemas::procedural::parse_phase1_procedural_extension  [1] src/enrich_cmd/extract_typed.rs:44
+   enrichment::pipeline::typed_schemas::procedural::phase1_procedural_schema  [1] src/enrich_cmd/extract_typed.rs:44
+   enrichment::pipeline::typed_schemas::reflective::PHASE1_REFLECTIVE_SYSTEM  [1] src/enrich_cmd/extract_typed.rs:47
+   enrichment::pipeline::typed_schemas::reflective::parse_phase1_reflective_extension  [1] src/enrich_cmd/extract_typed.rs:47
+   enrichment::pipeline::typed_schemas::reflective::phase1_reflective_schema  [1] src/enrich_cmd/extract_typed.rs:47
+   enrichment::pipeline::types  [1] src/enrich_cmd/classify.rs:16
+   enrichment::pipeline::types::ChapterInput  [2] src/enrich_cmd/classify.rs:26, src/enrich_cmd/extract_typed.rs:50
+   enrichment::pipeline::types::ChatPrompt  [2] src/bench_cmd/uap.rs:34, src/enrich_cmd/extract_typed.rs:50
+   enrichment::pipeline::types::DISCOURSE_ROUTING_THRESHOLD  [1] src/enrich_cmd/extract_typed.rs:50
+   enrichment::pipeline::types::Phase1Output  [1] src/enrich_cmd/extract_typed.rs:50
+   enrichment::pipeline::types::SectionClassificationVector  [2] src/enrich_cmd/classify.rs:26, src/enrich_cmd/extract_typed.rs:50
+   enrichment::pipeline::types::SectionClassificationsFile  [2] src/enrich_cmd/classify.rs:26, src/enrich_cmd/extract_typed.rs:50
+   enrichment::reconciliation::ReconciledEntity  [1] src/enrich_cmd/atlas_reconcile.rs:28
+   enrichment::reconciliation::ReconciliationAct  [2] src/bench_cmd/enron.rs:432, src/enrich_cmd/atlas_reconcile.rs:28
+   enrichment::reconciliation::ReconciliationPolicy  [2] src/bench_cmd/enron.rs:29, src/enrich_cmd/atlas_reconcile.rs:28
+   enrichment::reconciliation::ReifiedMerge  [1] src/enrich_cmd/atlas_reconcile.rs:230
+   enrichment::reconciliation::reconcile  [2] src/bench_cmd/enron.rs:29, src/enrich_cmd/atlas_reconcile.rs:28
+   enrichment::reconciliation::reify_merges  [1] src/enrich_cmd/atlas_reconcile.rs:28
+   enrichment::sep::list_categories  [1] src/enrich_cmd/sep_ingest.rs:26
+   enrichment::sep::load_article  [1] src/enrich_cmd/sep_ingest.rs:26
+   enrichment::tiered::ChunkEntityExtractor  [1] src/bench_cmd/vault_report.rs:78
+   enrichment::tiered::ChunkEntityExtractorHandle  [1] src/bench_cmd/vault_report.rs:78
+   enrichment::tiered::ChunkNerOutcome  [1] src/bench_cmd/vault_report.rs:78
+   enrichment::tiered::ConvBucket  [2] src/bench_cmd/vault_report.rs:78, src/enrich_cmd/raptor.rs:59
+   enrichment::tiered::TieredEnrichmentProvider  [1] src/bench_cmd/vault_report.rs:78
+   enrichment::tiered::TieredProviderHandle  [1] src/bench_cmd/vault_report.rs:78
+   enrichment::tiered::run_folder_tiered_enrichment  [1] src/bench_cmd/vault_report.rs:78
+   extractors::Extractor  [1] src/alignment_cmd.rs:30
+   extractors::alignment_workspace::AlignmentWorkspaceExtractor  [1] src/alignment_cmd.rs:29
+   extractors::column_aware::ColumnAwareConfig  [1] src/enrich_cmd/sheets_ingest.rs:21
+   extractors::column_aware::HeaderClassifier  [1] src/enrich_cmd/sheets_ingest.rs:21
+   extractors::column_aware::extract_entities_from_parquet  [1] src/enrich_cmd/sheets_ingest.rs:21
+   extractors::column_aware::extract_entities_from_parquet_embed  [1] src/enrich_cmd/sheets_ingest.rs:21
+   extractors::described_asset::AssetSubExtractor  [1] src/enrich_cmd/sheets_ingest.rs:25
+   extractors::wikipedia_types::wiki_title_from_url  [1] src/corpus_cmd/diagnostics.rs:512
+   extractors::xlsx::XlsxSubExtractor  [1] src/enrich_cmd/sheets_ingest.rs:26
+   filters::assets::VITAL_ARTICLES_L5  [1] src/corpus_cmd/diagnostics.rs:590
+   filters::normalize_title  [10] src/corpus_cmd/diagnostics.rs:514, src/corpus_cmd/diagnostics.rs:673, src/enrich_cmd/atlas_eval.rs:29 …
+   harness::EnrichOutput  [1] src/recipe_cmd.rs:326
+   harness::FrozenSample  [1] src/recipe_cmd.rs:19
+   harness::verify_atoms_at  [1] src/recipe_cmd.rs:383
+   index::field_skeleton::load_field_skeleton  [2] src/enrich_cmd/field_atoms.rs:18, src/enrich_cmd/field_atoms.rs:78
+   index::maintain  [1] src/corpus_cmd/optimize.rs:4
+   index::set_stream_axes  [1] src/corpus_cmd/diagnostics.rs:200
+   judge_restored_snapshot  [1] src/corpus_snapshot_cmd.rs:1146
+   merge_partitions_into_canonical  [1] src/corpus_cmd/partitions.rs:572
+   meta_atlas::MetaAtlasFile  [1] src/meta_atlas_cmd.rs:19
+   meta_atlas::MetaAtom  [1] src/meta_atlas_cmd.rs:19
+   meta_atlas::bridge  [1] src/meta_atlas_cmd.rs:18
+   meta_atlas::build_meta_atlas  [1] src/meta_atlas_cmd.rs:19
+   meta_atlas::classify_articulation  [1] src/atlas_cmd/stats.rs:137
+   meta_atlas::default_meta_atlas_path  [1] src/meta_atlas_cmd.rs:19
+   meta_atlas::read_meta_atlas  [1] src/meta_atlas_cmd.rs:19
+   meta_atlas::rebuild_for_corpus  [1] src/enrich_cmd/delta_cmd.rs:437
+   meta_atlas::write_meta_atlas  [1] src/meta_atlas_cmd.rs:19
+   oplog  [1] src/govern_cmd/mod.rs:6
+   pii  [1] src/awareness_cmd/entities.rs:217
+   pii::EntityMap  [1] src/corpus_scrub_cmd.rs:33
+   pii::scrub_pii  [2] src/corpus_scrub_cmd.rs:18, src/corpus_scrub_cmd.rs:33
+   probe_embedding_space_at  [1] src/corpus_snapshot_cmd.rs:480
+   progress::IngestProgress  [1] src/corpus_catalog_cmd.rs:334
+   recipe::AcquirerConfig::LocalFile  [1] src/recipe_cmd.rs:362
+   recipe::CatalogConfig  [1] src/corpus_catalog_cmd.rs:25
+   recipe_builtin  [1] src/alignment_cmd.rs:48
+   recipe_install  [1] src/corpus_cmd/recipe_source.rs:3
+   recipe_install::Registered  [1] src/corpus_cmd/recipe_source.rs:13
+   recipe_install::looks_like_recipe_path  [1] src/corpus_cmd/recipe_source.rs:13
+   recipe_install::register  [1] src/corpus_cmd/recipe_source.rs:17
+   recipe_schema::RECIPE_SCHEMA_DESCRIPTOR_JSON  [1] src/recipe_agent_live_trial.rs:1357
+   recipe_templates  [2] src/recipe_cmd/authoring.rs:15, src/recipe_cmd/authoring.rs:6
+   recipe_templates::instantiate  [1] src/recipe_cmd/authoring.rs:76
+   recipe_templates::list_builtin_names  [3] src/recipe_cmd/authoring.rs:24, src/recipe_cmd/authoring.rs:59, src/recipe_cmd/authoring.rs:64
+   recipe_templates::load_builtin  [1] src/recipe_cmd/authoring.rs:69
+   registry::BUNDLED_REGISTRY_TOML  [1] src/recipe_agent_live_trial.rs:1366
+   sharding::merge_shards  [1] src/corpus_cmd/partitions.rs:179
+   snapshot::PublishOptions  [1] src/corpus_snapshot_cmd.rs:14
+   snapshot::PublishOutcome  [2] src/corpus_snapshot_cmd.rs:845, src/corpus_snapshot_cmd.rs:846
+   snapshot::SnapshotManifest  [1] src/corpus_snapshot_cmd.rs:14
+   snapshot::compression_workers  [1] src/corpus_snapshot_cmd.rs:388
+   snapshot::prebuilt_toml_snippet  [1] src/corpus_snapshot_cmd.rs:14
+   snapshot::publish_snapshot  [1] src/corpus_snapshot_cmd.rs:14
+   snapshot::read_local_index_meta  [1] src/corpus_snapshot_cmd.rs:459
+   snapshot::read_manifest_from_archive  [2] src/corpus_snapshot_cmd.rs:14, src/corpus_snapshot_cmd.rs:846
+   snapshot::restore_snapshot_archive  [1] src/corpus_snapshot_cmd.rs:14
+   sovereign_config::RunnerConfig  [1] src/awareness_cmd/scenario.rs:296
+   stream_axes::derive_stability_from_info  [2] src/corpus_cmd/diagnostics.rs:199, src/corpus_cmd/diagnostics.rs:289
+   stream_axes::timestamp_now  [1] src/corpus_cmd/diagnostics.rs:293
+   update::newsworthy_watcher::APP_ID_PORTAL  [1] src/newsworthy_cmd.rs:32
+   update::newsworthy_watcher::APP_ID_TRACKED  [1] src/newsworthy_cmd.rs:32
+   update::newsworthy_watcher::Lifecycle  [1] src/newsworthy_cmd.rs:32
+   update::newsworthy_watcher::PortalMarker  [1] src/newsworthy_cmd.rs:32
+   update::newsworthy_watcher::TrackedArticle  [1] src/newsworthy_cmd.rs:32
+   wikipedia_graph_present  [3] src/atlas_cmd/kind.rs:146, src/atlas_cmd/migrate_all.rs:46, src/meta_atlas_cmd.rs:188
+== sovereign-core: carved 30, residue 44 (25 distinct)
+   CorpusEngine  [9] src/runtime.rs:287, src/runtime.rs:457, src/runtime/acquisition.rs:334 …
+   ForegroundLease  [2] src/runtime/admission.rs:25, src/runtime/admission.rs:85
+   ForegroundSignal  [2] tests/main/core_tests.rs:2507, tests/main/core_tests.rs:2535
+   WikipediaGraphApi  [3] src/runtime/lane.rs:104, src/runtime/lane.rs:150, src/runtime/retrieval/query_expansion.rs:125
+   WikipediaNeighbor  [3] src/runtime/retrieval/query_expansion.rs:534, src/runtime/retrieval/query_expansion.rs:539, src/runtime/retrieval/query_expansion.rs:588
+   enrichment::atlas::context::build_persistent_ann_seed_table  [1] src/runtime/retrieval_pipeline/atlas_step_reachability_tests.rs:164
+   enrichment::atlas::context::read_section_rows  [1] src/runtime/code_trace.rs:277
+   enrichment::atlas::resolve::EvidenceFetcher  [1] src/runtime/retrieval/atlas_grounding.rs:500
+   enrichment::atlas::resolve::resolve_evidence  [1] src/runtime/retrieval/atlas_grounding.rs:388
+   enrichment::atlas::wiki_store::WIKI_ENTITY_TYPE  [1] src/runtime/retrieval_pipeline/atlas_step_reachability_tests.rs:467
+   enrichment::atlas::wiki_store::build_wikipedia_columnar_store_from_chunks  [1] src/runtime/retrieval_pipeline/atlas_step_reachability_tests.rs:167
+   enrichment::atlas::wiki_store::wiki_atom_id  [2] src/runtime/retrieval_pipeline/atlas_step_reachability_tests.rs:167, src/runtime/retrieval_pipeline/atlas_step_reachability_tests.rs:447
+   enrichment::field_atoms::FieldModelSource  [1] src/runtime/retrieval/turn_prepass.rs:146
+   enrichment::field_atoms::FieldModelSource::Atlas  [1] src/runtime/retrieval/turn_prepass.rs:192
+   enrichment::field_atoms::load_field_model  [1] src/runtime/retrieval/turn_prepass.rs:162
+   enrichment::governance::RuleStatus  [1] src/runtime/retrieval_pipeline.rs:2322
+   enrichment::governance_view::GovernanceView  [2] src/runtime/retrieval_pipeline.rs:2323, src/runtime/retrieval_pipeline.rs:802
+   enrichment::governance_view::RuleView  [1] src/runtime/retrieval_pipeline.rs:2323
+   enrichment::governance_view::chunk_to_section_map  [1] src/runtime/grounding/mod.rs:515
+   enrichment::governance_view::chunk_to_section_map_status  [1] src/runtime/retrieval_pipeline.rs:802
+   enrichment::governance_view::section_titles  [1] src/runtime/grounding/mod.rs:515
+   extractors::wikipedia_types::WikiLink  [1] src/runtime/retrieval_pipeline/atlas_step_reachability_tests.rs:170
+   extractors::wikipedia_types::WikipediaChunkMetadata  [1] src/runtime/retrieval_pipeline/atlas_step_reachability_tests.rs:170
+   meta_atlas::MetaAtlasIndex  [4] src/runtime.rs:801, src/runtime/lane.rs:108, src/runtime/lane.rs:158 …
+   meta_atlas::MetaAtlasIndex::top_anchor_for_axis  [1] src/runtime/retrieval/boosts.rs:82
+== corpus-mcp: carved 14, residue 36 (28 distinct)
+   CorpusEngine  [3] src/ingest.rs:51, src/serve.rs:34, src/tools.rs:39
+   CorpusId  [1] src/ask.rs:33
+   CorpusSpec  [2] src/ingest.rs:51, src/serve.rs:34
+   IngestResult  [1] src/serve.rs:343
+   Recipe  [1] src/ingest.rs:51
+   embed_http::http_embed_fn  [2] src/host.rs:173, src/host.rs:96
+   enrichment::atlas  [1] src/ask.rs:14
+   enrichment::atlas::EdgeType::Involves  [1] src/ask.rs:400
+   enrichment::atlas::EvidenceFetcher  [1] src/ask.rs:32
+   enrichment::atlas::ResolvedChunk  [1] src/ask.rs:32
+   enrichment::atlas::open_walk_provider  [1] src/tools.rs:38
+   enrichment::atlas::read_or_compute_atlas_summary  [1] src/tools.rs:1099
+   enrichment::atlas::resolve::resolve_evidence  [1] src/tools.rs:473
+   enrichment::atlas::writer::write_atlas_ontology  [1] src/tools.rs:915
+   enrichment::pipeline::CustomAtlasSpec  [1] src/ingest.rs:473
+   enrichment::pipeline::EnrichProgress  [1] src/ingest.rs:50
+   enrichment::pipeline::EnrichProgressFn  [1] src/ingest.rs:50
+   enrichment::pipeline::Pipeline  [1] src/tools.rs:973
+   enrichment::pipeline::PipelineRegistry  [2] src/ingest.rs:50, src/tools.rs:973
+   enrichment::pipeline::pipelines::configurable_atlas::PIPELINE_ID  [1] src/ingest.rs:506
+   progress::IngestProgress  [2] src/ingest.rs:533, src/ingest.rs:534
+   recipe_install::register  [1] src/ingest.rs:258
+   recipe_templates:://!instantiate  [1] src/recipe.rs:9
+   recipe_templates::instantiate  [1] src/recipe.rs:77
+   recipe_templates::list_builtin_names  [2] src/recipe.rs:67, src/recipe.rs:9
+   recipe_templates::load_builtin  [2] src/recipe.rs:75, src/recipe.rs:9
+   snapshot  [1] src/serve.rs:100
+   snapshot::PREBUILT_PROBE_THRESHOLD  [1] src/serve.rs:105
+== sovereign-daemon: carved 45, residue 183 (78 distinct)
+   CancellationFlag  [1] src/auto_ingest.rs:13
+   CorpusEngine  [62] src/atlas_http.rs:261, src/auto_ingest.rs:715, src/bootstrap.rs:14 …
+   CorpusEngine::expand_corpus  [1] src/routes_internal/corpus_ingest.rs:564
+   CorpusEngine::expand_corpus_to_full  [1] src/routes_internal/corpus_ingest.rs:591
+   CorpusEngine::lazy_stamp_legacy_fingerprints  [1] src/bootstrap.rs:1675
+   CorpusSpec  [2] tests/main/e2e_code_intel.rs:36, tests/main/e2e_code_intel/demo_auth.rs:10
+   CorpusSpec::Inline  [1] src/routes_internal/corpus_ingest.rs:852
+   CorpusSpec::RecipePath  [1] tests/main/e2e_code_intel/demo_auth.rs:114
+   DeferralBudget  [1] src/yield_hook.rs:298
+   DeferralStep  [1] src/yield_hook.rs:298
+   ForegroundLease  [1] src/yield_hook.rs:119
+   ForegroundSignal  [3] src/yield_hook.rs:124, src/yield_hook.rs:80, src/yield_hook.rs:99
+   InferenceFn  [1] tests/main/landscape_digest_http_e2e.rs:54
+   IngestProgress  [10] src/ingest_executor.rs:88, src/routes_internal/corpus_ingest.rs:1317, src/routes_internal/corpus_ingest.rs:480 …
+   IngestProgress::Complete  [1] src/routes_oicp_ingest.rs:279
+   IngestProgress::Embedding  [1] src/routes_oicp_ingest.rs:268
+   IngestProgress::Extracting  [1] src/routes_oicp_ingest.rs:261
+   IngestProgress::Failed  [3] src/routes_internal/corpus_ingest.rs:621, src/routes_internal/corpus_ingest.rs:644, src/routes_internal/corpus_ingest.rs:660
+   ParameterKind  [1] src/recipe_http.rs:26
+   ProgressCallback  [3] src/auto_ingest.rs:1157, src/ingest_executor.rs:88, src/routes_internal/corpus_ingest.rs:611
+   Recipe  [2] src/recipe_http.rs:26, src/recipe_project_http.rs:36
+   Recipe::from_file  [4] src/governance_http.rs:844, src/governance_http.rs:859, src/governance_http.rs:899 …
+   Recipe::resolve_parameters  [1] src/routes_internal/corpus_ingest.rs:1234
+   Retention  [1] src/corpus_maintenance.rs:44
+   SourceFileRecord  [1] tests/main/storage_budget_route.rs:184
+   SourceFileStatus  [1] tests/main/storage_budget_route.rs:184
+   TestOptions  [1] src/recipe_http.rs:26
+   YieldHook  [5] src/daemon.rs:1231, src/daemon.rs:3293, src/yield_hook.rs:13 …
+   atlas_traversal::AtomSpan  [1] src/reading_http.rs:121
+   atlas_traversal::AtomSpanasDetectorAtomSpan  [1] src/reading_http.rs:27
+   atlas_traversal::detect_atom_spans  [1] src/reading_http.rs:27
+   canonical_sync::pack_canonical  [1] src/routes_internal/corpus_ingest.rs:325
+   engine::CorpusEngine  [1] src/newsworthy_host.rs:490
+   engine::status::scan_corpus_rows  [3] src/reading_http.rs:369, src/reading_http.rs:385, tests/main/loopback_parity/surface_parity.rs:98
+   enrichment::GovernanceOpKind  [2] src/governance_http.rs:38, tests/main/d8_surface_e2e.rs:60
+   enrichment::GovernanceView  [2] src/governance_http.rs:140, src/governance_http.rs:38
+   enrichment::GovernanceView::from_atlas_dir  [1] src/corpus_catalog_http.rs:598
+   enrichment::TensionDisposition  [1] src/governance_http.rs:38
+   enrichment::atlas::CrossCorpusEdge  [1] src/reading_http.rs:28
+   enrichment::atlas::analysis::sec_facts::CoverageCard  [1] src/corpus_catalog_http.rs:778
+   enrichment::atlas::analysis::sec_facts::authoritative_store  [1] src/corpus_catalog_http.rs:759
+   enrichment::atlas::analysis::sec_facts::coverage_cardasderive_card  [1] src/corpus_catalog_http.rs:759
+   enrichment::atlas::analysis::starter_questions::rank_starter_questions  [1] src/enrich_http.rs:21
+   enrichment::atlas::atoms_delta::apply_atom_delta  [1] src/newsworthy_host.rs:496
+   enrichment::atlas::migrate_ids::migrate_atlas_ids  [1] src/governance_http.rs:35
+   enrichment::atlas::read_atlas_cross_corpus_edges  [1] src/reading_http.rs:28
+   enrichment::atlas::read_or_compute_atlas_summary  [2] src/routes_internal/corpus_ingest.rs:84, src/routes_internal/corpus_sync.rs:296
+   enrichment::atlas::strategies::newsworthy_events::extract_atoms_for_portal_chunks  [1] src/newsworthy_host.rs:497
+   enrichment::atlas::strategies::structure_first::StructureFirstConfig  [1] src/newsworthy_host.rs:498
+   enrichment::atlas::strategies::structure_first::aggregate_articles_from_chunks  [1] src/newsworthy_host.rs:498
+   enrichment::atlas::strategies::structure_first::extract_atoms_for_articles  [1] src/newsworthy_host.rs:498
+   enrichment::governance_view::section_titles  [1] src/governance_http.rs:37
+   enrichment::state::EnrichmentHeartbeat  [1] src/corpus_watch_http.rs:1068
+   enrichment::state::EnrichmentPhase  [4] src/corpus_watch_http.rs:1068, src/corpus_watch_http.rs:1245, src/routes_internal/corpus_ingest.rs:923 …
+   enrichment::state::EnrichmentState  [3] src/lc_http.rs:97, src/routes_internal/enrichment_status.rs:23, tests/main/wire_view_drift.rs:186
+   enrichment::state::EnrichmentStateFile  [4] src/corpus_watch_http.rs:1068, src/corpus_watch_http.rs:1245, src/routes_internal/corpus_ingest.rs:923 …
+   enrichment::state::EnrichmentStateFile::declared_dead_at  [1] src/auto_resume.rs:320
+   enrichment::state::EnrichmentStateFile::fail  [1] src/corpus_watch_http.rs:1364
+   enrichment::state::sweep_stalled_states  [1] src/daemon.rs:4130
+   enrichment::tiered::ChunkEntityExtractor  [3] src/bootstrap.rs:116, src/bootstrap.rs:311, src/bootstrap.rs:95
+   extractors::code::language_for_extension  [1] src/routes_edit_predictions.rs:49
+   finalize_canonical  [3] tests/main/fold_ingest_abandoned_unit_e2e.rs:365, tests/main/fold_ingest_abandoned_unit_e2e.rs:421, tests/main/fold_ingest_cross_node_merge_e2e.rs:791
+   harness::verify_atoms_at  [1] src/recipe_http.rs:24
+   index::field_skeleton::load_field_skeleton  [1] src/corpus_catalog_http.rs:718
+   meta_atlas::rebuild_for_corpus  [1] src/newsworthy_host.rs:502
+   reprocess_skeleton_failures  [1] src/corpus_catalog_http.rs:801
+   testing::TestOptions  [1] src/routes_oicp_ingest.rs:113
+   testing::TestReport  [2] src/recipe_http.rs:25, src/routes_oicp_ingest.rs:179
+   testing::validate_recipe_offline  [1] src/recipe_project_http.rs:617
+   update::newsworthy_watcher::APP_ID_STATUS  [1] src/routes_internal/newsworthy_status.rs:30
+   update::newsworthy_watcher::APP_ID_TRACKED  [1] tests/main/rail_kv_pump_loop_tests.rs:27
+   update::newsworthy_watcher::CommittedDocs  [1] src/newsworthy_host.rs:31
+   update::newsworthy_watcher::HttpMediaWikiClient  [1] src/daemon.rs:4188
+   update::newsworthy_watcher::MediaWikiClient  [1] src/daemon.rs:4186
+   update::newsworthy_watcher::NewsworthyConfig::default  [1] src/daemon.rs:4178
+   update::newsworthy_watcher::NewsworthyHost  [3] src/daemon.rs:4180, src/newsworthy_host.rs:31, src/newsworthy_host.rs:5
+   update::newsworthy_watcher::STATUS_KEY_LAST_TICK  [1] src/routes_internal/newsworthy_status.rs:30
+   update::newsworthy_watcher::TickStatusSnapshot  [1] src/routes_internal/newsworthy_status.rs:30
+== sovereign-meshapp: carved 10, residue 13 (13 distinct)
+   chunkers::threaded_turns::ParsedTurn  [1] src/wrapped.rs:35
+   chunkers::threaded_turns::TurnAuthor  [1] src/wrapped.rs:35
+   chunkers::threaded_turns::parse_turns  [1] src/wrapped.rs:35
+   enrichment::atlas::analysis::FlagKind  [1] src/parcels.rs:17
+   enrichment::atlas::analysis::compute_aggregates  [1] src/parcels.rs:17
+   enrichment::atlas::analysis::flags  [1] src/parcels.rs:17
+   enrichment::investigation::graph::ExtractionExcerptasInvEvidence  [1] src/lib.rs:22
+   enrichment::investigation::graph::INVESTIGATION_DIRNAME  [1] src/lib.rs:22
+   enrichment::investigation::graph::InvestigationEntityasInvEntity  [1] src/lib.rs:22
+   enrichment::investigation::graph::PatternFinding  [1] src/lib.rs:22
+   enrichment::investigation::graph::PatternKind  [1] src/lib.rs:22
+   enrichment::investigation::graph::RelationshipasInvRelationship  [1] src/lib.rs:22
+   enrichment::investigation::graph::read_outputsasread_investigation_graph  [1] src/lib.rs:22
+== sovereign-mesh: carved 0, residue 6 (5 distinct)
+   CorpusEngine  [2] src/gossip.rs:46, tests/main/dst.rs:44
+   canonical_sync  [1] src/canonical_pull.rs:46
+   engine::CorpusEngine  [1] src/capabilities.rs:43
+   enrichment::atlas::read_or_compute_atlas_summary  [1] src/capabilities.rs:283
+   update::newsworthy_watcher::APP_ID_TRACKED  [1] src/ring_roster.rs:260
+== sovereign-cli-dev: carved 6, residue 13 (9 distinct)
+   CorpusEngine  [3] src/project_cmd/mod.rs:15, src/tools_cmd/registry.rs:42, tests/mcp_surface_e2e.rs:57
+   CorpusId  [1] src/refactor_cmd/classify.rs:385
+   CorpusSpec  [1] src/project_cmd/mod.rs:15
+   Evidence  [3] src/refactor_cmd/destination.rs:41, src/refactor_cmd/destination.rs:535, src/refactor_cmd/destination.rs:538
+   IngestProgress  [1] src/project_cmd/mod.rs:15
+   RecipeRegistry  [1] src/project_cmd/audit/mod.rs:289
+   SovereignConfig::load_or_default  [1] src/project_cmd/serve.rs:195
+   enrichment::code_intel::SymbolEnrichment  [1] src/refactor_cmd/affinity.rs:54
+   enrichment::pipeline::ChatPrompt  [1] src/backlog_cmd/score.rs:15

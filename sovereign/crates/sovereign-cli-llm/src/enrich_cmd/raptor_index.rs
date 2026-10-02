@@ -13,7 +13,7 @@
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::raptor_index::{build_corpus_raptor_index, RaptorIndexOutcome};
 
-use sovereign_cli_shared::help;
+use sovereign_cli_base::help;
 
 pub async fn cmd_raptor_index(args: &[String]) -> i32 {
     if help::wants_help(args) {
@@ -30,9 +30,17 @@ pub async fn cmd_raptor_index(args: &[String]) -> i32 {
         }
     };
 
+    let atlas = match crate::chat_cmd::ingest::atlas() {
+        Ok(a) => a,
+        Err(why) => {
+            eprintln!("error: {why}");
+            return 1;
+        }
+    };
+
     // Same path derivation as `enrich raptor` (daemon-compatible): `data_dir`
     // owns both the state DB and the indexes dir.
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");
@@ -56,7 +64,7 @@ pub async fn cmd_raptor_index(args: &[String]) -> i32 {
     };
 
     println!("Building RAPTOR summary-node ANN index for '{corpus_id}'…");
-    let outcome = build_corpus_raptor_index(&store, &index_path, &corpus_id).await;
+    let outcome = build_corpus_raptor_index(atlas.as_ref(), &store, &index_path, &corpus_id).await;
     println!("  {outcome}");
 
     match outcome {

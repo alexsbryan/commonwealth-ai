@@ -167,7 +167,7 @@ done
 # while `target/` is excluded, so it cannot build at all, and its own header
 # asserts the opposite ("the build context is the workspace root so this path
 # resolves"). Nothing caught it because its smoke tests are #[ignore]d
-# (sovereign-mesh/tests/local_pod_smoke.rs:262,415).
+# (sovereign-pods/tests/main/local_pod_smoke.rs:262,411).
 #
 # A COPY of a DIRECTORY is fine even when descendants are filtered — podman
 # only fails when the named path itself resolves to nothing. That is why

@@ -20,7 +20,7 @@
 //! sequenced next) both depend on `extract_tokens` and the
 //! `EVIDENCE_*` constants exported here.
 
-use corpus_engine::ScoredChunk;
+use corpus_index::types::ScoredChunk;
 
 use crate::types::{Intent, Operation};
 
@@ -970,7 +970,7 @@ pub(crate) fn strip_leading_title_duplicate<'a>(body: &'a str, title: Option<&st
 #[cfg(test)]
 mod grounding_filter_tests {
     use super::is_grounding_candidate;
-    use corpus_engine::ScoredChunk;
+    use corpus_index::types::ScoredChunk;
     use std::collections::HashMap;
 
     fn chunk(corpus_id: &str, title: Option<&str>) -> ScoredChunk {
@@ -985,7 +985,7 @@ mod grounding_filter_tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -1106,7 +1106,7 @@ mod strip_title_tests {
 #[cfg(test)]
 mod evidence_shape_tests {
     use super::{compute_evidence_shape, route_from_evidence, SynthesisRoute};
-    use corpus_engine::ScoredChunk;
+    use corpus_index::types::ScoredChunk;
     use std::collections::HashMap;
 
     fn chunk(corpus: &str, title: &str, score: f32) -> ScoredChunk {
@@ -1121,7 +1121,7 @@ mod evidence_shape_tests {
             source_doc_id: None,
             vector_distance: None,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -1515,35 +1515,6 @@ mod expansion_strategy_tests {
     }
 
     #[test]
-    fn two_hits_under_one_section_title_do_not_collapse_a_diverse_pool() {
-        // The measured defect (ei7-ans faaec2a84712, 2026-09-23): a
-        // 20-chunk pool across 16 sources where the top SECTION title
-        // repeated twice collapsed to 7 chunks and evicted the rank-4
-        // answering passage. Two repeats of anything is not a fifth of
-        // this pool; the merge-selected set survives untouched.
-        let shape = build_test_evidence_shape(20, 16, true, 2);
-        let (strategy, _) =
-            decide_expansion_strategy(&Intent::KnowledgeQuery, SynthesisRoute::FastFocused, &shape);
-        assert_eq!(strategy, ExpansionStrategy::NoExpansion);
-        // The boundary is the share, not the absolute repeat: 3/20 (15%)
-        // is still below a fifth and must not collapse either.
-        let shape = build_test_evidence_shape(20, 16, true, 3);
-        let (strategy, _) =
-            decide_expansion_strategy(&Intent::KnowledgeQuery, SynthesisRoute::FastFocused, &shape);
-        assert_eq!(strategy, ExpansionStrategy::NoExpansion);
-    }
-
-    #[test]
-    fn a_fifth_share_still_expands_dominant() {
-        // 4 of 20 is exactly the share floor: deepening stays available
-        // at the same strength the 3/10 pinned case exercises.
-        let shape = build_test_evidence_shape(20, 8, true, 4);
-        let (strategy, _) =
-            decide_expansion_strategy(&Intent::KnowledgeQuery, SynthesisRoute::FastFocused, &shape);
-        assert_eq!(strategy, ExpansionStrategy::DominantSource);
-    }
-
-    #[test]
     fn multi_source_primary_takes_top_sources() {
         let shape = build_test_evidence_shape(10, 4, false, 1);
         let (strategy, reason) = decide_expansion_strategy(
@@ -1687,7 +1658,7 @@ mod output_budget_tests {
     /// over vector-scored chunks only.
     #[test]
     fn top_cosine_from_vector_distances() {
-        let mk = |dist: Option<f32>| corpus_engine::ScoredChunk {
+        let mk = |dist: Option<f32>| corpus_index::types::ScoredChunk {
             content: "alpha beta".into(),
             title: Some("T".into()),
             url: None,
@@ -1698,7 +1669,7 @@ mod output_budget_tests {
             source_doc_id: None,
             vector_distance: dist,
             // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
-            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            provenance: corpus_index::index::ChunkProvenance::manufactured("test_fixture"),
         };
         let chunks = vec![mk(Some(0.4)), mk(None), mk(Some(0.9))];
         let shape = compute_evidence_shape(&chunks, "alpha");
@@ -1708,3 +1679,9 @@ mod output_budget_tests {
         assert_eq!(none.top_cosine, None);
     }
 }
+
+// The dominance-share bars (ei7), a sibling so this file stays inside its
+// size slack (ARCH §3.1). `#[path]`, so the names are unchanged.
+#[cfg(test)]
+#[path = "evidence/dominance_tests.rs"]
+mod dominance_tests;

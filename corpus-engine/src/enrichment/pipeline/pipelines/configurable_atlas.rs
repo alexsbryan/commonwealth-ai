@@ -245,10 +245,11 @@ mod tests {
     use super::*;
     use crate::recipe::Recipe;
 
-    /// The maple-house recipe as vendored by `build.rs` — the governance
+    /// The maple-house recipe from the recipes data crate — the governance
     /// fixture whose Phase-1 bytes I1 pins.
-    const MAPLE_HOUSE: &str =
-        include_str!(concat!(env!("OUT_DIR"), "/recipes/maple-house/recipe.toml"));
+    fn maple_house() -> &'static str {
+        crate::recipe_source::bundled::uncataloged_toml("maple-house").expect("maple-house bundled")
+    }
 
     fn spec(name: &str, guidance: &str, vocabulary: Option<CustomVocabulary>) -> CustomAtlasSpec {
         CustomAtlasSpec {
@@ -311,7 +312,7 @@ mod tests {
     /// format. Until P2's snapshot module lands this is the pin.
     #[test]
     fn i1_from_policies_matches_legacy_build_bytes() {
-        let v0_recipe = Recipe::from_toml(MAPLE_HOUSE).expect("maple-house parses");
+        let v0_recipe = Recipe::from_toml(maple_house()).expect("maple-house parses");
         let v0 = v0_recipe
             .custom_atlas_spec()
             .expect("maple-house is a custom ontology");
@@ -324,7 +325,7 @@ mod tests {
             ..v0.clone()
         };
 
-        let migrated = Recipe::migrate_ontology_version(MAPLE_HOUSE, 1)
+        let migrated = Recipe::migrate_ontology_version(maple_house(), 1)
             .expect("migration yields a loadable recipe")
             .expect("maple-house is version 0, so there is a change");
         let v1 = Recipe::from_toml(&migrated)

@@ -296,7 +296,7 @@ sovereign-eval/judge.rs (five-axis code rubric over whole agent runs ->
 code_rubric) and pipeline/judge.rs (fire-and-forget voice telemetry whose
 soft-fail-to-zero is the OPPOSITE discipline -> voice_telemetry). v1's
 canonical (sovereign_eval::rubric) named a module that does not exist —
-the rubric core lives in sovereign-cli-llm/src/bench_cmd/rubric/."""
+the rubric core lives in sovereign-cli-bench/src/bench_cmd/rubric/."""
 
 # ─────────────────────────────────────────────────────────────────────
 # PHASE 3 — the boundary both user surfaces cross. Split by evidence

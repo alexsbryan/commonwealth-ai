@@ -18,8 +18,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use oicp_client::RemoteApiProvider;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::remote::RemoteApiProvider;
 
 use super::journal::TurnRecord;
 use super::judge::{parse_witness_verdict, witness_judge_request};

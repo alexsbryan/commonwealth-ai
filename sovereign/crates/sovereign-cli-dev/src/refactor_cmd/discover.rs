@@ -286,7 +286,11 @@ fn feature_contract(meta: &WorkspaceMeta, crate_filter: Option<&str>) -> String 
     {
         features.push("sovereign-cli/dev-tools".into());
         features.push("sovereign-cli/code-intel".into());
-        features.push("sovereign-cli/awareness".into());
+    }
+    if (crate_filter.is_none() || crate_filter == Some("sovereign-cli-llm"))
+        && meta.get("sovereign-cli-llm").is_some()
+    {
+        features.push("sovereign-cli-llm/awareness".into());
     }
     if (crate_filter.is_none() || crate_filter == Some("sovereign-mesh"))
         && meta.get("sovereign-mesh").is_some()

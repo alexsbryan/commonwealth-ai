@@ -7,8 +7,8 @@
 //! `quality/TOPOLOGY.md` §10 phase 7b. The shared recipe
 //! (`sovereign-runtime-recipe`) wrote its tool registry out as one hardcoded
 //! sequence of `register` calls, so "adopt the shared recipe" meant "take
-//! exactly these eleven tools". Measured 2026-08-25, `sovereign-server`
-//! registered 31 by type name and the recipe 11, and the two sets were not
+//! exactly these eleven tools". Measured 2026-08-25, `sovereign-server` (a
+//! host since deleted) registered 31 by type name and the recipe 11, and the two sets were not
 //! nested in either direction — the server had no `knowledge_lookup` and no
 //! `attached_document_search`, the recipe had no code intel and no notes. So
 //! adoption read as a regression and the phase stalled on a question that

@@ -478,7 +478,7 @@ remaining work is the production build (Inc 1–3), not more proof.
       The only 2 reds were **pre-existing**, from a peer commit `5972b635` ("talk to
       code wired up", same day) that added a `dim_mismatch_disclosure` retrieval step
       but left `kq_and_deep_share_head_and_core` asserting the old count (18 vs actual
-      19) and `docs/retrieval-pipeline.md` un-regenerated. Reconciled both (assertion →
+      19) and `sovereign-core/docs/retrieval-pipeline.md` un-regenerated. Reconciled both (assertion →
       19/20 + slice indices; doc regenerated via `UPDATE_RETRIEVAL_PIPELINE_DOC=1`). Not
       code-intel work, but they blocked the green gate.
     - **Adjacent committed work — `5972b635` is COMPLEMENTARY, not a collision.** Its

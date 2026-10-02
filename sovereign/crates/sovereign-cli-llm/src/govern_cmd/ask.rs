@@ -18,9 +18,9 @@
 
 use std::io::Write;
 
-use corpus_engine::enrichment::{GovernanceOpKind, RuleStatus};
-use corpus_engine::oplog::Oplog;
+use corpus_engine_atlas_reader::governance::{GovernanceOpKind, RuleStatus};
 use futures::StreamExt as _;
+use oplog::Oplog;
 
 use sovereign_core::types::Intent;
 
@@ -28,16 +28,7 @@ use super::{atlas_dir, load_view};
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 
-/// Answering discipline for governance Q&A, injected as the session's
-/// custom-instructions (the general persona layer). Keeps open-ended
-/// answers honest + cited + supersession-aware. It lives HERE, in the CLI
-/// verb — the runtime stays domain-agnostic; this is just a persona string.
-pub(crate) const GOVERN_ASK_DISCIPLINE: &str = "\
-You are answering questions about a community's governing rules: a founding charter plus dated decisions that amend it over time. \
-Answer ONLY what the current rules and decisions actually address. \
-If the rules do not cover the question, say so plainly in one sentence (for example: \"The house rules don't address that.\") and stop — do NOT pad the answer with tangentially-related rules. \
-When you state a rule, cite the specific Article or Decision it comes from. \
-If an earlier rule was changed by a later decision, give the CURRENT rule and note that it replaced the earlier one; never present a superseded rule as if it were current.";
+pub(crate) use sovereign_contracts::ask_discipline::GOVERN_ASK_DISCIPLINE;
 
 pub async fn cmd_ask(args: &[String]) -> i32 {
     let (mut globals, rest) = match parse_globals(args) {
@@ -151,10 +142,10 @@ async fn render_sources(
     if chunk_refs.is_empty() {
         return;
     }
-    let index_root = crate::enrich_cmd::paths::index_root(corpus_id);
+    let index_root = sovereign_contracts::index_layout::index_root(corpus_id);
     let chunk_to_section =
-        corpus_engine::enrichment::governance_view::chunk_to_section_map(&index_root);
-    let titles = corpus_engine::enrichment::governance_view::section_titles(&index_root);
+        corpus_engine_atlas_reader::governance_view::chunk_to_section_map(&index_root);
+    let titles = corpus_engine_atlas_reader::governance_view::section_titles(&index_root);
 
     // Distinct sections in retrieval-rank order. The persisted metadata is
     // relevance-ranked — the rule most relevant to the question comes first —
@@ -190,7 +181,14 @@ async fn render_sources(
         // FULL section text from the index (not the truncated metadata snippet),
         // mirroring the bench live-runner's resolution. Strip the section's own
         // title line so the body isn't printed twice.
-        let body = match session.corpus_engine.open_index_for_corpus(cid).await {
+        let corpus = match session.corpus() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("  (passage bodies not read: {e})");
+                break;
+            }
+        };
+        let body = match corpus.open_index_for_corpus(cid).await {
             Ok(index) => index
                 .chunks_by_ids(&[*chid])
                 .await
@@ -233,8 +231,8 @@ fn render_supersession_provenance(corpus_id: &str, answer: &str) {
         Ok(o) => o,
         Err(_) => return,
     };
-    let titles = corpus_engine::enrichment::governance_view::section_titles(
-        crate::enrich_cmd::paths::index_root(corpus_id),
+    let titles = corpus_engine_atlas_reader::governance_view::section_titles(
+        sovereign_contracts::index_layout::index_root(corpus_id),
     );
     let answer_lc = answer.to_lowercase();
 

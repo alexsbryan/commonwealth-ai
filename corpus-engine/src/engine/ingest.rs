@@ -88,7 +88,7 @@ impl CorpusEngine {
         // opaque closure. The caller (which built the EmbedFn) knows
         // the model it wired in; it must hand that name to us via
         // `.with_embedding_model(stem)` before calling `ingest`.
-        if self.expected_embedding_model.is_empty() {
+        if self.expected_embedding_model().is_empty() {
             return Err(Error::Embed(
                 "embedding model name not configured. Call \
                  `CorpusEngine::with_embedding_model(stem)` before \
@@ -171,7 +171,7 @@ impl CorpusEngine {
                 Ok(None) => {
                     tracing::warn!(
                         corpus_id = %recipe.corpus.id,
-                        local_model = %self.expected_embedding_model,
+                        local_model = %self.expected_embedding_model(),
                         "ingest: prebuilt snapshot not usable with the local embedding model — running full ingest"
                     );
                     // fall through to the full acquire/extract/chunk/embed pipeline
@@ -461,7 +461,7 @@ impl CorpusEngine {
         let recipe = self.resolve_recipe(corpus).await?;
         std::fs::create_dir_all(&self.index_dir)?;
 
-        if self.expected_embedding_model.is_empty() {
+        if self.expected_embedding_model().is_empty() {
             return Err(Error::Embed(
                 "embedding model name not configured. Call \
                  `CorpusEngine::with_embedding_model(stem)` before \
@@ -498,7 +498,7 @@ impl CorpusEngine {
                 &canonical,
                 &recipe.corpus.id,
                 &recipe.corpus.name,
-                &self.expected_embedding_model,
+                &self.expected_embedding_model(),
                 dims,
                 recipe.corpus.mesh_sharing,
                 recipe.corpus.query_sharing,
@@ -679,7 +679,7 @@ impl CorpusEngine {
                 index_path,
                 &recipe.corpus.id,
                 &recipe.corpus.name,
-                &self.expected_embedding_model,
+                &self.expected_embedding_model(),
                 recipe.index.embedding_dimensions,
                 recipe.corpus.mesh_sharing,
                 recipe.corpus.query_sharing,
@@ -694,7 +694,7 @@ impl CorpusEngine {
                 &recipe.corpus.name,
                 // Use the engine's actual embedding model name (derived from the
                 // configured file path), not the recipe's hardcoded default string.
-                &self.expected_embedding_model,
+                &self.expected_embedding_model(),
                 recipe.index.embedding_dimensions,
                 recipe.corpus.mesh_sharing,
                 recipe.corpus.query_sharing,
@@ -1668,7 +1668,7 @@ impl CorpusEngine {
                  vector: {build_vector} (IVF-PQ auto ≈ {est_partitions} partitions), \
                  fts: {build_fts}",
                 id = recipe.corpus.id,
-                model = self.expected_embedding_model,
+                model = self.expected_embedding_model(),
             );
             if let Some(ref cb) = progress {
                 cb(IngestProgress::Indexing {
@@ -1947,6 +1947,11 @@ impl CorpusEngine {
                             "phase_b: incremental NER failed (non-fatal — Phase A snapshot retained)"
                         ),
                     }
+                } else {
+                    tracing::warn!(
+                        corpus = %recipe.corpus.id,
+                        "phase_b: incremental NER skipped — no GLiNER extractor is wired in this process"
+                    );
                 }
             }
         }

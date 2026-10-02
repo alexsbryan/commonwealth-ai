@@ -16,7 +16,7 @@
 //! from the grounding gate's retained claim records, the referenced
 //! memory recall, and the plan's general-knowledge signal.
 
-use crate::runtime::grounding::GateClaim;
+use crate::runtime::grounding::{declines_asked_fact, GateClaim};
 use crate::runtime::types::{GkReason, RecallVerificationProv, RecalledMemoryProv};
 use crate::types::{
     CoverageLevel, Demand, DemandFacet, EpistemicState, Gap, GapCoverage, Holding, Intent,
@@ -47,6 +47,9 @@ pub(crate) struct EpistemicInputs<'a> {
     pub gate_meta: Option<&'a serde_json::Value>,
     /// The gate's retained per-claim records.
     pub gate_claims: Option<&'a [GateClaim]>,
+    /// The released answer text, read for a partial decline
+    /// ([`declines_asked_fact`]); `None` on a surface that does not pass it.
+    pub answer: Option<&'a str>,
     /// Why the plan answered from general knowledge, when it did.
     pub general_knowledge: Option<GkReason>,
     /// The evidence pool the answer drew on; see [`pool_context`].
@@ -73,6 +76,7 @@ impl<'a> EpistemicInputs<'a> {
         Self {
             gate_meta: None,
             gate_claims: None,
+            answer: None,
             general_knowledge: None,
             pool,
             recalled: &[],
@@ -215,9 +219,31 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
         }
     }
 
+    // A gated release whose prose declines the asked fact while restating
+    // facts the corpus holds (pc-partial-decline-verdict): it answered
+    // nothing that was asked, so it cannot know from here. Its holdings
+    // and citations stay — the restated facts are true and openable. A
+    // holding the corpus did not verify (or one from another basis) says
+    // the turn asserted past the sources, and keeps the verdict it earns.
+    let text_declines =
+        !abstained && !gate_action.is_empty() && inputs.answer.is_some_and(declines_asked_fact);
+    let restates_only = holdings.iter().all(|h| {
+        matches!(h.provenance, Provenance::Corpus { .. })
+            && h.verification == Verification::Verified
+    });
+    let partial_decline = text_declines && restates_only;
+    if text_declines {
+        tracing::debug!(
+            target: "epistemic.ledger",
+            holdings = holdings.len(),
+            restates_only,
+            partial_decline,
+            "released text declines the asked fact"
+        );
+    }
     let verdict = derive_verdict(
         &holdings,
-        abstained,
+        abstained || partial_decline,
         inputs.general_knowledge.is_some(),
         !inputs.pool.corpora.is_empty(),
         gate_action.is_empty(),
@@ -272,6 +298,7 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
         corpus_holdings = n_corpus,
         memory_holdings = n_memory,
         claims_revised = revised,
+        partial_decline,
         demands = state.demands.len(),
         gaps = state.gaps.len(),
         gate_action = %gate_action,
@@ -360,12 +387,7 @@ pub(crate) fn derive_verdict(
 /// computed — zero model calls (EPISTEMIC_STATE.md, P1a). Facets:
 /// the query itself (always), the entity-boost entities, and the
 /// heuristic sub-question decomposition (env-gate-free inner form).
-pub(crate) fn build_demands(
-    message: &str,
-    intent: &Intent,
-    entities: &[String],
-    plan: Option<&crate::runtime::retrieval_pipeline::DemandPlan>,
-) -> Vec<Demand> {
+pub(crate) fn build_demands(message: &str, intent: &Intent, entities: &[String]) -> Vec<Demand> {
     let mut demands = vec![Demand {
         facet: DemandFacet::Query,
         text: message.to_string(),
@@ -395,23 +417,6 @@ pub(crate) fn build_demands(
             push_unique(&mut demands, DemandFacet::SubQuestion, &s);
         }
     }
-    // I4: fold in the LLM demand plan's facets when present — one demand
-    // model, two producers. Sub-queries become SubQuestion demands; stance
-    // poles (both sides of a contested axis) become Stance demands; section
-    // terms become Section demands.
-    if let Some(plan) = plan {
-        for s in &plan.sub_queries {
-            push_unique(&mut demands, DemandFacet::SubQuestion, s);
-        }
-        if let Some(stance) = &plan.stance_contrast {
-            for pole in &stance.poles {
-                push_unique(&mut demands, DemandFacet::Stance, pole);
-            }
-        }
-        for term in &plan.section_terms {
-            push_unique(&mut demands, DemandFacet::Section, term);
-        }
-    }
     demands
 }
 
@@ -421,7 +426,7 @@ pub(crate) fn build_demands(
 /// form appears in some chunk's title or content; SubQuestion = every
 /// substantive token of the sub-query appears in ONE chunk. The
 /// `Supported` upgrade happens at assembly, from gate claims.
-pub(crate) fn stamp_coverage(demands: &mut [Demand], chunks: &[corpus_engine::ScoredChunk]) {
+pub(crate) fn stamp_coverage(demands: &mut [Demand], chunks: &[corpus_index::types::ScoredChunk]) {
     let lowered: Vec<(String, String)> = chunks
         .iter()
         .map(|c| {
@@ -639,7 +644,7 @@ const COVERAGE_PROBE_MAX_CORPORA: usize = 12;
 /// bounded ANN probe per corpus. Free function so streaming spawns
 /// (which hold an engine clone, not the Runtime) can call it.
 pub async fn coverage_probe(
-    engine: Option<&std::sync::Arc<corpus_engine::CorpusEngine>>,
+    engine: Option<&std::sync::Arc<dyn corpus_index::source::CorpusReadPort>>,
     embedding: &[f32],
     enabled_corpora: Option<&[String]>,
 ) -> Option<CoverageProbeResult> {
@@ -665,7 +670,7 @@ pub async fn coverage_probe(
         // subset (order-dependent), so the topic/claim verdict depended on
         // which corpora happened to sort first. `None` (no scope) keeps the
         // all-installed behavior for un-scoped turns.
-        let scoped: Vec<&corpus_engine::IndexInfo> = infos
+        let scoped: Vec<&corpus_index::types::IndexInfo> = infos
             .iter()
             .filter(|i| corpus_in_probe_scope(&i.corpus_id, enabled_corpora))
             .collect();
@@ -720,7 +725,7 @@ pub async fn coverage_probe(
 /// and the mesh member each chunk came from (`metadata["peer"]`, the one
 /// writer being the retrieval pipeline's mesh merge), aligned with
 /// `chunks`; `None` for a local chunk.
-pub(crate) fn pool_context(chunks: &[corpus_engine::ScoredChunk]) -> PoolContext {
+pub(crate) fn pool_context(chunks: &[corpus_index::types::ScoredChunk]) -> PoolContext {
     let mut seen = std::collections::HashSet::new();
     let mut corpora = Vec::new();
     for c in chunks {

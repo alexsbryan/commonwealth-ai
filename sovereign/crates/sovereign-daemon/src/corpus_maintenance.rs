@@ -34,14 +34,15 @@
 //! outside its indexes — a metadata read — and does real work only when that
 //! number crosses a floor. On an idle corpus a cycle costs a few milliseconds
 //! and writes nothing, which matters because the index phase is NOT idempotent
-//! (see `corpus_engine::index::maintain`): an unconditional pass adds index
+//! (see `corpus_index::index::maintain`): an unconditional pass adds index
 //! versions forever and turns the healer into a leak.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use corpus_engine::{CorpusEngine, Retention};
+use corpus_index::index::Retention;
+use corpus_index::ingest_port::daemon::IngestPort;
 
 /// Minutes between sweeps. `0` disables the sweep entirely.
 fn interval_mins() -> u64 {
@@ -111,7 +112,7 @@ fn keep_versions() -> Option<usize> {
 /// it prevents produces no error, only gradual slowness, so a dead sweep looks
 /// exactly like a healthy one (DAEMON_RESILIENCE.md P0.4). Each cycle is
 /// independent and idempotent, so a restart loses nothing.
-pub fn spawn(engine: Arc<CorpusEngine>) {
+pub fn spawn(engine: Arc<dyn IngestPort>) {
     crate::supervise::spawn_supervised("corpus_maintenance_sweep", move || {
         let engine = Arc::clone(&engine);
         async move {
@@ -153,7 +154,7 @@ pub fn spawn(engine: Arc<CorpusEngine>) {
     });
 }
 
-async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64, keep: Option<usize>) {
+async fn sweep_once(engine: &Arc<dyn IngestPort>, floor: usize, prune: i64, keep: Option<usize>) {
     // `None` only when pruning is disabled outright; otherwise every corpus
     // gets the same policy and the per-corpus decision below is purely about
     // whether it has earned each phase.

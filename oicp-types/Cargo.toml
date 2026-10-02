@@ -39,6 +39,10 @@ toml = { workspace = true }
 # this crate already links two lines above. Same spelling as
 # `corpus-engine/xtask/Cargo.toml:23`, the other consumer of that module.
 kernel-types = { workspace = true, features = ["quality-registry"] }
+# `JobContext::progress` traces every progress note at debug (work/exec.rs,
+# moved here by pb-work-donor). Third-party and already in every closure that
+# links this crate, so it costs the leaf budget nothing.
+tracing = { workspace = true }
 
 [lints]
 workspace = true

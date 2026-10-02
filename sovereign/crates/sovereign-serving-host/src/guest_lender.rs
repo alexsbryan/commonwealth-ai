@@ -30,7 +30,7 @@
 //!
 //! [`StoredGuestLink`] resolves a granted id by reading the holder's link file
 //! and, when the link names an iroh endpoint, opening a mesh tunnel. Neither
-//! the file (`sovereign_core::guest_link` — the holder's credential, which
+//! the file (`sovereign_contracts::guest_link` — the holder's credential, which
 //! Serving only consumes; ARCH 12) nor the tunnel (`sovereign_mesh::
 //! guest_tunnel`, Fabric reach) is the package's to name, so both arrive
 //! through ports: [`GuestLinkReader`] and [`GuestTunnelOpener`], both
@@ -158,7 +158,7 @@ impl GuestLenderSource for NoGuestLenders {
 /// A live guest link, projected to the fields the resolver reads.
 ///
 /// The stored form — the file, its location, its expiry semantics — is the
-/// holder's own (`sovereign_core::guest_link`). Serving only consumes it, so
+/// holder's own (`sovereign_contracts::guest_link`). Serving only consumes it, so
 /// it arrives through [`GuestLinkReader`] rather than being named here
 /// (ARCH 12: the credential is the holder's, not Serving's). `expires_at` and
 /// `summary` are absent on purpose: the reader returns only links within
@@ -175,7 +175,7 @@ pub struct LiveGuestLink {
 }
 
 /// Reads this node's live guest link. The daemon implements it over
-/// `sovereign_core::guest_link`.
+/// `sovereign_contracts::guest_link`.
 pub trait GuestLinkReader: Send + Sync + std::fmt::Debug {
     /// The link when one is present AND within its stated window; `None`
     /// otherwise.
@@ -255,7 +255,7 @@ pub struct StoredGuestLink {
     /// re-issued after a lender restart carries NEW ephemeral ports, so the
     /// key is what makes a stale tunnel get replaced instead of reused.
     tunnel: RwLock<Option<(String, Arc<dyn GuestTunnelHandle>)>>,
-    /// Reads the holder's link file — `sovereign_core::guest_link`, reached
+    /// Reads the holder's link file — `sovereign_contracts::guest_link`, reached
     /// through the daemon (ARCH 12).
     links: Arc<dyn GuestLinkReader>,
     /// Opens the mesh tunnel — `sovereign_mesh::guest_tunnel`, Fabric reach.
@@ -329,9 +329,9 @@ impl StoredGuestLink {
     /// iroh endpoint. Mirrors the CLI's `guest_link::open_route`, and for the
     /// same reason: nothing else may turn a link into an address, or a bearer
     /// goes out in plaintext to a mesh that closed plaintext on purpose.
-    async fn route_for(&self, link: &LiveGuestLink) -> Option<String> {
+    async fn route_for(&self, link: &LiveGuestLink) -> Result<String, String> {
         let Some(dial) = link.dial.as_deref() else {
-            return Some(link.url.clone());
+            return Ok(link.url.clone());
         };
         if let Some((open_for, t)) = self.tunnel.read().await.as_ref() {
             // A CACHED TUNNEL IS A CLAIM, AND IT IS CHECKED BEFORE IT IS USED.
@@ -351,7 +351,7 @@ impl StoredGuestLink {
             // still up and the grant still valid.
             if open_for == dial {
                 if tunnel_is_accepting(t.base_url()).await {
-                    return Some(t.base_url().to_string());
+                    return Ok(t.base_url().to_string());
                 }
                 tracing::warn!(
                     target: "transport",
@@ -376,7 +376,7 @@ impl StoredGuestLink {
                     bridge = %base,
                     "guest-lender: opened the mesh tunnel to a lending node"
                 );
-                Some(base)
+                Ok(base)
             }
             Err(e) => {
                 // No plaintext fallback. A link naming an iroh endpoint means
@@ -389,7 +389,7 @@ impl StoredGuestLink {
                     "guest-lender: could not open the mesh tunnel — the model will \
                      resolve as unavailable rather than being served from elsewhere"
                 );
-                None
+                Err(e)
             }
         }
     }
@@ -477,7 +477,7 @@ impl StoredGuestLink {
         let Some(link) = self.links.live_link() else {
             return Resolved::NoLink;
         };
-        let Some(base) = self.route_for(&link).await else {
+        let Ok(base) = self.route_for(&link).await else {
             // A link whose tunnel will not open is NOT the same as no link.
             // Returning `None` here is how an unopenable tunnel used to read
             // as "this node never borrowed anything".
@@ -497,6 +497,53 @@ impl StoredGuestLink {
                 why,
             },
         }
+    }
+}
+
+/// Why [`StoredGuestLink::route`] has no base URL to give. Two absences, never
+/// a local base in their place (§18.3): the caller reports which one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GuestRouteAbsence {
+    /// This node holds no live guest link.
+    NoLink,
+    /// The link names an iroh endpoint and its tunnel would not open.
+    TunnelRefused { lender: String, why: String },
+}
+
+impl std::fmt::Display for GuestRouteAbsence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoLink => write!(
+                f,
+                "this node holds no live guest link — accept one with `svrn mesh use <link>`"
+            ),
+            Self::TunnelRefused { lender, why } => write!(
+                f,
+                "could not reach {lender} over the mesh tunnel: {why}\n\
+                 The link names an iroh endpoint, which means the lending node's \
+                 plaintext API is closed (an encrypted mesh). There is no plaintext \
+                 fallback — ask for a fresh link, or ask them to check `svrn mesh status`."
+            ),
+        }
+    }
+}
+
+impl StoredGuestLink {
+    /// The base URL every request under the stored link must be sent to —
+    /// opening, or reusing, the mesh tunnel when the link names an iroh
+    /// endpoint. serve's `/internal/guest/route` door serves this, so a
+    /// CLI reaches the lender through this one decider instead of opening a
+    /// tunnel of its own (§12 D6).
+    pub async fn route(&self) -> Result<String, GuestRouteAbsence> {
+        let Some(link) = self.links.live_link() else {
+            return Err(GuestRouteAbsence::NoLink);
+        };
+        self.route_for(&link)
+            .await
+            .map_err(|why| GuestRouteAbsence::TunnelRefused {
+                lender: link.url.clone(),
+                why,
+            })
     }
 }
 

@@ -56,7 +56,7 @@ Toggling Public ↔ Private does not retroactively republish prior records. The 
 - **Agent identity via header.** `X-Agent-Session` is extracted in `mcp_router::mcp_handle` and threaded into `ToolContext::agent_session_token`. Anonymous calls (no header) fall back to `format!("conn:{mcp_session_id}")` so per-connection grouping still works.
 - **`repo_id` is MUST.** Per spec §10 (escalated from SHOULD on the user's call) the daemon refuses to create Sessions outside a git repo with an `origin` remote. `repo_id` is SHA-256(canonicalized origin URL) — SSH and HTTPS forms of the same repo hash to the same value, so two workstations clones agree.
 - **`node_id` is reused, not duplicated.** Spec §1 — atlas identity equals mesh identity. Stable per workstation via `~/.svrnmesh/node_id`.
-- **`node_is_self` says whether a record is yours** (added 2026-08-07). Every claim and observation carries it alongside `node_id`, computed in `collect_in_flight` against `WorkAtlasStore::node_id()`, so both consumers — the `work_in_flight` tool and the session-boot briefing — agree. It exists because **scope strings are not node-qualified**: a host-local resource gets the same name on every workstation, so `daemon-runtime:9741-primary-slot` is one bucket holding every node's claim on its *own* daemon. `node_id` alone cannot resolve that — it is an opaque hash and nothing else in the response says which one is the caller's — so a peer's claim reads as a lock on the box you are sitting on. That misread cost real stalled work on 2026-08-07. Pinned by `tests/cross_node.rs::same_scope_on_two_nodes_is_distinguishable_by_node_is_self`. Node *names* (`BeefyMac`, `RuggedFox`) are **not** available here — they live in the mesh roster (`svrn mesh status`, which marks self with `*`), and the work-atlas store holds only `NodeId`.
+- **`node_is_self` says whether a record is yours** (added 2026-08-07). Every claim and observation carries it alongside `node_id`, computed in `collect_in_flight` against `WorkAtlasStore::node_id()`, so both consumers — the `work_in_flight` tool and the session-boot briefing — agree. It exists because **scope strings are not node-qualified**: a host-local resource gets the same name on every workstation, so `daemon-runtime:9741-primary-slot` is one bucket holding every node's claim on its *own* daemon. `node_id` alone cannot resolve that — it is an opaque hash and nothing else in the response says which one is the caller's — so a peer's claim reads as a lock on the box you are sitting on. That misread cost real stalled work on 2026-08-07. Pinned by `tests/port_fake.rs::same_scope_on_two_nodes_is_distinguishable_by_node_is_self (real-store twin: sovereign-mesh/tests/main/work_atlas_store.rs)`. Node *names* (`BeefyMac`, `RuggedFox`) are **not** available here — they live in the mesh roster (`svrn mesh status`, which marks self with `*`), and the work-atlas store holds only `NodeId`.
 - **`branch_relation` says whether a record is a LOCK or awareness** (added 2026-09-23). Every claim and observation carries `branch` — the owner session's `current_branch` — and `branch_relation` (`same` / `other` / `unknown`) measured against the response's `caller_branch`, both computed in `collect_in_flight` from the same session row that answers attribution. It exists because the atlas was branch-blind: a peer folding `rail-core` **on a feature branch** read as a lease on `main`, and a session refused to work that could not have collided with anything (operator, 2026-09-23). Semantics, and they are a contract every consumer follows: `same` = real collision, coordinate; `other` = awareness, NOT a lease — name it and proceed, the two trees cannot touch until a merge; `unknown` = a branch is missing on one side, reported as a gap and never rounded to `same` (ARCH §6). `caller_branch: null` means every relation is `unknown` — no session branch was on record. Pinned by `tools::work_in_flight::tests::{branch_relation_classifies_same_other_unknown,a_cross_branch_claim_is_reported_as_other_not_a_lock,a_same_branch_claim_is_reported_as_same,a_branchless_claim_is_unknown}`.
 
 ## TTL model
@@ -145,7 +145,7 @@ recorded.
   null — a receipt only means something when the origin is known to
   be elsewhere. The side map dies at process restart, exactly like
   the claims themselves (MeshStore is in-memory). Pinned by
-  `tests/cross_node.rs::peer_claim_gets_received_at_on_first_observation`.
+  `tests/port_fake.rs::peer_claim_gets_received_at_on_first_observation (real-store twin: sovereign-mesh/tests/main/work_atlas_store.rs)`.
 
 ## Broadcast model
 
@@ -153,16 +153,15 @@ Spec §7 calls for immediate fan-out on Claim writes — don't make a peer wait 
 full replication cycle to see a claim. **It is no longer a fan-out, and since
 cw-lift rung 2e nothing here puts bytes on a socket.**
 
-A claim write is an ordinary `MeshStore::set`, and the store queues it in
-`rail_outbox` in the same transaction as the row. Two hops then carry it: the
-KV pump signs it onto the `work-atlas` ring journal, and the ring-sync loop
-exchanges digests with peers. On their own clocks that is up to 2 s + up to
-60 s. `MeshBroadcaster` (`sovereign-daemon/src/work_atlas_broadcaster.rs`) is
-what makes it now: it calls `rail_kv_pump::pump_once` — the pump's own body,
-not a second spelling of it — and then raises `AppState::ring_write_nudge`,
-which the ring-sync loop waits on beside its interval. By the time
-`declare_scope` returns, the claim is signed onto the journal and a round has
-been asked for.
+A claim write is an ordinary `set` through the daemon's one `RailsKv`, which
+lands in cw-rails' mesh store; that store queues it in `rail_outbox` in the
+same transaction as the row. Two hops then carry it: cw-rails' pump signs it
+onto the `work-atlas` ring journal on its 2 s tick, and the daemon's ring-sync
+loop exchanges digests with peers on its round. That is up to 2 s + up to 60 s,
+and nothing hurries either hop: the daemon's `MeshBroadcaster` drained a store
+the atlas no longer wrote after five-programs fp-88, and was deleted in fp-83
+(decision five-programs-59). The `DeferredBroadcaster` the tools hold stays
+unset, a no-op.
 
 What went with the old model: `gossip::broadcast_now`, the
 `POST /internal/app/state` route it wrote to, and the ten-second full-snapshot
@@ -174,7 +173,7 @@ and the ring's anti-entropy is what redelivers it to a peer that was offline.
 claim simply stopped being re-sent and a peer kept its copy until its own TTL
 gc swept it. The rail carries a delete as a TOMBSTONE, so a release reaches
 peers — and, per K7, survives until the seal that retires it.
-`tests/cross_node.rs::release_propagates_as_a_tombstone` is the pin, and it is
+`tests/port_fake.rs::release_propagates_as_a_tombstone (real-store twin: sovereign-mesh/tests/main/work_atlas_store.rs)` is the pin, and it is
 the assertion that was inverted at 2e.
 
 Session updates do NOT trigger the hurry (they're high-volume and the peers
@@ -193,7 +192,6 @@ the pump's ordinary 2 s tick.
 | `work_atlas:query` | debug | `WorkInFlightTool::execute` |
 | `work_atlas:resource_may_i` | debug | `ResourceMayITool::execute` (scope, verdict, node) |
 | `work_atlas:claim_node_fallback_session` | debug | node attribution fell back to the session row (claim written by an older binary) |
-| `work_atlas: claim hurried onto the ring` | debug | `MeshBroadcaster::broadcast` — what the outbox drain appended, deferred and refused |
 | `work_atlas:repo_id_missing` | warn | `repo_id::resolve` error path; daemon serve continues but `declare_scope` rejects |
 | `mcp:tool_call dispatched` | debug | `mcp_router::handle_tool_call`, includes redacted token |
 
@@ -255,7 +253,7 @@ The existing `blast` tool gains a `concurrent: [{ claim_id, session_id, intent, 
 2. Applies its own 30 s per-path debounce — the spec's minimum interval between observation upserts. The coordinator's 800 ms debounce coalesces editor save-storms; the observer's 30 s on top stabilises the signal peers see.
 3. For each non-debounced path: reads any existing `ObservationRecord` (preserves `first_observed_at`, bumps `event_count`), writes the updated record under `work-atlas:observation:<session_id>:<path>` (or `work-atlas-private` when the configured privacy is Private), and calls `broadcaster.broadcast(...)` for Public records. Paths are normalized to **repo-relative** at write time (as are `declare_scope` file scopes) — the canonical shape every `work_in_flight --match_mode=file` query should use. An empty scope in file mode matches everything (the supported "all live signals" query).
 
-The broadcaster is a `DeferredBroadcaster` at observer construction time — the daemon's `AppState` isn't reachable when the watcher coordinator starts. A spawned task in `start_daemon` polls `daemon.app_state()` for up to 30 s and swaps the real `MeshBroadcaster` in once available. Until then, observations still propagate on the pump's own 2 s tick and the ring's 60 s round (just slower) — the write is queued either way, so nothing is lost by the wire-up window.
+The broadcaster is a `DeferredBroadcaster` that nothing sets (five-programs fp-83), so `broadcast` is a no-op. Observations propagate on cw-rails' 2 s pump tick and the ring's 60 s round — the write is queued in cw-rails' store either way.
 
 `work_in_flight` queries claims and observations independently, applies confidence grades (claims always `declared`; observations graded `active` / `recent` from `now - last_observed_at` against the spec windows), excludes the caller's own session, and returns both arrays.
 
@@ -284,7 +282,6 @@ These are intentionally out of scope and called out so future-you doesn't think 
 - `sovereign/crates/sovereign-work-atlas/src/observer.rs` — `AtlasObserver` (Phase 2 passive sensor).
 - `sovereign/crates/sovereign-work-atlas/src/confidence.rs` — grade thresholds + `observation_grade()`.
 - `sovereign/crates/sovereign-work-atlas/src/tools/broadcast.rs` — `ClaimBroadcaster` trait, `NullBroadcaster`, `DeferredBroadcaster` (Phase 2 indirection seam).
-- `sovereign/crates/sovereign-daemon/src/work_atlas_broadcaster.rs` — `MeshBroadcaster` (Phase 2 real impl).
 - `sovereign/crates/sovereign-daemon/src/daemon_services.rs::HeadlessRails::mesh_store` — the daemon's `AppState.mesh_store` IS the work-atlas's store. Was a `set_mesh_store` hook until 2026-08-24; it is now a required field of the headless daemon's variant, so a daemon that serves the atlas cannot be built without it.
 - `sovereign/crates/sovereign-cli/src/daemon_cmd.rs` — wire-up: observer registration, broadcaster swap-in, GC spawn.
 - `sovereign/crates/sovereign-work-atlas/` — the crate.
@@ -292,7 +289,6 @@ These are intentionally out of scope and called out so future-you doesn't think 
 - `sovereign/crates/sovereign-cli-llm/src/claim_cmd.rs` — `sovereign claim` dispatch incl. `may-i` / `take` (daemon-first; the in-process fallback lives here too).
 - `commonwealth/crates/commonwealth-api/src/admission.rs` + `state.rs` + `routes_status.rs` — the per-peer request tally on `/status` (`inference.peer_requests`, order seat-resource-commons UC-R1).
 - `commonwealth/crates/commonwealth-state/src/peer_preferences.rs` — `GOSSIP_EXCLUDED_APP_IDS` slice + paired test.
-- `sovereign/crates/sovereign-daemon/src/work_atlas_broadcaster.rs::MeshBroadcaster` — the hurry: `rail_kv_pump::pump_once` + `AppState::ring_write_nudge`. (Was `gossip.rs::broadcast_now`, deleted at cw-lift 2e with the route it POSTed to.)
 - `sovereign/crates/sovereign-daemon/src/mcp_router.rs` — `X-Agent-Session` extraction.
 - `sovereign/crates/sovereign-core/src/types.rs::ToolContext` — `agent_session_token` field.
 - `sovereign/crates/sovereign-tools/src/code/blast_radius.rs` — `concurrent` field injection.

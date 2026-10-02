@@ -271,7 +271,7 @@ fn email_date_parsing_handles_rfc5322_and_us_long_form() {
 
 #[tokio::test]
 async fn document_feed_orders_docs_desc_and_parses_links() {
-    use corpus_engine::index::{EmbeddedChunk, InsertChunk};
+    use corpus_index::index::{EmbeddedChunk, InsertChunk};
 
     let dir = tempfile::tempdir().unwrap();
     let index = CorpusIndex::create_with_sharing(

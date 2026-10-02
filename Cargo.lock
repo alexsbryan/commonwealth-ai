@@ -225,7 +225,7 @@ dependencies = [
 
 [[package]]
 name = "arch-layers"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "serde",
  "toml 0.8.2",
@@ -1851,7 +1851,7 @@ dependencies = [
 
 [[package]]
 name = "code-facts"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "corpus-engine-scip",
  "corpus-engine-yield",
@@ -1859,6 +1859,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sovereign-contracts",
  "streaming-iterator",
  "tokio",
  "tree-sitter",
@@ -1869,7 +1870,7 @@ dependencies = [
 
 [[package]]
 name = "code-next-edit"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "corpus-engine-scip",
  "serde",
@@ -1927,7 +1928,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "blake3",
  "ed25519-dalek 2.2.0",
@@ -1945,14 +1946,16 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-discovery"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "blake3",
  "commonwealth-core",
  "getrandom 0.3.4",
  "hex",
  "hostname",
+ "if-addrs",
  "mdns-sd",
+ "mesh-join-vocab",
  "serde",
  "serde_json",
  "sysinfo 0.35.2",
@@ -1963,12 +1966,14 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-media"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axum",
  "commonwealth-core",
  "commonwealth-transport",
  "hex",
+ "kernel-types",
+ "oicp-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -1981,7 +1986,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-rail"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "commonwealth-rail-core",
  "oplog",
@@ -1993,7 +1998,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-rail-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "ed25519-dalek 2.2.0",
  "hex",
@@ -2007,19 +2012,30 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-rails"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
+ "bytes",
  "commonwealth-core",
  "commonwealth-discovery",
  "commonwealth-media",
+ "commonwealth-rail",
+ "commonwealth-state",
  "commonwealth-transport",
+ "commonwealth-work",
  "ed25519-dalek 2.2.0",
+ "futures",
  "hex",
+ "host-kit",
  "hostname",
+ "kernel-types",
+ "mesh-reach",
+ "oicp-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sovereign-peer-wire",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -2031,7 +2047,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-state"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2041,6 +2057,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sovereign-contracts",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -2049,7 +2066,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-transport"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "commonwealth-core",
@@ -2058,8 +2075,8 @@ dependencies = [
  "hex",
  "iroh",
  "kernel-types",
+ "mesh-reach",
  "rustls",
- "serde",
  "serde_json",
  "tempfile",
  "tokio",
@@ -2070,7 +2087,7 @@ dependencies = [
 
 [[package]]
 name = "commonwealth-work"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "commonwealth-core",
  "commonwealth-rail",
@@ -2295,8 +2312,8 @@ dependencies = [
  "bzip2 0.5.2",
  "calamine",
  "chrono",
- "code-facts",
- "corpus-engine-notes",
+ "corpus-engine-atlas-reader",
+ "corpus-engine-recipes",
  "corpus-engine-scip",
  "corpus-engine-sections",
  "corpus-engine-yield",
@@ -2316,6 +2333,7 @@ dependencies = [
  "mailparse",
  "memmap2",
  "notify",
+ "oicp-types",
  "oplog",
  "parquet",
  "petgraph 0.6.5",
@@ -2362,7 +2380,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-archaeology"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "regex",
@@ -2376,31 +2394,40 @@ dependencies = [
 ]
 
 [[package]]
-name = "corpus-engine-atos"
-version = "0.7.0"
+name = "corpus-engine-atlas-reader"
+version = "0.8.0"
 dependencies = [
- "chrono",
- "corpus-engine-yield",
- "pulldown-cmark",
- "rusqlite",
+ "arrow",
+ "arrow-array",
+ "async-trait",
+ "corpus-index",
+ "futures",
+ "kernel-types",
+ "lancedb",
+ "memmap2",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "sovereign-contracts",
  "tempfile",
- "thiserror 2.0.18",
  "tokio",
  "tracing",
- "uuid",
+ "tracing-subscriber",
+ "understanding-atlas",
+ "understanding-vocab",
  "workspace-hack",
 ]
 
 [[package]]
 name = "corpus-engine-notes"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
+ "axum",
  "chrono",
  "clap",
  "corpus-engine-yield",
+ "corpus-index",
  "oicp-types",
  "reqwest 0.12.28",
  "rusqlite",
@@ -2418,12 +2445,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "corpus-engine-recipes"
+version = "0.8.0"
+dependencies = [
+ "toml 0.8.2",
+ "workspace-hack",
+]
+
+[[package]]
 name = "corpus-engine-scip"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
- "fs4 0.12.0",
  "glob",
+ "host-kit",
  "libc",
  "prost",
  "rusqlite",
@@ -2440,7 +2475,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-sections"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "regex",
  "tracing",
@@ -2448,7 +2483,7 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-watchers"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -2473,18 +2508,20 @@ dependencies = [
 
 [[package]]
 name = "corpus-engine-yield"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "workspace-hack",
 ]
 
 [[package]]
 name = "corpus-index"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
+ "anyhow",
  "arrow",
  "arrow-array",
  "arrow-schema",
+ "async-trait",
  "blake3",
  "chrono",
  "corpus-engine-yield",
@@ -2496,27 +2533,31 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-contracts",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "toml 0.8.2",
  "tracing",
+ "trybuild",
 ]
 
 [[package]]
 name = "corpus-mcp"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "corpus-engine",
+ "corpus-engine-atlas-reader",
  "corpus-index",
- "oicp-types",
+ "host-kit",
+ "kernel-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sovereign-contracts",
- "sovereign-enrichment-build",
+ "sovereign-turn-client",
  "tempfile",
  "tokio",
  "tracing",
@@ -4454,16 +4495,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fs4"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c29c30684418547d476f0b48e84f4821639119c483b1eccd566c8cd0cd05f521"
-dependencies = [
- "rustix 0.38.44",
- "windows-sys 0.52.0",
-]
-
-[[package]]
 name = "fs_extra"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5584,6 +5615,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "host-kit"
+version = "0.8.0"
+dependencies = [
+ "axum",
+ "futures",
+ "if-addrs",
+ "libc",
+ "oicp-types",
+ "reqwest 0.12.28",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "hostname"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6701,7 +6751,7 @@ dependencies = [
 
 [[package]]
 name = "kernel-types"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "blake3",
  "getrandom 0.3.4",
@@ -7935,6 +7985,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-join-vocab"
+version = "0.8.0"
+dependencies = [
+ "blake3",
+ "hex",
+]
+
+[[package]]
+name = "mesh-reach"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "hex",
+ "iroh",
+ "kernel-types",
+ "rand 0.9.4",
+ "reqwest 0.12.28",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8985,8 +9061,8 @@ name = "oicp-client"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "futures",
- "oicp-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -9017,6 +9093,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml 0.8.2",
+ "tracing",
 ]
 
 [[package]]
@@ -9165,7 +9242,7 @@ dependencies = [
 
 [[package]]
 name = "oplog"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "kernel-types",
  "oplog-types",
@@ -9178,7 +9255,7 @@ dependencies = [
 
 [[package]]
 name = "oplog-types"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "kernel-types",
  "serde",
@@ -11722,7 +11799,15 @@ dependencies = [
 
 [[package]]
 name = "serving-policy"
-version = "0.7.0"
+version = "0.8.0"
+dependencies = [
+ "serving-policy-core",
+ "workspace-hack",
+]
+
+[[package]]
+name = "serving-policy-core"
+version = "0.8.0"
 dependencies = [
  "oicp-types",
  "serde",
@@ -12123,7 +12208,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-agent-bench"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -12149,9 +12234,10 @@ dependencies = [
 
 [[package]]
 name = "sovereign-agent-tools"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
+ "oicp-types",
  "proc-macro2",
  "serde",
  "serde_json",
@@ -12164,60 +12250,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "sovereign-atos"
-version = "0.7.0"
+name = "sovereign-authoring-harness"
+version = "0.8.0"
 dependencies = [
  "async-trait",
- "bytes",
- "commonwealth-core",
- "commonwealth-state",
  "corpus-engine",
- "corpus-engine-atos",
- "corpus-engine-notes",
- "oicp-types",
- "pulldown-cmark",
+ "corpus-index",
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-contracts",
- "sovereign-core",
+ "sovereign-time",
  "tempfile",
- "thiserror 2.0.18",
  "tokio",
- "tracing",
- "uuid",
- "workspace-hack",
-]
-
-[[package]]
-name = "sovereign-authoring-harness"
-version = "0.7.0"
-dependencies = [
- "corpus-engine",
- "serde",
- "serde_json",
- "sha2 0.10.9",
  "workspace-hack",
 ]
 
 [[package]]
 name = "sovereign-cli"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
- "arc-swap",
- "async-trait",
  "chrono",
  "clap",
- "commonwealth-rail",
- "commonwealth-work",
- "corpus-engine",
- "corpus-engine-archaeology",
- "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-index",
  "dirs 5.0.1",
- "futures",
  "hex",
- "hostname",
+ "host-kit",
  "kernel-types",
  "libc",
  "oicp-client",
@@ -12228,80 +12286,103 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-agent-bench",
- "sovereign-cli-dev",
- "sovereign-cli-llm",
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
- "sovereign-enrichment-catalog",
  "sovereign-store",
+ "sovereign-turn-client",
  "tempfile",
  "tokio",
  "toml 0.8.2",
  "tracing",
- "tracing-subscriber",
  "uuid",
  "which",
+ "workspace-hack",
+]
+
+[[package]]
+name = "sovereign-cli-base"
+version = "0.8.0"
+dependencies = [
+ "clap",
+ "commonwealth-rail-core",
+ "dirs 5.0.1",
+ "libc",
+ "reqwest 0.12.28",
+ "serde_json",
+ "sovereign-contracts",
+ "tempfile",
+ "tracing",
+ "tracing-subscriber",
+ "workspace-hack",
+]
+
+[[package]]
+name = "sovereign-cli-bench"
+version = "0.8.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "clap",
+ "corpus-index",
+ "futures",
+ "hex",
+ "host-kit",
+ "kernel-types",
+ "libc",
+ "oicp-client",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sovereign-cli-base",
+ "sovereign-contracts",
+ "sovereign-eval",
+ "sovereign-time",
+ "sovereign-turn-client",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
+ "understanding-vocab",
  "workspace-hack",
 ]
 
 [[package]]
 name = "sovereign-cli-daemon"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
- "arc-swap",
  "async-trait",
  "axum",
- "chrono",
- "corpus-engine",
- "corpus-engine-notes",
  "corpus-engine-scip",
- "corpus-engine-watchers",
+ "corpus-index",
  "dirs 5.0.1",
  "futures",
+ "host-kit",
  "hostname",
- "kernel-types",
  "libc",
+ "mesh-join-vocab",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
- "sha2 0.10.9",
  "sovereign-cli-shared",
- "sovereign-compute",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-daemon",
- "sovereign-enrichment-build",
- "sovereign-gliner",
- "sovereign-inference",
- "sovereign-mesh",
- "sovereign-pods",
- "sovereign-runtime-recipe",
- "sovereign-scheduler",
  "sovereign-service",
- "sovereign-serving-host",
- "sovereign-store",
- "sovereign-tdd",
- "sovereign-tools",
- "sovereign-work-atlas",
- "sovereign-workflow",
- "sovereign-workflow-host",
+ "sovereign-turn-client",
  "tempfile",
  "tokio",
  "toml 0.8.2",
- "tower",
- "tower-http",
  "tracing",
  "tracing-subscriber",
- "uuid",
- "which",
  "workspace-hack",
 ]
 
 [[package]]
 name = "sovereign-cli-dev"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "arch-layers",
@@ -12309,33 +12390,28 @@ dependencies = [
  "axum",
  "chrono",
  "code-facts",
- "commonwealth-core",
- "commonwealth-state",
- "corpus-engine",
  "corpus-engine-archaeology",
- "corpus-engine-atos",
  "corpus-engine-notes",
  "corpus-engine-scip",
  "corpus-engine-watchers",
+ "corpus-index",
  "dirs 5.0.1",
  "futures",
+ "host-kit",
  "hostname",
  "kernel-types",
  "libc",
+ "oicp-client",
  "regex",
  "reqwest 0.12.28",
- "rusqlite",
  "serde",
  "serde_json",
- "serving-policy",
  "sha2 0.10.9",
- "sovereign-atos",
- "sovereign-cli-shared",
- "sovereign-core",
- "sovereign-daemon",
- "sovereign-mesh",
- "sovereign-store",
- "sovereign-tools",
+ "sovereign-cli-base",
+ "sovereign-code",
+ "sovereign-contracts",
+ "sovereign-time",
+ "sovereign-turn-client",
  "sovereign-work-atlas",
  "tempfile",
  "tokio",
@@ -12343,6 +12419,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
  "which",
  "workspace-hack",
@@ -12350,70 +12427,102 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-llm"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
- "arc-swap",
  "async-trait",
  "axum",
  "bytes",
  "chrono",
  "clap",
- "commonwealth-core",
- "commonwealth-media",
- "commonwealth-rail",
- "commonwealth-state",
- "commonwealth-transport",
- "commonwealth-work",
- "corpus-engine",
- "corpus-engine-atos",
- "corpus-engine-notes",
+ "commonwealth-rail-core",
+ "corpus-engine-atlas-reader",
+ "corpus-index",
  "dirs 5.0.1",
- "ed25519-dalek 2.2.0",
- "fast_qr",
  "futures",
  "hex",
- "hostname",
+ "host-kit",
  "kernel-types",
  "libc",
- "oicp-types",
+ "oicp-client",
+ "oplog",
  "rand 0.9.4",
  "regex",
  "reqwest 0.12.28",
- "rqrr",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-authoring-harness",
+ "sovereign-cli-base",
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-daemon",
- "sovereign-enrichment-build",
- "sovereign-enrichment-catalog",
- "sovereign-eval",
- "sovereign-gliner",
- "sovereign-inference",
- "sovereign-mesh",
  "sovereign-meshapp",
- "sovereign-pipeline",
- "sovereign-pods",
  "sovereign-runtime-recipe",
  "sovereign-store",
+ "sovereign-time",
  "sovereign-tools",
  "sovereign-turn-client",
- "sovereign-work-atlas",
  "sovereign-workflow",
  "sovereign-workflow-host",
  "tar",
  "tempfile",
  "tokio",
  "toml 0.8.2",
- "toml_edit 0.22.27",
- "tower-http",
  "tracing",
  "tracing-subscriber",
  "understanding-vocab",
+ "uuid",
+ "workspace-hack",
+ "zstd",
+]
+
+[[package]]
+name = "sovereign-cli-mesh"
+version = "0.8.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "clap",
+ "commonwealth-core",
+ "commonwealth-discovery",
+ "commonwealth-media",
+ "commonwealth-rail",
+ "commonwealth-rails",
+ "commonwealth-state",
+ "commonwealth-transport",
+ "commonwealth-work",
+ "dirs 5.0.1",
+ "ed25519-dalek 2.2.0",
+ "fast_qr",
+ "futures",
+ "hex",
+ "host-kit",
+ "hostname",
+ "libc",
+ "mesh-join-vocab",
+ "mesh-reach",
+ "oicp-types",
+ "rand 0.9.4",
+ "reqwest 0.12.28",
+ "rqrr",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sovereign-cli-base",
+ "sovereign-contracts",
+ "sovereign-pods",
+ "sovereign-time",
+ "sovereign-turn-client",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.2",
+ "toml_edit 0.22.27",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
  "which",
  "workspace-hack",
@@ -12422,55 +12531,102 @@ dependencies = [
 
 [[package]]
 name = "sovereign-cli-shared"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "clap",
- "commonwealth-rail",
- "corpus-engine",
- "corpus-engine-scip",
  "dirs 5.0.1",
  "kernel-types",
- "libc",
- "oicp-client",
- "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sovereign-cli-base",
  "sovereign-contracts",
- "sovereign-core",
- "sovereign-time",
- "tempfile",
  "tokio",
  "toml 0.8.2",
  "tracing",
- "tracing-subscriber",
- "which",
+ "workspace-hack",
+]
+
+[[package]]
+name = "sovereign-code"
+version = "0.8.0"
+dependencies = [
+ "arc-swap",
+ "arch-layers",
+ "arrow-array",
+ "async-trait",
+ "axum",
+ "blake3",
+ "chrono",
+ "code-facts",
+ "code-next-edit",
+ "corpus-engine-archaeology",
+ "corpus-engine-notes",
+ "corpus-engine-scip",
+ "corpus-engine-watchers",
+ "corpus-engine-yield",
+ "corpus-index",
+ "futures",
+ "host-kit",
+ "kernel-types",
+ "lancedb",
+ "notify",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sovereign-contracts",
+ "sovereign-tdd",
+ "sovereign-time",
+ "sovereign-turn-client",
+ "sovereign-work-atlas",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "tower",
+ "tracing",
+ "tree-sitter-go",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
+ "understanding-vocab",
+ "uuid",
  "workspace-hack",
 ]
 
 [[package]]
 name = "sovereign-compute"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
  "futures",
+ "host-kit",
+ "kernel-types",
  "libc",
+ "mesh-reach",
+ "oicp-client",
+ "oicp-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "sovereign-contracts",
- "sovereign-core",
+ "sovereign-gliner",
  "sovereign-inference",
+ "sovereign-serving-host",
  "tempfile",
  "tokio",
+ "tokio-util",
+ "tower",
  "tracing",
  "tracing-subscriber",
+ "uuid",
  "workspace-hack",
 ]
 
 [[package]]
 name = "sovereign-contracts"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -12483,7 +12639,6 @@ dependencies = [
  "hex",
  "http 1.4.0",
  "kernel-types",
- "libc",
  "oicp-types",
  "rand 0.9.4",
  "rcgen 0.13.2",
@@ -12495,6 +12650,7 @@ dependencies = [
  "sovereign-time",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "toml 0.8.2",
  "tracing",
  "uuid",
@@ -12502,20 +12658,23 @@ dependencies = [
 
 [[package]]
 name = "sovereign-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
  "chrono",
- "corpus-engine",
- "corpus-engine-notes",
+ "corpus-engine-atlas-reader",
  "corpus-engine-scip",
+ "corpus-engine-yield",
+ "corpus-index",
  "dashmap",
  "dirs 5.0.1",
  "futures",
+ "host-kit",
  "kernel-types",
  "oicp-client",
  "oicp-types",
+ "oplog",
  "pdf-extract",
  "reqwest 0.12.28",
  "serde",
@@ -12527,7 +12686,6 @@ dependencies = [
  "sovereign-tools",
  "sovereign-tools-base",
  "tempfile",
- "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -12541,78 +12699,70 @@ dependencies = [
 
 [[package]]
 name = "sovereign-daemon"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
  "axum",
  "bytes",
  "chrono",
- "code-next-edit",
- "commonwealth-core",
- "commonwealth-discovery",
- "commonwealth-media",
- "commonwealth-rail",
- "commonwealth-state",
- "commonwealth-transport",
- "commonwealth-work",
- "corpus-engine",
- "corpus-engine-atos",
- "corpus-engine-notes",
+ "commonwealth-rail-core",
+ "corpus-engine-atlas-reader",
  "corpus-engine-scip",
- "corpus-engine-watchers",
+ "corpus-engine-yield",
+ "corpus-index",
  "dirs 5.0.1",
  "ed25519-dalek 2.2.0",
  "futures",
+ "getrandom 0.3.4",
  "hex",
+ "host-kit",
  "hostname",
  "http-body 1.0.1",
  "http-body-util",
  "if-addrs",
  "kernel-types",
  "libc",
+ "mesh-join-vocab",
+ "mesh-reach",
+ "oicp-client",
  "oicp-types",
+ "oplog",
+ "rand 0.9.4",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
- "serving-policy",
+ "serving-policy-core",
  "sha2 0.10.9",
- "sovereign-atos",
- "sovereign-authoring-harness",
- "sovereign-compute",
  "sovereign-contracts",
  "sovereign-core",
- "sovereign-enrichment-build",
- "sovereign-enrichment-catalog",
- "sovereign-gliner",
+ "sovereign-daemon",
  "sovereign-grants",
- "sovereign-inference",
- "sovereign-mesh",
  "sovereign-meshapp",
- "sovereign-meshapp-registry",
  "sovereign-peer-wire",
- "sovereign-pods",
- "sovereign-scheduler",
- "sovereign-serving-host",
+ "sovereign-runtime-recipe",
  "sovereign-store",
- "sovereign-tdd",
  "sovereign-time",
  "sovereign-tools",
- "sovereign-work-atlas",
+ "sovereign-turn-client",
  "sovereign-workflow",
  "sovereign-workflow-host",
+ "subtle",
+ "sysinfo 0.35.2",
  "tar",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
+ "tokio-tungstenite",
  "tokio-util",
  "toml 0.8.2",
+ "toml_edit 0.22.27",
  "tower",
  "tower-http",
  "tracing",
  "tracing-subscriber",
- "tree-sitter",
+ "understanding-vocab",
  "uuid",
  "workspace-hack",
  "zstd",
@@ -12620,7 +12770,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-desktop"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -12662,10 +12812,11 @@ dependencies = [
 
 [[package]]
 name = "sovereign-enrichment-build"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "corpus-engine",
+ "corpus-index",
  "oicp-client",
  "oicp-types",
  "reqwest 0.12.28",
@@ -12684,9 +12835,11 @@ dependencies = [
 
 [[package]]
 name = "sovereign-enrichment-catalog"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
+ "chrono",
  "corpus-engine",
+ "corpus-index",
  "serde",
  "serde_json",
  "sovereign-contracts",
@@ -12697,12 +12850,11 @@ dependencies = [
 
 [[package]]
 name = "sovereign-eval"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "corpus-engine",
  "hex",
  "rand 0.9.4",
  "reqwest 0.12.28",
@@ -12710,7 +12862,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sovereign-authoring-harness",
  "sovereign-contracts",
  "sovereign-time",
  "tempfile",
@@ -12726,11 +12877,10 @@ dependencies = [
 
 [[package]]
 name = "sovereign-gliner"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "corpus-engine",
  "dirs 5.0.1",
  "gline-rs",
  "ndarray",
@@ -12739,9 +12889,8 @@ dependencies = [
  "regex",
  "reqwest 0.12.28",
  "serde_json",
- "sovereign-core",
- "sovereign-store",
- "tempfile",
+ "sovereign-contracts",
+ "sovereign-time",
  "tokenizers",
  "tokio",
  "tracing",
@@ -12750,18 +12899,20 @@ dependencies = [
 
 [[package]]
 name = "sovereign-grants"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "bytes",
- "commonwealth-core",
- "commonwealth-state",
- "corpus-engine",
+ "corpus-engine-yield",
+ "corpus-index",
  "dirs 5.0.1",
  "hex",
+ "kernel-types",
+ "oicp-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sovereign-contracts",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -12770,10 +12921,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-hosted-ingest"
+version = "0.8.0"
+dependencies = [
+ "corpus-engine",
+ "sovereign-authoring-harness",
+ "sovereign-daemon",
+ "sovereign-enrichment-build",
+ "sovereign-enrichment-catalog",
+ "workspace-hack",
+]
+
+[[package]]
 name = "sovereign-inference"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
+ "axum",
  "dirs 5.0.1",
  "encoding_rs",
  "futures",
@@ -12790,7 +12954,7 @@ dependencies = [
  "serde_json",
  "serving-policy",
  "sovereign-contracts",
- "sovereign-core",
+ "sovereign-time",
  "sysinfo 0.34.2",
  "tempfile",
  "thiserror 2.0.18",
@@ -12803,105 +12967,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "sovereign-mesh"
-version = "0.7.0"
-dependencies = [
- "arc-swap",
- "async-trait",
- "axum",
- "axum-server",
- "bytes",
- "chrono",
- "code-facts",
- "commonwealth-core",
- "commonwealth-discovery",
- "commonwealth-media",
- "commonwealth-rail",
- "commonwealth-state",
- "commonwealth-transport",
- "commonwealth-work",
- "corpus-engine",
- "corpus-engine-notes",
- "corpus-engine-scip",
- "corpus-engine-watchers",
- "dirs 6.0.0",
- "ed25519-dalek 2.2.0",
- "futures",
- "hex",
- "hostname",
- "if-addrs",
- "ignore",
- "kernel-types",
- "notify",
- "oicp-types",
- "rand 0.9.4",
- "reqwest 0.12.28",
- "rustls",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sovereign-authoring-harness",
- "sovereign-contracts",
- "sovereign-core",
- "sovereign-daemon",
- "sovereign-enrichment-catalog",
- "sovereign-gliner",
- "sovereign-grants",
- "sovereign-inference",
- "sovereign-mesh-test-harness",
- "sovereign-meshapp",
- "sovereign-meshapp-registry",
- "sovereign-peer-wire",
- "sovereign-pods",
- "sovereign-scheduler",
- "sovereign-serving-host",
- "sovereign-store",
- "sovereign-time",
- "sovereign-tools",
- "sovereign-turn-client",
- "sovereign-work-atlas",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tokio-tungstenite",
- "tokio-util",
- "toml 0.8.2",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "understanding-vocab",
- "urlencoding",
- "uuid",
- "workspace-hack",
-]
-
-[[package]]
-name = "sovereign-mesh-test-harness"
-version = "0.7.0"
-dependencies = [
- "async-trait",
- "axum",
- "commonwealth-core",
- "commonwealth-discovery",
- "commonwealth-state",
- "commonwealth-transport",
- "oicp-types",
- "serde_json",
- "sovereign-daemon",
- "sovereign-scheduler",
- "tokio",
- "tracing",
- "workspace-hack",
-]
-
-[[package]]
 name = "sovereign-meshapp"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
- "corpus-engine",
+ "corpus-engine-atlas-reader",
+ "corpus-engine-sections",
+ "corpus-index",
  "rusqlite",
  "serde",
  "serde_json",
@@ -12909,20 +12981,7 @@ dependencies = [
  "sovereign-time",
  "tempfile",
  "tokio",
- "workspace-hack",
-]
-
-[[package]]
-name = "sovereign-meshapp-registry"
-version = "0.7.0"
-dependencies = [
- "bytes",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
+ "understanding-vocab",
  "workspace-hack",
 ]
 
@@ -12950,38 +13009,70 @@ dependencies = [
 ]
 
 [[package]]
-name = "sovereign-peer-wire"
-version = "0.7.0"
+name = "sovereign-onprem"
+version = "0.8.0"
 dependencies = [
- "commonwealth-rail",
+ "host-kit",
+ "reqwest 0.12.28",
+ "serde_json",
+ "sovereign-daemon",
+ "sovereign-hosted-ingest",
+ "sovereign-serve",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "workspace-hack",
+]
+
+[[package]]
+name = "sovereign-peer-wire"
+version = "0.8.0"
+dependencies = [
+ "commonwealth-rail-core",
  "serde",
 ]
 
 [[package]]
 name = "sovereign-pipeline"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "clap",
+ "corpus-engine",
+ "corpus-engine-atlas-reader",
+ "corpus-index",
  "dirs 5.0.1",
+ "futures",
+ "libc",
+ "oicp-client",
+ "oplog",
  "regex",
+ "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "sovereign-authoring-harness",
+ "sovereign-cli-base",
  "sovereign-contracts",
+ "sovereign-enrichment-build",
+ "sovereign-enrichment-catalog",
  "sovereign-time",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "toml 0.8.2",
  "tracing",
+ "tracing-subscriber",
+ "understanding-vocab",
  "uuid",
  "workspace-hack",
 ]
 
 [[package]]
 name = "sovereign-pods"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "axum",
  "axum-server",
@@ -12998,12 +13089,14 @@ dependencies = [
  "sha2 0.10.9",
  "sovereign-contracts",
  "sovereign-time",
+ "sovereign-turn-client",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
  "tower",
  "tracing",
+ "tracing-subscriber",
  "urlencoding",
 ]
 
@@ -13013,6 +13106,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "corpus-engine",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
@@ -13028,14 +13122,12 @@ dependencies = [
 
 [[package]]
 name = "sovereign-runtime-recipe"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
- "corpus-engine",
- "corpus-engine-notes",
+ "corpus-engine-atlas-reader",
+ "corpus-index",
  "sovereign-contracts",
  "sovereign-core",
- "sovereign-gliner",
- "sovereign-inference",
  "sovereign-tools",
  "tokio",
  "tracing",
@@ -13044,62 +13136,54 @@ dependencies = [
 
 [[package]]
 name = "sovereign-scheduler"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "kernel-types",
  "oicp-types",
  "serde",
  "serde_json",
+ "sovereign-contracts",
  "tracing",
 ]
 
 [[package]]
-name = "sovereign-server"
-version = "0.7.0"
+name = "sovereign-serve"
+version = "0.8.0"
 dependencies = [
- "arc-swap",
  "async-trait",
  "axum",
- "chrono",
- "commonwealth-transport",
- "corpus-engine",
- "corpus-engine-notes",
- "corpus-engine-scip",
- "corpus-engine-watchers",
- "dirs 5.0.1",
+ "commonwealth-rail-core",
  "futures",
- "hex",
+ "host-kit",
+ "kernel-types",
+ "mesh-reach",
+ "oicp-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
- "serving-policy",
+ "sha2 0.10.9",
+ "sovereign-cli-base",
+ "sovereign-compute",
  "sovereign-contracts",
- "sovereign-core",
- "sovereign-gliner",
  "sovereign-inference",
- "sovereign-runtime-recipe",
- "sovereign-store",
- "sovereign-tdd",
- "sovereign-tools",
- "sovereign-workflow-host",
+ "sovereign-serving-host",
+ "sovereign-time",
+ "sovereign-turn-client",
  "tempfile",
  "tokio",
- "tokio-tungstenite",
- "toml 0.8.2",
  "tower",
- "tower-http",
  "tracing",
  "tracing-subscriber",
- "uuid",
  "workspace-hack",
 ]
 
 [[package]]
 name = "sovereign-service"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "dirs 5.0.1",
+ "host-kit",
  "libc",
  "sovereign-contracts",
  "workspace-hack",
@@ -13107,16 +13191,16 @@ dependencies = [
 
 [[package]]
 name = "sovereign-serving-host"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
  "axum",
- "commonwealth-core",
  "ed25519-dalek 2.2.0",
  "futures",
  "http-body 1.0.1",
  "kernel-types",
+ "mesh-reach",
  "oicp-client",
  "oicp-types",
  "reqwest 0.12.28",
@@ -13138,8 +13222,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-stock"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "corpus-engine",
+ "corpus-index",
+ "ed25519-dalek 2.2.0",
+ "futures",
+ "host-kit",
+ "kernel-types",
+ "oicp-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sovereign-cli-llm",
+ "sovereign-code",
+ "sovereign-contracts",
+ "sovereign-core",
+ "sovereign-daemon",
+ "sovereign-hosted-ingest",
+ "sovereign-recipe-author",
+ "sovereign-serve",
+ "sovereign-serving-host",
+ "sovereign-store",
+ "sovereign-turn-client",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "workspace-hack",
+]
+
+[[package]]
 name = "sovereign-store"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -13150,7 +13268,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sovereign-core",
- "sovereign-recipe-author",
  "tempfile",
  "tokio",
  "tokio-postgres",
@@ -13176,7 +13293,7 @@ dependencies = [
 
 [[package]]
 name = "sovereign-tdd"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "kernel-types",
@@ -13195,48 +13312,36 @@ dependencies = [
 
 [[package]]
 name = "sovereign-time"
-version = "0.7.0"
+version = "0.8.0"
 
 [[package]]
 name = "sovereign-tools"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
- "arc-swap",
- "arch-layers",
  "arrow",
- "arrow-array",
  "async-trait",
  "axum",
  "blake3",
  "bzip2 0.5.2",
  "chrono",
- "code-facts",
- "commonwealth-core",
- "corpus-engine",
- "corpus-engine-archaeology",
- "corpus-engine-atos",
- "corpus-engine-notes",
- "corpus-engine-scip",
+ "corpus-engine-atlas-reader",
  "corpus-engine-sections",
- "corpus-engine-watchers",
- "csv",
- "dirs 5.0.1",
+ "corpus-engine-yield",
+ "corpus-index",
  "docx-lite",
  "ego-tree",
  "filetime",
  "flate2",
  "futures",
  "glob",
- "i_overlay",
  "ignore",
  "image",
  "imageproc",
- "lancedb",
  "lettre",
  "libc",
  "mail-parser",
  "ndarray",
- "notify",
+ "oicp-types",
  "ort",
  "parquet",
  "pdf-extract",
@@ -13250,14 +13355,10 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2 0.10.9",
- "sovereign-atos",
  "sovereign-contracts",
  "sovereign-core",
- "sovereign-enrichment-catalog",
- "sovereign-recipe-author",
  "sovereign-store",
  "sovereign-tools-base",
- "sovereign-work-atlas",
  "strsim",
  "tempfile",
  "thiserror 2.0.18",
@@ -13300,6 +13401,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
+ "bytes",
  "futures",
  "oicp-types",
  "reqwest 0.12.28",
@@ -13309,17 +13411,17 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tracing",
+ "which",
  "workspace-hack",
 ]
 
 [[package]]
 name = "sovereign-work-atlas"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "async-trait",
  "bytes",
- "commonwealth-state",
  "corpus-engine-watchers",
  "hex",
  "kernel-types",
@@ -13327,7 +13429,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sovereign-contracts",
- "sovereign-core",
+ "sovereign-time",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -13755,7 +13857,7 @@ dependencies = [
  "downcast-rs",
  "fastdivide",
  "fnv",
- "fs4 0.8.4",
+ "fs4",
  "htmlescape",
  "hyperloglogplus",
  "itertools 0.14.0",
@@ -15155,11 +15257,10 @@ checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 
 [[package]]
 name = "understanding-atlas"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "corpus-index",
- "kernel-types",
  "oplog",
  "regex",
  "serde",
@@ -15171,29 +15272,25 @@ dependencies = [
 
 [[package]]
 name = "understanding-host"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arrow",
  "async-trait",
  "chrono",
  "corpus-engine",
- "corpus-index",
  "futures",
- "kernel-types",
  "lancedb",
- "oplog",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
  "tracing",
- "understanding-atlas",
  "understanding-vocab",
 ]
 
 [[package]]
 name = "understanding-vocab"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "blake3",
  "kernel-types",
@@ -17041,10 +17138,14 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "arch-layers",
+ "corpus-index",
  "kernel-types",
+ "oicp-types",
  "quote",
  "regex",
  "serde_json",
+ "sovereign-cli-dev",
+ "sovereign-cli-shared",
  "syn 2.0.118",
  "toml 0.8.2",
  "workspace-hack",

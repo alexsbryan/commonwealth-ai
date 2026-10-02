@@ -25,10 +25,10 @@
 
 use std::path::PathBuf;
 
-use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
-use corpus_engine::enrichment::atlas::writer::read_atlas_atoms;
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use serde_json::json;
+use understanding_vocab::atoms::AtomEnvelope;
+use understanding_vocab::read::read_atlas_atoms;
+use understanding_vocab::taxonomy::EntityType;
 
 use super::args::parse_args;
 use super::golden::{score_entities, EntityScore, ExpectedEntity, GoldenSet};

@@ -105,7 +105,7 @@ def lane_p0_root_junk(files: list[str]) -> list[str]:
 def lane_p1_bench_baselines(files: list[str]) -> list[str]:
     """Baseline snapshots the reader cannot address.
 
-    sovereign-cli-llm/src/bench_cmd/baselines.rs:39 builds every path as
+    sovereign-cli-bench/src/bench_cmd/baselines.rs:39 builds every path as
     bench_root/<group>/baselines/<id>/ and :44 opens `latest.json` inside it.
     So (a) any file sitting FLAT in a baselines/ dir has no <id>/ and is
     unreachable by construction, and (b) inside an <id>/ dir only latest.json
@@ -163,7 +163,7 @@ def lane_p1_dr_flights(files: list[str]) -> list[str]:
 DEAD_EXAMPLES_NO_REFS = [  # zero references anywhere in the tree
     "rescan_render", "intent_instruction_probe", "fact_extract",
     "wiring_drift_probe", "wrapped_dump", "probe_bdd",
-    "dump_code_index", "exercise_code_tools", "gliner2_backend_smoke",
+    "dump_code_index", "gliner2_backend_smoke",
     "triage_dump", "fact_check_smoke", "warm_cache", "gliner_smoke",
     "bench_wiki_graph", "build_fts", "check_edge_index", "build_edge_btree",
     "build_title_btree", "fact_spike",

@@ -94,6 +94,7 @@ pub(crate) fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
             benchmark: None,
             current_in_flight: None,
             anchor: None,
+            storage_remaining_bytes: None,
         },
         addresses: vec![],
     }
@@ -838,45 +839,6 @@ fn a_pre_split_peers_payload_still_parses() {
     assert!(!back.require_encryption);
 }
 
-/// The resolver's safety rule, watched failing. Callers ACT on the answer —
-/// `forget-member` writes a tombstone — so a loose match is not a usability
-/// nicety: a one-character prefix against a 16-character id is very nearly
-/// "retire an arbitrary member". Four is the floor.
-#[test]
-fn a_short_node_id_prefix_never_resolves_a_member() {
-    let id = crate::ids::NodeId::from_u128(0xb88252e400000000_0000000000000000);
-    let m = |q: &str| member_matches(id, "BeefyMac", q);
-    assert!(!m("b"), "1 char must not match");
-    assert!(!m("b88"), "3 chars must not match");
-    assert!(m("b882"), "4 chars is the floor");
-    assert!(m("node-b882"), "the node- prefix is optional");
-    assert!(m("BeefyMac"), "exact name matches");
-    assert!(!m("Beefy"), "a partial NAME must not match");
-    assert!(!m("b883"), "a wrong prefix must not match");
-}
-
-/// Every id form an operator is shown must resolve: the 16-hex `Display`
-/// (`node-…`), the 22-char column `mesh status` prints, and the full 32 the
-/// alias warning prints. Only the first did — `forget-member <id from the
-/// warning>` answered "No member matching" on a live roster.
-#[test]
-fn every_printed_node_id_form_resolves_its_member() {
-    let id = crate::ids::NodeId::from_hex("188f04e2831741c77ccd5a142a314e07").unwrap();
-    let m = |q: &str| member_matches(id, "LittleMac", q);
-    assert!(m(&id.to_string()), "Display form: {id}");
-    assert!(m("188f04e2831741c77ccd5a"), "status column (22)");
-    assert!(m("188f04e2831741c77ccd5a142a314e07"), "full hex (32)");
-    assert!(
-        !m("188f04e2831741c77ccd5a142a314e08"),
-        "a wrong full id must not match"
-    );
-}
-
-/// An empty query must never match. It reaches here as `--force` with no
-/// member, and matching everything would retire whichever row the iteration
-/// happened to reach first.
-#[test]
-fn an_empty_query_matches_nothing() {
-    let id = crate::ids::NodeId::from_u128(0xb88252e400000000_0000000000000000);
-    assert!(!member_matches(id, "BeefyMac", ""));
-}
+// `member_matches`' own tests moved beside its definition
+// (`kernel_types::member`) with five-programs fp-46; this module's
+// remaining consumers exercise it through the historical re-import.

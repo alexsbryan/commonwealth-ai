@@ -33,9 +33,12 @@
 // `brief`, `classifier`, `engine` and `spans` are PURE and moved to
 // `understanding-atlas` by domains `dm-understanding-pure-1` (the batch row
 // for the `pure` tier). Re-exported at the historical paths so every
-// in-engine reach keeps resolving; `question_kind` stays host (it embeds).
+// in-engine reach keeps resolving. `question_kind` joined the
+// `corpus-engine-atlas-reader` leaf 2026-09-21 (FIVE_PROGRAMS §12 decision 1
+// — the ground walk's row selection classifies through it); re-exported at
+// the historical path.
+pub use corpus_engine_atlas_reader::question_kind;
 pub use understanding_atlas::atlas_traversal::{brief, classifier, engine, spans};
-pub mod question_kind;
 
 pub use brief::{assemble_brief, depth_frame_records, Brief};
 pub use classifier::{classify_query, classify_query_with, QueryPlan, QueryTarget};

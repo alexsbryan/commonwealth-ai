@@ -33,9 +33,13 @@
 
 use std::time::Duration;
 
+use mesh_join_vocab::deep_link::parse_join_argument;
 use sovereign_core::setup_config::{DataSection, NodeSection, SetupConfig};
+use sovereign_turn_client::TurnClient;
 
 use super::{run_config_path, run_data_dir, Opts};
+
+mod join_child;
 
 /// How long to wait on each probe. Generous: an entry node may be loading a
 /// large model when the terminal first reaches it.
@@ -226,19 +230,15 @@ async fn prove_a_served_turn(client: &reqwest::Client, v1: &str) -> Result<Strin
 /// entry node that is not a mesh member, most often a daemon on this same
 /// machine.
 pub(super) async fn run_terminal_setup(entry_raw: &str, opts: &Opts) -> i32 {
-    if let Some(link) = sovereign_mesh::deep_link::parse_join_argument(entry_raw) {
-        return run_terminal_join(entry_raw, link, opts).await;
+    if parse_join_argument(entry_raw).is_some() {
+        return run_terminal_join(entry_raw, opts).await;
     }
     run_terminal_address(entry_raw, opts).await
 }
 
 /// The join-link path: join the mesh, find the node that holds the models,
 /// bind its identity, prove a turn.
-async fn run_terminal_join(
-    raw: &str,
-    link: sovereign_mesh::deep_link::DeepLink,
-    opts: &Opts,
-) -> i32 {
+async fn run_terminal_join(raw: &str, opts: &Opts) -> i32 {
     use std::io::Write as _;
 
     println!();
@@ -306,8 +306,9 @@ async fn run_terminal_join(
         .and_then(|h| h.into_string().ok())
         .unwrap_or_else(|| "sovereign-terminal".to_string());
     // THE SAME data dir and ports the config below records, not the compiled
-    // defaults. This daemon is what actually persists the mesh key, `mesh.json`
-    // and the node id, and what actually binds the listener — so handing it
+    // defaults. The join child (`join_child`) is what actually persists the
+    // mesh key, `mesh.json` and the node id, and what actually binds the
+    // listener, because it owns this data dir — so handing it
     // `svrnmesh_root()` + `unconfigured()` while writing something else to disk
     // gives one setup two answers to "where does this node live" and "which
     // port does it own". With `--data-dir` the identity landed in `~/.svrnmesh`
@@ -316,31 +317,46 @@ async fn run_terminal_join(
     // guard checked the requested port and the bind then failed on 9741,
     // reported as an expired invite.
     let data_dir = run_data_dir(opts);
-    let daemon = std::sync::Arc::new(sovereign_daemon::daemon::EmbeddedDaemon::new(
-        data_dir.clone(),
-        SetupConfig {
-            daemon: sovereign_contracts::setup_config::DaemonSection {
-                client_port,
-                internal_port: client_port + 1,
-                ..Default::default()
-            },
-            ..SetupConfig::unconfigured()
-        },
-        match admin_services() {
-            Ok(s) => s,
-            Err(e) => {
-                println!();
-                eprintln!("error: {e}");
-                return 1;
-            }
-        },
-    ));
-    daemon.expose_client_api();
-    let mesh_name = match daemon.join_mesh(&link, &node_name).await {
-        Ok(result) => result.mesh_name,
-        Err(e) => {
+    let Some(daemon_bin) = crate::daemon_bin::locate() else {
+        println!();
+        eprintln!(
+            "error: cannot find the `sovereign-stock` binary that performs the join. \
+             Build it with `cargo build -p sovereign-stock`, or set SOVEREIGN_DAEMON_BIN \
+             to its path."
+        );
+        return 1;
+    };
+    // The join goes through cw-rails, so the node runs it from here on: the
+    // same bring-up `svrn mesh create|join` run (phase-b-81 (1)).
+    let up = {
+        let data_dir = data_dir.clone();
+        tokio::task::spawn_blocking(move || join_child::bring_up_rails(&data_dir))
+            .await
+            .unwrap_or_else(|e| Err(format!("the cw-rails bring-up thread failed: {e}")))
+    };
+    if let Err(e) = up {
+        println!();
+        eprintln!("error: {e}");
+        return 1;
+    }
+    let (join_child, mesh_name) = match join_child::join(
+        std::process::Command::new(daemon_bin),
+        &data_dir,
+        client_port,
+        None,
+        raw,
+        &node_name,
+    )
+    .await
+    {
+        Ok(joined) => joined,
+        Err(join_child::JoinFailure::Launch(e)) => {
             println!();
-            eprintln!("error: could not join the mesh: {e}");
+            eprintln!("error: {e}");
+            return 1;
+        }
+        Err(join_child::JoinFailure::Refused) => {
+            println!();
             eprintln!();
             eprintln!(
                 "hint: the link may have expired — an encrypted mesh's invite is \
@@ -362,7 +378,7 @@ async fn run_terminal_join(
     };
     print!("  Looking for a member that holds models... ");
     std::io::stdout().flush().ok();
-    let holders = match find_holders(&daemon, &client).await {
+    let holders = match find_holders(&join_child, &client).await {
         Ok(h) => h,
         Err(msg) => {
             println!();
@@ -459,6 +475,7 @@ async fn run_terminal_join(
         // omitted so the file round-trips like any other config.
         engine: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         // The ports this setup was asked to configure — NOT the compiled
         // default. `Default::default()` here is what made a second node on one
         // host impossible: setup wrote 9741/9742 whatever it had been told.
@@ -551,20 +568,6 @@ async fn daemon_is_listening(port: u16) -> bool {
     client.get(format!("{base}/v1/models")).send().await.is_ok()
 }
 
-/// The `DaemonServices` bundle a one-shot admin action needs.
-fn admin_services() -> Result<sovereign_daemon::DaemonServices, String> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let launch = sovereign_contracts::launch::Launch::parse(
-        &args,
-        sovereign_contracts::launch::Launch::Verb {
-            name: "setup".to_string(),
-            args: args.clone(),
-        },
-    );
-    sovereign_daemon::assemble(&launch, sovereign_daemon::LaunchParts::Admin)
-        .map_err(|refusal| refusal.to_string())
-}
-
 /// Peers that answer `/status` AND hold a slot that can serve a turn.
 ///
 /// Polls, because gossip has not converged the instant a join returns and an
@@ -572,14 +575,22 @@ fn admin_services() -> Result<sovereign_daemon::DaemonServices, String> {
 /// `(node_id_hex, name, v1_base, facts)` per holder.
 #[allow(clippy::type_complexity)]
 async fn find_holders(
-    daemon: &sovereign_daemon::daemon::EmbeddedDaemon,
+    daemon: &join_child::JoinChild,
     client: &reqwest::Client,
 ) -> Result<Vec<(String, String, String, EntryNodeFacts)>, String> {
     const WINDOW: Duration = Duration::from_secs(30);
     let deadline = std::time::Instant::now() + WINDOW;
     let mut seen_any_peer = false;
+    // The joined child's own wire: its transport resolved these URLs, so they
+    // are read, never re-derived here (ARCH principle 8).
+    let venues = TurnClient::new(sovereign_contracts::setup_config::client_daemon_base_for(
+        daemon.client_port,
+    ));
     loop {
-        let peers = daemon.peer_inference_endpoints().await;
+        let peers: Vec<sovereign_contracts::daemon_wire::PeerVenue> = venues
+            .mesh_venues()
+            .await
+            .map_err(|e| format!("could not read the joined daemon's venues: {e}"))?;
         seen_any_peer |= !peers.is_empty();
         let mut holders = Vec::new();
         for peer in peers {
@@ -591,7 +602,7 @@ async fn find_holders(
                 continue;
             };
             if facts.holds_chat_slot {
-                holders.push((peer.node_id.to_hex(), peer.name.clone(), v1, facts));
+                holders.push((peer.node_id.clone(), peer.name.clone(), v1, facts));
             }
         }
         if !holders.is_empty() {
@@ -711,6 +722,7 @@ async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
         // omitted so the file round-trips like any other config.
         engine: Default::default(),
         search: Default::default(),
+        retrieval: Default::default(),
         // Same as the join path: honour the port this setup was told to
         // configure rather than always writing the compiled default.
         daemon: sovereign_contracts::setup_config::DaemonSection {

@@ -127,3 +127,20 @@ pub trait RecipeTester: Send + Sync {
         params: &RecipeTestParams,
     ) -> Result<RecipeTestOutcome>;
 }
+
+/// What the recipe-authoring tools take from ingest, handed in by the host
+/// that composes it (`corpus_engine::recipe_tester::recipe_author_seams`).
+/// A struct so the two strings cannot be transposed at a call site.
+#[derive(Clone)]
+pub struct RecipeAuthorSeams {
+    /// The harness the validate / test / write-structured tools run.
+    pub tester: std::sync::Arc<dyn RecipeTester>,
+    /// The recipe variant-catalog descriptor (JSON).
+    pub descriptor_json: &'static str,
+    /// The bundled registry snapshot (TOML) `registry_browse` reads.
+    pub registry_toml: &'static str,
+    /// `{placeholder}` bindings `probe_url` renders its URL and headers
+    /// against: ingest hands `None`, and a host that has the values (the
+    /// recipe agent's live trial, from `--param key=value`) sets them.
+    pub probe_parameters: Option<std::sync::Arc<std::collections::BTreeMap<String, String>>>,
+}

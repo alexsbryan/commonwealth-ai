@@ -7,7 +7,7 @@
 #
 # Pass gate: ≥ 9/10 correctly classified. The threshold accounts for
 # Pass 1 LLM variance; a hard regression (< 8/10) means specific
-# exemplars need more entries in `sovereign/router/exemplars.toml`.
+# exemplars need more entries in `sovereign/crates/sovereign-core/data/router/exemplars.toml`.
 #
 # This bank was authored when the skills-as-menu was retired in
 # favour of intent-keyed policy. Per `feedback_no_teaching_to_test`,

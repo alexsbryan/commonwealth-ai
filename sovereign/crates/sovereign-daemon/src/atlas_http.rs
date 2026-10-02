@@ -250,11 +250,11 @@ async fn atom_detail(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path((corpus, atom_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    let engine = match daemon.corpus_engine() {
-        Some(e) => Arc::clone(e),
-        None => return service_unavailable("corpus engine not initialised"),
+    let (engine, atlas) = match (daemon.corpus_engine(), daemon.atlas()) {
+        (Some(e), Some(a)) => (Arc::clone(e), Arc::clone(a)),
+        _ => return service_unavailable("corpus engine not initialised"),
     };
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
+    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf(), atlas);
     let mut detail = match reader.get_atom_detail(&corpus, &atom_id).await {
         Ok(Some(d)) => d,
         Ok(None) => return not_found("atom not found"),
@@ -281,7 +281,7 @@ mod section_map {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex, OnceLock};
 
-    use corpus_engine::CorpusEngine;
+    use corpus_index::ingest_port::daemon::IngestPort;
 
     /// Per-corpus state. `Building` is a marker, not a value: it stops
     /// a second click from launching a second full-index scan while
@@ -315,7 +315,7 @@ mod section_map {
     /// off a one-time background build. Never blocks the caller on the
     /// scan — that is the whole policy.
     pub(super) fn resolve_or_build(
-        engine: &Arc<CorpusEngine>,
+        engine: &Arc<dyn IngestPort>,
         corpus_id: &str,
     ) -> Option<Arc<HashMap<String, u64>>> {
         let mut cache = lock_cache();
@@ -771,10 +771,13 @@ fn summarize_entities(nodes: &[ConvRaptorNodeRow], top_n: usize) -> (Vec<String>
 }
 
 fn reader_for(daemon: &Arc<EmbeddedDaemon>) -> Result<FileAtlasReader, Absence> {
-    daemon
-        .corpus_engine()
-        .map(|engine| FileAtlasReader::new(engine.index_dir().to_path_buf()))
-        .ok_or_else(|| Absence::unavailable("corpus engine not initialised"))
+    match (daemon.corpus_engine(), daemon.atlas()) {
+        (Some(engine), Some(atlas)) => Ok(FileAtlasReader::new(
+            engine.index_dir().to_path_buf(),
+            Arc::clone(atlas),
+        )),
+        _ => Err(Absence::unavailable("corpus engine not initialised")),
+    }
 }
 
 /// `AtlasViewError` → status. `CorpusNotFound` is the caller's

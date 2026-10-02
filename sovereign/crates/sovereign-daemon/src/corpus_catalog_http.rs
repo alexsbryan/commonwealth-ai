@@ -33,7 +33,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::CorpusEngine;
+use corpus_index::ingest_port::daemon::IngestPort;
 use sovereign_tools::atlas_view::FileAtlasReader;
 use sovereign_tools::local_corpus::config::{LocalCorpusConfig, LocalCorpusSourceType};
 
@@ -397,7 +397,16 @@ async fn catalog(
     _: LocalOnly,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> Result<Response, Absence> {
-    let engine = engine_for(&daemon)?;
+    let corpora = catalog_entries(&daemon).await?;
+    Ok(Json(CatalogResponse { corpora }).into_response())
+}
+
+/// The catalogue's rows — [`catalog`]'s answer, and the one source
+/// `granted_http`'s `GET /v1/corpora` filters to a caller's grant.
+pub(crate) async fn catalog_entries(
+    daemon: &Arc<EmbeddedDaemon>,
+) -> Result<Vec<CatalogEntry>, Absence> {
+    let engine = engine_for(daemon)?;
     let builtins = engine.builtin_corpora();
     // Non-fatal, deliberately: the picker still renders so the user
     // can choose what to INSTALL when the indexes dir is unreadable.
@@ -407,7 +416,7 @@ async fn catalog(
 
     let mut corpora = Vec::new();
     for b in &builtins {
-        let registry_entry = engine.registry().find_entry(&b.id);
+        let registry_entry = engine.registry_listing(&b.id);
         let info = installed
             .iter()
             .find(|i| i.corpus_id == b.id && !i.is_shard);
@@ -440,6 +449,7 @@ async fn catalog(
             .to_string(),
             chunks_count: info.map(|i| i.chunk_count),
             enrichment_enabled: registry_entry
+                .as_ref()
                 .map(|e| e.enrichment_enabled)
                 .unwrap_or(false),
             indexed_at: info.map(|i| i.created_at),
@@ -447,7 +457,7 @@ async fn catalog(
             embedding_dimensions: info.map(|i| i.embedding_dimensions),
             vector_index_ready,
             needs_rebuild: info.is_some_and(|i| !i.indexes_built),
-            registry_url: registry_entry.map(|e| e.toml_url.clone()),
+            registry_url: registry_entry.as_ref().map(|e| e.toml_url.clone()),
             schema_version: Some(1),
             parent_corpus_id: b.parent_corpus_id.clone(),
             catalog_status: b.catalog_status.clone(),
@@ -497,7 +507,7 @@ async fn catalog(
         rows = corpora.len(),
         "corpus_catalog_http: catalogue ∪ installed served"
     );
-    Ok(Json(CatalogResponse { corpora }).into_response())
+    Ok(corpora)
 }
 
 /// GET `/internal/corpus/notebooks` — the unified Library shelf.
@@ -552,7 +562,7 @@ async fn notebooks(
     // counting that as explorable shipped the Explore tab straight
     // into "No atoms match the current filter" with nothing to match.
     let mut explorable: HashSet<String> = HashSet::new();
-    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
+    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf(), atlas_for(&daemon)?);
     if let Ok(atom_corpora) = reader.list_corpora().await {
         let notebook_ids: HashSet<&str> = installed
             .iter()
@@ -595,7 +605,10 @@ async fn notebooks(
                 if !atlas.join("governance_oplog.jsonl").exists() {
                     continue;
                 }
-                if let Ok(view) = corpus_engine::enrichment::GovernanceView::from_atlas_dir(&atlas)
+                if let Ok(view) =
+                    corpus_engine_atlas_reader::governance_view::GovernanceView::from_atlas_dir(
+                        &atlas,
+                    )
                 {
                     counts.insert(id, view.open_tensions().count() as u32);
                 }
@@ -715,7 +728,7 @@ async fn health(
     // One load, two answers. The command loaded the skeleton TWICE —
     // once to test presence, once to count — which is two chances for
     // the disk to answer differently within one response.
-    let skeleton = corpus_engine::index::field_skeleton::load_field_skeleton(&index.path())
+    let skeleton = corpus_engine_atlas_reader::field_model::load_field_skeleton(&index.path())
         .ok()
         .flatten();
     let has_article_profiles = skeleton.is_some();
@@ -756,12 +769,14 @@ async fn coverage_card(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     Path(corpus): Path<String>,
 ) -> Result<Response, Absence> {
-    use corpus_engine::enrichment::atlas::analysis::sec_facts::{
-        authoritative_store, coverage_card as derive_card,
+    use corpus_engine_atlas_reader::sec_facts::{
+        authoritative_store_by, coverage_card as derive_card,
     };
     let engine = engine_for(&daemon)?;
-    let card = authoritative_store(engine.index_dir(), engine.recipes_dir(), &corpus)
-        .map(|store| derive_card(&store));
+    let card = authoritative_store_by(engine.index_dir(), &corpus, &|id| {
+        engine.declared_authority_tool(id)
+    })
+    .map(|store| derive_card(&store));
     tracing::debug!(
         target: "sec_facts",
         %corpus,
@@ -775,7 +790,7 @@ async fn coverage_card(
 /// `Option`, so `null` arrives under a named key.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoverageCardResponse {
-    pub card: Option<corpus_engine::enrichment::atlas::analysis::sec_facts::CoverageCard>,
+    pub card: Option<corpus_engine_atlas_reader::sec_facts::CoverageCard>,
 }
 
 /// POST `/internal/corpus/{corpus}/retry-enrichment` — re-parse stored
@@ -798,7 +813,7 @@ async fn retry_enrichment(
             ))
         }
     };
-    Ok(match corpus_engine::reprocess_skeleton_failures(&index) {
+    Ok(match engine.reprocess_skeleton_failures(&index) {
         Ok((salvaged, still_failed)) => {
             tracing::info!(
                 %corpus,
@@ -857,9 +872,20 @@ fn tiers_for(corpus_id: &str) -> Vec<String> {
     }
 }
 
+/// Ingest's atlas port, composed beside the engine [`engine_for`] reads.
+fn atlas_for(
+    daemon: &Arc<EmbeddedDaemon>,
+) -> Result<Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>, Absence> {
+    daemon.atlas().map(Arc::clone).ok_or_else(|| {
+        Absence::unavailable(
+            "this daemon holds no CorpusEngine (it was commissioned to serve nothing)",
+        )
+    })
+}
+
 /// The daemon's own `CorpusEngine`. One lookup site, so no handler can
 /// read a different index dir than the one an ingest writes to.
-fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<CorpusEngine>, Absence> {
+fn engine_for(daemon: &Arc<EmbeddedDaemon>) -> Result<Arc<dyn IngestPort>, Absence> {
     daemon.corpus_engine().map(Arc::clone).ok_or_else(|| {
         Absence::unavailable(
             "this daemon holds no CorpusEngine (it was commissioned to serve nothing)",

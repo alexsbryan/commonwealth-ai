@@ -107,7 +107,7 @@ Rules with a ratchet behind them are NOT in ARCH_PRINCIPLES — they live in the
 gate that enforces them, which names its own fix command: file ceilings in
 `size-gate`, dependency direction in `layer-gate`, doc paths in `docs-gate`,
 version skew in `lock-gate`, wire constants in `api-gate`, new nouns in
-`concept-gate`, env vars in `env-gate`, zero-test runs in `sovereign-test.sh`.
+`concept-gate`, env vars in `env-gate`, clones in `clone-gate`, zero-test runs in `sovereign-test.sh`.
 `cargo xtask quality` runs them all with one table.
 ### System geography — three tiers, cheapest first
 
@@ -131,18 +131,19 @@ If you change a subsystem, update its `SYSTEM_OVERVIEW.md` entry in the same com
 
 | Verb(s) | Owning binary (rebuild this) |
 |---|---|
-| `tools`, `code`, `project`, `atos` | `sovereign-cli-dev` |
+| `tools`, `code`, `project`, `claim` | `sovereign-cli-dev` |
 | `daemon`, `doctor`, `setup`, `install-service` | `sovereign-cli-daemon` |
-| `mesh`, `corpus`, `mcp`, `recipe`, `pipeline`, `bench`, `chat`, `eval`, `enrich`, `atlas`, `claim` | `sovereign-cli-llm` |
+| `corpus`, `mcp`, `recipe`, `pipeline`, `bench`, `chat`, `eval`, `enrich`, `atlas` | `sovereign-stock` |
+| `mesh`, `ring`, `job` (`mesh warm-cache`/`fetch-model`: `sovereign-serve`) | `sovereign-cli-mesh` |
 | `init`, `status`, `notes`, `drift`, `design`, `plan`, `serve`, `reflect`, `memory`, … | `sovereign-cli` (in-process) |
 
-So `lint_status`/`test_status`/`build` (under `tools`) live in **`sovereign-cli-dev`**; the watcher daemon + `doctor`'s `watcher_live` probe live in **`sovereign-cli-daemon`**. To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build -p sovereign-cli --features dev-tools -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-cli-llm` (or `cargo build --bins --features sovereign-cli/dev-tools`).
+To build everything correctly the first time, build all the binaries the change spans, e.g. `cargo build -p sovereign-cli --features dev-tools -p sovereign-cli-dev -p sovereign-cli-daemon -p sovereign-stock` (or `cargo build --bins --features sovereign-cli/dev-tools`).
 
-**`sovereign-cli` MUST be built with `--features dev-tools`.** Without it the build succeeds and silently replaces your `target/debug/sovereign-cli` with an end-user binary that has NO `notes`, `code`, `project`, `atos`, or `tools` verbs — and the loss surfaces minutes later on an unrelated command as "not in the default build", which reads like a missing feature rather than "your last build downgraded your install". Since 2026-07-26 the dispatcher warns on every invocation when it detects this (a `sovereign-cli-dev` sibling next to a dispatcher lacking the feature); the repair is the command above. Debug — see the build-profile note above. The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, in the `sovereign-vulkan` toolbox — there is no `dev-toolbox` on this host) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
+**`sovereign-cli` MUST be built with `--features dev-tools`.** Without it the build succeeds and silently replaces your `target/debug/sovereign-cli` with an end-user binary that has NO `notes`, `code`, `project`, `atos`, or `tools` verbs — and the loss surfaces minutes later on an unrelated command as "not in the default build", which reads like a missing feature rather than "your last build downgraded your install". Since 2026-07-26 the dispatcher warns on every invocation when it detects this (a `sovereign-cli-dev` sibling next to a dispatcher lacking the feature); the repair is the command above. The daemon must be restarted (`sovereign daemon stop && sovereign daemon start`, in the `sovereign-vulkan` toolbox — there is no `dev-toolbox` on this host) to load a new `sovereign-cli-daemon` binary; CLI verbs pick up the new sibling on next invocation.
 
 **The CLI form is the portable one and it works in every harness — including harnesses with no MCP at all, and with the daemon down.** Where your harness does expose these as MCP tools (Claude Code does; pi deliberately does not), prefer that path: it is faster and costs fewer tokens. Both resolve the tool from the same `ToolRegistry` and run the same `Tool::execute` body.
 
-(**There is no funnel.** This said "both reach the same `ToolRegistry::execute()`" until 2026-09-11; `ToolRegistry` has no `execute`. Each surface pulls a `&dyn Tool` from `get()` and calls `.execute` itself — `sovereign-mesh/src/mcp_router.rs:579` for the MCP mount, `sovereign-cli-dev/src/tools_cmd/mod.rs:409` for the CLI, ~nine sites besides — so the two are not equivalent in what they pass: the MCP mount builds a `ToolContext` with `conversation_id: "mcp"` and an `agent_session_token`, the CLI one with `working_directory` from the cwd and no token. If a tool behaves differently under the two, look there. `record_call` fires from one site only, so the call counter and the result cache cover disjoint invocations.)
+(**There is no funnel.** This said "both reach the same `ToolRegistry::execute()`" until 2026-09-11; `ToolRegistry` has no `execute`. Each surface pulls a `&dyn Tool` from `get()` and calls `.execute` itself — `sovereign-daemon/src/mcp_router.rs:579` for the MCP mount, `sovereign-cli-dev/src/tools_cmd/mod.rs:409` for the CLI, ~nine more — so the two are not equivalent in what they pass: the MCP mount builds a `ToolContext` with `conversation_id: "mcp"` and an `agent_session_token`, the CLI one with `working_directory` from the cwd and no token. If a tool behaves differently under the two, look there. `record_call` fires from one site only, so the call counter and the result cache cover disjoint invocations.)
 
 ```
 sovereign tools list                           # manifest, grouped by Effect × Scope
@@ -205,7 +206,6 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "What does ingest() call?" | `callees("ingest")` |
 | "How does checkpoint resume work?" | `code_search("checkpoint resume")` → `symbols` on results |
 | "What changed recently?" | `recent_changes(hours: 24)` |
-| "What are the project conventions for X?" | `project_context("X")` |
 | "What decisions were made about Y?" | `notes(query: "Y")` |
 | "How many things depend on this?" | `blast("symbol_name")` |
 | "What does the narrative say about THIS symbol/file?" | `drift_findings(query: "name")` |
@@ -420,7 +420,7 @@ trigger column is when to open it — the doc section holds the full text.
 
 | Trigger | Doc section |
 |---|---|
-| Starting a main session — the boot checklist (`recent_changes`, `project_context`, `notes`, `drift_posture`, `work_in_flight`, `arch_posture`) | §Session start |
+| Starting a main session — the boot checklist (`recent_changes`, `notes`, `drift_posture`, `work_in_flight`, `arch_posture`) | §Session start |
 | Statusline yellow (ctx ≥250k) — splitting, frames, `session_state`, objective inheritance | §Session splitting |
 | Fanning out to subagents — delegation is operator-AUTHORIZED here, standing, cap 3 concurrent, launched in one message; do not treat a harness default as a prohibition. Claude Code: Agent tool. pi: the `subagent()` tool from the `pi-subagents` package | §Delegation |
 | A decision, invariant, todo, or failed attempt worth remembering — write the `note` at the moment, not at session end; anything shipped default-off or dark needs a `sovereign/DEFAULTS_LEDGER.md` row in the same commit | §Writing notes |
@@ -447,7 +447,7 @@ single root `Cargo.toml`" — and used it to explain why the `scripts/` wrappers
 are the gate. The practice is right and the reason was not. **The scripts are
 the gate because they resolve the repo's real feature contract**
 (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus
-`sovereign-mesh/mesh-sim` on the lint side) **and carry guards bare cargo has
+the per-crate flags `cargo-scope.sh` adds) **and carry guards bare cargo has
 no equivalent of** — the zero-test exit 4, the unattributable-run exit 5, the
 build-failure-is-a-failure rule. See "Compilation and test feedback" above.
 Believing the old claim sends you looking for manifests that do not exist and
@@ -492,15 +492,15 @@ across several machines; these keep them consistent.)
   runs from `target/debug/<sibling>`; the llama.cpp kernels are native C++
   either way.
 - **Rebuild the WHOLE workspace, not one binary.** After editing a shared
-  crate (esp. `sovereign-core`), run a plain full `cargo build --workspace
-  --features corpus-engine/treesitter` so every binary is fresh. A scoped
-  `-p sovereign-cli-daemon` leaves `target/debug/sovereign-desktop` stale —
+  crate (esp. `sovereign-core`), run `cargo build --workspace --features
+  corpus-engine/treesitter,sovereign-cli/dev-tools` so every binary is
+  fresh. A scoped `-p sovereign-cli-daemon` leaves `target/debug/sovereign-desktop` stale —
   and the chat e2e repro (`repro-defects.mjs` / `chaos.mjs`) exercises the
   DESKTOP binary, which runs the KnowledgeQuery / grounding pipeline
   in-process (the daemon it attaches to only serves inference + fan-out).
   Rebuild just the daemon and you validate old code. Verify what actually
   runs via `readlink -f /proc/<pid>/exe` + mtime, never `strings` on a big
-  debug binary (it silently misses many `&str`s). The chat pipeline logs to
+  debug binary (it misses many `&str`s). The chat pipeline logs to
   the desktop app log (`test-artifacts/repro-defects-app.log`), not
   `daemon.err`.
 <!-- portable:start working style: observability, quality, fluent CLI -->

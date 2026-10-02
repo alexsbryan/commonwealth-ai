@@ -81,6 +81,10 @@ pub struct OcrCtx {
     /// alias in the routing layer today — passing `"fast"` 503s on
     /// CLI-daemon setups.
     pub cleanup_model: String,
+    /// The bearer the cleanup call presents. `Some` only on a keyed daemon,
+    /// which admits no caller without a key, loopback included; the daemon
+    /// hands in its own per-process credential. `None` sends no header.
+    pub bearer: Option<String>,
     /// DPI for rasterization. Tesseract's documented optimum for
     /// English printed text is 300.
     pub dpi: u32,
@@ -115,6 +119,7 @@ impl OcrCtx {
             pdfium_lib_path: None,
             daemon_base_url,
             cleanup_model: "fast".into(),
+            bearer: None,
             dpi: 300,
             tesseract_timeout_secs: 30,
             cleanup_timeout_secs: 30,

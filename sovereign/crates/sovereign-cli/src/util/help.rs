@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shared help formatter. Implementation moved to
-//! `sovereign-cli-shared::help` so sibling binaries (atos, future
+//! `sovereign-cli-shared::help` so sibling binaries (future
 //! meta) can render the same `--help` blocks without depending on
 //! `sovereign-cli`. This shim preserves the in-crate
 //! `crate::util::help::*` import path used across every `*_cmd.rs`.

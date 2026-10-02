@@ -1,0 +1,361 @@
+{
+ "corpus_id": "test-code",
+ "embedding_dimensions": 1024,
+ "license": "private",
+ "rows": [
+  {
+   "source_doc_id": "src/executor.rs",
+   "title": "execute_step",
+   "url": null,
+   "metadata": {
+    "symbol_name": "execute_step",
+    "symbol_kind": "function",
+    "file_path": "src/executor.rs",
+    "line_start": 0,
+    "line_end": 11,
+    "language": "rust",
+    "mtime": 1788030232,
+    "is_public": true,
+    "doc_comment": "Executes a planned step against the current mesh state."
+   },
+   "content": "execute_step\n\n/// Executes a planned step against the current mesh state.\npub async fn execute_step(\n    plan:  &StepPlan,\n    state: &MeshState,\n) -> Result<StepResult, ExecutorError> {\n    validate_preconditions(plan, state)?;\n    let result = dispatch_step(plan).await?;\n    Ok(result)\n}\n\nfn validate_preconditions(\n    plan:  &StepPlan,"
+  },
+  {
+   "source_doc_id": "src/executor.rs",
+   "title": "validate_preconditions",
+   "url": null,
+   "metadata": {
+    "symbol_name": "validate_preconditions",
+    "symbol_kind": "function",
+    "file_path": "src/executor.rs",
+    "line_start": 7,
+    "line_end": 21,
+    "language": "rust",
+    "mtime": 1788030232,
+    "is_public": false
+   },
+   "content": "validate_preconditions\n\n    Ok(result)\n}\n\nfn validate_preconditions(\n    plan:  &StepPlan,\n    state: &MeshState,\n) -> Result<(), ExecutorError> {\n    if state.nodes.is_empty() {\n        return Err(ExecutorError::NoNodes);\n    }\n    Ok(())\n}\n\nasync fn dispatch_step(plan: &StepPlan) -> Result<StepResult, ExecutorError> {\n    todo!()"
+  },
+  {
+   "source_doc_id": "src/executor.rs",
+   "title": "dispatch_step",
+   "url": null,
+   "metadata": {
+    "symbol_name": "dispatch_step",
+    "symbol_kind": "function",
+    "file_path": "src/executor.rs",
+    "line_start": 17,
+    "line_end": 25,
+    "language": "rust",
+    "mtime": 1788030232,
+    "is_public": false
+   },
+   "content": "dispatch_step\n\n    Ok(())\n}\n\nasync fn dispatch_step(plan: &StepPlan) -> Result<StepResult, ExecutorError> {\n    todo!()\n}\n\n#[derive(Debug, thiserror::Error)]\npub enum ExecutorError {"
+  },
+  {
+   "source_doc_id": "src/executor.rs",
+   "title": "ExecutorError",
+   "url": null,
+   "metadata": {
+    "symbol_name": "ExecutorError",
+    "symbol_kind": "enum",
+    "file_path": "src/executor.rs",
+    "line_start": 22,
+    "line_end": 30,
+    "language": "rust",
+    "mtime": 1788030232,
+    "is_public": true
+   },
+   "content": "ExecutorError\n\n}\n\n#[derive(Debug, thiserror::Error)]\npub enum ExecutorError {\n    #[error(\"no nodes available\")]\n    NoNodes,\n    #[error(\"step validation failed: {0}\")]\n    ValidationFailed(String),\n}"
+  },
+  {
+   "source_doc_id": "src/planner.rs",
+   "title": "plan_next_step",
+   "url": null,
+   "metadata": {
+    "symbol_name": "plan_next_step",
+    "symbol_kind": "function",
+    "file_path": "src/planner.rs",
+    "line_start": 0,
+    "line_end": 3,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "plan_next_step\n\npub fn plan_next_step(context: &ConversationContext) -> StepPlan {\n    StepPlan { id: uuid::Uuid::new_v4(), kind: StepKind::Inference }\n}\npub struct ConversationContext { pub messages: Vec<String> }"
+  },
+  {
+   "source_doc_id": "src/planner.rs",
+   "title": "ConversationContext",
+   "url": null,
+   "metadata": {
+    "symbol_name": "ConversationContext",
+    "symbol_kind": "struct",
+    "file_path": "src/planner.rs",
+    "line_start": 0,
+    "line_end": 3,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "ConversationContext\n\npub fn plan_next_step(context: &ConversationContext) -> StepPlan {\n    StepPlan { id: uuid::Uuid::new_v4(), kind: StepKind::Inference }\n}\npub struct ConversationContext { pub messages: Vec<String> }"
+  },
+  {
+   "source_doc_id": "src/scheduler.rs",
+   "title": "apply_shard_plan",
+   "url": null,
+   "metadata": {
+    "symbol_name": "apply_shard_plan",
+    "symbol_kind": "function",
+    "file_path": "src/scheduler.rs",
+    "line_start": 0,
+    "line_end": 8,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true,
+    "doc_comment": "Applies a shard plan \u2014 takes ownership to prevent caller modification\nafter submission."
+   },
+   "content": "apply_shard_plan\n\n/// Applies a shard plan \u2014 takes ownership to prevent caller modification\n/// after submission.\npub async fn apply_shard_plan(plan: ShardPlan) -> anyhow::Result<()> {\n    validate_plan(&plan)?;\n    broadcast_plan(plan).await\n}\n\npub fn validate_plan(plan: &ShardPlan) -> anyhow::Result<()> {\n    anyhow::ensure!(!plan.shards.is_empty(), \"plan must have at least one shard\");"
+  },
+  {
+   "source_doc_id": "src/scheduler.rs",
+   "title": "validate_plan",
+   "url": null,
+   "metadata": {
+    "symbol_name": "validate_plan",
+    "symbol_kind": "function",
+    "file_path": "src/scheduler.rs",
+    "line_start": 4,
+    "line_end": 13,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "validate_plan\n\n    broadcast_plan(plan).await\n}\n\npub fn validate_plan(plan: &ShardPlan) -> anyhow::Result<()> {\n    anyhow::ensure!(!plan.shards.is_empty(), \"plan must have at least one shard\");\n    Ok(())\n}\n\nasync fn broadcast_plan(plan: ShardPlan) -> anyhow::Result<()> { todo!() }\n"
+  },
+  {
+   "source_doc_id": "src/scheduler.rs",
+   "title": "broadcast_plan",
+   "url": null,
+   "metadata": {
+    "symbol_name": "broadcast_plan",
+    "symbol_kind": "function",
+    "file_path": "src/scheduler.rs",
+    "line_start": 9,
+    "line_end": 15,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "broadcast_plan\n\n    Ok(())\n}\n\nasync fn broadcast_plan(plan: ShardPlan) -> anyhow::Result<()> { todo!() }\n\npub struct ShardPlan { pub shards: Vec<Shard> }\npub struct Shard { pub node_id: String, pub layers: std::ops::Range<usize> }"
+  },
+  {
+   "source_doc_id": "src/scheduler.rs",
+   "title": "ShardPlan",
+   "url": null,
+   "metadata": {
+    "symbol_name": "ShardPlan",
+    "symbol_kind": "struct",
+    "file_path": "src/scheduler.rs",
+    "line_start": 11,
+    "line_end": 15,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "ShardPlan\n\n\nasync fn broadcast_plan(plan: ShardPlan) -> anyhow::Result<()> { todo!() }\n\npub struct ShardPlan { pub shards: Vec<Shard> }\npub struct Shard { pub node_id: String, pub layers: std::ops::Range<usize> }"
+  },
+  {
+   "source_doc_id": "src/scheduler.rs",
+   "title": "Shard",
+   "url": null,
+   "metadata": {
+    "symbol_name": "Shard",
+    "symbol_kind": "struct",
+    "file_path": "src/scheduler.rs",
+    "line_start": 12,
+    "line_end": 15,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "Shard\n\nasync fn broadcast_plan(plan: ShardPlan) -> anyhow::Result<()> { todo!() }\n\npub struct ShardPlan { pub shards: Vec<Shard> }\npub struct Shard { pub node_id: String, pub layers: std::ops::Range<usize> }"
+  },
+  {
+   "source_doc_id": "src/types.rs",
+   "title": "MeshState",
+   "url": null,
+   "metadata": {
+    "symbol_name": "MeshState",
+    "symbol_kind": "struct",
+    "file_path": "src/types.rs",
+    "line_start": 0,
+    "line_end": 3,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "MeshState\n\npub struct MeshState { pub nodes: Vec<Node> }\npub struct Node     { pub id: String, pub capacity: usize }\npub struct StepPlan { pub id: uuid::Uuid, pub kind: StepKind }\npub struct StepResult { pub success: bool, pub output: Option<String> }"
+  },
+  {
+   "source_doc_id": "src/types.rs",
+   "title": "Node",
+   "url": null,
+   "metadata": {
+    "symbol_name": "Node",
+    "symbol_kind": "struct",
+    "file_path": "src/types.rs",
+    "line_start": 0,
+    "line_end": 4,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "Node\n\npub struct MeshState { pub nodes: Vec<Node> }\npub struct Node     { pub id: String, pub capacity: usize }\npub struct StepPlan { pub id: uuid::Uuid, pub kind: StepKind }\npub struct StepResult { pub success: bool, pub output: Option<String> }\npub enum StepKind   { Inference, KnowledgeQuery, ToolCall }"
+  },
+  {
+   "source_doc_id": "src/types.rs",
+   "title": "StepPlan",
+   "url": null,
+   "metadata": {
+    "symbol_name": "StepPlan",
+    "symbol_kind": "struct",
+    "file_path": "src/types.rs",
+    "line_start": 0,
+    "line_end": 4,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "StepPlan\n\npub struct MeshState { pub nodes: Vec<Node> }\npub struct Node     { pub id: String, pub capacity: usize }\npub struct StepPlan { pub id: uuid::Uuid, pub kind: StepKind }\npub struct StepResult { pub success: bool, pub output: Option<String> }\npub enum StepKind   { Inference, KnowledgeQuery, ToolCall }"
+  },
+  {
+   "source_doc_id": "src/types.rs",
+   "title": "StepResult",
+   "url": null,
+   "metadata": {
+    "symbol_name": "StepResult",
+    "symbol_kind": "struct",
+    "file_path": "src/types.rs",
+    "line_start": 0,
+    "line_end": 4,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "StepResult\n\npub struct MeshState { pub nodes: Vec<Node> }\npub struct Node     { pub id: String, pub capacity: usize }\npub struct StepPlan { pub id: uuid::Uuid, pub kind: StepKind }\npub struct StepResult { pub success: bool, pub output: Option<String> }\npub enum StepKind   { Inference, KnowledgeQuery, ToolCall }"
+  },
+  {
+   "source_doc_id": "src/types.rs",
+   "title": "StepKind",
+   "url": null,
+   "metadata": {
+    "symbol_name": "StepKind",
+    "symbol_kind": "enum",
+    "file_path": "src/types.rs",
+    "line_start": 1,
+    "line_end": 4,
+    "language": "rust",
+    "mtime": 1790622232,
+    "is_public": true
+   },
+   "content": "StepKind\n\npub struct Node     { pub id: String, pub capacity: usize }\npub struct StepPlan { pub id: uuid::Uuid, pub kind: StepKind }\npub struct StepResult { pub success: bool, pub output: Option<String> }\npub enum StepKind   { Inference, KnowledgeQuery, ToolCall }"
+  },
+  {
+   "source_doc_id": "web/api.ts",
+   "title": "NodeCapability",
+   "url": null,
+   "metadata": {
+    "symbol_name": "NodeCapability",
+    "symbol_kind": "interface",
+    "file_path": "web/api.ts",
+    "line_start": 0,
+    "line_end": 3,
+    "language": "typescript",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "NodeCapability\n\ninterface NodeCapability { nodeId: string; vramGb: number; isOnline: boolean }\nasync function fetchCapabilities(url: string): Promise<NodeCapability[]> {\n    return fetch(`${url}/capabilities`).then(r => r.json());\n}"
+  },
+  {
+   "source_doc_id": "web/api.ts",
+   "title": "fetchCapabilities",
+   "url": null,
+   "metadata": {
+    "symbol_name": "fetchCapabilities",
+    "symbol_kind": "function",
+    "file_path": "web/api.ts",
+    "line_start": 0,
+    "line_end": 6,
+    "language": "typescript",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "fetchCapabilities\n\ninterface NodeCapability { nodeId: string; vramGb: number; isOnline: boolean }\nasync function fetchCapabilities(url: string): Promise<NodeCapability[]> {\n    return fetch(`${url}/capabilities`).then(r => r.json());\n}\nfunction filterOnlineNodes(nodes: NodeCapability[]): NodeCapability[] {\n    return nodes.filter(n => n.isOnline);\n}"
+  },
+  {
+   "source_doc_id": "web/api.ts",
+   "title": "filterOnlineNodes",
+   "url": null,
+   "metadata": {
+    "symbol_name": "filterOnlineNodes",
+    "symbol_kind": "function",
+    "file_path": "web/api.ts",
+    "line_start": 1,
+    "line_end": 6,
+    "language": "typescript",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "filterOnlineNodes\n\nasync function fetchCapabilities(url: string): Promise<NodeCapability[]> {\n    return fetch(`${url}/capabilities`).then(r => r.json());\n}\nfunction filterOnlineNodes(nodes: NodeCapability[]): NodeCapability[] {\n    return nodes.filter(n => n.isOnline);\n}"
+  },
+  {
+   "source_doc_id": "web/store.ts",
+   "title": "createMeshStore",
+   "url": null,
+   "metadata": {
+    "symbol_name": "createMeshStore",
+    "symbol_kind": "function",
+    "file_path": "web/store.ts",
+    "line_start": 0,
+    "line_end": 5,
+    "language": "typescript",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "createMeshStore\n\nconst createMeshStore = () => {\n    let nodes: string[] = [];\n    const addNode    = (id: string): void => { nodes = [...nodes, id]; };\n    const removeNode = (id: string): void => { nodes = nodes.filter(n => n !== id); };\n    return { addNode, removeNode };\n};"
+  },
+  {
+   "source_doc_id": "web/store.ts",
+   "title": "addNode",
+   "url": null,
+   "metadata": {
+    "symbol_name": "addNode",
+    "symbol_kind": "function",
+    "file_path": "web/store.ts",
+    "line_start": 0,
+    "line_end": 5,
+    "language": "typescript",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "addNode\n\nconst createMeshStore = () => {\n    let nodes: string[] = [];\n    const addNode    = (id: string): void => { nodes = [...nodes, id]; };\n    const removeNode = (id: string): void => { nodes = nodes.filter(n => n !== id); };\n    return { addNode, removeNode };\n};"
+  },
+  {
+   "source_doc_id": "web/store.ts",
+   "title": "removeNode",
+   "url": null,
+   "metadata": {
+    "symbol_name": "removeNode",
+    "symbol_kind": "function",
+    "file_path": "web/store.ts",
+    "line_start": 0,
+    "line_end": 5,
+    "language": "typescript",
+    "mtime": 1790622232,
+    "is_public": false
+   },
+   "content": "removeNode\n\nconst createMeshStore = () => {\n    let nodes: string[] = [];\n    const addNode    = (id: string): void => { nodes = [...nodes, id]; };\n    const removeNode = (id: string): void => { nodes = nodes.filter(n => n !== id); };\n    return { addNode, removeNode };\n};"
+  }
+ ]
+}

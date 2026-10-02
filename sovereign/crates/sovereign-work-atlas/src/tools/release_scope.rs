@@ -8,13 +8,13 @@ use std::sync::Arc;
 use serde_json::json;
 use uuid::Uuid;
 
-use sovereign_core::error::{Error, Result};
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::types::{StepOutput, ToolContext};
 
 use crate::model::Privacy;
 use crate::store::WorkAtlasStore;
 use crate::tools::broadcast::ClaimBroadcaster;
-use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_contracts::tool_manifest::DeclaredTool;
 
 #[derive(Debug)]
 pub struct ReleaseScopeTool {
@@ -35,7 +35,7 @@ impl ReleaseScopeTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("release_scope", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("release_scope", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })

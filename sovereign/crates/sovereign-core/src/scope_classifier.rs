@@ -25,7 +25,7 @@
 //! Scope deserves its own decision surface. This module is that
 //! surface: a centroid-of-embeddings classifier trained on a
 //! deliberately small, shape-diverse, bench-disjoint example set
-//! (`sovereign/router/scope_examples.toml`).
+//! (`sovereign/crates/sovereign-core/data/router/scope_examples.toml`).
 //!
 //! ## Algorithm
 //!

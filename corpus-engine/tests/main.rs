@@ -26,6 +26,10 @@ mod atlas_code_structure;
 mod atlas_evidence_site_wiring;
 #[path = "main/atlas_narrative_markdown.rs"]
 mod atlas_narrative_markdown;
+#[path = "main/atlas_port_parity.rs"]
+mod atlas_port_parity;
+#[path = "main/atlas_store_fixtures.rs"]
+mod atlas_store_fixtures;
 #[path = "main/atoms_schema_back_compat.rs"]
 mod atoms_schema_back_compat;
 #[path = "main/chatgpt_real_export.rs"]
@@ -40,6 +44,8 @@ mod enrichment_requested_flag;
 mod enrichment_type_deciders_census;
 #[path = "main/filter_pipeline.rs"]
 mod filter_pipeline;
+#[path = "main/fold_merge_port_parity.rs"]
+mod fold_merge_port_parity;
 #[path = "main/http_api_pagination_e2e.rs"]
 mod http_api_pagination_e2e;
 #[path = "main/index_cache_residency.rs"]
@@ -66,6 +72,8 @@ mod ontology_resolution_e2e;
 mod ontology_retrieval_e2e;
 #[path = "main/parquet_ingest_e2e.rs"]
 mod parquet_ingest_e2e;
+#[path = "main/partition_merge_port_parity.rs"]
+mod partition_merge_port_parity;
 #[path = "main/pipeline_ontology.rs"]
 mod pipeline_ontology;
 #[path = "main/probe_index_residency.rs"]
@@ -88,6 +96,23 @@ mod reindex_stamps_freshness;
 mod sharding_round_trip_e2e;
 #[path = "main/snapshot_restore_e2e.rs"]
 mod snapshot_restore_e2e;
+// Not a test file: the two source-tree deciders the gates below share.
+#[path = "main/chunk_ner_bounded_seam.rs"]
+mod chunk_ner_bounded_seam;
+#[path = "main/composed_ingest_port_parity.rs"]
+mod composed_ingest_port_parity;
+#[path = "main/corpus_read_port_parity.rs"]
+mod corpus_read_port_parity;
+#[path = "main/daemon_port_parity.rs"]
+mod daemon_port_parity;
+#[path = "main/install_lifecycle_port_parity.rs"]
+mod install_lifecycle_port_parity;
+#[path = "main/local_corpus_port_parity.rs"]
+mod local_corpus_port_parity;
+#[path = "main/source_tree.rs"]
+mod source_tree;
+#[path = "main/svrn_recipe_shapes.rs"]
+mod svrn_recipe_shapes;
 #[path = "main/tiered_entity_extractor_seam.rs"]
 mod tiered_entity_extractor_seam;
 #[path = "main/watcher_e2e.rs"]
