@@ -2116,6 +2116,17 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: revert 7fb5bfd10 on cut, reopen pc-knowledge-gym-noresults and park it with the table and three options (keep the note; move 05's bar to one rephrase; a structural one-rephrase bound, a new row). The tree is main's behaviour again: recovery intact, 05 failing on its lookup count exactly as at main.
 - Because: without the note 05 already answered honestly and failed only on lookups (2 > 1); the note bought that one lookup by turning every wrong-words first query into a false "missing". That is the suppressed-correct-answer trade AGENTS.md's working style rules out ("Quality over the metric"), and the charter's rule that a measure miss reopens its code row. Which trade to make is the operator's; the interim tree should not carry a measured recall loss into the merge.
 
+**phase-c-12 · 2026-10-02 · pc-cli-config-load-silent-default · worker** — this commit
+- Needed: the row's census found the incident's config fails `SetupConfig::load` by validation (`validate_class`: neither `[models]` nor a `[node]` entry), not by parse, and that the row's fix as written touches 11 crates against a three-crate lift. A first session stopped at census with both forks (validation vs parse-only refusal; split or authorize); the package never reached the director.
+- Chose: refuse on ANY load error, validation included, which is the row's letter ("exists but does not load refuses"). Built the half inside the lift: `SetupConfig::load_present` in contracts and every cli-mesh dial (the incident's verbs) on it, 16efaf015 and 0f61bc951. Left the `client_daemon_base`/`internal_daemon_base` half (35 callers, 9 crates) to the director as a split, and did not write the lane's `.done`.
+- Because: refusing is the conservative reading. A config that fails validation also fails the daemon's own load, so no daemon can be running on the port it names, and dialling it would reach nothing; refusing names the file instead. Parse-only refusal would mean a second loader that skips validation, a second answer to "does this config load" (principle 8). The scope guard stops at more than twice the lift, so the 9-crate half is the director's to split or authorize. REVIEW-AFTER: a sandbox that wants mesh verbs now has to write a `[models]` or `[node]` stanza.
+- Minted as `phase-c-11` in its lane and renumbered at merge: that lane's commit bodies cite `phase-c-11`.
+
+**phase-c-13 · 2026-10-02 · pc-cli-config-load-silent-default · director** — this commit
+- Needed: the lane built the cli-mesh half (16efaf015, 0f61bc951) and stopped on the other: `client_daemon_base`/`internal_daemon_base` in sovereign-contracts setup_config.rs still default on a load error, with callers in about ten crates, several of them clap `default_value_t` fns that would become run-time resolution. Split, or authorize the lift in this row.
+- Chose: split. This row closes on the mesh/ring verbs (the incident's: `mesh join`, `mesh status`, rotate, ring, guest) and merges now; `pc-cli-config-load-silent-default-base` takes the two contracts accessors and their callers, onto the `SetupConfig::load_present` this row landed, depending on this row.
+- Because: the charter's "splitting when proofs differ (`<id>-<suffix>` stays in scope)", and scope.txt's header puts a split of a listed row in scope. The proofs differ: this half is proven by a sandboxed `mesh status` that refuses; the other needs a refusal at each clap default site across the CLI siblings and the in-process callers (core, pipeline, eval, enrichment-catalog, corpus-index), a different test and a different blast. Neither half's outcome is narrowed: together they are the row's letter.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13629,5 +13640,47 @@ What would falsify this: the operator ruling that run corpora are meant to be se
 <details><summary>reasoning, evidence, package</summary>
 
 The revert touches only 7fb5bfd10's four files (executor.rs's note and its trace field, the new test file and its mod line, functional.rs's visibility); no later commit touched them or uses what they added (`git grep EvidenceProbeInference|EMPTY_RESULT_NOTE|absence_stated` outside them is empty). The recovery reading used a named substitute: fixture 01 with a scratch mock whose first lookup returns no evidence and later ones the fixture's rows; no headless real-corpus driver exists for the executor path. 07-11 run `raw` and cannot see the note. Falsified if: a real-corpus reading shows rephrase recovery after an empty first lookup is rare enough that the note's honesty gain outweighs it; that reading is the operator's option (c) row's.
+
+</details>
+
+## phase-c-12 · 2026-10-02 — mesh verbs refuse a config that does not load, validation included; the client_daemon_base half waits for a split
+
+<details><summary>reasoning, evidence, package</summary>
+
+Census at 5a9f821df: `[daemon] client_port = 19751` parses (every section is serde-default) and `validate_class` (setup_config.rs:1853) refuses it. `load_from` runs that check on every load. Before the fix, the sandbox's `mesh status` printed the operator's live Meshsonics roster and exited 0, because it dialled cw-rails' default :9747 and not 9741 as the row says.
+
+The proof is tests/config_load_refuses.rs. With the old fallback planted back into `dial_config` (`.ok().flatten()`), TEST(sovereign-cli-mesh) went red: 193 pass, 2 fail, `["mesh", "status"] exited 0`. The planted `mesh status` read the live mesh again. Reverted, it is green at 195/0.
+
+Remaining for the director: `client_daemon_base()` (setup_config.rs:1549) and `internal_daemon_base()` (:1491) still turn a load error into the default port. Their callers are `git grep -n "client_daemon_base()"` minus comments: corpus-index 2, cli-base 4, cli-bench 9, cli-dev 2, cli-llm 5, core 1, enrichment-catalog 1, eval 1, pipeline 2, plus internal_daemon_base's 4. Several of them are String-returning clap default fns, which have to become run-time resolution.
+
+What would falsify this: the operator ruling that a sandbox config with only a `[daemon]` section is meant to dial what it names. That would need a dial-only loader, and principle 8 makes it an operator call.
+
+</details>
+
+## phase-c-13 · 2026-10-02 — split the client_daemon_base half off pc-cli-config-load-silent-default
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced in the lane worktree (commonwealth-ai-lanes/pc-cli-config-load-silent-default) at
+f119a4312, sovereign-vulkan toolbox, host otherwise idle (the pool was halted):
+
+- `scripts/sovereign-test.sh --package sovereign-cli-mesh`: exit 0, 195 pass 0 fail.
+- PLANT, `mesh_cmd::dial_config` back to `load_present().ok().flatten()` (mesh_cmd.rs:710):
+  exit 100, 193 pass 2 fail, `present_but_unparsable_config_refuses` and
+  `present_but_invalid_config_refuses_naming_the_path` (`["mesh", "status"] exited 0`).
+  Reverted with `git checkout --`, tree clean.
+- setup_config.rs `internal_daemon_base` and `client_daemon_base` still end in
+  `.unwrap_or_else(|_| default_*_port())`. `git grep -w client_daemon_base -- '*.rs'` names 59 lines
+  outside the definition (comments included) in corpus-index, xtask, sovereign-cli-{base,bench,daemon,dev,llm},
+  contracts, core, enrichment-catalog, eval, pipeline; `internal_daemon_base` 9 lines in 4 crates. The
+  package's "31 + 4 callers in 9 crates" undercounts slightly; the conclusion (well over the lift) holds.
+
+The lane's decision phase-c-11 collided with the base's phase-c-11 (85fed82d1) and was renumbered
+phase-c-12 before the merge, as the pool would (`ralph-decisions.py renumber`).
+
+What would falsify this: the -base row finding that the two accessors cannot refuse without changing a
+clap default's documented value (an end-user-observable delta the row does not state), which goes back
+to the operator; or a mesh/ring verb found still dialling through `client_daemon_base`, which reopens
+this row rather than the split.
 
 </details>
