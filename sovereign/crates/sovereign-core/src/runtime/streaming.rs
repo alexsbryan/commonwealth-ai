@@ -2346,6 +2346,7 @@ impl Runtime {
                     crate::runtime::epistemic::EpistemicInputs {
                         gate_meta: grounding_gate_meta.as_ref(),
                         gate_claims: gate_claims.as_deref(),
+                        answer: Some(&full_text),
                         general_knowledge,
                         demands: demands_for_ledger,
                         gaps,
@@ -3514,6 +3515,7 @@ impl Runtime {
                     crate::runtime::epistemic::EpistemicInputs {
                         gate_meta: grounding_gate_meta.as_ref(),
                         gate_claims: gate_claims.as_deref(),
+                        answer: Some(&full_text),
                         ..crate::runtime::epistemic::EpistemicInputs::over(deep_pool)
                     },
                 )

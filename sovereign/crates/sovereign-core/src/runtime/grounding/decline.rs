@@ -89,3 +89,59 @@ pub fn released_pure_decline(text: &str) -> bool {
     }
     answer_declines(&stripped)
 }
+
+/// "The memo does not mention a paralegal rate": the sources lack the asked
+/// fact, said by a text that may go on to restate what they do hold. Read
+/// only by [`declines_asked_fact`], where verified holdings bound it.
+const ABSENCE_STATEMENTS: &[&str] = &[
+    "does not mention",
+    "doesn't mention",
+    "do not mention",
+    "don't mention",
+    "does not specify",
+    "doesn't specify",
+    "do not specify",
+    "don't specify",
+    "does not state",
+    "doesn't state",
+    "do not state",
+    "don't state",
+    "does not say",
+    "doesn't say",
+    "do not say",
+    "don't say",
+    "not mentioned",
+    "not specified",
+    "not stated",
+    "no mention of",
+];
+
+/// A contrast after the decline turns it into a preamble to an answer
+/// ("the sources don't give the date, but the war ended in 1945").
+const ANSWER_PIVOTS: &[&str] = &[" but ", "however", "though", "instead", "nevertheless"];
+
+/// Does a released text decline the asked fact, whatever adjacent facts it
+/// restates? The ledger's partial-decline test (pc-partial-decline-verdict):
+/// [`released_pure_decline`] answers "did it assert nothing", which a text
+/// citing the partner and associate rates while declining the paralegal one
+/// fails although it answered nothing that was asked.
+///
+/// A text that declines and then answers is not a decline: a general-
+/// knowledge pivot vetoes it as in [`released_pure_decline`], and so does a
+/// contrast anywhere after the first decline phrase. Pure — no model, no env.
+pub(crate) fn declines_asked_fact(text: &str) -> bool {
+    let stripped = strip_gk_caveat(text).to_lowercase();
+    if stripped.contains("from general knowledge") {
+        return false;
+    }
+    let Some(at) = DECLINES
+        .iter()
+        .chain(ABSENCE_STATEMENTS)
+        .filter_map(|p| stripped.find(p))
+        .min()
+    else {
+        return false;
+    };
+    let after = &stripped[at..];
+    !ANSWER_PIVOTS.iter().any(|p| after.contains(p))
+}

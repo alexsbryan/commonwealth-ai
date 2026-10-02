@@ -330,6 +330,7 @@ impl Runtime {
                 crate::runtime::epistemic::EpistemicInputs {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
+                    answer: Some(&final_content),
                     ..crate::runtime::epistemic::EpistemicInputs::over(
                         crate::runtime::epistemic::pool_context(&kc.chunks),
                     )
