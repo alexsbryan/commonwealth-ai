@@ -82,12 +82,11 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     "solve_cancel",
 ];
 
-/// MCP tools that should only appear when a spec exists in the
-/// workspace. Phase 2 populates this slot; Phase 5 wires the
-/// file-presence gate that conditionally unions them into
-/// [`MCP_TOOLS_ALWAYS`] at request time. Until then the union is
-/// unconditional — a fresh repo with no `.sovereign/features/`
-/// will see `spec`/`drift` advertise empty content.
+/// MCP tools `tools/list` advertises only when the workspace has a spec
+/// ([`spec_present_in_dir`]: a root `ARCHITECTURE.md` or a
+/// `.sovereign/features/<name>/spec.md`), through
+/// [`render_tools_list_gated_by`]. Unlisted, they still answer
+/// `tools/call`: the gate is advertisement only.
 pub const MCP_TOOLS_SPEC_GATED: &[&str] = &["spec", "drift"];
 
 /// Tools registered in the in-process [`sovereign_contracts::ToolRegistry`]

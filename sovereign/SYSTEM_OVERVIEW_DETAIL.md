@@ -5485,10 +5485,10 @@ Three decisions the derivation makes, each pinned:
   stay in the roster; dropping them would turn their whole history into gaps on
   the day they left.
 
-The pipes: `svrn mesh bench` runs in the CLI and the daemon owns the journal, so
-the door stays at `POST`/`GET /v1/mesh/measurements` (`mesh_http.rs`,
-localhost-only; `?include_self=true` is the diagnostic that shows what this node
-has put on the ring). The CLI's only caller is `mesh_travel.rs`. Disk is written
+The pipes: `svrn mesh bench` runs in the CLI and appends through cw-rails' rail
+doors (sovereign-serve `mesh_travel.rs`); the daemon's
+`/v1/mesh/measurements` door is retired and answers 410 naming the ring journal
+(pb-serve-placement, pc-bare-404s). The CLI's only caller is `mesh_travel.rs`. Disk is written
 *before* the door, so `mesh bench` works with no daemon and a refusal reads as
 "not on the ring yet", never as a lost record — which is what makes refusing
 honest for a node that is not in a mesh yet and therefore has no roster that
@@ -8448,7 +8448,9 @@ instrument it has not run. `--force` overrides.
 
 Mesh HTTP surface (`mesh_http.rs`, loopback-only): `GET /v1/mesh/status`,
 `POST /v1/mesh/{create,join,rotate,switch,leave,forget-member}`,
-`GET /v1/mesh/relay-candidates`, `POST`/`GET /v1/mesh/measurements`.
+`GET /v1/mesh/relay-candidates`. `/v1/mesh/measurements` is retired
+(pb-serve-placement) and answers 410 naming the ring journal (`mesh_http.rs`
+`RETIRED`).
 
 `forget-member` (2026-08-28) retires ONE member row — the repair half of the
 endpoint-key rule. `node_pubkey` is what peers dial and what the iroh acceptor

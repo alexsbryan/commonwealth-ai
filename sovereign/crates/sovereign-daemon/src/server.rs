@@ -334,7 +334,8 @@ pub fn internal_router(state: AppState) -> Router {
         crate::admission::peer_knowledge_read_layer::<AppState>,
     );
 
-    Router::new()
+    // The routes the flip gave to cw-rails and serve, each a 410 naming them.
+    crate::mesh_http::internal_moved(Router::new())
         .route(
             "/internal/scheduling/intent",
             post(routes_internal::scheduling_intent),

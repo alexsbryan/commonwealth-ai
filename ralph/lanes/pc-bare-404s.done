@@ -1,0 +1,8 @@
+unit: pc-bare-404s
+commits: 3b43e5456 (measurements + internal routes 410), d1f12782f (partition_evict registered), 24242686a (serve member client absence), 1e95688f4 (spec gate docs, SYSTEM_OVERVIEW_DETAIL)
+what: every removed route the row names answers a named absence or works again:
+  /v1/mesh/measurements 410 naming the ring journal; :9742's /internal/{gossip,join,ring/sync,ring/live,ring/checkpoint/{ns}}
+  410 with moved_to at cw-rails, /internal/rpc-warm 410 naming serve; partition_evict registered on cwth/http/0 (restores
+  main's wipe-after-pull); a member on cwth/client/0 reads 410 for the five lost route families; spec/drift's gate named
+  in CODE_INTELLIGENCE.md and the const's doc. /v1/apps* untouched (deliberate).
+checks: TEST(sovereign-serve) 261/0, TEST(sovereign-daemon) 918/0, xtask mesh_route_one_home 1/0, LINT, LAYER, DOCS, BOUNDARY ✓, CLEAN exit=0

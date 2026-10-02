@@ -639,3 +639,42 @@ async fn every_served_kind_route_is_mounted_and_rerank_is_served() {
         );
     }
 }
+
+/// The internal-port routes the flip gave to cw-rails and serve answer 410
+/// naming the owner's base, never a bare 404 (pc-bare-404s). `svrn ring
+/// checkpoint` still dials the old port, so its error now says where to go.
+#[tokio::test]
+async fn internal_routes_the_flip_gave_away_answer_410_naming_their_owner() {
+    let state = test_app_state();
+    let rails = state.inner.node.rails_base.clone();
+    let serve = sovereign_turn_client::serve_self::default_serve_base();
+    let cases = [
+        ("/internal/gossip", rails.as_str()),
+        ("/internal/join", rails.as_str()),
+        ("/internal/ring/sync", rails.as_str()),
+        ("/internal/ring/live", rails.as_str()),
+        ("/internal/ring/checkpoint/demo", rails.as_str()),
+        ("/internal/rpc-warm", serve.as_str()),
+    ];
+    for (path, owner) in cases {
+        let resp = internal_router(state.clone())
+            .oneshot(
+                Request::post(path)
+                    .header("content-type", "application/json")
+                    .extension(axum::extract::ConnectInfo(SocketAddr::from((
+                        [127, 0, 0, 1],
+                        54321,
+                    ))))
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::GONE, "{path}");
+        let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["moved_to"], format!("{owner}{path}"), "{path}: {body}");
+    }
+}

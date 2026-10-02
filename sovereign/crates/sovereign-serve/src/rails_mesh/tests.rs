@@ -278,3 +278,54 @@ async fn read_roster_answers_name_and_members_from_one_read() {
     assert_eq!(name, "lift-mesh");
     assert_eq!(members.len(), 2, "{members:?}");
 }
+
+/// A member asking serve's member client for a route svrn served it before
+/// the flip reads a 410 naming what the member client serves; any other
+/// path a named 404; a served path is still served (pc-bare-404s).
+#[tokio::test]
+async fn the_member_client_names_what_a_member_lost_and_what_it_serves() {
+    use tower::ServiceExt;
+    let app = host_kit::shell::mount(vec![
+        host_kit::shell::RouteBundle::new("served")
+            .route("/v1/models", axum::routing::get(|| async { "models" })),
+        member_client_absence(),
+    ]);
+    let ask = |path: &str| {
+        let app = app.clone();
+        let request = axum::http::Request::post(path)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        async move {
+            let resp = app.oneshot(request).await.unwrap();
+            let status = resp.status();
+            let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+                .await
+                .unwrap();
+            (status, String::from_utf8_lossy(&bytes).into_owned())
+        }
+    };
+    for path in [
+        "/v1/responses",
+        "/v1/knowledge/search",
+        "/status",
+        "/api/chat",
+        "/oicp/v1/corpus/install",
+    ] {
+        let (status, body) = ask(path).await;
+        assert_eq!(status, axum::http::StatusCode::GONE, "{path}: {body}");
+        assert!(body.contains("/v1/chat/completions"), "{path}: {body}");
+    }
+    let (status, body) = ask("/v1/nothing").await;
+    assert_eq!(status, axum::http::StatusCode::NOT_FOUND, "{body}");
+    assert!(body.contains("not a member route"), "{body}");
+    let resp = app
+        .clone()
+        .oneshot(
+            axum::http::Request::get("/v1/models")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), axum::http::StatusCode::OK);
+}
