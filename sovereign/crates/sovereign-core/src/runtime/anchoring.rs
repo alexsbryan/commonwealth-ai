@@ -6,7 +6,8 @@
 //! `retrieval_is_catalog_only`, `question_anchors_retrieved_title`,
 //! `question_is_corpus_deictic`) that knowledge_query / streaming / the
 //! handlers read via `crate::runtime::anchoring::*`, plus
-//! `question_is_situation_deictic`, which `gk_rescue` reads.
+//! `question_is_situation_deictic`, which `gk_rescue` reads, and
+//! `question_closes_gk_exemption`, the two deixis shapes the gate reads.
 //!
 //! Split out of `evidence_loop.rs` (2026-07-13) for legibility and the
 //! ARCH §3.1 file-size ceiling — a pure move, no behaviour change.
@@ -376,6 +377,16 @@ pub(crate) fn question_is_situation_deictic(message: &str) -> bool {
     })
 }
 
+/// The question-shaped half of the gate's entity-anchored verdict: deixis
+/// to the corpus's own material or to the asker's own situation. Outside
+/// knowledge structurally cannot answer either, so either one closes the
+/// GK-caveat exemption from claim extraction. `gk_rescue` withholds on the
+/// situation shape (ee7cf6b12); without it here the synth path still
+/// released a "from general knowledge:" firm-specific value unverified.
+pub(crate) fn question_closes_gk_exemption(message: &str) -> bool {
+    question_is_corpus_deictic(message) || question_is_situation_deictic(message)
+}
+
 /// Minimal suffix-stripping stem so "abandons"/"abandoned"/"abandon"
 /// compare equal. Deliberately crude — it only needs to make keyword
 /// overlap robust to inflection, not be linguistically right.
@@ -408,4 +419,50 @@ fn stem(word: &str) -> &str {
 /// when the conversation carries no explicit corpus seal.
 pub(crate) fn merged_corpora(chunks: &[corpus_index::types::ScoredChunk]) -> HashSet<String> {
     chunks.iter().map(|c| c.corpus_id.clone()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_situation_deictic_question_closes_the_gk_exemption() {
+        // The on-prem kit's probes (2026-10-01): gk_rescue withholds on these
+        // since ee7cf6b12, and the gate must verify a synth-path
+        // "from general knowledge:" specific on them the same way.
+        for q in [
+            "Which conference room is booked for the Thursday partners' meeting?",
+            "What is our paralegal rate?",
+            "What hourly rate does the firm bill for paralegals?",
+            "Who is presenting at next Monday's review?",
+        ] {
+            assert!(
+                question_closes_gk_exemption(q),
+                "left the GK-caveat exemption open on a situation-deictic question: {q}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_corpus_deictic_question_still_closes_the_gk_exemption() {
+        assert!(question_closes_gk_exemption("In what year is the story set?"));
+        assert!(question_closes_gk_exemption("What do your sources say about the treaty?"));
+    }
+
+    #[test]
+    fn world_general_questions_keep_the_gk_exemption() {
+        // The other direction: an honest caveated answer to a public fact
+        // stays exempt.
+        for q in [
+            "What is the capital of Mongolia?",
+            "How many planets are in our solar system?",
+            "Why is the sky blue?",
+            "What happened on Black Thursday in 1929?",
+        ] {
+            assert!(
+                !question_closes_gk_exemption(q),
+                "closed the GK-caveat exemption on a world-general question: {q}"
+            );
+        }
+    }
 }
