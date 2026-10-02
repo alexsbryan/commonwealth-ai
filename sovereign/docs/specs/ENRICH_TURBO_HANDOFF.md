@@ -219,7 +219,7 @@ out). No regression; some of the gain is variance (two single runs).
 
 | File | What changed |
 |---|---|
-| `shared/crates/oicp-client/src/lib.rs` | **Fast-slot hijack fix**: Medium/Slow pin the provider's chat model; auto OICP envelope only when model empty. Tests updated. Pre-fix HTTP bench numbers measured the 4B — re-baseline anything older than 2026-07-23. |
+| `oicp-client/src/lib.rs` | **Fast-slot hijack fix**: Medium/Slow pin the provider's chat model; auto OICP envelope only when model empty. Tests updated. Pre-fix HTTP bench numbers measured the 4B — re-baseline anything older than 2026-07-23. |
 | `sovereign-core/src/quote_verification.rs` | `normalise_for_match` (typographic fold + markdown-marker strip + edge-ellipsis trim); composites still fail. 5 new tests. |
 | `sovereign-core/src/runtime/attached_doc_render.rs` | Lenient `<tool_call>` parse (balanced-brace, missing close tag), `strip_dangling_tool_calls`. |
 | `sovereign-core/src/runtime/handlers/attached_doc.rs` | Malformed-tool-call retry gate; scaffolding strip on accept + cap-hit paths. |
@@ -227,7 +227,7 @@ out). No regression; some of the gain is variance (two single runs).
 | `sovereign-tools/src/attached_document_search.rs` | **Wrong-asset fix**: resolve by conversation via `DocumentSession.source`; most-recent-Ready stub is fallback only. |
 | `sovereign-tools/src/document_asset.rs` | **(session #2)** GLiNER entity swap: `with_entity_extractor(dyn EntityExtractor)`, NER fast-path in `build_skeleton` with empty⇒LLM fallback; `parse_window_skeleton_batch` split into `parse_entity_name_list` + `attribute_entity_names` (document-casing recovery); Pass-B 64→14 segs `buffered(8)`; action-atom fan-out. 4 new attribution tests. Plus session #1: window skeleton, `extract_segments(stored_embeddings)`, `[t3-profile]` eprintln. |
 | `sovereign-tools/src/raptor_atlas.rs` | **(session #2)** leaf member cap (`MAX_MEMBERS_IN_SUMMARY_PROMPT=13` + `descriptors_for_prompt`, 2 tests); LPT dispatch; `SUMMARIZE_BUFFER` 6→8. Plus session #1: summaries `ExtractDurable`→`EnrichBulk`. |
-| `shared/crates/oicp-client/src/lib.rs` | **(session #2)** `RemoteApiProvider::embed_batch` + `embed_many_one_request` + `EMBED_BATCH_INPUTS=64`; `SplitInferenceProvider::embed_batch` forwards. (Plus session #1 fast-slot hijack fix, above.) |
+| `oicp-client/src/lib.rs` | **(session #2)** `RemoteApiProvider::embed_batch` + `embed_many_one_request` + `EMBED_BATCH_INPUTS=64`; `SplitInferenceProvider::embed_batch` forwards. (Plus session #1 fast-slot hijack fix, above.) |
 | `sovereign-cli-llm/bench_cmd/{book_report,mod}.rs` + `resource_meter.rs` | **(session #2)** per-call `CallRecord` log + `render_call_families()` (2 tests); `--no-gliner` flag; eager GLiNER wiring. Plus session #1 ledger + model flags + judge think-off. |
 | `sovereign-inference/embedded/{model_slot,prompt_helpers}.rs` | `chat_slot_n_ubatch()` env knob (`SOVEREIGN_N_UBATCH`, default 512). |
 | `sovereign-mesh/src/fim_adapter.rs` | pre-session change (FIM arc), not this work. |

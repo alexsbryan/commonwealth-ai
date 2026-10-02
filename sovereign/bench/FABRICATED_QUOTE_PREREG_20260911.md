@@ -86,7 +86,7 @@ the same `rescore`; the validation classes are pure Rust tests in
 Nothing banked carries a span address today. Every chaos-monkey results file
 has zero `answer_segments`; the forensics ledgers carry chunk text with no
 ids or hashes; the index doc struct has a `content_hash` field whose three
-writers (`ingest/crates/corpus-engine/src/index/mod.rs`) all set `None`; the resolved
+writers (`corpus-engine/src/index/mod.rs`) all set `None`; the resolved
 address at `sovereign-core/src/runtime/streaming.rs` is a pool index plus
 byte range with no corpus identity. Prerequisites, in order, each named by
 the ring it unblocks:

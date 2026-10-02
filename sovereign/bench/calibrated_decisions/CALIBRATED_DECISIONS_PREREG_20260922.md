@@ -247,7 +247,7 @@ constrained decoding, which is new engine work. Revisit only if the tracks
 here show that probabilities pay.
 
 **Phase 6 tension / same-as classifier**
-(`ingest/crates/corpus-engine/src/enrichment/atlas/analysis/tension_classifier.rs`).
+(`corpus-engine/src/enrichment/atlas/analysis/tension_classifier.rs`).
 The strongest ingest candidate, not yet a track. One call per candidate pair.
 Today it returns `is_tension` plus a `relation` enum and a confidence the model
 writes itself, defaulting to 0.7 when omitted (`:174`), and the confidence

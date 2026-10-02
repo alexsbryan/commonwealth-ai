@@ -4,7 +4,7 @@
 corrected design in `README.md` calls for: it sizes both investment options
 *before* anyone writes 40 questions, and it needs no authored questions to do it.
 
-Probe: `ingest/crates/corpus-engine/examples/bridge_rank_probe.rs` (production hybrid search
+Probe: `corpus-engine/examples/bridge_rank_probe.rs` (production hybrid search
 via `CorpusIndex::search`). Candidate miner + sample: SQL over `chunk_entities`,
 reproducible (md5-ordered, no RNG). Raw output stays in scratchpad — it carries
 entity surface forms and conversation UUIDs from a personal archive. Only
@@ -49,7 +49,7 @@ weakness on proper nouns, and load-bearing for reading the decomposition below.
 
 Query embeddings carry the production instruction prefix
 (`model_family.rs:302-304`); `/v1/embeddings` does not add it
-(`shared/crates/oicp-client/src/lib.rs:54-56`). Without it the cosines would be
+(`oicp-client/src/lib.rs:54-56`). Without it the cosines would be
 self-consistent but would not be what retrieval sees.
 
 ## Headline
