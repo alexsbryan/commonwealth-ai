@@ -12,3 +12,4 @@ pc-value-presence-admission pc-partial-decline-verdict pc-gk-rescue-fabrication 
 pc-partial-decline-verdict-measure *   # quality reading, host load recorded
 pc-gk-rescue-fabrication-measure *     # quality reading, host load recorded
 pc-deployed-turn-latency *             # turn timings on the deployed node against a clean root
+pc-gk-rescue-fabrication-measure-2 *   # the re-read after the reopened fix (phase-c-15)
