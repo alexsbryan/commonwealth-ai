@@ -2142,6 +2142,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose (operator: "I approve the recs"): (1) option (c): pc-knowledge-gym-noresults is rewritten to a loop-enforced bound (one rephrase after an empty result, absence stated after the second) and 05's bar moves to `max_lookup_calls = 2`; pc-knowledge-gym-noresults-both-directions closes at 61c978b07 as the reading it was. (2) pc-value-presence-admission, pc-gate-gk-exemption-deictic, pc-rails-journal-linear and pc-retired-verbs-named move above the cut and into scope.txt. (3) The dr-estate corpora are removed from the deployed node (after pc-gk-rescue-fabrication-measure-2's quiet-host reading). (4) AGENTS.md gains clone-gate in its ratchet list and the verb table's llm row names `sovereign-cli-llm-stock` (package `sovereign-stock`).
 - Because: each was the seat's recommendation with its evidence (phase-c-10, -11, -15; b07f61eb2; 29e0a3f22). The operator added a direction: "it does point to a Big O scalability problem that increased corpora hit response times so badly; I would prefer us to be able to easily handle noisy corpora". Removing the corpora treats the node; the fan-out's growth with installed corpora is phase-d's pd-scoped-run-corpora, rewritten to that direction.
 
+**phase-c-17 · 2026-10-02 · pc-partial-decline-verdict-measure · director** — this commit
+- Needed: the measure read a MISS in both directions (6ce67adbc). Reopen the code row and with what fixtures; whether the 35B present-killer-weapon flip is a false positive; where the zero-chunk finding goes; how the measure row closes.
+- Chose: reopen pc-partial-decline-verdict on three corrected shapes of `declines_asked_fact` (a contrast that continues the decline, a GK signpost with no value, an absence statement read anywhere in the text), with the 14 misses and the chat-ask false positive verbatim as fixtures; 4e8f9cfb1 stays. present-killer-weapon is not a fixture either way. The measure row is `[x]` at 6ce67adbc; the re-read is the split pc-partial-decline-verdict-measure-2, alone. The zero-chunk finding is filed below phase-c's cut as pc-zero-chunk-decline-verdict, not to phase-d.
+- Because: the row's proof says a miss reopens it and never re-tunes the bar; the misses and the false positive each trace to the one decider (principle 8), and the fix describes shapes rather than adding the two uncovered strings. The killer-weapon label agrees with what the prose claims of the retrieved sources; the unsignposted aside is the claim gate's to judge (principle 12). The zero-chunk verdict is a bug at a site the decider does not reach, the sibling of pc-complex-task-decline-verdict, not architecture; moving it above the cut is the operator's.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13740,5 +13745,24 @@ REVIEW-AFTER: widening the row's outcome from "gk_rescue" to "a knowledge turn" 
 <details><summary>reasoning, evidence, package</summary>
 
 05's bar moving from 1 to 2 is the operator's ruling, recorded here, so the row's change to pass.toml is not a worker re-tuning a bar after seeing data (the charter's rule). The bound is structural (principle 10): the loop counts empty results, so no prompt text carries it and the narrowed-note reading (3 lookups on 7 of 9, 61c978b07) cannot recur. Conflicts: pc-gate-gk-exemption-deictic is paired with pc-partial-decline-verdict and pc-value-presence-admission (sovereign-core grounding and the gate).
+
+</details>
+
+## phase-c-17 · 2026-10-02 — the partial-decline MISS reopens its row on the decider's shape
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced from the lane's raw (now target/ralph/phase-c/pc-partial-decline-verdict-measure/phase-c/pdm/, copied from the lane worktree; hash 0b2a7bb26, load per run in 6ce67adbc's body):
+
+- ledger-table.txt: 35B check4 5 turns, CannotKnowFromHere 2 (abstained_decline 1, released 1), Grounded 1, Unverified 2; 4B check4-firmonly 10 turns, CannotKnowFromHere 7 (5 flipped), Unverified 3. Matches the package.
+- runs/35b-cm-r2.transcripts.jsonl present-killer-weapon: "The provided passages do not state that Winnie Verloc kills Adolf Verloc ... Not covered here: The actual killing scene (which involves a carving knife) does not appear in these specific retrieved passages." The passages quoted in the same answer show her handling the carving knife.
+- absent-room-thursday in the six firm-bank transcripts: gate_action None, 0 chunks, every answer "I do not have access to your organization's internal schedule ...", verdict Unverified per ledger-table (Unverified/- once per firm run).
+- decline.rs `declines_asked_fact` at this tree: strips the GK caveat, vetoes on any remaining "from general knowledge", takes the first DECLINES or ABSENCE_STATEMENTS hit anywhere in the text, vetoes on any ANSWER_PIVOTS after it. Each miss class follows from one of those lines.
+
+The lane branch was merged (merge pc-partial-decline-verdict-measure) and ralph/lanes/pc-partial-decline-verdict.done removed with the reopen, as at phase-c-15, so a fresh lane does not read as finished.
+
+Falsified if: the reopened decider, judged on the same sandbox, flips a full answer to cannot_know_from_here at the chat-ask rate or worse, or the 14 fixtures pass but check 4 at 35B stays near half (then the misses are not the decider's and the row's premise is wrong again).
+
+REVIEW-AFTER: present-killer-weapon is read as the label agreeing with the prose. If the operator reads a parenthetical parametric specific as an answer the user would act on, it becomes a false-positive fixture for the reopened row.
 
 </details>
