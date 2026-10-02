@@ -72,8 +72,8 @@ pub fn find_repo_root_in(start: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Walk up from the CWD to the enclosing checkout: the directory holding both
-/// `quality/` and `sovereign/`.
+/// Walk up from the CWD to the enclosing checkout: the directory holding
+/// `quality/ARCH_LAYERS.toml`, a file only this monorepo has.
 ///
 /// The repo root taken from the INVOCATION, not from where the crate was
 /// compiled. `find_repo_root` above asks git and answers "which git repo";
@@ -86,7 +86,7 @@ pub fn find_repo_root_in(start: &Path) -> Option<PathBuf> {
 pub fn find_checkout_root() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
-        if dir.join("quality").is_dir() && dir.join("sovereign").is_dir() {
+        if dir.join("quality/ARCH_LAYERS.toml").is_file() {
             return Some(dir);
         }
         if !dir.pop() {

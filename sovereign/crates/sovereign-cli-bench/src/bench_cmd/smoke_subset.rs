@@ -79,7 +79,7 @@ impl SmokeSelection {
 pub fn smoke_path() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
-        if dir.join("quality").is_dir() && dir.join("sovereign").is_dir() {
+        if dir.join("quality/ARCH_LAYERS.toml").is_file() {
             return Some(dir.join("sovereign/bench/smoke.toml"));
         }
         if !dir.pop() {

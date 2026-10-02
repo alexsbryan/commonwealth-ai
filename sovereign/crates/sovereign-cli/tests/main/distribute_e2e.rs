@@ -95,15 +95,10 @@ impl Sandbox {
         let root = tempfile::tempdir().expect("tempdir");
         let p = |n: &str| root.path().join(n);
         let (home, svrnmesh, rails_dir, repo) = (p("home"), p("svrnmesh"), p("rails"), p("repo"));
-        for d in [
-            &home,
-            &svrnmesh,
-            &rails_dir,
-            &repo.join("quality"),
-            &repo.join("sovereign"),
-        ] {
+        for d in [&home, &svrnmesh, &rails_dir, &repo.join("quality")] {
             std::fs::create_dir_all(d).expect("dir");
         }
+        std::fs::write(repo.join("quality/ARCH_LAYERS.toml"), "").expect("checkout marker");
         let port = free_port();
         let base = format!("http://127.0.0.1:{port}");
         std::fs::write(
@@ -115,7 +110,6 @@ impl Sandbox {
         )
         .expect("config");
         std::fs::write(repo.join("quality/instruments.toml"), REGISTRY).expect("registry");
-        std::fs::write(repo.join("sovereign/.keep"), "").expect("keep");
         // The run persists its table under target/; a clean checkout stays clean.
         std::fs::write(repo.join(".gitignore"), "target/\n").expect("gitignore");
         let git = |args: &[&str]| {

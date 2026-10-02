@@ -295,6 +295,7 @@ mod tests {
             let bench = dir.join("sovereign/bench");
             std::fs::create_dir_all(&bench).unwrap();
             std::fs::create_dir_all(dir.join("quality")).unwrap();
+            std::fs::write(dir.join("quality/ARCH_LAYERS.toml"), "").unwrap();
             std::fs::write(bench.join("smoke.toml"), body).unwrap();
         };
         let six = tempfile::tempdir().unwrap();

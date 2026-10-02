@@ -1437,12 +1437,12 @@ fn model_stem() -> Option<String> {
     cfg.primary_model_stem()
 }
 
-/// Walk up to the enclosing checkout (the dir holding `quality/` and
-/// `sovereign/`), the same shape `posture` and the runner use.
+/// Walk up to the enclosing checkout (the dir holding
+/// `quality/ARCH_LAYERS.toml`), the same shape `posture` and the runner use.
 fn find_repo_root() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
-        if dir.join("quality").is_dir() && dir.join("sovereign").is_dir() {
+        if dir.join("quality/ARCH_LAYERS.toml").is_file() {
             return Some(dir);
         }
         if !dir.pop() {

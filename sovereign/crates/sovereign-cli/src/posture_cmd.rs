@@ -601,16 +601,16 @@ fn mtime(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path).ok().and_then(|m| m.modified().ok())
 }
 
-/// Walk up from the CWD to the enclosing checkout: the dir holding both
-/// `quality/` and `sovereign/` (this monorepo's shape — cheap and specific,
-/// no git dependency).
+/// Walk up from the CWD to the enclosing checkout: the dir holding
+/// `quality/ARCH_LAYERS.toml` (a file only this monorepo has — cheap and
+/// specific, no git dependency).
 ///
 /// `pub(crate)` because `quality_check_cmd` asks the same question and a
 /// second walk-up would be a second answer (ARCH §10.6).
 pub(crate) fn find_repo_root() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
-        if dir.join("quality").is_dir() && dir.join("sovereign").is_dir() {
+        if dir.join("quality/ARCH_LAYERS.toml").is_file() {
             return Some(dir);
         }
         if !dir.pop() {
