@@ -57,9 +57,9 @@ there and not here:
 
 | Not in this binary | What it would have allowed |
 |---|---|
-| The code program (`/v1/solve/jobs`, `/v1/projects`) | A caller-supplied command reaching a shell. It answers a 503 naming its absence. |
-| The MCP routes (`/mcp`, `/mcp/message`, `/mcp/stats`) | A developer control channel. They answer a 503: "this distribution does not serve MCP". |
-| The `search` tool's web fallback, `web_fetch`, `wikipedia_fetch`, `probe_url` | Outbound calls to DuckDuckGo, Google, Wikipedia, or any URL, on an ordinary question. |
+| The code program (`/v1/solve/jobs`, `/v1/projects`) | A caller-supplied command reaching a shell. It answers a 503 naming its absence and pointing at `/v1/conversations`. |
+| The MCP routes (`/mcp`, `/mcp/message`, `/mcp/stats`) | A developer control channel. They answer a 503: "this distribution does not serve MCP", with the same pointer; `GET /v1/mcp/servers` reports it not mounted. |
+| The `search` tool's web fallback, `web_fetch`, `wikipedia_fetch`, `probe_url` | Outbound calls to DuckDuckGo, Google, Wikipedia, or any URL, on an ordinary question. Answers never offer a web search either: the prompts drop that offer when no registered tool reaches the web. |
 
 Ingesting a server-side path (`POST /v1/documents`, the corpus register
 routes) is still in the binary, because that is how IT indexes the

@@ -132,7 +132,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
     let general: Router<AppState> = if surface.serves_general_client_routes() {
         let edit_door = match state.inner.node.edit_door.clone() {
             Some(door) => door,
-            None => crate::hosted_code::edit_door_absent_router(),
+            None => crate::hosted_code::edit_door_absent_router(state.inner.node.posture),
         };
         let general = Router::new()
             // OpenAI-compatible inference endpoints.

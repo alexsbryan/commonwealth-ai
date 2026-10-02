@@ -343,14 +343,15 @@ impl RpcWorkerDiscovery {
                 .capabilities
                 .anchor
                 .as_ref()
-                .and_then(|a| a.rpc_port.map(|port| (port, a.rpc_iroh)));
-            if let (None, Some((rpc_port, iroh_advertised))) = (&fresh, advertised) {
-                tracing::debug!(peer = %name, rpc_port, iroh_advertised, "rpc-discovery: the roster names this worker's port");
+                .and_then(|a| a.rpc_port.map(|port| (port, a.rpc_iroh, a.rpc_direct)));
+            if let (None, Some((rpc_port, iroh_advertised, rpc_direct))) = (&fresh, advertised) {
+                tracing::debug!(peer = %name, rpc_port, iroh_advertised, rpc_direct, "rpc-discovery: the roster names this worker's port");
                 fresh = endpoint::select_rpc_endpoint(
                     transport,
                     &m.dial,
                     rpc_port,
                     iroh_advertised,
+                    endpoint::DirectBind::from_anchor(rpc_direct),
                     None,
                 )
                 .await;
@@ -400,11 +401,16 @@ impl RpcWorkerDiscovery {
                         .and_then(|w| w.get("iroh"))
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
+                    let direct = json
+                        .get("rpc_worker")
+                        .and_then(|w| w.get("direct"))
+                        .and_then(|v| v.as_bool());
                     fresh = endpoint::select_rpc_endpoint(
                         transport,
                         &m.dial,
                         rpc_port,
                         iroh_advertised,
+                        endpoint::DirectBind::from_status(direct),
                         Some(host.as_str()),
                     )
                     .await;

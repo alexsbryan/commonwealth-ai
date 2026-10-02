@@ -2062,6 +2062,13 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Needed: a home for `promote_legacy_env` that cw-rails can call. The row's "a directly launched serve, cw-rails or pod worker skips the SVRNMESH_ bridge" is true for all three, and cw-rails' closure reads SOVEREIGN_ADVERTISE_ADDR, _MESH_STRICT_AUTH and _IROH_RELAY_ONLY. The bridge lived in sovereign-contracts, which `[[forbid]] commonwealth-rails → sovereign-*` keeps cw-rails off.
 - Chose: move it whole to `kernel_types::env_bridge` (re-exported at `sovereign_contracts::rebrand`), with the removed-var table beside it; `promote_legacy_env_as(program)` so cw-rails speaks as itself.
 - Because: kernel-types is the one crate already reachable from sovereign-contracts, commonwealth-rails and sovereign-serve, with `allow = []` and a std-only body: zero new edges. host-kit was the other candidate and is out twice: sovereign-contracts' package_leaf allow list is oicp-types, kernel-types, sovereign-time (quality/ARCH_LAYERS.toml:888), and host-kit "names no program's vocabulary" while the bridge's prefixes are vocabulary. Precedent: `kernel_types::member` moved here for the same two-owner reason (fp-46). BOUNDARY ✓ and clone-gate 13826 = baseline after the move.
+- Minted as `phase-c-2` in its lane and renumbered at merge: that lane's commit bodies cite `phase-c-2`.
+
+**phase-c-6 · 2026-10-01 · pc-onprem-followups · worker** — this commit
+- Needed: a keyed daemon's OCR cleanup admitted without a loopback exemption, and a sealed turn's offers derived from the registry.
+- Chose: a per-process self credential in the one key store (not an in-process call), and a corpus-only `search` that reports `Scope::Persistent`.
+- Because: the cleanup already speaks HTTP to `/v1/chat/completions`, so one store row reuses the one admission decision; and `Scope::External` on a tool that cannot leave the machine was itself the false claim the decider reads.
+- Minted as `phase-c-5` in its lane and renumbered at merge: that lane's commit bodies cite `phase-c-5`.
 
 **phase-b-113 · 2026-10-02 · pb-distribution-ship-gate · operator, escalating only the e2e latency; supersedes phase-b-111** — this commit
 - Needed: after F13 the gate read three alarms (095a15c09): chat-ask 18/19 (q2's audit 14 calls > 12 on run 3 of 3), knowledge-gym 05_noresults_honesty 0/3 (2 lookups > 1, 1/3 at the flip), and the e2e plain turn at 24,620 / 29,238 ms vs the 13,397 ms main-era baseline. The method escalates each to ABAB n=3 against B (main 18f783f44). A director session ruled all three escalated with the deployed daemon stopped (phase-b-111) before the operator answered; its window never opened (the seed copy was refused, the node was restarted, ce03d5135).
@@ -2078,6 +2085,16 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Needed: the lane's census (400f8f1cc, nothing built) found the row's outcome unreachable as worded: raw ggml RPC has no identity a probe could check (launch.rs:620), and by default the worker binds loopback (launch.rs:593) while serve always advertises `rpc_port` with `rpc_iroh: true` (rails_mesh.rs `anchor_claims`), so in `auto` mode a host's first direct probe of `<member IP>:<rpc_port>` can only ever reach something that is not the worker, and holds it sticky. It left three mechanisms in ctl/NEEDS_HUMAN.md, untracked.
 - Chose: A. `AnchorProfile.rpc_direct` (skipped when false), set by serve only for a non-loopback bind the operator allowed; the direct probe and the record-port probe-host fallback run only for a worker that declares it; a record without the field is bridge-only; a pre-cut `/status` port keeps main's path, traced as unproven. C (an identity on the direct path, the tunnel-proxy sidecar of transport lib.rs:73) is phase-d's new pd-rpc-direct-identity. B is not taken.
 - Because: A is the only option that closes the hole for every default member and costs none of them anything (their direct path never reached the worker), and it is not a charter fork: no leaf, exception, ratchet raise or user-visible change. The lane's open sub-question (legacy records) is answered by `git grep rpc_iroh 18f783f44 -- oicp-types` = nothing: main's AnchorProfile has neither field, so every record lacking `rpc_direct` is a cut build carrying `rpc_iroh`, and bridge-only loses no peer. B makes a deliberately LAN-bound worker pay QUIC on every tensor transfer, a throughput change users see.
+
+**phase-c-5 · 2026-10-02 · pc-pool-ready's owed dry wave · seat, reading it live and moving the lanes out of the tree** — this commit
+- Needed: pc-pool-ready landed with its two-lane dry wave never-ran, owed to the seat. Read live on phase-c's waves 1 and 2: the merge landed with no conflict, the clashing decision was renumbered (868dc0b3a, phase-c-2 → phase-c-4) and `ralph-decisions.py --check` stayed current, and each lane's jobs line shows its share (4 of 14). The claim the row rests on did not hold: a lane's first lint recompiled crates.io dependencies (pc-cmnwlth-lift-flake: proc-macro2, quote, unicode-ident and 196 more in its first 1,534 log lines).
+- Chose: lanes live beside the main tree, `<workdir>-lanes/<unit>` (`lane_root_for`, one accessor for every lane path), not under `.ralph/wt/`. The lanes already running finish where they are; any left at the next pool start are moved with `git worktree move`.
+- Because: cargo reads every ancestor's `.cargo/config.toml` and concatenates arrays, so a lane under the main tree ran `target.x86_64-unknown-linux-gnu.rustflags` twice (`cargo config get` from a lane prints the mold/`-L native` pair twice; from the main tree and from a sibling directory, once). Rustflags are part of every unit's identity, so the lane's fingerprints (proc-macro2 6179e4c45d78eccd and three more) are hashes the cloned target never held. The 2026-09-01 recipe the row cited used worktrees beside the repo. A RUSTFLAGS override would be a second copy of the config's list (principle 8).
+
+**phase-c-7 · 2026-10-02 · pc-cmnwlth-lift-flake · seat, ruling the lane's PROOF fork** — this commit
+- Needed: the lane built both halves of the outcome (b78101d1c keeps a red run's sandbox logs; 97a345a15 gives each commonwealth-rails `state()` fixture its own data dir, the race behind `the_founders_key_admits_a_joiner`'s ENOENT) and stopped at lift n6 of the PROOF's ten: the test phase was green (16 x "test result: ok"), the RUN smoke's self-heal step was not ("the founder's watchdog did not attempt an endpoint rebuild within 150s of losing the joiner"). The row names the test phase; the PROOF counted whole lifts.
+- Chose: the PROOF is read on what the outcome names: ten consecutive lifts whose TEST phase is green, host load recorded; a RUN-smoke red is recorded with its kept logs and counts neither way. Six are in (n1-n6 at 97a345a15), so the lane resumes for n7-n10. The self-heal timing is pc-cmnwlth-lift-flake-selfheal, a split of this row and so in scope by the split rule (`out_of_scope`, ralph.py:328): the PROOF as written already required green RUN phases, so the split re-chunks this row's scope rather than adding to it. Moving it below the cut line is the operator's to make if they read it otherwise.
+- Because: the PROOF's whole-lift count measured two defects with one number. The substitution is named here and on the row, not taken silently (principle 6), and the bar keeps its N (principle 7). The test-phase fix stands on a direct A/B: the lifted lib test binary looped 4 x 3 at host load ~3 went 12 runs / 4 red before 97a345a15 and 12 / 0 after, every red the one test. Retrying the smoke to green is not on offer.
 
 ## Flags for the operator
 
@@ -13358,6 +13375,35 @@ Falsified if: an operator rules the kernel identity-only. The alternative then i
 
 </details>
 
+## phase-c-6 · 2026-10-01 — the daemon admits itself by key; a corpus-only search says so in its scope
+
+<details><summary>reasoning, evidence, package</summary>
+
+Item 1 (OCR on a keyed daemon). The row allowed "an in-process call or the
+daemon's own credential, never a loopback exemption" (phase-b-86). An
+in-process call would need a second path into the chat route's handler
+(the turn admission, the slot resolution by file stem) that the HTTP path
+already owns, so it would be a second implementation of route dispatch.
+The credential is one row in `ClientTokenStore`: `self_credential()` is
+minted once per process from `generate_bearer_token` (the one bearer
+generator), never written to disk, and is admitted only by a store the
+disk made keyed. Its sub `@svrn` is not a label, so no key file can claim
+it. Falsified if a keyed daemon admits a caller presenting no key, or an
+unkeyed daemon admits `@svrn` (test
+`the_self_credential_admits_only_on_a_keyed_store`).
+
+Item 3 (sealed web offer). The decider `web_search_in_reach` reads the
+built registry's descriptors, so the only honest input is the descriptor.
+`SearchTool::new` (no web fallback) reported `Scope::External`, whose
+definition is "effect reaches outside this machine"; it now reports
+`Persistent` and a corpus-only description. No reader gates on `External`
+(census: only label renderers in cli-dev, core executor and planner), so
+the change moves no behaviour beyond the turn's prompt. Falsified if an
+open host's `search` stops reporting `External` (test
+`a_corpus_only_search_describes_no_web`).
+
+</details>
+
 ## phase-c-2 · 2026-10-02 — phase-b's remaining untracked findings are three rows below phase-c's cut line
 
 <details><summary>reasoning, evidence, package</summary>
@@ -13463,5 +13509,23 @@ No build, test or PLANT ran: the census stops before code (§3 step 2, §6).
 
 Edit or mark the row in ralph/next/phase-c/STATE.md, then
 `rm ralph/next/phase-c/ctl/STOP ralph/next/phase-c/ctl/NEEDS_HUMAN.md`.
+
+</details>
+
+## phase-c-5 · 2026-10-02 — pool lanes live beside the main tree, so cargo reads one config
+
+<details><summary>reasoning, evidence, package</summary>
+
+Fingerprint comparison, lane `.ralph/wt/pc-cmnwlth-lift-flake/target/debug/.fingerprint/proc-macro2-6179e4c45d78eccd/lib-proc_macro2.json` against main's `proc-macro2-954eb3cf8ea8a8d7`: rustc, features, target, profile, path and config hashes are equal (config 9185878174080762935 on both); rustflags differ, the lane's list being main's twice.
+
+The `.ralph/` code-watcher skip (b0004ed0e) and the `.gitignore` line now guard a path the pool no longer writes once the running lanes are moved; they are left as they are, being harmless, and the watcher skip would cost a Rust rebuild and a daemon restart to remove mid-campaign.
+
+</details>
+
+## phase-c-7 · 2026-10-02 — pc-cmnwlth-lift-flake's PROOF counts test phases; the RUN smoke's self-heal timing is its own row
+
+<details><summary>reasoning, evidence, package</summary>
+
+The lane's reading of n6's kept founder.log (target/program-lift/cmnwlth/kept-20261001T215240-3494908): the joiner is killed at 04:50:10; gossip and ring sync keep dialing it every ~20s; gossip marks it Offline at 04:51:16; the iroh peer path is lost only at 04:52:37 (~147s), and the first escalation lands at 04:52:40, after the smoke's 150s poll (scripts/program-lift.toml:248-255). iroh 1.0.2 `ACTOR_MAX_IDLE_TIMEOUT` (60s, remote_state.rs:73) applies only with no active connection, and the founder's own re-dials keep one active. Observed: 1 red in 6 RUN phases here, 0 in the 6 pb-distribution's sweep ran at 327a8097b. Whether the watchdog or the smoke's budget is wrong is the new row's census.
 
 </details>

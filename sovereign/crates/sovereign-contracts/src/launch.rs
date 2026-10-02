@@ -655,6 +655,14 @@ impl RpcServe {
     pub fn is_serving(&self) -> bool {
         matches!(self, Self::On { .. })
     }
+
+    /// True when the worker binds past loopback, which [`Self::resolve`]
+    /// allows only with the operator's plaintext-LAN acknowledgement: the one
+    /// case a host may reach it at the member's own address rather than
+    /// through the identity-bound mesh tunnel (pc-rpc-probe-identity).
+    pub fn binds_past_loopback(&self) -> bool {
+        self.bind().and_then(bind_host_is_loopback) == Some(false)
+    }
 }
 
 #[cfg(test)]

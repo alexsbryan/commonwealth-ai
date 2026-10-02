@@ -8,4 +8,4 @@ what: sixteen `removed` rows in quality/env-flags.toml, each with a
   `replacement`; every binary's startup bridge prints one line per removed var
   set under either spelling, then drops it; env-gate fails a removed var that
   is still read and pins REMOVED_ENV to the registry. No doc or script tells a
-  user to set one. Decision: ralph/decisions/phase-c-2.md (the kernel-types home).
+  user to set one. Decision: ralph/decisions/phase-c-4.md (the kernel-types home).

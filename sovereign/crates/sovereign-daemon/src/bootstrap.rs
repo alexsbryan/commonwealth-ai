@@ -626,11 +626,24 @@ pub async fn setup_watched_folders(
             // enrichment defaults use: the daemon registers each loaded
             // slot under its file stem, so a slot ALIAS like "fast" would
             // 503 and silently degrade every page to raw OCR text.
+            //
+            // A keyed daemon admits no caller without a key, loopback
+            // included (phase-b-86), so the cleanup call presents the
+            // daemon's own credential there; the store's own `is_keyed`
+            // decides, read from the directory the seal reads.
+            let keyed = crate::client_tokens::ClientTokenStore::load(Some(
+                crate::client_tokens::client_tokens_dir(data_dir),
+            ))
+            .is_keyed();
             super::ocr_install::install_ocr_ctx(
                 &manager,
                 data_dir,
                 format!("http://127.0.0.1:{}", config.daemon.client_port),
                 config.primary_model_stem().unwrap_or_default(),
+                keyed
+                    .then(crate::client_tokens::self_credential)
+                    .flatten()
+                    .map(str::to_string),
             )
             .await;
             // Living trigger: workflows attached to a watched folder

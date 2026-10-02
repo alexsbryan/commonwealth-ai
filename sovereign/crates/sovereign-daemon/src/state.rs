@@ -818,6 +818,7 @@ impl AppState {
                     guest_sessions: Arc::new(GuestSessionStore::new(node_seed.guest_sessions)),
                     guest_pages: Arc::new(node_seed.guest_pages),
                     edit_door: node_seed.edit_door,
+                    posture: node_seed.posture,
                     atlas: node_seed.atlas,
                     // 0 sentinel = no foreground activity observed yet.
                     // The yield hook treats 0 as "never active", regardless

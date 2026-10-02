@@ -181,6 +181,29 @@ impl std::fmt::Display for BadLabel {
 
 impl std::error::Error for BadLabel {}
 
+/// The `sub` the daemon's own credential asserts. A label holds no `@`, so no
+/// key file can claim it.
+pub const SELF_SUB: &str = "@svrn";
+
+/// This process's own API key: 256 bits minted once per process and never
+/// written anywhere, asserting [`SELF_SUB`] in the admin group. A keyed store
+/// admits it beside the keys on disk; an unkeyed one does not. It is how the
+/// daemon's calls to its own client routes (the OCR cleanup pass) are
+/// admitted by key, as every caller of a keyed daemon is (phase-b-86), never
+/// by a loopback exemption. `None` when the OS gave no entropy, named in the
+/// log; the caller then sends no key and the refusal it gets says why.
+pub fn self_credential() -> Option<&'static str> {
+    static KEY: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    KEY.get_or_init(|| match crate::client_auth::generate_bearer_token() {
+        Ok(token) => Some(token),
+        Err(e) => {
+            tracing::warn!("client_tokens: no self credential this process: {e}");
+            None
+        }
+    })
+    .as_deref()
+}
+
 /// The named tokens this node admits: the on-disk set, loaded once at start,
 /// and mutated in place by the routes.
 #[derive(Debug, Default)]
@@ -236,13 +259,27 @@ impl ClientTokenStore {
                 map.insert(fingerprint(&token), Named { label, token });
             }
         }
-        let keys: HashMap<String, keys::ApiKey> = dir
+        let mut keys: HashMap<String, keys::ApiKey> = dir
             .as_deref()
             .map(keys::read_dir_keys)
             .unwrap_or_default()
             .into_iter()
             .map(|k| (fingerprint(&k.token), k))
             .collect();
+        // Keyedness is decided by the disk alone; only then does the
+        // daemon's own credential join, so an unkeyed daemon never admits it.
+        if !keys.is_empty() {
+            if let Some(token) = self_credential() {
+                keys.insert(
+                    fingerprint(token),
+                    keys::ApiKey {
+                        sub: SELF_SUB.to_string(),
+                        token: token.to_string(),
+                        groups: vec![KEY_ADMIN_GROUP.to_string()],
+                    },
+                );
+            }
+        }
         tracing::debug!(
             dir = ?dir,
             named_tokens = map.len(),

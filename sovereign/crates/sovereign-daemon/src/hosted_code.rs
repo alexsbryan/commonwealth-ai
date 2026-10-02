@@ -13,6 +13,8 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use crate::posture::Posture;
+
 /// What svrn hands code's composition: its data root (code opens its own
 /// `notes.db` there, pb-notes-memory), the workspace it was told to watch,
 /// the chunk index svrn holds for that root, and the inputs of code's notes
@@ -89,42 +91,45 @@ impl HostedCode {
 pub const CODE_SERVER: &str = "svrn code mcp";
 
 /// A route of code's on svrn alone: a 503 naming the code program, never a
-/// 404 that reads as "no such route" (FIVE_PROGRAMS §4 rule 3).
-async fn absent(uri: axum::http::Uri) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    tracing::debug!(path = %uri.path(), "code routes: no code program in this process");
-    (
-        axum::http::StatusCode::SERVICE_UNAVAILABLE,
-        axum::Json(serde_json::json!({
-            "error": format!(
-                "{} is served by the code program, which this svrn does not host: \
-                 run `{CODE_SERVER}`",
-                uri.path()
-            ),
-        })),
-    )
-        .into_response()
+/// 404 that reads as "no such route" (FIVE_PROGRAMS §4 rule 3), and pointing
+/// where `posture` says: `svrn code mcp`, or what a sealed box does instead.
+fn absent(posture: Posture) -> axum::routing::MethodRouter {
+    axum::routing::any(move |uri: axum::http::Uri| async move {
+        use axum::response::IntoResponse;
+        tracing::debug!(path = %uri.path(), ?posture, "code routes: no code program in this process");
+        (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(serde_json::json!({
+                "error": format!(
+                    "{} is served by the code program, which this svrn does not host: {}",
+                    uri.path(),
+                    posture.code_pointer()
+                ),
+            })),
+        )
+            .into_response()
+    })
 }
 
 /// `/v1/projects/*` on svrn alone.
-pub fn projects_absent_router() -> axum::Router {
+pub fn projects_absent_router(posture: Posture) -> axum::Router {
     axum::Router::new()
-        .route("/v1/projects", axum::routing::any(absent))
-        .route("/v1/projects/{*rest}", axum::routing::any(absent))
+        .route("/v1/projects", absent(posture))
+        .route("/v1/projects/{*rest}", absent(posture))
 }
 
 /// The solver's job routes on svrn alone (pb-meshapp-solve):
 /// `/v1/solve/jobs` and everything under it.
-pub fn solve_absent_router() -> axum::Router {
+pub fn solve_absent_router(posture: Posture) -> axum::Router {
     axum::Router::new()
-        .route("/v1/solve/jobs", axum::routing::any(absent))
-        .route("/v1/solve/jobs/{*rest}", axum::routing::any(absent))
+        .route("/v1/solve/jobs", absent(posture))
+        .route("/v1/solve/jobs/{*rest}", absent(posture))
 }
 
 /// Code's editor door on svrn alone (pb-meshapp-rest): `/v1/edit_predictions`
 /// and its outcome route.
-pub fn edit_door_absent_router() -> axum::Router {
+pub fn edit_door_absent_router(posture: Posture) -> axum::Router {
     axum::Router::new()
-        .route("/v1/edit_predictions", axum::routing::any(absent))
-        .route("/v1/edit_predictions/outcome", axum::routing::any(absent))
+        .route("/v1/edit_predictions", absent(posture))
+        .route("/v1/edit_predictions/outcome", absent(posture))
 }

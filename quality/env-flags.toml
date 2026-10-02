@@ -764,6 +764,13 @@ shadows = "client_token"
 purpose = "Daemon client auth token. Env-only override of the SetupConfig field — an auth secret living in a shadow precedence chain (declared debt; see CLEANUP.md)."
 
 [[flag]]
+name = "SOVEREIGN_API_KEY"
+cluster = "infra-paths"
+default = "unset"
+status = "shipped"
+purpose = "The API key a CLI client presents to a keyed (on-prem) daemon, which admits no caller without one, loopback included. Read by the ONE accessor sovereign_contracts::setup_config::client_credential (SVRNMESH_API_KEY is the post-rename spelling and loses to this one; blank counts as unset). `svrn corpus watch*` sends it as `Authorization: Bearer`. Distinct from SOVEREIGN_CLIENT_TOKEN, the token a daemon admits. Never logged."
+
+[[flag]]
 name = "SOVEREIGN_DAEMON_URL"
 cluster = "infra-paths"
 default = "http://localhost:9741"

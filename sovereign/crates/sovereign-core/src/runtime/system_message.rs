@@ -130,7 +130,12 @@ impl Runtime {
             context.debug_assert_routed();
         }
 
-        let mut parts = vec![base.to_string()];
+        // Every system message passes here, so the prompts' web offers are
+        // reconciled with the registry in one place: a sealed daemon's turn
+        // must not offer a web search it has no tool for.
+        let base =
+            super::web_reach::offers_only_what_is_registered(base, &self.tools.descriptors());
+        let mut parts = vec![base.into_owned()];
 
         let now_utc = chrono::Utc::now();
         parts.push(today_anchor_block(&now_utc.format("%Y-%m-%d").to_string()));

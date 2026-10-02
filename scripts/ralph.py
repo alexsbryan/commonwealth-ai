@@ -1801,6 +1801,48 @@ DECISIONS_RENDERED = "ralph/DECISIONS.md"
 DECISIONS_SCRIPT = "scripts/ralph-decisions.py"
 
 
+def remove_tree(path):
+    """Remove `path` whole, clearing write-protection on the way, and return
+    None or the error that left it in place. A read-only directory in the
+    main tree's evidence (target/ralph/phase-b/ship/esc/seed, dr-xr-xr-x) is
+    reflink-cloned into every lane; it stopped both an ignore_errors rmtree
+    and `git worktree remove --force` from unlinking its entries, so a merged
+    lane left its whole target behind (2026-10-02: four lanes, 115 GiB
+    exclusive) and a cloned evidence tree was copied back as the lane's."""
+    path = pathlib.Path(path)
+    if not os.path.lexists(path):
+        return None
+    try:
+        shutil.rmtree(path)
+        return None
+    except OSError:
+        pass
+    for d, dirs, _ in os.walk(path):
+        for name in (d, *(os.path.join(d, x) for x in dirs)):
+            if not os.path.islink(name):
+                try:
+                    os.chmod(name, os.stat(name).st_mode | 0o700)
+                except OSError:
+                    pass
+    try:
+        shutil.rmtree(path)
+    except OSError as e:
+        return e
+    return None
+
+
+def lane_root_for(workdir):
+    """Where the pool keeps lane worktrees: beside the main tree, never inside
+    it. Cargo reads every ancestor's .cargo/config.toml and concatenates their
+    arrays, so a lane under the main tree ran with the main tree's
+    target.rustflags twice; rustflags are part of every unit's identity, so
+    each lane rebuilt every crates.io dependency its reflink-cloned target
+    already held (2026-10-02, phase-c wave 2: proc-macro2 and 198 more on one
+    lane's first lint, under .ralph/wt/)."""
+    workdir = pathlib.Path(workdir).resolve()
+    return workdir.parent / f"{workdir.name}-lanes"
+
+
 class Pool:
     """The parallel driver: waves of ready units in git worktrees, serial
     merges, a conflict halts (never auto-resolved). REVIEW rows run serially
@@ -1810,8 +1852,9 @@ class Pool:
                  lanes=2, base_branch="",
                  marker_timeout=DEFAULT_WAIT_LIMIT_S, wait_poll=120, sleep=time.sleep,
                  model="", review_model="", variant="", max_review_attempts=3,
-                 max_lane_failures=3, probe=None, jobs_share=None):
+                 max_lane_failures=3, probe=None, jobs_share=None, lane_root=None):
         self.paths = paths
+        self.lane_root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
         self.session_for = session_for
         self.notifier = notifier
         self.notify_enabled = notify_enabled
@@ -1902,7 +1945,7 @@ class Pool:
         the units still waiting). The filesystem is the state — a restart or a
         previous pool generation loses nothing."""
         still = set()
-        wt_root = self.paths.workdir / ".ralph" / "wt"
+        wt_root = self.lane_root
         if not wt_root.exists():
             return None, still
         for wt in sorted(wt_root.iterdir()):
@@ -1936,10 +1979,11 @@ class Pool:
         # (macOS) the lane-marker directory and `ralph/DONE` are one path, and
         # the completion marker could never be written.
         (self.paths.workdir / "ralph" / "lanes").mkdir(parents=True, exist_ok=True)
-        (self.paths.workdir / ".ralph" / "wt").mkdir(parents=True, exist_ok=True)
+        self.lane_root.mkdir(parents=True, exist_ok=True)
         self.paths.p(self.paths.control_dir).mkdir(parents=True, exist_ok=True)
         say(f"pool: lanes={self.lanes} base={self.base_branch}"
-            + (f" queue={self.paths.queue}" if self.paths.queue else ""))
+            + (f" queue={self.paths.queue}" if self.paths.queue else "")
+            + f" lane_root={self.lane_root}")
         while True:
             if self.paths.p(self.paths.stop).exists():
                 say("pool: STOP")
@@ -2123,13 +2167,18 @@ class Pool:
         r = subprocess.run([*self.CLONE_TARGET, str(src), str(dst)],
                            capture_output=True, text=True)
         if r.returncode != 0:
-            shutil.rmtree(dst, ignore_errors=True)
+            err = remove_tree(dst)
+            if err is not None:
+                say(f"pool: lane {unit} partial target clone not removed: {err}")
             say(f"pool: lane {unit} target NOT cloned "
                 f"({error_tail(r.stderr) or r.stderr.strip()[-200:]}) — the lane "
                 "builds from an empty target")
             return
         # The lane's evidence directory starts empty: _keep_evidence copies it back.
-        shutil.rmtree(dst / "ralph", ignore_errors=True)
+        err = remove_tree(dst / "ralph")
+        if err is not None:
+            say(f"pool: lane {unit} cloned evidence not cleared ({err}) — "
+                "_keep_evidence will copy the main tree's back with the lane's")
         files = self._git("ls-files", "-z", cwd=wt).stdout.split("\0")
         touched = 0
         for rel in filter(None, files):
@@ -2142,7 +2191,7 @@ class Pool:
             "— the workspace crates rebuild once, external deps stay warm")
 
     def run_lane(self, unit, model=None):
-        wt = self.paths.workdir / ".ralph" / "wt" / unit
+        wt = self.lane_root / unit
         branch = f"ralph/{unit}"
         if not wt.exists():
             r = self._git("worktree", "add", "-q", "-b", branch, str(wt), self.base_branch)
@@ -2220,6 +2269,7 @@ class Pool:
         added = self._git("diff", "--name-only", "--diff-filter=A", f"HEAD...{branch}",
                           "--", DECISIONS_DIR)
         clashes = [rel for rel in added.stdout.split() if self.paths.p(rel).exists()]
+        renamed = {}
         for rel in clashes:
             r = subprocess.run([sys.executable, str(self.paths.p(DECISIONS_SCRIPT)), "renumber",
                                 str(wt / rel), "--against", str(entries)],
@@ -2227,16 +2277,46 @@ class Pool:
             if r.returncode != 0:
                 return (f"lane {unit}: could not renumber {rel}: "
                         f"{error_tail(r.stderr) or r.stderr.strip()[-200:]}")
+            renamed[pathlib.Path(rel).stem] = pathlib.Path(r.stdout.strip()).stem
             say(f"pool: lane {unit} decision {rel} is taken on the base — renumbered "
                 f"{pathlib.Path(r.stdout.strip()).name}")
         if clashes:
+            self._recite_decisions(unit, wt, branch, renamed)
             self._git("add", "-A", "--", DECISIONS_DIR, cwd=wt)
-            c = self._git("commit", "-q", "-m", f"{unit}: decision ids renumbered at merge (pool)",
-                          cwd=wt)
+            mapping = ", ".join(f"{o} → {n}" for o, n in renamed.items())
+            c = self._git("commit", "-q", "-m",
+                          f"{unit}: decision ids renumbered at merge (pool): {mapping}", cwd=wt)
             if c.returncode != 0:
                 return (f"lane {unit}: the renumber commit failed: "
                         f"{error_tail(c.stderr) or c.stderr.strip()[-200:]}")
         return None
+
+    def _recite_decisions(self, unit, wt, branch, renamed):
+        """The lane's own files still cite the ids it minted, which on the base
+        name other entries (2026-10-02: pc-removed-env-warn's .done cited
+        phase-c-2, the seat's filing, after its entry became phase-c-4).
+        Rewrite each old id to its new one in every file the lane changed and
+        stage them; the renumbered entry, which records the old id on purpose,
+        is not among them (its old path is gone, its new one is untracked)."""
+        pattern = re.compile(r"(?<![\w-])(" + "|".join(map(re.escape, renamed)) + r")(?!\d)")
+        changed = self._git("diff", "--name-only", "--diff-filter=AM", f"HEAD...{branch}")
+        rewritten = []
+        for rel in changed.stdout.split():
+            path = wt / rel
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text()
+            except UnicodeDecodeError:
+                continue
+            new = pattern.sub(lambda m: renamed[m.group(1)], text)
+            if new != text:
+                path.write_text(new)
+                rewritten.append(rel)
+        if rewritten:
+            self._git("add", "--", *rewritten, cwd=wt)
+        say(f"pool: lane {unit} citations of {', '.join(renamed)} rewritten in "
+            f"{len(rewritten)} file(s){': ' + ', '.join(rewritten) if rewritten else ''}")
 
     def _regenerate_decisions(self, unit):
         """Lanes write ralph/decisions/<id>.md only; the rendered ledger is
@@ -2252,6 +2332,21 @@ class Pool:
         say(f"pool: {r.stdout.strip()}")
         self._git("add", "--", DECISIONS_RENDERED)
         return None
+
+    def _remove_lane(self, unit, wt):
+        """A merged lane's worktree goes, its target included; whatever `git
+        worktree remove` leaves is removed here and said, never left silent."""
+        r = self._git("worktree", "remove", "--force", str(wt))
+        if not wt.exists():
+            return
+        err = remove_tree(wt)
+        self._git("worktree", "prune")
+        why = error_tail(r.stderr) or r.stderr.strip()[-200:] or f"exit {r.returncode}"
+        if err is None:
+            say(f"pool: lane {unit} worktree remove left {wt} ({why}) — removed it")
+        else:
+            say(f"pool: lane {unit} worktree {wt} NOT removed ({why}; then {err}) — "
+                "its target holds disk until it is")
 
     def _keep_evidence(self, unit, wt):
         """A lane's raw evidence (its target/ralph/: check logs, readings) is
@@ -2281,7 +2376,7 @@ class Pool:
             say("pool: operator STOP — leaving the lanes unmerged (their worktrees resume)")
             return 0
         for unit in wave:
-            wt = self.paths.workdir / ".ralph" / "wt" / unit
+            wt = self.lane_root / unit
             branch = f"ralph/{unit}"
             if not wt.exists():
                 continue
@@ -2347,7 +2442,7 @@ class Pool:
                 say(f"pool: lane {unit} merged and marked [x] — worktree {wt} kept for its "
                     "evidence")
                 continue
-            self._git("worktree", "remove", "--force", str(wt))
+            self._remove_lane(unit, wt)
             self._git("branch", "-D", branch)
             say(f"pool: lane {unit} merged and marked [x]")
         if self._lane_failures:

@@ -1580,6 +1580,25 @@ pub fn daemon_url_override() -> Option<String> {
         })
 }
 
+/// The API key a CLI client presents to a keyed daemon, or `None`. THE one
+/// accessor for the CLI's credential: a keyed daemon (an on-prem box)
+/// admits no caller without a key, loopback included, so IT exports its
+/// admin key here rather than driving the API with curl.
+///
+/// `SOVEREIGN_API_KEY`, then `SVRNMESH_API_KEY`, blank counting as unset, by
+/// the same rule as [`daemon_url_override`]. Distinct from the daemon-side
+/// `SOVEREIGN_CLIENT_TOKEN`, which is the token a daemon ADMITS, not one a
+/// client presents.
+pub fn client_credential() -> Option<String> {
+    ["SOVEREIGN_API_KEY", "SVRNMESH_API_KEY"]
+        .iter()
+        .find_map(|key| {
+            let raw = std::env::var(key).ok()?;
+            let trimmed = raw.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+}
+
 /// Pure builder behind [`client_daemon_base`], and the accessor for callers
 /// that manage the LOCAL daemon process rather than talk to a daemon as a
 /// client — see the env-blindness note on [`client_daemon_base`].

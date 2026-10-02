@@ -1766,6 +1766,29 @@ class WatchTests(unittest.TestCase):
             self.assertEqual(state.read_text(), "")
 
 
+def in_tree_lanes(paths):
+    """The pool tests keep lane worktrees inside their temporary directory, so
+    nothing outlives it; production's default sits beside the main tree
+    (`lane_root_for`, LaneRootTests)."""
+    return paths.workdir / ".ralph" / "wt"
+
+
+class LaneRootTests(unittest.TestCase):
+    def test_lanes_live_beside_the_main_tree_not_under_it(self):
+        # Under the main tree cargo merges the main tree's .cargo/config.toml
+        # into every lane's, doubling target.rustflags, and every crates.io
+        # unit's identity changes with it.
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = pathlib.Path(tmp) / "repo"
+            workdir.mkdir()
+            root = ralph.lane_root_for(workdir)
+            self.assertEqual(root, workdir.resolve().parent / "repo-lanes")
+            self.assertNotIn(workdir.resolve(), root.parents)
+            pool = ralph.Pool(ralph.Paths(workdir), session_for=lambda cwd, env=None: None,
+                              notify_enabled=False)
+            self.assertEqual(pool.lane_root, root)
+
+
 class FakeLane:
     """A lane session: writes its unit's file, commits, and marks done."""
 
@@ -1842,6 +1865,7 @@ class PoolTests(unittest.TestCase):
     def make(self, root, session_for, **kwargs):
         paths = ralph.Paths(root)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", sleep=lambda s: None, **kwargs)
 
     def test_pick_wave_excludes_reviews_deps_and_conflicts(self):
@@ -1973,6 +1997,7 @@ class PoolWaitingTests(unittest.TestCase):
         paths = ralph.Paths(root)
         kwargs.setdefault("sleep", lambda s: None)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", **kwargs)
 
     def test_a_waiting_end_does_not_count_as_a_failure(self):
@@ -2050,6 +2075,7 @@ class RosterProbeTests(unittest.TestCase):
         paths = ralph.Paths(root)
         kwargs.setdefault("sleep", lambda s: None)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", **kwargs)
 
     def test_a_dead_first_roster_falls_through_to_the_healthy_model(self):
@@ -2217,6 +2243,7 @@ class HaltTailTests(unittest.TestCase):
         paths = ralph.Paths(root)
         kwargs.setdefault("sleep", lambda s: None)
         return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths),
                           lanes=2, base_branch="main", **kwargs)
 
     def test_a_lane_strikeout_halt_carries_the_last_error_line(self):
@@ -2493,7 +2520,8 @@ class PoolQueueTests(unittest.TestCase):
     def make(self, root, session_for, **kwargs):
         args = ralph.build_parser().parse_args(["pool", "--workdir", str(root), "--queue", "q"])
         paths = ralph.paths_for(args)
-        return ralph.Pool(paths, session_for=session_for, notify_enabled=False, lanes=2,
+        return ralph.Pool(paths, session_for=session_for, notify_enabled=False,
+                          lane_root=in_tree_lanes(paths), lanes=2,
                           base_branch="main", sleep=lambda s: None, **kwargs)
 
     def test_the_pool_runs_the_queue_it_names(self):
@@ -2630,6 +2658,32 @@ class PoolQueueTests(unittest.TestCase):
                                              "--untracked-files=no"],
                                             capture_output=True, text=True).stdout, "")
 
+    def test_a_renumbered_lanes_citations_follow_its_entry(self):
+        # Each lane cites the id it minted in a tracked file of its own. After
+        # the merges each file names its own entry, a longer id that shares the
+        # prefix is untouched, and the renumbered entry records the old id its
+        # lane's commit bodies still carry.
+        class CitingLane(self.MintingLane):
+            def run(self, model_args, prompt, log):
+                write(self.cwd, f"notes/{self.cwd.name}.md",
+                      "Decision: ralph/decisions/q-1.md (q-1; not q-10)\n")
+                return super().run(model_args, prompt, log)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.decisions_fixture(tmp)
+            self.assertEqual(self.make(root, lambda cwd, env=None: CitingLane(cwd)).run(), 0)
+            decisions = root / "ralph/decisions"
+            by_subject = {(decisions / f"{i}.md").read_text().split(" · ")[2]: i
+                          for i in ("q-1", "q-2")}
+            for unit, eid in by_subject.items():
+                self.assertEqual((root / f"notes/{unit}.md").read_text(),
+                                 f"Decision: ralph/decisions/{eid}.md ({eid}; not q-10)\n")
+            self.assertIn("Minted as `q-1` in its lane", (decisions / "q-2.md").read_text())
+            self.assertNotIn("Minted as", (decisions / "q-1.md").read_text())
+            log = subprocess.run(["git", "-C", tmp, "log", "--format=%s"],
+                                 capture_output=True, text=True).stdout
+            self.assertIn("decision ids renumbered at merge (pool): q-1 → q-2", log)
+
     def test_without_the_renumber_the_second_merge_halts(self):
         # The failing input the renumber exists for (its PLANT, kept as a test).
         with tempfile.TemporaryDirectory() as tmp:
@@ -2680,6 +2734,30 @@ class PoolQueueTests(unittest.TestCase):
                                  'cp -a "$0" "$1"')
             self.assertEqual(pool.run(), 0)
             self.assertEqual(seen, {"dep": "warm", "evidence": False, "fresh": True})
+
+    def test_a_read_only_dir_in_the_cloned_target_neither_leaks_the_lane_nor_its_evidence(self):
+        # The main tree's target/ralph/phase-b/ship/esc/seed is dr-xr-xr-x; the
+        # clone copies it into the lane, where it stopped the evidence reset
+        # and `git worktree remove --force` alike (2026-10-02).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "target/debug/ro/lib.rlib", "warm")
+            write(tmp, "target/ralph/phase-b/ship/esc/seed/config.toml", "seed")
+            for d in ("target/debug/ro", "target/ralph/phase-b/ship/esc/seed"):
+                os.chmod(root / d, 0o555)
+
+            class CheckingLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    write(self.cwd, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
+                    return super().run(model_args, prompt, log)
+
+            pool = self.make(root, lambda cwd, env=None: CheckingLane(cwd))
+            pool.CLONE_TARGET = ("cp", "-a")
+            self.assertEqual(pool.run(), 0)
+            self.assertFalse((root / ".ralph/wt/q-a").exists())
+            kept = root / "target/ralph/q/q-a"
+            self.assertEqual(sorted(p.relative_to(kept).as_posix() for p in kept.rglob("*")),
+                             ["lane.env", "q", "q/lint.log"])
 
     def test_a_target_that_cannot_be_cloned_is_named(self):
         with tempfile.TemporaryDirectory() as tmp:
