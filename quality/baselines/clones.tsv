@@ -3,7 +3,7 @@
 #   cargo run -p xtask -- clone-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clone-gate --tighten
-13820	(total covered lines)
+13804	(total covered lines)
 37	commonwealth/crates/commonwealth-core/src/mesh/mod.rs <-> sovereign/crates/sovereign-cli-mesh/src/daemon_store.rs
 60	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs
 32	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs <-> sovereign/crates/sovereign-serve/src/rails_mesh.rs
@@ -12,7 +12,6 @@
 24	commonwealth/crates/commonwealth-rails/src/gossip.rs <-> sovereign/crates/sovereign-daemon/src/peer_origin/claims.rs <-> sovereign/crates/sovereign-serve/src/rails_mesh.rs
 32	commonwealth/crates/commonwealth-rails/src/gossip.rs <-> sovereign/crates/sovereign-serve/src/rails_mesh.rs
 28	commonwealth/crates/commonwealth-rails/src/iroh_watchdog.rs <-> sovereign/crates/sovereign-contracts/src/daemon_wire/mesh.rs
-16	commonwealth/crates/commonwealth-rails/src/kv.rs <-> commonwealth/crates/commonwealth-rails/src/plane_seal.rs
 18	commonwealth/crates/commonwealth-rails/src/rail.rs <-> sovereign/crates/sovereign-daemon/src/routes_rail.rs
 26	commonwealth/crates/commonwealth-rails/src/rail.rs <-> sovereign/crates/sovereign-daemon/src/routes_rail_live.rs
 48	commonwealth/crates/commonwealth-state/src/backend.rs <-> commonwealth/crates/commonwealth-state/src/backend/memory.rs

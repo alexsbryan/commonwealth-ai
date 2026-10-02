@@ -1311,6 +1311,9 @@ desktop probes `/v1/models` and on success enters Attach: inference through
 `/v1/admin/reload`. **Boot is gated on identity, not on a port** —
 `ClientListener` is a watch (`Pending` / `Bound` / `Failed`) and
 `/status.process` carries `pid` + `run_id`, so a caller can ask WHO answered.
+On the dialing path `/status.serve_reach` names the follower's last read of
+serve's self-report (`answered`, `unreachable`, `did_not_answer_in_time`) and
+its age; `/status` never dials serve itself.
 A fixture daemon that loses the port, keeps running and logs success used to
 probe green while the app ingested into the operator's real daemon.
 
