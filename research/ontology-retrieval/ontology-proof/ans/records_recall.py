@@ -113,12 +113,19 @@ def main():
                     default=pathlib.Path.home() / ".svrnmesh/indexes/ei7-ans/atlas")
     ap.add_argument("--bank", type=pathlib.Path, default=HERE / "bank.toml")
     ap.add_argument("--json", type=pathlib.Path)
+    ap.add_argument("--local", type=pathlib.Path,
+                    help="a fixture's own ceiling ({row id: [members its text names]}, written by "
+                         "fixture_dev.py); scores only those rows, against that ceiling")
     a = ap.parse_args()
     ents, rels = load_atlas(a.atlas)
+    ceiling = json.loads(a.local.read_text()) if a.local else None
     qs = [q for q in tomllib.loads(a.bank.read_text())["questions"]
-          if q["category"] == "k1_list_them_all"]
-    rows = [row(ents, rels, q, json.loads((HERE / "gold" / f"{q['id']}.json").read_text()))
-            for q in qs]
+          if q["category"] == "k1_list_them_all" and (ceiling is None or q["id"] in ceiling)]
+    golds = {q["id"]: json.loads((HERE / "gold" / f"{q['id']}.json").read_text()) for q in qs}
+    if ceiling:
+        for qid, g in golds.items():
+            g["members_local"] = ceiling[qid]
+    rows = [row(ents, rels, q, golds[q["id"]]) for q in qs]
 
     hoards = [e for e in ents.values() if e.get("entity_type") == "hoard"]
     coins = [e for e in ents.values() if e.get("entity_type") == "coin"]
