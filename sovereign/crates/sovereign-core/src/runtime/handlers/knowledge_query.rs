@@ -1580,8 +1580,11 @@ impl Runtime {
             &chunks,
         );
         let corpus_deictic = crate::runtime::anchoring::question_is_corpus_deictic(message);
-        let gate_entity_anchored =
-            atlas_anchored || corpus_deictic || catalog_only || title_anchored;
+        let situation_deictic = crate::runtime::anchoring::question_is_situation_deictic(message);
+        let gate_entity_anchored = atlas_anchored
+            || crate::runtime::anchoring::question_closes_gk_exemption(message)
+            || catalog_only
+            || title_anchored;
         // Glassbox: the entity-anchor decision strips the GK-caveat exemption and
         // forces specific-claim verification — a load-bearing trust decision, one
         // per turn. Emit it for EVERY knowledge query (not only when it flips), each
@@ -1594,13 +1597,14 @@ impl Runtime {
             gate_entity_anchored,
             atlas_anchored,
             corpus_deictic,
+            situation_deictic,
             catalog_only,
             title_anchored,
             agentic_loop = agentic_entity_anchored,
             "entity-anchor decision (GK-caveat exemption closed when true)"
         );
         crate::runtime::grounding::dbg(&format!(
-            "[KQDIAG] gate_entity_anchored={gate_entity_anchored} atlas={atlas_anchored} deictic={corpus_deictic} catalog_only={catalog_only} title_anchored={title_anchored} loop_value={agentic_entity_anchored}"
+            "[KQDIAG] gate_entity_anchored={gate_entity_anchored} atlas={atlas_anchored} deictic={corpus_deictic} situation={situation_deictic} catalog_only={catalog_only} title_anchored={title_anchored} loop_value={agentic_entity_anchored}"
         ));
         // Re-stamp demand coverage against the FINAL pool — the
         // agentic loop may have widened it since the post-pipeline
