@@ -38,7 +38,9 @@ use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_rail::{Ed25519Verifier, RailAct, RailError, RingJournal, RingRail, Roster};
+use commonwealth_rail::{
+    Admission, Ed25519Verifier, RailAct, RailError, RingJournal, RingRail, Roster,
+};
 use commonwealth_state::rail_kv::{self, SEAL_AFTER_OWN_OPS};
 use commonwealth_state::{MeshStore, Outboxed, StoreEntry};
 use host_kit::shell::RouteBundle;
@@ -66,6 +68,12 @@ pub struct KvHost {
     /// Namespaces the ingest door took new peer ops for since the last tick;
     /// [`KvHost::project_dirty`] folds each once (fp-109).
     dirty: Mutex<BTreeSet<String>>,
+    /// Per namespace, the seq of this node's admitted snapshot mark for its
+    /// current floor, which the seal bar counts above (see
+    /// [`own_floor_and_mark`]). Learnt from an admission or from the mark
+    /// this pump just wrote, so the cheap line count can start there too and
+    /// stay an upper bound; absent, the cheap count takes every own line.
+    snapshot_base: Mutex<HashMap<String, u64>>,
 }
 
 /// What one [`KvHost::pump_once`] did — returned so a test asserts on the
@@ -104,6 +112,7 @@ impl KvHost {
             self_id,
             self_pubkey,
             dirty: Mutex::new(BTreeSet::new()),
+            snapshot_base: Mutex::new(HashMap::new()),
         })
     }
 
@@ -401,10 +410,13 @@ impl KvHost {
         Ok((journal, roster))
     }
 
-    /// Seal and snapshot `journal` if this node's own ops at or above its
-    /// floor have passed `SEAL_AFTER_OWN_OPS`. The raw line count gates the
-    /// admission (admitted-above-floor can never exceed it), so the verify
-    /// cost is paid only when a seal may be due.
+    /// Seal and snapshot `journal` if this node's own ops since its last
+    /// snapshot have passed `SEAL_AFTER_OWN_OPS` — the snapshot's rows are its
+    /// live set restated and do not count, or a live set over the bar
+    /// re-seals on every write (F13, pc-rails-reseal-loop). The raw line
+    /// count above the cached snapshot base gates the admission (the admitted
+    /// count can never exceed it), so the verify cost is paid only when a
+    /// seal may be due.
     async fn seal_if_due(&self, journal: &RingJournal, roster: &Roster, out: &mut PumpOutcome) {
         let namespace = journal.namespace();
         // Local-only journals are sealed too: since the daemon pump's KV half
@@ -414,8 +426,12 @@ impl KvHost {
             return;
         }
         let mine = self.rail.signer().actor();
+        let base = self.snapshot_base(namespace);
         let own_lines = match journal.read() {
-            Ok((ops, _)) => ops.iter().filter(|o| o.actor == mine).count(),
+            Ok((ops, _)) => ops
+                .iter()
+                .filter(|o| o.actor == mine && base.is_none_or(|b| o.kind.seq > b))
+                .count(),
             Err(e) => {
                 warn!(target: "rails", namespace, error = %e, "kv pump: the journal could not be read for the seal check");
                 return;
@@ -431,17 +447,21 @@ impl KvHost {
                 return;
             }
         };
-        let floor = admission.floors.get(&mine).copied().unwrap_or(0);
-        let own_above_floor = admission
+        let (floor, mark) = own_floor_and_mark(&admission, &mine);
+        self.set_snapshot_base(namespace, mark);
+        let own_since_snapshot = admission
             .ops
             .iter()
-            .filter(|o| o.actor == mine && o.seq >= floor)
+            .filter(|o| o.actor == mine && mark.map_or(o.seq >= floor, |m| o.seq > m))
             .count();
-        if own_above_floor < SEAL_AFTER_OWN_OPS {
-            debug!(target: "rails", namespace, own_lines, own_above_floor, floor,
+        if own_since_snapshot < SEAL_AFTER_OWN_OPS {
+            debug!(target: "rails", namespace, own_lines, own_since_snapshot, floor, snapshot_mark = ?mark,
                    "kv pump: the cheap line count cleared the bar and the admitted count did not");
             return;
         }
+        // The seal moves the floor, so the base above is stale whatever
+        // happens next; the snapshot's mark, if it lands, is the new one.
+        self.set_snapshot_base(namespace, None);
         let sealed = match journal.seal(self.rail.signer(), roster, &Ed25519Verifier) {
             Ok(s) => s,
             Err(e) => {
@@ -451,25 +471,41 @@ impl KvHost {
         };
         out.sealed += 1;
         if let Ok(done) = &sealed.retired {
-            info!(target: "rails", namespace, own_above_floor, removed = done.removed,
-                  kept = done.kept, "kv pump: sealed a store namespace");
+            info!(target: "rails", namespace, own_since_snapshot, snapshot_mark = ?mark,
+                  removed = done.removed, kept = done.kept, "kv pump: sealed a store namespace");
         }
-        out.snapshot_rows += self.snapshot(journal, roster, sealed.op.kind.seq);
+        let (rows, new_mark) = self.snapshot(journal, roster, sealed.op.kind.seq);
+        out.snapshot_rows += rows;
+        self.set_snapshot_base(namespace, new_mark);
+    }
+
+    fn snapshot_base(&self, namespace: &str) -> Option<u64> {
+        let bases = self.snapshot_base.lock().unwrap_or_else(|p| p.into_inner());
+        bases.get(namespace).copied()
+    }
+
+    fn set_snapshot_base(&self, namespace: &str, mark: Option<u64>) {
+        let mut bases = self.snapshot_base.lock().unwrap_or_else(|p| p.into_inner());
+        match mark {
+            Some(m) => bases.insert(namespace.to_string(), m),
+            None => bases.remove(namespace),
+        };
     }
 
     /// Re-append this node's live rows above the floor its seal just set,
     /// then the mark that closes the snapshot — without it a seal is a delete.
     /// Only rows this node ORIGINATED; the mark is written last, and one that
     /// could not be written claims nothing (the failure direction is "do not
-    /// retire").
-    fn snapshot(&self, journal: &RingJournal, roster: &Roster, floor: u64) -> usize {
+    /// retire"). Returns the rows re-appended and the mark's seq, `None` when
+    /// the mark could not be written.
+    fn snapshot(&self, journal: &RingJournal, roster: &Roster, floor: u64) -> (usize, Option<u64>) {
         let namespace = journal.namespace();
         let rows = match self.store.scan(namespace, "") {
             Ok(r) => r,
             Err(e) => {
                 warn!(target: "rails", namespace, error = %e,
                       "kv pump: the live set could not be read, so the seal retired rows nothing replaced");
-                return 0;
+                return (0, None);
             }
         };
         // One batch, so the log is read once for the whole snapshot rather
@@ -509,16 +545,42 @@ impl KvHost {
                     .map_err(|e| e.to_string())
             });
         match mark {
-            Ok(_) => {
+            Ok(op) => {
                 info!(target: "rails", namespace, appended, peers_rows_skipped = skipped, floor,
-                           "kv pump: snapshotted this node's live rows above the new floor, and closed it")
+                      mark_seq = op.kind.seq,
+                      "kv pump: snapshotted this node's live rows above the new floor, and closed it");
+                (appended, Some(op.kind.seq))
             }
-            Err(e) => warn!(target: "rails", namespace, appended, floor, error = %e,
-                            "kv pump: the snapshot could not be closed, so peers will keep \
-                             whatever of ours they already hold"),
+            Err(e) => {
+                warn!(target: "rails", namespace, appended, floor, error = %e,
+                      "kv pump: the snapshot could not be closed, so peers will keep \
+                       whatever of ours they already hold");
+                (appended, None)
+            }
         }
-        appended
     }
+}
+
+/// This node's floor in `admission`, and the seq of its own admitted snapshot
+/// mark that closes that floor, if one is held.
+///
+/// The ONE reading of what the seal bar counts: own ops above that mark, the
+/// writes since the last snapshot — or, with no mark (never sealed, or a
+/// snapshot that could not be closed), own ops from the floor. Between the
+/// floor and the mark lies the snapshot, the live set restated: counting it
+/// let a live set over `SEAL_AFTER_OWN_OPS` clear the bar by itself, so every
+/// write-bearing tick re-sealed (F13: the deployed node's rails.log showed 64
+/// seals of activity-private since 14:47Z, one for every other namespace).
+fn own_floor_and_mark(admission: &Admission, mine: &str) -> (u64, Option<u64>) {
+    let floor = admission.floors.get(mine).copied().unwrap_or(0);
+    let mark = admission
+        .ops
+        .iter()
+        .filter(|o| o.actor == mine && o.seq > floor && o.applies())
+        .filter(|o| o.payload.as_ref().and_then(rail_kv::read_snapshot_mark) == Some(floor))
+        .map(|o| o.seq)
+        .max();
+    (floor, mark)
 }
 
 /// Drain the store forever, and run the two plane seal arms

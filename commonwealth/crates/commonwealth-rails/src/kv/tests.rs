@@ -7,7 +7,7 @@ use std::sync::Arc;
 use commonwealth_core::capabilities::OriginKind;
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
-use commonwealth_rail::{Ed25519Verifier, RingRail, SigningKey};
+use commonwealth_rail::{Ed25519Verifier, RailAct, RingRail, SigningKey};
 use commonwealth_state::rail_kv::{self, SEAL_AFTER_OWN_OPS};
 use tokio::sync::RwLock;
 
@@ -415,4 +415,58 @@ async fn the_pump_appends_a_door_write_and_seals_past_the_threshold() {
     again.project_all_on_disk().await;
     assert_eq!(again.store.scan(NS, "live/").unwrap().len(), 3);
     assert!(again.store.scan(NS, "pad/").unwrap().is_empty());
+}
+
+/// **A live set over the bar seals once, not on every write after.** The
+/// snapshot re-appends the whole live set above the new floor; counted
+/// toward the bar, a live set of `SEAL_AFTER_OWN_OPS` or more cleared it by
+/// itself and every tick that appended anything re-sealed (F13). The bar
+/// counts this node's writes since its snapshot, so the next seal waits for
+/// that many new writes, from the cache and after a restart alike.
+#[tokio::test]
+async fn a_live_set_over_the_bar_seals_once_not_on_every_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let mesh = solo_mesh();
+    let host = host_at(dir.path(), &mesh);
+    let me = NodeId::from_u128(ME);
+    let live = SEAL_AFTER_OWN_OPS + 5;
+    for i in 0..live {
+        host.store.set(NS, &format!("live/{i}"), "x".into(), me).unwrap();
+    }
+    let first = drain(&host).await;
+    assert_eq!(first.sealed, 1, "{first:?}");
+    assert_eq!(first.snapshot_rows, live, "{first:?}");
+
+    // One more write: the snapshot's rows do not count, so no re-seal.
+    host.store.set(NS, "live/0", "y".into(), me).unwrap();
+    let next = drain(&host).await;
+    assert_eq!((next.appended, next.sealed), (1, 0), "{next:?}");
+
+    // A restart has no cached base and reads the mark off the admission.
+    let again = host_at(dir.path(), &mesh);
+    again.project_all_on_disk().await;
+    again.store.set(NS, "live/1", "y".into(), me).unwrap();
+    let after_restart = drain(&again).await;
+    assert_eq!((after_restart.appended, after_restart.sealed), (1, 0), "{after_restart:?}");
+
+    // The bar still holds for real writes, at exactly SEAL_AFTER_OWN_OPS
+    // since the mark. The padding goes straight onto the journal in one
+    // batch: the outbox drains one append per row, the slow part of this test.
+    let journal = again.rail.journal(NS).unwrap();
+    let roster = again.rail.roster(&journal).await.unwrap();
+    let pad: Vec<RailAct> = (0..SEAL_AFTER_OWN_OPS - 4)
+        .map(|i| RailAct::Record {
+            payload: rail_kv::to_payload(&format!("pad/{i}"), None, 1).unwrap(),
+        })
+        .collect();
+    journal
+        .append_all(pad, again.rail.signer(), &roster, None)
+        .unwrap();
+    again.store.set(NS, "live/2", "z".into(), me).unwrap();
+    let short = drain(&again).await;
+    assert_eq!(short.sealed, 0, "one write short of the bar: {short:?}");
+    again.store.set(NS, "live/3", "z".into(), me).unwrap();
+    let due = drain(&again).await;
+    assert_eq!(due.sealed, 1, "{due:?}");
+    assert_eq!(due.snapshot_rows, live, "{due:?}");
 }
