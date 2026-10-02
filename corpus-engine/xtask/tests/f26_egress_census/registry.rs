@@ -57,8 +57,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // this host's serve, moved from the daemon's serve_client at
     // pb-meshapp-rest so code's editor door shares it. 1 -> 2
     // (pb-mesh-exit-transport): `read_engine_state` moved here from the
-    // daemon's serve_client so `svrn mesh plan|bench` share it.
-    ("sovereign/crates/sovereign-turn-client/src/serve_self.rs", Class::LocalDaemon, 2),
+    // daemon's serve_client so `svrn mesh plan|bench` share it. 2 -> 1
+    // (pc-split-deploy-honesty-serve-reach, cf4ead9cc): both reads go
+    // through one bounded reader.
+    ("sovereign/crates/sovereign-turn-client/src/serve_self.rs", Class::LocalDaemon, 1),
     // sovereign-mobile: the phone's ApiClient — one `reqwest::Client`, one
     // `TurnClient::new(base_url)` over the same client family the desktop
     // and CLI use (sv-surface R6, 4e1f99f55), and the response parser.

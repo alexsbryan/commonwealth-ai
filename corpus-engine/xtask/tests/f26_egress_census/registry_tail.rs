@@ -197,6 +197,9 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // fetch-model's peer client moved here, whole, from sovereign-cli-mesh's
     // mesh_cmd.rs (c2529c94c): the mesh row went 8 -> 7, same class.
     ("sovereign/crates/sovereign-serve/src/fetch_model.rs", Class::Mesh, 1),
+    // pc-fetch-model-peer-discovery (8975bf4e0): the test lists files from
+    // the stub origin it bound on loopback (tests.rs:101).
+    ("sovereign/crates/sovereign-serve/src/fetch_model/tests.rs", Class::TestOnly, 1),
     // lib_tests.rs and reload.rs: `#[cfg(test)]` modules posting to a router
     // the test bound on loopback. lib.rs's tests moved under #[path] to
     // lib_tests.rs at 47e67b4db; the row followed at pb-meshapp-rest.

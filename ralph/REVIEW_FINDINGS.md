@@ -4680,3 +4680,81 @@ noun has more than one production definition.
   `deletion-manifest --verify` fail as at pb-auto-12 (p0-root-junk
   323069 > 113934); `size-gate` reports 77 keys grown (75 at pb-auto-12);
   concept-gate and domains-census-self-test are could-not-judge, as before.
+
+## REVIEW-audit-pc-auto-2 (2026-10-02, range 2765e8c8c..568752baf, since REVIEW-audit-pc-auto-1)
+
+64 commits, 11 units. TESTALL 13736 pass / 2 fail before this audit's
+commit (both census drift, below), PREPUSH exit 0, BOUNDARY 0 violations,
+clone-gate 13792 = baseline.
+
+### (1) Net lines, `.rs`, merges excluded, by subject's unit id (src | tests)
+
+Tests means a `tests/` path or a `tests.rs` file; inline `#[cfg(test)]`
+modules count as src, so gk-rescue and serve-reach's tests sit in src.
+
+| unit | src | tests |
+|---|---|---|
+| pc-split-deploy-honesty-serve-reach | +215 -47 = +168 | 0 |
+| pc-cli-config-load-silent-default-base | +334 -164 = +170 | +87 -10 = +77 |
+| pc-cli-config-load-silent-default | +209 -80 = +129 | +110 |
+| pc-gk-rescue-fabrication | +128 -8 = +120 | 0 |
+| pc-solo-durable | +244 -153 = +91 | +179 -7 = +172 |
+| pc-rejoin-tombstone | +43 -2 = +41 | +16 -1 = +15 |
+| pc-rendezvous-stable-hash | +45 -11 = +34 | 0 |
+| pc-fetch-model-peer-discovery | +74 -56 = +18 | +135 |
+| pc-knowledge-gym-noresults | +36 -18 = +18 | +91 -2 = +89 |
+| pc-atlas-highlight-determinism | +13 -6 = +7 | +23 |
+| revert 85fed82d1 (of 7fb5bfd10) | +18 -36 = -18 | +2 -91 = -89 |
+
+### (2) dry-report over the 20 touched crate dirs: could-not-judge
+
+The corpus the reports read was indexed at f12a348f (2026-09-27), before the
+range: `symbols` found none of `journal_before_ack` or
+`question_is_situation_deictic`. Against that index, the 20 reports show
+no clone whose side is one of the range's 62 added fn/type names.
+That is a reading of the old tree, not a verdict on this range. The
+attempt to refresh the index removed the corpus instead; see the last
+finding.
+
+### (3) New nouns, by `git grep` at HEAD
+
+EngineStateRead (serve_self.rs:56), ServeReach (provider.rs:251) and
+ServeReachStatus (provider.rs:261) have one definition each. KvLookup,
+KvScanQuery and KvSetBody have two (below), but they were moved in the
+range (7cca80c67), not added.
+
+### Findings
+
+- **ARCH 5 (drift), fixed in this section's commit** · TESTALL failed
+  `f26_egress_boundary_census`: serve_self.rs's site count went 2 -> 1 when
+  cf4ead9cc folded both reads into `read_bounded`, and 8975bf4e0 added an
+  unregistered test-only site at sovereign-serve/src/fetch_model/tests.rs:101.
+  The registry row became 1 and the new site was registered TestOnly
+  (f26_egress_census/registry.rs:63, registry_tail.rs:202).
+- **ARCH 5 (drift), fixed in this section's commit** · `conformance_tags_are_fresh`:
+  quality/conformance/commonwealth-rails.toml pinned membership.rs:96 (now 97,
+  pc-rejoin-tombstone) and sovereign-daemon.toml pinned routes_status.rs:780
+  (now 786, pc-split-deploy-honesty-serve-reach). Tags regenerated; both tests pass.
+- **ARCH 9, recorded, phase-d** · sovereign-core/src/runtime/anchoring.rs:330
+  `question_is_situation_deictic` (ee7cf6b12) judges open text with keyword
+  tables (WORLD_SCALE, WEEKDAYS, ORG_DEFINITE). Its sibling
+  `question_is_corpus_deictic` (anchoring.rs:301) has the same shape. The
+  queued pc-gate-gk-exemption-deictic should read this predicate, not
+  re-derive it (ARCH 8).
+- **ARCH 8, recorded, phase-d** · commonwealth-rails/src/kv/doors.rs:28,36,44
+  `KvLookup`/`KvScanQuery`/`KvSetBody` twin sovereign-contracts/src/peer.rs:137,144,156.
+  These are wire twins across the package boundary, older than the range.
+  They are a phase-d question, as any copy made to avoid an edge is.
+- **ARCH 6, already filed** · 10 `SetupConfig::load().ok()` sites remain
+  (e.g. sovereign-cli-bench quality_lane_cmd/chat_ask.rs:1436,
+  throughput.rs:859); pc-config-load-fallback-residue owns them.
+- **advisory lanes, recorded** · `size-gate` 79 keys grown (77 at pc-auto-1);
+  `deletion-manifest` p0-root-junk 323069 > 113934 and `hakari-verify` fail
+  as before; concept-gate and domains-census-self-test could-not-judge.
+- **instrument, broken by this audit, NEEDS_HUMAN** · `sovereign-cli code
+  index .` judged 1906 changed files past its 500-file guard and began a
+  FULL rebuild. That removed ~/.svrnmesh/indexes/commonwealth-ai/chunks.lance
+  (only 5 sidecar files are kept) and wrote the new chunks to
+  commonwealth-ai-partition-local. The 590 s timeout killed it at 5632
+  chunks. `code dry-report` and `code converge` now refuse ("none of them was
+  built from this repo"); `symbols` still answers from scip_graph.db.

@@ -14,8 +14,8 @@
 requirement = "FE-10"
 test = "commonwealth-rails::membership::every_membership_verb_answers_through_cw_rails_alone"
 file = "commonwealth/crates/commonwealth-rails/tests/membership.rs"
-line = 96
-asserts = 41
+line = 97
+asserts = 43
 
 [[claim]]
 requirement = "FE-15"
@@ -35,5 +35,5 @@ asserts = 3
 requirement = "FE-7"
 test = "commonwealth-rails::membership::every_membership_verb_answers_through_cw_rails_alone"
 file = "commonwealth/crates/commonwealth-rails/tests/membership.rs"
-line = 96
-asserts = 41
+line = 97
+asserts = 43
