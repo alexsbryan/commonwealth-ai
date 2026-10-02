@@ -97,6 +97,9 @@ pub struct SummaryProjection {
     /// place because the tree now has both. Separate from `atoms_written`: the
     /// atlas gains no atom and no seed row, it gains provenance.
     pub repaired: usize,
+    /// Summary atoms removed because their node is no longer installed (a
+    /// rebuilt tree), with their `Composes` edges and seed rows.
+    pub retired: usize,
     /// Rows whose article resolved to no atlas directory on disk.
     pub unresolved_article: usize,
     /// Rows with an empty stored embedding — no seed row possible.
@@ -127,6 +130,12 @@ impl SummaryProjection {
                 self.repaired
             ));
         }
+        if self.retired > 0 {
+            s.push_str(&format!(
+                "; {} Summary atoms of a tree no longer installed retired",
+                self.retired
+            ));
+        }
         if self.skipped_already_present > 0 {
             s.push_str(&format!(
                 "; {} already projected (skipped)",
@@ -139,6 +148,36 @@ impl SummaryProjection {
         }
         s
     }
+}
+
+/// Rebuild the seed table without `retired` keys, plus `seeds`. Kept rows keep
+/// their stored vectors (never re-embedded); replaced as the daemon's backfill
+/// replaces it (`build_persistent_ann_seed_table`). Returns the seeds added.
+async fn rebuild_seed_table(
+    dir: &Path,
+    retired: &HashSet<String>,
+    seeds: &[(String, Vec<f32>)],
+) -> Result<usize, String> {
+    let mut rows: Vec<(String, Vec<f32>)> = if dir.exists() {
+        AnnSeedTable::open(dir)
+            .await?
+            .all_rows()
+            .await?
+            .into_iter()
+            .filter(|(k, _)| !retired.contains(k))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    rows.extend(seeds.iter().cloned());
+    if dir.exists() {
+        std::fs::remove_dir_all(dir).map_err(|e| format!("remove ANN table dir: {e}"))?;
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("create ANN table dir: {e}"))?;
+    if !rows.is_empty() {
+        AnnSeedTable::build(dir, &rows).await?;
+    }
+    Ok(seeds.len())
 }
 
 /// The atlas directory a summary of `title` belongs in, or `None`.
@@ -303,6 +342,36 @@ pub async fn write_summary_atoms(
     for (atlas_dir, article_rows) in by_atlas {
         let existing = read_atlas_atoms(&atlas_dir)
             .map_err(|e| format!("read {}: {e}", atlas_dir.join("atoms.json").display()))?;
+        // Retire the Summary atoms of a tree no longer installed. A rebuild
+        // mints new node ids and this writer only appended, so after one
+        // `enrich raptor --force` the pilot atlas held 14 old summaries beside
+        // 14 new ones, and the walk reached both.
+        let current: HashSet<String> = article_rows
+            .iter()
+            .map(|r| atom_id_of(&r.node_id).as_str().to_string())
+            .collect();
+        let retired: HashSet<String> = existing
+            .atoms()
+            .iter()
+            .filter(|a| matches!(a, AtomEnvelope::Summary(_)))
+            .map(|a| a.id().as_str().to_string())
+            .filter(|id| !current.contains(id))
+            .collect();
+        let kept: Vec<AtomEnvelope> = existing
+            .atoms()
+            .iter()
+            .filter(|a| !retired.contains(a.id().as_str()))
+            .cloned()
+            .collect();
+        report.retired += retired.len();
+        if !retired.is_empty() {
+            tracing::info!(
+                atlas = %atlas_dir.display(),
+                retired = retired.len(),
+                installed = current.len(),
+                "summary_atoms: retiring Summary atoms of a tree no longer installed"
+            );
+        }
         // Presence alone is the WRONG skip predicate, and that is what left
         // both RAPTOR corpora permanently uncitable. A `Summary` atom with
         // neither evidence nor children is the damage shape of a projection
@@ -318,7 +387,7 @@ pub async fn write_summary_atoms(
         // because the first one filled the fields the predicate reads.
         let mut present: HashSet<String> = HashSet::new();
         let mut repairable: HashSet<String> = HashSet::new();
-        for a in existing.atoms() {
+        for a in &kept {
             present.insert(a.id().as_str().to_string());
             if let AtomEnvelope::Summary(s) = a {
                 if s.evidence.is_empty() && s.children.is_empty() {
@@ -339,7 +408,18 @@ pub async fn write_summary_atoms(
                 atlas_dir.join("edges.json").display()
             )
         })?;
-        let mut next_edge_ix = edges_file.edges.len();
+        // Once edges can leave, the count is no longer the next free id: take
+        // the highest id on disk.
+        let mut next_edge_ix = edges_file
+            .edges
+            .iter()
+            .filter_map(|e| e.id.as_str().strip_prefix("edge-")?.parse::<usize>().ok())
+            .max()
+            .map_or(0, |m| m + 1)
+            .max(edges_file.edges.len());
+        edges_file.edges.retain(|e| {
+            !retired.contains(e.source.as_str()) && !retired.contains(e.target.as_str())
+        });
 
         let mut atoms: Vec<AtomEnvelope> = Vec::new();
         let mut repaired: Vec<AtomEnvelope> = Vec::new();
@@ -445,7 +525,7 @@ pub async fn write_summary_atoms(
         // repair substitutes an atom under an id the file already holds, which
         // `append_atoms_and_edges` cannot express, and with no repairs the
         // merged set is exactly what appending produces.
-        let mut merged: Vec<AtomEnvelope> = existing.atoms().to_vec();
+        let mut merged: Vec<AtomEnvelope> = kept;
         for fixed in repaired {
             match merged
                 .iter_mut()
@@ -479,7 +559,17 @@ pub async fn write_summary_atoms(
             )
             .map_err(|e| format!("write atoms to {}: {e}", atlas_dir.display()))?;
 
-        if !seeds.is_empty() {
+        if !retired.is_empty() {
+            match rebuild_seed_table(&ann_table_dir(&atlas_dir), &retired, &seeds).await {
+                Ok(n) => report.seeds_written += n,
+                Err(e) => report.degradations.push(format!(
+                    "{}: retired {} Summary atoms but the seed table was not rebuilt ({e}) \
+                     — vector seeding may reach summaries no longer installed",
+                    atlas_dir.display(),
+                    retired.len()
+                )),
+            }
+        } else if !seeds.is_empty() {
             match AnnSeedTable::append_rows(&ann_table_dir(&atlas_dir), &seeds).await {
                 Ok(n) => report.seeds_written += n,
                 Err(e) => {

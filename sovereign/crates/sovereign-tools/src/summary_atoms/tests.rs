@@ -169,6 +169,64 @@ async fn projecting_twice_writes_the_atoms_once() {
     assert!(stub.atoms().is_empty());
 }
 
+/// A rebuilt tree replaces the one it rebuilt.
+///
+/// Every rebuild mints new node ids, and the projection only appended: after
+/// one `enrich raptor --force` on the pilot the atlas held 14 Summary atoms
+/// of the old tree beside 14 of the new, and the walk reached both.
+#[tokio::test]
+async fn a_rebuilt_tree_retires_the_summaries_it_replaced() {
+    let root = tempdir().unwrap();
+    std::fs::create_dir_all(root.path().join("sep")).unwrap();
+    empty_atlas(&root.path().join("sep").join("atlas"));
+    empty_atlas(&root.path().join("sep-abduction").join("atlas"));
+    let tree = |first: usize| -> Vec<RaptorSummaryRow> {
+        (first..first + 3)
+            .map(|i| RaptorSummaryRow {
+                node_id: format!("node-{i}"),
+                conv_uuid: "https://plato.stanford.edu/entries/abduction/".into(),
+                level: 0,
+                summary: format!("rollup {i}"),
+                embedding: emb(i),
+            })
+            .collect()
+    };
+    let marked: Arc<Mutex<Vec<PathBuf>>> = Arc::default();
+    write_summary_atoms(&port(tree(0), Arc::clone(&marked)), root.path(), "sep")
+        .await
+        .unwrap();
+    let rebuilt = write_summary_atoms(&port(tree(10), marked), root.path(), "sep")
+        .await
+        .unwrap();
+    assert_eq!(rebuilt.retired, 3);
+
+    let article_atlas = root.path().join("sep-abduction").join("atlas");
+    let want: HashSet<String> = (10..13)
+        .map(|i| {
+            AtomId::summary_content_hash(&format!("node-{i}"), "sep")
+                .as_str()
+                .to_string()
+        })
+        .collect();
+    let atoms: HashSet<String> = read_atlas_atoms(&article_atlas)
+        .unwrap()
+        .atoms()
+        .iter()
+        .map(|a| a.id().as_str().to_string())
+        .collect();
+    assert_eq!(atoms, want, "atoms.json holds a tree that is not installed");
+    let seeds: HashSet<String> = AnnSeedTable::open(&ann_table_dir(&article_atlas))
+        .await
+        .unwrap()
+        .all_rows()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(seeds, want, "the seed table still reaches the old tree");
+}
+
 /// The atoms the idempotence check used to strand.
 ///
 /// Failing input, named: project with no checkpoint (a legitimate, REPORTED
