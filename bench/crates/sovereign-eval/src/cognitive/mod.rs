@@ -139,8 +139,5 @@ pub fn run_suite(opts: SuiteOpts<'_>) -> Result<Report> {
 
 /// Default bank root — `<workspace>/bench/lanes/cognitive`.
 pub fn default_bank_root(workspace_root: &Path) -> PathBuf {
-    workspace_root
-        .join("sovereign")
-        .join("inquiries")
-        .join("cognitive")
+    workspace_root.join("bench").join("lanes").join("cognitive")
 }

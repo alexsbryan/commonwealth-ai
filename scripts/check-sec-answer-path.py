@@ -303,7 +303,7 @@ def main():
     # fixture, and `--prose-dir` remains available to point elsewhere.
     ap.add_argument("--prose-dir",
                     default=str(Path(__file__).resolve().parent.parent
-                                / "sovereign" / "bench" / "sec-filings" / "prose"),
+                                / "bench" / "lanes" / "sec-filings" / "prose"),
                     help="filing prose parts (for required_quote verification); "
                          "defaults to bench/lanes/sec-filings/prose")
     ap.add_argument("--records",

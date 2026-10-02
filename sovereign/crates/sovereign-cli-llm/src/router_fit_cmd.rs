@@ -724,7 +724,7 @@ fn baseline_dir_for_bank(root: &Path, bank_path: &Path) -> PathBuf {
     .and_then(|s| s.to_str())
     .unwrap_or("calibration");
     sovereign_contracts::baselines::baseline_dir(
-        &root.join("sovereign").join("bench"),
+        &root.join("bench").join("lanes"),
         "routing",
         &format!("{stem}-fit"),
     )
