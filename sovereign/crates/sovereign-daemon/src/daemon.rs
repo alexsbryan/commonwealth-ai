@@ -443,6 +443,15 @@ impl EmbeddedDaemon {
             .and_then(|s| s.core.corpus_engine.as_ref())
     }
 
+    /// The distribution's posture: what it serves of svrn's own surfaces,
+    /// and where its named absences point. `Open` for a daemon with no
+    /// serving profile.
+    pub fn posture(&self) -> crate::posture::Posture {
+        self.services
+            .serving()
+            .map_or(crate::posture::Posture::Open, |s| s.capability.posture)
+    }
+
     /// Borrow ingest's atlas port, composed beside [`Self::corpus_engine`].
     pub fn atlas(&self) -> Option<&Arc<dyn corpus_engine_atlas_reader::ports::AtlasPort>> {
         self.services.serving().and_then(|s| s.core.atlas.as_ref())
@@ -1153,6 +1162,7 @@ impl EmbeddedDaemon {
             code_edit_door = node_seed.edit_door.is_some(),
             "daemon: code's editor door (/v1/edit_predictions)"
         );
+        node_seed.posture = self.posture();
         // Ingest's atlas port, when the distribution composed ingest here
         // (pb-ingest-dial-daemon); the atlas routes name its absence.
         node_seed.atlas = self.atlas().cloned();
@@ -1375,10 +1385,7 @@ impl EmbeddedDaemon {
             .serving()
             .and_then(|s| s.capability.mcp.mount())
             .cloned();
-        let posture = self
-            .services
-            .serving()
-            .map_or(crate::posture::Posture::Open, |s| s.capability.posture);
+        let posture = self.posture();
         let mut mounted: Vec<axum::Router> = Vec::new();
         let mut mount_names: Vec<&'static str> = Vec::new();
         if self.services.serves_host_surface() {

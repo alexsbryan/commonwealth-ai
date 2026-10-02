@@ -98,6 +98,24 @@ impl SearchTool {
 /// see drift.
 pub const SEARCH_TOOL_DESCRIPTION: &str = include_str!("../assets/search_tool_description.md");
 
+/// The description of a `search` built with no web fallback
+/// ([`SearchTool::new`]): the corpora only, and no web or web budget, because
+/// a tool that cannot reach the web must not tell the model it can (a sealed
+/// daemon's turn, phase-c pc-onprem-followups).
+pub const SEARCH_TOOL_DESCRIPTION_LOCAL: &str =
+    include_str!("../assets/search_tool_description_local.md");
+
+/// What a `search` tells the model about itself: with a web fallback the
+/// gym-pinned description and `External`; without one the corpus-only
+/// description and `Persistent`.
+fn search_surface(web: bool) -> (&'static str, Scope) {
+    if web {
+        (SEARCH_TOOL_DESCRIPTION, Scope::External)
+    } else {
+        (SEARCH_TOOL_DESCRIPTION_LOCAL, Scope::Persistent)
+    }
+}
+
 /// Canonical system prompt for chats where the search tool is
 /// enabled. Mirrors SEARCH_TOOL_DESCRIPTION's rules but framed as a
 /// direct instruction to the model rather than a tool description.
@@ -113,11 +131,16 @@ impl Tool for SearchTool {
         Some(sovereign_contracts::tool_bundle::ToolFamily::Search)
     }
 
+    /// Without a web fallback the descriptor says so twice: a corpus-only
+    /// description, and `Scope::Persistent` (the local store it reads)
+    /// rather than `External`, which is what a turn reads to decide whether
+    /// the web is in reach.
     fn descriptor(&self) -> ToolDescriptor {
+        let (description, scope) = search_surface(self.web.is_some());
         ToolDescriptor {
             id: "search".to_string(),
             name: "Search".to_string(),
-            description: SEARCH_TOOL_DESCRIPTION.trim().to_string(),
+            description: description.trim().to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -132,7 +155,7 @@ impl Tool for SearchTool {
             effect: Effect::Read,
             idempotency: Idempotency::Idempotent,
             latency: Latency::Slow,
-            scope: Scope::External,
+            scope,
             output_schema: Some(serde_json::json!({
                 "type": "string",
                 "description": "Synthesised answer with inline citation markers \
@@ -637,6 +660,21 @@ mod tests {
                 || desc.contains("character-for-character"),
             "description should require verbatim URL copy"
         );
+    }
+
+    /// A corpus-only `search` names no web and claims no external scope; the
+    /// web-backed one keeps the gym-pinned text. Failing input: describe both
+    /// with `SEARCH_TOOL_DESCRIPTION` and the corpus-only one offers the web.
+    #[test]
+    fn a_corpus_only_search_describes_no_web() {
+        let (local, local_scope) = search_surface(false);
+        assert_eq!(local_scope, Scope::Persistent);
+        assert!(local.contains("does not reach the web"), "{local}");
+        assert!(!local.contains("optionally the web"), "{local}");
+        assert!(!local.contains("budget"), "{local}");
+        let (web, web_scope) = search_surface(true);
+        assert_eq!(web_scope, Scope::External);
+        assert_eq!(web, SEARCH_TOOL_DESCRIPTION);
     }
 
     #[test]

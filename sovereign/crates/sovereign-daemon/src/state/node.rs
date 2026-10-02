@@ -68,6 +68,10 @@ pub struct NodeSeed {
     /// (`hosted_code::CodeMount::edit_routes`, pb-meshapp-rest). `None` mounts
     /// the named absence pointing at `svrn code`.
     pub edit_door: Option<axum::Router>,
+    /// The distribution's posture (`EmbeddedDaemon::posture`): where a
+    /// named absence points (`Posture::code_pointer`). `Open` until the
+    /// daemon hands in its own.
+    pub posture: crate::posture::Posture,
     /// Ingest's atlas port, when a distribution composed ingest into this
     /// process (`process::HostedIngest`, pb-ingest-dial-daemon). `None` is
     /// svrn alone: the atlas routes name the absence.
@@ -160,6 +164,8 @@ impl NodeSeed {
             rails_base: crate::rails_client::resolve_rails_base(&daemon),
             // Handed in by the daemon from what code's composition mounted.
             edit_door: None,
+            // Handed in by the daemon from its services.
+            posture: crate::posture::Posture::Open,
             // Handed in by the daemon from what ingest's composition mounted.
             atlas: None,
         })
@@ -230,6 +236,8 @@ pub struct NodePart {
     /// Code's editor door, mounted by every surface that serves the general
     /// client routes; `None` is svrn alone ([`NodeSeed::edit_door`]).
     pub edit_door: Option<axum::Router>,
+    /// The distribution's posture ([`NodeSeed::posture`]).
+    pub posture: crate::posture::Posture,
     /// Ingest's atlas port; `None` is svrn alone ([`NodeSeed::atlas`]).
     pub atlas: Option<Arc<dyn AtlasPort>>,
     /// Unix-seconds timestamp of the last foreground inference request

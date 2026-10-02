@@ -173,7 +173,7 @@ crates/
 ├── sovereign-serving-host   # Serving's host tier — peer_inference, admission, turn_admission, entry_endpoint
 ├── sovereign-serve          # `serve`, the model server binary — the OpenAI wire alone (no mesh, no cw-rails) over the one serving assembly
 ├── sovereign-stock          # The stock distribution: svrn with serve, code and ingest hosted (ingest's engine built by `corpus_engine::face` in `sovereign-hosted-ingest` and handed in through `HostedIngest`; svrn links no corpus-engine), ONE process, what `svrn daemon run` execs (`[[distribution]] stock`); its second bin `sovereign-cli-llm-stock` hands cli-llm the same ingest composition and is what the dispatcher execs for the LLM verbs (bare `sovereign-cli-llm` names ingest absent)
-├── sovereign-onprem         # The on-prem distribution: svrn with serve and ingest hosted, ONE process; no code, no mesh, no recipe authoring, and `Posture::Sealed` withholds web reach, the wikipedia bundle and the `/mcp` route by name (`[[distribution]] onprem`; phase-b-86, -87)
+├── sovereign-onprem         # The on-prem distribution: svrn with serve and ingest hosted, ONE process; no code, no mesh, no recipe authoring, and `Posture::Sealed` withholds web reach, the wikipedia bundle and the `/mcp` route by name, each sealed absence pointing at `/v1/conversations` (`Posture::code_pointer`, `NO_MCP`), and a turn with no web-reaching tool drops the prompts' web offers (`runtime/web_reach.rs`) (`[[distribution]] onprem`; phase-b-86, -87)
 ├── sovereign-hosted-ingest  # Ingest's hosting composition for svrn: the one `hosted()` both distributions call (stock hands in recipe authoring, on-prem none); a library listed in BOTH the `stock` and `onprem` `[[distribution]]` rows, so its edges and `src/` answer to each row's faces (phase-b-88)
 ├── sovereign-grants         # GuestGrant, EphemeralGrantStore, `Scope` — per-turn authorization
 ├── sovereign-desktop        # Tauri 2 + Svelte 5
@@ -1051,7 +1051,11 @@ conversations are stored `{sub}:{id}`, a non-`admin` key reaches only
 `api_keys::KEY_SCOPE`, and `[retrieval] corpora` is every key's corpus grant.
 `granted_http` serves the grant: `GET /v1/corpora`, the reading window
 `GET /v1/corpora/{c}/chunks/{id}` (403 naming an ungranted corpus) and
-`GET /v1/tools`; `GET /health` is an unauthenticated `ok`.
+`GET /v1/tools`; `GET /health` is an unauthenticated `ok`. The daemon's calls
+to its own routes (the OCR cleanup pass) present
+`client_tokens::self_credential()`, a per-process admin key a keyed store
+admits and no disk holds; a CLI presents `SOVEREIGN_API_KEY`, read by
+`setup_config::client_credential` (`svrn corpus watch*` sends it).
 
 | Path | Notes |
 |---|---|

@@ -615,8 +615,8 @@ pub(super) async fn run_daemon(
         ),
         None => (
             None,
-            crate::hosted_code::projects_absent_router()
-                .merge(crate::hosted_code::solve_absent_router()),
+            crate::hosted_code::projects_absent_router(posture)
+                .merge(crate::hosted_code::solve_absent_router(posture)),
             None,
             None,
             None,

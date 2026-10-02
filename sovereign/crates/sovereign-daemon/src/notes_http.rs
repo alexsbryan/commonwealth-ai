@@ -53,12 +53,30 @@ pub use sovereign_contracts::daemon_wire::NoteEntry;
 /// Where a request for one of the code program's kinds is pointed.
 const CODE_NOTES: &str = "the code program's `notes` tool (`svrn code mcp`)";
 
+/// Where a code note is pointed: `open`, naming [`CODE_NOTES`], on an open
+/// install; on a sealed one, which ships no code program, what the box does.
+fn code_notes(posture: crate::posture::Posture, open: String) -> String {
+    match posture.withheld() {
+        None => open,
+        Some(_) => posture.code_pointer().to_string(),
+    }
+}
+
 /// The named absence for a kind svrn does not keep.
-fn code_kind(kind: &str) -> Absence {
-    tracing::debug!(kind, "notes_http: a code kind was asked of svrn's memory");
+fn code_kind(kind: &str, posture: crate::posture::Posture) -> Absence {
+    tracing::debug!(
+        kind,
+        ?posture,
+        "notes_http: a code kind was asked of svrn's memory"
+    );
     Absence::missing(format!(
-        "kind `{kind}` is not one svrn's memory keeps ({MEMORY_NOTE_KINDS:?}); the code \
-         program's decision notes are in its notes.db, served by {CODE_NOTES}"
+        "kind `{kind}` is not one svrn's memory keeps ({MEMORY_NOTE_KINDS:?}); {}",
+        code_notes(
+            posture,
+            format!(
+                "the code program's decision notes are in its notes.db, served by {CODE_NOTES}"
+            )
+        )
     ))
 }
 
@@ -192,7 +210,7 @@ async fn list_notes(
     let store = store_for(&daemon)?;
     let q = body.map(|Json(q)| q).unwrap_or_default();
     if let Some(kind) = q.kinds.iter().find(|k| !is_memory_note_kind(k)) {
-        return Err(code_kind(kind));
+        return Err(code_kind(kind, daemon.posture()));
     }
     let limit = q.limit.unwrap_or(LIST_LIMIT_DEFAULT);
     Ok(
@@ -236,8 +254,11 @@ async fn get_note(
     Ok(match store.memory_note_entry(&id).await {
         Ok(Some(note)) => Json(note).into_response(),
         Ok(None) => not_found(format!(
-            "no note `{id}` in svrn's memory; a decision note of the code program is served by \
-             {CODE_NOTES}"
+            "no note `{id}` in svrn's memory; {}",
+            code_notes(
+                daemon.posture(),
+                format!("a decision note of the code program is served by {CODE_NOTES}")
+            )
         )),
         Err(e) => internal_error(&e.to_string()),
     })
@@ -257,7 +278,7 @@ async fn create_note(
 ) -> Result<Response, Absence> {
     let store = store_for(&daemon)?;
     if !is_memory_note_kind(&body.kind) {
-        return Err(code_kind(&body.kind));
+        return Err(code_kind(&body.kind, daemon.posture()));
     }
     let Some(scope) = NoteScope::parse(&body.scope) else {
         return Ok(bad_request(&format!(

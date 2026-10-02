@@ -63,13 +63,14 @@ pub async fn install_ocr_ctx(
     data_dir: &Path,
     daemon_base_url: String,
     cleanup_model: String,
+    bearer: Option<String>,
 ) {
     #[cfg(not(feature = "ocr"))]
     {
         // Bind the unused params so the no-op arm compiles identically to
         // the real one — a signature that drifts between cfgs is a build
         // break waiting for whoever first turns the feature on.
-        let _ = (manager, data_dir, daemon_base_url, cleanup_model);
+        let _ = (manager, data_dir, daemon_base_url, cleanup_model, bearer);
         tracing::info!(
             "ocr:unavailable reason=feature_not_compiled — this daemon was built \
              without `--features ocr`, so scanned PDFs in a `corpus watch --ocr` \
@@ -134,6 +135,7 @@ pub async fn install_ocr_ctx(
             pdfium_lib_path,
             daemon_base_url,
             cleanup_model,
+            bearer,
             dpi: 300,
             tesseract_timeout_secs: 30,
             cleanup_timeout_secs: 30,
@@ -145,6 +147,7 @@ pub async fn install_ocr_ctx(
             pdfium = ?ctx.pdfium_lib_path,
             cleanup_model = %ctx.cleanup_model,
             daemon_base_url = %ctx.daemon_base_url,
+            keyed = ctx.bearer.is_some(),
             "ocr:installed — `corpus watch --ocr` folders will read scanned PDFs"
         );
         manager.set_ocr_ctx(ctx).await;
