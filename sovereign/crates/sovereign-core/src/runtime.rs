@@ -64,6 +64,8 @@ pub(crate) mod text_utils;
 // the pure policy layer, decomposed 2026-06-10 (see prompts.rs).
 mod prompts;
 pub(crate) use self::prompts::*;
+// The prompts' web offers, kept only when the built registry reaches the web.
+mod web_reach;
 
 pub(crate) use self::collaboration::{
     emit_ask_deliberation_chip, run_collaboration, run_post_stream_refinement, ContradictionCheck,
