@@ -24,6 +24,10 @@ const REMOVED: &[&[&str]] = &[
     &["drift", "accept"],
     &["audit", "p0-payments"],
     &["audit", "p0-payments", "--archive"],
+    &["milestone", "p0-payments", "2"],
+    &["drift", "p0-payments"],
+    &["plan"],
+    &["project", "found"],
 ];
 
 #[test]

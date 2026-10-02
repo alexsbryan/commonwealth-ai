@@ -2,8 +2,8 @@
 //! Phase 6 retirement tests.
 //!
 //! The CLI refactor's Phase 6 retires the explicit "founding" /
-//! "provision" ceremony. Both surfaces are now no-op + deprecation
-//! banner — the user types them, sees the banner, and learns that
+//! "provision" ceremony. Both surfaces are now refused (exit 2) with
+//! a retirement banner — the user types them, sees the banner, and learns that
 //! the new flow is just "init → write spec → commit → work."
 //!
 //! These tests spawn the actual `sovereign-cli` binary so the
@@ -70,10 +70,10 @@ fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).to_string()
 }
 
-fn assert_exit_zero(out: &Output, label: &str) {
-    if !out.status.success() {
+fn assert_exit_refused(out: &Output, label: &str) {
+    if out.status.code() != Some(2) {
         panic!(
-            "expected exit 0 from {label}, got {:?}\nstdout:\n{}\nstderr:\n{}",
+            "expected exit 2 from {label}, got {:?}\nstdout:\n{}\nstderr:\n{}",
             out.status.code(),
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr),
@@ -82,14 +82,14 @@ fn assert_exit_zero(out: &Output, label: &str) {
 }
 
 /// `svrn project found` is retired — the banner fires and the
-/// command exits 0 without touching the filesystem. (No
+/// command exits 2 without touching the filesystem. (No
 /// `.sovereign/project.toml` is required; the old gate that
 /// demanded it is gone with the rest of the body.)
 #[test]
 fn project_found_is_retired_no_op() {
     require_siblings!();
     let out = run(&["project", "found"]);
-    assert_exit_zero(&out, "project found");
+    assert_exit_refused(&out, "project found");
     let err = stderr(&out);
     assert!(
         err.contains("`svrn project found`"),
@@ -119,7 +119,7 @@ fn retirement_banner_pointer_obeys_quiet_env() {
         .args(["project", "found"])
         .output()
         .expect("spawn sovereign-cli");
-    assert_exit_zero(&out, "project found [QUIET=1]");
+    assert_exit_refused(&out, "project found [QUIET=1]");
     let err = stderr(&out);
     // Title line still fires — operator must know the command is gone.
     assert!(

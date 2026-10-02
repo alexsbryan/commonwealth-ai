@@ -77,7 +77,6 @@ pub async fn run_project(args: &[String]) -> i32 {
             announce("svrn project charter", "svrn charter");
             cmd_charter(&args[1..]).await
         }
-        "found" => cmd_found(&args[1..]).await,
         "amend" => {
             announce("svrn project amend", "svrn amend");
             cmd_amend(&args[1..]).await
@@ -397,17 +396,6 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
 // `load_merged_graph` is `corpus_engine_scip::merged_graph`'s (the
 // `sovereign-cli-shared::scip` re-export went with pb-code-cli-base); the code tools load it lazily through
 // `sovereign_code::LazyScipGraph` (phase-b pb-code-freshness).
-
-// `--orchestrate` (which sequenced DESIGN.md + CHARTER.md +
-// IMPLEMENTATION_PLAN.md + PHASES.md composition) is retired in
-// favour of the explicit `svrn charter` flow.
-async fn cmd_found(_args: &[String]) -> i32 {
-    sovereign_cli_base::deprecation::announce_retired(
-        "svrn project found",
-        "Founding is implicit now: `svrn init` + a committed          spec is sufficient. Use `svrn charter` if you want          to define team conventions.",
-    );
-    0
-}
 
 fn git_committer_identity_for_amend(repo_root: &Path) -> Option<String> {
     let name = std::process::Command::new("git")

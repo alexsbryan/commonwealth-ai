@@ -14,7 +14,7 @@
 //   design_session, design_onboarding, audit_extract, audit_recover,
 //   drift_cmd_orchestrator. (`honesty`, `doc_fetcher` and `found` also
 //   moved in this slice and were deleted on 2026-08-26 — the first two
-//   unreachable since `de34eb36`, `found` retired to `announce_retired`.)
+//   unreachable since `de34eb36`, `found` retired to a `deprecation::RETIRED` row.)
 // Slice 3 → sovereign-cli-dev: tools_cmd.
 // Slice 4 → sovereign-cli-dev: daemon_cmd, doctor_cmd,
 //   install_service_cmd, service_install, setup_cmd, setup_config.
