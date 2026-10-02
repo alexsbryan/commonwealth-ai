@@ -1,0 +1,9 @@
+unit: pc-solo-durable
+commits: 29e0a3f22 (kv doors journal before they answer; PROOF tests/kill_durable.rs),
+  7cca80c67 (doors move to kv/doors.rs, kv.rs back under the 800 band)
+what: a write a solo cw-rails acknowledged survives SIGKILL at once (50 writes,
+  two namespaces). PLANT (kv_set without journal_before_ack) 3/3 red:
+  "kv-durable/0: an acknowledged write was lost: null". TEST(commonwealth-rails)
+  195/0, LINT, LAYER, DOCS exit 0, BOUNDARY 0 violations, clone-gate 13792 = baseline.
+decision: phase-c-14 (mode-independent; ack latency p50 ~0.2 -> ~0.5-1.0 ms on a
+  small journal, 7.2 ms at 1,000 rows).
