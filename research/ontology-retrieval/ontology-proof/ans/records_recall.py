@@ -47,6 +47,10 @@ def match_hoards(ents, gold, question):
     pat = rx(gold["name"])
     cands = [e for e in ents.values() if e.get("entity_type") == "hoard"
              and any(pat.search(fold(n)) for n in names_of(e))]
+    # "Asia Minor" names IGCH 1436, 1438 and 1444 alike; an entity that cites
+    # another hoard's IGCH number is that hoard, not this one.
+    cited = lambda e: {int(n) for n in re.findall(r"IGCH\s*(\d+)", " ".join(names_of(e)))}  # noqa: E731
+    cands = [e for e in cands if not cited(e) or gold["igch"] in cited(e)]
     year = re.search(r"found (?:before )?(\d{4})", question)
     if year and len(cands) > 1:
         dated = [e for e in cands if year.group(1) in json.dumps(e, ensure_ascii=False)]

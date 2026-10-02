@@ -30,8 +30,8 @@ one_line     = "Share of text-attested K1 members (gold members_local) that the 
 derives_from = "records_recall.py first run 2026-10-02: 31/32 hoards resolve, 23/32 rows have no coin linked (49 of 362 coins carry a hoard ref), mean 0.031 of the local ceiling; ref snaps are type-unchecked by design (corpus-engine/src/enrichment/atlas/resolution_ontology.rs:16-23) and land coin.mint on hoard entities"
 status       = "open"
 direction    = "higher_is_better"
-floor        = 0.031
-floor_basis  = "n=1 deterministic read of ~/.svrnmesh/indexes/ei7-ans/atlas (atoms.json mtime 2026-09-22), 2026-10-02"
+floor        = 0.014
+floor_basis  = "n=1 deterministic read of ~/.svrnmesh/indexes/ei7-ans/atlas (atoms.json mtime 2026-09-22), 2026-10-02; was 0.031 until the instrument stopped crediting a row with an entity citing another IGCH number (IGCH 1438 and 1441 had scored IGCH 1437's coins)"
 target       = 0.5
 goodhart     = "hits target while the predicate stays false if refs snap loosely onto gold-matching names — stray members are listed per row beside recall and must be read with it; and a records number is extraction only, the chat answer is O-T2's"
 instrument   = "python3 research/ontology-retrieval/ontology-proof/ans/records_recall.py"
