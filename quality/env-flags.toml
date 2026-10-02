@@ -236,13 +236,6 @@ status = "guard"
 purpose = "The share of a longform draft's AUDITED claims that may fail and still be repaired by targeted surgery instead of a full 35B re-synthesis. 0.5 is derived, not tuned: the rule is 'surgery unless MOST claims fail', and a majority is more than half. Replaces SOVEREIGN_SURGICAL_MAX_FAILURES (absolute count, default 3) on 2026-08-13 — claim_budget scales the audited count with answer length, so an absolute cap inverted with length and structurally excluded longform (measured 51.2s fallback on a real desktop turn vs 1.7-2.7s when surgery engaged; NATIVE_GROUNDING_ECONOMY.md 7.3.1). Read in exactly one place (grounding/mod.rs surgical_max_failed_ratio); 0.0 forces full re-synthesis, 1.0 forces surgery, and those are the two positions the surgical calibration harness uses. Unparseable or out-of-range values warn and fall back to 0.5. Measured yield of the change over 8 warm desktop turns: 0 ms — it makes the code agree with its rationale, it did not make the query faster (ECONOMY 7.3.2)."
 
 [[flag]]
-name = "SOVEREIGN_SUFFICIENCY_CHUNKS"
-cluster = "grounding"
-default = "12"
-status = "experiment"
-purpose = "How many round-0 chunks the agentic loop's sufficiency judge reads."
-
-[[flag]]
 name = "SOVEREIGN_AGENTIC_KQ_DEBUG"
 cluster = "grounding"
 default = "off"
@@ -793,14 +786,6 @@ status = "guard"
 purpose = "Which code corpus `cargo xtask concept-gate` asks for its duplicate-name count. The relayed `converge status --corpus-id` defaults to \"the sole indexed code corpus\", a default that expires the moment a second one is indexed — this host carried three on 2026-08-29 (commonwealth-ai plus two fixtures), so the command refused and the gate reported COULD-NOT-JUDGE while blaming a stale sibling binary. The gate now names the corpus, defaulting to the repo directory name because that is the registration convention here; set this when a repo is indexed under a different id. A guard rather than a knob: it exists so the gate can reach a verdict at all, not to tune anything."
 
 [[flag]]
-name = "SOVEREIGN_BIND"
-cluster = "infra-paths"
-default = "unset"
-status = "shipped"
-shadows = "daemon.client_bind"
-purpose = "Daemon bind address override."
-
-[[flag]]
 name = "SOVEREIGN_CORPORA_DIR"
 cluster = "infra-paths"
 default = "under data root"
@@ -813,13 +798,6 @@ cluster = "infra-paths"
 default = "under data root"
 status = "shipped"
 purpose = "Recipe registry directory override."
-
-[[flag]]
-name = "SOVEREIGN_DB_PATH"
-cluster = "infra-paths"
-default = "under data root"
-status = "shipped"
-purpose = "State-store DB path override (normally rebrand::state_db_path under the data root)."
 
 [[flag]]
 name = "SOVEREIGN_MODELS_DIR"
@@ -1228,6 +1206,20 @@ status = "shipped"
 purpose = "Path override for sovereign-pod-worker, the ephemeral pod's worker-mode binary (sovereign-pods), which `svrn daemon run --worker-mode` execs with its argv unchanged (sovereign-cli-daemon `daemon_bin::exec_pod_worker`, pb-pods-worker). Read through `sovereign_turn_client::reach::locate_sibling`."
 
 [[flag]]
+name = "CW_RAILS_DIR"
+cluster = "infra-paths"
+default = "~/.commonwealth-rails"
+status = "shipped"
+purpose = "cw-rails' data dir when its `--data-dir` flag is absent. One decider: `commonwealth_media::declared::rails_data_dir` (`RAILS_DATA_DIR_ENV`), which rails' own config and every process handing rails its inputs resolve through. Outside env-gate's SOVEREIGN_/SVRNMESH_ census, so registered by hand."
+
+[[flag]]
+name = "SOVEREIGN_DAEMON_BIN"
+cluster = "cli-binaries"
+default = "the `sovereign-stock` sibling of the running program, then PATH"
+status = "shipped"
+purpose = "Path override for what `svrn daemon run` execs (sovereign-cli-daemon `daemon_bin::locate`, through `sovereign_turn_client::reach::locate_sibling`): point it at a bare `sovereign-daemon` to run one that dials a configured serve. scripts/fim-smoke.sh reads it for the daemon it boots."
+
+[[flag]]
 name = "CW_RAILS_BIN"
 cluster = "cli-binaries"
 default = "sibling of the running program, then PATH"
@@ -1261,13 +1253,6 @@ cluster = "cli-binaries"
 default = "unset"
 status = "shipped"
 purpose = "Enrichment tool's path to the sovereign CLI. Synonym-cluster member (see SOVEREIGN_BIN)."
-
-[[flag]]
-name = "SOVEREIGN_SERVER_PATH"
-cluster = "cli-binaries"
-default = "unset"
-status = "shipped"
-purpose = "Mobile host's path to the sovereign server binary."
 
 # ── bench: harness selection ────────────────────────────────────────
 
@@ -1678,3 +1663,136 @@ cluster = "dev-gates"
 default = "unset (no extra features — the sidecar builds with sovereign-cli-daemon's defaults)"
 status = "shipped"
 purpose = "Comma-separated cargo features scripts/stage-daemon-sidecar.sh forwards as `--features` when it builds the sovereign-cli-daemon Tauri sidecar. This is how the Windows GPU backend is selected since svt-7 (2026-09-12): `windows-vulkan` / `windows-cuda` are owned by sovereign-cli-daemon — the process that loads the weights — and forward from there to sovereign-inference (sovereign/SYSTEM_OVERVIEW.md:260). Only the Windows legs set it; `scripts/windows-crosscheck.sh:28` is the worked example. Unset means the default feature set, never a silent CPU fallback: a feature the crate does not have is a cargo build failure the script refuses to stage past."
+
+# ── removed ─────────────────────────────────────────────────────────
+# Nothing reads these any more. env-gate fails if one is read again, and
+# pins kernel_types::env_bridge::REMOVED_ENV to these rows, so a user who
+# still sets one gets a startup line printing `replacement` verbatim.
+
+[[flag]]
+name = "SOVEREIGN_AGENTIC_KQ"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled the round-2 agentic evidence loop on KnowledgeQuery."
+replacement = "retired: the agentic evidence loop was deleted (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_AGENTIC_KQ_THRESHOLD"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Insufficiency probability above which the agentic loop's round 2 fired."
+replacement = "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_BIND"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Bind address override for sovereign-server."
+replacement = "set [daemon] client_bind in config.toml; its reader, sovereign-server, was deleted (5cb09f22b)"
+
+[[flag]]
+name = "SOVEREIGN_CONV_PPR_WEIGHT"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Weight of conversation entity PPR in retrieval."
+replacement = "retired: conversation entity PPR was deleted at its default, 0 (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_DB_PATH"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "State-store DB path override for sovereign-server."
+replacement = "set SOVEREIGN_DATA_DIR; the state DB lives under the data root, and this var's reader, sovereign-server, was deleted (5cb09f22b)"
+
+[[flag]]
+name = "SOVEREIGN_DECOMP_DECAY"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Score decay for query-decomposition sub-query hits."
+replacement = "retired with SOVEREIGN_QUERY_DECOMP's step (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_DEMAND_PLAN"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled the demand-plan retrieval step."
+replacement = "retired: the demand-plan retrieval step was deleted (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_DEMAND_PLAN_FANOUT"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Fan-out width of the demand-plan step."
+replacement = "retired with SOVEREIGN_DEMAND_PLAN's step (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_FRONTDOOR"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Legacy alias that forced the opencode front-door profile."
+replacement = "set SOVEREIGN_HARNESS=opencode; the alias was cut (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled Wikipedia graph-neighbour expansion in retrieval."
+replacement = "retired: the graph-neighbour expansion step was deleted (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_META_BRIDGE"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled the meta-atlas bridge boost in retrieval."
+replacement = "retired: the meta-atlas bridge boost was deleted (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_QUERY_DECOMP"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled question decomposition and sub-query fan-out in retrieval."
+replacement = "retired: the query-decomposition retrieval step was deleted (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_SERVER_PATH"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Mobile host's path to the sovereign server binary."
+replacement = "retired: the mobile host that read it was deleted (efa709871)"
+
+[[flag]]
+name = "SOVEREIGN_SUFFICIENCY_CHARS"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Chars per chunk the agentic loop's sufficiency judge read."
+replacement = "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_SUFFICIENCY_CHUNKS"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "How many round-0 chunks the agentic loop's sufficiency judge read."
+replacement = "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)"
+
+[[flag]]
+name = "SOVEREIGN_TITLE_EXPAND"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Enabled LLM question-to-title expansion in retrieval."
+replacement = "retired: the title-expansion retrieval step was deleted (ac032e5bc)"

@@ -20,6 +20,10 @@ corpora (SEP slugs lowercase, Wikipedia titles title-case).
 
 ## The A/B
 
+**Cut 2026-09-21.** The `bridge_boost` step and `SOVEREIGN_META_BRIDGE` were
+deleted (ac032e5bc), so the two commands below now run the same pipeline and
+the variable only prints a startup warning. Kept as the record of the design.
+
 Bridge-OFF baseline vs bridge-ON, holding everything else fixed:
 
 ```

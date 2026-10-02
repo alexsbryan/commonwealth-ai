@@ -12,6 +12,9 @@ use std::sync::Arc;
 const DEFAULT_FILTER: &str = "warn,sovereign_pods=info,sovereign_pod_worker=info";
 
 fn main() {
+    // Rebrand back-compat, as every sibling runs it, before the runtime's
+    // threads exist: a directly launched worker honours SVRNMESH_* too.
+    sovereign_contracts::rebrand::promote_legacy_env();
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(DEFAULT_FILTER));
     let _ = tracing_subscriber::fmt()

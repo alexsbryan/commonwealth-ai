@@ -1464,7 +1464,9 @@ accessors** — `sovereign_contracts::rebrand` (`svrnmesh_root`, `data_dir`,
 a `clippy.toml` `disallowed-methods` ban on hand-rolled `dirs::home_dir`
 joins. The `SVRNMESH_DATA_DIR` override applies INSIDE `svrnmesh_root`, so
 every accessor above it moves together. Env overrides are declared in
-`quality/env-flags.toml`, enforced by `cargo xtask env-gate`.
+`quality/env-flags.toml`, enforced by `cargo xtask env-gate`; a `removed` row
+warns at startup when still set (`kernel_types::env_bridge::REMOVED_ENV`,
+printed by `promote_legacy_env`).
 
 **Committed contracts (versioned, reviewed):**
 

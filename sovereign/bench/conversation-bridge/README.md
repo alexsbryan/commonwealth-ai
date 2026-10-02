@@ -165,6 +165,10 @@ both? Binary + evidence span, following the `JudgeSourceDetail` pattern
 
 ## Arms — dose–response, not binary
 
+**Cut 2026-09-21.** Conversation entity PPR and `SOVEREIGN_CONV_PPR_WEIGHT`
+were deleted (cc78b933b), so the A arms below no longer differ and the
+variable only prints a startup warning. Kept as the record of the design.
+
 | arm | entities | `SOVEREIGN_CONV_PPR_WEIGHT` | isolates |
 |---|---|---|---|
 | A0 | present | `0` | entity path off entirely |
