@@ -129,6 +129,8 @@ mod recipe_surface_e2e;
 mod research_surface_e2e;
 #[path = "main/responses_adapter_e2e.rs"]
 mod responses_adapter_e2e;
+#[path = "main/retired_mesh_path_e2e.rs"]
+mod retired_mesh_path_e2e;
 #[path = "main/serving_ports_census.rs"]
 mod serving_ports_census;
 #[path = "main/storage_budget_route.rs"]
