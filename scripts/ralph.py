@@ -2462,8 +2462,16 @@ class Pool:
                 queue.set_status(unit, Status.DONE)
                 self._git("add", self.paths.state)
             # The subject ralph-mark.sh writes: units_since_audit counts it.
-            self._git("commit", "-q", "-m", f"ralph: {unit} done" if queue is not None
-                      else f"ralph: {DECISIONS_RENDERED} after merging {unit}")
+            # Checked: an unchecked failure here left the index dirty, and the
+            # wave's next merge refused on it and halted as a "merge conflict"
+            # (pc-rails-journal-linear after pc-partial-decline-verdict,
+            # 2026-10-02, phase-c-19).
+            r = self._git("commit", "-q", "-m", f"ralph: {unit} done" if queue is not None
+                          else f"ralph: {DECISIONS_RENDERED} after merging {unit}")
+            if r.returncode != 0:
+                return self._halt(f"merged {unit}, but its done commit failed — the "
+                                  "index holds it; commit it, then resume: "
+                                  + ((r.stderr or r.stdout).strip().splitlines() or [""])[0])
             if refused is not None:
                 return self._halt(refused)
             if not self._keep_evidence(unit, wt):

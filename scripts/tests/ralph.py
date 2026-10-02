@@ -1974,6 +1974,22 @@ class PoolTests(unittest.TestCase):
             self.assertIn("merge conflict", pkg)
             self.assertIn("halt: merge conflict", (root / "ralph/STOP").read_text())
 
+    def test_a_failed_done_commit_halts_by_name_not_as_the_next_merge_conflict(self):
+        # phase-c-19: the done commit after one merge failed unchecked, the
+        # next lane's merge refused on the dirty index, and the halt read
+        # "merge conflict" for a merge that was clean.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] dm-a — depends []\n- [ ] dm-b — depends []\n")
+            write(tmp, "hooks/commit-msg",
+                  "#!/bin/sh\ngrep -q '^ralph: dm-a done' \"$1\" && exit 1\nexit 0\n")
+            (root / "hooks/commit-msg").chmod(0o755)
+            subprocess.run(["git", "-C", tmp, "config", "core.hooksPath", "hooks"], check=True)
+            pool = self.make(root, lambda cwd, env=None: FakeLane(cwd))
+            self.assertEqual(pool.run(), 3)
+            pkg = (root / "ralph/NEEDS_HUMAN.md").read_text()
+            self.assertIn("merged dm-a, but its done commit failed", pkg)
+            self.assertNotIn("merge conflict", pkg)
+
     def test_review_runs_serially_and_completes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] REVIEW-a — depends []\n")

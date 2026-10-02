@@ -2152,6 +2152,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: leave "answer" out of the decider's telling stems; pin both professor and present-shop-street as texts that must NOT read as declines; correct the row's premise rather than flip three full answers. 13 of the row's 14 misses are fixed.
 - Because: citation.rs:683 renders "The passages do not answer: <part>" only beside a part it grounded. In the same 4B sa reading the render follows a correct answer of the asked fact in present-shop-street ("Brett Street"), prov-mother-almshouse and present-asst-commissioner, all Grounded; covering the shape flips those three (about 7% of the 4B sa turns), past phase-c-17's own falsifier (the chat-ask rate, 1 in 24). The text cannot say which part was asked; the multiquote knew, and that is where a fix would read it.
 
+**phase-c-19 · 2026-10-02 · pc-rails-journal-linear · director** — this commit
+- Needed: the pool halted with "merge conflict merging ralph/pc-rails-journal-linear"; the main tree held the uncommitted closure of pc-partial-decline-verdict (STATE.md `[x]`, DECISIONS.md regenerated with phase-c-18), staged, with no MERGE_HEAD.
+- Chose: commit that closure (22d0bb9e1), complete the merge by hand (b25bcfac8; clean, no conflicting hunk), mark the row `[x]`, and make the pool check its done commit: a failure now halts naming the unit and git's first line, instead of surfacing at the next merge as a conflict.
+- Because: with the index committed, `git merge --no-ff ralph/pc-rails-journal-linear` applied cleanly (9 files, 737+/194-), so the only thing stopping it was the dirty index; `scripts/ralph.py` ran the done commit unchecked after each merge. The new test fails without the check on exactly the observed package ("merge conflict merging ralph/dm-b") and passes with it; the 164-test suite is green.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13781,5 +13786,15 @@ Measured with a Python port of old and new decider over all 185 turns of the pdm
 Falsified if: a multiquote turn whose grounded part is NOT the asked fact is common enough on the next reading (pc-partial-decline-verdict-measure-2) that the professor-shaped miss outweighs the three answered ones; then the fix belongs at the multiquote, which knows its parts, not in the text decider.
 
 REVIEW-AFTER: whether the multiquote should carry which part was the question's own, so the ledger can read a declined asked part structurally (principle 10). Not this row's lift.
+
+</details>
+
+## phase-c-19 · 2026-10-02 — a failed done commit was reported as the next lane's merge conflict
+
+<details><summary>reasoning, evidence, package</summary>
+
+Evidence: `git status` at session start showed only `M  ralph/DECISIONS.md` and `M  ralph/next/phase-c/STATE.md`, both staged, matching what `_regenerate_decisions` and `queue.set_status` + `git add` leave before the `ralph: <unit> done` commit; `0838218d1 merge pc-partial-decline-verdict` was HEAD and no `ralph: pc-partial-decline-verdict done` followed it (the earlier 0b2a7bb26 is the row's first close, before it was reopened). The merge of the rails lane after committing the index went through with no conflict. Why the done commit itself failed was not recovered: no pool log on this host records git's stderr, and `scripts/commit-msg.sh` accepts the subject (rc=0, tried by hand). A concurrent git operation on the main tree (an index.lock) is the likely cause; the halt now prints it.
+
+Falsified if: a pool halt with "merge conflict" recurs while the merge applies cleanly on a clean index; then something else dirties the index between merges.
 
 </details>
