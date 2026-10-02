@@ -1571,13 +1571,19 @@ pub fn client_daemon_base() -> String {
 /// because every caller appends `/v1/…`, and `http://h:9841//v1/models` is a
 /// different route to a strict router than `http://h:9841/v1/models`.
 pub fn daemon_url_override() -> Option<String> {
-    ["SOVEREIGN_DAEMON_URL", "SVRNMESH_DAEMON_URL"]
-        .iter()
-        .find_map(|key| {
-            let raw = std::env::var(key).ok()?;
-            let trimmed = raw.trim().trim_end_matches('/');
-            (!trimmed.is_empty()).then(|| trimmed.to_string())
-        })
+    first_set_env(["SOVEREIGN_DAEMON_URL", "SVRNMESH_DAEMON_URL"], |v| {
+        v.trim_end_matches('/')
+    })
+}
+
+/// The first of `keys` whose value, trimmed then `normalize`d, is non-empty:
+/// the one rule [`daemon_url_override`] and [`client_credential`] read by.
+fn first_set_env(keys: [&str; 2], normalize: fn(&str) -> &str) -> Option<String> {
+    keys.iter().find_map(|key| {
+        let raw = std::env::var(key).ok()?;
+        let trimmed = normalize(raw.trim());
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
 }
 
 /// The API key a CLI client presents to a keyed daemon, or `None`. THE one
@@ -1590,13 +1596,7 @@ pub fn daemon_url_override() -> Option<String> {
 /// `SOVEREIGN_CLIENT_TOKEN`, which is the token a daemon ADMITS, not one a
 /// client presents.
 pub fn client_credential() -> Option<String> {
-    ["SOVEREIGN_API_KEY", "SVRNMESH_API_KEY"]
-        .iter()
-        .find_map(|key| {
-            let raw = std::env::var(key).ok()?;
-            let trimmed = raw.trim();
-            (!trimmed.is_empty()).then(|| trimmed.to_string())
-        })
+    first_set_env(["SOVEREIGN_API_KEY", "SVRNMESH_API_KEY"], |v| v)
 }
 
 /// Pure builder behind [`client_daemon_base`], and the accessor for callers

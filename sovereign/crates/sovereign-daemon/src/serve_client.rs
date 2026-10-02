@@ -564,8 +564,12 @@ pub fn unmet_slots(
     cfg: &SetupConfig,
     served: &sovereign_contracts::engine_state::ServedSelf,
 ) -> Vec<String> {
-    let Ok(models) = cfg.models() else {
-        return Vec::new();
+    let models = match cfg.models() {
+        Ok(models) => models,
+        Err(why) => {
+            tracing::debug!(target: "serving_path", %why, "reload: the config asks serve for no slot, so none is unmet");
+            return Vec::new();
+        }
     };
     let mut unmet = Vec::new();
     for (role, path) in sovereign_contracts::model_slots::advertised_slots(models) {

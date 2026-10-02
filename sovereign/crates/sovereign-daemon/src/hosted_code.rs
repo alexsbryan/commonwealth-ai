@@ -95,19 +95,12 @@ pub const CODE_SERVER: &str = "svrn code mcp";
 /// where `posture` says: `svrn code mcp`, or what a sealed box does instead.
 fn absent(posture: Posture) -> axum::routing::MethodRouter {
     axum::routing::any(move |uri: axum::http::Uri| async move {
-        use axum::response::IntoResponse;
         tracing::debug!(path = %uri.path(), ?posture, "code routes: no code program in this process");
-        (
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            axum::Json(serde_json::json!({
-                "error": format!(
-                    "{} is served by the code program, which this svrn does not host: {}",
-                    uri.path(),
-                    posture.code_pointer()
-                ),
-            })),
-        )
-            .into_response()
+        crate::http_response::Absence::unavailable(format!(
+            "{} is served by the code program, which this svrn does not host: {}",
+            uri.path(),
+            posture.code_pointer()
+        ))
     })
 }
 
