@@ -10,7 +10,7 @@ Pointer keys: **O2** = `.sovereign/features/ring-room-week2/order.md` ·
 **C** = `quality/campaigns/ring-room.toml` (rr-2 bars: floors, goodharts, derives_from) ·
 **S** = `quality/campaigns/ring-apps-shelf.md` · **T** = `docs/THREAT_MODEL.md` ·
 **G** = `sovereign/crates/sovereign-grants/src/guest_grant.rs` (Scope, TTL clamp, the three-step rule for a variant :70-75) ·
-**L** = `sovereign/docs/MESH_LOAD_AWARENESS.md` · **RD** = `docs/internal/RING_ROOM_DEMO.md` ·
+**L** = `sovereign/docs/MESH_LOAD_AWARENESS.md` · **RD** = `docs/internal/rings/demo/RING_ROOM_DEMO.md` ·
 **A** = `sovereign/apps/ring-doc/` (the doc page: app.js, adapter.js, index.html) ·
 **R** = `commonwealth/crates/commonwealth-rail*` (the ring rail — ZERO diffs; a row that needs one is §6) ·
 **D** = `scripts/ring-doc-demo.sh` (node door `sv`/`node_exec`/`node_curl` :94-108; podman backend :84-183; `cut_node`/heal :356-360) ·

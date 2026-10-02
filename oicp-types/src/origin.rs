@@ -52,7 +52,7 @@ pub enum OriginKind {
     /// positioned to rank. `origin_fanout` asks every member that publishes
     /// one the same question and returns a row each — including a
     /// `never_asked` row for the member that publishes none, which is the
-    /// property no marketplace has (`docs/internal/RING_APPLICATIONS.md`
+    /// property no marketplace has (`docs/internal/rings/reference/RING_APPLICATIONS.md`
     /// §Commerce).
     ///
     /// **What rides behind it is the ORIGIN's, entirely.** This kind carries

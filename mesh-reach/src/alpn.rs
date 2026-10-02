@@ -52,5 +52,5 @@ pub use kernel_types::alpn::GUEST_ALPN;
 /// is COMPUTED by asking every publisher at once
 /// (`commonwealth_media::fanout`) rather than stored, so there is no listing
 /// to be excluded from and nobody positioned to rank
-/// (`docs/internal/RING_APPLICATIONS.md` §Commerce).
+/// (`docs/internal/rings/reference/RING_APPLICATIONS.md` §Commerce).
 pub const OFFER_ALPN: &[u8] = b"cwth/offer/0";

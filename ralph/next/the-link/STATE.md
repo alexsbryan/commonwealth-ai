@@ -27,7 +27,7 @@ https parser `:240-259`) ·
 **RCMD** = `sovereign/crates/sovereign-cli-llm/src/ring_cmd/` (`ring log` is the verb shape to copy) ·
 **M** = `scripts/ring-room-demo.sh` (legs are added here, no new script; the offline leg
 records `cut_at`/`heal_at`/`converged_s`) ·
-**RS** = `docs/internal/RING_ROOM_RUN_OF_SHOW.md` (the demo this slots into; its §offline leg `:136-144`) ·
+**RS** = `docs/internal/rings/demo/RING_ROOM_RUN_OF_SHOW.md` (the demo this slots into; its §offline leg `:136-144`) ·
 **W** = `docs/RING_APP_LIBRARY.md:360-380,546-553` (the wasm isolated-copy recipe; the
 iroh-in-browser claim this campaign measures).
 

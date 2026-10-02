@@ -322,11 +322,11 @@ this demo shows the boundary held, not the crossing.
 | The acceptor forwards the guest channel to the guest listener | `sovereign-daemon/src/daemon.rs:3637` |
 
 Deeper design context: `docs/RING_APP_LIBRARY.md` (runtime, sandbox, join,
-reach); `docs/internal/RAIL_PROTOCOL_SKETCH.md` (the checkpoint and digest
+reach); `docs/internal/rings/reference/RAIL_PROTOCOL_SKETCH.md` (the checkpoint and digest
 against the protocol's laws); the demo contract this document slots into is
-`docs/internal/RING_ROOM_RUN_OF_SHOW.md`.
+`docs/internal/rings/demo/RING_ROOM_RUN_OF_SHOW.md`.
 
 Evidence, with file references, lives in the repository
-(`docs/internal/RAIL_PROTOCOL_SKETCH.md` for the checkpoint and digest
+(`docs/internal/rings/reference/RAIL_PROTOCOL_SKETCH.md` for the checkpoint and digest
 definitions; `docs/RING_APP_LIBRARY.md` §11–17 for the runtime, the join flow
 and the door).

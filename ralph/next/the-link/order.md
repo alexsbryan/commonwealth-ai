@@ -70,7 +70,7 @@ route, one verb and one document.
   fragment rule is structural: the parser splits at `#` first (:245) and
   reads nothing but the fragment.
 - **P4** The offline leg already records `cut_at`, `heal_at`, `converged_s`
-  and polls both journals byte-equal (`docs/internal/RING_ROOM_RUN_OF_SHOW.md:136-144`)
+  and polls both journals byte-equal (`docs/internal/rings/demo/RING_ROOM_RUN_OF_SHOW.md:136-144`)
   — the export hooks between the cut and the reconnect. VERIFIED (inventory
   2026-09-21): cut_at at ring-room-demo.sh:1426, heal_at :1435, recorded into
   `room-offline.json` :1448-1457 — the export slots between :1426 and :1435.

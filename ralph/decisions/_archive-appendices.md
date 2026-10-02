@@ -432,7 +432,7 @@ fail 0). Every other red traces to a commit that is an ancestor of the queue sta
 (`git merge-base --is-ancestor`), and `git log d8cd7bb9f..HEAD -- <file>` is empty for each
 named file: quote_verification.rs and the conformance tags (30293904f, 09-13);
 ingest_failure_modes.rs (last touched db21b2f8d, 09-03, the behaviour it checks changed in
-30293904f); cli-contract.toml:3571 citing `docs/internal/RING_APPLICATIONS.md`, which is
+30293904f); cli-contract.toml:3571 citing `docs/internal/rings/reference/RING_APPLICATIONS.md`, which is
 gitignored (`.gitignore:67`) and absent on this host (a3bd715f5, 09-13); env-flags.toml:43 and
 :1662 both declare `SOVEREIGN_SIDECAR_FEATURES` (e3474619c, 09-14); AGENTS.md +399 bytes
 (9272ac2ca, 09-13).
@@ -5290,7 +5290,7 @@ is not tuned here (§6, and "do not tune a gate to flip one number"). Nothing in
 the scorer a peer speed signal; §4.5's finding that `throughput_factor` is a constant for peers
 stands, and the local candidate's sub-reference clamp is what moved the synthesis.
 
-**Also corrected in the same commit** (principle 3): `docs/internal/RING_ROOM_DEMO.md` fix 1 is retired.
+**Also corrected in the same commit** (principle 3): `docs/internal/rings/demo/RING_ROOM_DEMO.md` fix 1 is retired.
 `reason="could-not-judge"` is the verdict LABEL, not a cause (`model_slot.rs:2714` logs
 `gate.measured`); `qwen35` 2B HAS been measured — `sovereign/DEFAULTS_LEDGER.md`, floor 19.9, signal
 459–644, **ratio 23x** against the probe's 4x `Safe` limit, in a sweep that agreed with the declared
@@ -6912,7 +6912,7 @@ own exit code to `demo.rc`. Frame 2e7f855c owed this.
 ### The fork
 
 `REVIEW-audit-rr-2` finished everything but PREPUSH: findings and fixes at f2e497d71,
-TESTALL 13504 pass / 1 fail (foreign: `docs/internal/RING_APPLICATIONS.md` is gitignored
+TESTALL 13504 pass / 1 fail (foreign: `docs/internal/rings/reference/RING_APPLICATIONS.md` is gitignored
 on this host and cited at `sovereign/docs/cli-contract.toml:3571` since a3bd715f5, an
 ancestor of the campaign start), LINT and DOCS green, PREPUSH red on arch-gate's
 approach band. The worker may not touch a baseline.
@@ -6983,7 +6983,7 @@ Advisory, outside the campaign: `hakari-verify` has been red across three audits
 > {"t":"summary","pass":13504,"fail":1,"warn":0,"ms":148974,"empty":false,"doctests":false}
 >   cli_contract_journeys::every_journey_cites_a_doc_that_exists
 >     journeys citing docs that are gone (rename the citation or restore the doc):
->       mesh-offers-catalogue cites `docs/internal/RING_APPLICATIONS.md`, which does not exist
+>       mesh-offers-catalogue cites `docs/internal/rings/reference/RING_APPLICATIONS.md`, which does not exist
 > 
 > $ scripts/ralph-check.sh lint
 > exit=0

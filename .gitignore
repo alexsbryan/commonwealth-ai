@@ -247,7 +247,7 @@ research/deep-research/demo/p5/runs-t1c/
 
 .vercel
 
-# Guest QRs written by the run of show's mint (docs/internal/RING_ROOM_RUN_OF_SHOW.md
+# Guest QRs written by the run of show's mint (docs/internal/rings/demo/RING_ROOM_RUN_OF_SHOW.md
 # §3 writes wall-qr.svg in the cwd). Short-lived credentials: never committed.
 wall-qr.svg
 phone-qr.svg
