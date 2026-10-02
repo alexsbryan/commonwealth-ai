@@ -46,8 +46,8 @@ use crate::types::EmbedFn;
 use super::atoms::{AtomId, ChunkRef, Entity, Event, SectionPosition};
 use super::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
 use super::resolution_identity::{
-    declared_subject_type, merge_permitted, resolve_claim_subject, sketch_may_merge_into,
-    MergeEvidence, TypedSubjectPools,
+    declared_subject_type, merge_permitted, resolve_relation_participants,
+    resolve_within_declared_type, sketch_may_merge_into, MergeEvidence, TypedSubjectPools,
 };
 use super::resolution_ontology::{
     check_event_participants, check_relation_endpoints, derive_section_context_refs,
@@ -1394,8 +1394,22 @@ pub fn resolve_step_3b_with(
     let mut relation_key_to_id: HashMap<String, super::atoms::AtomId> = HashMap::new();
     for section in sections {
         for (sketch_index, sketch) in section.relations_introduced.iter().enumerate() {
-            let (participant_ids, unresolved) =
-                resolve_entity_ids(&sketch.participants, entities, &name_index, &token_index);
+            // `unclassified` is the schema's escape for a relation the recipe
+            // did not declare: no endpoints to check, Phase 5 types it.
+            let declared_type = sketch
+                .relation_type
+                .as_deref()
+                .filter(|t| !t.is_empty() && *t != UNCLASSIFIED_RELATION);
+            let ends = declared_type.map_or([None, None], |t| policy.index().endpoints(t));
+            let (participant_ids, unresolved) = resolve_relation_participants(
+                &sketch.participants,
+                ends,
+                policy,
+                entities,
+                &name_index,
+                &token_index,
+                &mut typed_pools,
+            );
             for name in &unresolved {
                 failures.push(PhaseFailure {
                     phase: PipelinePhase::Questions,
@@ -1423,12 +1437,6 @@ pub fn resolve_step_3b_with(
             // that resolved there are not those types, the relation is not
             // the one the recipe declared — drop it and say why, rather than
             // writing a link the author's own declaration contradicts.
-            // `unclassified` is the schema's escape for a relation the recipe
-            // did not declare: no endpoints to check, Phase 5 types it.
-            let declared_type = sketch
-                .relation_type
-                .as_deref()
-                .filter(|t| !t.is_empty() && *t != UNCLASSIFIED_RELATION);
             if let Some(rel_type) = declared_type {
                 if let Err(reason) =
                     check_relation_endpoints(policy, rel_type, &participant_ids, entities)
@@ -1621,7 +1629,7 @@ pub fn resolve_step_3b_with(
             // whose name it carries.
             let declared_subject = declared_subject_type(policy, sketch.claim_kind.as_deref());
             let subject = sketch.subject.as_ref().and_then(|name| {
-                let resolved = resolve_claim_subject(
+                let resolved = resolve_within_declared_type(
                     name,
                     declared_subject,
                     policy,

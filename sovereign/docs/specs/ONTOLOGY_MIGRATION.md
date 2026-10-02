@@ -236,6 +236,13 @@ each because the code said so:
   `unclassified` escape (amended 2026-10-02). Optional, the grammar let
   the model skip it and write the declared noun into `label`, so every
   declared relation resolved `unclassified`.
+- A declared relation's ends resolve within their declared types, by the
+  same decider as a claim's `subject` (amended 2026-10-02). The name
+  index keeps one atom per name, so a same-named twin of another type
+  ("Demanhur hoard" the `person`) shadowed the hoard and the endpoint
+  check refused 58 of 63 `holds_coins_of` relations on ft-ans-dev-b.
+  With no atom of the declared type by that name, the general hit stands
+  and the check still refuses it.
 - Every merge in a declared corpus is reified, not only the non-strict
   ones — one rule is cheaper to hold than two, and the strict merges are
   the ones a reader most wants to see. The grade is `external` or

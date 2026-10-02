@@ -202,6 +202,52 @@ async fn endpoint_mismatch_dropped_and_recorded() {
     );
 }
 
+/// A name the extractor also minted under another type resolves, at a
+/// declared end, to the atom of the declared type — not to whichever atom of
+/// that name was indexed last. On ft-ans-dev-b (2026-10-02) every hoard and
+/// mint had a description-less `person` twin ("Demanhur hoard" the person),
+/// and 58 of 63 `holds_coins_of` relations were dropped as mismatches
+/// against the twin.
+#[tokio::test]
+async fn a_declared_end_resolves_to_the_atom_of_its_declared_type() {
+    let policies = numismatics();
+    let first = section(
+        "sec_0001",
+        vec![typed("Series R sceatta", "coin"), typed("Hamwic", "mint")],
+        vec![],
+    );
+    let mut later = section("sec_0002", vec![typed("Hamwic", "person")], vec![]);
+    later.relations_introduced = vec![relation(&["Series R sceatta", "Hamwic"], "struck_at")];
+    let (step_3a, step_3b) = resolve(&policies, vec![first, later]).await;
+
+    let hamwics: Vec<_> = step_3a
+        .entities
+        .iter()
+        .filter(|e| e.canonical_name == "Hamwic")
+        .collect();
+    assert_eq!(
+        hamwics.len(),
+        2,
+        "the twin survives 3a, as on the ANS corpus"
+    );
+    let mint = hamwics
+        .iter()
+        .find(|e| e.entity_type.as_str_repr() == "mint")
+        .expect("the mint atom")
+        .id
+        .clone();
+    assert_eq!(
+        step_3b.relations.len(),
+        1,
+        "kept, not refused: {:?}",
+        step_3b.failures
+    );
+    assert_eq!(
+        step_3b.relations[0].participants[1], mint,
+        "the `to` end is the mint"
+    );
+}
+
 /// The schema's escape value for a relation the recipe did not declare
 /// resolves exactly as an absent type always has: kept, unchecked, typed
 /// `unclassified` — never refused for ends a declared type would reject.
