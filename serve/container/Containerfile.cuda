@@ -20,7 +20,7 @@
 # ── build (from commonwealth-ai/ workspace root, NOT from sovereign/):
 #     cd ~/dev/commonwealth-ai
 #     podman build -t ghcr.io/<you>/sovereign-cuda:latest \
-#                  -f sovereign/container/Containerfile.cuda .
+#                  -f serve/container/Containerfile.cuda .
 #
 # ── run locally (rootful podman, NVIDIA GPU passthrough requires the
 #                 NVIDIA Container Toolkit):
@@ -254,7 +254,7 @@ COPY sovereign/bench/routing/calibration/axes_v1.toml ./sovereign/bench/routing/
 # Mirrors swap_inference_backend() in scripts/bootstrap-linux.sh.
 RUN python3 <<'PY'
 import re, pathlib
-p = pathlib.Path('/workspace/sovereign/crates/sovereign-inference/Cargo.toml')
+p = pathlib.Path('/workspace/serve/crates/sovereign-inference/Cargo.toml')
 src = p.read_text()
 header = '[target.\'cfg(target_os = "linux")\'.dependencies]'
 pattern = (
@@ -452,7 +452,7 @@ RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/lib/x86_64-linux-gnu/libc
 WORKDIR /workspace
 RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign
 
-COPY sovereign/container/entrypoint.sh /entrypoint.sh
+COPY serve/container/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Worker daemon's owner-only TLS surface. No client port (9741) — pods

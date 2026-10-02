@@ -22,7 +22,7 @@ vacuously zero and hop "descents" were pure first-2 fallback.**
 
 Measured 2026-07-31, M2 Max, daemon on :9741, chat = Qwen3.6-35B-A3B-UD-MTP-
 IQ4_NL (temperature 0, thinking off), embeddings = qwen-embedding-0.6b.
-Harness `sovereign/crates/sovereign-inference/examples/p51_descent.rs` +
+Harness `serve/crates/sovereign-inference/examples/p51_descent.rs` +
 `research/enrichment-spikes/scripts/p51_dump.py` (both committed). Raw logs:
 `runs/p51/{hops.jsonl,results.jsonl,run.log}`.
 

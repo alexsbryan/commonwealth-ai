@@ -386,7 +386,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-43-tool_envelope_schema_oneof_includes_each"
 requirement = "CI-43"
-target = "sovereign/crates/sovereign-serving-host/src/inference_adapter.rs"
+target = "serve/crates/sovereign-serving-host/src/inference_adapter.rs"
 find = "        props.insert(\n            \"name\".to_string(),\n            serde_json::json!({ \"type\": \"string\", \"enum\": [t.function.name] }),\n        );"
 replace = "        // MUTATION: Introduce a typo in the property name to violate the schema contract.\n        // The test expects 'name' but will find 'naem', causing the assertion on names to fail or panic during unwrap."
 mustFail = ["tool_envelope_schema_oneof_includes_each_tool"]
@@ -466,7 +466,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-15-agreement_when_gate_and_probe_both_say_s"
 requirement = "EN-15"
-target = "sovereign/crates/sovereign-inference/src/embedded/capabilities.rs"
+target = "serve/crates/sovereign-inference/src/embedded/capabilities.rs"
 find = "    pub fn measurement_contradicts_declaration(&self) -> bool {\n        match &self.partial_kv {\n            PartialKvVerdict::CouldNotJudge { .. } => false,\n            v => v.permits_partial_keep() == self.declarations_say_unsafe,\n        }\n    }"
 replace = "    pub fn measurement_contradicts_declaration(&self) -> bool {\n        // MUTATION: Always return true, ignoring the actual signal and evidence.\n        // This violates EN-15 because it does not explain which signal fired\n        // or on what evidence; it provides a constant result regardless of input.\n        true\n    }"
 mustFail = ["agreement_when_gate_and_probe_both_say_safe"]
@@ -746,7 +746,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-26-agreement_when_gate_and_probe_both_say_u"
 requirement = "EV-26"
-target = "sovereign/crates/sovereign-inference/src/embedded/capabilities.rs"
+target = "serve/crates/sovereign-inference/src/embedded/capabilities.rs"
 find = "    pub fn measurement_contradicts_declaration(&self) -> bool {\n        match &self.partial_kv {\n            PartialKvVerdict::CouldNotJudge { .. } => false,\n            v => v.permits_partial_keep() == self.declarations_say_unsafe,\n        }\n    }"
 replace = "    pub fn measurement_contradicts_declaration(&self) -> bool {\n        // EV-26 violation: Negative controls (Refused/Safe with mismatched probe)\n        // are now silently ignored if the gate passed, effectively making them advisory.\n        match &self.partial_kv {\n            PartialKvVerdict::CouldNotJudge { .. } => false,\n            // Bug: Only check contradiction if declarations say unsafe. \n            // If declarations say safe (gate passed), we return false regardless of probe refusal.\n            v if self.declarations_say_unsafe => v.permits_partial_keep() == true,\n            _ => false,\n        }\n    }"
 mustFail = ["agreement_when_gate_and_probe_both_say_unsafe"]
@@ -806,7 +806,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-33-the_local_fit_gate_is_advisory_by_defaul"
 requirement = "EV-33"
-target = "sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs"
+target = "serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs"
 find = "fn local_fit_enforce() -> bool {\n    std::env::var(\"SOVEREIGN_LOCAL_FIT_ENFORCE\")\n        .map(|v| v == \"1\" || v.eq_ignore_ascii_case(\"true\"))\n        .unwrap_or(false)\n}"
 replace = "fn local_fit_enforce() -> bool {\n    true\n}"
 mustFail = ["the_local_fit_gate_is_advisory_by_default"]
@@ -1206,7 +1206,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-65-suppression_is_deterministic_when_scores"
 requirement = "FE-65"
-target = "sovereign/crates/sovereign-gliner/src/gliner2.rs"
+target = "serve/crates/sovereign-gliner/src/gliner2.rs"
 find = "    hits.sort_by(|a, b| {\n        b.score\n            .partial_cmp(&a.score)\n            .unwrap_or(std::cmp::Ordering::Equal)\n            .then(a.word_start.cmp(&b.word_start))\n            .then(b.word_end.cmp(&a.word_end))\n    });"
 replace = "    // Mutation: Remove tie-breaking logic to make sorting non-deterministic on ties.\n    // This violates the requirement that a deterministic objective sends everything\n    // to one node when predictions are within noise (ties).\n    hits.sort_by(|a, b| {\n        b.score\n            .partial_cmp(&a.score)\n            .unwrap_or(std::cmp::Ordering::Equal)\n    });"
 mustFail = ["suppression_is_deterministic_when_scores_tie"]

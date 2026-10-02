@@ -271,7 +271,7 @@ effectively unbounded (the pre-fix shape, same code path, no reachable cap):
 
 ```
 thread '…::a_full_coalescer_sheds_instead_of_growing' panicked at
-  sovereign/crates/sovereign-inference/src/embedded/engine.rs:4107:14:
+  serve/crates/sovereign-inference/src/embedded/engine.rs:4107:14:
   a queue at its bound must shed, not grow: Receiver { … }
 pass: 0  fail: 1   cargo exit: 100
 ```
@@ -331,7 +331,7 @@ suffered. Run with `blocking_send` restored:
 
 ```
 thread '…::a_consumer_that_stops_reading_frees_the_slot_within_the_deadline' panicked at
-  sovereign/crates/sovereign-inference/src/embedded/model_slot.rs:5381:14:
+  serve/crates/sovereign-inference/src/embedded/model_slot.rs:5381:14:
   the send never returned — a half-open consumer is pinning the slot indefinitely, and
   the wall-clock deadline cannot fire because the generation loop is parked inside the
   send: Timeout

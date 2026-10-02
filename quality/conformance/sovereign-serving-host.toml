@@ -13,13 +13,13 @@
 [[claim]]
 requirement = "FE-133"
 test = "sovereign-serving-host::worker_eligibility::tests::stable_worker_eligible_after_settle"
-file = "sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs"
+file = "serve/crates/sovereign-serving-host/src/worker_eligibility.rs"
 line = 748
 asserts = 3
 
 [[claim]]
 requirement = "FE-135"
 test = "sovereign-serving-host::worker_eligibility::tests::anchor_profile_is_stricter_than_default"
-file = "sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs"
+file = "serve/crates/sovereign-serving-host/src/worker_eligibility.rs"
 line = 734
 asserts = 6

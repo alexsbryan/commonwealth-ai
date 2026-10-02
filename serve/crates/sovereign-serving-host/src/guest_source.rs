@@ -5,7 +5,7 @@
 //! through two ports — `GuestLinkReader` and `GuestTunnelOpener` — because
 //! neither the holder's link file (`sovereign_contracts::guest_link`, the holder's
 //! credential) nor the tunnel (`mesh_reach::guest`, Fabric reach) is the
-//! serving package's to name (`sovereign/SERVING_BOUNDARY.md` "The five
+//! serving package's to name (`serve/SERVING_BOUNDARY.md` "The five
 //! entries" (a)). This module implements both over the mesh's own readers,
 //! and carries the factory the daemon installs on its provider.
 //!

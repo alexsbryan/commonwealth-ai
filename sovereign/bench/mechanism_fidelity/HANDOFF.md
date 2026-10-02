@@ -47,7 +47,7 @@ Also see the memory file `~/.claude/projects/.../memory/project_mechanism_fideli
 - `elicit` (K-sampling, legacy), `elicit_logprob` (**Phase 0**, the K-killer), `preflight`, `build_rows`, `print_glassbox_summary`, checkpoint/resume (`CheckpointAgg`, `load_checkpoint`, `open_checkpoint`, `append_checkpoint`).
 - Registered in `bench_cmd/mod.rs` (`"mechanism-fidelity" => …`).
 
-**Embedded forced-choice path** (`sovereign/crates/sovereign-inference/src/embedded/model_slot.rs`):
+**Embedded forced-choice path** (`serve/crates/sovereign-inference/src/embedded/model_slot.rs`):
 - `forced_choice_candidates(&CompletionRequest) -> Option<Vec<String>>` — detects the sentinel.
 - `forced_choice_probs(model, ctx, candidates) -> Vec<(String,f32)>` — reads masked next-token logits over the candidate leading tokens (bare + space-prefixed), softmax.
 - The branch in `generate_sync` right after the prefill (`*cached_tokens = tokens.clone();` … before `build_sampler`) + the MTP gate (`&& forced_choice_candidates(request).is_none()`).

@@ -75,7 +75,7 @@ Landed since the original MVP plan:
   no-cycle property that keeps `vastai` shell-outs out of
   `sovereign-mesh`.
 - **Local-podman smoke harness** —
-  `sovereign/container/Containerfile.local-test` +
+  `serve/container/Containerfile.local-test` +
   `scripts/pod` wrapper + `sovereign-mesh/tests/local_pod_smoke.rs`
   validate the full wire protocol against real containers before
   paying for Vast. Three `#[ignore]` tests: single-pod lifecycle
@@ -311,7 +311,7 @@ owner-pubkey-thumbprint claim is checked against the pod's own
 bootstrap pin; only the owner can dispatch.
 
 ### Modified: pod entrypoint
-**`sovereign/container/entrypoint.sh`** — replaces today's Tailscale
+**`serve/container/entrypoint.sh`** — replaces today's Tailscale
 + rclone + mesh-join sequence with:
 
 1. Decode `SOVEREIGN_BOOTSTRAP` from env.

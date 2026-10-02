@@ -1758,7 +1758,7 @@ reason = "`kickstart_daemon` — `id -u`, then `launchctl kickstart -k gui/<uid>
 #
 # The closing conditions those eleven rows carried are not lost: they are in
 # the diffs that deleted them, in docs/CODE_TOOLING_BOUNDARY.md, in
-# sovereign/SERVING_BOUNDARY.md and in corpus-engine/DECOMPOSITION.md.
+# serve/SERVING_BOUNDARY.md and in corpus-engine/DECOMPOSITION.md.
 #
 # `sovereign-mesh-test-harness -> sovereign-api` retired at
 # REVIEW-build-harness-oicp-seam (2026-09-17). The harness's simulated node is

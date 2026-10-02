@@ -19,7 +19,7 @@ members = [
     # and sovereign-server depended on commonwealth-core, so moving it here
     # DELETES two cross-family edges instead of relocating them. Tier-0, and
     # the empty in-repo dep list is the contract (see its lib.rs).
-    "serving-policy",
+    "serve/crates/serving-policy",
     # The arithmetic half of serving-policy as a [[package_leaf]] vocabulary
     # leaf (fp-17, 2026-09-22): the daemon computes the same fair-share rule
     # the serving cluster does, and an [svrn] member may not name a [cmnwlth]
@@ -121,7 +121,7 @@ members = [
     # Sovereign — local agent runtime + CLI + desktop + server.
     "shared/crates/sovereign-contracts",
     "sovereign/crates/sovereign-core",
-    "sovereign/crates/sovereign-inference",
+    "serve/crates/sovereign-inference",
     "sovereign/crates/sovereign-store",
     "shared/crates/sovereign-time",
     "sovereign/crates/sovereign-tools",
@@ -130,7 +130,7 @@ members = [
     # 2026-07-17 so the fragile ort=rc.9 stack is a mandatory dep of only the
     # four binaries that need it, not an optional feature on a shared crate
     # (which Cargo unification compiled two ways, breaking -p builds).
-    "sovereign/crates/sovereign-gliner",
+    "serve/crates/sovereign-gliner",
     # The enrichment catalog — the on-disk store's layout, its `config.json`
     # schema and its inventory, below every host that touches it. Minted
     # 2026-08-20 (noun-convergence rung nc-16-shared-capability) after the
@@ -179,7 +179,7 @@ members = [
     # P1) — child-process supervisor (extracted from sovereign-desktop) + the
     # native lossless wire + child server/entrypoint + daemon-side provider
     # facade & replica pool.
-    "sovereign/crates/sovereign-compute",
+    "serve/crates/sovereign-compute",
     # Compute's remote isolation — leasing a rented machine and running work on
     # it (DOMAINS.md §11.2). Receives the worker_http / controller / daemon /
     # subprocess-runner / multi-pod-coordinator modules; `worker_pod`'s wire
@@ -189,11 +189,11 @@ members = [
     # created as stubs so the boundary has crates to name. The scheduler half
     # of sovereign-mesh moves into sovereign-scheduler, the host half into
     # sovereign-serving-host.
-    "sovereign/crates/sovereign-scheduler",
-    "sovereign/crates/sovereign-serving-host",
+    "serve/crates/sovereign-scheduler",
+    "serve/crates/sovereign-serving-host",
     # `serve`, the model server (docs/FIVE_PROGRAMS.md §2; phase-b
     # pb-serve-program): the one binary that answers the OpenAI wire alone.
-    "sovereign/crates/sovereign-serve",
+    "serve/crates/sovereign-serve",
     # The stock distribution (docs/FIVE_PROGRAMS.md §2c; pb-stock-binary): svrn
     # with serve hosted in one process, what `svrn daemon run` execs.
     "sovereign/crates/sovereign-stock",
@@ -353,7 +353,7 @@ cognitive_complexity = "warn"
 oicp-client = { path = "shared/crates/oicp-client" }
 oicp-types = { path = "shared/crates/oicp-types" }
 kernel-types = { path = "shared/crates/kernel-types" }
-serving-policy = { path = "serving-policy" }
+serving-policy = { path = "serve/crates/serving-policy" }
 serving-policy-core = { path = "shared/crates/serving-policy-core" }
 oplog = { path = "shared/crates/oplog" }
 mesh-join-vocab = { path = "shared/crates/mesh-join-vocab" }
@@ -376,14 +376,14 @@ code-next-edit = { path = "code-next-edit" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "shared/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
-sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
-sovereign-scheduler = { path = "sovereign/crates/sovereign-scheduler" }
+sovereign-inference = { path = "serve/crates/sovereign-inference" }
+sovereign-scheduler = { path = "serve/crates/sovereign-scheduler" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-time = { path = "shared/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-code = { path = "sovereign/crates/sovereign-code" }
 sovereign-studio = { path = "studio/crates/sovereign-studio" }
-sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
+sovereign-gliner = { path = "serve/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
 sovereign-enrichment-build = { path = "sovereign/crates/sovereign-enrichment-build" }
 sovereign-runtime-recipe = { path = "sovereign/crates/sovereign-runtime-recipe" }
@@ -395,9 +395,9 @@ sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
 sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
 sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
 sovereign-peer-wire = { path = "shared/crates/sovereign-peer-wire" }
-sovereign-compute = { path = "sovereign/crates/sovereign-compute" }
-sovereign-serving-host = { path = "sovereign/crates/sovereign-serving-host" }
-sovereign-serve = { path = "sovereign/crates/sovereign-serve" }
+sovereign-compute = { path = "serve/crates/sovereign-compute" }
+sovereign-serving-host = { path = "serve/crates/sovereign-serving-host" }
+sovereign-serve = { path = "serve/crates/sovereign-serve" }
 sovereign-service = { path = "sovereign/crates/sovereign-service" }
 sovereign-cli-base = { path = "shared/crates/sovereign-cli-base" }
 sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }

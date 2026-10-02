@@ -47,7 +47,7 @@
 1	sovereign/crates/sovereign-code/src/dry_report.rs
 2	sovereign/crates/sovereign-code/src/lint_status.rs
 2	sovereign/crates/sovereign-code/src/test_status.rs
-2	sovereign/crates/sovereign-compute/src/supervisor.rs
+2	serve/crates/sovereign-compute/src/supervisor.rs
 2	shared/crates/sovereign-contracts/src/health.rs
 1	shared/crates/sovereign-contracts/src/tool_result_cache.rs
 2	sovereign/crates/sovereign-core/src/deep_research/state.rs
@@ -66,10 +66,10 @@
 1	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs
 2	sovereign/crates/sovereign-grants/src/auto_recover.rs
 2	sovereign/crates/sovereign-grants/src/shard_manager.rs
-1	sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs
-1	sovereign/crates/sovereign-inference/src/embedded/sampler.rs
-1	sovereign/crates/sovereign-serving-host/src/inference_adapter.rs
-1	sovereign/crates/sovereign-serving-host/src/pinned_pod_snapshot.rs
+1	serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs
+1	serve/crates/sovereign-inference/src/embedded/sampler.rs
+1	serve/crates/sovereign-serving-host/src/inference_adapter.rs
+1	serve/crates/sovereign-serving-host/src/pinned_pod_snapshot.rs
 2	sovereign/crates/sovereign-tools/src/knowledge_view/manager.rs
 1	sovereign/crates/sovereign-tools/src/knowledge_view/recipes.rs
 1	sovereign/crates/sovereign-tools/src/typed_extension/mod.rs

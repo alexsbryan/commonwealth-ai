@@ -6,11 +6,11 @@
 13776	(total covered lines)
 37	commonwealth/crates/commonwealth-core/src/mesh/mod.rs <-> sovereign/crates/sovereign-cli-mesh/src/daemon_store.rs
 60	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs
-32	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs <-> sovereign/crates/sovereign-serve/src/rails_mesh.rs
+32	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs <-> serve/crates/sovereign-serve/src/rails_mesh.rs
 30	commonwealth/crates/commonwealth-media/src/declared.rs <-> sovereign/crates/sovereign-daemon/src/client_tokens.rs <-> studio/crates/sovereign-tools-base/src/mcp/secret_store.rs
 30	commonwealth/crates/commonwealth-rails/src/cli.rs <-> sovereign/crates/sovereign-cli-mesh/src/mesh_media.rs
-24	commonwealth/crates/commonwealth-rails/src/gossip.rs <-> sovereign/crates/sovereign-daemon/src/peer_origin/claims.rs <-> sovereign/crates/sovereign-serve/src/rails_mesh.rs
-32	commonwealth/crates/commonwealth-rails/src/gossip.rs <-> sovereign/crates/sovereign-serve/src/rails_mesh.rs
+24	commonwealth/crates/commonwealth-rails/src/gossip.rs <-> sovereign/crates/sovereign-daemon/src/peer_origin/claims.rs <-> serve/crates/sovereign-serve/src/rails_mesh.rs
+32	commonwealth/crates/commonwealth-rails/src/gossip.rs <-> serve/crates/sovereign-serve/src/rails_mesh.rs
 28	commonwealth/crates/commonwealth-rails/src/iroh_watchdog.rs <-> shared/crates/sovereign-contracts/src/daemon_wire/mesh.rs
 18	commonwealth/crates/commonwealth-rails/src/rail.rs <-> sovereign/crates/sovereign-daemon/src/routes_rail.rs
 26	commonwealth/crates/commonwealth-rails/src/rail.rs <-> sovereign/crates/sovereign-daemon/src/routes_rail_live.rs
@@ -121,13 +121,13 @@
 18	shared/crates/kernel-types/src/quality/instruments.rs <-> shared/crates/kernel-types/src/quality/triggers.rs
 16	shared/crates/oicp-client/src/lib.rs <-> shared/crates/oicp-client/src/serve_loopback.rs
 16	shared/crates/oicp-client/src/lib.rs <-> shared/crates/oicp-types/src/completion.rs
-260	shared/crates/oicp-client/src/lib.rs <-> shared/crates/oicp-types/src/completion.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs <-> sovereign/crates/sovereign-core/src/memory.rs <-> sovereign/crates/sovereign-core/src/runtime/collaboration.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/conation.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs <-> sovereign/crates/sovereign-inference/src/hybrid.rs <-> sovereign/crates/sovereign-inference/src/router_circuit.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs <-> sovereign/crates/sovereign-tools/src/typed_call.rs <-> studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
-189	shared/crates/oicp-client/src/lib.rs <-> shared/crates/oicp-types/src/completion.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs <-> sovereign/crates/sovereign-core/src/memory.rs <-> sovereign/crates/sovereign-core/src/runtime/collaboration.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/conation.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs <-> sovereign/crates/sovereign-inference/src/hybrid.rs <-> sovereign/crates/sovereign-inference/src/router_circuit.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs <-> sovereign/crates/sovereign-tools/src/typed_call.rs <-> studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs <-> shared/crates/sovereign-workflow/src/steps.rs
-144	shared/crates/oicp-client/src/lib.rs <-> shared/crates/oicp-types/src/completion.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs <-> sovereign/crates/sovereign-core/src/memory.rs <-> sovereign/crates/sovereign-core/src/runtime/gk_rescue.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs <-> sovereign/crates/sovereign-inference/src/hybrid.rs <-> sovereign/crates/sovereign-inference/src/router_circuit.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs <-> sovereign/crates/sovereign-tools/src/typed_call.rs <-> studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
-72	shared/crates/oicp-client/src/lib.rs <-> shared/crates/oicp-types/src/completion.rs <-> sovereign/crates/sovereign-core/src/memory.rs <-> sovereign/crates/sovereign-inference/src/hybrid.rs <-> sovereign/crates/sovereign-inference/src/router_circuit.rs <-> studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
-192	shared/crates/oicp-client/src/lib.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner_threads.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs <-> sovereign/crates/sovereign-core/src/memory.rs <-> sovereign/crates/sovereign-core/src/runtime/collaboration.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/conation.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/expressive.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/generative.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs <-> sovereign/crates/sovereign-inference/src/hybrid.rs <-> sovereign/crates/sovereign-inference/src/router_circuit.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs <-> sovereign/crates/sovereign-tools/src/typed_call.rs <-> studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
+260	shared/crates/oicp-client/src/lib.rs <-> shared/crates/oicp-types/src/completion.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs <-> sovereign/crates/sovereign-core/src/memory.rs <-> sovereign/crates/sovereign-core/src/runtime/collaboration.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/conation.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs <-> serve/crates/sovereign-inference/src/hybrid.rs <-> serve/crates/sovereign-inference/src/router_circuit.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs <-> sovereign/crates/sovereign-tools/src/typed_call.rs <-> studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
+189	shared/crates/oicp-client/src/lib.rs <-> shared/crates/oicp-types/src/completion.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs <-> sovereign/crates/sovereign-core/src/memory.rs <-> sovereign/crates/sovereign-core/src/runtime/collaboration.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/conation.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs <-> serve/crates/sovereign-inference/src/hybrid.rs <-> serve/crates/sovereign-inference/src/router_circuit.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs <-> sovereign/crates/sovereign-tools/src/typed_call.rs <-> studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs <-> shared/crates/sovereign-workflow/src/steps.rs
+144	shared/crates/oicp-client/src/lib.rs <-> shared/crates/oicp-types/src/completion.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs <-> sovereign/crates/sovereign-core/src/memory.rs <-> sovereign/crates/sovereign-core/src/runtime/gk_rescue.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs <-> serve/crates/sovereign-inference/src/hybrid.rs <-> serve/crates/sovereign-inference/src/router_circuit.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs <-> sovereign/crates/sovereign-tools/src/typed_call.rs <-> studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
+72	shared/crates/oicp-client/src/lib.rs <-> shared/crates/oicp-types/src/completion.rs <-> sovereign/crates/sovereign-core/src/memory.rs <-> serve/crates/sovereign-inference/src/hybrid.rs <-> serve/crates/sovereign-inference/src/router_circuit.rs <-> studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
+192	shared/crates/oicp-client/src/lib.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner_threads.rs <-> sovereign/crates/sovereign-cli-bench/src/eval_cmd/score.rs <-> sovereign/crates/sovereign-core/src/memory.rs <-> sovereign/crates/sovereign-core/src/runtime/collaboration.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/conation.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/expressive.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/generative.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs <-> serve/crates/sovereign-inference/src/hybrid.rs <-> serve/crates/sovereign-inference/src/router_circuit.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs <-> sovereign/crates/sovereign-tools/src/typed_call.rs <-> studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
 16	shared/crates/oicp-client/src/lib.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
-16	shared/crates/oicp-client/src/openai_passthrough.rs <-> sovereign/crates/sovereign-serving-host/src/peer_inference/provider_impl.rs
+16	shared/crates/oicp-client/src/openai_passthrough.rs <-> serve/crates/sovereign-serving-host/src/peer_inference/provider_impl.rs
 70	shared/crates/oicp-types/src/completion.rs <-> shared/crates/oicp-types/src/openai_types.rs
 22	shared/crates/oicp-types/src/tool_calls.rs <-> sovereign/crates/sovereign-daemon/src/frontdoor.rs
 24	sovereign-mobile/src-tauri/src/remote/stream.rs <-> sovereign/crates/sovereign-core/src/runtime/serve.rs <-> shared/crates/sovereign-turn-client/src/lib.rs
@@ -225,7 +225,7 @@
 62	sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs <-> sovereign/crates/sovereign-cli-llm/src/inner_chaos/synth.rs
 18	sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs <-> sovereign/crates/sovereign-tools/src/mem_tree.rs
 16	sovereign/crates/sovereign-cli-llm/src/portfolio_cmd/ask.rs <-> sovereign/crates/sovereign-cli-llm/src/proxy_cmd/ask.rs
-22	sovereign/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs <-> sovereign/crates/sovereign-compute/src/manager.rs
+22	sovereign/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs <-> serve/crates/sovereign-compute/src/manager.rs
 24	sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/runner.rs <-> sovereign/crates/sovereign-daemon/src/frontdoor.rs
 18	sovereign/crates/sovereign-cli-mesh/src/job_cmd.rs <-> sovereign/crates/sovereign-cli-mesh/src/ring_cmd/mod.rs
 52	sovereign/crates/sovereign-cli-mesh/src/mesh_app.rs <-> sovereign/crates/sovereign-cli-mesh/src/mesh_media.rs
@@ -300,23 +300,23 @@
 28	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs
 36	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/streaming.rs
 45	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs
-18	sovereign/crates/sovereign-core/src/runtime/handlers/recipe_author.rs <-> sovereign/crates/sovereign-serving-host/src/inference_adapter.rs
+18	sovereign/crates/sovereign-core/src/runtime/handlers/recipe_author.rs <-> serve/crates/sovereign-serving-host/src/inference_adapter.rs
 16	sovereign/crates/sovereign-core/src/runtime/retrieval/history.rs <-> understanding-atlas/src/meta_atlas/bridge/signals.rs
 341	sovereign/crates/sovereign-core/src/runtime/streaming.rs <-> sovereign/crates/sovereign-core/src/runtime/turn.rs
-18	sovereign/crates/sovereign-daemon/src/admission/layers.rs <-> sovereign/crates/sovereign-serving-host/src/admission.rs
+18	sovereign/crates/sovereign-daemon/src/admission/layers.rs <-> serve/crates/sovereign-serving-host/src/admission.rs
 20	sovereign/crates/sovereign-daemon/src/client_tokens.rs <-> studio/crates/sovereign-tools-base/src/mcp/secret_store.rs
 54	sovereign/crates/sovereign-daemon/src/corpus_catalog_http.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/commands/mod.rs
 16	sovereign/crates/sovereign-daemon/src/daemon_cmd/boot.rs <-> sovereign/crates/sovereign-daemon/src/daemon_cmd/mod.rs
 24	sovereign/crates/sovereign-daemon/src/daemon_cmd/lifecycle.rs <-> sovereign/crates/sovereign-daemon/src/daemon_cmd/memory_watch.rs <-> sovereign/crates/sovereign-daemon/src/routes_status.rs
 76	sovereign/crates/sovereign-daemon/src/daemon_cmd/memory_watch.rs <-> sovereign/crates/sovereign-daemon/src/routes_status.rs
-36	sovereign/crates/sovereign-daemon/src/openai_http.rs <-> sovereign/crates/sovereign-serving-host/src/fim_http.rs
+36	sovereign/crates/sovereign-daemon/src/openai_http.rs <-> serve/crates/sovereign-serving-host/src/fim_http.rs
 40	sovereign/crates/sovereign-daemon/src/routes_internal/knowledge.rs <-> sovereign/crates/sovereign-daemon/src/routes_knowledge.rs
 60	sovereign/crates/sovereign-daemon/src/routes_internal/pipeline_pause.rs <-> sovereign/crates/sovereign-pipeline/src/pipeline_cmd.rs
-22	sovereign/crates/sovereign-daemon/src/routes_oicp.rs <-> sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs
+22	sovereign/crates/sovereign-daemon/src/routes_oicp.rs <-> serve/crates/sovereign-serving-host/src/oicp_synthesis.rs
 24	sovereign/crates/sovereign-daemon/src/state.rs <-> sovereign/crates/sovereign-daemon/src/state/store.rs
 28	sovereign/crates/sovereign-desktop/src-tauri/src/commands/config_setup.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/state/config.rs
 16	sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs
-18	sovereign/crates/sovereign-desktop/src-tauri/src/commands/hardware.rs <-> sovereign/crates/sovereign-inference/src/setup_planner.rs
+18	sovereign/crates/sovereign-desktop/src-tauri/src/commands/hardware.rs <-> serve/crates/sovereign-inference/src/setup_planner.rs
 18	sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs
 33	sovereign/crates/sovereign-enrichment-build/src/atlas_configuration.rs <-> sovereign/crates/sovereign-enrichment-build/src/atlas_gaps.rs <-> sovereign/crates/sovereign-enrichment-build/src/atlas_tensions.rs
 18	sovereign/crates/sovereign-enrichment-build/src/atlas_gaps.rs <-> sovereign/crates/sovereign-enrichment-build/src/atlas_tensions.rs
@@ -333,11 +333,11 @@
 36	sovereign/crates/sovereign-eval/src/cognitive/runner.rs <-> sovereign/crates/sovereign-eval/src/judge.rs
 18	sovereign/crates/sovereign-eval/src/disposition_bench.rs <-> sovereign/crates/sovereign-eval/src/entity_resolution_bench.rs
 24	sovereign/crates/sovereign-eval/src/mechanism_fidelity/case.rs <-> sovereign/crates/sovereign-eval/src/mechanism_fidelity/classes/aggregation.rs
-36	sovereign/crates/sovereign-inference/src/embedded/embed_slot.rs <-> sovereign/crates/sovereign-inference/src/embedded/model_slot.rs <-> sovereign/crates/sovereign-inference/src/embedded/rerank_slot.rs
-26	sovereign/crates/sovereign-inference/src/embedded/embed_slot.rs <-> sovereign/crates/sovereign-inference/src/embedded/rerank_slot.rs
-122	sovereign/crates/sovereign-inference/src/evidence_id_constraint.rs <-> sovereign/crates/sovereign-inference/src/url_constraint.rs
-20	sovereign/crates/sovereign-inference/src/hybrid.rs <-> sovereign/crates/sovereign-inference/src/router_circuit.rs
-24	sovereign/crates/sovereign-inference/src/hybrid.rs <-> sovereign/crates/sovereign-inference/src/router_circuit.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
+36	serve/crates/sovereign-inference/src/embedded/embed_slot.rs <-> serve/crates/sovereign-inference/src/embedded/model_slot.rs <-> serve/crates/sovereign-inference/src/embedded/rerank_slot.rs
+26	serve/crates/sovereign-inference/src/embedded/embed_slot.rs <-> serve/crates/sovereign-inference/src/embedded/rerank_slot.rs
+122	serve/crates/sovereign-inference/src/evidence_id_constraint.rs <-> serve/crates/sovereign-inference/src/url_constraint.rs
+20	serve/crates/sovereign-inference/src/hybrid.rs <-> serve/crates/sovereign-inference/src/router_circuit.rs
+24	serve/crates/sovereign-inference/src/hybrid.rs <-> serve/crates/sovereign-inference/src/router_circuit.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
 30	sovereign/crates/sovereign-meshapp/src/parcels.rs <-> sovereign/crates/sovereign-tools/src/parcel_analytics.rs
 44	sovereign/crates/sovereign-onprem/src/main.rs <-> sovereign/crates/sovereign-stock/src/main.rs
 24	sovereign/crates/sovereign-pipeline/src/atlas_cmd/build_doc_index.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/enable_incremental.rs <-> sovereign/crates/sovereign-pipeline/src/atlas_cmd/migrate_ids.rs
@@ -384,8 +384,8 @@
 20	sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_intel.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs
 20	sovereign/crates/sovereign-pipeline/src/enrich_cmd/spec_reconcile.rs <-> sovereign/crates/sovereign-tools/src/knowledge_view/cross_view.rs
 16	sovereign/crates/sovereign-pipeline/src/recipe_cmd.rs <-> studio/crates/sovereign-recipe-author/src/test_tool.rs
-16	sovereign/crates/sovereign-serve/src/mesh_plan.rs <-> sovereign/crates/sovereign-serve/src/mesh_plan/report.rs
-16	sovereign/crates/sovereign-serving-host/src/peer_inference.rs <-> sovereign/crates/sovereign-serving-host/src/peer_inference/provider_impl.rs
+16	serve/crates/sovereign-serve/src/mesh_plan.rs <-> serve/crates/sovereign-serve/src/mesh_plan/report.rs
+16	serve/crates/sovereign-serving-host/src/peer_inference.rs <-> serve/crates/sovereign-serving-host/src/peer_inference/provider_impl.rs
 16	sovereign/crates/sovereign-store/src/memory.rs <-> sovereign/crates/sovereign-store/src/postgres.rs
 18	sovereign/crates/sovereign-store/src/postgres.rs <-> sovereign/crates/sovereign-store/src/sqlite.rs
 32	sovereign/crates/sovereign-store/src/postgres.rs <-> sovereign/crates/sovereign-store/src/sqlite/conversation.rs

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Observation-state export and trace-replay fixtures — Phase 0
 //! (P3 + P4) of
-//! [`docs/specs/SCHEDULER_QUALITY.md`](../../../docs/specs/SCHEDULER_QUALITY.md).
+//! [`docs/specs/SCHEDULER_QUALITY.md`](../../../../sovereign/docs/specs/SCHEDULER_QUALITY.md).
 //!
 //! # P3 — observation-state export
 //!

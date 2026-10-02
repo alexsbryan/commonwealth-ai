@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Routing decision records — Phase 0 (P1 + P2) of
-//! [`docs/specs/SCHEDULER_QUALITY.md`](../../../docs/specs/SCHEDULER_QUALITY.md).
+//! [`docs/specs/SCHEDULER_QUALITY.md`](../../../../sovereign/docs/specs/SCHEDULER_QUALITY.md).
 //!
 //! # Why this exists
 //!
@@ -44,7 +44,7 @@
 //! constructor-injected field on `InferenceRouter` rather than a
 //! process-global. Production installs the recording sink — file, env,
 //! clock and ids — which is `sovereign-serving-host`'s
-//! (`sovereign/SERVING_BOUNDARY.md` "Corrected 2026-09-14", bullet 1):
+//! (`serve/SERVING_BOUNDARY.md` "Corrected 2026-09-14", bullet 1):
 //! this crate takes the decision id and `now` as arguments and never
 //! reads a clock or mints an id itself.
 
@@ -811,7 +811,7 @@ pub struct DecisionBuilder {
 
 impl DecisionBuilder {
     /// `decision_id` is minted by the caller — the recording sink's host
-    /// owns id minting and the clock (`sovereign/SERVING_BOUNDARY.md`
+    /// owns id minting and the clock (`serve/SERVING_BOUNDARY.md`
     /// "Corrected 2026-09-14", bullet 1), so this crate reads no clock
     /// and mints no id.
     pub fn new(

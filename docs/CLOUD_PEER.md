@@ -52,7 +52,7 @@ answers "is anything costing me money right now, and how much so far".
   billing.
 
 The GPU allowlist is a safety guard, not a preference: the image is compiled
-for CUDA archs 80;86;89;90 (`sovereign/container/Containerfile.cuda`). Auto-pick
+for CUDA archs 80;86;89;90 (`serve/container/Containerfile.cuda`). Auto-pick
 takes the cheapest offer that passes it and **refuses an unrecognised GPU**
 rather than assuming it works — a Turing card is often the cheapest offer that
 fits the loadout, and you would pay for a could-not-judge. `offers` still lists

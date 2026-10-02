@@ -3,7 +3,7 @@
 //! chat request, given its OICP capability envelope.
 //!
 //! This is host code, not scheduler arithmetic
-//! (`sovereign/SERVING_BOUNDARY.md` "Corrected 2026-09-14"): it picks the
+//! (`serve/SERVING_BOUNDARY.md` "Corrected 2026-09-14"): it picks the
 //! *local* slot through a manifest lookup, and its only production caller is
 //! the host's inference adapter. The manifest it reads lives in
 //! `sovereign-core`, outside the serving package, so the lookup arrives

@@ -118,7 +118,7 @@ daemon-side half of the argument. Leading with what was wrong:
 
 ## The two tiers
 
-**Package crates** (`[[package]] name = "serving"`, `doc = "sovereign/SERVING_BOUNDARY.md"`):
+**Package crates** (`[[package]] name = "serving"`, `doc = "serve/SERVING_BOUNDARY.md"`):
 
 | Crate | Lines | Role |
 |---|---:|---|
@@ -226,7 +226,7 @@ pub struct RankResult {              // :322
 **(c) The admission entry** — the decision separated from the middleware, over a decider
 that already exists in a tier-0 leaf and is not re-minted (ARCH §11).
 ```rust
-// sovereign-serving-host, over serving-policy/src/fair_sched.rs :244 SchedCore<K> ·
+// sovereign-serving-host, over serve/crates/serving-policy/src/fair_sched.rs :244 SchedCore<K> ·
 // :448 try_grant(key,weight,cap) -> :198 TryGrant{Granted, WouldQueue{position}, Shed}.
 // The owner's own chat is ALWAYS admitted: it must never 503.
 // `Principal` is published language resolved once at the daemon's edge (DAEMON_CORE.md §3.3);

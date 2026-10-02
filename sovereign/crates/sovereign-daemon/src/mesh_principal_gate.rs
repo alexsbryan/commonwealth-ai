@@ -72,7 +72,7 @@ pub const SENDERS: &[&str] = &[
     "sovereign/crates/sovereign-grants/src/shard_manager.rs",
     "sovereign/crates/sovereign-daemon/src/routes_knowledge.rs",
     "sovereign/crates/sovereign-daemon/src/server.rs",
-    "sovereign/crates/sovereign-serving-host/src/peer_inference.rs",
+    "serve/crates/sovereign-serving-host/src/peer_inference.rs",
 ];
 
 /// The wire form itself, in both spellings, plus the retired parser's name so

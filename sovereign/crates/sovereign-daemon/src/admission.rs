@@ -4,7 +4,7 @@
 //!
 //! The decision's ports and the two axum middlewares are `layers`; the shed
 //! wire and 503 renderer are `sovereign_contracts::admission_wire`
-//! (`sovereign/SERVING_BOUNDARY.md` "The five entries" (c)). This module
+//! (`serve/SERVING_BOUNDARY.md` "The five entries" (c)). This module
 //! re-exports both at their historical paths and implements the ports over [`AppState`]:
 //!
 //! - [`Admission`] — the peer ceiling (pause, foreground yield, the

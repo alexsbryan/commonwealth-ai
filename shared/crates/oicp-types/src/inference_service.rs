@@ -7,7 +7,7 @@
 //! trait. They are protocol vocabulary — an OICP client asks a host for a FIM
 //! completion and reads the answer — so they live in the leaf every consumer
 //! already reaches rather than in the API crate the serving host may not name
-//! (`sovereign/SERVING_BOUNDARY.md` "The two tiers"; domains
+//! (`serve/SERVING_BOUNDARY.md` "The two tiers"; domains
 //! `REVIEW-build-local-inference`).
 
 use std::pin::Pin;

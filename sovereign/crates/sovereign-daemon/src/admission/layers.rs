@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Admission — the decision's ports and svrn's two axum middlewares.
 //!
-//! `sovereign/SERVING_BOUNDARY.md` "The five entries" (c). svrn mounts these
+//! `serve/SERVING_BOUNDARY.md` "The five entries" (c). svrn mounts these
 //! layers and no other program does, so they are svrn's (pb-svrn-serving-ports,
 //! §12 3a rung 1; they lived in `sovereign-serving-host` until then). The wire
 //! they answer with — the shed reason, its jitter and the 503 renderer — is the

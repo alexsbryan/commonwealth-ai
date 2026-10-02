@@ -110,7 +110,7 @@ fn ensure_image() -> Result<(), String> {
             "-t",
             IMAGE_TAG,
             "-f",
-            "sovereign/container/Containerfile.local-test",
+            "serve/container/Containerfile.local-test",
             "--ignorefile",
             ".containerignore.local-test",
             ".",

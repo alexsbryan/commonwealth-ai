@@ -354,24 +354,24 @@ llama-cpp-sys-4
 
 === where is llama-cpp-sys sourced ===
 sovereign/crates/sovereign-cli-llm/Cargo.toml:20:# linked llama-cpp-2 in the first place.
-sovereign/crates/sovereign-inference/Cargo.toml:38:# Jinja2 chat-template renderer. The llama-cpp-4 0.2.x binding
-sovereign/crates/sovereign-inference/Cargo.toml:51:# llama-cpp-4 binding's `LlamaSampler::llguidance` shim doesn't
-sovereign/crates/sovereign-inference/Cargo.toml:64:# lands a fix in a llama-cpp-2 release we can pin to.
-sovereign/crates/sovereign-inference/Cargo.toml:66:# llama-cpp-4 0.5.1 (bumped from 0.4.2 on 2026-08-03). The crate bundles
-sovereign/crates/sovereign-inference/Cargo.toml:69:# vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT.
-sovereign/crates/sovereign-inference/Cargo.toml:80:# (PR #22673, our original reason for leaving llama-cpp-2 0.1.146), the GLM-5
-sovereign/crates/sovereign-inference/Cargo.toml:95:# llama-cpp-sys-4 hunt for a Homebrew libomp and build ggml with
-sovereign/crates/sovereign-inference/Cargo.toml:133:llama-cpp-4 = { version = "0.5.1", default-features = false, features = ["metal", "mtmd"] }
-sovereign/crates/sovereign-inference/Cargo.toml:136:# than llama-cpp-4's `rpc` feature, whose binding module targets an older
-sovereign/crates/sovereign-inference/Cargo.toml:140:llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
-sovereign/crates/sovereign-inference/Cargo.toml:146:llama-cpp-4 = { version = "0.5.1", default-features = false, features = ["mtmd"] }
-sovereign/crates/sovereign-inference/Cargo.toml:147:llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
-sovereign/crates/sovereign-inference/Cargo.toml:150:llama-cpp-4 = { version = "0.5.1", features = ["vulkan"] }
-sovereign/crates/sovereign-inference/Cargo.toml:151:llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
-sovereign/crates/sovereign-inference/Cargo.toml:162:llama-cpp-4 = { version = "0.5.1", default-features = false, features = ["mtmd"] }
-sovereign/crates/sovereign-inference/Cargo.toml:163:llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
-sovereign/crates/sovereign-inference/Cargo.toml:173:windows-vulkan = ["llama-cpp-4/vulkan"]
-sovereign/crates/sovereign-inference/Cargo.toml:174:windows-cuda = ["llama-cpp-4/cuda"]
+serve/crates/sovereign-inference/Cargo.toml:38:# Jinja2 chat-template renderer. The llama-cpp-4 0.2.x binding
+serve/crates/sovereign-inference/Cargo.toml:51:# llama-cpp-4 binding's `LlamaSampler::llguidance` shim doesn't
+serve/crates/sovereign-inference/Cargo.toml:64:# lands a fix in a llama-cpp-2 release we can pin to.
+serve/crates/sovereign-inference/Cargo.toml:66:# llama-cpp-4 0.5.1 (bumped from 0.4.2 on 2026-08-03). The crate bundles
+serve/crates/sovereign-inference/Cargo.toml:69:# vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT.
+serve/crates/sovereign-inference/Cargo.toml:80:# (PR #22673, our original reason for leaving llama-cpp-2 0.1.146), the GLM-5
+serve/crates/sovereign-inference/Cargo.toml:95:# llama-cpp-sys-4 hunt for a Homebrew libomp and build ggml with
+serve/crates/sovereign-inference/Cargo.toml:133:llama-cpp-4 = { version = "0.5.1", default-features = false, features = ["metal", "mtmd"] }
+serve/crates/sovereign-inference/Cargo.toml:136:# than llama-cpp-4's `rpc` feature, whose binding module targets an older
+serve/crates/sovereign-inference/Cargo.toml:140:llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
+serve/crates/sovereign-inference/Cargo.toml:146:llama-cpp-4 = { version = "0.5.1", default-features = false, features = ["mtmd"] }
+serve/crates/sovereign-inference/Cargo.toml:147:llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
+serve/crates/sovereign-inference/Cargo.toml:150:llama-cpp-4 = { version = "0.5.1", features = ["vulkan"] }
+serve/crates/sovereign-inference/Cargo.toml:151:llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
+serve/crates/sovereign-inference/Cargo.toml:162:llama-cpp-4 = { version = "0.5.1", default-features = false, features = ["mtmd"] }
+serve/crates/sovereign-inference/Cargo.toml:163:llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
+serve/crates/sovereign-inference/Cargo.toml:173:windows-vulkan = ["llama-cpp-4/vulkan"]
+serve/crates/sovereign-inference/Cargo.toml:174:windows-cuda = ["llama-cpp-4/cuda"]
 sovereign/crates/sovereign-cli/Cargo.toml:16:#   removed: sovereign-inference (llama-cpp-2), sovereign-tools,
 ```
 
@@ -387,8 +387,8 @@ cd /home/alexbryan/dev/commonwealth-ai; echo "=== RPC / split code ==="; find . 
 
 ```
 === RPC / split code ===
-./sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
-./sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs
+./serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
+./serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs
 ./.claude/worktrees/agent-aaaeff1fb0082cc25/sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs
 ./.claude/worktrees/agent-aaaeff1fb0082cc25/sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
 
@@ -422,7 +422,7 @@ cd /home/alexbryan/dev/commonwealth-ai; echo "=== RPC / split code ==="; find . 
 ## Call 09
 
 ```bash
-cd /home/alexbryan/dev/commonwealth-ai; echo "=== LLAMA_CPP_COMMIT ==="; cat vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT 2>/dev/null; find vendor/llama-cpp-sys-4 -maxdepth 1 | head -20; echo; echo "=== does main have plan_shards_weighted? ==="; grep -c "plan_shards_weighted" sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs 2>/dev/null; echo "--- git log for that file ---"; git log --oneline -3 -- sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
+cd /home/alexbryan/dev/commonwealth-ai; echo "=== LLAMA_CPP_COMMIT ==="; cat vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT 2>/dev/null; find vendor/llama-cpp-sys-4 -maxdepth 1 | head -20; echo; echo "=== does main have plan_shards_weighted? ==="; grep -c "plan_shards_weighted" serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs 2>/dev/null; echo "--- git log for that file ---"; git log --oneline -3 -- serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
 ```
 
 <details><summary>output</summary>
@@ -1479,7 +1479,7 @@ cd /home/alexbryan/dev/commonwealth-ai/vendor/llama-cpp-sys-4/llama.cpp; echo "=
 ## Call 32
 
 ```bash
-cd /home/alexbryan/dev/commonwealth-ai; echo "=== binding exposes buft override? ==="; grep -rn "tensor_buft_override\|buft_override" vendor/llama-cpp-4/src/ 2>/dev/null | head -10; echo "(binding hits above)"; echo; echo "=== our daemon/inference side ==="; grep -rn "buft_override\|override_tensor\|\-\-override-tensor\|n_cpu_moe\|cpu_moe" --include=*.rs sovereign/crates/ 2>/dev/null | grep -v target | head -10; echo; echo "=== what model params DO we set? ==="; grep -rn "LlamaModelParams\|with_n_gpu_layers\|with_tensor_split\|with_use_mmap" --include=*.rs sovereign/crates/sovereign-inference/src/ 2>/dev/null | head -12
+cd /home/alexbryan/dev/commonwealth-ai; echo "=== binding exposes buft override? ==="; grep -rn "tensor_buft_override\|buft_override" vendor/llama-cpp-4/src/ 2>/dev/null | head -10; echo "(binding hits above)"; echo; echo "=== our daemon/inference side ==="; grep -rn "buft_override\|override_tensor\|\-\-override-tensor\|n_cpu_moe\|cpu_moe" --include=*.rs sovereign/crates/ 2>/dev/null | grep -v target | head -10; echo; echo "=== what model params DO we set? ==="; grep -rn "LlamaModelParams\|with_n_gpu_layers\|with_tensor_split\|with_use_mmap" --include=*.rs serve/crates/sovereign-inference/src/ 2>/dev/null | head -12
 ```
 
 <details><summary>output</summary>
@@ -1499,22 +1499,22 @@ vendor/llama-cpp-4/src/lib.rs:490:pub fn max_tensor_buft_overrides() -> usize {
 (binding hits above)
 
 === our daemon/inference side ===
-sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:573:/// llama.cpp's split — we ENFORCE this assignment via `tensor_buft_overrides` at
-sovereign/crates/sovereign-inference/src/embedded/model_slot.rs:1437:                    .with_tensor_buft_overrides(&dist.overrides)
+serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:573:/// llama.cpp's split — we ENFORCE this assignment via `tensor_buft_overrides` at
+serve/crates/sovereign-inference/src/embedded/model_slot.rs:1437:                    .with_tensor_buft_overrides(&dist.overrides)
 
 === what model params DO we set? ===
-sovereign/crates/sovereign-inference/src/smoketest.rs:48:use crate::llama::cpp::model::params::LlamaModelParams;
-sovereign/crates/sovereign-inference/src/smoketest.rs:148:    let model_params = LlamaModelParams::default().with_n_gpu_layers(args.n_gpu_layers);
-sovereign/crates/sovereign-inference/src/embedded/sampler.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
-sovereign/crates/sovereign-inference/src/embedded/rerank_slot.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
-sovereign/crates/sovereign-inference/src/embedded/rerank_slot.rs:190:        let model_params = LlamaModelParams::default().with_n_gpu_layers(requested_gpu_layers);
-sovereign/crates/sovereign-inference/src/embedded/grammar.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
-sovereign/crates/sovereign-inference/src/embedded/prompt_helpers.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
-sovereign/crates/sovereign-inference/src/embedded/embed_slot.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
-sovereign/crates/sovereign-inference/src/embedded/embed_slot.rs:113:        let model_params = LlamaModelParams::default().with_n_gpu_layers(requested_gpu_layers);
-sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs:29:use crate::llama::cpp::model::params::LlamaModelParams;
-sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs:886:    let mparams = LlamaModelParams::default().with_n_gpu_layers(999);
-sovereign/crates/sovereign-inference/src/embedded/engine.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
+serve/crates/sovereign-inference/src/smoketest.rs:48:use crate::llama::cpp::model::params::LlamaModelParams;
+serve/crates/sovereign-inference/src/smoketest.rs:148:    let model_params = LlamaModelParams::default().with_n_gpu_layers(args.n_gpu_layers);
+serve/crates/sovereign-inference/src/embedded/sampler.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
+serve/crates/sovereign-inference/src/embedded/rerank_slot.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
+serve/crates/sovereign-inference/src/embedded/rerank_slot.rs:190:        let model_params = LlamaModelParams::default().with_n_gpu_layers(requested_gpu_layers);
+serve/crates/sovereign-inference/src/embedded/grammar.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
+serve/crates/sovereign-inference/src/embedded/prompt_helpers.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
+serve/crates/sovereign-inference/src/embedded/embed_slot.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
+serve/crates/sovereign-inference/src/embedded/embed_slot.rs:113:        let model_params = LlamaModelParams::default().with_n_gpu_layers(requested_gpu_layers);
+serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs:29:use crate::llama::cpp::model::params::LlamaModelParams;
+serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs:886:    let mparams = LlamaModelParams::default().with_n_gpu_layers(999);
+serve/crates/sovereign-inference/src/embedded/engine.rs:21:use crate::llama::cpp::model::params::LlamaModelParams;
 ```
 
 </details>

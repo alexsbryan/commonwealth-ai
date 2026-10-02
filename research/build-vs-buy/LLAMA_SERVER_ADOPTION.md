@@ -63,7 +63,7 @@ that upstream PR #24292 fixed on 2026-09-16.
 
 ## 1. The decision, precisely
 
-In scope: replace the in-process engine (`sovereign/crates/sovereign-inference/src/embedded/`
+In scope: replace the in-process engine (`serve/crates/sovereign-inference/src/embedded/`
 and `vendor/llama-cpp-4`, `vendor/llama-cpp-sys-4`) with a `llama-server`
 process per node that the daemon supervises, reached through the existing
 `[engine] kind="remote"` seam (`RemoteApiProvider`, `shared/crates/oicp-client/src/lib.rs`).

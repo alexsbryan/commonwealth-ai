@@ -1526,7 +1526,7 @@ pointer and applies to ROCm devices. The memory-limit knobs that exist
 (`CANNExecutionProvider::with_memory_limit`, CUDA/ROCm `gpu_mem_limit`) are
 device-side; this workload is CPU-only, and no session config key takes a
 size. **So the bound on this pass is guard 2's input bound**, and
-`sovereign/crates/sovereign-gliner/src/session_bound.rs` says so in its
+`serve/crates/sovereign-gliner/src/session_bound.rs` says so in its
 module docs rather than implying the arena is capped.
 
 What rc.9 DOES expose is applied there, by one function per backend.
@@ -1541,7 +1541,7 @@ The v1 (gline-rs) path does NOT own its builder: `orp::Model::new` calls
 `v1_runtime_parameters` is that lever, and it matters most because
 `labeled::configured_model_id` resolves to a V1 model by default, i.e. the
 path the daemon was running. `with_memory_pattern` is unreachable from
-there. `sovereign/crates/sovereign-gliner/tests/session_bound_census.rs` is
+there. `serve/crates/sovereign-gliner/tests/session_bound_census.rs` is
 the ratchet: no other file in the crate may call `Session::builder()` or
 pass a bare `RuntimeParameters::default()`.
 

@@ -9,7 +9,7 @@
 //! this crate alone therefore had none. The MECHANISM has the same
 //! requirement for the same reason, and it is easy to get wrong in the same
 //! way: the obvious image to reach for is the monorepo's own
-//! (`sovereign/container/Containerfile`), the obvious registry is the
+//! (`serve/container/Containerfile`), the obvious registry is the
 //! monorepo's `.cargo-container`, and a mechanism resting on either is one a
 //! lifted peer cannot use. **This module assumes no repository.** It shells
 //! out to a container runtime the HOST provides, into an image the DONOR

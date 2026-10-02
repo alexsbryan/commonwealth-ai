@@ -7,7 +7,7 @@
 //! connections to OpenAI-shaped endpoints, routes K requests across them,
 //! sheds the K+1th on a `429` + `Retry-After`, and emits decision records
 //! that replay reproduces. This file is that run
-//! (`sovereign/SERVING_BOUNDARY.md` "What is enforced, and what is not"
+//! (`serve/SERVING_BOUNDARY.md` "What is enforced, and what is not"
 //! Tier 2; order `domains-10-serving-extract` step 8).
 //!
 //! It lives in the package's OWN tests on purpose. The lift copies the

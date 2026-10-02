@@ -10,7 +10,7 @@
 # ── build (from commonwealth-ai/ workspace root, NOT from sovereign/):
 #     cd ~/dev/commonwealth-ai
 #     podman build -t ghcr.io/<you>/sovereign-rocm:latest \
-#                  -f sovereign/container/Containerfile .
+#                  -f serve/container/Containerfile .
 #
 # `podman` is the recommended builder on Fedora / RHEL / Toolbox
 # hosts (rootless, daemonless). `docker build -f Containerfile` works
@@ -228,7 +228,7 @@ COPY --from=build /usr/local/bin/sovereign-pod-worker   /usr/local/bin/sovereign
 WORKDIR /workspace
 RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign
 
-COPY sovereign/container/entrypoint.sh /entrypoint.sh
+COPY serve/container/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Worker daemon's owner-only TLS surface. No client port (9741) — pods

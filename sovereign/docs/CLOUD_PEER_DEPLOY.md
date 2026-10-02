@@ -76,15 +76,15 @@ has capacity for that day:
 
 | flavor | dockerfile | base image | target hardware |
 |---|---|---|---|
-| ROCm | `sovereign/container/Containerfile`        | `rocm/dev-ubuntu-22.04:7.2`              | AMD MI300X (gfx942), MI250X (gfx90a), MI100 (gfx908) |
-| CUDA | `sovereign/container/Containerfile.cuda`   | `nvidia/cuda:12.1.1-devel-ubuntu22.04`   | NVIDIA H100/H200 (sm_90), A100 (sm_80), L40S/RTX 4090 (sm_89), RTX 30xx (sm_86) |
+| ROCm | `serve/container/Containerfile`        | `rocm/dev-ubuntu-22.04:7.2`              | AMD MI300X (gfx942), MI250X (gfx90a), MI100 (gfx908) |
+| CUDA | `serve/container/Containerfile.cuda`   | `nvidia/cuda:12.1.1-devel-ubuntu22.04`   | NVIDIA H100/H200 (sm_90), A100 (sm_80), L40S/RTX 4090 (sm_89), RTX 30xx (sm_86) |
 
 Both produce the same operator-facing surface — same env vars, same
 entrypoint, same mesh shape. The only difference is the inference
 backend baked in.
 
 For Containerfile-internal details (which apt packages each stage
-needs and why), see [`sovereign/container/README.md`](../container/README.md).
+needs and why), see [`serve/container/README.md`](../../serve/container/README.md).
 
 ## Provisioning checklist (one-time)
 
@@ -162,19 +162,19 @@ ROCm:
 ```bash
 cd ~/dev/commonwealth-ai
 podman build -t ghcr.io/<you>/sovereign-rocm:latest \
-             -f sovereign/container/Containerfile .
+             -f serve/container/Containerfile .
 ```
 
 CUDA:
 ```bash
 cd ~/dev/commonwealth-ai
 podman build -t ghcr.io/<you>/sovereign-cuda:latest \
-             -f sovereign/container/Containerfile.cuda .
+             -f serve/container/Containerfile.cuda .
 
 # (optional) slim build for one GPU class — smaller image, faster cold-start:
 podman build --build-arg CUDA_ARCHITECTURES=90 \
              -t ghcr.io/<you>/sovereign-cuda-h100:latest \
-             -f sovereign/container/Containerfile.cuda .
+             -f serve/container/Containerfile.cuda .
 ```
 
 Common arch aliases:

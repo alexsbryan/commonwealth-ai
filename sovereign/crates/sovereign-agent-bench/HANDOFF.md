@@ -979,7 +979,7 @@ line pointing at `Qwopus3.5-9B-Coder-MTP-Q6_K.gguf`.
 ### Daemon (changes touching `sovereign-cli` + `sovereign-inference` + `sovereign-mesh`)
 - `sovereign/crates/sovereign-cli/src/daemon_cmd.rs:2826-2980` — `wait_for_shutdown` glassbox + RSS hint
 - `sovereign/crates/sovereign-mesh/src/auto_resume.rs:99-115` — `SOVEREIGN_DISABLE_AUTO_RESUME` knob
-- `sovereign/crates/sovereign-inference/src/embedded.rs:8357-8505` — parser w/ orphan-bracket repair + 5 tests
+- `serve/crates/sovereign-inference/src/embedded.rs:8357-8505` — parser w/ orphan-bracket repair + 5 tests
 
 ### Operator config
 - `~/.svrnmesh/config.toml` — `code = .../Qwopus3.5-9B-Coder-MTP-Q6_K.gguf`, `extras_idle_secs = 30`, `primary_idle_secs = 60`

@@ -102,7 +102,7 @@ the operator is whether to retire the knob rather than whether to ship it.
 both ran with ORT's default: the pooling CPU memory arena ENABLED. Both now
 register `CPUExecutionProvider::default()`, whose `register` calls
 `DisableCpuMemArena` (`ort-2.0.0-rc.9/src/execution_providers/cpu.rs:48-51`).
-`sovereign/crates/sovereign-gliner/src/session_bound.rs` is the one place
+`serve/crates/sovereign-gliner/src/session_bound.rs` is the one place
 that decides it; a census test stops a second session escaping.
 
 **Why.** The arena grows in power-of-two buckets and does not return them.

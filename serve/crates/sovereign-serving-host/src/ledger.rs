@@ -7,7 +7,7 @@
 //! served a stream of N tokens from a node under a model id — and hands it to
 //! this port, which the daemon implements over its `ContributionEmitter`.
 //!
-//! `sovereign/SERVING_BOUNDARY.md` (a): `ledger_emission_for` came off the
+//! `serve/SERVING_BOUNDARY.md` (a): `ledger_emission_for` came off the
 //! roster port and the host mints from `RoutingOutcome` instead. The record
 //! already carries who served and how many tokens, so nothing needs to be
 //! threaded from the routing decision to the stream wrapper — the facts and

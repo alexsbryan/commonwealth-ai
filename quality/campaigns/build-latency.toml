@@ -101,7 +101,7 @@ weight = 114
 test   = "design_section_id_maps_curated_headings"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-inference/src/embedded/model_slot.rs"
+file   = "serve/crates/sovereign-inference/src/embedded/model_slot.rs"
 crate  = "sovereign-inference"
 weight = 95
 test   = "fits_in_comfortable_headroom"

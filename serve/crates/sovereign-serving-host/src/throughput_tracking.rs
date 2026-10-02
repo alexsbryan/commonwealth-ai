@@ -7,7 +7,7 @@
 //! Moved out of `sovereign-mesh` by domains
 //! REVIEW-build-serving-move-throughput-guest: its consumers are the host
 //! modules `peer_inference`/`pinned_worker_source`, so it travels with the
-//! knot (`sovereign/SERVING_BOUNDARY.md` "Corrected 2026-09-14"). Kept in its
+//! knot (`serve/SERVING_BOUNDARY.md` "Corrected 2026-09-14"). Kept in its
 //! own file (ARCH §3.2) — throughput accounting is structurally separate from
 //! peer selection.
 

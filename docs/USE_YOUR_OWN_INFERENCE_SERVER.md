@@ -157,7 +157,7 @@ load one from a shared library safely. The walkthrough is a runnable file:
 cargo run -p sovereign-inference --example custom_engine
 ```
 
-[`sovereign/crates/sovereign-inference/examples/custom_engine.rs`](../sovereign/crates/sovereign-inference/examples/custom_engine.rs)
+[`serve/crates/sovereign-inference/examples/custom_engine.rs`](../serve/crates/sovereign-inference/examples/custom_engine.rs)
 is the template — a working engine, the config that selects it, and the
 conformance check you run before trusting it. That check is worth using: it
 catches the mistakes that otherwise surface much later as a truncated answer or

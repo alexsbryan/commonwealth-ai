@@ -208,7 +208,7 @@ both files owe a fix in the same commit (§1.1).
 - **Four seams the design was going to reuse and cannot**, each because the citation did not
   survive contact: `rank()` is `pub(crate)` (`scheduler_core.rs:323`) behind a closed
   `ExclusionReason` (`decision_log.rs:479`); the "deficit ordering" is weight-then-FIFO plus a
-  per-origin equal-share cap, in a different crate (`serving-policy/src/fair_sched.rs:349-356`,
+  per-origin equal-share cap, in a different crate (`serve/crates/serving-policy/src/fair_sched.rs:349-356`,
   cap at `:163`), and the word "deficit" appears nowhere in it; `sovereign-compute`'s
   supervisor has two dependents and its own HTTP-polled restart decider (`supervisor.rs:960`);
   and `DistributionHandoff` is a same-host JSON file (`sovereign-compute/src/distribution.rs:35`,

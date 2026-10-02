@@ -6233,7 +6233,7 @@ bump — land the measurement and the WARN fix, revert the depth, report.
 ### 7. Landing
 
 ONE commit, local only, never push, no assistant attribution; files:
-sovereign/crates/sovereign-inference/src/embedded/model_slot.rs,
+serve/crates/sovereign-inference/src/embedded/model_slot.rs,
 quality/env-flags.toml, docs/ENV_FLAGS.md (regenerated), this file (the
 shared file carries t7a/t7b's concurrent sections verbatim; the pre-existing
 3 embedded::gates failures at HEAD — named in the baseline snapshot above —
@@ -6380,7 +6380,7 @@ inherited.
 ### Landing
 
 ONE commit (local only, no push, no assistant attribution):
-sovereign/crates/sovereign-inference/src/embedded/model_slot.rs
+serve/crates/sovereign-inference/src/embedded/model_slot.rs
 (n_rs_seq restored to 4; mtp_draft_max_decide + DraftMaxFallback +
 WARN-on-fallback + unit tests kept — 5/5 green, boundary test pins
 "4" out of range at n_rs_seq=4; provenance comments carry the verdict),

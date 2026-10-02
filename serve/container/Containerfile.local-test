@@ -14,7 +14,7 @@
 #
 # Build (from commonwealth-ai workspace root):
 #   scripts/pod build -t sovereign-worker-local:test \
-#     -f sovereign/container/Containerfile.local-test .
+#     -f serve/container/Containerfile.local-test .
 #
 # Prereq: target/release/{sovereign-cli,sovereign-cli-daemon,sovereign-stock,
 # sovereign-pod-worker} must exist (the worker-mode exec chain, pb-pods-worker). The Cargo build
@@ -53,7 +53,7 @@ COPY --chmod=0755 target/release/sovereign-pod-worker   /usr/local/bin/sovereign
 # Entrypoint script. Same one used by Containerfile.cuda — kept
 # identical so a green smoke here means the production entrypoint
 # script is also correct.
-COPY --chmod=0755 sovereign/container/entrypoint.sh /entrypoint.sh
+COPY --chmod=0755 serve/container/entrypoint.sh /entrypoint.sh
 
 # Worker daemon binds :9742; the controller's pinned-cert client
 # connects to the host port mapped by `podman run -p`. The container

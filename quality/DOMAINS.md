@@ -256,7 +256,7 @@ cluster that IS its context stays; every other cluster moves to its context's
 home crate (the registry's `crates` list, creating the home when it does not
 exist); leaf clusters first, then by size; an edge that crosses crates after
 the move goes through a port already designed (§10.3,
-`sovereign/SERVING_BOUNDARY.md`) or the cluster splits, never a new exception
+`serve/SERVING_BOUNDARY.md`) or the cluster splits, never a new exception
 row; a rename rides the move; each destination whose own-context share drops
 is enqueued, which is the breadth-first half; stop when the queue is empty and
 the predicate holds. Phase A's renames ride the moves; Phase C is wave 1's
@@ -470,7 +470,7 @@ input exists today.
 | two `decision_log`s | split | mesh module → `routing_decisions`, types `RoutingDecision*`; studio's keeps the tool id in four registries. `SOVEREIGN_DECISION_LOG`, `oicp-decision/v1`, `DECISION_TRACE_TARGET` do not move | 10 |
 | `GuestLender*` | split by side of the link | four types move to the serving host unrenamed; `StoredGuestLink` is host wiring; `sovereign-grants` keeps `GuestGrant`/`Scope`. `GuestLenderSource` is NOT `PeerEndpointSource`: enumerate vs lookup-by-model-id, `Vec` vs `Option`, a 60 s TTL with `invalidate()` on 401, and a guest is a PIN that beats selection (`peer_inference.rs:3104`). Two ports | 10 |
 | `frontdoor.rs` | Host, confirmed | two production callers, 23 sites (`routes_responses.rs` 14, `routes_inference.rs` 9), both above the routing decision; imports no scheduler, candidate, score or admission type | — |
-| the public interface | five sketches | the two ports, the scheduler entry with its real signature, admission on `SchedCore`, the decision record + replay, and what `sovereign-cli-daemon`'s eight sites call — the basis of `sovereign/SERVING_BOUNDARY.md`'s rules | 9 |
+| the public interface | five sketches | the two ports, the scheduler entry with its real signature, admission on `SchedCore`, the decision record + replay, and what `sovereign-cli-daemon`'s eight sites call — the basis of `serve/SERVING_BOUNDARY.md`'s rules | 9 |
 
 ### 10.5 Understanding's collisions — and one correction to Phase B
 
@@ -518,7 +518,7 @@ documents; each paragraph here is what a registry row records.
 
 The host crate, the dissolution of `AppState` and the adapter rule are `quality/DAEMON_CORE.md`
 §4. The caller's identity — which corrects §10.1's gift of `Principal` to Serving — is its §3.3.
-Serving's corrections head `sovereign/SERVING_BOUNDARY.md`. The `[[forbid]] corpus-engine* ->
+Serving's corrections head `serve/SERVING_BOUNDARY.md`. The `[[forbid]] corpus-engine* ->
 sovereign-*` row stands, and none of the clusters it appeared to block goes to `corpus-engine` or
 `sovereign-enrichment-build`.
 

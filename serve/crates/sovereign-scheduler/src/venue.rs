@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The published candidate record and the port that supplies it.
 //!
-//! `sovereign/SERVING_BOUNDARY.md` "The five entries" (a): the ranked thing
+//! `serve/SERVING_BOUNDARY.md` "The five entries" (a): the ranked thing
 //! is a `Venue`, and the roster reaches the ranker through ONE port —
 //! [`VenueSource::candidates`]. Two facts that used to ride this port do not:
 //!

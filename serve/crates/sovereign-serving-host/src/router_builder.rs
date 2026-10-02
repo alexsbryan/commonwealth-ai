@@ -19,7 +19,7 @@ use crate::venue_host::VenueHost;
 ///
 /// Collapses the two historical constructors — `with_peer_source` (a private
 /// in-flight publisher) and `with_peer_source_and_publisher` (an
-/// externally-owned one) — into one shape (`sovereign/SERVING_BOUNDARY.md`
+/// externally-owned one) — into one shape (`serve/SERVING_BOUNDARY.md`
 /// (e); `quality/DOMAINS.toml` `family = "serving-public-interface"`). The
 /// pair existed only because a hot reload must not mint a fresh publisher:
 /// live `LocalTotalGuard`s from the old router hold a clone of the shared

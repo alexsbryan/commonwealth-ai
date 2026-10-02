@@ -4,7 +4,7 @@ This directory holds the build artifacts for the cloud-peer images.
 The user-facing operational guide (provisioning R2, generating
 Tailscale auth keys, deploying on RunPod, running ingests against the
 cloud peer, teardown) lives in
-[`../docs/CLOUD_PEER_DEPLOY.md`](../docs/CLOUD_PEER_DEPLOY.md). This
+[`sovereign/docs/CLOUD_PEER_DEPLOY.md`](../../sovereign/docs/CLOUD_PEER_DEPLOY.md). This
 README covers what's in *this* directory and why each piece is shaped
 the way it is — read it when the build itself misbehaves or you need
 to extend the image.
@@ -27,10 +27,10 @@ would fail to resolve those crates.
 ```bash
 cd ~/dev/commonwealth-ai
 podman build -t ghcr.io/<you>/sovereign-rocm:latest \
-             -f sovereign/container/Containerfile .
+             -f serve/container/Containerfile .
 
 podman build -t ghcr.io/<you>/sovereign-cuda:latest \
-             -f sovereign/container/Containerfile.cuda .
+             -f serve/container/Containerfile.cuda .
 ```
 
 `docker build -f Containerfile[.cuda]` is interchangeable. Both
@@ -134,12 +134,12 @@ To target different GPU classes:
 # ROCm — MI250X
 podman build --build-arg AMDGPU_TARGETS=gfx90a \
              -t ghcr.io/<you>/sovereign-rocm-mi250x:latest \
-             -f sovereign/container/Containerfile .
+             -f serve/container/Containerfile .
 
 # CUDA — H100 only (slim image, faster cold-start)
 podman build --build-arg CUDA_ARCHITECTURES=90 \
              -t ghcr.io/<you>/sovereign-cuda-h100:latest \
-             -f sovereign/container/Containerfile.cuda .
+             -f serve/container/Containerfile.cuda .
 ```
 
 To bump the model set, edit `entrypoint.sh`'s `*_GGUF` defaults or
@@ -156,4 +156,4 @@ everything else — networking, secrets, ports — is provider-agnostic.
 For the actual deployment workflow (R2 setup, Tailscale auth keys,
 RunPod pod template, smoke testing, batch ingests, teardown,
 troubleshooting), see
-[`../docs/CLOUD_PEER_DEPLOY.md`](../docs/CLOUD_PEER_DEPLOY.md).
+[`sovereign/docs/CLOUD_PEER_DEPLOY.md`](../../sovereign/docs/CLOUD_PEER_DEPLOY.md).

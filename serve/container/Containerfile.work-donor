@@ -3,7 +3,7 @@
 #
 # ── build (from the workspace root):
 #     podman build -t localhost/sovereign-work:latest \
-#                  -f sovereign/container/Containerfile.work-donor .
+#                  -f serve/container/Containerfile.work-donor .
 #
 # ── declare it, on the node that will donate:
 #     [compute.work_offer] image = "localhost/sovereign-work:latest"

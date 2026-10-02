@@ -637,7 +637,7 @@ non-kyuz0 image you'd need `export HSA_OVERRIDE_GFX_VERSION=11.5.0`
   `Hardware: ... GPU: Vulkan0 (layers: 999, ...)` line at startup,
   plus `ggml_vulkan: Found 1 Vulkan devices:`. Fix-me: teach the
   label helper to return `"gpu+vulkan"` when that feature is on (see
-  [`embedded/rerank_slot.rs`](../crates/sovereign-inference/src/embedded/rerank_slot.rs)).
+  [`embedded/rerank_slot.rs`](../../serve/crates/sovereign-inference/src/embedded/rerank_slot.rs)).
   The embed slot is genuinely CPU-pinned via
   `with_offload_kqv(false).with_op_offload(false)` on every
   platform, by design — don't confuse that with the label bug.

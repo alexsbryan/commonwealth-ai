@@ -22,7 +22,7 @@
 #   --attention  a pure-attention model (qwen3, gemma, llama…) — drives
 #                the harness-sanity control (recommended)
 #
-# Verdicts (see sovereign/crates/sovereign-inference/tests/gate_repros.rs):
+# Verdicts (see serve/crates/sovereign-inference/tests/gate_repros.rs):
 #   test PASSES → hazard still reproduces → gate still justified
 #   test FAILS with "HAZARD NO LONGER REPRODUCES" → upstream fixed it →
 #     consider narrowing/removing that gate in src/embedded/gates.rs

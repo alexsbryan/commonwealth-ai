@@ -756,7 +756,7 @@ good *fast local provider* — just decoupled from the distribution goal.
 
 ## Reference — the code this rides on
 
-- **Distributed placement:** `sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs`
+- **Distributed placement:** `serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs`
   — `resolve_placement:706`, `classify_placement:670`, `plan_distribution:460`,
   `serve_rpc_worker_if_configured:821`. Threshold `SOVEREIGN_RPC_SAFE_STREAM_MB`
   (default 512).

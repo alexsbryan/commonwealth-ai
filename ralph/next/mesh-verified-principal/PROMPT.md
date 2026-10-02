@@ -147,7 +147,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   `shared/crates/commonwealth-rail-core/` — the RING RAIL is closed to this
   campaign (its roster is READ through `RingRail::roster`, never changed); a row that
   seems to need a rail diff is §6. Never touch the scheduler's scoring
-  (`sovereign/crates/sovereign-scheduler/`): a row that seems to need it is §6. `commonwealth-rails/` is the rails DAEMON,
+  (`serve/crates/sovereign-scheduler/`): a row that seems to need it is §6. `commonwealth-rails/` is the rails DAEMON,
   not that rule. Never stop or restart the DEPLOYED daemon (the one `svrn daemon status`
   names); the throwaway podman nodes `scripts/ring-room-demo.sh` (and `scripts/ring-doc-demo.sh`, which it sources) start under its own
   `SOVEREIGN_DATA_DIR` are the script's to start and stop, exactly as

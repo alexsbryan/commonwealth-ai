@@ -212,5 +212,5 @@ pushing — and any correction whose evidence you cannot reproduce.
   file's row to the new path, the line count unchanged — a re-key absorbs no
   growth.
 - When a move changes a path that `quality/DAEMON_CORE.md`,
-  `sovereign/SERVING_BOUNDARY.md` or `corpus-engine/DECOMPOSITION.md` names,
+  `serve/SERVING_BOUNDARY.md` or `corpus-engine/DECOMPOSITION.md` names,
   fix that line in the same commit.

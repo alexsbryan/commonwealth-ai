@@ -23,7 +23,7 @@ use crate::traits::InferenceProvider;
 /// `compute_children`, `peer_manifests`, `lender_manifest` — is reached through
 /// the supertrait and is not re-declared here. What remains is the translation
 /// the OpenAI wire needs and the two capabilities only a FIM-capable backend
-/// carries (`sovereign/SERVING_BOUNDARY.md` "The two tiers"; domains
+/// carries (`serve/SERVING_BOUNDARY.md` "The two tiers"; domains
 /// `REVIEW-build-local-inference`).
 ///
 /// The OpenAI request and response translation is an EDGE adapter implemented in

@@ -120,10 +120,10 @@ id = "FE-105"
 family = "FE"
 status = "landed"
 clause = '''A refusal produced by *this* gate MUST be exempted from peer health tracking — a busy response is a healthy peer declining, and booking it as a fault quarantines that peer.'''
-target = '''sovereign/crates/sovereign-serving-host/src/peer_inference.rs:1049::book_peer_failure'''
+target = '''serve/crates/sovereign-serving-host/src/peer_inference.rs:1049::book_peer_failure'''
 asserts = '''book_peer_failure(peer, err, shed=true) repeated past FAILURE_THRESHOLD leaves is_quarantined(peer) false; the same calls with shed=false quarantine it.'''
 catches = '''dropping the shed early-exit so our own busy/shed refusals are booked as peer faults, quarantining a healthy peer after a few concurrent turns.'''
-destination = '''sovereign/crates/sovereign-serving-host/src/peer_inference.rs (mod tests)'''
+destination = '''serve/crates/sovereign-serving-host/src/peer_inference.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-serving-host::peer_inference::tests::our_own_shed_refusals_never_quarantine_the_peer_that_shed'''
 
@@ -144,10 +144,10 @@ id = "FE-139"
 family = "FE"
 status = "subject-deleted"
 clause = '''Managed subordinate processes MUST have an explicit lifecycle state machine (starting / running / unhealthy / failed / stopped), graceful termination with a timeout before forced termination, periodic health polling with a sampled latency window and an unresponsive threshold, a **graceful departure** countdown state machine (announced → rebalancing → draining → complete), and a fault detector collapsing health changes into events.'''
-target = '''sovereign/crates/sovereign-compute/src/supervisor.rs:199::SupervisorState'''
+target = '''serve/crates/sovereign-compute/src/supervisor.rs:199::SupervisorState'''
 asserts = '''a subordinate's observed SupervisorState sequence is Starting -> Healthy -> Unhealthy -> Failed on repeated crashes, AND separately a departure sequence announced -> rebalancing -> draining -> complete.'''
 catches = '''DUE DILIGENCE 2026-09-02 — ALL THREE PARTS EXIST AS CODE AND NONE IS WIRED. SupervisorState (sovereign-compute/src/supervisor.rs:199), GracefulDeparture Announced->Rebalancing->Draining->Complete (commonwealth-inference/src/orchestrator/departure.rs:11-83) and FaultDetector (orchestrator/fault.rs:34-213) are each self-contained and unit-tested, but neither departure nor fault is ever constructed or called from orchestrator.rs, process.rs or any handler. Orchestrator::stop_all (orchestrator.rs:161), itself commented 'graceful departure', SIGTERMs every process directly and bypasses both. This is dead orchestration code that reads as compliance. The requirement is UNMET: wire it, then test it. A test written against the modules alone would pass while the product still kills processes abruptly.'''
-destination = '''sovereign/crates/sovereign-compute/src/supervisor.rs'''
+destination = '''serve/crates/sovereign-compute/src/supervisor.rs'''
 kind = '''rust-integration; but WIRING COMES FIRST — see catches'''
 # 2026-09-03: `commonwealth-inference/src/orchestrator/` (1,904 lines) was
 # deleted. `Orchestrator::new` was called from NOTHING but the two tests below,
@@ -182,10 +182,10 @@ id = "FE-77"
 family = "FE"
 status = "landed"
 clause = '''An overflow refusal MUST be a **new** typed variant, not a reuse of "insufficient cluster" — pooling more memory does not fix an overflow, and the wrong message sends the operator looking for a peer that is already there. The refusal MUST advise *lowering* the headroom factor and MUST name the one legitimate override.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs:1328::WorkerOverflow'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs:1328::WorkerOverflow'''
 asserts = '''first_worker_overflow on a plan with one non-fitting device returns Some(WorkerOverflow), distinct from InsufficientCluster; refusal() text contains LOWER (not raise) and names SOVEREIGN_SKIP_PER_DEVICE_FIT=1.'''
 catches = '''collapsing per-device overflow into InsufficientCluster (which self-resolves as anchors settle), sending an operator hunting a peer that is already there; or advising raising headroom, which makes the overflow worse.'''
-destination = '''sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs (mod tests)'''
+destination = '''serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-inference::embedded::rpc_distribution::rpc_prune_tests::a_per_device_overflow_is_its_own_refusal_and_advises_lowering_headroom'''
 
@@ -432,8 +432,8 @@ id = "FE-106"
 family = "FE"
 status = "landed"
 clause = '''A peer that refuses with a stated retry delay MUST be excluded from candidacy for that delay, capped, and cleared by any success — **before** any manifest fetch, so a yielding peer costs nothing rather than a cheaper something.'''
-target = '''sovereign/crates/sovereign-scheduler/src/yield_backoff.rs:79::record_refusal'''
-existing = '''sovereign/crates/sovereign-scheduler/src/yield_backoff.rs:195::backoff_is_capped_however_long_the_peer_asks'''
+target = '''serve/crates/sovereign-scheduler/src/yield_backoff.rs:79::record_refusal'''
+existing = '''serve/crates/sovereign-scheduler/src/yield_backoff.rs:195::backoff_is_capped_however_long_the_peer_asks'''
 landed = '''sovereign-scheduler::yield_backoff::tests::backoff_is_capped_however_long_the_peer_asks'''
 
 [[spec]]
@@ -467,8 +467,8 @@ id = "FE-133"
 family = "FE"
 status = "landed"
 clause = '''A host preparing a distributed load MUST be able to ask a participant to seed its portion **before** the load begins, and MUST distribute only to participants that pass an eligibility profile — a settling period plus quarantine on instability, surfaced to the operator.'''
-target = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:625::eligible'''
-existing = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:748::stable_worker_eligible_after_settle'''
+target = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:625::eligible'''
+existing = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:748::stable_worker_eligible_after_settle'''
 landed = '''sovereign-serving-host::worker_eligibility::tests::stable_worker_eligible_after_settle'''
 
 [[spec]]
@@ -476,8 +476,8 @@ id = "FE-135"
 family = "FE"
 status = "landed"
 clause = '''Where a topology stratifies into anchors (holding the split) and consumers, anchors MUST advertise their anchor profile, and the candidate filter MUST exclude non-anchors so a casual peer never joins the split. Anchors MUST get the stricter eligibility profile.'''
-target = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:218::EligibilityConfig::anchor'''
-existing = '''sovereign/crates/sovereign-serving-host/src/worker_eligibility.rs:734::anchor_profile_is_stricter_than_default'''
+target = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:218::EligibilityConfig::anchor'''
+existing = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:734::anchor_profile_is_stricter_than_default'''
 landed = '''sovereign-serving-host::worker_eligibility::tests::anchor_profile_is_stricter_than_default'''
 
 [[spec]]
@@ -650,8 +650,8 @@ id = "FE-70"
 family = "FE"
 status = "landed"
 clause = '''Where a model exceeds one node, the placement policy MUST apportion each device a **contiguous** range whose **bytes** — not unit count — are proportional to its memory.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:658::plan_shards_weighted'''
-existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1630::weighted_contiguous_and_gapless_on_heterogeneous_vram'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:658::plan_shards_weighted'''
+existing = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1630::weighted_contiguous_and_gapless_on_heterogeneous_vram'''
 landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::weighted_balances_clustered_mass_better_than_count + ::weighted_contiguous_and_gapless_on_heterogeneous_vram'''
 
 [[spec]]
@@ -659,8 +659,8 @@ id = "FE-74"
 family = "FE"
 status = "landed"
 clause = '''Per-device fit MUST be one decider used by both the preview and the load. Aggregate pooled memory is **not** sufficient: a cluster clearing the aggregate gate can still hand one device more than it has.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
-existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1765::pooled_memory_can_pass_where_a_device_fails'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
+existing = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1765::pooled_memory_can_pass_where_a_device_fails'''
 landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::pooled_memory_can_pass_where_a_device_fails'''
 
 [[spec]]
@@ -668,8 +668,8 @@ id = "FE-75"
 family = "FE"
 status = "landed"
 clause = '''The fit result MUST return **one row per device, fitting rows included** — a pass/fail return forces the preview to keep its own traversal, and a second traversal is the drift being removed.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
-existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1738::shard_fits_reports_every_device_not_just_the_failures'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
+existing = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1738::shard_fits_reports_every_device_not_just_the_failures'''
 landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::shard_fits_reports_every_device_not_just_the_failures'''
 
 [[spec]]
@@ -677,8 +677,8 @@ id = "FE-76"
 family = "FE"
 status = "landed"
 clause = '''*Cannot judge* MUST be distinct from *pass* (X-EH-2): an unread metadata table would otherwise clear every device on the strength of zeros.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
-existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1727::an_unread_tensor_table_is_never_a_pass'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
+existing = '''serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1727::an_unread_tensor_table_is_never_a_pass'''
 landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::an_unread_tensor_table_is_never_a_pass'''
 
 [[spec]]
@@ -730,16 +730,16 @@ id = "IN-17"
 family = "IN"
 status = "exists-untagged"
 clause = '''Where a model architecture is known to fault on a given compute backend, the system MUST detect this **before loading weights** — from model metadata alone — and MUST substitute a safe alternative discovered alongside it, surfacing a non-fatal notice. Where no safe alternative exists, start-up MUST fail with a clear in-application message rather than a native crash.'''
-target = '''sovereign/crates/sovereign-inference/src/cpu_compat.rs:125::choose_cpu_safe_chat_model'''
-existing = '''sovereign/crates/sovereign-inference/src/cpu_compat.rs:265::substitutes_largest_dense_when_unsafe_on_cpu'''
+target = '''serve/crates/sovereign-inference/src/cpu_compat.rs:125::choose_cpu_safe_chat_model'''
+existing = '''serve/crates/sovereign-inference/src/cpu_compat.rs:265::substitutes_largest_dense_when_unsafe_on_cpu'''
 
 [[spec]]
 id = "IN-2"
 family = "IN"
 status = "exists-untagged"
 clause = '''Slots MUST be able to alias one another so a single resident copy serves several roles, and the resolution order for an alias MUST have one decider.'''
-target = '''sovereign/crates/sovereign-scheduler/src/slot_aliases.rs:88::resolution_alias_keys'''
-existing = '''sovereign/crates/sovereign-scheduler/src/slot_aliases.rs:126::every_advertised_alias_is_resolvable'''
+target = '''serve/crates/sovereign-scheduler/src/slot_aliases.rs:88::resolution_alias_keys'''
+existing = '''serve/crates/sovereign-scheduler/src/slot_aliases.rs:126::every_advertised_alias_is_resolvable'''
 
 [[spec]]
 id = "IN-22"
@@ -778,8 +778,8 @@ id = "IN-3"
 family = "IN"
 status = "exists-untagged"
 clause = '''Remote and hybrid providers MUST be supported behind the same interface as local ones, so a deployment can mix local and remote capacity, with failover.'''
-target = '''sovereign/crates/sovereign-inference/src/hybrid.rs:190::HybridProvider::complete'''
-existing = '''sovereign/crates/sovereign-inference/src/hybrid.rs:439::falls_back_on_failure'''
+target = '''serve/crates/sovereign-inference/src/hybrid.rs:190::HybridProvider::complete'''
+existing = '''serve/crates/sovereign-inference/src/hybrid.rs:439::falls_back_on_failure'''
 
 [[spec]]
 id = "IN-30"
@@ -794,16 +794,16 @@ id = "IN-5"
 family = "IN"
 status = "exists-untagged"
 clause = '''The system MUST report, per slot: which model is resident, whether it is resident or cold, and whether it is running in a degraded substitute form. **Cold is not an outage** and MUST be reported distinctly.'''
-target = '''sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs:121::build_self_manifest'''
-existing = '''sovereign/crates/sovereign-serving-host/src/oicp_synthesis.rs:952::manifest_reports_indeterminate_and_absent_residency_as_cold'''
+target = '''serve/crates/sovereign-serving-host/src/oicp_synthesis.rs:121::build_self_manifest'''
+existing = '''serve/crates/sovereign-serving-host/src/oicp_synthesis.rs:952::manifest_reports_indeterminate_and_absent_residency_as_cold'''
 
 [[spec]]
 id = "IN-7"
 family = "IN"
 status = "exists-untagged"
 clause = '''The local-fit gate MUST NOT charge for bytes that never reach the accelerator. It MUST obtain the host-resident byte count from the engine's own projection, and MUST NOT condition that discount on a related-but-different setting.'''
-target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs:1711::local_fit_verdict'''
-existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs:2884::mmap_resident_weights_are_not_charged_but_the_incident_still_refuses'''
+target = '''serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs:1711::local_fit_verdict'''
+existing = '''serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs:2884::mmap_resident_weights_are_not_charged_but_the_incident_still_refuses'''
 
 [[spec]]
 id = "ST-10"

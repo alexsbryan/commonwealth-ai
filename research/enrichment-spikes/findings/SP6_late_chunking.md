@@ -36,7 +36,7 @@ blocker anymore.
 
 ## Method actually run
 
-Harness: `sovereign/crates/sovereign-inference/examples/sp6_late_chunk.rs`
+Harness: `serve/crates/sovereign-inference/examples/sp6_late_chunk.rs`
 (committed). Fixtures: `scripts/sp6_prep.py`.
 
 ```

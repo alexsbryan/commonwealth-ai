@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Replay a captured routing decision against the live scorer and the
 //! live ranking policy — Phase 1 **S1** of
-//! [`docs/specs/SCHEDULER_QUALITY.md`](../../../docs/specs/SCHEDULER_QUALITY.md).
+//! [`docs/specs/SCHEDULER_QUALITY.md`](../../../../sovereign/docs/specs/SCHEDULER_QUALITY.md).
 //!
 //! # The decomposition that makes S1 cheap
 //!

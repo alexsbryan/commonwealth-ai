@@ -63,7 +63,7 @@ tracing-subscriber = { workspace = true }
 # daemon routes serve's router and adapter answer. Serve's library by its own
 # paths through the empty-items face (phase-b-72), the daemon's seed records
 # from its `double`, ids from kernel-types and the manifest from oicp-types.
-sovereign-serving-host = { path = "../sovereign-serving-host" }
+sovereign-serving-host = { path = "../../../serve/crates/sovereign-serving-host" }
 sovereign-daemon = { workspace = true, features = ["treesitter", "test-doubles"] }
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }

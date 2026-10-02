@@ -91,7 +91,7 @@ The three are not one job:
 |---|---|---|
 | `top_k` | **two lines** | `sovereign_contracts::CompletionRequest` already carries `top_k` (`quality/baselines/api/sovereign-contracts.txt:3724`) and `sovereign-inference/src/embedded/sampler.rs:394` documents that `request.top_k` overrides the picked profile. It is absent only from the HTTP struct — so the Ollama shim *builds* it at `routes_ollama.rs:190` and serde discards it at `:220`. A client setting `options.top_k` gets a silent no-op today. |
 | `frequency_penalty` / `presence_penalty` | small | The sampler already carries a presence term (`sampler.rs:431`), driven by per-mode quirks rather than by the request. Needs a contract field plus a mapping line. |
-| `stop` | **real work** | `grep -r "stop_token\|stop_sequence\|antiprompt\|stop_words" sovereign/crates/sovereign-inference/src/` returns nothing. The embedded engine has no stop-sequence facility at all. This is decode-loop work, not plumbing, and should not be sized with the other two. |
+| `stop` | **real work** | `grep -r "stop_token\|stop_sequence\|antiprompt\|stop_words" serve/crates/sovereign-inference/src/` returns nothing. The embedded engine has no stop-sequence facility at all. This is decode-loop work, not plumbing, and should not be sized with the other two. |
 
 **Whatever is not fixed should be logged.** A `debug!` naming each dropped
 field converts a §18.3 violation into an honest degrade, at the cost of one

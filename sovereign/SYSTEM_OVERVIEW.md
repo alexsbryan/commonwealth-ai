@@ -35,7 +35,7 @@ commonwealth-ai/
 ├── shared/crates/oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── oicp-conformance/          # Standalone OICP v0.4 host conformance tester
 ├── shared/crates/oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
-├── serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
+├── serve/crates/serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
 ├── shared/crates/serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
 ├── shared/crates/mesh-reach/                # Peer dial vocabulary + PeerTransport; RailsTransport (`rails`), the guest dialer + one iroh HTTP bridge (`guest`)
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)

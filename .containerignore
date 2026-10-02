@@ -3,7 +3,7 @@
 # multi-GB cargo build outputs — making every container build start
 # with a multi-minute "Sending build context" stall.
 #
-# The Containerfiles under sovereign/container/ COPY in only the paths
+# The Containerfiles under serve/container/ COPY in only the paths
 # cargo / build-scripts actually need; this list enumerates the bulky
 # directories that are NEVER referenced by those COPYs so podman can
 # skip them outright.
@@ -65,7 +65,7 @@ target-container-*/
 dist/
 
 # ─── Re-included on purpose ───────────────────────────────────────────
-# `target/` above is excluded wholesale, but sovereign/container/Containerfile
+# `target/` above is excluded wholesale, but serve/container/Containerfile
 # .local-test COPYs the host-built release binary OUT of it — that image
 # deliberately bakes in a binary compiled on the host rather than rebuilding
 # Rust in-image. Without this negation that COPY cannot resolve and the image

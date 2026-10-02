@@ -70,7 +70,7 @@ curl https://rclone.org/install.sh | sudo bash
 
 ### 2. Container image pushed to a registry
 
-Build the CUDA image from `sovereign/container/Containerfile.cuda`
+Build the CUDA image from `serve/container/Containerfile.cuda`
 and push it somewhere Vast can pull from. **The image bundles
 `entrypoint.sh` — every time you change either file you must rebuild
 and re-push.**
@@ -79,7 +79,7 @@ Build runs on the **host** (no podman inside the toolbox):
 ```bash
 # In a HOST shell, from the repo root:
 podman build -t ghcr.io/<you>/sovereign-cuda:latest \
-             -f sovereign/container/Containerfile.cuda .
+             -f serve/container/Containerfile.cuda .
 podman push ghcr.io/<you>/sovereign-cuda:latest
 ```
 
@@ -118,7 +118,7 @@ sovereign daemon start
 fails fast with the complete missing-set if anything's absent.
 The CLI reads them from the shell env and re-exports them into
 the pod's onstart command. The pod entrypoint
-(`sovereign/container/entrypoint.sh:41-45`) re-checks them with
+(`serve/container/entrypoint.sh:41-45`) re-checks them with
 `: "${VAR:?…}"` — drop one and you waste ~60s of pod boot per
 attempt.
 
@@ -344,8 +344,8 @@ sections (0=GPU diag, 1=Tailscale, 2=R2 sync, 3=config, 4=daemon).
 | `~/.svrnmesh/logs/pipeline/sep-core-v1-*.log` | Per-driver-invocation log (created by the `pipeline run` shell snippet above) |
 | `~/.svrnmesh/mesh.json` | Mesh membership (auto-managed) |
 | `sovereign-recipes/sep/pipelines/sep-core-v1.toml` | Recipe — edit to tune retries/concurrency/schedule |
-| `sovereign/container/Containerfile.cuda` | Pod image source — rebuild + push after edits |
-| `sovereign/container/entrypoint.sh` | Pod boot script — same: rebuild + push after edits |
+| `serve/container/Containerfile.cuda` | Pod image source — rebuild + push after edits |
+| `serve/container/entrypoint.sh` | Pod boot script — same: rebuild + push after edits |
 | `sovereign/crates/sovereign-cli/src/pipeline_cmd.rs:cmd_pod_up` | The CLI side; env-var validation + R2 preflight + onstart synthesis |
 
 ## When you don't need a pod

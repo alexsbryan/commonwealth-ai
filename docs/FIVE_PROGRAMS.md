@@ -115,7 +115,7 @@ caller cannot read never enters a prompt and the absence is reported as a
 verdict. Today's `enabled_corpora` (347 sites) is a per-conversation
 preference, not an access control, and stays one.
 
-**Deployment.** `sovereign/container/Containerfile` (ROCm base) plus a proxy
+**Deployment.** `serve/container/Containerfile` (ROCm base) plus a proxy
 and a TLS terminator in one compose file, a GPU device, and two volumes:
 models and data. Ingest is a mounted volume plus a recipe, or an acquirer
 (`corpus-engine/src/acquirers/`: local file, HTTP API, Hugging Face, bulk

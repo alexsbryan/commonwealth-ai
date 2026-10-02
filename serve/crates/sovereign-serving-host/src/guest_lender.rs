@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The guest-lookup port, the vocabulary it publishes, and the resolver.
 //!
-//! `sovereign/SERVING_BOUNDARY.md` "The five entries" (a): a guest link is a
+//! `serve/SERVING_BOUNDARY.md` "The five entries" (a): a guest link is a
 //! PIN, not a candidate, so it crosses into Serving through its OWN port
 //! ([`GuestLenderSource`]) and never through the roster port. The two ports
 //! are deliberately not one: the roster enumerates (`Vec`), the guest lookup

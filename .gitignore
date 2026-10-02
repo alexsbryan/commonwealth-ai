@@ -204,7 +204,7 @@ packages/vscode-sovereign/*.vsix.sha256
 
 
 .cargo-container-arm64/
-sovereign/container/Containerfile.cli-arm64
+serve/container/Containerfile.cli-arm64
 target-container-linux-arm64/
 
 # Sovereign code intelligence

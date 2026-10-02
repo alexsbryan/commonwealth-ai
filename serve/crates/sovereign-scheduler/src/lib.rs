@@ -8,7 +8,7 @@
 //! `yield_backoff`, and `peer_health` (from commonwealth-core, phase-b
 //! pb-serve-sheds-core) — while the recorder sink, the local slot pick and the
 //! throughput stream observer stay with `sovereign-serving-host`
-//! (`sovereign/SERVING_BOUNDARY.md` "The two tiers").
+//! (`serve/SERVING_BOUNDARY.md` "The two tiers").
 
 pub mod decision_log;
 pub mod decision_replay;

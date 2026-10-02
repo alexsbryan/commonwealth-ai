@@ -4,7 +4,7 @@
 //! Opens connections, holds the HTTP surface, and receives every candidate
 //! through a port. Receives `peer_inference`, `inference_adapter`,
 //! `oicp_synthesis`, `guest_lender`, `pinned_worker_source`, `entry_endpoint`
-//! and `sovereign-api`'s `admission` (`sovereign/SERVING_BOUNDARY.md` "The two
+//! and `sovereign-api`'s `admission` (`serve/SERVING_BOUNDARY.md` "The two
 //! tiers").
 
 pub mod admission;

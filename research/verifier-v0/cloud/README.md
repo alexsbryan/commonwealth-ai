@@ -23,7 +23,7 @@ already exists.
 
 `mesh pod up` builds an **ephemeral inference worker**: it mints a
 bootstrap blob, boots our `sovereign-cuda` image whose entrypoint ends in
-`daemon run --worker-mode` (`sovereign/container/entrypoint.sh:114`), and
+`daemon run --worker-mode` (`serve/container/entrypoint.sh:114`), and
 drives a job protocol whose only reverse flow is `GET
 /internal/worker/completed` returning **JSON unit results**
 (`worker_controller.rs:616`).

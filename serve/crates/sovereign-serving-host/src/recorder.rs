@@ -4,7 +4,7 @@
 //! `sovereign-scheduler`'s `decision_log` holds the record model and the
 //! `DecisionSink` seam, but the sink that writes the records, the clock that
 //! stamps them and the sequence that orders their ids are host concerns
-//! (`sovereign/SERVING_BOUNDARY.md` "Corrected 2026-09-14", bullet 1). The
+//! (`serve/SERVING_BOUNDARY.md` "Corrected 2026-09-14", bullet 1). The
 //! ranker stays pure: it takes the decision id and `now` as arguments the way
 //! `DecisionBuilder::finish_at` always has.
 //!
