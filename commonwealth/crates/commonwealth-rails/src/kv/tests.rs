@@ -258,7 +258,11 @@ async fn a_restart_rehydrates_a_local_only_row_from_its_own_journal() {
         .unwrap()
         .error_for_status()
         .unwrap();
-    assert_eq!(drain(&first).await.appended, 1);
+    assert_eq!(
+        drain(&first).await.appended,
+        0,
+        "the door journaled the write before it answered"
+    );
 
     let second = host_at(dir.path(), &mesh);
     assert!(second.store.get(PRIVATE, "holding").unwrap().is_none());
@@ -315,7 +319,8 @@ async fn a_peer_op_in_a_local_only_journal_is_not_rehydrated() {
 /// A local-only write through the door is journaled on this node and never
 /// offered to a peer (fp-107: the outbox guard skips only rail-carried
 /// namespaces; privacy lives at the wire). Watched red by restoring
-/// `is_gossip_excluded` in `backend::memory`'s `enqueue`: `appended` was 0.
+/// `is_gossip_excluded` in `backend::memory`'s `enqueue`: the journal was
+/// empty.
 #[tokio::test]
 async fn a_local_only_write_is_journaled_and_never_offered() {
     const PRIVATE: &str = "notes-private";
@@ -336,7 +341,12 @@ async fn a_local_only_write_is_journaled_and_never_offered() {
         .unwrap()
         .error_for_status()
         .unwrap();
-    assert_eq!(drain(&host).await.appended, 1, "the write is journaled");
+    let (ops, _) = host.rail.journal(PRIVATE).unwrap().read().unwrap();
+    assert_eq!(
+        ops.len(),
+        1,
+        "the door journaled the write before it answered"
+    );
 
     let namespaces = host.rail.namespaces().unwrap();
     assert!(
@@ -356,14 +366,15 @@ async fn a_local_only_write_is_journaled_and_never_offered() {
 }
 
 #[tokio::test]
-async fn the_pump_appends_a_door_write_and_seals_past_the_threshold() {
+async fn a_door_write_is_journaled_before_its_answer_and_the_pump_seals_past_the_threshold() {
     let dir = tempfile::tempdir().unwrap();
     let mesh = solo_mesh();
     let host = host_at(dir.path(), &mesh);
     let base = serve(host.clone()).await;
     let me = NodeId::from_u128(ME);
 
-    // A door write reaches the journal on the next tick.
+    // A door write is on the journal before the door answers, so the tick
+    // finds nothing left to append (pc-solo-durable).
     reqwest::Client::new()
         .post(format!("{base}/v1/mesh/kv/entry"))
         .json(&serde_json::json!({
@@ -374,8 +385,10 @@ async fn the_pump_appends_a_door_write_and_seals_past_the_threshold() {
         .unwrap()
         .error_for_status()
         .unwrap();
+    let (ops, _) = host.rail.journal(NS).unwrap().read().unwrap();
+    assert_eq!(ops.len(), 1, "journaled before the answer");
     let first = drain(&host).await;
-    assert_eq!((first.appended, first.sealed), (1, 0));
+    assert_eq!((first.appended, first.sealed), (0, 0));
 
     // Two more live rows, then set+delete pairs until this node's own ops
     // cross the threshold: many lines, three live rows.

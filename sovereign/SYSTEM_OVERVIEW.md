@@ -1235,6 +1235,9 @@ since phase-b-5 `RailsDaemon::run` finishes that projection BEFORE the
 listener binds, so `/v1/mesh/status` answering means the store is loaded
 (`tests/ready.rs`), and the ed25519 stack builds optimized even in dev so
 a 12.9k-line store projects in under 2 s, not 118 s;
+since pc-solo-durable a door that changed the store drains the outbox onto
+the journal before it answers, so an acknowledged write survives a kill
+(`tests/kill_durable.rs`), and the tick keeps the seal check;
 since fp-87 `svrn portfolio` and `svrn newsworthy` read and write it through
 the daemon's `RailsKv`, after migrating their legacy SQLite files once —
 `sovereign-cli-mesh kv-export` reads, `sovereign-cli-llm/src/legacy_store.rs`

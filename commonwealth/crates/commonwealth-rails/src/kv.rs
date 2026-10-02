@@ -5,11 +5,14 @@
 //! **The store is a projection of THIS process's journals.** One
 //! `MeshStore::in_memory()`, rebuilt at start by folding every KV-shaped
 //! namespace under the rail root through `commonwealth_state::rail_kv` — the
-//! journal is the durable half, so a restart loses nothing the pump had
-//! appended. The pump is the send half lifted from
-//! `sovereign_mesh::rail_kv_pump`: every [`PUMP_INTERVAL`] it drains the
-//! store's outbox onto the namespace's journal, signed with this node's key,
-//! and seals + snapshots a KV namespace its outbox fed once this node's own
+//! journal is the durable half, so a restart loses nothing that reached it.
+//! A door that changed the store drains the outbox onto the journal BEFORE
+//! it answers ([`KvHost::journal_outbox`]), so an acknowledged write survives
+//! a kill: a solo node has no peer copy (pc-solo-durable, five-programs-66).
+//! The pump is the send half lifted from `sovereign_mesh::rail_kv_pump`:
+//! every [`PUMP_INTERVAL`] it drains what is still queued (a write deferred
+//! for want of a roster) the same way, signed with this node's key, and
+//! seals + snapshots a KV namespace either drain fed once this node's own
 //! ops above its last seal pass `rail_kv::SEAL_AFTER_OWN_OPS`.
 //!
 //! **One sealer per journal.** A snapshot's mark retires every row of its
@@ -50,8 +53,8 @@ use tracing::{debug, info, warn};
 
 use crate::rail::err;
 
-/// How often the outbox is drained — the daemon pump's interval, for the
-/// same reason: it is the latency of a local write reaching the ring.
+/// How often the pump drains the outbox and runs the seal check. A door
+/// write does not wait for it: the door journals before it answers.
 pub const PUMP_INTERVAL: Duration = Duration::from_secs(2);
 
 /// How many outbox rows one tick takes. A bound on how long one tick holds a
@@ -75,6 +78,13 @@ pub struct KvHost {
     /// line count starts there too and stays an upper bound; absent, it takes
     /// every own line.
     snapshot_base: Mutex<HashMap<String, u64>>,
+    /// One drainer at a time: a door and the tick both take the outbox, and
+    /// a row is acked only after its append, so two drains would append it
+    /// twice. Held across the tick's seal too, so a door append never lands
+    /// between a seal and its snapshot.
+    drain: tokio::sync::Mutex<()>,
+    /// Namespaces a drain appended to since the last tick's seal check.
+    seal_due: Mutex<BTreeSet<String>>,
 }
 
 /// What one [`KvHost::pump_once`] did — returned so a test asserts on the
@@ -114,6 +124,8 @@ impl KvHost {
             self_pubkey,
             dirty: Mutex::new(BTreeSet::new()),
             snapshot_base: Mutex::new(HashMap::new()),
+            drain: tokio::sync::Mutex::new(()),
+            seal_due: Mutex::new(BTreeSet::new()),
         })
     }
 
@@ -312,10 +324,41 @@ impl KvHost {
     }
 
     /// One drain of the outbox onto the journals, plus the seal check for
-    /// every namespace a row was appended to. Appended rows are acked;
-    /// `NotInRoster` and an unreadable roster leave rows queued; any other
-    /// refusal acks the row with a `warn` naming it.
+    /// every namespace a drain appended to since the last one — a door's
+    /// included, so journaling before the ack never skips a seal.
     pub async fn pump_once(&self) -> PumpOutcome {
+        let _drain = self.drain.lock().await;
+        let mut out = self.drain_outbox().await;
+        let due = std::mem::take(&mut *self.seal_due.lock().unwrap_or_else(|p| p.into_inner()));
+        for namespace in due {
+            match self.journal_and_roster(&namespace).await {
+                Ok((journal, roster)) => self.seal_if_due(&journal, &roster, &mut out).await,
+                Err(e) => {
+                    warn!(target: "rails", namespace, error = %e,
+                          "kv pump: the roster is unreadable, so the seal check waits a tick");
+                    self.seal_due
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .insert(namespace);
+                }
+            }
+        }
+        out
+    }
+
+    /// Drain the outbox onto the journals now, before a door answers the
+    /// write it just made — the store is in memory, so until this append a
+    /// kill loses a write the caller was told had landed. Returns what the
+    /// drain did; the seal check stays the tick's.
+    pub async fn journal_outbox(&self) -> PumpOutcome {
+        let _drain = self.drain.lock().await;
+        self.drain_outbox().await
+    }
+
+    /// One drain of the outbox onto the journals; the caller holds `drain`.
+    /// Appended rows are acked; `NotInRoster` and an unreadable roster leave
+    /// rows queued; any other refusal acks the row with a `warn` naming it.
+    async fn drain_outbox(&self) -> PumpOutcome {
         let mut out = PumpOutcome::default();
         let queued = match self.store.outbox_take(OUTBOX_DRAIN_LIMIT) {
             Ok(rows) => rows,
@@ -396,7 +439,10 @@ impl KvHost {
             }
             out.appended += appended_here;
             if appended_here > 0 {
-                self.seal_if_due(&journal, &roster, &mut out).await;
+                self.seal_due
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .insert(namespace);
             }
         }
         out
@@ -685,6 +731,27 @@ fn store_error(op: &str, e: commonwealth_state::Error) -> Response {
     )
 }
 
+/// Put the write a door just made on its journal before the door answers
+/// ([`KvHost::journal_outbox`]). On the blocking pool, for the tick's reason:
+/// an append re-reads the journal, synchronous I/O an async worker would hold
+/// other requests behind. A write still queued after it (this node is in no
+/// roster yet) is acknowledged as today, and named at `debug`.
+async fn journal_before_ack(host: &Arc<KvHost>, op: &'static str) {
+    let started = std::time::Instant::now();
+    let runtime = tokio::runtime::Handle::current();
+    let drain = {
+        let host = Arc::clone(host);
+        tokio::task::spawn_blocking(move || runtime.block_on(host.journal_outbox()))
+    };
+    match drain.await {
+        Ok(out) => debug!(target: "rails", op, appended = out.appended, deferred = out.deferred,
+                          refused = out.refused, elapsed_us = started.elapsed().as_micros() as u64,
+                          "kv door: journaled the outbox before answering"),
+        Err(e) => warn!(target: "rails", op, error = %e,
+                        "kv door: the journal drain did not finish, so this write waits for the pump"),
+    }
+}
+
 /// GET /v1/mesh/kv/entry — one record, or `null`.
 async fn kv_get(State(host): State<Arc<KvHost>>, Query(q): Query<KvLookup>) -> Response {
     match host.store.get(&q.app_id, &q.key) {
@@ -705,7 +772,12 @@ async fn kv_set(State(host): State<Arc<KvHost>>, Json(body): Json<KvSetBody>) ->
         }
     };
     match host.store.set(&body.app_id, &body.key, value, body.origin) {
-        Ok(changed) => Json(changed).into_response(),
+        Ok(changed) => {
+            if changed {
+                journal_before_ack(&host, "set").await;
+            }
+            Json(changed).into_response()
+        }
         Err(e) => store_error("set", e),
     }
 }
@@ -713,7 +785,12 @@ async fn kv_set(State(host): State<Arc<KvHost>>, Json(body): Json<KvSetBody>) ->
 /// DELETE /v1/mesh/kv/entry — whether anything was there to remove.
 async fn kv_delete(State(host): State<Arc<KvHost>>, Query(q): Query<KvLookup>) -> Response {
     match host.store.delete(&q.app_id, &q.key) {
-        Ok(deleted) => Json(deleted).into_response(),
+        Ok(deleted) => {
+            if deleted {
+                journal_before_ack(&host, "delete").await;
+            }
+            Json(deleted).into_response()
+        }
         Err(e) => store_error("delete", e),
     }
 }
