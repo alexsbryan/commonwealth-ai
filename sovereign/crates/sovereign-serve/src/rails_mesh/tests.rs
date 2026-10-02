@@ -125,6 +125,37 @@ fn serve_registers_its_peer_prefixes_and_its_rpc_worker_only_when_it_binds() {
         .expect("the rpc origin declares the anchor record");
     assert!(anchor.can_anchor);
     assert_eq!((anchor.rpc_port, anchor.rpc_iroh), (Some(50060), true));
+    assert!(
+        !anchor.rpc_direct,
+        "a loopback worker declares no direct bind"
+    );
+}
+
+/// pc-rpc-probe-identity: the anchor record declares a direct bind only for a
+/// worker the operator let past loopback; a host probes the member's address
+/// for no other. Failing input: declare `rpc_direct` unconditionally.
+#[test]
+fn only_a_worker_bound_past_loopback_declares_a_direct_bind() {
+    let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
+    let direct = |rpc: RpcServe| {
+        registrations_for(listen, None, rpc, None)
+            .iter()
+            .find(|r| r.alpn == "cwth/rpc/0")
+            .and_then(|r| r.claims.as_ref()?.anchor.as_ref().map(|a| a.rpc_direct))
+    };
+    assert_eq!(
+        direct(RpcServe::resolve(Some("127.0.0.1:50060"), false)),
+        Some(false)
+    );
+    assert_eq!(
+        direct(RpcServe::resolve(Some("0.0.0.0:50060"), true)),
+        Some(true)
+    );
+    assert_eq!(
+        direct(RpcServe::resolve(Some("0.0.0.0:50060"), false)),
+        None,
+        "refused: no worker"
+    );
 }
 
 /// The `cwth/http/0` registration declares the VRAM figure it was handed as

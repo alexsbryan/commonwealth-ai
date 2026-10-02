@@ -287,6 +287,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         rpc_worker: rpc_worker_port().map(|port| RpcWorkerStatus {
             port,
             iroh: state.rpc_iroh_accept(),
+            direct: sovereign_core::launch::RpcServe::from_env().binds_past_loopback(),
         }),
         serving: crate::serve_client::ServingPath::decided().map(|p| p.status_line()),
     })
@@ -464,6 +465,12 @@ pub struct RpcWorkerStatus {
     /// JSON is byte-identical for non-iroh workers (additive wire).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub iroh: bool,
+    /// True when the worker binds past loopback (plaintext LAN, operator-
+    /// allowed), so a host may dial `port` at this node's address; false
+    /// means the bridge is the only path that reaches it. Always written:
+    /// its absence is how a host knows the daemon predates the declaration
+    /// (pc-rpc-probe-identity).
+    pub direct: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -829,16 +836,21 @@ mod process_status_tests {
         let off = serde_json::to_value(RpcWorkerStatus {
             port: 50052,
             iroh: false,
+            direct: false,
         })
         .unwrap();
-        assert_eq!(off, serde_json::json!({ "port": 50052 }));
+        assert_eq!(off, serde_json::json!({ "port": 50052, "direct": false }));
         // true → advertised; hosts read it with `.get("iroh")` off the
         // opaque JSON, absent-means-false.
         let on = serde_json::to_value(RpcWorkerStatus {
             port: 50052,
             iroh: true,
+            direct: true,
         })
         .unwrap();
-        assert_eq!(on, serde_json::json!({ "port": 50052, "iroh": true }));
+        assert_eq!(
+            on,
+            serde_json::json!({ "port": 50052, "iroh": true, "direct": true })
+        );
     }
 }

@@ -215,8 +215,9 @@ impl PeerTransport for Nowhere {
 
 /// Discovery reads a worker's port from the roster's anchor record
 /// (pb-serve-distributes), so a worker on a roster with no `/status` behind
-/// it is found and dialled at its direct address. Failing input: read the
-/// port only from the peer's `/status`, and this tick discovers nothing.
+/// it is found and dialled at its direct address, which it declares
+/// (`rpc_direct`, pc-rpc-probe-identity). Failing input: read the port only
+/// from the peer's `/status`, and this tick discovers nothing.
 #[tokio::test]
 async fn a_worker_the_roster_names_is_discovered_without_a_status_probe() {
     let worker = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -232,7 +233,8 @@ async fn a_worker_the_roster_names_is_discovered_without_a_status_probe() {
                           "gpu_utilization": 0.0, "cpu_utilization": 0.0,
                           "available_for_mesh": true},
             "hosted_corpora": [], "reported_at": 0,
-            "anchor": {"can_anchor": true, "vram_gb": 0, "rpc_port": port}
+            "anchor": {"can_anchor": true, "vram_gb": 0, "rpc_port": port,
+                       "rpc_direct": true}
         }))
         .expect("capabilities");
     let roster = OnePeer(sovereign_contracts::membership::MembershipEntry {

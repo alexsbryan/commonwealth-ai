@@ -499,7 +499,7 @@ fn registrations_for(
             // ggml's rpc-server speaks raw bytes, not HTTP.
             framing: Framing::Bytes,
             ttl_secs: Some(ORIGIN_TTL_SECS),
-            claims: Some(anchor_claims(port)),
+            claims: Some(anchor_claims(port, rpc.binds_past_loopback())),
             namespaces: Vec::new(),
         }),
         _ => {
@@ -531,7 +531,7 @@ fn vram_claims(vram_gb: Option<u32>) -> NodeCapabilities {
 /// cw-rails merges into its gossiped capabilities (`origins::merge_declared`).
 /// Every other number is zero, as cw-rails' own report is: this declaration
 /// claims the anchor tier and nothing about inference.
-fn anchor_claims(rpc_port: u16) -> NodeCapabilities {
+fn anchor_claims(rpc_port: u16, rpc_direct: bool) -> NodeCapabilities {
     NodeCapabilities {
         anchor: Some(AnchorProfile {
             can_anchor: true,
@@ -544,6 +544,10 @@ fn anchor_claims(rpc_port: u16) -> NodeCapabilities {
             // cw-rails forwards `cwth/rpc/0` to the worker: a host bridges to
             // it when no direct address answers.
             rpc_iroh: true,
+            // Only a bind past loopback (plaintext LAN, operator-allowed) is
+            // reachable at this node's own address; any other worker is
+            // reached over the bridge, which proves the member.
+            rpc_direct,
         }),
         ..zero_claims()
     }
