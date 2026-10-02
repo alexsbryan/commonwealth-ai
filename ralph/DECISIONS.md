@@ -2064,6 +2064,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Because: the e2e gap is the user-visible one (a plain turn about 2x the main-era baseline); the other two are one-of-three and fixture-level readings whose cause is better found in phase-c than measured against main tonight.
 - Also read in the window's run-up (4c27b1948): P3's release first-token re-read passes 3/3 (x1.060-1.078 vs <= 1.10; embed x0.944-0.980 vs >= 0.90).
 
+**phase-c-2 · 2026-10-02 · seat, filing phase-b's remaining untracked findings to phase-c · seat** — this commit
+- Needed: target/ralph/phase-b/preflight-forks.md, an untracked file, still held findings no queue named. Re-read at 89b900c9d, fifteen held, two were fixed already (the `dir.pop()` climbs in mesh_principal_gate.rs and mesh_proof_header_gate.rs are gone; sovereign-lint.sh no longer names `mesh-sim`), and two are operator edits to AGENTS.md (clone-gate absent from the "Rules with a ratchet" list; the verb→binary table), which no row may make.
+- Chose: three rows below the cleanup cut line, outside the frozen scope: pc-mesh-dissolve-residue (seven files naming the deleted sovereign-mesh, or a moved test, as live), pc-retired-verbs-named (`svrn milestone`, `svrn drift <feature-id>`, `svrn plan`, `svrn project found` answer outside `deprecation::RETIRED`; two exit 0), pc-test-port-toctou (two release-then-bind e2e flakes; 24 private `fn free_port`). size-gate's red keys stay the merge's closing re-pin at origin/main, not a row.
+- Because: a finding in an untracked file is filed nowhere (phase-b-97, -104, -109, -110). None changes what a user can do except pc-retired-verbs-named, whose harm is a misleading error on a verb that no longer exists; it is a one-id scope move if the operator wants it inside phase-c.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13330,5 +13335,15 @@ Falsified if the classifier refuses seed.sh or run.sh under an explicit allow ru
 Reproduced: `scripts/ralph.py:905` returned the refusal for any id without `/`; `_dispatch_model` (ralph.py ~1860) turns a refusal for every roster entry into the halt. After the fix, `probe_model('claude-opus-5-5', paths_for(pool --queue phase-c))` returned `(True, '')` through `scripts/ralph-claude-shim.sh` against the live plan. New test `ProbeTests.test_a_declared_worker_bin_probes_a_bare_id_through_itself` fails with the old ralph.py (FAILED failures=1) and passes with the new; the full `scripts/tests/ralph.py` is 158 tests OK.
 
 Falsified if: a queue that declares a worker_bin which does route through opencode config (a wrapper around opencode with a loopback provider) gets probed against the mesh daemon. Then the loopback check must consult the client, not the id's shape.
+
+</details>
+
+## phase-c-2 · 2026-10-02 — phase-b's remaining untracked findings are three rows below phase-c's cut line
+
+<details><summary>reasoning, evidence, package</summary>
+
+Each item was re-read in the tree before filing. `svrn milestone foo 1` → "requires --project", exit 2; `svrn drift foo` → "requires a subcommand", exit 2; `svrn plan` and `svrn project found` → retirement note, exit 0; `svrn mobile` → "no mobile host ships", exit 1, against cli-contract.toml:3629's `disposition = "promote"`. `grep -c '^\[\[family\]\]' quality/twin-plants.toml` = 7 against SYSTEM_OVERVIEW.md:263's "19 families". `grep -rln 'fn free_port'` over the Rust trees = 24 files.
+
+Not filed: client_tokens_e2e's libtest-isolation case has no red run since the closing sweep (0 of 7); it rides pc-test-port-toctou as "reproduce first". corpus_watch_http_e2e was fixed in 3c08179cc. code_server_via_mcp_client.rs finds its binary beside the test with no `*_BIN` knob, but LIFT(svrn) is green at 327a8097b, so it is not a defect today.
 
 </details>
