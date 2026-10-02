@@ -101,6 +101,27 @@ impl RingJournal {
         roster: &Roster,
         on_behalf_of: Option<&str>,
     ) -> Result<Op<SignedOp>, RailError> {
+        let mut ops = self.append_all(vec![act], signer, roster, on_behalf_of)?;
+        Ok(ops.remove(0))
+    }
+
+    /// Sign and append several acts under this node's key, in order, with
+    /// ONE read of the log and ONE write.
+    ///
+    /// [`Self::append`] is this with one act. A batch exists because the next
+    /// sequence number is derived by reading the whole log: a snapshot that
+    /// re-appended `n` live rows one `append` at a time read the log `n`
+    /// times, O(n^2) in the live set (F13, pc-rails-reseal-loop). The seqs
+    /// are contiguous from that one read, which the writer lock makes safe
+    /// exactly as it does for one act. The write is one `write(2)`, so the
+    /// batch lands whole or not at all.
+    pub fn append_all(
+        &self,
+        acts: Vec<RailAct>,
+        signer: &dyn RingSigner,
+        roster: &Roster,
+        on_behalf_of: Option<&str>,
+    ) -> Result<Vec<Op<SignedOp>>, RailError> {
         let actor = signer.actor();
         // Authoring under a key the ring does not carry produces an op that
         // every node — including this one — reports as `UnknownSigner`
@@ -118,22 +139,15 @@ impl RingJournal {
                 namespace: self.namespace.clone(),
             });
         }
-        // A payload is canonical by construction, so by the time one is a
-        // `Payload` there is nothing left for the door to check. This assert
-        // is the reader's reminder that the check happened at the type
-        // boundary, not that it was skipped.
-        debug_assert!(
-            act.payloads()
-                .map(|p| p.as_value().is_object())
-                .unwrap_or(true),
-            "Payload::new admits only objects"
-        );
+        if acts.is_empty() {
+            return Ok(Vec::new());
+        }
 
         let log = self.log();
         let (existing, _) = log
             .read_all_with_skips()
             .map_err(|e| RailError::Io(e.to_string()))?;
-        let seq = existing
+        let first_seq = existing
             .iter()
             .filter(|o| o.actor == actor)
             .map(|o| o.kind.seq)
@@ -144,28 +158,44 @@ impl RingJournal {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
-        let body = body_json(&act, on_behalf_of);
-        let signature = signer.sign(&self.namespace, ts_unix, seq, &body);
-        let op = Op::new(
-            SignedOp {
-                seq,
-                sig: signature,
-                act,
-                on_behalf_of: on_behalf_of.map(str::to_string),
-            },
-            ts_unix,
-            actor.clone(),
-        );
-        log.append(&op).map_err(|e| RailError::Io(e.to_string()))?;
-        tracing::debug!(
-            namespace = %self.namespace,
-            id = %op.id,
-            actor = %actor,
-            seq,
-            on_behalf_of = ?on_behalf_of,
-            "ring rail: appended"
-        );
-        Ok(op)
+        let mut ops = Vec::with_capacity(acts.len());
+        for (seq, act) in (first_seq..).zip(acts) {
+            // A payload is canonical by construction, so by the time one is a
+            // `Payload` there is nothing left for the door to check. This assert
+            // is the reader's reminder that the check happened at the type
+            // boundary, not that it was skipped.
+            debug_assert!(
+                act.payloads()
+                    .map(|p| p.as_value().is_object())
+                    .unwrap_or(true),
+                "Payload::new admits only objects"
+            );
+            let body = body_json(&act, on_behalf_of);
+            let signature = signer.sign(&self.namespace, ts_unix, seq, &body);
+            ops.push(Op::new(
+                SignedOp {
+                    seq,
+                    sig: signature,
+                    act,
+                    on_behalf_of: on_behalf_of.map(str::to_string),
+                },
+                ts_unix,
+                actor.clone(),
+            ));
+        }
+        log.append_all(&ops)
+            .map_err(|e| RailError::Io(e.to_string()))?;
+        for op in &ops {
+            tracing::debug!(
+                namespace = %self.namespace,
+                id = %op.id,
+                actor = %actor,
+                seq = op.kind.seq,
+                on_behalf_of = ?on_behalf_of,
+                "ring rail: appended"
+            );
+        }
+        Ok(ops)
     }
 
     /// Append an op that arrived from a peer, exactly as it was signed.

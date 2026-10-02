@@ -68,6 +68,34 @@ fn appending_assigns_contiguous_sequence_numbers_per_actor() {
     assert_eq!(f.ops.len(), 4);
 }
 
+/// A batch continues the actor's counter, contiguously, and admits like the
+/// same acts appended one at a time.
+#[test]
+fn a_batch_append_continues_the_counter_contiguously() {
+    let dir = tempfile::tempdir().unwrap();
+    let journal = open(dir.path());
+    let r = ring();
+    journal.append(record("x"), &key(1), &r, None).unwrap();
+    let batch = vec![record("a"), record("b"), record("c")];
+    let ops = journal.append_all(batch, &key(1), &r, None).unwrap();
+    assert_eq!(
+        ops.iter().map(|o| o.kind.seq).collect::<Vec<_>>(),
+        [1, 2, 3]
+    );
+    assert_eq!(
+        journal
+            .append(record("y"), &key(1), &r, None)
+            .unwrap()
+            .kind
+            .seq,
+        4
+    );
+
+    let f = journal.admit(&r, &Ed25519Verifier).unwrap();
+    assert!(f.is_complete(), "{:?}", f.gaps);
+    assert_eq!(f.ops.len(), 5);
+}
+
 /// A journal line is one flat JSON object — the envelope's fields and the
 /// act's, side by side, the same shape the other three oplog tenants write.
 #[test]
