@@ -250,3 +250,6 @@ research/deep-research/demo/p5/runs-t1c/
 # §3 writes wall-qr.svg in the cwd). Short-lived credentials: never committed.
 wall-qr.svg
 phone-qr.svg
+
+# ralph pool lane worktrees (scripts/ralph.py Pool.run_lane: .ralph/wt/<unit>); whole checkouts, never committed
+.ralph/
