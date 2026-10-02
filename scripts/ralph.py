@@ -899,9 +899,16 @@ def probe_refusal(model, paths):
     is declared with a loopback baseURL (localhost:9741 — the mesh daemon
     serves inference at /v1) is refused by name, and a bare id names no
     provider at all (order ralph-model-roster seam: probe the provider, not
-    localhost). Returns "" to probe, else the cause."""
+    localhost). Returns "" to probe, else the cause.
+
+    The provider/model pair is opencode's grammar. A queue that declares its
+    own worker_bin (the claude shim) names models the way that client does,
+    bare (`claude-opus-5-5`), so a bare id is probed through it: phase-c's
+    pool halted at its first dispatch on exactly that refusal."""
     provider, _, name = model.partition("/")
     if not provider or not name:
+        if paths.manifest and paths.manifest.worker_bin:
+            return ""
         return "names no provider/model pair — not probed"
     for cfg in _probe_configs(paths):
         declared = (cfg.get("provider") or {}).get(provider) or {}

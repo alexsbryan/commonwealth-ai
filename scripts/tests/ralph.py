@@ -2184,6 +2184,18 @@ class ProbeTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"RALPH_OPENCODE_BIN": shutil.which("echo")}):
                 self.assertEqual(ralph.probe_model("prov/x", paths), (True, ""))
 
+    def test_a_declared_worker_bin_probes_a_bare_id_through_itself(self):
+        # The claude shim names models bare; the pool's dispatch probe refused
+        # `claude-opus-5-5` and halted phase-c before its first wave.
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = ralph.Paths(pathlib.Path(tmp),
+                                manifest=mock.Mock(worker_bin=shutil.which("echo")))
+            self.assertEqual(ralph.probe_model("claude-opus-5-5", paths), (True, ""))
+            paths.manifest.worker_bin = shutil.which("false")
+            ok, cause = ralph.probe_model("claude-opus-5-5", paths)
+            self.assertFalse(ok)
+            self.assertIn("exit 1", cause)
+
 
 class HaltTailTests(unittest.TestCase):
     """A strikeout halt carries the failing lane's last error-shaped
