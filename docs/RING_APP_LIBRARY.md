@@ -5,6 +5,11 @@
 > ring app is written against. It supersedes nothing. What a ring is *for*
 > lives in `docs/internal/rings/reference/RING_APPLICATIONS.md` (per-host, untracked); the
 > primitive inventory lives in `quality/campaigns/ring-apps.toml`.
+>
+> **To build from, read `docs/RING_SPEC.md`** (2026-10-02): the normative
+> spec — model, invariants, contracts with their state at HEAD, units, bars and
+> defects. This document stays the record of why; where the two differ, the
+> spec wins.
 
 Two parts. Part 1 is the library. Part 2 is what composes it — the runtime,
 the door, reach and joining — and is the only part that does I/O.
@@ -433,6 +438,8 @@ wanted.
   adapts to the 64 KiB and 4096-byte caps instead of meeting a refusal.
 - **Served modules.** Library and runtime ship as ES modules beside the shim
   from real `.js` files; `RING_SHIM` stops being a string in a `.rs` file.
+  (Done by 2026-10-02: `RING_SHIM` is `include_str!("ring_shim.js")`,
+  `sovereign-contracts/src/guest_pages/shim.rs:41`.)
 - **The test entry.** `node --test`, the five laws, `diffFold` against
   `svrn ring log <ns> --json`.
 
@@ -667,7 +674,10 @@ primitive. These are the ones it has no row for.
 **A new step 0, and it is a prerequisite rather than an enhancement.** An act
 commits to nothing but itself: `ring_op_message` signs
 `(namespace, ts_unix, actor, seq, body_json)` and there is no `prev` and no
-heads (`rail-core/src/sig.rs:72-87`). Two consequences compound. Equivocation —
+heads (`rail-core/src/sig.rs:72-87`). (Partly overtaken by 2026-10-02: the
+signed body now carries the author's view digest, per-actor chain heads,
+`admit.rs:661-687`; nothing reads it beyond verification yet — `RING_SPEC.md`
+U3.) Two consequences compound. Equivocation —
 one actor signing two different acts at one `seq` and showing each to half the
 ring — produces identical per-actor counters on both sides and is caught only
 where some node happens to hold both; nothing forces that. And Jacob &
@@ -916,6 +926,11 @@ their author's key (`LEGO_KIT.md` step 3; today a bundle carries a hash, not an
 author, §14).
 
 ## 22. The town — register, shops, deeds
+
+*Naming and the manifest are superseded by `RING_SPEC.md` §3.3–§4: the shop's
+runner is its **host**, `Keeper` is `ring-apps` rung `ra-7`'s copy-holding role
+(which an insurer is), and there is one `[app]` manifest for pages and shops.
+The text below keeps its original words.*
 
 Added 2026-10-02, from two operator directions: a ring is what is offered on
 it — a digital town, open when its members are and closed when they are not —
