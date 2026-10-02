@@ -2147,6 +2147,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: reopen pc-partial-decline-verdict on three corrected shapes of `declines_asked_fact` (a contrast that continues the decline, a GK signpost with no value, an absence statement read anywhere in the text), with the 14 misses and the chat-ask false positive verbatim as fixtures; 4e8f9cfb1 stays. present-killer-weapon is not a fixture either way. The measure row is `[x]` at 6ce67adbc; the re-read is the split pc-partial-decline-verdict-measure-2, alone. The zero-chunk finding is filed below phase-c's cut as pc-zero-chunk-decline-verdict, not to phase-d.
 - Because: the row's proof says a miss reopens it and never re-tunes the bar; the misses and the false positive each trace to the one decider (principle 8), and the fix describes shapes rather than adding the two uncovered strings. The killer-weapon label agrees with what the prose claims of the retrieved sources; the unsignposted aside is the claim gate's to judge (principle 12). The zero-chunk verdict is a bug at a site the decider does not reach, the sibling of pc-complex-task-decline-verdict, not architecture; moving it above the cut is the operator's.
 
+**phase-c-18 · 2026-10-02 · pc-partial-decline-verdict · worker** — this commit
+- Needed: the reopened row names absent-professor-realname ("The passages do not answer: real, legal name.") as a coverage miss to be fixed by the shape the absence phrases share; the census found that text is the citation multiquote's own render, which also follows correct answers.
+- Chose: leave "answer" out of the decider's telling stems; pin both professor and present-shop-street as texts that must NOT read as declines; correct the row's premise rather than flip three full answers. 13 of the row's 14 misses are fixed.
+- Because: citation.rs:683 renders "The passages do not answer: <part>" only beside a part it grounded. In the same 4B sa reading the render follows a correct answer of the asked fact in present-shop-street ("Brett Street"), prov-mother-almshouse and present-asst-commissioner, all Grounded; covering the shape flips those three (about 7% of the 4B sa turns), past phase-c-17's own falsifier (the chat-ask rate, 1 in 24). The text cannot say which part was asked; the multiquote knew, and that is where a fix would read it.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13764,5 +13769,17 @@ The lane branch was merged (merge pc-partial-decline-verdict-measure) and ralph/
 Falsified if: the reopened decider, judged on the same sandbox, flips a full answer to cannot_know_from_here at the chat-ask rate or worse, or the 14 fixtures pass but check 4 at 35B stays near half (then the misses are not the decider's and the row's premise is wrong again).
 
 REVIEW-AFTER: present-killer-weapon is read as the label agreeing with the prose. If the operator reads a parenthetical parametric specific as an answer the user would act on, it becomes a false-positive fixture for the reopened row.
+
+</details>
+
+## phase-c-18 · 2026-10-02 — the multiquote's "do not answer" render is not read as a decline
+
+<details><summary>reasoning, evidence, package</summary>
+
+Measured with a Python port of old and new decider over all 185 turns of the pdm reading (lane target/ralph/phase-c/proto.py; raw in the main tree's target/ralph/phase-c/pc-partial-decline-verdict-measure/phase-c/pdm/runs). With "answer" as a telling stem, eight 4B sa turns in that render read as declines: absent-professor-realname (right), present-anarchists-parlour, present-bomb-target, prov-michaelis-apostle, distract-explosion-victim (the declined part is the asked one: arguably right), and present-shop-street, prov-mother-almshouse, present-asst-commissioner (the asked fact was answered: wrong).
+
+Falsified if: a multiquote turn whose grounded part is NOT the asked fact is common enough on the next reading (pc-partial-decline-verdict-measure-2) that the professor-shaped miss outweighs the three answered ones; then the fix belongs at the multiquote, which knows its parts, not in the text decider.
+
+REVIEW-AFTER: whether the multiquote should carry which part was the question's own, so the ledger can read a declined asked part structurally (principle 10). Not this row's lift.
 
 </details>
