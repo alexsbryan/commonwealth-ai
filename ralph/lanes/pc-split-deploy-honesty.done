@@ -1,0 +1,11 @@
+unit: pc-split-deploy-honesty
+commits: 33fe8ac8c (adopt_served / push_router_aliases extracted, behaviour-preserving),
+  c09c05eb8 (a reload serve did not honour is refused, naming each slot),
+  a0a241d45 (svrn follows serve's self-report across a serve restart),
+  bf406e8c3 (the mesh-status bullet has no site after the flip; premise corrected)
+what: on the dialing path `POST /v1/admin/reload` succeeds only when serve's
+  self-report holds the core slots `[models]` asks for, and otherwise names
+  each one; svrn re-reads serve's self-report every 10 s and adopts a changed
+  one, so a serve restart reaches `/v1/models`, `/status` and the manifest.
+  `/v1/mesh/status` is cw-rails' and reads no serve state, so the third
+  bullet has no site. Decision: ralph/decisions/phase-c-8.md.

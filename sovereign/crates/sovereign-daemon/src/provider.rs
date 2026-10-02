@@ -116,6 +116,19 @@ impl LlamaCppFactory {
                     "serve's self-report after reload",
                 )
                 .await;
+                // The cell and the aliases now say what serve holds; the
+                // reload succeeds only when that is what the config asked
+                // for, and otherwise names each slot that did not load.
+                let unmet = crate::serve_client::unmet_slots(cfg, &served);
+                if !unmet.is_empty() {
+                    self.push_router_aliases().await;
+                    tracing::warn!(target: "serving_path", serve_base = %base.base, ?unmet, "reload: serve does not hold what the config asks for");
+                    return Err(format!(
+                        "reload: serve at {} reloaded but does not hold what the config asks for: {}",
+                        base.base,
+                        unmet.join("; ")
+                    ));
+                }
                 Ok(Arc::clone(cell) as Arc<dyn InferenceProvider>)
             }
             ReloadSource::Hosted { cell } => {
@@ -142,10 +155,22 @@ impl ProviderFactory for LlamaCppFactory {
         // forwarder built once against its entry node; its arm refuses by
         // name (`SetupConfig::models`) rather than load empty paths.
         self.raw_provider(cfg).await?;
-        // The cell under the router now holds the reloaded engine. The alias
-        // map follows serve's new residency into the same router; the
-        // in-flight gauge, whose live guards the old requests still hold, is
-        // the router's own and never re-minted.
+        self.push_router_aliases().await;
+        tracing::info!(
+            target: "serving_path",
+            ranks = self.slot_aliases.is_some(),
+            "reload: the cell swapped under the provider boot built; no second router"
+        );
+        Ok(Arc::clone(&self.routed))
+    }
+}
+
+impl LlamaCppFactory {
+    /// The cell under the router now holds what serve holds. The alias map
+    /// follows serve's residency into the same router; the in-flight gauge,
+    /// whose live guards the old requests still hold, is the router's own and
+    /// never re-minted.
+    async fn push_router_aliases(&self) {
         if let Some(sink) = &self.slot_aliases {
             let state = match self.daemon.get() {
                 Some(daemon) => daemon.app_state().await,
@@ -162,13 +187,74 @@ impl ProviderFactory for LlamaCppFactory {
                 }
             }
         }
-        tracing::info!(
-            target: "serving_path",
-            ranks = self.slot_aliases.is_some(),
-            "reload: the cell swapped under the provider boot built; no second router"
-        );
-        Ok(Arc::clone(&self.routed))
     }
+
+    /// Re-read serve's self-report every `every` and, when it differs from
+    /// the one svrn last adopted, adopt it as a reload does (cell, relay
+    /// manifest, aliases). svrn reads the self-report once at boot, so without
+    /// this a serve restart left svrn answering from the boot snapshot. A read
+    /// that fails keeps the last facts and is traced once per transition; "did
+    /// not answer" is never adopted as "holds nothing" (principle 6).
+    async fn follow(self: Arc<Self>, every: std::time::Duration) {
+        let ReloadSource::Serve {
+            base,
+            config_context,
+            cell,
+            relay,
+        } = &self.reload
+        else {
+            return;
+        };
+        let mut held: Option<serde_json::Value> = None;
+        let mut answering = true;
+        loop {
+            tokio::time::sleep(every).await;
+            let served = match crate::serve_client::read_served_self(&base.base).await {
+                Ok(served) => served,
+                Err(e) => {
+                    if answering {
+                        tracing::warn!(target: "serving_path", serve_base = %base.base, error = %e, "follow: serve's self-report did not answer; svrn keeps the last one it adopted");
+                    }
+                    answering = false;
+                    continue;
+                }
+            };
+            if !answering {
+                tracing::info!(target: "serving_path", serve_base = %base.base, "follow: serve's self-report answers again");
+            }
+            answering = true;
+            let now = serde_json::to_value(&served).ok();
+            if now.is_some() && now == held {
+                continue;
+            }
+            tracing::info!(target: "serving_path", serve_base = %base.base, primary = %served.primary_model, first = held.is_none(), "follow: serve's self-report changed; svrn adopts it");
+            crate::serve_client::adopt_served(base, cell, &served, *config_context);
+            if let Some(relay) = relay {
+                relay.read_manifest().await;
+            }
+            self.publish_served_aliases(&served.resident_slots, "serve's self-report, followed")
+                .await;
+            self.push_router_aliases().await;
+            held = now;
+        }
+    }
+}
+
+/// How often svrn re-reads serve's self-report on the dialing path.
+pub const SERVE_FOLLOW_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// The factory boot registers, following serve's self-report every
+/// [`SERVE_FOLLOW_INTERVAL`] where it dials serve (pc-split-deploy-honesty).
+pub fn following(factory: LlamaCppFactory) -> Arc<LlamaCppFactory> {
+    following_every(factory, SERVE_FOLLOW_INTERVAL)
+}
+
+fn following_every(factory: LlamaCppFactory, every: std::time::Duration) -> Arc<LlamaCppFactory> {
+    let factory = Arc::new(factory);
+    if matches!(factory.reload, ReloadSource::Serve { .. }) {
+        tokio::spawn(Arc::clone(&factory).follow(every));
+    }
+    factory
 }
 
 /// On the dialing path a reload is serve's (pb-svrn-dials-serve): the daemon
@@ -186,19 +272,31 @@ mod reload_through_serve {
     use sovereign_core::types::Speed;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    fn slot(role: &str, model: &str) -> ResidentSlot {
+        ResidentSlot {
+            role: role.to_string(),
+            model_id: model.to_string(),
+            resident: true,
+            size_bytes: None,
+            transitioning: false,
+            placement: None,
+        }
+    }
+
     fn served(model: &str) -> ServedSelf {
         ServedSelf {
             primary_model: model.to_string(),
-            resident_slots: vec![ResidentSlot {
-                role: "primary".to_string(),
-                model_id: model.to_string(),
-                resident: true,
-                size_bytes: None,
-                transitioning: false,
-                placement: None,
-            }],
+            resident_slots: vec![slot("primary", model), slot("embed", "emb")],
             ..ServedSelf::default()
         }
+    }
+
+    /// A config whose `[models]` asks for `primary` and the stub's embed model.
+    fn asking_for(primary: &str, dir: &std::path::Path) -> SetupConfig {
+        let path = dir.join("config.toml");
+        let text = format!("[models]\nprimary = \"/m/{primary}.gguf\"\nembed = \"/m/emb.gguf\"\n");
+        std::fs::write(&path, text).expect("write config");
+        SetupConfig::load_from(&path).expect("config parses")
     }
 
     /// serve's two reload routes: the reload counts, and the self-report names
@@ -240,15 +338,18 @@ mod reload_through_serve {
         format!("http://{addr}")
     }
 
-    #[tokio::test]
-    async fn a_reload_reloads_serve_and_the_manifest_names_the_new_model() {
-        let reloads = Arc::new(AtomicUsize::new(0));
-        let base = stub_serve(Arc::clone(&reloads)).await;
-        let dir = tempfile::tempdir().expect("tempdir");
-        let cfg = SetupConfig::unconfigured();
+    /// The dialing path's factory over a stub serve at `base`, and the cell and
+    /// router boot would have built.
+    type Wired = (
+        LlamaCppFactory,
+        Arc<sovereign_contracts::reloadable_provider::ReloadableProvider>,
+        Arc<dyn InferenceProvider>,
+    );
+
+    fn factory_over(base: String, cfg: &SetupConfig, dir: &std::path::Path) -> Wired {
         let daemon = Arc::new(crate::DeferredDaemon::new());
         daemon.bind(crate::EmbeddedDaemon::new(
-            dir.path().to_path_buf(),
+            dir.to_path_buf(),
             cfg.clone(),
             crate::daemon_services::fixtures::headless(),
         ));
@@ -285,6 +386,16 @@ mod reload_through_serve {
             routed: Arc::clone(&routed),
             slot_aliases: None,
         };
+        (factory, cell, routed)
+    }
+
+    #[tokio::test]
+    async fn a_reload_reloads_serve_and_the_manifest_names_the_new_model() {
+        let reloads = Arc::new(AtomicUsize::new(0));
+        let base = stub_serve(Arc::clone(&reloads)).await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = SetupConfig::unconfigured();
+        let (factory, cell, routed) = factory_over(base, &cfg, dir.path());
         let provider = factory
             .build_provider(&cfg)
             .await
@@ -312,5 +423,74 @@ mod reload_through_serve {
             ids.contains(&"after-reload"),
             "peers must see the reloaded model, saw {ids:?}"
         );
+    }
+
+    /// pc-split-deploy-honesty: a reload whose serve does not hold what the
+    /// config asks for is refused, naming the slot, and svrn's model facts
+    /// say what serve holds rather than what was asked for.
+    #[tokio::test]
+    async fn a_reload_serve_did_not_honour_is_refused_naming_the_slot() {
+        let reloads = Arc::new(AtomicUsize::new(0));
+        let base = stub_serve(Arc::clone(&reloads)).await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = asking_for("wanted", dir.path());
+        let (factory, cell, _) = factory_over(base, &cfg, dir.path());
+        let err = match factory.build_provider(&cfg).await {
+            Ok(_) => panic!("a reload serve did not honour reported success"),
+            Err(e) => e,
+        };
+        assert!(
+            err.contains("primary: asked for wanted, serve holds after-reload"),
+            "{err}"
+        );
+        assert!(!err.contains("embed"), "embed was held, yet named: {err}");
+        assert_eq!(cell.model_id_for(Speed::Slow), "after-reload");
+    }
+
+    /// pc-split-deploy-honesty: serve restarts holding another model, with no
+    /// reload; svrn's model facts follow it within the follow interval.
+    #[tokio::test]
+    async fn svrn_follows_serve_across_a_restart() {
+        let model = Arc::new(std::sync::Mutex::new("before-restart".to_string()));
+        let answers = Arc::clone(&model);
+        let app = axum::Router::new().route(
+            SERVED_SELF_PATH,
+            get(move || {
+                let answers = Arc::clone(&answers);
+                async move { axum::Json(served(&answers.lock().unwrap().clone())) }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let base = format!("http://{}", listener.local_addr().expect("addr"));
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = SetupConfig::unconfigured();
+        let (factory, cell, _) = factory_over(base, &cfg, dir.path());
+        let _factory = following_every(factory, std::time::Duration::from_millis(50));
+
+        *model.lock().unwrap() = "after-restart".to_string();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while cell.model_id_for(Speed::Slow) != "after-restart" {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "svrn still answers {} 5 s after serve restarted",
+                cell.model_id_for(Speed::Slow)
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn a_reload_serve_honoured_succeeds() {
+        let reloads = Arc::new(AtomicUsize::new(0));
+        let base = stub_serve(Arc::clone(&reloads)).await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = asking_for("after-reload", dir.path());
+        let (factory, _, _) = factory_over(base, &cfg, dir.path());
+        if let Err(e) = factory.build_provider(&cfg).await {
+            panic!("serve holds what was asked for, yet the reload refused: {e}");
+        }
     }
 }

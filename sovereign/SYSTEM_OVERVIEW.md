@@ -1315,7 +1315,9 @@ A fixture daemon that loses the port, keeps running and logs success used to
 probe green while the app ingested into the operator's real daemon.
 
 `/v1/admin/reload` rebuilds only what changed: the three model slots swap
-atomically via `ProviderFactory`; `client_port`, `internal_port`,
+atomically via `ProviderFactory` (on the dialing path serve rebuilds, and the
+reload refuses, naming each slot, when serve's self-report does not hold what
+`[models]` asks for); `client_port`, `internal_port`,
 `client_bind`, `client_token` and `data.dir` answer `restart_required: true`;
 `[iroh] enabled`, `transport`, `media_origin` and `media_allow`, which nothing
 in svrn reads since cw-rails became the mesh endpoint, answer `unread_fields`.
