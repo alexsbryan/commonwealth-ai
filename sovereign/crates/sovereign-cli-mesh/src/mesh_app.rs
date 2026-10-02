@@ -75,8 +75,13 @@ pub(crate) async fn cmd_app(args: &[String]) -> i32 {
     let peer = positional.first().map(|s| s.as_str());
     let app = positional.get(1).map(|s| s.as_str());
 
-    let port = daemon_client_port();
-    let url = format!("{}/v1/mesh/app", crate::mesh_cmd::rails_base());
+    let Ok(port) = daemon_client_port().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let Ok(base) = crate::mesh_cmd::rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let url = format!("{base}/v1/mesh/app");
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()

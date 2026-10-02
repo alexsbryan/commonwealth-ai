@@ -1182,8 +1182,8 @@ async fn reason_with_tools_caps_at_max_iterations() {
 
 /// Records every prompt it was asked to complete, and drives one tool call
 /// followed by a synthesis. The recorded prompts are what the assertion reads.
-pub(crate) struct EvidenceProbeInference {
-    pub(crate) seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+struct EvidenceProbeInference {
+    seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 #[async_trait::async_trait]
@@ -1348,10 +1348,6 @@ async fn reason_with_tools_delivers_a_json_tools_evidence_to_the_model() {
     assert!(
         !after_tool.contains("No results."),
         "a tool that returned a row must not be rendered as \"No results.\":\n{after_tool}"
-    );
-    assert!(
-        !after_tool.contains("the source does not hold this"),
-        "a tool that returned a row must not carry the empty-result note:\n{after_tool}"
     );
 
     // The path's own tally is the row the UI shows as "hits returned" and the

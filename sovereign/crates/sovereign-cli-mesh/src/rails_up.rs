@@ -63,13 +63,10 @@ pub(crate) async fn up() -> Result<String, String> {
     // No config file is a first run: the defaults. A config that exists and
     // does not load is refused — a handover from a guessed data dir is the
     // substitution principle 6 forbids.
-    let config = match SetupConfig::load() {
-        Ok(c) => c,
-        Err(e) if config_path.exists() => {
-            return Err(format!("{} does not load: {e}", config_path.display()));
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "mesh up: no setup config; the rails base and data dir are the defaults");
+    let config = match SetupConfig::load_present()? {
+        Some(c) => c,
+        None => {
+            tracing::warn!(config = %config_path.display(), "mesh up: no setup config; the rails base and data dir are the defaults");
             SetupConfig::unconfigured()
         }
     };

@@ -106,7 +106,9 @@ pub(crate) async fn cmd_token(args: &[String]) -> i32 {
         return 2;
     }
 
-    let port = daemon_client_port();
+    let Ok(port) = daemon_client_port().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
     if !crate::mesh_cmd::daemon_listening_on(port).await {
         eprintln!("No daemon detected on :{port} — client tokens live in its state.");
         eprintln!("Start it with `svrn daemon start`, then re-run.");

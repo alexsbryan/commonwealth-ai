@@ -3,7 +3,8 @@
 //! (phase-b pb-rails-membership). A founder rotates its invite; a solo node is
 //! refused on the old invite and admitted on the new one, then creates a
 //! second mesh, switches back, forgets the second, and leaves, and the
-//! founder's roster drops it. No inference daemon exists anywhere here.
+//! founder's roster drops it; it rejoins, and the roster lists it again. No
+//! inference daemon exists anywhere here.
 //!
 //! Hermetic like `found_and_join.rs`: `discovery = "none"`, no relay URLs.
 
@@ -306,6 +307,20 @@ async fn every_membership_verb_answers_through_cw_rails_alone() {
         .await;
         let (code, body) = post(nport, "/v1/mesh/leave", json!({})).await;
         assert_eq!(code, 409, "{body}");
+
+        // rejoin: the same node, under the same id, is live on the founder's
+        // roster again — the tombstone its leave stamped does not outlive it.
+        let (code, joined) = post(nport, "/v1/mesh/join", json!({ "key_or_url": new })).await;
+        assert_eq!(code, 200, "{joined}");
+        assert_eq!(joined["node_id"], json!(node_id), "the same id comes back");
+        poll_status(fport, "the rejoined member on the founder's roster", |d| {
+            d["members"]
+                .as_array()?
+                .iter()
+                .any(|m| m["node_id"] == json!(node_id))
+                .then_some(())
+        })
+        .await;
     };
     tokio::select! {
         exit = founder.run() => panic!("the founder stopped serving: {exit:?}"),

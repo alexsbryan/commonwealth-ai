@@ -2105,6 +2105,9 @@ mod default_tests;
 #[path = "tests/setup_config_daemon_url.rs"]
 mod daemon_url_tests;
 
+#[path = "setup_config_present.rs"]
+mod present;
+
 // ─── Slot context windows ───────────────────────────────────────────
 // Moved from sovereign-inference/src/embedded/engine.rs (2026-09-12) so a
 // client can spell the two windows without linking the inference stack;

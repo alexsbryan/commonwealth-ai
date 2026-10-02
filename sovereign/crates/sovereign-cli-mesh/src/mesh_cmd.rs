@@ -689,24 +689,34 @@ async fn cmd_rotate(args: &[String]) -> i32 {
 
 /// The daemon's client port from `SetupConfig`, not a hardcoded 9741 — a
 /// sandbox pointed at its own daemon must not rotate the operator's mesh.
-pub(crate) fn daemon_client_port() -> u16 {
-    sovereign_contracts::setup_config::SetupConfig::load()
-        .map(|c| c.daemon.client_port)
-        .unwrap_or(9741)
+/// `Err` when a config exists and does not load: dialling the default port
+/// then is how a sandbox once joined the operator's node to a test mesh.
+pub(crate) fn daemon_client_port() -> Result<u16, String> {
+    dial_config().map(|c| c.daemon.client_port)
 }
 
 /// cw-rails' base from `SetupConfig` through its one reader
 /// (`rails_kv::resolve_rails_base`): the membership doors and
 /// `/v1/mesh/status` are cw-rails' since pb-mesh-exit-transport, and svrn's
-/// copies answer 410 naming this base.
-pub(crate) fn rails_base() -> String {
-    let config = sovereign_contracts::setup_config::SetupConfig::load()
-        .unwrap_or_else(|_| sovereign_contracts::setup_config::SetupConfig::unconfigured());
-    sovereign_turn_client::rails_kv::resolve_rails_base(&config.daemon)
+/// copies answer 410 naming this base. `Err` as [`daemon_client_port`].
+pub(crate) fn rails_base() -> Result<String, String> {
+    dial_config().map(|c| sovereign_turn_client::rails_kv::resolve_rails_base(&c.daemon))
+}
+
+/// The config both dials read: none on disk is the defaults, one that does
+/// not load is refused (`SetupConfig::load_present`).
+fn dial_config() -> Result<sovereign_contracts::setup_config::SetupConfig, String> {
+    Ok(
+        sovereign_contracts::setup_config::SetupConfig::load_present()?
+            .unwrap_or_else(sovereign_contracts::setup_config::SetupConfig::unconfigured),
+    )
 }
 
 async fn rotate_via_running_daemon(force: bool) -> i32 {
-    let url = format!("{}/v1/mesh/rotate?force={force}", rails_base());
+    let Ok(base) = rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let url = format!("{base}/v1/mesh/rotate?force={force}");
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -828,7 +838,10 @@ async fn cmd_status(args: &[String]) -> i32 {
     }
 
     // Fetch from cw-rails, the mesh endpoint, at `[daemon] rails_base`.
-    let url = format!("{}/v1/mesh/status", rails_base());
+    let Ok(base) = rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let url = format!("{base}/v1/mesh/status");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -1019,7 +1032,10 @@ async fn cmd_transport(args: &[String]) -> i32 {
     }
     let json_out = args.iter().any(|a| a == "--json");
 
-    let url = format!("{}/v1/mesh/status", rails_base());
+    let Ok(base) = rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let url = format!("{base}/v1/mesh/status");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -1148,7 +1164,10 @@ async fn cmd_leave(args: &[String]) -> i32 {
     }
     // cw-rails' leave door; an absent cw-rails is the request's error below,
     // a non-zero exit naming the base.
-    let url = format!("{}/v1/mesh/leave", rails_base());
+    let Ok(base) = rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let url = format!("{base}/v1/mesh/leave");
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -1190,7 +1209,9 @@ async fn cmd_list(args: &[String]) -> i32 {
         eprintln!("Show every mesh this node has joined. The active one is marked '*'.");
         return 0;
     }
-    let base = rails_base();
+    let Ok(base) = rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
     let status = match TurnClient::new(&base).mesh_status().await {
         Ok(s) => s,
         Err(e) => {
@@ -1248,7 +1269,10 @@ async fn cmd_switch(args: &[String]) -> i32 {
     }
     let target = args[0].clone();
     // cw-rails' switch door; an absent cw-rails is the request's error.
-    let url = format!("{}/v1/mesh/switch", rails_base());
+    let Ok(base) = rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let url = format!("{base}/v1/mesh/switch");
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -1297,7 +1321,9 @@ async fn cmd_forget(args: &[String]) -> i32 {
     }
     // cw-rails' forget door resolves the name or id against its own store
     // and refuses the active mesh in its own words.
-    let base = rails_base();
+    let Ok(base) = rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
     match TurnClient::new(&base).mesh_forget(&args[0]).await {
         Ok(()) => {
             println!("Forgot \"{}\".", args[0]);
