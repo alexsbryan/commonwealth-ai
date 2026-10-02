@@ -21,3 +21,4 @@ pc-corpus-registry-live
 pc-rails-reseal-loop
 pc-chat-ask-audit-calls
 pc-knowledge-gym-noresults
+pc-deployed-turn-latency
