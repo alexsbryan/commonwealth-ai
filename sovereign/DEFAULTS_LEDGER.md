@@ -2240,10 +2240,10 @@ already exists and is deterministic (~9 min per arm):
 |---|---|---|
 | `SOVEREIGN_ATOM_ENUM` | entity-typed atom enumeration for enumeration-class questions | an A/B on a bank with enumeration questions ("which X were involved") — the Enron counterparty case its doc comment cites |
 | `SOVEREIGN_ATOM_ENUM_RELATIONS` | relation atoms in the same path | same bank, as a second arm on top of `ATOM_ENUM=1` |
-| `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND` | wikipedia graph-neighbour expansion | A/B on a wikipedia bank; watch corpus-mix drift, not just recall |
-| `SOVEREIGN_META_BRIDGE` | meta-atlas bridge boost | A/B on a multi-corpus bank |
-| `SOVEREIGN_QUERY_DECOMP` | question decomposition + fan-out | A/B on a multi-hop bank; cost is extra retrieval round-trips |
-| `SOVEREIGN_TITLE_EXPAND` | LLM question→title expansion | A/B on any retrieval bank; cost is one LLM call per turn |
+
+Four more rows (`SOVEREIGN_GRAPH_NEIGHBOR_EXPAND`, `_META_BRIDGE`,
+`_QUERY_DECOMP`, `_TITLE_EXPAND`) left this table 2026-09-21 when their
+retrieval steps were cut (ac032e5bc); no measurement is owed on code that is gone.
 
 **One live inconsistency found in the same audit, and it is not cosmetic.**
 `SOVEREIGN_ATOM_ENUM` is default-**off** with `status = experiment`, while
@@ -2490,8 +2490,9 @@ it is an experiment (then it should not be default-on). Resolve it with the
 - **Re-open only if:** a bank shows it separating at p<0.05 — most
   plausibly one built on *cross-conversation* questions where in-pool
   reordering is the whole game, since this bank's own headroom analysis
-  showed 66% of target conversations were already in the pool. Set a
-  non-zero `SOVEREIGN_CONV_PPR_WEIGHT`; nothing else is needed.
+  showed 66% of target conversations were already in the pool. The knob
+  and its code were cut 2026-09-21 (cc78b933b), so re-opening means restoring
+  that code; setting `SOVEREIGN_CONV_PPR_WEIGHT` now only prints a warning.
 
 ### Cluster-score blend — `SOVEREIGN_DOC_CLUSTER_WEIGHT` (stays 0.0)
 - **Verdict:** 2026-07-31, per this row's own settling condition — the

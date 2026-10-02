@@ -211,7 +211,7 @@ pipeline:
 | Profile  | Trigger                                              | Distiller | Catalog filter | Synthetic write_file | Grammar lock | Coherence baseline |
 |----------|------------------------------------------------------|-----------|----------------|----------------------|--------------|--------------------|
 | Codex    | UA: `codex_cli_rs/*`                                 |     -     |      yes       |          -           |     yes      |        yes         |
-| Opencode | UA: `opencode/*` (or legacy `SOVEREIGN_FRONTDOOR=1`) |    yes    |      yes       |         yes          |     yes      |        yes         |
+| Opencode | UA: `opencode/*` (or `SOVEREIGN_HARNESS=opencode`)    |    yes    |      yes       |         yes          |     yes      |        yes         |
 | Generic  | unknown UA, no env                                   |     -     |       -        |          -           |     yes      |        yes         |
 | Bare     | `SOVEREIGN_HARNESS=bare`                             |     -     |       -        |          -           |       -      |         -          |
 
