@@ -62,9 +62,11 @@ impl ChapterSelection {
 
     /// True when a successful run should *merge* into the existing
     /// cache (replace matching chapters, drop matching failures)
-    /// rather than overwriting it.
+    /// rather than overwriting it. A subset merges too: with no cache yet
+    /// the merge is a no-op, and over an existing one it keeps every
+    /// chapter the subset did not re-run.
     pub fn should_merge_into_cache(&self) -> bool {
-        matches!(self, Self::RetryFailed(_))
+        matches!(self, Self::RetryFailed(_) | Self::Subset(_))
     }
 }
 
@@ -1271,8 +1273,8 @@ impl PhaseRunner {
         //     of `--retry-failed` is that a successful recovery
         //     promotes those chapters into the cache without
         //     requiring a hand-merge.
-        //   - Subset run, no retry mode → diagnostic; cache
-        //     untouched.
+        //   - Subset run → merge into an existing cache; with none, the
+        //     cache stays untouched (the build step seeds it).
         let mode_label: &'static str = match retry_mode {
             Some(RetryMode::Terse { .. }) => "terse-retry",
             None => selection.mode_label(),
@@ -2901,6 +2903,45 @@ mod tests {
         let back: Option<Phase1Output> = runner.cache().read(PipelinePhase::Questions).unwrap();
         assert!(back.is_some());
         assert!(progress_count.load(Ordering::Relaxed) >= 4); // Start + 2 chapters + Done at minimum
+    }
+
+    /// A subset run over a corpus that already has a cache merges into it:
+    /// the re-run chapters are replaced, the rest kept. Copying the subset over
+    /// the cache left resolve with only the re-run sections (6 of 29 on
+    /// ft-ans-dev-b).
+    #[tokio::test]
+    async fn phase_1_subset_merges_into_an_existing_cache() {
+        let dir = tempdir().unwrap();
+        let runner = runner_under_test(dir.path());
+        let chapters = vec![
+            chapter("ch_01", "Chapter 1", "Body one"),
+            chapter("ch_02", "Chapter 2", "Body two"),
+            chapter("ch_03", "Chapter 3", "Body three"),
+        ];
+        runner
+            .phase_1_extract_questions(&chapters, &ChapterSelection::Full, |_| {})
+            .await
+            .unwrap();
+        let res = runner
+            .phase_1_extract_questions(
+                &chapters,
+                &ChapterSelection::Subset(vec!["ch_02".into()]),
+                |_| {},
+            )
+            .await
+            .unwrap();
+        assert!(res.cache_updated);
+        let cached = runner
+            .cache()
+            .read::<Phase1Output>(PipelinePhase::Questions)
+            .unwrap()
+            .expect("the cache survives a subset run");
+        let ids: Vec<&str> = cached
+            .questions_by_chapter
+            .iter()
+            .map(|c| c.chapter_id.as_str())
+            .collect();
+        assert_eq!(ids, ["ch_01", "ch_02", "ch_03"]);
     }
 
     #[tokio::test]

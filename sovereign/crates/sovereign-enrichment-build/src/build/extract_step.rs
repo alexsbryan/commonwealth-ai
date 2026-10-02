@@ -73,7 +73,7 @@ pub(super) async fn run_extract_step(parsed: &ParsedBuild) -> Result<StepOutcome
                 1,
             ));
         }
-        println!("  · promoted subset run → cache/questions.json");
+        println!("  · subset run in cache/questions.json");
     }
 
     if first_code == 0 {
@@ -296,7 +296,7 @@ fn continue_past_non_retriable(
                 1,
             ));
         }
-        println!("  · promoted subset run → cache/questions.json");
+        println!("  · subset run in cache/questions.json");
     }
     Ok(StepOutcome::did(format!(
         "{extracted} chapter(s) extracted; {failed} non-retriable failure(s) remain"
@@ -309,8 +309,19 @@ fn continue_past_non_retriable(
 fn promote_subset_to_cache(corpus_id: &str) -> std::io::Result<()> {
     let runs_dir = paths::runs_dir(corpus_id);
     let cache_dir = paths::cache_dir(corpus_id);
-    let latest = find_latest_run(&runs_dir)?;
     let cache_path = cache_dir.join("questions.json");
+    // An existing cache already took the subset by merge in the runner.
+    // Copying the run file over it dropped every section the subset did not
+    // re-run (resolve loaded 6 of 29 on ft-ans-dev-b); only a corpus with no
+    // cache yet is seeded here.
+    if cache_path.exists() {
+        tracing::debug!(
+            corpus = corpus_id,
+            "extract: cache exists; the runner merged the subset into it"
+        );
+        return Ok(());
+    }
+    let latest = find_latest_run(&runs_dir)?;
     std::fs::create_dir_all(&cache_dir)?;
     std::fs::copy(&latest, &cache_path)?;
     Ok(())
@@ -335,8 +346,14 @@ fn find_latest_run(runs_dir: &std::path::Path) -> std::io::Result<std::path::Pat
             ),
         ));
     }
-    entries.sort_by_key(|e| e.file_name());
-    Ok(entries.last().unwrap().path())
+    // Newest by write time. By NAME, `questions-terse-retry-001.json` sorts
+    // after `questions-subset-001.json` and an older retry run won.
+    let mut dated = Vec::with_capacity(entries.len());
+    for e in entries {
+        dated.push((e.metadata()?.modified()?, e.path()));
+    }
+    dated.sort_by_key(|(modified, _)| *modified);
+    Ok(dated.pop().expect("checked non-empty above").1)
 }
 
 #[cfg(test)]
