@@ -1206,6 +1206,20 @@ status = "shipped"
 purpose = "Path override for sovereign-pod-worker, the ephemeral pod's worker-mode binary (sovereign-pods), which `svrn daemon run --worker-mode` execs with its argv unchanged (sovereign-cli-daemon `daemon_bin::exec_pod_worker`, pb-pods-worker). Read through `sovereign_turn_client::reach::locate_sibling`."
 
 [[flag]]
+name = "CW_RAILS_DIR"
+cluster = "infra-paths"
+default = "~/.commonwealth-rails"
+status = "shipped"
+purpose = "cw-rails' data dir when its `--data-dir` flag is absent. One decider: `commonwealth_media::declared::rails_data_dir` (`RAILS_DATA_DIR_ENV`), which rails' own config and every process handing rails its inputs resolve through. Outside env-gate's SOVEREIGN_/SVRNMESH_ census, so registered by hand."
+
+[[flag]]
+name = "SOVEREIGN_DAEMON_BIN"
+cluster = "cli-binaries"
+default = "the `sovereign-stock` sibling of the running program, then PATH"
+status = "shipped"
+purpose = "Path override for what `svrn daemon run` execs (sovereign-cli-daemon `daemon_bin::locate`, through `sovereign_turn_client::reach::locate_sibling`): point it at a bare `sovereign-daemon` to run one that dials a configured serve. scripts/fim-smoke.sh reads it for the daemon it boots."
+
+[[flag]]
 name = "CW_RAILS_BIN"
 cluster = "cli-binaries"
 default = "sibling of the running program, then PATH"
