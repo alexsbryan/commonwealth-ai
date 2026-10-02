@@ -1801,6 +1801,36 @@ DECISIONS_RENDERED = "ralph/DECISIONS.md"
 DECISIONS_SCRIPT = "scripts/ralph-decisions.py"
 
 
+def remove_tree(path):
+    """Remove `path` whole, clearing write-protection on the way, and return
+    None or the error that left it in place. A read-only directory in the
+    main tree's evidence (target/ralph/phase-b/ship/esc/seed, dr-xr-xr-x) is
+    reflink-cloned into every lane; it stopped both an ignore_errors rmtree
+    and `git worktree remove --force` from unlinking its entries, so a merged
+    lane left its whole target behind (2026-10-02: four lanes, 115 GiB
+    exclusive) and a cloned evidence tree was copied back as the lane's."""
+    path = pathlib.Path(path)
+    if not os.path.lexists(path):
+        return None
+    try:
+        shutil.rmtree(path)
+        return None
+    except OSError:
+        pass
+    for d, dirs, _ in os.walk(path):
+        for name in (d, *(os.path.join(d, x) for x in dirs)):
+            if not os.path.islink(name):
+                try:
+                    os.chmod(name, os.stat(name).st_mode | 0o700)
+                except OSError:
+                    pass
+    try:
+        shutil.rmtree(path)
+    except OSError as e:
+        return e
+    return None
+
+
 def lane_root_for(workdir):
     """Where the pool keeps lane worktrees: beside the main tree, never inside
     it. Cargo reads every ancestor's .cargo/config.toml and concatenates their
@@ -2137,13 +2167,18 @@ class Pool:
         r = subprocess.run([*self.CLONE_TARGET, str(src), str(dst)],
                            capture_output=True, text=True)
         if r.returncode != 0:
-            shutil.rmtree(dst, ignore_errors=True)
+            err = remove_tree(dst)
+            if err is not None:
+                say(f"pool: lane {unit} partial target clone not removed: {err}")
             say(f"pool: lane {unit} target NOT cloned "
                 f"({error_tail(r.stderr) or r.stderr.strip()[-200:]}) — the lane "
                 "builds from an empty target")
             return
         # The lane's evidence directory starts empty: _keep_evidence copies it back.
-        shutil.rmtree(dst / "ralph", ignore_errors=True)
+        err = remove_tree(dst / "ralph")
+        if err is not None:
+            say(f"pool: lane {unit} cloned evidence not cleared ({err}) — "
+                "_keep_evidence will copy the main tree's back with the lane's")
         files = self._git("ls-files", "-z", cwd=wt).stdout.split("\0")
         touched = 0
         for rel in filter(None, files):
@@ -2298,6 +2333,21 @@ class Pool:
         self._git("add", "--", DECISIONS_RENDERED)
         return None
 
+    def _remove_lane(self, unit, wt):
+        """A merged lane's worktree goes, its target included; whatever `git
+        worktree remove` leaves is removed here and said, never left silent."""
+        r = self._git("worktree", "remove", "--force", str(wt))
+        if not wt.exists():
+            return
+        err = remove_tree(wt)
+        self._git("worktree", "prune")
+        why = error_tail(r.stderr) or r.stderr.strip()[-200:] or f"exit {r.returncode}"
+        if err is None:
+            say(f"pool: lane {unit} worktree remove left {wt} ({why}) — removed it")
+        else:
+            say(f"pool: lane {unit} worktree {wt} NOT removed ({why}; then {err}) — "
+                "its target holds disk until it is")
+
     def _keep_evidence(self, unit, wt):
         """A lane's raw evidence (its target/ralph/: check logs, readings) is
         copied to <log_dir>/<unit>/ in the main tree before the worktree, its
@@ -2392,7 +2442,7 @@ class Pool:
                 say(f"pool: lane {unit} merged and marked [x] — worktree {wt} kept for its "
                     "evidence")
                 continue
-            self._git("worktree", "remove", "--force", str(wt))
+            self._remove_lane(unit, wt)
             self._git("branch", "-D", branch)
             say(f"pool: lane {unit} merged and marked [x]")
         if self._lane_failures:

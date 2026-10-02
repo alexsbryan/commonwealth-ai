@@ -2735,6 +2735,30 @@ class PoolQueueTests(unittest.TestCase):
             self.assertEqual(pool.run(), 0)
             self.assertEqual(seen, {"dep": "warm", "evidence": False, "fresh": True})
 
+    def test_a_read_only_dir_in_the_cloned_target_neither_leaks_the_lane_nor_its_evidence(self):
+        # The main tree's target/ralph/phase-b/ship/esc/seed is dr-xr-xr-x; the
+        # clone copies it into the lane, where it stopped the evidence reset
+        # and `git worktree remove --force` alike (2026-10-02).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.fixture(tmp, "- [ ] q-a — depends []\n")
+            write(tmp, "target/debug/ro/lib.rlib", "warm")
+            write(tmp, "target/ralph/phase-b/ship/esc/seed/config.toml", "seed")
+            for d in ("target/debug/ro", "target/ralph/phase-b/ship/esc/seed"):
+                os.chmod(root / d, 0o555)
+
+            class CheckingLane(FakeLane):
+                def run(self, model_args, prompt, log):
+                    write(self.cwd, "target/ralph/q/lint.log", "exit=0 the lane's lint\n")
+                    return super().run(model_args, prompt, log)
+
+            pool = self.make(root, lambda cwd, env=None: CheckingLane(cwd))
+            pool.CLONE_TARGET = ("cp", "-a")
+            self.assertEqual(pool.run(), 0)
+            self.assertFalse((root / ".ralph/wt/q-a").exists())
+            kept = root / "target/ralph/q/q-a"
+            self.assertEqual(sorted(p.relative_to(kept).as_posix() for p in kept.rglob("*")),
+                             ["lane.env", "q", "q/lint.log"])
+
     def test_a_target_that_cannot_be_cloned_is_named(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.fixture(tmp, "- [ ] q-a — depends []\n")
