@@ -600,7 +600,11 @@ mod reload_through_serve {
         drop(listener);
         let status = reach_reads(base, "unreachable").await;
         assert!(
-            status.detail.as_deref().unwrap_or_default().contains("not reachable"),
+            status
+                .detail
+                .as_deref()
+                .unwrap_or_default()
+                .contains("not reachable"),
             "{status:?}"
         );
     }
