@@ -1,0 +1,1 @@
+pc-rails-reseal-loop: e0e5681ff (linear snapshot), e382391f0 + 433721306 (seal bar counts own writes since the snapshot). Proof in the commit that adds this file.
