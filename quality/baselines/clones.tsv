@@ -3,7 +3,7 @@
 #   cargo run -p xtask -- clone-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clone-gate --tighten
-13792	(total covered lines)
+13776	(total covered lines)
 37	commonwealth/crates/commonwealth-core/src/mesh/mod.rs <-> sovereign/crates/sovereign-cli-mesh/src/daemon_store.rs
 60	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs
 32	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs <-> sovereign/crates/sovereign-serve/src/rails_mesh.rs
@@ -298,7 +298,7 @@
 16	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/handlers/synthesis_common.rs
 26	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval/mod.rs
 28	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs
-52	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/streaming.rs
+36	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-core/src/runtime/streaming.rs
 45	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs <-> sovereign/crates/sovereign-tools/src/document_asset/execution.rs
 18	sovereign/crates/sovereign-core/src/runtime/handlers/recipe_author.rs <-> sovereign/crates/sovereign-serving-host/src/inference_adapter.rs
 16	sovereign/crates/sovereign-core/src/runtime/retrieval/history.rs <-> understanding-atlas/src/meta_atlas/bridge/signals.rs
