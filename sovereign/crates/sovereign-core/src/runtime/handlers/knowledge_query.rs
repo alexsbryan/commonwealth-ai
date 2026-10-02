@@ -2102,6 +2102,7 @@ impl Runtime {
                 crate::runtime::epistemic::EpistemicInputs {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
+                    answer: Some(&final_content),
                     general_knowledge,
                     demands,
                     gaps,

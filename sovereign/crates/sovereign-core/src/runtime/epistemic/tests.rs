@@ -613,3 +613,4 @@ fn referenced_memory_becomes_banded_holding() {
 }
 
 mod demands;
+mod partial_decline;

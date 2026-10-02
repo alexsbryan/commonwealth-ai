@@ -270,7 +270,12 @@ All holdings Corpus+Verified → `Grounded`. Any Memory holding →
 `MemoryRecall`/`Mixed`. GK holdings present → `GeneralKnowledge`/
 `Mixed`. No supported holdings + gaps → `CannotKnowFromHere` (the
 abstention state — now structurally carrying its gaps and routes,
-because they are fields of the same object).
+because they are fields of the same object). A gated release whose
+text declines the asked fact (`grounding::declines_asked_fact`) while
+every holding is Corpus+Verified is also `CannotKnowFromHere`: it
+restated adjacent facts and answered nothing asked, and keeps those
+holdings and citations. A contrast or general-knowledge pivot after
+the decline, or any unverified holding, keeps the derivation above.
 
 ### 4.5 `citations` — the gate's passages, made openable
 

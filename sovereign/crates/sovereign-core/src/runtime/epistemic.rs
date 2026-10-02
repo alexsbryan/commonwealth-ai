@@ -16,7 +16,7 @@
 //! from the grounding gate's retained claim records, the referenced
 //! memory recall, and the plan's general-knowledge signal.
 
-use crate::runtime::grounding::GateClaim;
+use crate::runtime::grounding::{declines_asked_fact, GateClaim};
 use crate::runtime::types::{GkReason, RecallVerificationProv, RecalledMemoryProv};
 use crate::types::{
     CoverageLevel, Demand, DemandFacet, EpistemicState, Gap, GapCoverage, Holding, Intent,
@@ -47,6 +47,9 @@ pub(crate) struct EpistemicInputs<'a> {
     pub gate_meta: Option<&'a serde_json::Value>,
     /// The gate's retained per-claim records.
     pub gate_claims: Option<&'a [GateClaim]>,
+    /// The released answer text, read for a partial decline
+    /// ([`declines_asked_fact`]); `None` on a surface that does not pass it.
+    pub answer: Option<&'a str>,
     /// Why the plan answered from general knowledge, when it did.
     pub general_knowledge: Option<GkReason>,
     /// The evidence pool the answer drew on; see [`pool_context`].
@@ -73,6 +76,7 @@ impl<'a> EpistemicInputs<'a> {
         Self {
             gate_meta: None,
             gate_claims: None,
+            answer: None,
             general_knowledge: None,
             pool,
             recalled: &[],
@@ -215,9 +219,31 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
         }
     }
 
+    // A gated release whose prose declines the asked fact while restating
+    // facts the corpus holds (pc-partial-decline-verdict): it answered
+    // nothing that was asked, so it cannot know from here. Its holdings
+    // and citations stay — the restated facts are true and openable. A
+    // holding the corpus did not verify (or one from another basis) says
+    // the turn asserted past the sources, and keeps the verdict it earns.
+    let text_declines =
+        !abstained && !gate_action.is_empty() && inputs.answer.is_some_and(declines_asked_fact);
+    let restates_only = holdings.iter().all(|h| {
+        matches!(h.provenance, Provenance::Corpus { .. })
+            && h.verification == Verification::Verified
+    });
+    let partial_decline = text_declines && restates_only;
+    if text_declines {
+        tracing::debug!(
+            target: "epistemic.ledger",
+            holdings = holdings.len(),
+            restates_only,
+            partial_decline,
+            "released text declines the asked fact"
+        );
+    }
     let verdict = derive_verdict(
         &holdings,
-        abstained,
+        abstained || partial_decline,
         inputs.general_knowledge.is_some(),
         !inputs.pool.corpora.is_empty(),
         gate_action.is_empty(),
@@ -272,6 +298,7 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
         corpus_holdings = n_corpus,
         memory_holdings = n_memory,
         claims_revised = revised,
+        partial_decline,
         demands = state.demands.len(),
         gaps = state.gaps.len(),
         gate_action = %gate_action,

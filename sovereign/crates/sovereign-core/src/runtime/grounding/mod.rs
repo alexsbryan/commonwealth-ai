@@ -137,7 +137,7 @@ pub use replay::{
 // Decline detection keeps its historical `grounding::` paths: the gate
 // modules (`use super::*`), `runtime.rs`'s re-export up, and the moved tests
 // all reach these through this façade.
-pub(crate) use decline::abstention_action;
+pub(crate) use decline::{abstention_action, declines_asked_fact};
 pub use decline::{answer_declines, released_pure_decline};
 // `ClaimSearcher` is constructed via `Runtime::claim_searcher`; the
 // type re-exports are for call sites that name them.

@@ -1450,6 +1450,7 @@ impl Runtime {
                 crate::runtime::epistemic::EpistemicInputs {
                     gate_meta: grounding_gate_meta.as_ref(),
                     gate_claims: gate_claims.as_deref(),
+                    answer: Some(text),
                     // The attached asset is local: no member.
                     ..crate::runtime::epistemic::EpistemicInputs::over(
                         crate::runtime::epistemic::PoolContext {
