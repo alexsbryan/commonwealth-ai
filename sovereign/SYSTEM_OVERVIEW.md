@@ -497,7 +497,9 @@ question the pipeline asks about a type is a method on the resolved
 - **`tiered`** — three progressive tiers (T1 embeddings → T2 entity-graph +
   PPR → T3 RAPTOR cluster tree). The RAPTOR builder is in
   `sovereign-tools/src/raptor_atlas.rs`, injected via
-  `TieredEnrichmentProvider` to avoid a cyclic dep. GLiNER augments the
+  `TieredEnrichmentProvider` to avoid a cyclic dep. A summary call the host
+  sheds comes back until `SHED_WAIT_CAP` (10 min) instead of taking the
+  extractive floor. GLiNER augments the
   conversation path through the `LabeledEntityExtractor` seam. **The NER seam
   is input-bounded** — `BoundedInputs` caps batches at 16 chunks and holds
   back anything over 2,048 chars; an over-cap chunk is REPORTED

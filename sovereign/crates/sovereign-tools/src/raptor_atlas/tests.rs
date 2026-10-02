@@ -341,6 +341,100 @@ async fn abstractive_llm_failure_falls_back_to_extractive() {
     );
 }
 
+/// The host answers the first `sheds` summary calls with a typed shed (the
+/// pilot's single-permit lane: seven of eight parked calls refused together
+/// at the 30 s park bound), then serves as [`OkLlmEmbedOk`].
+struct ShedThenOkLlm {
+    sheds: std::sync::atomic::AtomicUsize,
+    calls: std::sync::atomic::AtomicUsize,
+}
+
+impl ShedThenOkLlm {
+    fn new(sheds: usize) -> Self {
+        Self {
+            sheds: std::sync::atomic::AtomicUsize::new(sheds),
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+}
+
+#[async_trait]
+impl InferenceProvider for ShedThenOkLlm {
+    async fn complete(&self, req: &CompletionRequest) -> Result<CompletionResponse> {
+        use std::sync::atomic::Ordering::Relaxed;
+        self.calls.fetch_add(1, Relaxed);
+        if self
+            .sheds
+            .fetch_update(Relaxed, Relaxed, |n| n.checked_sub(1))
+            .is_ok()
+        {
+            return Err(sovereign_core::error::Error::queue_shed(3, 30_000));
+        }
+        OkLlmEmbedOk.complete(req).await
+    }
+    async fn complete_stream(
+        &self,
+        _: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>> {
+        unreachable!("summarize path does not stream")
+    }
+    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        Ok(direction_embed(text))
+    }
+    fn capabilities(&self) -> ProviderCapabilities {
+        mock_caps()
+    }
+}
+
+/// A shed is backpressure, not a failed summary: the call comes back and the
+/// node is abstractive. Before this, 5 of the pilot's 6 extractive nodes were
+/// sheds that took the floor without a summary ever being written.
+#[tokio::test(start_paused = true)]
+async fn a_shed_summary_call_comes_back_instead_of_taking_the_extractive_floor() {
+    let host = Arc::new(ShedThenOkLlm::new(2));
+    let inference: Arc<dyn InferenceProvider> = host.clone();
+    let node = summarize_one_cluster(
+        &inference,
+        extractive_test_input(),
+        DocumentTypeTag::Narrative,
+        SummaryMode::Abstractive,
+        None,
+    )
+    .await
+    .expect("a node");
+    assert_eq!(node.summarizer_model, "mock-abstractive-llm");
+    assert_eq!(host.calls.load(std::sync::atomic::Ordering::Relaxed), 3);
+}
+
+/// The wait is bounded: a host that never stops shedding is waited out to
+/// [`SHED_WAIT_CAP`], then the cluster takes the extractive floor.
+#[tokio::test(start_paused = true)]
+async fn a_host_that_never_stops_shedding_gets_the_floor_at_the_cap() {
+    let host = Arc::new(ShedThenOkLlm::new(usize::MAX));
+    let inference: Arc<dyn InferenceProvider> = host.clone();
+    let started = tokio::time::Instant::now();
+    let node = summarize_one_cluster(
+        &inference,
+        extractive_test_input(),
+        DocumentTypeTag::Narrative,
+        SummaryMode::Abstractive,
+        None,
+    )
+    .await
+    .expect("the floor, not a dropped node");
+    assert_eq!(node.summarizer_model, EXTRACTIVE_SUMMARIZER);
+    let calls = host.calls.load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        calls > 1,
+        "the shed was not waited out at all ({calls} call)"
+    );
+    assert!(
+        started.elapsed() >= SHED_WAIT_CAP,
+        "gave up after {:?}, before the {SHED_WAIT_CAP:?} cap",
+        started.elapsed()
+    );
+}
+
 #[tokio::test]
 async fn extractive_mode_is_llm_free_and_stamps_provenance() {
     let inference: Arc<dyn InferenceProvider> = Arc::new(PanicLlmEmbedOk);

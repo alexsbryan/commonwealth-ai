@@ -561,15 +561,22 @@ impl RemoteApiProvider {
                 )));
             };
             if attempt >= SHED_MAX_ATTEMPTS || waited + delay > SHED_TOTAL_WAIT_CAP {
-                // Out of budget. Report the shed AS a shed — the caller needs
-                // to know this was "busy", not "broken", to decide whether to
-                // route elsewhere (§18.3).
-                return Err(Error::Inference(format!(
-                    "{what} shed by the host after {attempt} attempt(s), \
-                     {}s waited: {}",
-                    waited.as_secs(),
-                    error_excerpt(&body)
-                )));
+                // Out of budget. Report the shed AS a shed, typed: the caller
+                // needs "busy", not "broken", to decide whether to come back or
+                // route elsewhere (§18.3), and this is the variant the
+                // in-process engine returns for the same refusal. The wire
+                // states no queue position (0); the body's reason has no field
+                // on `QueueShed`, so it goes to the trace.
+                tracing::info!(
+                    target: "oicp_client",
+                    what,
+                    attempt,
+                    waited_ms = waited.as_millis() as u64,
+                    retry_after_secs = delay.as_secs(),
+                    body = error_excerpt(&body),
+                    "shed budget spent — returning the host's refusal as a typed shed"
+                );
+                return Err(Error::queue_shed(0, delay.as_millis() as u64));
             }
             tracing::info!(
                 target: "oicp_client",

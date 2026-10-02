@@ -1482,8 +1482,10 @@ DECISION was corrected and the hint is now HONOURED by the last-resort client,
 > `provider_for_peer` cannot acquire it by accident because it builds a bare
 > `RemoteApiProvider`. Bounded by `SHED_MAX_ATTEMPTS` and `SHED_TOTAL_WAIT_CAP`,
 > with the per-hint clamp DERIVED from that cap so there is no hint the client
-> would accept and could never honour. Out of budget, the shed is reported AS a
-> shed, never as a crash (§18.3).
+> would accept and could never honour. Out of budget, the shed is returned as
+> the typed `Error::QueueShed` the in-process engine uses, never as a crash
+> (§18.3). Until 2026-10-02 it was prose in `Error::Inference`, and RAPTOR
+> took its extractive floor on sheds it could not tell from failures.
 >
 > **30 seconds is an operator decision, not a derived constant**, and the
 > tradeoff it encodes is written at the constant: shedding gives a hub

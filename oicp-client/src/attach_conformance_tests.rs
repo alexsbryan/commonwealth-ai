@@ -554,3 +554,27 @@ async fn the_daemon_backed_slot_waits_out_a_shed_and_a_bare_provider_reports_it(
          failed-hop tax MESH_SCALE §9.1.1 measures"
     );
 }
+
+/// The last resort's wait budget, spent: the shed comes back AS a shed.
+///
+/// `Error::QueueShed` is what the in-process engine returns for the same
+/// refusal (`model_slot.rs`), so a caller written against either provider
+/// already handles it. Prose in `Error::Inference` hid it from every caller
+/// that branches on type: RAPTOR wrote 5 of the pilot's 6 extractive nodes
+/// from sheds it could not tell from failures.
+#[tokio::test]
+async fn a_shed_past_the_wait_budget_comes_back_as_a_typed_shed() {
+    let daemon = MockDaemon::serving(vec![http_shed(1), http_shed(1), http_shed(1)]);
+    let err = daemon
+        .attach_provider()
+        .complete(&a_request())
+        .await
+        .expect_err("three sheds spend the budget");
+    match err {
+        Error::QueueShed {
+            retry_after_secs, ..
+        } => assert_eq!(retry_after_secs, 1, "the host's own hint, carried"),
+        other => panic!("a shed must arrive typed, got {other:?}"),
+    }
+    assert_eq!(daemon.request_lines().len(), SHED_MAX_ATTEMPTS as usize);
+}

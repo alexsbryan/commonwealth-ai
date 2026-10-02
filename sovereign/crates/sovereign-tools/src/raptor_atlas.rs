@@ -62,26 +62,36 @@ const NONLEAF_TARGET_FANOUT: usize = 5;
 /// nodes) and we don't summarize over it.
 const ROOT_BRANCHING_CEILING: usize = 4;
 
-/// Concurrency for the summary calls. On a mesh the load balancer
-/// spreads these across peers; on a solo node this is how many
-/// summaries ride one continuous-batched decode together.
-///
-/// **8 because that is the batching lane's width.** The FastShort slot
-/// is built with `n_seq_max=8` (`ModelSlot::from_existing_model`), so a
-/// 9th concurrent call cannot join the batch — it waits for a seq slot
-/// to retire. Raising this past 8 buys nothing and costs held memory
-/// and queue depth; it was briefly 12 during the 2026-07-24 tuning arc
-/// before that bound was checked. Lowering it below 8 leaves the lane
-/// half-empty, which is what the original 6 did: the bench's per-call
-/// log showed 15 leaf summaries dispatching in three visible waves as
-/// slots freed, a 53.6s leaf level made of calls whose own median
-/// latency was 7.7s.
-///
-/// If the batching lane is unavailable — `SOVEREIGN_FAST_SHORT_DISABLE`,
-/// a vetoed arch (see `fast_short_gate`), or any host that serves these
-/// on a single-sequence slot — the calls simply queue and this constant
-/// stops mattering. It is a ceiling, never an assumption of parallelism.
+
+/// Concurrency for extractive clusters: embed calls only, no LLM.
 const SUMMARIZE_BUFFER: usize = 8;
+
+/// Concurrency for abstractive clusters: one at a time.
+///
+/// The summary and its verify probe go out as ExtractDurable / Judge with
+/// full member text, which this host serves on a single-permit slot with a
+/// 30 s park bound. At 8 wide the pilot parked 7 calls and all 7 were shed
+/// together (daemon log 2026-10-02 22:21:19, 22:22:19, 22:23:19). Pilot
+/// tree, one run each: 8 wide 7/14 abstractive, every floor a verifier
+/// shed, 855 s; 1 wide 13/14, no sheds, 1,646 s. The width costs wall
+/// clock (the calls span more than one slot) and buys the summaries.
+/// Host-shaped: a mesh that spreads these across peers would want it wider.
+const ABSTRACTIVE_SUMMARIZE_BUFFER: usize = 1;
+
+/// The width for a build in `mode`.
+fn summarize_width(mode: SummaryMode) -> usize {
+    match mode {
+        SummaryMode::Abstractive => ABSTRACTIVE_SUMMARIZE_BUFFER,
+        SummaryMode::Extractive => SUMMARIZE_BUFFER,
+    }
+}
+
+/// How long one summary call may keep coming back after sheds before its
+/// cluster takes the extractive floor. A cost guard, not a quality knob: a
+/// shed says "busy", and a batch build with no other holder waits. Ten
+/// minutes is about nine summary-plus-verify pairs of other traffic at the
+/// lane's highest observed average turn (33.9 s).
+const SHED_WAIT_CAP: std::time::Duration = std::time::Duration::from_secs(600);
 
 /// Hard cap on how many member previews are shown to the leaf
 /// summarizer.
@@ -831,7 +841,7 @@ async fn summarize_clusters_buffered_with_checkpoint(
                 (cluster_idx, node)
             }
         })
-        .buffered(SUMMARIZE_BUFFER);
+        .buffered(summarize_width(mode));
 
     let mut out: Vec<(usize, RaptorNode)> = Vec::new();
     let mut completed = already_cached;
@@ -930,7 +940,7 @@ struct ClusterSummarizationInput {
 }
 
 /// Dispatch summarization for many clusters in parallel via
-/// `buffered(SUMMARIZE_BUFFER)`. Each inflight call goes through
+/// `buffered(summarize_width(mode))`. Each inflight call goes through
 /// `inference.complete(Speed::Slow)` which routes to the mesh load
 /// balancer — buffering at the dispatch layer is what lets the
 /// balancer actually fan across peers instead of serializing on
@@ -951,7 +961,7 @@ async fn summarize_clusters_buffered(
             let vf = verify.clone();
             async move { summarize_one_cluster(&inf, input, dt, mode, vf).await }
         })
-        .buffered(SUMMARIZE_BUFFER)
+        .buffered(summarize_width(mode))
         .collect()
         .await;
     summarized.into_iter().flatten().collect()
@@ -1103,6 +1113,50 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
     req
 }
 
+/// One summary call that comes back after every shed until [`SHED_WAIT_CAP`].
+///
+/// A shed says "busy", and the build has no other holder to route to, so it
+/// comes back. Taking the extractive floor instead would persist a lower-
+/// fidelity node for a reason unrelated to the summary. Every other error
+/// returns at once, untouched.
+async fn complete_after_sheds(
+    inference: &Arc<dyn InferenceProvider>,
+    req: &CompletionRequest,
+    level: u8,
+) -> Result<CompletionResponse> {
+    let started = tokio::time::Instant::now();
+    let mut sheds = 0u32;
+    loop {
+        match inference.complete(req).await {
+            Err(sovereign_core::error::Error::QueueShed {
+                retry_after_secs, ..
+            }) if started.elapsed() < SHED_WAIT_CAP => {
+                sheds += 1;
+                tracing::info!(
+                    level,
+                    sheds,
+                    retry_after_secs,
+                    waited_s = started.elapsed().as_secs(),
+                    "raptor_atlas: summary call shed by the host; coming back"
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(retry_after_secs)).await;
+            }
+            other => {
+                if sheds > 0 {
+                    tracing::info!(
+                        level,
+                        sheds,
+                        served = other.is_ok(),
+                        waited_s = started.elapsed().as_secs(),
+                        "raptor_atlas: summary call done coming back after sheds"
+                    );
+                }
+                return other;
+            }
+        }
+    }
+}
+
 async fn summarize_one_cluster_abstractive(
     inference: &Arc<dyn InferenceProvider>,
     input: ClusterSummarizationInput,
@@ -1114,13 +1168,15 @@ async fn summarize_one_cluster_abstractive(
     // summary used to vanish from the atlas entirely — silently
     // shrinking retrieval coverage. A verbatim extractive summary is
     // strictly better than no node. The embed-failure path below
-    // still drops: extraction needs the same embedder.
+    // still drops: extraction needs the same embedder. A shed reaches
+    // the floor only past SHED_WAIT_CAP, and says so (`shed = true`).
     let req = build_abstractive_request(&input, &doc_type, false);
-    let resp = match inference.complete(&req).await {
+    let resp = match complete_after_sheds(inference, &req, input.level).await {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(
                 level = input.level,
+                shed = matches!(e, sovereign_core::error::Error::QueueShed { .. }),
                 error = %e,
                 "raptor_atlas: summary LLM call failed; falling back to extractive"
             );
@@ -1174,10 +1230,11 @@ async fn summarize_one_cluster_abstractive(
                         "raptor_atlas: summary failed verification; retrying with faithful prompt"
                     );
                     let retry_req = build_abstractive_request(&input, &doc_type, true);
-                    let retry_parsed = match inference.complete(&retry_req).await {
-                        Ok(r) => parse_cluster_summary(&r.text).map(|p| (p, r.model_id)),
-                        Err(_) => None,
-                    };
+                    let retry_parsed =
+                        match complete_after_sheds(inference, &retry_req, input.level).await {
+                            Ok(r) => parse_cluster_summary(&r.text).map(|p| (p, r.model_id)),
+                            Err(_) => None,
+                        };
                     match retry_parsed {
                         Some((p2, m2)) => match ctx
                             .verifier
