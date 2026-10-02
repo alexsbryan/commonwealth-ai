@@ -3,7 +3,7 @@
 #   cargo run -p xtask -- clone-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clone-gate --tighten
-13826	(total covered lines)
+13820	(total covered lines)
 37	commonwealth/crates/commonwealth-core/src/mesh/mod.rs <-> sovereign/crates/sovereign-cli-mesh/src/daemon_store.rs
 60	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs
 32	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs <-> sovereign/crates/sovereign-serve/src/rails_mesh.rs
@@ -407,5 +407,5 @@
 78	studio/crates/sovereign-recipe-author/src/write_structured.rs <-> studio/crates/sovereign-workflow-host/src/author.rs
 26	studio/crates/sovereign-tools-base/src/read_file.rs <-> studio/crates/sovereign-tools-base/src/read_json.rs
 27	studio/crates/sovereign-tools-base/src/read_file.rs <-> studio/crates/sovereign-tools-base/src/read_json.rs <-> studio/crates/sovereign-tools-base/src/zip.rs
-44	studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
+38	studio/crates/sovereign-tools-base/src/search.rs <-> studio/crates/sovereign-tools-base/src/web/mod.rs
 24	studio/crates/sovereign-tools-base/src/write_file.rs <-> studio/crates/sovereign-tools-base/src/write_json.rs
