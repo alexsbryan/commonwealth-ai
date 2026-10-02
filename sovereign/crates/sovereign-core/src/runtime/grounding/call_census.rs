@@ -479,7 +479,10 @@ mod tests {
             .map(|p| p.strip_prefix(&root).unwrap().display().to_string())
             .collect();
         for must in ["call_census.rs", "value_presence.rs"] {
-            assert!(names.iter().any(|n| n == must), "the walk did not find {must}: {names:?}");
+            assert!(
+                names.iter().any(|n| n == must),
+                "the walk did not find {must}: {names:?}"
+            );
         }
         let sources: Vec<(String, String)> = files
             .iter()
