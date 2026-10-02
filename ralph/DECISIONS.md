@@ -2064,6 +2064,12 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Because: kernel-types is the one crate already reachable from sovereign-contracts, commonwealth-rails and sovereign-serve, with `allow = []` and a std-only body: zero new edges. host-kit was the other candidate and is out twice: sovereign-contracts' package_leaf allow list is oicp-types, kernel-types, sovereign-time (quality/ARCH_LAYERS.toml:888), and host-kit "names no program's vocabulary" while the bridge's prefixes are vocabulary. Precedent: `kernel_types::member` moved here for the same two-owner reason (fp-46). BOUNDARY ✓ and clone-gate 13826 = baseline after the move.
 - Minted as `phase-c-2` in its lane and renumbered at merge: that lane's commit bodies cite `phase-c-2`.
 
+**phase-c-6 · 2026-10-01 · pc-onprem-followups · worker** — this commit
+- Needed: a keyed daemon's OCR cleanup admitted without a loopback exemption, and a sealed turn's offers derived from the registry.
+- Chose: a per-process self credential in the one key store (not an in-process call), and a corpus-only `search` that reports `Scope::Persistent`.
+- Because: the cleanup already speaks HTTP to `/v1/chat/completions`, so one store row reuses the one admission decision; and `Scope::External` on a tool that cannot leave the machine was itself the false claim the decider reads.
+- Minted as `phase-c-5` in its lane and renumbered at merge: that lane's commit bodies cite `phase-c-5`.
+
 **phase-b-113 · 2026-10-02 · pb-distribution-ship-gate · operator, escalating only the e2e latency; supersedes phase-b-111** — this commit
 - Needed: after F13 the gate read three alarms (095a15c09): chat-ask 18/19 (q2's audit 14 calls > 12 on run 3 of 3), knowledge-gym 05_noresults_honesty 0/3 (2 lookups > 1, 1/3 at the flip), and the e2e plain turn at 24,620 / 29,238 ms vs the 13,397 ms main-era baseline. The method escalates each to ABAB n=3 against B (main 18f783f44). A director session ruled all three escalated with the deployed daemon stopped (phase-b-111) before the operator answered; its window never opened (the seed copy was refused, the node was restarted, ce03d5135).
 - Chose (operator: "Only the e2e latency"): the e2e is escalated, C vs B, n=3 ABAB, run by the seat on a minimal seed (the deployed config.toml alone, sanitized as seed.sh does and with [watched_folders] dropped, so neither side indexes during the reading), one sandbox daemon at a time on sandbox ports, the deployed node up and idle. chat-ask's overrun and knowledge-gym's fixture are ruled on their readings and filed above phase-c's cut line: pc-chat-ask-audit-calls, pc-knowledge-gym-noresults. phase-b-111 is superseded where they differ.
@@ -13361,6 +13367,35 @@ Falsified if: a queue that declares a worker_bin which does route through openco
 kernel-types' charter reads "identity and provenance", and an env mirror is neither; this is the stretch the choice accepts. It already carries `hardware_fingerprint` and the instrument registry, so the charter was not strict before. The brand prefix is read by commonwealth crates as well as sovereign ones, so it is owned by no single product domain, which is the kernel's actual admission rule (lib.rs: "owned by no product domain").
 
 Falsified if: an operator rules the kernel identity-only. The alternative then is a new neutrally named leaf for process-start mechanics (an operator decision per §0, "any other new leaf"), or host-kit with sovereign-contracts' allow list widened and the prefixes passed in by every caller.
+
+</details>
+
+## phase-c-6 · 2026-10-01 — the daemon admits itself by key; a corpus-only search says so in its scope
+
+<details><summary>reasoning, evidence, package</summary>
+
+Item 1 (OCR on a keyed daemon). The row allowed "an in-process call or the
+daemon's own credential, never a loopback exemption" (phase-b-86). An
+in-process call would need a second path into the chat route's handler
+(the turn admission, the slot resolution by file stem) that the HTTP path
+already owns, so it would be a second implementation of route dispatch.
+The credential is one row in `ClientTokenStore`: `self_credential()` is
+minted once per process from `generate_bearer_token` (the one bearer
+generator), never written to disk, and is admitted only by a store the
+disk made keyed. Its sub `@svrn` is not a label, so no key file can claim
+it. Falsified if a keyed daemon admits a caller presenting no key, or an
+unkeyed daemon admits `@svrn` (test
+`the_self_credential_admits_only_on_a_keyed_store`).
+
+Item 3 (sealed web offer). The decider `web_search_in_reach` reads the
+built registry's descriptors, so the only honest input is the descriptor.
+`SearchTool::new` (no web fallback) reported `Scope::External`, whose
+definition is "effect reaches outside this machine"; it now reports
+`Persistent` and a corpus-only description. No reader gates on `External`
+(census: only label renderers in cli-dev, core executor and planner), so
+the change moves no behaviour beyond the turn's prompt. Falsified if an
+open host's `search` stops reporting `External` (test
+`a_corpus_only_search_describes_no_web`).
 
 </details>
 
