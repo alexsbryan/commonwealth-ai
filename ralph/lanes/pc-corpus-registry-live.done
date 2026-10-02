@@ -1,0 +1,7 @@
+unit: pc-corpus-registry-live
+commits: 7db395cee (reconcile moves to sovereign-core, re-exported at its daemon path), a39de1ded (Runtime::principal_scope reconciles before each resolved turn + e2e), ccd0a3531 (build_context names why a resolved ceiling is empty)
+what: a corpus ingested while the daemon runs is in the next grounded turn's ceiling: the one corpus_state writer (the boot reconcile)
+  now also runs before every turn that resolves a ceiling, so every ingest path (in or out of process) is covered with no second
+  writer. A turn whose resolved ceiling is empty logs "this turn searches no local corpus" with its reason; a failed registry read
+  is no longer collapsed into an empty registry.
+checks: CLEAN, LINT, TEST(sovereign-daemon) 921/0, TEST(sovereign-core) 1549/0, PLANT x2 red, LAYER ✓, BOUNDARY ✓ (0 violations, clone-gate 13820 = baseline)
