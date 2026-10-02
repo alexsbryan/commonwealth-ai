@@ -229,6 +229,7 @@
           },
           "content": {
             "maxLength": 800,
+            "minLength": 1,
             "type": "string"
           }
         },

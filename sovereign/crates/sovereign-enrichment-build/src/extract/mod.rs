@@ -199,7 +199,8 @@ pub async fn run_extract(args: &[String]) -> i32 {
     )
     .with_chat_with_tokens(chat)
     .with_checkpoint_path(&checkpoint_path)
-    .with_dry_run(parsed.dry_run);
+    .with_dry_run(parsed.dry_run)
+    .with_min_body_words(cfg.min_section_body_words);
 
     // Rebuild corpus state.
     let (inputs, manifest) = match rebuild_corpus_state(&cfg) {
@@ -653,7 +654,8 @@ pub async fn run_with_closures_for_test(
         cache,
         runs,
         paths::exemplars_dir(corpus_id),
-    );
+    )
+    .with_min_body_words(cfg.min_section_body_words);
     let (inputs, _manifest) = rebuild_corpus_state(&cfg).map_err(|e| e.to_string())?;
     let result = runner
         .phase_1_extract_questions(&inputs, &selection, |_| {})

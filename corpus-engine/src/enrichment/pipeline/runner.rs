@@ -273,7 +273,10 @@ const FAILURE_HEAD_CHAR_CAP: usize = 2048;
 /// that has no body for the model to think about. Sending such a
 /// chapter to chat produces either a refusal or a schema-template
 /// echo — both wasted roundtrips. A real chapter, even a terse one,
-/// comfortably clears this bar.
+/// comfortably clears this bar. It is the DEFAULT: a corpus sets its own
+/// floor through [`PhaseRunner::with_min_body_words`] — its
+/// `min_section_body_words`, the floor the section detector applies — and a
+/// catalogue whose complete entries run 17-33 words needs a lower one.
 const MIN_PHASE1_CHAPTER_WORDS: usize = 40;
 
 /// Output-token budget used for seed-threaded Phase 1 calls. The
@@ -438,6 +441,10 @@ pub struct PhaseRunner {
     /// Compose every phase-1 prompt and dispatch none — `enrich extract
     /// --dry-run`. Set through [`PhaseRunner::with_dry_run`].
     dry_run: bool,
+    /// Sections with fewer body words are skipped without a chat call. Set
+    /// through [`PhaseRunner::with_min_body_words`]; [`MIN_PHASE1_CHAPTER_WORDS`]
+    /// otherwise.
+    min_body_words: usize,
     cache: PhaseCache,
     runs: RunOutputWriter,
     exemplars_dir: PathBuf,
@@ -495,6 +502,7 @@ impl PhaseRunner {
             chat,
             chat_with_tokens: None,
             dry_run: false,
+            min_body_words: MIN_PHASE1_CHAPTER_WORDS,
             cache,
             runs,
             exemplars_dir: exemplars_dir.as_ref().to_path_buf(),
@@ -609,6 +617,13 @@ impl PhaseRunner {
     /// question about a prompt the real pass never sends.
     pub fn with_dry_run(mut self, dry_run: bool) -> Self {
         self.dry_run = dry_run;
+        self
+    }
+
+    /// The corpus's body-word floor for Phase 1 (`min_section_body_words`);
+    /// `0` sends every section.
+    pub fn with_min_body_words(mut self, words: usize) -> Self {
+        self.min_body_words = words;
         self
     }
 
@@ -829,10 +844,17 @@ impl PhaseRunner {
             // skip as a failure so the run file surfaces it rather
             // than silently caching `"..."`.
             let words = approx_word_count(&chapter.text);
-            if words < MIN_PHASE1_CHAPTER_WORDS {
+            if words < self.min_body_words {
+                let floor = self.min_body_words;
+                tracing::debug!(
+                    chapter = %chapter.chapter_id,
+                    words,
+                    floor,
+                    "phase1: section below the corpus's body-word floor; skipped"
+                );
                 let reason = format!(
                     "skipped: chapter body is too short to analyze ({words} words < \
-                     {MIN_PHASE1_CHAPTER_WORDS} word minimum) — likely a Part-level \
+                     {floor} word minimum, min_section_body_words) — likely a Part-level \
                      heading or front-matter section"
                 );
                 progress(Phase1Progress::ChapterFailed {
@@ -2975,6 +2997,42 @@ mod tests {
         );
         // The skip must not fabricate a raw response.
         assert!(res.failures[0].raw_response_head.is_none());
+    }
+
+    /// A catalogue entry is short because it is dense, not empty. The
+    /// corpus's own floor decides: the default 40 skipped six K1 hoard
+    /// entries (17-33 words) on the ANS dev fixture.
+    #[tokio::test]
+    async fn phase_1_skip_floor_is_the_corpus_setting() {
+        let dir = tempdir().unwrap();
+        let runner = runner_under_test(dir.path()).with_min_body_words(8);
+        let entry = ChapterInput {
+            chapter_id: "sec_0001".into(),
+            title: "Phacous: IGCH 1678".into(),
+            text: "Phacous, Egypt, 1907. Tetradrachms of Alexander struck at Sardes, \
+                   Miletus, Lampsacus and Sidon, buried about 305 B.C."
+                .into(),
+            metadata: std::collections::HashMap::new(),
+            approx_tokens: 30,
+        };
+        let heading = ChapterInput {
+            chapter_id: "sec_0002".into(),
+            title: "Part I".into(),
+            text: "Book I. The History Of A Family".into(),
+            metadata: std::collections::HashMap::new(),
+            approx_tokens: 10,
+        };
+        let res = runner
+            .phase_1_extract_questions(&[entry, heading], &ChapterSelection::Full, |_| {})
+            .await
+            .unwrap();
+        let skipped: Vec<&str> = res.failures.iter().map(|f| f.chapter_id.as_str()).collect();
+        assert_eq!(skipped, ["sec_0002"], "only the heading is skipped");
+        assert_eq!(
+            res.output.questions_by_chapter.len(),
+            1,
+            "the entry is extracted"
+        );
     }
 
     #[tokio::test]
