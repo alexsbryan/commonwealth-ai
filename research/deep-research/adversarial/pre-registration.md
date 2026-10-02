@@ -1658,7 +1658,7 @@ written after. Nothing below re-negotiates a pre-registered contract.
 
 ### What ran, in order
 
-1. **The reds, red-first.** R-5 (`sovereign/crates/sovereign-cli-llm/
+1. **The reds, red-first.** R-5 (`svrn/crates/sovereign-cli-llm/
    src/enrich_cmd/egress_reds.rs:96` — a personal-corpus chunk must
    not reach a remote payload via `enrich --provider`) failed at HEAD
    and passes with ZERO assertion changes after the fix. R-6 (the F26
@@ -1988,7 +1988,7 @@ whole flight with `index out of bounds: the len is N but the index is N`.
 Evidence (instrumented, reproduced, understood — no whack-a-mole):
 
 - `[local] task 62 exit=101 terminal=? wall=74s FAIL` — ion-trap
-  question; panic at `studio/crates/sovereign-tools-base/src/web/
+  question; panic at `svrn/crates/sovereign-tools-base/src/web/
   extract.rs:53:17` while fetching `https://en.wikipedia.org/wiki/
   Qubit#Qudits_and_qutrits` (449,475-byte HTML; "len is 449475 but the
   index is 449475"). Corpus arm fetches the source URLs of corpus
@@ -1998,7 +1998,7 @@ Evidence (instrumented, reproduced, understood — no whack-a-mole):
 - Minimal repro (red-first, pinned in the file's test module):
   `extract_text_from_html("<p>İstanbul</p>")` panics at the same
   line:53:17 with "len is 16 but index is 16"; passes after the fix.
-- The fix (one line, `studio/crates/sovereign-tools-base/src/web/
+- The fix (one line, `svrn/crates/sovereign-tools-base/src/web/
   extract.rs`): `let len = html_bytes.len().min(bytes.len());` — the
   walk is bounded by the SOURCE buffer it indexes. `cargo test -p
   sovereign-tools-base --lib`: 93 passed (92 prior + the new regression
@@ -2075,7 +2075,7 @@ appendix (append-only, §18.6).
 
 Observed: local task 95 (Diamond Sutra) exit=101 at 79s —
 
-    svrn panic at sovereign/crates/sovereign-core/src/deep_research/estate.rs:47:23:
+    svrn panic at svrn/crates/sovereign-core/src/deep_research/estate.rs:47:23:
     end byte index 600 is not a char boundary; it is inside 'ā' (bytes 599..601)
 
 The estate snippet window (`estate_snippet`, the term-centered 600-byte cut)
@@ -4832,7 +4832,7 @@ downgraded claims visibly stamped.
 Design (all confirmed against the code):
 
 1. `render_race(question, claims, run_id) -> String` — a NEW pure
-   function in `sovereign/crates/sovereign-core/src/deep_research/render.rs`
+   function in `svrn/crates/sovereign-core/src/deep_research/render.rs`
    (my scope per the order). Sections: Findings (passed claims,
    citation tails stripped via the existing `strip_citation_spans`,
    typed citations inline — evidence_id + URL resolved from
@@ -5206,7 +5206,7 @@ ONE commit (pre-reg + reds + fix + prompt clause + execution record
 
 ### Red-first evidence — six tests watched failing at HEAD, green after
 
-All in sovereign/crates/sovereign-core/src/deep_research/:
+All in svrn/crates/sovereign-core/src/deep_research/:
 
 1. `word_figures_tokenize_like_their_digit_forms` — the 10 frozen
    shapes: "twenty percent" ≡ "20%", "fifty-eight point one percent"
@@ -5316,7 +5316,7 @@ arm 13/13 pairs with a PASSING test run (this landing).
   12/13 pairs wrote; seed-01 shed-died (`local_queue_full`,
   retry_after 30s) while the t6a corpus-scale thin bank held the slot
   (its seed-11 1083s and v1 2088s flights overlapped). The frozen
-  comparator (`sovereign/crates/sovereign-core/tests/oneshot_rag.rs`)
+  comparator (`svrn/crates/sovereign-core/tests/oneshot_rag.rs`)
   has NO shed retry — item 7 wrapped only the CLI complete call sites
   in `deep_research_cmd.rs`, NOT the test's draft-ask path — so any
   daemon shed kills the pair.
@@ -5972,7 +5972,7 @@ Pre-registered 2026-08-20 before any code (order deep-research-t7b §2; §18.6).
 ### Landing
 
 ONE commit, local only, never push, no assistant attribution; scope
-sovereign/crates/sovereign-core/src/deep_research/ + this file. Execution
+svrn/crates/sovereign-core/src/deep_research/ + this file. Execution
 record appended below after the battery.
 
 ### Execution record (2026-08-20)
@@ -7858,7 +7858,7 @@ grounding gate and is wired only into `runtime/grounding/judge.rs`.
 "How many independent origins does this claim require" is a different
 decision and gets a distinct name (§10.6, one decider one name). Built
 as a sibling centroid classifier with its own exemplar TOML under
-`sovereign/crates/sovereign-core/data/router/`, baked via `include_str!`, same shape as the five
+`svrn/crates/sovereign-core/data/router/`, baked via `include_str!`, same shape as the five
 existing siblings.
 
 - `Quantitative` — structural override, no embedding: the claim carries

@@ -1,6 +1,6 @@
 # Running a mesh across networks
 
-Commonwealth is the mesh inside Sovereign — you don't install or run it on its own. On a single network, pooling machines is just `sovereign mesh create` on one and `sovereign mesh join <key>` on the others; the [README](../../sovereign/README.md#commonwealth--pool-machines-with-people-you-trust) and [Run a model bigger than your machine](../../docs/RUN_A_BIGGER_MODEL.md) cover that path.
+Commonwealth is the mesh inside Sovereign — you don't install or run it on its own. On a single network, pooling machines is just `sovereign mesh create` on one and `sovereign mesh join <key>` on the others; the [README](../../svrn/README.md#commonwealth--pool-machines-with-people-you-trust) and [Run a model bigger than your machine](../../docs/RUN_A_BIGGER_MODEL.md) cover that path.
 
 This guide is for the harder case: getting nodes to reach each other when they're on different networks, or on a LAN that blocks peer discovery. It's all about connectivity. Once the machines can see each other, you create and join the mesh exactly as you would locally.
 
@@ -44,7 +44,7 @@ relay_urls = ["https://relay.your-domain.com:443"]
 discovery = "none"
 ```
 
-Note the distinction: `relay_urls` alone moves the *relay* to your box but peers still use iroh's public DNS to publish and resolve addresses. `discovery = "none"` is what a security team means by "no third party" — on a flat LAN/VPC it needs no relay at all (gossiped addresses suffice); across subnets, pair it with your own `relay_urls`. Both settings are per-node and gossiped, so you migrate machines one at a time and a mixed set interoperates. This is the path for **air-gapped or multi-site fleets** and **corporate networks that block the public relay domains** — see [ENTERPRISE_FLEET_DEPLOY.md](../../sovereign/docs/ENTERPRISE_FLEET_DEPLOY.md).
+Note the distinction: `relay_urls` alone moves the *relay* to your box but peers still use iroh's public DNS to publish and resolve addresses. `discovery = "none"` is what a security team means by "no third party" — on a flat LAN/VPC it needs no relay at all (gossiped addresses suffice); across subnets, pair it with your own `relay_urls`. Both settings are per-node and gossiped, so you migrate machines one at a time and a mixed set interoperates. This is the path for **air-gapped or multi-site fleets** and **corporate networks that block the public relay domains** — see [ENTERPRISE_FLEET_DEPLOY.md](../../svrn/docs/ENTERPRISE_FLEET_DEPLOY.md).
 
 **Corporate / locked-down networks.** The relay path is TCP over port 443 (WebSocket-over-TLS), so it works even where UDP is blocked outright — the same worst-case fallback a VPN relies on. If your network requires an HTTP proxy, set `HTTP_PROXY` / `HTTPS_PROXY` in the daemon's environment and the relay connection honors it.
 

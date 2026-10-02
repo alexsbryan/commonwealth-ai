@@ -75,7 +75,7 @@ If a concern you considered is actually PREVENTED by the code, instead emit it w
 Respond with ONLY a JSON array of these objects, most severe first."""
 
 TARGETS = [
-    dict(label="T1 tier_counts (formalized: underflow)", rel="sovereign/crates/sovereign-tools/src/atlas_postinstall.rs",
+    dict(label="T1 tier_counts (formalized: underflow)", rel="svrn/crates/sovereign-tools/src/atlas_postinstall.rs",
          line=608,
          prov="`records`/`expansions` are rows deserialized from an on-disk atlas file produced by an earlier pipeline stage; each row's `.tier` field is an untrusted integer with no proven range."),
     dict(label="T2 count_emails (unformalized: fs recursion on untrusted path)", rel="sovereign/crates/sovereign-desktop/src-tauri/src/import_commands.rs",

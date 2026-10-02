@@ -10,7 +10,7 @@ The population, fixed by M0 and not recomputed here:
     cross-file predicted 1156 · author-edited 694 · overlap 593
     => 563 over-offered, 101 missed.
 
-Pre-registered in sovereign/docs/specs/NEXT_EDIT_SYMBOL_LANE.md §M1a,
+Pre-registered in svrn/docs/specs/NEXT_EDIT_SYMBOL_LANE.md §M1a,
 written before this ran. For every candidate filter: junk removed, good
 lost, precision after, recall after (denominator stays 694). A filter is
 a candidate for M1b iff precision >= 60% AND recall >= 80%.

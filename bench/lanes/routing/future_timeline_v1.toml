@@ -11,7 +11,7 @@
 # retest (`When is the M5 Mac Studio expected?` — bare "expected" with no
 # trailing "to") surfaced the brittleness of keyword matching: every new
 # phrasing demands a new keyword. The principled approach (described in
-# `sovereign/docs/PRODUCTION_SEARCH_INTEGRATION.md`) is:
+# `svrn/docs/PRODUCTION_SEARCH_INTEGRATION.md`) is:
 #
 #   1. **Humility / corpus-first**: the agent doesn't pre-classify whether
 #      external lookup is warranted. It queries the corpus, synthesises

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! On-disk snapshot for a pinned worker pod.
 //!
-//! Spec: `sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md` §3.6.
+//! Spec: `svrn/docs/PINNED_WORKER_AS_INFERENCE_PEER.md` §3.6.
 //!
 //! ## What the snapshot carries
 //!

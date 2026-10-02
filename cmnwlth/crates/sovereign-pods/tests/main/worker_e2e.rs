@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! End-to-end test of the ephemeral-worker pod wire protocol.
 //!
-//! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md`. Verifies that:
+//! Spec: `svrn/docs/EPHEMERAL_WORKER_PODS.md`. Verifies that:
 //!
 //! 1. The owner-side TLS pin (`reqwest::Certificate::from_der` of the
 //!    seed-derived self-signed cert + `danger_accept_invalid_hostnames`)

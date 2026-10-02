@@ -281,7 +281,7 @@ pub struct CompletionRequest {
     /// `<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>` markers
     /// (built by `sovereign_contracts::fim::build_fim_prompt`, re-exported as
     /// `sovereign_inference::fim::build_fim_prompt`).
-    /// See `sovereign/docs/INLINE_COMPLETION.md` §3.1.
+    /// See `svrn/docs/INLINE_COMPLETION.md` §3.1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_shape: Option<PromptShape>,
 

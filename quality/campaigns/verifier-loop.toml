@@ -6,7 +6,7 @@
 # the plan survives without them.
 id        = "verifier-loop"
 objective = "Every operating point the inference verifier loop decides on is a number with a provenance chain - fitted from retained episodes, committed as data, read through one accessor, and load-bearing under perturbation - so the verification work already spread across 100 instruments and 366 verdict types pays into the answer a person reads instead of into target/"
-spec      = "sovereign/docs/specs/VERIFICATION_COMMONS.md §1-§4 (the verification episode as the unit of collection; §4 the mechanism of change). Its own header says 'design study, no code' — this campaign is its first execution. Constrained by bench/lanes/FABRICATED_QUOTE_PREREG_20260911.md ('Model strata only demote. Bytes admit.') and by bench/lanes/VERIFIER_ECONOMY_PREREG_20260819.md (two axes never averaged)."
+spec      = "svrn/docs/specs/VERIFICATION_COMMONS.md §1-§4 (the verification episode as the unit of collection; §4 the mechanism of change). Its own header says 'design study, no code' — this campaign is its first execution. Constrained by bench/lanes/FABRICATED_QUOTE_PREREG_20260911.md ('Model strata only demote. Bytes admit.') and by bench/lanes/VERIFIER_ECONOMY_PREREG_20260819.md (two axes never averaged)."
 declared  = "2026-09-12"
 status    = "active"
 
@@ -84,7 +84,7 @@ goodhart     = "this can hit target while the predicate is still false if the fr
 [[bar]]
 id           = "vl-bank-live"
 one_line     = "CLAIM: the episode bank the replay reads is this week's, not a dated diagnostic snapshot"
-derives_from = "sovereign/docs/specs/VERIFICATION_COMMONS.md §2: 'Every gated turn already computes a complete structured trace - and then discards it after rendering the answer. The unit is this trace, kept.'"
+derives_from = "svrn/docs/specs/VERIFICATION_COMMONS.md §2: 'Every gated turn already computes a complete structured trace - and then discards it after rendering the answer. The unit is this trace, kept.'"
 status       = "open"
 floor        = 29.0
 floor_basis  = "AGE IN DAYS of the newest episode the replay can read - the clock is the denominator and nobody authors it. 29 at declaration: bench/lanes/chaos_monkey/judge_replay_cases.py:59-60 names exactly two case sets, newest 2026-08-14. What exists in total is 1,049 forensics records (821 claim + 114 audit windows + 114 audit results) across five committed ledgers, ALL from 2026-08-13/14. The journal half cannot serve this: GROUNDING_STREAM is default=on but carries handles and NO text by design, and its 291 decision lines over 8 active days (2026-08-27..09-10) can replay nothing."
@@ -109,7 +109,7 @@ instrument   = "TO BUILD, rung vl-5: the count, reported together with the measu
 goodhart     = "this can hit target while the predicate is still false if the labels are the system's own verdicts rebadged, or if they are TURN-grain while the register judges CLAIMS - a turn marked wrong does not say which of its four claims was wrong, and a bag-level label is not a claim label"
 kill = """K5 - NO TARGET IS DECLARED, because the number that would justify one has never been measured. ARCH principle 7: establish the noise floor at your sample size first. So rung vl-5's FIRST act is to measure the interval width at n=100 and at whatever n the queue reaches, and a target is ratified with the operator in a commit SEPARATE from that measurement (§18.6). A target picked now would be the same fabricated-fact-with-a-unit this campaign exists to stop.
 
-K6 - the labels come from the QUEUE, not from organic app usage, and a rung that ships only the app affordance has not moved this bar. The journal holds 291 decision lines over 8 active days; rated organically at any realistic fraction that never reaches a useful n. 821 banked claims with their windows already exist. sovereign/docs/specs/ATTESTED_RECORDS.md §3 names the mechanism as stratum 6 - 'Human - review queue - its verdicts become gold-set rows - the flywheel'. The precedent to avoid is ~/.sovereign/comaintainer/field-episodes.jsonl: the capture shape was built and all four of its records still read `seat_verdict: None`."""
+K6 - the labels come from the QUEUE, not from organic app usage, and a rung that ships only the app affordance has not moved this bar. The journal holds 291 decision lines over 8 active days; rated organically at any realistic fraction that never reaches a useful n. 821 banked claims with their windows already exist. svrn/docs/specs/ATTESTED_RECORDS.md §3 names the mechanism as stratum 6 - 'Human - review queue - its verdicts become gold-set rows - the flywheel'. The precedent to avoid is ~/.sovereign/comaintainer/field-episodes.jsonl: the capture shape was built and all four of its records still read `seat_verdict: None`."""
 
 [[bar]]
 id           = "vl-rulers-earned"
@@ -127,7 +127,7 @@ kill         = "K1 - ACCEPTED IN ADVANCE 2026-09-12 (operator), so an Uncalibrat
 [[bar]]
 id           = "vl-free-rejections"
 one_line     = "CLAIM: a claim that fails deterministic span integrity or normalization is rejected BEFORE any model call - no GPU, no judge, no latency"
-derives_from = "sovereign/docs/specs/ATTESTED_RECORDS.md §3: strata 1-2 'can reject on their own authority... and it is the part that needs no GPU'. Composed with bench/lanes/FABRICATED_QUOTE_PREREG_20260911.md: bytes admit, models only demote."
+derives_from = "svrn/docs/specs/ATTESTED_RECORDS.md §3: strata 1-2 'can reject on their own authority... and it is the part that needs no GPU'. Composed with bench/lanes/FABRICATED_QUOTE_PREREG_20260911.md: bytes admit, models only demote."
 status       = "open"
 floor        = 0.0
 floor_basis  = "structural: PERCENT of audited claims rejected by a deterministic stratum before any model call. Zero today - sovereign-core/src/quote_verification.rs (638 lines) and sovereign-core/src/runtime/numeric_audit.rs (744 lines) both run POST-generation as freestanding special cases, not as strata ahead of the judge."
@@ -147,7 +147,7 @@ direction    = "near_zero"
 target       = 0.0
 instrument   = "EXISTS: `svrn bench gate chaos-monkey` against bench/lanes/chaos_monkey/baselines/secret_agent/, plus the per-corpus faithfulness gate. No new scorer, no new threshold - ARCH principle 8."
 goodhart     = "this can hit target while the predicate is still false if the bank does not contain the shape the change broke - a floor held on cases nobody re-selected after the mechanism moved is a floor held against the previous system"
-kill         = "K3 - fabrication > 0 with instrument validation green means a SECOND DECIDER exists on the admission path (ARCH principle 8): find it and remove it, do not tune. Timidity regressed in order to reach fabrication 0 is a REJECTED row in sovereign/DEFAULTS_LEDGER.md and the demotion path is redesigned - the bar is not lowered."
+kill         = "K3 - fabrication > 0 with instrument validation green means a SECOND DECIDER exists on the admission path (ARCH principle 8): find it and remove it, do not tune. Timidity regressed in order to reach fabrication 0 is a REJECTED row in docs/DEFAULTS_LEDGER.md and the demotion path is redesigned - the bar is not lowered."
 
 # ── THE LADDER ───────────────────────────────────────────────────────────────
 # REORDERED 2026-09-12 (operator: lowest effort + highest impact first, anchor to

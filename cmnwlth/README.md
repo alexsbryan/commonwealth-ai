@@ -61,7 +61,7 @@ against the mesh half. They are consumers of the two stacks, not a third stack
 | [`commonwealth-discovery`](crates/commonwealth-discovery) | How a mesh starts and how a machine gets in: join keys, mDNS, the local hardware survey. |
 | [`commonwealth-transport`](crates/commonwealth-transport) | One place that answers "how do I reach that peer" — IP overlay today, dial-by-Ed25519-key behind the `iroh` feature. |
 | [`commonwealth-state`](crates/commonwealth-state) | `MeshStore`: a small SQLite key/value board every node keeps a whole copy of, reconciled by gossip. |
-| [`commonwealth-rail-core`](crates/commonwealth-rail-core) | The fold: signing an act, admitting it, putting every peer's acts in one order all of them agree on. Zero I/O. |
+| [`commonwealth-rail-core`](../shared/crates/commonwealth-rail-core) | The fold: signing an act, admitting it, putting every peer's acts in one order all of them agree on. Zero I/O. |
 | [`commonwealth-rail`](crates/commonwealth-rail) | The journal that fold runs over — an append-only JSONL log under `<root>/rings/<namespace>/`. |
 
 Each crate's own `lib.rs` opens with what it is for and the two or three
@@ -156,7 +156,7 @@ own infrastructure. The file is
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — the original design and its
   reasoning. Kept for the *why*; it has drifted from the code and says so at
   the top.
-- **[../sovereign/SYSTEM_OVERVIEW.md](../sovereign/SYSTEM_OVERVIEW.md) §5** —
+- **[docs/SYSTEM_OVERVIEW.md](../docs/SYSTEM_OVERVIEW.md) §5** —
   the current shape of the running system, kept current with the code.
 - **[docs/oicp-v0.4.md](docs/oicp-v0.4.md)** — the capability-advertisement
   protocol peers speak when they are doing inference for each other.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Routing decision records — Phase 0 (P1 + P2) of
-//! [`docs/specs/SCHEDULER_QUALITY.md`](../../../../sovereign/docs/specs/SCHEDULER_QUALITY.md).
+//! [`docs/specs/SCHEDULER_QUALITY.md`](../../../../svrn/docs/specs/SCHEDULER_QUALITY.md).
 //!
 //! # Why this exists
 //!

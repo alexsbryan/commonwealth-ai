@@ -2,7 +2,7 @@
 <script lang="ts">
   // Atlas Inspector — conversation detail view.
   //
-  // Spec: sovereign/docs/specs/CONV_TIERED_PORT.md §"A1 conv corpora
+  // Spec: svrn/docs/specs/CONV_TIERED_PORT.md §"A1 conv corpora
   // in Atlas index — ConvDetail".
   //
   // Renders one conversation's full enrichment surface:

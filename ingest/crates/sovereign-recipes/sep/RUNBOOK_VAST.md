@@ -3,7 +3,7 @@
 > **Worker-mode rewrite — 2026-05-15.** `mesh pod up` no longer
 > joins pods to the mesh. Pods are now owner-only ephemeral workers
 > over a TLS-pinned channel; see
-> [`sovereign/docs/EPHEMERAL_WORKER_PODS.md`](../../../../sovereign/docs/EPHEMERAL_WORKER_PODS.md)
+> [`svrn/docs/EPHEMERAL_WORKER_PODS.md`](../../../../svrn/docs/EPHEMERAL_WORKER_PODS.md)
 > for the new architecture. The owner-side env-var contract shrunk
 > from 8 fields to 2 (`SOVEREIGN_VAST_IMAGE` + `vastai` CLI auth).
 >
@@ -346,7 +346,7 @@ sections (0=GPU diag, 1=Tailscale, 2=R2 sync, 3=config, 4=daemon).
 | `ingest/crates/sovereign-recipes/sep/pipelines/sep-core-v1.toml` | Recipe — edit to tune retries/concurrency/schedule |
 | `serve/container/Containerfile.cuda` | Pod image source — rebuild + push after edits |
 | `serve/container/entrypoint.sh` | Pod boot script — same: rebuild + push after edits |
-| `sovereign/crates/sovereign-cli/src/pipeline_cmd.rs:cmd_pod_up` | The CLI side; env-var validation + R2 preflight + onstart synthesis |
+| `svrn/crates/sovereign-cli/src/pipeline_cmd.rs:cmd_pod_up` | The CLI side; env-var validation + R2 preflight + onstart synthesis |
 
 ## When you don't need a pod
 

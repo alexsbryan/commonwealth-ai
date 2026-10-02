@@ -33,9 +33,9 @@ use sovereign_cli_shared::cli_contract::{Contract, Visibility};
 /// Seeded with the stable, fully-documented verbs; expand over time.
 const FLAG_STRICT_VERBS: &[&str] = &["setup", "doctor", "chat", "drift", "pipeline"];
 
-/// Repo path to the `sovereign/` tree.
-fn sovereign_root() -> PathBuf {
-    repo_root().join("sovereign")
+/// Repo path to the `svrn/` tree.
+fn svrn_root() -> PathBuf {
+    repo_root().join("svrn")
 }
 
 #[path = "shared/repo_root.rs"]
@@ -43,7 +43,7 @@ mod repo_root;
 use repo_root::repo_root;
 
 fn read(rel: &str) -> String {
-    let p = sovereign_root().join(rel);
+    let p = svrn_root().join(rel);
     std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()))
 }
 

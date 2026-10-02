@@ -137,7 +137,7 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   `write-is-acyclic` :317 (failing input: "Two processes writing chunks.lance concurrently …
   `svrn enrich` while the daemon is up"). `a-process-writes-only-what-it-is-granted` :322 stays
   false — nothing in this order addresses it. corpus-index store `today` :166.
-- **Uncommitted now** and touched by these rows: `sovereign/SYSTEM_OVERVIEW.md` only
+- **Uncommitted now** and touched by these rows: `docs/SYSTEM_OVERVIEW.md` only
   (`git status --short` over the rows' paths). `ingest/crates/corpus-engine/src/enrichment/state.rs` is dirty and
   is NOT touched by this order (the enrichment catalog is a different store).
 
@@ -186,7 +186,7 @@ this rung's); both HUMAN rows (both are approval-time decisions with `depends []
   `sovereign-contracts/src/run_lock.rs`, which is why `hd-3-config-lock` depends on the guard row
   rather than running as a free lane.
 - **hd-6 (principal)** touches sovereign-grants and sovereign-api. No overlap.
-- `sovereign/SYSTEM_OVERVIEW.md` is edited by every rung and is dirty now: the peer's hunks must be
+- `docs/SYSTEM_OVERVIEW.md` is edited by every rung and is dirty now: the peer's hunks must be
   committed before a REVIEW row in the main tree runs `git add` on it.
 - The domains pool moves files between crates. Re-grep every path premise before a row starts.
 

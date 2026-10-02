@@ -17,4 +17,4 @@ change.
 
 <!-- Optional: trade-offs, things you're unsure about, follow-ups you're leaving for later. -->
 
-<!-- If you added, removed, or reshaped a subsystem, a note in sovereign/SYSTEM_OVERVIEW.md keeps the map honest. -->
+<!-- If you added, removed, or reshaped a subsystem, a note in docs/SYSTEM_OVERVIEW.md keeps the map honest. -->

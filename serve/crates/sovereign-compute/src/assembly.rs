@@ -98,7 +98,7 @@ impl std::fmt::Display for AssemblyError {
 }
 
 /// Env name for the automatic next-edit fallback. Declared in
-/// `quality/env-flags.toml`; ledger row in `sovereign/DEFAULTS_LEDGER.md`.
+/// `quality/env-flags.toml`; ledger row in `docs/DEFAULTS_LEDGER.md`.
 const NEXT_EDIT_FALLBACK_ENV: &str = "SOVEREIGN_NEXT_EDIT_FALLBACK";
 
 /// Is the automatic next-edit fallback armed?
@@ -375,7 +375,7 @@ fn build_in_process(
             // Nothing configured. Serve next-edit off the resident chat
             // model rather than serving nothing (`NEXT_EDIT.md` §graceful
             // degradation). Default OFF pending a bench baseline on the
-            // fast slot — see `sovereign/DEFAULTS_LEDGER.md`.
+            // fast slot — see `docs/DEFAULTS_LEDGER.md`.
             None if plan.in_process.contains(&PlannedSlot::NextEditFallback) => {
                 if let Err(e) = arc.install_fallback_next_edit_slot(NextEditFormat::default()) {
                     tracing::warn!(

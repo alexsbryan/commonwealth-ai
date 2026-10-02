@@ -13,10 +13,10 @@ const REPO: &str = "/home/alexbryan/dev/commonwealth-ai";
 const OUT: &str = "/home/alexbryan/.sovereign/indexes/commonwealth-ai/facts.json";
 // crates whose src covers the 25-claim bank's evidence
 const ROOTS: &[&str] = &[
-    "sovereign/crates/sovereign-core/src",
+    "svrn/crates/sovereign-core/src",
     "sovereign/crates/sovereign-mesh/src",
-    "sovereign/crates/sovereign-tools/src",
-    "sovereign/crates/sovereign-cli-daemon/src",
+    "svrn/crates/sovereign-tools/src",
+    "svrn/crates/sovereign-cli-daemon/src",
     "ingest/crates/corpus-engine/src",
     "shared/crates/corpus-engine-scip/src",
 ];

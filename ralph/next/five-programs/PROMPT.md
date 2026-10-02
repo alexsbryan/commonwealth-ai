@@ -162,7 +162,7 @@ growth past a cap is a design finding, never a queue edit. Commit
 row `[x]`.
 
 **`REVIEW-audit-fp-<n>`.** Run TESTALL and PREPUSH. Read `git log` and
-`git diff` since the previous audit against `sovereign/ARCH_PRINCIPLES.md`
+`git diff` since the previous audit against `docs/ARCH_PRINCIPLES.md`
 ("The twelve"). Fix what you find, behaviour-preserving, and record each finding in
 `ralph/REVIEW_FINDINGS.md`: principle, path:line, fixed-in hash. A red gate
 you cannot make green: §6.
@@ -218,7 +218,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   an `except` list unless the row names that exact row.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
   `scripts/ralph*`. Never stop or restart the DEPLOYED daemon (the one
   `svrn daemon status` names). Never touch `ralph/STOP`,
   `ralph/NEEDS_HUMAN.md`, or another queue's directory under `ralph/next/`.
@@ -230,5 +230,5 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   without its decision saying so is §6.
 - A `[[package_leaf]]` admission must be one the queue row names exactly; the
   leaf test is: no fs, no store, workspace deps ⊆ the leaf's allow-list.
-- When a row changes a subsystem `sovereign/SYSTEM_OVERVIEW.md` describes, fix
+- When a row changes a subsystem `docs/SYSTEM_OVERVIEW.md` describes, fix
   that one line in the same commit (principle 3). Nothing more.

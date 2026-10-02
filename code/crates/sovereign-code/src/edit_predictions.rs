@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `POST /v1/edit_predictions` — next-edit prediction, both lanes
-//! (`sovereign/docs/NEXT_EDIT.md` §3). Deliberately thin over the pure
+//! (`svrn/docs/NEXT_EDIT.md` §3). Deliberately thin over the pure
 //! pipelines: parse + validate the wire shape, convert the client's
 //! UTF-16 offsets to bytes, predict, convert back. The rule lane
 //! ([`code_next_edit::next_edit`]) always runs first and needs no inference;
@@ -59,7 +59,7 @@ pub struct EditDoor {
     pub indexes_dir: PathBuf,
     /// serve's base on this host, which the model lane dials.
     pub serve_base: String,
-    /// One-in-flight budget for the model lane (`sovereign/docs/NEXT_EDIT.md`
+    /// One-in-flight budget for the model lane (`svrn/docs/NEXT_EDIT.md`
     /// §4): a consult that finds the slot busy is dropped immediately
     /// (`dropped: "busy"`), never queued — ghost text and chat always win
     /// the slot. `Arc` so the permit moves into the task that runs the

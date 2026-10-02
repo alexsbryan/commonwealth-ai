@@ -3,7 +3,7 @@
 //! inference scheduler route requests to an ephemeral worker pod the
 //! same way it routes to a persistent mesh peer.
 //!
-//! Spec: `sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md`.
+//! Spec: `svrn/docs/PINNED_WORKER_AS_INFERENCE_PEER.md`.
 //!
 //! ## What it carries
 //!

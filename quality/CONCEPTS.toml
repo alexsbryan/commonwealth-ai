@@ -780,7 +780,7 @@ today       = "2026-08-16: 13 variants, ~500 variant references, and at least se
 
 [[concept]]
 name        = "Command"
-canonical   = "sovereign/docs/cli-contract.toml"
+canonical   = "svrn/docs/cli-contract.toml"
 disposition = "converge"
 totality    = "The contract is GENERATIVE. Parser, dispatch, help text and reference docs are produced from it. A command not in the contract does not exist; a contract row nothing implements does not compile. (Non-type canonical: the concept-gate treats the contract file as the owner; type-level gating does not apply.)"
 gloss      = '''one CLI promise.'''

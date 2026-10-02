@@ -464,11 +464,11 @@ to 79% / 83% after a Tier-2 pass on 52 high-value articles.
 - **`src/enrichment/pipeline/pipelines/`** — the open surface: one
   module per pipeline (`literary_atlas`, `philosophy_atlas`,
   `referential_atlas`) with its prompt assets.
-- **`sovereign/crates/sovereign-cli/src/enrich_cmd/`** — every CLI
+- **`svrn/crates/sovereign-cli/src/enrich_cmd/`** — every CLI
   subcommand (`init`, `extract`, `ingest`, `triage-candidates`,
   `atlas-eval`, `atlas-resolve`, `atlas-tensions`, `schema-report`,
   `schema-review`, `atlas-cross-corpus`).
-- **`sovereign/crates/sovereign-cli/src/eval_cmd/`** — `eval run` and
+- **`svrn/crates/sovereign-cli/src/eval_cmd/`** — `eval run` and
   the `--with-atlas` wiring.
 
 When something breaks in production, the most useful starting point is

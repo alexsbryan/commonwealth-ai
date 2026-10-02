@@ -12,7 +12,7 @@ this directory covers multi-turn dynamics specific to inner-work
 12-turn fixture forcing the rolling-summary memory compaction
 worker past its `threshold = 6` boundary. Paired with the mechanical
 smoke at
-`sovereign/crates/sovereign-core/tests/memory_compaction_smoke.rs`.
+`svrn/crates/sovereign-core/tests/memory_compaction_smoke.rs`.
 
 **Pass criteria** (verified by the to-be-written inner-work bench
 runner — currently the fixture is a placeholder consumer for it):

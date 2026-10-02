@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """P1 — the parity-plan verdict for the flag-on composition.
 
-The bars are `sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md` §4.1,
+The bars are `svrn/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md` §4.1,
 pre-registered before this composition was written and NOT restated here
 with different numbers:
 

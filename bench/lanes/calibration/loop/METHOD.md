@@ -1,7 +1,7 @@
 # The tuning loop — method (one page)
 
 Order `native-grounding-tuning-loop` (directive 44f48dd6). The parity plan
-(`sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md`) supplies the work
+(`svrn/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md`) supplies the work
 queue (§3 conversion ledger) and the outer bars (§4). This directory
 supplies the method. Everything here is glue over committed apparatus —
 nothing new was built beyond the drivers in this directory.

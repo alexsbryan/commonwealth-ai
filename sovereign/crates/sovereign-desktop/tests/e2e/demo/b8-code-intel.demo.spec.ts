@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // B8 — Ask your codebase a question you can't grep for.
 //
-// Thesis and answer-key: sovereign/docs/specs/CODE_INTEL_CHAT.md. The
+// Thesis and answer-key: svrn/docs/specs/CODE_INTEL_CHAT.md. The
 // audience is the CTO who can smell BS: the buy-trigger is "turn the
 // subsystem I'm afraid to touch into one I can change with confidence",
 // and the moat is that the code never leaves the laptop.

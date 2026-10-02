@@ -189,7 +189,7 @@ def lane_p2_code_certain(files: list[str]) -> list[str]:
            if "/examples/" in f and f.endswith(".rs")
            and not f.startswith("vendor/")
            and os.path.basename(f)[:-3] in dead]
-    ps = "sovereign/crates/sovereign-store/src/postgres.rs"
+    ps = "svrn/crates/sovereign-store/src/postgres.rs"
     if ps in set(files):
         out.append(ps)
     return sorted(set(out))

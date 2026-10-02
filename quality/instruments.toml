@@ -177,8 +177,8 @@ censused_surfaces = [
   "scripts/run-if-stale.sh",
   "sovereign/crates/sovereign-desktop/package.json",
   "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md",
-  "sovereign/docs/TESTING_SURFACE.md",
-  "sovereign/docs/specs/DAEMON_RESILIENCE.md",
+  "svrn/docs/TESTING_SURFACE.md",
+  "svrn/docs/specs/DAEMON_RESILIENCE.md",
 ]
 
 # ── xtask ratchets — the checks a diff cannot answer ─────────────────
@@ -195,7 +195,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "sovereign/ARCH_PRINCIPLES.md §1.1"
+doc = "docs/ARCH_PRINCIPLES.md §1.1"
 
 [[instrument]]
 id = "arch-gate"
@@ -209,10 +209,10 @@ baseline = { kind = "count", path = "quality/baselines/oversized.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
 # when_changed: file sizes over `.rs`, plus the instruction surface it censuses (arch_gate.rs
-#               names AGENTS.md, .claude/CLAUDE.md, sovereign/SYSTEM_OVERVIEW.md) and its
+#               names AGENTS.md, .claude/CLAUDE.md, docs/SYSTEM_OVERVIEW.md) and its
 #               three baselines. Superset: a `.rs` anywhere re-selects it.
 when_changed = "(\\.rs$|^AGENTS\\.md$|^\\.claude/CLAUDE\\.md$|^sovereign/SYSTEM_OVERVIEW\\.md$|^quality/baselines/)"
-doc = "sovereign/ARCH_PRINCIPLES.md §3.1"
+doc = "docs/ARCH_PRINCIPLES.md §3.1"
 
 [[instrument]]
 id = "boundary-gate"
@@ -238,7 +238,7 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/fan_in.tsv" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "sovereign/ARCH_PRINCIPLES.md §8"
+doc = "docs/ARCH_PRINCIPLES.md §8"
 
 [[instrument]]
 id = "lifecycle-gate"
@@ -268,7 +268,7 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/lock_dups.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "sovereign/ARCH_PRINCIPLES.md §8.2"
+doc = "docs/ARCH_PRINCIPLES.md §8.2"
 
 [[instrument]]
 id = "layout-gate"
@@ -284,7 +284,7 @@ runs_in = ["prepush", "ci:gates"]
 # when_changed: walks `.rs` under the declared crate trees against
 #               quality/baselines/corpus_layout.txt.
 when_changed = "(\\.rs$|^quality/baselines/)"
-doc = "sovereign/ARCH_PRINCIPLES.md §3"
+doc = "docs/ARCH_PRINCIPLES.md §3"
 
 [[instrument]]
 id = "env-gate"
@@ -318,7 +318,7 @@ negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
 # when_changed: scans `.rs` for direct clock reads against quality/baselines/clock_reads.txt.
 when_changed = "(\\.rs$|^quality/baselines/)"
-doc = "sovereign/ARCH_PRINCIPLES.md §9"
+doc = "docs/ARCH_PRINCIPLES.md §9"
 
 [[instrument]]
 id = "concept-gate"
@@ -409,7 +409,7 @@ baseline = { kind = "none" }
 # the control.
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-cli-llm/src/judge_replay.rs (module header)"
+doc = "svrn/crates/sovereign-cli-llm/src/judge_replay.rs (module header)"
 load_bearing = [
   { flag = "--render-only", why = "the mechanical facet without a daemon, bit-stable across repeats — it is how a rendering change is proven not to have moved the register" },
   { flag = "--repeat N", why = "one run is not a measurement (ARCH §18.5); without it the verdict spread is unknown and a flip cannot be told from noise" },
@@ -1005,7 +1005,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush"]
-when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^Cargo\\.lock$|^rust-toolchain\\.toml$|^\\.cargo/|^vendor/|^scripts/sovereign-test\\.sh$|^scripts/lib/|^sovereign/crates/sovereign-tools/src/code/test_adapters/|^sovereign/docs/cli-contract\\.toml$|^sovereign/scripts/cli-journey-.*\\.sh$|^sovereign/scripts/tests/)"
+when_changed = "(\\.rs$|(^|/)Cargo\\.toml$|^Cargo\\.lock$|^rust-toolchain\\.toml$|^\\.cargo/|^vendor/|^scripts/sovereign-test\\.sh$|^scripts/lib/|^svrn/crates/sovereign-tools/src/code/test_adapters/|^svrn/docs/cli-contract\\.toml$|^svrn/scripts/cli-journey-.*\\.sh$|^svrn/scripts/tests/)"
 # Exit 3 = the check could not RUN on this host: a third-party build script
 # failed and no first-party diagnostic was emitted, so nothing in the diff
 # can fix it (the native deps live in the dev toolbox). The script decides
@@ -1195,14 +1195,14 @@ load_bearing = [
 id = "cli-journey-selftest"
 kind = "control"
 claim = "invariant"
-command = "sovereign/scripts/tests/cli-journey-selftest.sh"
+command = "svrn/scripts/tests/cli-journey-selftest.sh"
 cost_secs = 3.0
 enforcement = "hard"
 fidelity = "F1"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["ci:test"]
-doc = "sovereign/docs/cli-contract.toml (journeys)"
+doc = "svrn/docs/cli-contract.toml (journeys)"
 load_bearing = [
   { flag = "(ten negative controls)", why = "it drives the real journey runner against a stub CLI and a loopback stub daemon and proves it FAILS a wrong exit code, a missing substring, a non-reversing mutation, and that it aborts a sequence after a failed step" },
 ]
@@ -1317,7 +1317,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 baseline = { kind = "metrics", path = "bench/lanes/quality-check" }
 negative_control = "none"
 runs_in = ["smoke:2", "by-hand"]
-doc = "sovereign/docs/CLI_REFERENCE.md#svrn-quality"
+doc = "svrn/docs/CLI_REFERENCE.md#svrn-quality"
 load_bearing = [
   { flag = "--mint", why = "without it a first run against a NEW stack fingerprint writes no baseline at all — deliberately, so a drifting stack cannot silently re-mint its own bar" },
   { flag = "--budget-secs", why = "a lane with under 60s of runway is could-not-judge, not a pass. `--budget-secs 0` is the cheap structural proof the journey drives" },
@@ -1749,7 +1749,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses"
 id = "smoke-attach-mode"
 kind = "probe"
 claim = "invariant"
-command = "sovereign/scripts/smoke-attach-mode.sh"
+command = "svrn/scripts/smoke-attach-mode.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F3"
@@ -1796,7 +1796,7 @@ load_bearing = [
 id = "contract-nightly"
 kind = "suite"
 claim = "invariant"
-command = "sovereign/scripts/cli-journey-nightly.sh"
+command = "svrn/scripts/cli-journey-nightly.sh"
 cost_secs = "unmeasured"
 enforcement = "hard"
 fidelity = "F3"
@@ -1804,13 +1804,13 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "cli-journey-selftest"
 runs_in = ["run-if-stale", "nightly"]
-doc = "sovereign/docs/cli-contract.toml (journeys)"
+doc = "svrn/docs/cli-contract.toml (journeys)"
 
 [[instrument]]
 id = "cli-journey-verify"
 kind = "suite"
 claim = "invariant"
-command = "sovereign/scripts/cli-journey-verify.sh --tier 2"
+command = "svrn/scripts/cli-journey-verify.sh --tier 2"
 cost_secs = "unmeasured"
 enforcement = "hard"
 fidelity = "F3"
@@ -1818,7 +1818,7 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "cli-journey-selftest"
 runs_in = ["by-hand"]
-doc = "sovereign/docs/cli-contract.toml (journeys)"
+doc = "svrn/docs/cli-contract.toml (journeys)"
 load_bearing = [
   { flag = "--mutating", why = "REFUSES unless SOVEREIGN_JOURNEY_ISOLATED=1 and the daemon URL is not the default :9741 — mutating steps install/remove corpora and join/leave meshes" },
 ]
@@ -1848,7 +1848,7 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "metrics", path = "quality/baselines/oicp" }
 negative_control = "none"
 runs_in = ["run-if-stale"]
-doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row)"
+doc = "svrn/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row)"
 
 # ── The refresh commands behind `svrn posture`'s rows ────────────────
 
@@ -1864,7 +1864,7 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (drift_row)"
+doc = "svrn/crates/sovereign-cli/src/posture_cmd.rs (drift_row)"
 
 [[instrument]]
 id = "arch-report"
@@ -1877,7 +1877,7 @@ fidelity = "F2"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row)"
+doc = "svrn/crates/sovereign-cli/src/posture_cmd.rs (arch_row)"
 
 [[instrument]]
 id = "capability-map"
@@ -1890,7 +1890,7 @@ fidelity = "F2"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/crates/sovereign-cli/src/posture_cmd.rs (capability_row)"
+doc = "svrn/crates/sovereign-cli/src/posture_cmd.rs (capability_row)"
 
 
 # ── The four the doc's "off the map" paragraph named ─────────────────
@@ -1915,7 +1915,7 @@ preconditions = ["binary:sovereign-desktop", "port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:6", "by-hand"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
   { flag = "SOVEREIGN_FORCE_LOCAL UNSET", why = "the coverage claim SURVIVED svt-2 and its mechanism did not. It used to read `SOVEREIGN_CLI_PATH UNSET`, because every other supervised lane pinned that and this one did not, so only this lane took resolve_daemon_child()'s `current_exe() --daemon-child` branch. Supervision and that function are gone (99a0b1520). What is left is the same shape one rung out: this script unsets SOVEREIGN_FORCE_LOCAL (wizard-verify.sh:109) and drives a fresh profile, so it is still the only thing exercising the DEFAULT wizard path — the sidecar beside the executable, resolved by daemon_binary::stable_daemon_binary and brought up detached by serving_host::ensure_reachable. journeys/first-launch-setup.journey.spec.ts:86 SETS the flag, which is why the journey covers the branch real users never take (GUEST_QA_DESIGN.md:31-40)" },
   { flag = "a private netns (Linux) / checked-free ports (macOS)", why = "there is no netns equivalent on darwin, so it REFUSES to start unless :9741 and :9745 are free — which desktop-smoke.sh Phase 6 arranges" },
@@ -1932,7 +1932,7 @@ fidelity = "F3"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 
 [[instrument]]
 id = "daemon-soak-report"
@@ -1945,7 +1945,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "daemon-soak-report-selftest"
 runs_in = ["run-if-stale"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
   { flag = "the daemon's own exit receipts, not supervisor.log", why = "the crash-loop FAIL counted restarts out of `logs/supervisor.log`, which only `scripts/daemon-supervised.sh` writes. On every launchd and systemd install the file is absent, the block emitted one WARN, and the headline verdict was unreachable by any input (ARCH §18.1). It counts `daemon: shutdown signal received` across the live log and the rotated `.bak` copies since 2026-09-08" },
   { flag = "exit 2 (WARN) renders `failed`, deliberately", why = "the script's contract is 0 PASS / 1 FAIL / 2 WARN and the registry has four verdicts, none of them `warn`. Read on the exit code, a WARN is a FAIL — the safe direction, because the other one hides. It IS red on this host today, and that is the finding rather than noise: the daemon logged five exits in the last 24 hours. If it ever goes red on something that does not deserve a look, raise the script's warn bar; do not add a verdict to make the row quiet" },
@@ -1965,7 +1965,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["run-if-stale"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 
 # ── The concurrency lane (product-defects-batch entry 3) ─────────────
 #
@@ -1988,7 +1988,7 @@ baseline = { kind = "none" }
 negative_control = "daemon-concurrency-soak-control"
 could_not_judge_exits = [2]
 runs_in = ["run-if-stale"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
   { flag = "NO host-quiet precondition", why = "contention is the condition to measure under, not one to wait out. The 1-minute load is recorded per turn and reported as a covariate; a soak that only runs on a quiet box measures a state that never occurs in use" },
   { flag = "the kernel corroboration on the jetsam class", why = "`log_shutdown_context` calls any SIGTERM above 24 GiB peak RSS a possible jetsam, and this daemon carries ~36 GiB three minutes after boot with `inference.resident = []` — so the daemon's own verdict fires on every operator stop here. Without `os_confirms_memory_kill` this lane scores a peer's `daemon stop` as the defect it was built to catch (ARCH §18.1: a guard asserting on a field the subject supplies)" },
@@ -2012,7 +2012,7 @@ preconditions = ["port-listening:9741", "corpus-installed:sep"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["run-if-stale"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
   { flag = "it RESTORES the daemon it killed", why = "launchd here declares `KeepAlive { SuccessfulExit = false }` and did NOT relaunch after an injected SIGKILL, so a control that does not put the daemon back leaves the operator's box without one — and a negative control nobody dares schedule is one that never runs. `--no-restore` opts out for a deliberate teardown" },
 ]
@@ -2034,7 +2034,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["run-if-stale"]
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 
 [[instrument]]
 id = "mesh-soak"
@@ -2143,7 +2143,7 @@ doc = ".github/workflows/ci.yml (why the `dst` job is shelved: `dst` resolves in
 id = "cli-contract-live-verify"
 kind = "check"
 claim = "invariant"
-command = "sovereign/scripts/cli-contract-live-verify.sh"
+command = "svrn/scripts/cli-contract-live-verify.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F3"
@@ -2151,20 +2151,20 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "sovereign/docs/TESTING_SURFACE.md"
+doc = "svrn/docs/TESTING_SURFACE.md"
 
 [[instrument]]
 id = "cli-journey-sandbox"
 kind = "suite"
 claim = "invariant"
-command = "sovereign/scripts/cli-journey-sandbox.sh"
+command = "svrn/scripts/cli-journey-sandbox.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F3"
 baseline = { kind = "none" }
 negative_control = "cli-journey-selftest"
 runs_in = ["by-hand"]
-doc = "sovereign/docs/TESTING_SURFACE.md"
+doc = "svrn/docs/TESTING_SURFACE.md"
 load_bearing = [
   { flag = "an isolated HOME + a non-default daemon port", why = "the only way a MUTATING journey tier may run: its steps install/remove corpora and join/leave meshes, so on the operator's real root it would eat live state" },
 ]
@@ -2263,7 +2263,7 @@ baseline = { kind = "fingerprint", path = "bench/lanes/quality-check/baselines/c
 bank = "bench/lanes/quality-check/chat-ask.toml"
 negative_control = "none"
 runs_in = ["check"]
-doc = "sovereign/crates/sovereign-cli/src/quality_check_cmd/mod.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run)"
+doc = "svrn/crates/sovereign-cli/src/quality_check_cmd/mod.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run)"
 
 # EVERY row of this lane is wall-clock (TTFT, decode tok/s), and this host
 # moves 2.8x under load — 50.7 tok/s at load 3.7 against 17.8 at load 32 (note

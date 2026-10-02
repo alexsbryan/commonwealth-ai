@@ -137,7 +137,7 @@ pub const PREBUILT_PROBE_SAMPLE: usize = 16;
 /// compatible" from "would poison the index".
 ///
 /// ONE owner. It was `pub(crate)` in `engine/ingest_prebuilt.rs`, which is why
-/// `corpus-mcp/src/serve.rs` carried a hand-copied `0.92` with a comment
+/// `svrn/crates/corpus-mcp/src/serve.rs` carried a hand-copied `0.92` with a comment
 /// apologising for it (ARCH §10.6). Import it.
 pub const PREBUILT_PROBE_THRESHOLD: f32 = 0.92;
 

@@ -2,7 +2,7 @@
 
 Conventions enforced for the Svelte 5 + Tauri 2 desktop frontend at
 `crates/sovereign-desktop/src/`. Pair with
-[`../../ARCH_PRINCIPLES.md`](../../ARCH_PRINCIPLES.md) — these are
+[`docs/ARCH_PRINCIPLES.md`](../../../docs/ARCH_PRINCIPLES.md) — these are
 the frontend-specific addenda.
 
 **Verifying your change:** this file says which tool to test a given

@@ -1,7 +1,7 @@
 # Inner-work rolling-summary memory compaction — behavioural bench.
 #
 # Pairs with the mechanical smoke at
-# `sovereign/crates/sovereign-core/tests/memory_compaction_smoke.rs`.
+# `svrn/crates/sovereign-core/tests/memory_compaction_smoke.rs`.
 # That smoke proves the worker FOLDS correctly with an in-memory
 # store + scripted inference. This bench proves the system PRESERVES
 # witness quality across a session that crosses the K=6 threshold —

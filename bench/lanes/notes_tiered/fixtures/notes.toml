@@ -1,7 +1,7 @@
 # Notes fixture for the notes_tiered bench.
 #
 # Synthesised from the 2026-05-25 audit table in
-# `sovereign/docs/specs/NOTES_TIERED.md` (the "Problem (measured)"
+# `svrn/docs/specs/NOTES_TIERED.md` (the "Problem (measured)"
 # section). Each note here exercises a specific FTS5 failure mode
 # that the audit surfaced — synonym mismatch, stem mismatch,
 # paraphrase miss — so the T1 semantic blend can be measured
@@ -36,7 +36,7 @@ id = "n1"
 kind = "invariant"
 content = "Decoder must accept every emitted token; naive EOS check via byte length skips empty-bytes tokens. Use force_continue=true to bypass."
 symbols = ["embedded.rs", "decoder"]
-files = ["sovereign/crates/sovereign-core/src/embedded.rs"]
+files = ["svrn/crates/sovereign-core/src/embedded.rs"]
 session_id = "audit-2026-05-25"
 
 [[notes]]
@@ -82,7 +82,7 @@ id = "n6"
 kind = "invariant"
 content = "chat_template lookup must retry on BuffSizeError; tokenizer 8KB cap truncated Gemma 4 template silently"
 symbols = ["tokenizer", "chat_template"]
-files = ["sovereign/crates/sovereign-core/src/embedded.rs"]
+files = ["svrn/crates/sovereign-core/src/embedded.rs"]
 session_id = "audit-2026-05-25"
 
 [[notes]]
@@ -108,7 +108,7 @@ id = "n9"
 kind = "invariant"
 content = "tools-bearing gym fixtures skip the MTP / speculative decoding path entirely — gate at embedded.rs:701"
 symbols = ["MTP", "tools"]
-files = ["sovereign/crates/sovereign-core/src/embedded.rs"]
+files = ["svrn/crates/sovereign-core/src/embedded.rs"]
 session_id = "audit-2026-05-25"
 
 [[notes]]
@@ -142,7 +142,7 @@ id = "n13"
 kind = "decision"
 content = "reranker pass after BM25 chunk retrieval; uses qwen-rerank-0.6b under the embed slot"
 symbols = ["reranker"]
-files = ["sovereign/crates/sovereign-core/src/runtime.rs"]
+files = ["svrn/crates/sovereign-core/src/runtime.rs"]
 session_id = "audit-2026-05-25"
 
 [[notes]]

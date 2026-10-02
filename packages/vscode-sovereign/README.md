@@ -213,7 +213,7 @@ exactly that shape, so it is withheld pending a deterministic engine.
 Full walkthrough, including how to read the reasoning behind any
 suggestion or silence: [Next edit in your
 editor](../../docs/NEXT_EDIT_IN_YOUR_EDITOR.md). Design + policy:
-`sovereign/docs/NEXT_EDIT.md`.
+`svrn/docs/NEXT_EDIT.md`.
 
 ## Seeing what's going on (glassbox)
 
@@ -318,5 +318,5 @@ with prefix caching (typing only re-processes the delta), and applies
 structural stop rules (single-line vs block-body, dedupe against the text
 after your cursor) — all visible via the debug payload. Cancellation is
 real: superseded keystrokes close the socket and the model stops
-mid-token. The full design lives in `sovereign/docs/INLINE_COMPLETION.md`
+mid-token. The full design lives in `svrn/docs/INLINE_COMPLETION.md`
 in the source tree, which opens with the beta.

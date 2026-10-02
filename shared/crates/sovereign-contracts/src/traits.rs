@@ -593,8 +593,8 @@ pub trait InferenceProvider: Send + Sync {
 
     /// Live description of the code-editing serving arrangement —
     /// which model serves editing assistance and which of the two
-    /// lanes it can actually serve (`sovereign/docs/NEXT_EDIT.md`,
-    /// `sovereign/docs/INLINE_COMPLETION.md`).
+    /// lanes it can actually serve (`svrn/docs/NEXT_EDIT.md`,
+    /// `svrn/docs/INLINE_COMPLETION.md`).
     ///
     /// `None` means no editing model is available at all. A `Some`
     /// whose [`EditSlotInfo::fim`] is `None` is the ordinary case for

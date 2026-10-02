@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! FIM inline-completion adapter — the seam implementation behind
 //! `LocalInferenceService::fim_completion_stream`
-//! (`sovereign/docs/INLINE_COMPLETION.md`, decisions D3/D6).
+//! (`svrn/docs/INLINE_COMPLETION.md`, decisions D3/D6).
 //!
 //! Pipeline per request: gate on `edit_slot_info()` **and on its FIM
 //! lane** (either missing → the 503 message the route surfaces

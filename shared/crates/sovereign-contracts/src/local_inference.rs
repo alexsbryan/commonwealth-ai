@@ -68,7 +68,7 @@ pub trait LocalInferenceService: InferenceProvider {
     fn provider_manifest(&self) -> Option<crate::oicp::ProviderManifest>;
 
     /// FIM inline completion (`POST /v1/completions`,
-    /// `sovereign/docs/INLINE_COMPLETION.md`). Default `Err` — the
+    /// `svrn/docs/INLINE_COMPLETION.md`). Default `Err` — the
     /// route maps it to 503 with the actionable `[models.fim]` fix.
     /// Only the embedded llama.cpp adapter overrides.
     async fn fim_completion_stream(

@@ -61,7 +61,7 @@ fn the_svrn_remainder_names_no_ingest_crate() {
     );
     let needle = regex::Regex::new(&pattern).unwrap();
 
-    let src = root.join("sovereign/crates/sovereign-cli-llm/src");
+    let src = root.join("svrn/crates/sovereign-cli-llm/src");
     let mut files = Vec::new();
     rs_files(&src, &mut files);
     files.sort();

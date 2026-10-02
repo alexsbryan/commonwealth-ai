@@ -13,7 +13,7 @@ WHY --db HAS NO DEFAULT. Nothing in this repo can bulk-read the store: the CLI
 and the daemon's `/v1/notes/query` both cap a read at 100
 (sovereign-cli/src/notes_cmd.rs:200, sovereign-mesh/src/notes_http.rs:201), and
 the CLI's local lookup follows `~/.svrnmesh/active_notes_db`, which on
-2026-09-13 named the nested `sovereign/.sovereign/notes.db` rather than the
+2026-09-13 named the nested `svrn/.sovereign/notes.db` rather than the
 daemon's `~/.svrnmesh/notes.db`. A default here would be one more hand-derived
 path that can export the wrong store without a word (ARCH principles 6, 8).
 

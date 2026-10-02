@@ -35,7 +35,7 @@ id           = "wr-kinds-are-read"
 demo         = "Add a field to Limits and watch the build refuse it"
 rung         = "wr-1"
 one_line     = "CLAIM: kinds a warrant can carry that the decider never consults = 0, proven per kind and not in aggregate"
-derives_from = "the comment at sovereign/crates/sovereign-grants/src/guest_grant.rs:159-164, which asks the reader not to collapse `None` (no model scope) with `Some(&[])` (a model scope naming nothing) - an assertion in English prose where a test could hold it (ARCH 3, ARCH 10's smell table). `Scope` is a sum where any kind may simply be absent; that absence is the property being removed."
+derives_from = "the comment at svrn/crates/sovereign-grants/src/guest_grant.rs:159-164, which asks the reader not to collapse `None` (no model scope) with `Some(&[])` (a model scope naming nothing) - an assertion in English prose where a test could hold it (ARCH 3, ARCH 10's smell table). `Scope` is a sum where any kind may simply be absent; that absence is the property being removed."
 floor        = 0.0
 floor_basis  = "structural: COUNT of kinds present in `Limits` for which no warrant top-in-that-kind-and-bottom-elsewhere is permitted anything. Zero is the claim, not an aspiration - a kind with no decider arm is inventory, and this bar is what makes `no kind without a consumer` a rule rather than a preference."
 target       = 0.0

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Declared-ontology filters over the Phase-6 candidate set — axis 5's
 //! `tension.between` and axis 3's `tension.same`
-//! (`sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`).
+//! (`svrn/docs/specs/ONTOLOGY_PRIMITIVES.md`).
 //!
 //! Two passes, both no-ops for a corpus that declares nothing:
 //!

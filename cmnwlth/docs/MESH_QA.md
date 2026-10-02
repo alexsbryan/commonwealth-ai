@@ -309,7 +309,7 @@ because a run that quietly fell back to plaintext would otherwise pass.
 **What it cannot prove.** Both daemons are on one host, so every forward is
 on-box. `ServingLocus::ForwardsOffBox` and the off-box `local_only` refusal need
 a second MACHINE and remain unit-tested until one exists
-(`sovereign/docs/specs/MESH_N4_TOPOLOGY.md` §4.5). This is also why no `svrn
+(`svrn/docs/specs/MESH_N4_TOPOLOGY.md` §4.5). This is also why no `svrn
 contract` journey covers terminal onboarding: a journey is a sequence of CLI
 calls in one hermetic `HOME`, and it cannot stand up the mesh peer the binding
 resolves against.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Owner-side controller for ephemeral worker pods.
 //!
-//! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md`. This module is the
+//! Spec: `svrn/docs/EPHEMERAL_WORKER_PODS.md`. This module is the
 //! mirror of `worker_http`: where the pod implements the four routes,
 //! the controller calls them. It owns the full lifecycle:
 //!

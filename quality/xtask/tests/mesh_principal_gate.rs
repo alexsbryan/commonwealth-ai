@@ -4,7 +4,7 @@
 //! which a lifted svrn does not carry. Its lists stay at their historical
 //! path, `sovereign_daemon::mesh_principal_gate`, mounted here and not copied.
 
-#[path = "../../../sovereign/crates/sovereign-daemon/src/mesh_principal_gate.rs"]
+#[path = "../../../svrn/crates/sovereign-daemon/src/mesh_principal_gate.rs"]
 mod gate;
 #[path = "shared/repo_root.rs"]
 mod repo_root;
@@ -14,7 +14,7 @@ use repo_root::repo_root;
 use std::path::{Path, PathBuf};
 
 /// The gate's own file spells the wire form in its lists, as it may.
-const GATE_FILE: &str = "sovereign/crates/sovereign-daemon/src/mesh_principal_gate.rs";
+const GATE_FILE: &str = "svrn/crates/sovereign-daemon/src/mesh_principal_gate.rs";
 
 /// Walk `sovereign/crates` for `.rs` files that are not tests.
 ///

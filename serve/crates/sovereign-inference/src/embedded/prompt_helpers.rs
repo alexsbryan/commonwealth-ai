@@ -280,7 +280,7 @@ pub(crate) fn ctx_n_batch(context_size: u32) -> u32 {
 /// continuation from an identical KV cache, not a defect.
 ///
 /// `=0` opts out. Reversal condition and full evidence:
-/// `sovereign/DEFAULTS_LEDGER.md`.
+/// `docs/DEFAULTS_LEDGER.md`.
 pub(crate) fn mtp_prefill_tail_logits_only() -> bool {
     std::env::var("SOVEREIGN_MTP_PREFILL_TAIL_LOGITS")
         .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))

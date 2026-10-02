@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Fill-in-the-middle (FIM) prompt and stop text — the marker table, the PSM
 //! prompt builder, the mode decision and the pure stream stop tracker
-//! (`sovereign/docs/INLINE_COMPLETION.md`).
+//! (`svrn/docs/INLINE_COMPLETION.md`).
 //!
 //! Moved here from `sovereign_inference::fim` (domains
 //! `REVIEW-build-serving-drop-inference`): the text is arithmetic over

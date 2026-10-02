@@ -40,7 +40,7 @@ fn main() {
 /// Worker-mode entry — runs the ephemeral pod daemon. Skips every
 /// persistent-peer surface (no config, no models, no mesh) and serves
 /// only the four owner-only routes documented in
-/// `sovereign/docs/EPHEMERAL_WORKER_PODS.md`.
+/// `svrn/docs/EPHEMERAL_WORKER_PODS.md`.
 ///
 /// Triggered by `svrn daemon run --worker-mode`. The bootstrap
 /// blob is read from `SOVEREIGN_BOOTSTRAP` env or `--bootstrap-blob

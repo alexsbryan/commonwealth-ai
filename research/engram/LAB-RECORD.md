@@ -353,7 +353,7 @@ llama-cpp-4
 llama-cpp-sys-4
 
 === where is llama-cpp-sys sourced ===
-sovereign/crates/sovereign-cli-llm/Cargo.toml:20:# linked llama-cpp-2 in the first place.
+svrn/crates/sovereign-cli-llm/Cargo.toml:20:# linked llama-cpp-2 in the first place.
 serve/crates/sovereign-inference/Cargo.toml:38:# Jinja2 chat-template renderer. The llama-cpp-4 0.2.x binding
 serve/crates/sovereign-inference/Cargo.toml:51:# llama-cpp-4 binding's `LlamaSampler::llguidance` shim doesn't
 serve/crates/sovereign-inference/Cargo.toml:64:# lands a fix in a llama-cpp-2 release we can pin to.
@@ -372,7 +372,7 @@ serve/crates/sovereign-inference/Cargo.toml:162:llama-cpp-4 = { version = "0.5.1
 serve/crates/sovereign-inference/Cargo.toml:163:llama-cpp-sys-4 = { version = "0.5.1", features = ["rpc"] }
 serve/crates/sovereign-inference/Cargo.toml:173:windows-vulkan = ["llama-cpp-4/vulkan"]
 serve/crates/sovereign-inference/Cargo.toml:174:windows-cuda = ["llama-cpp-4/cuda"]
-sovereign/crates/sovereign-cli/Cargo.toml:16:#   removed: sovereign-inference (llama-cpp-2), sovereign-tools,
+svrn/crates/sovereign-cli/Cargo.toml:16:#   removed: sovereign-inference (llama-cpp-2), sovereign-tools,
 ```
 
 </details>

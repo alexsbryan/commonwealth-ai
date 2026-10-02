@@ -15,10 +15,10 @@ use tree_sitter::{Parser, Query, QueryCursor};
 
 const REPO: &str = "/home/alexbryan/dev/commonwealth-ai";
 const FILES: &[&str] = &[
-    "sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs", // #12 config
-    "sovereign/crates/sovereign-daemon/src/worker.rs",                         // chat URL
-    "ingest/crates/corpus-engine/src/enrichment/code_intel/mod.rs",            // SUMMARY:/ASKS:
-    "sovereign/crates/sovereign-mesh/src/peer_inference.rs",                   // select_route
+    "svrn/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs", // #12 config
+    "svrn/crates/sovereign-daemon/src/worker.rs",                         // chat URL
+    "ingest/crates/corpus-engine/src/enrichment/code_intel/mod.rs",       // SUMMARY:/ASKS:
+    "sovereign/crates/sovereign-mesh/src/peer_inference.rs",              // select_route
 ];
 
 #[derive(Default)]

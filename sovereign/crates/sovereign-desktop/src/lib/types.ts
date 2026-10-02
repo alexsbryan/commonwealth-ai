@@ -2634,7 +2634,7 @@ export interface PageCursor {
 }
 
 // ─── Conversation tiered-retrieval Atlas surface ────────────────
-// Spec: sovereign/docs/specs/CONV_TIERED_PORT.md §"Retrieval
+// Spec: svrn/docs/specs/CONV_TIERED_PORT.md §"Retrieval
 // surface — A1/A2". Conv corpora don't write atoms.json; their
 // tiered enrichment lives in the conv_skeletons / conv_raptor_nodes
 // / conv_motifs SQLite sidecar tables. AtlasIndex calls BOTH
@@ -2779,7 +2779,7 @@ export interface EntityAggregateRow {
  *  `chunk_entity_progress` SQLite row. State: "running" | "complete"
  *  | "incremental" | "failed" | "paused". The "incremental" state
  *  is the Phase B steady-state for live corpora (spec
- *  `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md` §B) — Phase A
+ *  `svrn/docs/specs/PROGRESSIVE_ENRICHMENT.md` §B) — Phase A
  *  finishes "complete", then the daemon's post-ingest hook flips it
  *  to "incremental" once the first delta-extract lands. */
 export interface ChunkEntityProgressRow {

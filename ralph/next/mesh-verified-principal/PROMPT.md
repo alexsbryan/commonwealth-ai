@@ -85,7 +85,7 @@ growth past a cap is a design finding, never a queue edit. Commit
 row `[x]`.
 
 **`REVIEW-audit-rd-<n>`.** Run TESTALL and PREPUSH. Read `git log` and
-`git diff` since the previous audit against `sovereign/ARCH_PRINCIPLES.md`
+`git diff` since the previous audit against `docs/ARCH_PRINCIPLES.md`
 ("The twelve"). Fix what you find, behaviour-preserving, and record each finding in
 `ralph/REVIEW_FINDINGS.md`: principle, path:line, fixed-in hash. A red gate
 you cannot make green: §6.
@@ -142,7 +142,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   an `except` list unless the row names that exact row.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
   `scripts/ralph*`, or ANYTHING under `cmnwlth/crates/commonwealth-rail/` or
   `shared/crates/commonwealth-rail-core/` — the RING RAIL is closed to this
   campaign (its roster is READ through `RingRail::roster`, never changed); a row that
@@ -152,5 +152,5 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   names); the throwaway podman nodes `scripts/ring-room-demo.sh` (and `scripts/ring-doc-demo.sh`, which it sources) start under its own
   `SOVEREIGN_DATA_DIR` are the script's to start and stop, exactly as
   `scripts/ring-offers-demo.sh` does.
-- When a row changes a subsystem `sovereign/SYSTEM_OVERVIEW.md` describes, fix
+- When a row changes a subsystem `docs/SYSTEM_OVERVIEW.md` describes, fix
   that one line in the same commit (principle 3). Nothing more.

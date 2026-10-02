@@ -2,7 +2,7 @@
 <script lang="ts">
   // Atlas Inspector — per-conv-corpus browse view.
   //
-  // Spec: sovereign/docs/specs/CONV_TIERED_PORT.md §"A1 conv corpora
+  // Spec: svrn/docs/specs/CONV_TIERED_PORT.md §"A1 conv corpora
   // in Atlas index".
   //
   // Parallel to AtlasCorpusView.svelte but reads from the SQLite-

@@ -12,7 +12,7 @@ use super::pod;
 /// full lifecycle — useful for kicking off batch ingest runs from
 /// the shell.
 ///
-/// Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md` §"Multi-pod jobs".
+/// Spec: `svrn/docs/EPHEMERAL_WORKER_PODS.md` §"Multi-pod jobs".
 pub(super) async fn cmd_pod_pool(args: &[String]) -> i32 {
     let mut pod_count: usize = 0;
     let mut gpu_name: String = "L40S".into();

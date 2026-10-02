@@ -23,8 +23,8 @@ use crate::common;
 /// The narrative contracts whose citations are gated, plus the newcomer
 /// tour (a compressed rendering of the contract — same rot exposure).
 const DOCS_GATE_DOCS: &[&str] = &[
-    "sovereign/SYSTEM_OVERVIEW.md",
-    "sovereign/ARCH_PRINCIPLES.md",
+    "docs/SYSTEM_OVERVIEW.md",
+    "docs/ARCH_PRINCIPLES.md",
     "docs/ARCHITECTURE_TOUR.md",
     // Added 2026-08-20 with the deletion of the `check_doc_paths` MCP tool,
     // which did this same job on demand and had to be REMEMBERED. Four of this
@@ -51,7 +51,7 @@ const DOCS_GATE_EXTS: &[&str] = &[
 /// which is right for a quantity that legitimately grows. This one does not
 /// grow: a thirteenth principle displaces a twelfth, and having that argument
 /// is the mechanism. There is deliberately no escape flag.
-const ARCH_DOC: &str = "sovereign/ARCH_PRINCIPLES.md";
+const ARCH_DOC: &str = "docs/ARCH_PRINCIPLES.md";
 const ARCH_MAX_TOKENS: usize = 8_000;
 const ARCH_MAX_SECTION_TOKENS: usize = 600;
 const ARCH_MAX_PRINCIPLES: usize = 12;
@@ -208,7 +208,7 @@ pub fn run() -> i32 {
     }
 
     let overview =
-        std::fs::read_to_string(root.join("sovereign/SYSTEM_OVERVIEW.md")).unwrap_or_default();
+        std::fs::read_to_string(root.join("docs/SYSTEM_OVERVIEW.md")).unwrap_or_default();
     let enum_fails = enumeration_failures(&root, &overview, &allow);
     let n_enum = enum_fails.len();
     fails.extend(enum_fails);
@@ -246,7 +246,7 @@ pub fn run() -> i32 {
 /// Citations are
 /// matched as ordered component subsequences against this index, because
 /// the docs deliberately cite in shorthand — `runtime/prompts.rs` for
-/// `sovereign/crates/sovereign-core/src/runtime/prompts.rs`,
+/// `svrn/crates/sovereign-core/src/runtime/prompts.rs`,
 /// `commonwealth-api/admission.rs` skipping the `src/`. Subsequence
 /// matching tolerates that while still failing on a renamed, moved-away,
 /// or deleted terminal file.

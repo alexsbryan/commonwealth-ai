@@ -85,7 +85,7 @@ growth past a cap is a design finding, never a queue edit. Commit
 row `[x]`.
 
 **`REVIEW-audit-e7-<n>`.** Run TESTALL and PREPUSH. Read `git log` and
-`git diff` since the previous audit against `sovereign/ARCH_PRINCIPLES.md`
+`git diff` since the previous audit against `docs/ARCH_PRINCIPLES.md`
 ("The twelve"). Fix what you find, behaviour-preserving, and record each finding in
 `ralph/REVIEW_FINDINGS.md`: principle, path:line, fixed-in hash. A red gate
 you cannot make green: §6.
@@ -144,7 +144,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   an `except` list unless the row names that exact row.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
   `scripts/ralph*`. Never stop or restart the DEPLOYED daemon. Never edit
   `research/ontology-retrieval/PRE-REG-*.md` except its `## Deviations` section,
   and only when the row says so: the bars are the operator's.
@@ -154,5 +154,5 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
 - **The rented pod.** Never run `scripts/dev-pod.sh up`: renting is the operator's act (`HUMAN-e7-pod-up`). The ONLY thing that touches a rented pod is `research/ontology-retrieval/harness/pod_window.sh`, which destroys it on every exit. If you ever find a pod billing with no window running (`scripts/dev-pod.sh status`), run `scripts/dev-pod.sh down`, then §6.
 - Never acquire a study corpus (ANS, EDGAR, NarrativeQA) and make no outbound
   network request. Stage 0 runs on what is installed.
-- When a row changes a subsystem `sovereign/SYSTEM_OVERVIEW.md` describes, fix
+- When a row changes a subsystem `docs/SYSTEM_OVERVIEW.md` describes, fix
   that one line in the same commit (principle 3). Nothing more.

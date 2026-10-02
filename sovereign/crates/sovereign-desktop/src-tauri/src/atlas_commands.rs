@@ -9,7 +9,7 @@
 //!
 //! These commands live outside `commands.rs` deliberately:
 //! `commands.rs` is already the workspace's largest file (§3.3 in
-//! sovereign/ARCH_PRINCIPLES.md), and atlas inspection is a distinct
+//! docs/ARCH_PRINCIPLES.md), and atlas inspection is a distinct
 //! concern from the "reading from a citation" flow that owns the
 //! `read_*` commands.
 //!

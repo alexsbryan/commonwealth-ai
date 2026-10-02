@@ -2290,7 +2290,7 @@ static RPC_SERVE_STARTED: std::sync::Once = std::sync::Once::new();
 ///
 /// Phase 0 ships `false` — the in-process thread stays the default. Opt in
 /// with `SOVEREIGN_RPC_WORKER_PROCESS=1`; the flip condition and review-by
-/// date are in `sovereign/DEFAULTS_LEDGER.md`.
+/// date are in `docs/DEFAULTS_LEDGER.md`.
 fn rpc_worker_out_of_process() -> bool {
     accepts_out_of_process(
         std::env::var("SOVEREIGN_RPC_WORKER_PROCESS")

@@ -6,7 +6,7 @@
 [[mutant]]
 id = "gr-2-verbatim_quote_against_evidence_passes"
 requirement = "GR-2"
-target = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+target = "svrn/crates/sovereign-core/src/quote_verification.rs"
 find = "pub fn verify_answer_against_evidence(answer: &str, evidence: &str) -> VerificationResult {\n    if evidence.trim().is_empty() {\n        return VerificationResult {\n            rewritten: answer.to_string(),\n            ..VerificationResult::default()\n        };\n    }\n    let sources = [evidence.to_string()];\n    verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)\n}"
 replace = "pub fn verify_answer_against_evidence(answer: &str, _evidence: &str) -> VerificationResult {\n    // BUG: Ignores the evidence corpus entirely, violating GR-2\n    VerificationResult {\n        rewritten: answer.to_string(),\n        verified_count: 1,\n        demoted_count: 0,\n    }\n}"
 mustFail = ["verbatim_quote_against_evidence_passes"]
@@ -36,7 +36,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-4-a_gate_that_never_ran_is_could_not_judge"
 requirement = "GR-4"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/mod.rs"
 find = "        Some(_) if !claim_check_measured => GateJudgeVerdict::CouldNotJudge,"
 replace = "        Some(0.5) if !claim_check_measured => GateJudgeVerdict::CouldNotJudge,"
 mustFail = ["a_gate_that_never_ran_is_could_not_judge_not_supported"]
@@ -56,7 +56,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-9-content_floor_calibration_pins_the_recor"
 requirement = "GR-9"
-target = "sovereign/crates/sovereign-core/src/deep_research/acquisition.rs"
+target = "svrn/crates/sovereign-core/src/deep_research/acquisition.rs"
 find = "pub fn prose_line_length(content: &str) -> usize {\n    content.lines().map(str::len).max().unwrap_or(0)\n}"
 replace = "pub fn prose_line_length(content: &str) -> usize {\n    // BUG: Using char count instead of byte length breaks the calibration harness\n    // which relies on byte-pinned measurements for multibyte characters.\n    content.chars().count()\n}"
 mustFail = ["content_floor_calibration_pins_the_recorded_cuts"]
@@ -66,7 +66,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-9-committed_recall_calibration_loads_and_c"
 requirement = "GR-9"
-target = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs"
+target = "svrn/crates/sovereign-cli-llm/src/inner_chaos/recall.rs"
 find = "    if bank.cases.is_empty() {\n        return Err(format!(\"no [[case]] entries in {}\", path.display()));\n    }"
 replace = ""
 mustFail = ["committed_recall_calibration_loads_and_covers_both_polarities"]
@@ -86,7 +86,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-10-scope_is_bounded_by_the_corpora_budget"
 requirement = "GR-10"
-target = "sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs"
+target = "svrn/crates/sovereign-core/src/runtime/retrieval_pipeline.rs"
 find = "    ranked\n        .into_iter()\n        .take(budget)\n        .map(|(id, _)| id.to_string())\n        .collect()"
 replace = "    ranked\n        .into_iter()\n        .flat_map(|(id, score)| {\n            // Mutation: Instead of taking one entry per corpus (the budget),\n            // we now take all chunks for the top-scoring corpora up to a\n            // much larger limit, effectively widening the scope beyond the\n            // intended corpus-level cap and allowing chunky corpora to monopolize.\n            vec![id.to_string()]\n        })\n        .take(budget * 10) // Widen scope significantly by increasing effective capacity\n        .collect()"
 mustFail = ["scope_is_bounded_by_the_corpora_budget"]
@@ -96,7 +96,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-10-unscoped_turn_never_widens_beyond_the_co"
 requirement = "GR-10"
-target = "sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs"
+target = "svrn/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs"
 find = "    let mut seen = std::collections::BTreeSet::new();\n    pool_corpora\n        .iter()\n        .filter(|c| !c.is_empty())\n        .filter(|c| seen.insert((*c).clone()))\n        .cloned()\n        .collect()"
 replace = "    // MUTATION: Violate GR-10 by widening scope to all corpora in the pool,\n    // ignoring any reachability constraints or explicit scoping logic for unscoped turns.\n    if enabled_corpora.is_none() {\n        return pool_corpora.to_vec();\n    }\n    let mut seen = std::collections::BTreeSet::new();\n    pool_corpora\n        .iter()\n        .filter(|c| !c.is_empty())\n        .filter(|c| seen.insert((*c).clone()))\n        .cloned()\n        .collect()"
 mustFail = ["unscoped_turn_never_widens_beyond_the_corpora_it_reached"]
@@ -106,7 +106,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-11-citation_with_quotes_points_at_source_ch"
 requirement = "GR-11"
-target = "sovereign/crates/sovereign-tools/src/typed_extension/pass.rs"
+target = "svrn/crates/sovereign-tools/src/typed_extension/pass.rs"
 find = "pub(super) fn citation_from_quote_spans(\n    fallback_id: &str,\n    quotes: &[ParsedQuoteSpan],\n) -> SourceCitation {\n    let primary = quotes.first().map(|q| (q.chunk_id, q.text.as_str()));\n    SourceCitation::from_primary(fallback_id, primary)\n}"
 replace = "pub(super) fn citation_from_quote_spans(\n    _fallback_id: &str,\n    _quotes: &[ParsedQuoteSpan],\n) -> SourceCitation {\n    // Mutation: Ignore inputs and return a hardcoded empty/fake citation\n    // This violates GR-11 because it does not name the source of the quote.\n    SourceCitation { \n        section_id: String::new(), \n        passage_preview: None \n    }\n}"
 mustFail = ["citation_with_quotes_points_at_source_chunk"]
@@ -126,7 +126,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-11-section_title_citation_kept_via_label"
 requirement = "GR-11"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
 find = "            if bounded && looks_source {\n                let rel = close.unwrap();\n                let end = i + 1 + rel; // absolute index of ']'\n                let inner: String = chars[i + 1..end].iter().collect();\n                let (rebuilt, total, stripped, snapped) = process_bracket(&inner, &hay, &label_set);"
 replace = "            if bounded && looks_source {\n                let rel = close.unwrap();\n                let end = i + 1 + rel; // absolute index of ']'\n                let inner: String = chars[i + 1..end].iter().collect();\n                let (rebuilt, total, stripped, snapped) = process_bracket_no_snap(&inner, &hay, &label_set);"
 mustFail = ["section_title_citation_kept_via_label"]
@@ -136,7 +136,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-12-a_stitched_quote_is_not_salvaged_into_a_"
 requirement = "GR-12"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/judge.rs"
 find = "    // 1. A quoted span the answer actually contains.\n    if let Some(best) = quoted\n        .iter()\n        .filter(|s| s.chars().count() >= MIN_SPAN && ans.contains(&anchor_key(s)))\n        .max_by_key(|s| s.chars().count())\n    {\n        return Some(best.trim().to_string());\n    }"
 replace = "    // 1. A quoted span the answer actually contains.\n    if let Some(best) = quoted\n        .iter()\n        .filter(|s| s.chars().count() >= MIN_SPAN)\n        .find(|s| ans.contains(&anchor_key(s)))\n    {\n        return Some(best.trim().to_string());\n    }\n    // Fallback to longest match regardless of exact containment for mutation testing\n    if let Some(best) = quoted\n        .iter()\n        .max_by_key(|s| s.chars().count())\n    {\n        if best.chars().count() >= MIN_SPAN && ans.contains(&best.to_lowercase()) {\n            return Some(best.trim().to_string());\n        }\n    }"
 mustFail = ["a_stitched_quote_is_not_salvaged_into_a_fragment"]
@@ -146,7 +146,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-12-an_attributed_quote_survives_the_strict_"
 requirement = "GR-12"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/citation.rs"
 find = "    let answer = match chunk\n        .is_some()\n        .then(|| snap_answer_case_to_quote(&answer, &quote))\n        .flatten()\n    {\n        Some(fixed) => {\n            dbg(&format!(\n                \"citation: answer re-snapped to the SOURCE span's casing \u2192 {fixed:?}\"\n            ));\n            fixed\n        }\n        None => answer,\n    };"
 replace = "    // MUTATION: Skip re-snapping case from source. The model's garbled copy is returned instead of the source's exact casing.\n    let _answer = match chunk\n        .is_some()\n        .then(|| snap_answer_case_to_quote(&answer, &quote))\n        .flatten()\n    {\n        Some(fixed) => {\n            dbg(&format!(\n                \"citation: answer re-snapped to the SOURCE span's casing \u2192 {fixed:?}\"\n            ));\n            fixed\n        }\n        None => answer,\n    };\n    let answer = if chunk.is_some() { answer } else { _answer };"
 mustFail = ["an_attributed_quote_survives_the_strict_post_hoc_recheck"]
@@ -166,7 +166,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-15-aggregate_range_citation_is_not_missnapp"
 requirement = "GR-15"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
 find = "    let chars: Vec<char> = answer.chars().collect();\n    let mut out = String::with_capacity(answer.len());\n    let mut citations_total = 0usize;\n    let mut stripped_titles: Vec<String> = Vec::new();\n    let mut snapped_titles: Vec<(String, String)> = Vec::new();\n    let mut i = 0usize;"
 replace = "    // MUTATION: Fold labels into the haystack to loosen fabrication guards (violates GR-15)\n    let mut hay_labels = label_set.iter().map(|(_, n)| n.clone()).collect::<Vec<_>>();\n    hay.extend(hay_labels);\n\n    let chars: Vec<char> = answer.chars().collect();\n    let mut out = String::with_capacity(answer.len());\n    let mut citations_total = 0usize;\n    let mut stripped_titles: Vec<String> = Vec::new();\n    let mut snapped_titles: Vec<(String, String)> = Vec::new();\n    let mut i = 0usize;"
 mustFail = ["aggregate_range_citation_is_not_missnapped_out_of_a_label_family"]
@@ -176,7 +176,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-15-corpus_name_citation_kept_via_label"
 requirement = "GR-15"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
 find = "    let mut raw = chunks.join(\" \");\n    if !labels.is_empty() {\n        raw.push(' ');\n        raw.push_str(&labels.join(\" \"));\n    }"
 replace = ""
 mustFail = ["corpus_name_citation_kept_via_label"]
@@ -206,7 +206,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-17-a_part_whose_quote_is_not_verbatim_canno"
 requirement = "GR-17"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/citation.rs"
 find = "    if !unanswered.is_empty() {\n        answer.push_str(&format!(\n            \"\\n\\nThe passages do not answer: {}.\",\n            unanswered.join(\"; \")\n        ));\n    }"
 replace = "    // MUTATION: Silently filter out unanswered parts instead of reporting them,\n    // violating the requirement that a drop MUST be a named refusal value.\n    // The 'unanswered' list is ignored here, effectively hiding the refusal."
 mustFail = ["a_part_whose_quote_is_not_verbatim_cannot_enter"]
@@ -216,7 +216,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-17-fabricated_quote_rejected"
 requirement = "GR-17"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/citation.rs"
 find = "// Pass 2 \u2014 the original per-chunk decision, unchanged.\n    for (i, hay) in normalised.iter().enumerate() {\n        if present_in(hay) {\n            return Some(QuoteMatch::Partial { chunk: i });\n        }\n    }"
 replace = ""
 mustFail = ["fabricated_quote_rejected"]
@@ -226,7 +226,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-18-released_citations_reach_the_ledger"
 requirement = "GR-18"
-target = "sovereign/crates/sovereign-core/src/runtime/epistemic.rs"
+target = "svrn/crates/sovereign-core/src/runtime/epistemic.rs"
 find = "    let citations = if abstained {\n        Vec::new()\n    } else {\n        inputs\n            .gate_meta\n            .and_then(|m| m.get(\"citations\"))\n            .and_then(|c| serde_json::from_value(c.clone()).ok())\n            .unwrap_or_default()\n    };"
 replace = "    // VIOLATION: Maintain a hardcoded list instead of projecting from the released answer.\n    let citations: Vec<Citation> = vec![\n        Citation {\n            text: \"Hardcoded citation 1\".to_string(),\n            locator: None,\n            target: Target { corpus_id: \"hardcoded-corpus\".into(), chunk_id: 0 },\n        }\n    ];"
 mustFail = ["released_citations_reach_the_ledger"]
@@ -246,7 +246,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-18-exact_id_citation_is_untouched"
 requirement = "GR-18"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
 find = "    let mut raw = chunks.join(\" \");\n    if !labels.is_empty() {\n        raw.push(' ');\n        raw.push_str(&labels.join(\" \"));\n    }\n    let hay = normalize(&raw);"
 replace = "    // VIOLATION: Maintain labels as a separate list instead of projecting from answer\n    let _label_list = labels.to_vec();\n    let hay = normalize(answer);"
 mustFail = ["exact_id_citation_is_untouched"]
@@ -256,7 +256,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-18-claim_citation_spans_do_not_leak_figures"
 requirement = "GR-18"
-target = "sovereign/crates/sovereign-core/src/deep_research/containment.rs"
+target = "svrn/crates/sovereign-core/src/deep_research/containment.rs"
 find = "pub fn missing_claim_figures(claim: &str, evidence: &[String]) -> Vec<String> {\n    let stripped: Vec<String> = evidence.iter().map(|e| strip_citation_spans(e)).collect();\n    let joined = stripped.join(\"\\n\");\n    let present = |s: &str| value_present_in_chunks(s, &stripped) && appears_in_body(s, &joined);\n    let mut out: Vec<String> = Vec::new();\n    for f in figure_tokens(&strip_citation_spans(claim)) {\n        if !present(&f) && !out.contains(&f) {\n            out.push(f);\n        }\n    }\n    out\n}"
 replace = "pub fn missing_claim_figures(claim: &str, evidence: &[String]) -> Vec<String> {\n    // VIOLATION GR-18: Maintaining a second list (evidence_copy) that agrees by hand,\n    // instead of projecting from the released answer.\n    let mut evidence_copy = evidence.to_vec();\n    \n    // Manually strip citations to keep them in sync with 'stripped' logic below\n    for e in evidence_copy.iter_mut() {\n        *e = strip_citation_spans(e);\n    }\n\n    let stripped: Vec<String> = evidence_copy.clone();\n    let joined = stripped.join(\"\\n\");\n    let present = |s: &str| value_present_in_chunks(s, &stripped) && appears_in_body(s, &joined);\n    let mut out: Vec<String> = Vec::new();\n    for f in figure_tokens(&strip_citation_spans(claim)) {\n        if !present(&f) && !out.contains(&f) {\n            out.push(f);\n        }\n    }\n    // Return the manually maintained list instead of projecting from claim\n    evidence_copy\n}"
 mustFail = ["claim_citation_spans_do_not_leak_figures"]
@@ -266,7 +266,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-19-verify_gate_passes_verified_abstractive_"
 requirement = "GR-19"
-target = "sovereign/crates/sovereign-tools/src/raptor_atlas.rs"
+target = "svrn/crates/sovereign-tools/src/raptor_atlas.rs"
 find = "async fn summarize_one_cluster(\n    inference: &Arc<dyn InferenceProvider>,\n    input: ClusterSummarizationInput,\n    doc_type: DocumentTypeTag,\n    mode: SummaryMode,\n    verify: Option<Arc<crate::summary_verify::VerifyCtx>>,\n) -> Option<RaptorNode> {\n    if mode == SummaryMode::Extractive {\n        return extract_one_cluster(inference, input).await;\n    }\n    summarize_one_cluster_abstractive(inference, input, doc_type, verify).await\n}"
 replace = "async fn summarize_one_cluster(\n    inference: &Arc<dyn InferenceProvider>,\n    input: ClusterSummarizationInput,\n    doc_type: DocumentTypeTag,\n    mode: SummaryMode,\n    _verify: Option<Arc<crate::summary_verify::VerifyCtx>>,\n) -> Option<RaptorNode> {\n    if mode == SummaryMode::Extractive {\n        return extract_one_cluster(inference, input).await;\n    }\n    // Mutation: Pass None to bypass verification gate entirely.\n    // This violates GR-19 because the verifier is not consulted with untruncated passages.\n    summarize_one_cluster_abstractive_no_verify(inference, input, doc_type).await\n}"
 mustFail = ["verify_gate_passes_verified_abstractive_through"]
@@ -286,7 +286,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-19-verbatim_quote_against_evidence_passes"
 requirement = "GR-19"
-target = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+target = "svrn/crates/sovereign-core/src/quote_verification.rs"
 find = "pub fn verify_answer_against_evidence(answer: &str, evidence: &str) -> VerificationResult {\n    if evidence.trim().is_empty() {\n        return VerificationResult {\n            rewritten: answer.to_string(),\n            ..VerificationResult::default()\n        };\n    }\n    let sources = [evidence.to_string()];\n    verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)\n}"
 replace = "pub fn verify_answer_against_evidence(answer: &str, _evidence: &str) -> VerificationResult {\n    // Mutation: Ignore the provided evidence and pass an empty source set.\n    // This violates GR-19 because the verifier no longer receives the untruncated passages\n    // from the 'evidence' argument; it only sees what was in the prompt (which is effectively\n    // nothing here as we don't have access to a separate prompt buffer in this signature,\n    // or rather, we are deliberately discarding the 'evidence' parameter which should be the superset).\n    let sources = Vec::new();\n    verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)\n}"
 mustFail = ["verbatim_quote_against_evidence_passes"]
@@ -296,7 +296,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-21-whitespace_normalised_quote_verifies"
 requirement = "GR-21"
-target = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+target = "svrn/crates/sovereign-core/src/quote_verification.rs"
 find = "let normalised_quote = trim_edge_ellipses(&normalise_for_match(&inner));\n                    let verified = !normalised_quote.is_empty()\n                        && normalised_sources\n                            .iter()\n                            .any(|src| src.contains(&normalised_quote));"
 replace = "// MUTATION: Remove ellipsis trimming to allow composite/spliced quotes to match.\n                    // This violates GR-21 because a spliced quote (e.g. with newlines) might now be considered contiguous after normalization if the source also had it normalized, or more critically,\n                    // by removing the specific handling that ensures non-contiguous spans are rejected as composites when they shouldn't match directly.\n                    // Actually, simpler violation: Just remove the `trim_edge_ellipses` call which is part of ensuring strict matching against normalised sources for fragmented content.\n                    let normalised_quote = normalise_for_match(&inner);\n                    let verified = !normalised_quote.is_empty()\n                        && normalised_sources\n                            .iter()\n                            .any(|src| src.contains(&normalised_quote));"
 mustFail = ["whitespace_normalised_quote_verifies"]
@@ -306,7 +306,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-21-a_composite_quote_is_still_demoted_again"
 requirement = "GR-21"
-target = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+target = "svrn/crates/sovereign-core/src/quote_verification.rs"
 find = "    if evidence.trim().is_empty() {\n        return VerificationResult {\n            rewritten: answer.to_string(),\n            ..VerificationResult::default()\n        };\n    }\n    let mut sources: Vec<String> = Vec::with_capacity(chunks.len() + 1);\n    sources.push(evidence.to_string());\n    sources.extend(chunks.iter().cloned());"
 replace = "    // MUTATION: Bypass the empty-evidence guard to force verification even when evidence is missing,\n    // potentially altering behavior for spliced quotes or causing incorrect demotion logic.\n    // This violates GR-21 by not preserving the specific handling of non-contiguous/spliced\n    // quotes in the context where evidence might be considered 'empty' but chunks exist,\n    // specifically targeting the path that should leave answers alone if no real evidence exists.\n    \n    let mut sources: Vec<String> = Vec::with_capacity(chunks.len() + 1);\n    sources.push(evidence.to_string());\n    sources.extend(chunks.iter().cloned());"
 mustFail = ["a_composite_quote_is_still_demoted_against_the_full_chunks"]
@@ -316,7 +316,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-21-composite_quote_with_ellipsis_fails_veri"
 requirement = "GR-21"
-target = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+target = "svrn/crates/sovereign-core/src/quote_verification.rs"
 find = "                    let normalised_quote = trim_edge_ellipses(&normalise_for_match(&inner));\n                    let verified = !normalised_quote.is_empty()\n                        && normalised_sources\n                            .iter()\n                            .any(|src| src.contains(&normalised_quote));"
 replace = "                    // MUTATION: Remove ellipsis trimming to allow composite quotes with ellipses to match if the core text is present.\n                    // This violates GR-21 which requires spliced/non-contiguous quotes (often indicated by ellipses) to fail verification.\n                    let normalised_quote = normalise_for_match(&inner);\n                    let verified = !normalised_quote.is_empty()\n                        && normalised_sources\n                            .iter()\n                            .any(|src| src.contains(&normalised_quote));"
 mustFail = ["composite_quote_with_ellipsis_fails_verification"]
@@ -326,7 +326,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-22-model_originated_figures_over_an_armed_c"
 requirement = "GR-22"
-target = "sovereign/crates/sovereign-core/src/runtime/authority_guard.rs"
+target = "svrn/crates/sovereign-core/src/runtime/authority_guard.rs"
 find = "    let mut allowed: Vec<String> = basis.allowed_tokens.to_vec();\n    for span in basis.verified_spans {\n        allowed.extend(crate::runtime::numeric_audit::numeric_tokens(span));\n    }\n    allowed.extend(crate::runtime::numeric_audit::numeric_tokens(\n        basis.question,\n    ));"
 replace = "    // MUTATION: Allow all numerics from the answer itself, bypassing the audit.\n    // This violates GR-22 because it permits model-originated figures to pass\n    // without tracing back to a tool output or verified quote.\n    let mut allowed: Vec<String> = crate::runtime::numeric_audit::numeric_tokens(answer);\n    for span in basis.verified_spans {\n        allowed.extend(crate::runtime::numeric_audit::numeric_tokens(span));\n    }\n    allowed.extend(crate::runtime::numeric_audit::numeric_tokens(\n        basis.question,\n    ));"
 mustFail = ["model_originated_figures_over_an_armed_corpus_are_blocked"]
@@ -336,7 +336,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-23-audit_optin_allows_exactly_the_tools_own"
 requirement = "GR-23"
-target = "sovereign/crates/sovereign-tools/src/sec_facts.rs"
+target = "svrn/crates/sovereign-tools/src/sec_facts.rs"
 find = "fn with_audit_optin(mut out: serde_json::Value) -> serde_json::Value {\n    let mut tokens: Vec<String> = Vec::new();\n    collect_text(&out, &mut |s| tokens.extend(numeric_tokens(s)));\n    tokens.sort();\n    tokens.dedup();\n    out[\"numeric_audit\"] = json!({\n        \"audit_bare_numerals\": true,\n        \"allowed_tokens\": tokens,\n    });\n    out\n}"
 replace = "fn with_audit_optin(mut out: serde_json::Value) -> serde_json::Value {\n    let mut tokens: Vec<String> = Vec::new();\n    // Mutation: Only capture currency/percentage forms by filtering for '$' or '%', \n    // violating the requirement to cover bare numerals.\n    collect_text(&out, &mut |s| {\n        if s.contains('$') || s.contains('%') {\n            tokens.extend(numeric_tokens(s));\n        }\n    });\n    tokens.sort();\n    tokens.dedup();\n    out[\"numeric_audit\"] = json!({\n        \"audit_bare_numerals\": true,\n        \"allowed_tokens\": tokens,\n    });\n    out\n}"
 mustFail = ["audit_optin_allows_exactly_the_tools_own_numerals"]
@@ -346,7 +346,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-23-precise_value_traces_to_a_raw_output_eve"
 requirement = "GR-23"
-target = "sovereign/crates/sovereign-core/src/runtime/numeric_audit.rs"
+target = "svrn/crates/sovereign-core/src/runtime/numeric_audit.rs"
 find = "// Nothing the tool emitted \u21d2 no audit basis. Callers only invoke the\n    // audit when a figure-emitting tool ran, but keep the pure function\n    // safe to call unconditionally (it must not flag every figure in an\n    // answer that simply wasn't backed by such a tool).\n    if cited.is_empty() && raw_values.is_empty() {\n        return Vec::new();\n    }"
 replace = ""
 mustFail = ["precise_value_traces_to_a_raw_output_even_when_cited_form_is_compact"]
@@ -376,7 +376,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-26-tool_cited_figures_release_at_the_exit"
 requirement = "GR-26"
-target = "sovereign/crates/sovereign-core/src/runtime/authority_guard.rs"
+target = "svrn/crates/sovereign-core/src/runtime/authority_guard.rs"
 find = "    let first = armed.first();\n    if violations.is_empty() {\n        tracing::info!(\n            target: \"authority_guard\",\n            handler,\n            corpus = %first.corpus_id,\n            tool = %first.tool_id,\n            verified_quotes = basis.verified_spans.len(),\n            \"authority_guard: released \u2014 every figure traces (tool, verified quote, or the question)\"\n        );\n        return GuardVerdict::Released;\n    }"
 replace = "    // MUTATION: Bypass strict citation check for raw_values to simulate missing export capability\n    let first = armed.first();\n    if violations.is_empty() {\n        tracing::info!(\n            target: \"authority_guard\",\n            handler,\n            corpus = %first.corpus_id,\n            tool = %first.tool_id,\n            verified_quotes = basis.verified_spans.len(),\n            \"authority_guard: released \u2014 every figure traces (tool, verified quote, or the question)\"\n        );\n        return GuardVerdict::Released;\n    }\n    \n    // Mutation: Allow release even with violations if raw_values are present but uncited\n    if !basis.raw_values.is_empty() && first.corpus_id == \"test\" {\n         tracing::warn!(\n            target: \"authority_guard\",\n            handler,\n            corpus = %first.corpus_id,\n            tool = %first.tool_id,\n            \"authority_guard: RELEASED despite violations due to missing export mechanism\"\n        );\n        return GuardVerdict::Released;\n    }"
 mustFail = ["tool_cited_figures_release_at_the_exit"]
@@ -396,7 +396,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-28-model_originated_figures_over_an_armed_c"
 requirement = "GR-28"
-target = "sovereign/crates/sovereign-core/src/runtime/authority_guard.rs"
+target = "svrn/crates/sovereign-core/src/runtime/authority_guard.rs"
 find = "    let mut allowed: Vec<String> = basis.allowed_tokens.to_vec();\n    for span in basis.verified_spans {\n        allowed.extend(crate::runtime::numeric_audit::numeric_tokens(span));\n    }\n    allowed.extend(crate::runtime::numeric_audit::numeric_tokens(\n        basis.question,\n    ));"
 replace = "    // MUTATION: Remove the inclusion of user's question numerals from allowed set.\n    // This violates GR-28 which requires allowing numerals from the user's own question.\n    let mut allowed: Vec<String> = basis.allowed_tokens.to_vec();\n    for span in basis.verified_spans {\n        allowed.extend(crate::runtime::numeric_audit::numeric_tokens(span));\n    }"
 mustFail = ["model_originated_figures_over_an_armed_corpus_are_blocked"]
@@ -446,7 +446,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-33-every_intent_has_a_guard_story"
 requirement = "GR-33"
-target = "sovereign/crates/sovereign-core/src/runtime/authority_guard.rs"
+target = "svrn/crates/sovereign-core/src/runtime/authority_guard.rs"
 find = "        // Verified 2026-08-17: neither variant has its own branch on\n        // either dispatch surface \u2014 turn.rs's `_ =>` arm sends both to\n        // handle_simple, and the streaming dispatcher falls through to\n        // stream_deep_query_turn (no SimpleAction/Continuation match in\n        // either dispatcher; handle_simple never branches on the tool\n        // payload). So they exit through the already-covered\n        // simple/deep seams.\n        SimpleAction { .. } | Continuation { .. } => {\n            GuardStory::Covered(\"catch-all dispatch \u2192 simple/deep exit seams\")\n        }"
 replace = "        // Verified 2026-08-17: neither variant has its own branch on\n        // either dispatch surface \u2014 turn.rs's `_ =>` arm sends both to\n        // handle_simple, and the streaming dispatcher falls through to\n        // stream_deep_query_turn (no SimpleAction/Continuation match in\n        // either dispatcher; handle_simple never branches on the tool\n        // payload). So they exit through the already-covered\n        // simple/deep seams.\n        SimpleAction { .. } | Continuation { .. } => {\n            GuardStory::NoOpByConstruction(\"catch-all dispatch \u2192 simple/deep exit seams\")\n        }"
 mustFail = ["every_intent_has_a_guard_story"]
@@ -506,7 +506,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-40-zero_turn_persona_is_an_error"
 requirement = "GR-40"
-target = "sovereign/crates/sovereign-cli-llm/src/inner_chaos/personas.rs"
+target = "svrn/crates/sovereign-cli-llm/src/inner_chaos/personas.rs"
 find = "        if p.turns == 0 {\n            return Err(format!(\"persona `{}` declares turns = 0\", p.id));\n        }"
 replace = ""
 mustFail = ["zero_turn_persona_is_an_error"]
@@ -526,7 +526,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-41-a_log_line_says_who_wrote_it_what_it_voi"
 requirement = "GR-41"
-target = "sovereign/crates/sovereign-cli-llm/src/ring_cmd/mod.rs"
+target = "svrn/crates/sovereign-cli-llm/src/ring_cmd/mod.rs"
 find = "    let mark = if op.get(\"voided\").and_then(|v| v.as_bool()).unwrap_or(false) {\n        // Not hidden. A voided act is part of the history, and an app that\n        // shows the correction without the thing corrected leaves a reader\n        // unable to check the change.\n        \" [voided]\"\n    } else {\n        \"\"\n    };"
 replace = "    let mark = \"\";"
 mustFail = ["a_log_line_says_who_wrote_it_what_it_voids_and_whether_it_was_voided"]
@@ -566,7 +566,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-47-tool_derived_verdicts"
 requirement = "GR-47"
-target = "sovereign/crates/sovereign-core/src/runtime/epistemic.rs"
+target = "svrn/crates/sovereign-core/src/runtime/epistemic.rs"
 find = "    // Tool-only holdings (deterministic figures, no corpus/memory): honest\n    // as Mixed \u2014 the figures are system-originated, so the turn is neither\n    // corpus-Grounded nor a memory/GK recall. It never overclaims Grounded.\n    if n_tool > 0 && n_corpus == 0 && n_memory == 0 {\n        return TurnVerdict::Mixed;\n    }"
 replace = "    // Tool-only holdings (deterministic figures, no corpus/memory):\n    // BUG: Incorrectly classifying tool-only turns as Unverified instead of Mixed,\n    // violating GR-47 which requires mixed verdicts for marked claims with distinct bases.\n    if n_tool > 0 && n_corpus == 0 && n_memory == 0 {\n        return TurnVerdict::Unverified;\n    }"
 mustFail = ["tool_derived_verdicts"]
@@ -596,7 +596,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-51-phantom_rows_are_ledgered"
 requirement = "GR-51"
-target = "sovereign/crates/sovereign-core/src/deep_research/acquisition.rs"
+target = "svrn/crates/sovereign-core/src/deep_research/acquisition.rs"
 find = "        if rank < k + eps_budget {\n            continue;\n        }"
 replace = "        let hit_eps_admitted = below_cut.iter().any(|h| h.id == hit.id);\n        if (rank < k + eps_budget) || hit_eps_admitted {\n            continue;\n        }"
 mustFail = ["phantom_rows_are_ledgered"]

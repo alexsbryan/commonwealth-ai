@@ -37,7 +37,7 @@ in the files the row points at. When a row and the tree disagree, you stop
 | NODE(d) | `scripts/ralph-check.sh node d` (node 20 and npx are in the toolbox; pin every npm version the row names) | exit=0 |
 | PILOT | `scripts/ralph-check.sh pilot` — needs the deployed daemon UP and the `chaos-secret-agent` corpus installed; it never stops or restarts the daemon | exit=0 and the table the row names |
 <!-- section: hard-rules-scope -->
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
   `scripts/ralph*`. Never stop or restart the DEPLOYED daemon. Never edit
   `research/ontology-retrieval/PRE-REG-*.md` except its `## Deviations` section,
   and only when the row says so: the bars are the operator's.

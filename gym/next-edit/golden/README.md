@@ -1,6 +1,6 @@
 # Next-edit golden set — stratified by shape, sized by power
 
-Spec: [`NEXT_EDIT_BAKEOFF.md`](../../../sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md) §2.
+Spec: [`NEXT_EDIT_BAKEOFF.md`](../../../svrn/docs/specs/NEXT_EDIT_BAKEOFF.md) §2.
 Built because the `gen` bank cannot decide anything (60 cases, and the
 [Phase 0 results](../../../bench/lanes/next-edit-bakeoff/RESULTS_PHASE0.md)
 quantify how badly).

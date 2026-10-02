@@ -39,11 +39,11 @@
 //!     (RemotePayload — the `--provider` chat client; at
 //!     sovereign-cli-llm/src/enrich_cmd/inference_client.rs until P0's
 //!     crate split, 2026-09-02)
-//!   - sovereign/crates/sovereign-core/src/deep_research/port.rs
+//!   - svrn/crates/sovereign-core/src/deep_research/port.rs
 //!     (QueryEgress — the web_search client)
-//!   - sovereign/crates/sovereign-tools/src/knowledge_lookup/mod.rs
+//!   - svrn/crates/sovereign-tools/src/knowledge_lookup/mod.rs
 //!     (QueryEgress — the web-escalation client)
-//!   - studio/crates/sovereign-tools-base/src/web/mod.rs
+//!   - svrn/crates/sovereign-tools-base/src/web/mod.rs
 //!     (QueryEgress — the search tool's default_client)
 //!   - sovereign/crates/sovereign-desktop/src-tauri/src/commands/
 //!     conversation.rs (the Search-the-web card's client — carried
@@ -72,7 +72,7 @@ const BOUNDARY_MODULE: &str = "shared/crates/sovereign-contracts/src/egress.rs";
 /// The ONE run-scoped fail-closed budget decider (bar
 /// dr-budget-one-decider). Frontier-key spend is declared here and
 /// inert until t2b opens the judge role.
-const SPEND_DECIDER_MODULE: &str = "sovereign/crates/sovereign-core/src/deep_research/budget.rs";
+const SPEND_DECIDER_MODULE: &str = "svrn/crates/sovereign-core/src/deep_research/budget.rs";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Class {
@@ -338,7 +338,7 @@ fn r6_one_run_scoped_budget_decider() {
     // conversation-FRAME check is a different concept. The decider
     // move removed the search-path budget gate; a resurrected one
     // here is the exact R-6 shape.
-    let search_rs_path = "studio/crates/sovereign-tools-base/src/search.rs";
+    let search_rs_path = "svrn/crates/sovereign-tools-base/src/search.rs";
     let search_rs = fs::read_to_string(root.join(search_rs_path))
         .unwrap_or_else(|_| panic!("{search_rs_path} missing"));
     for id in [

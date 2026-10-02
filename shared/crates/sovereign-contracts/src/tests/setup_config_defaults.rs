@@ -56,7 +56,7 @@ embed = "/m/e.gguf"
 #[test]
 fn local_only_defaults_to_false_and_is_settable() {
     // A daemon is NETWORKED unless an operator says otherwise: the
-    // local-only profile ships dark (sovereign/DEFAULTS_LEDGER.md), so an
+    // local-only profile ships dark (docs/DEFAULTS_LEDGER.md), so an
     // existing config.toml must keep every mesh loop it had.
     let bare = r#"
 [models]

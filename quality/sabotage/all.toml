@@ -6,7 +6,7 @@
 [[mutant]]
 id = "ci-1-multi_hop_chain_becomes_a_call_graph_tra"
 requirement = "CI-1"
-target = "sovereign/crates/sovereign-core/src/runtime/code_trace.rs"
+target = "svrn/crates/sovereign-core/src/runtime/code_trace.rs"
 find = "fn format_chain_block(symbol: &str, result: &CallChainResult) -> Option<String> {\n    if result.nodes.len() <= 1 {\n        return None;\n    }\n    let mut block = format!(\"Call-graph trace for `{symbol}`:\\n\");\n    block.push_str(&render_call_chain_brief(result));\n    Some(block)\n}"
 replace = "fn format_chain_block(_symbol: &str, _result: &CallChainResult) -> Option<String> {\n    // Mutation: Always return None to break the call graph trace generation\n    None\n}"
 mustFail = ["multi_hop_chain_becomes_a_call_graph_trace_block"]
@@ -136,7 +136,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-11-a_repo_nested_under_a_registered_one_is_"
 requirement = "CI-11"
-target = "sovereign/crates/sovereign-cli-daemon/src/setup_cmd/finish.rs"
+target = "svrn/crates/sovereign-cli-daemon/src/setup_cmd/finish.rs"
 find = "    if let Some(conflict) = registry.nested_conflict(&corpus_id, root) {\n        return Registration::NestsWith {\n            existing_id: conflict.corpus_id.clone(),\n            existing_root: conflict.root.clone(),\n        };\n    }\n    Registration::Register {"
 replace = "    // Mutation: Ignore nested conflicts to violate CI-11\n    // The requirement states registration MUST refuse a root that is an ancestor or descendant.\n    // By skipping this check, the code will allow registering 'api' under 'monorepo', causing the test expecting NestsWith to fail (it would get Register instead).\n    \n    Registration::Register {"
 mustFail = ["a_repo_nested_under_a_registered_one_is_refused_not_forced"]
@@ -146,7 +146,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-12-uncitable_themes_are_dropped_from_the_in"
 requirement = "CI-12"
-target = "sovereign/crates/sovereign-meshapp/src/wrapped/semantic/tests.rs"
+target = "svrn/crates/sovereign-meshapp/src/wrapped/semantic/tests.rs"
 find = "#[test]\nfn uncitable_themes_are_dropped_from_the_index_entirely() {\n    // This is the enforcement point for commitment 2: a fold cannot emit\n    // a claim it has no quote for, because the theme never reaches it.\n    let docs = vec![doc(\"c1\", vec![turn(\"2025-01-01 10:00\", true, 1, \"hi\")])];\n    let c = content(&[(1, \"we discussed Taoism\")]);\n    let nodes = vec![node(\"c1\", &[\"Taoism\", \"Neverland\"], &[1])];\n    let idx = ThemeIndex::from_enrichment(&nodes, &docs, &c, &HashMap::new());\n    assert!(idx.prior.contains_key(\"taoism\"));\n    assert!(!idx.prior.contains_key(\"neverland\"));\n    assert!(idx.mentions.iter().all(|m| m.key == \"taoism\"));\n}"
 replace = "#[test]\nfn uncitable_themes_are_dropped_from_the_index_entirely() {\n    // This is the enforcement point for commitment 2: a fold cannot emit\n    // a claim it has no quote for, because the theme never reaches it.\n    let docs = vec![doc(\"c1\", vec![turn(\"2025-01-01 10:00\", true, 1, \"hi\")])];\n    let c = content(&[(1, \"we discussed Taoism\")]);\n    let nodes = vec![node(\"c1\", &[\"Taoism\", \"Neverland\"], &[1])];\n    let idx = ThemeIndex::from_enrichment(&nodes, &docs, &c, &HashMap::new());\n    assert!(idx.prior.contains_key(\"taoism\"));\n    // MUTATION: Allow 'neverland' to remain in the index despite lacking a quote.\n    // This violates CI-12 by allowing an uncitable theme to masquerade as valid\n    // (or at least present) rather than being dropped entirely.\n    assert!(!idx.prior.contains_key(\"neverland\"));\n}"
 mustFail = ["uncitable_themes_are_dropped_from_the_index_entirely"]
@@ -166,7 +166,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-13-staleness_bands"
 requirement = "CI-13"
-target = "sovereign/crates/sovereign-tools/src/code/facts_tool.rs"
+target = "svrn/crates/sovereign-tools/src/code/facts_tool.rs"
 find = "fn staleness_of(age_hours: f64, lags_graph: bool) -> &'static str {\n    if lags_graph || age_hours >= 168.0 {\n        \"stale\"\n    } else if age_hours >= 24.0 {\n        \"aging\"\n    } else {\n        \"fresh\"\n    }\n}"
 replace = "fn staleness_of(_age_hours: f64, _lags_graph: bool) -> &'static str {\n    \"unknown\"\n}"
 mustFail = ["staleness_bands"]
@@ -186,7 +186,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-15-faithful_codebase_citation_survives"
 requirement = "CI-15"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs"
 find = "                if is_handle {\n                    if out.ends_with(' ') {\n                        out.pop();\n                    }\n                    stripped_titles.push(t.to_string());\n                    citations_total += 1;\n                    i = i + 1 + rel + 1;\n                    continue;\n                }"
 replace = "                // MUTATION: Do not strip handle-style internal references, keeping them in the output.\n                // This violates CI-15 by failing to reconcile/reflex noise that should be stripped,\n                // potentially leaving invalid markers or altering the cleaned prose incorrectly for downstream validation."
 mustFail = ["faithful_codebase_citation_survives"]
@@ -196,7 +196,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-17-obsidian_vault_source_is_reconcilable"
 requirement = "CI-17"
-target = "sovereign/crates/sovereign-tools/src/local_corpus/config.rs"
+target = "svrn/crates/sovereign-tools/src/local_corpus/config.rs"
 find = "                snapshot_retention: 24,"
 replace = "                snapshot_retention: 3,"
 mustFail = ["obsidian_vault_source_is_reconcilable"]
@@ -216,7 +216,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-21-gates_require_both_absolute_and_margin"
 requirement = "CI-21"
-target = "sovereign/crates/sovereign-core/src/archive_classifier.rs"
+target = "svrn/crates/sovereign-core/src/archive_classifier.rs"
 find = "    pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> Option<ArchiveVerdict> {\n        let score = self.score_from_embedding(q_normalized)?;\n        let gate = self.gate();\n        let fires = gate.admits(score);\n        tracing::info!(\n            target: \"router.archive\",\n            sim_archive = score.sim_positive,\n            sim_thread = score.sim_negative,\n            margin = score.margin(),\n            min_archive_sim = self.min_archive_sim,\n            min_margin = self.min_margin,\n            cushion = gate.cushion(score),\n            fires,\n            \"archive classification\"\n        );\n        fires.then_some(ArchiveVerdict {\n            sim_archive: score.sim_positive,\n            sim_thread: score.sim_negative,\n            margin: score.margin(),\n        })\n    }"
 replace = "    pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> Option<ArchiveVerdict> {\n        let score = self.score_from_embedding(q_normalized)?;\n        // MUTATION: Bypass the gate entirely. This violates CI-21 (must be mirrors, not gates) and causes tests expecting gating behavior to fail.\n        tracing::info!(\n            target: \"router.archive\",\n            sim_archive = score.sim_positive,\n            sim_thread = score.sim_negative,\n            margin = score.margin(),\n            min_archive_sim = self.min_archive_sim,\n            min_margin = self.min_margin,\n            cushion = 0.0,\n            fires = true,\n            \"archive classification\"\n        );\n        Some(ArchiveVerdict {\n            sim_archive: score.sim_positive,\n            sim_thread: score.sim_negative,\n            margin: score.margin(),\n        })\n    }"
 mustFail = ["gates_require_both_absolute_and_margin"]
@@ -286,7 +286,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-30-the_budget_holds_and_what_it_dropped_is_"
 requirement = "CI-30"
-target = "sovereign/crates/sovereign-core/src/deep_research/synthesize.rs"
+target = "svrn/crates/sovereign-core/src/deep_research/synthesize.rs"
 find = "            if text.chars().count() >= 220 || out.is_empty() {\n                out.push(Passage {\n                    chunk_id: c.id.clone(),\n                    url: c.source_url.clone(),\n                    text,\n                });\n            }"
 replace = "            // BUG: Skip validation to allow unaccounted passages\n            if false { \n                out.push(Passage {\n                    chunk_id: c.id.clone(),\n                    url: c.source_url.clone(),\n                    text,\n                });\n            }\n            // Always push a dummy passage to break accounting logic\n            out.push(Passage {\n                chunk_id: c.id.clone(),\n                url: c.source_url.clone(),\n                text: String::new()\n            });"
 mustFail = ["the_budget_holds_and_what_it_dropped_is_counted"]
@@ -306,7 +306,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-32-apply_liveness_demotes_only_when_not_liv"
 requirement = "CI-32"
-target = "sovereign/crates/sovereign-tools/src/code/watcher_health.rs"
+target = "svrn/crates/sovereign-tools/src/code/watcher_health.rs"
 find = "pub fn apply_liveness(raw_status: &str, reason: WatcherReason) -> &str {\n    if reason.is_live() {\n        return raw_status;\n    }\n    match raw_status {\n        \"fresh_passing\" | \"fresh_failing\" | \"stale\" => WATCHER_DOWN,\n        other => other,\n    }\n}"
 replace = "pub fn apply_liveness(raw_status: &str, _reason: WatcherReason) -> &str {\n    // BUG: Ignores liveness status entirely, always returns the input\n    raw_status\n}"
 mustFail = ["apply_liveness_demotes_only_when_not_live"]
@@ -316,7 +316,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-32-liveness_flagged_when_a_reachable_node_i"
 requirement = "CI-32"
-target = "sovereign/crates/sovereign-cli-llm/src/mesh_soak.rs"
+target = "svrn/crates/sovereign-cli-llm/src/mesh_soak.rs"
 find = "    // Liveness: every reachable node (identified by its own self-record id) must\n    // be seen as live by every other reachable node.\n    let self_ids: BTreeSet<String> = reachable\n        .iter()\n        .filter_map(|(_, v)| {\n            v.members\n                .iter()\n                .find(|m| m.is_self)\n                .map(|m| m.node_id.clone())\n        })\n        .collect();\n    for (addr, view) in &reachable {\n        for live_id in &self_ids {\n            match view.members.iter().find(|m| &m.node_id == live_id) {\n                Some(m) if m.is_live() => {}\n                _ => violations.push(Violation {\n                    invariant: \"liveness\",\n                    detail: format!(\"node {addr} does not see reachable node {live_id} as live\"),\n                }),\n            }\n        }\n    }"
 replace = "    // Liveness: every reachable node (identified by its own self-record id) must\n    // be seen as live by every other reachable node.\n    let self_ids: BTreeSet<String> = reachable\n        .iter()\n        .filter_map(|(_, v)| {\n            v.members\n                .iter()\n                .find(|m| m.is_self)\n                .map(|m| m.node_id.clone())\n        })\n        .collect();\n    for (addr, view) in &reachable {\n        for live_id in &self_ids {\n            match view.members.iter().find(|m| &m.node_id == live_id) {\n                Some(m) if m.is_live() => {}\n                _ => violations.push(Violation {\n                    invariant: \"liveness\",\n                    detail: format!(\"node {addr} does not see reachable node {live_id} as fresh\"),\n                }),\n            }\n        }\n    }"
 mustFail = ["liveness_flagged_when_a_reachable_node_is_seen_offline_by_a_peer"]
@@ -336,7 +336,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-36-artifact_tracking_covers_both_authoring_"
 requirement = "CI-36"
-target = "sovereign/crates/sovereign-core/src/runtime/handlers/recipe_author.rs"
+target = "svrn/crates/sovereign-core/src/runtime/handlers/recipe_author.rs"
 find = "fn is_artifact_write_tool(name: &str) -> bool {\n    matches!(\n        name,\n        \"recipe_write\" | \"recipe_write_structured\" | \"workflow_write\" | \"workflow_write_structured\"\n    )\n}"
 replace = "fn is_artifact_write_tool(name: &str) -> bool {\n    matches!(\n        name,\n        \"recipe_write\" | \"workflow_write\"\n    )\n}"
 mustFail = ["artifact_tracking_covers_both_authoring_modes"]
@@ -346,7 +346,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-37-avoid_term_extraction_is_conservative"
 requirement = "CI-37"
-target = "sovereign/crates/sovereign-core/src/lessons.rs"
+target = "svrn/crates/sovereign-core/src/lessons.rs"
 find = "        if cleaned.len() < 3 || word_count == 0 || word_count > 3 || !char_ok {\n            return None;\n        }"
 replace = ""
 mustFail = ["avoid_term_extraction_is_conservative"]
@@ -416,7 +416,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-4-cache_methods_are_distinct_per_space"
 requirement = "EN-4"
-target = "sovereign/crates/sovereign-core/src/router_instruction.rs"
+target = "svrn/crates/sovereign-core/src/router_instruction.rs"
 find = "    pub const fn cache_method(self) -> &'static str {\n        match self {\n            Self::Classifier => \"c\",\n            Self::RetrievalQuery => \"q\",\n            Self::Unprefixed => \"d\",\n        }\n    }"
 replace = "    pub const fn cache_method(self) -> &'static str {\n        match self {\n            _ => \"shared\",\n        }\n    }"
 mustFail = ["cache_methods_are_distinct_per_space"]
@@ -546,7 +546,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-20-answer_declines_skips_honest_abstentions"
 requirement = "EN-20"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/mod.rs"
 find = "pub(crate) fn grounded_abstention(_claim: &str, chunks_checked: usize) -> String {\n    format!(\n        \"I couldn't confirm an answer to this against the {chunks_checked} passages \\\n         your sources turned up \u2014 so rather than guess at something I can't verify \\\n         from them, I'd flag that instead. If you think it's there, try rephrasing \\\n         with the specific names or terms involved and I'll take another look.\"\n    )\n}"
 replace = "pub(crate) fn grounded_abstention(claim: &str, _chunks_checked: usize) -> String {\n    // Violation: Returns a confident assertion regardless of input content,\n    // failing to produce a genuine abstention string as required by EN-20.\n    format!(\"The answer is definitively found in the sources regarding {}\", claim)\n}"
 mustFail = ["answer_declines_skips_honest_abstentions_only"]
@@ -566,7 +566,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-1-multi_source_synthesis_routes_primary"
 requirement = "EV-1"
-target = "sovereign/crates/sovereign-core/src/runtime/evidence.rs"
+target = "svrn/crates/sovereign-core/src/runtime/evidence.rs"
 find = "    let distinct_sources = {\n        let mut keys: Vec<_> = chunks.iter().map(chunk_source_key).collect();\n        keys.sort();\n        keys.dedup();\n        keys.len()\n    };"
 replace = "    // MUTATION: Force distinct_sources to 1 regardless of actual sources.\n    // This violates the requirement that 'distinct_sources' be measurable\n    // and accurately reflect the diversity of retrieval results, causing\n    // tests asserting on source diversity (like multi_source_synthesis_routes_primary)\n    // to fail or pass incorrectly depending on logic downstream.\n    let distinct_sources = {\n        if !chunks.is_empty() { 1 } else { 0 }\n    };"
 mustFail = ["multi_source_synthesis_routes_primary"]
@@ -586,7 +586,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-3-turn_segment_parses_tier1_handles"
 requirement = "EV-3"
-target = "sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/runner.rs"
+target = "svrn/crates/sovereign-cli-llm/src/knowledge_gym_cmd/runner.rs"
 find = "fn turn_segment_of(handle: &str) -> Option<usize> {\n    let rest = handle.strip_prefix(\"ev-T\")?;\n    let dash_pos = rest.find('-')?;\n    let turn_str = &rest[..dash_pos];\n    turn_str.parse::<usize>().ok()\n}"
 replace = "fn turn_segment_of(handle: &str) -> Option<usize> {\n    // Mutation: Read number before tier (violates EV-3)\n    if !handle.starts_with(\"ev-\") {\n        return None;\n    }\n    let after_ev = &handle[3..];\n    \n    // Try to parse the numeric part first\n    if let Some(dash_idx) = after_ev.find('-') {\n        let num_part = &after_ev[..dash_idx];\n        if let Ok(num) = num_part.parse::<usize>() {\n            // If we found a number, check if it's followed by 'T' and then more numbers?\n            // The requirement says tier MUST be read before number.\n            // This mutation assumes format ev-<number>-T<tier> or similar invalid logic,\n            // but specifically breaks the \"ev-T<number>\" pattern expected by tests.\n            \n            // Let's make it fail for valid inputs like \"ev-T0-0001\"\n            return None;\n        }\n    }\n    None\n}"
 mustFail = ["turn_segment_parses_tier1_handles"]
@@ -596,7 +596,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-4-gates_require_both_absolute_and_margin"
 requirement = "EV-4"
-target = "sovereign/crates/sovereign-core/src/archive_classifier.rs"
+target = "svrn/crates/sovereign-core/src/archive_classifier.rs"
 find = "    pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> Option<ArchiveVerdict> {\n        let score = self.score_from_embedding(q_normalized)?;\n        let gate = self.gate();\n        let fires = gate.admits(score);"
 replace = "    pub fn classify_from_embedding(&self, q_normalized: &[f32]) -> Option<ArchiveVerdict> {\n        let score = self.score_from_embedding(q_normalized)?;\n        // MUTATION: Ignore the margin gate logic to violate EV-4.\n        // This makes the classifier rely only on absolute similarity,\n        // causing tests expecting margin-based blocking to fail.\n        let _gate = self.gate();\n        let fires = score.sim_positive >= 0.5;"
 mustFail = ["gates_require_both_absolute_and_margin"]
@@ -666,7 +666,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-23-a_gate_that_never_ran_is_could_not_judge"
 requirement = "EV-23"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/mod.rs"
 find = "        Some(_) if !claim_check_measured => GateJudgeVerdict::CouldNotJudge,"
 replace = "        Some(0.5) if !claim_check_measured => GateJudgeVerdict::Unsupported,"
 mustFail = ["a_gate_that_never_ran_is_could_not_judge_not_supported"]
@@ -716,7 +716,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-25-a_mutation_runs_report_never_settles_a_c"
 requirement = "EV-25"
-target = "sovereign/crates/sovereign-cli/src/conformance_cmd.rs"
+target = "svrn/crates/sovereign-cli/src/conformance_cmd.rs"
 find = "        if !VERIFICATION_PROFILES.contains(&profile.as_str()) {\n            ignored.push((\n                p,\n                if profile == \"sabotage\" {\n                    \"mutation run \u2014 its reds are manufactured\"\n                } else {\n                    \"not a verification profile\"\n                },\n            ));\n            continue;\n        }\n        if best.as_ref().is_none_or(|(bm, _)| m > *bm) {"
 replace = "        // BUG: Mutation runs (like 'sabotage') should be ignored to prevent them from winning the 'newest' race.\n        // By removing this check, the sabotage report is treated as a valid verification profile.\n        // Since it was created after the good report, it becomes `best` and overwrites the correct verdict,\n        # violating EV-25 which requires negative controls to have staged broken conditions reported correctly."
 mustFail = ["a_mutation_runs_report_never_settles_a_conformance_claim"]
@@ -726,7 +726,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-25-a_failing_checkpoint_is_only_counted_whe"
 requirement = "EV-25"
-target = "sovereign/crates/sovereign-cli-llm/src/mesh_soak.rs"
+target = "svrn/crates/sovereign-cli-llm/src/mesh_soak.rs"
 find = "        } else if v.get(\"violations\").is_some() {"
 replace = "        } else {"
 mustFail = ["a_failing_checkpoint_is_only_counted_when_it_carries_violations"]
@@ -736,7 +736,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-26-a_gate_that_never_ran_is_could_not_judge"
 requirement = "EV-26"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/mod.rs"
 find = "        Some(_) if !claim_check_measured => GateJudgeVerdict::CouldNotJudge,"
 replace = "        Some(0.5) if !claim_check_measured => GateJudgeVerdict::CouldNotJudge,"
 mustFail = ["a_gate_that_never_ran_is_could_not_judge_not_supported"]
@@ -756,7 +756,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-27-a_journey_only_claims_a_requirement_a_co"
 requirement = "EV-27"
-target = "sovereign/crates/sovereign-cli-shared/src/cli_contract.rs"
+target = "svrn/crates/sovereign-cli-shared/src/cli_contract.rs"
 find = "    pub fn requirement_claims(&self) -> Vec<JourneyClaim<'_>> {\n        let mut out = Vec::new();\n        for journey in &self.journeys {\n            for (step_index, step) in journey.steps.iter().enumerate() {\n                for requirement in &step.requirements {\n                    out.push(JourneyClaim {\n                        journey,\n                        step_index,\n                        step,\n                        requirement,\n                    });\n                }\n            }\n        }\n        out\n    }"
 replace = "    pub fn requirement_claims(&self) -> Vec<JourneyClaim<'_>> {\n        // MUTATION: Skip collecting claims to violate the contract that journeys serve promises.\n        let mut out = Vec::new();\n        if self.journeys.is_empty() { return out; }\n        for journey in &self.journeys {\n            for (step_index, step) in journey.steps.iter().enumerate() {\n                for requirement in &step.requirements {\n                    out.push(JourneyClaim {\n                        journey,\n                        step_index,\n                        step,\n                        requirement,\n                    });\n                }\n            }\n        }\n        out\n    }"
 mustFail = ["a_journey_only_claims_a_requirement_a_command_can_settle"]
@@ -766,7 +766,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-28-live_read_steps_assert_output"
 requirement = "EV-28"
-target = "sovereign/crates/sovereign-cli-shared/src/cli_contract.rs"
+target = "svrn/crates/sovereign-cli-shared/src/cli_contract.rs"
 find = "    pub fn live_steps(&self) -> impl Iterator<Item = (usize, &JourneyStep)> {\n        let runs = self.runs_live();\n        self.steps\n            .iter()\n            .enumerate()\n            .filter(move |(_, s)| runs && s.skip_live.is_none())\n    }"
 replace = "    pub fn live_steps(&self) -> impl Iterator<Item = (usize, &JourneyStep)> {\n        let runs = self.runs_live();\n        self.steps\n            .iter()\n            .enumerate()\n            .filter(move |(_, s)| runs && s.skip_live.is_none() || !s.mutates)\n    }"
 mustFail = ["live_read_steps_assert_output"]
@@ -776,7 +776,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-28-live_steps_all_assert_something"
 requirement = "EV-28"
-target = "sovereign/crates/sovereign-cli-shared/src/cli_contract.rs"
+target = "svrn/crates/sovereign-cli-shared/src/cli_contract.rs"
 find = "                    if ev == AssertionStrength::None {\n                        c.live_unfalsifiable\n                            .push(format!(\"{}[{}] {}\", j.id, i, s.run));\n                    }"
 replace = ""
 mustFail = ["live_steps_all_assert_something"]
@@ -786,7 +786,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-30-gates_require_both_absolute_and_margin"
 requirement = "EV-30"
-target = "sovereign/crates/sovereign-core/src/archive_classifier.rs"
+target = "svrn/crates/sovereign-core/src/archive_classifier.rs"
 find = "        let gate = self.gate();\n        let fires = gate.admits(score);"
 replace = "        // MUTATION: Bypass the margin gate to violate EV-30 (hard zero requirement)\n        // This allows classification when absolute similarity passes but margin is insufficient.\n        let _gate = self.gate();\n        let fires = score.sim_positive >= self.min_archive_sim;"
 mustFail = ["gates_require_both_absolute_and_margin"]
@@ -796,7 +796,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-30-a_gate_that_never_ran_is_could_not_judge"
 requirement = "EV-30"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/mod.rs"
 find = "        Some(_) if !claim_check_measured => GateJudgeVerdict::CouldNotJudge,"
 replace = "        Some(vp) if vp >= tau => GateJudgeVerdict::Unsupported,"
 mustFail = ["a_gate_that_never_ran_is_could_not_judge_not_supported"]
@@ -826,7 +826,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-34-a_gate_that_never_ran_is_could_not_judge"
 requirement = "EV-34"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/mod.rs"
 find = "        Some(_) if !claim_check_measured => GateJudgeVerdict::CouldNotJudge,"
 replace = "        Some(0.5) if !claim_check_measured => GateJudgeVerdict::Unsupported,"
 mustFail = ["a_gate_that_never_ran_is_could_not_judge_not_supported"]
@@ -876,7 +876,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-9-locally_authored_note_carries_no_marker"
 requirement = "FE-9"
-target = "sovereign/crates/sovereign-tools/src/code/brief.rs"
+target = "svrn/crates/sovereign-tools/src/code/brief.rs"
 find = "        let author = notes\n            .attribution(row.origin_node_id.as_deref())\n            .marker_compact()\n            .map(|m| format!(\" _{m}_\"))\n            .unwrap_or_default();"
 replace = "        // MUTATION: Force a marker even when attribution is Unknown.\n        // This violates FE-9 because the active marker names no location (Unknown).\n        let author = if row.origin_node_id.is_some() {\n            notes\n                .attribution(row.origin_node_id.as_deref())\n                .marker_compact()\n                .map(|m| format!(\" _{m}_\"))\n                .unwrap_or_default()\n        } else {\n            \" _?_ \".to_string()\n        };"
 mustFail = ["locally_authored_note_carries_no_marker"]
@@ -936,7 +936,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-16-rotate_refuses_while_an_unconfirmed_peer"
 requirement = "FE-16"
-target = "sovereign/crates/sovereign-daemon/src/daemon.rs"
+target = "svrn/crates/sovereign-daemon/src/daemon.rs"
 find = "                    match generation {\n                        Some(true) => {}\n                        Some(false) => pre_split.push(m.name.clone()),\n                        None => unconfirmed.push(m.name.clone()),\n                    }"
 replace = "                    if let Some(false) = generation {\n                        pre_split.push(m.name.clone());\n                    }\n                    // Treat unknown/unconfirmed as confirmed to avoid false positives\n                    // on nodes that haven't gossiped yet, effectively ignoring the\n                    // requirement for local observation of confirmation status.\n                    else { /* assume safe */ }"
 mustFail = ["rotate_refuses_while_an_unconfirmed_peer_is_online"]
@@ -966,7 +966,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-22-hardware_fingerprint_is_gpu_order_indepe"
 requirement = "FE-22"
-target = "sovereign/crates/sovereign-core/src/mesh_measurements.rs"
+target = "svrn/crates/sovereign-core/src/mesh_measurements.rs"
 find = "    let mut gpu_mix: u64 = 0;\n    for (name, vram_gb, backend) in gpus {\n        let mut g = DefaultHasher::new();\n        name.hash(&mut g);\n        vram_gb.hash(&mut g);\n        backend.hash(&mut g);\n        gpu_mix ^= g.finish();\n    }"
 replace = "    // Mutation: Use a non-commutative accumulation to make order matter.\n    let mut gpu_mix: u64 = 1; \n    for (name, vram_gb, backend) in gpus {\n        let mut g = DefaultHasher::new();\n        name.hash(&mut g);\n        vram_gb.hash(&mut g);\n        backend.hash(&mut g);\n        // XOR is commutative; changing to addition or sequential hashing breaks independence from enumeration order\n        gpu_mix += g.finish(); \n    }"
 mustFail = ["hardware_fingerprint_is_gpu_order_independent"]
@@ -996,7 +996,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-29-fairness_defaults_on_and_the_kill_switch"
 requirement = "FE-29"
-target = "sovereign/crates/sovereign-daemon/src/admission/layers.rs"
+target = "svrn/crates/sovereign-daemon/src/admission/layers.rs"
 find = "pub fn client_fairness_enabled_from_env() -> bool {\n    match std::env::var(\"SOVEREIGN_CLIENT_FAIRNESS\") {\n        Err(_) => true,\n        Ok(v) => !matches!(\n            v.trim().to_ascii_lowercase().as_str(),\n            \"0\" | \"false\" | \"off\" | \"no\"\n        ),\n    }\n}"
 replace = "pub fn client_fairness_enabled_from_env() -> bool {\n    match std::env::var(\"SOVEREIGN_CLIENT_FAIRNESS\") {\n        Err(_) => false,\n        Ok(v) => matches!(\n            v.trim().to_ascii_lowercase().as_str(),\n            \"1\" | \"true\" | \"on\"\n        ),\n    }\n}"
 mustFail = ["fairness_defaults_on_and_the_kill_switch_is_explicit"]
@@ -1116,7 +1116,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-43-enforce_localhost_accepts_loopback_rejec"
 requirement = "FE-43"
-target = "sovereign/crates/sovereign-daemon/src/loopback_guard.rs"
+target = "svrn/crates/sovereign-daemon/src/loopback_guard.rs"
 find = "pub(crate) fn enforce_localhost(addr: &SocketAddr) -> Result<(), Response> {\n    if addr.ip().is_loopback() {\n        Ok(())\n    } else {\n        Err((\n            StatusCode::FORBIDDEN,\n            Json(serde_json::json!({ \"error\": \"local-only\" })),\n        )\n            .into_response())\n    }\n}"
 replace = "pub(crate) fn enforce_localhost(_addr: &SocketAddr) -> Result<(), Response> {\n    // Mutation: Always allow, bypassing the loopback check.\n    Ok(())\n}"
 mustFail = ["enforce_localhost_accepts_loopback_rejects_others"]
@@ -1156,7 +1156,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-52-routes_come_only_from_the_catalog"
 requirement = "FE-52"
-target = "sovereign/crates/sovereign-core/src/runtime/acquisition.rs"
+target = "svrn/crates/sovereign-core/src/runtime/acquisition.rs"
 find = "    let mut routes: Vec<AcquisitionRoute> = scored\n        .into_iter()\n        .take(catalog_cap)\n        .map(|(_, e)| e.route.clone())\n        .collect();"
 replace = "    // MUTATION: Allow non-catalog routes to be selected via the main loop,\n    // violating the requirement that entry points MUST resolve through one route cascade.\n    let mut routes: Vec<AcquisitionRoute> = scored\n        .into_iter()\n        .take(catalog_cap)\n        .flat_map(|(sim, e)| {\n            if sim > 0.95 {\n                vec![e.route.clone(), AcquisitionRoute::WebSearch { queries: vec![] }]\n            } else {\n                vec![e.route.clone()]\n            }\n        })\n        .collect();"
 mustFail = ["routes_come_only_from_the_catalog"]
@@ -1196,7 +1196,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-64-released_pure_decline_separates_declines"
 requirement = "FE-64"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/mod.rs"
 find = "pub(crate) fn grounded_abstention(_claim: &str, chunks_checked: usize) -> String {\n    format!(\n        \"I couldn't confirm an answer to this against the {chunks_checked} passages \\\n         your sources turned up \u2014 so rather than guess at something I can't verify \\\n         from them, I'd flag that instead. If you think it's there, try rephrasing \\\n         with the specific names or terms involved and I'll take another look.\"\n    )\n}"
 replace = "pub(crate) fn grounded_abstention(claim: &str, _chunks_checked: usize) -> String {\n    // Mutation: Return a substantive answer regardless of input to violate separation logic\n    format!(\"The capital is Canberra.\")\n}"
 mustFail = ["released_pure_decline_separates_declines_from_caveated_answers"]
@@ -1226,7 +1226,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-68-shipped_bank_is_disjoint_from_evaluation"
 requirement = "FE-68"
-target = "sovereign/crates/sovereign-core/src/archive_classifier.rs"
+target = "svrn/crates/sovereign-core/src/archive_classifier.rs"
 find = "    pub fn exemplar_texts(raw: &str) -> Result<Vec<String>> {\n        let parsed: ArchiveExamplesFile = toml::from_str(raw)\n            .map_err(|e| Error::InvalidInput(format!(\"parse archive examples: {e}\")))?;\n        Ok(parsed\n            .archive\n            .examples\n            .into_iter()\n            .chain(parsed.thread.examples)\n            .collect())\n    }"
 replace = "    pub fn exemplar_texts(raw: &str) -> Result<Vec<String>> {\n        let parsed: ArchiveExamplesFile = toml::from_str(raw)\n            .map_err(|e| Error::InvalidInput(format!(\"parse archive examples: {e}\")))?;\n        // MUTATION: Violates FE-68 by including thread examples in the shipped bank,\n        // potentially causing overlap with held-out evaluation sets.\n        Ok(parsed\n            .archive\n            .examples\n            .into_iter()\n            .chain(parsed.thread.examples)\n            .collect())\n    }"
 mustFail = ["shipped_bank_is_disjoint_from_evaluation_sets"]
@@ -1236,7 +1236,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-69-fabricated_compound_still_fails_space_bl"
 requirement = "FE-69"
-target = "sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs"
+target = "svrn/crates/sovereign-core/src/runtime/grounding/citation.rs"
 find = "            } else {\n                // Space-tolerant containment: the MTP copy channel drops spaces\n                // (\"18seconds\" for the quote's \"18 seconds\"; the measured\n                // \"dancinggirls\") \u2014 a mis-spaced COPY of quote text is grounded\n                // content wearing a typo, and `respace_answer_from_quote`\n                // repairs the surface after verification. A compound absent\n                // from the quote even space-blind (\"50minutes\" with no\n                // \"50 minutes\" anywhere) still fails.\n                q.contains(w.as_str())\n                    || q.split_whitespace()\n                        .collect::<String>()\n                        .contains(w.as_str())"
 replace = "            } else {\n                // Space-tolerant containment: the MTP copy channel drops spaces\n                // (\"18seconds\" for the quote's \"18 seconds\"; the measured\n                // \"dancinggirls\") \u2014 a mis-spaced COPY of quote text is grounded\n                // content wearing a typo, and `respace_answer_from_quote`\n                // repairs the surface after verification. A compound absent\n                // from the quote even space-blind (\"50minutes\" with no\n                // \"50 minutes\" anywhere) still fails.\n                q.contains(w.as_str())\n                    || w.chars().all(|c| c.is_ascii_digit())\n                    || q.split_whitespace()\n                        .collect::<String>()\n                        .contains(w.as_str())"
 mustFail = ["fabricated_compound_still_fails_space_blind"]
@@ -1266,7 +1266,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-74-a_cluster_too_small_fails_the_aggregate_"
 requirement = "FE-74"
-target = "sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs"
+target = "svrn/crates/sovereign-cli-llm/src/mesh_cmd.rs"
 find = "    let overflows = r.overflows();\n    if overflows.is_empty() {\n        let _ = writeln!(o, \"Per-device:     all devices fit ok\");\n    } else {"
 replace = "    // MUTATION: Ignore per-device overflow checks and always report success.\n    // This violates FE-74 which requires per-device fit to be a decider.\n    let _overflows = r.overflows();\n    let _ = writeln!(o, \"Per-device:     all devices fit ok\");"
 mustFail = ["a_cluster_too_small_fails_the_aggregate_gate"]
@@ -1276,7 +1276,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-78-a_deadline_overrun_is_still_a_shed_and_n"
 requirement = "FE-78"
-target = "sovereign/crates/sovereign-core/src/deep_research/port.rs"
+target = "svrn/crates/sovereign-core/src/deep_research/port.rs"
 find = "fn looks_shed(text: &str) -> bool {\n    let t = text.to_lowercase();\n    [\n        \"503\",\n        \"service unavailable\",\n        \"too many requests\",\n        \"429\",\n        \"retry-after\",\n    ]\n    .iter()\n    .any(|tok| t.contains(tok))\n}"
 replace = "fn looks_shed(_text: &str) -> bool {\n    true\n}"
 mustFail = ["a_deadline_overrun_is_still_a_shed_and_not_a_prompt_overflow"]

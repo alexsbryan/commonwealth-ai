@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Model-lane next-edit prediction (`sovereign/docs/NEXT_EDIT.md` §2,
+//! Model-lane next-edit prediction (`svrn/docs/NEXT_EDIT.md` §2,
 //! §4, §8 P2) — the pure half: consult gate, needle derivation, region
 //! selection, prompt shaping, output parsing, and region diffing. No
 //! inference here; the route layer owns the `LocalInferenceService`
@@ -336,7 +336,7 @@ pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Co
     // The detection stays live and the decline is named so the
     // admission table still counts how often these shapes occur — that
     // count is what a re-open has to argue against. Flip condition and
-    // review-by: `sovereign/DEFAULTS_LEDGER.md`.
+    // review-by: `docs/DEFAULTS_LEDGER.md`.
     if let (Some(ra), Some(rb)) = (&ra, &rb) {
         if ra != rb && a.before == b.before {
             if a.after == b.after {

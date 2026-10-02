@@ -117,7 +117,7 @@ A move keeps behaviour identical and keeps every old path compiling.
 Copy the `Cargo.toml` shape of the nearest sibling under
 `sovereign/crates/`; add the crate to the root `Cargo.toml` `[workspace]
 members`; add it to the `[[layer]]` the row names in
-`quality/ARCH_LAYERS.toml`; add one line for it to `sovereign/SYSTEM_OVERVIEW.md`
+`quality/ARCH_LAYERS.toml`; add one line for it to `docs/SYSTEM_OVERVIEW.md`
 §2's crate list. Its `src/lib.rs` holds only the `//!` doc the row gives.
 
 ## 4. REVIEW units — you are the stronger model
@@ -142,7 +142,7 @@ anything that adds an
 `[x]`. If the pointed design is contradicted by the tree, §6.
 
 **`REVIEW-audit-<n>`.** Run TESTALL and PREPUSH. Read `git log` and `git
-diff` since the previous audit's hash against `sovereign/ARCH_PRINCIPLES.md`
+diff` since the previous audit's hash against `docs/ARCH_PRINCIPLES.md`
 ("The twelve", and the section of any principle you cite). Fix what you find,
 behaviour-preserving, and record each finding in `ralph/REVIEW_FINDINGS.md`:
 principle, path:line, fixed-in hash. Delete shims whose importers are all
@@ -205,7 +205,7 @@ pushing — and any correction whose evidence you cannot reproduce.
   or widen an `except` list unless the row names that exact row.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/` or
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/` or
   `scripts/ralph-*.sh`. Never stop or restart the daemon. Never
   `--update-baseline` a ratchet (first bullet). `quality/baselines/` is
   machine-written and off-limits except for §3a step 6: a move re-keys its own

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Port-level counterparts to the real-store proofs in the assembled host
-//! (`sovereign/crates/sovereign-daemon/tests/main/work_atlas_store.rs`).
+//! (`svrn/crates/sovereign-daemon/tests/main/work_atlas_store.rs`).
 //!
 //! That file drives `WorkAtlasStore` over the REAL `MeshStore`, so it can
 //! assert what replication does with a record — the ring, the travel, the

@@ -6,11 +6,11 @@ measured on this date from this repo's own history; every recorded
 failure is cited to the document or note that records it.
 
 ← companions: `.claude/CLAUDE.md` (the accreted constitution this doc
-proposes to shrink), `sovereign/ARCH_PRINCIPLES.md` (the values; §18 is
-this doc's judgment core), `sovereign/docs/EPISTEMIC_STATE.md` (the
+proposes to shrink), `docs/ARCH_PRINCIPLES.md` (the values; §18 is
+this doc's judgment core), `svrn/docs/EPISTEMIC_STATE.md` (the
 pattern being repeated: replace prose with a typed object — there the
 answer, here the verdict), `gym/next-edit/golden/` (the mining
-precedent), `sovereign/DEFAULTS_LEDGER.md` (the promotion mechanism),
+precedent), `docs/DEFAULTS_LEDGER.md` (the promotion mechanism),
 `docs/COMAINTAINER_OPERATOR_MANUAL.md` (the operator's own quick
 reference — the commands, not the design),
 `docs/COMAINTAINER_SUBSTRATE.md` (this role scaled to a 30-developer

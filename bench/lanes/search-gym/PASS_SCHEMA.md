@@ -89,7 +89,7 @@ must_not_cite_url_outside_mock = true
 
 ## Adding a new key
 
-1. Add the field to `Predicate` in `sovereign/crates/sovereign-cli/src/search_gym_cmd/predicate.rs`.
+1. Add the field to `Predicate` in `svrn/crates/sovereign-cli/src/search_gym_cmd/predicate.rs`.
 2. Document it here.
 3. Add a scoring arm to `score::score()` in `score.rs`.
 4. Pin behaviour with a unit test in `score.rs::tests`.

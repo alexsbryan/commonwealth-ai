@@ -181,7 +181,7 @@ The consequences, from the review pass, with the first re-checked by the author:
   sends `{"type":"string","enum":["A","B"],"x_forced_choice":true}` as
   structured output. A remote server returns a sampled string, and
   `serde_json::from_str(resp.text.trim()).ok()?`
-  (`sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs:166-167`)
+  (`svrn/crates/sovereign-core/src/runtime/grounding/judge.rs:166-167`)
   returns `None` with no log line, so the gate releases the answer unverified.
   The call sites are the KnowledgeQuery gate, the deep-research audit and the
   evidence-sufficiency loop.
@@ -282,7 +282,7 @@ a sampler hook.
 
 ### Phase 2: ship dark
 
-Sidecar engine behind config, default off, with a `sovereign/DEFAULTS_LEDGER.md`
+Sidecar engine behind config, default off, with a `docs/DEFAULTS_LEDGER.md`
 row naming the flip condition (Phase 1 bars green on both hosts) and a
 review-by date. Nightly lanes run both engines.
 

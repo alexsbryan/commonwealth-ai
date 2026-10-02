@@ -7,7 +7,7 @@ category = "tool_use"
 system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
 
 {{menu}}"""
-user = """Task: count how many `.rs` files exist under `sovereign/crates/sovereign-core/src/` (recursively). One number as output."""
+user = """Task: count how many `.rs` files exist under `svrn/crates/sovereign-core/src/` (recursively). One number as output."""
 
 [[context_blocks]]
 name = "menu"

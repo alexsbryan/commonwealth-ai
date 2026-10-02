@@ -6,7 +6,7 @@
 //! keyed by a content-hash of the body. This is the validated bridge from a
 //! conceptual ("no function keywords") question to the right symbol:
 //! retrieval matches the summary + questions, then the SCIP call-graph traces
-//! from there. See `sovereign/docs/specs/CODE_INTEL_CHAT.md`.
+//! from there. See `svrn/docs/specs/CODE_INTEL_CHAT.md`.
 //!
 //! Design (SOLID, single-responsibility, dependency-injected):
 //!  - [`SymbolMeta`] + [`SymbolEnrichment`] are plain data.

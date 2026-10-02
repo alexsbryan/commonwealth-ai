@@ -146,18 +146,18 @@ jobs:
               - 'vendor/**'
               - 'scripts/sovereign-test.sh'
               - 'scripts/lib/**'
-              - 'sovereign/crates/sovereign-tools/src/code/test_adapters/**'
+              - 'svrn/crates/sovereign-tools/src/code/test_adapters/**'
               # The CLI contract + journey manifest IS the test input for
               # cli_contract_{code,docs,journeys} and cli_journey_dispatch —
               # editing it can turn the suite red without touching a .rs file.
-              - 'sovereign/docs/cli-contract.toml'
+              - 'svrn/docs/cli-contract.toml'
               # The journey runner, its sandbox lane, its nightly wrapper, and
               # its negative controls. A glob, not a list: this was three named
               # files and the nightly lane added a fourth that silently matched
               # nothing. Keep in step with the `rust` / `JOURNEY` filters in
               # scripts/pre-push.sh.
-              - 'sovereign/scripts/cli-journey-*.sh'
-              - 'sovereign/scripts/tests/**'
+              - 'svrn/scripts/cli-journey-*.sh'
+              - 'svrn/scripts/tests/**'
               - '.github/workflows/ci.yml'
             desktop:
               - 'sovereign/crates/sovereign-desktop/**'
@@ -509,9 +509,9 @@ jobs:
       #
       # The real-daemon run stays an OPERATOR gate, not a CI one, because it
       # needs model weights this runner does not have:
-      #   SOVEREIGN_LIVE_JOURNEYS=1 sovereign/scripts/cli-journey-verify.sh --tier 2
+      #   SOVEREIGN_LIVE_JOURNEYS=1 svrn/scripts/cli-journey-verify.sh --tier 2
       - name: CLI journey harness self-test
-        run: sovereign/scripts/tests/cli-journey-selftest.sh
+        run: svrn/scripts/tests/cli-journey-selftest.sh
       # Benches are the only --all-targets class `cargo test` does not build,
       # and bench code rots silently. Incremental against the artifacts the
       # test build just produced, so this is seconds, not a second compile.

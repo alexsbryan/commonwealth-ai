@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! SEC typed-fact store — the pure lookup/derivation half of the
-//! `sec_facts` tool (spec `sovereign/docs/specs/FINANCIAL_CORPORA.md` §6.2).
+//! `sec_facts` tool (spec `svrn/docs/specs/FINANCIAL_CORPORA.md` §6.2).
 //!
 //! The store is a sidecar (`sec_facts.json`) written at corpus setup time
 //! by `sovereign_tools::sec_facts_render::render` — THE one decider for

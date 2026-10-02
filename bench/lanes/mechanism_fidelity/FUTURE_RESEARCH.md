@@ -205,4 +205,4 @@ shape (so scorer/verdict/cards/early-stopping all work unchanged), plus the mand
 | Pre-registration bands | `manifest.toml` |
 | Verdict reader | `verdict.py` |
 | Cards | `~/.svrnmesh/model-fidelity-cards/<model>.json` |
-| System map entry | `sovereign/SYSTEM_OVERVIEW.md` (Reasoning-Fidelity Validation Harness) |
+| System map entry | `docs/SYSTEM_OVERVIEW.md` (Reasoning-Fidelity Validation Harness) |

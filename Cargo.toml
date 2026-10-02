@@ -116,16 +116,16 @@ members = [
     # The thin knowledge host — cited search + atlas atom lookup over MCP/stdio
     # against any OpenAI-compatible endpoint; links corpus-engine + the vocab
     # leaf and nothing that carries llama.cpp, ort or iroh (enrichment-as-plugin
-    # Step 5; the acceptance test is corpus-mcp/acceptance.sh).
-    "corpus-mcp",
+    # Step 5; the acceptance test is svrn/crates/corpus-mcp/acceptance.sh).
+    "svrn/crates/corpus-mcp",
 
     # Sovereign — local agent runtime + CLI + desktop + server.
     "shared/crates/sovereign-contracts",
-    "sovereign/crates/sovereign-core",
+    "svrn/crates/sovereign-core",
     "serve/crates/sovereign-inference",
-    "sovereign/crates/sovereign-store",
+    "svrn/crates/sovereign-store",
     "shared/crates/sovereign-time",
-    "sovereign/crates/sovereign-tools",
+    "svrn/crates/sovereign-tools",
     "code/crates/sovereign-code",
     # GLiNER (ONNX) per-chunk entity extraction — carved out of sovereign-tools
     # 2026-07-17 so the fragile ort=rc.9 stack is a mandatory dep of only the
@@ -148,9 +148,9 @@ members = [
     # implemented three times, for the same reason as the catalog above: it
     # needs sovereign-tools + sovereign-gliner, and every crate that could
     # already see both was a host binary.
-    "sovereign/crates/sovereign-runtime-recipe",
+    "svrn/crates/sovereign-runtime-recipe",
     "shared/crates/sovereign-turn-client",
-    "studio/crates/sovereign-tools-base",
+    "svrn/crates/sovereign-tools-base",
     "ingest/crates/sovereign-recipe-author",
     # Workflow substrate — Step · Artifact · Runner (a typed dataflow over
     # local-model steps; the general form of corpus-ingest/enrichment/agent).
@@ -158,19 +158,19 @@ members = [
     # Daemon-runnable workflow host — the registry assembly + in-process runner +
     # catalog, hoisted out of the CLI so the daemon can run workflows (the living
     # trigger's prerequisite).
-    "studio/crates/sovereign-workflow-host",
+    "svrn/crates/sovereign-workflow-host",
     "studio/crates/sovereign-studio",
     # Headless studio CLI — authors + tests recipes and runs workflows against any
     # OICP daemon, linking ONLY the studio crates + shared leaves (no corpus-engine,
     # no sovereign-core). The proof the studio package is independently usable.
     # MeshApp explorer ops — pure path-in/DTO-out projections shared by the
     # desktop Tauri host and the `sovereign meshapp dev` CLI server.
-    "sovereign/crates/sovereign-meshapp",
+    "svrn/crates/sovereign-meshapp",
     # The node's host crate (DAEMON_CORE.md §4.1), in the `mesh-api` layer.
     # Created as a stub so the boundary has a crate to name; it received
     # sovereign-mesh's host modules (pb-mesh-dissolve deleted that crate) and
     # sovereign-api's host cluster.
-    "sovereign/crates/sovereign-daemon",
+    "svrn/crates/sovereign-daemon",
     # The daemon-to-daemon wire types both ends of an internal exchange must
     # spell the same way (domains dm-daemon-api-edge (a)): the receiving route
     # lives in sovereign-daemon and the sending loop in sovereign-mesh, so the
@@ -205,7 +205,7 @@ members = [
     # Ingest's hosting composition for svrn, the one `hosted()` both
     # distributions call (docs/internal/FIVE_PROGRAMS.md §2c; phase-b-88).
     "sovereign/crates/sovereign-hosted-ingest",
-    "sovereign/crates/sovereign-service",
+    "svrn/crates/sovereign-service",
     "sovereign/crates/sovereign-desktop/src-tauri",
     "sovereign-mobile/src-tauri",
     # The phone surface. Promoted into the workspace 2026-09-10 (sv-surface R6):
@@ -215,12 +215,12 @@ members = [
     # from growing back is a gate that actually compiles and tests it. `tauri`
     # was already a workspace dependency via sovereign-desktop, so this adds no
     # new third-party tree.
-    "sovereign/crates/sovereign-cli",
+    "svrn/crates/sovereign-cli",
     "shared/crates/sovereign-cli-base",
-    "sovereign/crates/sovereign-cli-shared",
+    "svrn/crates/sovereign-cli-shared",
     "code/crates/sovereign-cli-dev",
-    "sovereign/crates/sovereign-cli-daemon",
-    "sovereign/crates/sovereign-cli-llm",
+    "svrn/crates/sovereign-cli-daemon",
+    "svrn/crates/sovereign-cli-llm",
     # bench's CLI (phase-b pb-cli-llm-bench-move).
     "bench/crates/sovereign-cli-bench",
     "cmnwlth/crates/sovereign-cli-mesh",
@@ -231,7 +231,7 @@ members = [
     "code/crates/sovereign-agent-bench",
     "code/crates/sovereign-agent-tools",
     # TDD-machine backend (red-green-refactor solver registry).
-    # See sovereign/docs/TDD_MACHINE_DESIGN.md.
+    # See svrn/docs/TDD_MACHINE_DESIGN.md.
     "code/crates/sovereign-tdd",
 
     # Commonwealth — symmetric mesh daemon.
@@ -240,7 +240,7 @@ members = [
     # IP overlay today; iroh slots in behind the same trait later.
     "cmnwlth/crates/commonwealth-transport",
     "cmnwlth/crates/commonwealth-discovery",
-    "sovereign/crates/sovereign-grants",
+    "svrn/crates/sovereign-grants",
     # The ring rail, split in two on 2026-09-04 (cw-lift 1b). `-rail-core` is
     # the pure fold — vocabulary, signing, admission, sync digest, zero I/O —
     # and `-rail` is the JSONL journal under `<root>/rings/<ns>/` that calls
@@ -377,32 +377,32 @@ code-facts = { path = "code/crates/code-facts" }
 code-next-edit = { path = "code/crates/code-next-edit" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "shared/crates/sovereign-contracts" }
-sovereign-core = { path = "sovereign/crates/sovereign-core" }
+sovereign-core = { path = "svrn/crates/sovereign-core" }
 sovereign-inference = { path = "serve/crates/sovereign-inference" }
 sovereign-scheduler = { path = "serve/crates/sovereign-scheduler" }
-sovereign-store = { path = "sovereign/crates/sovereign-store" }
+sovereign-store = { path = "svrn/crates/sovereign-store" }
 sovereign-time = { path = "shared/crates/sovereign-time" }
-sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
+sovereign-tools = { path = "svrn/crates/sovereign-tools" }
 sovereign-code = { path = "code/crates/sovereign-code" }
 sovereign-studio = { path = "studio/crates/sovereign-studio" }
 sovereign-gliner = { path = "serve/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "ingest/crates/sovereign-enrichment-catalog" }
 sovereign-enrichment-build = { path = "ingest/crates/sovereign-enrichment-build" }
-sovereign-runtime-recipe = { path = "sovereign/crates/sovereign-runtime-recipe" }
+sovereign-runtime-recipe = { path = "svrn/crates/sovereign-runtime-recipe" }
 sovereign-turn-client = { path = "shared/crates/sovereign-turn-client" }
-sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
+sovereign-tools-base = { path = "svrn/crates/sovereign-tools-base" }
 sovereign-recipe-author = { path = "ingest/crates/sovereign-recipe-author" }
 sovereign-workflow = { path = "shared/crates/sovereign-workflow" }
-sovereign-workflow-host = { path = "studio/crates/sovereign-workflow-host" }
-sovereign-meshapp = { path = "sovereign/crates/sovereign-meshapp" }
-sovereign-daemon = { path = "sovereign/crates/sovereign-daemon" }
+sovereign-workflow-host = { path = "svrn/crates/sovereign-workflow-host" }
+sovereign-meshapp = { path = "svrn/crates/sovereign-meshapp" }
+sovereign-daemon = { path = "svrn/crates/sovereign-daemon" }
 sovereign-peer-wire = { path = "shared/crates/sovereign-peer-wire" }
 sovereign-compute = { path = "serve/crates/sovereign-compute" }
 sovereign-serving-host = { path = "serve/crates/sovereign-serving-host" }
 sovereign-serve = { path = "serve/crates/sovereign-serve" }
-sovereign-service = { path = "sovereign/crates/sovereign-service" }
+sovereign-service = { path = "svrn/crates/sovereign-service" }
 sovereign-cli-base = { path = "shared/crates/sovereign-cli-base" }
-sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
+sovereign-cli-shared = { path = "svrn/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "ingest/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "code/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "code/crates/sovereign-agent-bench" }
@@ -414,7 +414,7 @@ sovereign-tdd = { path = "code/crates/sovereign-tdd" }
 commonwealth-core = { path = "cmnwlth/crates/commonwealth-core" }
 commonwealth-transport = { path = "cmnwlth/crates/commonwealth-transport" }
 commonwealth-discovery = { path = "cmnwlth/crates/commonwealth-discovery" }
-sovereign-grants = { path = "sovereign/crates/sovereign-grants" }
+sovereign-grants = { path = "svrn/crates/sovereign-grants" }
 commonwealth-rail-core = { path = "shared/crates/commonwealth-rail-core" }
 commonwealth-rail = { path = "cmnwlth/crates/commonwealth-rail" }
 commonwealth-work = { path = "cmnwlth/crates/commonwealth-work" }

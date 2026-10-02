@@ -17,7 +17,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Dial-by-key mesh access over iroh (Track W of
-/// `sovereign/docs/specs/TRANSPORT_MIGRATION.md`). When `enabled`, the
+/// `svrn/docs/specs/TRANSPORT_MIGRATION.md`). When `enabled`, the
 /// daemon binds an iroh endpoint from its `<data_dir>/node_key`
 /// identity — the SAME Ed25519 key it already gossips as
 /// `MemberRecord.node_pubkey`, so "known member" and "dialable by key"

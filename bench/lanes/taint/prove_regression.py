@@ -16,7 +16,7 @@ import subprocess, sys
 from taint import PARSER, txt, build_letmap
 import guard
 
-REL="sovereign/crates/sovereign-tools/src/document_asset.rs"
+REL="svrn/crates/sovereign-tools/src/document_asset.rs"
 BUGGY="76b72a4baa8e25ed6e6ca98d1296e00444a4e1db"
 FIXED="6c9b4fd6"
 

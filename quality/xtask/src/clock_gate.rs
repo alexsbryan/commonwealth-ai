@@ -51,7 +51,7 @@ use crate::common;
 /// The files ALLOWED to read the wall clock, because they are the deciders.
 const DECIDERS: &[&str] = &[
     "shared/crates/sovereign-time/src/lib.rs",
-    "sovereign/crates/sovereign-core/src/time.rs",
+    "svrn/crates/sovereign-core/src/time.rs",
     "shared/crates/corpus-engine-yield/src/time.rs",
     "cmnwlth/crates/commonwealth-core/src/clock.rs",
 ];

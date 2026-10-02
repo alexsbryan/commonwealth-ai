@@ -306,7 +306,7 @@ mod tests {
         let s = scope();
         for rel in [
             "ingest/crates/corpus-engine/src",
-            "sovereign/crates/sovereign-core/src/runtime",
+            "svrn/crates/sovereign-core/src/runtime",
             "commonwealth/crates/commonwealth-api/src",
             "scripts",
             "docs",

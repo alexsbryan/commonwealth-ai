@@ -1,0 +1,17 @@
+*.gguf
+*node_modules
+# `dist/` (trailing slash) — the frontend build output, DIRECTORIES ONLY.
+# This was `dist*`, which silently swallowed any source file whose name
+# started with "dist": `distribution.rs`, `distributed_*_e2e.rs` were both
+# invisible to `git status` and would never have been committed.
+dist/
+
+# Sovereign code intelligence
+.sovereign/project.json
+.sovereign/scip/
+# SQLite databases (notes.db, features.db, mesh.db, …) — personal
+# session state, binary, not for source control. Glob covers the db
+# file itself plus its -shm / -wal / -journal sidecars in one rule so
+# new dbs are caught automatically.
+.sovereign/*.db
+.sovereign/*.db-*

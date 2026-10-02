@@ -51,7 +51,7 @@ dependency.
 
 Four monorepo binaries already consume the engine as a library: `sovereign-cli-llm`,
 `sovereign-server`, `sovereign-cli-daemon` and `sovereign-desktop`. The
-substrate spec (`sovereign/docs/specs/WORKFLOW_SUBSTRATE.md`) proved it
+substrate spec (`svrn/docs/specs/WORKFLOW_SUBSTRATE.md`) proved it
 reproduces corpus ingest's `chunk → embed` stage byte-for-byte against the real
 engine. So "consume within it" is not a future state. It is the current state,
 and the library question is only about the dependency direction of the

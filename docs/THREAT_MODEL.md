@@ -25,7 +25,7 @@ exposing anything. Two rules govern it:
 
 Vulnerability reporting: see [SECURITY.md](../SECURITY.md). Architecture
 context: `cmnwlth/ARCHITECTURE.md` §9 (a summary that defers to this
-document) and `sovereign/SYSTEM_OVERVIEW.md` §"Discovery and membership".
+document) and `docs/SYSTEM_OVERVIEW.md` §"Discovery and membership".
 
 ## Trust boundaries
 
@@ -35,7 +35,7 @@ Three zones, from most to least trusted:
   local CLI, and in-process callers reach the client API without a token.
   This is decided from the real socket peer address
   (`ConnectInfo<SocketAddr>`), never from a spoofable header
-  (`sovereign/crates/sovereign-daemon/src/client_auth.rs`).
+  (`svrn/crates/sovereign-daemon/src/client_auth.rs`).
 - **The mesh perimeter.** In trusted-network mode a Commonwealth mesh runs
   on a network you control — a tailnet, WireGuard, or a LAN behind a
   firewall. Inside that perimeter, nodes that hold the join key are peers.
@@ -43,11 +43,11 @@ Three zones, from most to least trusted:
   time (`cmnwlth/crates/commonwealth-discovery/src/membership.rs`);
   when a joiner presents a node identity it must also carry an Ed25519
   proof-of-possession, and a bad or missing proof is rejected with 401
-  (`sovereign/crates/sovereign-daemon/src/routes_internal/mesh_admin.rs`
+  (`svrn/crates/sovereign-daemon/src/routes_internal/mesh_admin.rs`
   with the check in
   `cmnwlth/crates/commonwealth-transport/src/identity.rs`).
 - **Guests.** A holder of an ephemeral guest grant
-  (`sovereign/crates/sovereign-grants/src/guest_grant.rs`, 2026-08-27; the
+  (`svrn/crates/sovereign-grants/src/guest_grant.rs`, 2026-08-27; the
   crate was `commonwealth-knowledge` until the pack split) is strictly
   weaker than a member and strictly weaker than a
   `client_token` holder. They present a short-lived, revocable bearer,
@@ -68,7 +68,7 @@ Three zones, from most to least trusted:
   **guest door**: `[daemon] guest_bind = "host:port"` (default off) puts
   the same Guest router on a bind the room's WiFi reaches, listening only
   while such a grant is live and closed at the last expiry
-  (`sovereign/crates/sovereign-daemon/src/guest_door.rs`), even on an
+  (`svrn/crates/sovereign-daemon/src/guest_door.rs`), even on an
   encrypted mesh. **A wall grant reaches every rail namespace this door's
   owner registered for guests in `[daemon.guest_pages]`, for the grant's
   TTL, and nothing else on the rail** — the resource declares and the
@@ -98,7 +98,7 @@ Three zones, from most to least trusted:
   grants it is recognised under. The door also answers `/status` and `/oicp/v1/capabilities` to
   anyone on that network, as every non-loopback bind does.
   A rail scope also carries `POST /v1/guest/ask`
-  (`sovereign/crates/sovereign-daemon/src/routes_guest_ask.rs`), which is how
+  (`svrn/crates/sovereign-daemon/src/routes_guest_ask.rs`), which is how
   the room answers a question for someone who holds no membership. Its bound
   is the handler, not the path: the turn runs IN-PROCESS as the door's own
   principal, in one conversation whose id is `sha256(bearer)` — so a second
@@ -118,9 +118,9 @@ Three zones, from most to least trusted:
 
 | Surface | Default bind | Auth | Encryption |
 |---|---|---|---|
-| Client API `:9741` — embedded daemon (`/v1/*` OpenAI, `/api/*` Ollama shim, apps, knowledge) | `127.0.0.1` (`sovereign/crates/sovereign-daemon/src/daemon.rs`) | Loopback exempt; any non-loopback caller needs `Authorization: Bearer <token>`, matched full-token-first then guest-grant (`client_auth.rs`); **fail-closed** (403) when no token is configured. Exempt read-only paths: `/status`, `/oicp/v1/capabilities`. | Plain HTTP on the perimeter; on an encrypted mesh the listener is forced loopback and iroh QUIC/TLS is the sole ingress |
+| Client API `:9741` — embedded daemon (`/v1/*` OpenAI, `/api/*` Ollama shim, apps, knowledge) | `127.0.0.1` (`svrn/crates/sovereign-daemon/src/daemon.rs`) | Loopback exempt; any non-loopback caller needs `Authorization: Bearer <token>`, matched full-token-first then guest-grant (`client_auth.rs`); **fail-closed** (403) when no token is configured. Exempt read-only paths: `/status`, `/oicp/v1/capabilities`. | Plain HTTP on the perimeter; on an encrypted mesh the listener is forced loopback and iroh QUIC/TLS is the sole ingress |
 | ~~Client API `:9741` — standalone `commonwealth` binary~~ | ~~`0.0.0.0` (hardcoded)~~ | ~~Same `client_auth` bearer layer as above~~ | Struck 2026-09-20: the binary was deleted by `27c0fe031` (2026-08-26) and no crate of that name is in the tree, so this surface does not ship. See Known gaps entry 4. |
-| MCP `/mcp` (rides `:9741`) | — | Loopback-only middleware, no token by design (`sovereign/crates/sovereign-daemon/src/mcp_router.rs`); permissive CORS is safe *because* of the loopback gate | — |
+| MCP `/mcp` (rides `:9741`) | — | Loopback-only middleware, no token by design (`svrn/crates/sovereign-daemon/src/mcp_router.rs`); permissive CORS is safe *because* of the loopback gate | — |
 | Internal mesh API `:9742` (gossip, join, scheduling, corpus collaboration) | `0.0.0.0` in trusted-network mode; `127.0.0.1` in encrypted mode | **None blanket** — perimeter-trusted; join itself is key+proof gated and gossip carries a mesh proof; **the other routes, admin ones included, have no guard of their own** (corrected 2026-09-20: this row said they were per-handler loopback-only, and no handler reads the caller's address) | **Encrypted-QUIC-first**; in trusted-network mode it falls back to cleartext HTTP on your perimeter, and encrypted mode (below) makes iroh QUIC/TLS the sole path |
 | `sovereign-server` `:8080` (multi-tenant REST/WS, mobile-facing) | `127.0.0.1` (`sovereign/crates/sovereign-server/src/config.rs`) | API-key → tenant middleware. **Startup refuses a non-loopback bind with auth disabled** unless `allow_unauthenticated_remote = true` is set explicitly (`validate_exposure`). `/health` + `/status` unauthenticated by design. | Plain HTTP on the perimeter; iroh dial-by-key optional (`[iroh] enabled`) |
 | Worker-pod daemon `:9742` (rented/cloud worker) | `0.0.0.0` | Owner-only routes; client pins the worker's certificate thumbprint from the bootstrap seed | rustls TLS (`cmnwlth/crates/sovereign-pods/src/worker_daemon.rs`) |
@@ -177,7 +177,7 @@ deliberate; neither is a placeholder.
 - **Work-atlas privacy is structural.** Private claims/observations are
   written to a separate store that never gossips, enforced at the store,
   gossip, and read layers (`~/.svrnmesh/work-atlas.toml`,
-  `sovereign/docs/WORK_ATLAS.md`).
+  `svrn/docs/WORK_ATLAS.md`).
 - **Answers cite sources.** Retrieval provenance is recorded and surfaced
   (`[Source: …]` citations, message provenance metadata), so data that
   leaves a node does so as attributed retrieval results, not anonymous
@@ -225,7 +225,7 @@ it.
    member name when the roster has one. Since `0f190bc47` `/internal/ring/sync`
    refuses on that key, by roster; see entry 7.
    What `8885071db` added is one gate for every other route
-   (`sovereign/crates/sovereign-daemon/src/internal_gate.rs`, applied in
+   (`svrn/crates/sovereign-daemon/src/internal_gate.rs`, applied in
    `server.rs` immediately before `internal_principal_layer`, so the resolver
    runs outermost and the gate reads what it attached). It exempts exactly
    `/internal/join` and `/internal/gossip` by exact path equality, admits a

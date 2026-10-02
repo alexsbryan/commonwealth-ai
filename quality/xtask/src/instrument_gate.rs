@@ -47,7 +47,7 @@ const INSTRUMENT_SUBCOMMANDS: [&str; 9] = [
 
 /// Where a bare `foo.sh` in prose is looked up. First hit wins; a name that
 /// resolves nowhere is not a reference to anything and is dropped.
-const SCRIPT_DIRS: [&str; 3] = ["scripts", "sovereign/scripts", ".claude/hooks/tests"];
+const SCRIPT_DIRS: [&str; 3] = ["scripts", "svrn/scripts", ".claude/hooks/tests"];
 
 pub fn run(args: &[String]) -> i32 {
     let root = args

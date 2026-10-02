@@ -33,7 +33,7 @@ sovereign-agent-tools = { workspace = true }
 # TDD-machine backend — the `search` runner is now a thin adapter
 # over `sovereign_tdd::SolverRegistry`. Lifting the loop into
 # sovereign-tdd 2026-05-24 was phase 7b of the TDD machine
-# rollout (see `sovereign/docs/TDD_MACHINE_DESIGN.md`).
+# rollout (see `svrn/docs/TDD_MACHINE_DESIGN.md`).
 sovereign-tdd = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 

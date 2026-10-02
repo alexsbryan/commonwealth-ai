@@ -24,7 +24,7 @@ above; nothing re-implemented, nothing substituted.
 
 ## The instrument
 
-- Driver: `sovereign/crates/sovereign-core/tests/fr6_decorrelation.rs`
+- Driver: `svrn/crates/sovereign-core/tests/fr6_decorrelation.rs`
   (`#[ignore]`d; runs against the live local daemon, `--ignored
   --nocapture`). Provider: `RemoteApiProvider` → the primary stem
   `Qwen3.6-35B-A3B-MTP-UD-Q6_K` (the same model class the hand-run chat

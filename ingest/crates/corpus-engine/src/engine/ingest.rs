@@ -1906,7 +1906,7 @@ impl CorpusEngine {
             }
 
             // Phase B incremental NER hook (spec
-            // `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md`
+            // `svrn/docs/specs/PROGRESSIVE_ENRICHMENT.md`
             // §"Incremental update strategy"). For
             // conversation-category corpora — `conversation-history`
             // via the KnowledgeView debouncer, `conversations-personal`

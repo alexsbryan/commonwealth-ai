@@ -51,7 +51,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--harvest", required=True)
     ap.add_argument("--calibration", default=str(
-    Path(__file__).resolve().parents[4] / "sovereign/crates/sovereign-core/data/calibration/h1_admission_calibration.json"))
+    Path(__file__).resolve().parents[4] / "svrn/crates/sovereign-core/data/calibration/h1_admission_calibration.json"))
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent / "percorpus_tau_saltgrass.json"))
     args = ap.parse_args()
 

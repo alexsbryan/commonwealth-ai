@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Frontier shape taxonomy + mechanical detectors for the next-edit golden set.
 
-Spec: `sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md` §2. Sizing and gates:
+Spec: `svrn/docs/specs/NEXT_EDIT_BAKEOFF.md` §2. Sizing and gates:
 `gym/next-edit/golden/README.md`.
 
 WHY THIS EXISTS. The `gen` bank's 30 positives are drawn from exactly the

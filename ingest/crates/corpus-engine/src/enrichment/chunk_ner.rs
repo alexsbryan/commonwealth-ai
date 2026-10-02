@@ -47,7 +47,7 @@ impl GlinerChunkExtractor {
 
 impl GlinerChunkExtractor {
     /// Phase B incremental hook (spec
-    /// `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md` §"Incremental
+    /// `svrn/docs/specs/PROGRESSIVE_ENRICHMENT.md` §"Incremental
     /// update strategy"). Scans `index_path` for chunks NOT yet in
     /// `chunk_entities` for `corpus_id` and runs GliNER only on the
     /// delta. Non-destructive: writes via `save_chunk_entities`

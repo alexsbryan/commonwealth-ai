@@ -344,7 +344,7 @@ sha256 = ""
 # with three of four flip conditions met and the fourth NOT met. This
 # comment records the gaps rather than implying a clean bar, because the
 # next reader must not infer from `featured` that the journey is fully
-# proven. Full audit trail: sovereign/DEFAULTS_LEDGER.md.
+# proven. Full audit trail: docs/DEFAULTS_LEDGER.md.
 #
 # WHAT IS PROVEN. The figure path works on BOTH surfaces. Ring 0
 # (`svrn chat ask`, n=3, 3/3 identical) and ring 2 (the desktop app,

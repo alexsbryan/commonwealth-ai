@@ -29,7 +29,7 @@ use crate::types::{Intent, ToolDescriptor};
 // ─── Mode ids ──────────────────────────────────────────────────
 
 /// The two surviving named modes after skill retirement. These match
-/// the `id` field of the TOMLs at `sovereign/modes/<id>/skill.toml`.
+/// the `id` field of the TOMLs at `svrn/modes/<id>/skill.toml`.
 pub const MODE_INNER_WORK: &str = "inner-work";
 /// Recipe-author workspace mode id.
 pub const MODE_RECIPE_AUTHOR: &str = "recipe-author";

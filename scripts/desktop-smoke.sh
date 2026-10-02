@@ -341,7 +341,7 @@ phase1() {
   log "PHASE 1 — perf baseline (throughput + TTFT + MTP + TTFI)"
   [ -n "$DRY_RUN" ] && { record "1 perf" "DRY" 0 "throughput_probe x2 + mtp-probe + ttfi"; return 0; }
   local t0; t0=$(date +%s) fail=0 detail=""
-  sovereign/scripts/smoke-attach-mode.sh > "$ART/p1-attach.log" 2>&1 \
+  svrn/scripts/smoke-attach-mode.sh > "$ART/p1-attach.log" 2>&1 \
     && log "  daemon surface: up" || { warn "  smoke-attach probes failed (non-fatal)"; detail+="attach? "; }
 
   # The throughput lane of `svrn quality check` owns this now. It runs the

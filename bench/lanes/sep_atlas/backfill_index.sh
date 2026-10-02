@@ -57,7 +57,7 @@ SVRN_ROOT=$(svrn_root)
 SCLI=${SCLI:-$REPO/target/debug/sovereign-cli}
 LOG_DIR=${LOG_DIR:-$HERE/logs}
 # The ledger is EVIDENCE and lives beside the driver, in git. The verbose run
-# log is noise and lives in `logs/`, which `sovereign/.gitignore` excludes --
+# log is noise and lives in `logs/`, which `svrn/.gitignore` excludes --
 # putting the ledger there would have quietly un-committed the one artifact
 # this job exists to produce.
 LEDGER=${LEDGER:-$HERE/backfill-index.jsonl}

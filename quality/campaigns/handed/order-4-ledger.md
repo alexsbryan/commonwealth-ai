@@ -25,7 +25,7 @@ say refuses by name instead of pretending to record.
 ## Premises (verified 2026-09-17, file:line)
 
 - `pub trait StepExecutionStore` — shared/crates/sovereign-contracts/src/traits.rs:1805-1840; default bodies at :1808-1810 (`record_started`), :1814-1821 (`mark_completed`), :1824-1826 (`mark_failed`), :1837-1839 (`find_execution`); the doc at :1798-1803 states "Every method defaults to a no-op so non-durable contexts (test mocks …) are unaffected".
-- Implementations (all four methods present in the three real ones): sovereign/crates/sovereign-store/src/memory.rs:300-339; sovereign/crates/sovereign-store/src/postgres.rs:790-868 (module behind `#[cfg(feature = "postgres")]`, sovereign-store/src/lib.rs:5-6); sovereign/crates/sovereign-store/src/sqlite/step_execution.rs:7 (methods at :8, :32, :49, :61); `impl StepExecutionStore for MockStore {}` — sovereign/crates/sovereign-core/tests/main/core_tests.rs:388.
+- Implementations (all four methods present in the three real ones): svrn/crates/sovereign-store/src/memory.rs:300-339; svrn/crates/sovereign-store/src/postgres.rs:790-868 (module behind `#[cfg(feature = "postgres")]`, sovereign-store/src/lib.rs:5-6); svrn/crates/sovereign-store/src/sqlite/step_execution.rs:7 (methods at :8, :32, :49, :61); `impl StepExecutionStore for MockStore {}` — svrn/crates/sovereign-core/tests/main/core_tests.rs:388.
 - `StateStore` is a plain supertrait with no blanket impl (traits.rs:1960-1973); its impls are exactly core_tests.rs:390, memory.rs:715, postgres.rs:1594, sqlite.rs:345.
 - Callers: sovereign-core/src/executor.rs:805 (`find_execution`, `?`), :848 (`record_started`, `?`), :903 (`mark_completed`), :927 (`mark_failed`, result discarded); all inside `if descriptor.idempotency == Idempotency::NonIdempotent` (:803). sovereign-store/tests/main/step_execution_replay.rs uses real stores.
 - `MockStore` appears only in core_tests.rs (40 hits there, 0 elsewhere under sovereign-core/tests/main). Its one NonIdempotent tool (:1498) is exercised by `executor_tool_denied_permission_skips` (:1512), which returns `StepOutput::Skipped` at executor.rs:760 before :804.
@@ -41,14 +41,14 @@ say refuses by name instead of pretending to record.
    the answer that re-runs a side effect. Row `hd-4-ledger-total`.
 2. In the same row, give `MockStore` an explicit refusal — all four methods return
    `Err(Error::NotImplemented("MockStore keeps no step ledger; a test that reaches the ledger uses InMemoryStateStore".into()))` —
-   written in a new file `sovereign/crates/sovereign-core/tests/main/core_tests_ledger.rs` declared
+   written in a new file `svrn/crates/sovereign-core/tests/main/core_tests_ledger.rs` declared
    in place of the empty impl as `#[path = "core_tests_ledger.rs"] mod ledger;` (child module, so
    the private `MockStore` is `super::MockStore`); fix SYSTEM_OVERVIEW.md:2359-2360 to match. Row `hd-4-ledger-total`.
 
 ## Seams
 
 - Do NOT touch: the executor (executor.rs:796-930, including the discarded `mark_failed` at :927); the three real store impls (already total); `HealthStore` and the other defaulted store traits (HT names only the ledger; `durable-state` is not a rung).
-- Files other rungs also touch: `sovereign-core/tests/main/core_tests.rs` (hd-2 `hd-2-seal-core` edits seven `RuntimeParts::new(` calls — this row changes core_tests.rs by 0 lines so the pair fits the 11-line oversized slack; either order works, but not concurrently); `sovereign/SYSTEM_OVERVIEW.md` (every rung; a peer's uncommitted edits were on the tree on 2026-09-17 and are committed as of round 2 — re-check `git status --short` before `git add` rather than trusting either statement).
+- Files other rungs also touch: `sovereign-core/tests/main/core_tests.rs` (hd-2 `hd-2-seal-core` edits seven `RuntimeParts::new(` calls — this row changes core_tests.rs by 0 lines so the pair fits the 11-line oversized slack; either order works, but not concurrently); `docs/SYSTEM_OVERVIEW.md` (every rung; a peer's uncommitted edits were on the tree on 2026-09-17 and are committed as of round 2 — re-check `git status --short` before `git add` rather than trusting either statement).
 
 ## Done when
 

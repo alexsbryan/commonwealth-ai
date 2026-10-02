@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Score a model against the golden set.
 
-Spec: `sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md` §4 (the ruler).
+Spec: `svrn/docs/specs/NEXT_EDIT_BAKEOFF.md` §4 (the ruler).
 
 Scores against GROUND TRUTH — the edits the commit author actually went
 on to make — rather than against count predicates. That closes the

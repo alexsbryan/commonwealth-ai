@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pod-side HTTP endpoints for ephemeral workers.
 //!
-//! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md`. This module is the
+//! Spec: `svrn/docs/EPHEMERAL_WORKER_PODS.md`. This module is the
 //! pod's complete external surface in worker mode — no `/v1/chat/*`, no
 //! mesh gossip, no admin routes. Every route in this router is
 //! protected by the [`require_worker_token`] middleware, which checks

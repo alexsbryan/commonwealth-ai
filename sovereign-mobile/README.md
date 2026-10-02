@@ -1,7 +1,7 @@
 # Sovereign Mobile (Tauri 2 — iOS + Android)
 
 A **thin presentation + control client** for a Sovereign host, per
-`sovereign/docs/specs/MOBILE.md`. It runs **no local inference, no
+`svrn/docs/specs/MOBILE.md`. It runs **no local inference, no
 embedding, and no Runtime**: it sends queries to a host node's
 `sovereign-server` over the **tailnet**, authenticates as a tenant, and
 renders the streamed result. The phone is a *client, not a mesh peer*.
@@ -111,7 +111,7 @@ dir, which has no `node_modules`. Unifying them too needs hoisted deps
 
 **On this Linux box (no Xcode):**
 - `cargo check` the core — requires the Tauri Linux build deps
-  (`gtk3-devel`, `webkit2gtk4.1-devel`, …; see `sovereign/scripts/bootstrap-linux.sh`)
+  (`gtk3-devel`, `webkit2gtk4.1-devel`, …; see `svrn/scripts/bootstrap-linux.sh`)
   and the Android SDK/NDK for `tauri android` targets.
 - `npm install && npm run dev` — preview the frontend in a browser
   against a reachable `sovereign-server`.

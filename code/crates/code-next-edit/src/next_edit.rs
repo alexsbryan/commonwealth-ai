@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Rule-lane next-edit prediction (`sovereign/docs/NEXT_EDIT.md`
+//! Rule-lane next-edit prediction (`svrn/docs/NEXT_EDIT.md`
 //! §2–§4) — the deterministic half of the two-lane design. Pure: no
 //! inference, no state, no editor knowledge. The daemon owns ALL
 //! policy (context expansion, guards, induction, firing threshold)
@@ -46,7 +46,7 @@ impl GuardedRule {
 
 /// One proposed replacement. Offsets are BYTE offsets into the text
 /// `predict` was given; the route layer converts to UTF-16 for the
-/// wire (`sovereign/docs/NEXT_EDIT.md` §3).
+/// wire (`svrn/docs/NEXT_EDIT.md` §3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edit {
     pub start: usize,

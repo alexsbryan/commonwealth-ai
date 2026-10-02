@@ -12,14 +12,14 @@ _A coordination daemon for community-owned distributed inference and knowledge._
 > favour of per-peer affinity preferences, and the §4 scheduler generation
 > described below — model portfolio, adaptive scheduler, shard plan_builder,
 > usage prediction — was never wired into the runtime and was deleted
-> 2026-06-10; see `sovereign/docs/specs/OICP_RATIONALIZATION.md` for what
+> 2026-06-10; see `svrn/docs/specs/OICP_RATIONALIZATION.md` for what
 > replaced it). Read it for the *why*
 > behind the original design, the design-philosophy section that still
 > governs the project, and the threat-model framing — those parts hold.
 >
 > For the **current** shape of the running system — file paths, route
 > tables, type signatures, CLI subcommands — read
-> [`../sovereign/SYSTEM_OVERVIEW.md`](../sovereign/SYSTEM_OVERVIEW.md) §5
+> [`docs/SYSTEM_OVERVIEW.md`](../docs/SYSTEM_OVERVIEW.md) §5
 > instead. That doc is kept current with the code on the commit it
 > appears in (per ARCH_PRINCIPLES §1.1).
 
@@ -155,7 +155,7 @@ The join key is shared out-of-band — spoken aloud, sent via Signal, printed on
 
 When a new node joins, an existing member verifies the join key, adds the new node to its member list, and the record propagates via gossip. The join key is verified once and discarded.
 
-> **Implementation note — drifted from this design doc (see `sovereign/SYSTEM_OVERVIEW.md` for the authoritative current state).** Ongoing inter-node auth was *designed* as per-session mutual TLS with pinned certs; **the shipped system does not implement that** — the TLS scaffolding was removed rather than left as a security façade. In practice: the client port (`:9741`) gates non-loopback callers with a bearer token; the internal port (`:9742`) is perimeter-trusted (operators run a WireGuard/Tailscale underlay) plus the join-key/`join_key_hash` check in `Mesh::merge_from` that rejects foreign-mesh gossip; iroh's QUIC handshake verifies node keys when enabled (default off).
+> **Implementation note — drifted from this design doc (see `docs/SYSTEM_OVERVIEW.md` for the authoritative current state).** Ongoing inter-node auth was *designed* as per-session mutual TLS with pinned certs; **the shipped system does not implement that** — the TLS scaffolding was removed rather than left as a security façade. In practice: the client port (`:9741`) gates non-loopback callers with a bearer token; the internal port (`:9742`) is perimeter-trusted (operators run a WireGuard/Tailscale underlay) plus the join-key/`join_key_hash` check in `Mesh::merge_from` that rejects foreign-mesh gossip; iroh's QUIC handshake verifies node keys when enabled (default off).
 
 The join key is mandatory. This is an architectural constraint that prevents anonymous open meshes, which would require Byzantine fault tolerance and introduce the coordination complexity the project explicitly avoids.
 

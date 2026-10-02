@@ -429,7 +429,7 @@ mod tests {
 
 /// §1.1 contract: every project dir named in the SYSTEM_OVERVIEW §1 tree exists.
 fn doc_contract_failures(root: &Path) -> Vec<String> {
-    let overview = root.join("sovereign/SYSTEM_OVERVIEW.md");
+    let overview = root.join("docs/SYSTEM_OVERVIEW.md");
     let text = match std::fs::read_to_string(&overview) {
         Ok(t) => t,
         Err(e) => return vec![format!("cannot read {}: {e}", overview.display())],

@@ -2,7 +2,7 @@
 //
 // The desktop reading of `metadata.answer_segments` and the typed
 // abstention that rides beside it — `NATIVE_GROUNDING.md` §6, composed
-// at P1 (`sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md` §4.1).
+// at P1 (`svrn/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md` §4.1).
 //
 // **What this renders, and what it must never imply.** A `grounded`
 // segment means the sentence was found VERBATIM inside one retrieved

@@ -217,10 +217,10 @@ replace     = '''            // TWIN-CENSUS PLANT (scripts/twin-census.py) — t
 [[family]]
 id          = "turn-capability"
 crate       = "sovereign-core"
-census      = "sovereign/crates/sovereign-core/tests/main/turn_capability_census.rs"
+census      = "svrn/crates/sovereign-core/tests/main/turn_capability_census.rs"
 mustFail    = ["no_runtime_site_reads_a_per_turn_capability_off_the_runtime_member"]
 breaks      = "a per-turn capability read off the Runtime member — compiles, passes in-process, resolves to the no-op sink on the daemon"
-target      = "sovereign/crates/sovereign-core/src/runtime/streaming.rs"
+target      = "svrn/crates/sovereign-core/src/runtime/streaming.rs"
 expect_red  = "process-wide capability read(s) are back"
 find        = '''impl Runtime {'''
 replace     = '''impl Runtime {
@@ -297,7 +297,7 @@ crate       = "sovereign-mesh"
 census      = "sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs"
 mustFail    = ["every_router_refuses_a_request_no_handler_of_ours_can_refuse"]
 breaks      = "a loopback-only router wired without the guard middleware — the LAN-reachable admin surface"
-target      = "sovereign/crates/sovereign-daemon/src/mesh_http.rs"
+target      = "svrn/crates/sovereign-daemon/src/mesh_http.rs"
 guard_paths = [
     "sovereign/crates/sovereign-mesh/tests/main.rs",
     "sovereign/crates/sovereign-mesh/tests/main/common/mod.rs",

@@ -49,7 +49,7 @@ pub struct LocalOnlyProfile {
 
 impl Default for LocalOnlyProfile {
     /// The shipped posture: networked. Ships default-OFF — see
-    /// `sovereign/DEFAULTS_LEDGER.md`.
+    /// `docs/DEFAULTS_LEDGER.md`.
     fn default() -> Self {
         Self {
             on: false,

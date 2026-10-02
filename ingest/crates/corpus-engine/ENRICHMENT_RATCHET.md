@@ -183,7 +183,7 @@ whether a corpus's summaries reach retrieval is now a data state — does its
 atlas carry `Summary` atoms (`svrn enrich summary-atoms <corpus>`) — not a
 knob, which is the shape `ENRICHMENT_ROADMAP_SIZING.md`'s D2 (knob-retirement
 protocol) asked for.
-Record: `sovereign/DEFAULTS_LEDGER.md`.
+Record: `docs/DEFAULTS_LEDGER.md`.
 
 **Follow-up this census creates:** registering the 11 grandfathered vars
 is a prerequisite for the target of ≤4, since a var nobody has
@@ -244,7 +244,7 @@ names four. Recorded here so the tranche has one close-out artifact.
 Demonstrated, not asserted: control run green (7/10 person atoms, same
 as baseline), perturbed run **0/10 with `regressed`, exit 1**, ~3 min
 warm. Protocol and calibration notes at
-`sovereign/handoff/ENRICHMENT_CANARY_DEMO.md`; script at
+`docs/handoff/ENRICHMENT_CANARY_DEMO.md`; script at
 `scripts/enrichment-canary.sh`.
 
 **Gate 2 — faithfulness rate reported per corpus. PARTIAL.**
@@ -307,7 +307,7 @@ grep -n 'enrichment_type ==' ingest/crates/corpus-engine/src/engine/ingest.rs
 
 # 2. stores — SQLite side
 grep -oE "CREATE TABLE IF NOT EXISTS [a-z_]+" \
-  sovereign/crates/sovereign-store/src/migrations.rs | sort -u
+  svrn/crates/sovereign-store/src/migrations.rs | sort -u
 
 # 5. knobs — registered, then the grandfathered remainder
 grep -n 'name = "SOVEREIGN_' quality/env-flags.toml

@@ -3,7 +3,7 @@
 # Defer/descope = edit a bar's `status`; git history is the ledger.
 id        = "epistemic-index"
 objective = "A TOML recipe with a custom ontology, ingested, yields epistemically indexed retrieval from the person's own llama-server"
-spec      = "sovereign/docs/specs/EPISTEMIC_INDEX.md"
+spec      = "svrn/docs/specs/EPISTEMIC_INDEX.md"
 declared  = "2026-09-04"
 status    = "active"
 
@@ -164,7 +164,7 @@ PY'''
 
 [[bar]]
 id           = "EI3-recipe-to-answer"
-one_line     = "corpus-mcp/acceptance.sh runs recipe new -> ingest -> serve -> ask on the wessex fixture against a bare chat+embed endpoint; truth.json recall >= the daemon-built corpus"
+one_line     = "svrn/crates/corpus-mcp/acceptance.sh runs recipe new -> ingest -> serve -> ask on the wessex fixture against a bare chat+embed endpoint; truth.json recall >= the daemon-built corpus"
 derives_from = "EPISTEMIC_INDEX.md §4, §6 row 3"
 status       = "open"
 target       = 1.0
@@ -209,17 +209,17 @@ kill         = "a second walk kept behind a flag is still a second walk -- ARCH 
 #   1. `pub async fn ground(` defined exactly ONCE in corpus-engine
 #      (ingest/crates/corpus-engine/src/enrichment/atlas/ground.rs:530)
 #   2. sovereign-core calls it
-#      (sovereign/crates/sovereign-core/src/runtime/retrieval/atlas_grounding.rs:296)
-#   3. corpus-mcp calls it (corpus-mcp/src/tools.rs:429)
+#      (svrn/crates/sovereign-core/src/runtime/retrieval/atlas_grounding.rs:296)
+#   3. corpus-mcp calls it (svrn/crates/corpus-mcp/src/tools.rs:429)
 #   4. NO second walk is DEFINED outside corpus-engine -- unless its file routes
 #      through `ground::ground(` itself, which is §10.6's other legal outcome
 #      (the loser becomes a CALLER in the same commit) and reads 1.0 with the
 #      delegation named. The one that exists today is the RAPTOR late-carry
 #      injector, delegating to nothing: `apply_raptor_grounding`
-#      (sovereign/crates/sovereign-core/src/runtime/retrieval/raptor_grounding.rs:105)
+#      (svrn/crates/sovereign-core/src/runtime/retrieval/raptor_grounding.rs:105)
 #      its own summary producer `raptor_scored_chunk` (same file, :263), and its
 #      gate `raptor_late_inject_enabled`
-#      (sovereign/crates/sovereign-core/src/runtime/question_analysis.rs:875).
+#      (svrn/crates/sovereign-core/src/runtime/question_analysis.rs:875).
 #      Three symbols, because ei-5c is DELETING raptor_grounding.rs whole rather
 #      than folding it: the RAPTOR path reads conv_raptor_nodes /
 #      raptor_summaries.lance where the walk reads Summary atoms, so there was
@@ -244,7 +244,7 @@ def files(*roots):
             yield p
 
 CE = ["ingest/crates/corpus-engine/src"]
-OUTSIDE = ["sovereign/crates/sovereign-core/src", "corpus-mcp/src"]
+OUTSIDE = ["svrn/crates/sovereign-core/src", "svrn/crates/corpus-mcp/src"]
 WALK = "ground::ground("
 # The pinned second-walk symbols. A DEFINITION of either outside corpus-engine
 # is a second implementation UNLESS its own file routes through the one walk:
@@ -306,5 +306,5 @@ bad = {"llama-cpp-4", "llama-cpp-sys-4", "ort", "ort-sys", "iroh", "sovereign-in
 names = {l.split()[0] for l in out.stdout.splitlines() if l.strip()}
 hit = sorted(bad & names)
 print("carries:", hit, file=sys.stderr)
-print(json.dumps({"value": 0.0 if hit else 1.0, "artifact": "corpus-mcp/Cargo.toml"}))
+print(json.dumps({"value": 0.0 if hit else 1.0, "artifact": "svrn/crates/corpus-mcp/Cargo.toml"}))
 PY'''

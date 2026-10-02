@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Conversation tiered-retrieval enrichment runner (Phase B port).
 //!
-//! Spec: `sovereign/docs/specs/CONV_TIERED_PORT.md`.
+//! Spec: `svrn/docs/specs/CONV_TIERED_PORT.md`.
 //!
 //! Replaces the legacy field-model atlas enrichment for conversation
 //! corpora. Reads chunks from the corpus's Lance index, groups by

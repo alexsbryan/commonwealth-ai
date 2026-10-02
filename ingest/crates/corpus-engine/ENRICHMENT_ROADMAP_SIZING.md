@@ -416,7 +416,7 @@ is cross-article synthesis or much larger corpora. Load-bearing side
 finding: `--group-by-article` RAPTOR output is a FOREST (42 parentless
 tops) — see the D3 note below.
 (`research/enrichment-spikes/findings/P51_tree_descent.md`; roll-up in
-`sovereign/docs/archive/ENRICHMENT_SPIKES_2026_07.md`.)
+`svrn/docs/archive/ENRICHMENT_SPIKES_2026_07.md`.)
 **P5.2 — Visual assets. `XL — not sized for commitment.`**
 Fund spikes only: pdfium page-raster + ColModernVBERT ONNX single-page
 score (`M 2-3d`), multi-vector MaxSim storage prototype on the
@@ -586,7 +586,7 @@ Exit gates: the canary proves the lane can fail; faithfulness rate
 reported per corpus; chaos double-gate (competence ≥ 0.71 AND honesty
 ≥ 0.82) met with enrichment ON; all six spike answers written down
 (spike-bundle portion satisfied 2026-07-31 — roll-up at
-`sovereign/docs/archive/ENRICHMENT_SPIKES_2026_07.md`; SP2 kill-point
+`svrn/docs/archive/ENRICHMENT_SPIKES_2026_07.md`; SP2 kill-point
 did not fire).
 Ratchet at exit: dead code deleted (ConvTieredProvider, debouncer v1
 waste, stats stub), docs truth-restored; store/knob counts unchanged —

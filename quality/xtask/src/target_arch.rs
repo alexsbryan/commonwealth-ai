@@ -272,7 +272,7 @@ impl Concept {
     /// underscores; one spelling, decided here (§10.6).
     ///
     /// `None` when the canonical is not a Rust path — two rows declare a FILE
-    /// as their home (`sovereign/docs/cli-contract.toml`), and reading its
+    /// as their home (`svrn/docs/cli-contract.toml`), and reading its
     /// first path segment as a crate name manufactures a finding that is not
     /// there. A home the graph cannot speak about is reported as such.
     pub fn owner_crate(&self) -> Option<String> {
@@ -952,11 +952,11 @@ in_program  = false
     fn a_canonical_that_is_a_file_has_no_owner_crate_rather_than_a_wrong_one() {
         let toml = MINI.replace(
             r#"canonical   = "commonwealth_core::mesh::Peer""#,
-            r#"canonical   = "sovereign/docs/cli-contract.toml""#,
+            r#"canonical   = "svrn/docs/cli-contract.toml""#,
         );
         let r = load_register(&toml).unwrap();
         assert_eq!(r[1].owner_crate(), None);
-        assert_eq!(r[1].owner_label(), "sovereign/docs/cli-contract.toml");
+        assert_eq!(r[1].owner_label(), "svrn/docs/cli-contract.toml");
     }
 
     #[test]

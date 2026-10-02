@@ -93,7 +93,7 @@ check     = "python3 scripts/domains-census.py predicate && cargo xtask boundary
 #   atoms.json readers: 20 sites, ZERO declare their own struct — all use
 #      vocab's AtomsFile (17) or serde_json::Value (3). The Atom* count as
 #      DOMAINS §8 row 2 states it would read GREEN today on a tree where
-#      corpus-mcp/src/tools.rs:873 hand-rolls the reader because the door,
+#      svrn/crates/corpus-mcp/src/tools.rs:873 hand-rolls the reader because the door,
 #      read_atlas_atoms, is at ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs:595
 #      and not in vocab. Nine sites outside the context bypass it. Six of the
 #      seven sibling atlas files have a write_atlas_* and no reader at all.
@@ -321,7 +321,7 @@ kill         = "if this rises above its floor while the structural bars improve,
 #
 # Phase 0 LANDED before this file existed: domains-1 (904145b64) and domains-2
 # (cd9250aab), 2026-09-11 — six crates left commonwealth/, ledgered in
-# sovereign/SYSTEM_OVERVIEW.md §5. Ordering was BIG-FIRST by operator
+# docs/SYSTEM_OVERVIEW.md §5. Ordering was BIG-FIRST by operator
 # direction and stays so: a small crate's destination is decided by where the
 # big one lands. Numbering continues from those two.
 #

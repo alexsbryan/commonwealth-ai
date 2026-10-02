@@ -3,7 +3,7 @@
 Measures whether the T1 semantic-blend tier in `NoteStore`
 (`read_notes_scoped_semantic`) closes the FTS5-recall gap the
 2026-05-25 audit (see
-`sovereign/docs/specs/NOTES_TIERED.md`) surfaced — synonym /
+`svrn/docs/specs/NOTES_TIERED.md`) surfaced — synonym /
 stem / paraphrase misses where FTS5 alone returns nothing.
 
 This bench has its own runner (a cargo example in

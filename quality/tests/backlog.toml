@@ -1664,7 +1664,7 @@ found = "2026-08-31"
 class = "instrument-defect"
 tier = 3
 surface = "rust-unit"
-target = "sovereign/docs/cli-contract.toml"
+target = "svrn/docs/cli-contract.toml"
 failure = """The existing journey manifest reaches 9 of 322 command-settleable
 requirements — and a later adversarial re-adjudication (note `cf566968`) cut
 that to TWO, with 6 of 13 applied claims returning OVERCLAIM. The manifest's
@@ -1860,7 +1860,7 @@ observable = """A lane reporting a delta also reports the measured noise band
 for that lane, and refuses to call a delta inside the band a result."""
 mutation = """Report the delta without the band. The refusal test must redden
 against a sub-band delta."""
-blocked = "half exists, half does not. Per-lane declared `tolerance` in bench_cmd/lane_baseline.rs already refuses a sub-band delta (one_item_flip_within_tolerance_is_noise). But that is a DECLARED tolerance, not the MEASURED run-to-run band this record is about; the measured bands live as prose in sovereign/docs/RUNBOOK.md section 6, and neither render.rs nor all.rs reports a band alongside a delta. The mutation (report the delta without the band) has no band to remove."
+blocked = "half exists, half does not. Per-lane declared `tolerance` in bench_cmd/lane_baseline.rs already refuses a sub-band delta (one_item_flip_within_tolerance_is_noise). But that is a DECLARED tolerance, not the MEASURED run-to-run band this record is about; the measured bands live as prose in svrn/docs/RUNBOOK.md section 6, and neither render.rs nor all.rs reports a band alongside a delta. The mutation (report the delta without the band) has no band to remove."
 
 [[test]]
 id = "GA-10"

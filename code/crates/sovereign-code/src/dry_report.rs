@@ -804,7 +804,7 @@ mod tests {
             "research/deep-research/drb/vendor/pkg/mod.rs",
             ".claude/worktrees/agent-a99/sovereign/crates/sovereign-tools/src/code/dry_report.rs",
             "ingest/crates/corpus-engine/tests/extractor_smoke.rs",
-            "sovereign/crates/sovereign-core/benches/embed.rs",
+            "svrn/crates/sovereign-core/benches/embed.rs",
         ] {
             assert!(!s.admits(excluded), "should be out of scope: {excluded}");
         }
@@ -812,8 +812,8 @@ mod tests {
         // one that regressed once already: `research` as a SUBSTRING swallowed
         // it, which is why the exclusions match whole path segments.
         for included in [
-            "sovereign/crates/sovereign-tools/src/code/dry_report.rs",
-            "sovereign/crates/sovereign-core/src/deep_research/icd.rs",
+            "svrn/crates/sovereign-tools/src/code/dry_report.rs",
+            "svrn/crates/sovereign-core/src/deep_research/icd.rs",
             "ingest/crates/corpus-engine/src/extractors/mod.rs",
         ] {
             assert!(s.admits(included), "should be in scope: {included}");

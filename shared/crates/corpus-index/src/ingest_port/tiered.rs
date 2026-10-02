@@ -74,7 +74,7 @@ pub trait ChunkEntityExtractor: Send + Sync {
     ) -> Result<ChunkNerOutcome>;
 
     /// Phase B incremental hook (spec
-    /// `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md` §"Incremental
+    /// `svrn/docs/specs/PROGRESSIVE_ENRICHMENT.md` §"Incremental
     /// update strategy"). Called by `CorpusEngine::ingest` after a
     /// conversation-category corpus's ingest succeeds. Implementor
     /// scans the index for chunks NOT yet in `chunk_entities`, runs

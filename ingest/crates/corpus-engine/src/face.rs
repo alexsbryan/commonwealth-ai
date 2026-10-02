@@ -177,7 +177,7 @@ pub fn compose(parts: IngestParts) -> IngestFace {
         .with_inference_fn(inference_fn)
         .with_self_node_id(node_id);
     // Conv-tiered enrichment provider — spec
-    // `sovereign/docs/specs/CONV_TIERED_PORT.md`. Absent, the tiered runner
+    // `svrn/docs/specs/CONV_TIERED_PORT.md`. Absent, the tiered runner
     // falls back to dispatch-plan-only mode.
     if let Some(provider) = conv_tiered {
         engine = engine.with_tiered_provider(provider);

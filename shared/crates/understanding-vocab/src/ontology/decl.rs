@@ -217,7 +217,7 @@ pub const MAX_ENTITIES_PER_SECTION: usize = 60;
 /// behaviour, so a block carrying only `version = 1` (or only the version-0
 /// `guidance` / `vocabulary` keys) is exactly a version-0 block. Declared
 /// types are predicates over the fixed atom kinds — kinds stay closed, types
-/// are declared. See `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md` §1 for the
+/// are declared. See `svrn/docs/specs/ONTOLOGY_PRIMITIVES.md` §1 for the
 /// ten worked declarations and §4 for what `recipe validate` checks.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct OntologyV1 {

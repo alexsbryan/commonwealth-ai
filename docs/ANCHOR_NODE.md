@@ -34,7 +34,7 @@ network by policy, so `svrn mesh grant` puts an iroh dial string in the
 link instead of an address. Accepting it opens a QUIC tunnel that binds
 a local port — but that tunnel is parked in a process-lifetime slot, and
 dropping it shuts the port (`open_route`, in
-`sovereign/crates/sovereign-cli-llm/src/guest_link.rs`). It lives as
+`svrn/crates/sovereign-cli-llm/src/guest_link.rs`). It lives as
 long as the `svrn chat` process and no longer. There is no persistent guest
 proxy command; `GuestTunnel` has exactly two callers, `open_route` and
 its tests.
@@ -277,7 +277,7 @@ except the serialization.
 - **Two members show one endpoint key** — `svrn mesh forget-member
   <node>` is the repair; see [join a mesh](./JOIN_A_MESH.md#when-it-breaks).
 - Anything else: `svrn doctor` on both machines, then the
-  [troubleshooting guide](../sovereign/docs/TROUBLESHOOTING.md).
+  [troubleshooting guide](../svrn/docs/TROUBLESHOOTING.md).
 
 ## Related
 

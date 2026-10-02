@@ -208,7 +208,7 @@ unattributed = "(unattributed)"
 [[initiative]]
 id = "native-grounding"
 title = "Native grounding — decode-rooted calibration to replace the judge stack"
-spec = "sovereign/docs/specs/NATIVE_GROUNDING.md"
+spec = "svrn/docs/specs/NATIVE_GROUNDING.md"
 declared = "2026-08-07"
 status = "active"
 notes = """The spec was NOT on main until 2026-08-12 — it lived on branch
@@ -234,12 +234,12 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H0"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §7.3 H0"
 
   [[initiative.bar.transition]]
   on = "2026-08-10"
   to = "deferred"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §4.1"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §4.1"
   note = """The plan of record SUBSTITUTED its own P1 computed bars
 (honesty >=0.91, competence >=0.74, no HARD regression) for §7.3 H0's
 full-chaos A/B on dev+test at 3 seeds. The P1 bars were met 2026-08-11
@@ -266,12 +266,12 @@ citing the 121.5s figure must cite the correction with it."""
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §1"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §1"
 
   [[initiative.bar.transition]]
   on = "2026-08-10"
   to = "deferred"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §5"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §5"
   note = """VERBATIM, §5: "The incumbent's ~35 judge calls per gated
 longform turn remain cited-not-measured and remain untouched until P3c."
 Corroborated at §0: "What flip-on does NOT buy at P1: latency (§5)."
@@ -283,7 +283,7 @@ moved out of the decision and never re-entered."""
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "re-entered"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md (order native-grounding-respec-economy)"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md (order native-grounding-respec-economy)"
   note = """The superseding plan re-enters this bar and carries a latency
 column in EVERY comparison table, which is the specific structural
 correction of the §6 omission above. The plan additionally declares
@@ -302,12 +302,12 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H0"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §7.3 H0"
 
   [[initiative.bar.transition]]
   on = "2026-08-10"
   to = "deferred"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §5"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §5"
   note = """Same sentence that deferred H0-latency — the judge fan-out is
 the latency. §5: judge calls "remain untouched until P3c". §7's deletes
 ledger assigns the single-claim verify path to the "P3c-promote branch"
@@ -316,7 +316,7 @@ only. No P3c order exists."""
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "re-entered"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9 (order native-grounding-respec-economy)"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9 (order native-grounding-respec-economy)"
   note = """Re-entered with the judge calls scheduled for deletion in
 NAMED phases rather than in a P3c that was never ordered: the longform
 rewrite + audit#2 in Phase 1 (unconditional, deletes only), the per-claim
@@ -336,7 +336,7 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H0"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §7.3 H0"
 
 [[initiative.bar]]
 id = "H0-loc"
@@ -348,7 +348,7 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §9"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §9"
   note = """§9: "Nothing is deleted until H0 graduates; this is the FUNDED
 target." The deletes were therefore structurally downstream of a bar
 (H0-latency) that was deferred out of the plan."""
@@ -356,7 +356,7 @@ target." The deletes were therefore structurally downstream of a bar
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "re-entered"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9 (order native-grounding-respec-economy)"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9 (order native-grounding-respec-economy)"
   note = """The ratchet is INVERTED by the superseding plan: every phase
 deletes as it lands, and a phase that adds a mechanism while deferring
 its delete must not be written. Tracked from here by E-deletes-land-per-
@@ -384,7 +384,7 @@ either outcome (#6)."""
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.2"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §7.2"
 
 [[initiative.bar]]
 id = "P0-scorer-determinism"
@@ -397,7 +397,7 @@ evidence_note = "Same branch-visibility caveat as P0-tau-sweep."
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.2"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §7.2"
 
 [[initiative.bar]]
 id = "P0-latency-harness"
@@ -409,7 +409,7 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.2"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §7.2"
 
   [[initiative.bar.transition]]
   on = "2026-08-11"
@@ -426,7 +426,7 @@ bar."""
   [[initiative.bar.transition]]
   on = "2026-08-10"
   to = "deferred"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §4.3 (P3a)"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §4.3 (P3a)"
   note = """VERBATIM: "land the per-turn stage-timing field (`ab/FINDINGS.md`
 bar (c) declared per-turn latency underivable — no latency claim is
 fundable before this)". The plan knew the instrument was missing and
@@ -445,7 +445,7 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H1"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §7.3 H1"
 
   [[initiative.bar.transition]]
   on = "2026-08-08"
@@ -470,7 +470,7 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H2"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §7.3 H2"
 
   [[initiative.bar.transition]]
   on = "2026-08-08"
@@ -513,7 +513,7 @@ up behind a bar that was itself deferred."""
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §5 H3"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §5 H3"
 
 [[initiative.bar]]
 id = "H4-attribution"
@@ -526,7 +526,7 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H4"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §7.3 H4"
 
   [[initiative.bar.transition]]
   on = "2026-08-08"
@@ -565,12 +565,12 @@ declared = "2026-08-07"
   [[initiative.bar.transition]]
   on = "2026-08-07"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §5 H5"
+  by = "svrn/docs/specs/NATIVE_GROUNDING.md §5 H5"
 
   [[initiative.bar.transition]]
   on = "2026-08-11"
   to = "met"
-  by = "order native-grounding-flip-soak; sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §0"
+  by = "order native-grounding-flip-soak; svrn/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §0"
   note = """Contract fields landed in Phase 0 (commits 4bda3459, 34d64532);
 segments + typed abstention reached the desktop at P1 and were promoted to
 default ON 2026-08-11 (directive 7aa64f29). This is the initiative's one
@@ -580,7 +580,7 @@ independently gated" in §5."""
 # --- E: the resource-economy bars (NATIVE_GROUNDING_ECONOMY.md) -----------
 #
 # Declared 2026-08-12 by order native-grounding-respec-economy, which produced
-# sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md — the plan that SUPERSEDES
+# svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md — the plan that SUPERSEDES
 # NATIVE_GROUNDING_PARITY_PLAN.md by name.
 #
 # WHY THESE EXIST AS SEPARATE BARS rather than as an amendment to H0's five.
@@ -607,7 +607,7 @@ BOUND on the incumbent, not a measurement of it."""
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.1"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.1"
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
@@ -765,7 +765,7 @@ a system that still hands the operator a 247s turn."""
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §7.1"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §7.1"
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
@@ -890,18 +890,18 @@ evidence"). The pointer to the replacement is in the transition's `by`."""
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9"
 
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "descoped"
-  by = "operator direction via order grounding-glassbox-stack-attribution; sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9.0 -- replaced by E-tombstone-ledger"
+  by = "operator direction via order grounding-glassbox-stack-attribution; svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9.0 -- replaced by E-tombstone-ledger"
 
 [[initiative.bar]]
 id = "E-tombstone-ledger"
 one_line = "Every phase stops something from EXECUTING, and every tombstoned path carries its dated ledger row in the same commit"
-derives_from = "NATIVE_GROUNDING_ECONOMY.md §9.0; sovereign/DEFAULTS_LEDGER.md (standing house rule)"
-bar = "for each landed phase: (a) at least one path that executed before the phase does not execute after it on the default configuration, demonstrated from the Phase-1 attribution strip rather than asserted; and (b) every tombstoned path has a sovereign/DEFAULTS_LEDGER.md row added in the SAME commit carrying flip condition, settling-plan item and review-by date"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §9.0; docs/DEFAULTS_LEDGER.md (standing house rule)"
+bar = "for each landed phase: (a) at least one path that executed before the phase does not execute after it on the default configuration, demonstrated from the Phase-1 attribution strip rather than asserted; and (b) every tombstoned path has a docs/DEFAULTS_LEDGER.md row added in the SAME commit carrying flip condition, settling-plan item and review-by date"
 kill = "a tombstone is still executing 30 days past its review-by date, or the deletion pass (Phase 5) has no dated trigger -> tombstone-then-delete has collapsed back into 'nothing is deleted until H0 graduates' and the seat schedules the pass rather than waiting for it (kill K8)"
 declared = "2026-08-12"
 evidence_note = """Replaces E-deletes-land-per-phase, retargeted from LOC on
@@ -923,7 +923,7 @@ that is correct -- no Phase 4 order exists yet."""
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9.0 (order grounding-glassbox-stack-attribution)"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9.0 (order grounding-glassbox-stack-attribution)"
 
   [[initiative.bar.transition]]
   on = "2026-08-14"
@@ -985,7 +985,7 @@ claimed rather than as silence."""
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9 Phase 1 (order grounding-glassbox-stack-attribution)"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9 Phase 1 (order grounding-glassbox-stack-attribution)"
 
   [[initiative.bar.transition]]
   on = "2026-08-12"
@@ -1031,7 +1031,7 @@ the user-experience bar per §10's own rule."""
   [[initiative.bar.transition]]
   on = "2026-08-13"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 (order grounding-preventative-medicine)"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 (order grounding-preventative-medicine)"
   note = """Declared by the order that was supposed to MOVE it and instead
 found the instrument measuring it was broken. D1 returned J-BROKEN: 7 of 27
 hand-judged failures genuinely unsupported (25.9%), 38 of 57 with their support
@@ -1117,7 +1117,7 @@ and the repair removes exactly that artifact)."""
   [[initiative.bar.transition]]
   on = "2026-08-13"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 revision 2026-08-13 (order grounding-preventative-medicine, adversarial-set steer)"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 revision 2026-08-13 (order grounding-preventative-medicine, adversarial-set steer)"
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
@@ -1203,7 +1203,7 @@ section is the request for it."""
   [[initiative.bar.transition]]
   on = "2026-08-13"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 revision 2026-08-13 (order grounding-preventative-medicine, adversarial-set steer)"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 revision 2026-08-13 (order grounding-preventative-medicine, adversarial-set steer)"
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
@@ -1242,7 +1242,7 @@ can clear its declared kill bar and still be worse than looking at nothing."""
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.3"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.3"
 
   [[initiative.bar.transition]]
   on = "2026-08-14"
@@ -1289,7 +1289,7 @@ works on this stack at all."""
   [[initiative.bar.transition]]
   on = "2026-08-12"
   to = "declared"
-  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §8.3"
+  by = "svrn/docs/specs/NATIVE_GROUNDING_ECONOMY.md §8.3"
 
 # ==========================================================================
 # mesh-scale
@@ -2053,7 +2053,7 @@ notes = "HALF-MEASURED at declaration (§9.4): parked=0 and error=0 hold at N=1 
 [[initiative]]
 id = "deep-research"
 title = "Deep research — a research question spawns a persistent, gated corpus"
-spec = "sovereign/docs/specs/DEEP_RESEARCH.md"
+spec = "svrn/docs/specs/DEEP_RESEARCH.md"
 declared = "2026-08-13"
 status = "active"
 notes = """Operator intake note 38bc1862: an engineering plan where every stage
@@ -2236,7 +2236,7 @@ split out to dr-estate-visible, which carries the evidence."""
   [[initiative.bar.transition]]
   on = "2026-08-17"
   to = "met"
-  by = "order deep-research-t2d — clause verification at HEAD, READ-ONLY (sovereign/crates/sovereign-core/src/deep_research/); the deep_research battery passes 88/88 in the sovereign-vulkan toolbox"
+  by = "order deep-research-t2d — clause verification at HEAD, READ-ONLY (svrn/crates/sovereign-core/src/deep_research/); the deep_research battery passes 88/88 in the sovereign-vulkan toolbox"
   note = """All three clauses VERIFIED at HEAD (asserts exist, pass, wired
   — not presumed); the transition is written by the verified outcome.
   (a) R6 stance item 2 — fetch failures recorded absent per-source:
@@ -2760,9 +2760,9 @@ two reds measured before the fix. R-5 (red-first, zero assertion changes
 between red and green): a personal-corpus chunk must not reach a remote
 payload via `enrich --provider` — RED at HEAD (the remote path existed
 with zero privacy tokens, nothing refused), GREEN after the landing
-(sovereign/crates/sovereign-cli-llm/src/enrich_cmd/egress_reds.rs:96).
+(svrn/crates/sovereign-cli-llm/src/enrich_cmd/egress_reds.rs:96).
 ONE boundary choke point for remote-model calls AND query egress:
-sovereign/crates/sovereign-core/src/egress.rs — `verify` decides on the
+svrn/crates/sovereign-core/src/egress.rs — `verify` decides on the
 caller-declared payload (privacy, custody, what, target, exact detail),
 `search_client`/`model_client` are the only client factories; every
 remote host (cli, cli-llm, tools, server, desktop) injects the
@@ -2775,7 +2775,7 @@ DEMO-8 flight transcripts are the evidence (query releases under the
 run grant + public-web url releases + the typed default-deny refusal).
 Consent gate: run-scoped typed grant (`--consent public-web|peer|personal`),
 default-deny, frozen into the charter and recorded in manifest.json.
-F26 census enforced as a build gate (sovereign/crates/sovereign-core/
+F26 census enforced as a build gate (svrn/crates/sovereign-core/
 tests/f26_egress_census.rs, in the standard suite): the red counted FIVE
 egress-class construction sites at HEAD; the landing registers zero
 outside the boundary. DEMO-8: research/deep-research/demo/demo8/;
@@ -2807,7 +2807,7 @@ decider, the R-6 red measured first: at HEAD every budget decider was
 fail-open and none run-scoped (BudgetView had no writer anywhere; every
 production construction empty; budget_allows(None) => true;
 orchestrator.rs:222-230; a second monthly fail-open decider at
-search.rs:234-238). The landing: sovereign/crates/sovereign-core/src/
+search.rs:234-238). The landing: svrn/crates/sovereign-core/src/
 deep_research/budget.rs SpendDecider — the ONE decider — covers
 web-search spend AND frontier-key spend (FAMILY_WEB_SEARCH /
 FAMILY_WEB_FETCH / FAMILY_FRONTIER_KEY; the frontier-key family is
@@ -3285,7 +3285,7 @@ the first type moves."""
 [[initiative]]
 id = "financial-corpora"
 title = "Financial corpora — a company's filings answer with their basis, or refuse"
-spec = "sovereign/docs/specs/FINANCIAL_CORPORA.md"
+spec = "svrn/docs/specs/FINANCIAL_CORPORA.md"
 declared = "2026-08-14"
 status = "active"
 notes = """Declared AFTER two orders had already landed unattributed

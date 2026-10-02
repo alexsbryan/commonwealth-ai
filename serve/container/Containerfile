@@ -3,7 +3,7 @@
 #
 # Builds an image that runs `sovereign-cli daemon run --worker-mode`.
 # The pod becomes a single-owner ephemeral worker — see
-# sovereign/docs/EPHEMERAL_WORKER_PODS.md. No Tailscale, no R2, no
+# svrn/docs/EPHEMERAL_WORKER_PODS.md. No Tailscale, no R2, no
 # mesh gossip; the owner connects directly to :9742 over a
 # seed-derived TLS pin.
 #

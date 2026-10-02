@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn package_name_handles_all_id_formats() {
         assert_eq!(
-            package_name("path+file:///repo/sovereign/crates/sovereign-core#0.1.19"),
+            package_name("path+file:///repo/svrn/crates/sovereign-core#0.1.19"),
             "sovereign-core"
         );
         assert_eq!(

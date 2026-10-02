@@ -3,7 +3,7 @@
 //! for a SCIP-indexed CODE corpus and index them as searchable chunks.
 //!
 //! This is the conceptual->code retrieval bridge (see
-//! `sovereign/docs/specs/CODE_INTEL_CHAT.md`): for every function in the
+//! `svrn/docs/specs/CODE_INTEL_CHAT.md`): for every function in the
 //! corpus's SCIP graph, the daemon's chat model writes a plain-English summary
 //! plus the questions it answers (user-vocabulary, never code jargon); each is
 //! embedded + upserted into `chunks.lance`, content-hash-gated so only changed

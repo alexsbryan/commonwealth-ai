@@ -617,7 +617,7 @@ re-testable; P1 changes the synthesis side it indicted. So:
    RAPTOR dedupe, chunk-neighbour expansion. Each becomes one entry in
    the P0.4 A/B lane; defaults flip only on wins.
 
-   **What settled** (rows in `sovereign/DEFAULTS_LEDGER.md`; notes
+   **What settled** (rows in `docs/DEFAULTS_LEDGER.md`; notes
    `6a957b47`, `f4150097`):
 
    - **T3 cluster-score blend — DELETED** (2026-07-31). Measured a
@@ -636,7 +636,7 @@ re-testable; P1 changes the synthesis side it indicted. So:
      reverse than 1,325 tested lines are to rebuild. Its second-order
      value is larger than its first — turning it off is what removes the
      query-path read of `chunk_entities`, and so what makes deferred
-     NER safe (`sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md`).
+     NER safe (`svrn/docs/specs/PROGRESSIVE_ENRICHMENT.md`).
 
    **What shipped alongside them, and is the one P3 change a user can
    name: per-article dedup** (`dedup_by_source = true` on both

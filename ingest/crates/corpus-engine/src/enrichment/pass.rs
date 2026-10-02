@@ -332,7 +332,7 @@ fn bridge_field_model_progress<'a>(
 // ── tiered ────────────────────────────────────────────────────────────────
 
 /// The tiered RAPTOR + entity build (spec
-/// `sovereign/docs/specs/CONV_TIERED_PORT.md`). Runs at install through the
+/// `svrn/docs/specs/CONV_TIERED_PORT.md`). Runs at install through the
 /// injected [`TieredProviderHandle`]; resumable after a process restart.
 ///
 /// No declared artifact: its real outputs are SQLite tables written by the

@@ -57,7 +57,7 @@ use std::path::{Path, PathBuf};
 /// is the point: with every host reaching the constructor through it, "which
 /// processes commission a Runtime" becomes a question about callers of one
 /// function rather than a grep for a constructor.
-const CANONICAL_CONSTRUCTOR: &str = "sovereign/crates/sovereign-runtime-recipe/src/lib.rs";
+const CANONICAL_CONSTRUCTOR: &str = "svrn/crates/sovereign-runtime-recipe/src/lib.rs";
 
 /// Hosts that still build a `Runtime` WITHOUT the shared recipe — their own
 /// router stack, their own tool registry, their own enrichment lane.
@@ -126,14 +126,14 @@ const UNSHARED_RECIPES: &[&str] = &[
 const COMMISSIONING_PROCESSES: &[&str] = &[
     // THE TARGET. `sovereign daemon run` — the same process; commissioning
     // moved into sovereign-daemon's boot.rs at the de-embed (2026-09-21).
-    "sovereign/crates/sovereign-daemon/src/daemon_cmd/boot.rs",
+    "svrn/crates/sovereign-daemon/src/daemon_cmd/boot.rs",
     // `svrn chat`. On the shared recipe since 2026-08-25, so what remains is a
     // surface conversion rather than a rewrite: it already refuses to start
     // without a daemon (`probe_or_bail` against `GET /v1/models`) and its
     // provider is already remote. The blocker is breadth, not depth —
     // `build_session` has ~10 callers beyond chat itself (the chaos harness,
     // the atlas backfills, `govern ask`, the portfolio and proxy asks).
-    "sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs",
+    "svrn/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs",
     // `sovereign-desktop/src-tauri/src/state.rs` LEFT this list 2026-09-11
     // (504c6b6d3, sv-surface svt-3b): the app commissions no `Runtime` and
     // attaches to a daemon it does not own. 4 -> 3; the daemon is the target.
@@ -208,7 +208,7 @@ const TURN_EXECUTION_SITES: &[&str] = &[
     // `bench_cmd/live_runner.rs`) converted for exactly that reason: for them
     // `collect_turn` is instrument-neutral, so it was a deletion of a
     // hand-rolled drain rather than a change to what is measured.
-    "sovereign/crates/sovereign-cli-llm/src/probe_cmd/attached.rs",
+    "svrn/crates/sovereign-cli-llm/src/probe_cmd/attached.rs",
     // The DOCUMENT-SESSION drive, once in both `bench_cmd/book_report.rs` and
     // `bench_cmd/live_runner.rs`, now one drive here (b79e7d126). It calls
     // `handle_turn` directly, and that is not neutral: the question
@@ -220,11 +220,11 @@ const TURN_EXECUTION_SITES: &[&str] = &[
     // from this list on the assumption that converting its main path
     // converted the file. A census that only counts what you remembered to
     // look at is not one.
-    "sovereign/crates/sovereign-cli-llm/src/voice_eval/runner.rs",
-    "sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs",
-    "sovereign/crates/sovereign-cli-llm/src/inner_chaos/replay.rs",
-    "sovereign/crates/sovereign-cli-llm/src/inner_chaos/runner.rs",
-    "sovereign/crates/sovereign-cli-llm/src/inner_chaos/synth.rs",
+    "svrn/crates/sovereign-cli-llm/src/voice_eval/runner.rs",
+    "svrn/crates/sovereign-cli-llm/src/inner_chaos/recall.rs",
+    "svrn/crates/sovereign-cli-llm/src/inner_chaos/replay.rs",
+    "svrn/crates/sovereign-cli-llm/src/inner_chaos/runner.rs",
+    "svrn/crates/sovereign-cli-llm/src/inner_chaos/synth.rs",
     // `sovereign-desktop`'s `commands/chat.rs` and `commands/document_asset.rs`
     // were here, and the reasons given were wrong twice over.
     //
@@ -527,7 +527,7 @@ fn turn_execution_sites() -> Vec<String> {
     .into_iter()
     // The runtime owns these methods and `serve_turn` is the sanctioned
     // caller — that is the whole point of the bar, not a violation of it.
-    .filter(|f| !f.starts_with("sovereign/crates/sovereign-core/src/runtime"))
+    .filter(|f| !f.starts_with("svrn/crates/sovereign-core/src/runtime"))
     .collect()
 }
 

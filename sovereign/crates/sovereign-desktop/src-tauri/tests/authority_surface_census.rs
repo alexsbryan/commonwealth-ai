@@ -106,18 +106,21 @@
 //! registry alone.
 
 const STATE_RS: &str = include_str!("../src/state.rs");
-const RECIPE_RS: &str = include_str!("../../../sovereign-runtime-recipe/src/lib.rs");
+const RECIPE_RS: &str =
+    include_str!("../../../../../svrn/crates/sovereign-runtime-recipe/src/lib.rs");
 /// The process that ANSWERS a question about a corpus the desktop installed.
 /// It also registers the acquirer on the ingest port it composes — the only
 /// place a registration can do anything (svt-6). It moved here from
 /// `bootstrap.rs` at pb-ingest-dial-daemon (a350a9a5d), when the engine build
 /// became ingest's `corpus_engine::face::compose`.
-const DAEMON_RS: &str = include_str!("../../../sovereign-daemon/src/daemon_cmd/boot.rs");
+const DAEMON_RS: &str =
+    include_str!("../../../../../svrn/crates/sovereign-daemon/src/daemon_cmd/boot.rs");
 /// The desktop's install request. It holds no engine; it asks the one that has
 /// the acquirer.
 const INSTALL_RS: &str = include_str!("../src/commands/corpus_install.rs");
-const BUNDLES_RS: &str = include_str!("../../../sovereign-tools/src/bundles.rs");
-const SEC_FACTS_RS: &str = include_str!("../../../sovereign-tools/src/sec_facts.rs");
+const BUNDLES_RS: &str = include_str!("../../../../../svrn/crates/sovereign-tools/src/bundles.rs");
+const SEC_FACTS_RS: &str =
+    include_str!("../../../../../svrn/crates/sovereign-tools/src/sec_facts.rs");
 
 /// The body of `impl ToolBundle for <name>`, so a needle found in a doc
 /// comment or a neighbouring family cannot satisfy a hop.

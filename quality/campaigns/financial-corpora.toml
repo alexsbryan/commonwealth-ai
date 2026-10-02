@@ -3,7 +3,7 @@
 # Defer/descope = edit a bar's `status`; git history is the ledger.
 id        = "financial-corpora"
 objective = "Financial corpora answer figure questions with basis or refuse"
-spec      = "sovereign/docs/specs/FINANCIAL_CORPORA.md"
+spec      = "svrn/docs/specs/FINANCIAL_CORPORA.md"
 declared  = "2026-08-14"
 status    = "active"
 

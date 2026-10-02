@@ -428,7 +428,7 @@ for c in "${RETRIEVAL_CORPORA[@]}"; do
 done
 
 # ── Lane 2b: retrieval through the PRODUCTION pipeline (HARD, deterministic) ──
-# The bench-prod parity lane (sovereign/docs/RETRIEVAL_REDESIGN.md §7.1): each
+# The bench-prod parity lane (svrn/docs/RETRIEVAL_REDESIGN.md §7.1): each
 # question drives the production KnowledgeQuery retrieval pipeline in-process
 # (context build → kq_pipeline() → merge/truncate, NO synthesis) and the
 # composed evidence pool is baseline-diffed. This is the lane that would have

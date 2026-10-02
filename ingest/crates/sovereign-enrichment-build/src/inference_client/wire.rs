@@ -648,7 +648,7 @@ pub(super) async fn send_honouring_shed(
 ///   three a bare `llama-server` understands.
 ///
 /// The third was missing until 2026-09-08, and the bare-endpoint acceptance
-/// (`corpus-mcp/acceptance.sh`, a Qwen3.6-35B behind a plain llama-server)
+/// (`svrn/crates/corpus-mcp/acceptance.sh`, a Qwen3.6-35B behind a plain llama-server)
 /// paid for it on every phase: all 20 chapters of the wessex-hoard fixture
 /// failed Phase 1 as `think_truncated` and were re-run on the exemplar-free
 /// terse prompt, phases 3 and 6 returned 0 of 4 and 0 of 164 (an empty

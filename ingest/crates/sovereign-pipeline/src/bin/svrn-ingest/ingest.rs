@@ -217,7 +217,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     // carrying the `reqwest` constructor token counts as a construction site
     // whether it is code or a comment — so spelling the thing this line no
     // longer does would re-register the site it just removed. Watched
-    // failing: it did exactly that, as `UNREGISTERED: corpus-mcp/src/
+    // failing: it did exactly that, as `UNREGISTERED: svrn/crates/corpus-mcp/src/
     // ingest.rs (1 site(s))`, with the only match in the file being the
     // comment.
     // `--no-enrich` runs no phase that speaks chat, so an embeddings-only

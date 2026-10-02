@@ -151,7 +151,7 @@ pub enum ToolAccess {
 /// Every per-intent attribute, as one row.
 ///
 /// **Adding an intent is a variant plus a row here plus exemplars in
-/// `sovereign/crates/sovereign-core/data/router/exemplars.toml`.** Nothing else
+/// `svrn/crates/sovereign-core/data/router/exemplars.toml`.** Nothing else
 /// in the workspace has to change, nothing else may re-derive a column — the whole
 /// point is that a missing attribute is a COMPILE ERROR (this struct has no
 /// `Default`, so a row that omits a field does not build) rather than a
@@ -177,7 +177,7 @@ pub struct IntentRow {
     pub name: &'static str,
 
     /// The wire key, snake_case. One vocabulary shared by the exemplar TOML
-    /// (`sovereign/crates/sovereign-core/data/router/exemplars.toml`), eval banks'
+    /// (`svrn/crates/sovereign-core/data/router/exemplars.toml`), eval banks'
     /// `expected_intent`, routing reports, and the desktop redirect payload.
     /// Payload-carrying variants suffix it with their payload (`simple_action:web_search`);
     /// the row holds the base.
@@ -576,7 +576,7 @@ impl Intent {
 
 /// Referential cognitive **operation** — *what an answer does*. The MECE
 /// re-cut of the conflated `Simple`/`Knowledge`/`Deep`/`Comparison` intents
-/// (see `sovereign/docs/QUERY_TAXONOMY_MECE.md`). Orthogonal to *effort*
+/// (see `svrn/docs/QUERY_TAXONOMY_MECE.md`). Orthogonal to *effort*
 /// (which model tier serves it) — that is a separate axis. Defined for the
 /// referential-knowledge path ONLY; the Jakobson/speech-act intents
 /// (`Metalingual`/`Conation`/`Commissive`/`Expressive`) and the action
@@ -597,7 +597,7 @@ pub enum Operation {
 /// The **effort** an answer demands — orthogonal to [`Operation`]. Picks the
 /// model tier: `Low` → fast slot, `High` → primary slot. Derived from a
 /// dedicated effort classifier (centroid over high/low-effort exemplars), not
-/// from the intent label. See `sovereign/docs/QUERY_TAXONOMY_MECE.md`: an
+/// from the intent label. See `svrn/docs/QUERY_TAXONOMY_MECE.md`: an
 /// "exhaustive, section-by-section account" and a "who-is-X" lookup are the
 /// same `Answer` operation at opposite ends of this axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

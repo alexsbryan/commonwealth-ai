@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Worker-mode daemon entry point.
 //!
-//! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md`. Called from
+//! Spec: `svrn/docs/EPHEMERAL_WORKER_PODS.md`. Called from
 //! `sovereign-cli daemon` when `--worker-mode` is passed. Replaces the
 //! whole persistent-peer wiring (gossip, mesh join, /v1/chat exposure,
 //! load-balancer participation) with a single HTTPS listener on

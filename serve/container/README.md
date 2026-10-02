@@ -4,7 +4,7 @@ This directory holds the build artifacts for the cloud-peer images.
 The user-facing operational guide (provisioning R2, generating
 Tailscale auth keys, deploying on RunPod, running ingests against the
 cloud peer, teardown) lives in
-[`sovereign/docs/CLOUD_PEER_DEPLOY.md`](../../sovereign/docs/CLOUD_PEER_DEPLOY.md). This
+[`svrn/docs/CLOUD_PEER_DEPLOY.md`](../../svrn/docs/CLOUD_PEER_DEPLOY.md). This
 README covers what's in *this* directory and why each piece is shaped
 the way it is — read it when the build itself misbehaves or you need
 to extend the image.
@@ -156,4 +156,4 @@ everything else — networking, secrets, ports — is provider-agnostic.
 For the actual deployment workflow (R2 setup, Tailscale auth keys,
 RunPod pod template, smoke testing, batch ingests, teardown,
 troubleshooting), see
-[`sovereign/docs/CLOUD_PEER_DEPLOY.md`](../../sovereign/docs/CLOUD_PEER_DEPLOY.md).
+[`svrn/docs/CLOUD_PEER_DEPLOY.md`](../../svrn/docs/CLOUD_PEER_DEPLOY.md).

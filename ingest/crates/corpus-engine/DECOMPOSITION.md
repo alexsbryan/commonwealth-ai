@@ -17,8 +17,8 @@ crates with one-way dep arrows. Authored 2026-05-23 after the first carve-out
 (`corpus-engine-scip`) shipped and demonstrated the pattern.
 
 This document describes **intent**, not current state. For the current
-crate map, see `sovereign/SYSTEM_OVERVIEW.md` §2. For the rules this plan
-applies, see `sovereign/ARCH_PRINCIPLES.md` §3 (file size), §5 (interface
+crate map, see `docs/SYSTEM_OVERVIEW.md` §2. For the rules this plan
+applies, see `docs/ARCH_PRINCIPLES.md` §3 (file size), §5 (interface
 segregation), §8 (dependency hygiene), §10 (refactor discipline), and §14
 (small focused PRs).
 
@@ -384,7 +384,7 @@ was not opened.
 
 ## Pointers
 
-- **Inspirations + concrete failure modes:** `sovereign/ARCH_PRINCIPLES.md`
+- **Inspirations + concrete failure modes:** `docs/ARCH_PRINCIPLES.md`
   §3 (file size), §5 (interface segregation), §8 (dep hygiene), §10
   (refactor discipline), §14 (small PRs).
 - **First carve-out worked example:** the scip move (2026-05-23) — see
@@ -393,7 +393,7 @@ was not opened.
   `shared/crates/corpus-engine-scip/src/`, the local Error type, and the consumer
   migration PRs. Also the memory note
   `project_corpus_engine_scip_carveout.md`.
-- **Current workspace state:** `sovereign/SYSTEM_OVERVIEW.md` §2.
+- **Current workspace state:** `docs/SYSTEM_OVERVIEW.md` §2.
 - **Why the data tells this story:** the original audit ran via
   `cargo metadata --no-deps --format-version 1` + Python classification
   of each consumer's import sites by concern family. The script is

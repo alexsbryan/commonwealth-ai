@@ -498,7 +498,7 @@ description = "Corpus id (subdir under ~/.svrnmesh/capabilities). Defaults to th
 
 [tool.parameters.properties.narrative]
 type = "array"
-description = "Override the narrative-doc set. Defaults to sovereign/SYSTEM_OVERVIEW.md + sovereign/ARCH_PRINCIPLES.md relative to the workspace root."
+description = "Override the narrative-doc set. Defaults to docs/SYSTEM_OVERVIEW.md + docs/ARCH_PRINCIPLES.md relative to the workspace root."
 
 [tool.parameters.properties.narrative.items]
 type = "string"
@@ -774,7 +774,7 @@ required = []
 
 [tool.parameters.properties.narrative]
 type = "array"
-description = "Override the narrative-doc set. Defaults to sovereign/SYSTEM_OVERVIEW.md + sovereign/ARCH_PRINCIPLES.md resolved relative to the workspace root."
+description = "Override the narrative-doc set. Defaults to docs/SYSTEM_OVERVIEW.md + docs/ARCH_PRINCIPLES.md resolved relative to the workspace root."
 
 [tool.parameters.properties.narrative.items]
 type = "string"
@@ -1229,7 +1229,7 @@ call = { changed = true }
 
 [[tool.examples]]
 situation = "Scripting / explicit query against a known file set (e.g. a pre-commit hook with a precomputed list)."
-call = { files = ["ingest/crates/corpus-engine/src/recipe.rs", "sovereign/crates/sovereign-cli/src/drift_cmd_orchestrator.rs"] }
+call = { files = ["ingest/crates/corpus-engine/src/recipe.rs", "svrn/crates/sovereign-cli/src/drift_cmd_orchestrator.rs"] }
 
 [[tool]]
 id = "note"

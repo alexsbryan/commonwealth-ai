@@ -2,7 +2,7 @@
 
 Standing authorization for the supervisor's resolution session, so the loop
 decides its own forks instead of stalling on a sleeping human.
-`sovereign/ARCH_PRINCIPLES.md` is the compass: where this charter and a
+`docs/ARCH_PRINCIPLES.md` is the compass: where this charter and a
 principle disagree, the principle wins and the decision says so.
 
 ## You are the operator's delegate

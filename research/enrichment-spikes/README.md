@@ -2,7 +2,7 @@
 
 **CLOSED 2026-07-31 (SP1–SP6 + D1 + P5 probes).** All six spikes AND the three Wave-4
 P5 probes (G8–G10, funded in T1 slack) answered; frozen roll-up with the consolidated
-verdict table lives at `sovereign/docs/archive/ENRICHMENT_SPIKES_2026_07.md`. P5
+verdict table lives at `svrn/docs/archive/ENRICHMENT_SPIKES_2026_07.md`. P5
 headlines: descent loses to one-shot at equal budget + the RAPTOR output is a forest
 (P5.1); page-score separation real, ONNX export blocked upstream (P5.2a); MaxSim
 sibling-table viable, IVF-PQ recall is knob-shaped (P5.2b). sep restored byte-identical
@@ -17,7 +17,7 @@ by operator: "Everything" (~12–20 engineer-days).
 House conventions honored: gates + fixtures frozen in this README **before any run**;
 findings land in `findings/SPn_*.md` (bold verdict up top, tables, exact producing
 commands, artifact paths); `data/`, `runs/`, `backup/`, `.venv/` gitignored; close-out
-rolls up to `sovereign/docs/archive/` + one NoteStore `decision` note per verdict.
+rolls up to `svrn/docs/archive/` + one NoteStore `decision` note per verdict.
 
 ## Pre-registered decision gates (frozen 2026-07-30, before any run)
 

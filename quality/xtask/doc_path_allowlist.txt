@@ -22,7 +22,7 @@ test-artifacts/a11y/
 
 # §2 sovereign top-level layout cites `models/` — the downloaded GGUF
 # weights directory. Created by `sovereign setup`, gitignored by design
-# (both root .gitignore:72 and sovereign/.gitignore), so it exists on
+# (both root .gitignore:72 and svrn/.gitignore), so it exists on
 # every working install but never in a clean checkout.
 models/
 

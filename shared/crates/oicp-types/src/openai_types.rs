@@ -465,7 +465,7 @@ pub enum StreamFrame {
 }
 
 /// `/v1/completions` request — the FIM inline-completion surface
-/// (`sovereign/docs/INLINE_COMPLETION.md` §3.4, decision D6). Dual
+/// (`svrn/docs/INLINE_COMPLETION.md` §3.4, decision D6). Dual
 /// shape: the OpenAI-legacy fields (`model`/`prompt`/`suffix`/
 /// `max_tokens`/`stop`/`stream`) keep generic OpenAI-compat clients
 /// and curl working; the rich fields (`prefix`/`path`/`language`/

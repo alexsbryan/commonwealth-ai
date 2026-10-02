@@ -14,7 +14,7 @@
 //!
 //! ```toml
 //! [plan]
-//! subject = "sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs"
+//! subject = "svrn/crates/sovereign-core/src/runtime/grounding/judge.rs"
 //! verify_cmd = "cargo test -p sovereign-core --lib"   # optional, run after each step
 //!
 //! [[move]]
@@ -23,7 +23,7 @@
 //! dest = "src/runtime/grounding/judge/tests.rs"       # created; existing dest is appended to
 //!
 //! [[patch]]
-//! file = "sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs"  # optional, defaults to subject
+//! file = "svrn/crates/sovereign-core/src/runtime/grounding/judge.rs"  # optional, defaults to subject
 //! start = 1845
 //! end = 1846
 //! body = """#[cfg(test)]

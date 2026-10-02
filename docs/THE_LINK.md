@@ -314,10 +314,10 @@ this demo shows the boundary held, not the crossing.
 | Link grammar as built: token, exp, summary — fragment only | `cmnwlth/crates/commonwealth-discovery/src/deep_link.rs:224-238` |
 | A token outside the fragment is not read | `deep_link.rs:243-259` |
 | Page path composed by the minting verb; `/ring/<ns>/`, `/ring/` index | `sovereign/crates/sovereign-mesh/src/deep_link.rs:74-84` (`wall_page_base`) |
-| Grant liveness and expiry checked per request | `sovereign/crates/sovereign-daemon/src/client_auth.rs:258-331` |
-| Session handle header; 409 on a lapsed handle | `sovereign/crates/sovereign-daemon/src/routes_guest_session.rs:59`, `client_auth.rs:282-330` |
-| A namespace the grant does not name is refused with a sentence | `sovereign/crates/sovereign-daemon/src/routes_rail.rs:100-117` |
-| Guest acts signed by the host; guest is a vouched payload name | `sovereign/crates/sovereign-daemon/src/routes_rail.rs:407-439` |
+| Grant liveness and expiry checked per request | `svrn/crates/sovereign-daemon/src/client_auth.rs:258-331` |
+| Session handle header; 409 on a lapsed handle | `svrn/crates/sovereign-daemon/src/routes_guest_session.rs:59`, `client_auth.rs:282-330` |
+| A namespace the grant does not name is refused with a sentence | `svrn/crates/sovereign-daemon/src/routes_rail.rs:100-117` |
+| Guest acts signed by the host; guest is a vouched payload name | `svrn/crates/sovereign-daemon/src/routes_rail.rs:407-439` |
 | The checkpoint's four verification steps use shipped exports | `admit` (`rail-core/src/admit.rs:307`), `digest` (`rail-core/src/sync.rs:133`), re-exported from `rail-core/src/lib.rs:91-95` |
 | The acceptor forwards the guest channel to the guest listener | `sovereign-daemon/src/daemon.rs:3637` |
 

@@ -221,7 +221,7 @@ clause = '''Compaction is non-destructive, so storage grows until pruning. Pruni
 target = '''ingest/crates/sovereign-pipeline/src/corpus_cmd/optimize.rs:80::run_optimize'''
 asserts = '''`corpus optimize <id> --prune-days 0` (or a non-integer) writes an error naming the constraint to stderr and exits 2 without ever calling CorpusIndex::prune.'''
 catches = '''letting a zero or unparsed retention through to the destructive prune path, deleting every superseded version regardless of what an in-flight reader still holds.'''
-destination = '''sovereign/docs/cli-contract.toml (journey) + optimize.rs mod tests'''
+destination = '''svrn/docs/cli-contract.toml (journey) + optimize.rs mod tests'''
 kind = '''cli-journey; the refusal is an operator-facing surface, so assert stderr+exit in a journey'''
 landed = '''sovereign-cli-llm::corpus_cmd::optimize::tests::* + cli-contract journey `corpus-prune-refusal`'''
 
@@ -255,7 +255,7 @@ id = "UI-22"
 family = "UI"
 status = "landed"
 clause = '''Secure by default: bind to the loopback interface, and refuse at start-up a non-loopback bind with authentication disabled, with an explicit opt-out.'''
-target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2831::start_daemon'''
+target = '''svrn/crates/sovereign-daemon/src/daemon.rs:2831::start_daemon'''
 asserts = '''with a non-loopback client_bind and no resolvable token, startup either refuses to bind or installs no token layer and every remote request 401s.'''
 catches = '''an edit flipping the loopback branch shipping an unauthenticated non-loopback listener. The entire posture lives inline in a ~4700-line async fn with no extracted decision function and zero tests — extracting it is part of this spec.'''
 destination = '''sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs'''
@@ -304,10 +304,10 @@ id = "EN-20"
 family = "EN"
 status = "landed"
 clause = '''Retrieval MUST drop passages from superseded rules — **no dead law** — and the answer path MUST run the same cite-or-abstain discipline as every other grounded surface.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs:807::step_governance_active_set'''
+target = '''svrn/crates/sovereign-core/src/runtime/retrieval_pipeline.rs:807::step_governance_active_set'''
 asserts = '''given a GovernanceView with a superseded rule's section and chunks from it, st.chunks after step_governance_active_set excludes those ids and the outcome note reports the drop count.'''
 catches = '''the failure the step's own comment names: the filter matches nothing, every amended rule stays live, and a governance answer built on repealed text is reported clean.'''
-destination = '''sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs (mod tests)'''
+destination = '''svrn/crates/sovereign-core/src/runtime/retrieval_pipeline.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-core::runtime::retrieval_pipeline::tests::a_superseded_rules_chunks_leave_the_pool_and_the_note_says_how_many'''
 
@@ -390,10 +390,10 @@ id = "GR-4"
 family = "GR"
 status = "landed"
 clause = '''Any window bound inside the gate MUST be *derived* from the retrieved set, not a constant. Where a constant no longer governs anything, it MUST be removed rather than left as a knob.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs:3188::gate_longform'''
+target = '''svrn/crates/sovereign-core/src/runtime/grounding/mod.rs:3188::gate_longform'''
 asserts = '''per_claim_chunks scales with leaf_chunks.len() — 3 leaf chunks yield a materially different window than 30 — and never reverts to a literal.'''
 catches = '''reintroducing a constant (like the removed max_chunks: 8) that stops governing the audit window, so the auditor sees less evidence than the drafter did, silently.'''
-destination = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs (mod tests)'''
+destination = '''svrn/crates/sovereign-core/src/runtime/grounding/mod.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-core::runtime::grounding::tests::the_audit_window_is_derived_from_the_retrieved_leaf_set_not_a_constant'''
 
@@ -402,10 +402,10 @@ id = "GR-46"
 family = "GR"
 status = "landed"
 clause = '''An answer MUST be a typed object carrying per-claim provenance, an overall verdict, and — where the answer is incomplete — a conjecture about what is missing and how it could be acquired.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/epistemic.rs:79::assemble_epistemic_state'''
+target = '''svrn/crates/sovereign-core/src/runtime/epistemic.rs:79::assemble_epistemic_state'''
 asserts = '''one assemble_epistemic_state call, given both a supported and an uncovered demand, returns an EpistemicState whose holdings, verdict and gaps are populated together and mutually consistent.'''
 catches = '''a change that populates gaps correctly but leaves holdings stale, or a verdict disagreeing with the holdings it derives from. Every existing test exercises one slice in isolation.'''
-destination = '''sovereign/crates/sovereign-core/src/runtime/epistemic.rs (mod tests)'''
+destination = '''svrn/crates/sovereign-core/src/runtime/epistemic.rs (mod tests)'''
 kind = '''rust-unit'''
 landed = '''sovereign-core::runtime::epistemic::tests::one_assembly_returns_holdings_verdict_and_gaps_that_agree_with_each_other'''
 
@@ -414,7 +414,7 @@ id = "FE-10"
 family = "FE"
 status = "landed"
 clause = '''Leaving MUST clear the pointer *and* remove the departed membership. Leaving a pointer naming deleted state reads as healthy at boot while making that membership permanently unforgettable.'''
-target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:1805::stop_inner'''
+target = '''svrn/crates/sovereign-daemon/src/daemon.rs:1805::stop_inner'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/mesh_switch.rs:179::leaving_clears_the_active_pointer_rather_than_stranding_it'''
 landed = '''sovereign-mesh::main::mesh_switch::leaving_clears_the_active_pointer_rather_than_stranding_it'''
 
@@ -493,7 +493,7 @@ id = "FE-15"
 family = "FE"
 status = "landed"
 clause = '''Credential rotation MUST be refused while the fleet is mixed, and the refusal MUST distinguish **two populations** with different remedies: a peer that authorises on the legacy predicate needs *upgrading*; a peer simply not yet observed since start-up needs one *round*. Collapsing them tells operators their fleet is un-migrated when it is not.'''
-target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
+target = '''svrn/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs:112::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build'''
 landed = '''sovereign-mesh::main::rotate_pre_split_guard::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build'''
 
@@ -511,7 +511,7 @@ id = "FE-17"
 family = "FE"
 status = "landed"
 clause = '''Because that observation is in memory, the rotation refusal MUST run at least one round before it is willing to refuse. **It must never report a verdict from an instrument it has not run.**'''
-target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
+target = '''svrn/crates/sovereign-daemon/src/daemon.rs:2106::rotate_invite'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs:86::rotate_refuses_while_an_unconfirmed_peer_is_online'''
 landed = '''sovereign-mesh::main::rotate_pre_split_guard::rotate_refuses_while_an_unconfirmed_peer_is_online'''
 
@@ -615,7 +615,7 @@ id = "FE-43"
 family = "FE"
 status = "exists-untagged"
 clause = '''Control-plane and administrative routes MUST be local-only, defended in **three layers**: router middleware, per-handler check, and a pinned test asserting the guard under the *production listener shape*.'''
-target = '''sovereign/crates/sovereign-daemon/src/loopback_guard.rs:159::loopback_only'''
+target = '''svrn/crates/sovereign-daemon/src/loopback_guard.rs:159::loopback_only'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs:134::admin_http_rejects_non_loopback_via_admin_reload'''
 
 [[spec]]
@@ -641,7 +641,7 @@ id = "FE-7"
 family = "FE"
 status = "landed"
 clause = '''A node MUST be able to belong to **many** trust rings and be active in exactly one. Parked memberships MUST retain their full roster and credentials, so returning to one is a **resume** — no handshake, no key redeemed.'''
-target = '''sovereign/crates/sovereign-daemon/src/daemon.rs:1405::join_mesh'''
+target = '''svrn/crates/sovereign-daemon/src/daemon.rs:1405::join_mesh'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/join_parks_not_leaves.rs:89::same_mesh_id_survives_a_failed_join_from_a_solo_mesh'''
 landed = '''sovereign-mesh::main::join_parks_not_leaves::same_mesh_id_survives_a_failed_join_from_a_solo_mesh'''
 
@@ -695,16 +695,16 @@ id = "FE-87"
 family = "FE"
 status = "exists-untagged"
 clause = '''**The obvious served-slot guard does nothing.** A response's model field is typically a verbatim echo of what the client requested. The real check MUST understand every hosting mode, including one where the in-process view reports the model as *not resident* for a perfectly healthy externally-hosted instance. States that mean "something else is answering" MUST NOT count as serving.'''
-target = '''sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs:1118::primary_is_serving'''
-existing = '''sovereign/crates/sovereign-cli-llm/src/mesh_bench/tests.rs:1045::a_child_hosted_primary_counts_as_serving_though_resident_is_false'''
+target = '''svrn/crates/sovereign-cli-llm/src/mesh_bench.rs:1118::primary_is_serving'''
+existing = '''svrn/crates/sovereign-cli-llm/src/mesh_bench/tests.rs:1045::a_child_hosted_primary_counts_as_serving_though_resident_is_false'''
 
 [[spec]]
 id = "FE-90"
 family = "FE"
 status = "landed"
 clause = '''A record MUST carry the **pre-image of its own key**, so a reader can say what the number was *for*. The pre-image MUST be **checkable**: recomputing the key from the stored fields, with a mismatch treated as *absent* rather than quoted.'''
-target = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:460::PlacementWitness::explains'''
-existing = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:2290::a_witness_accounts_for_the_digest_it_was_built_from'''
+target = '''svrn/crates/sovereign-core/src/mesh_measurements.rs:460::PlacementWitness::explains'''
+existing = '''svrn/crates/sovereign-core/src/mesh_measurements.rs:2290::a_witness_accounts_for_the_digest_it_was_built_from'''
 landed = '''sovereign-core::mesh_measurements::tests::a_witness_accounts_for_the_digest_it_was_built_from'''
 
 [[spec]]
@@ -712,8 +712,8 @@ id = "FE-92"
 family = "FE"
 status = "landed"
 clause = '''An empty co-resident list MUST render as the *finding* "nothing else was resident", not as silence. An older record MUST say "not recorded", never imply a quiet machine.'''
-target = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:778::RunConditions::describe'''
-existing = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:2950::no_co_residents_is_reported_as_a_finding_not_as_silence'''
+target = '''svrn/crates/sovereign-core/src/mesh_measurements.rs:778::RunConditions::describe'''
+existing = '''svrn/crates/sovereign-core/src/mesh_measurements.rs:2950::no_co_residents_is_reported_as_a_finding_not_as_silence'''
 landed = '''sovereign-core::mesh_measurements::tests::no_co_residents_is_reported_as_a_finding_not_as_silence'''
 
 [[spec]]
@@ -810,8 +810,8 @@ id = "ST-10"
 family = "ST"
 status = "exists-untagged"
 clause = '''Any cache of embeddings MUST key the *instruction* used to produce them into its identity, not only the model. A model fingerprint cannot see an instruction change, and a cache that reports fresh while holding vectors from a different semantic space is worse than a cold cache.'''
-target = '''sovereign/crates/sovereign-core/src/router_embed_cache.rs:149::key'''
-existing = '''sovereign/crates/sovereign-core/src/router_embed_cache.rs:571::classifier_keys_fold_in_the_instruction'''
+target = '''svrn/crates/sovereign-core/src/router_embed_cache.rs:149::key'''
+existing = '''svrn/crates/sovereign-core/src/router_embed_cache.rs:571::classifier_keys_fold_in_the_instruction'''
 
 [[spec]]
 id = "ST-24"
@@ -887,8 +887,8 @@ id = "UI-18"
 family = "UI"
 status = "exists-untagged"
 clause = '''Long-running background services MUST rotate their own logs by copy-truncate (preserving the file identity held by service supervisors), with a size cap, a backup count, and a sweep.'''
-target = '''sovereign/crates/sovereign-cli-daemon/src/log_rotation.rs:80::rotate_one'''
-existing = '''sovereign/crates/sovereign-cli-daemon/src/log_rotation.rs:237::over_cap_copy_truncates'''
+target = '''svrn/crates/sovereign-cli-daemon/src/log_rotation.rs:80::rotate_one'''
+existing = '''svrn/crates/sovereign-cli-daemon/src/log_rotation.rs:237::over_cap_copy_truncates'''
 
 [[spec]]
 id = "UI-30"
@@ -986,8 +986,8 @@ id = "EV-28"
 family = "EV"
 status = "landed"
 clause = '''**A step that asserts an exit code asserts nothing**, because tools of this kind exit successfully when they find nothing. Every step a lane runs MUST assert **output** — read inline, or proven by a later step.'''
-target = '''sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:288::Journey::exercises'''
-existing = '''sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:1289::a_read_proves_itself_inline_and_a_mutation_is_proven_downstream'''
+target = '''svrn/crates/sovereign-cli-shared/src/cli_contract.rs:288::Journey::exercises'''
+existing = '''svrn/crates/sovereign-cli-shared/src/cli_contract.rs:1289::a_read_proves_itself_inline_and_a_mutation_is_proven_downstream'''
 landed = '''sovereign-cli-shared::cli_contract::tests::a_read_proves_itself_inline_and_a_mutation_is_proven_downstream (+ ::a_trailing_mutation_with_nothing_after_it_is_unproven)'''
 
 [[spec]]
@@ -995,8 +995,8 @@ id = "EV-30"
 family = "EV"
 status = "landed"
 clause = '''At least three gates MUST be **hard zeros**: every live step asserts something; every live read step asserts output; every live journey asserts output somewhere. Never-run debt MUST be capped and shrink-only.'''
-target = '''sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:952::assertion_census'''
-existing = '''sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs:733::live_steps_all_assert_something'''
+target = '''svrn/crates/sovereign-cli-shared/src/cli_contract.rs:952::assertion_census'''
+existing = '''svrn/crates/sovereign-cli/tests/main/cli_contract_journeys.rs:733::live_steps_all_assert_something'''
 landed = '''sovereign-cli::main::cli_contract_journeys::live_steps_all_assert_something (+ ::live_read_steps_assert_output + ::every_live_journey_asserts_output_somewhere + ::steps_no_lane_runs_do_not_grow)'''
 
 [[spec]]
@@ -1022,8 +1022,8 @@ id = "GR-2"
 family = "GR"
 status = "landed"
 clause = '''**The evidence universe is the load-bearing design decision.** Verification MUST run against the *sealed corpus* — per-claim search over the source of record — not merely against the prompt's snapshot of it. Failed claims' corrective passages MUST feed the repair, replacing rather than deleting.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs:2547::rewrite_system_note'''
-existing = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs:6633::rewrite_note_includes_corrective_passages'''
+target = '''svrn/crates/sovereign-core/src/runtime/grounding/mod.rs:2547::rewrite_system_note'''
+existing = '''svrn/crates/sovereign-core/src/runtime/grounding/mod.rs:6633::rewrite_note_includes_corrective_passages'''
 landed = '''sovereign-core::runtime::grounding::tests::rewrite_note_includes_corrective_passages'''
 
 [[spec]]
@@ -1031,8 +1031,8 @@ id = "GR-33"
 family = "GR"
 status = "exists-untagged"
 clause = '''Coverage MUST be **code**: an exhaustive per-intent table with three dispositions (covered / no-op by construction / excluded by decision), pinned by test, with non-intent-keyed exits dispositioned explicitly.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/authority_guard.rs:345::guard_story'''
-existing = '''sovereign/crates/sovereign-core/src/runtime/authority_guard.rs:588::every_intent_has_a_guard_story'''
+target = '''svrn/crates/sovereign-core/src/runtime/authority_guard.rs:345::guard_story'''
+existing = '''svrn/crates/sovereign-core/src/runtime/authority_guard.rs:588::every_intent_has_a_guard_story'''
 
 [[spec]]
 id = "GR-35"
@@ -1065,5 +1065,5 @@ id = "GR-9"
 family = "GR"
 status = "exists-untagged"
 clause = '''Judge prompts MUST be byte-pinned to the calibration harness, so a calibrated operating point transfers.'''
-target = '''sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs:1266::chunk_judge_prompt'''
-existing = '''sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs:1911::one_renderer_owns_the_family'''
+target = '''svrn/crates/sovereign-core/src/runtime/grounding/judge.rs:1266::chunk_judge_prompt'''
+existing = '''svrn/crates/sovereign-core/src/runtime/grounding/judge.rs:1911::one_renderer_owns_the_family'''

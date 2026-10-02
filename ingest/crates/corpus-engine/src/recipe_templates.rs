@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Ontology-v1 recipe templates — the worked declarations from
-//! `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md` §1 as complete recipes.
+//! `svrn/docs/specs/ONTOLOGY_PRIMITIVES.md` §1 as complete recipes.
 //!
 //! `svrn recipe new --ontology <name>` scaffolds one of these. They are
 //! data, not code: each lives at

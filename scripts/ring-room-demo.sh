@@ -188,7 +188,7 @@ room_scaffold() { # dir name
 # Per-file sha256 of a scaffolded directory against the templates, plus the
 # `grep -ci guest` the bar's clause (b) reads. Writes ONE json object.
 room_scaffold_proof() { # dir name out.json
-  python3 - "$1" "$2" "$REPO/sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates" > "$3" <<'PY'
+  python3 - "$1" "$2" "$REPO/svrn/crates/sovereign-cli-llm/src/ring_cmd/templates" > "$3" <<'PY'
 import hashlib, json, os, re, sys
 scaffold, name, templates = sys.argv[1:4]
 def sha(b): return hashlib.sha256(b).hexdigest()[:16]
@@ -368,7 +368,7 @@ print(f\"{len(ops)} {hashlib.sha256(''.join(ops).encode()).hexdigest()[:16]}\")"
 # instead of leaving it probing a namespace nobody owns any more.
 room_daemon_owned_ns() {
   sed -n 's/^pub const MEASUREMENTS_APP_ID: &str = "\(.*\)";$/\1/p' \
-    "$REPO/sovereign/crates/sovereign-core/src/mesh_measurements.rs" | head -1
+    "$REPO/svrn/crates/sovereign-core/src/mesh_measurements.rs" | head -1
 }
 
 # The model the wall will grant, read from the daemon's own dispatchable list
@@ -2107,7 +2107,7 @@ if topology == "room":
     b = bars["rg-second-app-zero-lines"]
     row_w = num(r"within ([\d.]+) s", b["floor_basis"])
     tpl_diff = git("diff", "--stat", f"{guest_base}..HEAD", "--",
-                   "sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates")
+                   "svrn/crates/sovereign-cli-llm/src/ring_cmd/templates")
     spend = act_at(p1, "expense")
     spend_s, spend_row = seen_after(wall2_rows, spend)
     if not scaffold or not p1:

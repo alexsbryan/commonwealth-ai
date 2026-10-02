@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Dial-by-key host access (Track M, M2 — see
-//! `sovereign/docs/specs/TRANSPORT_MIGRATION.md`).
+//! `svrn/docs/specs/TRANSPORT_MIGRATION.md`).
 //!
 //! For a host row with `endpoint_kind = 'iroh'`, the address column
 //! holds a pairing string `<endpoint-id-hex>@<relay-url>[,<addr>...]`

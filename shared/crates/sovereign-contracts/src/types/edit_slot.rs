@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Code-editing assistance contract types — which model serves editing
 //! help, and **which of the two lanes it can actually serve**
-//! (`sovereign/docs/INLINE_COMPLETION.md`, `sovereign/docs/NEXT_EDIT.md`).
+//! (`svrn/docs/INLINE_COMPLETION.md`, `svrn/docs/NEXT_EDIT.md`).
 //! These cross the `InferenceProvider` seam so the daemon's HTTP layer
 //! can report slot state (`/status.inference.edit`) without knowing
 //! engine internals.

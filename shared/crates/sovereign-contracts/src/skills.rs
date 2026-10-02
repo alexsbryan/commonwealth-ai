@@ -157,7 +157,7 @@ pub enum SkillRegister {
 // splice block; that splice was removed when the skills-as-menu
 // UI retired. The wisdom in the retired skills' `trigger_phrases`
 // lists migrated into the router's embed-exemplar bank
-// (`sovereign/crates/sovereign-core/data/router/exemplars.toml`); see the migration commit
+// (`svrn/crates/sovereign-core/data/router/exemplars.toml`); see the migration commit
 // for the audit. The surviving modes (inner-work, recipe-author)
 // do not need router hints because the user explicitly enters
 // their surfaces.
@@ -975,7 +975,7 @@ impl Default for SkillRegistry {
 // silently, on the skill axis.
 //
 // The set is what the desktop shipped on 2026-09-09, measured: inner-work
-// and recipe-author. `sovereign/modes/workflow-author` exists in the tree
+// and recipe-author. `svrn/modes/workflow-author` exists in the tree
 // but ships in NO binary's registry (its TOOLS ship, via
 // `WorkflowAuthoringTools`); the witness/relational skills ride the
 // voice-eval harness only. Both hosts load exactly this list — adding a
@@ -1533,7 +1533,7 @@ register = "relational"
     // The two tests that read `../../modes/*/skill.toml` at RUNTIME moved to
     // `sovereign-core/tests/main/mode_declarations.rs` on 2026-09-04. This
     // crate is a `[[package_leaf]]`, so every declared package carries it and
-    // each must build standalone WITH ITS TESTS — and `sovereign/modes/` is
+    // each must build standalone WITH ITS TESTS — and `svrn/modes/` is
     // not part of the crate, so in a lift both panicked on the read.
     // `sovereign-core` is in no package and already read the same files from
     // the same place. The assertions are unchanged; nothing was taught to

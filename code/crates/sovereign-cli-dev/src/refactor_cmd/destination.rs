@@ -515,7 +515,7 @@ mod tests {
                 "corpus-engine/src/lib.rs",
                 "pub use corpus_index::index::{\n    Evidence,\n};\n",
             ),
-            ("sovereign/docs/cli-contract.toml", ""),
+            ("svrn/docs/cli-contract.toml", ""),
         ] {
             let path = tmp.path().join(rel);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -569,7 +569,7 @@ mod tests {
     fn a_non_type_canonical_is_named_rather_than_failed() {
         let (_tmp, ws) = workspace();
         assert!(matches!(
-            ws.resolve("sovereign/docs/cli-contract.toml"),
+            ws.resolve("svrn/docs/cli-contract.toml"),
             Resolution::NotATypePath { .. }
         ));
         assert!(matches!(
@@ -636,11 +636,11 @@ mod tests {
     #[test]
     fn a_non_type_home_still_answers_whether_it_exists() {
         let (_tmp, ws) = workspace();
-        let present = ws.resolve("sovereign/docs/cli-contract.toml");
+        let present = ws.resolve("svrn/docs/cli-contract.toml");
         assert!(present.exists(), "{}", present.render());
         assert!(matches!(present, Resolution::NotATypePath { .. }));
 
-        let absent = ws.resolve("sovereign/docs/no-such-contract.toml");
+        let absent = ws.resolve("svrn/docs/no-such-contract.toml");
         assert!(!absent.exists(), "{}", absent.render());
 
         // A crate as a home: `sovereign_wire` is planned and not yet a crate.

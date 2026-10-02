@@ -12,7 +12,7 @@ re-asserted by the fitter on every run:
 | `FINDINGS.md` | `e05da2351463e173ab1f9af6d7a96e6940d13ae1d606250af1695111fe9431cd` |
 
 `h1_scores.jsonl` and `h1_admission_calibration.json` live at
-`sovereign/crates/sovereign-core/data/calibration/` — the runtime bakes both
+`svrn/crates/sovereign-core/data/calibration/` — the runtime bakes both
 and a crate may not reach outside its own root (`cargo xtask boundary-gate`).
 
 `h1_top_cosine.overall.curve.json` came along as the comparator the

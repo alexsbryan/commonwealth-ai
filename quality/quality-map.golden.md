@@ -54,9 +54,9 @@
 
 | instrument | command | enforcement | fidelity | cost | in CI |
 |---|---|---|---|---|---|
-| `cli-journey-sandbox` | `sovereign/scripts/cli-journey-sandbox.sh` | tracked | F3 | unmeasured | **no** |
-| `cli-journey-verify` | `sovereign/scripts/cli-journey-verify.sh --tier 2` | hard | F3 | unmeasured | **no** |
-| `contract-nightly` | `sovereign/scripts/cli-journey-nightly.sh` | hard | F3 | unmeasured | **no** |
+| `cli-journey-sandbox` | `svrn/scripts/cli-journey-sandbox.sh` | tracked | F3 | unmeasured | **no** |
+| `cli-journey-verify` | `svrn/scripts/cli-journey-verify.sh --tier 2` | hard | F3 | unmeasured | **no** |
+| `contract-nightly` | `svrn/scripts/cli-journey-nightly.sh` | hard | F3 | unmeasured | **no** |
 | `desktop-demo` | `npm run demo` | tracked | F3 | unmeasured | **no** |
 | `desktop-e2e-faults` | `npm run test:e2e:faults` | hard | F4 | 20m | **no** |
 | `desktop-e2e-real` | `npm run test:e2e:real` | hard | F2 | 50m | **no** |
@@ -136,13 +136,13 @@
 | `module-cycles` | `cargo modules dependencies --acyclic -p <crate>` | tracked | F0 | unmeasured | **no** |
 | `pre-commit` | `./scripts/pre-commit.sh` | advisory | F0 | unmeasured | **no** |
 | `rustsec-advisories` | `cargo deny check advisories` | advisory | F0 | unmeasured | **no** |
-| `smoke-attach-mode` | `sovereign/scripts/smoke-attach-mode.sh` | tracked | F3 | unmeasured | **no** |
+| `smoke-attach-mode` | `svrn/scripts/smoke-attach-mode.sh` | tracked | F3 | unmeasured | **no** |
 
 ### control — breaks something on purpose and requires another instrument to notice — the only kind that measures what the others would CATCH
 
 | instrument | command | enforcement | fidelity | cost | in CI |
 |---|---|---|---|---|---|
-| `cli-journey-selftest` | `sovereign/scripts/tests/cli-journey-selftest.sh` | hard | F1 | 3s | yes |
+| `cli-journey-selftest` | `svrn/scripts/tests/cli-journey-selftest.sh` | hard | F1 | 3s | yes |
 | `daemon-concurrency-soak-control` | `scripts/daemon-concurrency-soak.py --minutes 6 --inject-death sigkill --inject-at 10 --expect-death crash` | tracked | F3 | 5m | **no** |
 | `daemon-concurrency-soak-selftest` | `scripts/daemon-concurrency-soak.py --self-test` | tracked | F0 | 2s | **no** |
 | `daemon-soak-report-selftest` | `scripts/daemon-soak-report.sh --self-test` | tracked | F0 | 0.20s | **no** |
@@ -161,7 +161,7 @@
 
 | instrument | command | enforcement | fidelity | cost | in CI |
 |---|---|---|---|---|---|
-| `cli-contract-live-verify` | `sovereign/scripts/cli-contract-live-verify.sh` | tracked | F3 | unmeasured | **no** |
+| `cli-contract-live-verify` | `svrn/scripts/cli-contract-live-verify.sh` | tracked | F3 | unmeasured | **no** |
 | `co-lineage` | `python3 scripts/co-lineage.py` | advisory | F0 | 0.05s | **no** |
 | `evidence-verdict` | `python3 scripts/evidence-verdict.py` | advisory | F0 | unmeasured | **no** |
 | `judge-replay-bank` | `python3 bench/lanes/chaos_monkey/judge_replay_cases.py --bank-age` | advisory | F0 | 0.13s | **no** |
@@ -313,15 +313,15 @@ A flag here is one whose absence does not fail anything; it just makes the green
 ### What CI does not run (100 of 130)
 
 - `api-gate` — .github/workflows/weekly.yml (header) · runs in: weekly:api-surface
-- `arch-report` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
+- `arch-report` — svrn/crates/sovereign-cli/src/posture_cmd.rs (arch_row) · runs in: by-hand
 - `build-timings` — .github/workflows/weekly.yml (header) · runs in: weekly:timings
-- `capability-map` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (capability_row) · runs in: by-hand
+- `capability-map` — svrn/crates/sovereign-cli/src/posture_cmd.rs (capability_row) · runs in: by-hand
 - `chaos-monkey` — bench/lanes/chaos_monkey/README.md · runs in: check
-- `chat-ask` — sovereign/crates/sovereign-cli/src/quality_check_cmd/mod.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run) · runs in: check
+- `chat-ask` — svrn/crates/sovereign-cli/src/quality_check_cmd/mod.rs (the focus lane — issue #57's turn, ingesting its corpus from source each run) · runs in: check
 - `ci-bench` — bench/lanes/README.md · runs in: by-hand
-- `cli-contract-live-verify` — sovereign/docs/TESTING_SURFACE.md · runs in: by-hand
-- `cli-journey-sandbox` — sovereign/docs/TESTING_SURFACE.md · runs in: by-hand
-- `cli-journey-verify` — sovereign/docs/cli-contract.toml (journeys) · runs in: by-hand
+- `cli-contract-live-verify` — svrn/docs/TESTING_SURFACE.md · runs in: by-hand
+- `cli-journey-sandbox` — svrn/docs/TESTING_SURFACE.md · runs in: by-hand
+- `cli-journey-verify` — svrn/docs/cli-contract.toml (journeys) · runs in: by-hand
 - `clippy-json` — quality/xtask/src/lint_gate.rs · runs in: by-hand
 - `clone-gate` — quality/xtask/src/clone_gate.rs (module header) · runs in: prepush
 - `co-drift` — scripts/co-drift.py (module header — the per-commit claim/scope audit) · runs in: by-hand
@@ -330,15 +330,15 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `co-sweep` — scripts/run-if-stale.sh (header) · runs in: run-if-stale
 - `commit-msg` — scripts/commit-msg.sh (header) · runs in: precommit
 - `concept-gate` — quality/NOUN_CONVERGENCE.md · runs in: prepush
-- `contract-nightly` — sovereign/docs/cli-contract.toml (journeys) · runs in: run-if-stale, nightly
+- `contract-nightly` — svrn/docs/cli-contract.toml (journeys) · runs in: run-if-stale, nightly
 - `cw-rails-lift` — cmnwlth/BOUNDARY.md · runs in: by-hand
 - `cw-work-lift` — cmnwlth/BOUNDARY.md · runs in: by-hand
-- `daemon-concurrency-soak` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
-- `daemon-concurrency-soak-control` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
-- `daemon-concurrency-soak-selftest` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
-- `daemon-soak` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: by-hand
-- `daemon-soak-report` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
-- `daemon-soak-report-selftest` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
+- `daemon-concurrency-soak` — svrn/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
+- `daemon-concurrency-soak-control` — svrn/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
+- `daemon-concurrency-soak-selftest` — svrn/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
+- `daemon-soak` — svrn/docs/specs/DAEMON_RESILIENCE.md · runs in: by-hand
+- `daemon-soak-report` — svrn/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
+- `daemon-soak-report-selftest` — svrn/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
 - `desktop-a11y` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
 - `desktop-breaker` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers · runs in: by-hand
 - `desktop-chaos` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: by-hand
@@ -371,7 +371,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `dm-census-word-owners` — quality/campaigns/domains.toml (bar dm-word-owners — the count this measures) · runs in: by-hand
 - `doc-coverage` — .github/workflows/weekly.yml (header) · runs in: weekly:doc-coverage
 - `domains-census-self-test` — scripts/domains-census.py (module header — the planted controls) · runs in: by-hand, prepush
-- `drift-detect` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (drift_row) · runs in: by-hand
+- `drift-detect` — svrn/crates/sovereign-cli/src/posture_cmd.rs (drift_row) · runs in: by-hand
 - `enrichment-f1` — bench/lanes/literary/README.md · runs in: check
 - `evidence-verdict` — AGENTS.md §Code Intelligence (the tool table row: "Does the test my commit body cites actually SEE the change?") · runs in: by-hand
 - `feature-matrix` — .github/workflows/weekly.yml (header) · runs in: weekly:features
@@ -380,7 +380,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `hook-wiring` — .claude/hooks/tests/settings-wiring.sh · runs in: prepush
 - `inner-chaos-calibrate` — sovereign/crates/sovereign-desktop/tests/e2e/CHAOS_QA_METHODOLOGY.md · runs in: smoke:2
 - `inner-chaos-soak` — bench/lanes/chaos_monkey/README.md · runs in: smoke:5
-- `judge-replay` — sovereign/crates/sovereign-cli-llm/src/judge_replay.rs (module header) · runs in: by-hand
+- `judge-replay` — svrn/crates/sovereign-cli-llm/src/judge_replay.rs (module header) · runs in: by-hand
 - `judge-replay-bank` — quality/campaigns/verifier-loop.toml §vl-bank-live · runs in: run-if-stale, by-hand
 - `judge-replay-bank-feed` — bench/lanes/chaos_monkey/feed_replay_bank.sh (module header) · runs in: run-if-stale
 - `judge-replay-report` — bench/lanes/chaos_monkey/results/judge_replay_20260814_calibration.md (the two refusals this report has to reproduce) · runs in: by-hand
@@ -392,10 +392,10 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `module-cycles` — .github/workflows/weekly.yml (header) · runs in: weekly:cycles
 - `mtp-probe` — bench/lanes/README.md · runs in: smoke:1
 - `nc-thesis` — scripts/nc-thesis.py (module header — is the product claim a TYPE?) · runs in: by-hand, prepush
-- `oicp-conformance` — sovereign/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row) · runs in: run-if-stale
+- `oicp-conformance` — svrn/crates/sovereign-cli/src/posture_cmd.rs (oicp_conformance_row) · runs in: run-if-stale
 - `pre-commit` — scripts/pre-commit.sh (header) · runs in: by-hand
 - `pre-push` — scripts/pre-push.sh (header — the one-minute budget) · runs in: by-hand
-- `quality-check` — sovereign/docs/CLI_REFERENCE.md#svrn-quality · runs in: smoke:2, by-hand
+- `quality-check` — svrn/docs/CLI_REFERENCE.md#svrn-quality · runs in: smoke:2, by-hand
 - `retrieval-prod` — bench/lanes/sep/README.md · runs in: check
 - `routing` — bench/lanes/README.md · runs in: check
 - `routing-replay` — sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-big-harnesses · runs in: smoke:3
@@ -410,7 +410,7 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `throughput-probe` — bench/lanes/README.md · runs in: smoke:1
 - `twin-census` — quality/twin-plants.toml (the families and their plants) · runs in: by-hand
 - `windows-crosscheck` — .github/workflows/desktop-release.yml · runs in: by-hand
-- `wizard-verify` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: smoke:6, by-hand
+- `wizard-verify` — svrn/docs/specs/DAEMON_RESILIENCE.md · runs in: smoke:6, by-hand
 - `xtask-quality` — quality/xtask/src/quality_cmd.rs · runs in: by-hand
 
 ### What nothing runs (0)

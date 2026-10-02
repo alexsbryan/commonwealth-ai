@@ -14,7 +14,7 @@ _Phased build plan for the Commonwealth coordination daemon. Each phase declares
 >
 > For the **current** shape of the workspace — crate layout, what's
 > implemented, what's deferred — read
-> [`../sovereign/SYSTEM_OVERVIEW.md`](../sovereign/SYSTEM_OVERVIEW.md) §5
+> [`docs/SYSTEM_OVERVIEW.md`](../docs/SYSTEM_OVERVIEW.md) §5
 > and §10 (Architecture Roadmap). This file is preserved so the original
 > phasing argument and dependency analysis remain accessible to anyone
 > tracing why the project landed where it did.

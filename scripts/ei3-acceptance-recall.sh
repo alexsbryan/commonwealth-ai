@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ei3-acceptance-recall.sh — the EI3-recipe-to-answer instrument (ei-3c, 2026-09-07).
 #
-# The bar: "corpus-mcp/acceptance.sh runs recipe new -> ingest -> serve -> ask on
+# The bar: "svrn/crates/corpus-mcp/acceptance.sh runs recipe new -> ingest -> serve -> ask on
 # the wessex fixture against a bare chat+embed endpoint; truth.json recall >= the
 # daemon-built corpus". Two halves, and this measures both:
 #
@@ -19,7 +19,7 @@
 # Why the ingest is not re-run here. It is 60-90 minutes against a live chat
 # model (measured 2026-09-05: 5,418 s for one full manifest), which no measure
 # window holds and no `timeout_s` should try to. So the ingest is the LANE's
-# work, run through `ACCEPT_INGEST=1 corpus-mcp/acceptance.sh`, and this reads
+# work, run through `ACCEPT_INGEST=1 svrn/crates/corpus-mcp/acceptance.sh`, and this reads
 # the atlas it left — the same shape as the EI2 instrument, which reads the
 # newest verdicts artefact rather than re-judging a bank. The artefact's age is
 # printed and rides in the row, so a stale read is visible rather than silent.
@@ -47,7 +47,7 @@ cnj() { echo "ei3: $* — could-not-judge" >&2; exit 3; }
 # machine lacks — could-not-judge — and that is also how a FULL run's exit 2 is
 # read below. It resolves the embed gguf against the main checkout when this
 # runs from a worktree, which every campaign worker does.
-pf="$("$REPO/corpus-mcp/acceptance.sh" --preflight 2>&1)"
+pf="$("$REPO/svrn/crates/corpus-mcp/acceptance.sh" --preflight 2>&1)"
 pf_rc=$?
 (( pf_rc == 0 )) || cnj "acceptance.sh refused its own preflight: $pf"
 echo "ei3: $pf" >&2
@@ -62,14 +62,14 @@ for d in "$DATA_ROOT/indexes/$INGEST_CORPUS"*/atlas/atoms.json; do
   if [[ -z "$candidate" || "$d" -nt "$candidate" ]]; then candidate="$d"; fi
 done
 [[ -n "$candidate" ]] || cnj "no bare-endpoint atlas under $DATA_ROOT/indexes/$INGEST_CORPUS* — \
-the ingest leg has NEVER RUN here; run \`ACCEPT_INGEST=1 CHAT_GGUF=<gguf> corpus-mcp/acceptance.sh\` in a lane window"
+the ingest leg has NEVER RUN here; run \`ACCEPT_INGEST=1 CHAT_GGUF=<gguf> svrn/crates/corpus-mcp/acceptance.sh\` in a lane window"
 age_h=$(( ( $(date +%s) - $(stat -c %Y "$candidate") ) / 3600 ))
 echo "ei3: candidate atlas $candidate (${age_h}h old); control $CONTROL" >&2
 
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
-echo "ei3: running the llama-server arm of corpus-mcp/acceptance.sh (no ACCEPT_INGEST)" >&2
-"$REPO/corpus-mcp/acceptance.sh" >"$log" 2>&1
+echo "ei3: running the llama-server arm of svrn/crates/corpus-mcp/acceptance.sh (no ACCEPT_INGEST)" >&2
+"$REPO/svrn/crates/corpus-mcp/acceptance.sh" >"$log" 2>&1
 chain_rc=$?
 tail -5 "$log" >&2
 if (( chain_rc == 2 )); then

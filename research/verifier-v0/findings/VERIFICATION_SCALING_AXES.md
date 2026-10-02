@@ -1,7 +1,7 @@
 # Verification scaling axes — what LLM-as-a-Verifier offers a 4B, and what it does not
 
 **Status:** further-research pre-registration. Written 2026-08-20.
-**Parent:** `sovereign/docs/specs/VERIFIER_V0.md` (§0 build-vs-adopt, §1 success
+**Parent:** `svrn/docs/specs/VERIFIER_V0.md` (§0 build-vs-adopt, §1 success
 criteria). Successor instrument to `HEADROOM_STUDY.md` and
 `THRESHOLD_CALIBRATION.md`.
 **External source:** `github.com/llm-as-a-verifier/llm-as-a-verifier`,

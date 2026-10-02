@@ -9,7 +9,7 @@
 //! verdicts, memory recall bands, general-knowledge signals) — never
 //! by an additional model pass — and persists on
 //! `Message.metadata.epistemic_state`. Design:
-//! `sovereign/docs/EPISTEMIC_STATE.md`.
+//! `svrn/docs/EPISTEMIC_STATE.md`.
 //!
 //! Wire-stability: these types are serialized into message metadata
 //! and read by the desktop/mobile projections. Additive changes only;

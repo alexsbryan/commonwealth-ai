@@ -389,7 +389,7 @@ stated on the record in MANIFEST.md rather than blurred together.
 **Claim.** Point it at a repo and ask the question you'd ask a senior engineer —
 in English, naming no symbol — and get the actual code path back. The subsystem
 you're afraid to touch becomes one you can change. And the code never leaves the
-laptop. (Thesis and answer-key: `sovereign/docs/specs/CODE_INTEL_CHAT.md`.)
+laptop. (Thesis and answer-key: `svrn/docs/specs/CODE_INTEL_CHAT.md`.)
 
 **Choreography.**
 1. Scope to the `commonwealth-ai` notebook.

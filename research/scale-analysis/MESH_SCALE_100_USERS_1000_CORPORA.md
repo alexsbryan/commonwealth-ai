@@ -1,7 +1,7 @@
 # Scale analysis — 100 users, 1000 corpora: where the system breaks, in order
 
 **Date:** 2026-08-13 · **Method:** three parallel code sweeps (retrieval path, inference
-scheduling, mesh substrate) + the existing `sovereign/docs/specs/SCHEDULER_QUALITY.md`
+scheduling, mesh substrate) + the existing `svrn/docs/specs/SCHEDULER_QUALITY.md`
 measurements. Every claim below carries a file:line citation from today's tree; nothing is
 extrapolated from docs alone.
 
@@ -947,7 +947,7 @@ readiness itself. Proof on the instrument that found it:
 `needle-rig-build.sh` reports `repaired=0/100`, and `needle-rig-baseline.sh`
 goes from exit 4 (`kq_fanout_corpora=0`, eligibility refused) to exit 0
 (`searched=100 installed=100 OK`, 100/100 rank-1 in both runs). Regression
-test: `sovereign/crates/sovereign-tools/tests/corpus_store_readiness.rs`.
+test: `svrn/crates/sovereign-tools/tests/corpus_store_readiness.rs`.
 
 #### 8.6.3 Instrument validated before any result was read
 

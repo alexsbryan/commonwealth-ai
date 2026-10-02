@@ -774,7 +774,7 @@ Allowed values:
 
 ## `OntologyV1`
 
-`[enrichment.ontology]` under `version = 1`: the declaration language for "your own types". Every key is optional; each defaults to today's behaviour, so a block carrying only `version = 1` (or only the version-0 `guidance` / `vocabulary` keys) is exactly a version-0 block. Declared types are predicates over the fixed atom kinds — kinds stay closed, types are declared. See `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md` §1 for the ten worked declarations and §4 for what `recipe validate` checks.
+`[enrichment.ontology]` under `version = 1`: the declaration language for "your own types". Every key is optional; each defaults to today's behaviour, so a block carrying only `version = 1` (or only the version-0 `guidance` / `vocabulary` keys) is exactly a version-0 block. Declared types are predicates over the fixed atom kinds — kinds stay closed, types are declared. See `svrn/docs/specs/ONTOLOGY_PRIMITIVES.md` §1 for the ten worked declarations and §4 for what `recipe validate` checks.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -1245,7 +1245,7 @@ refuses at load rather than clamping.
 the atlas for each question kind — `thematic`, `trajectory`, `tension`,
 `enumeration`, `lookup` — as seed kinds, edge kinds, hops and budget (the
 `NavigationPolicy` / `WalkPolicy` / `SeedPolicy` tables above). Every row has a
-pre-registered default (`sovereign/docs/specs/EPISTEMIC_INDEX.md` §2.2); omit
+pre-registered default (`svrn/docs/specs/EPISTEMIC_INDEX.md` §2.2); omit
 the section, or a row, to take it. A row you write replaces the default row
 whole. Kinds and edges are spelled as the atoms and edges carry them on disk
 (`Configuration`, `Entity`, `concept`; `Involves`, `Tension`, `OpposesIn`); an
@@ -1276,6 +1276,6 @@ entity type, and the question shapes the corpus will answer — so an inference
 you disagree with can be overridden in the recipe.
 
 The worked declarations for ten kinds of user are in
-`sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md` §1; `svrn recipe new --ontology
+`svrn/docs/specs/ONTOLOGY_PRIMITIVES.md` §1; `svrn recipe new --ontology
 <name>` scaffolds a complete recipe from one of them.
 

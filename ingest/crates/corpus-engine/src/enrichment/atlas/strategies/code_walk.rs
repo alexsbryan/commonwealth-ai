@@ -143,8 +143,8 @@ impl WorkspaceMap {
     /// Find the crate containing a given chunk's `file_path`. Returns
     /// `None` for chunks outside any known crate (e.g., top-level
     /// scripts, README excerpts). Longest-prefix match: with two
-    /// crates `sovereign/crates/sovereign-core` and
-    /// `sovereign/crates/sovereign-core/src/runtime`, a chunk at the
+    /// crates `svrn/crates/sovereign-core` and
+    /// `svrn/crates/sovereign-core/src/runtime`, a chunk at the
     /// latter wins.
     fn crate_for_path(&self, file_path: &str) -> Option<&CrateRecord> {
         let path = Path::new(file_path);

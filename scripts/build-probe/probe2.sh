@@ -44,10 +44,10 @@ timeit flip - check-full-after-scoped 0 $LOCK env CARGO_LOG=cargo::core::compile
 timeit flip - lint-scoped-noedit 1 $LOCK env CARGO_LOG=cargo::core::compiler::fingerprint=info cargo check -p sovereign-mesh -p sovereign-cli-daemon -p sovereign-cli-dev -p sovereign-cli-llm --all-targets --features corpus-engine/treesitter,sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-mesh/treesitter
 echo "=== (B) clean re-measure $(date) ==="; settle
 PROBES=(
-"sovereign/crates/sovereign-cli-llm/src/lib.rs|sovereign-cli-llm"
+"svrn/crates/sovereign-cli-llm/src/lib.rs|sovereign-cli-llm"
 "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs|sovereign-desktop"
-"sovereign/crates/sovereign-tools/src/local_corpus/manager.rs|sovereign-tools"
-"sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs|sovereign-cli-daemon"
+"svrn/crates/sovereign-tools/src/local_corpus/manager.rs|sovereign-tools"
+"svrn/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs|sovereign-cli-daemon"
 "shared/crates/sovereign-turn-client/src/lib.rs|sovereign-turn-client"
 "sovereign/crates/sovereign-mesh/src/daemon.rs|sovereign-mesh"
 "shared/crates/sovereign-contracts/src/setup_config.rs|sovereign-contracts"

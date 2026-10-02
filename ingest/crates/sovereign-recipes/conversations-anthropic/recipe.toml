@@ -31,7 +31,7 @@ fts = true
 vector = true
 
 # Tiered retrieval port (Phase B; spec
-# `sovereign/docs/specs/CONV_TIERED_PORT.md`). Replaces the legacy
+# `svrn/docs/specs/CONV_TIERED_PORT.md`). Replaces the legacy
 # atlas field-model pipeline that wedged in a Phase 1b parse-fail
 # loop on the 16k-chunk import (see project memory
 # `project_conv_anthropic_tiered_port_handoff`). The tiered runner

@@ -43,7 +43,7 @@
 //!   inference buffers go to the system allocator and are freed on
 //!   release. This trades some allocator throughput for a bounded
 //!   footprint on a background pass; the throughput cost has NOT been
-//!   measured, and `sovereign/DEFAULTS_LEDGER.md` says so.
+//!   measured, and `docs/DEFAULTS_LEDGER.md` says so.
 //! - **Memory-pattern planning off** on the sessions we build ourselves.
 //!   It pre-plans one contiguous buffer from the first run's shapes; with
 //!   a varying batch dimension that plan is re-made at the largest shape

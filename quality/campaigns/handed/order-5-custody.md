@@ -100,7 +100,7 @@ row is an approval-time decision on three data values, answered in the Premises 
 - **Two SECOND parsers keep their own `true` default, and this row flips neither.**
   `RegistryEntry.mesh_sharing` — ingest/crates/corpus-engine/src/registry.rs:76-77, `#[serde(default =
   "default_true")]` at :76 over that crate's own `fn default_true()` (registry.rs:112) — and
-  `CorpusDefinition.mesh_sharing` — sovereign/crates/sovereign-tools/src/corpus/registry.rs:45-51,
+  `CorpusDefinition.mesh_sharing` — svrn/crates/sovereign-tools/src/corpus/registry.rs:45-51,
   `#[serde(default = "default_mesh_sharing")]` at :45 over a private
   `fn default_mesh_sharing() -> bool { true }` at :49-51 that a `git grep default_true` cannot see.
   `RegistryEntry` reaches the desktop catalog type: `Registry::catalog()` (registry.rs:311) maps
@@ -116,7 +116,7 @@ row is an approval-time decision on three data values, answered in the Premises 
   become private under the flip. Any test asserting `mesh_sharing == true` on one of them goes red
   and is fixed in this row by stating the key in the fixture, never by reverting the default —
   this is the expected shape of the row's fallout and is not a §6.
-- `sovereign/SYSTEM_OVERVIEW.md` is edited by every rung and was dirty on 2026-09-17 (since committed — clean at round 2); re-check `git status --short` before `git add`, and if the peer's
+- `docs/SYSTEM_OVERVIEW.md` is edited by every rung and was dirty on 2026-09-17 (since committed — clean at round 2); re-check `git status --short` before `git add`, and if the peer's
   hunks must be committed before this row's commit.
 
 ## Done when

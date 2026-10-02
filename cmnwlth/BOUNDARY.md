@@ -323,7 +323,7 @@ zero `[[exception]]` rows, held across four widenings.
 **A third gate was written for this on 2026-09-11 and then deleted the same
 day**, and the reason is worth more than the gate was. It checked that every
 crate in a `[[package]]`'s list is named in the doc that package declares, and
-it worked — it found this file stale by two crates and `corpus-mcp/README.md`
+it worked — it found this file stale by two crates and `svrn/crates/corpus-mcp/README.md`
 stale by one. But a checker that keeps two copies of a list in agreement is
 policing a duplication instead of removing it, and the repo already has enough
 after-the-fact enforcement. The membership list now exists once, in the

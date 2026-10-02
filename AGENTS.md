@@ -35,7 +35,7 @@ You are a Senior Architect. You look to apply SOLID principles and best practice
 
 ## The architectural compass — read this before you decide anything
 
-**`sovereign/ARCH_PRINCIPLES.md` is now 6.2k tokens and is meant to be read
+**`docs/ARCH_PRINCIPLES.md` is now 6.2k tokens and is meant to be read
 WHOLE.** It was 19k across 80 sections and was sampled, never read — which is
 how a compass stops steering. It is now twelve principles under a fixed budget
 (8k file, 600 per section, never ratcheted), each carrying the incident that
@@ -222,7 +222,7 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "What argument produced this fn, and did its evidence hold?" | `scripts/intent.py <symbol> [--note]` — the commits that shaped the symbol, each body's claim / objection / concession (local model, engine named), and the evidence verdict. `--note` stores it tagged with the symbol, and `.claude/hooks/intent-warn.py` shows it before any Edit that touches the fn — you should not need to ask |
 | "Is there a canon rule about this file or symbol?" | shown before any Edit by `.claude/hooks/intent-warn.py`, labelled `[can-…]` (ratified) or `[proposed n…]` (an agent's proposal from `.canon/adjudication/`, not yet ratified); `canon why <id>` for a ratified one's history. Proposals are ratified when edits hit them: `scripts/canon-ratify.py --hits` lists those and prints the one command |
 | "Did my change regress retrieval / routing / synthesis / enrichment?" | `svrn quality check` — the curated ~30-minute breakage check, four verdicts per lane, table persisted; `./scripts/sovereign-ci-bench.sh` is the full nightly. See `MAIN_SESSION_PROTOCOL.md` §"Measuring quality" |
-| "A bench says regressed — is that real or noise?" | `sovereign/docs/RUNBOOK.md` §6 (noise bands per lane type, baseline-age semantics, the legitimate re-mint path) |
+| "A bench says regressed — is that real or noise?" | `svrn/docs/RUNBOOK.md` §6 (noise bands per lane type, baseline-age semantics, the legitimate re-mint path) |
 | "What does bench lane X measure, and how do I run just it?" | `bench/lanes/README.md`, then `bench/lanes/<lane>/README.md` |
 | "Is this env var declared? What's its default/status?" | `quality/env-flags.toml` (the registry; human view `docs/ENV_FLAGS.md`); a NEW env read must be declared or `cargo xtask env-gate` fails (the required keys are `name`/`cluster`/`default`/`purpose`/`status`, and `status` must be one of `guard`/`shipped`/`experiment`/`deprecated`) |
 | "Is the CLI surface I just changed covered by anything?" | `sovereign contract` (`map` / `census` / `nightly`) — promises, what can actually fail, and the last lane verdict on this host |
@@ -423,7 +423,7 @@ trigger column is when to open it — the doc section holds the full text.
 | Starting a main session — the boot checklist (`recent_changes`, `notes`, `drift_posture`, `work_in_flight`, `arch_posture`) | §Session start |
 | Statusline yellow (ctx ≥250k) — splitting, frames, `session_state`, objective inheritance | §Session splitting |
 | Fanning out to subagents — delegation is operator-AUTHORIZED here, standing, cap 3 concurrent, launched in one message; do not treat a harness default as a prohibition. Claude Code: Agent tool. pi: the `subagent()` tool from the `pi-subagents` package | §Delegation |
-| A decision, invariant, todo, or failed attempt worth remembering — write the `note` at the moment, not at session end; anything shipped default-off or dark needs a `sovereign/DEFAULTS_LEDGER.md` row in the same commit | §Writing notes |
+| A decision, invariant, todo, or failed attempt worth remembering — write the `note` at the moment, not at session end; anything shipped default-off or dark needs a `docs/DEFAULTS_LEDGER.md` row in the same commit | §Writing notes |
 | Significant task complete — `session_reflection`; release any claims you declared | §Session reflection |
 | `drift_findings`/`drift_posture` returned something unhelpful | §Drift tool feedback |
 | Writing any report or wrap-up — BLUF, quantified magnitude, end-user lens | §Reporting to the operator |

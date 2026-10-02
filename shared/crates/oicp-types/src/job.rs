@@ -561,7 +561,7 @@ pub struct JobUnit {
 /// inference, and the same three caveats hold: it is what the donor SAYS, it
 /// is computed once from configuration, and nothing rewrites it after an
 /// observed failure. A claim is not a promise and never a lease — the words
-/// stay apart here on purpose, because `sovereign/docs/WORK_ATLAS.md` already
+/// stay apart here on purpose, because `svrn/docs/WORK_ATLAS.md` already
 /// owns "claim" for agent coordination on the same rail.
 // `PartialEq` for the same reason [`JobUnit`] carries it: a fold holding the
 // live offer per donor is compared as a whole by `commonwealth-work`'s

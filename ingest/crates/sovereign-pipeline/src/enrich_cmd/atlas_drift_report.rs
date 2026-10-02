@@ -534,7 +534,7 @@ fn compute_findings(narratives: &[NarrativeIndex], structural: &StructuralIndex)
 
             // Skip narrative noise — entities the literary_atlas
             // pipeline extracts that aren't actually code components:
-            //   - document path references (`sovereign/docs/X.md`)
+            //   - document path references (`svrn/docs/X.md`)
             //   - abstract concepts in lowercase prose (`contract`,
             //     `mechanism`, `invariant`) — these are discussion
             //     terms, not named structural surface.
@@ -1629,7 +1629,7 @@ fn is_narrative_noise(atom_type: &str, canonical: &str) -> bool {
     if lower.ends_with(".md") || lower.contains("/docs/") || lower.contains(".md/") {
         return true;
     }
-    if lower.starts_with(".sovereign/") || lower.starts_with("sovereign/docs/") {
+    if lower.starts_with(".sovereign/") || lower.starts_with("svrn/docs/") {
         return true;
     }
     // Lowercase single-word common nouns the pipeline picks up.

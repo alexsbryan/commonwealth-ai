@@ -515,7 +515,7 @@ COMMIT;
 /// Applied to databases at `user_version = 8`. Lands the additive
 /// surface for the tiered-retrieval-over-NoteStore port (T1 embeddings)
 /// and mesh-wide propagation (per
-/// `sovereign/docs/specs/NOTES_TIERED.md` + the
+/// `svrn/docs/specs/NOTES_TIERED.md` + the
 /// `~/.claude/plans/let-s-work-on-this-compiled-whale.md` plan).
 ///
 /// Five new columns on `notes`:

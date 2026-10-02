@@ -42,10 +42,7 @@ use std::sync::Arc;
 
 /// Default narrative docs the architectural drift detector tracks.
 /// Resolved relative to the workspace root.
-pub const DEFAULT_NARRATIVES: &[&str] = &[
-    "sovereign/SYSTEM_OVERVIEW.md",
-    "sovereign/ARCH_PRINCIPLES.md",
-];
+pub const DEFAULT_NARRATIVES: &[&str] = &["docs/SYSTEM_OVERVIEW.md", "docs/ARCH_PRINCIPLES.md"];
 
 /// Default markdown output of `sovereign drift detect`.
 pub const DEFAULT_REPORT_NAME: &str = "latest.md";

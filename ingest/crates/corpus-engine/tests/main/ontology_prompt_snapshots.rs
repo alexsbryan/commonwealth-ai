@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Prompt-byte snapshots pinning ontology invariants I1 and I2
-//! (`sovereign/docs/specs/ONTOLOGY_MIGRATION.md` §0).
+//! (`svrn/docs/specs/ONTOLOGY_MIGRATION.md` §0).
 //!
 //! Each prompt the atlas pipeline would send to a model is serialised
 //! whole — the [`ChatPrompt`] the chat client itself serialises: system,

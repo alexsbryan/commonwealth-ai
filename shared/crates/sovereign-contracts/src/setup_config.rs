@@ -250,7 +250,7 @@ pub struct NodeSection {
     /// whose default is the per-item loop `SplitInferenceProvider` overrides
     /// precisely because it made corpus ingest embed-bound. A wrapper that
     /// forgets one method silently inherits that, with nothing red. See
-    /// `sovereign/DEFAULTS_LEDGER.md` for the re-open condition.
+    /// `docs/DEFAULTS_LEDGER.md` for the re-open condition.
     ///
     /// Required when `[models]` is absent and meaningless when it is present.
     /// Named deliberately rather than discovered: a node with no weights and no
@@ -292,7 +292,7 @@ pub struct NodeSection {
     /// terminal is exposed to exactly that: when a DHCP lease moves and another
     /// machine takes the address, the terminal forwards there without erroring.
     /// Resolving by identity was priced and deferred
-    /// (`sovereign/DEFAULTS_LEDGER.md`), so the interim posture is to make the
+    /// (`docs/DEFAULTS_LEDGER.md`), so the interim posture is to make the
     /// drift visible rather than silent — `svrn doctor`'s `entry_node_identity`
     /// check probes the address and compares what answers against this.
     ///
@@ -648,9 +648,9 @@ pub struct ModelsSection {
     pub primary_pool: Option<PrimaryPoolSection>,
 
     /// Opt-in **dedicated code-editing model** — the slot serving
-    /// next-edit suggestions (`sovereign/docs/NEXT_EDIT.md`) and, when
+    /// next-edit suggestions (`svrn/docs/NEXT_EDIT.md`) and, when
     /// the model's vocab carries FIM markers, inline completion too
-    /// (`sovereign/docs/INLINE_COMPLETION.md`).
+    /// (`svrn/docs/INLINE_COMPLETION.md`).
     ///
     /// Declaring the section opts into a *specialised* editing model.
     /// It is NOT the opt-in for editing assistance as such: with the
@@ -1641,7 +1641,7 @@ fn default_yield_to_foreground_secs() -> u64 {
     60
 }
 /// Default `false`: a daemon is networked unless an operator says otherwise.
-/// The local-only profile ships dark — see `sovereign/DEFAULTS_LEDGER.md`.
+/// The local-only profile ships dark — see `docs/DEFAULTS_LEDGER.md`.
 fn default_local_only() -> bool {
     false
 }

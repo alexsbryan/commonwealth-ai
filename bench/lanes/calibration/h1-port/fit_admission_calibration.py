@@ -206,7 +206,7 @@ def main():
     out = {
         "schema": "h1-admission-calibration/v1",
         "derived_from": {
-            "scores": "sovereign/crates/sovereign-core/data/calibration/h1_scores.jsonl",
+            "scores": "svrn/crates/sovereign-core/data/calibration/h1_scores.jsonl",
             "scores_sha256": EXPECTED_SCORES_SHA256,
             "curve": "bench/lanes/calibration/h1-port/h1_rerank_margin.overall.curve.json",
             "curve_sha256": EXPECTED_CURVE_SHA256,

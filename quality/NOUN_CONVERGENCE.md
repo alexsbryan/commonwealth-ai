@@ -10,7 +10,7 @@ architecture is [`TARGET_ARCHITECTURE.md`](./TARGET_ARCHITECTURE.md).
 reorders.
 
 **Contracts this answers to:**
-[`ARCH_PRINCIPLES.md`](../sovereign/ARCH_PRINCIPLES.md) §10.6, §7, §18, §19.
+[`ARCH_PRINCIPLES.md`](../docs/ARCH_PRINCIPLES.md) §10.6, §7, §18, §19.
 
 ---
 

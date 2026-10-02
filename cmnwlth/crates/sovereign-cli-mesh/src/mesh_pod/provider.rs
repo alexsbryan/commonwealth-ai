@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Vast `WorkerProvider` impl + owner-key persistence.
 //!
-//! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md`. The
+//! Spec: `svrn/docs/EPHEMERAL_WORKER_PODS.md`. The
 //! [`VastWorkerProvider`] is the concrete implementation
 //! `WorkerController` consumes when the operator picks Vast — it wraps
 //! the existing `sovereign_pipeline::pod::*` shell-outs and adds an

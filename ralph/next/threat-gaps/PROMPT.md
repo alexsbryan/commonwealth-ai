@@ -85,7 +85,7 @@ growth past a cap is a design finding, never a queue edit. Commit
 row `[x]`.
 
 **`REVIEW-audit-tg`.** Run TESTALL and PREPUSH. Read `git log` and
-`git diff` since the previous audit against `sovereign/ARCH_PRINCIPLES.md`
+`git diff` since the previous audit against `docs/ARCH_PRINCIPLES.md`
 ("The twelve"). Fix what you find, behaviour-preserving, and record each finding in
 `ralph/REVIEW_FINDINGS.md`: principle, path:line, fixed-in hash. A red gate
 you cannot make green: §6.
@@ -150,7 +150,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   line in a package, never "the audit's", and never a re-pin.
 - Never build `--release`. Never run bare `cargo build`/`test`/`check`/`clippy`
   — only the §5 commands, which take the cargo lock.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
   `scripts/ralph*`, any file under `quality/campaigns/` (the five `tg-*` bars were
   pre-registered before any row ran; a clause, a floor or a goodhart line that seems wrong
   is §6, never an edit), or ANYTHING under `cmnwlth/crates/commonwealth-rail/`,
@@ -172,5 +172,5 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   nodes `scripts/threat-gaps-demo.sh` and `scripts/ring-room-demo.sh` (and `scripts/ring-doc-demo.sh`,
   which the room sources) start under their own `SOVEREIGN_DATA_DIR` are the script's to start
   and stop, exactly as `scripts/ring-offers-demo.sh` does.
-- When a row changes a subsystem `sovereign/SYSTEM_OVERVIEW.md` describes, fix
+- When a row changes a subsystem `docs/SYSTEM_OVERVIEW.md` describes, fix
   that one line in the same commit (principle 3). Nothing more.

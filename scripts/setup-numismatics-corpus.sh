@@ -28,7 +28,7 @@
 # how the chain LOOKED healthy while nothing had been demonstrated.
 #
 # STEPS 1-4 ARE NO LONGER THIS SCRIPT'S CLAIM. They are declared as the
-# `ontology-author` journey in sovereign/docs/cli-contract.toml, so `svrn
+# `ontology-author` journey in svrn/docs/cli-contract.toml, so `svrn
 # contract census` and pre-push can see them and a step that stops asserting
 # turns a lane red. They stay here because this is also how the hoard gets
 # REBUILT, and a rebuild that skipped its own chain would be a second path.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Fill-in-the-middle (FIM) inline-completion support — the prompt
 //! builder, the marker-style vocab probe, and the stream stop
-//! tracker (`sovereign/docs/INLINE_COMPLETION.md`).
+//! tracker (`svrn/docs/INLINE_COMPLETION.md`).
 //!
 //! FIM for the coder families we ship is expressed as a plain-text
 //! prompt using the model's own special-token markers, tokenized with

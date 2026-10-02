@@ -44,8 +44,7 @@ use std::path::{Path, PathBuf};
 mod repo_root;
 
 fn daemon_cmd_source() -> String {
-    let path =
-        repo_root::repo_root().join("sovereign/crates/sovereign-daemon/src/daemon_cmd/boot.rs");
+    let path = repo_root::repo_root().join("svrn/crates/sovereign-daemon/src/daemon_cmd/boot.rs");
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
@@ -166,7 +165,7 @@ fn the_compiled_in_set_is_the_measured_two_and_lives_in_contracts() {
         0,
         "workflow-author's TOML ships in NO registry (its TOOLS ship, via \
          WorkflowAuthoringTools; the file itself still sits unembedded in \
-         `sovereign/modes/`). Adding it to the compiled-in set is a \
+         `svrn/modes/`). Adding it to the compiled-in set is a \
          both-hosts decision — this pin makes the change a deliberate one, \
          not a drift."
     );

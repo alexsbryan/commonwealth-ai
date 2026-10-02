@@ -5,7 +5,7 @@
 # This pod is owned by exactly one persistent peer (its owner) for the
 # duration of one job; it never joins the mesh.
 #
-# Spec: sovereign/docs/EPHEMERAL_WORKER_PODS.md.
+# Spec: svrn/docs/EPHEMERAL_WORKER_PODS.md.
 #
 # Boot sequence:
 #   1. Validate SOVEREIGN_BOOTSTRAP env (base64 blob the owner minted).

@@ -113,7 +113,7 @@ until boundary-gate exits 0 {
 | COMPILE | `scripts/ralph-check.sh compile` — the toolbox-wrapped scoped compile; on this host it is the only honest LINT for anything that reaches llama-cpp-sys-4 | exit=0 |
 | ARCH | `scripts/ralph-check.sh arch` (builtin; rides on LINT in the base) | exit=0 |
 <!-- section: hard-rules-scope -->
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`, or
   `scripts/ralph*`. Never stop or restart the DEPLOYED daemon (the one
   `svrn daemon status` names). Never touch `ralph/STOP`,
   `ralph/NEEDS_HUMAN.md`, or another queue's directory under `ralph/next/`.

@@ -6,7 +6,7 @@ license.workspace = true
 description = "TDD-machine backend: red-green-refactor solver loop for any harness that calls it (HTTP, MCP, Pi extension)."
 
 # This crate is the workflow backend the design doc
-# `sovereign/docs/TDD_MACHINE_DESIGN.md` describes. It hosts three
+# `svrn/docs/TDD_MACHINE_DESIGN.md` describes. It hosts three
 # `SolverProvider` impls (`tdd_red`, `tdd_green`, `tdd_refactor`)
 # behind a single `SolverRegistry`. The HTTP + MCP transports in
 # `sovereign-server` dispatch through that registry; the Pi

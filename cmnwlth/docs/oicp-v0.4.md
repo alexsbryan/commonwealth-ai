@@ -403,4 +403,4 @@ a searched corpus outside the advertised set as an error.
 
 See the implementation in `shared/crates/oicp-types/src/lib.rs`, the previous protocol version
 in [`oicp-v0.3.md`](./oicp-v0.3.md), and the extraction it enables in
-`sovereign/SYSTEM_OVERVIEW.md`.
+`docs/SYSTEM_OVERVIEW.md`.

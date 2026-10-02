@@ -1012,7 +1012,7 @@ async fn run_worker(ctx: WorkerCtx) {
                     //     Default OFF (SOVEREIGN_SCIP_LSP_TIER): it spends a
                     //     warm analyzer's time on the hot path and its
                     //     duty-cycle effect over a 30-minute editing window is
-                    //     not measured yet. See sovereign/DEFAULTS_LEDGER.md.
+                    //     not measured yet. See docs/DEFAULTS_LEDGER.md.
                     if sovereign_contracts::env::truthy("SOVEREIGN_SCIP_LSP_TIER") {
                         let graph = rebuild_ctx.merged.load();
                         corpus_engine_scip::lsp_tier::run_edge_pass(

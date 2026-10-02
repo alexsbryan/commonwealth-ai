@@ -62,7 +62,7 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // `declare_scope` / `release_scope` are write-effectful; the audit
     // gate in `mcp_router::handle_tool_call` logs them at WARN.
     // `work_in_flight` is read-only, used to check overlapping work
-    // before starting. See sovereign/docs/WORK_ATLAS.md.
+    // before starting. See svrn/docs/WORK_ATLAS.md.
     "declare_scope",
     "release_scope",
     "work_in_flight",

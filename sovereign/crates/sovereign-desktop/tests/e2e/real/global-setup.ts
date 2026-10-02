@@ -83,7 +83,7 @@ const NUM_CORPUS_DIR = path.join(__dirname, "fixtures/numismatics-corpus");
 // climbing out of its crate root to reach here for it.
 const NUM_ATLAS_FIXTURE = path.join(
   __dirname,
-  "../../../../sovereign-tools/tests/fixtures/numismatics-atlas",
+  "../../../../../../svrn/crates/sovereign-tools/tests/fixtures/numismatics-atlas",
 );
 const NUM_DISPLAY_NAME = "Marlow Field (E2E)";
 /** Specs read this to learn the numismatics corpus id. */

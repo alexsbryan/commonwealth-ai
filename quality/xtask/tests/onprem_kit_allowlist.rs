@@ -24,8 +24,8 @@ mod repo_root;
 use repo_root::repo_root;
 
 const KIT: &str = "sovereign/deploy/onprem";
-const API_KEYS: &str = "sovereign/crates/sovereign-daemon/src/api_keys.rs";
-const CLIENT_AUTH: &str = "sovereign/crates/sovereign-daemon/src/client_auth.rs";
+const API_KEYS: &str = "svrn/crates/sovereign-daemon/src/api_keys.rs";
+const CLIENT_AUTH: &str = "svrn/crates/sovereign-daemon/src/client_auth.rs";
 const SEALED_E2E: &str = "sovereign/crates/sovereign-onprem/tests/sealed_composition_e2e.rs";
 
 fn read(rel: &str) -> String {

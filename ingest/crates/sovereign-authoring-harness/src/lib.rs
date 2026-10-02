@@ -5,7 +5,7 @@
 //! runner produces and turns them into an exact Pass / Fail verdict per stage,
 //! with the failing items shown, not summarized. Pure functions of the form
 //! `(stage output, declaration) -> Vec<Verdict>`; the renderer prints the
-//! ladder. See `sovereign/docs/specs/AUTHORING_HARNESS.md`.
+//! ladder. See `svrn/docs/specs/AUTHORING_HARNESS.md`.
 //!
 //! The `Verdict` here lives in its own module path on purpose — `sovereign-eval`
 //! already exports a different `Verdict` from `mechanism_fidelity::stopping`.

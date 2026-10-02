@@ -4,7 +4,7 @@
 # Sister image to `Containerfile` (ROCm). Runs in worker mode —
 # `sovereign-cli daemon run --worker-mode` — and is owned by exactly
 # one persistent peer for the lifetime of one job. See
-# sovereign/docs/EPHEMERAL_WORKER_PODS.md. Differences from the ROCm
+# svrn/docs/EPHEMERAL_WORKER_PODS.md. Differences from the ROCm
 # image:
 #
 #   1. NVIDIA CUDA base (devel for build, runtime for serving).
@@ -231,7 +231,7 @@ COPY sovereign/router/    ./sovereign/router/
 #
 # TO FIND THE FULL SET after touching sovereign-core, resolve every escaping
 # include and check it against the COPYs here:
-#   grep -rn 'include_str!' --include=*.rs sovereign/crates/sovereign-core | grep '\.\./'
+#   grep -rn 'include_str!' --include=*.rs svrn/crates/sovereign-core | grep '\.\./'
 # The deep relative paths are the hazard — `admission.rs` reaches SIX levels
 # up, so nothing about the call site suggests it depends on bench/.
 COPY bench/lanes/book-report/bench.toml ./bench/lanes/book-report/bench.toml

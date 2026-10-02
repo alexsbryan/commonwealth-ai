@@ -5,10 +5,10 @@ import guard
 
 REPO="/home/alexbryan/dev/commonwealth-ai"
 SITES=[
-    ("sovereign/crates/sovereign-core/src/title.rs", 800),
-    ("sovereign/crates/sovereign-core/src/title.rs", 809),
-    ("sovereign/crates/sovereign-tools/src/code/atos_utils.rs", 177),
-    ("sovereign/crates/sovereign-tools/src/local_corpus/frontmatter.rs", 64),
+    ("svrn/crates/sovereign-core/src/title.rs", 800),
+    ("svrn/crates/sovereign-core/src/title.rs", 809),
+    ("svrn/crates/sovereign-tools/src/code/atos_utils.rs", 177),
+    ("svrn/crates/sovereign-tools/src/local_corpus/frontmatter.rs", 64),
     ("cmnwlth/crates/commonwealth-api/src/frontdoor.rs", 2209),
 ]
 

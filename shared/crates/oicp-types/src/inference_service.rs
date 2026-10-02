@@ -18,7 +18,7 @@ use serde::Serialize;
 use crate::openai_types::StreamFrame;
 
 /// Fill-in-the-middle (inline completion) request — the daemon-side
-/// view of `POST /v1/completions` (`sovereign/docs/INLINE_COMPLETION.md`).
+/// view of `POST /v1/completions` (`svrn/docs/INLINE_COMPLETION.md`).
 /// The route has already unified the dual wire shape (OpenAI legacy
 /// `prompt`+`suffix` vs rich `prefix`+`suffix`) into these fields.
 #[derive(Debug, Clone)]

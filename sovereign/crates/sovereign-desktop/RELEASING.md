@@ -312,7 +312,7 @@ has never installed the CLI gets a working app: at startup the desktop asks
 `sovereign_turn_client`'s `ServingHost` whether a host is serving and, if not,
 brings the sidecar up detached — one call, no handle, no restart policy. The
 capability is the `bundled-backend` cargo feature, which `src-tauri/Cargo.toml`
-declares (`sovereign/DEFAULTS_LEDGER.md` records the flip).
+declares (`docs/DEFAULTS_LEDGER.md` records the flip).
 
 Three names have to agree, and only two of them are checked by the compiler:
 
@@ -388,7 +388,7 @@ builds are dynamically linked to `libleptonica`/`libtiff`/`libjpeg`/
 users had to `brew/apt install tesseract` themselves or OCR was
 unavailable. PaddleOCR's ONNX models have no such linkage.
 
-The 2026-05-27 bake-off (`sovereign/docs/OCR_PADDLE_ENGINE.md`,
+The 2026-05-27 bake-off (`svrn/docs/OCR_PADDLE_ENGINE.md`,
 harness `sovereign-tools/examples/paddle_bakeoff.rs`) put PaddleOCR
 **at or above** tesseract quality once `det_limit_side_len` was raised
 to 1600 (the merge-at-960 bug on dense pages — now the engine default):

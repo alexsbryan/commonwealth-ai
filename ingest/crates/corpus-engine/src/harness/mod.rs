@@ -4,7 +4,7 @@
 //! Runs the real ingest stages over a FROZEN sample and emits typed,
 //! judgment-free observations. The *policy* layer (Pass/Fail verdicts) lives
 //! in `sovereign-eval::authoring_harness`, which consumes what this module
-//! produces. See `sovereign/docs/specs/AUTHORING_HARNESS.md`.
+//! produces. See `svrn/docs/specs/AUTHORING_HARNESS.md`.
 //!
 //! Invariants this module upholds:
 //! - **I3** — acquisition runs exactly once, here, at sample [`capture`]; the

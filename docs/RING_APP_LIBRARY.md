@@ -38,7 +38,7 @@ what the state is. Each node folds its own copy.
 As built, ordering and voiding are decided once, in `commonwealth-rail-core`'s
 `admit`. The client's `fold` only traverses: it skips voided acts and
 replacement-less corrections and walks the rest in the rail's order
-(`sovereign/crates/sovereign-daemon/src/guest_door.rs:323`). The library sits
+(`svrn/crates/sovereign-daemon/src/guest_door.rs:323`). The library sits
 on top of that traversal and never re-derives what is beneath it.
 
 ## 2. What the givens force

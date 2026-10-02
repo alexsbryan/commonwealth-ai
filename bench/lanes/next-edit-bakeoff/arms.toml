@@ -1,5 +1,5 @@
 # Next-edit bakeoff arms — Phase 0
-# Spec: sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md §1 (candidates), §7.
+# Spec: svrn/docs/specs/NEXT_EDIT_BAKEOFF.md §1 (candidates), §7.
 # Driver: scripts/next_edit_bakeoff.py
 #
 # QUANTIZATION IS A CONFOUND AND IS NOT EQUALISED HERE. Every arm records
@@ -97,7 +97,7 @@ source = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF (the operator's resident chat primary
 # ── Phase 2 (PENDING): the arm the shipped fallback actually uses ────────
 #
 # NOT YET RUN. This is the flip condition for SOVEREIGN_NEXT_EDIT_FALLBACK
-# (sovereign/DEFAULTS_LEDGER.md) and the reason that flag ships OFF.
+# (docs/DEFAULTS_LEDGER.md) and the reason that flag ships OFF.
 #
 # `install_fallback_next_edit_slot` targets `ModelsSection::fast_path()`,
 # which is the explicit `[models].fast` GGUF when set and the primary

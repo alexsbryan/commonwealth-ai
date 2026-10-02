@@ -43,7 +43,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // pb-work-donor (6ecad5596): the execute origin's `#[cfg(test)]` module
     // (work_origin.rs:276-278) dials its own loopback port, as cw-rails'
     // donor does.
-    ("sovereign/crates/sovereign-daemon/src/work_origin/tests.rs", Class::TestOnly, 2),
+    ("svrn/crates/sovereign-daemon/src/work_origin/tests.rs", Class::TestOnly, 2),
     // 2 -> 3 on 2026-08-21 (nc-27): `daemon_get` MOVED here from
     // `project_cmd/registry_watch.rs` when that file was deleted as an
     // unreachable fork. Same loopback client, same class — a relocation,
@@ -72,23 +72,23 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // `doctor_cmd.rs` was split along its three declared layers; the three
     // construction sites moved with the code they probe with. Same class,
     // same total, new paths.
-    ("sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/probe.rs", Class::LocalDaemon, 2),
+    ("svrn/crates/sovereign-cli-daemon/src/doctor_cmd/probe.rs", Class::LocalDaemon, 2),
     (
-        "sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs",
+        "svrn/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs",
         Class::LocalDaemon,
         1,
     ),
-    ("sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs", Class::LocalDaemon, 3),
-    ("sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-cli-daemon/src/setup_cmd/finish.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-daemon/src/model_cmd.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs", Class::LocalDaemon, 3),
+    ("svrn/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs", Class::LocalDaemon, 2),
+    ("svrn/crates/sovereign-cli-daemon/src/setup_cmd/finish.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli-daemon/src/model_cmd.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-cli ----
-    ("sovereign/crates/sovereign-cli/src/project_registry.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-cli/src/update_cmd.rs", Class::InboundOnly, 1),
-    ("sovereign/crates/sovereign-cli/src/session_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli/src/serve_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli/src/project_init/mod.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli/src/project_registry.rs", Class::LocalDaemon, 2),
+    ("svrn/crates/sovereign-cli/src/update_cmd.rs", Class::InboundOnly, 1),
+    ("svrn/crates/sovereign-cli/src/session_cmd.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli/src/serve_cmd.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli/src/project_init/mod.rs", Class::LocalDaemon, 1),
     // code_index_cmd.rs is gone (pb-code-index): `svrn code` execs the code
     // program, sovereign-cli-dev.
 
@@ -145,12 +145,12 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // is sent on the user's behalf); neither is corpus content, and SEC
     // is a public-record endpoint rather than a model provider or a
     // search engine.
-    ("sovereign/crates/sovereign-tools/src/sec_edgar.rs", Class::InboundOnly, 1),
+    ("svrn/crates/sovereign-tools/src/sec_edgar.rs", Class::InboundOnly, 1),
     ("code/crates/corpus-engine-notes/src/mining/diff_extract_backend.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-tools/src/local_corpus/ocr/cleanup.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-tools/src/corpus/manager.rs", Class::InboundOnly, 1),
-    ("sovereign/crates/sovereign-tools/src/catalog_ingest.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-tools/src/calendar.rs", Class::OperatorSurface, 1),
+    ("svrn/crates/sovereign-tools/src/local_corpus/ocr/cleanup.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-tools/src/corpus/manager.rs", Class::InboundOnly, 1),
+    ("svrn/crates/sovereign-tools/src/catalog_ingest.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-tools/src/calendar.rs", Class::OperatorSurface, 1),
 
 
     // ---- sovereign-inference (InboundOnly: range-resumed model downloads) ----
@@ -193,7 +193,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // 5 -> 4 at pb-meshapp-rest: the served-self read moved to
     // sovereign-turn-client/src/serve_self.rs (row there). 4 -> 3 at
     // pb-mesh-exit-transport: `read_engine_state` moved there too.
-    ("sovereign/crates/sovereign-daemon/src/serve_client.rs", Class::LocalDaemon, 3),
+    ("svrn/crates/sovereign-daemon/src/serve_client.rs", Class::LocalDaemon, 3),
     // fetch-model's peer client moved here, whole, from sovereign-cli-mesh's
     // mesh_cmd.rs (c2529c94c): the mesh row went 8 -> 7, same class.
     ("serve/crates/sovereign-serve/src/fetch_model.rs", Class::Mesh, 1),
@@ -263,12 +263,12 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // the boundary move — hosts inject the boundary-built client
     // (sovereign-tools-base is contract-only and cannot reach
     // sovereign-core); the WebFetchTool site stays InboundOnly.
-    ("studio/crates/sovereign-tools-base/src/web/search/orchestrator.rs", Class::TestOnly, 4),
-    ("studio/crates/sovereign-tools-base/src/web/mod.rs", Class::InboundOnly, 1),
-    ("studio/crates/sovereign-tools-base/src/mcp/http.rs", Class::OperatorSurface, 1),
+    ("svrn/crates/sovereign-tools-base/src/web/search/orchestrator.rs", Class::TestOnly, 4),
+    ("svrn/crates/sovereign-tools-base/src/web/mod.rs", Class::InboundOnly, 1),
+    ("svrn/crates/sovereign-tools-base/src/mcp/http.rs", Class::OperatorSurface, 1),
 
     // ---- studio/sovereign-workflow-host (LocalDaemon) ----
-    ("studio/crates/sovereign-workflow-host/src/installer.rs", Class::LocalDaemon, 2),
+    ("svrn/crates/sovereign-workflow-host/src/installer.rs", Class::LocalDaemon, 2),
     // The embed-model resolution that lived here and in
     // `sovereign-cli-llm/src/recipe_cmd.rs` (one site each) became ONE
     // decider in `daemon_models.rs` on 2026-09-01 (issue #57: the listing
@@ -285,7 +285,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // fails-closed test, both inline `#[cfg(test)]` against a spawned
     // loopback listener. Production traffic is the DAEMON's own in-process
     // provider; no client, no egress.
-    ("studio/crates/sovereign-workflow-host/src/workflow_http.rs", Class::TestOnly, 2),
+    ("svrn/crates/sovereign-workflow-host/src/workflow_http.rs", Class::TestOnly, 2),
 
     // ---- studio/sovereign-recipe-author ----
     ("ingest/crates/sovereign-recipe-author/src/probe_url.rs", Class::InboundOnly, 1),
@@ -293,7 +293,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
 
     // ---- commonwealth (the estate's own web app + shards; Mesh / LocalDaemon) ----
     // 3 -> 2 at 783cf0fcb: the uncalled `stream_index` went with its client.
-    ("sovereign/crates/sovereign-grants/src/shard_manager.rs", Class::Mesh, 2),
+    ("svrn/crates/sovereign-grants/src/shard_manager.rs", Class::Mesh, 2),
     // `http_embed_fn` moved DOWN to corpus-engine 2026-09-03 (enrichment-as-
     // plugin Step 5). What was left behind — the `/v1/models` reconstruction
     // probe, `embed_model_info` — had ZERO callers, so the file went with the
@@ -329,14 +329,14 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // Re-keyed 2026-09-18 (REVIEW-audit-daemon-2): the api host cluster moved
     // to `sovereign-daemon` at `dm-daemon-api-edge`. Path only — the three
     // sites and their classes travelled with their files.
-    ("sovereign/crates/sovereign-daemon/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-daemon/src/routes_knowledge.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-daemon/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-daemon/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
+    ("svrn/crates/sovereign-daemon/src/routes_knowledge.rs", Class::Mesh, 1),
+    ("svrn/crates/sovereign-daemon/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
     // NEW (2026-09-18, ring-doc REVIEW-build-rd-1-live, 6ac1fd39f; re-keyed to
     // sovereign-daemon with the api host cluster): the ring live lane's fan-out.
     // `push_ephemeral` POSTs a namespaced envelope to `/internal/ring/live` on each
     // Online mesh member through the `PeerTransport` seam — ring peers, never a third party.
-    ("sovereign/crates/sovereign-daemon/src/routes_rail_live.rs", Class::Mesh, 1),
+    ("svrn/crates/sovereign-daemon/src/routes_rail_live.rs", Class::Mesh, 1),
     // NEW ROW (2026-09-19, ring-room rr-2-media-posture c24fe521a): the
     // holder's media-presence poll. RECOUNTED (2026-09-24, fp-47's dial,
     // 884ed301c): the origin ask moved to the rails daemon — this file
@@ -348,7 +348,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // is no longer asked by THIS file at all; the poll's own row is
     // `commonwealth-rails/src/presence.rs` below.
     (
-        "sovereign/crates/sovereign-daemon/src/media_presence.rs",
+        "svrn/crates/sovereign-daemon/src/media_presence.rs",
         Class::LocalDaemon,
         1,
     ),
@@ -357,7 +357,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // ring rail's port (`RailsRingRail`). One construction, one destination:
     // the loopback `rails_base` (default 127.0.0.1:9747), the mesh's rails
     // daemon this daemon already trusts with its roster answers since fp-6.
-    ("sovereign/crates/sovereign-daemon/src/rails_client.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-daemon/src/rails_client.rs", Class::LocalDaemon, 1),
     // NEW ROW (2026-09-25, fp-solo-hermetic, five-programs-66): a local-only
     // node's `ensure_rails` reads an already-running cw-rails'
     // `GET /v1/mesh/status` posture — the same loopback `rails_base`, which

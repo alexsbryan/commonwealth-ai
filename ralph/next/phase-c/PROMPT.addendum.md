@@ -101,7 +101,7 @@ same commit.
   never above the cut line, and it never lands in this row's commits. If the
   census finds more than twice the row's LIFT, stop at census (§6) with the
   split.
-- Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md` or `.claude/`. Never
+- Never edit `docs/ARCH_PRINCIPLES.md`, `AGENTS.md` or `.claude/`. Never
   edit `scripts/ralph*` unless your row is pc-pool-ready, whose outcome is
   ralph's pool. Never stop or restart the DEPLOYED daemon (the one
   `svrn daemon status` names). Never touch `ralph/STOP`,

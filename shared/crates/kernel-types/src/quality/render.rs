@@ -302,7 +302,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "sovereign/ARCH_PRINCIPLES.md §1.1"
+doc = "docs/ARCH_PRINCIPLES.md §1.1"
 
 [[instrument]]
 id = "wizard-verify"
@@ -316,7 +316,7 @@ preconditions = ["port-listening:9741"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = []
-doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+doc = "svrn/docs/specs/DAEMON_RESILIENCE.md"
 load_bearing = [
   { flag = "SOVEREIGN_CLI_PATH unset", why = "the only coverage of the packaged branch" },
 ]

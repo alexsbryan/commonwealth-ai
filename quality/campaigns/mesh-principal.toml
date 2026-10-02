@@ -18,7 +18,7 @@
 id        = "mesh-principal"
 parent    = "ring-apps"
 objective = "A member cannot act as another member on a call, and a mesh member who is not on a ring's roster cannot read that ring. Both follow from one fact the transport already knows: whose key is on the other end."
-spec      = ".sovereign/features/mesh-verified-principal/order.md; docs/THREAT_MODEL.md; cmnwlth/crates/commonwealth-transport/src/iroh_identity_forward.rs (the door to converge on); sovereign/crates/sovereign-daemon/src/{client_principal.rs,client_auth.rs,headers.rs}"
+spec      = ".sovereign/features/mesh-verified-principal/order.md; docs/THREAT_MODEL.md; cmnwlth/crates/commonwealth-transport/src/iroh_identity_forward.rs (the door to converge on); svrn/crates/sovereign-daemon/src/{client_principal.rs,client_auth.rs,headers.rs}"
 declared  = "2026-09-20"
 status    = "active"
 

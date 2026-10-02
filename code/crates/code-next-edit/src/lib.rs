@@ -5,7 +5,7 @@
 //! the package's crates are the root siblings beside this one — `corpus-engine-notes`
 //! and the rest — until the doc's Phase 5 rename). It is the package's TENTH
 //! crate, and the first its §2 table does not name: `quality/DOMAINS.md` §4 calls
-//! next-edit "Workbench's clearest lost child" (spec `sovereign/docs/NEXT_EDIT.md`).
+//! next-edit "Workbench's clearest lost child" (spec `svrn/docs/NEXT_EDIT.md`).
 //!
 //! The five pure workbench modules moved here at domains `dm-next-edit-move`
 //! (2026-09-17), out of `sovereign-api`:

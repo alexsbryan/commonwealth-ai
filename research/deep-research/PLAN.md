@@ -1,6 +1,6 @@
 # Deep research — the adversarially synthesized engineering plan
 
-**Status:** Seat synthesis, 2026-08-13. Derived from `sovereign/docs/specs/DEEP_RESEARCH.md`
+**Status:** Seat synthesis, 2026-08-13. Derived from `svrn/docs/specs/DEEP_RESEARCH.md`
 (design draft, same day) put through the mesh-scale §7 treatment: one reviewer verifying
 every reuse citation and precondition against HEAD, one briefed to refute the design and
 the measurement plan. Operator intake: note `38bc1862`. Reviewer reports are summarized
@@ -37,7 +37,7 @@ pattern repeated exactly: the diagnosis survives and the prescriptions needed su
 | Kill bar | **REFUTED as written** | "Beats cloud DR on neither honesty nor cost" ships on cost alone — and electricity wins cost by construction even for an empty report. Restated: ship iff P4 AND P2 AND P1. Cheapness is never a pass. |
 
 **Spec errata (fix in the spec at first build order, §1.1):** every search/fetch path is
-wrong — the code is `studio/crates/sovereign-tools-base/src/web/` (reachable as
+wrong — the code is `svrn/crates/sovereign-tools-base/src/web/` (reachable as
 `sovereign_tools::web` only via re-export; check `quality/ARCH_LAYERS.toml` before a
 sovereign-side loop takes a studio dep). `KnowledgeLookupTool` has NO headless wiring
 (desktop-only, double-defaulted-off; server registers `SearchTool::with_web` instead —

@@ -105,7 +105,7 @@ fn print_help() {
          Flags:\n  \
            --format json   Emit JSON instead of human-readable output.\n  \
          \n\
-         See sovereign/docs/WORK_ATLAS.md for the full model.\n"
+         See svrn/docs/WORK_ATLAS.md for the full model.\n"
     );
 }
 

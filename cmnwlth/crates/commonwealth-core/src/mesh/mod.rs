@@ -26,7 +26,7 @@ use crate::ids::{MeshId, NodeId, NodePubkey};
 /// bytes regardless of input, so the timing carries no information.
 /// Whether the operator has declared the fleet fully post-split, so
 /// `Mesh::gossip_authorized_with` may refuse the legacy arm instead of
-/// falling back to it. Off by default — see `sovereign/DEFAULTS_LEDGER.md`.
+/// falling back to it. Off by default — see `docs/DEFAULTS_LEDGER.md`.
 ///
 /// Read once: this sits in the gossip hot path, and a knob whose value can
 /// change mid-run would make "which predicate authorized this round" depend on
@@ -817,7 +817,7 @@ impl Mesh {
     /// predicate is stable across any number of invite rotations.
     ///
     /// The compat arm below is a **temporary second decider** (a deliberate
-    /// ARCH §10.6 deviation, ledgered in `sovereign/DEFAULTS_LEDGER.md`): a
+    /// ARCH §10.6 deviation, ledgered in `docs/DEFAULTS_LEDGER.md`): a
     /// pre-split peer sends a zeroed `mesh_secret`, and refusing it would
     /// partition the mesh on upgrade — exactly the failure this change
     /// removes. It falls back to the legacy predicate and says so at `warn`,

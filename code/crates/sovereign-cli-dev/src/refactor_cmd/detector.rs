@@ -350,7 +350,7 @@ impl Detector for FieldAtomDetector {
         ControlSite {
             // Verified present 2026-08-23. `corpus_id` is the factory's first
             // declared subject and had 369 String declarations at 63c72af8.
-            file: "sovereign/crates/sovereign-core/src/conv_entity_graph.rs",
+            file: "svrn/crates/sovereign-core/src/conv_entity_graph.rs",
             token: "corpus_id",
             why: "corpus_id is the factory's first subject; if no String \
                   declaration of it remains, the atom is converged and this \
@@ -444,7 +444,7 @@ impl Detector for ShapeDetector {
             // would have made every run could-not-judge forever. Recorded
             // because the next person to pick a control will reach for a
             // famous name rather than a shaped one.
-            file: "sovereign/crates/sovereign-core/src/deep_research/icd.rs",
+            file: "svrn/crates/sovereign-core/src/deep_research/icd.rs",
             token: "ClaimCitation",
             why: "ClaimCitation/DrCitation is the canonical cross-crate shape \
                   fork. If it stops matching, either it was converged (pick a \
@@ -580,7 +580,7 @@ impl Detector for BehaviourDetector {
             // Chosen by measurement, not by taste: the first live full run
             // (2026-08-31, 185 exact groups / 356 near clusters / ~10,703
             // redundant lines) reported this group at 5 copies x 8 lines.
-            file: "sovereign/crates/sovereign-core/src/deep_research/fetch.rs",
+            file: "svrn/crates/sovereign-core/src/deep_research/fetch.rs",
             token: "2e0ac3170ee6",
             why: "`alignment_decision` is duplicated five times — four in \
                   deep_research/fetch.rs and once in search.rs — as a \
@@ -670,7 +670,7 @@ impl Detector for IntentDetector {
         ControlSite {
             // Chosen by measurement on the first live run (2026-08-31):
             // 27 jobs, 84 implementations, 23,899 symbols, 8s.
-            file: "sovereign/crates/sovereign-core/src/memory.rs",
+            file: "svrn/crates/sovereign-core/src/memory.rs",
             token: "intent:cosine",
             why: "Cosine similarity has 22 homes across 6 crates — the \
                   largest cluster by a factor of four — and \
@@ -896,7 +896,7 @@ impl Detector for ProvenanceChannelDetector {
 
     fn control(&self) -> ControlSite {
         ControlSite {
-            file: "sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs",
+            file: "svrn/crates/sovereign-core/src/runtime/retrieval_pipeline.rs",
             token: "custody",
             why: "The estate stamp writes Custody through CUSTODY_META_KEY at \
                   acquisition — the canonical untyped-provenance site, and the \

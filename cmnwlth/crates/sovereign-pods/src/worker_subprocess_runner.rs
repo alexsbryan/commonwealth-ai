@@ -2,7 +2,7 @@
 //! Worker-mode runner that delegates each work unit to a child
 //! `sovereign-cli daemon` process running on the same pod.
 //!
-//! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md` Phase 2.
+//! Spec: `svrn/docs/EPHEMERAL_WORKER_PODS.md` Phase 2.
 //!
 //! ## Why a child process at all?
 //!

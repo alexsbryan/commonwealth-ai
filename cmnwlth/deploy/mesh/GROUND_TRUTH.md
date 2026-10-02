@@ -103,7 +103,7 @@ both files owe a fix in the same commit (§1.1).
 - **Charter drift detection** — recompute the on-disk `CHARTER.md` hash against the recorded one,
   four outcomes (`none` / `differs` / `unknown` / `n/a`) — `sovereign-cli-dev/src/project_cmd/audit/mod.rs:110-130`.
 - Charter skeleton + amendment flow — `sovereign-cli-dev/src/project_cmd/charter_amend.rs:36, 180`.
-- Adjudication analogue — `sovereign/docs/GOVERN_A_CORPUS.md` ("surface tensions, resolve them into
+- Adjudication analogue — `svrn/docs/GOVERN_A_CORPUS.md` ("surface tensions, resolve them into
   common law"): establish a governed baseline, see tensions, adjudicate, ask what the law is.
 - **Scope caveat:** all of the above governs *software projects* and lives in `sovereign-cli-dev`, a
   high-layer CLI crate. The mechanism transfers to consortium governance; the schema and crate
@@ -265,10 +265,10 @@ both files owe a fix in the same commit (§1.1).
 
 ## Related docs
 
-`sovereign/docs/ENTERPRISE_FLEET_DEPLOY.md` is the closest existing document to this framing and
-states the unauthenticated-internal-port posture plainly at `:90-95`. `sovereign/docs/MESH_NETOPS.md`
+`svrn/docs/ENTERPRISE_FLEET_DEPLOY.md` is the closest existing document to this framing and
+states the unauthenticated-internal-port posture plainly at `:90-95`. `svrn/docs/MESH_NETOPS.md`
 is written for a security team approving a deployment and carries a §5 "open validation (not yet
-proven — do not represent as tested)". `sovereign/docs/specs/SCHEDULER_QUALITY.md` is the scheduler
+proven — do not represent as tested)". `svrn/docs/specs/SCHEDULER_QUALITY.md` is the scheduler
 design reference. `docs/THREAT_MODEL.md` carries the known-gaps list the plan updates on landing.
 `docs/TWO_NODE_QUICKSTART.md` is the working residency demo. `docs/internal/CI_ECONOMY.md` is the CI-spend
 audit and incident report.

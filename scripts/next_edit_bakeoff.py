@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Next-edit build-vs-adopt bakeoff driver — Phase 0.
 
-Spec: `sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md` §7 (Phase 0), §8 item 2.
+Spec: `svrn/docs/specs/NEXT_EDIT_BAKEOFF.md` §7 (Phase 0), §8 item 2.
 
 For each arm in the manifest this brings up the candidate on llama-server,
 puts `examples/next_edit_score` in front of it (which runs *the daemon's

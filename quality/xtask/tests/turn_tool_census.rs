@@ -98,10 +98,10 @@ const TURN_REGISTRIES: &[(&str, &str, Extraction)] = &[
     // which is what this row has always measured.
     (
         "recipe",
-        "sovereign/crates/sovereign-runtime-recipe/src/lib.rs",
+        "svrn/crates/sovereign-runtime-recipe/src/lib.rs",
         Extraction::Bundles(&[
-            "sovereign/crates/sovereign-runtime-recipe/src/lib.rs",
-            "sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs",
+            "svrn/crates/sovereign-runtime-recipe/src/lib.rs",
+            "svrn/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs",
         ]),
     ),
 ];
@@ -352,8 +352,8 @@ fn read(root: &Path, rel: &str) -> String {
 /// The recipe-authoring family joined its tools in sovereign-recipe-author
 /// (pb-ingest-rehome-daemon), for the same reason.
 const BUNDLE_DEFINITIONS: &[&str] = &[
-    "sovereign/crates/sovereign-tools/src/bundles.rs",
-    "studio/crates/sovereign-workflow-host/src/author.rs",
+    "svrn/crates/sovereign-tools/src/bundles.rs",
+    "svrn/crates/sovereign-workflow-host/src/author.rs",
     "ingest/crates/sovereign-recipe-author/src/bundle.rs",
 ];
 
@@ -374,7 +374,7 @@ fn bundle_defs(root: &Path) -> String {
 
 /// Where `baseline_bundles` is defined — the families EVERY recipe host gets
 /// without naming one of them.
-const BASELINE_BUNDLES_SITE: &str = "sovereign/crates/sovereign-runtime-recipe/src/lib.rs";
+const BASELINE_BUNDLES_SITE: &str = "svrn/crates/sovereign-runtime-recipe/src/lib.rs";
 
 /// `sources`, plus the baseline site when any of them calls into it.
 ///

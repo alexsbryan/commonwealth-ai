@@ -36,7 +36,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // the host daemon. Lifted out of sovereign-cli so the desktop
     // stops spawning the CLI to reach it — the classification did not
     // change with the crate.
-    ("sovereign/crates/sovereign-core/src/deep_research/port.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-core/src/deep_research/port.rs", Class::LocalDaemon, 1),
     // sovereign-turn-client: the client half of the turn protocol, minted
     // 2026-08-25 (TOPOLOGY §10 phase 6). One `reqwest::Client` for
     // `POST /v1/conversations` + the conversation-end call; the turn itself
@@ -79,8 +79,8 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // precondition sends a one-token completion so a lane never runs against a
     // daemon that answers the models route but cannot decode. Both loopback;
     // neither carries estate content off the machine. LocalDaemon, not egress.
-    ("sovereign/crates/sovereign-cli/src/quality_check_cmd/fingerprint.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli/src/quality_check_cmd/exec.rs", Class::LocalDaemon, 2),
+    ("svrn/crates/sovereign-cli/src/quality_check_cmd/fingerprint.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli/src/quality_check_cmd/exec.rs", Class::LocalDaemon, 2),
 
     // ---- sovereign-mesh: the estate's own transport (Mesh) ----
     // Peer-to-peer / daemon-mesh HTTP; own auth + custody class.
@@ -208,8 +208,8 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     //
     // reload.rs 8 -> 7 (pb-mesh-exit-transport): the media-origin reload test
     // retired with the daemon's media acceptor (cw-rails owns `[media]`).
-    ("sovereign/crates/sovereign-daemon/src/admin_http/tests.rs", Class::Mesh, 6),
-    ("sovereign/crates/sovereign-daemon/src/admin_http/tests/reload.rs", Class::Mesh, 7),
+    ("svrn/crates/sovereign-daemon/src/admin_http/tests.rs", Class::Mesh, 6),
+    ("svrn/crates/sovereign-daemon/src/admin_http/tests/reload.rs", Class::Mesh, 7),
     // NEW ROW 2026-09-12 (sv-surface svt-7). `assets_http.rs` is the daemon's
     // weights surface — hardware / catalog / slot / NER reads plus the one
     // asset-download job. All five constructions are inside its
@@ -237,7 +237,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // handlers became forwards to serve, and their route tests moved to
     // sovereign-compute, two sites to assets/route_tests.rs (0c264ec53) and one
     // to setup_reads/tests.rs (1d60dad61). The one left is the forward test.
-    ("sovereign/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 1),
+    ("svrn/crates/sovereign-daemon/src/assets_http.rs", Class::Mesh, 1),
     // `#[cfg(test)]`-only files, each dialing a router its test bound on
     // loopback. setup_reads' second site is 1d60dad61's own new test.
     ("serve/crates/sovereign-compute/src/assets/route_tests.rs", Class::TestOnly, 2),
@@ -269,7 +269,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     //      producing the split-brain `mesh_cmd::cmd_join` documents.
     // The only payload that leaves in any of the three is the same fixed
     // four-word probe prompt, with no estate content in it.
-    ("sovereign/crates/sovereign-cli-daemon/src/setup_cmd/terminal.rs", Class::Mesh, 3),
+    ("svrn/crates/sovereign-cli-daemon/src/setup_cmd/terminal.rs", Class::Mesh, 3),
     // guest_lender.rs (2026-08-28, order mesh-guest-grant): resolving a model
     // id to a node this one holds a GUEST GRANT with, so a guest's turn runs
     // on their own daemon and only the completion crosses. ONE site — the
@@ -308,10 +308,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // Re-keyed at pb-serve-distributes: the one left, RPC-worker discovery's
     // `/status` probe client, moved with discovery to serving-host.
     ("serve/crates/sovereign-serving-host/src/rpc_discovery.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-daemon/src/auto_ingest.rs", Class::Mesh, 2),
+    ("svrn/crates/sovereign-daemon/src/auto_ingest.rs", Class::Mesh, 2),
     // Moved from sovereign-mesh (pb-mesh-exit-mesh): the canonical pull's
     // peer client. Class and count unchanged.
-    ("sovereign/crates/sovereign-daemon/src/canonical_pull.rs", Class::Mesh, 1),
+    ("svrn/crates/sovereign-daemon/src/canonical_pull.rs", Class::Mesh, 1),
     // Re-keyed 2026-09-16: the two knowledge-surface clients moved to the
     // client family, `sovereign-turn-client` (domains
     // REVIEW-build-mesh-client-pair, DAEMON_CORE.md §4.3). Class and count
@@ -405,7 +405,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // is loopback → LocalDaemon; the door's inbound face is not this
     // census's question (no estate payload is constructed toward a
     // third party here).
-    ("sovereign/crates/sovereign-daemon/src/guest_door.rs", Class::LocalDaemon, 2),
+    ("svrn/crates/sovereign-daemon/src/guest_door.rs", Class::LocalDaemon, 2),
     // guest_room_commands.rs (merged from the-ring work, 2026-09-22): the
     // desktop's guest-grant create/list/revoke + the `/v1/mesh/status` dial
     // read. Every URL is `state.client_base_url()` — this host's own daemon
@@ -555,13 +555,13 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_offers.rs", Class::Mesh, 1),
     // 3 → 2 at sv-surface (2026-09-11): `daemon_reachable` stopped
     // building its own client and asks `ServingHost` instead.
-    ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
+    ("svrn/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),
+    ("svrn/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
     // `mesh bench` and remote_gguf moved to serve whole (pb-serve-placement);
     // the sites travelled with the files.
     ("serve/crates/sovereign-serve/src/mesh_bench/shell.rs", Class::Mesh, 3),
     ("serve/crates/sovereign-serve/src/remote_gguf.rs", Class::InboundOnly, 2),
-    ("sovereign/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs", Class::LocalDaemon, 2),
+    ("svrn/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs", Class::LocalDaemon, 2),
     // probe_or_bail and resolve_model_ids moved with build_inference to
     // oicp-client (pb-cli-llm-bench-move); the two sites travelled with them.
     ("shared/crates/oicp-client/src/daemon_inference.rs", Class::LocalDaemon, 2),
@@ -569,16 +569,16 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // `GET /internal/guest/route` for the guest link's base (the daemon's
     // until pb-mesh-exit-mesh); serve owns the tunnel, so this client never
     // leaves the machine.
-    ("sovereign/crates/sovereign-cli-llm/src/chat_cmd/config.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli-llm/src/chat_cmd/config.rs", Class::LocalDaemon, 1),
     // 1 -> 2 (2026-09-09, sv-surface rung 5): `workflow run` and `corpus
     // ingest`'s notebook path became job-submission clients of the daemon's
     // /internal/workflows/* — run_assembled's poll client joins the
     // capabilities-fetch client that was already here. Loopback daemon
     // traffic, class unchanged.
-    ("sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 2),
+    ("svrn/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 2),
     ("code/crates/sovereign-cli-dev/src/solve_cmd.rs", Class::LocalDaemon, 1),
     ("ingest/crates/sovereign-pipeline/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/mod.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli-llm/src/knowledge_gym_cmd/mod.rs", Class::LocalDaemon, 1),
     ("ingest/crates/sovereign-pipeline/src/corpus_snapshot_cmd.rs", Class::InboundOnly, 1),
     // The install client moved to the CLI leaf (pb-cli-llm-ingest-move).
     ("shared/crates/sovereign-cli-base/src/corpus_install.rs", Class::LocalDaemon, 1),

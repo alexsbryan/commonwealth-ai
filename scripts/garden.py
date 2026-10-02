@@ -17,7 +17,7 @@ The transposition is literal, and every panel is measured, not asserted:
                   the wall may only close. THIS IS THE GUARD.
   砂紋  SAMON      the raked baselines. Gravel represents water that is not
                   there; a baseline represents a state the tree has since left.
-                  REPORTED, NEVER GATED — sovereign/DEFAULTS_LEDGER.md records
+                  REPORTED, NEVER GATED — docs/DEFAULTS_LEDGER.md records
                   the operator's 2026-08-08 decision that staleness triggers are
                   ritual, not automation ("do not re-raise it"). The garden does
                   not nag about gravel. It refuses to let you move a stone.

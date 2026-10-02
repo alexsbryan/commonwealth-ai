@@ -12,7 +12,7 @@
 //! WHY THESE ASSERTIONS. The lane's pre-registered bar is RECALL — it
 //! must name the call sites of the function under the cursor — and its
 //! measured hazards are the three classes M1a found dominating the M0
-//! population (`sovereign/docs/specs/NEXT_EDIT_SYMBOL_LANE.md`): a
+//! population (`svrn/docs/specs/NEXT_EDIT_SYMBOL_LANE.md`): a
 //! brand-new function, a file that merely moved, and an occurrence
 //! that is a `use` import rather than a call. There is a test for each,
 //! and each fails if the corresponding guard is removed.

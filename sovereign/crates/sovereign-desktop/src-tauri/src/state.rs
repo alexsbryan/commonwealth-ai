@@ -491,7 +491,7 @@ pub async fn bootstrap_with_progress(
     // Deciding which weights are safe to load is the job of whoever loads
     // them. `sovereign_inference::cpu_compat` is already a shared crate, so
     // the decider does not move — only its caller does, to the daemon's slot
-    // build. Until it lands the guard has NO owner: `sovereign/DEFAULTS_LEDGER.md`
+    // build. Until it lands the guard has NO owner: `docs/DEFAULTS_LEDGER.md`
     // carries the row, with the flip condition and a review-by.
 
     // Inference is the DAEMON's, over HTTP, and this process holds no handle

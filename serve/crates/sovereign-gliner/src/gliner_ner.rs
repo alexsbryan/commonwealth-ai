@@ -2,7 +2,7 @@
 //! Per-chunk named entity recognition via GLiNER (pure Rust through
 //! `gline-rs`).
 //!
-//! Spec: `sovereign/docs/specs/CONV_TIERED_PORT.md` §"Phase 1 —
+//! Spec: `svrn/docs/specs/CONV_TIERED_PORT.md` §"Phase 1 —
 //! GliNER per-chunk entities".
 //!
 //! Why this exists: RAPTOR's cluster-summary prompt extracts a

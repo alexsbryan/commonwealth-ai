@@ -17,7 +17,7 @@ for a ratchet, and nothing in this file is a gate.
 **Sovereign answers a question from what you already have, says where the
 answer came from, and declines when it cannot.**
 
-That sentence is the core domain. `sovereign/README.md` states it as the
+That sentence is the core domain. `svrn/README.md` states it as the
 product promise — answers "cited from sources you keep locally", nothing
 leaving the device unless asked — and the bench apparatus measures exactly it.
 
@@ -40,7 +40,7 @@ get value from it**, and we have run that test four times already:
 | Lift | What it proved | Status |
 |---|---|---|
 | `studio` (`studio/BOUNDARY.md`) | the workflow/recipe authoring closure builds outside the monorepo, 36 s cold, zero source edits | lifted 2026-07-21 |
-| `corpus-mcp` (`corpus-mcp/README.md`) | a third party can search a corpus-engine index AND read what its enrichment produced against a plain `llama-server`, with nothing carrying llama.cpp, ort or iroh | declared, gated |
+| `corpus-mcp` (`svrn/crates/corpus-mcp/README.md`) | a third party can search a corpus-engine index AND read what its enrichment produced against a plain `llama-server`, with nothing carrying llama.cpp, ort or iroh | declared, gated |
 | `commonwealth-work` (`scripts/cw-work-lift.sh`) | a package-only peer builds outside the monorepo in 7.7 s and completes three heterogeneous units inside a container boundary | lifted, re-proven 2026-09-11 |
 | `commonwealth-rails` (`scripts/cw-rails-lift.sh`) | the lifted daemon joins a REAL mesh by invite and serves another member's library | lifted 2026-09-11 |
 
@@ -160,7 +160,7 @@ outside the monorepo inside a rootless container.
 The `code-intel` package is already declared (`docs/CODE_TOOLING_BOUNDARY.md`),
 5 of a target 9 crates.
 *Applicable as:* a code-intelligence MCP server. Next-edit is its clearest lost
-child — an IDE completion service whose spec is `sovereign/docs/NEXT_EDIT.md`,
+child — an IDE completion service whose spec is `svrn/docs/NEXT_EDIT.md`,
 living in the mesh's HTTP crate.
 
 **Workspace** — *what does the assistant remember about its own work?* Owns
@@ -280,7 +280,7 @@ the repo root beside the two crates it certifies against (domains-2). What
 remains under `cmnwlth/` is the nine-crate package and nothing else, and
 `scripts/cw-work-lift.sh --sandbox` reported verdict 1 after each move — that
 reading is the invariant, not the crate count. The ledger of what went where is
-`sovereign/SYSTEM_OVERVIEW.md` §5. Ordering was BIG-FIRST (operator, reversing
+`docs/SYSTEM_OVERVIEW.md` §5. Ordering was BIG-FIRST (operator, reversing
 the builder): a small crate's destination is decided by where the big one
 lands, so moving it first moves it twice.
 
@@ -338,7 +338,7 @@ floors as the baseline:
   readers already use `understanding-vocab`'s `AtomsFile`; none declares its
   own struct. The leak is the DOOR: `read_atlas_atoms` is at
   `ingest/crates/corpus-engine/src/enrichment/atlas/writer.rs:595`, not in vocab, so
-  `corpus-mcp/src/tools.rs:873` hand-rolls one and nine sites bypass it. The
+  `svrn/crates/corpus-mcp/src/tools.rs:873` hand-rolls one and nine sites bypass it. The
   bar becomes "pub `Atom*` outside vocab and `enrichment/`, minus three named
   axum binders": **12 → 0**, and the door invariant is made structural rather
   than counted. `Cluster*` is never persisted under `atlas/` and leaves §5's

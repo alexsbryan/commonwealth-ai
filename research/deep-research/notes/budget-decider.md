@@ -8,7 +8,7 @@ changes at this commit.**
 ## §1 Inventory — three facts, all fail-open
 
 **Decider 1 — `BudgetView` (web-search backend selection).**
-`studio/crates/sovereign-tools-base/src/web/search/orchestrator.rs:50-80`
+`svrn/crates/sovereign-tools-base/src/web/search/orchestrator.rs:50-80`
 defines a read-only view over `HashMap<String, u32>` of remaining units.
 It has **no writer anywhere in the codebase**: its own doc comment
 (lines 44-48) defers the store — "the budget store (a separate concern —
@@ -24,7 +24,7 @@ unlimited**. A budget that cannot be written and defaults to spending is
 a fail-open in both directions.
 
 **Decider 2 — the monthly "web" budget (agent web_search tool).**
-`studio/crates/sovereign-tools-base/src/search.rs:234-246`
+`svrn/crates/sovereign-tools-base/src/search.rs:234-246`
 (`check_budget`) and 248-259 (`decrement_budget`): a single SQLite row
 keyed by the string `"web"`, monthly window, reset +30 days. `check_budget`
 returns `_ => true` when no record exists — **no record = allowed** —

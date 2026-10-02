@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Roll back `svrn mesh up`'s handover moves to the main-era layout
-# (sovereign/docs/RUNBOOK.md §9). Stop the daemon and cw-rails first.
+# (svrn/docs/RUNBOOK.md §9). Stop the daemon and cw-rails first.
 # SVRN: the daemon's [data] dir; CONFIG: its config.toml; RAILS: cw-rails' data dir.
 # Run by migration_backup_tests.rs against a main-era fixture handed over twice.
 set -eu

@@ -50,16 +50,16 @@ timeit warm - build-ws 1 $LOCK cargo build --workspace --features "$BUILDF" --ti
 # file|crate|test
 PROBES=(
 "sovereign/crates/sovereign-mesh/src/daemon.rs|sovereign-mesh|partition_round_robin_balances"
-"sovereign/crates/sovereign-core/src/deep_research/mod.rs|sovereign-core|gates_require_both_absolute_and_margin"
+"svrn/crates/sovereign-core/src/deep_research/mod.rs|sovereign-core|gates_require_both_absolute_and_margin"
 "ingest/crates/corpus-engine/src/engine/mod.rs|corpus-engine|stamp_then_load_round_trips"
-"sovereign/crates/sovereign-cli-llm/src/lib.rs|sovereign-cli-llm|shard_index_and_count_read_the_convention"
+"svrn/crates/sovereign-cli-llm/src/lib.rs|sovereign-cli-llm|shard_index_and_count_read_the_convention"
 "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs|sovereign-desktop|deterministic_with_seed"
-"sovereign/crates/sovereign-tools/src/local_corpus/manager.rs|sovereign-tools|is_pathological_all_zero"
+"svrn/crates/sovereign-tools/src/local_corpus/manager.rs|sovereign-tools|is_pathological_all_zero"
 "shared/crates/sovereign-contracts/src/setup_config.rs|sovereign-contracts|noop_observer_is_send_sync"
-"sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs|sovereign-cli-daemon|restarts_on_panic_then_completes"
+"svrn/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs|sovereign-cli-daemon|restarts_on_panic_then_completes"
 "shared/crates/sovereign-turn-client/src/lib.rs|sovereign-turn-client|the_default_ready_path_is_v1_models"
 "shared/crates/kernel-types/src/lib.rs|kernel-types|hex_round_trips"
-"sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs|sovereign-core|gates_require_both_absolute_and_margin"
+"svrn/crates/sovereign-core/tests/main/f26_egress_census.rs|sovereign-core|gates_require_both_absolute_and_margin"
 )
 for p in "${PROBES[@]}"; do
   IFS='|' read -r f crate test <<< "$p"

@@ -38,7 +38,7 @@ use super::idle_slot::IdleSlot;
 use crate::hardware::{detect_hardware, HardwareProfile};
 
 /// Reserved extras-slot name for the dedicated code-editing model
-/// (`sovereign/docs/NEXT_EDIT.md`, `INLINE_COMPLETION.md`). The idle
+/// (`svrn/docs/NEXT_EDIT.md`, `INLINE_COMPLETION.md`). The idle
 /// monitor and the LRU eviction pass both skip this name (decision D2
 /// — the editing slot is pinned: a reload tax on the keystroke path is
 /// disqualifying), while an explicit operator `unload_extra("edit")`
@@ -684,7 +684,7 @@ pub struct EmbeddedLlamaCpp {
     /// requests, and dropped slots stay alive until their last
     /// in-flight request finishes (RAII via `Arc`).
     extras: Arc<std::sync::RwLock<ExtrasState>>,
-    /// Live code-editing serving arrangement (`sovereign/docs/NEXT_EDIT.md`,
+    /// Live code-editing serving arrangement (`svrn/docs/NEXT_EDIT.md`,
     /// `INLINE_COMPLETION.md`). `Some` after `install_edit_slot` or
     /// `install_fallback_next_edit_slot`; `None` only when there is no
     /// editing model at all. `edit_slot_info()` surfaces it to
@@ -1526,7 +1526,7 @@ impl EmbeddedLlamaCpp {
     }
 
     /// Install the dedicated code-editing slot (`[models.edit]` —
-    /// `sovereign/docs/NEXT_EDIT.md`, `INLINE_COMPLETION.md`). Two
+    /// `svrn/docs/NEXT_EDIT.md`, `INLINE_COMPLETION.md`). Two
     /// modes (decision D8):
     ///
     /// - **Alias mode** — `section.path` resolves to the same GGUF the

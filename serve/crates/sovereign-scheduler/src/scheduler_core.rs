@@ -550,7 +550,7 @@ pub fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResult {
         // — gossiped samples are not yet plumbed and would muddle the
         // cold-start ramp.
         //
-        // See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
+        // See `svrn/docs/MESH_LOAD_AWARENESS.md`.
         let self_observed_in_flight = obs.in_flight;
         let mut in_flight_source = LoadSource::SelfObserved;
         if let Some(gossiped) = peer.gossiped_in_flight {

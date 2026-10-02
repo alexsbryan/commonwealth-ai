@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Ephemeral worker pods — owner-initiated TLS-pinned worker transport.
 //!
-//! Spec: `sovereign/docs/EPHEMERAL_WORKER_PODS.md`. This module owns the
+//! Spec: `svrn/docs/EPHEMERAL_WORKER_PODS.md`. This module owns the
 //! wire-protocol seam between an owner (a persistent peer — desktop, CLI)
 //! and a worker (a Vast/RunPod box rented for a few hours). The seam is:
 //!

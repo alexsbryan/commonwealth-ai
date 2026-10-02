@@ -6201,7 +6201,7 @@ def cmd_self_test(_a) -> int:
                       ("a ledger of plans", "sorry"), ("svrn setup --terminal", "sorry")):
         eq(_kh.run({"kind": "Proposes", "turn": 1, "name": _n, "span": f"a new {_n}"})[0], _want, f"Proposes {_n}")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "NodeId", "span": "x"})[0], "refuted", "Proposes: a macro-defined type is defined (define_id!(NodeId, ..))")
-    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "sovereign/DEFAULTS_LEDGER.md", "shape": "file", "span": "a `sovereign/DEFAULTS_LEDGER.md` row per rung"})[0], "sorry", "Proposes: a row in an existing file is an addition")
+    eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "docs/DEFAULTS_LEDGER.md", "shape": "file", "span": "a `docs/DEFAULTS_LEDGER.md` row per rung"})[0], "sorry", "Proposes: a row in an existing file is an addition")
     eq(anchored("Outcome", "pub(crate) struct Outcome {\n local: Option<Scored>"), True, "anchored: the name is a token in the text")
     eq(anchored("come", "pub(crate) struct Outcome {"), False, "anchored: not a substring of a longer token")
     eq(_kh.run({"kind": "Proposes", "turn": 1, "name": "summaries", "shape": "fn", "span": "`pub fn summaries(&self, before: int)`"})[0], "sorry", "Proposes: a &self method belongs to its type")

@@ -462,7 +462,7 @@ mod tests {
 
     /// covers: ST-7
     ///
-    /// The labels are asserted on by `sovereign/docs/cli-contract.toml`
+    /// The labels are asserted on by `svrn/docs/cli-contract.toml`
     /// (journey `enrich-atlas`), so they are API. Renaming one silently
     /// turns that journey's barrier back into a vacuous check. The route
     /// serves `state_label` from the same `label()` — one spelling, both

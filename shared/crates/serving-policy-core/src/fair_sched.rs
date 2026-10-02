@@ -3,7 +3,7 @@
 //!
 //! A shared-model fleet has exactly one distributed primary with only a
 //! handful of decode slots, divided across everyone (see
-//! `sovereign/docs/RUN_GLM_5_2_ON_THE_MESH.md`). Two boundaries gate access
+//! `svrn/docs/RUN_GLM_5_2_ON_THE_MESH.md`). Two boundaries gate access
 //! to that pool, and both were flat counters before this module existed:
 //!
 //!   - the host's mesh inference endpoint (`commonwealth-api` admission),

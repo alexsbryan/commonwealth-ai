@@ -70,7 +70,7 @@ fn embedding_from_fixed_list(list: &FixedSizeListArray, row: usize) -> Option<Ve
 /// across distinct regions of the pool instead of stacking one article.
 /// This is the set-composition objective the per-chunk heuristics
 /// (noise floor / per-article caps) approximated by side effect — see
-/// sovereign/docs/RETRIEVAL_REDESIGN.md §3-4 and GeoRAG
+/// svrn/docs/RETRIEVAL_REDESIGN.md §3-4 and GeoRAG
 /// (arXiv:2606.29328) for the measured basis. (1−1/e) greedy guarantee;
 /// cost k·n² ≤ 30·200² — sub-millisecond-to-few-ms, no model calls.
 ///

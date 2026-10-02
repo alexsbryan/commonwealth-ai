@@ -3,7 +3,7 @@
 Standing authorization for the supervisor's resolution session. It lets the
 loop decide its own forks instead of stalling on a sleeping human (operator
 directive 2026-09-21, carried from five-programs).
-`sovereign/ARCH_PRINCIPLES.md` is the compass: where this charter and a
+`docs/ARCH_PRINCIPLES.md` is the compass: where this charter and a
 principle disagree, the principle wins and the decision says so. The design is
 docs/internal/FIVE_PROGRAMS.md §1, §2, §2c, §4 and §12 3a as amended 2026-09-25, with
 its reasoning in ralph/decisions/phase-b-1.md.

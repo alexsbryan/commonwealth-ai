@@ -6,8 +6,8 @@ systems any given corpus uses._
 This is the umbrella doc. Two deep-dives sit under it and stay
 authoritative for their own system: [`ENRICHMENT_V2.md`](./ENRICHMENT_V2.md)
 (System 2 — Atlas) and
-[`sovereign/docs/TIERED_RETRIEVAL.md`](../../../sovereign/docs/TIERED_RETRIEVAL.md)
-(System 3 — Tiered retrieval). Per `sovereign/ARCH_PRINCIPLES.md §1.1`
+[`svrn/docs/TIERED_RETRIEVAL.md`](../../../svrn/docs/TIERED_RETRIEVAL.md)
+(System 3 — Tiered retrieval). Per `docs/ARCH_PRINCIPLES.md §1.1`
 this file is a contract — every path, table, and CLI claim below
 resolves against the code on the commit it appears in.
 
@@ -29,8 +29,8 @@ corpora like attached documents, by the ingest path that runs them):
 |---|---|---|---|
 | `field_model` | **System 1 — Field Model (v1)** | 5-phase *holistic, whole-corpus* field analysis (skeleton → cluster → align → fault-lines → open-questions). `Domain` trait. | this doc |
 | `atlas` | **System 2 — Atlas (v2)** | LLM-driven **typed atom graph** (Entity/Claim/Event/Question/…) *per document*. `Pipeline` trait. Writes `atlas/atoms.json`. | [`ENRICHMENT_V2.md`](./ENRICHMENT_V2.md) |
-| `tiered` | **System 3 — Tiered retrieval (RAPTOR + GLiNER)** | 3 progressive tiers: T1 embeddings → T2 entity-graph + PPR → T3 **RAPTOR** cluster tree. SQLite-backed. **The gold standard for user-facing corpora.** | [`TIERED_RETRIEVAL.md`](../../../sovereign/docs/TIERED_RETRIEVAL.md) |
-| _(verb, not a `type`)_ | **System 4 — Code intelligence** | Per-**symbol** intent summaries over a SCIP-indexed *code* corpus + a SCIP call-graph trace injected into chat evidence (the `CodeQuery` route). Plain-English question → right symbol → callers/callees. | [`CODE_INTEL_CHAT.md`](../../../sovereign/docs/specs/CODE_INTEL_CHAT.md) |
+| `tiered` | **System 3 — Tiered retrieval (RAPTOR + GLiNER)** | 3 progressive tiers: T1 embeddings → T2 entity-graph + PPR → T3 **RAPTOR** cluster tree. SQLite-backed. **The gold standard for user-facing corpora.** | [`TIERED_RETRIEVAL.md`](../../../svrn/docs/TIERED_RETRIEVAL.md) |
+| _(verb, not a `type`)_ | **System 4 — Code intelligence** | Per-**symbol** intent summaries over a SCIP-indexed *code* corpus + a SCIP call-graph trace injected into chat evidence (the `CodeQuery` route). Plain-English question → right symbol → callers/callees. | [`CODE_INTEL_CHAT.md`](../../../svrn/docs/specs/CODE_INTEL_CHAT.md) |
 
 **Dispatch:** `ingest/crates/corpus-engine/src/engine/ingest.rs:1581` branches on
 `enrichment_config.enrichment_type == "tiered"`; otherwise the
@@ -119,7 +119,7 @@ system by what the corpus is *for*, not by recency.
 
 ---
 
-## System 3 — Tiered retrieval (RAPTOR + GLiNER) · `type = "tiered"` · deep-dive [`TIERED_RETRIEVAL.md`](../../../sovereign/docs/TIERED_RETRIEVAL.md)
+## System 3 — Tiered retrieval (RAPTOR + GLiNER) · `type = "tiered"` · deep-dive [`TIERED_RETRIEVAL.md`](../../../svrn/docs/TIERED_RETRIEVAL.md)
 
 **This is the gold standard** the most-benched, user-facing corpora use:
 **attached documents, conversation history, and Obsidian + watched
@@ -210,7 +210,7 @@ their owner. Optional T3 re-rank: the cluster-score blend
 
 ---
 
-## System 4 — Code intelligence · `sovereign enrich code-intel` · deep-dive [`CODE_INTEL_CHAT.md`](../../../sovereign/docs/specs/CODE_INTEL_CHAT.md)
+## System 4 — Code intelligence · `sovereign enrich code-intel` · deep-dive [`CODE_INTEL_CHAT.md`](../../../svrn/docs/specs/CODE_INTEL_CHAT.md)
 
 **The conceptual→code bridge.** Lets a user ask a plain-English question of a
 SCIP-indexed codebase ("how does inference run", "what calls `gate_answer`",
@@ -389,7 +389,7 @@ that, not a remembered branch, is what makes an empty version-1 block compose
 version-0 bytes (pinned by `tests/main/ontology_prompt_snapshots.rs`). After
 resolution, `atlas/ontology.json` records the policies the atlas was built
 under and `_summary.json` (schema 3) carries an `OntologySummary`. Design and
-phase plan: `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`,
+phase plan: `svrn/docs/specs/ONTOLOGY_PRIMITIVES.md`,
 `ONTOLOGY_MIGRATION.md`; field reference: `ingest/crates/sovereign-recipes/SCHEMA.md`.
 
 ---
@@ -402,7 +402,7 @@ phase plan: `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`,
    per-article) and field-model (v1, full-corpus) coexist — different
    surfaces, same source parquet."_). SEP is LanceDB-backed and has no
    `raptor_nodes`. The association of SEP with the tiered RAPTOR stack
-   traces to the **archived** `sovereign/docs/archive/RERANK_EXPERIMENT.md`
+   traces to the **archived** `svrn/docs/archive/RERANK_EXPERIMENT.md`
    (the `atlas_weight` blend that lifted SEP sources 40 → 65) — an
    experiment, not the shipped retrieval path. The gold-standard
    RAPTOR + GLiNER corpora are **conversation, attached-doc, and
@@ -424,8 +424,8 @@ phase plan: `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`,
    `engine/ingest.rs:1581` (the dispatch branch).
 3. The deep-dive for the system you're touching:
    [`ENRICHMENT_V2.md`](./ENRICHMENT_V2.md) (atoms),
-   [`TIERED_RETRIEVAL.md`](../../../sovereign/docs/TIERED_RETRIEVAL.md) (RAPTOR/GLiNER),
-   or [`CODE_INTEL_CHAT.md`](../../../sovereign/docs/specs/CODE_INTEL_CHAT.md) (code
+   [`TIERED_RETRIEVAL.md`](../../../svrn/docs/TIERED_RETRIEVAL.md) (RAPTOR/GLiNER),
+   or [`CODE_INTEL_CHAT.md`](../../../svrn/docs/specs/CODE_INTEL_CHAT.md) (code
    intelligence — the per-symbol summary bridge + SCIP call-graph trace).
 4. The injection seam if you're on tiered:
    `enrichment/tiered.rs` (trait) →

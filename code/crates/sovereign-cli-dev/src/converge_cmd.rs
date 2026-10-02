@@ -1031,7 +1031,7 @@ mod tests {
         let exts = vec!["rs".to_string()];
         let scope = SourceScope::default();
         assert!(counts_path(
-            "sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs",
+            "svrn/crates/sovereign-core/src/runtime/retrieval_pipeline.rs",
             &exts,
             &scope
         ));
@@ -1043,7 +1043,7 @@ mod tests {
         // concept" for the 166 type definitions in the very module whose five
         // privately re-derived nouns are why this program exists.
         assert!(counts_path(
-            "sovereign/crates/sovereign-core/src/deep_research/icd.rs",
+            "svrn/crates/sovereign-core/src/deep_research/icd.rs",
             &exts,
             &scope
         ));

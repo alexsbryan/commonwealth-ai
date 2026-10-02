@@ -78,7 +78,7 @@ check "a link failure with no first-party diagnostic abstains" abstain \
 #    happens to touch a crate with a native dep.
 check "a build-script failure alongside OUR error is a judgement, not an abstention" judge \
 "error[E0308]: mismatched types
-  --> sovereign/crates/sovereign-core/src/lib.rs:41:9
+  --> svrn/crates/sovereign-core/src/lib.rs:41:9
 error: failed to run custom build command for \`llama-cpp-sys-4 v0.1.0\`"
 
 # 4. An ordinary compile error from our tree, alone.

@@ -576,5 +576,5 @@ follow-up campaigns:
 - `ingest/crates/corpus-engine/src/enrichment/pipeline/section_classifier_axes_prompt.md` — Phase 0 vector prompt.
 - `ingest/crates/corpus-engine/src/enrichment/pipeline/typed_schemas/argumentative_phase1_system.md` — argumentative typed-extension prompt (carries the three iteration patterns from §5).
 - `ingest/crates/corpus-engine/src/enrichment/atlas/axis_catalog.rs::AXIS_CATALOG` — typed-axis registry the bench dispatches on.
-- `sovereign/crates/sovereign-cli/src/enrich_cmd/eval.rs::score_axis` — catalog-driven scorer.
-- `sovereign/crates/sovereign-cli/src/enrich_cmd/extract_typed.rs` — fan-out dispatcher with budget + retry.
+- `svrn/crates/sovereign-cli/src/enrich_cmd/eval.rs::score_axis` — catalog-driven scorer.
+- `svrn/crates/sovereign-cli/src/enrich_cmd/extract_typed.rs` — fan-out dispatcher with budget + retry.

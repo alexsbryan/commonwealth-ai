@@ -40,13 +40,13 @@ weight = 181
 test   = "partition_round_robin_balances"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-core/src/deep_research/mod.rs"
+file   = "svrn/crates/sovereign-core/src/deep_research/mod.rs"
 crate  = "sovereign-core"
 weight = 148
 test   = "gates_require_both_absolute_and_margin"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs"
+file   = "svrn/crates/sovereign-core/tests/main/f26_egress_census.rs"
 crate  = "sovereign-core"
 weight = 37
 test   = "gates_require_both_absolute_and_margin"
@@ -59,7 +59,7 @@ weight = 137
 test   = "stamp_then_load_round_trips"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-cli-llm/src/lib.rs"
+file   = "svrn/crates/sovereign-cli-llm/src/lib.rs"
 crate  = "sovereign-cli-llm"
 weight = 140
 test   = "shard_index_and_count_read_the_convention"
@@ -71,7 +71,7 @@ weight = 137
 test   = "deterministic_with_seed"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-tools/src/local_corpus/manager.rs"
+file   = "svrn/crates/sovereign-tools/src/local_corpus/manager.rs"
 crate  = "sovereign-tools"
 weight = 50
 test   = "is_pathological_all_zero"
@@ -83,13 +83,13 @@ weight = 83
 test   = "noop_observer_is_send_sync"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs"
+file   = "svrn/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs"
 crate  = "sovereign-cli-daemon"
 weight = 74
 test   = "restarts_on_panic_then_completes"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-cli/src/main.rs"
+file   = "svrn/crates/sovereign-cli/src/main.rs"
 crate  = "sovereign-cli"
 weight = 123
 test   = "dispatch_recognises_flag_layouts"
@@ -167,7 +167,7 @@ weight = 44
 test   = "activity_level_availability_values"
 
 [[probe]]
-file   = "corpus-mcp/src/tools.rs"
+file   = "svrn/crates/corpus-mcp/src/tools.rs"
 crate  = "corpus-mcp"
 weight = 42
 test   = "a_walked_answer_carries_passages_and_a_map"
@@ -197,7 +197,7 @@ weight = 34
 test   = "lookup_key_collapses_punct_and_case"
 
 [[probe]]
-file   = "sovereign/crates/sovereign-cli-shared/src/lane_verdict.rs"
+file   = "svrn/crates/sovereign-cli-shared/src/lane_verdict.rs"
 crate  = "sovereign-cli-shared"
 weight = 33
 test   = "presence_flags_and_short_aliases"

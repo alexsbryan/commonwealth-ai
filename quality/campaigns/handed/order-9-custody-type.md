@@ -63,7 +63,7 @@ recorded in campaign.md.
     (registry.rs:311) maps `e.mesh_sharing` at :321 into `BuiltinCorpus`
     (ingest/crates/corpus-engine/src/types.rs:674, the field at :681).
   - `CorpusDefinition.mesh_sharing` — a second manifest parser with its own private
-    default: sovereign/crates/sovereign-tools/src/corpus/registry.rs:45-51,
+    default: svrn/crates/sovereign-tools/src/corpus/registry.rs:45-51,
     `#[serde(default = "default_mesh_sharing")]` at :45 over
     `fn default_mesh_sharing() -> bool { true }` at :49-51, which a
     `git grep default_true` cannot see.

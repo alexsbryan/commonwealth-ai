@@ -150,7 +150,7 @@ The cog-sci map from the design conversation holds up under measurement:
    (repo-tracked); machine-local `~/.claude/settings.json` checked on this
    host — no registration. Two leftovers carried into the R2 order: the
    scaffold generator still emits the firehose for every new project
-   (`sovereign/crates/sovereign-cli/src/project_init/scaffold.rs:432`), and
+   (`svrn/crates/sovereign-cli/src/project_init/scaffold.rs:432`), and
    `notes_retrieval_cmd.rs:4` still documents the 10–14KB block.
 2. **Structural seat boot block** — one script assembling the rail reads
    the skill's boot step already prescribes (anchor todos first, then

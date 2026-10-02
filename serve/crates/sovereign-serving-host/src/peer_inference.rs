@@ -488,7 +488,7 @@ pub struct InferenceRouter {
     /// never originated. Without this, a workstation serving its own
     /// Claude-desktop inference appears phantom-idle to peers, who
     /// then route additional work here and contend with the local
-    /// user. See `sovereign/docs/MESH_LOAD_AWARENESS.md` for the
+    /// user. See `svrn/docs/MESH_LOAD_AWARENESS.md` for the
     /// architectural backstory.
     ///
     /// Atomic so the gossip emitter can `.load()` lock-free without
@@ -2252,7 +2252,7 @@ impl InferenceRouter {
         // Same gossip-override policy as `select_peer`: when the peer
         // publishes its self-reported in-flight, trust it over our
         // local view, which sees only founder-originated dispatches.
-        // See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
+        // See `svrn/docs/MESH_LOAD_AWARENESS.md`.
         let self_observed = self
             .peer_observations
             .read()

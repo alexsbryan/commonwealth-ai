@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Slot policy — the executable core of `sovereign/docs/SLOT_POLICY.md`.
+//! Slot policy — the executable core of `svrn/docs/SLOT_POLICY.md`.
 //!
 //! Call sites declare WHAT a call needs (a [`Workload`] class → an OICP
 //! requirement bundle); the scheduler resolves WHERE it runs. No call

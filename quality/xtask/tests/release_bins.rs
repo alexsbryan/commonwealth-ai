@@ -24,8 +24,8 @@ use repo_root::repo_root;
 
 /// The packages whose exec sites a release install reaches.
 const DISPATCHING: &[&str] = &[
-    "sovereign/crates/sovereign-cli/src",
-    "sovereign/crates/sovereign-cli-daemon/src",
+    "svrn/crates/sovereign-cli/src",
+    "svrn/crates/sovereign-cli-daemon/src",
     "cmnwlth/crates/sovereign-cli-mesh/src",
 ];
 

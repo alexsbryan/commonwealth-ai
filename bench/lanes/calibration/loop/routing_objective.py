@@ -21,7 +21,7 @@ REPO = LOOP.parents[3]
 BIN = REPO / "target/debug/sovereign-cli-llm"
 PROBES = LOOP / "routing_probes.toml"
 GUARD_BANKS = [
-    REPO / "sovereign/crates/sovereign-core/data/calibration/axes_v1.toml",
+    REPO / "svrn/crates/sovereign-core/data/calibration/axes_v1.toml",
     REPO / "bench/lanes/routing/calibration/holdout/intent_frames_v1.toml",
 ]
 GUARD_BASELINE = LOOP / "routing_guard_baseline.json"

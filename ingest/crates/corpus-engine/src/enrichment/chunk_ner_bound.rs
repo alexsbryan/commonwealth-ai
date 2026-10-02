@@ -76,7 +76,7 @@ pub const MAX_CHUNK_CHARS: usize = 2_048;
 /// unbounded-N conversation produced.
 ///
 /// 16 is a batch-size DEFAULT, not a derived quantity, and it is recorded
-/// as one in `sovereign/DEFAULTS_LEDGER.md`. It is not tuned: it was
+/// as one in `docs/DEFAULTS_LEDGER.md`. It is not tuned: it was
 /// chosen as the smallest power of two that still keeps v1's native
 /// batching worth having (the trait's looping default is N=1), and the
 /// throughput cost of the choice has not been measured.

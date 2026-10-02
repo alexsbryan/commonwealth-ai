@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon-free next-edit scorer — Phase 0 of the build-vs-adopt bakeoff
-//! (`sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md` §7, §8 item 1).
+//! (`svrn/docs/specs/NEXT_EDIT_BAKEOFF.md` §7, §8 item 1).
 //!
 //! Serves `POST /v1/edit_predictions` with the **same pipeline the
 //! daemon runs** (`sovereign_code::edit_predictions::predict_response`,

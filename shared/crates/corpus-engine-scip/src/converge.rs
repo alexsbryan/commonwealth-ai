@@ -868,7 +868,7 @@ mod tests {
     #[test]
     fn scope_excludes_agent_worktree_shadows_and_test_paths() {
         let s = SourceScope::default();
-        assert!(s.admits("sovereign/crates/sovereign-core/src/lib.rs"));
+        assert!(s.admits("svrn/crates/sovereign-core/src/lib.rs"));
         // The worktree clause: without it, every first-party name is
         // double-counted from the agent worktree copies.
         assert!(!s.admits(".claude/worktrees/agent-abc/sovereign/crates/x/src/lib.rs"));
@@ -888,7 +888,7 @@ mod tests {
     #[test]
     fn deep_research_is_not_the_research_spike_tree() {
         let s = SourceScope::default();
-        assert!(s.admits("sovereign/crates/sovereign-core/src/deep_research/icd.rs"));
+        assert!(s.admits("svrn/crates/sovereign-core/src/deep_research/icd.rs"));
         // …while the top-level spike tree the pattern was actually written for
         // stays excluded. It is repo-relative with no leading slash, which is
         // why the fix cannot simply be to anchor the pattern as `/research/`.
@@ -905,7 +905,7 @@ mod tests {
         let s = SourceScope::default();
         // Longer segments that merely END with an excluded token are source.
         for admitted in [
-            "sovereign/crates/sovereign-core/src/deep_research/icd.rs",
+            "svrn/crates/sovereign-core/src/deep_research/icd.rs",
             "sovereign/crates/a/src/xvendor/x.rs",
             "sovereign/crates/a/src/my_target/x.rs",
             "sovereign/crates/a/src/prebuild.rs",

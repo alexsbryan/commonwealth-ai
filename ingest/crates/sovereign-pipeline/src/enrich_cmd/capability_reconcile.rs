@@ -246,8 +246,8 @@ fn cap_keywords(cap: &Cap) -> Vec<String> {
 fn discover_docs(source: &Path) -> Vec<PathBuf> {
     let mut docs = Vec::new();
     for rel in [
-        "sovereign/SYSTEM_OVERVIEW.md",
-        "sovereign/ARCH_PRINCIPLES.md",
+        "docs/SYSTEM_OVERVIEW.md",
+        "docs/ARCH_PRINCIPLES.md",
         "SYSTEM_OVERVIEW.md",
         "ARCH_PRINCIPLES.md",
         "ARCHITECTURE.md",
@@ -258,7 +258,7 @@ fn discover_docs(source: &Path) -> Vec<PathBuf> {
             docs.push(p);
         }
     }
-    for dir in ["sovereign/docs", "docs"] {
+    for dir in ["svrn/docs", "docs"] {
         if let Ok(rd) = fs::read_dir(source.join(dir)) {
             for e in rd.flatten() {
                 let p = e.path();

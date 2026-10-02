@@ -1,7 +1,7 @@
 # UAP / Blue Book — recipe-author E2E demo
 
 Drives the **recipe-author agent** end to end to author the `uap-blue-book`
-corpus from `sovereign/docs/specs/UFO.md`, through the **real daemon Runtime
+corpus from `svrn/docs/specs/UFO.md`, through the **real daemon Runtime
 loop** (the same `handle_recipe_author_turn` the desktop chat uses) — not a
 side-channel. Spec: `~/.claude/plans/crystalline-imagining-newell.md`.
 

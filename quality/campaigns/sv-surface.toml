@@ -1559,7 +1559,7 @@ status       = "open"
 # backends are SESSION-scoped: the launchd agent loads into `gui/<uid>`, the
 # Windows task is logon-triggered, the systemd unit is a user unit
 # (`WantedBy=default.target`) and NOTHING enables lingering — `grep -ri
-# linger sovereign/crates/sovereign-service sovereign/contrib` returns zero
+# linger svrn/crates/sovereign-service sovereign/contrib` returns zero
 # hits as of this amendment. So a Linux node leaves the mesh at logout and
 # does not return until someone logs in, and macOS/Windows come back at
 # login rather than at boot. On the machine most worth having in the mesh —

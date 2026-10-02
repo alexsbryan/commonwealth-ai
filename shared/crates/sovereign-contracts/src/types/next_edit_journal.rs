@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The next-edit journal — local, metadata-only evidence about how the
 //! editing lane actually behaves on a developer's own machine
-//! (`sovereign/docs/NEXT_EDIT.md` §10).
+//! (`svrn/docs/NEXT_EDIT.md` §10).
 //!
 //! # Why this exists
 //!

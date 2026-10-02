@@ -44,7 +44,7 @@ entry is `code map <path> [--spec <file>]`.
 call graphs, a deterministic tree-sitter fact base, live lint/test status,
 durable cross-session notes, and index-health posture — so a coding agent stops
 guessing from grep. The design record is
-[CODE_INTEL_CHAT.md](../sovereign/docs/specs/CODE_INTEL_CHAT.md).
+[CODE_INTEL_CHAT.md](../svrn/docs/specs/CODE_INTEL_CHAT.md).
 
 Both run on the same four layers:
 
@@ -62,7 +62,7 @@ as the softer answer in every report that prints them
 **The LLM layers ship.** They are the product, not an internal convenience, and
 they are already injectable: `ingest/crates/corpus-engine/src/enrichment/code_intel/mod.rs`
 takes a `ChatCompletionFn` and knows nothing about where it points. The prior
-posture recorded in `sovereign/SYSTEM_OVERVIEW.md` §4 — "the LLM-bound layers
+posture recorded in `docs/SYSTEM_OVERVIEW.md` §4 — "the LLM-bound layers
 stay mesh-side" — was a statement about which gates run in *this repo's public
 CI*, and is not a distribution constraint. Update that sentence when Phase 6
 lands so the two documents do not disagree.

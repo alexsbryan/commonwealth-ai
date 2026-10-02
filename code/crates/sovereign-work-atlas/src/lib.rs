@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Work Atlas — coordination layer for agents sharing a mesh repo.
 //!
-//! See `sovereign/docs/WORK_ATLAS.md` for the why; this crate is the
+//! See `svrn/docs/WORK_ATLAS.md` for the why; this crate is the
 //! Phase 1 implementation of the v0.1 spec — Sessions + Claims, no
 //! Observations yet.
 //!

@@ -41,7 +41,7 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 # (pb-ingest-rehome-daemon).
 sovereign-recipe-author = { workspace = true }
 # svrn's LLM verbs (`bin_main_with`), handed the same ingest composition.
-sovereign-cli-llm = { path = "../sovereign-cli-llm" }
+sovereign-cli-llm = { path = "../../../svrn/crates/sovereign-cli-llm" }
 host-kit = { workspace = true, features = ["shell"] }
 tokio = { workspace = true }
 tracing = { workspace = true }

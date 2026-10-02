@@ -124,7 +124,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-9-locally_authored_note_carries_no_marker"
 requirement = "FE-9"
-target = "sovereign/crates/sovereign-tools/src/code/brief.rs"
+target = "svrn/crates/sovereign-tools/src/code/brief.rs"
 find = "        let author = notes\n            .attribution(row.origin_node_id.as_deref())\n            .marker_compact()\n            .map(|m| format!(\" _{m}_\"))\n            .unwrap_or_default();"
 replace = "        // MUTATION: Force a marker even when attribution is Unknown.\n        // This violates FE-9 because it names a location (the placeholder)\n        // that has no membership in the roster, creating an active marker\n        // pointing to nothing.\n        let author = if row.origin_node_id.is_some() {\n             notes\n                .attribution(row.origin_node_id.as_deref())\n                .marker_compact()\n                .map(|m| format!(\" _{m}_\"))\n                .unwrap_or_else(|| \" _?_\".to_string())\n        } else {\n            String::new()\n        }; "
 mustFail = ["locally_authored_note_carries_no_marker"]
@@ -284,7 +284,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-16-rotate_refuses_while_an_unconfirmed_peer"
 requirement = "FE-16"
-target = "sovereign/crates/sovereign-daemon/src/daemon.rs"
+target = "svrn/crates/sovereign-daemon/src/daemon.rs"
 find = "                    match generation {\n                        Some(true) => {}\n                        Some(false) => pre_split.push(m.name.clone()),\n                        None => unconfirmed.push(m.name.clone()),\n                    }"
 replace = "                    // BUG: Treat unknown (None) as confirmed to silence the guard.\n                    // This violates FE-16 by allowing rotation when a peer's status is\n                    // not locally observed, causing the test `rotate_refuses_while_an_unconfirmed_peer_is_online`\n                    // to pass incorrectly or misclassify peers in other scenarios.\n                    match generation {\n                        Some(true) | None => {},\n                        Some(false) => pre_split.push(m.name.clone()),\n                    }"
 mustFail = ["rotate_refuses_while_an_unconfirmed_peer_is_online"]
@@ -354,7 +354,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-20-from_proposed_maps_wire_payload"
 requirement = "FE-20"
-target = "sovereign/crates/sovereign-core/src/lessons.rs"
+target = "svrn/crates/sovereign-core/src/lessons.rs"
 find = "            enforcement: LessonEnforcement::parse(&p.enforcement)\n                .unwrap_or(LessonEnforcement::Prompt),"
 replace = "            enforcement: p.enforcement.parse().unwrap_or_else(|_| {\n                // BUG: Fails to default to Prompt for unknown strings, causing panic or incorrect type\n                unimplemented!()\n            }),"
 mustFail = ["from_proposed_maps_wire_payload"]
@@ -384,7 +384,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-22-total_ram_detects_on_supported_platforms"
 requirement = "FE-22"
-target = "sovereign/crates/sovereign-cli-daemon/src/memory_watch.rs"
+target = "svrn/crates/sovereign-cli-daemon/src/memory_watch.rs"
 find = "fn total_system_ram_mb() -> Option<u64> {\n    #[cfg(target_os = \"linux\")]\n    {\n        // /proc/meminfo \"MemTotal:  131072000 kB\"\n        let meminfo = std::fs::read_to_string(\"/proc/meminfo\").ok()?;\n        let host_mb = meminfo.lines().find_map(|l| {\n            let rest = l.strip_prefix(\"MemTotal:\")?;\n            let kb: u64 = rest.trim().trim_end_matches(\"kB\").trim().parse().ok()?;\n            Some(kb / 1024)\n        })?;\n        // cgroup v2 unified hierarchy; \"max\" = unlimited. Best-effort —\n        // absent/unparseable just means the host total stands.\n        let cgroup_mb = std::fs::read_to_string(\"/sys/fs/cgroup/memory.max\")\n            .ok()\n            .and_then(|s| s.trim().parse::<u64>().ok())\n            .map(|bytes| bytes / (1024 * 1024));\n        Some(match cgroup_mb {\n            Some(limit) if limit < host_mb => limit,\n            _ => host_mb,\n        })\n    }"
 replace = "fn total_system_ram_mb() -> Option<u64> {\n    #[cfg(target_os = \"linux\")]\n    {\n        // Fallback to a hardcoded configuration value instead of detecting hardware capability\n        return Some(8192);\n    }\n    #[cfg(target_os = \"macos\")]"
 mustFail = ["total_ram_detects_on_supported_platforms"]
@@ -394,7 +394,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-22-hardware_fingerprint_is_gpu_order_indepe"
 requirement = "FE-22"
-target = "sovereign/crates/sovereign-core/src/mesh_measurements.rs"
+target = "svrn/crates/sovereign-core/src/mesh_measurements.rs"
 find = "    let mut gpu_mix: u64 = 0;\n    for (name, vram_gb, backend) in gpus {\n        let mut g = DefaultHasher::new();\n        name.hash(&mut g);\n        vram_gb.hash(&mut g);\n        backend.hash(&mut g);\n        gpu_mix ^= g.finish();\n    }"
 replace = "    let mut gpu_hash: u64 = 0;\n    for (name, vram_gb, backend) in gpus {\n        let mut g = DefaultHasher::new();\n        name.hash(&mut g);\n        vram_gb.hash(&mut g);\n        backend.hash(&mut g);\n        gpu_hash += g.finish();\n    }\n\n    // Use the non-commutative accumulation result directly to break order independence.\n    let gpu_mix = if !gpus.is_empty() { \n        let mut final_g = DefaultHasher::new();\n        // Re-hash the sum to simulate a stateful dependency on insertion order implicitly via sequential addition logic flaws or just use the raw accumulated value which is sensitive to order in some contexts, but here we simply switch to a method that ISN'T commutative like XOR.\n        // Actually, simpler: Just hash them sequentially into one hasher instead of folding with XOR.\n        0 \n    } else { 0 }; \n\n    // Correct replacement for non-commutative behavior:\n    let mut gpu_mix_final: u64 = 0;\n    if !gpus.is_empty() {\n         let mut g2 = DefaultHasher::new();\n         for (name, vram_gb, backend) in gpus {\n             name.hash(&mut g2);\n             vram_gb.hash(&mut g2);\n             backend.hash(&mut g2);\n         }\n         gpu_mix_final = g2.finish();\n    }"
 mustFail = ["hardware_fingerprint_is_gpu_order_independent"]

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn bench verifier …` — offline seams for the verifier-v0 program
-//! (`sovereign/docs/specs/VERIFIER_V0.md`).
+//! (`svrn/docs/specs/VERIFIER_V0.md`).
 //!
 //! Stream B's premise is that training claims must be in the PRODUCTION
 //! register — the exact prompt, parser, and claim budget the grounding gate

@@ -67,14 +67,14 @@ use repo_root::repo_root;
 /// [`the_desktop_variant_has_no_first_party_host`] below.
 const LIVE_CONSTRUCTION_SITES: &[(&str, &str, &str)] = &[
     (
-        "sovereign/crates/sovereign-daemon/src/daemon_cmd/boot.rs",
+        "svrn/crates/sovereign-daemon/src/daemon_cmd/boot.rs",
         "Headless",
         "headless: Some(",
     ),
     // The setup wizard's join (moved out of cli-daemon's terminal.rs by
     // fp-cond2-c: the wizard spawns this launch instead of building one).
     (
-        "sovereign/crates/sovereign-daemon/src/daemon_cmd/admin_join.rs",
+        "svrn/crates/sovereign-daemon/src/daemon_cmd/admin_join.rs",
         "MeshAdmin",
         "LaunchParts::Admin",
     ),
@@ -86,7 +86,7 @@ fn declared_variants() -> Vec<String> {
     // `daemon_services.rs` moved to `sovereign-daemon` at dm-daemon-mesh-edge
     // (2026-09-17); this census reads it by repo-relative path.
     let src = std::fs::read_to_string(
-        repo_root().join("sovereign/crates/sovereign-daemon/src/daemon_services.rs"),
+        repo_root().join("svrn/crates/sovereign-daemon/src/daemon_services.rs"),
     )
     .expect("daemon_services.rs is readable");
     let body_start = src
@@ -123,7 +123,7 @@ fn declared_variants() -> Vec<String> {
 fn every_variant_is_constructed_by_the_assembler() {
     // The assembler moved to `sovereign-daemon` with the file (2026-09-17).
     let src = std::fs::read_to_string(
-        repo_root().join("sovereign/crates/sovereign-daemon/src/daemon_services.rs"),
+        repo_root().join("svrn/crates/sovereign-daemon/src/daemon_services.rs"),
     )
     .expect("daemon_services.rs is readable");
     let start = src
@@ -283,7 +283,7 @@ fn the_desktop_variant_has_no_first_party_host() {
             // both crates are the assembler's home since dm-daemon-mesh-edge
             // (2026-09-17) moved the host cluster out of `sovereign-mesh`.
             if rel.starts_with("sovereign/crates/sovereign-mesh/")
-                || rel.starts_with("sovereign/crates/sovereign-daemon/")
+                || rel.starts_with("svrn/crates/sovereign-daemon/")
             {
                 continue;
             }
@@ -300,7 +300,7 @@ fn the_desktop_variant_has_no_first_party_host() {
         hosts.is_empty(),
         "these files reach `DaemonServices::Desktop` — in-process daemon hosting \
          outside `sovereign-mesh`: {hosts:?}. sv-surface's K3 bar makes that a \
-         DECLARED mode with a named owner and a `sovereign/DEFAULTS_LEDGER.md` \
+         DECLARED mode with a named owner and a `docs/DEFAULTS_LEDGER.md` \
          row, never a fallback a surface grows back into. If this is the iOS \
          case the variant is reserved for, add the row and the host to \
          LIVE_CONSTRUCTION_SITES in the same commit."

@@ -24,7 +24,7 @@
 #   - PDFium shared library (bblanchon/pdfium-binaries, latest)      → ~7 MB
 #
 # What it does NOT fetch: tesseract. The 2026-05-27 bake-off (see
-# sovereign/docs/OCR_PADDLE_ENGINE.md) replaced tesseract with PaddleOCR —
+# svrn/docs/OCR_PADDLE_ENGINE.md) replaced tesseract with PaddleOCR —
 # which needs no platform install — so the desktop no longer bundles it.
 # Tesseract remains a CODE fallback (OcrEngineKind::Tesseract) for users
 # with a system install; a tesseract-bundling build is a documented opt-in

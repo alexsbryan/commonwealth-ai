@@ -3,7 +3,7 @@
 **Status: ARMED AND TRAINING — Vast pod `46909861`, RTX PRO 5000 Blackwell,
 $0.6681/hr, armed 2026-08-05 12:40 PDT.** Run `m3-4b-ab-46909861`; payload
 preflight 9 passed / 0 failed → FIT. Progress: `cloud/pod.sh status 46909861`.
-Spec: `sovereign/docs/specs/VERIFIER_V0.md` §7 (M3), §1 (targets), §5 (the card).
+Spec: `svrn/docs/specs/VERIFIER_V0.md` §7 (M3), §1 (targets), §5 (the card).
 Hardware evidence: notes `8aad1dbb` (PRO 5000 chosen), `f71dc9a5` (A6000 rejected),
 `20167c19` (the memory guard), `6e3f7486` (a Vast machine that cannot be rented).
 

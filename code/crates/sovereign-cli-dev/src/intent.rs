@@ -152,7 +152,7 @@ fn terms_of(text: &str) -> BTreeSet<String> {
     out
 }
 
-/// Which crate owns this path. `sovereign/crates/sovereign-core/src/x.rs` is
+/// Which crate owns this path. `svrn/crates/sovereign-core/src/x.rs` is
 /// `sovereign-core`; `ingest/crates/corpus-engine/src/x.rs` is `corpus-engine`. A path with
 /// no `/src/` keeps its first component, which is right for `xtask` and
 /// friends and never merges two real crates.
@@ -478,7 +478,7 @@ mod tests {
             ),
             sym(
                 "probe_cosine",
-                "sovereign/crates/sovereign-core/src/b.rs",
+                "svrn/crates/sovereign-core/src/b.rs",
                 "Computes the cosine similarity between two embedding vectors.",
             ),
         ];
@@ -499,7 +499,7 @@ mod tests {
             ),
             sym(
                 "cosine_sim",
-                "sovereign/crates/sovereign-core/src/b.rs",
+                "svrn/crates/sovereign-core/src/b.rs",
                 "Computes the cosine similarity between two embedding vectors.",
             ),
         ];
@@ -610,7 +610,7 @@ mod tests {
             "code-facts"
         );
         assert_eq!(
-            crate_of("sovereign/crates/sovereign-core/src/memory.rs"),
+            crate_of("svrn/crates/sovereign-core/src/memory.rs"),
             "sovereign-core"
         );
     }

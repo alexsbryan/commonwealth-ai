@@ -5,7 +5,7 @@
 //! at their historical path, `sovereign_daemon::mesh_proof_header_gate`,
 //! mounted here and not copied.
 
-#[path = "../../../sovereign/crates/sovereign-daemon/src/mesh_proof_header_gate.rs"]
+#[path = "../../../svrn/crates/sovereign-daemon/src/mesh_proof_header_gate.rs"]
 mod gate;
 #[path = "shared/repo_root.rs"]
 mod repo_root;
@@ -15,7 +15,7 @@ use repo_root::repo_root;
 use std::path::{Path, PathBuf};
 
 /// The gate's own file spells the wire form in its lists, as it may.
-const GATE_FILE: &str = "sovereign/crates/sovereign-daemon/src/mesh_proof_header_gate.rs";
+const GATE_FILE: &str = "svrn/crates/sovereign-daemon/src/mesh_proof_header_gate.rs";
 
 fn production_sources(root: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(root) else {

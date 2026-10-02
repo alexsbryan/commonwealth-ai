@@ -129,4 +129,4 @@ the demo.
 - **macOS firewall prompt** for the daemon listening on `0.0.0.0:9742` —
   allow it; that's the mesh-internal port.
 - Anything else: `svrn doctor` on each machine, then the
-  [troubleshooting guide](../sovereign/docs/TROUBLESHOOTING.md).
+  [troubleshooting guide](../svrn/docs/TROUBLESHOOTING.md).
