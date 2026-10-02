@@ -69,8 +69,6 @@ mod memory_compaction_smoke;
 mod mode_declarations;
 #[path = "main/oneshot_rag.rs"]
 mod oneshot_rag;
-#[path = "main/reason_empty_result.rs"]
-mod reason_empty_result;
 #[path = "main/retrieval_ledger.rs"]
 mod retrieval_ledger;
 #[path = "main/retrieval_pipeline_doc.rs"]

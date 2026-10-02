@@ -220,8 +220,8 @@ pub fn accept_join(
 ///     persisted a stable install-local ID.
 ///   - and `id` IS already in `mesh.members` with a matching
 ///     `new_node_name` → update the existing record's addresses +
-///     last_seen + status and return the same id. This is the
-///     "same machine rejoining" case — no zombie entry created.
+///     last_seen + status, clear a tombstone, and return the same id.
+///     This is the "same machine rejoining" case — no zombie entry created.
 ///   - and `id` IS already in `mesh.members` with a DIFFERENT
 ///     name → refuse (the ID would collide with someone else's
 ///     machine on this mesh). Fall back to generating a fresh ID.
@@ -278,6 +278,17 @@ pub fn accept_join_with_identity(
                 let mut refreshed = existing.clone();
                 refreshed.addresses = new_node_addresses;
                 refreshed.last_seen = now;
+                if let Some(removed_at) = refreshed.removed_at.take() {
+                    // A member that left comes back live. The admission is the
+                    // founder's act on a verified invite, not the subject's own
+                    // gossip, and a refused id would be admitted fresh anyway.
+                    // STRICTLY newer than the tombstone, which `leave` may
+                    // stamp a second ahead, so the merge LWW carries the
+                    // rejoin to every peer still holding it.
+                    refreshed.last_seen = now.max(existing.event_time() + 1);
+                    tracing::info!(node = %id, removed_at, last_seen = refreshed.last_seen,
+                                   "join: a same-id rejoin clears the member's tombstone");
+                }
                 refreshed.status = NodeStatus::Online;
                 if node_pubkey.is_some() {
                     refreshed.node_pubkey = node_pubkey;
@@ -516,6 +527,36 @@ mod tests {
         assert_eq!(bob.removed_at, Some(1_000));
         assert!(!bob.is_active());
         assert_eq!(bob.status, NodeStatus::Offline);
+    }
+
+    /// A member that left and rejoins under its own id is active again, and
+    /// its record out-ranks the tombstone in the merge LWW even when `leave`
+    /// stamped it a second ahead of the founder's clock.
+    #[test]
+    fn a_same_id_rejoin_after_leave_clears_the_tombstone() {
+        let (mut mesh, key) = init_mesh("Test", "Alice", vec![]);
+        let founder_id = *mesh.members.keys().next().unwrap();
+        let bob_id = NodeId::from_u128(42);
+        accept_join_with_proposed_id(&mut mesh, &key, "Bob", vec![], founder_id, Some(bob_id))
+            .unwrap();
+
+        let ahead = now_secs() + 1;
+        let bob = mesh.members.get_mut(&bob_id).unwrap();
+        bob.removed_at = Some(ahead);
+        bob.last_seen = ahead;
+        bob.status = NodeStatus::Offline;
+
+        let rejoined =
+            accept_join_with_proposed_id(&mut mesh, &key, "Bob", vec![], founder_id, Some(bob_id))
+                .unwrap();
+        assert_eq!(rejoined, bob_id, "the same id, no zombie");
+        let bob = &mesh.members[&bob_id];
+        assert!(bob.is_active(), "the rejoin clears the tombstone");
+        assert_eq!(bob.status, NodeStatus::Online);
+        assert!(
+            bob.event_time() > ahead,
+            "the rejoin must out-rank the tombstone peers still hold"
+        );
     }
 
     #[test]

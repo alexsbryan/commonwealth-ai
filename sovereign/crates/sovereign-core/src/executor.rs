@@ -12,10 +12,6 @@ use crate::types::*;
 
 use crate::time::unix_now as now;
 
-/// Appended under a reasoning-loop tool result that ran and returned nothing.
-const EMPTY_RESULT_NOTE: &str = "\n(No results: the source does not hold this. Do not search \
-     again with other words; answer now and say it is missing.)";
-
 // ─── LlmJudge Rubrics ─────────────────────────────────────────
 
 /// The pre-existing default judge rubric. Optimised for factual /
@@ -1203,43 +1199,29 @@ impl Executor {
                     // to the tool WHOLE — the retired loop rebuilt them as
                     // `{"query": …}` and so could not drive anything but a
                     // search.
-                    let (tool_result, result_count, absence_stated) =
-                        if self.tools.get(&call.name).is_err() {
-                            (format!("Tool '{}' not available.", call.name), 0, false)
-                        } else {
-                            match self
-                                .tools
-                                .call_cached(&call.name, &call.arguments, &ctx)
-                                .await
-                            {
-                                Ok(output) => {
-                                    let count = result_cardinality(&output);
-                                    let mut text = format_step_output(&output, TextEnvelope::Prose);
-                                    // A call that ran and found NOTHING says so where
-                                    // the model decides its next move. A rule for it in
-                                    // the system prompt alone moved knowledge-gym
-                                    // 05_noresults_honesty from 0/9 to 7/9 single-lookup
-                                    // replays; the rest rephrased into the same empty
-                                    // store, against `knowledge_lookup`'s own "Empty
-                                    // evidence -> say I don't know".
-                                    if count == 0 {
-                                        text.push_str(EMPTY_RESULT_NOTE);
-                                    }
-                                    (text, count, count == 0)
-                                }
-                                Err(e) => (
-                                    format!("Tool call failed: {e}. Try different arguments."),
-                                    0,
-                                    false,
-                                ),
-                            }
-                        };
+                    let (tool_result, result_count) = if self.tools.get(&call.name).is_err() {
+                        (format!("Tool '{}' not available.", call.name), 0)
+                    } else {
+                        match self
+                            .tools
+                            .call_cached(&call.name, &call.arguments, &ctx)
+                            .await
+                        {
+                            Ok(output) => (
+                                format_step_output(&output, TextEnvelope::Prose),
+                                result_cardinality(&output),
+                            ),
+                            Err(e) => (
+                                format!("Tool call failed: {e}. Try different arguments."),
+                                0,
+                            ),
+                        }
+                    };
                     tracing::info!(
                         target: "executor.reason_with_tools",
                         tool = %call.name,
                         iteration = iterations,
                         result_count,
-                        absence_stated,
                         rendered_chars = tool_result.len(),
                         "reason loop tool call"
                     );
