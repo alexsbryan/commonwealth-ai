@@ -6,11 +6,11 @@ pub use corpus_engine_atlas_reader::context as atlas_context;
 pub mod answering;
 pub mod approval_desk;
 pub mod context;
-pub mod corpus_registry;
 pub mod conv_briefing;
 pub mod conv_entity_graph;
 pub mod conv_frame;
 pub mod conv_tiered;
+pub mod corpus_registry;
 pub mod dossier;
 // `embed_fn` — the one InferenceProvider->EmbedFn adapter — lives in
 // `corpus-index` beside `types::EmbedFn` (fp-5); re-exported at its

@@ -296,7 +296,7 @@ impl Runtime {
             self.store.as_ref(),
             conversation_id,
             message,
-            self.principal_scope(conversation_id),
+            self.principal_scope(conversation_id).await,
         )
         .await?;
         let intent = self

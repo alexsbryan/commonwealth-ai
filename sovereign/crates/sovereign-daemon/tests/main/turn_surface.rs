@@ -45,6 +45,8 @@
 pub(crate) mod corpus_scoping;
 #[path = "turn_surface/parked_turn.rs"]
 mod parked_turn;
+#[path = "turn_surface/registry_live.rs"]
+mod registry_live;
 #[path = "turn_surface/rerank_pins.rs"]
 mod rerank_pins;
 #[path = "turn_surface/sampling_pins.rs"]

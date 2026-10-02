@@ -157,7 +157,7 @@ impl Runtime {
     /// ([`crate::context::PrincipalScope::admits`]), so a refusal never names
     /// a corpus this caller may not retrieve from.
     async fn allow_list_universe(&self, conversation_id: &str) -> Vec<String> {
-        let scope = self.principal_scope(conversation_id);
+        let scope = self.principal_scope(conversation_id).await;
         let Some(engine) = self.corpus_engine.as_ref() else {
             return Vec::new();
         };
@@ -286,7 +286,7 @@ impl Runtime {
 
         // 1. Build context from store (use message text for memory retrieval).
         //    The user message is already persisted so it shows up here.
-        let scope = self.principal_scope(conversation_id);
+        let scope = self.principal_scope(conversation_id).await;
         let mut context =
             build_context(self.store.as_ref(), conversation_id, message, scope).await?;
         tracing::debug!(

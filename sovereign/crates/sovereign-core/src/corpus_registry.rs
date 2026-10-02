@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Corpus registry reconciliation at boot: ONE SOURCE, the engine.
+//! Corpus registry reconciliation: ONE SOURCE, the engine.
 //!
 //! `corpus_state` is what `build_context` reads to derive the principal
 //! ceiling and the prompt's installed list; `installed_indexes()` is what the
@@ -7,10 +7,12 @@
 //! 2026-09-22: 0 rows against 58 on-disk indexes — the ceiling comes out
 //! `Some([])` and Filter 5 fails CLOSED, refusing every local fan-out:
 //! unscoped turns answered "No matching passages" from general knowledge on a
-//! host holding the answer (b3f8a8000). Reconcile at boot: every engine index
-//! without a row gets one, so the registry cannot lag the thing it describes.
-//! Rows are never DELETED here — engine-absent corpora keep theirs; removal is
-//! a corpus operation, not boot's.
+//! host holding the answer (b3f8a8000). Reconcile at boot, and again before
+//! every turn that resolves a ceiling (`Runtime::principal_scope`): every
+//! engine index without a row gets one, so the registry cannot lag the thing
+//! it describes — a corpus ingested while the daemon runs included. Rows are
+//! never DELETED here — engine-absent corpora keep theirs; removal is a corpus
+//! operation, not this one's.
 
 use std::collections::HashSet;
 
@@ -21,7 +23,8 @@ use sovereign_contracts::types::{CorpusState, CorpusVisibility};
 /// Give every engine index that has no `corpus_state` row one. Returns
 /// nothing: every outcome — rows added, a listing that failed, a save that
 /// failed — is logged at this module's path (under the daemon's
-/// `sovereign_core=info` allowlist entry), and none of them stops the boot.
+/// `sovereign_core=info` allowlist entry), and none of them stops the boot
+/// or the turn.
 pub async fn reconcile_corpus_registry(engine: &dyn CorpusReadPort, store: &dyn StateStore) {
     let indexes = match engine.installed_indexes().await {
         Ok(i) => i,
