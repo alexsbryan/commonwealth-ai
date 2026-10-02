@@ -223,6 +223,7 @@ fn run(args: Args) -> Result<(), String> {
         pdfium_lib_path,
         daemon_base_url: "http://127.0.0.1:9741".into(),
         cleanup_model: "unused-in-bakeoff".into(),
+        bearer: None,
         dpi: args.dpi,
         tesseract_timeout_secs: 120,
         cleanup_timeout_secs: 30,

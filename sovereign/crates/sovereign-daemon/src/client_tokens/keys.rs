@@ -222,4 +222,35 @@ mod tests {
             vec!["it".to_string()]
         );
     }
+
+    /// The daemon's own credential is admitted, as an admin, only by a store
+    /// the disk made keyed, and no operator listing shows it. Failing input:
+    /// insert it unconditionally and the unkeyed store admits it (and reads
+    /// keyed).
+    #[test]
+    fn the_self_credential_admits_only_on_a_keyed_store() {
+        let own = super::super::self_credential().expect("entropy");
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("client-tokens");
+        let unkeyed = ClientTokenStore::load(Some(dir.clone()));
+        assert!(!unkeyed.is_keyed());
+        assert_eq!(unkeyed.asserted_for(own), None);
+        add_key(&dir, "alice", &[], "tok-alice").unwrap();
+        let keyed = ClientTokenStore::load(Some(dir.clone()));
+        assert_eq!(
+            keyed.asserted_for(own),
+            Some((
+                super::super::SELF_SUB.to_string(),
+                vec![KEY_ADMIN_GROUP.to_string()]
+            ))
+        );
+        assert_eq!(
+            list_keys(&dir)
+                .into_iter()
+                .map(|r| r.sub)
+                .collect::<Vec<_>>(),
+            vec!["alice".to_string()]
+        );
+        assert!(check_label(super::super::SELF_SUB).is_err());
+    }
 }
