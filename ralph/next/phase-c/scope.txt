@@ -19,3 +19,5 @@ pc-pool-ready
 pc-cmnwlth-lift-flake
 pc-corpus-registry-live
 pc-rails-reseal-loop
+pc-chat-ask-audit-calls
+pc-knowledge-gym-noresults
