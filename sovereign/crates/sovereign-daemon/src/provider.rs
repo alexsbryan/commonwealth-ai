@@ -11,6 +11,7 @@ use crate::admin_http::ProviderFactory;
 use async_trait::async_trait;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
+use sovereign_turn_client::serve_self::EngineStateRead;
 
 /// Reloads the serving provider from a fresh `SetupConfig` and hands back the
 /// provider boot built over it, so a hot reload keeps mesh-aware model routing
@@ -195,7 +196,7 @@ impl LlamaCppFactory {
     /// this a serve restart left svrn answering from the boot snapshot. A read
     /// that fails keeps the last facts and is traced once per transition; "did
     /// not answer" is never adopted as "holds nothing" (principle 6).
-    async fn follow(self: Arc<Self>, every: std::time::Duration) {
+    async fn follow(self: Arc<Self>, every: std::time::Duration, reach: &'static ServeReach) {
         let ReloadSource::Serve {
             base,
             config_context,
@@ -205,15 +206,18 @@ impl LlamaCppFactory {
         else {
             return;
         };
+        reach.following();
         let mut held: Option<serde_json::Value> = None;
         let mut answering = true;
         loop {
             tokio::time::sleep(every).await;
-            let served = match crate::serve_client::read_served_self(&base.base).await {
-                Ok(served) => served,
-                Err(e) => {
+            let read = sovereign_turn_client::serve_self::served_self_read(&base.base).await;
+            reach.record(&read);
+            let served = match read {
+                EngineStateRead::Answered(served) => served,
+                absent => {
                     if answering {
-                        tracing::warn!(target: "serving_path", serve_base = %base.base, error = %e, "follow: serve's self-report did not answer; svrn keeps the last one it adopted");
+                        tracing::warn!(target: "serving_path", serve_base = %base.base, read = ?absent, "follow: serve's self-report did not answer; svrn keeps the last one it adopted");
                     }
                     answering = false;
                     continue;
@@ -240,19 +244,97 @@ impl LlamaCppFactory {
     }
 }
 
+/// serve's reach as svrn's follower last read it: `/status`'s `serve_reach`
+/// (pc-split-deploy-honesty-serve-reach). `/status` reports this reading and
+/// its age and never dials serve itself (principle 1). Unset where no follower
+/// runs (a hosted serve, a terminal), so the field is absent there.
+pub struct ServeReach(std::sync::Mutex<Option<Option<(EngineStateRead<()>, std::time::Instant)>>>);
+
+/// The one the boot's follower writes and `/status` reads.
+static SERVE_REACH: ServeReach = ServeReach::new();
+
+/// What `/status` says of serve's reach: `last_read` is `answered`,
+/// `unreachable` (nothing answered, or it refused or was unreadable; `detail`
+/// says which), `did_not_answer_in_time` or `not_read_yet`, `age_seconds`
+/// how long ago that read was.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ServeReachStatus {
+    /// What the last read found.
+    pub last_read: &'static str,
+    /// Why serve was unreachable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// Seconds since that read; absent before the first.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub age_seconds: Option<u64>,
+}
+
+impl ServeReach {
+    /// No follower yet: `/status` names no reach.
+    pub const fn new() -> Self {
+        Self(std::sync::Mutex::new(None))
+    }
+
+    fn following(&self) {
+        let mut held = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        held.get_or_insert(None);
+    }
+
+    fn record<T>(&self, read: &EngineStateRead<T>) {
+        let kept = match read {
+            EngineStateRead::Answered(_) => EngineStateRead::Answered(()),
+            EngineStateRead::Unreachable(why) => EngineStateRead::Unreachable(why.clone()),
+            EngineStateRead::DidNotAnswerInTime => EngineStateRead::DidNotAnswerInTime,
+        };
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(Some((kept, std::time::Instant::now())));
+    }
+
+    /// The last read and its age; `None` where no follower runs.
+    pub fn status(&self) -> Option<ServeReachStatus> {
+        let held = self.0.lock().unwrap_or_else(|e| e.into_inner()).clone()?;
+        let Some((read, at)) = held else {
+            return Some(ServeReachStatus {
+                last_read: "not_read_yet",
+                detail: None,
+                age_seconds: None,
+            });
+        };
+        let (last_read, detail) = match read {
+            EngineStateRead::Answered(()) => ("answered", None),
+            EngineStateRead::Unreachable(why) => ("unreachable", Some(why)),
+            EngineStateRead::DidNotAnswerInTime => ("did_not_answer_in_time", None),
+        };
+        Some(ServeReachStatus {
+            last_read,
+            detail,
+            age_seconds: Some(at.elapsed().as_secs()),
+        })
+    }
+}
+
+/// `/status`'s `serve_reach`: the boot follower's last read of serve.
+pub fn serve_reach() -> Option<ServeReachStatus> {
+    SERVE_REACH.status()
+}
+
 /// How often svrn re-reads serve's self-report on the dialing path.
 pub const SERVE_FOLLOW_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// The factory boot registers, following serve's self-report every
 /// [`SERVE_FOLLOW_INTERVAL`] where it dials serve (pc-split-deploy-honesty).
 pub fn following(factory: LlamaCppFactory) -> Arc<LlamaCppFactory> {
-    following_every(factory, SERVE_FOLLOW_INTERVAL)
+    following_every(factory, SERVE_FOLLOW_INTERVAL, &SERVE_REACH)
 }
 
-fn following_every(factory: LlamaCppFactory, every: std::time::Duration) -> Arc<LlamaCppFactory> {
+fn following_every(
+    factory: LlamaCppFactory,
+    every: std::time::Duration,
+    reach: &'static ServeReach,
+) -> Arc<LlamaCppFactory> {
     let factory = Arc::new(factory);
     if matches!(factory.reload, ReloadSource::Serve { .. }) {
-        tokio::spawn(Arc::clone(&factory).follow(every));
+        tokio::spawn(Arc::clone(&factory).follow(every, reach));
     }
     factory
 }
@@ -468,7 +550,11 @@ mod reload_through_serve {
         let dir = tempfile::tempdir().expect("tempdir");
         let cfg = SetupConfig::unconfigured();
         let (factory, cell, _) = factory_over(base, &cfg, dir.path());
-        let _factory = following_every(factory, std::time::Duration::from_millis(50));
+        let _factory = following_every(
+            factory,
+            std::time::Duration::from_millis(50),
+            Box::leak(Box::new(ServeReach::new())),
+        );
 
         *model.lock().unwrap() = "after-restart".to_string();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -480,6 +566,74 @@ mod reload_through_serve {
             );
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
+    }
+
+    /// Follow `base` every 50 ms into a fresh reach until its last read is
+    /// `want`, within 10 s.
+    async fn reach_reads(base: String, want: &str) -> ServeReachStatus {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = SetupConfig::unconfigured();
+        let (factory, _, _) = factory_over(base, &cfg, dir.path());
+        let reach: &'static ServeReach = Box::leak(Box::new(ServeReach::new()));
+        assert_eq!(reach.status(), None, "no follower, yet a reach was named");
+        let _factory = following_every(factory, std::time::Duration::from_millis(50), reach);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let status = reach.status();
+            if let Some(status) = status.clone().filter(|s| s.last_read == want) {
+                return status;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "serve's reach read {status:?} 10 s in, never {want}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    }
+
+    /// pc-split-deploy-honesty-serve-reach: serve stopped is named
+    /// unreachable, never a timeout.
+    #[tokio::test]
+    async fn status_names_a_stopped_serve_unreachable() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let base = format!("http://{}", listener.local_addr().expect("addr"));
+        drop(listener);
+        let status = reach_reads(base, "unreachable").await;
+        assert!(
+            status
+                .detail
+                .as_deref()
+                .unwrap_or_default()
+                .contains("not reachable"),
+            "{status:?}"
+        );
+    }
+
+    /// pc-split-deploy-honesty-serve-reach: serve accepting and not
+    /// answering is named a timeout, never unreachable.
+    #[tokio::test]
+    async fn status_names_a_serve_that_accepts_and_does_not_answer_a_timeout() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let base = format!("http://{}", listener.local_addr().expect("addr"));
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((socket, _)) = listener.accept().await {
+                held.push(socket);
+            }
+        });
+        let status = reach_reads(base, "did_not_answer_in_time").await;
+        assert_eq!(status.detail, None);
+    }
+
+    /// pc-split-deploy-honesty-serve-reach: serve up names neither absence.
+    #[tokio::test]
+    async fn status_names_a_serve_that_answers_answered() {
+        let base = stub_serve(Arc::new(AtomicUsize::new(0))).await;
+        let status = reach_reads(base, "answered").await;
+        assert_eq!(status.detail, None);
+        assert!(status.age_seconds.is_some(), "{status:?}");
     }
 
     #[tokio::test]

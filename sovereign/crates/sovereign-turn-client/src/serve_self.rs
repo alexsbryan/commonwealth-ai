@@ -5,38 +5,33 @@
 //! through the same reader svrn does).
 
 /// Read serve's self-report, bounded like every other status read of serve
-/// (`crate::reach::PROBE_TIMEOUT`).
+/// (`crate::reach::PROBE_TIMEOUT`). The two absences fold into one message
+/// here; [`served_self_read`] keeps them apart.
 pub async fn read_served_self(
     base: &str,
 ) -> Result<sovereign_contracts::engine_state::ServedSelf, String> {
-    let url = format!(
-        "{}{}",
-        base.trim_end_matches('/'),
-        sovereign_contracts::engine_state::SERVED_SELF_PATH
-    );
-    let read = async {
-        let resp = reqwest::Client::new()
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("serve at {base} is not reachable: {e}"))?;
-        if !resp.status().is_success() {
-            return Err(format!(
-                "serve at {base} refused its self-report: HTTP {}",
-                resp.status()
-            ));
-        }
-        resp.json::<sovereign_contracts::engine_state::ServedSelf>()
-            .await
-            .map_err(|e| format!("serve at {base} answered an unreadable self-report: {e}"))
-    };
-    match tokio::time::timeout(crate::reach::PROBE_TIMEOUT, read).await {
-        Ok(r) => r,
-        Err(_) => Err(format!(
+    match served_self_read(base).await {
+        EngineStateRead::Answered(served) => Ok(served),
+        EngineStateRead::Unreachable(why) => Err(why),
+        EngineStateRead::DidNotAnswerInTime => Err(format!(
             "serve at {base} did not answer its self-report within {:?}",
             crate::reach::PROBE_TIMEOUT
         )),
     }
+}
+
+/// Read serve's self-report as [`read_engine_state`] reads its engine state:
+/// unreachable and did-not-answer-in-time stay apart (svrn's follower, whose
+/// last read `/status` names, pc-split-deploy-honesty-serve-reach).
+pub async fn served_self_read(
+    base: &str,
+) -> EngineStateRead<sovereign_contracts::engine_state::ServedSelf> {
+    read_bounded(
+        base,
+        sovereign_contracts::engine_state::SERVED_SELF_PATH,
+        "self-report",
+    )
+    .await
 }
 
 /// The base a client dials `serve` at when nothing says otherwise:
@@ -54,11 +49,13 @@ pub fn default_serve_base() -> String {
 /// whose `device_memory` is `None`, and it is never the same answer as a
 /// serve that is not there or one that did not answer in time. Moved from
 /// the svrn daemon's `serve_client` when its `/v1/mesh/status` went
-/// (pb-mesh-exit-transport); `svrn mesh plan|bench` read it now.
+/// (pb-mesh-exit-transport); `svrn mesh plan|bench` read it now. `T` is
+/// what was read: the engine state, or serve's self-report
+/// ([`served_self_read`]), through the one bounded reader.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EngineStateRead {
+pub enum EngineStateRead<T = sovereign_contracts::engine_state::EngineState> {
     /// serve answered its cached view.
-    Answered(sovereign_contracts::engine_state::EngineState),
+    Answered(T),
     /// Nothing answered at the base, or what answered refused or was unreadable.
     Unreachable(String),
     /// serve did not answer within the bound.
@@ -69,12 +66,23 @@ pub enum EngineStateRead {
 /// (`crate::reach::PROBE_TIMEOUT`, 2 s): a cached view on serve's side does
 /// not bound the dial to it (the rule minted on 2026-07-30).
 pub async fn read_engine_state(base: &str) -> EngineStateRead {
+    read_bounded(
+        base,
+        sovereign_contracts::engine_state::ENGINE_STATE_PATH,
+        "engine state",
+    )
+    .await
+}
+
+/// GET `path` from serve at `base` within `crate::reach::PROBE_TIMEOUT`;
+/// `what` names the read in each absence's message.
+async fn read_bounded<T: serde::de::DeserializeOwned + std::fmt::Debug>(
+    base: &str,
+    path: &str,
+    what: &str,
+) -> EngineStateRead<T> {
     let bound = crate::reach::PROBE_TIMEOUT;
-    let url = format!(
-        "{}{}",
-        base.trim_end_matches('/'),
-        sovereign_contracts::engine_state::ENGINE_STATE_PATH
-    );
+    let url = format!("{}{}", base.trim_end_matches('/'), path);
     let read = async {
         let resp = reqwest::Client::new()
             .get(&url)
@@ -83,20 +91,20 @@ pub async fn read_engine_state(base: &str) -> EngineStateRead {
             .map_err(|e| format!("serve at {base} is not reachable: {e}"))?;
         if !resp.status().is_success() {
             return Err(format!(
-                "serve at {base} refused its engine state: HTTP {}",
+                "serve at {base} refused its {what}: HTTP {}",
                 resp.status()
             ));
         }
-        resp.json::<sovereign_contracts::engine_state::EngineState>()
+        resp.json::<T>()
             .await
-            .map_err(|e| format!("serve at {base} answered an unreadable engine state: {e}"))
+            .map_err(|e| format!("serve at {base} answered an unreadable {what}: {e}"))
     };
     let outcome = match tokio::time::timeout(bound, read).await {
         Ok(Ok(state)) => EngineStateRead::Answered(state),
         Ok(Err(why)) => EngineStateRead::Unreachable(why),
         Err(_) => EngineStateRead::DidNotAnswerInTime,
     };
-    tracing::debug!(serve_base = base, bound_ms = bound.as_millis() as u64, outcome = ?outcome, "engine state read from serve");
+    tracing::debug!(serve_base = base, path, bound_ms = bound.as_millis() as u64, outcome = ?outcome, "{what} read from serve");
     outcome
 }
 

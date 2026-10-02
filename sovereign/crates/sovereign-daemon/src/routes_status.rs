@@ -290,6 +290,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             direct: sovereign_core::launch::RpcServe::from_env().binds_past_loopback(),
         }),
         serving: crate::serve_client::ServingPath::decided().map(|p| p.status_line()),
+        serve_reach: crate::provider::serve_reach(),
     })
 }
 
@@ -421,6 +422,11 @@ pub struct StatusResponse {
     /// Absent where no boot decided (the desktop, tests).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serving: Option<String>,
+    /// Whether the last read of serve's self-report answered, did not
+    /// answer in time, or found nothing to reach, and how long ago
+    /// (`provider::ServeReach`). Absent where no follower runs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serve_reach: Option<crate::provider::ServeReachStatus>,
 }
 
 /// Process vitals for the pager: `uptime_seconds` resets are the
