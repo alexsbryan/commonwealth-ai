@@ -11,7 +11,7 @@ contained patches like:
 ```
 apply_patch <<'EOF'
 *** Begin Patch
-*** Add File: shared/crates/oicp-types/Cargo.toml
+*** Add File: oicp-types/Cargo.toml
 +[package]
 +name = "oicp-types"
 +version = "0.1.0"

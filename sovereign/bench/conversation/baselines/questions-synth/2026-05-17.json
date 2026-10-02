@@ -2302,7 +2302,7 @@
           "title": "4.8 OICP (v0.3)",
           "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
           "score": 0.0,
-          "snippet": "4.8 OICP (v0.3)\n\nSpec: `cmnwlth/docs/oicp-v0.3.md`. Types: `shared/crates/oicp-types/src/lib.rs`,\nre-exported as `sovereign_core::oicp` and `commonwealth_core::oicp`.\n\nWire types:\n\n`CapabilityHint` —..."
+          "snippet": "4.8 OICP (v0.3)\n\nSpec: `commonwealth/docs/oicp-v0.3.md`. Types: `oicp-types/src/lib.rs`,\nre-exported as `sovereign_core::oicp` and `commonwealth_core::oicp`.\n\nWire types:\n\n`CapabilityHint` —..."
         },
         {
           "corpus_id": "institutional-notes",

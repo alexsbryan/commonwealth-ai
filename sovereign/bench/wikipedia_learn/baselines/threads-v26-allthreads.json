@@ -16505,7 +16505,7 @@
               "title": "10.3 Doc-as-source-of-truth posture",
               "url": "file:///Users/user/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
               "score": 0.0,
-              "snippet": "10.3 Doc-as-source-of-truth posture\n\nThe two long-form commonwealth docs — `cmnwlth/ARCHITECTURE.md`\nand `cmnwlth/IMPLEMENTATION_PLAN.md` — are now flagged at the top\nas historical..."
+              "snippet": "10.3 Doc-as-source-of-truth posture\n\nThe two long-form commonwealth docs — `commonwealth/ARCHITECTURE.md`\nand `commonwealth/IMPLEMENTATION_PLAN.md` — are now flagged at the top\nas historical..."
             },
             {
               "corpus_id": "wikipedia",
