@@ -1881,6 +1881,19 @@ class PoolTests(unittest.TestCase):
             self.assertEqual(q.pick_wave(4, {frozenset(("dm-a", "dm-c"))}),
                              ["dm-a", "dm-d"])
 
+    def test_a_row_marked_alone_shares_a_wave_with_no_row_added_before_or_after(self):
+        # phase-c's -measure rows paired themselves with every row by hand, and
+        # the seven rows added later were paired with nothing (2026-10-02).
+        with tempfile.TemporaryDirectory() as tmp:
+            state = pathlib.Path(tmp) / "ralph/STATE.md"
+            alone = ralph.conflict_pairs("dm-m *  # a reading: no lane compiles beside it\n")
+            write(tmp, "ralph/STATE.md", "- [ ] dm-a — depends []\n- [ ] dm-m — depends []\n"
+                                         "- [ ] dm-late — depends []\n")
+            self.assertEqual(ralph.Queue(state).pick_wave(3, alone), ["dm-a", "dm-late"])
+            write(tmp, "ralph/STATE.md", "- [x] dm-a — depends []\n- [ ] dm-m — depends []\n"
+                                         "- [ ] dm-late — depends []\n")
+            self.assertEqual(ralph.Queue(state).pick_wave(3, alone), ["dm-m"])
+
     def test_a_conflicts_line_of_n_ids_means_every_pair(self):
         # ring-doc's line names three rows; until 2026-09-19 only the first two conflicted.
         with tempfile.TemporaryDirectory() as tmp:

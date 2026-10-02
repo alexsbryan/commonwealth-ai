@@ -117,7 +117,7 @@ Projected waves at 3 lanes (ralph's conflict and heavy rules, simulated 2026-10-
   - finish: none directly (a phase-c bug row; phase-c is done when every row above the cut line is [x]).
   - trial: census first; NONE unless the census finds a rewrite it cannot make without one.
   - Split by phase-b-103: this row lands the change and its unit tests in a lane; the quality reading is pc-gk-rescue-fabrication-measure, which runs alone on a quiet host.
-- [ ] pc-gk-rescue-fabrication-measure — depends [pc-gk-rescue-fabrication] — OUTCOME: the quality reading for pc-gk-rescue-fabrication: chaos-monkey and the blatant-confab bar on the known probes (the conference-room and empty-corpus questions) at the 4B and the deployed 35B, in both directions. Runs alone (conflicts.txt pairs it with every other row) so no lane compiles during it; host load recorded with the reading (principle 7: one run is not a measurement, a judge change is reported in both directions).
+- [ ] pc-gk-rescue-fabrication-measure — depends [pc-gk-rescue-fabrication] — OUTCOME: the quality reading for pc-gk-rescue-fabrication: chaos-monkey and the blatant-confab bar on the known probes (the conference-room and empty-corpus questions) at the 4B and the deployed 35B, in both directions. Runs alone (`<id> *` in conflicts.txt) so no lane compiles during it; host load recorded with the reading (principle 7: one run is not a measurement, a judge change is reported in both directions).
   - finish: the row it measures.
   - PROOF: the readings, each with hash, n, host load and raw path; a miss reopens pc-gk-rescue-fabrication, never re-tunes the bar.
   - trial: NONE.
@@ -126,7 +126,7 @@ Projected waves at 3 lanes (ralph's conflict and heavy rules, simulated 2026-10-
   - finish: none directly (a phase-c bug row; phase-c is done when every row above the cut line is [x]).
   - trial: census first; NONE unless the census finds a rewrite it cannot make without one.
   - Split by phase-b-103: this row lands the change and its unit tests in a lane; the quality reading is pc-partial-decline-verdict-measure, which runs alone on a quiet host.
-- [ ] pc-partial-decline-verdict-measure — depends [pc-partial-decline-verdict] — OUTCOME: the quality reading for pc-partial-decline-verdict: chaos-monkey and chat-ask, read in both directions (what the change now marks cannot_know_from_here that is a real answer, and what it still misses), plus on-prem acceptance check 4 unchanged. Runs alone (conflicts.txt pairs it with every other row) so no lane compiles during it; host load recorded with the reading (principle 7: one run is not a measurement, a judge change is reported in both directions).
+- [ ] pc-partial-decline-verdict-measure — depends [pc-partial-decline-verdict] — OUTCOME: the quality reading for pc-partial-decline-verdict: chaos-monkey and chat-ask, read in both directions (what the change now marks cannot_know_from_here that is a real answer, and what it still misses), plus on-prem acceptance check 4 unchanged. Runs alone (`<id> *` in conflicts.txt) so no lane compiles during it; host load recorded with the reading (principle 7: one run is not a measurement, a judge change is reported in both directions).
   - finish: the row it measures.
   - PROOF: the readings, each with hash, n, host load and raw path; a miss reopens pc-partial-decline-verdict, never re-tunes the bar.
   - trial: NONE.

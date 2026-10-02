@@ -6,34 +6,8 @@ pc-bare-404s pc-split-deploy-honesty                  # sovereign-daemon routes
 pc-bare-404s pc-onprem-followups                      # named absences in the daemon's routes
 pc-removed-env-warn pc-cli-config-load-silent-default # sovereign-contracts setup_config and its env reads
 pc-rpc-probe-identity pc-fetch-model-peer-discovery   # sovereign-serve's peer dialing
-# The -measure rows run alone: each is paired with every other row, so its wave holds nothing else.
-pc-partial-decline-verdict-measure pc-pool-ready
-pc-partial-decline-verdict-measure pc-removed-env-warn
-pc-partial-decline-verdict-measure pc-bare-404s
-pc-partial-decline-verdict-measure pc-onprem-followups
-pc-partial-decline-verdict-measure pc-rpc-probe-identity
-pc-partial-decline-verdict-measure pc-split-deploy-honesty
-pc-partial-decline-verdict-measure pc-fetch-model-peer-discovery
-pc-partial-decline-verdict-measure pc-rejoin-tombstone
-pc-partial-decline-verdict-measure pc-cli-config-load-silent-default
-pc-partial-decline-verdict-measure pc-rendezvous-stable-hash
-pc-partial-decline-verdict-measure pc-atlas-highlight-determinism
-pc-partial-decline-verdict-measure pc-gk-rescue-fabrication
-pc-partial-decline-verdict-measure pc-partial-decline-verdict
-pc-partial-decline-verdict-measure pc-solo-durable
-pc-partial-decline-verdict-measure pc-gk-rescue-fabrication-measure
-pc-gk-rescue-fabrication-measure pc-pool-ready
-pc-gk-rescue-fabrication-measure pc-removed-env-warn
-pc-gk-rescue-fabrication-measure pc-bare-404s
-pc-gk-rescue-fabrication-measure pc-onprem-followups
-pc-gk-rescue-fabrication-measure pc-rpc-probe-identity
-pc-gk-rescue-fabrication-measure pc-split-deploy-honesty
-pc-gk-rescue-fabrication-measure pc-fetch-model-peer-discovery
-pc-gk-rescue-fabrication-measure pc-rejoin-tombstone
-pc-gk-rescue-fabrication-measure pc-cli-config-load-silent-default
-pc-gk-rescue-fabrication-measure pc-rendezvous-stable-hash
-pc-gk-rescue-fabrication-measure pc-atlas-highlight-determinism
-pc-gk-rescue-fabrication-measure pc-gk-rescue-fabrication
-pc-gk-rescue-fabrication-measure pc-partial-decline-verdict
-pc-gk-rescue-fabrication-measure pc-solo-durable
-pc-gk-rescue-fabrication-measure pc-partial-decline-verdict-measure
+# Readings run alone (`<id> *`: no other row shares the wave, so no lane compiles beside it,
+# whenever that row was added; the hand-written pairs this replaced missed seven later rows):
+pc-partial-decline-verdict-measure *   # quality reading, host load recorded
+pc-gk-rescue-fabrication-measure *     # quality reading, host load recorded
+pc-deployed-turn-latency *             # turn timings on the deployed node against a clean root

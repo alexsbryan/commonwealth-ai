@@ -671,6 +671,12 @@ class Queue:
                 continue
             if any(frozenset((r.id, w)) in conflicts for w in wave):
                 continue
+            # `<id> *` in conflicts.txt: the row runs in a wave of its own. Pairing a
+            # reading with every other row by hand missed the seven rows phase-c
+            # gained after its conflicts file was written (2026-10-02).
+            if wave and (frozenset((r.id, ALONE)) in conflicts
+                         or any(frozenset((w, ALONE)) in conflicts for w in wave)):
+                continue
             wave.append(r.id)
         return wave
 
@@ -1765,9 +1771,15 @@ class Supervisor:
                 say(f"supervisor: resolution {attempt} cleared the halt — resuming the campaign")
 
 
+# A conflicts.txt line `<id> *` pairs the row with every other: it runs alone.
+ALONE = "*"
+
+
 def conflict_pairs(text):
     """A line of N ids means all N-choose-2 pairs; `#` starts a comment. Reading
-    only the first two dropped the third id of ring-doc's line without a word."""
+    only the first two dropped the third id of ring-doc's line without a word.
+    `*` among the ids is ALONE: each other id on the line runs in a wave of its
+    own (`pick_wave`)."""
     pairs = set()
     for line in text.splitlines():
         ids = line.split("#")[0].split()
