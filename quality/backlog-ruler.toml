@@ -33,7 +33,7 @@ v2 = """Axis F added 2026-08-09 by operator directive ee29b86d, minted
 from this backlog's own first migration: 62% of the 79 migrated items
 scored on axis E and 44% scored Value 1-2, because v1's five axes are all
 ANSWER-QUALITY axes and had no room for a product that a new user cannot
-reach at all. See docs/BACKLOG_MIGRATION_2026-08-09.md for the evidence
+reach at all. See docs/internal/BACKLOG_MIGRATION_2026-08-09.md for the evidence
 that earned it. F scores on the same scale as A-D, not as a modifier."""
 extracted = """Moved verbatim out of the scripts/co-backlog.py doc header
 into this file 2026-08-09, order backlog-insert-system deliverable 1."""

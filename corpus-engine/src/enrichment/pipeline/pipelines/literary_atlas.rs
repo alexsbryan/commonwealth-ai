@@ -1536,7 +1536,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "content": { "type": "string", "maxLength": 800 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 800 },
         "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["content"]

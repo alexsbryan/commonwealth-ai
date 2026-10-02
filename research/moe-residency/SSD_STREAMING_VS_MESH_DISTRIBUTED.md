@@ -10,7 +10,7 @@ actually better than SSD streaming, which the community is converging on?**
 Sources: `antirez/ds4` ("DwarfStar", read 2026-08-13: `ds4_ssd.c/h`,
 `ds4_streaming_hotlist*.inc`, `rocm/ds4_rocm_moe.cuh`, `speed-bench/`,
 `STRIXHALO.md`); Mference/TurboFieldfare (reviewed in note 482260be);
-our own measurements in `docs/RUN_DEEPSEEK_V4_FLASH.md` and the notes rail.
+our own measurements in `docs/internal/RUN_DEEPSEEK_V4_FLASH.md` and the notes rail.
 
 ## 1. What SSD streaming actually is (antirez/ds4's shipped design)
 
@@ -47,7 +47,7 @@ We already own most of their substrate under different names:
 |---|---|
 | resident expert cache (RAM) | warm blocks in VRAM/RAM |
 | cold experts on local NVMe | **worker-side content-addressed tensor cache on disk** (already shipped; note b87bb8ea proves the bytes land there) |
-| skeleton always resident | our "hot skeleton 6.9 GiB / 5%" vs "137.1 GiB cold routed experts / 95%" split, already computed in `docs/RUN_DEEPSEEK_V4_FLASH.md` |
+| skeleton always resident | our "hot skeleton 6.9 GiB / 5%" vs "137.1 GiB cold routed experts / 95%" split, already computed in `docs/internal/RUN_DEEPSEEK_V4_FLASH.md` |
 | byte-budget planner | **absent** — our fit gate is all-bytes-resident or refuse |
 | hotlist-prioritized fill | **absent** — our warm is all-or-nothing (measured 2.6 h of serialization over Wi-Fi) |
 | pread into preallocated slots | llama.cpp knows per-tensor offsets, so a sparse expert→(file, offset, len) index is implementable without their repacked layout |

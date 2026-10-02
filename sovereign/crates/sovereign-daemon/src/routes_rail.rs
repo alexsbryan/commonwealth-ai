@@ -412,6 +412,35 @@ pub async fn append(
     // Read before the body becomes an act, because `RailAct` does not carry
     // this field and serde drops it on the way in.
     let on_behalf_of = stamp_from(guest, &body);
+    // The idempotency key rides OUTSIDE the act — short-lived door state never
+    // goes on the permanent journal (ROOT_CAUSE_FIXES C3b) — so it is read
+    // before the body becomes an act, like the name above.
+    let idem_key = body
+        .get("idempotency_key")
+        .and_then(|v| v.as_str())
+        .map(|k| {
+            format!(
+                "{}:{}:{k}",
+                guest.map(|g| g.grant.token.as_str()).unwrap_or("member"),
+                namespace
+            )
+        });
+    if let Some(ledger_key) = &idem_key {
+        if let Some(cached) = state
+            .inner
+            .rail_idempotency
+            .lock()
+            .expect("idempotency ledger")
+            .get(ledger_key)
+        {
+            tracing::debug!(
+                target: "rail:door",
+                ns = %namespace,
+                "append replayed — the recorded answer"
+            );
+            return Json(cached.clone()).into_response();
+        }
+    }
     // A guest's name crosses the dial only as this node's signed word
     // (decision five-programs-34): the rails daemon holds no sessions,
     // so it honours `on_behalf_of` under an attestation it verifies against
@@ -463,6 +492,23 @@ pub async fn append(
         Ok(act) => act,
         Err(e) => return err(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
     };
+    // A guest's words must say whose they are. The name comes from the session
+    // the door authenticated (`stamp_from`) — never the wire — and a guest who
+    // claimed none lands HERE rather than as the host's words (ROOT_CAUSE_FIXES
+    // C1; operator decision 2026-09-23: refused by name). `Seal` is exempt:
+    // delivery, not words — there is nothing it could be said on behalf of.
+    if guest.is_some() && on_behalf_of.is_none() && !matches!(act, RailAct::Seal) {
+        tracing::warn!(
+            target: "rail:door",
+            ns = %namespace,
+            "guest append refused — no name"
+        );
+        return err(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "a guest append must say whose words these are — claim a name first; \
+             a member writes in their own name",
+        );
+    }
     // Through the rail's ONE roster reader, not the file: the daemon's own
     // namespace derives its roster from membership, and reading the file here
     // refused this node's own key on that ring (ARCH §10.6).
@@ -511,6 +557,14 @@ pub async fn append(
             });
             if let Some(retired) = retired {
                 out["retired"] = retire(&retired);
+            }
+            if let Some(ledger_key) = idem_key {
+                state
+                    .inner
+                    .rail_idempotency
+                    .lock()
+                    .expect("idempotency ledger")
+                    .insert(ledger_key, out.clone());
             }
             Json(out).into_response()
         }
@@ -619,6 +673,66 @@ pub async fn log(
         "held": admission.held,
         "complete": admission.is_complete(),
         "roster": roster,
+    }))
+    .into_response()
+}
+
+/// GET /v1/rail/membership — who is in this ring, per the record.
+///
+/// The answer the ONE membership walk gives, carried out on [`Admission`] so
+/// this route and the log cannot disagree about the same journal: `bindings`
+/// (key → person, cumulative — a name stays when standing goes), `standing`
+/// (who counts now), and the acts that counted and voided. The seed ships
+/// beside it, because the DIFFERENCE is the question — a key standing here
+/// and absent from the seed stands through an `Admit`, and voiding that one
+/// act is the leak-undo (`RING_APPLICATIONS.md` amendment's first recovery).
+///
+/// Like [`log`], this is a read of the whole journal in one pass. An app
+/// page reaches for `log`; this surface is the operator's `svrn ring
+/// membership` and the demo that watches three nodes agree.
+pub async fn membership(
+    State(state): State<AppState>,
+    guest: Option<axum::Extension<Guest>>,
+    Query(q): Query<RailQuery>,
+) -> Response {
+    let guest = guest.as_ref().map(|e| &e.0);
+    let (rail, namespace) = match door_for(&state, guest, q.namespace.as_deref()).await {
+        Ok(pair) => pair,
+        Err(refusal) => return refusal,
+    };
+    let roster = match rail.roster(&namespace).await {
+        Ok(r) => r,
+        Err(e @ RailError::BadNamespace(_)) => return err(StatusCode::BAD_REQUEST, e.to_string()),
+        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    };
+    // The same ONE admission `log` takes, on the serving side, against the
+    // roster shipped beside it — so the two routes cannot disagree.
+    let admission = match rail.journal_admit(&namespace, &roster).await {
+        Ok(a) => a,
+        Err(e @ RailError::BadNamespace(_)) => return err(StatusCode::BAD_REQUEST, e.to_string()),
+        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    };
+    // The admission crossed the rail port, so `None` means the answering rail
+    // predates the field. Named rather than rendered as an empty membership,
+    // which would read as "nobody is in this ring" (ARCH §18.3).
+    let Some(membership) = admission.membership else {
+        tracing::warn!(
+            namespace,
+            "rail: membership — the admission carried no membership walk"
+        );
+        return err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the rail answered an admission with no membership walk — it predates \
+             the field; upgrade cw-rails",
+        );
+    };
+    // As with `gaps` in `log`: serialization over strings and sets has no
+    // failing input.
+    let membership = serde_json::to_value(membership).unwrap_or_default();
+    Json(serde_json::json!({
+        "namespace": namespace,
+        "roster": roster,
+        "membership": membership,
     }))
     .into_response()
 }

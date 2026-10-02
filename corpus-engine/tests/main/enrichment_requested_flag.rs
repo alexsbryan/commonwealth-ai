@@ -9,7 +9,7 @@
 //! `EnrichmentChecker`'s opening `if !info.enrichment_enabled { continue; }`
 //! fire for every corpus, always — so `LowEnrichmentCoverage` and
 //! `StaleEnrichment` were unreachable for all inputs. Full trace:
-//! `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4.
+//! `docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4.
 //!
 //! **What these tests pin.** The stamp happens at the ENTRY of ingest's
 //! `'enrichment:` block, not at its exit. That distinction is the entire

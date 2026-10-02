@@ -226,11 +226,23 @@ each because the code said so:
   `resolve_entities_and_events` as shims; the declared passes live in a
   sibling `atlas/resolution_ontology.rs` and read a `ResolutionPolicy`.
   Nothing is re-plumbed for a corpus that declares nothing.
-- A `ref` attribute snaps by NAME and the resolved atom's type is NOT
-  checked against the `of`. A second, stricter gate would refuse a
-  correct snap whenever Phase 1 typed the target as one of the generic
-  six, which is the common case on a first extraction. `of` still earns
-  its keep in the prompt and in `recipe validate`.
+- A `ref` attribute snaps by NAME. A resolved atom of ANOTHER declared
+  type is refused and recorded (amended 2026-10-02: 33 refs on the
+  ei7-ans atlas had landed a coin's `mint` on a hoard or a `ruler` on a
+  mint). One typed as a generic six is not checked: refusing it would
+  refuse a correct snap whenever Phase 1 typed the target generically,
+  the common case on a first extraction.
+- A declared relation's `relation_type` slot is required, with an
+  `unclassified` escape (amended 2026-10-02). Optional, the grammar let
+  the model skip it and write the declared noun into `label`, so every
+  declared relation resolved `unclassified`.
+- A declared relation's ends resolve within their declared types, by the
+  same decider as a claim's `subject` (amended 2026-10-02). The name
+  index keeps one atom per name, so a same-named twin of another type
+  ("Demanhur hoard" the `person`) shadowed the hoard and the endpoint
+  check refused 58 of 63 `holds_coins_of` relations on ft-ans-dev-b.
+  With no atom of the declared type by that name, the general hit stands
+  and the check still refuses it.
 - Every merge in a declared corpus is reified, not only the non-strict
   ones — one rule is cheaper to hold than two, and the strict merges are
   the ones a reader most wants to see. The grade is `external` or

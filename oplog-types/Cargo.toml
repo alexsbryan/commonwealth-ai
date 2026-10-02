@@ -1,0 +1,25 @@
+[package]
+name = "oplog-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The pure envelope of an append-only journal — Op/OpId/SkippedLine/Journaled, no I/O. Split from `oplog` (which keeps the fs writer and re-exports these) so a fold-only consumer like commonwealth-rail-core links no filesystem code at all."
+
+# DELIBERATE: three dependencies and NO `workspace-hack`. This crate is the
+# bottom half of the type/writer boundary (ROOT_CAUSE_FIXES B4): the fs
+# writer stayed in `oplog`, and `commonwealth-rail-core` depends on THIS
+# crate so its closure stays pure. `workspace-hack` would drag the whole
+# workspace's feature union — and with it every IO crate — back into that
+# closure, so its absence here is the contract (`purity-gate` and the
+# `[[forbid]]` row in quality/ARCH_LAYERS.toml hold it).
+#
+#   serde/serde_json  the wire form of an Op line (and Op::new's body bytes)
+#   kernel-types      the one BLAKE3 — OpId's derivation lives where the
+#                     hash does, so a second derivation cannot appear
+[dependencies]
+kernel-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

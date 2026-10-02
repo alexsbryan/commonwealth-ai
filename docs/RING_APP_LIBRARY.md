@@ -1,8 +1,9 @@
 # The ring app library — a design from first principles
 
-> **DRAFT — not in force (2026-09-20).** A design record for the library a
+> **DRAFT — not in force (2026-09-20; amended 2026-10-02: §20 held, lent,
+> carried; §21 two gates).** A design record for the library a
 > ring app is written against. It supersedes nothing. What a ring is *for*
-> lives in `docs/internal/RING_APPLICATIONS.md` (per-host, untracked); the
+> lives in `docs/internal/rings/reference/RING_APPLICATIONS.md` (per-host, untracked); the
 > primitive inventory lives in `quality/campaigns/ring-apps.toml`.
 
 Two parts. Part 1 is the library. Part 2 is what composes it — the runtime,
@@ -214,7 +215,7 @@ five laws — which bounds the search enough for a small local model.
 **Beneath: membership.** The rail decides who may sign, in `admit`, before
 the library sees anything. An act from a key the roster does not claim is a
 gap in the rail's answer and never an op, so the fold cannot be handed one.
-Under the 2026-09-18 amendment (`docs/internal/RING_APPLICATIONS.md`)
+Under the 2026-09-18 amendment (`docs/internal/rings/reference/RING_APPLICATIONS.md`)
 membership is computed from a seed plus `Admit` and `Remove` acts, behind the
 one membership function `admit` calls, with the permutation property as its
 contract. That is a fold with a law, one layer down — and deliberately not
@@ -238,7 +239,8 @@ surface as gaps, never silently folded as if they were this version's.
 
 Deferred, recorded so they are not lost: performing an effect and reassigning
 one whose performer never returns; enforcing determinism at run time rather
-than only testing it; origin isolation between rings.
+than only testing it; origin isolation between rings. §20 takes up the first
+for effects on lent things and for `ask`.
 
 ## 10. Bars, written before any of this is built
 
@@ -399,7 +401,7 @@ surface, not to rings.
 Part 1's purity rule stops here. Everything below does I/O. It is drawn as
 four layers, each owning one thing about itself (ARCH principle 12), and it
 is scoped to what the first ring apps and the spot in
-`docs/internal/RING_SPOT.md` demand — nothing is here because it might be
+`docs/internal/rings/pitch/RING_SPOT.md` demand — nothing is here because it might be
 wanted.
 
 | Layer | Owns | Does not own | Lives |
@@ -437,7 +439,8 @@ wanted.
 Out, by demand: the effect performer (no app asks for one — ring-room reaches
 the house AI through `chat ask` in its demo script), so `pending` is rendered
 as wanted and unperformed, never dropped; and the debounced writer, which has
-one caller and stays in the `doc` adapter.
+one caller and stays in the `doc` adapter. §20 names the first apps that ask
+for the performer — the Elder, the clerk and a provisioner — and where it runs.
 
 ## 13. The sandbox — two layers, neither remembered
 
@@ -710,4 +713,201 @@ discover it.
 7. Reads gated by roster, then encryption.
 
 The library extraction from `ring-doc` (Part 1 section 10) runs beside 1 to 3;
-it touches no file they touch.
+it touches no file they touch. §20 and §21 carry their own order and reorder
+nothing above; both lean on steps 0, 2 and 3.
+
+## 20. Held, lent, carried
+
+Added 2026-10-02, from two operator directions: treat a server like any other
+node, and let distributed inference and shared knowledge land in the ring world
+rather than beside it. Three kinds of thing reach a ring, and each answers
+"what happens when the member who brought it leaves" differently. Most
+disagreements about servers, models and corpora are disagreements about which
+kind something is.
+
+| | What it is | Examples | Lives | When its member leaves |
+|---|---|---|---|---|
+| Held | a fold over the journal | ledger, roster, decisions, rota, the index of the journal | every member's node | stays |
+| Lent | something a member's node offers to a ring | a media library, an app, a model or a pooled one, a corpus built from their own shelf, batch compute | the lender's node | goes with them |
+| Carried | a pure artefact addressed by hash | app bundles, recipes, profiles, public corpus snapshots, seeds, distilled articles | wherever it was installed | everyone who has it keeps it |
+
+Part 1 is the library for held things. This section is the other two.
+
+**A server is a member's machine.** Core sentence 2 holds as written. A homelab
+box or a rented VPS holding a member's key is one of that member's machines — a
+second key under the same person, which the roster already models (§16). It is
+not the keeper §17 withdrew: the keeper was a party outside the ring admitted
+to hold the journal, and the line between the two is whose key it is, not the
+hardware. Nothing a ring holds may live only on a server; that is what makes it
+a member and not a hub.
+
+**The node owns what it runs; the ring owns who is in** (ARCH principle 12).
+Declarative operators get the first half whole. A NixOS module — unbuilt; there
+is no `.nix` file in this repository — would declare the node's key from a
+secrets store, each service, and which rings each is lent to. It never declares
+membership; that is an `Admit` a person writes. Publication follows the unit's
+life: wrapping a unit's command in `svrn run --as <name> --port <p> --` holds a
+claim that is renewed while the child lives and retaken after a daemon restart
+(`sovereign-cli-llm/src/run_cmd.rs:216-229`). A stopped unit stops being lent
+within its TTL, and the durable tier `docs/PUBLISH_AN_APP.md` warns only
+accumulates is not needed.
+
+**One question decides reach: is the caller on the roster of a ring this was
+lent to?** Today seven things answer it separately:
+
+- `[iroh] app_allow`, `media_allow` and `offer_allow`: names or node prefixes,
+  empty meaning every member of the active mesh (`docs/PUBLISH_AN_APP.md`, "Who
+  may reach it");
+- the knowledge serving route, which admits any member the iroh acceptor
+  verified and reads no per-corpus sharing flag
+  (`sovereign-daemon/src/routes_internal/knowledge.rs`; no hit for `sharing`,
+  2026-10-02);
+- `allowed_peers` on peer-assisted ingest;
+- the `inference` namespace's roster, derived from mesh membership
+  (`sovereign-mesh/src/ring_roster.rs:82`);
+- the work plane's hand-written `roster.json` (`cmnwlth/deploy/mesh/WORK_PLANE.md`,
+  "One namespace").
+
+`OriginKind`'s separate trust classes are right — lending the chore app is not
+lending the film library (`shared/crates/oicp-types/src/origin.rs:26`) — so the change is not
+one list. Each lend names the rings it goes to, and the membership function
+`admit` already calls says who is in them (ARCH principle 8). That depends on
+§15: a server lending to a house, a band and a friend group needs every ring
+live at once and `member_check` widened to any roster the node holds.
+
+**Legacy services keep their users; the roster decides them.** Cheapest first:
+
+1. *Native.* The app reads `X-Mesh-Member`. Built (`docs/PUBLISH_AN_APP.md`).
+2. *Injected.* The lending node attaches the service's own credential to
+   forwarded requests, so no member ever holds it (`svrn mesh media declare`,
+   `commonwealth-transport/src/iroh_identity_forward.rs`). Built, as one shared
+   read-only viewer (`sovereign-cli-llm/src/mesh_media/viewer.rs`). Many
+   self-hosted apps accept a trusted proxy header as the user; mapping
+   `X-Mesh-Member` onto it gives per-person identity with no provisioner. From
+   memory — verify per app.
+3. *Provisioned.* An account per member, created on `Admit` and disabled on
+   `Remove` (`RING_ENTRY.md`, decision 4). This is §5's `pending` one layer down
+   — desired accounts from the roster, minus the accounts the service reports —
+   the reconciliation shape NixOS activation and a Kubernetes controller already
+   use. The performer is the node that runs the service, because that node owns
+   the user table; when it goes, the accounts go with it, so nothing needs
+   reassigning. A provisioner is a tool brick (`LEGO_KIT.md`), not a seventh
+   kind. One on a node other than the roster's host waits on §19 steps 0 and 3.
+
+**Duties go to an awake member.** The chat bridge, invite minting, the Elder's
+engine and a relay each run on some member's node. `RING_APPLICATIONS.md`
+already says "a club mints on its always-on member" and "a relay is a member
+whose machine stays on." Choosing among awake members is a candidate for
+`kernel_types::partition::rendezvous_owner` (`shared/crates/kernel-types/src/partition.rs:65`)
+over the awake set; unmeasured. A server wins by staying awake and is
+replaceable in each.
+
+**Inference is lent.** A node's OICP manifest is what it lends.
+`LAZY_INFERENCE_ON_THE_RAIL.md` moves it onto the journal under
+`INFERENCE_APP_ID`, written on change; the step here is to scope that namespace
+by ring rather than by mesh. Two members pooling a model neither holds is a
+joint lend. The decode turn stays request and response on the data plane,
+routed by the existing `rank()` — "a decode turn is not a job and must never
+become one" (`WORK_PLANE.md`, "The axiom"). The journal carries what is lent,
+never the turns.
+
+**Knowledge is all three.**
+
+- *The ring's memory is held.* A corpus built from the journal is a cache of a
+  fold — a function of the journal, a recipe and an embedding model — so any
+  member with a model can rebuild it and nobody owns it. It needs the journal
+  acquirer `STRATEGY_RINGS.md` names; nothing under `corpus-engine/src` reads a
+  `RingJournal` (checked 2026-10-01). The acquirer indexes what the fold shows:
+  a corrected act appears corrected, and the struck-through original is reached
+  only when someone asks what happened. Acts are typed records already (§4), so
+  only their free text needs a model. The ring's recipe pins the embedding
+  model, or two members' indexes of one journal disagree; the refusal that
+  should catch a mismatch, `EmbedModelMismatch`, has no constructor
+  (`WORK_PLANE.md`, audit row 4).
+- *A member's shelf is lent.* A query reaches it and passages come back with
+  citations; the files stay. Passages are copies of parts, and the lend says so.
+- *Public knowledge is carried.* A snapshot published with a sha256 manifest is
+  installed, or asked of a member who lends it.
+
+**Recipes and profiles are carried.** Each is code addressed by hash that turns
+a source into derived state — to a corpus what a bundle is to a ring's state.
+Core sentence 5 extends to them, and `LEGO_KIT.md` step 3 (one distribution
+mechanism, signed by the author's ring key) is how; today there are three
+(`meshapp publish|install`, snapshot manifests, the recipe registry).
+`FIVE_PROGRAMS.md` §11.3 already draws the line: "Drafted packages, never
+content, go back to the bank."
+
+**An app reaches a model through `pending`.** A fold cannot call a model: it
+runs on every node and again on every replay. `pending` returns an `ask`; the
+member lending inference performs it; the fulfilment act carries the
+`kernel_types::Answer` — claims, citations, verdict — and the model's identity.
+Every node folds that one answer instead of asking its own model and getting
+another. This is §18's Temporal row ("recorded results, which are the
+fulfilment act") and the first demand on §12's performer. Only answers the ring
+keeps travel this way; a chat turn does not. A recorded answer is evidence,
+labelled as written by a model, and never a decision (§21).
+
+**The mesh becomes a view.** When membership lives only in rings, the mesh is
+not a set anyone joins. It is everything lent to the rings a key belongs to —
+§15's "a mesh shrinks toward what it owns — lending", finished.
+
+**Bars, proposed before any of it is built.**
+
+- *Revocation.* One `Remove` ends a member's reach to every kind of lend — app,
+  media, corpus, inference, work — within sixty seconds. Watched failing first
+  with any one decider left on its own list.
+- *Switch-off.* Turn off a lender. The ring keeps everything it holds; the Elder
+  answers from the journal through another member's model; anything that needed
+  the lent thing comes back as an asleep row, never as a smaller answer that
+  does not say so. Watched failing with the held index planted only on the
+  server.
+- *Seam.* A NixOS module lends a service to a ring with no change to the daemon.
+
+**Order.** (1) The journal acquirer. (2) Lends name a ring — apps, media and
+offers first, then the knowledge route, inference, work. (3)
+`LAZY_INFERENCE_ON_THE_RAIL.md` as written, then its write-on-change row for
+every kind of lend, replacing the manifest pull, the config tier and claims as
+three ways to advertise. (4) One fan-out: `commonwealth_media::fanout` and the
+knowledge fan-out are two implementations of "ask every lender, one row each".
+(5) The performer, with `ask` first. (6) One distribution path for carried
+artefacts. Multi-node rings wait on §19 steps 0 and 3; at M0 a lend from the
+host works against the host's roster.
+
+**Naming, owed first.** "Offer" already means two things (`OriginKind::Offer`,
+`WorkAct::Offer`) and an inference capability would make a third
+(`LAZY_INFERENCE_ON_THE_RAIL.md`, "Naming"). If "lend" is the word, settle it
+once with `sovereign code converge noun` before it spreads.
+
+## 21. Gestures and gifts — two gates
+
+Added 2026-10-02 with `STRATEGY_RINGS.md` "Commons, gift, inheritance", which
+holds the argument. Two of its rules are guarantees code can hold, so they are
+gates here (ARCH principle 10).
+
+**No surface returns a value about a member.** Stance 7, owed as a gate since
+the strategy was drafted. Its first subject is built: `LedgerEventKind`
+(`commonwealth-core/src/contributions.rs:61`) records inference served,
+knowledge queries served, bytes moved and work units completed, and `aggregate`
+(`:250`) sums them per node — per person, on a mesh where a node is a person.
+Between strangers pooling compute that is bookkeeping and may stay for routing.
+Inside a ring it renders nowhere. The gate: a planted surface returning a
+per-member series fails the build.
+
+**A gesture needs a person.** App act kinds that are gestures — thanks, vouch,
+introduction, congratulation — say so in their one declaration (§4), and an act
+of a gesture kind carries a person's confirmation in its provenance. An act a
+model proposed and no person confirmed is refused, not flagged, beside
+`GovernanceIssue::UnattendedAct`
+(`corpus-engine/src/enrichment/governance_view.rs:611`). Watched failing first
+with a planted auto-confirmed vouch. Guest grade passes, because the bridge
+signs what a person tapped (`RING_ENTRY.md`, decision 2). `Admit` is not an app
+kind and is not covered here: §9's one rule already makes it a member's act,
+and a bridged `Admit` rests on the human `Admit` of the bridge.
+
+**What the library owes both.** The `ledger` reducer folds splits — money the
+members agreed to share. A gift is not a split with a flag: it is a `thanks`
+act, signed by the person who received it and pointing at what it thanks, and
+the library ships no reducer that sums thanks per person. And the maker is
+shown wherever an app runs, which costs nothing once bundles are signed by
+their author's key (`LEGO_KIT.md` step 3; today a bundle carries a hash, not an
+author, §14).

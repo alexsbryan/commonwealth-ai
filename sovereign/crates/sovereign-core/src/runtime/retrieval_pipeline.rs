@@ -213,6 +213,9 @@ pub use crate::runtime::retrieval_ledger::{
     ledger_violation_count, ledger_violations, DropReason, StepKind, StepLedger, StepOutcome,
 };
 
+#[path = "retrieval_pipeline/evidence_trace.rs"]
+pub(crate) mod evidence_trace;
+
 pub type StepFuture<'a> =
     std::pin::Pin<Box<dyn std::future::Future<Output = StepOutcome> + Send + 'a>>;
 
@@ -651,10 +654,26 @@ impl RetrievalPipeline {
     /// answerable from logs alone, ARCH §0.1/§9).
     pub async fn run(&self, rt: &Runtime, state: &mut PipelineState<'_>) {
         for s in &self.steps {
+            let trace_contents =
+                tracing::enabled!(target: "retrieval.pipeline", tracing::Level::DEBUG);
+            let incoming =
+                trace_contents.then(|| evidence_trace::content_fingerprints(&state.chunks));
             let before = state.chunks.len();
             let outcome = (s.run)(rt, state).await;
             let after = state.chunks.len();
             let delta = after as i64 - before as i64;
+            if let Some(incoming) = incoming {
+                let outgoing = evidence_trace::content_fingerprints(&state.chunks);
+                tracing::debug!(
+                    target: "retrieval.pipeline",
+                    pipeline = self.name,
+                    step = s.name,
+                    query_hash = %evidence_trace::question_fingerprint(state.message),
+                    before = ?incoming,
+                    after = ?outgoing,
+                    "retrieval.pipeline: passage identities"
+                );
+            }
             // A filter that removed chunks and said nothing is accounted for
             // from its DECLARED reason — the count is the delta, which the
             // runner already has. One place, so no filter can forget.

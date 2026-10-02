@@ -59,7 +59,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use oplog::{Op, OpId};
+use oplog_types::{Op, OpId};
 
 use crate::payload::Payload;
 use crate::{Person, RailAct, RingVerifier, Roster, SignedOp};
@@ -77,7 +77,7 @@ use crate::{Person, RailAct, RingVerifier, Roster, SignedOp};
 #[serde(tag = "gap", rename_all = "snake_case")]
 pub enum RailGap {
     /// A journal line this build could not parse. From
-    /// [`SkippedLine::Malformed`](oplog::SkippedLine) — a torn
+    /// [`SkippedLine::Malformed`](oplog_types::SkippedLine) — a torn
     /// write, or a payload that has no canonical form (see
     /// [`Payload`](crate::Payload)).
     MalformedLine { line: u64, error: String },
@@ -111,21 +111,66 @@ pub enum RailGap {
         seq: u64,
         ids: Vec<OpId>,
     },
-    /// A correction naming an op we do not hold. Harmless to the order (the
-    /// void is recorded and applies the moment the target arrives), but it
-    /// means we are missing an op that may itself carry something.
+    /// A correction naming an op we do not hold. The correction itself folds;
+    /// its citation resolves to nothing here. Harmless to the order (the void
+    /// is recorded and applies the moment the target arrives), and it hides
+    /// no act from the fold — if the target is real and missing, its author's
+    /// run reports the [`SequenceHole`], and if that author is wholly absent
+    /// this gap names the exact op to ask for. It is the ask, not silence,
+    /// and a typo'd citation must not flip every node's completeness bit
+    /// forever (ROOT_CAUSE_FIXES A2).
     DanglingCorrection { by: OpId, missing: OpId },
+    /// The signer is bound in the record but held no standing at this act's
+    /// position — written while removed, or before their own
+    /// [`Admit`](crate::RailAct::Admit) in the order. The act counts for
+    /// nothing and is named rather than dropped: it may be real data (voiding
+    /// the [`Remove`](crate::RailAct::Remove) admits it back — leg 3 of
+    /// `ra-membership-is-order-free`).
+    NotAMember { id: OpId, actor: String },
+}
+
+/// What a gap means for the fold's answer — the one classification (ARCH
+/// §10.6), asked the question `is_complete` exists to answer: **can this gap
+/// be hiding acts that belong in the fold?**
+///
+/// The line matters more than it looks: a refusal is a refusal, never an
+/// absence (ARCH §18.3), and an absence is never silence — but "the fold is
+/// missing data" and "the record contradicts itself" are different facts and
+/// one typo'd [`Correct`](crate::RailAct::Correct) used to masquerade as the
+/// former forever. The split is by coverage, not by scariness: a forged or
+/// forked act is Absence precisely because it may be REAL data the fold
+/// refused (the acts are real but they are a subset), while a tampered id or
+/// a dangling citation is Contradiction because every act that could be
+/// folded is folded — the gap is a fact about a claim the record makes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GapClass {
+    /// The fold may lack acts that belong in it — an unreadable line, a
+    /// refused or unattributable act (which may be real), a forked-out seq,
+    /// a seq that never arrived. [`Admission::is_complete`] is false exactly
+    /// on these.
+    Absence,
+    /// Every act that could be folded is folded: the gap is a claim the
+    /// record makes that nothing here can stand behind — an id its content
+    /// does not derive, or a correction citing an op nobody holds. Named
+    /// beside a complete answer.
+    Contradiction,
 }
 
 impl RailGap {
-    /// Shorten an op id for a sentence. The full 22 characters are in the
-    /// JSON; a person reading a line needs enough to match it, not all of it.
-    fn short(id: &OpId) -> String {
-        let s = id.as_str();
-        if s.len() > 12 {
-            format!("{}…", &s[..12])
-        } else {
-            s.to_string()
+    /// The one classification of what a gap means (ARCH §10.6). Consumers
+    /// ask their own question of it — completeness is `class() ==
+    /// Absence`; `ring checkpoint --verify` refuses a document on the gaps
+    /// whose acts cannot stand — but there is one answer per kind here.
+    pub fn class(&self) -> GapClass {
+        match self {
+            Self::MalformedLine { .. }
+            | Self::NewerVersionLine { .. }
+            | Self::BadSignature { .. }
+            | Self::UnknownSigner { .. }
+            | Self::NotAMember { .. }
+            | Self::SequenceFork { .. }
+            | Self::SequenceHole { .. } => GapClass::Absence,
+            Self::TamperedId { .. } | Self::DanglingCorrection { .. } => GapClass::Contradiction,
         }
     }
 }
@@ -151,32 +196,36 @@ impl std::fmt::Display for RailGap {
             Self::BadSignature { id, .. } => write!(
                 f,
                 "an op whose signature does not verify ({})",
-                Self::short(id)
+                crate::short_id(id.as_str())
+            ),
+            Self::NotAMember { actor, .. } => write!(
+                f,
+                "an op by actor {actor} was written while they held no standing in the ring"
             ),
             Self::UnknownSigner { actor, .. } => write!(
                 f,
                 "an op signed by {}… — nobody in the roster claims that key",
-                &actor[..actor.len().min(12)]
+                crate::actor_prefix(actor)
             ),
             Self::TamperedId { claimed, .. } => write!(
                 f,
                 "a journal line whose id ({}) does not match its content",
-                Self::short(claimed)
+                crate::short_id(claimed.as_str())
             ),
             Self::SequenceHole { actor, missing } => write!(
                 f,
                 "an op from {}… has not reached this node yet (#{missing})",
-                &actor[..actor.len().min(12)]
+                crate::actor_prefix(actor)
             ),
             Self::SequenceFork { actor, seq, .. } => write!(
                 f,
                 "{}… used one sequence number twice (#{seq}) — both ops are excluded",
-                &actor[..actor.len().min(12)]
+                crate::actor_prefix(actor)
             ),
             Self::DanglingCorrection { missing, .. } => write!(
                 f,
                 "a correction of {}, which this node does not hold",
-                Self::short(missing)
+                crate::short_id(missing.as_str())
             ),
         }
     }
@@ -267,13 +316,26 @@ pub struct Admission {
     /// trusts has to be the floor admission trusted, or the destructive path
     /// gets its own second reading of the seals (ARCH §10.6, §18.3).
     pub floors: crate::sync::Floors,
+    /// The fold's own conclusion about who is in: the one `membership`
+    /// walk, carried out rather than re-derivable, so a reader asking the
+    /// membership question cannot reach a second answer (ARCH §10.6). The
+    /// seed, the act-admitted bindings and standing all live here.
+    ///
+    /// `None` only where the answer was rebuilt from a wire shape that
+    /// predates the field — absence reported, never a default walk
+    /// (ARCH §18.3).
+    pub membership: Option<crate::membership::Membership>,
 }
 
 impl Admission {
-    /// Whether this answer covers everything we know about. A `false` here is
-    /// the signal a UI must not hide: the acts are real but they are a subset.
+    /// Whether this answer covers every act that could be in it. `false` is
+    /// the signal a UI must not hide: the acts are real but they are a
+    /// subset — a gap of [`GapClass::Absence`] can be hiding acts that
+    /// belong in the fold. [`GapClass::Contradiction`] gaps do not flip it:
+    /// they are named beside a complete answer (a tampered id changes no
+    /// outcome; a dangling citation is the ask, not a hole).
     pub fn is_complete(&self) -> bool {
-        self.gaps.is_empty()
+        !self.gaps.iter().any(|g| g.class() == GapClass::Absence)
     }
 
     /// The ops an app's reducer should apply, in order. The one definition
@@ -310,12 +372,12 @@ struct Candidate<'a> {
 /// one.
 pub fn admit(
     ops: &[Op<SignedOp>],
-    skipped: &[oplog::SkippedLine],
+    skipped: &[oplog_types::SkippedLine],
     roster: &Roster,
     namespace: &str,
     verifier: &dyn RingVerifier,
 ) -> Admission {
-    use oplog::SkippedLine;
+    use oplog_types::SkippedLine;
 
     let mut gaps: Vec<RailGap> = skipped
         .iter()
@@ -330,8 +392,8 @@ pub fn admit(
         })
         .collect();
 
-    // ── signature, then membership ───────────────────────────
-    let mut admitted: BTreeMap<OpId, Candidate<'_>> = BTreeMap::new();
+    // ── signature ───────────────────────────────────────────
+    let mut authentic: BTreeMap<OpId, &Op<SignedOp>> = BTreeMap::new();
     for op in ops {
         let derived = derived_id(op);
         if derived != op.id {
@@ -340,7 +402,11 @@ pub fn admit(
                 derived: derived.clone(),
             });
         }
-        let body = body_json(&op.kind.act, op.kind.on_behalf_of.as_deref());
+        let body = body_json(
+            &op.kind.act,
+            op.kind.on_behalf_of.as_deref(),
+            op.kind.view.as_ref(),
+        );
         // Whatever the verifier cannot vouch for is a gap, never an act. A
         // `false` here is a refusal and is reported as one — there is no
         // answer that means "could not tell, carry on" (ARCH §18.3).
@@ -358,19 +424,39 @@ pub fn admit(
             });
             continue;
         }
-        let Some(person) = roster.person_for(&op.actor) else {
+        // Dedupe: the same op reaching us twice is the normal case under
+        // gossip, not an anomaly.
+        authentic.insert(derived, op);
+    }
+
+    // ── membership: the seed plus two act kinds, one function ─────────
+    //
+    // `roster` is the SEED (RING_APPLICATIONS.md "Amendment 2026-09-18"):
+    // what is in the ring is decided by `membership`, and an act resolves
+    // through the bindings its own record carries — so key churn cannot
+    // re-flip the past (leg 4 of `ra-membership-is-order-free`).
+    let m = crate::membership::membership(authentic.values().copied(), roster);
+
+    let mut admitted: BTreeMap<OpId, Candidate<'_>> = BTreeMap::new();
+    for (id, op) in authentic {
+        let Some(person) = m.person_for(&op.actor) else {
             gaps.push(RailGap::UnknownSigner {
-                id: derived,
+                id,
                 actor: op.actor.clone(),
             });
             continue;
         };
-        // Dedupe: the same op reaching us twice is the normal case under
-        // gossip, not an anomaly.
+        if !m.counted.contains(&id) && !m.voided.contains(&id) {
+            gaps.push(RailGap::NotAMember {
+                id,
+                actor: op.actor.clone(),
+            });
+            continue;
+        }
         admitted.insert(
-            derived.clone(),
+            id.clone(),
             Candidate {
-                id: derived,
+                id,
                 person: person.clone(),
                 op,
             },
@@ -403,40 +489,17 @@ pub fn admit(
     }
     admitted.retain(|id, _| !forked.contains(id));
 
-    // Holes are audited from each actor's SEALED FLOOR, not from zero, or a
-    // node that has retired what a seal covers reports one hole per retired
-    // op — permanently, to every housemate, while being in perfect health.
-    // That report is what made compaction indistinguishable from breakage.
-    //
-    // The floors come from ops that survived BOTH the signature/roster checks
-    // above and the fork exclusion just now: a seal the rail refused, or one
-    // it cannot choose between, retires nothing. Suppressing a hole is a claim
-    // of completeness, and a claim of completeness may only rest on an act the
-    // rail could actually authenticate (ARCH §18.3).
-    let floors = crate::sync::sealed_floors(admitted.values().map(|c| c.op));
-    for (actor, by_seq) in &seqs {
-        let floor = floors.get(*actor).copied().unwrap_or(0);
-        let highest = by_seq.keys().copied().next_back().unwrap_or(0);
-        for n in floor..=highest {
-            if !by_seq.contains_key(&n) {
-                gaps.push(RailGap::SequenceHole {
-                    actor: (*actor).to_string(),
-                    missing: n,
-                });
-            }
-        }
-    }
-
     // ── the void set: commutative, and it never resurrects ───
     //
-    // Built from every surviving correction at once, with no regard for
-    // order and no regard for whether the correction is itself corrected.
-    // Both choices are the same choice: the set must not depend on a walk.
-    // Correcting a correction therefore cancels ITS replacement and leaves
-    // the original voided — to bring something back, write it again. That is
-    // what "compensating entry, visible" means, and it is why this is one
-    // scan rather than a liveness pass.
-    let mut voided: BTreeSet<OpId> = BTreeSet::new();
+    // The set itself is computed in ONE place — `membership`, which applies
+    // it before its walk so a correction that lands late still drops what it
+    // targets and everything that target admitted. This pass only NAMES the
+    // corrections whose target nobody here holds: the ask, never a hole
+    // (GapClass::Contradiction).
+    // Cloned, not moved: the whole walk — voided set included — is carried
+    // out on `Admission` below, so the membership a reader sees is the one
+    // this fold applied.
+    let voided = m.voided.clone();
     for a in admitted.values() {
         if let RailAct::Correct { corrects, .. } = &a.op.kind.act {
             if !admitted.contains_key(corrects) {
@@ -445,7 +508,35 @@ pub fn admit(
                     missing: corrects.clone(),
                 });
             }
-            voided.insert(corrects.clone());
+        }
+    }
+
+    // Holes are audited from each actor's SEALED FLOOR, not from zero, or a
+    // node that has retired what a seal covers reports one hole per retired
+    // op — permanently, to every housemate, while being in perfect health.
+    // That report is what made compaction indistinguishable from breakage.
+    //
+    // The floors come from ops that survived BOTH the signature/roster checks
+    // above and the fork exclusion just now, minus what the void set just
+    // retired: a seal the rail refused, one it cannot choose between, or one
+    // the log itself corrected retires nothing. Suppressing a hole is a claim
+    // of completeness, and a claim of completeness may only rest on an act the
+    // rail could actually authenticate (ARCH §18.3).
+    let floors = crate::sync::sealed_floors(admitted.values().map(|c| c.op), &voided);
+    for (actor, by_seq) in &seqs {
+        let floor = floors.get(*actor).copied().unwrap_or(0);
+        let highest = by_seq
+            .keys()
+            .copied()
+            .next_back()
+            .expect("seqs only holds actors that wrote");
+        for n in floor..=highest {
+            if !by_seq.contains_key(&n) {
+                gaps.push(RailGap::SequenceHole {
+                    actor: (*actor).to_string(),
+                    missing: n,
+                });
+            }
         }
     }
 
@@ -489,8 +580,9 @@ pub fn admit(
                 } => (Some(corrects.clone()), replacement.clone()),
                 // A seal is delivery, not meaning: it voids nothing and
                 // carries nothing, so `applies()` is false and no reducer
-                // sees it.
-                RailAct::Seal => (None, None),
+                // sees it. Admit/Remove carry meaning to the MEMBERSHIP
+                // function and never to an app (no-re-division).
+                RailAct::Seal | RailAct::Admit { .. } | RailAct::Remove { .. } => (None, None),
             };
             AdmittedOp {
                 id: a.id.clone(),
@@ -541,6 +633,7 @@ pub fn admit(
         gaps,
         held: ops.len(),
         floors,
+        membership: Some(m),
     }
 }
 
@@ -549,29 +642,46 @@ pub fn admit(
 /// Identity from essence (ARCH §7.5). A rewritten `id` field therefore cannot
 /// make an op impersonate another op's correction target; it just gets
 /// reported.
-fn derived_id(op: &Op<SignedOp>) -> OpId {
+pub(crate) fn derived_id(op: &Op<SignedOp>) -> OpId {
     Op::new(op.kind.clone(), op.ts_unix, op.actor.clone()).id
 }
 
 /// The exact bytes the signature covers — the act, in declaration order, with
 /// its payload canonical (see [`Payload`](crate::Payload)), followed by
-/// `on_behalf_of` when the writer stated one.
+/// `on_behalf_of` when the writer stated one, followed by `view` when the
+/// writer committed to one.
 ///
 /// The name is inside the signature because a stamp a peer could strip or
-/// rewrite in flight would attribute an act to whoever last handled it. It is
-/// LAST and omitted when `None`, so the bytes for an act with no name are
-/// byte-identical to what this function returned before the field existed and
-/// every op already on every replica verifies unchanged.
-pub fn body_json(act: &RailAct, on_behalf_of: Option<&str>) -> String {
+/// rewrite in flight would attribute an act to whoever last handled it. The
+/// view is inside for the same reason one field later: a rewritten view
+/// would make every act claim whichever history suited the carrier. Both are
+/// LAST-in-order and omitted when `None`, so the bytes for an act with
+/// neither are byte-identical to what this function returned before the
+/// fields existed and every op already on every replica verifies unchanged.
+pub fn body_json(
+    act: &RailAct,
+    on_behalf_of: Option<&str>,
+    view: Option<&crate::Digest>,
+) -> String {
     // A borrowing mirror of `SignedOp`'s signed half rather than a second
     // spelling of the rule: the act flattens in exactly as it serialises
-    // alone, and the one added field sits after it.
+    // alone, and the two added fields sit after it.
     #[derive(serde::Serialize)]
     struct Body<'a> {
         #[serde(flatten)]
         act: &'a RailAct,
         #[serde(skip_serializing_if = "Option::is_none")]
         on_behalf_of: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        view: Option<&'a crate::Digest>,
     }
-    serde_json::to_string(&Body { act, on_behalf_of }).unwrap_or_default()
+    serde_json::to_string(&Body {
+        act,
+        on_behalf_of,
+        view,
+    })
+    // A `RailAct` failing to serialise is unreachable; silent `""` would be
+    // catastrophic — empty bytes on the signature path (ROOT_CAUSE_FIXES C4,
+    // substitution-gate's named target).
+    .expect("a RailAct serialises — signing empty bytes is the named catastrophe")
 }

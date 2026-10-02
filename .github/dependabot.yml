@@ -2,7 +2,7 @@
 #
 # ## Why monthly, and why ONE PR per ecosystem
 #
-# Measured over 2026-07-01..24 (full audit in docs/CI_ECONOMY.md): dependabot's
+# Measured over 2026-07-01..24 (full audit in docs/internal/CI_ECONOMY.md): dependabot's
 # own *update runs* — the resolution passes that produce the PRs, before any CI
 # touches them — cost **1,017 billed minutes, 19% of the repo's entire Actions
 # spend**. A single cargo resolution against this 40-crate workspace's lock

@@ -1,0 +1,71 @@
+[2m2026-09-24T04:44:12.334013Z[0m [32m INFO[0m [1mDatasetRecordBatchStream[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"FilteredRead" [3moutput_rows[0m[2m=[0m244 [3miops[0m[2m=[0m5 [3mrequests[0m[2m=[0m5 [3mbytes_read[0m[2m=[0m6318 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+RAPTOR retrofit plan for corpus 'raptor-pilot-and-his-wife-composed':
+  documents:  1
+  chunks:     244
+  doc-type:   Document
+  summaries:  Abstractive
+  furniture:  kept (pass --strip-furniture to drop)
+  by bucket:  large=1
+
+Building RAPTOR trees via daemon http://localhost:9741 (chat=primary, embed=embed)…
+Summary verification: ON — every abstractive summary judged against its member texts (T1 P1.2)
+
+[2m2026-09-24T04:44:12.386344Z[0m [32m INFO[0m [1mDatasetRecordBatchStream[0m[2m:[0m [3mtype[0m[2m=[0m"plan_run" [3mplan_summary[0m[2m=[0m"Projection(Take(CoalesceBatches(FilteredRead)))" [3moutput_rows[0m[2m=[0m244 [3miops[0m[2m=[0m4 [3mrequests[0m[2m=[0m4 [3mbytes_read[0m[2m=[0m2222 [3mindices_loaded[0m[2m=[0m0 [3mparts_loaded[0m[2m=[0m0 [3mindex_comparisons[0m[2m=[0m0
+[2m2026-09-24T04:44:12.400392Z[0m [32m INFO[0m summary verifier: name veto armed from the atlas vocabulary [3mpath[0m[2m=[0m/Users/alexsbryan/.sovereign/indexes/raptor-pilot-and-his-wife-composed/atlas/atoms.json [3mnames[0m[2m=[0m106
+[2m2026-09-24T04:44:59.272073Z[0m [32m INFO[0m shed — honouring the host's Retry-After and coming back [3mwhat[0m[2m=[0m"Remote API request" [3mattempt[0m[2m=[0m1 [3mdelay_ms[0m[2m=[0m30000 [3mwaited_ms[0m[2m=[0m0
+[2m2026-09-24T04:44:59.272411Z[0m [32m INFO[0m shed — honouring the host's Retry-After and coming back [3mwhat[0m[2m=[0m"Remote API request" [3mattempt[0m[2m=[0m1 [3mdelay_ms[0m[2m=[0m30000 [3mwaited_ms[0m[2m=[0m0
+[2m2026-09-24T04:44:59.272519Z[0m [32m INFO[0m shed — honouring the host's Retry-After and coming back [3mwhat[0m[2m=[0m"Remote API request" [3mattempt[0m[2m=[0m1 [3mdelay_ms[0m[2m=[0m30000 [3mwaited_ms[0m[2m=[0m0
+[2m2026-09-24T04:44:59.272587Z[0m [32m INFO[0m shed — honouring the host's Retry-After and coming back [3mwhat[0m[2m=[0m"Remote API request" [3mattempt[0m[2m=[0m1 [3mdelay_ms[0m[2m=[0m30000 [3mwaited_ms[0m[2m=[0m0
+[2m2026-09-24T04:44:59.272641Z[0m [32m INFO[0m shed — honouring the host's Retry-After and coming back [3mwhat[0m[2m=[0m"Remote API request" [3mattempt[0m[2m=[0m1 [3mdelay_ms[0m[2m=[0m30000 [3mwaited_ms[0m[2m=[0m0
+[2m2026-09-24T04:44:59.272687Z[0m [32m INFO[0m shed — honouring the host's Retry-After and coming back [3mwhat[0m[2m=[0m"Remote API request" [3mattempt[0m[2m=[0m1 [3mdelay_ms[0m[2m=[0m30000 [3mwaited_ms[0m[2m=[0m0
+[2m2026-09-24T04:45:18.239036Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m0 [3munsupported[0m[2m=[0m0
+[2m2026-09-24T04:46:51.950525Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m4 [3munsupported[0m[2m=[0m4
+[2m2026-09-24T04:47:13.030486Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m3
+[2m2026-09-24T04:48:54.214926Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m0 [3munsupported[0m[2m=[0m0
+[2m2026-09-24T04:48:54.222695Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m0 [3munsupported[0m[2m=[0m0
+[2m2026-09-24T04:49:28.847481Z[0m [32m INFO[0m shed — honouring the host's Retry-After and coming back [3mwhat[0m[2m=[0m"Remote API request" [3mattempt[0m[2m=[0m1 [3mdelay_ms[0m[2m=[0m30000 [3mwaited_ms[0m[2m=[0m0
+[2m2026-09-24T04:49:36.209940Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m0 [3munsupported[0m[2m=[0m0
+[2m2026-09-24T04:49:38.418042Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m0 [3munsupported[0m[2m=[0m0
+[2m2026-09-24T04:51:20.802145Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m3
+[2m2026-09-24T04:52:32.505191Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m3
+[2m2026-09-24T04:53:21.935286Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m4 [3munsupported[0m[2m=[0m4
+[2m2026-09-24T04:53:25.189958Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m4 [3munsupported[0m[2m=[0m3
+[2m2026-09-24T04:53:27.568889Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m4 [3munsupported[0m[2m=[0m2
+[2m2026-09-24T04:55:16.034524Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m3
+[2m2026-09-24T04:56:42.907651Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m2
+[2m2026-09-24T04:56:56.075307Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m3
+[2m2026-09-24T04:57:20.654730Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m4 [3munsupported[0m[2m=[0m4
+[2m2026-09-24T04:59:19.472303Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m0
+[2m2026-09-24T05:00:00.310299Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m2
+[2m2026-09-24T05:01:04.300160Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m2
+[2m2026-09-24T05:01:11.891157Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m4 [3munsupported[0m[2m=[0m1
+[2m2026-09-24T05:03:51.423231Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m1
+[2m2026-09-24T05:03:57.319801Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m4 [3munsupported[0m[2m=[0m2
+[2m2026-09-24T05:04:17.460205Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m0 [3mclaims[0m[2m=[0m4 [3munsupported[0m[2m=[0m1
+[2m2026-09-24T05:04:24.019111Z[0m [32m INFO[0m shed — honouring the host's Retry-After and coming back [3mwhat[0m[2m=[0m"Remote API request" [3mattempt[0m[2m=[0m1 [3mdelay_ms[0m[2m=[0m53000 [3mwaited_ms[0m[2m=[0m0
+[2m2026-09-24T05:06:04.032053Z[0m [32m INFO[0m raptor_atlas: summary failed verification; retrying with faithful prompt [3mlevel[0m[2m=[0m1 [3mclaims[0m[2m=[0m3 [3munsupported[0m[2m=[0m3
+[2m2026-09-24T05:06:58.620763Z[0m [33m WARN[0m raptor_atlas: retry still unsupported; persisting extractive floor instead [3mlevel[0m[2m=[0m1 [3mclaims[0m[2m=[0m4 [3munsupported[0m[2m=[0m2
+[2m2026-09-24T05:07:00.328678Z[0m [32m INFO[0m raptor_atlas: build complete [3mnodes[0m[2m=[0m14 [3mleaves[0m[2m=[0m12 [3mmax_level[0m[2m=[0m1
+[2m2026-09-24T05:07:00.328893Z[0m [32m INFO[0m document_asset: summary verification gate (T1 P1.2) [3mstats[0m[2m=[0mverified 14 · pass 1 · retry 13 (pass 1) · extractive fallback 12 · verifier failures 0 · name registry 106 names
+      [t3-profile] raptor_tree=1367.9s (nodes=14)
+  [1/1] pilot-and-his-wife  244 chunks · large · 14 nodes · 12/14 extractive fallback · 1367.9s
+
+RAPTOR retrofit complete for 'raptor-pilot-and-his-wife-composed':
+  documents built:  1
+  nodes persisted:  14  (conv_raptor_nodes, corpus_id='raptor-pilot-and-his-wife-composed')
+  summarised by a model: 2  ·  extractive fallback: 12
+  elapsed:          1367.9s
+  avg per document: 1367.9s
+
+The atom-graph atlas (atlas/atoms.json) is untouched — RAPTOR nodes are additive.
+[2m2026-09-24T05:07:00.480686Z[0m [32m INFO[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"dummy"
+[2m2026-09-24T05:07:00.555718Z[0m [32m INFO[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"data" [3mpath[0m[2m=[0m"111110010100101110101011b511b54ddaa7ed29ce15320796.lance"
+[2m2026-09-24T05:07:00.570244Z[0m [32m INFO[0m [3mmode[0m[2m=[0m"create" [3mtype[0m[2m=[0m"manifest" [3mpath[0m[2m=[0m"dummy"
+[2m2026-09-24T05:07:00.574285Z[0m [32m INFO[0m raptor index: built [3mrows[0m[2m=[0m14 [3mdim[0m[2m=[0m1024 [3mindexed[0m[2m=[0mfalse [3msource_version[0m[2m=[0m1790226420
+RAPTOR summary-node ANN index: built raptor_summaries.lance (14 summary nodes)
+[2m2026-09-24T05:07:00.576812Z[0m [33m WARN[0m raptor: abstractive build came back majority-extractive [3mcorpus[0m[2m=[0m"raptor-pilot-and-his-wife-composed" [3mabstractive[0m[2m=[0m2 [3mextractive[0m[2m=[0m12
+
+error: --summary-mode abstractive, but 12 of 14 persisted nodes fell back to extractive (verbatim source sentences, no model prose).
+  The tree is not an abstractive tree; anything read off it measures extraction.
+  Re-run with RUST_LOG=sovereign_tools::raptor_atlas=warn to see which branch fired (LLM error / parse failure / failed verification).
+  A real rebuild needs the CHECKPOINT gone, not just --force: a manifest with `completed_at` set resumes as "skipping LLM build" and replays these same nodes in 0.0s. Delete /Users/alexsbryan/.sovereign/indexes/raptor-pilot-and-his-wife-composed/_raptor_checkpoint first.

@@ -83,13 +83,14 @@ pub(super) fn kv_op(
         payload: rail_kv::to_payload(k, v, t).unwrap(),
     };
     let ts = 1_700_000_000i64 + seq as i64;
-    let sig = sign_ring_op(key, ns, ts, seq, &body_json(&act, None));
+    let sig = sign_ring_op(key, ns, ts, seq, &body_json(&act, None, None));
     Op::new(
         SignedOp {
             seq,
             sig,
             act,
             on_behalf_of: None,
+            view: None,
         },
         ts,
         actor_of(key),
@@ -168,7 +169,11 @@ pub(super) async fn exchange(local: &KvHost, peer: &KvHost, ns: &str) -> Exchang
     let pj = peer.rail.journal(ns).unwrap();
     loop {
         let (theirs, _) = pj
-            .ops_missing_from_within(&lj.digest().unwrap(), NO_BUDGET)
+            .ops_missing_from_within(
+                &commonwealth_rail::Ed25519Verifier,
+                &lj.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
+                NO_BUDGET,
+            )
             .unwrap();
         let sealed = theirs.iter().any(|o| matches!(o.kind.act, RailAct::Seal));
         let pulled = ingest(local, ns, theirs);
@@ -177,7 +182,11 @@ pub(super) async fn exchange(local: &KvHost, peer: &KvHost, ns: &str) -> Exchang
             lj.compact(&roster, &Ed25519Verifier).unwrap();
         }
         let (ours, _) = lj
-            .ops_missing_from_within(&pj.digest().unwrap(), NO_BUDGET)
+            .ops_missing_from_within(
+                &commonwealth_rail::Ed25519Verifier,
+                &pj.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
+                NO_BUDGET,
+            )
             .unwrap();
         let pushed = ingest(peer, ns, ours);
         out.pulled += pulled;
@@ -422,8 +431,12 @@ async fn a_seal_bounds_the_ring_and_the_snapshot_keeps_every_live_key() {
         "the peer's disk holds only the seal, the snapshot and its mark"
     );
     assert_eq!(
-        a_journal.digest().unwrap(),
-        b_journal.digest().unwrap(),
+        a_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
+        b_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
         "two nodes, one claim"
     );
 

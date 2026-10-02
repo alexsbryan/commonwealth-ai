@@ -27,21 +27,21 @@ fn a_local_only_journal_is_held_but_never_offered() {
     let local = rail.journal(LOCAL).unwrap();
     let carried = rail.journal(CARRIED).unwrap();
     local
-        .append(record("mine"), &key(1), &ring(), None)
+        .append(record("mine"), &key(1), &ring(), None, &Ed25519Verifier)
         .unwrap();
     carried
-        .append(record("shared"), &key(1), &ring(), None)
+        .append(record("shared"), &key(1), &ring(), None, &Ed25519Verifier)
         .unwrap();
 
     assert_eq!(local.read().unwrap().0.len(), 1, "journaled on this node");
     assert_eq!(rail.namespaces().unwrap(), vec![CARRIED.to_string()]);
 
     let (for_peer, more) = local
-        .ops_missing_from_within(&Digest::new(), NO_BUDGET)
+        .ops_missing_from_within(&Ed25519Verifier, &Digest::new(), NO_BUDGET)
         .unwrap();
     assert!(for_peer.is_empty() && !more, "a peer is answered nothing");
     let (for_peer, _) = carried
-        .ops_missing_from_within(&Digest::new(), NO_BUDGET)
+        .ops_missing_from_within(&Ed25519Verifier, &Digest::new(), NO_BUDGET)
         .unwrap();
     assert_eq!(
         for_peer.len(),

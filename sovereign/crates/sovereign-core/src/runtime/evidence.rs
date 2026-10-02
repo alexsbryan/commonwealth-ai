@@ -54,6 +54,30 @@ pub(crate) const EVIDENCE_MEDIAN_RATIO_THRESHOLD: f32 = 1.5;
 /// same document is a strong single-source signal even without title_match.
 pub(crate) const EVIDENCE_MIN_TOP_SOURCE_REPEAT: usize = 2;
 
+/// Dominance is a SHARE of the pool, not an absolute count: the top
+/// `(corpus_id, title)` must hold at least `1 / EVIDENCE_DOMINANCE_SHARE_DEN`
+/// of the retrieved pool before the pipeline may collapse onto it. The
+/// repeat floor above alone misfires on section-keyed corpora, where the key
+/// names a SECTION and two incidental hits under one section title are
+/// nothing like "retrieval landed on one document". Measured 2026-09-23
+/// (ei7-ans, passage fingerprint faaec2a84712, three reproductions): a
+/// 20-chunk pool with 16 distinct sources and only 2 repeats collapsed to 7
+/// chunks at `cohesion_expansion`, evicting the rank-4 answering passage; the
+/// model then declined with the answer absent from its prompt. 1/5 is the
+/// sharpest cut consistent with the pinned contracts this predicate must
+/// keep: the expansion test's 3/10 (30%) depth case and the measured-good
+/// 7/20 (35%) wiki deepening both stay dominant; 2/20 (10%) does not.
+pub(crate) const EVIDENCE_DOMINANCE_SHARE_DEN: usize = 5;
+
+/// ONE decider for "this pool is dominated by its top source". Readers:
+/// `decide_expansion_strategy` (the behavioural one) and the narration /
+/// next-step-offer displays, which must not claim a focus the pipeline did
+/// not apply. Do not re-derive `repeat >= 2` at a call site.
+pub(crate) fn is_dominant_source_pool(shape: &EvidenceShape) -> bool {
+    shape.top_source_repeat_count >= EVIDENCE_MIN_TOP_SOURCE_REPEAT
+        && shape.top_source_repeat_count * EVIDENCE_DOMINANCE_SHARE_DEN >= shape.count
+}
+
 /// Decisive threshold: this many repeats of the top source in top-k routes
 /// Fast regardless of other signals — the retrieval has clearly landed on
 /// one document multiple times. Cheaper than re-deriving median_ratio on
@@ -854,8 +878,12 @@ pub(crate) fn decide_expansion_strategy(
 
     // Depth: a clearly-dominant single source — but never for a
     // breadth-shaped turn, which would defeat the contrast/synthesis.
+    // "Clearly-dominant" is the shared predicate, a share of the pool:
+    // two hits under one section title on a sixteen-source pool is not
+    // dominance, and acting on it evicted the answering passage
+    // (`is_dominant_source_pool` for the receipt).
     if matches!(route, SynthesisRoute::FastFocused)
-        && shape.top_source_repeat_count >= EVIDENCE_MIN_TOP_SOURCE_REPEAT
+        && is_dominant_source_pool(shape)
         && !needs_breadth
     {
         return (ExpansionStrategy::DominantSource, "fast_single_source");
@@ -1651,3 +1679,9 @@ mod output_budget_tests {
         assert_eq!(none.top_cosine, None);
     }
 }
+
+// The dominance-share bars (ei7), a sibling so this file stays inside its
+// size slack (ARCH §3.1). `#[path]`, so the names are unchanged.
+#[cfg(test)]
+#[path = "evidence/dominance_tests.rs"]
+mod dominance_tests;

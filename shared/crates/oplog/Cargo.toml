@@ -21,6 +21,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 # The ONE content-hash implementation — see the DELIBERATE note above.
 kernel-types = { workspace = true }
+# The pure envelope (Op/OpId/SkippedLine/Journaled), re-exported from
+# `lib.rs` so every `oplog::Op` path keeps resolving. This crate is the fs
+# writer of the type/writer split (ROOT_CAUSE_FIXES B4).
+oplog-types = { workspace = true }
 thiserror = { workspace = true }
 # Append and skip decisions are traced at debug; a journal whose writes are
 # invisible fails ARCH §9.1.

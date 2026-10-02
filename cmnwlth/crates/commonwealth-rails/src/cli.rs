@@ -264,7 +264,10 @@ pub async fn main(args: Args) -> ExitCode {
                 listen,
                 listen_source = if listen_flag.is_some() { "flag" } else { "config" },
                 local_only,
-                n0_services = config.relay_config().n0_services,
+                n0_services = config
+                    .relay_config()
+                    .expect("discovery is refused at Config::load (C2)")
+                    .n0_services,
                 "run: posture resolved"
             );
             // Held until `main` returns: the process lifetime.

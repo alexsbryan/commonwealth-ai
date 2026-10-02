@@ -17,7 +17,7 @@ Package: ctl/NEEDS_HUMAN.resolved-fp10-20260924.md. Reproduced at ba832a97d:
 - build/inference.rs:271 `sovereign_inference::engine_factory::build_engine(config)`; :454 `sovereign_compute::manager::build_compute_layer_with_distributed`; bin/sovereign-daemon.rs:59 `sovereign_compute::child_main::run`, :64 `sovereign_inference::rpc_worker_main::run`. The daemon constructs the engine and re-execs both children.
 - quality/ARCH_LAYERS.toml:676-679 `[[forbid]] from = "commonwealth-rails" to = "sovereign-*"`, no except, reason: the binary is lifted out of the monorepo. cw-rails cannot own engine construction.
 - sovereign-inference/src/embedded/rpc_distribution.rs:2385-2390 re-execs `current_exe()` for the rpc-worker; sovereign-cli-daemon/src/lib.rs:161 carries the second `rpc_worker_main::run` site. fp-25 depends on whichever binary owns serving.
-- docs/FIVE_PROGRAMS.md:1037-1046 (D2) and :1128 (Phase B, "make the serving binary own the verbs", ~20 edges). fp-16 (d1aaa2843) recorded the same missing prerequisite for the mesh dial.
+- docs/internal/FIVE_PROGRAMS.md:1037-1046 (D2) and :1128 (Phase B, "make the serving binary own the verbs", ~20 edges). fp-16 (d1aaa2843) recorded the same missing prerequisite for the mesh dial.
 
 Why I did not decide: (a) a new cmnwlth serving binary reverses D2's text and is a phase; (b) is an `[[exception]]` row; (c) re-homing the daemon's serving half is a placement move of phase size. A literal stub dial is forbidden by §11 ("do not fake") and changes every chat answer. Recommendation (b) is written on the HUMAN row.
 

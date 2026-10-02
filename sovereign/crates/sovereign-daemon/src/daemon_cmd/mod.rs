@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The assembled-host process's own core — `sovereign-daemon run`
-//! (docs/FIVE_PROGRAMS.md §11 step 10), reached three ways:
+//! (docs/internal/FIVE_PROGRAMS.md §11 step 10), reached three ways:
 //!
 //! 1. `exec`'d by the `svrn` CLI's `daemon` verb shim, which passes the
 //!    argv that followed the verb;

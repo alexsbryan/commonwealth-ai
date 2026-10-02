@@ -709,11 +709,11 @@ impl FolderTieredProvider {
         // 0..N indices, not stable chunk ids), so a note edit that changes
         // the leaves invalidates it and rebuilds, while an unchanged vault
         // resumes (or short-circuits) with zero LLM.
-        let (checkpoint, sink) = match self
+        let index_dir: Option<std::path::PathBuf> = self
             .index_dir_resolver
             .as_ref()
-            .and_then(|r| r.resolve(corpus_id))
-        {
+            .and_then(|r| r.resolve(corpus_id));
+        let (checkpoint, sink) = match index_dir.as_deref() {
             Some(index_dir) => {
                 let mut hasher = blake3::Hasher::new();
                 for c in &chunks {
@@ -754,12 +754,25 @@ impl FolderTieredProvider {
             self.summary_mode,
             match self.summary_mode {
                 crate::raptor_atlas::SummaryMode::Abstractive => {
+                    // Same name-veto arming as the folder path: the
+                    // registry comes from this corpus's own atlas.
+                    let stats = Arc::new(crate::summary_verify::VerifyStats::default());
+                    let (verifier, registry_names) = {
+                        let base = crate::summary_verify::JudgeSummaryVerifier::new(Arc::clone(
+                            &self.inference,
+                        ));
+                        match index_dir.as_deref() {
+                            Some(dir) => base.attach_atlas_registry(dir),
+                            None => (base, 0),
+                        }
+                    };
+                    stats
+                        .registry_names
+                        .store(registry_names, std::sync::atomic::Ordering::Relaxed);
                     Some(Arc::new(crate::summary_verify::VerifyCtx {
-                        verifier: Arc::new(crate::summary_verify::JudgeSummaryVerifier::new(
-                            Arc::clone(&self.inference),
-                        )),
+                        verifier: Arc::new(verifier),
                         policy: crate::summary_verify::VerifyPolicy::On,
-                        stats: Arc::new(crate::summary_verify::VerifyStats::default()),
+                        stats,
                     }))
                 }
                 crate::raptor_atlas::SummaryMode::Extractive => None,

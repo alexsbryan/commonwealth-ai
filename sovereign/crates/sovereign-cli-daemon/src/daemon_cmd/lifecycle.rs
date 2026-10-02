@@ -2,7 +2,7 @@
 //! Daemon process lifecycle — extracted from `daemon_cmd` (§3.2).
 //! start / stop / restart / reload / status, and the pidfile + port-probe
 //! plumbing. The foreground run's signal-wait moved out with the run body
-//! (de-embed, docs/FIVE_PROGRAMS.md §11 step 10) — it now lives beside the
+//! (de-embed, docs/internal/FIVE_PROGRAMS.md §11 step 10) — it now lives beside the
 //! daemon loop it parks, in `sovereign-daemon`'s fork of this module.
 
 /// The port this host's daemon is actually configured to serve on.

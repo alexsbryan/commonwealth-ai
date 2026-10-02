@@ -95,6 +95,7 @@
 //! forbid.
 
 pub mod actor;
+pub mod alpn;
 pub mod answer;
 pub mod attribution;
 pub mod conformance;

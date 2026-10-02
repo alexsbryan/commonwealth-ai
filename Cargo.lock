@@ -2002,12 +2002,12 @@ version = "0.8.0"
 dependencies = [
  "ed25519-dalek 2.2.0",
  "hex",
- "oplog",
+ "kernel-types",
+ "oplog-types",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "tracing",
- "workspace-hack",
 ]
 
 [[package]]
@@ -9245,11 +9245,21 @@ name = "oplog"
 version = "0.8.0"
 dependencies = [
  "kernel-types",
+ "oplog-types",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "oplog-types"
+version = "0.8.0"
+dependencies = [
+ "kernel-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -13357,6 +13367,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "understanding-vocab",
+ "unicode-normalization",
  "uuid",
  "walkdir",
  "workspace-hack",

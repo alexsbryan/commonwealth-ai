@@ -328,7 +328,7 @@ pub(crate) async fn append_act(
             .map(|done| (done.op, Some(retire(&done.retired))))
     } else {
         journal
-            .append(act, rail.signer(), &roster, stamp)
+            .append(act, rail.signer(), &roster, stamp, &Ed25519Verifier)
             .map(|op| (op, None))
     };
     match appended {
@@ -530,7 +530,7 @@ pub async fn attest(
 
 /// GET /v1/rail/digest?namespace= — the journal's per-actor high-water marks.
 fn digest_answer(journal: &Arc<RingJournal>) -> Response {
-    match journal.digest() {
+    match journal.digest(&Ed25519Verifier) {
         Ok(d) => Json(serde_json::json!({
             "namespace": journal.namespace(),
             "digest": d,
@@ -555,7 +555,11 @@ pub struct MissingBody {
 }
 
 fn missing_answer(journal: &Arc<RingJournal>, body: MissingBody) -> Response {
-    match journal.ops_missing_from_within(&body.digest, body.budget.unwrap_or(NO_BUDGET)) {
+    match journal.ops_missing_from_within(
+        &Ed25519Verifier,
+        &body.digest,
+        body.budget.unwrap_or(NO_BUDGET),
+    ) {
         Ok((ops, more)) => Json(serde_json::json!({
             "namespace": journal.namespace(),
             "ops": ops,

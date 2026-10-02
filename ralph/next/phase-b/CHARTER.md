@@ -5,7 +5,7 @@ loop decide its own forks instead of stalling on a sleeping human (operator
 directive 2026-09-21, carried from five-programs).
 `sovereign/ARCH_PRINCIPLES.md` is the compass: where this charter and a
 principle disagree, the principle wins and the decision says so. The design is
-docs/FIVE_PROGRAMS.md §1, §2, §2c, §4 and §12 3a as amended 2026-09-25, with
+docs/internal/FIVE_PROGRAMS.md §1, §2, §2c, §4 and §12 3a as amended 2026-09-25, with
 its reasoning in ralph/decisions/phase-b-1.md.
 
 ## You are the operator's delegate
@@ -36,7 +36,7 @@ Split only when two outcomes need different proofs.
   rewrite you cannot trial is not a decision you can make: write the package.
   fp-44 and pb-10 falsified director rewrites 15 and 7 minutes after they
   were written; this rule is why.
-- A decision that changes the design edits docs/FIVE_PROGRAMS.md in the same
+- A decision that changes the design edits docs/internal/FIVE_PROGRAMS.md in the same
   commit. A decision that contradicts FIVE_PROGRAMS without editing it is
   incomplete (phase-b-29 fixed §1, §2c and §4 rule 2 against phase-b-1).
 

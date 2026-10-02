@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `svrn daemon` — the verb surface around the daemon process.
 //!
-//! Until the de-embed (docs/FIVE_PROGRAMS.md §11 step 10) this module
+//! Until the de-embed (docs/internal/FIVE_PROGRAMS.md §11 step 10) this module
 //! also RAN the daemon in-process: config load, provider, engine,
 //! stores, commissioning, the run loop. That body forked to the
 //! `sovereign-daemon` crate's own `[[bin]]`, and what stays here is
@@ -262,7 +262,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // log rotation, memory watch, provider, engine, stores, Runtime
     // commissioning, mesh resume, the shutdown choreography — and all
     // of it forked to the `sovereign-daemon` binary at the de-embed
-    // (docs/FIVE_PROGRAMS.md §11 step 10). `exec(2)` replaces this
+    // (docs/internal/FIVE_PROGRAMS.md §11 step 10). `exec(2)` replaces this
     // process image, so the pid, the pidfile semantics, the service
     // manager's child, and the desktop's supervised `--daemon-child`
     // all keep pointing at the process that now runs the daemon.

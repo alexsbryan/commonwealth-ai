@@ -79,9 +79,11 @@
 mod admit;
 mod attest;
 mod introduce;
+mod membership;
 mod payload;
 mod sig;
 mod sync;
+mod view;
 
 use std::collections::BTreeMap;
 
@@ -89,21 +91,21 @@ use std::collections::BTreeMap;
 pub use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 
-pub use admit::{admit, body_json, Admission, AdmittedOp, RailGap};
+pub use admit::{admit, body_json, Admission, AdmittedOp, GapClass, RailGap};
 pub use attest::{AttestRefusal, GuestAttestation};
 pub use introduce::{trace, trace_op, Introduce, Vouch, VouchStatus};
+pub use membership::{membership, Membership};
 pub use payload::{Payload, PayloadError, MAX_PAYLOAD_BYTES};
 pub use sig::{actor_of, ring_op_message, sign_ring_op};
-pub use sync::{
-    digest, ops_missing_from, ops_missing_from_within, Compaction, Digest, Floors, NO_BUDGET,
-};
+pub use sync::{digest, ops_missing_from, ops_missing_from_within, Compaction, Floors, NO_BUDGET};
+pub use view::{Digest, View, DIGEST_V};
 
 /// The journal envelope, re-exported so a consumer of the rail names ONE
 /// crate. `Op<SignedOp>` is what crosses the ring-sync wire
 /// (`commonwealth-api/src/routes_internal/ring_sync.rs`,
 /// `sovereign-mesh/src/ring_sync.rs`), and a caller that had to name `oplog`
 /// separately would be free to reach a different version of it.
-pub use oplog::{Journaled, Op, OpId, SkippedLine};
+pub use oplog_types::{Journaled, Op, OpId, SkippedLine};
 
 // A consumer cannot use this crate without both of these, and until 2026-09-04
 // neither was exported — so the only shipped `RingSigner` impl was for a type
@@ -326,6 +328,44 @@ pub enum RailAct {
     /// It carries no payload, so an app's reducer never sees it
     /// ([`AdmittedOp::applies`] is false); it is delivery, not meaning.
     Seal,
+    /// A member says: this person and this key are in the ring. One of the
+    /// two membership acts (`RING_APPLICATIONS.md` "Amendment 2026-09-18");
+    /// membership is computed from the seed plus these and [`Self::Remove`],
+    /// and nothing else on the journal changes it.
+    ///
+    /// The binding rides IN the record — the reason a `roster.json` edit
+    /// cannot retroactively flip a member's past: acts admitted through an
+    /// `Admit` resolve through the record, not through the file. Undo is the
+    /// [`Self::Correct`] that exists: voiding an `Admit` drops that key and
+    /// every key it transitively admitted, because their admissions were
+    /// signed by a key that no longer holds.
+    ///
+    /// Carries no [`Payload`] and never reaches an app reducer — an app that
+    /// read membership would re-divide every past expense the day someone
+    /// joins (the no-re-division property).
+    Admit {
+        person: Person,
+        /// The key being admitted, as actor hex — the same spelling every
+        /// signature on the wire already uses.
+        key: String,
+    },
+    /// A member says: this key is out. The cut is by the removed key's own
+    /// signed seq (`through_seq`) and never by a position in the order —
+    /// `(ts_unix, actor, seq, id)` starts with the author's own timestamp, so
+    /// a positional cutoff could be dodged by backdating, while a seq cutoff
+    /// cannot (admit already refuses a fork on seq). Two cuts compose by
+    /// minimum with no shared order (the OpenSSH KRL shape).
+    ///
+    /// The cut is PROSPECTIVE at its position in the rail's order: past acts
+    /// by the key stay admitted. PKISN's rule falls out of that position
+    /// scoping — a removed key's later `Remove`s do not count, so a cut party
+    /// cannot cut back. Undo is [`Self::Correct`]: voiding the `Remove`
+    /// restores the member and admits what they wrote while removed.
+    Remove {
+        key: String,
+        /// The last seq of the removed key's own chain that this cut covers.
+        through_seq: u64,
+    },
 }
 
 impl RailAct {
@@ -367,7 +407,7 @@ impl RailAct {
         match self {
             Self::Record { payload } => Some(payload),
             Self::Correct { replacement, .. } => replacement.as_ref(),
-            Self::Seal => None,
+            Self::Seal | Self::Admit { .. } | Self::Remove { .. } => None,
         }
     }
 }
@@ -413,12 +453,51 @@ pub struct SignedOp {
     /// `rail_ops_written_before_on_behalf_of_still_verify` holds to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_behalf_of: Option<String>,
+    /// The author's view of the ring at the moment of writing: every actor's
+    /// [`View`] over what this writer held (the sync digest's entries). It is
+    /// the act citing its context — the DAG heads of
+    /// `RING_APP_LIBRARY.md` §19 step 0 — so an equivocation carries two
+    /// claimed histories in its own two lines, and a future cut
+    /// (`Remove{key, through_seq}`) is weighable against what its remover
+    /// claimed to have seen.
+    ///
+    /// **Self-asserted and unforgable-by-others, like the name above it:** a
+    /// writer claims their own view; nobody can rewrite it in flight because
+    /// it is inside the signature. The journal stamps it at the signing door
+    /// — a caller-supplied `view` is as meaningless as a caller-supplied
+    /// `on_behalf_of`. Absent today for every hand-built fixture and every
+    /// op written before the field existed, and they verify unchanged.
+    ///
+    /// LAST and skipped when absent, for the byte-compatibility reason this
+    /// struct now owes twice (the `on_behalf_of` comment above).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<crate::Digest>,
 }
+
+/// The line format version the membership act cohort ships at
+/// (`RailAct::Admit` / [`RailAct::Remove`]). The original three kinds stay at
+/// `Journaled::VERSION` (1) — see [`SignedOp::line_version`].
+pub const MEMBERSHIP_LINE_VERSION: u32 = 2;
 
 impl Journaled for SignedOp {
     const FILE: &'static str = "ring_oplog.jsonl";
     const ID_PREFIX: &'static str = "ring";
     const LABEL: &'static str = "ring_rail";
+    /// This build reads the membership cohort's lines too (see
+    /// [`Self::line_version`]).
+    const UNDERSTANDS: u32 = MEMBERSHIP_LINE_VERSION;
+    /// The membership acts — [`RailAct::Admit`] and [`RailAct::Remove`] —
+    /// ship at the bumped line version and the original three keep the bytes
+    /// they always had, so an un-upgraded node names exactly the acts it
+    /// cannot read `NewerVersionLine` (leg 5 of `ra-membership-is-order-free`)
+    /// and a ring with no membership act folds byte-identically to the build
+    /// before.
+    fn line_version(&self) -> u32 {
+        match self.act {
+            RailAct::Admit { .. } | RailAct::Remove { .. } => MEMBERSHIP_LINE_VERSION,
+            _ => Self::VERSION,
+        }
+    }
 }
 
 // ── Errors ───────────────────────────────────────────────────
@@ -434,6 +513,11 @@ pub enum RailError {
     /// outside its own namespace by naming a path (ARCH §7.1).
     #[error("'{0}' is not a ring namespace — use 1..=64 characters from a-z, 0-9, '-' and '_'")]
     BadNamespace(String),
+    /// The wall clock is unreadable. Refusing to sign is the only honest
+    /// answer: the previous `unwrap_or(0)` quietly signed lines stamped 0,
+    /// on the signature path itself (ROOT_CAUSE_FIXES C4).
+    #[error("the wall clock is unreadable — refusing to sign a line stamped 0")]
+    Clock,
     #[error("ring rail io: {0}")]
     Io(String),
     /// The door refused to author this act. The string is a sentence, because

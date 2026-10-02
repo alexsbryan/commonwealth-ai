@@ -31,7 +31,7 @@
 //!
 //! # What is deliberately NOT signed
 //!
-//! The [`OpId`](oplog::OpId) is not in the message, because it
+//! The [`OpId`](oplog_types::OpId) is not in the message, because it
 //! is derived from the signature (the id hashes the whole line body, `sig`
 //! included). That is not a hole: admission re-derives the id from content
 //! and ignores the one on the line, so a rewritten `id` changes nothing and

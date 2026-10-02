@@ -117,7 +117,13 @@ async fn an_act_signed_on_one_rails_daemon_reaches_the_other_through_its_own_rou
     let act = RailAct::from_json(serde_json::json!({ "op": "record", "payload": { "n": 1 } }))
         .expect("an act");
     journal
-        .append(act, daemon_a.rail.signer(), &roster, None)
+        .append(
+            act,
+            daemon_a.rail.signer(),
+            &roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        )
         .expect("alpha signs");
     assert_eq!(held(&daemon_a.rail), 1, "control: alpha holds its act");
     assert_eq!(held(&daemon_b.rail), 0, "control: beta holds nothing yet");

@@ -60,7 +60,10 @@ impl RingSyncJournal for RingRail {
 
     fn journal_digest(&self, namespace: &str) -> JournalFut<'_, Digest> {
         let namespace = namespace.to_string();
-        Box::pin(async move { self.journal(&namespace)?.digest() })
+        Box::pin(async move {
+            self.journal(&namespace)?
+                .digest(&commonwealth_rail::Ed25519Verifier)
+        })
     }
 
     fn journal_ingest_all(&self, namespace: &str, ops: &[Op<SignedOp>]) -> JournalFut<'_, usize> {
@@ -78,8 +81,11 @@ impl RingSyncJournal for RingRail {
         let namespace = namespace.to_string();
         let theirs = theirs.clone();
         Box::pin(async move {
-            self.journal(&namespace)?
-                .ops_missing_from_within(&theirs, budget_bytes)
+            self.journal(&namespace)?.ops_missing_from_within(
+                &commonwealth_rail::Ed25519Verifier,
+                &theirs,
+                budget_bytes,
+            )
         })
     }
 

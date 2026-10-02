@@ -11,7 +11,7 @@ fix rows F4-F12, the lift instrument and the O3 test successors. The items those
 re-read in the tree at C and rewritten here. The verb table was read from the built dispatcher
 (target/ralph/phase-b/ship/retired-verbs.log). Items marked "(read from code)" were traced but not run.
 
-Phase B splits the node into programs (docs/FIVE_PROGRAMS.md §2): `svrn`, the knowledge daemon on
+Phase B splits the node into programs (docs/internal/FIVE_PROGRAMS.md §2): `svrn`, the knowledge daemon on
 :9741; `serve`, the model server on :9748; cw-rails, the mesh endpoint on :9747; and `svrn ingest`,
 `svrn code` and `svrn bench`. A stock install still runs as one process. The mesh now belongs to
 cw-rails, and nothing starts cw-rails unless you ask it to.

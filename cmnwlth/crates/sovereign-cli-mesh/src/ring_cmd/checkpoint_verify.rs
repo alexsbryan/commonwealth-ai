@@ -98,18 +98,20 @@ pub(crate) fn verify_document(
     }
 
     // ── step 3: digest equality — the completeness claim ────────
-    let computed = digest(&ops);
+    let computed = digest(&ops, ns, &Ed25519Verifier);
     let mut actors: std::collections::BTreeSet<&str> =
         computed.keys().map(String::as_str).collect();
     actors.extend(stated.keys().map(String::as_str));
     for actor in actors {
-        let c = computed.get(actor);
-        let s = stated.get(actor);
-        if c != s {
-            let said = |m: Option<&u64>| {
-                m.map(|n| n.to_string())
-                    .unwrap_or_else(|| "no mark".to_string())
-            };
+        let (c, s) = (computed.get(actor), stated.get(actor));
+        if c == s {
+            continue;
+        }
+        let said = |m: Option<&commonwealth_rail::View>| {
+            m.map(|v| v.mark.to_string())
+                .unwrap_or_else(|| "no mark".to_string())
+        };
+        if c.map(|v| (v.from, v.mark)) != s.map(|v| (v.from, v.mark)) {
             return Err(refusal(
                 STEP_DIGEST,
                 &format!(
@@ -119,12 +121,22 @@ pub(crate) fn verify_document(
                 ),
             ));
         }
+        // Same run claimed, different content: the one substitution a
+        // marks-only digest could not see (ROOT_CAUSE_FIXES A1).
+        let at = c.or(s).map(|v| v.mark).unwrap_or(0);
+        return Err(refusal(
+            STEP_DIGEST,
+            &format!(
+                "actor {actor}'s content commitment disagrees at the same mark {at} — \
+                 the document's ops are not the ones it was cut from"
+            ),
+        ));
     }
 
     // ── step 4: render — marks, admitted-act count, gaps ────────
     let mut out = format!("{ns}: verified — {} admitted act(s)\n", admission.ops.len());
-    for (actor, mark) in &computed {
-        out.push_str(&format!("  mark {actor}: {mark}\n"));
+    for (actor, view) in computed.iter() {
+        out.push_str(&format!("  mark {actor}: {}\n", view.mark));
     }
     if admission.gaps.is_empty() {
         out.push_str("no gaps\n");
@@ -143,7 +155,12 @@ fn refusal(step: &str, why: &str) -> String {
 }
 
 /// Whether this gap means the document carries an inauthentic or forked act
-/// (`Some`, the refusal's why) or merely an incomplete one (`None`, rendered).
+/// (`Some`, the refusal's why) or merely an incomplete or contested one
+/// (`None`, rendered). A document-level POLICY over gap kinds — the four
+/// whose acts cannot stand beside any fold — while `RailGap::class()`
+/// answers the fold's own question (can this gap hide acts). Explicit arms,
+/// no catch-all: a new gap kind must make this decision again, not inherit
+/// a default (ARCH §18.3).
 fn authenticity_refusal(gap: &RailGap, ops: &[Op<SignedOp>]) -> Option<String> {
     match gap {
         RailGap::BadSignature { actor, .. } => {
@@ -162,7 +179,11 @@ fn authenticity_refusal(gap: &RailGap, ops: &[Op<SignedOp>]) -> Option<String> {
         RailGap::SequenceFork { actor, seq, .. } => Some(format!(
             "actor {actor} used one sequence number twice (#{seq}) — the document forks"
         )),
-        _ => None,
+        RailGap::MalformedLine { .. }
+        | RailGap::NewerVersionLine { .. }
+        | RailGap::SequenceHole { .. }
+        | RailGap::NotAMember { .. }
+        | RailGap::DanglingCorrection { .. } => None,
     }
 }
 
@@ -289,6 +310,7 @@ mod tests {
                     rail.signer(),
                     &roster,
                     None,
+                    &Ed25519Verifier,
                 )
                 .unwrap();
         }
@@ -384,7 +406,7 @@ mod tests {
             }))
             .unwrap(),
         };
-        let body = body_json(&act, None);
+        let body = body_json(&act, None, None);
         let sig = sign_ring_op(&key(), NS, existing.ts_unix, existing.kind.seq, &body);
         let planted = Op::new(
             SignedOp {
@@ -392,6 +414,7 @@ mod tests {
                 sig,
                 act,
                 on_behalf_of: None,
+                view: None,
             },
             existing.ts_unix,
             actor.clone(),
@@ -404,6 +427,49 @@ mod tests {
         let err = verify_document(&doc, None).unwrap_err();
         assert!(err.contains(STEP_ADMIT), "{err}");
         assert!(err.contains("fork"), "{err}");
+        assert!(err.contains(&actor), "the actor is named: {err}");
+    }
+
+    /// **A one-for-one substitution at one seq must not verify.** The fork
+    /// test plants a SECOND op and admits catches the pair; this replaces the
+    /// line outright — a well-formed set with no fork in it, validly signed,
+    /// where only the CONTENT differs from the document's own completeness
+    /// claim. Marks-only digests cannot see this (the seqs are identical);
+    /// the content commitment is what refuses it.
+    #[tokio::test]
+    async fn a_one_for_one_substitution_at_one_seq_refuses_naming_the_content_commitment() {
+        let dir = tempfile::tempdir().unwrap();
+        let actor = key().actor();
+        let mut doc = export(rail_with_acts(dir.path(), 3).await).await;
+
+        let existing: Op<SignedOp> = serde_json::from_str(doc["ops"][1].as_str().unwrap()).unwrap();
+        let act = RailAct::Record {
+            payload: Payload::new(serde_json::json!({
+                "kind": "expense", "amount": 999,
+            }))
+            .unwrap(),
+        };
+        let body = body_json(&act, None, None);
+        let sig = sign_ring_op(&key(), NS, existing.ts_unix, existing.kind.seq, &body);
+        let substitute = Op::new(
+            SignedOp {
+                seq: existing.kind.seq,
+                sig,
+                act,
+                on_behalf_of: None,
+                view: None,
+            },
+            existing.ts_unix,
+            actor.clone(),
+        );
+        doc["ops"][1] = serde_json::json!(serde_json::to_string(&substitute).unwrap());
+
+        let err = verify_document(&doc, None).unwrap_err();
+        assert!(err.contains(STEP_DIGEST), "{err}");
+        assert!(
+            err.contains("content commitment"),
+            "the content claim is what failed: {err}"
+        );
         assert!(err.contains(&actor), "the actor is named: {err}");
     }
 

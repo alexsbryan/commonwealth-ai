@@ -24,6 +24,10 @@ iroh = "=1.0.2"
 wasm-bindgen = "=0.2.128"
 wasm-bindgen-futures = "=0.4.78"
 js-sys = "=0.3.105"
+# The shared wire identity (GUEST_ALPN). Layer 0 — depends on no product
+# crate — so the pinned closure above is untouched; this is the one window
+# this standalone workspace opens back into the tree, and it opens downward.
+kernel-types = { path = "../../../shared/crates/kernel-types" }
 
 # Its own workspace root: without this, cargo walks up to the repo's
 # [workspace] and refuses the crate as a non-member.

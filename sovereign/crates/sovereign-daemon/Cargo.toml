@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# The assembled-host process (docs/FIVE_PROGRAMS.md §11 step 10) — the
+# The assembled-host process (docs/internal/FIVE_PROGRAMS.md §11 step 10) — the
 # run path the `svrn daemon` verb `exec`s into, and the process
 # launchd/systemd units point at. `treesitter` because `daemon_cmd`
 # mounts `bootstrap` and `tool_registry`, both gated on the feature the

@@ -216,6 +216,7 @@ async fn a_peer_op_ingested_through_the_door_is_served_after_one_fold() {
             &peer_key,
             &peer_roster,
             None,
+            &commonwealth_rail::Ed25519Verifier,
         )
         .unwrap();
     let (ops, _) = peer_journal.read().unwrap();
@@ -304,6 +305,7 @@ async fn a_peer_op_in_a_local_only_journal_is_not_rehydrated() {
             &peer_key,
             &roster,
             None,
+            &commonwealth_rail::Ed25519Verifier,
         )
         .expect("the peer is in the roster, so its line is admitted");
     drop(first);
@@ -358,6 +360,7 @@ async fn a_local_only_write_is_journaled_and_never_offered() {
         .journal(PRIVATE)
         .unwrap()
         .ops_missing_from_within(
+            &commonwealth_rail::Ed25519Verifier,
             &commonwealth_rail::Digest::new(),
             commonwealth_rail::NO_BUDGET,
         )
@@ -449,7 +452,13 @@ async fn journal_cost_reading() {
         })
         .collect();
     journal
-        .append_all(base, host.rail.signer(), &roster, None)
+        .append_all(
+            base,
+            host.rail.signer(),
+            &roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        )
         .unwrap();
     let peer = SigningKey::from_bytes(&[9; 32]);
     let mut peer_seq = 0u64;
@@ -550,7 +559,13 @@ async fn a_live_set_over_the_bar_seals_once_not_on_every_write() {
         })
         .collect();
     journal
-        .append_all(pad, again.rail.signer(), &roster, None)
+        .append_all(
+            pad,
+            again.rail.signer(),
+            &roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        )
         .unwrap();
     again.store.set(NS, "live/2", "z".into(), me).unwrap();
     let short = drain(&again).await;

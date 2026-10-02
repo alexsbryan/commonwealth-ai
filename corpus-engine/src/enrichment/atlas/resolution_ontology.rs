@@ -13,14 +13,14 @@
 //! Every pass here is pure and takes the already-resolved entity set, so each
 //! is testable without an embedder and none of them can renumber an atom.
 //!
-//! **What is deliberately not checked.** A `ref` attribute snaps by NAME and
-//! nothing verifies that the atom it landed on is of the declared `of` type.
-//! `of` earns its keep in the prompt (P2 renders it) and in
-//! `recipe validate`; adding a second, stricter gate here would refuse a
-//! correct snap whenever Phase 1 typed the target as one of the generic six,
-//! which is the common case on a first extraction. The resolver's own
-//! ambiguity guard is the gate, and an unresolved ref is recorded, not
-//! silently dropped (§18.3).
+//! **What is checked, and what deliberately is not.** A `ref` attribute
+//! snaps by NAME. A target whose type is ANOTHER declared type is refused
+//! (a `mint` ref landing on a hoard: 33 such refs on the ei7-ans atlas,
+//! feature-fidelity O0, 2026-10-02). A target typed as one of the generic
+//! six is NOT checked: refusing it would refuse a correct snap whenever
+//! Phase 1 typed the target generically, which is the common case on a
+//! first extraction. Either way an unresolved or refused ref keeps its name
+//! and is recorded, not silently dropped (§18.3).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -509,6 +509,36 @@ pub fn snap_ref_attributes(
                 token_index,
             ) {
                 Some(target) => {
+                    // Refuse a target of ANOTHER declared type (a `mint` ref
+                    // landing on a hoard). A generic-typed target still snaps
+                    // — that is the case the module comment protects.
+                    let target_type = entities
+                        .iter()
+                        .find(|e| e.id == target)
+                        .map(|e| e.entity_type.as_str_repr());
+                    if let Some(actual) =
+                        target_type.filter(|t| policy.index.contains(t) && !policy.accepts(of, t))
+                    {
+                        debug!(
+                            entity = %entity.canonical_name,
+                            attribute = %attr,
+                            value = %name,
+                            actual,
+                            "atlas/resolution 3b: ref resolved to another declared type; keeping the name"
+                        );
+                        failures.push(PhaseFailure {
+                            phase: PHASE,
+                            subject: format!("atom:{}", entity.id.as_str()),
+                            kind: PhaseFailureKind::UnresolvedAttributeRef,
+                            reason: format!(
+                                "`{}`.{attr} = `{name}` (declared ref to `{of}`) resolved to a \
+                                 `{actual}`, another declared type; the attribute keeps the name",
+                                entity.canonical_name
+                            ),
+                            raw_response_head: None,
+                        });
+                        continue;
+                    }
                     debug!(
                         entity = %entity.canonical_name,
                         attribute = %attr,

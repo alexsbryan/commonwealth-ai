@@ -128,7 +128,13 @@ async fn append(rail: &RingRail, ns: &str, amount: u64) {
     )
     .unwrap();
     journal
-        .append(act, rail.signer(), &roster, None)
+        .append(
+            act,
+            rail.signer(),
+            &roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        )
         .unwrap_or_else(|e| panic!("append to {ns}: {e}"));
 }
 

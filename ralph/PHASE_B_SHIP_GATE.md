@@ -3,7 +3,7 @@
 Pre-registered by the seat on 2026-10-01, before any reading it names. It replaces the review draft of
 2026-09-30, which read `origin/cut` at 628b01f08 on the macOS peer; where the two differ, this file says why.
 
-Phase B's structural finish (docs/FIVE_PROGRAMS.md: boundary-gate at 0, no `package = "svrn"` exception,
+Phase B's structural finish (docs/internal/FIVE_PROGRAMS.md: boundary-gate at 0, no `package = "svrn"` exception,
 six lifts, the EmbeddedDaemon census) does not say whether a user's install, chat turn, ingest or mesh query
 still works the way it did on main. This gate adds that condition at a fixed price: **about two and a half
 hours of runs at the final tip on RuggedFox, plus three small fix rows before it.** Anything that costs

@@ -32,7 +32,7 @@ dispatch halts the whole pool: census every in-scope row first.
 - Row order; folding rows on the same files; splitting when proofs differ
   (`<id>-<suffix>` stays in scope); BLOCKED when a premise waits on an
   unlanded row; `[x]` with the evidence when the tree no longer has the defect.
-- Where a moved item lands: docs/FIVE_PROGRAMS.md §12 3a, and anything
+- Where a moved item lands: docs/internal/FIVE_PROGRAMS.md §12 3a, and anything
   mesh-facing by §4 rule 8 (phase-b-18). Extend, never re-own: a fix that
   makes a program impossible to take alone is wrong, however small.
 - Re-running a red gate to understand it, fixing the code it names, splitting

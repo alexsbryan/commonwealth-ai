@@ -1,7 +1,7 @@
 <!-- ledger -->
 
 **the-link-7 · 2026-09-22 · REVIEW-audit-the-link · director** — e9d0c4f85 · 49b664b2e · this commit
-- Needed: The audit body was done and committed (5d44de59f) but the row stayed `[~]` on its two named checks, both red on causes the campaign's diff does not touch. TESTALL 13701/1: `every_journey_cites_a_doc_that_exists` — mesh-offers-catalogue cites `docs/internal/RING_APPLICATIONS.md`, gitignored per-host (`.gitignore:67`), absent here, cited since a3bd715f5, an ancestor of BASE. PREPUSH arch-gate [hard]: `runner.rs` past slack and the approach band +446. The package posed both as operator forks; the tree contradicts that framing — a313c9c18 (the runner.rs growth) is ON origin/main, the branch's `origin/main..HEAD` diff has zero `.rs` changes, and the 2074 pin was already 45 lines stale (the file was 2119 when 5bd896d8f froze it).
+- Needed: The audit body was done and committed (5d44de59f) but the row stayed `[~]` on its two named checks, both red on causes the campaign's diff does not touch. TESTALL 13701/1: `every_journey_cites_a_doc_that_exists` — mesh-offers-catalogue cites `docs/internal/rings/reference/RING_APPLICATIONS.md`, gitignored per-host (`.gitignore:67`), absent here, cited since a3bd715f5, an ancestor of BASE. PREPUSH arch-gate [hard]: `runner.rs` past slack and the approach band +446. The package posed both as operator forks; the tree contradicts that framing — a313c9c18 (the runner.rs growth) is ON origin/main, the branch's `origin/main..HEAD` diff has zero `.rs` changes, and the 2074 pin was already 45 lines stale (the file was 2119 when 5bd896d8f froze it).
 - Chose: (1) The file: SPLIT, never re-pinned — the trailing `degraded_router_tests` module (100 test-only lines) moved to `runner/degraded_router_tests.rs` under `#[path]`, the `router.rs`→`router/posture_tests.rs` precedent; runner.rs 2133→2037, back under its pin (e9d0c4f85). (2) The band: re-pinned AT origin/main from a detached worktree per the 2026-09-21 direction's recipe, `approach_band.txt` ONLY — `oversized.txt`/`instruction_surface.txt` deliberately not copied back, because a file pin is never raised (49b664b2e). (3) TESTALL's red: recorded foreign per this queue's own precedent (A51 rr-2, A59 ring-guest — the identical red on this host), row closed on the campaign's share; restore-or-rename of the per-host doc stays the operator's (third report).
 - Because: The direction makes the file-ceiling fix "never re-pinned, never an operator question" and prescribes the origin/main re-pin for ratchets in arrears; the charter's decide-list covers "fixing the code the gate names". The TESTALL red is not a ratchet and its fix (restore or rename a per-host doc this campaign never cited) is outside the charter's leave-list's spirit to guess at — closing on the campaign's share with the red honestly recorded is ARCH 5's four-verdict close, and it is exactly what A51 and A59 did.
 
@@ -61,7 +61,7 @@ is the third report to the operator, per A59's own counting.
   designed; concept-gate declared could-not-judge).
 - TESTALL red: `--package sovereign-cli --filter
   every_journey_cites_a_doc_that_exists` → 0 passed / 1 failed, "mesh-offers-
-  catalogue cites `docs/internal/RING_APPLICATIONS.md`, which does not exist" —
+  catalogue cites `docs/internal/rings/reference/RING_APPLICATIONS.md`, which does not exist" —
   the same sentence the audit recorded.
 - rail-core diff EMPTY (invariant c3fed9c3); regression sets C2/C3/rr-1
   untouched; no D1-D4 surface touched by any of the three commits.

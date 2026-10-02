@@ -180,7 +180,7 @@ pub struct IrohSection {
     /// mesh's catalogue is COMPUTED by asking every publisher at once and
     /// returning a row each, so there is no stored listing to be excluded
     /// from and nobody positioned to rank
-    /// (`docs/internal/RING_APPLICATIONS.md` §Commerce). A static JSON file
+    /// (`docs/internal/rings/reference/RING_APPLICATIONS.md` §Commerce). A static JSON file
     /// behind `python3 -m http.server` is a legitimate offer origin.
     ///
     /// Its own key rather than an `[iroh.apps]` entry named `offers`,

@@ -1,7 +1,7 @@
 [Unit]
 # ONE process: the on-prem distribution (sovereign-onprem) owns the model
 # weights, the index, the conversations and the client API nginx proxies
-# to. It composes no shell, web or MCP surface (docs/FIVE_PROGRAMS.md §2c).
+# to. It composes no shell, web or MCP surface (docs/internal/FIVE_PROGRAMS.md §2c).
 Description=firm-rag grounded search (sovereign-onprem) — the client API and the model weights
 Documentation=file:/opt/firm-rag/README.md
 After=network.target

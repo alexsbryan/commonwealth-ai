@@ -42,6 +42,8 @@ corpus-engine-sections = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Name-matching normalization (fold) — see summary_verify.rs fold().
+unicode-normalization = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 futures = { workspace = true }

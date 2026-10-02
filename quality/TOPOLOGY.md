@@ -136,7 +136,7 @@ membership comes from the receiver-scoped `Runtime` mutator matrix of the same
 day. Anything here that is not yet true is marked `TARGET`.
 
 *Dated 2026-09-26.* The single assembler below predates the five-program
-split (docs/FIVE_PROGRAMS.md §2). Weights and compute children are now
+split (docs/internal/FIVE_PROGRAMS.md §2). Weights and compute children are now
 `serve`'s, the SCIP graph belongs to `svrn code`, and the node key and mesh
 endpoint belong to cw-rails (§4 rule 8). Two parts still hold, and rule 8
 builds on both: the ring rule (place a capability by what its absence costs)

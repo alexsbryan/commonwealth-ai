@@ -5,7 +5,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# Ingest's hosting composition for svrn (docs/FIVE_PROGRAMS.md §2c;
+# Ingest's hosting composition for svrn (docs/internal/FIVE_PROGRAMS.md §2c;
 # phase-b-88): the one `hosted()` both distributions hand svrn, moved out of
 # sovereign-stock so on-prem calls it instead of mounting stock's file. A
 # library in no package and no leaf, listed in BOTH the `stock` and `onprem`

@@ -2,7 +2,7 @@
 
 > **The `[[package]] name = "studio"` row was deleted 2026-09-21** when
 > `quality/ARCH_LAYERS.toml` was rewritten to declare the five programs
-> (`docs/FIVE_PROGRAMS.md` §9). Studio is not one of the five, and §5 lists its
+> (`docs/internal/FIVE_PROGRAMS.md` §9). Studio is not one of the five, and §5 lists its
 > surface under "deleted, not migrated" unless a §7 journey reaches it — so
 > `sovereign-studio`, `sovereign-workflow` and `sovereign-workflow-host` are in
 > NO package and NOTHING enforces the boundary this document describes.

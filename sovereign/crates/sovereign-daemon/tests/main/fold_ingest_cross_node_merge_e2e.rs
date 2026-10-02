@@ -184,13 +184,14 @@ pub(crate) fn sign(seed: u8, ts: i64, seq: u64, act: &WorkAct) -> Op<SignedOp> {
     let inner = RailAct::Record {
         payload: payload_of(act),
     };
-    let sig = sign_ring_op(&k, WORK_NAMESPACE, ts, seq, &body_json(&inner, None));
+    let sig = sign_ring_op(&k, WORK_NAMESPACE, ts, seq, &body_json(&inner, None, None));
     Op::new(
         SignedOp {
             seq,
             sig,
             act: inner,
             on_behalf_of: None,
+            view: None,
         },
         ts,
         actor_of(&k),

@@ -209,9 +209,10 @@ pub fn sketch_may_merge_into(
     }
 }
 
-// ── 3b: resolving a subject within its declared type ─────────
-/// Per-declared-type entity pools for claim-subject resolution, built once per
-/// type on first use so the per-claim cost is a map lookup.
+// ── 3b: resolving a name within its declared type ────────────
+/// Per-declared-type entity pools for resolving a name within its declared
+/// type — a claim's subject, a declared relation's ends — built once per type
+/// on first use so the per-name cost is a map lookup.
 ///
 /// THE INDEXES ARE THE POINT, not the entity slice. A reuse review on
 /// 2026-09-03 proposed replacing this with an `accept: &dyn Fn(&Entity)`
@@ -266,14 +267,15 @@ impl TypedSubjectPools {
     }
 }
 
-/// Resolve a claim's `subject`. Undeclared kinds take the general path. A kind
-/// declaring `subject = T` accepts a general hit only when it IS a `T` (or a
-/// specialisation); otherwise the name is resolved again among the `T` atoms
-/// alone. Measured before this existed: Halstead's "Series Y sceattas (Wessex
-/// Down 1)" resolved to the person Aldfrith on token salience, and the
-/// tension pass — which pairs claims by subject — never saw the dispute the
-/// corpus was written around.
-pub fn resolve_claim_subject(
+/// Resolve a name the ontology types: a claim's `subject`, a declared
+/// relation's ends. With no declared type it is the general path. Declaring
+/// `T` accepts a general hit only when it IS a `T` (or a specialisation);
+/// otherwise the name is resolved again among the `T` atoms alone. Measured
+/// before this existed: Halstead's "Series Y sceattas (Wessex Down 1)"
+/// resolved to the person Aldfrith on token salience, and the tension pass —
+/// which pairs claims by subject — never saw the dispute the corpus was
+/// written around.
+pub fn resolve_within_declared_type(
     name: &str,
     declared: Option<&str>,
     policy: &ResolutionPolicy<'_>,
@@ -295,10 +297,10 @@ pub fn resolve_claim_subject(
             return general;
         }
         debug!(
-            subject = name,
+            name,
             declared,
             resolved = ?id,
-            "atlas/resolution 3b: claim subject resolved outside its declared type; \
+            "atlas/resolution 3b: name resolved outside its declared type; \
              retrying among that type's atoms"
         );
     }
@@ -306,9 +308,53 @@ pub fn resolve_claim_subject(
     let typed =
         resolve_entity_id_with_salience(name, &pool.entities, &pool.name_index, &pool.token_index);
     if let Some(id) = &typed {
-        debug!(subject = name, declared, resolved = ?id, "atlas/resolution 3b: claim subject resolved within its declared type");
+        debug!(name, declared, resolved = ?id, "atlas/resolution 3b: name resolved within its declared type");
     }
     typed
+}
+
+/// Resolve a relation sketch's participants, each declared end (`ends[0]` is
+/// `from`, `[1]` is `to`, by sketch position) within its declared type.
+/// Returns `(resolved, unresolved)` with the general resolver's dedup.
+///
+/// When no atom of the declared type carries the name, the general hit
+/// stands, so the endpoint check still refuses it and records what was
+/// actually there — a real mismatch stays a mismatch, not an unresolved name.
+/// With no declared ends this is the general resolver exactly.
+pub fn resolve_relation_participants(
+    names: &[String],
+    ends: [Option<&str>; 2],
+    policy: &ResolutionPolicy<'_>,
+    entities: &[Entity],
+    name_index: &HashMap<String, AtomId>,
+    token_index: &HashMap<String, Vec<AtomId>>,
+    pools: &mut TypedSubjectPools,
+) -> (Vec<AtomId>, Vec<String>) {
+    let mut resolved = Vec::with_capacity(names.len());
+    let mut unresolved = Vec::new();
+    for (position, name) in names.iter().enumerate() {
+        let declared = ends.get(position).copied().flatten();
+        let id = resolve_within_declared_type(
+            name,
+            declared,
+            policy,
+            entities,
+            name_index,
+            token_index,
+            pools,
+        )
+        .or_else(|| {
+            declared.and_then(|_| {
+                resolve_entity_id_with_salience(name, entities, name_index, token_index)
+            })
+        });
+        match id {
+            Some(id) if !resolved.contains(&id) => resolved.push(id),
+            Some(_) => {}
+            None => unresolved.push(name.clone()),
+        }
+    }
+    (resolved, unresolved)
 }
 
 #[cfg(test)]

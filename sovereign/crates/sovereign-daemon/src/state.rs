@@ -261,6 +261,14 @@ pub struct AppStateInner {
     /// throttle dials, and the newsworthy tick handle. Held as a part so route
     /// shells read it directly (DC §4.2).
     pub ingest: ingest::IngestPart,
+    /// The append door's idempotency ledger: `(caller, namespace, key) → the
+    /// recorded response`, so a replayed POST yields one act and the same
+    /// answer (ROOT_CAUSE_FIXES C3b). Door-PROCESS scope, and that is the
+    /// honest claim: exactly-once per door process — the journal's own dedupe
+    /// covers byte-identical re-ingest. Short-lived door state, so it never
+    /// goes on the permanent journal.
+    pub rail_idempotency:
+        Arc<std::sync::Mutex<std::collections::BTreeMap<String, serde_json::Value>>>,
 }
 
 impl AppStateInner {
@@ -748,6 +756,7 @@ impl AppState {
         Self {
             inner: Arc::new(AppStateInner {
                 fabric,
+                rail_idempotency: Default::default(),
                 serving: serving::ServingPart {
                     model_aliases: ModelAliasTable::default_table(),
                     pipeline_aliases:

@@ -1,6 +1,6 @@
 # Cloud tensor peer — renting a GPU pod into the mesh
 
-Validated 2026-07-27 (see `DISTRIBUTED_PILOT_READINESS.md` validation log): a
+Validated 2026-07-27: a
 $0.055/hr Vast RTX 3060 Ti joined the production mesh as a ggml-RPC tensor
 worker over iroh and served a shard of the Qwen3.5-4B primary at
 **~7.2 t/s median WAN decode** (vs 17.35 t/s same-day LAN forced-tunnel
@@ -85,7 +85,7 @@ The launch script handles the traps found on the first run:
   via=iroh-bridge`. Pod `/status`: `rpc_worker {port, iroh:true}`.
   `svrn mesh transport`: expect `mixed`/`direct` — relay-only is a finding.
   Worker eligibility needs 300 s continuous presence (do not shorten the
-  settle; see DISTRIBUTED_GDN_CRASH_STATUS.md §8.5).
+  settle).
 - **G2 — measured decode.** After the discovery loop auto-reloads the primary
   (`mode=distributed` in `/status`):
   `PEER=<pod name> scripts/measure-distributed-decode.sh` — six guards; only
@@ -117,6 +117,7 @@ curl -s -X POST localhost:9741/v1/mesh/rotate
   follow-up.
 - The pod's tiny VRAM share is structural for small models: the host's VRAM
   dominates the byte-mass split. For a real capacity win, this path wants the
-  can't-fit-one-box case (122B) — see QWEN122B_DISTRIBUTED_HANDOFF.md.
+  can't-fit-one-box case (122B) — see [Run a model bigger than your
+  machine](./RUN_A_BIGGER_MODEL.md).
 - Member records for destroyed pods linger as `offline` until pruned by
   mesh policy; rotation prevents rejoin.

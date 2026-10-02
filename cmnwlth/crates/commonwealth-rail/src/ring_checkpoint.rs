@@ -35,7 +35,7 @@ pub fn checkpoint_document(
         "ns": ns,
         "created_unix": created_unix,
         "roster": roster,
-        "digest": digest(ops),
+        "digest": digest(ops, ns, &commonwealth_rail_core::Ed25519Verifier),
         "ops": lines,
     }))
 }

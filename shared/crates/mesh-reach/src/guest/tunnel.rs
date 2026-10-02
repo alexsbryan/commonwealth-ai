@@ -75,7 +75,7 @@ impl GuestTunnel {
         discovery: Option<&str>,
     ) -> Result<GuestTunnel, String> {
         let target = parse_dial_string(dial)?;
-        let relay_cfg = RelayConfig::from_parts(relay_urls, discovery);
+        let relay_cfg = RelayConfig::from_parts(relay_urls, discovery)?;
         let secret = SecretKey::from_bytes(&rand::random::<[u8; 32]>());
         let endpoint = build_relayed_endpoint(secret, vec![GUEST_ALPN.to_vec()], &relay_cfg)
             .await

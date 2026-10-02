@@ -65,7 +65,7 @@ pub fn signed_for(
     act: RailAct,
     on_behalf_of: Option<&str>,
 ) -> Op<SignedOp> {
-    let body = body_json(&act, on_behalf_of);
+    let body = body_json(&act, on_behalf_of, None);
     let signature = sign_ring_op(k, ns, ts, seq, &body);
     Op::new(
         SignedOp {
@@ -73,6 +73,7 @@ pub fn signed_for(
             sig: signature,
             act,
             on_behalf_of: on_behalf_of.map(str::to_string),
+            view: None,
         },
         ts,
         actor_of(k),
@@ -81,6 +82,15 @@ pub fn signed_for(
 
 pub fn admitted(ops: &[Op<SignedOp>]) -> Admission {
     admit(ops, &[], &ring(), NS, &Ed25519Verifier)
+}
+
+/// The marks projection of a digest — what most sync bars assert on. The
+/// content commitment is asserted where it is the point (`view`'s tests and
+/// the fork bars); everywhere else the mark is the claim under test.
+pub fn marks(d: &crate::Digest) -> BTreeMap<String, u64> {
+    d.iter()
+        .map(|(actor, view)| (actor.clone(), view.mark))
+        .collect()
 }
 
 /// The `what` of every act an app's reducer would see, in order — the shape

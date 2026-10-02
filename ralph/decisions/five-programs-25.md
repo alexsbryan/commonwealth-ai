@@ -16,7 +16,7 @@ Package: ctl/NEEDS_HUMAN.resolved-fpcoreres-20260924.md. Reproduced at b553ba70d
 - `cargo xtask boundary-gate` (toolbox, corpus-engine/) → FAILED (62), EXIT=1.
 - `git grep -nE "resolve_evidence|EvidenceFetcher|ResolvedChunk" -- '*.rs'` outside resolve.rs finds three crates. corpus-engine's re-export is at enrichment/atlas/mod.rs:94. sovereign-core uses it at atlas_grounding.rs:388 and :500. corpus-mcp uses it at tools.rs:473 and at ask.rs:32 and :64 (`IndexEvidenceFetcher`). The reader's own ground/mod.rs:30-35 and report.rs:282 document it.
 - corpus-mcp/Cargo.toml's `sovereign-enrichment-build` comment records ei-5a-build-cut, which cut the sites that dragged sovereign-core, sovereign-tools and sovereign-inference (closure 695 → 590).
-- docs/FIVE_PROGRAMS.md:1032 says: "`ground`'s selection POLICY (`candidate_atlas_ids`, walk choice) is the consumer's decision and moves to the svrn side". `candidate_atlas_ids` is at sovereign-core atlas_grounding.rs:25, so that half has already landed.
+- docs/internal/FIVE_PROGRAMS.md:1032 says: "`ground`'s selection POLICY (`candidate_atlas_ids`, walk choice) is the consumer's decision and moves to the svrn side". `candidate_atlas_ids` is at sovereign-core atlas_grounding.rs:25, so that half has already landed.
 - corpus-engine-atlas-reader/src/ground/mod.rs:13-17 says the walk "moves down here, where `corpus-mcp` can reach it without taking a dependency the boundary-gate forbids". Step 3 of the same doc is `resolve_evidence`.
 - resolve.rs imports `kernel_types::CorpusId`, `crate::types::ScoredChunk` (a corpus-index re-export), `ChunkRequest` and `ChunkSelector`. All of these are inside the reader's allow-list (quality/ARCH_LAYERS.toml, `corpus-engine-atlas-reader`), so no budget changes.
 

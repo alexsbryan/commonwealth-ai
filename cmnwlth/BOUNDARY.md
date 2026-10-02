@@ -1,7 +1,7 @@
 # The commonwealth package boundary
 
 > **The `[[package]] name = "commonwealth"` row became `cmnwlth` on
-> 2026-09-21** (`docs/FIVE_PROGRAMS.md` §9, the five-program declaration). All
+> 2026-09-21** (`docs/internal/FIVE_PROGRAMS.md` §9, the five-program declaration). All
 > nine crates carried over unchanged and their internal surface is still
 > `commonwealth-core` plus the `oplog` / `kernel-types` / `oicp-types` leaves —
 > folding them into the wider row introduced no edge among them. What the row

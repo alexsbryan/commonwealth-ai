@@ -11,7 +11,7 @@ description = "Long-running daemon + setup + service install binary."
 #   sovereign install-service                — launchd / systemd register
 #   sovereign doctor                         — health check + integrity probe
 #
-# Since the de-embed (docs/FIVE_PROGRAMS.md §11 step 10) `daemon run`
+# Since the de-embed (docs/internal/FIVE_PROGRAMS.md §11 step 10) `daemon run`
 # itself execs the `sovereign-daemon` sibling binary (src/daemon_bin.rs);
 # this crate keeps the verb surface, the wizard, and the pidfile plumbing.
 #
@@ -35,7 +35,7 @@ sovereign-core = { workspace = true }
 # owner (ARCH §10.6).
 sovereign-service = { workspace = true }
 mesh-join-vocab = { workspace = true }
-# The daemon crate, post-de-embed (docs/FIVE_PROGRAMS.md §11 step 10): no
+# The daemon crate, post-de-embed (docs/internal/FIVE_PROGRAMS.md §11 step 10): no
 # longer the in-process run body (that forked to its own `[[bin]]`, which
 # `daemon_bin.rs` execs). The residue this crate still links: the pidfile
 # path + rpc-worker flag parser (`startup`, `bootstrap`), and doctor's
@@ -59,7 +59,7 @@ sovereign-cli-shared = { workspace = true }
 # two files, replaced by `kernel-types` for `NodeId` and
 # `sovereign-contracts::peer`'s narrow ports. The atlas builder itself
 # (`in_process_atlas_builder`) forked to `sovereign-daemon` with the run
-# body at the de-embed (docs/FIVE_PROGRAMS.md §11 step 10). The
+# body at the de-embed (docs/internal/FIVE_PROGRAMS.md §11 step 10). The
 # `corpus-engine` dep that fed doctor's SovereignConfig reads was dropped
 # 2026-09-21 when that config moved to `sovereign-contracts::config`;
 # corpus-index/scip below stay.

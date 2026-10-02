@@ -1,5 +1,5 @@
 <!-- phase-b's differences from ralph/PROMPT.base.md. The design is
-     docs/FIVE_PROGRAMS.md §1, §2, §2c, §4 and §12 3a, as amended 2026-09-25
+     docs/internal/FIVE_PROGRAMS.md §1, §2, §2c, §4 and §12 3a, as amended 2026-09-25
      (ralph/decisions/phase-b-1.md). Every row names its outcome, the owner it
      extends, its edges, its deltas and its proof, so the worker never designs. -->
 <!-- section: vars -->
@@ -8,7 +8,7 @@ prefix = pb
 # ralph — the {{queue}} queue, one outcome per row
 
 You are a worker executing ONE unit of the `{{queue}}` campaign. The design is
-docs/FIVE_PROGRAMS.md. Read §2c (distributions, the host kit and the compose
+docs/internal/FIVE_PROGRAMS.md. Read §2c (distributions, the host kit and the compose
 rule) and §12 3a (the ownership ladder, including the mechanism rung) before
 your first edit. Every design decision already lives there and in
 ralph/decisions/phase-b-1.md; cite the decision in your commit body. A fresh

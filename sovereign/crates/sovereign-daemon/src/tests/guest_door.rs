@@ -21,6 +21,42 @@ fn pages(default_dir: Option<&str>, named: &[(&str, &str)]) -> GuestPages {
     )
 }
 
+/// **B2's bar: every door-served response carries the door's CSP.** Walks
+/// the door's routes through the real `door_router` — the wall, a page, a
+/// miss through the proxy fallback, and a guest-surface route — and asserts
+/// the policy on every response, refusals included (a refusal is still a
+/// door-served response). These four are the census's WALK, named rather
+/// than exhaustive: the layer on the router is what covers every route, and
+/// a new one is covered on the day it is added. Watched failing first —
+/// with the layer removed, every path came back bare.
+#[tokio::test]
+async fn every_door_served_response_carries_the_csp() {
+    use axum::body::Body;
+    use tower::ServiceExt;
+
+    let state = crate::state::test_app_state_with_seed(crate::state::fabric::FabricSeed::default());
+    let app = door_router(state, std::sync::Arc::new(pages(Some("wall"), &[])), None);
+    let expected =
+        sovereign_contracts::egress::csp(sovereign_contracts::egress::ConnectSrc::SameOrigin);
+    for path in [
+        "/",
+        "/ring/index.html",
+        "/ring/missing.html",
+        "/v1/guest/ask",
+    ] {
+        let req = axum::http::Request::builder()
+            .uri(path)
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        let got = resp
+            .headers()
+            .get(axum::http::header::CONTENT_SECURITY_POLICY)
+            .and_then(|v| v.to_str().ok());
+        assert_eq!(got, Some(expected.as_str()), "{path} must carry the CSP");
+    }
+}
+
 /// A gate you have not watched fail: the published-app arm answers only a
 /// grant that NAMES the app — the same rule bundles live under.
 #[test]
@@ -376,4 +412,47 @@ fn a_namespaced_page_names_its_app_on_every_rail_call() {
     assert!(named.contains("path.startsWith('/v1/rail/')"));
     let bare = ring_shim("", Some(""));
     assert!(bare.contains("const NS = \"\";"));
+}
+
+/// **C3a: the proxy asks the CALLER's grant, not "some grant"**
+/// (ROOT_CAUSE_FIXES C3a). `route_page`'s granted predicate is the
+/// wall-OPEN question ("one QR serves a whole wall") and stays ∃; the PROXY
+/// is a different question — one live grant naming the ns must not open the
+/// app's surface to every stranger at the door. Watched failing first: the
+/// ∃-filter proxied the bearer-less caller through.
+#[tokio::test]
+async fn a_path_with_no_caller_grant_is_refused_not_proxied() {
+    use sovereign_grants::{GuestGrantStore, Scope};
+    use std::sync::Arc;
+
+    let pages = Arc::new(GuestPages::new(
+        None,
+        Default::default(),
+        [("my-doc".to_string(), "127.0.0.1:4318".to_string())]
+            .into_iter()
+            .collect(),
+    ));
+    let grants = GuestGrantStore::new();
+    let now = sovereign_time::unix_millis();
+    grants.issue(
+        "someone-elses-token",
+        vec![Scope::Rails("my-doc".into())],
+        Some("theirs".into()),
+        3_600,
+        now,
+    );
+    let st = PageState {
+        pages,
+        grants: Arc::new(grants),
+    };
+    let req = axum::http::Request::builder()
+        .uri("/whatever")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let resp = root_proxy(State(st), req).await;
+    assert_eq!(
+        resp.status(),
+        axum::http::StatusCode::NOT_FOUND,
+        "a stranger holding no grant is refused — someone else's grant is not a pass"
+    );
 }

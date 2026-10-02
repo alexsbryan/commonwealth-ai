@@ -185,7 +185,7 @@ mod tests {
                 krate: "sovereign-serve".into(),
                 items: vec!["bundles".into(), "assemble".into()],
             }],
-            doc: "docs/FIVE_PROGRAMS.md".into(),
+            doc: "docs/internal/FIVE_PROGRAMS.md".into(),
             max_code_lines: 300,
         }
     }

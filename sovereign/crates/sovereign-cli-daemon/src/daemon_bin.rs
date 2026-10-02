@@ -6,7 +6,7 @@
 //! dials a configured serve.
 //!
 //! `svrn daemon run` ran the daemon LINKED in this crate until the
-//! de-embed (docs/FIVE_PROGRAMS.md §11 step 10): the run body now lives
+//! de-embed (docs/internal/FIVE_PROGRAMS.md §11 step 10): the run body now lives
 //! in `sovereign-daemon`'s own `[[bin]]`, and this crate keeps the verb
 //! surface around it — lifecycle, the first-boot wizard gate, help —
 //! exec'ing the sibling for the run itself. Same discovery + fallback

@@ -35,6 +35,7 @@ commonwealth-ai/
 ├── shared/crates/oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── cmnwlth/crates/oicp-conformance/          # Standalone OICP v0.4 host conformance tester
 ├── shared/crates/oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
+├── oplog-types/               # The pure envelope (Op/OpId/SkippedLine) split from oplog — zero I/O, the closure rail-core links (2026-09-23, ROOT_CAUSE_FIXES B4)
 ├── serve/crates/serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
 ├── shared/crates/serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
 ├── shared/crates/mesh-reach/                # Peer dial vocabulary + PeerTransport; RailsTransport (`rails`), the guest dialer + one iroh HTTP bridge (`guest`)
@@ -82,7 +83,7 @@ Dependency direction is one-way. Sovereign and cmnwlth meet at the contracts
 seam (`sovereign-contracts`, a shared leaf) and over cw-rails' HTTP doors.
 `sovereign-mesh`, the in-process embed that was once the only place they met,
 is gone (pb-mesh-dissolve, phase-b-92); the stock distribution composes the
-programs in one process through their faces (docs/FIVE_PROGRAMS.md §2c).
+programs in one process through their faces (docs/internal/FIVE_PROGRAMS.md §2c).
 
 ```
        oicp-types          sovereign-recipes
@@ -664,7 +665,13 @@ register change is priced in both directions or it is not judged.
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER
 of `corpus_engine::enrichment::atlas::ground`, the same walk `corpus-mcp`
 drives, so the two cannot diverge. The evidence budget is spent ACROSS the
-ideas the walk reached, not down the ranked list.
+ideas the walk reached, not down the ranked list. With
+`retrieval.pipeline=debug`, content fingerprints track passages through every
+step and the KnowledgeQuery handler's subsequent cohesion expansion, rerank,
+late summaries and prompt admission; the pipeline's `scope_audit` is not the
+final prompt pool. Atlas grounding reports raw request counts separately
+from the pipeline's chunk-equivalent injection ledger because one request can
+yield multiple passages.
 
 **An answer over missing knowledge says so, and CODE guarantees it.**
 `UnavailabilityReason` is a closed enum, `corpus_unavailability()` is the one
@@ -748,7 +755,7 @@ TDD solver (`sovereign_code::solve_http`, `/v1/solve/jobs*` and MCP `solve`, pb-
 dials serve, no serve is a named refusal, and svrn alone answers the routes the same way. The tools live in their own crate, `sovereign-code` — 18,431 lines
 lifted out of `sovereign-tools` on 2026-09-21 (822681564), so that `svrn code`
 is a program with a boundary a gate can read rather than a module inside the
-knowledge server (docs/FIVE_PROGRAMS.md §2). Tools under
+knowledge server (docs/internal/FIVE_PROGRAMS.md §2). Tools under
 `sovereign-code/src/`: the code index (`symbols`,
 `code_search`, `recent_changes`, `working_set`, `brief`), the session brief
 (`briefing`), the tree-sitter fact base (`facts`), the SCIP call graph
@@ -1068,7 +1075,7 @@ admits and no disk holds; a CLI presents `SOVEREIGN_API_KEY`, read by
 | `GET /status` | Node / mesh / inference / knowledge summary, incl. `process.pid` + `run_id` |
 | `GET /oicp/v1/capabilities` | Provider manifest + federation info |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | Ollama-native compatibility shim, pure translation over the OpenAI handlers |
-| `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, and the LIVE lane (delivery, not record — nothing reaches a store or a disk). The journals live at `cw-rails` since fp-54: `/v1/rail/*` dials the rails daemon's doors through the rail port, and a guest's WRITE carries a `GuestAttestation` the daemon signs with its node key for the session's lifetime (`AppState::attest_guest`); rails verifies it against the namespace's roster and a refusal comes back by name (`signer_not_in_roster`, `expired`, …, 403) |
+| `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, membership (the one walk `admit` calls, read off the same fold — `svrn ring membership`), and the LIVE lane (delivery, not record — nothing reaches a store or a disk). The journals live at `cw-rails` since fp-54: `/v1/rail/*` dials the rails daemon's doors through the rail port, and a guest's WRITE carries a `GuestAttestation` the daemon signs with its node key for the session's lifetime (`AppState::attest_guest`); rails verifies it against the namespace's roster and a refusal comes back by name (`signer_not_in_roster`, `expired`, …, 403) |
 | `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list guest grants. On the Operator bind ONLY. The holder's side, `GET /internal/guest/route` (the base URL its stored link reaches, opening the mesh tunnel; 412/502 named absence otherwise), is serve's loopback router since pb-mesh-exit-mesh (`sovereign_serve::guest_route`) |
 | `/v1/mesh/*`, `/v1/admin/*`, `/mcp/*` | Loopback-only |
 

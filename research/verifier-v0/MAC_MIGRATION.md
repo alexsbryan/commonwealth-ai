@@ -94,7 +94,7 @@ allowed: ping status mesh-status transport http-status mesh-http logs [N]
          daemon-kill9 [dry]
 ```
 
-`beefymac-ops` is a **sandboxed verb surface** (`docs/OPS_CHANNEL.md`) — port
+`beefymac-ops` is a **sandboxed verb surface** (`docs/internal/OPS_CHANNEL.md`) — port
 2222, dedicated `svrn_ops_ed25519` key, `IdentitiesOnly yes`. The allowlist has no
 file-transfer verb, and `~/.ssh/config` defines **no other route to the Mac**.
 This is a deliberate posture, not a misconfiguration; do not work around it by

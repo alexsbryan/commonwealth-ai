@@ -37,7 +37,7 @@ pub(super) fn body_of_size(target: usize) -> Payload {
     let mut filler = target.saturating_sub(40);
     loop {
         let p = Payload::new(serde_json::json!({ "b": "x".repeat(filler) })).unwrap();
-        let n = body_json(&RailAct::Record { payload: p.clone() }, None).len();
+        let n = body_json(&RailAct::Record { payload: p.clone() }, None, None).len();
         if n >= target {
             return p;
         }
@@ -50,13 +50,14 @@ pub(super) fn body_of_size(target: usize) -> Payload {
 /// any other.
 pub(super) fn signed_in(ns: &str, key: &SigningKey, seq: u64, act: RailAct) -> Op<SignedOp> {
     let ts = 1_700_000_000i64 + seq as i64;
-    let sig = sign_ring_op(key, ns, ts, seq, &body_json(&act, None));
+    let sig = sign_ring_op(key, ns, ts, seq, &body_json(&act, None, None));
     Op::new(
         SignedOp {
             seq,
             sig,
             act,
             on_behalf_of: None,
+            view: None,
         },
         ts,
         actor_of(key),
@@ -176,8 +177,10 @@ async fn a_journal_past_the_one_exchange_ceiling_converges_onto_a_fresh_peer() {
     assert_eq!(admitted.ops.len(), N);
     assert!(admitted.is_complete(), "gaps: {:?}", admitted.gaps);
     assert_eq!(
-        peer_journal.digest().unwrap(),
-        journal.digest().unwrap(),
+        peer_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
+        journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
         "two nodes, one claim"
     );
 }
@@ -207,8 +210,10 @@ async fn a_peers_seal_prunes_this_nodes_disk_in_the_round_it_arrives() {
     let admitted = journal.admit(&solo_roster(&key), &Ed25519Verifier).unwrap();
     assert!(admitted.is_complete(), "gaps: {:?}", admitted.gaps);
     assert_eq!(
-        journal.digest().unwrap(),
-        peer_journal.digest().unwrap(),
+        journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
+        peer_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
         "two nodes, one claim"
     );
 }
@@ -305,7 +310,11 @@ async fn ten_thousand_ops_do_not_fit_one_chunk() {
     let dir = tempfile::tempdir().unwrap();
     let (_rail, journal) = node(dir.path(), &key, 10_000);
     let (chunk, more) = journal
-        .ops_missing_from_within(&Digest::new(), RING_SYNC_OPS_BUDGET_BYTES)
+        .ops_missing_from_within(
+            &commonwealth_rail::Ed25519Verifier,
+            &Digest::new(),
+            RING_SYNC_OPS_BUDGET_BYTES,
+        )
         .unwrap();
     assert!(more, "the budget must cut a 10,000-op journal short");
     assert!(
@@ -317,7 +326,9 @@ async fn ten_thousand_ops_do_not_fit_one_chunk() {
         serde_json::to_vec(&chunk).unwrap().len() <= MAX_REQUEST_BODY_BYTES,
         "a chunk must fit the limit it was budgeted against"
     );
-    let all = journal.ops_missing_from(&Digest::new()).unwrap();
+    let all = journal
+        .ops_missing_from(&commonwealth_rail::Ed25519Verifier, &Digest::new())
+        .unwrap();
     let per_op = serde_json::to_vec(&all).unwrap().len() / all.len();
     assert!(
         (860..=890).contains(&per_op),
@@ -336,8 +347,10 @@ async fn the_budgeted_chunk_is_served_where_the_whole_journal_is_refused() {
         let (peer, _) = node(r.path(), &key, 0);
         let push = RingSyncRequest {
             namespace: NS.to_string(),
-            digest: journal.digest().unwrap(),
-            ops: journal.ops_missing_from(&Digest::new()).unwrap(),
+            digest: journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
+            ops: journal
+                .ops_missing_from(&commonwealth_rail::Ed25519Verifier, &Digest::new())
+                .unwrap(),
         };
         let (status, _) = sync_raw(&serve(peer).await, &push).await;
         assert_eq!(status, want, "{n} unbudgeted ops");
@@ -346,12 +359,16 @@ async fn the_budgeted_chunk_is_served_where_the_whole_journal_is_refused() {
     let (_rail, journal) = node(s.path(), &key, 10_000);
     let (peer, _) = node(r.path(), &key, 0);
     let (ops, more) = journal
-        .ops_missing_from_within(&Digest::new(), RING_SYNC_OPS_BUDGET_BYTES)
+        .ops_missing_from_within(
+            &commonwealth_rail::Ed25519Verifier,
+            &Digest::new(),
+            RING_SYNC_OPS_BUDGET_BYTES,
+        )
         .unwrap();
     assert!(more, "the control: 10,000 ops must not fit one chunk");
     let push = RingSyncRequest {
         namespace: NS.to_string(),
-        digest: journal.digest().unwrap(),
+        digest: journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap(),
         ops,
     };
     let (status, _) = sync_raw(&serve(peer).await, &push).await;
@@ -372,7 +389,9 @@ async fn the_pull_direction_is_budgeted_and_converges_by_repeating() {
     loop {
         let ask = RingSyncRequest {
             namespace: NS.to_string(),
-            digest: fresh_journal.digest().unwrap(),
+            digest: fresh_journal
+                .digest(&commonwealth_rail::Ed25519Verifier)
+                .unwrap(),
             ops: Vec::new(),
         };
         let (status, body) = sync_raw(&url, &ask).await;
@@ -402,7 +421,12 @@ async fn the_pull_direction_is_budgeted_and_converges_by_repeating() {
         .unwrap();
     assert_eq!(admitted.ops.len(), N);
     assert!(admitted.is_complete(), "gaps: {:?}", admitted.gaps);
-    assert_eq!(fresh_journal.digest().unwrap(), journal.digest().unwrap());
+    assert_eq!(
+        fresh_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
+        journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap()
+    );
 }
 
 /// A seal is an op, not a delete: the exchange shortens only once the
@@ -463,7 +487,11 @@ async fn a_seal_shortens_the_exchange_only_once_the_retired_lines_are_deleted() 
     assert_eq!(journal.read().unwrap().0.len(), (KEPT + 1) as usize);
 
     let (ops, more) = journal
-        .ops_missing_from_within(&Digest::new(), RING_SYNC_OPS_BUDGET_BYTES)
+        .ops_missing_from_within(
+            &commonwealth_rail::Ed25519Verifier,
+            &Digest::new(),
+            RING_SYNC_OPS_BUDGET_BYTES,
+        )
         .unwrap();
     assert!(!more, "the compacted suffix fits one chunk");
     assert_eq!(ops.len(), (KEPT + 1) as usize);
@@ -474,7 +502,12 @@ async fn a_seal_shortens_the_exchange_only_once_the_retired_lines_are_deleted() 
         .unwrap();
     assert!(admitted.is_complete(), "gaps: {:?}", admitted.gaps);
     assert_eq!(admitted.applied().count(), KEPT as usize);
-    assert_eq!(peer_journal.digest().unwrap(), journal.digest().unwrap());
+    assert_eq!(
+        peer_journal
+            .digest(&commonwealth_rail::Ed25519Verifier)
+            .unwrap(),
+        journal.digest(&commonwealth_rail::Ed25519Verifier).unwrap()
+    );
 }
 
 /// A route answering `body` to every exchange, served; its URL.

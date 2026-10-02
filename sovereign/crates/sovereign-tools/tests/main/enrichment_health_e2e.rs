@@ -8,7 +8,7 @@
 //! setter anywhere in the workspace. So `continue` fired for every corpus,
 //! always, and `LowEnrichmentCoverage` / `StaleEnrichment` were dead code —
 //! §18.1's "a check with no failing input you can name". Full trace:
-//! `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4.
+//! `docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4.
 //!
 //! **What this pins** is the checker, svrn's code, over the ingest ports'
 //! double listing leaf `CorpusIndex`es on disk (phase-b-47):
@@ -167,7 +167,7 @@ async fn checker_opens_the_path_the_listing_reported_not_the_canonical_name() {
 /// **The failed-ingest partition.** An ingest that dies inside its enrichment
 /// phase leaves `<corpus_id>-partition-<node>/` behind with
 /// `ingestion_in_progress: true` beside `indexes_built: true` — the
-/// fingerprint traced in `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3.
+/// fingerprint traced in `docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3.
 ///
 /// That directory is invisible to every corpus listing on the machine —
 /// `installed_indexes()` skips anything mid-ingest — so before this the

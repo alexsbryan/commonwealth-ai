@@ -5,7 +5,7 @@
 # Why core.hooksPath rather than copying files into .git/hooks/: hooks under
 # .git/ are per-clone, invisible to review, and drift silently between
 # machines. This repo now treats the pre-push gate as the PRIMARY correctness
-# gate (see scripts/pre-push.sh and docs/CI_ECONOMY.md), so it needs to be a
+# gate (see scripts/pre-push.sh and docs/internal/CI_ECONOMY.md), so it needs to be a
 # reviewed, shared artifact — one `git pull` updates the gate for everyone.
 #
 # Idempotent. Safe to re-run; scripts/bootstrap.sh calls it.

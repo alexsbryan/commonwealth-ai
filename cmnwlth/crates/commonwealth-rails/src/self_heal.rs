@@ -110,7 +110,9 @@ pub async fn rebuild(daemon: &RailsDaemon) -> Result<Endpoint, String> {
 /// them: the self-discovery probe runs only with n0 discovery, and relay-home
 /// is a health signal only when the node uses a relay at all.
 pub fn watchdog_config(config: &Config) -> WatchdogConfig {
-    let relay = config.relay_config();
+    let relay = config
+        .relay_config()
+        .expect("discovery is refused at Config::load (C2)");
     let mut cfg = WatchdogConfig::from_env();
     cfg.self_probe = relay.n0_services;
     cfg.relays_expected = relay.n0_services || !relay.relay_urls.is_empty();

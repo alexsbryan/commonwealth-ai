@@ -195,7 +195,7 @@ bring_up_decider = { krate = "turn-client", file = "x/reach.rs", reason = "one d
 [[distribution]]
 name = "stock"
 crates = ["stock"]
-doc = "docs/FIVE_PROGRAMS.md"
+doc = "docs/internal/FIVE_PROGRAMS.md"
 max_code_lines = 300
 [[distribution.face]]
 package = "svrn"
@@ -258,7 +258,7 @@ items = ["bundles"]
 [[distribution]]
 name = "onprem"
 crates = ["onprem", "shared"]
-doc = "docs/FIVE_PROGRAMS.md"
+doc = "docs/internal/FIVE_PROGRAMS.md"
 max_code_lines = 200
 [[distribution.face]]
 package = "svrn"

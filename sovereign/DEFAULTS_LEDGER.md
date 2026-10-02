@@ -2122,7 +2122,7 @@ _Historical record below — the reasoning while this row was `preview`._
 ### Landing field-diff — `co-review.sh --field` (opt-in flag, no env var)
 
 - **Shipped:** 2026-08-07, opt-in, same commit as this row
-  (docs/FIELD_VERDICTS.md Scene 2).
+  (docs/internal/FIELD_VERDICTS.md Scene 2).
 - **What it does:** at a landing review, runs one degraded scratch
   render (`fieldglass --no-dup --out <scratch>`; the default delta
   baseline is structurally untouched) and diffs the changed files' rows

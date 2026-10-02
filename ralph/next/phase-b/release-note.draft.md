@@ -7,7 +7,7 @@ made it, and file:line references are at `cut`. This draft answers the ship gate
 listing every user-visible change" (ralph/PHASE_B_SHIP_GATE.md). It was read from the tree and the
 log; nothing was run. A claim taken from a commit body without tracing it in code is marked as such.
 
-Phase B splits the node into programs (docs/FIVE_PROGRAMS.md §2): `svrn`, the knowledge daemon on
+Phase B splits the node into programs (docs/internal/FIVE_PROGRAMS.md §2): `svrn`, the knowledge daemon on
 :9741; `serve`, the model server on :9748; cw-rails, the mesh endpoint on :9747; and `svrn ingest`,
 `svrn code` and `svrn bench`. A stock install still runs as one process. The mesh now belongs to
 cw-rails, and nothing starts cw-rails unless you ask it to.

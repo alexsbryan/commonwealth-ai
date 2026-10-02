@@ -410,7 +410,13 @@ impl KvHost {
             let appended = if acts.is_empty() {
                 Ok(Vec::new())
             } else {
-                journal.append_all(acts, self.rail.signer(), &roster, None)
+                journal.append_all(
+                    acts,
+                    self.rail.signer(),
+                    &roster,
+                    None,
+                    &commonwealth_rail::Ed25519Verifier,
+                )
             };
             let not_in_roster = matches!(appended, Err(RailError::NotInRoster { .. }));
             for (i, (row, error)) in unfit.iter().enumerate() {
@@ -586,7 +592,13 @@ impl KvHost {
             }
         }
         let wanted = acts.len();
-        let appended = match journal.append_all(acts, self.rail.signer(), roster, None) {
+        let appended = match journal.append_all(
+            acts,
+            self.rail.signer(),
+            roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        ) {
             Ok(ops) => ops.len(),
             Err(e) => {
                 warn!(target: "rails", namespace, rows = wanted, error = %e,
@@ -603,6 +615,7 @@ impl KvHost {
                         self.rail.signer(),
                         roster,
                         None,
+                        &commonwealth_rail::Ed25519Verifier,
                     )
                     .map_err(|e| e.to_string())
             });

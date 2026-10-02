@@ -73,6 +73,7 @@ pub async fn run(args: &[String]) -> i32 {
         Some("show") => run_show(&args[1..]).await,
         Some("host") => run_host(&args[1..]),
         Some("log") => run_log(&args[1..]).await,
+        Some("membership") => membership::run(&args[1..]).await,
         Some("checkpoint") => run_checkpoint(&args[1..]).await,
         Some("seal") => run_seal(&args[1..]).await,
         _ => {
@@ -84,6 +85,7 @@ pub async fn run(args: &[String]) -> i32 {
 
 mod checkpoint_verify;
 mod host;
+mod membership;
 mod scaffold;
 mod show;
 mod usage;
@@ -167,8 +169,8 @@ fn http_client() -> Result<reqwest::Client, String> {
 /// here needs the functions, so one `use` line serves both and a route renamed
 /// on the daemon still breaks the build at every caller.
 pub(crate) use sovereign_cli_base::rail::{
-    error_text, rail_append, rail_checkpoint, rail_log, RAIL_APPEND_PATH, RAIL_LIVE_PATH,
-    RAIL_LOG_PATH,
+    error_text, rail_append, rail_checkpoint, rail_log, rail_membership, RAIL_APPEND_PATH,
+    RAIL_LIVE_PATH, RAIL_LOG_PATH,
 };
 
 // ── checkpoint ───────────────────────────────────────────────

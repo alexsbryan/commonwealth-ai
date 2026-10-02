@@ -156,7 +156,7 @@ clusters needing no new crate or dependency edge (~11,300: the 11 identical
 axum ack-handlers at `corpus_watch_http.rs:963`, the four exemplar classifiers
 sharing a 12-method skeleton, `recipe_builtin`'s five-place table), Rust test
 dedup (~8,000), env-flag dead paths already costed per-variable in
-`docs/ENV_VAR_AUDIT.md`, the five undocumented hidden CLI verbs (1,512),
+`docs/internal/ENV_VAR_AUDIT.md`, the five undocumented hidden CLI verbs (1,512),
 `oicp-conformance` (1,320), and the 130 zero-caller functions whose name
 occurs exactly once repo-wide (1,285).
 

@@ -122,7 +122,13 @@ fn a_two_key_node_keeps_the_daemon_keys_roster_identity() {
     let signs_with = |k: SigningKey| {
         let rail = RingRail::new(rails.path(), Arc::new(k));
         let journal = rail.journal("work").unwrap();
-        journal.append(act(), rail.signer(), &roster, None)
+        journal.append(
+            act(),
+            rail.signer(),
+            &roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        )
     };
     assert!(
         signs_with(solo_key).is_err(),

@@ -7,7 +7,7 @@
 # Output: target/distributed-decode/{distributed-decode.json,frames.jsonl}
 #
 # Guards, each earned by a specific observed false result (see
-# docs/DISTRIBUTED_GDN_CRASH_STATUS.md §8 for the full trap list):
+# docs/internal/DISTRIBUTED_GDN_CRASH_STATUS.md §8 for the full trap list):
 #
 #  1. WHICH SLOT SERVED IT. Config is fast=0.8B / primary=4B. A request hijacked
 #     to the fast slot would look fast and successful while proving nothing (the

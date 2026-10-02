@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""co-field.py — the seat's fieldglass reader (docs/FIELD_VERDICTS.md).
+"""co-field.py — the seat's fieldglass reader (docs/internal/FIELD_VERDICTS.md).
 
 One decider for every seat surface that reads the field:
 

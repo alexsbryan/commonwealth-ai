@@ -72,6 +72,7 @@ fn guest_named(name: &str) -> Guest {
         name: name.into(),
         issued_at_ms: 0,
         expires_at_ms: u64::MAX,
+        revoked: false,
     });
     g
 }
@@ -290,3 +291,8 @@ fn a_read_only_entry_refuses_a_guests_append_and_nobody_elses() {
     // ...as is a namespace the registry says nothing about.
     assert!(refuse_read_only(&pages, Some(&g), "undeclared").is_none());
 }
+
+// The door's write contract (C1 + C3b) and the membership route are proven
+// end to end in `tests/rail_e2e/door_contract.rs`, against a real cw-rails
+// behind the rail port: the journals are cw-rails' since
+// pb-mesh-exit-transport, so an in-process `RingRail` is not this daemon's.

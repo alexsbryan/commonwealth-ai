@@ -7,7 +7,7 @@
 //! `--daemon-child` argv and calls [`daemon_child_main`], so ONE daemon
 //! serves the CLI binary and the desktop child alike — no ~241 MB
 //! sidecar duplicated into the installer. Since the de-embed
-//! (docs/FIVE_PROGRAMS.md §11 step 10) the daemon body itself lives in
+//! (docs/internal/FIVE_PROGRAMS.md §11 step 10) the daemon body itself lives in
 //! the `sovereign-daemon` binary; the child arm execs it, keeping the
 //! same pid (and so the same supervisor handle) while inheriting every
 //! daemon defense from the sibling.

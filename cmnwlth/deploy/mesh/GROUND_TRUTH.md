@@ -257,7 +257,7 @@ both files owe a fix in the same commit (§1.1).
 ## The CI economy *(doc — evidence for the CI/CD workload)*
 
 - On 2026-07-24 every hosted GitHub Actions job began failing in ~4s on a spending limit; the gate
-  "stopped existing without announcing it" — `docs/CI_ECONOMY.md:1-33`.
+  "stopped existing without announcing it" — `docs/internal/CI_ECONOMY.md:1-33`.
 - Audited July spend: 4,369 billed minutes; 843 of 1,199 job-runs never started; the burn is bursts
   (2,950 min in two days of CI iteration), not steady state — `CI_ECONOMY.md:36-79`.
 - Releases already run local at $0 (`scripts/release-all.sh`); hosted is the fallback —
@@ -270,5 +270,5 @@ states the unauthenticated-internal-port posture plainly at `:90-95`. `sovereign
 is written for a security team approving a deployment and carries a §5 "open validation (not yet
 proven — do not represent as tested)". `sovereign/docs/specs/SCHEDULER_QUALITY.md` is the scheduler
 design reference. `docs/THREAT_MODEL.md` carries the known-gaps list the plan updates on landing.
-`docs/TWO_NODE_QUICKSTART.md` is the working residency demo. `docs/CI_ECONOMY.md` is the CI-spend
+`docs/TWO_NODE_QUICKSTART.md` is the working residency demo. `docs/internal/CI_ECONOMY.md` is the CI-spend
 audit and incident report.

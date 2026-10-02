@@ -565,15 +565,18 @@ pub async fn meshapp_installed_apps() -> Result<Vec<serde_json::Value>, String> 
 // `withGlobalTauri`-off bug hid. See `meshapp_shim.js` for the rationale.
 const MESHAPP_SHIM: &str = include_str!("../meshapp_shim.js");
 
-/// Strict CSP for a mesh-app window: scripts/styles from the bundle only
-/// (no inline/eval scripts), NO external network egress — `connect-src`
-/// is limited to the Tauri IPC scheme so `window.meshApp` still works but
-/// the bundle cannot `fetch`/WebSocket anywhere. The only path to the
-/// host is the gated bridge.
-const MESHAPP_CSP: &str = "default-src 'self'; script-src 'self'; \
-     style-src 'self' 'unsafe-inline'; img-src 'self' data:; \
-     connect-src ipc: http://ipc.localhost; object-src 'none'; \
-     base-uri 'self'; form-action 'none'";
+/// Strict CSP for a mesh-app window — scripts/styles from the bundle only
+/// (no inline/eval scripts), NO network except the gated Tauri IPC bridge
+/// (`ConnectSrc::Ipc`; no `'self'` fetch, per this window's rule). ONE
+/// builder, in `sovereign-contracts::egress` (ROOT_CAUSE_FIXES B2); the
+/// guest door passes `ConnectSrc::SameOrigin` and gets its own, different
+/// `connect-src`. The only path to the host is the gated bridge.
+fn mesh_app_csp() -> tauri::http::HeaderValue {
+    tauri::http::HeaderValue::from_bytes(
+        sovereign_contracts::egress::csp(sovereign_contracts::egress::ConnectSrc::Ipc).as_bytes(),
+    )
+    .expect("the mesh-app CSP is static")
+}
 
 /// `meshapp_open(appId, entry?)` — host command (main-window UI) that
 /// opens the sandboxed window for an INSTALLED app. The window label is
@@ -617,10 +620,8 @@ pub async fn meshapp_open(
         .inner_size(1024.0, 760.0)
         .initialization_script(MESHAPP_SHIM)
         .on_web_resource_request(|_req, res| {
-            res.headers_mut().insert(
-                tauri::http::header::CONTENT_SECURITY_POLICY,
-                tauri::http::HeaderValue::from_static(MESHAPP_CSP),
-            );
+            res.headers_mut()
+                .insert(tauri::http::header::CONTENT_SECURITY_POLICY, mesh_app_csp());
         })
         .build()
         .map_err(|e| format!("open mesh-app window `{label}`: {e}"))?;

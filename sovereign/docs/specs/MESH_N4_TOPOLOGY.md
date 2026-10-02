@@ -2219,7 +2219,7 @@ These settle questions this design rests on but does not change.
 
 - `sovereign/docs/specs/SCHEDULER_QUALITY.md` — F1 (dead time > service time),
   F2 (invisible inbound load), F5 (deterministic argmax as herd generator).
-- `docs/RUN_DEEPSEEK_V4_FLASH.md` — the N=2 measurement, the link bound, and
+- `docs/internal/RUN_DEEPSEEK_V4_FLASH.md` — the N=2 measurement, the link bound, and
   `scripts/rpc-timing-split.py`.
 - `docs/RUN_GLM_5_2_ON_THE_MESH.md` — the hub-and-spoke framing this supersedes
   for multi-origin topologies.

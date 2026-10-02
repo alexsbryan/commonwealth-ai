@@ -186,7 +186,7 @@ pub enum HealthIssue {
     /// variant existed the failure was reported by nobody — the corpus simply
     /// appeared absent, and the operator's only trace was a WARN in the
     /// daemon log at the moment it happened.
-    /// `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3 traces one such install
+    /// `docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3 traces one such install
     /// end to end.
     IncompleteIngestPartition {
         /// Corpus the dead ingest was building, read from its own meta rather

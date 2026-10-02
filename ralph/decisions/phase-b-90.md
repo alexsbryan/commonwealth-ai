@@ -19,7 +19,7 @@
   - (A) Principle 12. contracts already owns the page path, and its doc names the link as the path's user (guest_pages.rs:35-46). mesh-join-vocab owns the fragment grammar.
   - (A) Principle 8. The 2026-09-22 outage came from the decisions: which page path, and where `path=` goes. Those stay single, and only argument passing happens at two sites.
   - (A) Principle 10. One call returns both values. Users see the same strings as before.
-  - (B) FIVE_PROGRAMS §4 rule 8 (docs/FIVE_PROGRAMS.md:271-275) already says cw-rails measures and "serve declares VRAM". Only the timing was wrong: this row removes the daemon's only path to the probe.
+  - (B) FIVE_PROGRAMS §4 rule 8 (docs/internal/FIVE_PROGRAMS.md:271-275) already says cw-rails measures and "serve declares VRAM". Only the timing was wrong: this row removes the daemon's only path to the probe.
   - (B) serve cannot declare the node's hardware without either a second detector (principle 8) or an edge to commonwealth-discovery. Its Cargo.toml has no such edge, and pb-serve-package forbids serve any commonwealth crate.
   - (B) Principle 11: an existing field carries the figure. Principle 6: an empty list means "not declared", never zero VRAM. Peers see the same numbers from every node that runs serve.
   - Neither ruling widens a budget, adds an exception, promotes a store or raises a ratchet. serve, cw-rails, contracts and the daemon gain no dependency.

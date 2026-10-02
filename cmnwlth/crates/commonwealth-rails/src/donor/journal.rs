@@ -57,6 +57,7 @@ pub(super) async fn append(daemon: &RailsDaemon, act: &WorkAct) -> Result<(), St
             daemon.rail.signer(),
             &roster,
             None,
+            &commonwealth_rail::Ed25519Verifier,
         )
         .map_err(|e| e.to_string())?;
     daemon.ring_nudge.notify_one();

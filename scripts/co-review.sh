@@ -100,7 +100,7 @@ BUNDLE="$(mktemp -t co-review-bundle.XXXXXX)"
     fi
   done
   echo "=== FIELD EVIDENCE (fieldglass sidecar) ==="
-  # Standing-field evidence for the changed files (docs/FIELD_VERDICTS.md
+  # Standing-field evidence for the changed files (docs/internal/FIELD_VERDICTS.md
   # Scene 1). co-field.py names every absence itself, so this section can
   # never be silently empty.
   git -C "$REPO" diff-tree -r --name-only --no-commit-id "$COMMIT" \
@@ -174,7 +174,7 @@ rec = {"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
        "charter_sha256": hashlib.sha256((Path(gym)/"CHARTER.md").read_bytes()).hexdigest(),
        "malformed": malformed}
 # Stamp which field snapshot any field: citation resolves against
-# (docs/FIELD_VERDICTS.md Scene 1 — the audit key for evidence age).
+# (docs/internal/FIELD_VERDICTS.md Scene 1 — the audit key for evidence age).
 _sc_path, _sc_how = M.sidecar_path(Path(gym).resolve().parent.parent)
 try:
     _sc = json.loads(_sc_path.read_text()) if _sc_path else None

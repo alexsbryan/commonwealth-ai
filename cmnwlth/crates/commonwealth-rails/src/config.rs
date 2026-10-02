@@ -131,6 +131,11 @@ pub enum ConfigRefusal {
     ZeroListen(PathBuf),
     #[error("{0} sets `gossip_interval_secs = 0` — a round loop with no interval")]
     ZeroInterval(PathBuf),
+    /// The `[relay] discovery` spelling this build does not know (ROOT_CAUSE_FIXES
+    /// C2). Named with the transport's own refusal text — the accepted set
+    /// travels in it — rather than aliased to a default.
+    #[error("bad [relay] discovery: {0}")]
+    BadDiscovery(String),
 }
 
 impl Config {
@@ -171,6 +176,9 @@ impl Config {
         if cfg.gossip_interval_secs == 0 {
             return Err(ConfigRefusal::ZeroInterval(file));
         }
+        // The `[relay] discovery` spelling is refused HERE, at load (C2), so
+        // every later reader of the posture holds a value that parsed.
+        cfg.relay_config()?;
         tracing::info!(
             target: "rails",
             path = %file.display(),
@@ -184,12 +192,16 @@ impl Config {
         Ok(cfg)
     }
 
-    /// The transport's relay posture for this config.
-    pub fn relay_config(&self) -> commonwealth_transport::iroh::RelayConfig {
+    /// The transport's relay posture for this config — the transport's own
+    /// mapping of this file's `[relay]`, including the strict `discovery`
+    /// parse (ROOT_CAUSE_FIXES C2): a typo'd value is a load-time REFUSAL
+    /// naming the value and the accepted set, never a quiet n0 default.
+    pub fn relay_config(&self) -> Result<commonwealth_transport::iroh::RelayConfig, ConfigRefusal> {
         commonwealth_transport::iroh::RelayConfig::from_parts(
             self.relay.urls.clone(),
             self.relay.discovery.as_deref(),
         )
+        .map_err(ConfigRefusal::BadDiscovery)
     }
 }
 
@@ -272,8 +284,18 @@ allow = ["LittleMac", "node-44ae"]
         assert_eq!(cfg.media.allow.len(), 2);
         // `discovery = "none"` severs n0 — read through the transport's own
         // mapping rather than re-derived here.
-        assert!(!cfg.relay_config().n0_services);
-        assert_eq!(cfg.relay_config().relay_urls.len(), 1);
+        assert!(
+            !cfg.relay_config()
+                .expect("the fixture spells `none`")
+                .n0_services
+        );
+        assert_eq!(
+            cfg.relay_config()
+                .expect("the fixture spells `none`")
+                .relay_urls
+                .len(),
+            1
+        );
     }
 
     /// `listen = 0` binds an ephemeral port nobody can dial back, which for
@@ -286,6 +308,22 @@ allow = ["LittleMac", "node-44ae"]
             Config::load(d.path(), None).unwrap_err(),
             ConfigRefusal::ZeroListen(_)
         ));
+    }
+
+    /// C2 at load: a typo'd `[relay] discovery` refuses to LOAD, naming the
+    /// value — never a quiet n0 default that a later posture read inherits.
+    #[test]
+    fn an_unknown_discovery_refuses_at_load() {
+        let d = dir();
+        std::fs::write(
+            d.path().join(CONFIG_FILE),
+            "[relay]\ndiscovery = \"carrier-pigeon\"\n",
+        )
+        .unwrap();
+        match Config::load(d.path(), None).unwrap_err() {
+            ConfigRefusal::BadDiscovery(why) => assert!(why.contains("carrier-pigeon"), "{why}"),
+            other => panic!("expected BadDiscovery, got {other}"),
+        }
     }
 
     #[test]

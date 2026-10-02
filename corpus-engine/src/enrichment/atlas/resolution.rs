@@ -39,14 +39,15 @@ use tracing::{debug, info};
 use crate::enrichment::pipeline::atlas::{
     EntitySketch, EventSketch, EventType, SectionExtraction, StateType,
 };
+use crate::enrichment::pipeline::pipelines::ontology_schema::UNCLASSIFIED_RELATION;
 use crate::error::Result;
 use crate::types::EmbedFn;
 
 use super::atoms::{AtomId, ChunkRef, Entity, Event, SectionPosition};
 use super::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
 use super::resolution_identity::{
-    declared_subject_type, merge_permitted, resolve_claim_subject, sketch_may_merge_into,
-    MergeEvidence, TypedSubjectPools,
+    declared_subject_type, merge_permitted, resolve_relation_participants,
+    resolve_within_declared_type, sketch_may_merge_into, MergeEvidence, TypedSubjectPools,
 };
 use super::resolution_ontology::{
     check_event_participants, check_relation_endpoints, derive_section_context_refs,
@@ -633,8 +634,15 @@ async fn resolve_entities(
         // so the loop can borrow uniformly.
         let mut section_sketches: Vec<EntitySketch> = section.entities_introduced.clone();
         section_sketches.extend(entity_sketches_from_developed(section));
+        let introduced = section.entities_introduced.len();
 
-        for sketch in &section_sketches {
+        for (position, sketch) in section_sketches.iter().enumerate() {
+            // A state sketch NAMES an entity and asserts no type: its `Person`
+            // is the fallback for a name never introduced. On an exact name it
+            // folds into whatever atom carries that name; under the declared
+            // veto it minted a `person` twin of every hoard a state was
+            // recorded on (19 names on ft-ans-dev-b).
+            let reference = position >= introduced;
             let candidate_emb = if sketch.description.trim().is_empty() {
                 // No description → rule 2 can't apply. We still take
                 // rules 1 and 3, which don't require embeddings.
@@ -646,6 +654,14 @@ async fn resolve_entities(
             // The declared ontology's veto on every proposed merge target.
             // Inert for an undeclared corpus (`merge_permitted` is `Ok`).
             let permit = |idx: usize, evidence: MergeEvidence| {
+                if reference && matches!(evidence, MergeEvidence::Exact) {
+                    debug!(
+                        name = %sketch.canonical_name,
+                        target = %entities[idx].entity_type.as_str_repr(),
+                        "atlas/resolution 3a: state reference folds into the atom of its exact name"
+                    );
+                    return true;
+                }
                 sketch_may_merge_into(policy, sketch, &entities[idx], evidence)
             };
             let target = find_merge_target(
@@ -1393,8 +1409,22 @@ pub fn resolve_step_3b_with(
     let mut relation_key_to_id: HashMap<String, super::atoms::AtomId> = HashMap::new();
     for section in sections {
         for (sketch_index, sketch) in section.relations_introduced.iter().enumerate() {
-            let (participant_ids, unresolved) =
-                resolve_entity_ids(&sketch.participants, entities, &name_index, &token_index);
+            // `unclassified` is the schema's escape for a relation the recipe
+            // did not declare: no endpoints to check, Phase 5 types it.
+            let declared_type = sketch
+                .relation_type
+                .as_deref()
+                .filter(|t| !t.is_empty() && *t != UNCLASSIFIED_RELATION);
+            let ends = declared_type.map_or([None, None], |t| policy.index().endpoints(t));
+            let (participant_ids, unresolved) = resolve_relation_participants(
+                &sketch.participants,
+                ends,
+                policy,
+                entities,
+                &name_index,
+                &token_index,
+                &mut typed_pools,
+            );
             for name in &unresolved {
                 failures.push(PhaseFailure {
                     phase: PipelinePhase::Questions,
@@ -1422,7 +1452,6 @@ pub fn resolve_step_3b_with(
             // that resolved there are not those types, the relation is not
             // the one the recipe declared — drop it and say why, rather than
             // writing a link the author's own declaration contradicts.
-            let declared_type = sketch.relation_type.as_deref().filter(|t| !t.is_empty());
             if let Some(rel_type) = declared_type {
                 if let Err(reason) =
                     check_relation_endpoints(policy, rel_type, &participant_ids, entities)
@@ -1459,7 +1488,7 @@ pub fn resolve_step_3b_with(
                 // The author's noun when the recipe declared one; Phase 5's
                 // job otherwise.
                 relation_type: crate::enrichment::pipeline::atlas::RelationType::Other(
-                    declared_type.unwrap_or("unclassified").to_string(),
+                    declared_type.unwrap_or(UNCLASSIFIED_RELATION).to_string(),
                 ),
                 evidence: sketch_anchor_evidence(&section.section_id, &sketch.anchor),
                 section_range: super::atoms::SectionRange::point(section.section_id.clone()),
@@ -1615,7 +1644,7 @@ pub fn resolve_step_3b_with(
             // whose name it carries.
             let declared_subject = declared_subject_type(policy, sketch.claim_kind.as_deref());
             let subject = sketch.subject.as_ref().and_then(|name| {
-                let resolved = resolve_claim_subject(
+                let resolved = resolve_within_declared_type(
                     name,
                     declared_subject,
                     policy,

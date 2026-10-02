@@ -394,12 +394,14 @@ async fn the_sync_doors_digest_missing_and_ingest_one_journal() {
         );
     }
 
-    // digest: one actor, contiguous through seq 1. A digest IS the
-    // actor→high-water map, so the JSON is that map and nothing else.
+    // digest: one actor, contiguous through seq 1. A v2 digest is the
+    // actor→View map under `entries` (rail-core `view.rs`): the run's mark,
+    // its floor, and the head that commits to the ops in it.
     let out = body_of(digest_answer(&journal)).await;
     assert_eq!(out["namespace"], "ledger");
+    assert_eq!(out["digest"]["v"], commonwealth_rail::DIGEST_V);
     assert_eq!(
-        out["digest"][RingSigner::actor(&key(7)).as_str()],
+        out["digest"]["entries"][RingSigner::actor(&key(7)).as_str()]["mark"],
         1,
         "one actor, two ops, high-water seq 1"
     );

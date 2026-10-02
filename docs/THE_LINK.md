@@ -43,10 +43,12 @@ not permission handed out by a party, it is authorship.
 expiring grant. The guest's browser does not sign acts: every act a guest
 produces is signed by the host's node, with the guest carried as a display
 name the host vouches for. The record honestly contains *"the host vouches
-the guest said X"* — never *"the guest said X."* Grants are short-lived,
-in-memory, and revocable by the host, which is exactly what makes them
-suitable for strangers: the guest tier is where this system's credentials can
-be killed, and it is the only one.
+the guest said X"* — never *"the guest said X."* — and the door enforces it:
+a guest append with no claimed name is refused by name (2026-09-23), so the
+sentence is true by construction rather than by the shim's cooperation.
+Grants are short-lived, in-memory, and revocable by the host, which is
+exactly what makes them suitable for strangers: the guest tier is where this
+system's credentials can be killed, and it is the only one.
 
 Graduation — installing a node and continuing with one's own key — is the
 person's own confirmed act on their own machine. Nothing writes a member in.
@@ -320,11 +322,11 @@ this demo shows the boundary held, not the crossing.
 | The acceptor forwards the guest channel to the guest listener | `sovereign-daemon/src/daemon.rs:3637` |
 
 Deeper design context: `docs/RING_APP_LIBRARY.md` (runtime, sandbox, join,
-reach); `docs/internal/RAIL_PROTOCOL_SKETCH.md` (the checkpoint and digest
+reach); `docs/internal/rings/reference/RAIL_PROTOCOL_SKETCH.md` (the checkpoint and digest
 against the protocol's laws); the demo contract this document slots into is
-`docs/RING_ROOM_RUN_OF_SHOW.md`.
+`docs/internal/rings/demo/RING_ROOM_RUN_OF_SHOW.md`.
 
 Evidence, with file references, lives in the repository
-(`docs/internal/RAIL_PROTOCOL_SKETCH.md` for the checkpoint and digest
+(`docs/internal/rings/reference/RAIL_PROTOCOL_SKETCH.md` for the checkpoint and digest
 definitions; `docs/RING_APP_LIBRARY.md` §11–17 for the runtime, the join flow
 and the door).

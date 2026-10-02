@@ -155,6 +155,12 @@ crates = [
     # them. Its in-repo dep list is `kernel-types` alone — see the three
     # [[forbid]] blocks below, without which this entry enforces nothing.
     "oplog",
+    # The pure envelope split from oplog 2026-09-23 (ROOT_CAUSE_FIXES B4):
+    # Op/OpId/SkippedLine with zero I/O, so the rail fold links no filesystem
+    # code (the rail-core [[forbid]] row below and purity-gate hold the two
+    # halves of that claim). Same tier-0 reason as its parent: `OpId` is
+    # content-addressed and gossiped.
+    "oplog-types",
     # Mesh join-key + deep-link FORMAT (fp-9/fp-24). Tier-0 for the rail-core
     # reason: both ends of a mesh join must spell the key and the link the same
     # way, and the two [[forbid]] rows below (`commonwealth-discovery →
@@ -544,6 +550,16 @@ reason = "a journal that names the runtime cannot be lifted with the mesh substr
 from = "oplog"
 to = "commonwealth-*"
 reason = "same rule pointing the other way — corpus-engine's three tenants write this journal too, so a mesh dependency would make the knowledge layer link the mesh to append a line"
+
+# ROOT_CAUSE_FIXES B4 (2026-09-23): the zero-I/O half. This row is the EDGE
+# leg of the claim "the fold links no filesystem code at all"; what an edge
+# rule cannot see — std::fs behind an allowed edge — is `purity-gate`'s
+# source census and wasm32 leg. Together with the type/writer split
+# (`oplog-types` is pure; `oplog` is the fs writer).
+[[forbid]]
+from = "commonwealth-rail-core"
+to = "oplog"
+reason = "the canon links no filesystem code at all: `oplog-types` is the pure envelope and `oplog` is the fs writer — a dependency back is the zero-I/O claim dying silently (purity-gate watches the rest)"
 
 # The ring rail, split out of commonwealth-knowledge on 2026-09-04 (cw-lift
 # 1b). Each rule is TWO ROWS, `commonwealth-rail` and `commonwealth-rail-core`
@@ -956,7 +972,12 @@ name = "commonwealth-rail-core"
 # sig) — no fs, no store; the JOURNAL half (`commonwealth-rail`, which holds the
 # append log) stays cmnwlth's. Admitted 2026-09-21 under §12 decision 3 (wire
 # vocabulary becomes shared); the existing rail [[forbid]] rows keep applying.
-allow = ["oplog", "workspace-hack"]
+# Its edges are `oplog-types` (the pure envelope split from `oplog`,
+# ROOT_CAUSE_FIXES B4, so the fold links no filesystem code) and `kernel-types`
+# (`ContentHash` for the View commitment) — both already leaves, and
+# `oplog-types`'s own budget is `kernel-types` alone, so the closure did not
+# widen when `oplog` left it.
+allow = ["oplog-types", "kernel-types"]
 
 [[package_leaf]]
 name = "sovereign-peer-wire"
@@ -1040,6 +1061,27 @@ name = "oplog"
 # ordering and dedup, not identity. Three crates name it today —
 # commonwealth-rail, commonwealth-rail-core, corpus-engine — which is what a
 # shared leaf is rather than a convenience.
+#
+# `oplog-types` joined its allow 2026-09-23 (ROOT_CAUSE_FIXES B4): the pure
+# envelope split out so rail-core links no filesystem code, with `oplog`
+# re-exporting it so corpus-engine's `crate::oplog` paths never moved. The
+# edge is the re-export, and it is the whole crate list of the type half.
+allow = ["kernel-types", "oplog-types"]
+
+[[package_leaf]]
+name = "oplog-types"
+# The pure envelope (Op/OpId/SkippedLine), split from `oplog` 2026-09-23
+# (ROOT_CAUSE_FIXES B4) so `commonwealth-rail-core` — the fold — links ZERO
+# filesystem code; the fs writer stayed behind in `oplog`, which re-exports
+# these types. Admitted 2026-09-30 when boundary-gate named the missing
+# registration: B4 landed the crate and the purity gate but never added the
+# leaf, so the rail's own dependency left every package closure.
+#
+# The objection to any leaf admission is that the list is global; measured
+# rather than argued, this one is the cheapest admission in the file:
+#     oplog-types closure      4 crates (kernel-types, serde, serde_json, itself)
+#     crates NO existing leaf
+#     already carries          0   <- every one is inside `oplog`'s closure
 allow = ["kernel-types"]
 
 [[package_leaf]]
@@ -1142,7 +1184,7 @@ allow = ["sovereign-contracts", "commonwealth-rail-core", "workspace-hack"]
 
 # ── The packages ─────────────────────────────────────────────────────────────
 #
-# THE FIVE PROGRAMS, DECLARED AS THE ENDSTATE (2026-09-21, docs/FIVE_PROGRAMS.md
+# THE FIVE PROGRAMS, DECLARED AS THE ENDSTATE (2026-09-21, docs/internal/FIVE_PROGRAMS.md
 # §9 / step 9). Until this commit there were six packages — `studio`,
 # `code-intel`, `corpus-mcp`, `commonwealth`, `serving`, `understanding` — each
 # declared where a carve-out happened to reach, and together they answered a
@@ -1213,7 +1255,7 @@ allow = ["sovereign-contracts", "commonwealth-rail-core", "workspace-hack"]
 
 [[package]]
 name = "svrn"
-doc = "docs/FIVE_PROGRAMS.md"
+doc = "docs/internal/FIVE_PROGRAMS.md"
 # The knowledge server (§2): MCP `ask`, `search`, `atoms_lookup`; HTTP
 # `/v1/chat/completions`. Owns corpus indexes and conversations on disk.
 #
@@ -1276,7 +1318,7 @@ crates = [
 
 [[package]]
 name = "ingest"
-doc = "docs/FIVE_PROGRAMS.md"
+doc = "docs/internal/FIVE_PROGRAMS.md"
 # `svrn ingest` (§2): the recipe pipeline. CLI only, no wire. Owns the index
 # directory it writes.
 #
@@ -1326,7 +1368,7 @@ crates = [
 
 [[package]]
 name = "cmnwlth"
-doc = "docs/FIVE_PROGRAMS.md"
+doc = "docs/internal/FIVE_PROGRAMS.md"
 # The endpoint router with a roster (§2): HTTP `/v1/*` proxied, the OICP
 # manifest. Owns the roster, the adverts and the decision log.
 #
@@ -1354,7 +1396,7 @@ crates = [
 
 [[package]]
 name = "serve"
-doc = "docs/FIVE_PROGRAMS.md"
+doc = "docs/internal/FIVE_PROGRAMS.md"
 # The model server (§2): `/v1/chat/completions`, `/v1/embeddings`,
 # `/v1/rerank`, `/v1/ner`, `/v1/models` and its own OICP manifest. Owns the
 # weights, its placement config and the scheduler's decision log. Split out of
@@ -1379,7 +1421,7 @@ crates = [
 
 [[package]]
 name = "code"
-doc = "docs/FIVE_PROGRAMS.md"
+doc = "docs/internal/FIVE_PROGRAMS.md"
 # `svrn code` (§2): the LSP for agents. MCP `symbols`, `callers`, `blast`, …;
 # HTTP `/v1/completions` (FIM). Owns the SCIP index and notes on disk.
 #
@@ -1420,7 +1462,7 @@ crates = [
 
 [[package]]
 name = "bench"
-doc = "docs/FIVE_PROGRAMS.md"
+doc = "docs/internal/FIVE_PROGRAMS.md"
 # `svrn bench` (§2): the evaluator. Serves no wire and dials a URL. Owns banks,
 # baselines and verdict tables.
 #
@@ -1487,7 +1529,7 @@ leaf_budget = ["oicp-types", "sovereign-contracts", "kernel-types", "sovereign-t
 [[distribution]]
 name = "stock"
 crates = ["sovereign-stock", "sovereign-hosted-ingest"]
-doc = "docs/FIVE_PROGRAMS.md"
+doc = "docs/internal/FIVE_PROGRAMS.md"
 max_code_lines = 300
 [[distribution.face]]
 package = "svrn"
@@ -1582,7 +1624,7 @@ items = ["port::compose"]
 [[distribution]]
 name = "onprem"
 crates = ["sovereign-onprem", "sovereign-hosted-ingest"]
-doc = "docs/FIVE_PROGRAMS.md"
+doc = "docs/internal/FIVE_PROGRAMS.md"
 max_code_lines = 200
 [[distribution.face]]
 package = "svrn"

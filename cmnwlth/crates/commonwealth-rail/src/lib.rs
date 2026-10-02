@@ -356,3 +356,5 @@ pub mod ring_checkpoint;
 mod tests;
 #[cfg(test)]
 mod tests_local_only;
+#[cfg(test)]
+mod tests_write_index;

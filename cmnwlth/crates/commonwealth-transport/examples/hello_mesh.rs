@@ -122,7 +122,7 @@ mod real_main {
 
     fn relay_config(args: &[String]) -> RelayConfig {
         if args.iter().any(|a| a == "--no-n0") {
-            RelayConfig::from_parts(Vec::new(), Some("none"))
+            RelayConfig::from_parts(Vec::new(), Some("none")).expect("`none` is a spelling")
         } else {
             RelayConfig::default()
         }

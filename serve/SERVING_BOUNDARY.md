@@ -2,7 +2,7 @@
 
 > **The `[[package]] name = "serving"` row was deleted 2026-09-21** when
 > `quality/ARCH_LAYERS.toml` was rewritten to declare the five programs
-> (`docs/FIVE_PROGRAMS.md` §9). `sovereign-scheduler`, `sovereign-serving-host`
+> (`docs/internal/FIVE_PROGRAMS.md` §9). `sovereign-scheduler`, `sovereign-serving-host`
 > and `serving-policy` are members of `cmnwlth` now, alongside
 > `sovereign-inference` and `sovereign-compute` — §2 gives the router "the
 > serving cluster", and a router with a roster that cannot run a model is a

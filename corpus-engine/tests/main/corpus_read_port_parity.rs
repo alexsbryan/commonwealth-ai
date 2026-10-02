@@ -340,7 +340,7 @@ async fn an_unpromoted_partition_is_listed_at_its_real_path() {
 
 /// An ingest that dies inside its enrichment phase leaves
 /// `<corpus_id>-partition-<node>/` behind with `ingestion_in_progress: true`
-/// beside `indexes_built: true` (`docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3).
+/// beside `indexes_built: true` (`docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3).
 /// Built here from a REAL ingest, not a hand-written meta: no installed
 /// listing can see it, the canonical open fails, and only
 /// `incomplete_ingests` names it, with the ask and the late-failure flag.

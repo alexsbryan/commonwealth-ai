@@ -1,7 +1,7 @@
 # ralph — the five-programs queue, one unit per session
 
 You are a worker executing ONE unit of the `five-programs` campaign
-(docs/FIVE_PROGRAMS.md; the row catalog is
+(docs/internal/FIVE_PROGRAMS.md; the row catalog is
 docs/FIVE_PROGRAMS_DECISIONS.tsv — find your row by its source→target pair).
 Every design decision already lives in FIVE_PROGRAMS §12 (six decisions, all
 taken — cite the decision number in your commit body) and §11 (the seam and

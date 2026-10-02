@@ -255,7 +255,11 @@ pub async fn status(State(daemon): State<Arc<RailsDaemon>>) -> impl IntoResponse
     let addr = daemon.endpoint().addr();
     // The posture the endpoint was bound with (`RailsNode::bind` reads the
     // same `relay_config`), so a client can refuse an n0-homed cw-rails.
-    let relay = daemon.node.config.relay_config();
+    let relay = daemon
+        .node
+        .config
+        .relay_config()
+        .expect("discovery is refused at Config::load (C2)");
     let dial = commonwealth_transport::iroh::format_dial_string(&addr);
     // The invite, with the daemon's field name, or why there is none.
     let invite = crate::found::invite_link(daemon.join_key().as_deref(), &mesh, dial.as_deref());

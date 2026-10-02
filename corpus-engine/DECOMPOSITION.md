@@ -2,7 +2,7 @@
 
 > **The `[[package]] name = "understanding"` row was deleted 2026-09-21** when
 > `quality/ARCH_LAYERS.toml` was rewritten to declare the five programs
-> (`docs/FIVE_PROGRAMS.md` §9). `understanding-atlas` and `understanding-host`
+> (`docs/internal/FIVE_PROGRAMS.md` §9). `understanding-atlas` and `understanding-host`
 > are members of `ingest`: the atlas is WRITTEN by the pipeline and READ by
 > `svrn` through the index, which is §4 rule 1 (one data directory, one owner).
 > `understanding-vocab` stays a shared leaf. The

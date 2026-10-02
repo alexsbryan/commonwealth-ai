@@ -5,7 +5,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# The on-prem distribution (docs/FIVE_PROGRAMS.md §2c; phase-b-86, -87): ONE
+# The on-prem distribution (docs/internal/FIVE_PROGRAMS.md §2c; phase-b-86, -87): ONE
 # process running svrn with serve and ingest hosted in it. It composes no code
 # (no sovereign-code edge), no mesh, and no recipe authoring (no
 # sovereign-recipe-author edge), and seals svrn's posture: web reach, the

@@ -27,7 +27,7 @@ name: Desktop release
 #
 # Why it is not primary: the `macos-arm64` leg measured **250 billed minutes
 # per run** (25 wall-minutes at the 10x macOS multiplier) — the single most
-# expensive job in the repo. See docs/CI_ECONOMY.md.
+# expensive job in the repo. See docs/internal/CI_ECONOMY.md.
 #
 # THE TAG TRIGGER IS DELIBERATELY GONE. `push: tags: desktop-v*` used to fire
 # this automatically, which meant every local release — which requires a tag

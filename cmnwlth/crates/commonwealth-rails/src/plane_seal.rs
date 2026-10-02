@@ -429,7 +429,13 @@ async fn snapshot_work(
         }
     }
     let wanted = rail_acts.len();
-    let written = match journal.append_all(rail_acts, rail.signer(), roster, None) {
+    let written = match journal.append_all(
+        rail_acts,
+        rail.signer(),
+        roster,
+        None,
+        &commonwealth_rail::Ed25519Verifier,
+    ) {
         Ok(ops) => ops,
         Err(e) => {
             warn!(namespace, acts = wanted, error = %e,

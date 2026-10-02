@@ -233,7 +233,13 @@ fn append(
 ) -> Result<(), String> {
     let payload = act::to_payload(a)?;
     journal
-        .append(RailAct::Record { payload }, key, roster, None)
+        .append(
+            RailAct::Record { payload },
+            key,
+            roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        )
         .map(|_| ())
         .map_err(|e| e.to_string())
 }

@@ -21,7 +21,7 @@ around it.
 
 Phase B left every program takeable alone, and a fix keeps it so. Name in your
 census commit the existing owner your row extends and the registry it plugs
-into. A change that adds a second implementation of a docs/FIVE_PROGRAMS.md
+into. A change that adds a second implementation of a docs/internal/FIVE_PROGRAMS.md
 §2c drive (bring-up, root lock, engine assembly, MCP dispatch, tool-set build,
 route mounting, job execution), or a second owner of a capability, stops (§6).
 A model kind, tool or route is a REGISTRATION, never a new binary or a

@@ -36,7 +36,11 @@ pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
 /// iroh-gated `guest` module (pb-mesh-exit-transport) so a program that
 /// registers the guest door names it without linking iroh; `guest` re-exports
 /// it at its historical path.
-pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
+///
+/// The BYTES live in `kernel-types` (`alpn`) — the wasm guest runtime dials
+/// the same spelling from a standalone closure and imports them there
+/// (ROOT_CAUSE_FIXES B3: one definition, the second site imports).
+pub use kernel_types::alpn::GUEST_ALPN;
 
 /// A MEMBER reaching the HTTP origin that lists what this node's operator has
 /// to SELL or LEND (`[iroh] offer_origin`) — a drill going spare, six eggs, a
@@ -48,5 +52,5 @@ pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
 /// is COMPUTED by asking every publisher at once
 /// (`commonwealth_media::fanout`) rather than stored, so there is no listing
 /// to be excluded from and nobody positioned to rank
-/// (`docs/internal/RING_APPLICATIONS.md` §Commerce).
+/// (`docs/internal/rings/reference/RING_APPLICATIONS.md` §Commerce).
 pub const OFFER_ALPN: &[u8] = b"cwth/offer/0";

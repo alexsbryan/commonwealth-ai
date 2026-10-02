@@ -2,7 +2,7 @@
 
 > **The `[[package]] name = "corpus-mcp"` row was deleted 2026-09-21** when
 > `quality/ARCH_LAYERS.toml` was rewritten to declare the five programs
-> (`docs/FIVE_PROGRAMS.md` §9). Its three crates were split by program: this
+> (`docs/internal/FIVE_PROGRAMS.md` §9). Its three crates were split by program: this
 > host is in `svrn` (it serves the knowledge wire), and
 > `sovereign-enrichment-build` / `sovereign-enrichment-catalog` are in `ingest`
 > (they WRITE the atlas this host reads). The three `[[exception]]` rows that

@@ -1759,7 +1759,7 @@ impl CorpusEngine {
                         // "this corpus was supposed to be enriched and
                         // isn't". Stamping on exit instead is the exact
                         // shape that left the check dead —
-                        // `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4-§5.
+                        // `docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4-§5.
                         //
                         // Non-fatal on failure: a meta write that cannot
                         // land must not abort an otherwise-good ingest,

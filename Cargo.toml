@@ -31,6 +31,7 @@ members = [
     # seven references into it. Tier-0 because op ids are GOSSIPED, so the one
     # content-hash derivation must sit below everyone who writes a log.
     "shared/crates/oplog",
+    "oplog-types",
     # Mesh join-key + deep-link FORMAT vocabulary (fp-9/fp-24, 2026-09-23):
     # `hash_join_key`/`validate_join_key_format` and the deep_link URL grammar
     # both ends of a mesh join must spell the same way. Deliberately NOT named
@@ -191,18 +192,18 @@ members = [
     # sovereign-serving-host.
     "serve/crates/sovereign-scheduler",
     "serve/crates/sovereign-serving-host",
-    # `serve`, the model server (docs/FIVE_PROGRAMS.md §2; phase-b
+    # `serve`, the model server (docs/internal/FIVE_PROGRAMS.md §2; phase-b
     # pb-serve-program): the one binary that answers the OpenAI wire alone.
     "serve/crates/sovereign-serve",
-    # The stock distribution (docs/FIVE_PROGRAMS.md §2c; pb-stock-binary): svrn
+    # The stock distribution (docs/internal/FIVE_PROGRAMS.md §2c; pb-stock-binary): svrn
     # with serve hosted in one process, what `svrn daemon run` execs.
     "sovereign/crates/sovereign-stock",
-    # The on-prem distribution (docs/FIVE_PROGRAMS.md §2c; phase-b-86, -87):
+    # The on-prem distribution (docs/internal/FIVE_PROGRAMS.md §2c; phase-b-86, -87):
     # svrn, serve and ingest in one process, with no code, no mesh, and svrn's
     # open-web surfaces and `/mcp` withheld.
     "sovereign/crates/sovereign-onprem",
     # Ingest's hosting composition for svrn, the one `hosted()` both
-    # distributions call (docs/FIVE_PROGRAMS.md §2c; phase-b-88).
+    # distributions call (docs/internal/FIVE_PROGRAMS.md §2c; phase-b-88).
     "sovereign/crates/sovereign-hosted-ingest",
     "sovereign/crates/sovereign-service",
     "sovereign/crates/sovereign-desktop/src-tauri",
@@ -356,6 +357,7 @@ kernel-types = { path = "shared/crates/kernel-types" }
 serving-policy = { path = "serve/crates/serving-policy" }
 serving-policy-core = { path = "shared/crates/serving-policy-core" }
 oplog = { path = "shared/crates/oplog" }
+oplog-types = { path = "oplog-types" }
 mesh-join-vocab = { path = "shared/crates/mesh-join-vocab" }
 host-kit = { path = "shared/crates/host-kit" }
 mesh-reach = { path = "shared/crates/mesh-reach" }
@@ -508,6 +510,9 @@ regex = "1"
 # isolated workdir (bench candidate snapshots, sovereign-tdd
 # workdir gate tests, atos lifecycle tests, …).
 tempfile = "3"
+# Diacritic folding for name matching (summary_verify): one version, already
+# in the lock via idna — a direct edge instead of a hand-rolled accent table.
+unicode-normalization = "0.1.25"
 
 # Persistence
 rusqlite = { version = "0.35", features = ["bundled"] }

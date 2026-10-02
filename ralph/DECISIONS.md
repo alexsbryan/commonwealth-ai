@@ -183,7 +183,7 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 
 
 **A33 · 2026-09-19 · rr-1-classify-leaves-a-slow-node · worker (director order)** — commit 689af944d + this commit
-- Needed: `ra-room-plug-in-live` fails on `c_answer_names` alone, and A28 kept the 60 s window rather than widen it. `docs/RING_ROOM_DEMO.md` part two and the order both named the root as `OffloadVerdict::FastLatency` gating the 38 s route classify because `Workload::Route` is class Fast. A fresh reproduction says otherwise: a's own decision line reads `sharding=LocalOnly`, so `offload_verdict` refused on PRIVACY — its first check — and the latency gate was never consulted. `Workload::request` hardcodes `ShardingPrivacy::LocalOnly` and all three `LlmRouter` classify sites used it, while the same turn's `Judge` and `Synthesize` envelopes thread the session posture, which SLOT_POLICY §2.4 requires of all of them.
+- Needed: `ra-room-plug-in-live` fails on `c_answer_names` alone, and A28 kept the 60 s window rather than widen it. `docs/internal/rings/demo/RING_ROOM_DEMO.md` part two and the order both named the root as `OffloadVerdict::FastLatency` gating the 38 s route classify because `Workload::Route` is class Fast. A fresh reproduction says otherwise: a's own decision line reads `sharding=LocalOnly`, so `offload_verdict` refused on PRIVACY — its first check — and the latency gate was never consulted. `Workload::request` hardcodes `ShardingPrivacy::LocalOnly` and all three `LlmRouter` classify sites used it, while the same turn's `Judge` and `Synthesize` envelopes thread the session posture, which SLOT_POLICY §2.4 requires of all of them.
 - Chose: Fix BOTH gates, in the order they fire, at one decider each. (1) Privacy: the classify threads `SkillRegistry::session_sharding()` — one new accessor that `Runtime::session_sharding` now also delegates to, so the rule has one implementation. (2) Latency: `offload_verdict_with_local` stands the Fast gate down when the node's own measured `tg_tok_s_ewma` is below the existing `THROUGHPUT_REFERENCE_TG_TOK_S`, reported as its own gate name `fast_latency_yielded`; an unmeasured node keeps the standing rule. REFUSED the order's suggested shape — a startup benchmark probe on every node — citing canon `dc3c9856` and `SCHEDULER_QUALITY.md` §4.5 / F10. Instrument: `RING_DOC_GPU_NODES` gives one named podman node the host's render device.
 - Because: The order's own method binds the diagnosis to a run, and the run falsified the premise both it and the doc inherited — the two verdicts share the reported gate name `not_offload_eligible`, which is what let the misreading stand, and fixing only the named gate would have moved nothing (pinned by its own test). Reviving `run_baseline_benchmark` is the measured regression canon forbids (−56 % mean latency bought with capability, declined upgrades 31 → 67), so the speed signal used is the one this fleet already collects; it is a rate, so unlike a measured TTFT it does not conflate job sizes, and it mints no constant, config key or probe. Standing the gate down only lets the scorer LOOK — local still ranks and still wins where no peer is better — which is what bounds a change to a privacy-adjacent path.
 
@@ -300,7 +300,7 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose (operator: "Go with all five recs"): (1) `ra-room-scan-to-name` clause (a) names `Scope::Rails(ring-doc)`, false under A55's wall grant; its text WILL BE corrected openly, saying it came after data and citing A55 — but only AFTER `REVIEW-audit-rg`, because the instrument prints "ring-room.toml is unedited" in that bar's row and the shed bar's goodhart requires no clause edit to that file inside this campaign. OWED by the seat; not done in this commit. (2) `ra-room-member-only-by-vouch` (b): accepted with no text change — the clause asks that the grant list show the guests with their expiry and its goodhart asks for N >= 2 PHONES; it never named a grant count. The audit confirms two phones are still asserted. (3) `threat-gaps-close` approved; `quality/campaigns/threat-gaps.toml` declared with five pre-registered `tg-*` bars; assumptions A1-A5 accepted (`:9742` defaults to member-only with a `perimeter` knob; RPC binds loopback with a loud refusal otherwise; the shared client token keeps working, `named-only` is the knob; no knob on the mesh-app allowlist; reuse mesh-principal's listener if it built one); sequenced AFTER mesh-principal. (4) THREAT_MODEL entries 6 and 7 stay and go public on the next push. (5) "By design" stays on the compromised-node entry.
 - Because: (1) a correction that lands mid-campaign would make the instrument's own printed sentence false and trip the guard written to catch quiet weakening; after the audit it is just a correction. (3) the `:9742` rows edit `iroh_access.rs`, `server.rs` and `daemon.rs`, which mesh-principal also edits and may leave a listener in; the exposure is LAN-perimeter and not new. (4) A56 — a disclosed gap with an owner is the intended state, and mesh-principal is next in the queue.
 **A59 · 2026-09-20 · REVIEW-audit-rg · director (seat)** — this commit
-- Needed: the audit is done and committed (`a2a688d07`) and stopped on two red gates a worker may not close: TESTALL 13548 pass / 1 fail, and PREPUSH red on arch-gate's approach band (+5 files / +5077 lines against `origin/main`). The seat reproduced: `guest_door.rs` 463 -> 1077 and `routes_rail.rs` 483 -> 855 since `f51b66112`; the one test failure is `every_journey_cites_a_doc_that_exists` on `docs/internal/RING_APPLICATIONS.md`, absent on this host, ignored by `.gitignore:67`, cited at `sovereign/docs/cli-contract.toml:3571` since `a3bd715f5`, which is an ancestor of this campaign's base; A51's appendix records the identical red for rr-2.
+- Needed: the audit is done and committed (`a2a688d07`) and stopped on two red gates a worker may not close: TESTALL 13548 pass / 1 fail, and PREPUSH red on arch-gate's approach band (+5 files / +5077 lines against `origin/main`). The seat reproduced: `guest_door.rs` 463 -> 1077 and `routes_rail.rs` 483 -> 855 since `f51b66112`; the one test failure is `every_journey_cites_a_doc_that_exists` on `docs/internal/rings/reference/RING_APPLICATIONS.md`, absent on this host, ignored by `.gitignore:67`, cited at `sovereign/docs/cli-contract.toml:3571` since `a3bd715f5`, which is an ancestor of this campaign's base; A51's appendix records the identical red for rr-2.
 - Chose: the row closes on the campaign's share, as `REVIEW-audit-rr-2` did at A51, and is marked `[x] a2a688d07`. Every machine row of ring-guest is now `[x]`; `HUMAN-rg-the-wall` is the operator's. NOT decided here, all the operator's: (1) the arch-gate approach band — accept, trim or re-pin; ring-guest's share is +4 files / +3602 lines and rr-2's +1 / +1475 is still open under A51, so `--update-baseline` on this tree would absorb both; (2) the absent doc — restore it on this host or rename the citation; this is the third audit to report it; (3) whether size-gate's 76 unbaselined keys and hakari-verify's panic get an owner. No baseline was touched.
 - Because: both reds are foreign to the row's work or are the growth the row was written to measure, and the audit said so unsoftened — `sovereign-daemon` +1394 net non-test lines against a registered prediction of under ~250 and an overbuild line of ~500, substrate 2291 against ~250. The prediction was FALSIFIED on size and HELD on shape: the scaffold's template diff is empty, ring-doc is net negative, the rail came in at 53 of ~60 with one row touching it. Whether 1077 lines in `guest_door.rs` is the price of the wall or an overbuild to trim is the question the operator's walk should answer, not the seat.
 **A60 · 2026-09-20 · ra-room-scan-to-name clause (a) · OPERATOR (decided at A58, applied here)** — this commit
@@ -361,7 +361,7 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Because: each layer answered in turn — the wasm endpoint bound, the relay handshake completed, the QUIC connection negotiated `cwth/guest/0` and established, the request rode one bi-stream, and the guest-channel admission read the grant and served the rail. The one non-obvious path fact (a wasm client must hold the bi-stream's send half open until the response, as `HttpBridge::pump` does) is recorded below with both verbatim runs. No product code moved — this row's own `git diff` over sovereign/crates and commonwealth/crates is empty.
 
 **browser-dial-3 · 2026-09-22 · REVIEW-audit-browser-dial · director** — this commit
-- Needed: The audit body was done and committed (`418639ea7`) but the row stayed `[~]` on its two named checks, both red on causes the campaign's diff does not touch. TESTALL exit=100, 13710 pass / 2 fail: `every_journey_cites_a_doc_that_exists` — mesh-offers-catalogue cites `docs/internal/RING_APPLICATIONS.md`, gitignored per-host (`.gitignore:67`), absent here, cited at `sovereign/docs/cli-contract.toml:3627` since `a3bd715f5`, an ancestor of BOTH `origin/main` and BASE — and `local_only_boot::a_local_only_daemon_spawns_no_network_service`, the 10 s boot bound under a 13712-test parallel run (`testfn sovereign-mesh` alone exit=0). PREPUSH exit=1: arch-gate [hard], the approach band 203149 → 203154 (+5), in full the concurrent foreign `5825a2fa3`'s `ring_cmd/mod.rs` 1082 → 1087. The predicate's literal reading — tree-wide `git diff --stat <BASE>..HEAD` over sovereign/crates and commonwealth/crates empty — is FALSE: +678, all of it foreign. The package posed the disposition as operator forks.
+- Needed: The audit body was done and committed (`418639ea7`) but the row stayed `[~]` on its two named checks, both red on causes the campaign's diff does not touch. TESTALL exit=100, 13710 pass / 2 fail: `every_journey_cites_a_doc_that_exists` — mesh-offers-catalogue cites `docs/internal/rings/reference/RING_APPLICATIONS.md`, gitignored per-host (`.gitignore:67`), absent here, cited at `sovereign/docs/cli-contract.toml:3627` since `a3bd715f5`, an ancestor of BOTH `origin/main` and BASE — and `local_only_boot::a_local_only_daemon_spawns_no_network_service`, the 10 s boot bound under a 13712-test parallel run (`testfn sovereign-mesh` alone exit=0). PREPUSH exit=1: arch-gate [hard], the approach band 203149 → 203154 (+5), in full the concurrent foreign `5825a2fa3`'s `ring_cmd/mod.rs` 1082 → 1087. The predicate's literal reading — tree-wide `git diff --stat <BASE>..HEAD` over sovereign/crates and commonwealth/crates empty — is FALSE: +678, all of it foreign. The package posed the disposition as operator forks.
 - Chose: Close the audit row on the campaign's OWN share, which is zero. (1) The predicate is read per its two bars' `floor_basis` clause (d), which already scope it "for this row", and per O §Predictions ("sovereign/crates: +0 … a row that needs a product edit has found the order's exit condition"); the tree-wide literal reading is recorded FALSIFIED by the foreign lane, not erased (ARCH 6). (2) The two TESTALL reds are recorded foreign, as this queue's precedent (the-link-7, A51 rr-2, A59 ring-guest) closed the identical red; the restore/rename of the per-host doc stays the operator's. (3) arch-gate [hard] is LEFT RED and packaged — its only fix is a product edit (`ring_cmd/mod.rs` trimmed/split 5 lines), which this campaign's one absolute forbids and which the foreign lane that grew it owns; a working-tree `--update-baseline` is forbidden by PROMPT §7, and a re-pin at origin/main cannot absorb an unpushed commit (`5825a2fa3` is not on origin/main). (4) The dial WORKED — bd-1 returned `HTTP/1.1 200 OK` carrying `ring-658e43cce7830b48` (browser-dial-2) — so the order's DoD (O Demo: the MEASUREMENT closes the order) is met, and the demo-leg follow-on order stays the operator's (campaign.md Stop conditions). Every row is `[x]`.
 - Because: A measurement campaign's contract is a zero product diff and a measured dial; both hold on the campaign's own share (its four commits are ledger + queue mark only; its own `.rs` change is zero). Correcting a row whose premise the tree contradicts is the operator's standing direction (`ralph/PROMPT.md`, 2026-09-17), and closing an audit with a foreign red recorded is the-link-7's settled precedent. The one thing the charter does not clearly cover — a foreign HARD-ratchet regression inside the range whose only fix is a product edit — is why this decision carries REVIEW-AFTER. REVIEW-AFTER: the approach band is left +5 over baseline on foreign, unpushed product code; pre-push stays BLOCKED for the whole branch until the operator or the `5825a2fa3` lane trims/splits `ring_cmd/mod.rs` back under 1082 (or banks a real cut with `arch-gate --tighten`).
 
@@ -401,7 +401,7 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Because: The order implies the fix — Demo §3 names `ralph/DECISIONS.md` as the dial bar's proof home and Demo §2's proof is the builder/parser/QR round-trip, i.e. the test suite; neither asks the room run to re-run them. Forcing it would embed cargo in a demo whose contract is "measures binaries, never the tree" (HANDOFF step 3) and add a second row where one correction suffices (charter: strictly necessary). ARCH 5: CNJ is an unmeasured bar making no claim, never a pass — printing PASSED would read 1.0 on kindness, the bars' own goodhart language. the-link-1 already recorded "demo exit 4 … is the four-verdict rule working, not a failure", and tl-2 closed on exactly this table (f6fb719e9; its acceptance, STATE.md:59, required only the six rr-2 and five rg PASSED).
 
 **the-link-7 · 2026-09-22 · REVIEW-audit-the-link · director** — e9d0c4f85 · 49b664b2e · this commit
-- Needed: The audit body was done and committed (5d44de59f) but the row stayed `[~]` on its two named checks, both red on causes the campaign's diff does not touch. TESTALL 13701/1: `every_journey_cites_a_doc_that_exists` — mesh-offers-catalogue cites `docs/internal/RING_APPLICATIONS.md`, gitignored per-host (`.gitignore:67`), absent here, cited since a3bd715f5, an ancestor of BASE. PREPUSH arch-gate [hard]: `runner.rs` past slack and the approach band +446. The package posed both as operator forks; the tree contradicts that framing — a313c9c18 (the runner.rs growth) is ON origin/main, the branch's `origin/main..HEAD` diff has zero `.rs` changes, and the 2074 pin was already 45 lines stale (the file was 2119 when 5bd896d8f froze it).
+- Needed: The audit body was done and committed (5d44de59f) but the row stayed `[~]` on its two named checks, both red on causes the campaign's diff does not touch. TESTALL 13701/1: `every_journey_cites_a_doc_that_exists` — mesh-offers-catalogue cites `docs/internal/rings/reference/RING_APPLICATIONS.md`, gitignored per-host (`.gitignore:67`), absent here, cited since a3bd715f5, an ancestor of BASE. PREPUSH arch-gate [hard]: `runner.rs` past slack and the approach band +446. The package posed both as operator forks; the tree contradicts that framing — a313c9c18 (the runner.rs growth) is ON origin/main, the branch's `origin/main..HEAD` diff has zero `.rs` changes, and the 2074 pin was already 45 lines stale (the file was 2119 when 5bd896d8f froze it).
 - Chose: (1) The file: SPLIT, never re-pinned — the trailing `degraded_router_tests` module (100 test-only lines) moved to `runner/degraded_router_tests.rs` under `#[path]`, the `router.rs`→`router/posture_tests.rs` precedent; runner.rs 2133→2037, back under its pin (e9d0c4f85). (2) The band: re-pinned AT origin/main from a detached worktree per the 2026-09-21 direction's recipe, `approach_band.txt` ONLY — `oversized.txt`/`instruction_surface.txt` deliberately not copied back, because a file pin is never raised (49b664b2e). (3) TESTALL's red: recorded foreign per this queue's own precedent (A51 rr-2, A59 ring-guest — the identical red on this host), row closed on the campaign's share; restore-or-rename of the per-host doc stays the operator's (third report).
 - Because: The direction makes the file-ceiling fix "never re-pinned, never an operator question" and prescribes the origin/main re-pin for ratchets in arrears; the charter's decide-list covers "fixing the code the gate names". The TESTALL red is not a ratchet and its fix (restore or rename a per-host doc this campaign never cited) is outside the charter's leave-list's spirit to guess at — closing on the campaign's share with the red honestly recorded is ARCH 5's four-verdict close, and it is exactly what A51 and A59 did.
 
@@ -1873,7 +1873,7 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
   - (A) Principle 12. contracts already owns the page path, and its doc names the link as the path's user (guest_pages.rs:35-46). mesh-join-vocab owns the fragment grammar.
   - (A) Principle 8. The 2026-09-22 outage came from the decisions: which page path, and where `path=` goes. Those stay single, and only argument passing happens at two sites.
   - (A) Principle 10. One call returns both values. Users see the same strings as before.
-  - (B) FIVE_PROGRAMS §4 rule 8 (docs/FIVE_PROGRAMS.md:271-275) already says cw-rails measures and "serve declares VRAM". Only the timing was wrong: this row removes the daemon's only path to the probe.
+  - (B) FIVE_PROGRAMS §4 rule 8 (docs/internal/FIVE_PROGRAMS.md:271-275) already says cw-rails measures and "serve declares VRAM". Only the timing was wrong: this row removes the daemon's only path to the probe.
   - (B) serve cannot declare the node's hardware without either a second detector (principle 8) or an edge to commonwealth-discovery. Its Cargo.toml has no such edge, and pb-serve-package forbids serve any commonwealth crate.
   - (B) Principle 11: an existing field carries the figure. Principle 6: an empty list means "not declared", never zero VRAM. Peers see the same numbers from every node that runs serve.
   - Neither ruling widens a budget, adds an exception, promotes a store or raises a ratchet. serve, cw-rails, contracts and the daemon gain no dependency.
@@ -1941,7 +1941,7 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Needed: phase-c had become one bucket of 37 rows mixing architecture designed in phase-b-1 with defects found during Phase B. Asked for an honest read, the seat counted 11 architecture rows main does not have either, 8 bugs main shares, 9 cleanup, tooling and coverage rows, and 9 regressions or unexercised journeys the cut introduced.
 - Chose (operator): "Let's make bugs and cleanup Phase C then these 'rest of the architecture' Phase D."
   - ralph/next/phase-d/STATE.md holds the 11 architecture rows, renamed pc-* -> pd-* (the header maps every old id, so the decision ledgers' references resolve): venues, inference-origin, bench-dials, contracts, provider-split, config-split, dispatcher-carve, solve-dial, daemon-adopts, split-decider, fetch-model-reach. Their in-set dependencies are renamed with them.
-  - ralph/next/phase-c/STATE.md holds bugs and cleanup in three groups, regressions first: 13 cut-introduced (9 plus four split-deployment defects), 8 bugs main shares, 9 cleanup. docs/FIVE_PROGRAMS.md's three passages about the config split, the contracts leaf test and §2c's one implementation per drive now point at phase-d.
+  - ralph/next/phase-c/STATE.md holds bugs and cleanup in three groups, regressions first: 13 cut-introduced (9 plus four split-deployment defects), 8 bugs main shares, 9 cleanup. docs/internal/FIVE_PROGRAMS.md's three passages about the config split, the contracts leaf test and §2c's one implementation per drive now point at phase-d.
   - Correction, the seat's: the ship gate's "Not blocking: filed to phase-c" list claimed four split-deployment items filed that had no row. They are now pc-rpc-probe-identity, pc-admin-reload-checks-serve, pc-serve-restart-self-report and pc-mesh-status-serve-down, and the gate's text says so (principle 4).
 - Because: bugs and architecture are started by different triggers. A defect is owed; an architecture row waits on a person who needs its use case ("no demo, no build"). One queue made the second look like the first and hid the first.
 - Not decided here: whether pc-upgrade-off-mesh-named, pc-stock-collaborate-e2e and pc-migration-backups land before the merge (the seat recommended it; O1's timing is the operator's).
@@ -2609,7 +2609,7 @@ fail 0). Every other red traces to a commit that is an ancestor of the queue sta
 (`git merge-base --is-ancestor`), and `git log d8cd7bb9f..HEAD -- <file>` is empty for each
 named file: quote_verification.rs and the conformance tags (30293904f, 09-13);
 ingest_failure_modes.rs (last touched db21b2f8d, 09-03, the behaviour it checks changed in
-30293904f); cli-contract.toml:3571 citing `docs/internal/RING_APPLICATIONS.md`, which is
+30293904f); cli-contract.toml:3571 citing `docs/internal/rings/reference/RING_APPLICATIONS.md`, which is
 gitignored (`.gitignore:67`) and absent on this host (a3bd715f5, 09-13); env-flags.toml:43 and
 :1662 both declare `SOVEREIGN_SIDECAR_FEATURES` (e3474619c, 09-14); AGENTS.md +399 bytes
 (9272ac2ca, 09-13).
@@ -4789,13 +4789,13 @@ so the "no terminal state" is escalation, not a defect.
 removed the package, which would resume the campaign. This entry records why the
 campaign is NOT resumed, and restores the package carrying the operator fork.
 
-**Fork.** `c35d235b2` (`docs/FIVE_PROGRAMS.md`) landed at 15:13:53, 34 seconds
+**Fork.** `c35d235b2` (`docs/internal/FIVE_PROGRAMS.md`) landed at 15:13:53, 34 seconds
 before the director's commit at 15:14:27. It states it "Supersedes the
 ten-context decomposition in `quality/DOMAINS.md` §4 and the `domains`
-campaign's relocation plan" (`docs/FIVE_PROGRAMS.md:3-4`); `quality/DOMAINS.md`
+campaign's relocation plan" (`docs/internal/FIVE_PROGRAMS.md:3-4`); `quality/DOMAINS.md`
 now carries the banner "§4, §7 and §11 do not govern" (`:3-6`); §5 deletes "the
 ten-context registry `quality/DOMAINS.toml` and its census script"
-(`docs/FIVE_PROGRAMS.md:69-71`) and step 0 deletes the process apparatus
+(`docs/internal/FIVE_PROGRAMS.md:69-71`) and step 0 deletes the process apparatus
 (`:104-106`). The campaign's remaining rows ARE that relocation plan. Continue
 it, pause it and begin the new procedure, or finish wave 1 first?
 
@@ -4805,14 +4805,14 @@ replacing the campaign's plan, authored by the operator minutes earlier, and the
 charter's own instruction is "an honest package beats a guessed decision" and
 "If the fork is one the charter leaves to the operator, say so in the package —
 the options, their costs, and your recommendation — and stop." The director's
-recommendation is to pause and begin `docs/FIVE_PROGRAMS.md` step 0; the package
+recommendation is to pause and begin `docs/internal/FIVE_PROGRAMS.md` step 0; the package
 (`ralph/NEEDS_HUMAN.md`) names the three options, their costs, and the one-line
 resume.
 
 **Evidence** (reproduced this session, on `ralph/domains-campaign`).
 - `git log --format='%h %ci %s' -3` -> `2220dbf93` (15:14:27), `c35d235b2`
   (15:13:53), `7b2e304b8` (15:08:52).
-- `quality/DOMAINS.md:3-6` banner; `docs/FIVE_PROGRAMS.md:3-4,:69-71,:104-106`.
+- `quality/DOMAINS.md:3-6` banner; `docs/internal/FIVE_PROGRAMS.md:3-4,:69-71,:104-106`.
 - Ready rows are the relocation plan:
   `Queue('ralph/STATE.md').first_ready_review()` -> `None`; ready non-review
   lanes `['dm-mesh-workbench-move-scip', 'dm-vocab-compile-fail-test',
@@ -4823,7 +4823,7 @@ resume.
 
 **Falsified by.** An operator instruction that the campaign continues to the
 transition (then remove the package and the director's row-order resolution
-resumes the campaign); or a `docs/FIVE_PROGRAMS.md` revision that keeps the
+resumes the campaign); or a `docs/internal/FIVE_PROGRAMS.md` revision that keeps the
 relocation plan governing (then the campaign stands); or a `ralph/STOP` that
 appeared with `c35d235b2` (then the halt is the operator's already).
 
@@ -7467,7 +7467,7 @@ is not tuned here (§6, and "do not tune a gate to flip one number"). Nothing in
 the scorer a peer speed signal; §4.5's finding that `throughput_factor` is a constant for peers
 stands, and the local candidate's sub-reference clamp is what moved the synthesis.
 
-**Also corrected in the same commit** (principle 3): `docs/RING_ROOM_DEMO.md` fix 1 is retired.
+**Also corrected in the same commit** (principle 3): `docs/internal/rings/demo/RING_ROOM_DEMO.md` fix 1 is retired.
 `reason="could-not-judge"` is the verdict LABEL, not a cause (`model_slot.rs:2714` logs
 `gate.measured`); `qwen35` 2B HAS been measured — `sovereign/DEFAULTS_LEDGER.md`, floor 19.9, signal
 459–644, **ratio 23x** against the probe's 4x `Safe` limit, in a sweep that agreed with the declared
@@ -9089,7 +9089,7 @@ own exit code to `demo.rc`. Frame 2e7f855c owed this.
 ### The fork
 
 `REVIEW-audit-rr-2` finished everything but PREPUSH: findings and fixes at f2e497d71,
-TESTALL 13504 pass / 1 fail (foreign: `docs/internal/RING_APPLICATIONS.md` is gitignored
+TESTALL 13504 pass / 1 fail (foreign: `docs/internal/rings/reference/RING_APPLICATIONS.md` is gitignored
 on this host and cited at `sovereign/docs/cli-contract.toml:3571` since a3bd715f5, an
 ancestor of the campaign start), LINT and DOCS green, PREPUSH red on arch-gate's
 approach band. The worker may not touch a baseline.
@@ -9160,7 +9160,7 @@ Advisory, outside the campaign: `hakari-verify` has been red across three audits
 > {"t":"summary","pass":13504,"fail":1,"warn":0,"ms":148974,"empty":false,"doctests":false}
 >   cli_contract_journeys::every_journey_cites_a_doc_that_exists
 >     journeys citing docs that are gone (rename the citation or restore the doc):
->       mesh-offers-catalogue cites `docs/internal/RING_APPLICATIONS.md`, which does not exist
+>       mesh-offers-catalogue cites `docs/internal/rings/reference/RING_APPLICATIONS.md`, which does not exist
 > 
 > $ scripts/ralph-check.sh lint
 > exit=0
@@ -10068,7 +10068,7 @@ directory is gitignored); the `local_only_boot` test failing alone (it passes).
 
 **Evidence reproduced this session:** `./scripts/ralph-check.sh arch` exit=1;
 `testfn sovereign-cli every_journey_cites_a_doc_that_exists` exit=100 / 1 fail,
-"mesh-offers-catalogue cites `docs/internal/RING_APPLICATIONS.md`, which does
+"mesh-offers-catalogue cites `docs/internal/rings/reference/RING_APPLICATIONS.md`, which does
 not exist"; `testfn sovereign-mesh
 a_local_only_daemon_spawns_no_network_service` exit=0; `git diff --numstat
 ac44e6fec..HEAD -- sovereign/crates commonwealth/crates` = +678 in exactly the
@@ -10538,7 +10538,7 @@ is the third report to the operator, per A59's own counting.
   designed; concept-gate declared could-not-judge).
 - TESTALL red: `--package sovereign-cli --filter
   every_journey_cites_a_doc_that_exists` → 0 passed / 1 failed, "mesh-offers-
-  catalogue cites `docs/internal/RING_APPLICATIONS.md`, which does not exist" —
+  catalogue cites `docs/internal/rings/reference/RING_APPLICATIONS.md`, which does not exist" —
   the same sentence the audit recorded.
 - rail-core diff EMPTY (invariant c3fed9c3); regression sets C2/C3/rr-1
   untouched; no D1-D4 surface touched by any of the three commits.
@@ -11010,7 +11010,7 @@ Package: ctl/NEEDS_HUMAN.resolved-fp10-20260924.md. Reproduced at ba832a97d:
 - build/inference.rs:271 `sovereign_inference::engine_factory::build_engine(config)`; :454 `sovereign_compute::manager::build_compute_layer_with_distributed`; bin/sovereign-daemon.rs:59 `sovereign_compute::child_main::run`, :64 `sovereign_inference::rpc_worker_main::run`. The daemon constructs the engine and re-execs both children.
 - quality/ARCH_LAYERS.toml:676-679 `[[forbid]] from = "commonwealth-rails" to = "sovereign-*"`, no except, reason: the binary is lifted out of the monorepo. cw-rails cannot own engine construction.
 - sovereign-inference/src/embedded/rpc_distribution.rs:2385-2390 re-execs `current_exe()` for the rpc-worker; sovereign-cli-daemon/src/lib.rs:161 carries the second `rpc_worker_main::run` site. fp-25 depends on whichever binary owns serving.
-- docs/FIVE_PROGRAMS.md:1037-1046 (D2) and :1128 (Phase B, "make the serving binary own the verbs", ~20 edges). fp-16 (d1aaa2843) recorded the same missing prerequisite for the mesh dial.
+- docs/internal/FIVE_PROGRAMS.md:1037-1046 (D2) and :1128 (Phase B, "make the serving binary own the verbs", ~20 edges). fp-16 (d1aaa2843) recorded the same missing prerequisite for the mesh dial.
 
 Why I did not decide: (a) a new cmnwlth serving binary reverses D2's text and is a phase; (b) is an `[[exception]]` row; (c) re-homing the daemon's serving half is a placement move of phase size. A literal stub dial is forbidden by §11 ("do not fake") and changes every chat answer. Recommendation (b) is written on the HUMAN row.
 
@@ -11062,7 +11062,7 @@ Package: ctl/NEEDS_HUMAN.resolved-fpcoreres-20260924.md. Reproduced at b553ba70d
 - `cargo xtask boundary-gate` (toolbox, corpus-engine/) → FAILED (62), EXIT=1.
 - `git grep -nE "resolve_evidence|EvidenceFetcher|ResolvedChunk" -- '*.rs'` outside resolve.rs finds three crates. corpus-engine's re-export is at enrichment/atlas/mod.rs:94. sovereign-core uses it at atlas_grounding.rs:388 and :500. corpus-mcp uses it at tools.rs:473 and at ask.rs:32 and :64 (`IndexEvidenceFetcher`). The reader's own ground/mod.rs:30-35 and report.rs:282 document it.
 - corpus-mcp/Cargo.toml's `sovereign-enrichment-build` comment records ei-5a-build-cut, which cut the sites that dragged sovereign-core, sovereign-tools and sovereign-inference (closure 695 → 590).
-- docs/FIVE_PROGRAMS.md:1032 says: "`ground`'s selection POLICY (`candidate_atlas_ids`, walk choice) is the consumer's decision and moves to the svrn side". `candidate_atlas_ids` is at sovereign-core atlas_grounding.rs:25, so that half has already landed.
+- docs/internal/FIVE_PROGRAMS.md:1032 says: "`ground`'s selection POLICY (`candidate_atlas_ids`, walk choice) is the consumer's decision and moves to the svrn side". `candidate_atlas_ids` is at sovereign-core atlas_grounding.rs:25, so that half has already landed.
 - corpus-engine-atlas-reader/src/ground/mod.rs:13-17 says the walk "moves down here, where `corpus-mcp` can reach it without taking a dependency the boundary-gate forbids". Step 3 of the same doc is `resolve_evidence`.
 - resolve.rs imports `kernel_types::CorpusId`, `crate::types::ScoredChunk` (a corpus-index re-export), `ChunkRequest` and `ChunkSelector`. All of these are inside the reader's allow-list (quality/ARCH_LAYERS.toml, `corpus-engine-atlas-reader`), so no budget changes.
 

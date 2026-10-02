@@ -72,7 +72,7 @@ scripts/ralph-mark.sh tl-2-offline-leg-exports <sha> ralph/next/the-link/STATE.m
 - A `cut-not-a-cut` COULD-NOT-JUDGE means the run was not cold — rerun it.
 - The rr-1 regression (`RING_ROOM_TOPOLOGY=three`, run once by REVIEW-DEMO)
   has TWO EXPECTED REDS that are the baseline, not failures: answer 0.8,
-  plug-in 0.0 on `c_answer_names` — `docs/RING_ROOM_RUN_OF_SHOW.md` has the
+  plug-in 0.0 on `c_answer_names` — `docs/internal/rings/demo/RING_ROOM_RUN_OF_SHOW.md` has the
   account. What the gate checks is that they have not MOVED.
 - The audit row should fold in the macOS-side preliminary findings: the rail
   predictions held exactly (rail +0, rail-core +0 — the invariant), and the
@@ -89,7 +89,7 @@ scripts/ralph-mark.sh tl-2-offline-leg-exports <sha> ralph/next/the-link/STATE.m
 - Origin's pre-push hook was still red on `eval_cmd/runner.rs` (+59 over
   slack, raptor's `a313c9c18`/`d1a8596b2`) when the push went through —
   their split is still owed wherever that lane lives.
-- Context if anything surprises: `docs/RING_ROOM_RUN_OF_SHOW.md` (the demo
+- Context if anything surprises: `docs/internal/rings/demo/RING_ROOM_RUN_OF_SHOW.md` (the demo
   contract), `ralph/next/the-link/` (queue, order, charter, prompt),
   `ralph/DECISIONS.md` the-link-1..5 (why it parked), and the daemon logs
   under `target/ring-room-rr2-demo/` are ground truth.

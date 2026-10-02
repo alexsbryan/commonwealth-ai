@@ -3,6 +3,7 @@
 #   cargo run -p xtask -- clock-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clock-gate --tighten
+1	cmnwlth/crates/commonwealth-rail/examples/stage_member_act.rs
 1	cmnwlth/crates/commonwealth-rail/src/journal.rs
 1	cmnwlth/crates/commonwealth-state/src/activity.rs
 1	cmnwlth/crates/commonwealth-state/src/contributions.rs

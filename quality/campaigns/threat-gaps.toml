@@ -37,7 +37,7 @@ status       = "open"
 id           = "tg-rpc-port-not-on-lan"
 demo         = "On an anchor with no env set, `ss -ltn` shows the tensor-split port on 127.0.0.1; `nc <lan-ip> 50052` from a second box is refused; tokens still flow and the host log says via=iroh-bridge."
 one_line     = "CLAIM: the tensor-split port is not reachable from the LAN by default, and distributed inference still works through the member-only tunnel"
-derives_from = "measured 2026-09-20: DEFAULT_RPC_BIND = 0.0.0.0:50052 (sovereign-daemon/src/bootstrap.rs:327); the member-only encrypted tunnel already exists (RPC_ALPN, commonwealth-transport/src/iroh.rs:78; test the_rpc_alpn_admits_members_only_and_has_no_downgrade, iroh_access.rs:1470); tunnel vs direct measured on a 4B only (docs/DISTRIBUTED_PILOT_READINESS.md:533-536)"
+derives_from = "measured 2026-09-20: DEFAULT_RPC_BIND = 0.0.0.0:50052 (sovereign-daemon/src/bootstrap.rs:327); the member-only encrypted tunnel already exists (RPC_ALPN, commonwealth-transport/src/iroh.rs:78; test the_rpc_alpn_admits_members_only_and_has_no_downgrade, iroh_access.rs:1470); tunnel vs direct measured on a 4B only (docs/internal/DISTRIBUTED_PILOT_READINESS.md:533-536)"
 floor        = 1.0
 floor_basis  = "structural: 1.0 iff (a) with no env and no config the worker binds loopback, (b) a non-loopback bind without the acknowledgement knob is refused with a sentence and is not silently Off, (c) a two-node split completes tokens over the bridge on a direct path, not relay, (d) big-model tok/s over the bridge is reported beside direct-ip in the verdict row. Any false is 0.0."
 target       = 1.0

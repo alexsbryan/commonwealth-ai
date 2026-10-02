@@ -268,6 +268,10 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
         Router::new()
             .route("/v1/rail/append", post(routes_rail::append))
             .route("/v1/rail/log", get(routes_rail::log))
+            // The operator's "who is in" — the one membership walk, read off
+            // the same admission `log` folds. Mounted beside it because the
+            // same listener decides who may ask.
+            .route("/v1/rail/membership", get(routes_rail::membership))
             // The live lane — delivery, not record. Beside `append`
             // because the same page uses both and the same listener
             // decides who may reach either; nothing it carries lands in

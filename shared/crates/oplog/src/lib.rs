@@ -91,8 +91,9 @@ use std::io::{BufRead, BufReader, Write};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
+pub use oplog_types::{Journaled, Op, OpId, SkippedLine};
 
 /// What can go wrong writing or reading a journal.
 ///
@@ -115,103 +116,6 @@ pub enum OplogError {
 }
 
 pub type Result<T> = std::result::Result<T, OplogError>;
-
-/// What a tenant must declare to get a journal: where its lines live, which
-/// line format the current writer emits, and the prefix its ids wear.
-///
-/// A trait rather than three constructor arguments so the three facts cannot
-/// be supplied inconsistently at two call sites of the same log (ARCH §10.6),
-/// and so `Oplog::<K>::new(dir)` needs nothing but the directory.
-pub trait Journaled: Serialize + DeserializeOwned {
-    /// Basename of the JSONL file, joined onto the directory given to
-    /// [`Oplog::new`].
-    const FILE: &'static str;
-    /// Short, stable id prefix — `"gov"`, `"recon"`, `"bridge"`. Part of the
-    /// hashed input, so ids from two tenants can never collide even if the
-    /// same body were written at the same second by the same actor.
-    const ID_PREFIX: &'static str;
-    /// Line format version this build writes. Bump only when a reader must
-    /// opt in to new semantics; [`Oplog::read_all`] skips lines declaring a
-    /// higher `v` rather than silently misreading them.
-    const VERSION: u32 = 1;
-    /// Short label for tracing and error text (`"governance_oplog"`).
-    const LABEL: &'static str;
-}
-
-// ── Identity ─────────────────────────────────────────────────
-
-/// Stable, content-addressed id for one op.
-///
-/// Opaque on purpose: the only way to mint one is [`Op::new`], which hashes
-/// the act. `from_raw` exists for reading an id back off a log line or a CLI
-/// argument, and is named so a reader sees no hashing happened here.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct OpId(String);
-
-impl OpId {
-    pub fn from_raw(s: impl Into<String>) -> Self {
-        Self(s.into())
-    }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for OpId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-// ── The envelope ─────────────────────────────────────────────
-
-/// One line in an [`Oplog`] — an act (`kind`) plus its provenance.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "K: DeserializeOwned"))]
-pub struct Op<K> {
-    /// Content-addressed op id (see [`OpId`]). Stable across replays.
-    pub id: OpId,
-    /// Line format version. Always written; the read-side gate skips lines
-    /// declaring a version this build does not understand.
-    pub v: u32,
-    /// When the act happened (Unix seconds).
-    pub ts_unix: i64,
-    /// Who performed it. `human:<name>` for an adjudication a person made,
-    /// a machine label (`"ingest"`, `"reconcile:multi-origin"`) otherwise.
-    /// Tenants that require human attribution enforce it themselves — see
-    /// `governance::first_unattended_act`.
-    pub actor: String,
-    #[serde(flatten)]
-    pub kind: K,
-}
-
-impl<K: Journaled> Op<K> {
-    /// Build an op, deriving its content-addressed [`OpId`] from the
-    /// (prefix, ts, actor, body) tuple.
-    ///
-    /// Two byte-identical acts at the same second by the same actor collide by
-    /// design — callers append in real time, so this does not arise in
-    /// practice (the same birthday-bound caveat the atom content-hash ids
-    /// carry).
-    pub fn new(kind: K, ts_unix: i64, actor: impl Into<String>) -> Self {
-        let actor = actor.into();
-        // serde_json writes fields in declaration order, so the body string —
-        // and therefore the id — is deterministic across runs and builds.
-        let body = serde_json::to_string(&kind).unwrap_or_default();
-        let input = format!("{}|{ts_unix}|{actor}|{body}", K::ID_PREFIX);
-        Self {
-            id: OpId(format!(
-                "{}-{}",
-                K::ID_PREFIX,
-                kernel_types::ContentHash::of_str(&input).short()
-            )),
-            v: K::VERSION,
-            ts_unix,
-            actor,
-            kind,
-        }
-    }
-}
 
 // ── The journal ──────────────────────────────────────────────
 
@@ -516,34 +420,41 @@ impl<K: Journaled> Oplog<K> {
     /// One line, judged: an op, or the reason it is not one. The one place
     /// both readers decide which lines count.
     fn parse_line(&self, line: &str, line_no: u64) -> std::result::Result<Op<K>, SkippedLine> {
-        match serde_json::from_str::<Op<K>>(line) {
-            Ok(op) if op.v > K::VERSION => {
+        // The version gate runs BEFORE the body parse (leg 5 of
+        // `ra-membership-is-order-free`): an act whose KIND this build
+        // has never seen fails serde, and a parse-first gate would name
+        // that Malformed exactly when NewerVersion is the honest answer.
+        #[derive(serde::Deserialize)]
+        struct LinePeek {
+            v: u32,
+        }
+        if let Ok(peek) = serde_json::from_str::<LinePeek>(line) {
+            if peek.v > K::UNDERSTANDS {
                 tracing::warn!(
                     log = K::LABEL,
                     path = %self.path.display(),
                     line = line_no,
-                    v = op.v,
+                    v = peek.v,
                     "oplog: skipping op from a newer format version"
                 );
-                Err(SkippedLine::NewerVersion {
+                return Err(SkippedLine::NewerVersion {
                     line: line_no,
-                    v: op.v,
-                })
-            }
-            Ok(op) => Ok(op),
-            Err(err) => {
-                tracing::warn!(
-                    log = K::LABEL,
-                    path = %self.path.display(),
-                    line = line_no,
-                    "oplog: malformed line skipped ({err})"
-                );
-                Err(SkippedLine::Malformed {
-                    line: line_no,
-                    error: err.to_string(),
-                })
+                    v: peek.v,
+                });
             }
         }
+        serde_json::from_str::<Op<K>>(line).map_err(|err| {
+            tracing::warn!(
+                log = K::LABEL,
+                path = %self.path.display(),
+                line = line_no,
+                "oplog: malformed line skipped ({err})"
+            );
+            SkippedLine::Malformed {
+                line: line_no,
+                error: err.to_string(),
+            }
+        })
     }
 }
 
@@ -581,20 +492,6 @@ fn file_identity(meta: &fs::Metadata) -> Option<(u64, u64)> {
 #[cfg(not(unix))]
 fn file_identity(_meta: &fs::Metadata) -> Option<(u64, u64)> {
     None
-}
-
-/// A line present in the journal that this build did not turn into an [`Op`].
-///
-/// Not an error — the read still succeeds, and every other line is returned.
-/// It is the *reportable absence*: the caller now holds the evidence that its
-/// answer is derived from a subset, and can decide whether that matters.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SkippedLine {
-    /// This build could not parse the line at all.
-    Malformed { line: u64, error: String },
-    /// The line declares a format version newer than `K::VERSION`, so reading
-    /// it would be guessing at semantics this build does not have.
-    NewerVersion { line: u64, v: u32 },
 }
 
 #[cfg(test)]
@@ -792,6 +689,32 @@ mod tests {
         assert!(raw.ends_with('\n'), "every line is newline-terminated");
         assert_eq!(raw.lines().count(), 2);
         assert_eq!(log.read_all().unwrap().len(), 2);
+    }
+
+    /// Leg 5 of `ra-membership-is-order-free`, at the envelope level: a line
+    /// declaring a version this build does not understand is skipped BEFORE
+    /// its body is parsed — never as `MalformedLine`, never as an admitted
+    /// op. A parse-first gate gets this exactly backwards for the lines that
+    /// matter most: an act whose KIND a build has never seen fails serde and
+    /// reads as Malformed, when the version bump exists to name it.
+    #[test]
+    fn a_newer_version_line_is_skipped_before_its_body_is_parsed() {
+        let dir = tempfile::tempdir().unwrap();
+        let log: Oplog<Probe> = Oplog::new(dir.path());
+        fs::write(
+            log.path(),
+            format!(
+                r#"{{"id":"probe-0000000000000000","v":{},"ts_unix":7,"actor":"ingest","kind":{{"op":"an_act_this_build_has_never_seen"}}}}"#,
+                Probe::VERSION + 1
+            ),
+        )
+        .unwrap();
+        let (ops, skipped) = log.read_all_with_skips().unwrap();
+        assert!(ops.is_empty(), "nothing admitted");
+        assert!(
+            matches!(skipped.as_slice(), [SkippedLine::NewerVersion { v, .. }] if *v == Probe::VERSION + 1),
+            "the version gate names it — never a Malformed misread of the unknown kind: {skipped:?}"
+        );
     }
 
     #[test]

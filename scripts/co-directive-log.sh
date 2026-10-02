@@ -21,7 +21,7 @@
 #       --draft "text" --final "text" (--edited|--unedited|--no-decision) \
 #       [--citations "ARCH §14,note ab12cd34"] [--edit-class scope|tone|content|none]
 #
-# Draft-time logging (artifact D, docs/FIELD_VERDICTS.md §4 loop 1 —
+# Draft-time logging (artifact D, docs/internal/FIELD_VERDICTS.md §4 loop 1 —
 # the queue's substrate, and the decision-to-send latency metric):
 #   scripts/co-directive-log.sh --pending --kind order --draft "text" \
 #       [--worker W] [--citations ...]          # prints the directive id

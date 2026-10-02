@@ -1,7 +1,7 @@
 # The code-intel package boundary
 
 > **The `[[package]] name = "code-intel"` row became `code` on 2026-09-21**
-> (`docs/FIVE_PROGRAMS.md` §9, the five-program declaration). Same crates, plus
+> (`docs/internal/FIVE_PROGRAMS.md` §9, the five-program declaration). Same crates, plus
 > `sovereign-cli-dev` — the sibling binary that owns the `tools`, `code`,
 > `project` and `atos` verbs, because a package that holds the library but not
 > the binary the user runs enforces half a program. The six `[[exception]]`

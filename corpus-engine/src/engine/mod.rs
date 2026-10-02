@@ -1442,7 +1442,7 @@ impl CorpusEngine {
     /// `<corpus_id>-partition-<node>/` with `ingestion_in_progress: true`
     /// beside `indexes_built: true` (promotion to the canonical directory
     /// runs only on `Ok`), and every surface on the machine reported the
-    /// corpus as simply absent. `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3
+    /// corpus as simply absent. `docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3
     /// traces one such failure end to end.
     ///
     /// Cheap: `_corpus_meta.json` only, no Lance open. Unreadable and

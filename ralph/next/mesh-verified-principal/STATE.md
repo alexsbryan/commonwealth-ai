@@ -21,7 +21,7 @@ Pointer keys: **O** = `.sovereign/features/mesh-verified-principal/order.md` ·
 **RS** = `sovereign/crates/sovereign-mesh/src/ring_sync.rs` (the peer list :227-241, not :222-245 — the guest queue moved it; the only roster read is `rail.roster` at :425 inside `prune_what_the_peer_retired` :420-436, not :412-432) and `sovereign/crates/sovereign-daemon/src/routes_internal/ring_sync.rs` (the serving side — handler `ring_sync` :74, route `/internal/ring/sync` registered at `server.rs:508`) ·
 **RR** = `sovereign/crates/sovereign-mesh/src/ring_roster.rs` (`MeshRosterSource::install` :303-323 — membership is the rail's DEFAULT roster for every namespace AND the registered source for the seven in `REGISTERED_NAMESPACES` :249-261; `MeshRoster::derive` :107-162) ·
 **MF** = `oicp-types/src/manifest.rs` (:221-225) · **T** = `docs/THREAT_MODEL.md` ·
-**M** = `scripts/ring-room-demo.sh` · **RUN** = `docs/RING_ROOM_RUN_OF_SHOW.md` ·
+**M** = `scripts/ring-room-demo.sh` · **RUN** = `docs/internal/rings/demo/RING_ROOM_RUN_OF_SHOW.md` ·
 **QG** = `ralph/next/ring-guest-substrate/STATE.md` (read-only: what the guest queue landed).
 
 Status: `[x]` done · `[~]` in progress · `[ ]` pending. Work the first `[ ]` row whose dependencies

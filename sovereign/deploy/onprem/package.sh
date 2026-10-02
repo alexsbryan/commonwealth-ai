@@ -16,7 +16,7 @@
 #       the on-prem distribution: ONE process composing svrn, serve and
 #       ingest, and nothing that reaches a shell, the web or an arbitrary
 #       server-side path. Those surfaces are not composed in the binary
-#       (docs/FIVE_PROGRAMS.md §2c; sovereign/crates/sovereign-onprem).
+#       (docs/internal/FIVE_PROGRAMS.md §2c; sovereign/crates/sovereign-onprem).
 #       `ocr` compiles in the PaddleOCR engine. Without it a scanned PDF
 #       is reported as scanned_no_text and never indexed — and for a
 #       litigation practice, scans ARE the corpus.

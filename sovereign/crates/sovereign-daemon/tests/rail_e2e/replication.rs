@@ -29,19 +29,7 @@ async fn an_app_seals_through_the_append_door_and_the_journal_shrinks() {
     );
     let post = |body: serde_json::Value| {
         let state = state.clone();
-        async move {
-            call(
-                state,
-                request(
-                    "POST",
-                    "/v1/rail/append",
-                    LAN_PEER,
-                    Some(GUEST_TOKEN),
-                    Some(body),
-                ),
-            )
-            .await
-        }
+        async move { named_append(state.clone(), LAN_PEER, GUEST_TOKEN, body).await }
     };
 
     for _ in 0..3 {

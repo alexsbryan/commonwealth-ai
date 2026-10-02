@@ -64,25 +64,20 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use oplog::Op;
+use oplog_types::{Op, OpId};
 
-use crate::{RailAct, SignedOp};
+use crate::{Digest, RailAct, RingVerifier, SignedOp, View};
 
-/// Per-actor contiguous high-water marks. `{actor_pubkey_hex → n}`.
+/// Per-actor contiguous high-water marks, carried inside [`Digest`]'s
+/// [`View`] entries. `mark` means **"I need nothing at or below this"**,
+/// which is a strict generalisation of the old reading ("I hold every op
+/// `0..=n`"), identical whenever nothing is sealed.
 ///
-/// `n` means **"I need nothing at or below this"** — which is a strict
-/// generalisation of the old reading ("I hold every op `0..=n`"), identical
-/// whenever nothing is sealed. That is why the sealed floor did NOT become a
-/// second field here: a peer's only use for this map is to answer *which ops
-/// do I send*, and `(n, ∞)` is that answer either way.
-///
-/// It matters because this crosses the wire every sixty seconds between peers
-/// that may be on different builds (`sovereign-mesh/src/ring_sync.rs`), and
-/// disk and wire are different compatibility clocks. A digest written by a
-/// build that knows about seals is byte-identical to one written by a build
-/// that does not, for the same holding — so neither side can fail to read the
-/// other, and there is nothing to default and no version to tag.
-pub type Digest = BTreeMap<String, u64>;
+/// It matters because this crosses the wire every sixty seconds between
+/// peers that may be on different builds (`sovereign-mesh/src/ring_sync.rs`),
+/// and disk and wire are different compatibility clocks — which is why the
+/// envelope is versioned and an unversioned marks-only digest is refused by
+/// name (see [`Digest`]'s own docs).
 
 /// Where each actor's history still starts. `{actor_pubkey_hex → seq}`.
 ///
@@ -91,9 +86,7 @@ pub type Digest = BTreeMap<String, u64>;
 /// `commonwealth_rail::RingJournal::compact` deletes from THAT map rather than
 /// deriving its own. A prune keyed on a second reading of the seals would be
 /// two answers to "what is retired" with the destructive one unwatched
-/// (ARCH §10.6) — and the two would differ exactly where it is most expensive,
-/// because [`sealed_floors`] over raw holdings trusts a seal that admission
-/// refused.
+/// (ARCH §10.6).
 pub type Floors = BTreeMap<String, u64>;
 
 /// What one compaction removed, and the floors it removed by.
@@ -130,21 +123,26 @@ pub struct Compaction {
 /// An actor's floor is the `seq` of their own highest seal, because a seal
 /// retires everything its author wrote before it. Never having sealed is a
 /// floor of zero, which is exactly the behaviour this rail had before seals
-/// existed.
+/// existed. A seal in `voided` contributes no floor: the retirement was itself
+/// corrected, and a correction voids without exception.
 ///
-/// **Which ops you hand it is the whole safety question.** [`admit`](crate::admit)
-/// hands it only ops that passed the signature and roster checks, so a forged
-/// or unclaimed seal retires nothing — a seal is the one act that makes the
-/// rail stop asking for history, and treating an unauthenticated one as
-/// authoritative would let a single pushed line erase a member's past on every
-/// node that received it (ARCH §18.3). [`digest`] hands it the whole holding,
-/// which is the same trust the contiguous mark beside it has always had:
-/// the digest says what to ASK for, and being wrong there costs a round, while
-/// being wrong in `admit` states a total over a subset and calls it complete.
-pub(crate) fn sealed_floors<'a>(ops: impl IntoIterator<Item = &'a Op<SignedOp>>) -> Floors {
+/// **Which ops you hand it is the whole safety question**, and both callers
+/// hand it only ops they authenticated: [`admit`](crate::admit) — ops that
+/// passed the signature and roster checks and survived fork exclusion;
+/// [`digest`] — ops whose signature verified under their claimed actor. The
+/// `actor` field is just what the line claimed until a verifier says
+/// otherwise, and a seal is the one act that makes the rail stop asking for
+/// history: one unauthenticated seal line would raise the floor AND satisfy
+/// it, retiring a member's whole past on every node that received it
+/// (ARCH §18.3). That is why being wrong here is not "a round" — the peer
+/// never re-sends below a floor, so the loss does not heal.
+pub(crate) fn sealed_floors<'a>(
+    ops: impl IntoIterator<Item = &'a Op<SignedOp>>,
+    voided: &BTreeSet<OpId>,
+) -> Floors {
     let mut floors = Floors::new();
     for op in ops {
-        if matches!(op.kind.act, RailAct::Seal) {
+        if matches!(op.kind.act, RailAct::Seal) && !voided.contains(&crate::admit::derived_id(op)) {
             let floor = floors.entry(op.actor.clone()).or_insert(0);
             *floor = (*floor).max(op.kind.seq);
         }
@@ -152,17 +150,60 @@ pub(crate) fn sealed_floors<'a>(ops: impl IntoIterator<Item = &'a Op<SignedOp>>)
     floors
 }
 
+/// The ops whose signature verifies under their claimed actor — the ONE
+/// reading of "what this node honestly holds" (ARCH 8). [`digest`] folds a
+/// head over it, and [`ops_missing_from_within`] must fold the peer's window
+/// over the same set: a check that folded everything held would compare a
+/// forged line against a head that never counted it, see a mismatch no
+/// exchange can heal, and resend the actor's whole window every call.
+fn authentic<'a>(
+    ops: &'a [Op<SignedOp>],
+    namespace: &str,
+    verifier: &dyn RingVerifier,
+) -> Vec<&'a Op<SignedOp>> {
+    ops.iter()
+        .filter(|op| {
+            verifier.verify(
+                &op.actor,
+                namespace,
+                op.ts_unix,
+                op.kind.seq,
+                &crate::body_json(
+                    &op.kind.act,
+                    op.kind.on_behalf_of.as_deref(),
+                    op.kind.view.as_ref(),
+                ),
+                &op.kind.sig,
+            )
+        })
+        .collect()
+}
+
 /// What this node can honestly claim to need nothing below, per actor.
+///
+/// An op that does not verify under its claimed actor counts for nothing —
+/// not toward a floor, not toward a mark. Until verification the `actor`
+/// field is only what the line claimed, and a digest that believed it would
+/// advertise history its holder does not have: a forged line at the next
+/// contiguous seq silently loses the real op there, and a forged seal loses
+/// everything it claims to retire (see [`sealed_floors`]).
 ///
 /// See the module docs: this is the **contiguous** mark, so a hole below the
 /// maximum lowers it and the peer re-sends from there. Healing a hole is
 /// therefore automatic rather than a separate repair path. The run counts from
 /// the actor's sealed floor, so a node that has compacted a retired prefix
 /// still makes a claim instead of falling silent.
-pub fn digest(ops: &[Op<SignedOp>]) -> Digest {
-    let floors = sealed_floors(ops);
+pub fn digest(ops: &[Op<SignedOp>], namespace: &str, verifier: &dyn RingVerifier) -> Digest {
+    let authentic = authentic(ops, namespace, verifier);
+    let mut voided: BTreeSet<OpId> = BTreeSet::new();
+    for op in &authentic {
+        if let RailAct::Correct { corrects, .. } = &op.kind.act {
+            voided.insert(corrects.clone());
+        }
+    }
+    let floors = sealed_floors(authentic.iter().copied(), &voided);
     let mut by_actor: BTreeMap<&str, BTreeSet<u64>> = BTreeMap::new();
-    for op in ops {
+    for op in &authentic {
         by_actor
             .entry(op.actor.as_str())
             .or_default()
@@ -177,16 +218,19 @@ pub fn digest(ops: &[Op<SignedOp>]) -> Digest {
             // none" for the purpose of asking. A sealed actor cannot reach
             // this: the floor IS the seal's own seq, so holding the seal is
             // holding the floor.
-            let mut n = floors.get(actor).copied().unwrap_or(0);
+            let from = floors.get(actor).copied().unwrap_or(0);
+            let mut n = from;
             if !seqs.contains(&n) {
                 return None;
             }
             while seqs.contains(&(n + 1)) {
                 n += 1;
             }
-            Some((actor.to_string(), n))
+            let view = View::of(actor, from, n, authentic.iter().copied());
+            Some((actor.to_string(), view))
         })
-        .collect()
+        .collect::<BTreeMap<_, _>>()
+        .into()
 }
 
 /// Every op this node holds that `theirs` says the peer is missing.
@@ -202,8 +246,13 @@ pub fn digest(ops: &[Op<SignedOp>]) -> Digest {
 /// This is [`ops_missing_from_within`] with no budget, and it is the honest
 /// TOTAL: what a caller wants when it is measuring, not when it is sending.
 /// Everything that puts ops on a wire uses the budgeted form.
-pub fn ops_missing_from(ops: &[Op<SignedOp>], theirs: &Digest) -> Vec<Op<SignedOp>> {
-    ops_missing_from_within(ops, theirs, NO_BUDGET).0
+pub fn ops_missing_from(
+    ops: &[Op<SignedOp>],
+    namespace: &str,
+    verifier: &dyn RingVerifier,
+    theirs: &Digest,
+) -> Vec<Op<SignedOp>> {
+    ops_missing_from_within(ops, namespace, verifier, theirs, NO_BUDGET).0
 }
 
 /// The budget that never binds — what [`ops_missing_from`] passes.
@@ -226,20 +275,38 @@ pub const NO_BUDGET: usize = usize::MAX;
 ///
 /// # Why repeating this terminates (the sync loop's whole safety argument)
 ///
-/// **The first op of a non-empty chunk is always one the peer does not
-/// hold.** A mark of `n` for an actor means their run is contiguous THROUGH
-/// `n`, so they do not hold `n + 1`; the selection filters on `seq > n` and
-/// orders by `(actor, seq)`, so the lowest element it can yield is exactly
-/// that op. A peer therefore ingests at least one new op per non-empty chunk,
-/// both holdings are finite, and the caller's loop
-/// (`sovereign-mesh/src/ring_sync.rs::exchange`) cannot spin against a peer
-/// that is merely behind.
+/// Per call — one exchange carries both directions — every non-empty
+/// selection delivers at least one op at least one side did not hold, or the
+/// call is empty and the sides fold equal.
+///
+/// **`seq > mark` keeps the original property**: a mark of `n` means the run
+/// is contiguous THROUGH `n`, so `n + 1` is not held; the selection orders by
+/// `(actor, seq)`, so the first such op is exactly one the peer lacks.
+///
+/// **A mismatching window travels as one atomic per-actor unit**, and that is
+/// the rest of the argument. Both folds run over AUTHENTICATED ops — the
+/// peer's head by [`digest`], ours here by the same [`authentic`] filter —
+/// because holdings the two folds count differently can never agree: a forged
+/// line in the window once read as a permanent fork and resent the whole unit
+/// every call. A fold mismatch at the same `(from, mark)` then means the
+/// authenticated sets differ in the window, so the two directions' units cannot
+/// both be subsets of the other side's holdings — the all-duplicates
+/// direction is paid for by the reverse direction's progress in the same
+/// call. Atomicity is what makes that unconditional under a budget: a split
+/// window could ship the same duplicate prefix forever with the difference
+/// past the cut, so a unit that does not fit is deferred whole (`more`)
+/// unless it is alone in the chunk — then it goes whole, exactly as a single
+/// oversized op does below, and the receiver's body limit refuses it by name
+/// rather than the sender quietly stopping. Holdings only grow (ingest only
+/// adds) and are finite, so the caller's loop
+/// (`sovereign-mesh/src/ring_sync.rs::exchange`) stops.
 ///
 /// # The budget is in WIRE bytes, and one op is never split
 ///
 /// Cost is `serde_json` length plus the array's separating comma — the same
 /// serialisation the receiver's limit compares against, because any other
 /// number would be a second implementation of "how big is this" (ARCH §10.6).
+/// A window unit's cost is the sum over its ops.
 ///
 /// An op that alone exceeds the budget is still sent. A chunk of none would
 /// be the spin this exists to prevent, and the honest failure for an op too
@@ -247,48 +314,115 @@ pub const NO_BUDGET: usize = usize::MAX;
 /// quietly stops.
 pub fn ops_missing_from_within(
     ops: &[Op<SignedOp>],
+    namespace: &str,
+    verifier: &dyn RingVerifier,
     theirs: &Digest,
     budget_bytes: usize,
 ) -> (Vec<Op<SignedOp>>, bool) {
-    let mut wanted: Vec<&Op<SignedOp>> = ops
-        .iter()
-        .filter(|op| match theirs.get(&op.actor) {
-            Some(high_water) => op.kind.seq > *high_water,
-            None => true,
-        })
-        .collect();
-    wanted.sort_by(|a, b| (&a.actor, a.kind.seq).cmp(&(&b.actor, b.kind.seq)));
+    let cost_of = |op: &Op<SignedOp>, budget_bytes: usize| match serde_json::to_vec(op) {
+        // `+ 1` for the comma the enclosing array puts between elements.
+        Ok(bytes) => bytes.len() + 1,
+        // Unreachable for an op that came off a wire or out of a journal, but
+        // a price that cannot be computed must not read as free: charge the
+        // whole budget so such an op is only ever sent alone, and let the
+        // receiver — not a silent drop — judge it.
+        Err(_) => budget_bytes,
+    };
 
-    if budget_bytes == NO_BUDGET {
-        return (wanted.into_iter().cloned().collect(), false);
+    let trusted = authentic(ops, namespace, verifier);
+
+    // Actors in order, and ops within an actor by `(seq, id)` so the wire
+    // payload is deterministic — two nodes with the same holdings produce
+    // byte-identical bodies, which makes a diff of two captures mean
+    // something (and orders a fork's two branches the same on every node).
+    let mut by_actor: BTreeMap<&str, Vec<&Op<SignedOp>>> = BTreeMap::new();
+    for op in ops {
+        by_actor.entry(op.actor.as_str()).or_default().push(op);
+    }
+    for held in by_actor.values_mut() {
+        held.sort_by_key(|op| (op.kind.seq, op.id.to_string()));
     }
 
     let mut out: Vec<Op<SignedOp>> = Vec::new();
     let mut spent: usize = 0;
-    for op in wanted {
-        let cost = match serde_json::to_vec(op) {
-            // `+ 1` for the comma the enclosing array puts between elements.
-            Ok(bytes) => bytes.len() + 1,
-            // Unreachable for an op that came off a wire or out of a journal,
-            // but a price that cannot be computed must not read as free:
-            // charge the whole budget so such an op is only ever sent alone,
-            // and let the receiver — not a silent drop — judge it.
-            Err(_) => budget_bytes,
+    let mut more = false;
+    for (actor, held) in &by_actor {
+        let Some(view) = theirs.get(*actor) else {
+            // Absent actor: absence asks for everything (module docs) — the
+            // first non-fitting op stops the walk and names `more`.
+            for op in held {
+                let cost = cost_of(op, budget_bytes);
+                if budget_bytes != NO_BUDGET
+                    && !out.is_empty()
+                    && spent.saturating_add(cost) > budget_bytes
+                {
+                    return (out, true);
+                }
+                spent = spent.saturating_add(cost);
+                out.push((*op).clone());
+            }
+            continue;
         };
-        if !out.is_empty() && spent.saturating_add(cost) > budget_bytes {
-            return (out, true);
+        let window: Vec<&Op<SignedOp>> = held
+            .iter()
+            .copied()
+            .filter(|op| op.kind.seq >= view.from && op.kind.seq <= view.mark)
+            .collect();
+        let over: Vec<&Op<SignedOp>> = held
+            .iter()
+            .copied()
+            .filter(|op| op.kind.seq > view.mark)
+            .collect();
+        // Folded over what is AUTHENTIC in the window, exactly as the peer's
+        // head was ([`authentic`]); the unit below still carries everything
+        // held — author-blind, store it and gossip it.
+        let mismatch =
+            View::of(actor, view.from, view.mark, trusted.iter().copied()).head != view.head;
+        if !mismatch {
+            for op in over {
+                let cost = cost_of(op, budget_bytes);
+                if budget_bytes != NO_BUDGET
+                    && !out.is_empty()
+                    && spent.saturating_add(cost) > budget_bytes
+                {
+                    return (out, true);
+                }
+                spent = spent.saturating_add(cost);
+                out.push((*op).clone());
+            }
+            continue;
+        }
+        // The mismatching window is ONE per-actor unit (the termination
+        // argument above): what is in the claimed run first, then what is
+        // above the mark — all of it in this call, or none of it.
+        let unit: Vec<&Op<SignedOp>> = window.into_iter().chain(over).collect();
+        tracing::debug!(
+            actor = %crate::actor_prefix(actor),
+            from = view.from,
+            mark = view.mark,
+            ops = unit.len(),
+            "rail sync: window_mismatch — the claimed run folds differently here, sending it as one unit"
+        );
+        if unit.is_empty() {
+            continue;
+        }
+        let cost: usize = unit.iter().map(|op| cost_of(op, budget_bytes)).sum();
+        if budget_bytes != NO_BUDGET && !out.is_empty() && spent.saturating_add(cost) > budget_bytes
+        {
+            more = true;
+            continue;
         }
         spent = spent.saturating_add(cost);
-        out.push(op.clone());
+        out.extend(unit.into_iter().map(|op| (*op).clone()));
     }
-    (out, false)
+    (out, more)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests_support::{key, record, signed};
-    use crate::RailAct;
+    use crate::tests_support::{key, marks, record, signed, NS};
+    use crate::{Ed25519Verifier, RailAct};
 
     fn actor(seed: u8) -> String {
         crate::actor_of(&key(seed))
@@ -298,10 +432,15 @@ mod tests {
         signed(&key(seed), ts, seq, record("x"))
     }
 
+    /// The digest under the shipped verifier — what the bars assert on.
+    fn digest_of(ops: &[Op<SignedOp>]) -> Digest {
+        digest(ops, NS, &Ed25519Verifier)
+    }
+
     #[test]
     fn a_contiguous_run_reports_its_last_seq() {
         let ops = vec![op(1, 0, 10), op(1, 1, 11), op(1, 2, 12)];
-        assert_eq!(digest(&ops), Digest::from([(actor(1), 2)]));
+        assert_eq!(marks(&digest_of(&ops)), BTreeMap::from([(actor(1), 2)]));
     }
 
     /// **The reason the mark is contiguous.** A node holding 0 and 2 must not
@@ -310,10 +449,10 @@ mod tests {
     #[test]
     fn a_hole_lowers_the_mark_so_the_peer_re_sends_across_it() {
         let held = vec![op(1, 0, 10), op(1, 2, 12)];
-        assert_eq!(digest(&held), Digest::from([(actor(1), 0)]));
+        assert_eq!(marks(&digest_of(&held)), BTreeMap::from([(actor(1), 0)]));
 
         let peer_has = vec![op(1, 0, 10), op(1, 1, 11), op(1, 2, 12)];
-        let sent = ops_missing_from(&peer_has, &digest(&held));
+        let sent = ops_missing_from(&peer_has, NS, &Ed25519Verifier, &digest_of(&held));
         assert_eq!(
             sent.iter().map(|o| o.kind.seq).collect::<Vec<_>>(),
             vec![1, 2],
@@ -326,9 +465,12 @@ mod tests {
     #[test]
     fn an_actor_whose_first_op_is_missing_is_absent_from_the_digest() {
         let held = vec![op(1, 3, 13)];
-        assert!(digest(&held).is_empty());
+        assert!(digest_of(&held).is_empty());
         let peer_has = vec![op(1, 0, 10), op(1, 1, 11), op(1, 3, 13)];
-        assert_eq!(ops_missing_from(&peer_has, &digest(&held)).len(), 3);
+        assert_eq!(
+            ops_missing_from(&peer_has, NS, &Ed25519Verifier, &digest_of(&held)).len(),
+            3
+        );
     }
 
     /// An actor we have never heard of is absent, and absence asks for
@@ -337,13 +479,16 @@ mod tests {
     #[test]
     fn an_unknown_actor_gets_their_whole_history() {
         let peer_has = vec![op(2, 0, 10), op(2, 1, 11)];
-        assert_eq!(ops_missing_from(&peer_has, &Digest::new()).len(), 2);
+        assert_eq!(
+            ops_missing_from(&peer_has, NS, &Ed25519Verifier, &Digest::new()).len(),
+            2
+        );
     }
 
     #[test]
     fn a_peer_that_is_already_caught_up_is_sent_nothing() {
         let ops = vec![op(1, 0, 10), op(1, 1, 11)];
-        assert!(ops_missing_from(&ops, &digest(&ops)).is_empty());
+        assert!(ops_missing_from(&ops, NS, &Ed25519Verifier, &digest_of(&ops)).is_empty());
     }
 
     /// Replication is author-blind: a node republishes what it HOLDS, so a
@@ -352,7 +497,7 @@ mod tests {
     fn a_node_republishes_ops_it_did_not_author() {
         let departed = op(3, 0, 10);
         let held = vec![op(1, 0, 11), departed.clone()];
-        let sent = ops_missing_from(&held, &Digest::from([(actor(1), 0)]));
+        let sent = ops_missing_from(&held, NS, &Ed25519Verifier, &digest_of(&[op(1, 0, 11)]));
         assert_eq!(sent, vec![departed], "someone else's op, still republished");
     }
 
@@ -378,14 +523,14 @@ mod tests {
     fn a_compacted_actor_is_advertised_from_its_seal_instead_of_not_at_all() {
         let no_seal = vec![op(1, 3, 103), op(1, 4, 104)];
         assert!(
-            digest(&no_seal).is_empty(),
+            digest_of(&no_seal).is_empty(),
             "control: nothing sealed, nothing contiguous from 0, nothing to claim"
         );
 
         let compacted = vec![seal(1, 3, 103), op(1, 4, 104)];
         assert_eq!(
-            digest(&compacted),
-            Digest::from([(actor(1), 4)]),
+            marks(&digest_of(&compacted)),
+            BTreeMap::from([(actor(1), 4)]),
             "the mark counts from the sealed floor, not from zero"
         );
     }
@@ -402,14 +547,14 @@ mod tests {
         let compacted = vec![seal(1, 3, 103), op(1, 4, 104)];
         let peer_holds: Vec<_> = retired.iter().chain(&compacted).cloned().collect();
         assert!(
-            ops_missing_from(&peer_holds, &digest(&compacted)).is_empty(),
+            ops_missing_from(&peer_holds, NS, &Ed25519Verifier, &digest_of(&compacted)).is_empty(),
             "the retired prefix is not wanted and must not be sent"
         );
 
         // And the seal still travels to a peer that has not got it yet: a
         // node cannot honour a floor it has never seen.
         assert_eq!(
-            ops_missing_from(&peer_holds, &digest(&retired))
+            ops_missing_from(&peer_holds, NS, &Ed25519Verifier, &digest_of(&retired))
                 .iter()
                 .map(|o| o.kind.seq)
                 .collect::<Vec<_>>(),
@@ -418,13 +563,131 @@ mod tests {
         );
     }
 
+    // ── authenticity: an unauthenticated line counts for nothing ──
+
+    /// A line whose signature is `signer`'s while its `actor` field claims
+    /// somebody else: the shape one hostile journal line takes before anyone
+    /// verifies it. `Op::new` is the same builder the honest fixtures use, so
+    /// the id is self-consistent and only the signature gives it away.
+    fn spoofed(signer: u8, claimed: u8, seq: u64, ts: i64, act: RailAct) -> Op<SignedOp> {
+        let body = crate::body_json(&act, None, None);
+        let sig = crate::sign_ring_op(&key(signer), crate::tests_support::NS, ts, seq, &body);
+        Op::new(
+            SignedOp {
+                seq,
+                sig,
+                act,
+                on_behalf_of: None,
+                view: None,
+            },
+            ts,
+            actor(claimed),
+        )
+    }
+
+    /// **A forged seal must not retire a member's past.** The floor is a
+    /// `max` ratchet — one pushed line claiming `actor(1)` at seq 5 makes the
+    /// digest claim 5 and every peer stop sending seq 3..=5 forever. Before
+    /// this bar the digest trusted `op.actor` off the wire; the signature is
+    /// the only field a writer cannot forge for somebody else.
+    #[test]
+    fn a_forged_seal_does_not_raise_the_floor() {
+        let held = vec![
+            op(1, 0, 10),
+            op(1, 1, 11),
+            op(1, 2, 12),
+            spoofed(9, 1, 5, 15, RailAct::Seal),
+        ];
+        assert_eq!(
+            marks(&digest_of(&held)),
+            BTreeMap::from([(actor(1), 2)]),
+            "the forged seal retires nothing and the mark stops at what is real"
+        );
+        let peer_has: Vec<_> = (0..=5).map(|s| op(1, s, 10 + s as i64)).collect();
+        assert_eq!(
+            ops_missing_from(&peer_has, NS, &Ed25519Verifier, &digest_of(&held))
+                .iter()
+                .map(|o| o.kind.seq)
+                .collect::<Vec<_>>(),
+            vec![3, 4, 5],
+            "the real ops the forgery tried to retire still come back"
+        );
+    }
+
+    /// The same hole one step down the ratchet: a forged record at the next
+    /// contiguous seq extends the mark, and the real op at that seq is never
+    /// requested — one silent lost op per pushed line.
+    #[test]
+    fn a_forged_record_does_not_extend_the_mark() {
+        let held = vec![
+            op(1, 0, 10),
+            op(1, 1, 11),
+            op(1, 2, 12),
+            spoofed(9, 1, 3, 13, record("evil")),
+        ];
+        assert_eq!(marks(&digest_of(&held)), BTreeMap::from([(actor(1), 2)]));
+    }
+
+    /// **A forged line inside a window must not read as a fork.** The peer's
+    /// head folds only authenticated ops ([`digest`]); a mismatch check that
+    /// folded everything held saw a disagreement no exchange could heal, and
+    /// resent the actor's whole window every call, forever — two nodes with
+    /// IDENTICAL holdings, one pushed line between them.
+    #[test]
+    fn identical_holdings_with_a_forged_line_in_the_window_send_nothing() {
+        let held = vec![
+            op(1, 0, 10),
+            spoofed(9, 1, 1, 11, record("evil")),
+            op(1, 1, 11),
+            op(1, 2, 12),
+        ];
+        assert!(
+            ops_missing_from(&held, NS, &Ed25519Verifier, &digest_of(&held)).is_empty(),
+            "same holdings, nothing to send"
+        );
+        let forked = vec![op(1, 0, 10), op(1, 1, 11), op(1, 1, 99), op(1, 2, 12)];
+        assert_eq!(
+            ops_missing_from(&forked, NS, &Ed25519Verifier, &digest_of(&held)).len(),
+            4,
+            "the control: a REAL fork in the same window still travels as the unit"
+        );
+    }
+
+    /// **A voided seal retires nothing.** `Correct` voids without erasure and
+    /// the void set is commutative — but the floor was computed before the
+    /// void set saw the light, so a seal the log itself calls wrong kept
+    /// suppressing its author's holes. Seq 1 is missing here and must come
+    /// back precisely because the seal that claimed to retire it is voided.
+    #[test]
+    fn a_voided_seal_retires_nothing() {
+        let seal = seal(1, 2, 102);
+        let held = vec![
+            op(1, 0, 10),
+            seal.clone(),
+            signed(
+                &key(1),
+                103,
+                3,
+                RailAct::Correct {
+                    corrects: seal.id.clone(),
+                    replacement: None,
+                },
+            ),
+        ];
+        assert_eq!(
+            marks(&digest_of(&held)),
+            BTreeMap::from([(actor(1), 0)]),
+            "no floor, and the hole at seq 1 lowers the mark"
+        );
+    }
+
     #[test]
     fn the_payload_order_is_content_derived_not_arrival_order() {
         let a = vec![op(1, 0, 10), op(2, 0, 11), op(1, 1, 12)];
         let b = vec![op(1, 1, 12), op(1, 0, 10), op(2, 0, 11)];
         assert_eq!(
-            ops_missing_from(&a, &Digest::new()),
-            ops_missing_from(&b, &Digest::new())
+            ops_missing_from(&a, NS, &Ed25519Verifier, &Digest::new()),
+            ops_missing_from(&b, NS, &Ed25519Verifier, &Digest::new())
         );
     }
 
@@ -439,8 +702,12 @@ mod tests {
     #[test]
     fn the_unbudgeted_form_is_the_budgeted_one_with_no_budget() {
         let held: Vec<_> = (0..20).map(|s| op(1, s, 100 + s as i64)).collect();
-        let (all, more) = ops_missing_from_within(&held, &Digest::new(), NO_BUDGET);
-        assert_eq!(all, ops_missing_from(&held, &Digest::new()));
+        let (all, more) =
+            ops_missing_from_within(&held, NS, &Ed25519Verifier, &Digest::new(), NO_BUDGET);
+        assert_eq!(
+            all,
+            ops_missing_from(&held, NS, &Ed25519Verifier, &Digest::new())
+        );
         assert!(!more, "a budget that cannot bind never truncates");
     }
 
@@ -449,7 +716,8 @@ mod tests {
     fn a_budget_nothing_reaches_sends_everything_and_reports_no_more() {
         let held: Vec<_> = (0..20).map(|s| op(1, s, 100 + s as i64)).collect();
         let whole = wire_bytes(&held);
-        let (sent, more) = ops_missing_from_within(&held, &Digest::new(), whole * 2);
+        let (sent, more) =
+            ops_missing_from_within(&held, NS, &Ed25519Verifier, &Digest::new(), whole * 2);
         assert_eq!(sent.len(), 20);
         assert!(!more);
     }
@@ -461,7 +729,8 @@ mod tests {
     fn a_budget_that_binds_sends_the_lowest_ops_and_reports_more() {
         let held: Vec<_> = (0..20).map(|s| op(1, s, 100 + s as i64)).collect();
         let five = wire_bytes(&held[..5]);
-        let (sent, more) = ops_missing_from_within(&held, &Digest::new(), five);
+        let (sent, more) =
+            ops_missing_from_within(&held, NS, &Ed25519Verifier, &Digest::new(), five);
         assert!(more, "the budget cut it short and must say so");
         assert!(
             (1..20).contains(&sent.len()),
@@ -485,7 +754,7 @@ mod tests {
     #[test]
     fn an_op_bigger_than_the_whole_budget_is_still_sent_alone() {
         let held: Vec<_> = (0..3).map(|s| op(1, s, 100 + s as i64)).collect();
-        let (sent, more) = ops_missing_from_within(&held, &Digest::new(), 1);
+        let (sent, more) = ops_missing_from_within(&held, NS, &Ed25519Verifier, &Digest::new(), 1);
         assert_eq!(sent.len(), 1, "exactly one, never zero");
         assert_eq!(sent[0].kind.seq, 0);
         assert!(more);
@@ -503,15 +772,16 @@ mod tests {
         let mut peer: Vec<Op<SignedOp>> = Vec::new();
         let mut rounds = 0;
         loop {
-            let (chunk, more) = ops_missing_from_within(&held, &digest(&peer), budget);
+            let (chunk, more) =
+                ops_missing_from_within(&held, NS, &Ed25519Verifier, &digest_of(&peer), budget);
             if chunk.is_empty() {
                 assert!(!more, "nothing to send cannot also mean more remains");
                 break;
             }
-            let before = digest(&peer);
+            let before = digest_of(&peer);
             peer.extend(chunk);
             assert_ne!(
-                digest(&peer),
+                digest_of(&peer),
                 before,
                 "round {rounds} sent a chunk that moved nothing — this is the spin"
             );
@@ -519,7 +789,7 @@ mod tests {
             assert!(rounds <= 40, "a 40-op journal must not need 40+ rounds");
         }
         assert_eq!(peer.len(), 40, "converged, in {rounds} rounds");
-        assert_eq!(digest(&peer), digest(&held), "two nodes, one claim");
+        assert_eq!(digest_of(&peer), digest_of(&held), "two nodes, one claim");
         assert!(rounds > 1, "the control: this budget really did chunk");
     }
 }

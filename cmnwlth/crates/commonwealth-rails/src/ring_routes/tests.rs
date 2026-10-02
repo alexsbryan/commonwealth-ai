@@ -42,7 +42,15 @@ async fn append_record(rail: &RingRail, amount: u64) {
         serde_json::json!({ "op": "record", "payload": { "kind": "expense", "amount": amount } }),
     )
     .unwrap();
-    journal.append(act, rail.signer(), &roster, None).unwrap();
+    journal
+        .append(
+            act,
+            rail.signer(),
+            &roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        )
+        .unwrap();
 }
 
 /// The ring routes over `rail` and `live`, with registrations holding the
@@ -134,7 +142,7 @@ async fn the_stated_digest_is_what_the_carried_ops_compute_to() {
         .collect();
     let stated: Digest = serde_json::from_value(doc["digest"].clone()).unwrap();
     assert_eq!(
-        commonwealth_rail::digest(&ops),
+        commonwealth_rail::digest(&ops, NS, &commonwealth_rail::Ed25519Verifier),
         stated,
         "the completeness claim: every act through every mark it names"
     );

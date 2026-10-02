@@ -111,7 +111,7 @@ pub enum Principal {
     },
     /// A caller whose identity an issuer asserted: today an on-prem API key
     /// (`sub` is the key's name), later a validated SSO token producing the
-    /// same arm (docs/FIVE_PROGRAMS.md §2b). On a daemon that holds keys,
+    /// same arm (docs/internal/FIVE_PROGRAMS.md §2b). On a daemon that holds keys,
     /// loopback grants nothing and this is the only arm admitted.
     Asserted {
         /// The asserted subject. Conversations are owned by it.

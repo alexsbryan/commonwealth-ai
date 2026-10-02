@@ -1,5 +1,5 @@
 <!-- five-programs' differences from ralph/PROMPT.base.md. The campaign is
-     docs/FIVE_PROGRAMS.md; the row catalog is
+     docs/internal/FIVE_PROGRAMS.md; the row catalog is
      docs/FIVE_PROGRAMS_DECISIONS.tsv (79 rows); the six decisions are §12 —
      every queue row carries its decision number, so the worker never designs. -->
 <!-- section: vars -->
@@ -8,7 +8,7 @@ prefix = fp
 # ralph — the {{queue}} queue, one unit per session
 
 You are a worker executing ONE unit of the `{{queue}}` campaign
-(docs/FIVE_PROGRAMS.md; the row catalog is
+(docs/internal/FIVE_PROGRAMS.md; the row catalog is
 docs/FIVE_PROGRAMS_DECISIONS.tsv — find your row by its source→target pair).
 Every design decision already lives in FIVE_PROGRAMS §12 (six decisions, all
 taken — cite the decision number in your commit body) and §11 (the seam and

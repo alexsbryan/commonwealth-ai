@@ -167,14 +167,23 @@ impl RingJournal {
     /// caller that could sign without deciding about it would be a second
     /// answer to what these bytes are (ARCH §10.6). `None` is every caller
     /// that writes its own acts.
+    ///
+    /// The act's `view` is stamped HERE, never caller-supplied: this
+    /// journal's [`digest`] over everything authentic it holds, the writer's
+    /// claimed view of the ring at the moment of writing (the DAG heads of
+    /// `RING_APP_LIBRARY.md` §19 step 0). It needs the verifier for the same
+    /// reason `digest` does — an unauthenticated line is not part of anyone's
+    /// honest view — so the scheme that judged the holdings is named at the
+    /// door like every other answer of this shape.
     pub fn append(
         &self,
         act: RailAct,
         signer: &dyn RingSigner,
         roster: &Roster,
         on_behalf_of: Option<&str>,
+        verifier: &dyn RingVerifier,
     ) -> Result<Op<SignedOp>, RailError> {
-        let mut ops = self.append_all(vec![act], signer, roster, on_behalf_of)?;
+        let mut ops = self.append_all(vec![act], signer, roster, on_behalf_of, verifier)?;
         Ok(ops.remove(0))
     }
 
@@ -186,12 +195,20 @@ impl RingJournal {
     /// the seqs are contiguous from it, which the writer lock makes safe
     /// exactly as it does for one act. The write is one `write(2)`, so the
     /// batch lands whole or not at all, and one fsync rather than one per act.
+    ///
+    /// Every act in the batch carries the SAME `view`: the journal's
+    /// [`digest`] over what it held before this write. The batch is one
+    /// atomic write, so "the moment of writing" is one moment. The view is
+    /// the one thing here the write index cannot answer from the tail — it
+    /// folds and verifies the whole log — so it costs one read per batch,
+    /// never one per act.
     pub fn append_all(
         &self,
         acts: Vec<RailAct>,
         signer: &dyn RingSigner,
         roster: &Roster,
         on_behalf_of: Option<&str>,
+        verifier: &dyn RingVerifier,
     ) -> Result<Vec<Op<SignedOp>>, RailError> {
         let actor = signer.actor();
         // Authoring under a key the ring does not carry produces an op that
@@ -222,7 +239,23 @@ impl RingJournal {
         let ts_unix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+            .map_err(|why| {
+                // Named, never defaulted (ROOT_CAUSE_FIXES C4): the old
+                // `unwrap_or(0)` signed lines stamped 0 on the signature path.
+                tracing::warn!(
+                    target: "rail:door",
+                    ns = %self.namespace,
+                    %why,
+                    "append refused — the wall clock is unreadable"
+                );
+                RailError::Clock
+            })?;
+        let (held_ops, _) = log
+            .oplog
+            .read_all_with_skips()
+            .map_err(|e| RailError::Io(e.to_string()))?;
+        let view = digest(&held_ops, &self.namespace, verifier);
+        drop(held_ops);
         let mut ops = Vec::with_capacity(acts.len());
         for (seq, act) in (first_seq..).zip(acts) {
             // A payload is canonical by construction, so by the time one is a
@@ -235,7 +268,7 @@ impl RingJournal {
                     .unwrap_or(true),
                 "Payload::new admits only objects"
             );
-            let body = body_json(&act, on_behalf_of);
+            let body = body_json(&act, on_behalf_of, Some(&view));
             let signature = signer.sign(&self.namespace, ts_unix, seq, &body);
             ops.push(Op::new(
                 SignedOp {
@@ -243,6 +276,7 @@ impl RingJournal {
                     sig: signature,
                     act,
                     on_behalf_of: on_behalf_of.map(str::to_string),
+                    view: Some(view.clone()),
                 },
                 ts_unix,
                 actor.clone(),
@@ -289,11 +323,12 @@ impl RingJournal {
         Ok(true)
     }
 
-    /// What this node can honestly claim to hold, per actor — the ~600-byte
-    /// payload a peer needs in order to work out what to send back.
-    /// See [`digest`] for why the mark is contiguous.
-    pub fn digest(&self) -> Result<Digest, RailError> {
-        Ok(digest(&self.read()?.0))
+    /// What this node can honestly claim to need nothing below, per actor —
+    /// the ~600-byte payload a peer needs in order to work out what to send
+    /// back. See [`digest`] for why the mark is contiguous and why an op that
+    /// does not verify under its claimed actor counts for nothing.
+    pub fn digest(&self, verifier: &dyn RingVerifier) -> Result<Digest, RailError> {
+        Ok(digest(&self.read()?.0, &self.namespace, verifier))
     }
 
     /// Every op this node holds that `theirs` says the peer is missing.
@@ -302,8 +337,21 @@ impl RingJournal {
     ///
     /// The honest TOTAL, and therefore the wrong thing to put on a wire: use
     /// [`RingJournal::ops_missing_from_within`] for that.
-    pub fn ops_missing_from(&self, theirs: &Digest) -> Result<Vec<Op<SignedOp>>, RailError> {
-        Ok(ops_missing_from(&self.read()?.0, theirs))
+    ///
+    /// Takes the verifier for the reason [`RingJournal::digest`] does: the
+    /// peer's claim folds only authenticated ops, so ours must be judged by
+    /// the same scheme or a forged line reads as a fork that never heals.
+    pub fn ops_missing_from(
+        &self,
+        verifier: &dyn RingVerifier,
+        theirs: &Digest,
+    ) -> Result<Vec<Op<SignedOp>>, RailError> {
+        Ok(ops_missing_from(
+            &self.read()?.0,
+            &self.namespace,
+            verifier,
+            theirs,
+        ))
     }
 
     /// [`RingJournal::ops_missing_from`], stopped at `budget_bytes` of
@@ -318,6 +366,7 @@ impl RingJournal {
     /// the rail stays a crate a ring app can lift without an HTTP server.
     pub fn ops_missing_from_within(
         &self,
+        verifier: &dyn RingVerifier,
         theirs: &Digest,
         budget_bytes: usize,
     ) -> Result<(Vec<Op<SignedOp>>, bool), RailError> {
@@ -331,6 +380,8 @@ impl RingJournal {
         }
         Ok(ops_missing_from_within(
             &self.read()?.0,
+            &self.namespace,
+            verifier,
             theirs,
             budget_bytes,
         ))
@@ -401,7 +452,7 @@ impl RingJournal {
         roster: &Roster,
         verifier: &dyn RingVerifier,
     ) -> Result<Sealed, RailError> {
-        let op = self.append(RailAct::Seal, signer, roster, None)?;
+        let op = self.append(RailAct::Seal, signer, roster, None, verifier)?;
         let retired = self.compact(roster, verifier);
         if let Err(e) = &retired {
             tracing::warn!(

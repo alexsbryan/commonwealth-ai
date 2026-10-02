@@ -8,7 +8,7 @@
 //! is missing from it. This one can, because the catalogue is COMPUTED: every
 //! neighbour is asked at once and every neighbour is a ROW — served, failed,
 //! or never asked and why. There is no stored listing to be excluded from and
-//! nobody positioned to rank (`docs/internal/RING_APPLICATIONS.md` §Commerce).
+//! nobody positioned to rank (`docs/internal/rings/reference/RING_APPLICATIONS.md` §Commerce).
 //!
 //! `--why` says the second sentence no marketplace can: who vouched for this
 //! seller, on what act, and when. It is the first surface that reads

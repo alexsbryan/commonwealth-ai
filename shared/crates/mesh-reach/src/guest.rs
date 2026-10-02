@@ -87,29 +87,56 @@ impl Default for RelayConfig {
     }
 }
 
+/// The closed set of `discovery` spellings (ROOT_CAUSE_FIXES C2). The
+/// config is DATA, and a data value this build does not know is a refusal,
+/// never a default (ARCH §9, §18.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Discovery {
+    /// The n0 relays and DNS — the bootstrap posture.
+    N0,
+    /// Severed from n0: no relay service, no DNS lookup.
+    None,
+}
+
+impl std::str::FromStr for Discovery {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim() {
+            "n0" => Ok(Discovery::N0),
+            "none" => Ok(Discovery::None),
+            "self" | "local" => Err(format!(
+                "`{s}` was never implemented — `none` is the setting that severs n0 \
+                 (ROOT_CAUSE_FIXES C2: a spelling that promises a capability it does \
+                 not have is refused, not aliased)"
+            )),
+            other => Err(format!(
+                "unknown [iroh] discovery `{other}` — accepted: `n0`, `none`"
+            )),
+        }
+    }
+}
+
 impl RelayConfig {
     /// Build from operator config: the `relay_urls` list and a
-    /// `discovery` string (`"n0"` / absent = n0 services; `"none"` /
-    /// `"self"` / `"local"` = sever n0). An unknown value warns and
-    /// keeps the safe n0 default. Central so both `sovereign-mesh` and
-    /// `sovereign-server` map their configs identically.
-    pub fn from_parts(relay_urls: Vec<String>, discovery: Option<&str>) -> Self {
-        let n0_services = match discovery.map(str::trim) {
-            None | Some("") | Some("n0") => true,
-            Some("none") | Some("self") | Some("local") => false,
-            Some(other) => {
-                tracing::warn!(
-                    target: "transport",
-                    value = %other,
-                    "iroh: unknown [iroh] discovery — using n0 services (the safe default)"
-                );
-                true
-            }
+    /// `discovery` spelling. The spellings are a CLOSED set —
+    /// [`Discovery::from_str`] names every one it accepts and refuses the
+    /// rest by name (ROOT_CAUSE_FIXES C2). Absent/`"n0"` = the n0 services
+    /// (bootstrap posture); `"none"` = severed. `"self"`/`"local"` are
+    /// refused rather than aliased: they were never implemented, and a
+    /// spelling that promises a capability it does not have is the
+    /// substitution this door exists to stop. Central so every program
+    /// maps its config identically — and a typo refuses to LOAD instead of
+    /// quietly phoning n0.
+    pub fn from_parts(relay_urls: Vec<String>, discovery: Option<&str>) -> Result<Self, String> {
+        let discovery = match discovery.map(str::trim) {
+            None | Some("") => Discovery::N0,
+            Some(s) => s.parse::<Discovery>()?,
         };
-        Self {
+        Ok(Self {
             relay_urls,
-            n0_services,
-        }
+            n0_services: discovery == Discovery::N0,
+        })
     }
 }
 

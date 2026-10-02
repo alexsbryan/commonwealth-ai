@@ -285,7 +285,7 @@ Findings, fixed (all in `adc29b1ba`):
   still named the mesh `yield_backoff.rs`; repointed, or the mutant can never
   be planted (the `all.toml` precedent from `928ec78a4`).
 - **ARCH 3/4 (a doc naming a path that no longer owns the fact)** ·
-  `docs/CMNWLTH_DESIGN.md:114`, `docs/LAZY_INFERENCE_ON_THE_RAIL.md:39`,
+  `docs/CMNWLTH_DESIGN.md:114`, `docs/internal/LAZY_INFERENCE_ON_THE_RAIL.md:39`,
   `sovereign/SYSTEM_OVERVIEW.md:7695`, `sovereign/docs/specs/VERIFIER_V0.md:414`,
   `research/smb-onprem-adoption/MULTI_TENANT_SMB_ADOPTION.md:193`, and the
   `sovereign-contracts/src/types/next_edit_journal.rs:26` doc comment.
@@ -422,7 +422,7 @@ Findings, fixed:
   cli-daemon, cli-llm, contracts, core, enrichment-build, inference, tools,
   commonwealth-core, corpus-engine, oicp-types; and
   `docs/RPC_DISTRIBUTED_INFERENCE.md:226`,
-  `docs/LAZY_INFERENCE_ON_THE_RAIL.md:45`, `quality/NOUN_CONVERGENCE.md:1111`,
+  `docs/internal/LAZY_INFERENCE_ON_THE_RAIL.md:45`, `quality/NOUN_CONVERGENCE.md:1111`,
   `quality/env-flags.toml:570` (+ regenerated `docs/ENV_FLAGS.md`). Fixed in
   `d43188ff9`.
 - **ARCH 3/4 (path-keyed registries)** · `quality/conformance-specs.toml`
@@ -1101,7 +1101,7 @@ Findings, fixed (all in this commit):
   site. Repointed the const and its doc.
 - **ARCH 3 (the doc lands with the code) · the composition move's doc drift** ·
   `daemon_cmd/<moved>` still named in live docs and comments:
-  `docs/DISTRIBUTED_PILOT_READINESS.md`, `docs/specs/SOLVE_UX.md`,
+  `docs/internal/DISTRIBUTED_PILOT_READINESS.md`, `docs/specs/SOLVE_UX.md`,
   `quality/ARCH_LAYERS.toml:73,1316`, `quality/CLEANUP.md:70`,
   `quality/DOMAINS.toml:972,2827`, `quality/campaigns/sv-surface.toml`,
   `quality/sabotage/all.toml:409` (a LIVE mutant target),
@@ -1350,7 +1350,7 @@ exit=0 (arch-gate passed, 206 files / 201889 lines in the band; size-gate and
 hakari-verify advisory-red, concept-gate could-not-judge — all three foreign,
 as in the first pass). The one red left in TESTALL is
 `every_journey_cites_a_doc_that_exists`: `sovereign/docs/cli-contract.toml`
-cites the gitignored `docs/internal/RING_APPLICATIONS.md` (`.gitignore:67`),
+cites the gitignored `docs/internal/rings/reference/RING_APPLICATIONS.md` (`.gitignore:67`),
 added by `a3bd715f5`, an ancestor of the queue start `efe2aa080` — foreign,
 under the DECISIONS.md:605 reading.
 
@@ -1382,7 +1382,7 @@ Findings, fixed (commits `b606f9587`, `7cf49fc9d`):
 Checks. TESTALL exit=100 before the fixes below (13502 pass / 3 fail), exit=100
 after with ONE red left (13504 pass / 1 fail), and that one is foreign:
 `cli_contract_journeys::every_journey_cites_a_doc_that_exists` — the
-`mesh-offers-catalogue` journey cites `docs/internal/RING_APPLICATIONS.md`,
+`mesh-offers-catalogue` journey cites `docs/internal/rings/reference/RING_APPLICATIONS.md`,
 which `.gitignore:67` excludes and which is absent on this host. The citation
 came in at `a3bd715f5` (`sovereign/docs/cli-contract.toml:3571`), an ancestor of
 this campaign's start `4b8fe1a16` (`git merge-base --is-ancestor`), and both
@@ -1693,7 +1693,7 @@ instrument), and no SDK beyond the shim.
 ### Foreign reds carried, not this campaign's
 
 - **TESTALL's one fail**: `cli_contract_journeys::every_journey_cites_a_doc_that_exists`
-  — `mesh-offers-catalogue` cites `docs/internal/RING_APPLICATIONS.md`, which
+  — `mesh-offers-catalogue` cites `docs/internal/rings/reference/RING_APPLICATIONS.md`, which
   is gitignored (`.gitignore:67`) and per-host, absent on this Halo. The
   citation at `sovereign/docs/cli-contract.toml:3571` landed in `a3bd715f5`,
   an ancestor of `f51b66112`. Identically recorded by `REVIEW-audit-rr-2`
@@ -1818,7 +1818,7 @@ of them this campaign's and fixed here.
 | failure | verdict | why |
 |---|---|---|
 | `xtask::conformance_tags::conformance_tags_are_fresh` | THIS CAMPAIGN — fixed | two separate defects, below |
-| `sovereign-cli::main cli_contract_journeys::every_journey_cites_a_doc_that_exists` | pre-existing, not fixable here | the citation landed `a3bd715f5` (2026-09-13, ring-apps); the doc it names, `docs/internal/RING_APPLICATIONS.md`, is GITIGNORED per-host and `quality/campaigns/ring-apps.toml:8` records it ABSENT on the Halo. This campaign's diff touches neither `sovereign/docs/cli-contract.toml` nor `docs/internal/` (`git diff --stat` on both paths: empty) |
+| `sovereign-cli::main cli_contract_journeys::every_journey_cites_a_doc_that_exists` | pre-existing, not fixable here | the citation landed `a3bd715f5` (2026-09-13, ring-apps); the doc it names, `docs/internal/rings/reference/RING_APPLICATIONS.md`, is GITIGNORED per-host and `quality/campaigns/ring-apps.toml:8` records it ABSENT on the Halo. This campaign's diff touches neither `sovereign/docs/cli-contract.toml` nor `docs/internal/` (`git diff --stat` on both paths: empty) |
 | `sovereign-mesh::main local_only_boot::a_local_only_daemon_spawns_no_network_service` | load flake, not a regression | the 10 s bound on a daemon booting under a 13570-test parallel run. `--package sovereign-mesh` alone: `pass: 604 fail: 0`, twice. Worth a bound that scales with load; not this campaign's and not tuned here |
 
 PREPUSH: exit 1, blocking on `arch-gate`. See the size section below for what
@@ -3237,7 +3237,7 @@ conformance regen (6b6434a47).
 
 - TESTALL `scripts/ralph-check.sh testall` → **exit=100, 13701 pass / 1 fail** —
   `cli_contract_journeys::every_journey_cites_a_doc_that_exists`: mesh-offers-catalogue
-  cites `docs/internal/RING_APPLICATIONS.md` — foreign, not worker-fixable (NEEDS_HUMAN).
+  cites `docs/internal/rings/reference/RING_APPLICATIONS.md` — foreign, not worker-fixable (NEEDS_HUMAN).
 - PREPUSH `scripts/ralph-check.sh prepush` → **PUSH BLOCKED, 1 blocking: arch-gate** —
   foreign, not worker-fixable (NEEDS_HUMAN). Scoped lint, rustfmt, docs/layout/layer/
   boundary/lock/env gates all passed; size-gate + deletion-manifest advisory-failed.
@@ -3363,7 +3363,7 @@ concurrent session on `main` (operator direction 2026-09-22, "I want to go 100% 
 - TESTALL `scripts/ralph-check.sh testall` → **exit=100, 13710 pass / 2 fail**, both
   foreign, triaged:
   - `cli_contract_journeys::every_journey_cites_a_doc_that_exists` — the known per-host
-    red: `mesh-offers-catalogue` cites `docs/internal/RING_APPLICATIONS.md`, GITIGNORED
+    red: `mesh-offers-catalogue` cites `docs/internal/rings/reference/RING_APPLICATIONS.md`, GITIGNORED
     (`.gitignore:67`) and ABSENT on the Halo, cited at `sovereign/docs/cli-contract.toml`
     since `a3bd715f5` (2026-09-13, an ANCESTOR of BASE — `git merge-base --is-ancestor`
     verified). This campaign's diff touches neither `sovereign/docs/cli-contract.toml`

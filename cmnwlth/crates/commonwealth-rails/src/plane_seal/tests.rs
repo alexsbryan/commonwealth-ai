@@ -22,13 +22,14 @@ fn sign_work(key: &SigningKey, seq: u64, ts: i64, act: &WorkAct) -> Op<SignedOp>
     let act = RailAct::Record {
         payload: commonwealth_work::to_payload(act).expect("a work act is a payload"),
     };
-    let sig = sign_ring_op(key, WORK_NAMESPACE, ts, seq, &body_json(&act, None));
+    let sig = sign_ring_op(key, WORK_NAMESPACE, ts, seq, &body_json(&act, None, None));
     Op::new(
         SignedOp {
             seq,
             sig,
             act,
             on_behalf_of: None,
+            view: None,
         },
         ts,
         actor_of(key),
@@ -280,7 +281,13 @@ async fn a_work_live_set_over_the_bar_seals_once_not_on_every_tick() {
             .collect()
     };
     journal
-        .append_all(renew(SEAL_AFTER_OWN_OPS - 1), rail.signer(), &roster, None)
+        .append_all(
+            renew(SEAL_AFTER_OWN_OPS - 1),
+            rail.signer(),
+            &roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        )
         .unwrap();
     assert_eq!(
         seal_once(&rail, &restarted).await.sealed,
@@ -288,7 +295,13 @@ async fn a_work_live_set_over_the_bar_seals_once_not_on_every_tick() {
         "one write short of the bar"
     );
     journal
-        .append_all(renew(1), rail.signer(), &roster, None)
+        .append_all(
+            renew(1),
+            rail.signer(),
+            &roster,
+            None,
+            &commonwealth_rail::Ed25519Verifier,
+        )
         .unwrap();
     assert_eq!(seal_once(&rail, &restarted).await.sealed, 1);
 }

@@ -1703,7 +1703,7 @@ impl ModelSlot {
                     // `dist.tensor_split` puts each cut point HALFWAY between
                     // block boundaries in (n_layer+1)-unit space, so dev_layer
                     // reproduces the plan exactly (see `dev_layer_tensor_split`
-                    // and docs/DISTRIBUTED_GDN_CRASH_STATUS.md).
+                    // and docs/internal/DISTRIBUTED_GDN_CRASH_STATUS.md).
                     .with_tensor_split(&dist.tensor_split);
             }
             LoadPlacement::InsufficientCluster { eligible, quorum } => {

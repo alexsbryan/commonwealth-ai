@@ -889,23 +889,59 @@ mod tests {
 
     #[test]
     fn relay_config_from_parts_maps_discovery() {
-        // Default / "n0" / absent → n0 services on.
+        // Default / "n0" / absent / empty → n0 services on.
         assert!(RelayConfig::default().n0_services);
-        assert!(RelayConfig::from_parts(vec![], None).n0_services);
-        assert!(RelayConfig::from_parts(vec![], Some("n0")).n0_services);
-        // Sovereignty spellings → n0 severed.
-        for d in ["none", "self", "local"] {
-            assert!(
-                !RelayConfig::from_parts(vec![], Some(d)).n0_services,
-                "discovery={d} must sever n0"
-            );
-        }
-        // Unknown → safe default (n0 on).
-        assert!(RelayConfig::from_parts(vec![], Some("carrier-pigeon")).n0_services);
+        assert!(
+            RelayConfig::from_parts(vec![], None)
+                .expect("absent is n0")
+                .n0_services
+        );
+        assert!(
+            RelayConfig::from_parts(vec![], Some("n0"))
+                .expect("n0")
+                .n0_services
+        );
+        assert!(
+            RelayConfig::from_parts(vec![], Some(""))
+                .expect("empty is n0")
+                .n0_services
+        );
+        // The one sovereignty spelling → n0 severed.
+        let c = RelayConfig::from_parts(vec![], Some("none")).expect("none");
+        assert!(!c.n0_services);
         // relay_urls passes through.
-        let c = RelayConfig::from_parts(vec!["https://r.example:443".into()], Some("none"));
+        let c = RelayConfig::from_parts(vec!["https://r.example:443".into()], Some("none"))
+            .expect("none");
         assert_eq!(c.relay_urls, vec!["https://r.example:443".to_string()]);
         assert!(!c.n0_services);
+    }
+
+    /// **C2: a typo'd value refuses to load** (ROOT_CAUSE_FIXES C2). The old
+    /// shape warned and kept n0 — the substitution this door exists to stop.
+    /// Watched failing first, with the warn-and-keep planted back.
+    #[test]
+    fn an_unknown_discovery_value_refuses_to_load() {
+        let err = RelayConfig::from_parts(vec![], Some("carrier-pigeon")).unwrap_err();
+        assert!(err.contains("carrier-pigeon"), "the value is named: {err}");
+        assert!(
+            err.contains("accepted"),
+            "and the accepted set is named: {err}"
+        );
+    }
+
+    /// **C2: `self`/`local` are refused naming `none`** — they were never
+    /// implemented, and aliasing them to `none` would keep the lie in the
+    /// vocabulary. Watched failing first with the same plant.
+    #[test]
+    fn self_and_local_refuse_naming_none() {
+        for d in ["self", "local"] {
+            let err = RelayConfig::from_parts(vec![], Some(d)).unwrap_err();
+            assert!(err.contains("never implemented"), "{d}: {err}");
+            assert!(
+                err.contains("`none`"),
+                "{d}: the honest spelling must be named: {err}"
+            );
+        }
     }
 
     #[tokio::test]

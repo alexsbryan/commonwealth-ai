@@ -2,7 +2,7 @@
 //! The store's side of the agent-notes port.
 //!
 //! [`NoteStore`] implements [`RecipeNotes`] and [`AgentNotes`] here, in the
-//! package that OWNS notes on disk (`docs/FIVE_PROGRAMS.md` §2, §4 rule 1). Every
+//! package that OWNS notes on disk (`docs/internal/FIVE_PROGRAMS.md` §2, §4 rule 1). Every
 //! other program takes `Arc<dyn AgentNotes>` from its host and never names this
 //! crate; an `Arc<NoteStore>` coerces into that at the construction site.
 //!

@@ -1,0 +1,91 @@
+{
+  "cases": [
+    {
+      "actor": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "from": 0,
+      "head": "6b0ee48a13235b72410a661e043021f58e3c27dcd38c1bd39b80e90c3247e056",
+      "mark": 0,
+      "name": "empty window",
+      "ops": []
+    },
+    {
+      "actor": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "from": 0,
+      "head": "21f6b6a08c22f52bee9ea72df92f495d94d7a9ea5574a4ae98dedf365e104a25",
+      "mark": 0,
+      "name": "one op",
+      "ops": [
+        [
+          0,
+          "ring-b8f061f3878e65c8"
+        ]
+      ]
+    },
+    {
+      "actor": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "from": 0,
+      "head": "e73fb18ff7733e615a64e3a8b1140c664c6b60c7d6af61f4f1e0bf6be542f70e",
+      "mark": 1,
+      "name": "two ops",
+      "ops": [
+        [
+          0,
+          "ring-b8f061f3878e65c8"
+        ],
+        [
+          1,
+          "ring-a7dab777b7edf712"
+        ]
+      ]
+    },
+    {
+      "actor": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "from": 1,
+      "head": "aa860862260bddba139e925f2ea620bf2ba3d4c64f4e32ed480ed808cc51689e",
+      "mark": 1,
+      "name": "offset window",
+      "ops": [
+        [
+          0,
+          "ring-b8f061f3878e65c8"
+        ],
+        [
+          1,
+          "ring-a7dab777b7edf712"
+        ]
+      ]
+    },
+    {
+      "actor": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "from": 0,
+      "head": "f63bf90afa8cebef6d36cdfc9227f63c46daea81ea8e1012cbf3782b5334028d",
+      "mark": 2,
+      "name": "a fork at one seq — ids sorted and deduped",
+      "ops": [
+        [
+          0,
+          "ring-b8f061f3878e65c8"
+        ],
+        [
+          2,
+          "ring-4cbc3ffe6ed7df74"
+        ],
+        [
+          2,
+          "ring-97439b2be70e8a52"
+        ],
+        [
+          1,
+          "ring-a7dab777b7edf712"
+        ],
+        [
+          2,
+          "ring-4cbc3ffe6ed7df74"
+        ]
+      ]
+    }
+  ],
+  "domain": "cwth/view/1",
+  "formula": "h0 = BLAKE3(domain || 0x00 || actor); hs = BLAKE3(h{s-1} || 0x00 || be64(s) || 0x00 || id), ids at s sorted then deduped, s in [from, mark]",
+  "generated": "2026-09-24 from the reference implementation — RFC style: generated once, then pinned"
+}

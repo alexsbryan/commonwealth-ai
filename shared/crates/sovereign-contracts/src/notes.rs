@@ -2,7 +2,7 @@
 //! The agent-notes port — the whole slice of the note store the programs
 //! OUTSIDE `code/` read and write.
 //!
-//! `corpus-engine-notes` belongs to `svrn code` (`docs/FIVE_PROGRAMS.md` §2:
+//! `corpus-engine-notes` belongs to `svrn code` (`docs/internal/FIVE_PROGRAMS.md` §2:
 //! "owns the SCIP index and notes on disk"). Every other program reaching
 //! `corpus_engine_notes::NoteStore` is one program naming another's store, and
 //! §4 rule 1 (one data directory, one owner) is why promoting that crate to a
