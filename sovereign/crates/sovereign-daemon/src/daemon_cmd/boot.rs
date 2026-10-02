@@ -1056,14 +1056,16 @@ pub(super) async fn run_daemon(
             },
             headless: Some(crate::HeadlessExtras {
                 rails: crate::HeadlessRails {
-                    // Rebuilds the provider when `models.*` changes on disk. Holds
-                    // the same deferred handle, bound below.
-                    provider_factory: Arc::new(crate::provider::LlamaCppFactory {
-                        daemon: Arc::clone(&deferred_daemon),
-                        reload,
-                        routed: Arc::clone(&routed_provider),
-                        slot_aliases: ranked.slot_aliases.clone(),
-                    }),
+                    // Rebuilds the provider when `models.*` changes on disk, and
+                    // follows serve's self-report. Holds the deferred handle bound below.
+                    provider_factory: crate::provider::following(
+                        crate::provider::LlamaCppFactory {
+                            daemon: Arc::clone(&deferred_daemon),
+                            reload,
+                            routed: Arc::clone(&routed_provider),
+                            slot_aliases: ranked.slot_aliases.clone(),
+                        },
+                    ),
                     // The work atlas writes into THIS store, so its entries reach
                     // the store's outbox and ride the ring rail (cw-lift 4b; the
                     // gossip enumeration this comment used to name was deleted at

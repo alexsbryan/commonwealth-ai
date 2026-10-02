@@ -188,6 +188,73 @@ impl LlamaCppFactory {
             }
         }
     }
+
+    /// Re-read serve's self-report every `every` and, when it differs from
+    /// the one svrn last adopted, adopt it as a reload does (cell, relay
+    /// manifest, aliases). svrn reads the self-report once at boot, so without
+    /// this a serve restart left svrn answering from the boot snapshot. A read
+    /// that fails keeps the last facts and is traced once per transition; "did
+    /// not answer" is never adopted as "holds nothing" (principle 6).
+    async fn follow(self: Arc<Self>, every: std::time::Duration) {
+        let ReloadSource::Serve {
+            base,
+            config_context,
+            cell,
+            relay,
+        } = &self.reload
+        else {
+            return;
+        };
+        let mut held: Option<serde_json::Value> = None;
+        let mut answering = true;
+        loop {
+            tokio::time::sleep(every).await;
+            let served = match crate::serve_client::read_served_self(&base.base).await {
+                Ok(served) => served,
+                Err(e) => {
+                    if answering {
+                        tracing::warn!(target: "serving_path", serve_base = %base.base, error = %e, "follow: serve's self-report did not answer; svrn keeps the last one it adopted");
+                    }
+                    answering = false;
+                    continue;
+                }
+            };
+            if !answering {
+                tracing::info!(target: "serving_path", serve_base = %base.base, "follow: serve's self-report answers again");
+            }
+            answering = true;
+            let now = serde_json::to_value(&served).ok();
+            if now.is_some() && now == held {
+                continue;
+            }
+            tracing::info!(target: "serving_path", serve_base = %base.base, primary = %served.primary_model, first = held.is_none(), "follow: serve's self-report changed; svrn adopts it");
+            crate::serve_client::adopt_served(base, cell, &served, *config_context);
+            if let Some(relay) = relay {
+                relay.read_manifest().await;
+            }
+            self.publish_served_aliases(&served.resident_slots, "serve's self-report, followed")
+                .await;
+            self.push_router_aliases().await;
+            held = now;
+        }
+    }
+}
+
+/// How often svrn re-reads serve's self-report on the dialing path.
+pub const SERVE_FOLLOW_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// The factory boot registers, following serve's self-report every
+/// [`SERVE_FOLLOW_INTERVAL`] where it dials serve (pc-split-deploy-honesty).
+pub fn following(factory: LlamaCppFactory) -> Arc<LlamaCppFactory> {
+    following_every(factory, SERVE_FOLLOW_INTERVAL)
+}
+
+fn following_every(factory: LlamaCppFactory, every: std::time::Duration) -> Arc<LlamaCppFactory> {
+    let factory = Arc::new(factory);
+    if matches!(factory.reload, ReloadSource::Serve { .. }) {
+        tokio::spawn(Arc::clone(&factory).follow(every));
+    }
+    factory
 }
 
 /// On the dialing path a reload is serve's (pb-svrn-dials-serve): the daemon
@@ -378,6 +445,41 @@ mod reload_through_serve {
         );
         assert!(!err.contains("embed"), "embed was held, yet named: {err}");
         assert_eq!(cell.model_id_for(Speed::Slow), "after-reload");
+    }
+
+    /// pc-split-deploy-honesty: serve restarts holding another model, with no
+    /// reload; svrn's model facts follow it within the follow interval.
+    #[tokio::test]
+    async fn svrn_follows_serve_across_a_restart() {
+        let model = Arc::new(std::sync::Mutex::new("before-restart".to_string()));
+        let answers = Arc::clone(&model);
+        let app = axum::Router::new().route(
+            SERVED_SELF_PATH,
+            get(move || {
+                let answers = Arc::clone(&answers);
+                async move { axum::Json(served(&answers.lock().unwrap().clone())) }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let base = format!("http://{}", listener.local_addr().expect("addr"));
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = SetupConfig::unconfigured();
+        let (factory, cell, _) = factory_over(base, &cfg, dir.path());
+        let _factory = following_every(factory, std::time::Duration::from_millis(50));
+
+        *model.lock().unwrap() = "after-restart".to_string();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while cell.model_id_for(Speed::Slow) != "after-restart" {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "svrn still answers {} 5 s after serve restarted",
+                cell.model_id_for(Speed::Slow)
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
     }
 
     #[tokio::test]
