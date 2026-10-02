@@ -7,6 +7,7 @@ pc-bare-404s pc-onprem-followups                      # named absences in the da
 pc-removed-env-warn pc-cli-config-load-silent-default # sovereign-contracts setup_config and its env reads
 pc-rpc-probe-identity pc-fetch-model-peer-discovery   # sovereign-serve's peer dialing
 pc-value-presence-admission pc-partial-decline-verdict pc-gk-rescue-fabrication  # sovereign-core runtime/grounding
+pc-gate-gk-exemption-deictic pc-partial-decline-verdict pc-value-presence-admission  # sovereign-core runtime/grounding and the gate
 # Readings run alone (`<id> *`: no other row shares the wave, so no lane compiles beside it,
 # whenever that row was added; the hand-written pairs this replaced missed seven later rows):
 pc-partial-decline-verdict-measure *   # quality reading, host load recorded

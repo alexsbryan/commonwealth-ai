@@ -22,3 +22,7 @@ pc-rails-reseal-loop
 pc-chat-ask-audit-calls
 pc-knowledge-gym-noresults
 pc-deployed-turn-latency
+pc-value-presence-admission
+pc-gate-gk-exemption-deictic
+pc-rails-journal-linear
+pc-retired-verbs-named

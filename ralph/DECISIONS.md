@@ -2137,6 +2137,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: reopen pc-gk-rescue-fabrication with two corrected premises: (1) the known probe takes the zero-chunk branch, which reads the existing `question_is_situation_deictic` and declines without the GK prefix; (2) the 4B's Halvorsen release on gk_rescue's path is the entity clause's to explain, census first, the prompt clause stays but is not the guard. The measure row is `[x]` at b07f61eb2 and the re-read is the split `pc-gk-rescue-fabrication-measure-2`, alone. pc-gate-gk-exemption-deictic stays below the cut with the measurement attached. Two findings filed below the cut: pc-chaos-monkey-gk-blind, pc-node-entry-v1-suffix.
 - Because: the row's outcome names the user-visible failure the kit found, and that failure's code site is the zero-chunk branch, so the row's premise ("gk_rescue releases it") was false, not its scope; the predicate the fix minted is the one decider (principle 8). A prompt clause the 4B broke in 2 of 3 is not structural (principle 10). Moving a row above the line is the operator's by the charter.
 
+**phase-c-16 · 2026-10-02 · operator rulings on the seat's morning asks · operator** — this commit
+- Needed: the seat's list of operator decisions (2026-10-02 ~12:35Z): the knowledge-gym trade (phase-c-11's options a/b/c), four rows below the cut recommended into scope, the 316 `dr-estate-dr-*` run corpora on the deployed node (phase-c-10's option A), and two AGENTS.md corrections.
+- Chose (operator: "I approve the recs"): (1) option (c): pc-knowledge-gym-noresults is rewritten to a loop-enforced bound (one rephrase after an empty result, absence stated after the second) and 05's bar moves to `max_lookup_calls = 2`; pc-knowledge-gym-noresults-both-directions closes at 61c978b07 as the reading it was. (2) pc-value-presence-admission, pc-gate-gk-exemption-deictic, pc-rails-journal-linear and pc-retired-verbs-named move above the cut and into scope.txt. (3) The dr-estate corpora are removed from the deployed node (after pc-gk-rescue-fabrication-measure-2's quiet-host reading). (4) AGENTS.md gains clone-gate in its ratchet list and the verb table's llm row names `sovereign-cli-llm-stock` (package `sovereign-stock`).
+- Because: each was the seat's recommendation with its evidence (phase-c-10, -11, -15; b07f61eb2; 29e0a3f22). The operator added a direction: "it does point to a Big O scalability problem that increased corpora hit response times so badly; I would prefer us to be able to easily handle noisy corpora". Removing the corpora treats the node; the fan-out's growth with installed corpora is phase-d's pd-scoped-run-corpora, rewritten to that direction.
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13727,5 +13732,13 @@ Recommendation for the operator: lift pc-gate-gk-exemption-deictic above the cut
 Falsified if: after the reopened fix, the zero-chunk branch with the deictic decline still releases an invented room on the conference-room probe (then the branch is not the cause), or world-general zero-chunk questions lose their answer (then the predicate is too wide for this branch).
 
 REVIEW-AFTER: widening the row's outcome from "gk_rescue" to "a knowledge turn" is read here as correcting a false premise, not as adding scope; the operator may read it otherwise.
+
+</details>
+
+## phase-c-16 · 2026-10-02 — the operator's rulings: gym option (c), four rows into scope, dr-estate removed, AGENTS.md corrected
+
+<details><summary>reasoning, evidence, package</summary>
+
+05's bar moving from 1 to 2 is the operator's ruling, recorded here, so the row's change to pass.toml is not a worker re-tuning a bar after seeing data (the charter's rule). The bound is structural (principle 10): the loop counts empty results, so no prompt text carries it and the narrowed-note reading (3 lookups on 7 of 9, 61c978b07) cannot recur. Conflicts: pc-gate-gk-exemption-deictic is paired with pc-partial-decline-verdict and pc-value-presence-admission (sovereign-core grounding and the gate).
 
 </details>
