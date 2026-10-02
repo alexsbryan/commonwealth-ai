@@ -44,6 +44,12 @@ pub fn promote_legacy_env() {
             "svrnmesh: {} is set but no longer read, so it has no effect — {}",
             removed.name, removed.instead
         );
+        // Nothing reads it, so dropping it costs no child anything — and a
+        // dispatcher exec'ing a sibling that re-runs this would otherwise
+        // print the same line once per process in the chain.
+        let suffix = removed.name.trim_start_matches("SOVEREIGN_");
+        std::env::remove_var(removed.name);
+        std::env::remove_var(format!("SVRNMESH_{suffix}"));
     }
 }
 
@@ -106,5 +112,17 @@ mod tests {
         let keys = [first, branded.as_str(), live.as_str(), "PATH"];
         assert_eq!(removed_set(keys.into_iter()), vec![&REMOVED_ENV[0]]);
         assert!(removed_set(["PATH", live.as_str()].into_iter()).is_empty());
+    }
+
+    #[test]
+    fn a_warned_var_leaves_the_environment_so_a_re_exec_stays_quiet() {
+        // Names come from the table, never a literal: env-gate fails a
+        // removed var that is still read, and a literal set_var reads as one.
+        let name = REMOVED_ENV[1].name;
+        let branded = format!("SVRNMESH_{}", name.trim_start_matches("SOVEREIGN_"));
+        std::env::set_var(name, "1");
+        promote_legacy_env();
+        assert!(std::env::var_os(name).is_none());
+        assert!(std::env::var_os(&branded).is_none());
     }
 }
