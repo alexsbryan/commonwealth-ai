@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # ops-channel-setup-macos.sh — one-shot, NO-SUDO server-side setup for the
-# sandboxed ops channel (docs/OPS_CHANNEL.md). Run as the login user on the
+# sandboxed ops channel (docs/internal/OPS_CHANNEL.md). Run as the login user on the
 # Mac that should ACCEPT ops connections:
 #
 #   bash scripts/ops-channel-setup-macos.sh            # keys from ~/.svrn-ops/clients

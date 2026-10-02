@@ -429,7 +429,7 @@ zero bars and a `notes` line saying so.
 - `scripts/co-directive-log.sh` (write forms) — how the seat logs
   draft/final pairs; you only ever see the drafts themselves.
 - `scripts/co-field.py` — the seat's fieldglass reader: changed-file
-  evidence and landing diffs for verdict records (`docs/FIELD_VERDICTS.md`).
+  evidence and landing diffs for verdict records (`docs/internal/FIELD_VERDICTS.md`).
 - `scripts/co-sweep.sh` — the nightly shadow sweep (launchd, 03:30):
   reviews every commit since the last sweep into `verdicts.jsonl`.
   `--install` / `--uninstall` manage the launchd agent.

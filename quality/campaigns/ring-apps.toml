@@ -204,7 +204,7 @@ rides = "stream"
 on_the_ring = "a page over rails by default; server-side compute is a declared escalation on a keeper; search and the house AI live on a hub and every answer names which machine it depended on"
 landed_by = ["ra-12"]
 pulled_by = []
-note = "docs/LAZY_INFERENCE_ON_THE_RAIL.md already treats the GPU node as the seam. Last on the ladder by the pasted argument: on a peer network availability and trust are the hard problems, not the AI."
+note = "docs/internal/LAZY_INFERENCE_ON_THE_RAIL.md already treats the GPU node as the seam. Last on the ladder by the pasted argument: on a peer network availability and trust are the hard problems, not the AI."
 
 [[primitive]]
 id = "deployment"

@@ -23,7 +23,7 @@
 # CI is a safety net. It is not the thing that stops bad code, because by the
 # time CI speaks the code is already on main, and because CI is a metered
 # resource that can — and on 2026-07-24 did — simply stop running when the
-# month's Actions allowance ran out (docs/CI_ECONOMY.md has the audit).
+# month's Actions allowance ran out (docs/internal/CI_ECONOMY.md has the audit).
 #
 # A gate you pay per-invocation for is a gate you will eventually ration. A
 # gate that runs on hardware you already own is one you can afford to run on

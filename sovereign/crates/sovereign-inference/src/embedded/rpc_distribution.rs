@@ -552,7 +552,7 @@ pub(crate) struct DistributionPlan {
     /// a disagreement straddles a layer across devices — on a hybrid (Gated
     /// DeltaNet) model that disables the fused GDN kernel and the unfused
     /// GGML_OP_SET path aborts the host on first distributed decode
-    /// (docs/DISTRIBUTED_GDN_CRASH_STATUS.md). See [`dev_layer_tensor_split`].
+    /// (docs/internal/DISTRIBUTED_GDN_CRASH_STATUS.md). See [`dev_layer_tensor_split`].
     pub(crate) tensor_split: Vec<f32>,
     pub(crate) assignments: Vec<RpcWarmAssignment>,
     /// Eligible RPC worker peers (anchors lending memory) this plan

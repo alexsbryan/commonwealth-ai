@@ -231,7 +231,7 @@ metadata:
   originSessionId: 188016f2-aebc-4331-8e7b-57a10c97a2b0
 ---
 
-Path characterization for the Qwen-122B distributed arc (see [[rpc-distributed-hang-root-cause]], docs/QWEN122B_DISTRIBUTED_HANDOFF.md), measured 2026-07-18 with `commonwealth-transport/examples/tunnel_bench.rs` (build: `--features iroh,iroh-relay-only`).
+Path characterization for the Qwen-122B distributed arc (see [[rpc-distributed-hang-root-cause]], docs/internal/QWEN122B_DISTRIBUTED_HANDOFF.md), measured 2026-07-18 with `commonwealth-transport/examples/tunnel_bench.rs` (build: `--features iroh,iroh-relay-only`).
 
 **Real bug found+fixed:** iroh tunnel pump legs (`HttpBridge` accepted TCP + `IrohAcceptor` forward connect) lacked `TCP_NODELAY` — Nagle × delayed-ACK added ~40ms/direction (~82ms on a 16KB round-trip, measured on loopback). Fixed in `commonwealth-transport/src/iroh.rs`. Invariant: every TCP leg of a byte tunnel sets nodelay. Production gossip/control over iroh silently paid this before.
 
@@ -305,7 +305,7 @@ Explored running DeepSeek-V4-Flash across Strix Halo (128GB, Vulkan/ROCm) + Beef
 
 **Strix ROCm gotcha:** default exposes only ~62GB of 128GB; unlock full GTT via GRUB (`amdgpu.gttsize` / `ttm.*`) + reboot. kyuz0 toolboxes make ROCm-on-gfx1151 viable (kernel ≥6.18.4, `-fa 1 --no-mmap`) — worth revisiting our Vulkan-only default someday. ds4 (fast, SSD-streaming, prebuilt kyuz0 toolbox) stays a good *fast local provider* option if we want DeepSeek-V4 for its own sake.
 
-Full record: `docs/RUN_DEEPSEEK_V4_FLASH.md` (concluded honestly, not deleted). Relates to [[project_shared_fleet_initiative]], [[project_rpc_distributed_hang_root_cause]], [[project_pinned_pod_inference]], [[project_qwen3.5_122b_throughput]].
+Full record: `docs/internal/RUN_DEEPSEEK_V4_FLASH.md` (concluded honestly, not deleted). Relates to [[project_shared_fleet_initiative]], [[project_rpc_distributed_hang_root_cause]], [[project_pinned_pod_inference]], [[project_qwen3.5_122b_throughput]].
 
 ########## project_qwen3.5_122b_throughput.md ##########
 ---

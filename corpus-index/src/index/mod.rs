@@ -445,7 +445,7 @@ struct IndexMeta {
     /// (`sovereign-tools/src/enrichment_checker.rs`) say "enrichment was
     /// requested here and never completed". Stamping it on success instead
     /// would make the failure case invisible, which is the defect this field
-    /// was renamed to fix (see `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4-§5).
+    /// was renamed to fix (see `docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4-§5).
     ///
     /// NOT the same fact as `RegistryEntry::enrichment_enabled`
     /// (`registry.rs`), which describes the catalogue recipe rather than this

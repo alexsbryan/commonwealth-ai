@@ -1180,7 +1180,7 @@ pub fn override_patterns(plan: &[NodeShard]) -> Vec<(String, usize)> {
 /// hybrid (Gated DeltaNet) model one straddled layer disables the fused GDN
 /// kernel globally, the unfused path emits `GGML_OP_SET`, and the first
 /// distributed decode kills the host at ggml-rpc.cpp:498
-/// (docs/DISTRIBUTED_GDN_CRASH_STATUS.md).
+/// (docs/internal/DISTRIBUTED_GDN_CRASH_STATUS.md).
 ///
 /// So hand llama.cpp cut points that sit HALFWAY between our block boundaries
 /// in `(n_layer + 1)`-unit space: a device whose last block is `b` gets its

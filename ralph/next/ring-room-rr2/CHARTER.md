@@ -54,5 +54,5 @@ wrong resolution.
   library in use is shown as in use and not contended; viewers are read-only.
   Rows that need a Jellyfin capability beyond a read-only user and `/Sessions`
   stop.
-- The CPU-node ask (docs/RING_ROOM_DEMO.md part two) is the scheduler's row in
+- The CPU-node ask (docs/internal/RING_ROOM_DEMO.md part two) is the scheduler's row in
   another session; a row here that seems to need it stops and names it.

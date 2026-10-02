@@ -29,7 +29,7 @@
 //!    because `ingestion_in_progress` is still `true`. An ingest that dies
 //!    inside its enrichment phase leaves exactly one of these, and until
 //!    2026-08-07 nothing on the machine reported it: the corpus read as
-//!    absent (`docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3).
+//!    absent (`docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3).
 
 use std::sync::Arc;
 
@@ -79,7 +79,7 @@ impl HealthCheckable for EnrichmentChecker {
                 // Until 2026-08-07 this read a field nothing ever wrote
                 // `true`, so this `continue` fired for every corpus, always,
                 // and no issue below could be reported for any input
-                // (`docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4).
+                // (`docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4).
                 if !info.enrichment_requested {
                     continue;
                 }

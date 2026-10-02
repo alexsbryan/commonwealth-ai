@@ -118,7 +118,7 @@ Everything else is identical in all three: every `scripts/co-*` driver,
 ## The briefing (scene 0)
 
 Five fixed lines, each ending in a decision or the literal words
-"nothing to decide". Shape: `docs/FIELD_VERDICTS.md` §3. Existing
+"nothing to decide". Shape: `docs/internal/FIELD_VERDICTS.md` §3. Existing
 surfaces only:
 
 1. **Earth** — sidecar `.delta` + `.honesty` via jq, never Read the

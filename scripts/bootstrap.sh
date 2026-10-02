@@ -131,7 +131,7 @@ esac
 
 # ── Git hooks ────────────────────────────────────────────────────────────
 # The pre-push hook is this repo's PRIMARY correctness gate — CI is the
-# confirmation pass, not the thing that stops bad code (docs/CI_ECONOMY.md
+# confirmation pass, not the thing that stops bad code (docs/internal/CI_ECONOMY.md
 # explains why: a metered gate is a gate you eventually ration, and on
 # 2026-07-24 the Actions allowance ran out and every check silently stopped
 # running). Installing it is therefore part of bootstrap, not an optional

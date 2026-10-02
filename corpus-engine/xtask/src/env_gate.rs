@@ -400,8 +400,7 @@ fn render_doc(registry: &Registry) -> String {
          The registry is enforced by `cargo run -p xtask -- env-gate`: a NEW env\n\
          var read anywhere in the workspace must be declared here (or in the\n\
          gate's third-party allowlist); pre-registry debt rides the shrink-only\n\
-         baseline `quality/baselines/env_unregistered.txt`. The historical\n\
-         dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.\n",
+         baseline `quality/baselines/env_unregistered.txt`.\n",
     );
 
     let mut by_cluster: BTreeMap<&str, Vec<&FlagRow>> = BTreeMap::new();

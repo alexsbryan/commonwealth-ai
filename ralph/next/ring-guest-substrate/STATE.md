@@ -17,7 +17,7 @@ Pointer keys: **O** = `.sovereign/features/ring-guest-substrate/order.md` ·
 **TP** = `sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates/` (the scaffold: NEVER edited; one line there is the campaign's answer and is §6) ·
 **A** = `sovereign/apps/ring-doc/` · **H** = `docs/HOUSE_EXPENSES.md` ·
 **M** = `scripts/ring-room-demo.sh` (the room topology; legs are added here, no new script) ·
-**PH** = `scripts/ring-room-phone/` (`phone.mjs`, `wall.mjs`) · **RS** = `docs/RING_ROOM_RUN_OF_SHOW.md` ·
+**PH** = `scripts/ring-room-phone/` (`phone.mjs`, `wall.mjs`) · **RS** = `docs/internal/RING_ROOM_RUN_OF_SHOW.md` ·
 **Q2** = `ralph/next/ring-room-rr2/STATE.md` (rr-2's queue, read-only: how rows were shaped and what landed).
 
 Status: `[x]` done · `[~]` in progress · `[ ]` pending. Work the first `[ ]` row whose

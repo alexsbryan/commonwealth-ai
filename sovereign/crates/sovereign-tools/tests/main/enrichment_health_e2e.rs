@@ -8,7 +8,7 @@
 //! setter anywhere in the workspace. So `continue` fired for every corpus,
 //! always, and `LowEnrichmentCoverage` / `StaleEnrichment` were dead code —
 //! §18.1's "a check with no failing input you can name". Full trace:
-//! `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4.
+//! `docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4.
 //!
 //! **What this pins**, end to end through the real ingest pipeline — no
 //! hand-written meta, no hand-set flag:
@@ -557,7 +557,7 @@ domain = "philosophy"
 /// **The failed-ingest partition.** An ingest that dies inside its enrichment
 /// phase leaves `<corpus_id>-partition-<node>/` behind with
 /// `ingestion_in_progress: true` beside `indexes_built: true` — the
-/// fingerprint traced in `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3.
+/// fingerprint traced in `docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3.
 /// `build_indexes()` stamped the second flag; enrichment then threw, so
 /// `mark_ingestion_complete()` never ran and promotion to the canonical
 /// directory (which happens only on `Ok`) never happened.

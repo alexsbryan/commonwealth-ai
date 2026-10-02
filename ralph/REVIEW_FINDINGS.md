@@ -285,7 +285,7 @@ Findings, fixed (all in `adc29b1ba`):
   still named the mesh `yield_backoff.rs`; repointed, or the mutant can never
   be planted (the `all.toml` precedent from `928ec78a4`).
 - **ARCH 3/4 (a doc naming a path that no longer owns the fact)** ·
-  `docs/CMNWLTH_DESIGN.md:114`, `docs/LAZY_INFERENCE_ON_THE_RAIL.md:39`,
+  `docs/CMNWLTH_DESIGN.md:114`, `docs/internal/LAZY_INFERENCE_ON_THE_RAIL.md:39`,
   `sovereign/SYSTEM_OVERVIEW.md:7695`, `sovereign/docs/specs/VERIFIER_V0.md:414`,
   `research/smb-onprem-adoption/MULTI_TENANT_SMB_ADOPTION.md:193`, and the
   `sovereign-contracts/src/types/next_edit_journal.rs:26` doc comment.
@@ -422,7 +422,7 @@ Findings, fixed:
   cli-daemon, cli-llm, contracts, core, enrichment-build, inference, tools,
   commonwealth-core, corpus-engine, oicp-types; and
   `docs/RPC_DISTRIBUTED_INFERENCE.md:226`,
-  `docs/LAZY_INFERENCE_ON_THE_RAIL.md:45`, `quality/NOUN_CONVERGENCE.md:1111`,
+  `docs/internal/LAZY_INFERENCE_ON_THE_RAIL.md:45`, `quality/NOUN_CONVERGENCE.md:1111`,
   `quality/env-flags.toml:570` (+ regenerated `docs/ENV_FLAGS.md`). Fixed in
   `d43188ff9`.
 - **ARCH 3/4 (path-keyed registries)** · `quality/conformance-specs.toml`
@@ -1101,7 +1101,7 @@ Findings, fixed (all in this commit):
   site. Repointed the const and its doc.
 - **ARCH 3 (the doc lands with the code) · the composition move's doc drift** ·
   `daemon_cmd/<moved>` still named in live docs and comments:
-  `docs/DISTRIBUTED_PILOT_READINESS.md`, `docs/specs/SOLVE_UX.md`,
+  `docs/internal/DISTRIBUTED_PILOT_READINESS.md`, `docs/specs/SOLVE_UX.md`,
   `quality/ARCH_LAYERS.toml:73,1316`, `quality/CLEANUP.md:70`,
   `quality/DOMAINS.toml:972,2827`, `quality/campaigns/sv-surface.toml`,
   `quality/sabotage/all.toml:409` (a LIVE mutant target),

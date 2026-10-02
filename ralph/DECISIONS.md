@@ -183,7 +183,7 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 
 
 **A33 · 2026-09-19 · rr-1-classify-leaves-a-slow-node · worker (director order)** — commit 689af944d + this commit
-- Needed: `ra-room-plug-in-live` fails on `c_answer_names` alone, and A28 kept the 60 s window rather than widen it. `docs/RING_ROOM_DEMO.md` part two and the order both named the root as `OffloadVerdict::FastLatency` gating the 38 s route classify because `Workload::Route` is class Fast. A fresh reproduction says otherwise: a's own decision line reads `sharding=LocalOnly`, so `offload_verdict` refused on PRIVACY — its first check — and the latency gate was never consulted. `Workload::request` hardcodes `ShardingPrivacy::LocalOnly` and all three `LlmRouter` classify sites used it, while the same turn's `Judge` and `Synthesize` envelopes thread the session posture, which SLOT_POLICY §2.4 requires of all of them.
+- Needed: `ra-room-plug-in-live` fails on `c_answer_names` alone, and A28 kept the 60 s window rather than widen it. `docs/internal/RING_ROOM_DEMO.md` part two and the order both named the root as `OffloadVerdict::FastLatency` gating the 38 s route classify because `Workload::Route` is class Fast. A fresh reproduction says otherwise: a's own decision line reads `sharding=LocalOnly`, so `offload_verdict` refused on PRIVACY — its first check — and the latency gate was never consulted. `Workload::request` hardcodes `ShardingPrivacy::LocalOnly` and all three `LlmRouter` classify sites used it, while the same turn's `Judge` and `Synthesize` envelopes thread the session posture, which SLOT_POLICY §2.4 requires of all of them.
 - Chose: Fix BOTH gates, in the order they fire, at one decider each. (1) Privacy: the classify threads `SkillRegistry::session_sharding()` — one new accessor that `Runtime::session_sharding` now also delegates to, so the rule has one implementation. (2) Latency: `offload_verdict_with_local` stands the Fast gate down when the node's own measured `tg_tok_s_ewma` is below the existing `THROUGHPUT_REFERENCE_TG_TOK_S`, reported as its own gate name `fast_latency_yielded`; an unmeasured node keeps the standing rule. REFUSED the order's suggested shape — a startup benchmark probe on every node — citing canon `dc3c9856` and `SCHEDULER_QUALITY.md` §4.5 / F10. Instrument: `RING_DOC_GPU_NODES` gives one named podman node the host's render device.
 - Because: The order's own method binds the diagnosis to a run, and the run falsified the premise both it and the doc inherited — the two verdicts share the reported gate name `not_offload_eligible`, which is what let the misreading stand, and fixing only the named gate would have moved nothing (pinned by its own test). Reviving `run_baseline_benchmark` is the measured regression canon forbids (−56 % mean latency bought with capability, declined upgrades 31 → 67), so the speed signal used is the one this fleet already collects; it is a rate, so unlike a measured TTFT it does not conflate job sizes, and it mints no constant, config key or probe. Standing the gate down only lets the scorer LOOK — local still ranks and still wins where no peer is better — which is what bounds a change to a privacy-adjacent path.
 
@@ -3027,13 +3027,13 @@ so the "no terminal state" is escalation, not a defect.
 removed the package, which would resume the campaign. This entry records why the
 campaign is NOT resumed, and restores the package carrying the operator fork.
 
-**Fork.** `c35d235b2` (`docs/FIVE_PROGRAMS.md`) landed at 15:13:53, 34 seconds
+**Fork.** `c35d235b2` (`docs/internal/FIVE_PROGRAMS.md`) landed at 15:13:53, 34 seconds
 before the director's commit at 15:14:27. It states it "Supersedes the
 ten-context decomposition in `quality/DOMAINS.md` §4 and the `domains`
-campaign's relocation plan" (`docs/FIVE_PROGRAMS.md:3-4`); `quality/DOMAINS.md`
+campaign's relocation plan" (`docs/internal/FIVE_PROGRAMS.md:3-4`); `quality/DOMAINS.md`
 now carries the banner "§4, §7 and §11 do not govern" (`:3-6`); §5 deletes "the
 ten-context registry `quality/DOMAINS.toml` and its census script"
-(`docs/FIVE_PROGRAMS.md:69-71`) and step 0 deletes the process apparatus
+(`docs/internal/FIVE_PROGRAMS.md:69-71`) and step 0 deletes the process apparatus
 (`:104-106`). The campaign's remaining rows ARE that relocation plan. Continue
 it, pause it and begin the new procedure, or finish wave 1 first?
 
@@ -3043,14 +3043,14 @@ replacing the campaign's plan, authored by the operator minutes earlier, and the
 charter's own instruction is "an honest package beats a guessed decision" and
 "If the fork is one the charter leaves to the operator, say so in the package —
 the options, their costs, and your recommendation — and stop." The director's
-recommendation is to pause and begin `docs/FIVE_PROGRAMS.md` step 0; the package
+recommendation is to pause and begin `docs/internal/FIVE_PROGRAMS.md` step 0; the package
 (`ralph/NEEDS_HUMAN.md`) names the three options, their costs, and the one-line
 resume.
 
 **Evidence** (reproduced this session, on `ralph/domains-campaign`).
 - `git log --format='%h %ci %s' -3` -> `2220dbf93` (15:14:27), `c35d235b2`
   (15:13:53), `7b2e304b8` (15:08:52).
-- `quality/DOMAINS.md:3-6` banner; `docs/FIVE_PROGRAMS.md:3-4,:69-71,:104-106`.
+- `quality/DOMAINS.md:3-6` banner; `docs/internal/FIVE_PROGRAMS.md:3-4,:69-71,:104-106`.
 - Ready rows are the relocation plan:
   `Queue('ralph/STATE.md').first_ready_review()` -> `None`; ready non-review
   lanes `['dm-mesh-workbench-move-scip', 'dm-vocab-compile-fail-test',
@@ -3061,7 +3061,7 @@ resume.
 
 **Falsified by.** An operator instruction that the campaign continues to the
 transition (then remove the package and the director's row-order resolution
-resumes the campaign); or a `docs/FIVE_PROGRAMS.md` revision that keeps the
+resumes the campaign); or a `docs/internal/FIVE_PROGRAMS.md` revision that keeps the
 relocation plan governing (then the campaign stands); or a `ralph/STOP` that
 appeared with `c35d235b2` (then the halt is the operator's already).
 
@@ -5705,7 +5705,7 @@ is not tuned here (§6, and "do not tune a gate to flip one number"). Nothing in
 the scorer a peer speed signal; §4.5's finding that `throughput_factor` is a constant for peers
 stands, and the local candidate's sub-reference clamp is what moved the synthesis.
 
-**Also corrected in the same commit** (principle 3): `docs/RING_ROOM_DEMO.md` fix 1 is retired.
+**Also corrected in the same commit** (principle 3): `docs/internal/RING_ROOM_DEMO.md` fix 1 is retired.
 `reason="could-not-judge"` is the verdict LABEL, not a cause (`model_slot.rs:2714` logs
 `gate.measured`); `qwen35` 2B HAS been measured — `sovereign/DEFAULTS_LEDGER.md`, floor 19.9, signal
 459–644, **ratio 23x** against the probe's 4x `Safe` limit, in a sweep that agreed with the declared

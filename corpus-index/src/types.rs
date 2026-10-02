@@ -437,7 +437,7 @@ pub struct IncompleteIngest {
     pub path: PathBuf,
     /// `indexes_built: true` beside `ingestion_in_progress: true` is the
     /// failed-ingest fingerprint documented in
-    /// `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3: `build_indexes()` finished
+    /// `docs/internal/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3: `build_indexes()` finished
     /// and stamped this, then a LATER phase threw — enrichment being the one
     /// that actually did — and `mark_ingestion_complete()` never ran. `false`
     /// means the ingest died earlier, mid-embed, which is a different and far

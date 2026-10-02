@@ -260,7 +260,7 @@ practice.
 
 Measured 2026-08-27: nine of ten xtask gates had no caller — `ci.yml`'s gates
 job has been commented out since the commit that wrote it (deliberately;
-`docs/CI_ECONOMY.md` argues the real gate is local), `pre-push.sh` ran only
+`docs/internal/CI_ECONOMY.md` argues the real gate is local), `pre-push.sh` ran only
 `docs-gate`, and the definition of done named neither. `docs-gate` itself was
 failing, so every push was blocked and nobody had said so.
 

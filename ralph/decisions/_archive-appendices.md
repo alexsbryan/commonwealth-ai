@@ -2612,13 +2612,13 @@ so the "no terminal state" is escalation, not a defect.
 removed the package, which would resume the campaign. This entry records why the
 campaign is NOT resumed, and restores the package carrying the operator fork.
 
-**Fork.** `c35d235b2` (`docs/FIVE_PROGRAMS.md`) landed at 15:13:53, 34 seconds
+**Fork.** `c35d235b2` (`docs/internal/FIVE_PROGRAMS.md`) landed at 15:13:53, 34 seconds
 before the director's commit at 15:14:27. It states it "Supersedes the
 ten-context decomposition in `quality/DOMAINS.md` §4 and the `domains`
-campaign's relocation plan" (`docs/FIVE_PROGRAMS.md:3-4`); `quality/DOMAINS.md`
+campaign's relocation plan" (`docs/internal/FIVE_PROGRAMS.md:3-4`); `quality/DOMAINS.md`
 now carries the banner "§4, §7 and §11 do not govern" (`:3-6`); §5 deletes "the
 ten-context registry `quality/DOMAINS.toml` and its census script"
-(`docs/FIVE_PROGRAMS.md:69-71`) and step 0 deletes the process apparatus
+(`docs/internal/FIVE_PROGRAMS.md:69-71`) and step 0 deletes the process apparatus
 (`:104-106`). The campaign's remaining rows ARE that relocation plan. Continue
 it, pause it and begin the new procedure, or finish wave 1 first?
 
@@ -2628,14 +2628,14 @@ replacing the campaign's plan, authored by the operator minutes earlier, and the
 charter's own instruction is "an honest package beats a guessed decision" and
 "If the fork is one the charter leaves to the operator, say so in the package —
 the options, their costs, and your recommendation — and stop." The director's
-recommendation is to pause and begin `docs/FIVE_PROGRAMS.md` step 0; the package
+recommendation is to pause and begin `docs/internal/FIVE_PROGRAMS.md` step 0; the package
 (`ralph/NEEDS_HUMAN.md`) names the three options, their costs, and the one-line
 resume.
 
 **Evidence** (reproduced this session, on `ralph/domains-campaign`).
 - `git log --format='%h %ci %s' -3` -> `2220dbf93` (15:14:27), `c35d235b2`
   (15:13:53), `7b2e304b8` (15:08:52).
-- `quality/DOMAINS.md:3-6` banner; `docs/FIVE_PROGRAMS.md:3-4,:69-71,:104-106`.
+- `quality/DOMAINS.md:3-6` banner; `docs/internal/FIVE_PROGRAMS.md:3-4,:69-71,:104-106`.
 - Ready rows are the relocation plan:
   `Queue('ralph/STATE.md').first_ready_review()` -> `None`; ready non-review
   lanes `['dm-mesh-workbench-move-scip', 'dm-vocab-compile-fail-test',
@@ -2646,7 +2646,7 @@ resume.
 
 **Falsified by.** An operator instruction that the campaign continues to the
 transition (then remove the package and the director's row-order resolution
-resumes the campaign); or a `docs/FIVE_PROGRAMS.md` revision that keeps the
+resumes the campaign); or a `docs/internal/FIVE_PROGRAMS.md` revision that keeps the
 relocation plan governing (then the campaign stands); or a `ralph/STOP` that
 appeared with `c35d235b2` (then the halt is the operator's already).
 
@@ -5290,7 +5290,7 @@ is not tuned here (§6, and "do not tune a gate to flip one number"). Nothing in
 the scorer a peer speed signal; §4.5's finding that `throughput_factor` is a constant for peers
 stands, and the local candidate's sub-reference clamp is what moved the synthesis.
 
-**Also corrected in the same commit** (principle 3): `docs/RING_ROOM_DEMO.md` fix 1 is retired.
+**Also corrected in the same commit** (principle 3): `docs/internal/RING_ROOM_DEMO.md` fix 1 is retired.
 `reason="could-not-judge"` is the verdict LABEL, not a cause (`model_slot.rs:2714` logs
 `gate.measured`); `qwen35` 2B HAS been measured — `sovereign/DEFAULTS_LEDGER.md`, floor 19.9, signal
 459–644, **ratio 23x** against the probe's 4x `Safe` limit, in a sweep that agreed with the declared

@@ -4035,7 +4035,7 @@ by `model_id` to the child for that slot, else the in-process engine;
 lifecycle to `/status` (`compute_children`, target `compute_child`). The child
 supervisor was extracted here from the desktop (shared, byte-identical).
 Crash-isolation acceptance is proven (`compute_child_e2e.rs`). See
-`docs/DISTRIBUTED_PILOT_READINESS.md` P1.
+`docs/internal/DISTRIBUTED_PILOT_READINESS.md` P1.
 
 **The distributed primary in a child (`[compute] distributed_primary`, default
 OFF).** The payoff the boundary was built for. Distributing a primary across
@@ -8061,7 +8061,7 @@ ran and passed. Audited spend was ~6,600 billed min/month against a 3,000-min
 allowance, 56% of it CI, with the Actions cache measured **empty** (so every run
 cold-built the workspace incl. llama.cpp: 56.7 min median). The full audit,
 the five mechanisms behind it, and the resulting budget are in
-`docs/CI_ECONOMY.md`; `scripts/ci-spend-audit.sh` reproduces the numbers on
+`docs/internal/CI_ECONOMY.md`; `scripts/ci-spend-audit.sh` reproduces the numbers on
 demand (GitHub's own `/timing` endpoint reports zeros here, so the script sums
 per-job wall time and applies runner multipliers itself).
 

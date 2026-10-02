@@ -14,7 +14,7 @@
 # "The job was not started because recent account payments have failed or your
 # spending limit needs to be increased." A gate that cannot run is not a
 # lenient gate — it is no gate, and dependabot PRs sailed through looking
-# unblocked. The full audit is docs/CI_ECONOMY.md; the four numbers that
+# unblocked. The full audit is docs/internal/CI_ECONOMY.md; the four numbers that
 # drove this rewrite:
 #
 #   * ~6,600 billed min/month projected against a 3,000-min private-repo

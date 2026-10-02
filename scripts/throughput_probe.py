@@ -2,7 +2,7 @@
 """Throughput probe — streaming latency/throughput for an OpenAI-compatible endpoint.
 
 The instrument for the heterogeneous-distribution experiment
-(docs/QWEN122B_HETEROGENEOUS_EXPERIMENT.md) and the SHARED_MODEL tok/s gate. Unlike
+(docs/internal/QWEN122B_HETEROGENEOUS_EXPERIMENT.md) and the SHARED_MODEL tok/s gate. Unlike
 mtp-probe.sh (wall-time only) or rpc-distributed-e2e.sh (proves the chain, measures no
 t/s), this streams a fixed completion and times it token by token:
 

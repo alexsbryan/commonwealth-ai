@@ -324,7 +324,7 @@ this demo shows the boundary held, not the crossing.
 Deeper design context: `docs/RING_APP_LIBRARY.md` (runtime, sandbox, join,
 reach); `docs/internal/RAIL_PROTOCOL_SKETCH.md` (the checkpoint and digest
 against the protocol's laws); the demo contract this document slots into is
-`docs/RING_ROOM_RUN_OF_SHOW.md`.
+`docs/internal/RING_ROOM_RUN_OF_SHOW.md`.
 
 Evidence, with file references, lives in the repository
 (`docs/internal/RAIL_PROTOCOL_SKETCH.md` for the checkpoint and digest

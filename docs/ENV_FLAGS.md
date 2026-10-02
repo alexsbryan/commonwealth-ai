@@ -14,8 +14,7 @@ default-off unless noted; **deprecated** = scheduled for removal.
 The registry is enforced by `cargo run -p xtask -- env-gate`: a NEW env
 var read anywhere in the workspace must be declared here (or in the
 gate's third-party allowlist); pre-registry debt rides the shrink-only
-baseline `quality/baselines/env_unregistered.txt`. The historical
-dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
+baseline `quality/baselines/env_unregistered.txt`.
 
 ## bench
 
