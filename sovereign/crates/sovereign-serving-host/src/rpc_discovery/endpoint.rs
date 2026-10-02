@@ -11,21 +11,99 @@ use mesh_reach::{PeerContact, PeerTransport};
 
 use super::{bridge_rpc_endpoint, rpc_tunnel_mode, RpcTunnelMode};
 
+/// What a worker's record says about binding where a host could dial it
+/// directly. Raw ggml RPC carries no identity, so only the iroh bridge (bound
+/// to the member's key) proves the member; a direct address is dialled only
+/// where the worker said it listens (pc-rpc-probe-identity).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum DirectBind {
+    /// The operator let the worker bind past loopback (plaintext LAN): the
+    /// direct probe and the probe host may run, unproven inside the boundary
+    /// that operator declared.
+    Declared,
+    /// No direct bind declared: the worker listens on loopback, so anything
+    /// answering at the member's address is not it. Bridge only.
+    Undeclared,
+    /// A `/status` record from a build that predates the declaration: main's
+    /// path, every direct choice traced as unproven.
+    Unstated,
+}
+
+impl DirectBind {
+    /// The anchor record's `rpc_direct`. Every record that carries `rpc_port`
+    /// is a cut build, so a missing field is a declaration of none.
+    pub(super) fn from_anchor(rpc_direct: bool) -> Self {
+        if rpc_direct {
+            Self::Declared
+        } else {
+            Self::Undeclared
+        }
+    }
+
+    /// The `/status` `rpc_worker.direct` field; absent from a pre-cut daemon.
+    pub(super) fn from_status(direct: Option<bool>) -> Self {
+        direct.map_or(Self::Unstated, Self::from_anchor)
+    }
+}
+
 /// Choose the endpoint ggml will dial for a worker on `rpc_port`. Direct raw
-/// TCP to a member IP is the LAN fast path; the iroh bridge is the
-/// cross-network path; the parsed probe host, when the port came from a
-/// `/status` probe, is the last resort. `SOVEREIGN_RPC_TUNNEL` = `always`
-/// prefers the bridge; `never` opts out of bridging. Returns `(endpoint,
-/// via)`, or `None` when nothing answered and there is no probe host.
+/// TCP to a member IP is the LAN fast path, for a worker that declared it;
+/// the iroh bridge is the identity-bound path; the parsed probe host, when
+/// the port came from a `/status` probe, is the last resort.
+/// `SOVEREIGN_RPC_TUNNEL` = `always` prefers the bridge; `never` opts out of
+/// bridging. Returns `(endpoint, via)`, or `None` when nothing answered and
+/// there is no probe host.
 pub(super) async fn select_rpc_endpoint(
     transport: &Arc<dyn PeerTransport>,
     dial: &PeerContact,
     rpc_port: u16,
     iroh_advertised: bool,
+    direct: DirectBind,
     probe_host: Option<&str>,
 ) -> Option<(String, String)> {
-    let mode = rpc_tunnel_mode();
+    select_in_mode(
+        rpc_tunnel_mode(),
+        transport,
+        dial,
+        rpc_port,
+        iroh_advertised,
+        direct,
+        probe_host,
+    )
+    .await
+}
+
+async fn select_in_mode(
+    mode: RpcTunnelMode,
+    transport: &Arc<dyn PeerTransport>,
+    dial: &PeerContact,
+    rpc_port: u16,
+    iroh_advertised: bool,
+    direct: DirectBind,
+    probe_host: Option<&str>,
+) -> Option<(String, String)> {
     let allow_bridge = iroh_advertised && mode != RpcTunnelMode::Never;
+    if direct == DirectBind::Undeclared {
+        if !allow_bridge {
+            tracing::warn!(
+                node = %dial.node_id,
+                rpc_port,
+                tunnel = ?mode,
+                iroh_advertised,
+                "rpc-discovery: the worker declared no direct bind and the bridge is not allowed, \
+                 so no path proves this member: none chosen (its address answers for anything but the worker)"
+            );
+            return None;
+        }
+        let sel = bridge_rpc_endpoint(transport, dial).await;
+        tracing::debug!(
+            node = %dial.node_id,
+            rpc_port,
+            bridged = sel.is_some(),
+            "rpc-discovery: the worker declared no direct bind: bridge only, its address is never probed"
+        );
+        return sel;
+    }
     let mut sel: Option<(String, String)> = None;
     if allow_bridge && mode == RpcTunnelMode::Always {
         sel = bridge_rpc_endpoint(transport, dial).await;
@@ -40,6 +118,19 @@ pub(super) async fn select_rpc_endpoint(
     }
     if let (None, Some(host)) = (&sel, probe_host) {
         sel = Some((format!("{host}:{rpc_port}"), "probe-host".to_string()));
+    }
+    if let Some((endpoint, via)) = sel
+        .as_ref()
+        .filter(|(_, via)| !via.starts_with("iroh-bridge"))
+    {
+        tracing::debug!(
+            node = %dial.node_id,
+            %endpoint,
+            %via,
+            direct = ?direct,
+            "rpc-discovery: chosen endpoint is not identity-bound (raw ggml RPC proves no member): \
+             unproven inside the plaintext LAN its operator declared, or a pre-declaration /status"
+        );
     }
     sel
 }
@@ -121,6 +212,90 @@ mod tests {
         }
     }
 
+    /// A transport that bridges every member to one loopback authority, as
+    /// the iroh transport does once it has dialled the member's key.
+    #[derive(Debug)]
+    struct Bridge;
+
+    #[async_trait::async_trait]
+    impl PeerTransport for Bridge {
+        fn name(&self) -> &'static str {
+            "bridge"
+        }
+        async fn endpoints(&self, _: &PeerContact, _: TrafficClass) -> Vec<PeerEndpoint> {
+            vec![PeerEndpoint {
+                base_url: "http://127.0.0.1:4242".into(),
+                label: "x".into(),
+            }]
+        }
+    }
+
+    /// pc-rpc-probe-identity: a stranger listens at the member's direct
+    /// address on the advertised rpc port while the worker itself binds
+    /// loopback (declares no direct bind). The host must take the bridge,
+    /// which proves the member, and never the stranger; a worker that did
+    /// declare a direct bind is still dialled `direct-ip`. Failing input:
+    /// drop the `DirectBind::Undeclared` gate, and the stranger is chosen.
+    #[tokio::test]
+    async fn a_stranger_on_the_members_address_is_never_chosen_for_an_undeclared_worker() {
+        let stranger = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let port = stranger.local_addr().expect("addr").port();
+        let transport: Arc<dyn PeerTransport> = Arc::new(Bridge);
+        let member = contact(Vec::new(), vec!["127.0.0.1:4433".parse().unwrap()]);
+        let bridged = Some(("127.0.0.1:4242".to_string(), "iroh-bridge:x".to_string()));
+        let direct_ip = Some((format!("127.0.0.1:{port}"), "direct-ip".to_string()));
+        let pick = |direct, probe_host| {
+            select_in_mode(
+                RpcTunnelMode::Auto,
+                &transport,
+                &member,
+                port,
+                true,
+                direct,
+                probe_host,
+            )
+        };
+        assert_eq!(pick(DirectBind::Undeclared, None).await, bridged);
+        assert_eq!(
+            pick(DirectBind::Undeclared, Some("127.0.0.1")).await,
+            bridged
+        );
+        assert_eq!(pick(DirectBind::Declared, None).await, direct_ip);
+        // A pre-declaration `/status` keeps main's path (traced unproven).
+        assert_eq!(pick(DirectBind::from_status(None), None).await, direct_ip);
+        assert_eq!(DirectBind::from_status(Some(false)), DirectBind::Undeclared);
+        assert_eq!(DirectBind::from_anchor(false), DirectBind::Undeclared);
+    }
+
+    /// `SOVEREIGN_RPC_TUNNEL=never` with a worker that declared no direct
+    /// bind leaves no path that reaches it: a named absence, never a probe of
+    /// its address or the probe host. Failing input: fall through to the
+    /// direct probe, and the stranger is chosen.
+    #[tokio::test]
+    async fn never_bridging_an_undeclared_worker_chooses_nothing() {
+        let stranger = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let port = stranger.local_addr().expect("addr").port();
+        let transport: Arc<dyn PeerTransport> = Arc::new(Bridge);
+        let member = contact(vec!["127.0.0.1:9742".parse().unwrap()], Vec::new());
+        assert_eq!(
+            select_in_mode(
+                RpcTunnelMode::Never,
+                &transport,
+                &member,
+                port,
+                true,
+                DirectBind::Undeclared,
+                Some("127.0.0.1"),
+            )
+            .await,
+            None
+        );
+    }
+
     fn contact(addresses: Vec<SocketAddr>, iroh_direct_addrs: Vec<SocketAddr>) -> PeerContact {
         PeerContact {
             node_id: NodeId::from_u128(7),
@@ -147,13 +322,31 @@ mod tests {
         let transport: Arc<dyn PeerTransport> = Arc::new(NoBridge);
         let roster_only_iroh = contact(Vec::new(), vec!["127.0.0.1:4433".parse().unwrap()]);
         assert_eq!(
-            select_rpc_endpoint(&transport, &roster_only_iroh, port, false, Some("probe")).await,
+            select_in_mode(
+                RpcTunnelMode::Auto,
+                &transport,
+                &roster_only_iroh,
+                port,
+                false,
+                DirectBind::Declared,
+                Some("probe")
+            )
+            .await,
             Some((format!("127.0.0.1:{port}"), "direct-ip".to_string()))
         );
         // A member the overlay does name is probed there, as before.
         let overlay = contact(vec!["127.0.0.1:9742".parse().unwrap()], Vec::new());
         assert_eq!(
-            select_rpc_endpoint(&transport, &overlay, port, false, Some("probe")).await,
+            select_in_mode(
+                RpcTunnelMode::Auto,
+                &transport,
+                &overlay,
+                port,
+                false,
+                DirectBind::Declared,
+                Some("probe")
+            )
+            .await,
             Some((format!("127.0.0.1:{port}"), "direct-ip".to_string()))
         );
     }
