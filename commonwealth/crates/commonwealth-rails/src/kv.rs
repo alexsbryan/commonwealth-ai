@@ -472,31 +472,30 @@ impl KvHost {
                 return 0;
             }
         };
-        let mut appended = 0usize;
+        // One batch, so the log is read once for the whole snapshot rather
+        // than once per row (`RingJournal::append_all`).
+        let mut acts = Vec::new();
         let mut skipped = 0usize;
         for row in rows {
             if row.origin != self.self_id {
                 skipped += 1;
                 continue;
             }
-            let written = rail_kv::to_payload(&row.key, Some(&row.value), row.timestamp)
-                .map_err(|e| e.to_string())
-                .and_then(|payload| {
-                    journal
-                        .append(
-                            RailAct::Record { payload },
-                            self.rail.signer(),
-                            roster,
-                            None,
-                        )
-                        .map_err(|e| e.to_string())
-                });
-            match written {
-                Ok(_) => appended += 1,
+            match rail_kv::to_payload(&row.key, Some(&row.value), row.timestamp) {
+                Ok(payload) => acts.push(RailAct::Record { payload }),
                 Err(e) => warn!(target: "rails", namespace, key = %row.key, error = %e,
                                 "kv pump: a live row could not be snapshotted and is now below the floor"),
             }
         }
+        let wanted = acts.len();
+        let appended = match journal.append_all(acts, self.rail.signer(), roster, None) {
+            Ok(ops) => ops.len(),
+            Err(e) => {
+                warn!(target: "rails", namespace, rows = wanted, error = %e,
+                      "kv pump: the live rows could not be snapshotted and are now below the floor");
+                0
+            }
+        };
         let mark = rail_kv::snapshot_mark(floor)
             .map_err(|e| e.to_string())
             .and_then(|payload| {
@@ -528,9 +527,10 @@ impl KvHost {
 /// it.
 ///
 /// Each tick runs on the blocking pool: every journal append re-reads the
-/// journal, so a seal's snapshot is tens of seconds of synchronous I/O, and
-/// on an async worker it held the API's requests queued behind it (F13: a
-/// sandbox `/v1/mesh/status` p95 of 5.3 s through a 2,500-row cycle).
+/// journal, so a tick is synchronous I/O (a seal's snapshot was tens of
+/// seconds of it before `RingJournal::append_all`), and on an async worker it
+/// held the API's requests queued behind it (F13: a sandbox
+/// `/v1/mesh/status` p95 of 5.3 s through a 2,500-row cycle).
 pub async fn run_forever(host: Arc<KvHost>) {
     info!(target: "rails", interval_secs = PUMP_INTERVAL.as_secs(),
           seal_after_own_ops = SEAL_AFTER_OWN_OPS, "kv pump: started");
