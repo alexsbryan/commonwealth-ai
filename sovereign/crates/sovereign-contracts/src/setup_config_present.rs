@@ -59,7 +59,9 @@ mod tests {
     fn load_present_good_file_loads() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("config.toml");
-        std::fs::write(&path, "[daemon]\nclient_port = 19751\n[models]\n").expect("write");
+        let body = "[daemon]\nclient_port = 19751\n[models]\nprimary = \"/m/p.gguf\"\n\
+                    fast = \"/m/f.gguf\"\nembed = \"/m/e.gguf\"\n";
+        std::fs::write(&path, body).expect("write");
         let cfg = SetupConfig::load_present_from(&path)
             .expect("loads")
             .expect("present");

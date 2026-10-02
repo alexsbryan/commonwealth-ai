@@ -165,6 +165,14 @@ async fn supervise(opts: Options) -> i32 {
             }
         },
     };
+    // Before the spawn: a refusal must not leave a child running unpublished.
+    let publisher = match Publisher::new(&opts.name, port, opts.ttl_secs) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("run: {e}");
+            return 1;
+        }
+    };
     let mut cmd = tokio::process::Command::new(&opts.command[0]);
     cmd.args(&opts.command[1..])
         .env("PORT", port.to_string())
@@ -183,7 +191,6 @@ async fn supervise(opts: Options) -> i32 {
         opts.command.join(" ")
     );
 
-    let publisher = Publisher::new(&opts.name, port, opts.ttl_secs);
     // Wait for the child to bind, unless it exits first. A child that dies in
     // its first second is the common case when the command is wrong, and
     // reporting that as "your app never bound the port" would send someone
@@ -328,15 +335,15 @@ struct Publisher {
 }
 
 impl Publisher {
-    fn new(name: &str, port: u16, ttl_secs: u64) -> Self {
+    fn new(name: &str, port: u16, ttl_secs: u64) -> Result<Self, String> {
         // The app registry is cw-rails' since pb-mesh-exit-transport; svrn's
         // copy of the route answers 410 naming this base.
-        Self::at(
-            &format!("{}/v1/mesh/publish", crate::mesh_cmd::rails_base()),
+        Ok(Self::at(
+            &format!("{}/v1/mesh/publish", crate::mesh_cmd::rails_base()?),
             name,
             port,
             ttl_secs,
-        )
+        ))
     }
 
     /// The same publisher against a named base — how the tests point one at a

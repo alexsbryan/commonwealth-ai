@@ -146,13 +146,7 @@ fn refuse_derived_roster(namespace: &str) -> Option<String> {
     ))
 }
 
-/// Read the daemon's client port from config rather than hardcoding 9741 —
-/// a sandbox pointed at its own daemon must not act on the operator's.
-fn daemon_client_port() -> u16 {
-    sovereign_contracts::setup_config::SetupConfig::load()
-        .map(|c| c.daemon.client_port)
-        .unwrap_or(9741)
-}
+use crate::mesh_cmd::daemon_client_port;
 
 fn http_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
@@ -242,7 +236,7 @@ async fn run_checkpoint(args: &[String]) -> i32 {
 
 /// Mint a grant that reaches exactly one namespace's rail and nothing else.
 async fn mint_rail_grant(namespace: &str) -> Result<String, String> {
-    let port = daemon_client_port();
+    let port = daemon_client_port()?;
     let url = format!("http://127.0.0.1:{port}/internal/guest/grant");
     let body = serde_json::json!({
         "scopes": { "rail": namespace },
@@ -336,7 +330,7 @@ async fn run_roster(args: &[String]) -> i32 {
 /// minted by this verb would be a second identity nobody signs with. An
 /// absent cw-rails is an `Err` naming its base.
 async fn self_actor() -> Result<String, String> {
-    let base = crate::mesh_cmd::rails_base();
+    let base = crate::mesh_cmd::rails_base()?;
     let url = format!("{base}/v1/rail/actor");
     #[derive(serde::Deserialize)]
     struct Actor {

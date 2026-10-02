@@ -110,7 +110,9 @@ pub(crate) async fn cmd_offers(args: &[String]) -> i32 {
         i += 1;
     }
 
-    let port = daemon_client_port();
+    let Ok(port) = daemon_client_port().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(60))
         .build()
@@ -184,7 +186,7 @@ struct Neighbour {
 /// fanout with no `peers` targets only members that ADVERTISE the kind, and a
 /// neighbour publishing none would then be absent instead of a row.
 async fn neighbours(client: &reqwest::Client) -> Result<Vec<Neighbour>, String> {
-    let url = format!("{}/v1/mesh/status", crate::mesh_cmd::rails_base());
+    let url = format!("{}/v1/mesh/status", crate::mesh_cmd::rails_base()?);
     let resp = client
         .get(&url)
         .send()
@@ -263,7 +265,9 @@ async fn catalogue(
     }
     let names: Vec<&str> = neighbours.iter().map(|n| n.name.as_str()).collect();
 
-    let base = crate::mesh_cmd::rails_base();
+    let Ok(base) = crate::mesh_cmd::rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
     let url = format!("{base}/v1/mesh/fanout");
     let mut body = serde_json::json!({
         "path": path,
@@ -487,7 +491,10 @@ fn warrant_of(
 /// `svrn mesh offers --who` — the gossip list. Nothing is dialed, so this
 /// answers "who says they publish one", never "who answers".
 async fn list_publishers(client: &reqwest::Client, port: u16, json_out: bool) -> i32 {
-    let url = format!("{}/v1/mesh/offers", crate::mesh_cmd::rails_base());
+    let Ok(base) = crate::mesh_cmd::rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let url = format!("{base}/v1/mesh/offers");
     let resp = match client.get(&url).send().await {
         Ok(r) => r,
         Err(e) => {
@@ -548,7 +555,10 @@ async fn list_publishers(client: &reqwest::Client, port: u16, json_out: bool) ->
 /// `svrn mesh offers <peer>` — the loopback URL that reaches ONE member's
 /// offer origin, the shape `svrn mesh media <peer>` has.
 async fn reach_one(client: &reqwest::Client, port: u16, peer: &str, json_out: bool) -> i32 {
-    let url = format!("{}/v1/mesh/offers", crate::mesh_cmd::rails_base());
+    let Ok(base) = crate::mesh_cmd::rails_base().map_err(|e| eprintln!("{e}")) else {
+        return 1;
+    };
+    let url = format!("{base}/v1/mesh/offers");
     let resp = match client.get(&url).query(&[("peer", peer)]).send().await {
         Ok(r) => r,
         Err(e) => {
