@@ -24,15 +24,6 @@ use sovereign_workflow_host::{
 // way. Two backends, one surface — the recipe install path stays intact.
 use sovereign_cli_base::corpus_install::{param_json_value, submit_install_request};
 
-/// The daemon this CLI talks to, resolved through the ONE decider — env
-/// (`SOVEREIGN_DAEMON_URL`), then `[daemon] client_port`, then the compiled
-/// default. Was a compiled literal, so the flag below was the only way to
-/// move it and a session pointed at a second daemon silently missed this
-/// verb (§10.6).
-fn default_daemon() -> String {
-    sovereign_core::setup_config::client_daemon_base()
-}
-
 /// A name on the unified `workflow` surface resolves to one of two artifact kinds,
 /// each with its own backend: a **workflow** (run in-process by the workflow host)
 /// or a **recipe** (a corpus ingest/enrich, delegated to the daemon's install
@@ -126,7 +117,7 @@ pub async fn run_workflow(args: &[String]) -> i32 {
 /// server-side and returns the partner-facing reply. One authoring turn — re-run
 /// with more detail (or edit the saved TOML) to iterate.
 async fn cmd_author(args: &[String]) -> i32 {
-    let mut daemon = default_daemon();
+    let mut daemon: Option<String> = None;
     let mut desc: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
@@ -134,7 +125,7 @@ async fn cmd_author(args: &[String]) -> i32 {
             "--daemon" => {
                 i += 1;
                 match args.get(i) {
-                    Some(u) => daemon = u.clone(),
+                    Some(u) => daemon = Some(u.clone()),
                     None => {
                         eprintln!("--daemon needs a URL");
                         return 1;
@@ -149,6 +140,9 @@ async fn cmd_author(args: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(daemon) = sovereign_cli_base::urls::daemon_base_or_refuse(daemon) else {
+        return 1;
+    };
     let Some(desc) = desc else {
         eprintln!("Usage: svrn workflow author \"<describe the workflow you want>\"");
         eprintln!(
@@ -277,7 +271,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
 async fn cmd_run(args: &[String]) -> i32 {
     let mut file: Option<String> = None;
     let mut concurrency = 4usize;
-    let mut daemon = default_daemon();
+    let mut daemon: Option<String> = None;
     let mut no_cache = false;
     let mut params: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     let mut i = 0;
@@ -297,7 +291,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             "--daemon" => {
                 i += 1;
                 match args.get(i) {
-                    Some(u) => daemon = u.clone(),
+                    Some(u) => daemon = Some(u.clone()),
                     None => {
                         eprintln!("--daemon needs a URL");
                         return 1;
@@ -365,6 +359,9 @@ async fn cmd_run(args: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(daemon) = sovereign_cli_base::urls::daemon_base_or_refuse(daemon) else {
+        return 1;
+    };
 
     let Some(file) = file else {
         eprintln!("Usage: svrn workflow run <name|file.toml> [--folder <dir>] …");

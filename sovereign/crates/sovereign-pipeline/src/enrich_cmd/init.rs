@@ -349,7 +349,13 @@ pub async fn cmd_init(args: &[String]) -> i32 {
     // The CONFIGURED client port, not the compiled default: this probe decides
     // whether init can resolve model ids at all, and against a daemon on a
     // non-default port it reported "not responding" while the daemon was fine.
-    let base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let base_url = match sovereign_contracts::setup_config::client_daemon_base() {
+        Ok(base) => base,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
     let daemon_up = probe_daemon(&base_url).await;
     if !daemon_up {
         eprintln!("note: daemon is not responding at {base_url}.");
@@ -574,7 +580,13 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
     // Probe daemon + resolve defaults for un-pinned model ids,
     // mirroring the source-file path so downstream extract works
     // identically — including its port resolution.
-    let base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let base_url = match sovereign_contracts::setup_config::client_daemon_base() {
+        Ok(base) => base,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
     let daemon_up = probe_daemon(&base_url).await;
     let (auto_chat, auto_embed) = if daemon_up {
         resolve_default_models(&base_url).await

@@ -553,7 +553,13 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     };
 
     let corpus = format!("{}-{}", bank.corpus_prefix, ctx.stem());
-    let base = sovereign_cli_base::urls::daemon_base_url();
+    let base = match sovereign_cli_base::urls::daemon_base_url() {
+        Ok(base) => base,
+        Err(e) => {
+            report.cannot_judge("daemon", e);
+            return report.finish();
+        }
+    };
 
     // ── Row: ingest ────────────────────────────────────────────────
     // This IS the document-ingest lane. It runs first because every row

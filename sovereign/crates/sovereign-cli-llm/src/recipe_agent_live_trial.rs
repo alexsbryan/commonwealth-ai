@@ -210,7 +210,7 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
     let mut feature_id: Option<String> = None;
     let mut title: Option<String> = None;
     // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
-    let mut daemon_base = sovereign_contracts::setup_config::client_daemon_base();
+    let mut daemon_base: Option<String> = None;
     let mut skills_dir: Option<PathBuf> = None;
     let mut sample_size: u64 = 50;
     let mut chat_model: Option<String> = None;
@@ -229,7 +229,7 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
             "--title" => title = iter.next().cloned(),
             "--daemon" => {
                 if let Some(v) = iter.next() {
-                    daemon_base = v.clone();
+                    daemon_base = Some(v.clone());
                 }
             }
             "--skills-dir" => skills_dir = iter.next().map(PathBuf::from),
@@ -286,7 +286,8 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
         script_path,
         feature_id,
         title,
-        daemon_base,
+        daemon_base: daemon_base
+            .map_or_else(sovereign_contracts::setup_config::client_daemon_base, Ok)?,
         skills_dir,
         sample_size,
         chat_model,

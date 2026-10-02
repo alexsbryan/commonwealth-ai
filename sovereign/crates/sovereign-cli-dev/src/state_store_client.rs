@@ -87,7 +87,7 @@ impl DaemonConversationStore {
                 .timeout(std::time::Duration::from_secs(20))
                 .build()
                 .map_err(|e| Error::Storage(format!("http client: {e}")))?,
-            v1: sovereign_cli_base::urls::daemon_v1_base(),
+            v1: sovereign_cli_base::urls::daemon_v1_base().map_err(Error::Storage)?,
         })
     }
 

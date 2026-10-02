@@ -32,15 +32,15 @@ impl SvrnJudge {
         }
     }
 
-    fn globals(&self) -> ChatGlobals {
-        let mut globals = default_globals_for_voice_eval();
+    fn globals(&self) -> Result<ChatGlobals, String> {
+        let mut globals = default_globals_for_voice_eval()?;
         globals.daemon_base = self.base_url.clone();
         globals.daemon_explicit = true;
-        globals
+        Ok(globals)
     }
 
     async fn ask(&self, request: ProbeRequest) -> Result<ProbeEvidence, String> {
-        let globals = self.globals();
+        let globals = self.globals()?;
         tokio::task::spawn_blocking(move || run_probe(&globals, &request))
             .await
             .map_err(|e| format!("probe task: {e}"))?

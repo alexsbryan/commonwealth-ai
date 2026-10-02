@@ -106,7 +106,7 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
     }
     let mut cases_path: Option<PathBuf> = None;
     let mut out: Option<PathBuf> = None;
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
     let mut model = "primary".to_string();
     let mut register_filter: Option<String> = None;
     let mut case_filter: Option<String> = None;
@@ -130,7 +130,7 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
         match rest[i].as_str() {
             "--cases" => cases_path = Some(PathBuf::from(val!("--cases"))),
             "--out" => out = Some(PathBuf::from(val!("--out"))),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--model" => model = val!("--model"),
             "--register" => register_filter = Some(val!("--register")),
             "--filter" => case_filter = Some(val!("--filter")),
@@ -149,6 +149,9 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(base_url) = sovereign_cli_base::urls::daemon_base_or_refuse(base_url) else {
+        return 1;
+    };
     let Some(cases_path) = cases_path else {
         eprintln!("error: --cases is required");
         help::print(&HELP);

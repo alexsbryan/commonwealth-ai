@@ -3,7 +3,7 @@
 #   cargo run -p xtask -- clone-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clone-gate --tighten
-13804	(total covered lines)
+13792	(total covered lines)
 37	commonwealth/crates/commonwealth-core/src/mesh/mod.rs <-> sovereign/crates/sovereign-cli-mesh/src/daemon_store.rs
 60	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs
 32	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs <-> sovereign/crates/sovereign-serve/src/rails_mesh.rs
@@ -145,7 +145,7 @@
 36	sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/flywheel.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/promote.rs
 18	sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/mechanism_fidelity.rs
 34	sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/parity_compare.rs
-80	sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/verifier.rs
+84	sovereign/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/verifier.rs
 68	sovereign/crates/sovereign-cli-bench/src/bench_cmd/enron.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/uap.rs
 32	sovereign/crates/sovereign-cli-bench/src/bench_cmd/enron.rs <-> sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_reconcile.rs
 16	sovereign/crates/sovereign-cli-bench/src/bench_cmd/faithfulness.rs <-> sovereign/crates/sovereign-cli-bench/src/bench_cmd/gate.rs
@@ -255,7 +255,6 @@
 32	sovereign/crates/sovereign-code/src/read_notes.rs <-> sovereign/crates/sovereign-code/src/write_note.rs
 18	sovereign/crates/sovereign-contracts/src/daemon_wire.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/commands/mcp_servers.rs
 36	sovereign/crates/sovereign-contracts/src/daemon_wire/enrich_catalog.rs <-> sovereign/crates/sovereign-enrichment-catalog/src/catalog.rs
-16	sovereign/crates/sovereign-contracts/src/daemon_wire/enrich_catalog.rs <-> sovereign/crates/sovereign-enrichment-catalog/src/config.rs
 20	sovereign/crates/sovereign-contracts/src/daemon_wire/enrich_progress.rs <-> sovereign/crates/sovereign-enrichment-build/src/build/plan.rs
 38	sovereign/crates/sovereign-contracts/src/daemon_wire/recipe_projects.rs <-> sovereign/crates/sovereign-desktop/src-tauri/src/recipe_author_commands.rs
 30	sovereign/crates/sovereign-contracts/src/daemon_wire/setup_plan.rs <-> sovereign/crates/sovereign-contracts/src/models_manifest.rs

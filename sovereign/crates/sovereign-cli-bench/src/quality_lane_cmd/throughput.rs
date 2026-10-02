@@ -515,7 +515,13 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         }
     };
 
-    let base = sovereign_cli_base::urls::daemon_base_url();
+    let base = match sovereign_cli_base::urls::daemon_base_url() {
+        Ok(base) => base,
+        Err(e) => {
+            report.cannot_judge("daemon", e);
+            return report.finish();
+        }
+    };
     let mut metrics: Vec<(String, LaneMetric)> = Vec::new();
     let mut fidelity: Vec<(String, bool)> = Vec::new();
 

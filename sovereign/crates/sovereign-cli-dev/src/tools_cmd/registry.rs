@@ -94,7 +94,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     //
     // An env read at point of use is invisible to go-to-definition, which is
     // the whole reason the environment axis is a phase.
-    let daemon_url = sovereign_cli_base::urls::daemon_base_url();
+    let daemon_url = sovereign_cli_base::urls::daemon_base_url()?;
     let notes_embed = build_daemon_notes_embed_fn_or_none(&daemon_url).await;
     // The code tools read installed indexes only (list + open), so the
     // leaf's filesystem source serves them; no engine, no embedder.

@@ -66,13 +66,13 @@ impl Drop for DaemonEnvGuard {
 #[test]
 fn client_daemon_base_honours_the_env_knob() {
     let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:19741")]);
-    assert_eq!(client_daemon_base(), "http://127.0.0.1:19741");
+    assert_eq!(client_daemon_base().unwrap(), "http://127.0.0.1:19741");
 }
 
 #[test]
 fn client_daemon_base_accepts_the_svrnmesh_spelling() {
     let _g = DaemonEnvGuard::set(&[("SVRNMESH_DAEMON_URL", "http://127.0.0.1:19742")]);
-    assert_eq!(client_daemon_base(), "http://127.0.0.1:19742");
+    assert_eq!(client_daemon_base().unwrap(), "http://127.0.0.1:19742");
 }
 
 /// Both set is not a coin flip: SOVEREIGN_ wins, matching every other
@@ -83,7 +83,7 @@ fn client_daemon_base_prefers_sovereign_over_svrnmesh() {
         ("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:19741"),
         ("SVRNMESH_DAEMON_URL", "http://127.0.0.1:19742"),
     ]);
-    assert_eq!(client_daemon_base(), "http://127.0.0.1:19741");
+    assert_eq!(client_daemon_base().unwrap(), "http://127.0.0.1:19741");
 }
 
 /// A blank knob is UNSET, not an empty base URL — otherwise
@@ -93,9 +93,11 @@ fn client_daemon_base_prefers_sovereign_over_svrnmesh() {
 fn client_daemon_base_treats_blank_env_as_unset() {
     let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "   ")]);
     assert!(
-        client_daemon_base().starts_with("http://localhost:"),
-        "blank knob must fall through to the configured port, got {}",
         client_daemon_base()
+            .unwrap()
+            .starts_with("http://localhost:"),
+        "blank knob must fall through to the configured port, got {}",
+        client_daemon_base().unwrap()
     );
 }
 
@@ -104,9 +106,9 @@ fn client_daemon_base_treats_blank_env_as_unset() {
 #[test]
 fn client_daemon_base_trims_trailing_slash() {
     let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:19741/")]);
-    assert_eq!(client_daemon_base(), "http://127.0.0.1:19741");
+    assert_eq!(client_daemon_base().unwrap(), "http://127.0.0.1:19741");
     assert_eq!(
-        format!("{}/v1/models", client_daemon_base()),
+        format!("{}/v1/models", client_daemon_base().unwrap()),
         "http://127.0.0.1:19741/v1/models"
     );
 }
@@ -116,7 +118,7 @@ fn client_daemon_base_trims_trailing_slash() {
 #[test]
 fn client_daemon_base_without_env_is_the_configured_port() {
     let _g = DaemonEnvGuard::set(&[]);
-    let base = client_daemon_base();
+    let base = client_daemon_base().unwrap();
     assert!(
         base.starts_with("http://localhost:"),
         "expected the configured-port form, got {base}"

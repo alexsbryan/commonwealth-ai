@@ -45,8 +45,13 @@ struct Cli {
 ///
 /// Still a clap DEFAULT, not an override: an explicit `--daemon-url` wins, and
 /// `--daemon-url skip` keeps its existing "no daemon at all" meaning.
+///
+/// `--help` shows the compiled default when the setup config does not load;
+/// a run that takes this default then refuses in `main`, naming why.
 fn default_daemon_url() -> String {
-    sovereign_contracts::setup_config::client_daemon_base()
+    use sovereign_contracts::setup_config as sc;
+    sc::client_daemon_base()
+        .unwrap_or_else(|_| sc::client_daemon_base_for(sc::default_client_port()))
 }
 
 #[derive(Subcommand)]
@@ -165,7 +170,16 @@ fn main() -> Result<()> {
         .with_target(false)
         .init();
 
-    let cli = Cli::parse();
+    let matches = <Cli as clap::CommandFactory>::command().get_matches();
+    let cli =
+        <Cli as clap::FromArgMatches>::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    if let Some((_, sub)) = matches.subcommand() {
+        let defaulted = sub.ids().any(|id| id == "daemon_url")
+            && sub.value_source("daemon_url") == Some(clap::parser::ValueSource::DefaultValue);
+        if defaulted {
+            sovereign_contracts::setup_config::client_daemon_base().map_err(anyhow::Error::msg)?;
+        }
+    }
     let data_dir = resolve_data_dir(cli.data_dir.as_deref())?;
 
     match cli.cmd {

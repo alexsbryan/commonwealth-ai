@@ -177,7 +177,7 @@ async fn run(rest: &[String]) -> i32 {
     let mut sample: usize = 25;
     let mut seed: u64 = 17;
     let mut model = "primary".to_string();
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
     let mut output: Option<PathBuf> = None;
 
     let mut i = 0;
@@ -211,7 +211,7 @@ async fn run(rest: &[String]) -> i32 {
                 }
             },
             "--model" => model = val!("--model"),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--output" => output = Some(PathBuf::from(val!("--output"))),
             "--help" | "-h" => {
                 help::print(&HELP);
@@ -231,6 +231,9 @@ async fn run(rest: &[String]) -> i32 {
         }
         i += 1;
     }
+    let Some(base_url) = sovereign_cli_base::urls::daemon_base_or_refuse(base_url) else {
+        return 1;
+    };
     let Some(corpus_id) = corpus_arg else {
         eprintln!("error: <corpus-id> is required");
         help::print(&HELP);

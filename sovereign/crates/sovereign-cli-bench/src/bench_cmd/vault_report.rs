@@ -402,7 +402,7 @@ async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
         assess: None,
         judge: None,
     };
-    let globals = default_globals_for_voice_eval();
+    let globals = default_globals_for_voice_eval()?;
     match crate::eval_cmd::run_probe(&globals, &request)? {
         ProbeEvidence::VaultBuild(build) => Ok(report(*build, &mode)),
         other => Err(format!(

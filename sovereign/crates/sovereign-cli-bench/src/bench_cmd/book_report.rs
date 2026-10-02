@@ -548,7 +548,7 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
         "[2/3] bootstrap — connecting to daemon; `svrn __probe` builds the DocumentAssetManager"
     );
     let globals = {
-        let mut g = default_globals_for_voice_eval();
+        let mut g = default_globals_for_voice_eval()?;
         // --answer-model swaps the session's chat model — the model that
         // answers bench questions. The judge is pinned separately below.
         if opts.answer_model.is_some() {
@@ -746,7 +746,7 @@ async fn run_bridge(opts: Opts) -> Result<BookReportRun, String> {
     bridge.healthz().await?;
 
     // Optional judge provider: Tier 2-5 judging runs in THIS process.
-    let judge_session = match build_inference(&default_globals_for_voice_eval()).await {
+    let judge_session = match build_inference(&default_globals_for_voice_eval()?).await {
         Ok((inference, _, _)) => {
             eprintln!("      judge: daemon reachable — LLM-judge enabled for Tier 2-5");
             Some(inference)

@@ -101,10 +101,17 @@ pub async fn cmd_add(args: &[String]) -> i32 {
         if !args.json {
             eprintln!("  score  one call to the resident model…");
         }
-        let base = args
+        let base = match args
             .daemon
             .clone()
-            .unwrap_or_else(score::default_daemon_base);
+            .map_or_else(score::default_daemon_base, Ok)
+        {
+            Ok(base) => base,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        };
         match score::score_item(&ruler, &base, args.objective.as_deref(), &text).await {
             Ok(s) => Some(s),
             Err(e) => {

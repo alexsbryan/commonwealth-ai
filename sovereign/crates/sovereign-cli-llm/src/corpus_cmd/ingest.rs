@@ -17,8 +17,8 @@ use sovereign_workflow_host::resolve_workflow_source;
 /// The daemon base via the ONE decider — `sovereign_contracts::setup_config::
 /// client_daemon_base()` (env `SOVEREIGN_DAEMON_URL`, then `[daemon]
 /// client_port`, then the compiled default), the same resolution
-/// `workflow_cmd::default_daemon` applies.
-fn default_daemon_base() -> String {
+/// `workflow_cmd` applies through `urls::daemon_base_or_refuse`.
+fn default_daemon_base() -> Result<String, String> {
     sovereign_contracts::setup_config::client_daemon_base()
 }
 
@@ -105,7 +105,13 @@ pub async fn cmd_corpus_ingest(args: &[String]) -> i32 {
     // `http://localhost:9741` — the same §10.6 defect rung 2 fixed in
     // model_cmd: a CLI pointed at a second daemon silently ingested through
     // the first.
-    let daemon = default_daemon_base();
+    let daemon = match default_daemon_base() {
+        Ok(daemon) => daemon,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
     let code =
         crate::workflow_cmd::run_assembled(&toml, &daemon, concurrency, no_cache, params).await;
     if code != 0 {

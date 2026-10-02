@@ -85,7 +85,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut captures_dir = PathBuf::from("target/flywheel/redteam");
     let mut replay = false;
     let mut judge_model = "fast".to_string();
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
 
     let mut i = 0;
     macro_rules! val {
@@ -105,11 +105,13 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--captures-dir" => captures_dir = PathBuf::from(val!("--captures-dir")),
             "--replay" => replay = true,
             "--judge-model" => judge_model = val!("--judge-model"),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             other => return Err(format!("unknown flag `{other}`")),
         }
         i += 1;
     }
+    let base_url =
+        base_url.map_or_else(sovereign_contracts::setup_config::client_daemon_base, Ok)?;
     Ok(Args {
         corpus: corpus.ok_or("--corpus is required")?,
         bank: bank.ok_or("--bank is required (the main red-team probe bank .toml)")?,

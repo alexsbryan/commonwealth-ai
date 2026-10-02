@@ -76,8 +76,8 @@ pub async fn error_text(resp: reqwest::Response) -> String {
     }
 }
 
-fn url(path: &str, namespace: &str) -> String {
-    url_at(&crate::urls::daemon_base_url(), path, namespace)
+fn url(path: &str, namespace: &str) -> Result<String, String> {
+    Ok(url_at(&crate::urls::daemon_base_url()?, path, namespace))
 }
 
 fn url_at(base: &str, path: &str, namespace: &str) -> String {
@@ -101,7 +101,7 @@ pub const RAIL_DIGEST_PATH: &str = "/v1/rail/digest";
 /// because a refused act and an absent act look identical once the roster is
 /// gone.
 pub async fn rail_log(namespace: &str) -> Result<serde_json::Value, String> {
-    log_from(url(RAIL_LOG_PATH, namespace), "the daemon")
+    log_from(url(RAIL_LOG_PATH, namespace)?, "the daemon")
         .await
         .map_err(|e| e.to_string())
 }
@@ -159,7 +159,7 @@ async fn log_from(url: String, who: &str) -> Result<serde_json::Value, RailDoorE
 pub async fn rail_checkpoint(namespace: &str) -> Result<serde_json::Value, String> {
     let url = format!(
         "{}/internal/ring/checkpoint/{namespace}",
-        sovereign_contracts::setup_config::internal_daemon_base()
+        sovereign_contracts::setup_config::internal_daemon_base()?
     );
     let resp = client()?
         .get(&url)
@@ -202,7 +202,7 @@ pub async fn roster_and_admission(namespace: &str) -> Result<(Roster, Admission)
 /// `Serialize` is the wire form the door parses with `RailAct::from_json`, so
 /// a caller cannot spell `{"op": "sealed"}` and learn about it from a 422.
 pub async fn rail_append(namespace: &str, act: &RailAct) -> Result<serde_json::Value, String> {
-    append_to(url(RAIL_APPEND_PATH, namespace), act, "the daemon")
+    append_to(url(RAIL_APPEND_PATH, namespace)?, act, "the daemon")
         .await
         .map_err(|e| e.to_string())
 }
@@ -366,7 +366,7 @@ mod tests {
         let key = "SOVEREIGN_DAEMON_URL";
         let prior = std::env::var(key).ok();
         std::env::set_var(key, "http://127.0.0.1:19741/");
-        let got = url(RAIL_LOG_PATH, "work");
+        let got = url(RAIL_LOG_PATH, "work").unwrap();
         match prior {
             Some(v) => std::env::set_var(key, v),
             None => std::env::remove_var(key),

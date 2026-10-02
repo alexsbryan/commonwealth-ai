@@ -435,7 +435,7 @@ pub(super) async fn build_thread_session(
 ) -> Result<(ChatSession, tempfile::TempDir), String> {
     let tmp = tempfile::TempDir::new().map_err(|e| format!("create inner-chaos tempdir: {e}"))?;
 
-    let mut globals = default_globals_for_voice_eval();
+    let mut globals = default_globals_for_voice_eval()?;
     if let Some(base) = daemon_base {
         globals.daemon_base = base.to_string();
     }

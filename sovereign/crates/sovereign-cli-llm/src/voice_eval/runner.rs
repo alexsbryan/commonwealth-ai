@@ -202,7 +202,8 @@ async fn build_scenario_session(
         sovereign_core::error::Error::Serialization(format!("create voice-eval tempdir: {e}"))
     })?;
 
-    let mut globals = crate::chat_cmd::config::default_globals_for_voice_eval();
+    let mut globals = crate::chat_cmd::config::default_globals_for_voice_eval()
+        .map_err(sovereign_core::error::Error::InvalidInput)?;
     if let Some(base) = &opts.daemon_base {
         globals.daemon_base = base.clone();
     }

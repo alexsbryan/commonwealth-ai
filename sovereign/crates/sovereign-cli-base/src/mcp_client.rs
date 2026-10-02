@@ -56,8 +56,9 @@ pub async fn daemon_tool_call(tool: &str, arguments: Value) -> Result<Value, Dae
         "method": "tools/call",
         "params": { "name": tool, "arguments": arguments }
     });
+    let base = client_daemon_base().map_err(DaemonCallError::Unreachable)?;
     let resp = client
-        .post(format!("{}/mcp/message", client_daemon_base()))
+        .post(format!("{base}/mcp/message"))
         .json(&body)
         .send()
         .await

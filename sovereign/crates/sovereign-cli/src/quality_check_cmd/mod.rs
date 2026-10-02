@@ -357,7 +357,13 @@ pub async fn run(args: &[String]) -> i32 {
         return 4;
     }
 
-    let base = sovereign_cli_shared::urls::daemon_base_url();
+    let base = match sovereign_cli_shared::urls::daemon_base_url() {
+        Ok(base) => base,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    };
     // The venue's DECLARED lanes, not this run's selection: which lanes
     // `--lane` picked is not a property of the stack. Folding the selected
     // lanes' bank hashes in gave the same box two ids (2ce389007280 for 8

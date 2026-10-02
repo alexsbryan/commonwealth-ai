@@ -20,7 +20,7 @@ pub const DEFAULT_CLIENT_PORT: u16 = 9741;
 /// isolated daemon (e.g. `http://127.0.0.1:19741`); without the knob
 /// the canonical port is the answer. One accessor per path (§10.6):
 /// daemon-first MCP calls resolve their target here.
-pub fn daemon_base_url() -> String {
+pub fn daemon_base_url() -> Result<String, String> {
     // Delegates rather than deciding (§10.6). This used to read the env here
     // and fall back to the COMPILED port above, which made it blind to an
     // operator's `[daemon] client_port` — every other reader followed the
@@ -29,6 +29,16 @@ pub fn daemon_base_url() -> String {
     // trailing slashes on, so `http://h:9841//v1/models` reached a strict
     // router as a different route. `client_daemon_base` answers all three.
     sovereign_contracts::setup_config::client_daemon_base()
+}
+
+/// `explicit` (a verb's `--base-url`-style flag) or [`daemon_base_url`]; `None`
+/// after printing why when the setup config exists and does not load, so the
+/// verb exits rather than dialling the default port.
+pub fn daemon_base_or_refuse(explicit: Option<String>) -> Option<String> {
+    explicit
+        .map_or_else(daemon_base_url, Ok)
+        .map_err(|e| eprintln!("error: {e}"))
+        .ok()
 }
 
 /// `http://localhost:<port>/v1` — the OpenAI-compatible API root.
@@ -59,14 +69,14 @@ pub fn v1_models_url(port: u16) -> String {
 /// One accessor per path (§10.6): append endpoint segments to THIS, not to
 /// `daemon_base_url`. A knob already ending in `/v1` is honoured as-is rather
 /// than doubled.
-pub fn daemon_v1_base() -> String {
-    let base = daemon_base_url();
+pub fn daemon_v1_base() -> Result<String, String> {
+    let base = daemon_base_url()?;
     let base = base.trim_end_matches('/');
-    if base.ends_with("/v1") {
+    Ok(if base.ends_with("/v1") {
         base.to_string()
     } else {
         format!("{base}/v1")
-    }
+    })
 }
 
 #[cfg(test)]
@@ -97,7 +107,7 @@ mod tests {
         ] {
             unsafe { std::env::set_var("SOVEREIGN_DAEMON_URL", knob) };
             assert_eq!(
-                daemon_v1_base(),
+                daemon_v1_base().unwrap(),
                 want,
                 "a daemon base of `{knob}` must yield `{want}` — appending an endpoint to the \
                  bare root is the 404 that cost `snapshot restore` its probe"

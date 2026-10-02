@@ -94,7 +94,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut bench_root = PathBuf::from("sovereign/bench");
     let mut candidate_config = None;
     let mut judge_model = "fast".to_string();
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
     let mut apply = false;
     let mut unseal_test = false;
     let mut reason = None;
@@ -123,7 +123,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
                 candidate_config = Some(PathBuf::from(val!("--candidate-config")))
             }
             "--judge-model" => judge_model = val!("--judge-model"),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--apply" => apply = true,
             "--unseal-test" => unseal_test = true,
             "--reason" => reason = Some(val!("--reason")),
@@ -132,6 +132,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         }
         i += 1;
     }
+    let base_url =
+        base_url.map_or_else(sovereign_contracts::setup_config::client_daemon_base, Ok)?;
     Ok(Args {
         param: param.ok_or("--param is required (e.g. rerank.enabled=true)")?,
         corpus: corpus.ok_or("--corpus is required")?,

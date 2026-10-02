@@ -90,7 +90,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut n = 12usize;
     let mut seed = 0u64;
     let mut judge_model = "fast".to_string();
-    let mut base_url = sovereign_contracts::setup_config::client_daemon_base();
+    let mut base_url: Option<String> = None;
     let mut out = PathBuf::from("target/flywheel/results.jsonl");
     let mut regressions: Option<PathBuf> = None;
     let mut capture = true;
@@ -114,7 +114,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             "--n" => n = val!("--n").parse().map_err(|_| "--n must be a usize")?,
             "--seed" => seed = val!("--seed").parse().map_err(|_| "--seed must be a u64")?,
             "--judge-model" => judge_model = val!("--judge-model"),
-            "--base-url" => base_url = val!("--base-url"),
+            "--base-url" => base_url = Some(val!("--base-url")),
             "--out" => out = PathBuf::from(val!("--out")),
             "--regressions" => regressions = Some(PathBuf::from(val!("--regressions"))),
             "--no-capture" => capture = false,
@@ -122,6 +122,8 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
         }
         i += 1;
     }
+    let base_url =
+        base_url.map_or_else(sovereign_contracts::setup_config::client_daemon_base, Ok)?;
     Ok(Args {
         generator,
         corpus: corpus.ok_or("--corpus is required (the corpus id to seal retrieval to)")?,

@@ -1485,14 +1485,14 @@ fn default_internal_port() -> u16 {
 /// HERE rather than in `sovereign-cli-shared` because the resolution needs
 /// [`SetupConfig`], and that crate deliberately carries no heavy dependencies.
 ///
-/// Falls back to the compiled default when the config is absent or unreadable,
-/// which is the same posture the `#[serde(default)]` on the field itself takes:
-/// a missing config means defaults, not an error.
-pub fn internal_daemon_base() -> String {
-    let port = SetupConfig::load()
-        .map(|cfg| cfg.daemon.internal_port)
-        .unwrap_or_else(|_| default_internal_port());
-    internal_daemon_base_for(port)
+/// A missing config means the compiled default; one that exists and does not
+/// load is `Err` naming its path ([`SetupConfig::load_present`]), never the
+/// default port: that dialled the operator's node from a sandbox (phase-b-67).
+pub fn internal_daemon_base() -> Result<String, String> {
+    let cfg = SetupConfig::load_present()?;
+    Ok(internal_daemon_base_for(
+        cfg.map_or_else(default_internal_port, |c| c.daemon.internal_port),
+    ))
 }
 
 /// Pure builder behind [`internal_daemon_base`], for callers that already hold a
@@ -1507,8 +1507,8 @@ pub fn internal_daemon_base_for(port: u16) -> String {
 /// Precedence, highest first:
 ///   1. `SOVEREIGN_DAEMON_URL` — explicit per-invocation override
 ///   2. `SVRNMESH_DAEMON_URL`  — the post-rename spelling of the same knob
-///   3. `[daemon] client_port` in `~/.svrnmesh/config.toml`
-///   4. the compiled default (see [`default_client_port`])
+///   3. `[daemon] client_port` in `~/.svrnmesh/config.toml`; `Err` when it exists and does not load
+///   4. the compiled default (see [`default_client_port`]), when there is no config
 ///
 /// The twin of [`internal_daemon_base`], and it exists for the same reason one
 /// level over: `sovereign-cli-shared::urls` builds these URLs from a port the
@@ -1546,16 +1546,14 @@ pub fn internal_daemon_base_for(port: u16) -> String {
 ///
 /// `localhost` rather than `127.0.0.1` to match `urls::v1_url`, which every
 /// existing client-side caller already uses.
-pub fn client_daemon_base() -> String {
-    match daemon_url_override() {
-        Some(url) => url,
-        None => {
-            let port = SetupConfig::load()
-                .map(|cfg| cfg.daemon.client_port)
-                .unwrap_or_else(|_| default_client_port());
-            client_daemon_base_for(port)
-        }
+pub fn client_daemon_base() -> Result<String, String> {
+    if let Some(url) = daemon_url_override() {
+        return Ok(url);
     }
+    let cfg = SetupConfig::load_present()?;
+    Ok(client_daemon_base_for(
+        cfg.map_or_else(default_client_port, |c| c.daemon.client_port),
+    ))
 }
 
 /// The env leg of [`client_daemon_base`], isolated so the precedence is
