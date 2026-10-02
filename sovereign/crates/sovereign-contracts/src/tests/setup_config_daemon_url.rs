@@ -14,7 +14,12 @@ use super::*;
 // under one executor is not a gate (§18.1). Hence the lock.
 static DAEMON_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-const DAEMON_URL_KEYS: [&str; 2] = ["SOVEREIGN_DAEMON_URL", "SVRNMESH_DAEMON_URL"];
+const DAEMON_URL_KEYS: [&str; 4] = [
+    "SOVEREIGN_DAEMON_URL",
+    "SVRNMESH_DAEMON_URL",
+    "SOVEREIGN_API_KEY",
+    "SVRNMESH_API_KEY",
+];
 
 /// Clears BOTH spellings, applies `pairs`, and restores the prior values on
 /// drop — so a developer running the suite with the knob exported in their
@@ -125,4 +130,28 @@ fn client_daemon_base_without_env_is_the_configured_port() {
 fn client_daemon_base_for_ignores_the_env_knob() {
     let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://a-rented-pod:9841")]);
     assert_eq!(client_daemon_base_for(9741), "http://localhost:9741");
+}
+
+/// The CLI's one credential: SOVEREIGN_ first, blank is unset, and nothing
+/// set is `None` (no header), never an empty bearer. Failing input: drop the
+/// blank filter and `SOVEREIGN_API_KEY= ` reads as `Some("")`.
+#[test]
+fn client_credential_reads_one_knob_by_the_daemon_url_rule() {
+    {
+        let _g = DaemonEnvGuard::set(&[]);
+        assert_eq!(client_credential(), None);
+    }
+    {
+        let _g = DaemonEnvGuard::set(&[("SOVEREIGN_API_KEY", "   ")]);
+        assert_eq!(client_credential(), None);
+    }
+    {
+        let _g = DaemonEnvGuard::set(&[("SVRNMESH_API_KEY", "k-mesh")]);
+        assert_eq!(client_credential().as_deref(), Some("k-mesh"));
+    }
+    let _g = DaemonEnvGuard::set(&[
+        ("SOVEREIGN_API_KEY", " k-it "),
+        ("SVRNMESH_API_KEY", "k-mesh"),
+    ]);
+    assert_eq!(client_credential().as_deref(), Some("k-it"));
 }
