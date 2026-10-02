@@ -26,7 +26,7 @@ Static analysis on 2026-08-05 at HEAD `d3c5261d`:
 | pass | what it covered | method |
 |---|---|---|
 | HTTP surface | every route in `commonwealth-api`, request/response field parity, SSE + error shapes | read `server.rs` router registrations + all `routes_*.rs`; grepped each llama-server path string |
-| extension seams | `pub trait` + registry + feature-flag + config inventory across `commonwealth/crates/*`, `oicp-types`, `oicp-client` | trait/impl census, `include_str!` audit, `#[non_exhaustive]` census |
+| extension seams | `pub trait` + registry + feature-flag + config inventory across `cmnwlth/crates/*`, `oicp-types`, `oicp-client` | trait/impl census, `include_str!` audit, `#[non_exhaustive]` census |
 | layering + simple path | crate dependency graph, minimum viable run, config surface, integrator docs | `Cargo.toml` graph, `main.rs` startup trace, `quality/ARCH_LAYERS.toml` |
 
 Each of the three passes ran as an independent read-only agent; every
@@ -202,7 +202,7 @@ their own unit tests; the production loader is `include_str!`
 ### 5.4 The wire contract is the sharpest gap
 
 **Zero `#[non_exhaustive]`** across `shared/crates/oicp-types/`, `shared/crates/oicp-client/` and
-`commonwealth/crates/` — verified, count is 0. **No `flatten`, no
+`cmnwlth/crates/` — verified, count is 0. **No `flatten`, no
 `deny_unknown_fields`, no catch-all map**; `serde(other)` appears exactly once
 (`capability.rs:42`, `Capability::Unknown`).
 
@@ -230,12 +230,12 @@ have** — and the discipline is already written, tested and in production.
 Root `Cargo.toml:112-116` states plainly that every crate is unpublished, and
 all inter-crate deps are `path =` (`:166-207`).
 
-- The **spec** declares itself **CC0** (`commonwealth/docs/oicp-v0.4.md:5`).
+- The **spec** declares itself **CC0** (`cmnwlth/docs/oicp-v0.4.md:5`).
 - The **only implementation** is **AGPL-3.0-or-later** (`Cargo.toml:122`),
-  which `commonwealth/ARCHITECTURE.md:32` still describes as Apache 2.0.
+  which `cmnwlth/ARCHITECTURE.md:32` still describes as Apache 2.0.
 - `oicp-conformance` — whose own manifest says *"A conforming third-party host
   can copy this crate wholesale"* — is `publish = false`, lives inside
-  `commonwealth/crates/`, and is referenced by nothing in CI.
+  `cmnwlth/crates/`, and is referenced by nothing in CI.
 - `oicp-client`, billed as the thin pure-HTTP client, depends on
   `sovereign-contracts`: **63 traits / 221 structs / 102 enums**
   (`quality/baselines/api/sovereign-contracts.txt`). Adopting it means
@@ -452,7 +452,7 @@ To be fixed by whoever next touches these files:
 | `ARCHITECTURE.md:900` — a `[fairness]` config table | deleted from the struct (`commonwealth-core/src/config.rs:6-11`) |
 | `sovereign/SYSTEM_OVERVIEW.md:201` — "`docs/oicp-v0.3.md` is the canonical OICP spec" | `shared/crates/oicp-types/src/lib.rs:5` — v0.4 is canonical. **Fixed 2026-08-05 as part of this review.** |
 | `shared/crates/oicp-types/Cargo.toml` description — "OICP v0.2" | implements v0.4.0 (`version.rs:5`) |
-| `commonwealth/docs/` carries four overlapping OICP specs (v0.2, v0.3, v0.4, unversioned) totalling 1,781 lines | no "read this one" pointer |
+| `cmnwlth/docs/` carries four overlapping OICP specs (v0.2, v0.3, v0.4, unversioned) totalling 1,781 lines | no "read this one" pointer |
 | `contrib/systemd/commonwealth.service:9` — `ExecStop=… daemon stop` | no such subcommand |
 | `contrib/install.sh:9` — `github.com/commonwealth-rs/commonwealth` | not this repository |
 

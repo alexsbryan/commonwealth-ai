@@ -291,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--graph", type=Path, default=DEFAULT_GRAPH)
-    parser.add_argument("--scope", default="", help="repo-relative source prefix, e.g. commonwealth/crates")
+    parser.add_argument("--scope", default="", help="repo-relative source prefix, e.g. cmnwlth/crates")
     parser.add_argument("--threshold", type=float, default=0.35)
     parser.add_argument("--limit", type=int, default=25)
     parser.add_argument("--json", action="store_true")

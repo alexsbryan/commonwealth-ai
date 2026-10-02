@@ -24,7 +24,7 @@
 //!    certainly have a gossip-convergence bug, not a "balance"
 //!    bug.
 //!
-//! See `commonwealth/docs/mesh-health.md` for the full rationale
+//! See `cmnwlth/docs/mesh-health.md` for the full rationale
 //! and `commonwealth-state/src/contribution_store.rs` for storage.
 
 use std::collections::HashMap;

@@ -1160,7 +1160,7 @@ impl Detector for UnownedCellDetector {
         ControlSite {
             // Verified present 2026-08-24: 60 fields, 40 of them cells
             // (18 RwLock, 14 Atomic, 4 ArcSwap, 3 Mutex, 1 Semaphore).
-            file: "commonwealth/crates/commonwealth-api/src/state.rs",
+            file: "cmnwlth/crates/commonwealth-api/src/state.rs",
             token: "AppStateInner",
             why: "AppStateInner is the mesh daemon's composition root and the \
                   worst holding on this tree by a factor of two. If it has \

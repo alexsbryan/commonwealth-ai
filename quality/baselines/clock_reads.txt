@@ -3,10 +3,10 @@
 #   cargo run -p xtask -- clock-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clock-gate --tighten
-1	commonwealth/crates/commonwealth-rail/src/journal.rs
-1	commonwealth/crates/commonwealth-state/src/activity.rs
-1	commonwealth/crates/commonwealth-state/src/contributions.rs
-1	commonwealth/crates/commonwealth-state/src/peer_preferences.rs
+1	cmnwlth/crates/commonwealth-rail/src/journal.rs
+1	cmnwlth/crates/commonwealth-state/src/activity.rs
+1	cmnwlth/crates/commonwealth-state/src/contributions.rs
+1	cmnwlth/crates/commonwealth-state/src/peer_preferences.rs
 1	corpus-engine-archaeology/src/archaeology_eval.rs
 3	corpus-engine-notes/tests/main/propagation.rs
 1	shared/crates/corpus-engine-scip/src/scip_graph.rs
@@ -20,7 +20,7 @@
 6	quality/xtask/src/clock_gate.rs
 1	quality/xtask/src/target_arch.rs
 2	shared/crates/kernel-types/src/judgement.rs
-1	oicp-conformance/src/main.rs
+1	cmnwlth/crates/oicp-conformance/src/main.rs
 1	sovereign-mobile/src-tauri/src/commands/host.rs
 1	sovereign/crates/sovereign-cli-bench/src/eval_cmd/runner.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs

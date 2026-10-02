@@ -32,7 +32,7 @@ requests. Tools only — no resources or prompts yet — and deliberately
 loopback-only: it exposes local dev tooling, not a remote service.
 
 **OICP** — `GET /oicp/v1/capabilities` plus the ingest extension. The
-spec ([commonwealth/docs/oicp-v0.4.md](../commonwealth/docs/oicp-v0.4.md),
+spec ([cmnwlth/docs/oicp-v0.4.md](../cmnwlth/docs/oicp-v0.4.md),
 v0.3 as fallback) is CC0 — implement it freely on either side.
 `oicp-conformance` (a repo-root sibling of `oicp-types`) is a
 standalone certifier you

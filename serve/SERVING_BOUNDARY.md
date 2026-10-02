@@ -23,7 +23,7 @@ function call from the turn path.
 
 **Which crates it holds is not written here.** The set lives in one place,
 `[[package]] name = "serving"` in `quality/ARCH_LAYERS.toml`, for the reason
-`commonwealth/BOUNDARY.md` gives at its head: a second copy of a list drifts while the gate
+`cmnwlth/BOUNDARY.md` gives at its head: a second copy of a list drifts while the gate
 stays green. `cargo xtask boundary-gate` enforces the property (blocking).
 
 ## Why this is declared before the work, not after

@@ -28,7 +28,7 @@ workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hac
 # crate's ONLY production TOML parser and it left for `oicp-types`; the three
 # remaining `toml::from_str` calls are all in `config.rs`'s `#[cfg(test)]`
 # module, which round-trips the shipped `DaemonConfig` / `MeshConfig` shapes.
-# Declared here rather than dropped: `commonwealth/BOUNDARY.md` counts dev
+# Declared here rather than dropped: `cmnwlth/BOUNDARY.md` counts dev
 # edges too, so this is a visible line, not a silent one.
 [dev-dependencies]
 toml = { workspace = true }

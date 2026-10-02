@@ -176,7 +176,7 @@ escalate_to_workspace=0
 
 # The workspace's member names, once. A changed file can live under a
 # standalone manifest that is NOT a member — a wasm app or a probe with its
-# own `[workspace]` (sovereign/apps/ring-runtime) — and `cargo check -p <name>`
+# own `[workspace]` (cmnwlth/apps/ring-runtime) — and `cargo check -p <name>`
 # would fail with "did not match any packages", which reads as a toolchain
 # error rather than a skip. Resolve the member set up front; if that cannot be
 # done at all, escalate to the workspace, the loud and safe fallback.
@@ -220,7 +220,7 @@ if [[ -n "$raw_paths" ]]; then
                 if [[ -n "$name" ]]; then
                     if [[ "$escalate_to_workspace" == "0" ]] && ! grep -qx "$name" <<<"$ws_members"; then
                         # Not a workspace member: its own build owns it (e.g.
-                        # sovereign/apps/ring-runtime → scripts/build-ring-runtime.sh).
+                        # cmnwlth/apps/ring-runtime → scripts/build-ring-runtime.sh).
                         # Say the skip — an unmentioned skip is how a file stops
                         # being covered without anyone noticing.
                         echo "scope: skipping $name — not a workspace member ($dir)" >&2

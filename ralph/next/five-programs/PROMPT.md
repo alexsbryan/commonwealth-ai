@@ -206,9 +206,9 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   path is relative to the repo root, where every command already runs.
   opencode's permission check resolves `cd X && ../../y` against the wrong
   base, auto-rejects a path INSIDE this repo, and ends your session with the
-  unit half done (rd-1-scaffold lost a session to `/home/sovereign/apps/...`).
+  unit half done (rd-1-scaffold lost a session to `/home/cmnwlth/apps/...`).
   For a scratch build dir use `target/ralph/bundle/` by its repo-relative path
-  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=sovereign/apps/...`).
+  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=cmnwlth/apps/...`).
 - Change files with the Edit and Write tools, never with a shell heredoc
   (`cat >> f <<EOF`, `python3 - <<EOF`): edits inside the repo are accepted
   outright, a heredoc asks the operator and is denied after 600 s unattended.

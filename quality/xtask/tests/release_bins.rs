@@ -26,7 +26,7 @@ use repo_root::repo_root;
 const DISPATCHING: &[&str] = &[
     "sovereign/crates/sovereign-cli/src",
     "sovereign/crates/sovereign-cli-daemon/src",
-    "sovereign/crates/sovereign-cli-mesh/src",
+    "cmnwlth/crates/sovereign-cli-mesh/src",
 ];
 
 /// Exec'd only behind a verb the release dispatcher refuses before dispatch.

@@ -13,7 +13,7 @@
 //!
 //! The failure was one line of omission: `MeshKnowledgeClient` parsed
 //! `KnowledgeSearchResponse` and threw `corpora_unavailable` on the floor
-//! (`sovereign/deploy/mesh/GROUND_TRUTH.md`: "The fan-out client discards
+//! (`cmnwlth/deploy/mesh/GROUND_TRUTH.md`: "The fan-out client discards
 //! `corpora_searched`/`corpora_unavailable` and returns transport failure as
 //! an empty vec"). These tests drive the real client over a real socket
 //! against a stub daemon that replays exactly that response, and assert the

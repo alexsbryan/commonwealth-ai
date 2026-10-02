@@ -132,7 +132,7 @@ rides = "stream"
 on_the_ring = "range-served playback of a blob from whichever holder is up, keeper hot copy so the owner's sleeping laptop does not buffer; commonwealth-media becomes the ring's library rather than a per-member URL"
 landed_by = ["ra-18"]
 pulled_by = ["ra-18"]
-note = "commonwealth-media exists as a Jellyfin-shaped PROXY (commonwealth/crates/commonwealth-media/src/lib.rs:1-40; fanout caps bodies and never streams, origin_fanout.rs:13-19). Converge, do not mint a second library. NOUN: `Stream` likely collides - converge."
+note = "commonwealth-media exists as a Jellyfin-shaped PROXY (cmnwlth/crates/commonwealth-media/src/lib.rs:1-40; fanout caps bodies and never streams, origin_fanout.rs:13-19). Converge, do not mint a second library. NOUN: `Stream` likely collides - converge."
 
 [[primitive]]
 id = "realtime"
@@ -227,7 +227,7 @@ note = "The ring-deploy order (.sovereign/features/ring-deploy/order.md, draft 2
 # partition drill are OWED instruments and read could-not-judge until they
 # exist; nothing here fabricates a verdict for them (ARCH 5, ARCH 6).
 [predicate]
-statement = "A ring app is a manifest plus a static page over the rails: a builder who is not the rail's author ships the next reference app from the docs with zero diffs under commonwealth/crates/commonwealth-rail*, distributes it with one verb, and it survives the partition drill; every surface a joined person touches renders a person, never a key; and the two ra-1 refusals hold - a roster key resolves to the signed op that introduced it and its signer, and an `Introduce` arriving over ring-sync changes no roster row"
+statement = "A ring app is a manifest plus a static page over the rails: a builder who is not the rail's author ships the next reference app from the docs with zero diffs under cmnwlth/crates/commonwealth-rail*, distributes it with one verb, and it survives the partition drill; every surface a joined person touches renders a person, never a key; and the two ra-1 refusals hold - a roster key resolves to the signed op that introduced it and its signer, and an `Introduce` arriving over ring-sync changes no roster row"
 check     = "./scripts/sovereign-test.sh --human --package commonwealth-rail --package commonwealth-rail-core"
 
 # ── BARS ─────────────────────────────────────────────────────────────────────

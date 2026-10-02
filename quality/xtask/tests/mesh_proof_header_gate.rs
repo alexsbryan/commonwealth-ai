@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! sovereign-daemon's `mesh_proof_header_gate` ratchet, moved here by
-//! pb-distribution-svrn-lift-2: it scans the monorepo's `commonwealth/crates`
+//! pb-distribution-svrn-lift-2: it scans the monorepo's `cmnwlth/crates`
 //! and `sovereign/crates`, which a lifted svrn does not carry. Its lists stay
 //! at their historical path, `sovereign_daemon::mesh_proof_header_gate`,
 //! mounted here and not copied.

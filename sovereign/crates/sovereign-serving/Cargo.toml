@@ -5,8 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+commonwealth-core = { path = "../../../cmnwlth/crates/commonwealth-core" }
+commonwealth-state = { path = "../../../cmnwlth/crates/commonwealth-state" }
 corpus-engine = { workspace = true }
 
 serde = { workspace = true }

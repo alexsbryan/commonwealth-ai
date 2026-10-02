@@ -28,7 +28,7 @@ wrong resolution.
   a wire field a client reads).
 - A `REVIEW-mint-rr-` that needs more rows than its cap.
 - Weakening a PLANT, adding an `[[exception]]`, or widening an `except` list.
-- A stop condition from `.sovereign/features/ring-room/campaign.md` §Stop conditions firing, or any diff under `commonwealth/crates/commonwealth-rail*`.
+- A stop condition from `.sovereign/features/ring-room/campaign.md` §Stop conditions firing, or any diff under `cmnwlth/crates/commonwealth-rail*`.
 - Pushing, rewriting history, `--no-verify`.
 
 ## Always

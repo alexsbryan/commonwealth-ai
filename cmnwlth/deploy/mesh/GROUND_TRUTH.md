@@ -179,7 +179,7 @@ both files owe a fix in the same commit (§1.1).
 
 - **Nothing of it exists.** No `work` namespace, no `commonwealth-work` crate, no `WorkAct`,
   no `JobUnit`, no executor registry, no second queue of any kind. The design is
-  `sovereign/deploy/mesh/WORK_PLANE.md`, re-cut onto the ring rail on 2026-09-09 and laddered
+  `cmnwlth/deploy/mesh/WORK_PLANE.md`, re-cut onto the ring rail on 2026-09-09 and laddered
   as cw-lift Phase 5 (`quality/campaigns/closed/cw-lift.toml`, rungs 5a-5h). `docs/CMNWLTH_DESIGN.md`
   is the same ontology under other names and now carries a superseded-by header pointing at it.
 - **The 2026-09-04 design rested on machinery that mostly does not exist**, and the sixteen-row
@@ -237,7 +237,7 @@ both files owe a fix in the same commit (§1.1).
 - `TenantId` is an axum extension consumed only inside `sovereign-server` handlers
   (`routes.rs:176-178` and callers). The remote-backend hop sends one static per-backend bearer and
   nothing else — no tenant header, field, or param (`shared/crates/oicp-client/src/lib.rs:451-453`; request body
-  built at `:234-330`). `grep -rni tenant` over `commonwealth/` and `sovereign-mesh/src`: zero
+  built at `:234-330`). `grep -rni tenant` over `cmnwlth/` and `sovereign-mesh/src`: zero
   functional hits — the daemon has no tenant concept to receive one.
 - `RankInputs` carries no corpus, dataset, or tenant — `InferenceRequirements` is capability hint /
   latency class / token counts / one `sharding` bool (`scheduler_core.rs:242-268`,

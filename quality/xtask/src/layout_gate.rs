@@ -270,7 +270,7 @@ mod tests {
             domain_of("sovereign/crates/sovereign-mesh/src/x.rs"),
             "sovereign"
         );
-        assert_eq!(domain_of("commonwealth/crates/a/src/x.rs"), "commonwealth");
+        assert_eq!(domain_of("cmnwlth/crates/a/src/x.rs"), "cmnwlth");
         assert_eq!(domain_of("corpus-engine/src/x.rs"), "corpus-engine");
         assert_eq!(
             domain_of("shared/crates/corpus-engine-scip/src/x.rs"),

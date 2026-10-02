@@ -332,9 +332,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // gossips the node.
 
     // ---- sovereign-pods: the rented-pod modules (Wave 1); Class::Mesh per the enum doc's "pod traffic" ----
-    ("sovereign/crates/sovereign-pods/src/worker_http.rs", Class::Mesh, 6),
-    ("sovereign/crates/sovereign-pods/src/worker_subprocess_runner.rs", Class::Mesh, 1),
-    ("sovereign/crates/sovereign-pods/src/worker_inference_proxy.rs", Class::Mesh, 1),
+    ("cmnwlth/crates/sovereign-pods/src/worker_http.rs", Class::Mesh, 6),
+    ("cmnwlth/crates/sovereign-pods/src/worker_subprocess_runner.rs", Class::Mesh, 1),
+    ("cmnwlth/crates/sovereign-pods/src/worker_inference_proxy.rs", Class::Mesh, 1),
 
     // ---- sovereign-desktop: the host daemon on :9741 (LocalDaemon) ----
     // All desktop commands talk to the local daemon's /internal/*
@@ -464,7 +464,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // sovereign-serve/src/fetch_model.rs (c2529c94c).
     // 7 -> 6 (pb-serve-placement): `mesh plan`'s live-mesh read moved to
     // sovereign-serve/src/mesh_plan.rs.
-    ("sovereign/crates/sovereign-cli-mesh/src/mesh_cmd.rs", Class::Mesh, 6),
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_cmd.rs", Class::Mesh, 6),
     // `mesh plan`'s read of the local daemon's `/v1/mesh/status`
     // (pb-serve-placement, from mesh_cmd.rs). Loopback to our own daemon.
     ("serve/crates/sovereign-serve/src/mesh_plan.rs", Class::LocalDaemon, 1),
@@ -476,7 +476,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // round exactly as `mesh rotate`'s was. One site; the collision WARNING
     // that names this command is pure rendering and builds no client.
     (
-        "sovereign/crates/sovereign-cli-mesh/src/mesh_member_cmd.rs",
+        "cmnwlth/crates/sovereign-cli-mesh/src/mesh_member_cmd.rs",
         Class::Mesh,
         1,
     ),
@@ -488,7 +488,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // the honest class: no third-party model or search traffic passes here,
     // and nothing on this path may construct a RemotePayload/QueryEgress
     // client (that stays in the boundary).
-    ("sovereign/crates/sovereign-cli-mesh/src/mesh_guest.rs", Class::Mesh, 1),
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_guest.rs", Class::Mesh, 1),
     // NEW 2026-09-11: `svrn mesh media <peer>`, the viewer half of federated
     // media. One client, two loopback destinations: our own daemon's
     // `/v1/mesh/media` to mint the bridge, then one `GET /` through that
@@ -500,7 +500,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // 1 -> 2 (2026-09-11): `mesh media fanout <path>` builds its own client to
     // POST the daemon's `/v1/mesh/media/fanout` on loopback; the daemon does
     // the reaching. Same class, same reason.
-    ("sovereign/crates/sovereign-cli-mesh/src/mesh_media.rs", Class::Mesh, 2),
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_media.rs", Class::Mesh, 2),
     // NEW ROW (2026-09-19, ring-room rr-2-media-posture 042a74806): the HOLDER
     // half of `mesh media offer` — the read-only viewer account it provisions
     // on the origin before it declares a credential. One client (`viewer.rs`'s
@@ -513,7 +513,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // this exchange rides the estate's transport, the credential it writes is
     // what LATER dials do carry.
     (
-        "sovereign/crates/sovereign-cli-mesh/src/mesh_media/viewer.rs",
+        "cmnwlth/crates/sovereign-cli-mesh/src/mesh_media/viewer.rs",
         Class::LocalDaemon,
         1,
     ),
@@ -522,15 +522,15 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // bridge the daemon minted. Same shape and same class as mesh_media's
     // probe: the bytes ride the estate's own transport to a Commonwealth
     // node, and the request carries no estate content.
-    ("sovereign/crates/sovereign-cli-mesh/src/mesh_app.rs", Class::Mesh, 1),
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_app.rs", Class::Mesh, 1),
     // run_cmd.rs (2026-09-12): `svrn run` takes, renews and releases a
     // publish claim against `127.0.0.1:<client_port>/v1/mesh/publish`. Never
     // leaves the machine — the daemon is what reaches anybody.
-    ("sovereign/crates/sovereign-cli-mesh/src/run_cmd.rs", Class::LocalDaemon, 1),
+    ("cmnwlth/crates/sovereign-cli-mesh/src/run_cmd.rs", Class::LocalDaemon, 1),
     // publish_cmd.rs (2026-09-12): bare `svrn publish` asks the daemon what is
     // published, because a claim taken by a running `svrn run` is in no file.
     // Loopback only; the config half of the verb dials nothing at all.
-    ("sovereign/crates/sovereign-cli-mesh/src/publish_cmd.rs", Class::LocalDaemon, 1),
+    ("cmnwlth/crates/sovereign-cli-mesh/src/publish_cmd.rs", Class::LocalDaemon, 1),
     // mesh_skew.rs (2026-09-12, hm-3): explains a mesh route's 404 by asking
     // the daemon which build it is. It CONSTRUCTS no client in production —
     // the caller hands it the one it already built — so all three sites are
@@ -544,7 +544,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // the client the caller already built. Empty `peers` is load-bearing for
     // this class: it selects zero targets, so the control request dials no
     // peer at all and asks no origin anything.
-    ("sovereign/crates/sovereign-cli-mesh/src/mesh_skew.rs", Class::TestOnly, 5),
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_skew.rs", Class::TestOnly, 5),
     // mesh_offers.rs (2026-09-13, ra-4): `svrn mesh offers` builds ONE client
     // and points it only at `127.0.0.1:<client_port>` — the roster read, the
     // fan-out POST and the single-peer reach all go to this node's own
@@ -552,7 +552,7 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // `mesh_media`'s reason: the fan-out's bytes ride the estate's own
     // transport to member nodes, and the request carries no estate content —
     // the path asked is `/`, and what comes back is the seller's.
-    ("sovereign/crates/sovereign-cli-mesh/src/mesh_offers.rs", Class::Mesh, 1),
+    ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_offers.rs", Class::Mesh, 1),
     // 3 → 2 at sv-surface (2026-09-11): `daemon_reachable` stopped
     // building its own client and asks `ServingHost` instead.
     ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),

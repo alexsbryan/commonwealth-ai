@@ -45,7 +45,7 @@ commonwealth-ai/
 ├── corpus-mcp/                # Thin knowledge host, three verbs — `recipe new` (scaffold from an ontology template), `ingest <recipe.toml>` (acquire→index→atlas enrichment) and `serve` (`ask`: cited passages + the map of ideas the atlas walk traversed; cited search; atlas atom lookup, over MCP/stdio; pulls a named corpus's prebuilt snapshot if absent), all against ANY OpenAI-compatible endpoint — DISCOVERED (Ollama, llama-server, the OICP daemon) when none is named; no llama.cpp/ort/iroh
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
-├── commonwealth/              # Mesh coordination daemon
+├── cmnwlth/              # Mesh coordination daemon
 ├── studio/                    # Liftable authoring package — workflow engine + recipe-author + headless CLI (see studio/BOUNDARY.md)
 ├── quality/                   # Quality program — ARCH_LAYERS.toml (layer map), gate baselines, arch-layers crate
 ├── packages/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
@@ -65,7 +65,7 @@ weights (created by `svrn setup`, gitignored).
 | Project              | Role                                          | Depends on                                            |
 |----------------------|-----------------------------------------------|-------------------------------------------------------|
 | `oicp-types`         | OICP v0.3 wire types + scoring helpers        | —                                                     |
-| `kernel-types`       | **The neutral kernel** — identity and provenance owned by no product domain: `ContentHash`, `CorpusId`, `NodeId`, `Origin` (+ its closed `Source` sum, `Server`, `Grain`, `Locator`), `Custody`, `Attribution`. Minted 2026-08-20 after measurement showed the 23 types all three domains speak were 22-owned by corpus-engine — three systems depending on one system's implementation, not a contract. The SECOND layer-0 membrane, deliberately separate from `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. It may name nothing above it. **Also the TRUST vocabulary** (2026-08-20, rung nc-10-judgement): `Verdict` (the four of ARCH §18.2), `Reason` (non-empty, refuses the 13 placeholder spellings), `Freshness`, and `Judgement` — a verdict about a named subject with its reason, its date and its horizon. It is here rather than in `sovereign-contracts` because §10.8 names "contracts becomes the megablock" as a failure mode whose guard is "the envelope goes to kernel-types"; both the product and back-of-house reach DOWN to it, which is legal — the one-way rule forbids depending on back-of-house, not sharing an ancestor beneath both. It carries WORK, not shape (§10.3): age computation, one age format, staleness banding, one status vocabulary, the roll-up conjunction and the honesty footer. First adopters: `svrn posture` (seven status vocabularies and seven age formats collapsed to one) and `NightlyPosture`. **And the RELEASED TURN** (2026-08-20, rung nc-11-answer): `Seal` (a trait — the kernel states the one question a sealed body of evidence must answer, and `corpus_engine::EvidenceSet` answers it, so no arrow points up), `Citation` (a quote a seal vouched for), `Draft` (composed text whose only exit is release — its text cannot be read), `Answer` (text + citations + provenance + judgement, with no door that does not take a `Judgement`), `PeerAnswer` (an answer the custody sweep cleared for the mesh) and `Refused` (why a citation or a release said no — a value, not a log line). `quality/CONCEPTS.toml` writes the canonical home as `sovereign_contracts::answer::Answer`, and that home CANNOT hold these: `sovereign-contracts` is layer-0 `contract`, BELOW `corpus-engine`, so anything naming evidence from there inverts the edge the bottom of the stack exists to forbid. The resolution is that `Answer` never names `Evidence` — every field of it is already kernel vocabulary — and the seal stays with the evidence. Work carried, not shape: the verbatim-containment check `sovereign-meshapp` states in a doc comment and audits nowhere, the release fold (which is `Judgement::roll_up`, reused rather than re-reduced), and the mesh custody sweep, which had no implementation at all — `grep -rn Custody commonwealth/` finds nothing on this tree. **And the WIRE-FORM decider** (2026-08-23, rung rf-2): `wire::WireFixture` — the ONE implementation (§10.6) of "does adopting this typed value at a `String` site change the bytes", generalised from `ContentHash`'s hand-written `serde_wire_form_is_a_plain_hex_string`; the three kernel wire tests and the refactor factory's stage-6 differ (`sovereign-cli-dev/src/refactor_wire.rs`) all assert through it. Compiled under `cfg(any(test, feature = "wire-fixture"))` so the default build keeps the four-dep budget. **And the REQUIREMENT REGISTRY** (2026-08-31, campaign `conformance`): `conformance::{Requirement, Scenario, Registry, ReqLevel, Enforceability}` — what `research/clean-room/REQUIREMENTS.md` obliges, as data. It is here for the same reason `Verdict` is: three unrelated surfaces need to name a requirement (the CLI contract, the desktop journey manifest, the xtask gate table) and a registry owned by any one of them would make the other two depend on that one's world. `quality/requirements.toml` is GENERATED from the spec by `quality/xtask/tests/requirements_registry.rs` (parser split out to `requirements_registry/spec_parser.rs`) and byte-gated against it; that same test also asserts the hand-authored enforceability column is id-for-id equal to the registry. The parser PANICS on an unrecognised declaration form and on a bare requirement in a section with no declared default, because defaulting to MUST is exactly what lost the 53-requirement `GR` family from an earlier count that came out 112 short. **The generator MOVED to `quality/xtask/tests/` on 2026-09-04** (cw-lift): it reads the repo root, and this crate is a global `[[package_leaf]]` that every declared package must be able to build standalone WITH ITS TESTS — the commonwealth lift failed on exactly it and on the `covers:` scanner beside it. The vocabulary stays here; only the workspace-hygiene generators left, taking `toml`, `syn` and `quote` out of this crate's dev-dependencies with them. `boundary-gate` could not see this class when the move was made — it had only the two compile-time rules — and it can now: rule 3c (787eda806, same day) flags a path derived from `CARGO_MANIFEST_DIR` that climbs out of the crate, and a `git` subprocess with no `current_dir` | `serde`, `getrandom`, `hex`, `blake3` (+ optional `serde_json` behind `wire-fixture`) |
+| `kernel-types`       | **The neutral kernel** — identity and provenance owned by no product domain: `ContentHash`, `CorpusId`, `NodeId`, `Origin` (+ its closed `Source` sum, `Server`, `Grain`, `Locator`), `Custody`, `Attribution`. Minted 2026-08-20 after measurement showed the 23 types all three domains speak were 22-owned by corpus-engine — three systems depending on one system's implementation, not a contract. The SECOND layer-0 membrane, deliberately separate from `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. It may name nothing above it. **Also the TRUST vocabulary** (2026-08-20, rung nc-10-judgement): `Verdict` (the four of ARCH §18.2), `Reason` (non-empty, refuses the 13 placeholder spellings), `Freshness`, and `Judgement` — a verdict about a named subject with its reason, its date and its horizon. It is here rather than in `sovereign-contracts` because §10.8 names "contracts becomes the megablock" as a failure mode whose guard is "the envelope goes to kernel-types"; both the product and back-of-house reach DOWN to it, which is legal — the one-way rule forbids depending on back-of-house, not sharing an ancestor beneath both. It carries WORK, not shape (§10.3): age computation, one age format, staleness banding, one status vocabulary, the roll-up conjunction and the honesty footer. First adopters: `svrn posture` (seven status vocabularies and seven age formats collapsed to one) and `NightlyPosture`. **And the RELEASED TURN** (2026-08-20, rung nc-11-answer): `Seal` (a trait — the kernel states the one question a sealed body of evidence must answer, and `corpus_engine::EvidenceSet` answers it, so no arrow points up), `Citation` (a quote a seal vouched for), `Draft` (composed text whose only exit is release — its text cannot be read), `Answer` (text + citations + provenance + judgement, with no door that does not take a `Judgement`), `PeerAnswer` (an answer the custody sweep cleared for the mesh) and `Refused` (why a citation or a release said no — a value, not a log line). `quality/CONCEPTS.toml` writes the canonical home as `sovereign_contracts::answer::Answer`, and that home CANNOT hold these: `sovereign-contracts` is layer-0 `contract`, BELOW `corpus-engine`, so anything naming evidence from there inverts the edge the bottom of the stack exists to forbid. The resolution is that `Answer` never names `Evidence` — every field of it is already kernel vocabulary — and the seal stays with the evidence. Work carried, not shape: the verbatim-containment check `sovereign-meshapp` states in a doc comment and audits nowhere, the release fold (which is `Judgement::roll_up`, reused rather than re-reduced), and the mesh custody sweep, which had no implementation at all — `grep -rn Custody cmnwlth/` finds nothing on this tree. **And the WIRE-FORM decider** (2026-08-23, rung rf-2): `wire::WireFixture` — the ONE implementation (§10.6) of "does adopting this typed value at a `String` site change the bytes", generalised from `ContentHash`'s hand-written `serde_wire_form_is_a_plain_hex_string`; the three kernel wire tests and the refactor factory's stage-6 differ (`sovereign-cli-dev/src/refactor_wire.rs`) all assert through it. Compiled under `cfg(any(test, feature = "wire-fixture"))` so the default build keeps the four-dep budget. **And the REQUIREMENT REGISTRY** (2026-08-31, campaign `conformance`): `conformance::{Requirement, Scenario, Registry, ReqLevel, Enforceability}` — what `research/clean-room/REQUIREMENTS.md` obliges, as data. It is here for the same reason `Verdict` is: three unrelated surfaces need to name a requirement (the CLI contract, the desktop journey manifest, the xtask gate table) and a registry owned by any one of them would make the other two depend on that one's world. `quality/requirements.toml` is GENERATED from the spec by `quality/xtask/tests/requirements_registry.rs` (parser split out to `requirements_registry/spec_parser.rs`) and byte-gated against it; that same test also asserts the hand-authored enforceability column is id-for-id equal to the registry. The parser PANICS on an unrecognised declaration form and on a bare requirement in a section with no declared default, because defaulting to MUST is exactly what lost the 53-requirement `GR` family from an earlier count that came out 112 short. **The generator MOVED to `quality/xtask/tests/` on 2026-09-04** (cw-lift): it reads the repo root, and this crate is a global `[[package_leaf]]` that every declared package must be able to build standalone WITH ITS TESTS — the commonwealth lift failed on exactly it and on the `covers:` scanner beside it. The vocabulary stays here; only the workspace-hygiene generators left, taking `toml`, `syn` and `quote` out of this crate's dev-dependencies with them. `boundary-gate` could not see this class when the move was made — it had only the two compile-time rules — and it can now: rule 3c (787eda806, same day) flags a path derived from `CARGO_MANIFEST_DIR` that climbs out of the crate, and a `git` subprocess with no `current_dir` | `serde`, `getrandom`, `hex`, `blake3` (+ optional `serde_json` behind `wire-fixture`) |
 | `workspace-hack`     | cargo-hakari feature-unification crate (build-latency move bl-hakari, 2026-09-17): no source, third-party deps only, with the UNION of features the workspace activates, so a `-p <crate>` build resolves what `--workspace` resolves (scope-drift over the 28 probe crates 316 → 118, and 80 of the 118 sit inside the four `[[package_leaf]]` probe scopes that deliberately do NOT link it — kernel-types, oicp-types, corpus-engine-vocab, sovereign-contracts — whose whole baseline fresh cost was 23 s of 2204). Regenerated by `cargo hakari generate`; `cargo hakari verify` is an advisory pre-push instrument. Config in `.config/hakari.toml`: platforms listed, the vendored llama.cpp crates and the eight shared leaves excluded from traversal (a leaf is budgeted to zero internal deps and boundary-gate counts the hack as one); a crate stays out of it by having ONE feature set (iroh, via `commonwealth-transport`), never by `final-excludes`. No `build.rs` (boundary-gate forbids one on a leaf; measured no drift cost) | — |
 | `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-engine-yield`, `corpus-engine-scip` (treesitter feature), `corpus-engine-notes`, `corpus-engine-atos` |
 | `corpus-engine-scip` | SCIP call graph store + exporter dispatch     | —                                                     |
@@ -99,14 +99,14 @@ projects meet.
             ├───────────┬───────────┼──────────────┐
             │           │           │              │
         Sovereign       │      both call          cmnwlth
-       (sovereign/)     │   identical APIs        (commonwealth/)
+       (sovereign/)     │   identical APIs        (cmnwlth/)
             │           │                              │
             └─ sovereign-mesh (in-process embed) ──────┘
 ```
 
 Two shared protocols cross the Sovereign/cmnwlth boundary:
 
-- **OICP** — declared in `commonwealth/docs/oicp-v0.3.md`; types
+- **OICP** — declared in `cmnwlth/docs/oicp-v0.3.md`; types
   in `shared/crates/oicp-types/src/lib.rs`; re-exported as `sovereign_core::oicp`
   and `commonwealth_core::oicp`. Downstream crates use the
   re-exports, never the types crate directly.
@@ -303,7 +303,7 @@ crates/
 └── commonwealth-rails        # `cw-rails` — the minimal daemon a shim author installs: join an invite, run, serve
 ```
 
-Nine crates, and nine is the whole directory: `commonwealth/crates/` holds the
+Nine crates, and nine is the whole directory: `cmnwlth/crates/` holds the
 package and nothing else since the `domains-2` move (2026-09-11).
 
 **Six crates left this directory on 2026-09-11**, in two moves, because their
@@ -324,7 +324,7 @@ consumers named:
 | Was | Is | Why there |
 |---|---|---|
 | `commonwealth-test-harness` | `sovereign-mesh-test-harness`, at [`sovereign/crates/sovereign-mesh-test-harness`](../sovereign/crates/sovereign-mesh-test-harness) | `SimulatedMesh<S>`, `SimulatedNode<S>`, `MockLlamaServer`, fault injection. The node is generic over its state — the OICP/contracts seam — so the harness's library names no host. Its only consumer in the repo is `sovereign-mesh`, behind that crate's `dst` feature, so it now sits beside it and is named for it |
-| `oicp-conformance` | same name, at [`oicp-conformance`](../oicp-conformance) — a repo-root sibling | `oicp-types` and `oicp-client`, the two crates it certifies against, are root siblings too. Its dependency budget (oicp-types + serde/reqwest/tokio) was always the point; sitting under `commonwealth/` only implied a mesh it does not need. `commonwealth/docs/ARCHITECTURE_REVIEW_2026-08-05.md:421` asked for exactly this move |
+| `oicp-conformance` | same name, at [`oicp-conformance`](../cmnwlth/crates/oicp-conformance) — a repo-root sibling | `oicp-types` and `oicp-client`, the two crates it certifies against, are root siblings too. Its dependency budget (oicp-types + serde/reqwest/tokio) was always the point; sitting under `commonwealth/` only implied a mesh it does not need. `cmnwlth/docs/ARCHITECTURE_REVIEW_2026-08-05.md:421` asked for exactly this move |
 
 Neither move changed logic and the package's own boundary held —
 `boundary-gate` reads `commonwealth 9/9 crates present`, and
@@ -361,7 +361,7 @@ are declared as `[[package]]` / `[[package_leaf]]` blocks in
 the same parser, so layer-gate, boundary-gate and `arch_report` cannot
 drift on what a boundary means. Four are declared: `studio`, `code-intel`
 (`docs/CODE_TOOLING_BOUNDARY.md`), `corpus-mcp` (`corpus-mcp/README.md`)
-and — since 2026-09-03 — `commonwealth` (`commonwealth/BOUNDARY.md`), the
+and — since 2026-09-03 — `commonwealth` (`cmnwlth/BOUNDARY.md`), the
 mesh substrate: `commonwealth-{core,transport,state,discovery}`, 17,194
 lines, zero `[[exception]]` rows on the day it was declared. It was
 declared BEFORE the work that moves code across it, because layer-gate
@@ -6023,7 +6023,7 @@ Watched failing: `iroh_dialer_admission_e2e::routing_on_alpn_alone_is_the_hole_t
 wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing.
 
 **Federated media rides that fifth slot end to end** (`TrafficClass::Media`,
-`commonwealth/crates/commonwealth-media/src/reach.rs`, the route and daemon
+`cmnwlth/crates/commonwealth-media/src/reach.rs`, the route and daemon
 glue in `sovereign-daemon/src/media_reach.rs`, 2026-09-11). The holder declares
 `[iroh] media_origin = "127.0.0.1:8096"` — `svrn mesh media offer [<origin>]
 [--admit <member>...]` writes it (and `media_allow`; with no origin it probes
@@ -6180,7 +6180,7 @@ a_slow_peer_does_not_delay_the_others_and_is_a_failed_row` (cap ignored),
 `knowledge_fanout` (4) and `knowledge_fanout_e2e` (3) suites.
 
 **The catalogue half, over any origin kind**
-(`commonwealth/crates/commonwealth-media/src/fanout.rs`, the route in
+(`cmnwlth/crates/commonwealth-media/src/fanout.rs`, the route in
 `sovereign-daemon/src/origin_fanout.rs`, `POST /v1/mesh/fanout`,
 `svrn mesh media fanout <path>`, `svrn mesh app fanout <app> <path>` and
 `svrn mesh offers`, 2026-09-11; generalised 2026-09-12; third kind 2026-09-13).
@@ -6219,7 +6219,7 @@ inference daemon and the rails daemon fan out with one implementation
 `an_answer_is_read_up_to_the_cap_and_says_when_it_was_cut` (cap ignored).
 
 **Named apps, and the claim that cannot outlive its process**
-(`commonwealth/crates/commonwealth-media/src/apps.rs`,
+(`cmnwlth/crates/commonwealth-media/src/apps.rs`,
 `sovereign-daemon/src/publish_http.rs`, `sovereign-cli-llm/src/run_cmd.rs`,
 2026-09-12). `OriginKind::App` is one closed-set variant on one ALPN with one
 acceptor route; WHICH app is a registry lookup, because app names are open
@@ -6260,7 +6260,7 @@ before the claim, unreachable again after the release — so a regression to
 boot-time protocol selection fails rather than passing on a test that had
 advertised it all along; and `apps::tests::a_claim_nobody_released_is_gone_when_its_ttl_passes`.
 
-**The minimal rails daemon** (`commonwealth/crates/commonwealth-rails`, the
+**The minimal rails daemon** (`cmnwlth/crates/commonwealth-rails`, the
 `cw-rails` binary, `scripts/cw-rails-lift.sh --sandbox`, 2026-09-11).
 The process that IS your address on the mesh, with media registered on it and
 nothing else — what a Jellyswarrm-shaped shim author installs beside their
@@ -6345,7 +6345,7 @@ carrying `dial=` is tunnelled or it is refused (§18.3).
 
 | Path                          | Notes                                                  |
 |-------------------------------|--------------------------------------------------------|
-| `POST /v1/chat/completions`   | OpenAI-compatible. Routing differs by daemon shape (embedded vs standalone) — see `commonwealth/docs/routing-field-guide.md`. `LocalOnly` privacy → 400. |
+| `POST /v1/chat/completions`   | OpenAI-compatible. Routing differs by daemon shape (embedded vs standalone) — see `cmnwlth/docs/routing-field-guide.md`. `LocalOnly` privacy → 400. |
 | `POST /v1/responses`          | OpenAI Responses-API adapter (codex 0.130+). Wire-format translator over chat-completions. See [`docs/inference.md`](./docs/inference.md). |
 | `GET  /v1/models`             | **Names this daemon can dispatch by name**, one row per name. Built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not. Carries `residency` (`resident`/`cold` — cold is a lazy slot, not an outage) and `advertised_by` (which nodes hold it). Falls back to the gossiped `inference_store` scan ONLY on the orchestrator daemon, which has no manifest; that path can say "the entry's last writer is reachable" and nothing stronger. Before 2026-08-27 the store scan was the ONLY path, and it advertised ids chat completions refused. |
 | `POST /v1/embeddings`         | Embedding endpoint (what `embed_http::http_embed_fn` peers call) |
@@ -7915,7 +7915,7 @@ decider). Empty strings normalise to SQL `NULL` host-side.
 ### Build / test
 
 The repo is **one unified Cargo workspace** — every crate a member under the
-root `Cargo.toml` (`sovereign/`, `commonwealth/`, `corpus-engine` + its
+root `Cargo.toml` (`sovereign/`, `cmnwlth/`, `corpus-engine` + its
 carve-outs are directories of member crates, **not** separate workspaces). Use the
 **sovereign watcher** (`lint_status` / `test_status` MCP tools) for
 compilation feedback — running `cargo build` / `cargo test` directly via Bash
@@ -8146,7 +8146,7 @@ Default ports:
 | See the Sovereign HTTP MCP route                 | `sovereign/crates/sovereign-server/src/routes_mcp.rs`               |
 | **Deploy to a shared, air-gapped box (the on-prem pilot)** | `sovereign/deploy/onprem/` — `PLAN.md` (why each choice), `README.md` (the IT-facing brief), `EGRESS.md` (line-by-line audit of every outbound call + its kill switch), the hand-written `daemon-config.toml`, ONE systemd unit running the `sovereign-onprem` distribution binary (keyed: `svrn daemon key`), the nginx route allowlist (pinned to `acceptance.sh`'s `CLIENT_ROUTES` by `quality/xtask/tests/onprem_kit_allowlist.rs`), `package.sh` (our side) / `install.sh` (`--no-systemd` for a sandbox proof) + `acceptance.sh` (theirs, against the daemon's API). **Read `EGRESS.md` before claiming this system makes no outbound connections:** three agent tools (`search`'s web fallback, `web_fetch`, `wikipedia_fetch`) reached the internet on ordinary chat turns with no config switch until the `net-tools` feature was added 2026-08-03 |
 | **Rent a GPU by the minute — as an appliance, or as a mesh peer** | `docs/CLOUD_PEER.md` — `scripts/dev-pod.sh` rents a daemon carrying this host's loadout and tears it down in one command, either as a SOLO ISLAND or (`--mesh`) as a real peer that federates retrieval to whoever holds the bytes. Measured 2026-08-29: a pod holding ZERO corpora answered a `sep` query with five cited chunks served by RuggedFox at 0.73-0.80s Delaware->California, for $0.08. The mode is recorded in the Vast label so `check` and `down` cannot run against the wrong expectation, and `check` EXITS NON-ZERO on a contradiction. **A `--mesh` flight puts the join link on third-party hardware — end it with `svrn mesh rotate`.** The sibling `docs/CLOUD_TENSOR_PEER.md` is the other cloud shape: layers of ONE model sharded over ggml-RPC, not a whole daemon |
-| Trace a `/v1/chat/completions` end-to-end        | `commonwealth/docs/routing-field-guide.md`                          |
+| Trace a `/v1/chat/completions` end-to-end        | `cmnwlth/docs/routing-field-guide.md`                          |
 | Point an outside tool (Claude Code, Codex, an Ollama client, an OpenAI SDK, an editor) at the daemon | `docs/INTEROP.md` — task-oriented recipes per socket; `docs/INTEGRATION_SURFACES.md` for which surfaces are contracts |
 | Understand OICP routing                          | `shared/crates/oicp-types/src/lib.rs` + `sovereign-scheduler/src/oicp_select.rs` (shared by both sides) + `sovereign-inference/src/selector.rs` and [`docs/inference.md`](./docs/inference.md) |
 | Know what a comparable project does (exo) before designing distributed inference | `docs/internal/EXO_COMPARATIVE_STUDY.md` — teardown of exo-explore/exo @ `b5375f8`: what to adopt, what we already lead on, and where both projects are stuck (notably: exo has **no** measured throughput or link-bandwidth signal either, which reframes SCHEDULER_QUALITY F10) |

@@ -69,7 +69,7 @@ check     = "python3 scripts/domains-census.py predicate && cargo xtask boundary
 # excluding target/ and studio/). DOMAINS.md §3 said 34 across 11 crates; the
 # instrument below will be the one decider and this row records the drift:
 #   39 distinct pub Peer* definitions across 13 crates
-#   13 inside commonwealth/crates (transport 8, state 2, core 2, media 1)
+#   13 inside cmnwlth/crates (transport 8, state 2, core 2, media 1)
 #   26 OUTSIDE — sovereign-mesh 11, sovereign-api 5, sovereign-contracts 3,
 #      sovereign-tools 2, desktop 1, cli-llm 1, oicp-types 1, kernel-types 1,
 #      corpus-engine 1
@@ -119,7 +119,7 @@ check     = "python3 scripts/domains-census.py predicate && cargo xtask boundary
 # is what makes the choice checkable rather than remembered.
 #
 # ONE INSTRUMENT IS ALREADY BROKEN. scripts/daemon-route-census.py:25 still
-# lists `commonwealth/crates/commonwealth-api/src` as a host; that path left
+# lists `cmnwlth/crates/commonwealth-api/src` as a host; that path left
 # the tree at domains-1 (904145b64, 2026-09-11). Today it reports 213 unique
 # paths and never names sovereign-api, so DAEMON_CORE.md's 242 / 89-route
 # baseline is silently under-counted by every route sovereign-api registers.
@@ -144,7 +144,7 @@ status       = "open"
 # rename) and PeerAnswer in kernel-types (C9, egress custody — the one place
 # the word is load-bearing; disposition keep, with the why on the row).
 floor        = 35.0
-floor_basis  = "2026-09-13 scratchpad/peer-count.sh --anywhere (pub + pub(crate)) over the registry's [[noun]] rows: 50 across 14 crates, 35 outside commonwealth/ in 9 crates (sovereign-mesh, -api, -contracts, -tools, -desktop, -cli-llm, corpus-engine, oicp-types, kernel-types); prefix-only would read 26. domains-3 re-mints with the one instrument and records any delta"
+floor_basis  = "2026-09-13 scratchpad/peer-count.sh --anywhere (pub + pub(crate)) over the registry's [[noun]] rows: 50 across 14 crates, 35 outside cmnwlth/ in 9 crates (sovereign-mesh, -api, -contracts, -tools, -desktop, -cli-llm, corpus-engine, oicp-types, kernel-types); prefix-only would read 26. domains-3 re-mints with the one instrument and records any delta"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "python3 scripts/domains-census.py peer-outside --anywhere --json"

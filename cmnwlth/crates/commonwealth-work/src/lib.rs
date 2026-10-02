@@ -28,7 +28,7 @@
 //!
 //! **A package closure a third party can lift.** `commonwealth-work` joins
 //! `[[package]] commonwealth` in `quality/ARCH_LAYERS.toml` with its own
-//! `[[forbid]] -> sovereign-*` row, and `commonwealth/BOUNDARY.md` records the
+//! `[[forbid]] -> sovereign-*` row, and `cmnwlth/BOUNDARY.md` records the
 //! measured closure. cw-lift 5f builds this crate outside the monorepo; the
 //! manifest's dependency list is the contract, not a preference.
 //!

@@ -13,7 +13,7 @@
 id        = "the-link"
 parent    = "ring-apps"
 objective = "A ring's record, frozen while the room was cut off from the internet, verifies cold on a machine that was never asked: one export verb, one verify verb, four steps over shipped rail exports and zero rail-core edits. The guest link carries its own couriers and marks. The dial's single unknown becomes three numbers in a decisions appendix, whatever they say."
-spec      = ".sovereign/features/the-link/order.md (Demo, Decisions, Premises, Predictions); docs/THE_LINK.md (the design); quality/campaigns/ring-room.toml and ring-guest.toml (regression sets, NEVER edited here); commonwealth/BOUNDARY.md:133 (the journal layout)"
+spec      = ".sovereign/features/the-link/order.md (Demo, Decisions, Premises, Predictions); docs/THE_LINK.md (the design); quality/campaigns/ring-room.toml and ring-guest.toml (regression sets, NEVER edited here); cmnwlth/BOUNDARY.md:133 (the journal layout)"
 declared  = "2026-09-21"
 status    = "active"
 
@@ -54,7 +54,7 @@ rung         = "tl-3"
 one_line     = "CLAIM: the dial's one unknown is a measured number on the record, and no product code moved because of it"
 derives_from = "rail-core compiles for wasm32 only in an isolated copy (`docs/RING_APP_LIBRARY.md:360-380`, workspace-hack carries tokio; getrandom needs wasm_js); iroh's browser relay-only build is CLAIMED, never verified against our pin (`:546-553`) — both are measurements, not premises"
 floor        = 1.0
-floor_basis  = "structural: 1.0 iff (a) the wasm size is of the artifact that was built, hashed and named by tool and opt level — not of a hello-world stand-in, (b) the iroh attempt names the locked version it ran against and its outcome with the failing layer, verbatim, (c) if it built, the dial attempt names the layer that answered or failed against a live node's guest channel, (d) `git diff` over sovereign/crates and commonwealth/crates for this row is empty. Any false is 0.0 — including a missing appendix entry."
+floor_basis  = "structural: 1.0 iff (a) the wasm size is of the artifact that was built, hashed and named by tool and opt level — not of a hello-world stand-in, (b) the iroh attempt names the locked version it ran against and its outcome with the failing layer, verbatim, (c) if it built, the dial attempt names the layer that answered or failed against a live node's guest channel, (d) `git diff` over sovereign/crates and cmnwlth/crates for this row is empty. Any false is 0.0 — including a missing appendix entry."
 target       = 1.0
 direction    = "higher_is_better"
 goodhart     = "reads 1.0 for an optimistic summary (clause (b) wants the failing layer verbatim, not 'no'); reads 1.0 while product code drifted toward the outcome it wanted (clause (d) is the whole point of D3)"

@@ -17,7 +17,7 @@ commonwealth-media = { workspace = true }
 oicp-types = { workspace = true }
 mesh-join-vocab = { workspace = true }
 mesh-reach = { workspace = true, features = ["guest"] }
-commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
+commonwealth-discovery = { path = "../commonwealth-discovery" }
 # The client half of the daemon's HTTP surface: `ServingHost` decides "is a
 # daemon answering", `TurnClient` speaks `/v1/mesh/*` (create/join). Added
 # when the last in-process daemon constructions left this crate.
@@ -26,13 +26,13 @@ commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-dis
 # gates code only, so it moves no dependency edge.
 sovereign-turn-client = { workspace = true, features = ["bundled-backend"] }
 sovereign-cli-base = { workspace = true, features = ["rail-client"] }
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+commonwealth-core = { path = "../commonwealth-core" }
 # `kv-export` (fp-87): the legacy SQLite stores' migration reads through
 # commonwealth-state's own backend — the one schema decider, in this package.
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state", features = ["sqlite"] }
+commonwealth-state = { path = "../commonwealth-state", features = ["sqlite"] }
 commonwealth-rail = { workspace = true }
 commonwealth-work = { workspace = true, features = ["process"] }
-commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
+commonwealth-transport = { path = "../commonwealth-transport" }
 # `svrn mesh up`'s identity handover writes the daemon's key, node id and
 # meshes through cw-rails' own store writers (identity_handover.rs,
 # pb-mesh-exit-transport): one decider for cw-rails' disk format.
@@ -72,7 +72,7 @@ tempfile = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 # identity_handover's tests found meshes the way cw-rails' own tests do.
-commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
+commonwealth-discovery = { path = "../commonwealth-discovery" }
 
 [lints]
 workspace = true

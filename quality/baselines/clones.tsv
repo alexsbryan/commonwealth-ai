@@ -4,19 +4,19 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clone-gate --tighten
 13776	(total covered lines)
-37	commonwealth/crates/commonwealth-core/src/mesh/mod.rs <-> sovereign/crates/sovereign-cli-mesh/src/daemon_store.rs
-60	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs
-32	commonwealth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs <-> serve/crates/sovereign-serve/src/rails_mesh.rs
-30	commonwealth/crates/commonwealth-media/src/declared.rs <-> sovereign/crates/sovereign-daemon/src/client_tokens.rs <-> studio/crates/sovereign-tools-base/src/mcp/secret_store.rs
-30	commonwealth/crates/commonwealth-rails/src/cli.rs <-> sovereign/crates/sovereign-cli-mesh/src/mesh_media.rs
-24	commonwealth/crates/commonwealth-rails/src/gossip.rs <-> sovereign/crates/sovereign-daemon/src/peer_origin/claims.rs <-> serve/crates/sovereign-serve/src/rails_mesh.rs
-32	commonwealth/crates/commonwealth-rails/src/gossip.rs <-> serve/crates/sovereign-serve/src/rails_mesh.rs
-28	commonwealth/crates/commonwealth-rails/src/iroh_watchdog.rs <-> shared/crates/sovereign-contracts/src/daemon_wire/mesh.rs
-18	commonwealth/crates/commonwealth-rails/src/rail.rs <-> sovereign/crates/sovereign-daemon/src/routes_rail.rs
-26	commonwealth/crates/commonwealth-rails/src/rail.rs <-> sovereign/crates/sovereign-daemon/src/routes_rail_live.rs
-48	commonwealth/crates/commonwealth-state/src/backend.rs <-> commonwealth/crates/commonwealth-state/src/backend/memory.rs
-26	commonwealth/crates/commonwealth-transport/src/iroh_identity_forward.rs <-> commonwealth/crates/commonwealth-transport/src/iroh_routed_forward.rs
-16	commonwealth/crates/commonwealth-work/src/process.rs <-> sovereign/crates/sovereign-daemon/src/ingest_executor.rs
+37	cmnwlth/crates/commonwealth-core/src/mesh/mod.rs <-> cmnwlth/crates/sovereign-cli-mesh/src/daemon_store.rs
+60	cmnwlth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs
+32	cmnwlth/crates/commonwealth-discovery/src/membership.rs <-> sovereign/crates/sovereign-daemon/src/double/mod.rs <-> serve/crates/sovereign-serve/src/rails_mesh.rs
+30	cmnwlth/crates/commonwealth-media/src/declared.rs <-> sovereign/crates/sovereign-daemon/src/client_tokens.rs <-> studio/crates/sovereign-tools-base/src/mcp/secret_store.rs
+30	cmnwlth/crates/commonwealth-rails/src/cli.rs <-> cmnwlth/crates/sovereign-cli-mesh/src/mesh_media.rs
+24	cmnwlth/crates/commonwealth-rails/src/gossip.rs <-> sovereign/crates/sovereign-daemon/src/peer_origin/claims.rs <-> serve/crates/sovereign-serve/src/rails_mesh.rs
+32	cmnwlth/crates/commonwealth-rails/src/gossip.rs <-> serve/crates/sovereign-serve/src/rails_mesh.rs
+28	cmnwlth/crates/commonwealth-rails/src/iroh_watchdog.rs <-> shared/crates/sovereign-contracts/src/daemon_wire/mesh.rs
+18	cmnwlth/crates/commonwealth-rails/src/rail.rs <-> sovereign/crates/sovereign-daemon/src/routes_rail.rs
+26	cmnwlth/crates/commonwealth-rails/src/rail.rs <-> sovereign/crates/sovereign-daemon/src/routes_rail_live.rs
+48	cmnwlth/crates/commonwealth-state/src/backend.rs <-> cmnwlth/crates/commonwealth-state/src/backend/memory.rs
+26	cmnwlth/crates/commonwealth-transport/src/iroh_identity_forward.rs <-> cmnwlth/crates/commonwealth-transport/src/iroh_routed_forward.rs
+16	cmnwlth/crates/commonwealth-work/src/process.rs <-> sovereign/crates/sovereign-daemon/src/ingest_executor.rs
 32	corpus-engine-archaeology/src/rough_edges.rs <-> corpus-engine/src/enrichment/atlas/strategies/code_walk.rs
 50	corpus-engine-archaeology/src/rough_edges.rs <-> corpus-engine/src/enrichment/atlas/strategies/code_walk.rs <-> corpus-engine/src/extractors/code/mod.rs
 32	corpus-engine-archaeology/src/rough_edges.rs <-> corpus-engine/src/extractors/code/mod.rs
@@ -227,13 +227,13 @@
 16	sovereign/crates/sovereign-cli-llm/src/portfolio_cmd/ask.rs <-> sovereign/crates/sovereign-cli-llm/src/proxy_cmd/ask.rs
 22	sovereign/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs <-> serve/crates/sovereign-compute/src/manager.rs
 24	sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/runner.rs <-> sovereign/crates/sovereign-daemon/src/frontdoor.rs
-18	sovereign/crates/sovereign-cli-mesh/src/job_cmd.rs <-> sovereign/crates/sovereign-cli-mesh/src/ring_cmd/mod.rs
-52	sovereign/crates/sovereign-cli-mesh/src/mesh_app.rs <-> sovereign/crates/sovereign-cli-mesh/src/mesh_media.rs
-18	sovereign/crates/sovereign-cli-mesh/src/mesh_cmd.rs <-> sovereign/crates/sovereign-cli-mesh/src/mesh_member_cmd.rs
-22	sovereign/crates/sovereign-cli-mesh/src/mesh_guest.rs <-> sovereign/crates/sovereign-cli-mesh/src/mesh_token.rs
-16	sovereign/crates/sovereign-cli-mesh/src/mesh_media.rs <-> sovereign/crates/sovereign-cli-mesh/src/mesh_offers.rs
-150	sovereign/crates/sovereign-cli-mesh/src/mesh_pod.rs <-> sovereign/crates/sovereign-cli-mesh/src/mesh_pod/pool.rs
-22	sovereign/crates/sovereign-cli-mesh/src/mesh_pod/pod.rs <-> sovereign/crates/sovereign-cli-mesh/src/mesh_pod/pool.rs
+18	cmnwlth/crates/sovereign-cli-mesh/src/job_cmd.rs <-> cmnwlth/crates/sovereign-cli-mesh/src/ring_cmd/mod.rs
+52	cmnwlth/crates/sovereign-cli-mesh/src/mesh_app.rs <-> cmnwlth/crates/sovereign-cli-mesh/src/mesh_media.rs
+18	cmnwlth/crates/sovereign-cli-mesh/src/mesh_cmd.rs <-> cmnwlth/crates/sovereign-cli-mesh/src/mesh_member_cmd.rs
+22	cmnwlth/crates/sovereign-cli-mesh/src/mesh_guest.rs <-> cmnwlth/crates/sovereign-cli-mesh/src/mesh_token.rs
+16	cmnwlth/crates/sovereign-cli-mesh/src/mesh_media.rs <-> cmnwlth/crates/sovereign-cli-mesh/src/mesh_offers.rs
+150	cmnwlth/crates/sovereign-cli-mesh/src/mesh_pod.rs <-> cmnwlth/crates/sovereign-cli-mesh/src/mesh_pod/pool.rs
+22	cmnwlth/crates/sovereign-cli-mesh/src/mesh_pod/pod.rs <-> cmnwlth/crates/sovereign-cli-mesh/src/mesh_pod/pool.rs
 40	sovereign/crates/sovereign-cli/src/cache_audit_cmd.rs <-> sovereign/crates/sovereign-cli/src/notes_retrieval_cmd.rs
 26	sovereign/crates/sovereign-cli/src/deep_research_cmd.rs <-> sovereign/crates/sovereign-core/src/deep_research/launch.rs
 54	sovereign/crates/sovereign-code/src/arch_posture.rs <-> sovereign/crates/sovereign-code/src/arch_report.rs <-> sovereign/crates/sovereign-code/src/capability_map_tool.rs

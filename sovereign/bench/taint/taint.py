@@ -250,7 +250,7 @@ def analyze_file(path, rel=None):
 if __name__=="__main__":
     import sys
     path = sys.argv[1] if len(sys.argv)>1 else \
-        "/home/alexbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-api/src/frontdoor.rs"
+        "/home/alexbryan/dev/commonwealth-ai/cmnwlth/crates/commonwealth-api/src/frontdoor.rs"
     res=analyze_file(path)
     from collections import Counter
     c=Counter(r[4] for r in res)

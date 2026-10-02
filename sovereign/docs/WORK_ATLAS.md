@@ -287,8 +287,8 @@ These are intentionally out of scope and called out so future-you doesn't think 
 - `sovereign/crates/sovereign-work-atlas/` — the crate.
 - `sovereign/crates/sovereign-work-atlas/src/tools/resource_may_i.rs` — `resource_may_i` tool, `resource_verdict`, `DEFAULT_RESOURCE_TTL_SECS` (resource-commons convention, order seat-resource-commons).
 - `sovereign/crates/sovereign-cli-llm/src/claim_cmd.rs` — `sovereign claim` dispatch incl. `may-i` / `take` (daemon-first; the in-process fallback lives here too).
-- `commonwealth/crates/commonwealth-api/src/admission.rs` + `state.rs` + `routes_status.rs` — the per-peer request tally on `/status` (`inference.peer_requests`, order seat-resource-commons UC-R1).
-- `commonwealth/crates/commonwealth-state/src/peer_preferences.rs` — `GOSSIP_EXCLUDED_APP_IDS` slice + paired test.
+- `cmnwlth/crates/commonwealth-api/src/admission.rs` + `state.rs` + `routes_status.rs` — the per-peer request tally on `/status` (`inference.peer_requests`, order seat-resource-commons UC-R1).
+- `cmnwlth/crates/commonwealth-state/src/peer_preferences.rs` — `GOSSIP_EXCLUDED_APP_IDS` slice + paired test.
 - `sovereign/crates/sovereign-daemon/src/mcp_router.rs` — `X-Agent-Session` extraction.
 - `sovereign/crates/sovereign-core/src/types.rs::ToolContext` — `agent_session_token` field.
 - `sovereign/crates/sovereign-tools/src/code/blast_radius.rs` — `concurrent` field injection.

@@ -33,7 +33,7 @@
 /sovereign/                     @alexsbryan
 
 # Commonwealth — the symmetric mesh daemon.
-/commonwealth/                  @alexsbryan
+/cmnwlth/                  @alexsbryan
 
 # Wire-protocol types shared across the tree.
 /shared/crates/oicp-types/                    @alexsbryan

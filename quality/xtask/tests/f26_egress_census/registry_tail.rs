@@ -28,10 +28,10 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // the rail routes and the guest-grant mint. Nothing a ring app writes
     // leaves the machine through this client — replication is the daemon's
     // own peer traffic (`ring_sync`), on the mesh class.
-    ("sovereign/crates/sovereign-cli-mesh/src/ring_cmd/mod.rs", Class::LocalDaemon, 1),
+    ("cmnwlth/crates/sovereign-cli-mesh/src/ring_cmd/mod.rs", Class::LocalDaemon, 1),
     // pb-shell (42a657102, da819e9e2): a `#[test]` that builds a RingCtx it
     // never sends through, and the shell's own test module.
-    ("sovereign/crates/sovereign-cli-mesh/src/ring_cmd/show.rs", Class::TestOnly, 1),
+    ("cmnwlth/crates/sovereign-cli-mesh/src/ring_cmd/show.rs", Class::TestOnly, 1),
     ("shared/crates/host-kit/src/shell/tests.rs", Class::TestOnly, 1),
     // pb-code-server (20fd4954e): the host kit's MCP framing test posts to
     // its own loopback listener.
@@ -365,7 +365,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // the read runs on ensure_rails' short-lived runtime, not the daemon's.
     // Moved with `ensure_rails` to `svrn mesh up` (pb-rails-untether).
     (
-        "sovereign/crates/sovereign-cli-mesh/src/rails_up.rs",
+        "cmnwlth/crates/sovereign-cli-mesh/src/rails_up.rs",
         Class::LocalDaemon,
         1,
     ),
@@ -380,11 +380,11 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // reachable from here. The other three sites are the inline test
     // module's fixtures against an origin it spawns itself.
     (
-        "commonwealth/crates/commonwealth-rails/src/presence.rs",
+        "cmnwlth/crates/commonwealth-rails/src/presence.rs",
         Class::OperatorSurface,
         4,
     ),
-    ("oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
+    ("cmnwlth/crates/oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
     // Federated media's catalogue half. The row was
     // `sovereign-mesh/src/media_fanout.rs` from 2026-09-11 until the decisions
     // moved to the package crate later the same day (0eccf5664) — same two
@@ -396,7 +396,7 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // row's `json` field — one JSON answer parsed, one truncated answer
     // deliberately not. Test fixtures in an inline module, same as
     // `mesh_skew.rs`'s three; the production sites are still the two above.
-    ("commonwealth/crates/commonwealth-media/src/fanout.rs", Class::Mesh, 4),
+    ("cmnwlth/crates/commonwealth-media/src/fanout.rs", Class::Mesh, 4),
 
     // ---- commonwealth-rails: the package-only rails daemon (2026-09-11) ----
     // Every destination is a peer of the operator's own mesh, reached through
@@ -406,24 +406,24 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // a member.
     // 1 -> 2 at pb-rails-membership (26e82ea3a): the departure announcement
     // builds its own client, to the same Online members with the same bound.
-    ("commonwealth/crates/commonwealth-rails/src/gossip.rs", Class::Mesh, 2),
-    ("commonwealth/crates/commonwealth-rails/src/join.rs", Class::Mesh, 1),
+    ("cmnwlth/crates/commonwealth-rails/src/gossip.rs", Class::Mesh, 2),
+    ("cmnwlth/crates/commonwealth-rails/src/join.rs", Class::Mesh, 1),
     // The ring round's peer client (`peer_client`, pb-rails-parity d30c17f1b):
     // same ten-second bound and same destinations as the gossip round's.
-    ("commonwealth/crates/commonwealth-rails/src/ring_sync.rs", Class::Mesh, 1),
+    ("cmnwlth/crates/commonwealth-rails/src/ring_sync.rs", Class::Mesh, 1),
     // `cw-rails media` is a client of THIS daemon's own loopback API — the
     // same bytes a `curl` would send, and they never leave the machine.
-    ("commonwealth/crates/commonwealth-rails/src/cli.rs", Class::LocalDaemon, 1),
+    ("cmnwlth/crates/commonwealth-rails/src/cli.rs", Class::LocalDaemon, 1),
     // The `#[cfg(test)]` modules of the kv doors (fp-77, fp-107, fp-109) and the
     // ledger doors (fp-78): each client talks to a router the test itself served
     // on loopback.
-    ("commonwealth/crates/commonwealth-rails/src/kv/tests.rs", Class::TestOnly, 4),
-    ("commonwealth/crates/commonwealth-rails/src/ledger/tests.rs", Class::TestOnly, 1),
+    ("cmnwlth/crates/commonwealth-rails/src/kv/tests.rs", Class::TestOnly, 4),
+    ("cmnwlth/crates/commonwealth-rails/src/ledger/tests.rs", Class::TestOnly, 1),
     // The ring doors' and the ring round's test modules, which the flip
     // (1c120f23d) brought into cw-rails: the same loopback-router shape.
-    ("commonwealth/crates/commonwealth-rails/src/ring_routes/tests.rs", Class::TestOnly, 2),
-    ("commonwealth/crates/commonwealth-rails/src/ring_sync/tests.rs", Class::TestOnly, 11),
-    ("commonwealth/crates/commonwealth-rails/src/ring_sync/tests/round_tests.rs", Class::TestOnly, 1),
+    ("cmnwlth/crates/commonwealth-rails/src/ring_routes/tests.rs", Class::TestOnly, 2),
+    ("cmnwlth/crates/commonwealth-rails/src/ring_sync/tests.rs", Class::TestOnly, 11),
+    ("cmnwlth/crates/commonwealth-rails/src/ring_sync/tests/round_tests.rs", Class::TestOnly, 1),
 
     // ---- mesh-reach: the reach leaf (2026-09-28, REVIEW-audit-pb-auto-6) ----
     // `RailsTransport` asks cw-rails' reach door at the loopback API base its

@@ -648,7 +648,7 @@ reason = "the rail's manifests declare commonwealth-core ABSENT in prose and not
 # `commonwealth-rail*` at the time; the check held for `-work` and did not for
 # `commonwealth-rails`, which is why they name their two crates now.) Without this block the crate would sit in `mesh-foundation` with
 # nothing at all stopping a `sovereign-*` edge, which is the exact failure
-# `commonwealth/BOUNDARY.md` was written about.
+# `cmnwlth/BOUNDARY.md` was written about.
 [[forbid]]
 from = "commonwealth-work"
 to = "sovereign-*"

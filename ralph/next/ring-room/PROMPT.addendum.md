@@ -29,7 +29,7 @@ you cannot make green: §6.
 | DEMO-WAIT | `scripts/ralph-check.sh demo-wait` — polls up to 9 min; exit=3 means still running: call it AGAIN, as many times as it takes; then read it exactly as DEMO | as DEMO |
 <!-- section: hard-rules-scope -->
 - Never edit `sovereign/ARCH_PRINCIPLES.md`, `AGENTS.md`, `.claude/`,
-  `scripts/ralph*`, or ANYTHING under `commonwealth/crates/commonwealth-rail/` or
+  `scripts/ralph*`, or ANYTHING under `cmnwlth/crates/commonwealth-rail/` or
   `shared/crates/commonwealth-rail-core/` — the RING RAIL (zero diffs there
   beyond the roster-door hunk the operator permitted is the campaign predicate;
   a row that seems to need one is §6). `commonwealth-rails/` is the rails DAEMON,

@@ -11,15 +11,15 @@ They do not.
 Rails' data dir (the `daemon.node.data_dir` the poll passes to `house_dir_under`, commonwealth-rails/src/presence.rs:57):
 
 ```
-commonwealth/crates/commonwealth-rails/src/config.rs:21:  pub const DATA_DIR_ENV: &str = "CW_RAILS_DIR";
-commonwealth/crates/commonwealth-rails/src/config.rs:127-137: resolve_data_dir = --data-dir, else $CW_RAILS_DIR, else ~/.commonwealth-rails
+cmnwlth/crates/commonwealth-rails/src/config.rs:21:  pub const DATA_DIR_ENV: &str = "CW_RAILS_DIR";
+cmnwlth/crates/commonwealth-rails/src/config.rs:127-137: resolve_data_dir = --data-dir, else $CW_RAILS_DIR, else ~/.commonwealth-rails
 ```
 
 The daemon's and the offer verb's root:
 
 ```
 sovereign/crates/sovereign-cli-daemon/src/lib.rs:184:   let data_dir = sovereign_contracts::rebrand::svrnmesh_root();
-sovereign/crates/sovereign-cli-mesh/src/mesh_media/offer.rs:167-170:
+cmnwlth/crates/sovereign-cli-mesh/src/mesh_media/offer.rs:167-170:
     let root = sovereign_contracts::rebrand::svrnmesh_root();
     let house_dir = commonwealth_media::house_dir_under(&root);
 sovereign-contracts/src/rebrand.rs:160: svrnmesh_root = $SVRNMESH_DATA_DIR, else ~/.svrnmesh (legacy fallback)

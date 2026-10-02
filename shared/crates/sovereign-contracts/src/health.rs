@@ -31,7 +31,7 @@ impl Component {
     /// Stable human-readable name in `kind/id` form (e.g. `corpus-index/sep`), for logs and UI listings.
     pub fn display_name(&self) -> String {
         match self {
-            Self::CorpusIndex(id) => format!("shared/crates/corpus-index/{id}"),
+            Self::CorpusIndex(id) => format!("corpus-index/{id}"),
             Self::Enrichment(id) => format!("enrichment/{id}"),
             Self::StateStore => "state-store".into(),
             Self::LlmRouter => "llm-router".into(),

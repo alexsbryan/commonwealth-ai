@@ -631,8 +631,8 @@ JOIN_BANK='[
 join_doc_js() {
   cat > "$D/join-doc.mjs" <<'JS'
 const { REPO, PD, PA, POLL_S, WATCH_S } = process.env;
-const A = await import(`file://${REPO}/sovereign/apps/ring-doc/adapter.js`);
-const { Y } = await import(`file://${REPO}/sovereign/apps/ring-doc/vendor/ring-doc-bundle.js`);
+const A = await import(`file://${REPO}/cmnwlth/apps/ring-doc/adapter.js`);
+const { Y } = await import(`file://${REPO}/cmnwlth/apps/ring-doc/vendor/ring-doc-bundle.js`);
 // The SDK's fold, as ring-doc-demo.sh's driver carries it.
 const fold = (log, reducer, initial) => {
   let acc = initial;
@@ -1932,7 +1932,7 @@ if topology == "room":
     # did, and it re-arms as a tripwire the moment an unpushed campaign
     # edits rail — which is the standing rule D1 revised for one row only.
     # Operator direction 2026-09-22 (option a on the same handoff).
-    RAIL = ["commonwealth/crates/commonwealth-rail",
+    RAIL = ["cmnwlth/crates/commonwealth-rail",
             "shared/crates/commonwealth-rail-core"]
     rail_diff = git("diff", "--stat", "origin/main", "--", *RAIL)
     rail_diff_ring_guest = git("diff", "--stat", guest_base, "HEAD", "--", *RAIL)
@@ -2276,7 +2276,7 @@ if topology == "room":
     # which carries its own self-test; this script does not re-derive it. A
     # counter that cannot run is could-not-judge, never a 0 (ARCH 6).
     doc_files = [os.path.join(REPO, f) for f in
-                 ("sovereign/apps/ring-doc/app.js", "sovereign/apps/ring-doc/adapter.js")]
+                 ("cmnwlth/apps/ring-doc/app.js", "cmnwlth/apps/ring-doc/adapter.js")]
     try:
         counted = json.loads(subprocess.run(
             [sys.executable, os.path.join(REPO, "scripts/ring-doc-guest-lines.py"), *doc_files],

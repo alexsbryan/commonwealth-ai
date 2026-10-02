@@ -53,7 +53,7 @@ const DECIDERS: &[&str] = &[
     "shared/crates/sovereign-time/src/lib.rs",
     "sovereign/crates/sovereign-core/src/time.rs",
     "shared/crates/corpus-engine-yield/src/time.rs",
-    "commonwealth/crates/commonwealth-core/src/clock.rs",
+    "cmnwlth/crates/commonwealth-core/src/clock.rs",
 ];
 
 /// Which decider a new site should reach for, named by where the site lives.
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn each_island_is_pointed_at_its_own_decider() {
         assert!(decider_for("corpus-engine/src/facts_store.rs").starts_with("corpus_engine_yield"));
-        assert!(decider_for("commonwealth/crates/commonwealth-api/src/x.rs")
+        assert!(decider_for("cmnwlth/crates/commonwealth-api/src/x.rs")
             .starts_with("commonwealth_core"));
         assert!(
             decider_for("sovereign/crates/sovereign-mesh/src/x.rs").starts_with("sovereign_core")

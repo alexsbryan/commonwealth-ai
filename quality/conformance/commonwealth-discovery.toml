@@ -13,6 +13,6 @@
 [[claim]]
 requirement = "FE-22"
 test = "commonwealth-discovery::hardware::tests::the_vendor_chain_stops_at_the_first_vendor_that_answers"
-file = "commonwealth/crates/commonwealth-discovery/src/hardware.rs"
+file = "cmnwlth/crates/commonwealth-discovery/src/hardware.rs"
 line = 453
 asserts = 9

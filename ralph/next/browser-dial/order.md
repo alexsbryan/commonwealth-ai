@@ -57,7 +57,7 @@ FOLLOW-ON order, opened only if this one measures WORKED.
 
 ## Predictions (the audit reads the diff against these, line by line)
 
-- sovereign/crates: +0. commonwealth/crates: +0. scripts/: +0.
+- sovereign/crates: +0. cmnwlth/crates: +0. scripts/: +0.
   A row that needs a product edit has found the order's exit condition,
   not its next step.
 - quality/campaigns/browser-dial.toml: +1 file (pre-registered before any

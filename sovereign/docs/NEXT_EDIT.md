@@ -215,7 +215,7 @@ IDE client stays a thin capture-and-render shell.
   context per side, making each history unit self-contained.
 - **Daemon — `POST /v1/edit_predictions`** on the `client_router`
   (:9741), beside the FIM handler; handler in
-  `commonwealth/crates/commonwealth-api/src/routes_edit_predictions.rs`,
+  `cmnwlth/crates/commonwealth-api/src/routes_edit_predictions.rs`,
   pure pipeline in `commonwealth-api/src/next_edit.rs`. Request:
   `{history[], text, cursor, path, language, debug}`; response:
   `{edits: [{start, end, new_text}], engine: "rule",

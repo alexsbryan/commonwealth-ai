@@ -74,7 +74,7 @@ fn mounted(dir: &Path) -> std::collections::BTreeSet<String> {
 #[test]
 fn no_route_cw_rails_serves_is_mounted_by_svrn_but_the_rail_forward() {
     let root = repo_root();
-    let rails = mounted(&root.join("commonwealth/crates/commonwealth-rails/src"));
+    let rails = mounted(&root.join("cmnwlth/crates/commonwealth-rails/src"));
     let svrn = mounted(&root.join("sovereign/crates/sovereign-daemon/src"));
     assert!(
         rails.contains("/v1/mesh/status") && rails.contains("/internal/gossip"),

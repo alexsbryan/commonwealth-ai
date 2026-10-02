@@ -13,9 +13,9 @@ it is the *outcome* of OICP claim scoring, and the local node is just
 the degenerate one-node mesh.
 
 Companion docs: `inference.md` (slot mechanics, scoring pipeline),
-`commonwealth/docs/oicp-v0.4.md` (the wire contract: requirements,
+`cmnwlth/docs/oicp-v0.4.md` (the wire contract: requirements,
 claims, features, constraint negotiation),
-`commonwealth/docs/routing-field-guide.md` (where a request
+`cmnwlth/docs/routing-field-guide.md` (where a request
 physically goes today).
 
 ---

@@ -1,5 +1,5 @@
 # Workspace CI — the unified root workspace (40 crates: oicp-types,
-# corpus-engine + carve-outs + xtask, sovereign/*, commonwealth/*).
+# corpus-engine + carve-outs + xtask, sovereign/*, cmnwlth/*).
 #
 # Why this lives at the repo root: GitHub Actions only executes workflows in
 # the *root* `.github/workflows/`. `commonwealth/.github/workflows/ci.yml` is a

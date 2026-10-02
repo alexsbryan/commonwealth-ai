@@ -24,7 +24,7 @@ exposing anything. Two rules govern it:
    "Known gaps" section below is part of the contract, not an appendix.
 
 Vulnerability reporting: see [SECURITY.md](../SECURITY.md). Architecture
-context: `commonwealth/ARCHITECTURE.md` §9 (a summary that defers to this
+context: `cmnwlth/ARCHITECTURE.md` §9 (a summary that defers to this
 document) and `sovereign/SYSTEM_OVERVIEW.md` §"Discovery and membership".
 
 ## Trust boundaries
@@ -40,12 +40,12 @@ Three zones, from most to least trusted:
   on a network you control — a tailnet, WireGuard, or a LAN behind a
   firewall. Inside that perimeter, nodes that hold the join key are peers.
   Membership is gated by a BLAKE3-hashed join key, compared in constant
-  time (`commonwealth/crates/commonwealth-discovery/src/membership.rs`);
+  time (`cmnwlth/crates/commonwealth-discovery/src/membership.rs`);
   when a joiner presents a node identity it must also carry an Ed25519
   proof-of-possession, and a bad or missing proof is rejected with 401
   (`sovereign/crates/sovereign-daemon/src/routes_internal/mesh_admin.rs`
   with the check in
-  `commonwealth/crates/commonwealth-transport/src/identity.rs`).
+  `cmnwlth/crates/commonwealth-transport/src/identity.rs`).
 - **Guests.** A holder of an ephemeral guest grant
   (`sovereign/crates/sovereign-grants/src/guest_grant.rs`, 2026-08-27; the
   crate was `commonwealth-knowledge` until the pack split) is strictly
@@ -123,7 +123,7 @@ Three zones, from most to least trusted:
 | MCP `/mcp` (rides `:9741`) | — | Loopback-only middleware, no token by design (`sovereign/crates/sovereign-daemon/src/mcp_router.rs`); permissive CORS is safe *because* of the loopback gate | — |
 | Internal mesh API `:9742` (gossip, join, scheduling, corpus collaboration) | `0.0.0.0` in trusted-network mode; `127.0.0.1` in encrypted mode | **None blanket** — perimeter-trusted; join itself is key+proof gated and gossip carries a mesh proof; **the other routes, admin ones included, have no guard of their own** (corrected 2026-09-20: this row said they were per-handler loopback-only, and no handler reads the caller's address) | **Encrypted-QUIC-first**; in trusted-network mode it falls back to cleartext HTTP on your perimeter, and encrypted mode (below) makes iroh QUIC/TLS the sole path |
 | `sovereign-server` `:8080` (multi-tenant REST/WS, mobile-facing) | `127.0.0.1` (`sovereign/crates/sovereign-server/src/config.rs`) | API-key → tenant middleware. **Startup refuses a non-loopback bind with auth disabled** unless `allow_unauthenticated_remote = true` is set explicitly (`validate_exposure`). `/health` + `/status` unauthenticated by design. | Plain HTTP on the perimeter; iroh dial-by-key optional (`[iroh] enabled`) |
-| Worker-pod daemon `:9742` (rented/cloud worker) | `0.0.0.0` | Owner-only routes; client pins the worker's certificate thumbprint from the bootstrap seed | rustls TLS (`sovereign/crates/sovereign-pods/src/worker_daemon.rs`) |
+| Worker-pod daemon `:9742` (rented/cloud worker) | `0.0.0.0` | Owner-only routes; client pins the worker's certificate thumbprint from the bootstrap seed | rustls TLS (`cmnwlth/crates/sovereign-pods/src/worker_daemon.rs`) |
 | Tensor-split RPC `:50051/:50052` (`llama-server` ↔ `rpc-server`) | `127.0.0.1` — including `--rpc-worker` and `role = "anchor"`, which took `0.0.0.0` until 2026-09-20. A non-loopback `SOVEREIGN_RPC_SERVE` is refused unless `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1` (or `[shared_model] allow_plaintext_lan = true`) acknowledges it (`sovereign-contracts/src/launch.rs`) | **None** | **None — raw TCP.** Members reach the worker over the member-only `RPC_ALPN` tunnel (`sovereign/crates/sovereign-mesh/src/iroh_access.rs`), which needs no LAN bind. See Known gaps |
 | Desktop command bridge `:9745` (test automation) | `127.0.0.1` | Debug builds only, opt-in via `SOVEREIGN_COMMAND_BRIDGE=1`; must never ship enabled in release (`sovereign/crates/sovereign-desktop/src-tauri/src/command_bridge.rs`) | — |
 
@@ -197,7 +197,7 @@ it.
    work. Until closed: run it only inside the perimeter; never claim
    end-to-end encryption while it is in use. (Activations are float tensors,
    not text, but activation-inversion attacks recovering input fragments are
-   published research — see `commonwealth/ARCHITECTURE.md` §9.)
+   published research — see `cmnwlth/ARCHITECTURE.md` §9.)
    *Closes when:* the RPC stream rides an authenticated, encrypted transport
    (the iroh path the rest of the mesh uses) or the port refuses a peer it
    cannot verify. *Owner:* campaign `threat-gaps` (order `threat-gaps-close`),
@@ -275,7 +275,7 @@ it.
 4. ~~**The standalone `commonwealth` binary hardcodes `0.0.0.0:9741`**
    (bearer-gated, loopback-exempt) rather than following the embedded
    daemon's loopback-first default.~~ Struck 2026-09-20 by `27c0fe031`
-   (2026-08-26), which deleted the binary: `commonwealth/crates/` holds nine
+   (2026-08-26), which deleted the binary: `cmnwlth/crates/` holds nine
    crates and none of them is `commonwealth-daemon`, so the surface this entry
    described no longer ships. The embedded daemon's loopback-first default
    (first row of the surfaces table) is the only `:9741` there is.

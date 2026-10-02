@@ -13,7 +13,7 @@
 > 232 violations the declaration produced, and 14 of those are
 > `sovereign-mesh`'s and its neighbours', not the nine crates'.
 
-`commonwealth/crates/` holds the **mesh substrate** — the crate set a third
+`cmnwlth/crates/` holds the **mesh substrate** — the crate set a third
 party could lift out of this monorepo and build a peer against, with no
 sovereign runtime, no corpus engine and no model.
 
@@ -134,7 +134,7 @@ purpose and two of them were not.
 
 ## The two tiers
 
-**Package crates** (`commonwealth/crates/`):
+**Package crates** (`cmnwlth/crates/`):
 
 | Crate | Lines | Closure | Role |
 |---|---:|---:|---|

@@ -814,7 +814,7 @@ kind = "gate"
 claim = "invariant"
 command = "python3 scripts/domains-census.py predicate"
 # 0.59s, n=3 (0.58 / 0.60 / 0.60 wall), 2026-09-14. Exits 1 (FALSE) while any
-# kept context names no package or any crate outside commonwealth/ defines a
+# kept context names no package or any crate outside cmnwlth/ defines a
 # Peer* type; the campaign `check` chains boundary-gate after it.
 cost_secs = 0.59
 enforcement = "advisory"
@@ -2048,7 +2048,7 @@ preconditions = ["binary:podman"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["weekly:soak", "by-hand"]
-doc = "commonwealth/docs/MESH_QA.md"
+doc = "cmnwlth/docs/MESH_QA.md"
 load_bearing = [
   { flag = "the podman backend", why = "real partitions and cgroup OOM. The nightly workflow deliberately runs the LOCAL-subprocess backend instead, so this script's fault classes are covered by nothing scheduled" },
   { flag = "`continue-on-error: true` on the weekly job", why = ".github/workflows/mesh-soak-nightly.yml:35 — the job is advisory, so a red soak does not fail the workflow. `runs_in` says it is scheduled and this says what the schedule can do about a failure, which is nothing" },
@@ -2071,7 +2071,7 @@ fidelity = "F0"
 baseline = { kind = "metrics", path = ".github/mesh-slo-baseline.json" }
 negative_control = "none"
 runs_in = ["weekly:soak", "by-hand"]
-doc = "commonwealth/docs/MESH_QA.md"
+doc = "cmnwlth/docs/MESH_QA.md"
 load_bearing = [
   { flag = "BOTH of its invocations swallow the exit code", why = "mesh-soak.sh:1248 ends `|| true` and only runs under --gate, which the weekly workflow does not pass; mesh-soak-nightly.yml:107-108 runs it as its own step and also ends `|| true`. It is declared `advisory` because that is what it IS, not because someone decided it should be — `cmd_soak_gate` exits 1 on regression and nothing reads it" },
   { flag = "the baseline is named three different things and none is committed", why = "mesh-soak.sh looks for $ROOT/mesh-soak-baseline.json (gitignored, .gitignore:175), the workflow passes .github/mesh-slo-baseline.json, MESH_QA.md:132 says mesh-slo-baseline.json. A gate against a baseline that does not exist gates nothing" },
@@ -2763,7 +2763,7 @@ negative_control = "none"
 # instrument, and an in-run control is neither — it is not separately
 # addressable. Naming nothing is the accurate answer to the field as posed.
 runs_in = ["by-hand"]
-doc = "commonwealth/BOUNDARY.md"
+doc = "cmnwlth/BOUNDARY.md"
 # Verifies the four things `cargo tree` cannot see: whether the copied closure
 # resolves, whether a hand-spelled `path = "../.."` survives flattening, whether
 # it builds with none of this workspace's `.cargo/config.toml` / `clippy.toml` /
@@ -2790,7 +2790,7 @@ fidelity = "F4"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
-doc = "commonwealth/BOUNDARY.md"
+doc = "cmnwlth/BOUNDARY.md"
 # The same closure property for the package's first BINARY, plus the half no
 # manifest gate reaches: that the lifted `cw-rails` JOINS a real mesh by invite,
 # converges a roster carrying another member, lists one offering a library, is

@@ -1,6 +1,6 @@
 # media_bridge — raw readings, 2026-09-09
 
-Data behind the reading in `sovereign/deploy/mesh/WORK_PLANE.md`
+Data behind the reading in `cmnwlth/deploy/mesh/WORK_PLANE.md`
 §"Distance to the capstone". Verdict: **could-not-judge on the pre-registered
 bar; mechanism cleared.** The bar is two machines on different networks over
 the relayed path; no peer was reachable, so no cross-machine number exists.

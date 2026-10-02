@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn pick_default_falls_back_to_first_non_embed_without_alias() {
-        // Older daemon / minimal config: no `commonwealth/*`
+        // Older daemon / minimal config: no `cmnwlth/*`
         // aliases present. Resolver walks the list and grabs
         // the first non-embed for chat, first embed for embed.
         // The GGUF id is the right answer in this case — the
@@ -333,7 +333,7 @@ mod tests {
     fn pick_default_skips_commonwealth_namespace_in_fallback() {
         // Edge case: `commonwealth/fast` is present but
         // `commonwealth/primary` is not (operator misconfig).
-        // The fallback should still skip every `commonwealth/*`
+        // The fallback should still skip every `cmnwlth/*`
         // id rather than picking `commonwealth/fast` as chat —
         // we only know `commonwealth/primary` and `commonwealth/embed`
         // are the canonical chat/embed aliases.

@@ -130,9 +130,9 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   path is relative to the repo root, where every command already runs.
   opencode's permission check resolves `cd X && ../../y` against the wrong
   base, auto-rejects a path INSIDE this repo, and ends your session with the
-  unit half done (rd-1-scaffold lost a session to `/home/sovereign/apps/...`).
+  unit half done (rd-1-scaffold lost a session to `/home/cmnwlth/apps/...`).
   For a scratch build dir use `target/ralph/bundle/` by its repo-relative path
-  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=sovereign/apps/...`).
+  in every argument (`npx esbuild target/ralph/bundle/entry.js --outfile=cmnwlth/apps/...`).
 - Change files with the Edit and Write tools, never with a shell heredoc
   (`cat >> f <<EOF`, `python3 - <<EOF`): edits inside the repo are accepted
   outright, a heredoc asks the operator and is denied after 600 s unattended.
@@ -146,7 +146,7 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
   `scripts/ralph*`, or the templates under
   `sovereign/crates/sovereign-cli-llm/src/ring_cmd/templates/` (the scaffold is the
   falsifier: ONE line there fails `rg-second-app-zero-lines` and is §6). The RING RAIL,
-  `commonwealth/crates/commonwealth-rail/` and `shared/crates/commonwealth-rail-core/`,
+  `cmnwlth/crates/commonwealth-rail/` and `shared/crates/commonwealth-rail-core/`,
   is open to EXACTLY ONE row, `rg-1-on-behalf-of` (operator decision D1, 2026-09-20,
   ledger A52: a signed `on_behalf_of` beside the payload). Every other row that seems
   to need a rail diff is §6, and that row adds the one field and what verifying it

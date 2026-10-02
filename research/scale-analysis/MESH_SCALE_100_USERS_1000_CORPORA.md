@@ -1754,7 +1754,7 @@ separate order; what follows closed is the half that made the response *lie*.
 `corpora_unavailable` never left the client:
 `MeshKnowledgeSource::search` returned a bare `Vec<MeshScoredChunk>`, so
 `MeshKnowledgeClient` parsed the response, took `results`, and dropped the
-rest on the floor — `sovereign/deploy/mesh/GROUND_TRUTH.md` had already
+rest on the floor — `cmnwlth/deploy/mesh/GROUND_TRUTH.md` had already
 recorded this ("The fan-out client discards `corpora_searched`/
 `corpora_unavailable` and returns transport failure as an empty vec"). Three
 failure paths — transport error, non-2xx, malformed body — each returned an

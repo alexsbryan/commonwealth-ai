@@ -976,7 +976,7 @@ The daemon runs as a system service (`commonwealth daemon start/stop/status`).
 Commonwealth compiles to a single static binary. No runtime dependencies except llama.cpp binaries.
 
 ```
-commonwealth/
+cmnwlth/
 ├── crates/
 │   ├── commonwealth-core/          # Types, mesh state, shard plans, ledger
 │   ├── commonwealth-discovery/     # mDNS, gossip, latency probing

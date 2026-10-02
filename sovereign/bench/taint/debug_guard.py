@@ -9,7 +9,7 @@ SITES=[
     ("sovereign/crates/sovereign-core/src/title.rs", 809),
     ("sovereign/crates/sovereign-tools/src/code/atos_utils.rs", 177),
     ("sovereign/crates/sovereign-tools/src/local_corpus/frontmatter.rs", 64),
-    ("commonwealth/crates/commonwealth-api/src/frontdoor.rs", 2209),
+    ("cmnwlth/crates/commonwealth-api/src/frontdoor.rs", 2209),
 ]
 
 def index_at(root, src, line):

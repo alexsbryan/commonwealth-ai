@@ -331,8 +331,8 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `commit-msg` — scripts/commit-msg.sh (header) · runs in: precommit
 - `concept-gate` — quality/NOUN_CONVERGENCE.md · runs in: prepush
 - `contract-nightly` — sovereign/docs/cli-contract.toml (journeys) · runs in: run-if-stale, nightly
-- `cw-rails-lift` — commonwealth/BOUNDARY.md · runs in: by-hand
-- `cw-work-lift` — commonwealth/BOUNDARY.md · runs in: by-hand
+- `cw-rails-lift` — cmnwlth/BOUNDARY.md · runs in: by-hand
+- `cw-work-lift` — cmnwlth/BOUNDARY.md · runs in: by-hand
 - `daemon-concurrency-soak` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
 - `daemon-concurrency-soak-control` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
 - `daemon-concurrency-soak-selftest` — sovereign/docs/specs/DAEMON_RESILIENCE.md · runs in: run-if-stale
@@ -387,8 +387,8 @@ A flag here is one whose absence does not fail anything; it just makes the green
 - `knowledge-gym` — sovereign/bench/knowledge-gym/RUNBOOK.md · runs in: check
 - `lint-gate` — scripts/pre-push.sh (header — why it is not a push gate) · runs in: by-hand
 - `mesh-live-probe` — scripts/mesh-live-probe.py (module header — routing behaviour against the real fleet) · runs in: by-hand
-- `mesh-soak` — commonwealth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
-- `mesh-soak-gate` — commonwealth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
+- `mesh-soak` — cmnwlth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
+- `mesh-soak-gate` — cmnwlth/docs/MESH_QA.md · runs in: weekly:soak, by-hand
 - `module-cycles` — .github/workflows/weekly.yml (header) · runs in: weekly:cycles
 - `mtp-probe` — sovereign/bench/README.md · runs in: smoke:1
 - `nc-thesis` — scripts/nc-thesis.py (module header — is the product claim a TYPE?) · runs in: by-hand, prepush

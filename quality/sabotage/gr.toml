@@ -76,7 +76,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-10-unsealed_search_skips_the_giant_corpus"
 requirement = "GR-10"
-target = "commonwealth/crates/commonwealth-api/src/routes_internal/knowledge.rs"
+target = "cmnwlth/crates/commonwealth-api/src/routes_internal/knowledge.rs"
 find = "        if !explicit && chunks > MAX_UNSEALED_CORPUS_CHUNKS {\n            skipped_oversize.push(cid);\n            continue;\n        }"
 replace = ""
 mustFail = ["unsealed_search_skips_the_giant_corpus"]
@@ -196,7 +196,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-16-locus_is_inside_find_even_for_a_pure_ins"
 requirement = "GR-16"
-target = "commonwealth/crates/commonwealth-api/src/next_edit_syntax.rs"
+target = "cmnwlth/crates/commonwealth-api/src/next_edit_syntax.rs"
 find = "fn edit_locus(find: &str, replace: &str) -> usize {\n    let (f, r) = (find.as_bytes(), replace.as_bytes());\n    let mut i = 0;\n    while i < f.len().min(r.len()) && f[i] == r[i] {\n        i += 1;\n    }\n    i.min(f.len().saturating_sub(1))\n}"
 replace = "fn edit_locus(find: &str, replace: &str) -> usize {\n    let (f, r) = (find.as_bytes(), replace.as_bytes());\n    let mut i = 0;\n    while i < f.len().min(r.len()) && f[i] == r[i] {\n        i += 1;\n    }\n    // Mutation: Return the length of find instead of clamping inside it.\n    // This violates GR-16 by potentially returning a location outside\n    // or at the very end of 'find', which is incorrect for an insertion\n    // locus that should be within the prefix match range.\n    if i >= f.len() { return f.len(); } \n    i.min(f.len().saturating_sub(1))\n}"
 mustFail = ["locus_is_inside_find_even_for_a_pure_insertion"]
@@ -276,7 +276,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-19-the_passthrough_check_catches_an_altered"
 requirement = "GR-19"
-target = "commonwealth/crates/commonwealth-api/src/auto_recover.rs"
+target = "cmnwlth/crates/commonwealth-api/src/auto_recover.rs"
 find = "let Some(corpus) = Corpus::named(index_dir, corpus_id) else {"
 replace = "// MUTATION: Violates GR-19 by truncating the evidence passed to the verifier.\n    // The requirement states the verifier MUST receive untruncated passages. \n    // This edit simulates a bug where only a subset (or truncated version) of the context is available,\n    // causing the post-synthesis guard to fail verification on valid but complex turns."
 mustFail = ["the_passthrough_check_catches_an_altered_turn"]
@@ -586,7 +586,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-50-failure_nudge_skips_envelope_shadow_to_f"
 requirement = "GR-50"
-target = "commonwealth/crates/commonwealth-api/src/frontdoor.rs"
+target = "cmnwlth/crates/commonwealth-api/src/frontdoor.rs"
 find = "    // Delete the failed assistant call and any envelope-shadow\n    // siblings. The model's strongest attractor is verbatim echo of\n    // the last assistant message. Redaction (replacing the cmd with\n    // a placeholder) just shifted the echo target \u2014 the model\n    // happily emitted \"[redacted: ...]\" as the new cmd. Removing\n    // the messages entirely leaves the model nothing to copy.\n    //\n    // The tool result is retained (with banner) as the only signal\n    // that a failure occurred. The tool_call_id chain is broken\n    // post-edit but the inference layer doesn't validate it \u2014\n    // messages are flattened into a single prompt before sampling.\n    delete_failed_call_from_history(messages, &cmd_quote);"
 replace = "    // Delete the failed assistant call and any envelope-shadow\n    // siblings. The model's strongest attractor is verbatim echo of\n    // the last assistant message. Redaction (replacing the cmd with\n    // a placeholder) just shifted the echo target \u2014 the model\n    // happily emitted \"[redacted: ...]\" as the new cmd. Removing\n    // the messages entirely leaves the model nothing to copy.\n    //\n    // The tool result is retained (with banner) as the only signal\n    // that a failure occurred. The tool_call_id chain is broken\n    // post-edit but the inference layer doesn't validate it \u2014\n    // messages are flattened into a single prompt before sampling.\n    delete_failed_call_from_history(messages, &cmd_quote);\n    // MUTATION: Do not remove envelope shadows or real calls from history,\n    // violating GR-50 requirement for per-call attribution cleanup."
 mustFail = ["failure_nudge_skips_envelope_shadow_to_find_real_call"]

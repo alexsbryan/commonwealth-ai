@@ -30,7 +30,7 @@ defines the same ontology under other names — `Job`, `Executor`, `Claim`, `Sel
 `JobRouter` (spelled with `…Rail` there until 2026-09-20) — and those nouns map **one-to-one** onto the ones below; that document now carries
 a superseded-by header pointing here, with the mapping table in it. It stays as the ontology
 and the use-case set; it is not a live design and it is not deleted.
-[`sovereign/docs/WORK_ATLAS.md`](../../docs/WORK_ATLAS.md) owns the word "work" for
+[`sovereign/docs/WORK_ATLAS.md`](../../../sovereign/docs/WORK_ATLAS.md) owns the word "work" for
 **agent-coordination** claims on this same rail — advisory, deliberately not a lock manager —
 and nothing here extends it; a `Lease` below is not an atlas claim and the two never share a
 type.

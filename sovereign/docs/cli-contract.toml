@@ -1528,7 +1528,7 @@ capabilities = ["ring new", "ring roster add", "ring introduce", "ring log", "ri
 [[experience]]
 id = "work-plane"
 title = "Hand a unit of work to your ring, and read one fold of what happened"
-doc = "sovereign/deploy/mesh/WORK_PLANE.md"
+doc = "cmnwlth/deploy/mesh/WORK_PLANE.md"
 capabilities = ["job submit", "job status"]
 
 [[experience]]
@@ -1889,7 +1889,7 @@ persona = "operator"
 experience = "work-plane"
 tier = 3
 visibility = "internal"
-doc = "sovereign/deploy/mesh/WORK_PLANE.md"
+doc = "cmnwlth/deploy/mesh/WORK_PLANE.md"
 [[journey.step]]
 run = "daemon start"
 mutates = true

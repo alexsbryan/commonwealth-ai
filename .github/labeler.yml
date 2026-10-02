@@ -13,11 +13,11 @@
 
 "area: commonwealth":
   - changed-files:
-      - any-glob-to-any-file: "commonwealth/**"
+      - any-glob-to-any-file: "cmnwlth/**"
 
 "area: mesh":
   - changed-files:
-      - any-glob-to-any-file: "commonwealth/**"
+      - any-glob-to-any-file: "cmnwlth/**"
 
 "area: desktop":
   - changed-files:

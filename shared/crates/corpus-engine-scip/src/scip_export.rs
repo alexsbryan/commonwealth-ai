@@ -198,7 +198,7 @@ pub enum ScipProgress<'a> {
 /// **Monorepo case**: if `repo_root` contains no top-level `Cargo.toml`, the
 /// function scans one level of subdirectories for workspace roots. This covers
 /// repos whose workspace roots are siblings under a shared parent (e.g.
-/// `corpus-engine/`, `sovereign/`, `commonwealth/` under `commonwealth-ai/`).
+/// `corpus-engine/`, `sovereign/`, `cmnwlth/` under `commonwealth-ai/`).
 /// To use this path from within a single-workspace sub-repo, pass the monorepo
 /// parent explicitly — see `sovereign project init --workspace-root`.
 pub fn find_cargo_workspace_roots(repo_root: &Path) -> Vec<std::path::PathBuf> {

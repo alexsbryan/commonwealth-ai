@@ -100,7 +100,7 @@ real head tensors degrade with one warn line. Escape hatch:
 - **Gemma 4 + Metal is unsupported** on llama-cpp-2 0.1.145 —
   ggml-metal lacks the matmul kernels and decode SIGSEGVs. CPU
   fallback via `SOVEREIGN_FORCE_CPU_CHAT=1`.
-- **Slot aliases (`fast`, `primary`, `commonwealth/*`) resolve via
+- **Slot aliases (`fast`, `primary`, `cmnwlth/*`) resolve via
   `slot_aliases::resolution_alias_keys`** — the daemon publishes the
   alias map at startup (`daemon.rs::register_local_model_slots`,
   `AppState::slot_aliases_reader`) and the mesh manifest advertises the same
@@ -119,7 +119,7 @@ real head tensors degrade with one warn line. Escape hatch:
 
 ## 2. OICP v0.3 — capability advertisement + scheduler scoring
 
-Spec: `commonwealth/docs/oicp-v0.3.md`. Types:
+Spec: `cmnwlth/docs/oicp-v0.3.md`. Types:
 `shared/crates/oicp-types/src/lib.rs`, re-exported as `sovereign_core::oicp`
 and `commonwealth_core::oicp` — never import the types crate
 directly downstream.
@@ -197,7 +197,7 @@ review process — **not** the scheduler.
 The Responses adapter is a wire-format translator over the
 chat-completions handler — same slot routing, OICP gating, ATOS
 middleware, grammar-constrained tool calls. Code lives in
-`commonwealth/crates/commonwealth-api/src/routes_responses.rs`
+`cmnwlth/crates/commonwealth-api/src/routes_responses.rs`
 (handler) + `responses_types.rs` (wire shapes).
 
 ### Harness polymorphism (`frontdoor::Harness`)
@@ -436,8 +436,8 @@ the measurement. See `baselines/threads-marathon-graceful-v{14,15,16}-gliner.jso
   choice for a given call, and why** (workload classes, hard rules,
   sanctioned exceptions). This file covers the mechanics; that one
   covers the policy.
-- `commonwealth/docs/oicp-v0.3.md` — OICP wire-protocol spec.
-- `commonwealth/docs/routing-field-guide.md` — end-to-end
+- `cmnwlth/docs/oicp-v0.3.md` — OICP wire-protocol spec.
+- `cmnwlth/docs/routing-field-guide.md` — end-to-end
   `/v1/chat/completions` priority ladder (embedded vs standalone,
   `MeshInferenceProvider` gates, gotchas).
 - `sovereign/docs/MESH_LOAD_AWARENESS.md` — peer load shedding +

@@ -108,10 +108,10 @@ id = "FE-100"
 family = "FE"
 status = "landed"
 clause = '''Traffic that names an origin and traffic that does not MUST be gated by **disjoint** mechanisms — one returning early when the other applies — so a request meets exactly one and is never double-gated.'''
-target = '''commonwealth/crates/commonwealth-api/src/admission.rs:551::peer_admission_layer'''
+target = '''cmnwlth/crates/commonwealth-api/src/admission.rs:551::peer_admission_layer'''
 asserts = '''a request carrying X-Node-Id moves only peer_admission_layer's counters and never consumes a client_fairness_layer share slot, and vice versa for a request without it.'''
 catches = '''the two gates' early-return conditions drifting apart, so one request is charged against both the peer ceiling and the client fair-share cap, or against neither.'''
-destination = '''commonwealth/crates/commonwealth-api/src/admission.rs (mod tests)'''
+destination = '''cmnwlth/crates/commonwealth-api/src/admission.rs (mod tests)'''
 kind = '''rust-unit; drive both middleware layers over a tower stack'''
 landed = '''commonwealth-api::admission::tests::peer_traffic_and_client_traffic_never_consume_each_others_budget'''
 
@@ -132,10 +132,10 @@ id = "FE-119"
 family = "FE"
 status = "landed"
 clause = '''A replicated namespaced key-value store MUST exist with last-writer-wins resolution, per-namespace isolation, and time-to-live garbage collection. Namespaces MUST be excludable from replication.'''
-target = '''commonwealth/crates/commonwealth-state/src/store.rs:188::gc'''
+target = '''cmnwlth/crates/commonwealth-state/src/store.rs:188::gc'''
 asserts = '''gc_app(app, ttl) removes only entries older than now-ttl within that namespace, leaving other namespaces and newer entries intact; gc(ttl) spans all apps. Return value equals the number deleted.'''
 catches = '''an off-by-one on the cutoff, gc_app deleting across all namespaces, or a silent no-op letting stale entries accumulate forever. Neither function has any test.'''
-destination = '''commonwealth/crates/commonwealth-state/src/store.rs (mod tests)'''
+destination = '''cmnwlth/crates/commonwealth-state/src/store.rs (mod tests)'''
 kind = '''rust-unit; MeshStore::in_memory'''
 landed = '''commonwealth-state::store::tests::gc_is_bounded_by_both_the_cutoff_and_the_namespace'''
 
@@ -170,10 +170,10 @@ id = "FE-22"
 family = "FE"
 status = "landed"
 clause = '''Hardware capability MUST be detected, not configured, with a fallback chain across accelerator vendors.'''
-target = '''commonwealth/crates/commonwealth-discovery/src/hardware.rs:35::detect_gpus'''
+target = '''cmnwlth/crates/commonwealth-discovery/src/hardware.rs:35::detect_gpus'''
 asserts = '''detect_gpus() with NVIDIA present returns only NVIDIA GpuInfos and never invokes the ROCm or Metal probes; with NVIDIA absent and ROCm present it falls through to ROCm and stops.'''
 catches = '''a reorder or a probe chain that keeps querying after a vendor returned results, duplicating GPUs. The existing hardware test asserts only ram/cores/storage and never inspects profile.gpus or probe order.'''
-destination = '''commonwealth/crates/commonwealth-discovery/src/hardware.rs (mod tests)'''
+destination = '''cmnwlth/crates/commonwealth-discovery/src/hardware.rs (mod tests)'''
 kind = '''rust-unit; needs a probe seam — detect_gpus shells out today, so extracting the per-vendor probe is part of this spec'''
 landed = '''commonwealth-discovery::hardware::tests::the_vendor_chain_stops_at_the_first_vendor_that_answers'''
 
@@ -206,10 +206,10 @@ id = "IN-27"
 family = "IN"
 status = "landed"
 clause = '''Outcome reporting MUST add zero user-visible surface: fire-and-forget, short deadline, every failure swallowed including an older-server rejection.'''
-target = '''commonwealth/crates/commonwealth-api/src/next_edit_journal.rs:144::edit_prediction_outcome'''
+target = '''cmnwlth/crates/commonwealth-api/src/next_edit_journal.rs:144::edit_prediction_outcome'''
 asserts = '''POST edit_prediction_outcome with a recognised outcome and non-empty episode_id returns 204; an unrecognised outcome or empty episode_id returns 400 — never 5xx, never blocking.'''
 catches = '''a change that panics, hangs, or returns a status the editor extension does not already treat as ignorable, turning an advisory journal write into a visible editor failure.'''
-destination = '''commonwealth/crates/commonwealth-api/src/next_edit_journal.rs (mod tests)'''
+destination = '''cmnwlth/crates/commonwealth-api/src/next_edit_journal.rs (mod tests)'''
 kind = '''rust-unit; axum handler over a test router'''
 landed = '''commonwealth-api::next_edit_journal::tests::the_outcome_route_answers_204_or_400_and_never_5xx'''
 
@@ -441,8 +441,8 @@ id = "FE-11"
 family = "FE"
 status = "landed"
 clause = '''A ring MUST carry **two separate credentials**: one that authorises ongoing participation and never rotates, and one that admits new joiners and rotates freely.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:673::rotate_invite_key'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:565::rotating_the_invite_never_touches_the_mesh_secret'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:673::rotate_invite_key'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:565::rotating_the_invite_never_touches_the_mesh_secret'''
 landed = '''commonwealth-core::mesh::tests::gossip_auth::rotating_the_invite_never_touches_the_mesh_secret'''
 
 [[spec]]
@@ -450,16 +450,16 @@ id = "FE-110"
 family = "FE"
 status = "exists-untagged"
 clause = '''A pull-side transfer MUST be credited to the node that shipped the bytes, with the origin explicit in the schema.'''
-target = '''commonwealth/crates/commonwealth-core/src/contributions.rs:178::aggregate'''
-existing = '''commonwealth/crates/commonwealth-core/src/contributions.rs:420::pull_emitted_shard_transfer_credits_actual_sender'''
+target = '''cmnwlth/crates/commonwealth-core/src/contributions.rs:178::aggregate'''
+existing = '''cmnwlth/crates/commonwealth-core/src/contributions.rs:420::pull_emitted_shard_transfer_credits_actual_sender'''
 
 [[spec]]
 id = "FE-13"
 family = "FE"
 status = "landed"
 clause = '''The participation credential SHOULD NOT ride the wire between upgraded peers. A round SHOULD carry a keyed proof bound to the **sender** and to a short time window, so a captured proof is neither transferable nor durable.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:550::mesh_proof'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:165::a_proof_cannot_be_replayed_by_a_different_peer'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:550::mesh_proof'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:165::a_proof_cannot_be_replayed_by_a_different_peer'''
 landed = '''commonwealth-core::mesh::tests::gossip_auth::a_proof_cannot_be_replayed_by_a_different_peer'''
 
 [[spec]]
@@ -485,7 +485,7 @@ id = "FE-137"
 family = "FE"
 status = "exists-untagged"
 clause = '''Host election MUST be re-evaluated each cycle over replicated membership, with a pinned host winning while eligible, and the elected host MUST be published so a soak test can assert a **no-split-brain** invariant.'''
-target = '''commonwealth/crates/commonwealth-core/src/partition.rs:47::should_host'''
+target = '''cmnwlth/crates/commonwealth-core/src/partition.rs:47::should_host'''
 existing = '''sovereign/crates/sovereign-mesh/src/dst.rs:882::no_split_brain_falsifier_disjoint_live_sets_elect_different_leaders'''
 
 [[spec]]
@@ -502,8 +502,8 @@ id = "FE-16"
 family = "FE"
 status = "landed"
 clause = '''**The confirmation is local observation, never a peer's claim.** An upgraded peer deliberately withholds the credential, so a zeroed field stopped being evidence of an old build; reading it as one made two upgraded nodes report each other as legacy and block rotation on both sides.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:611::gossip_authorized_with'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:261::a_peer_that_proves_possession_is_never_reported_pre_split'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:611::gossip_authorized_with'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:261::a_peer_that_proves_possession_is_never_reported_pre_split'''
 landed = '''commonwealth-core::mesh::tests::gossip_auth::a_peer_that_proves_possession_is_never_reported_pre_split'''
 
 [[spec]]
@@ -546,15 +546,15 @@ retired = '''subject deleted (latency_probe.rs, 0 callers) — the clause is now
 # Not a claim about where the fix goes — a grouping key, so the item renders in
 # the queue instead of clustering under an empty path. RTT belongs wherever the
 # peer wire already is; picking the site is part of the write.
-target = '''commonwealth/crates/commonwealth-transport/src/'''
+target = '''cmnwlth/crates/commonwealth-transport/src/'''
 
 [[spec]]
 id = "FE-23"
 family = "FE"
 status = "landed"
 clause = '''Reachability information a peer publishes MUST be **signed per-node with a monotonic version**, so an attacker past the admission gate cannot force a peer unreachable or downgrade its transport.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:731::reconcile_dial_info'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests.rs:239::dial_info_strip_attack_is_rejected_and_pinned'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:731::reconcile_dial_info'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests.rs:239::dial_info_strip_attack_is_rejected_and_pinned'''
 landed = '''commonwealth-core::mesh::tests::dial_info_strip_attack_is_rejected_and_pinned'''
 
 [[spec]]
@@ -562,8 +562,8 @@ id = "FE-24"
 family = "FE"
 status = "landed"
 clause = '''Policy that must only ever tighten (such as an encryption requirement) MUST merge **stricter-wins**, not last-writer-wins.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:382::merge_from_authenticated'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests.rs:389::encryption_policy_never_downgrades'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:382::merge_from_authenticated'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests.rs:389::encryption_policy_never_downgrades'''
 landed = '''commonwealth-core::mesh::tests::encryption_policy_never_downgrades'''
 
 [[spec]]
@@ -571,8 +571,8 @@ id = "FE-25"
 family = "FE"
 status = "landed"
 clause = '''*How this node reaches a peer* MUST be decided in exactly one place: a seam resolving **(peer, traffic class) → ordered candidate endpoints**. Call sites keep their own clients and timeouts and append route paths.'''
-target = '''commonwealth/crates/commonwealth-transport/src/routed.rs:141::endpoints'''
-existing = '''commonwealth/crates/commonwealth-transport/src/routed.rs:245::routed_class_lists_primary_then_default_fallback'''
+target = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:141::endpoints'''
+existing = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:245::routed_class_lists_primary_then_default_fallback'''
 landed = '''commonwealth-transport::routed::tests::routed_class_lists_primary_then_default_fallback'''
 
 [[spec]]
@@ -580,8 +580,8 @@ id = "FE-26"
 family = "FE"
 status = "landed"
 clause = '''At least two transports MUST be supportable behind that seam: a conventional address-based one, and a **key-addressed encrypted** one that dials a peer by its public key with no address, bridging to the ordinary local listeners.'''
-target = '''commonwealth/crates/commonwealth-transport/src/routed.rs:52::RoutedTransport::new'''
-existing = '''commonwealth/crates/commonwealth-transport/src/routed.rs:283::required_class_with_no_iroh_path_returns_empty_not_plaintext'''
+target = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:52::RoutedTransport::new'''
+existing = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:283::required_class_with_no_iroh_path_returns_empty_not_plaintext'''
 landed = '''commonwealth-transport::routed::tests::required_class_with_no_iroh_path_returns_empty_not_plaintext'''
 
 [[spec]]
@@ -589,8 +589,8 @@ id = "FE-27"
 family = "FE"
 status = "landed"
 clause = '''A routing transport MUST concatenate a chosen transport's candidates ahead of a default, so a failed or absent dial degrades to the fallback **on the same request**, automatically. Success feedback MUST route back to the producing transport.'''
-target = '''commonwealth/crates/commonwealth-transport/src/routed.rs:160::note_success'''
-existing = '''commonwealth/crates/commonwealth-transport/src/routed.rs:329::note_success_routes_to_the_transport_that_produced_the_endpoint'''
+target = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:160::note_success'''
+existing = '''cmnwlth/crates/commonwealth-transport/src/routed.rs:329::note_success_routes_to_the_transport_that_produced_the_endpoint'''
 landed = '''commonwealth-transport::routed::tests::note_success_routes_to_the_transport_that_produced_the_endpoint'''
 
 [[spec]]
@@ -598,8 +598,8 @@ id = "FE-3"
 family = "FE"
 status = "landed"
 clause = '''Every node MUST persist a durable asymmetric keypair. The identity MUST be **mesh-independent**: it survives leaving, joining, and switching, so a node is the same node in every trust ring it belongs to.'''
-target = '''commonwealth/crates/commonwealth-transport/src/identity.rs:90::load_or_generate_node_key'''
-existing = '''commonwealth/crates/commonwealth-transport/src/identity.rs:267::load_or_generate_round_trips'''
+target = '''cmnwlth/crates/commonwealth-transport/src/identity.rs:90::load_or_generate_node_key'''
+existing = '''cmnwlth/crates/commonwealth-transport/src/identity.rs:267::load_or_generate_round_trips'''
 landed = '''commonwealth-transport::identity::tests::load_or_generate_round_trips'''
 
 [[spec]]
@@ -607,8 +607,8 @@ id = "FE-4"
 family = "FE"
 status = "exists-untagged"
 clause = '''Joining MUST be by a short human-transcribable key. The receiving side MUST store only a hash and discard the plaintext.'''
-target = '''commonwealth/crates/commonwealth-discovery/src/membership.rs:11::generate_join_key'''
-existing = '''commonwealth/crates/commonwealth-discovery/src/membership.rs:416::join_key_format'''
+target = '''cmnwlth/crates/commonwealth-discovery/src/membership.rs:11::generate_join_key'''
+existing = '''cmnwlth/crates/commonwealth-discovery/src/membership.rs:416::join_key_format'''
 
 [[spec]]
 id = "FE-43"
@@ -623,8 +623,8 @@ id = "FE-5"
 family = "FE"
 status = "landed"
 clause = '''Join MUST include proof-of-possession of the node's identity key; a bad proof MUST be rejected.'''
-target = '''commonwealth/crates/commonwealth-transport/src/identity.rs:163::verify_join_proof'''
-existing = '''commonwealth/crates/commonwealth-transport/src/identity.rs:344::join_proof_binds_node_id_and_name'''
+target = '''cmnwlth/crates/commonwealth-transport/src/identity.rs:163::verify_join_proof'''
+existing = '''cmnwlth/crates/commonwealth-transport/src/identity.rs:344::join_proof_binds_node_id_and_name'''
 landed = '''commonwealth-transport::identity::tests::join_proof_binds_node_id_and_name'''
 
 [[spec]]
@@ -632,8 +632,8 @@ id = "FE-6"
 family = "FE"
 status = "landed"
 clause = '''Identity keys MUST be protected by an anti-downgrade rule: a relayed record without the key MUST NOT strip a known one.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:448::merge_one_member'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests.rs:555::merge_preserves_pubkey_when_old_peer_relays_record_without_it'''
+target = '''cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:448::merge_one_member'''
+existing = '''cmnwlth/crates/commonwealth-core/src/mesh/tests.rs:555::merge_preserves_pubkey_when_old_peer_relays_record_without_it'''
 landed = '''commonwealth-core::mesh::tests::merge_preserves_pubkey_when_old_peer_relays_record_without_it'''
 
 [[spec]]
@@ -721,8 +721,8 @@ id = "FE-99"
 family = "FE"
 status = "landed"
 clause = '''There MUST be exactly one canonical wire form for an origin identifier, and exactly one parser. A display form MUST never be accepted as a wire form. A present-but-malformed value MUST still be gated and tallied, and the status surface MUST name the rejected raw value, when it was last seen, and the expected form.'''
-target = '''commonwealth/crates/commonwealth-api/src/admission.rs:551::peer_admission_layer'''
-existing = '''commonwealth/crates/commonwealth-api/src/admission.rs:1289::middleware_malformed_header_buckets_zero_and_is_named'''
+target = '''cmnwlth/crates/commonwealth-api/src/admission.rs:551::peer_admission_layer'''
+existing = '''cmnwlth/crates/commonwealth-api/src/admission.rs:1289::middleware_malformed_header_buckets_zero_and_is_named'''
 landed = '''commonwealth-api::admission::tests::middleware_malformed_header_buckets_zero_and_is_named (+ ::headers::tests::wrong_length_returns_none + ::headers::tests::non_hex_returns_none + ::routes_status::process_status_tests::zero_bucket_row_names_rejected_header_and_expected_form)'''
 
 [[spec]]
@@ -746,8 +746,8 @@ id = "IN-22"
 family = "IN"
 status = "exists-untagged"
 clause = '''Next-edit prediction MUST have a **deterministic rule lane** (pure induction from observed edits, no model) as well as any model lane. Rule kinds MUST render through one shared representation so that site finding, the already-applied exclusion, thresholds, and the queue are shared — new inductions, not new pipelines.'''
-target = '''commonwealth/crates/commonwealth-api/src/next_edit.rs:342::induce_insertion'''
-existing = '''commonwealth/crates/commonwealth-api/src/next_edit.rs:892::insertion_rule_skips_already_applied_sites'''
+target = '''cmnwlth/crates/commonwealth-api/src/next_edit.rs:342::induce_insertion'''
+existing = '''cmnwlth/crates/commonwealth-api/src/next_edit.rs:892::insertion_rule_skips_already_applied_sites'''
 
 [[spec]]
 id = "IN-26"

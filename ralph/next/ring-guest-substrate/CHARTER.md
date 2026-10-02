@@ -28,7 +28,7 @@ wrong resolution.
   a wire field a client reads).
 - A `REVIEW-mint-rg-` that needs more rows than its cap.
 - Weakening a PLANT, adding an `[[exception]]`, or widening an `except` list.
-- The order's own "Not worth continuing if" firing (`.sovereign/features/ring-guest-substrate/order.md` §Objective), or any diff under `commonwealth/crates/commonwealth-rail*` outside the one row the additions below name.
+- The order's own "Not worth continuing if" firing (`.sovereign/features/ring-guest-substrate/order.md` §Objective), or any diff under `cmnwlth/crates/commonwealth-rail*` outside the one row the additions below name.
 - Pushing, rewriting history, `--no-verify`.
 
 ## Always

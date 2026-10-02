@@ -143,7 +143,7 @@ The cog-sci map from the design conversation holds up under measurement:
    needed.*
    **DONE 2026-08-13** (operator-approved, committed `f240c201`): three
    registrations found and removed (root `settings.json`, plus sibling
-   `sovereign/` and `commonwealth/` settings — all three `.sh` copies
+   `sovereign/` and `cmnwlth/` settings — all three `.sh` copies
    deleted), `SYSTEM_OVERVIEW.md` frame-injection sentence corrected
    (it described the deleted script as the frame injector), `session-boot.sh`
    comment updated. Propagation to peer machines is by commit + pull

@@ -50,7 +50,7 @@ POST /v1/chat/completions
         │
         ▼
    pipeline alias?            ─── yes ──▶ run ATOS middleware chain,
-   (e.g. commonwealth/                    rewrite request.model to
+   (e.g. cmnwlth/                    rewrite request.model to
     sovereign-coder)                      concrete model id, fall through
         │
         ▼

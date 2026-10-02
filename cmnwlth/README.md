@@ -163,7 +163,7 @@ own infrastructure. The file is
 
 ## What else is in this directory
 
-`commonwealth/crates/` also holds `commonwealth-api`, `-inference`,
+`cmnwlth/crates/` also holds `commonwealth-api`, `-inference`,
 `-knowledge`, `-app` and `-test-harness`. Those are **applications built on**
 the substrate, not part of it — they name the corpus engine, which puts their
 dependency closures an order of magnitude above the six crates above (the

@@ -16,7 +16,7 @@
 //! (`quality/xtask/tests/mesh_proof_header_gate.rs`: it scans the
 //! monorepo, which a lifted svrn does not carry).
 //!
-//! Both trees are walked, because the minting side is in `commonwealth/` and
+//! Both trees are walked, because the minting side is in `cmnwlth/` and
 //! a reader would be in `sovereign/`. Test code is exempt twice over —
 //! `tests/` trees are not walked, and everything from a file's first
 //! `#[cfg(test)]` on is skipped — because typing the header is how a refusal
@@ -25,7 +25,7 @@
 /// The one production file that may spell the literal: the one that mints
 /// it. Repo-relative, matched as a suffix so the test runs from any cwd.
 pub const PROOF_HEADER_ALLOWED: &[&str] =
-    &["commonwealth/crates/commonwealth-transport/src/mesh_proof.rs"];
+    &["cmnwlth/crates/commonwealth-transport/src/mesh_proof.rs"];
 
 /// The wire form, in both spellings a Rust file could hold it in.
 pub const PROOF_WIRE_FORM: &[&str] = &["x-mesh-proof", "X-Mesh-Proof"];

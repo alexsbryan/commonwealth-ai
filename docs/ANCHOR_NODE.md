@@ -69,7 +69,7 @@ teammates put in their editor config, and they are what makes this work:
 requests naming them are passed to the mesh layer **unresolved**, so the
 load balancer picks whichever node advertising the alias is least busy
 rather than pinning to one machine's GGUF filename
-(`commonwealth/crates/commonwealth-api/src/routes_inference.rs`). A
+(`cmnwlth/crates/commonwealth-api/src/routes_inference.rs`). A
 teammate who names a concrete quant instead gets pinned to whoever has
 that exact file, and loses the anchor the day you swap quants.
 
@@ -243,7 +243,7 @@ work.
 
 An anchor serves other people's tools, so it is worth knowing what the
 daemon changes about a turn before it reaches the model. Two switches govern
-all of it (`commonwealth/crates/commonwealth-api/src/turn_fidelity.rs`);
+all of it (`cmnwlth/crates/commonwealth-api/src/turn_fidelity.rs`);
 both are documented per-flag in [ENV_FLAGS.md](./ENV_FLAGS.md).
 
 - **`SOVEREIGN_FRONTDOOR_AUTO_ALLOWLIST`** (default **off**) — when on,

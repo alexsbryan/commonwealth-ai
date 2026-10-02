@@ -28,7 +28,7 @@ wrong resolution.
   a wire field a client reads).
 - A `REVIEW-mint-mp-` that needs more rows than its cap.
 - Weakening a PLANT, adding an `[[exception]]`, or widening an `except` list.
-- The order's own "Not worth continuing if" firing (`.sovereign/features/mesh-verified-principal/order.md` §Objective), or any diff under `commonwealth/crates/commonwealth-rail*`.
+- The order's own "Not worth continuing if" firing (`.sovereign/features/mesh-verified-principal/order.md` §Objective), or any diff under `cmnwlth/crates/commonwealth-rail*`.
 - Pushing, rewriting history, `--no-verify`.
 
 ## Always

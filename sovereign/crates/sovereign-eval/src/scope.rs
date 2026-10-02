@@ -185,7 +185,7 @@ fn is_in_scope(path: &str, allowed_globs: &[String]) -> bool {
 
 /// Tiny glob matcher: `*` matches any run of non-`/` chars; `**` matches
 /// any sequence including `/`. No char classes, no escapes — enough for
-/// the path patterns the harness uses (`src/**`, `commonwealth/**/*.rs`,
+/// the path patterns the harness uses (`src/**`, `cmnwlth/**/*.rs`,
 /// `.sovereign/features/<id>/**`).
 fn glob_match(pattern: &str, path: &str) -> bool {
     let p_bytes = pattern.as_bytes();
@@ -273,7 +273,7 @@ mod tests {
         ];
         assert!(is_in_scope("src/lib.rs", &allowed));
         assert!(is_in_scope(".sovereign/features/foo/spec.md", &allowed));
-        assert!(!is_in_scope("commonwealth/crates/x.rs", &allowed));
+        assert!(!is_in_scope("cmnwlth/crates/x.rs", &allowed));
     }
 
     #[test]

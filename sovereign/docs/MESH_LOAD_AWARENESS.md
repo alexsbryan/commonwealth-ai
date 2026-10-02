@@ -62,7 +62,7 @@ as before.
 ### Touch list
 
 #### 1. Schema
-`commonwealth/crates/commonwealth-core/src/capabilities.rs`
+`cmnwlth/crates/commonwealth-core/src/capabilities.rs`
 
 Add to `NodeCapabilities`:
 

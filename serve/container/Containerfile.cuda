@@ -150,11 +150,11 @@ ENV CMAKE_CUDA_COMPILER_LAUNCHER=sccache
 
 # Build context = commonwealth-ai/ workspace root. Post-monorepo (May
 # 2026) the single workspace Cargo.toml + Cargo.lock live here; each
-# of corpus-engine/, shared/crates/oicp-types/, commonwealth/, sovereign/ contains
+# of corpus-engine/, shared/crates/oicp-types/, cmnwlth/, sovereign/ contains
 # workspace-member crates referenced by path from the root manifest.
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
-COPY commonwealth/        ./commonwealth/
+COPY cmnwlth/        ./cmnwlth/
 COPY corpus-engine/       ./corpus-engine/
 # corpus-engine decomposition carve-outs — top-level sibling workspace
 # members since mid-2026; cargo refuses the workspace if any is absent.

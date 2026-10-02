@@ -9,7 +9,7 @@
 
   After first load the page needs no origin traffic at all (the service worker
   caches it), because it is an iroh endpoint: it dials the wall directly over a
-  relay (sovereign/apps/ring-runtime/src/lib.rs).
+  relay (cmnwlth/apps/ring-runtime/src/lib.rs).
 
   The CSP is deliberately strict: no inline script (app.js is external), no
   remote code. `wasm-unsafe-eval` is required to instantiate WebAssembly;

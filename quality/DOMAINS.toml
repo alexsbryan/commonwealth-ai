@@ -172,7 +172,7 @@ package = "commonwealth"
 crates = ["commonwealth-core", "commonwealth-transport", "commonwealth-discovery", "commonwealth-rail-core", "commonwealth-rail", "commonwealth-work", "commonwealth-state", "commonwealth-media", "commonwealth-rails", "sovereign-mesh"]   # sovereign-mesh is the sovereign-side adapter and is what STAYS in wave 1
 lift = "scripts/cw-rails-lift.sh"
 applicable_as = "proven: cw-rails joined a real mesh by invite and served another member's library (2026-09-11)"
-roots = ["commonwealth/crates"]
+roots = ["cmnwlth/crates"]
 status = "kept"
 
 [[context]]
@@ -186,7 +186,7 @@ package = "commonwealth"   # the vocabulary half, commonwealth-work, is inside t
 crates = ["commonwealth-work", "sovereign-pods"]   # 2026-09-14 (DOMAINS.md §11.2): commonwealth-work IS the context (fold, lease predicate, executor registry); sovereign-pods (rented pods) is proposed; sovereign-compute was chosen by name and tier and is Serving's local engine
 lift = "scripts/cw-work-lift.sh --sandbox"
 applicable_as = "proven: three heterogeneous units complete outside the monorepo inside a rootless container"
-roots = ["commonwealth/crates/commonwealth-work"]
+roots = ["cmnwlth/crates/commonwealth-work"]
 status = "kept"
 
 [[context]]
@@ -633,7 +633,7 @@ lines = 316
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pods/src/multi_pod_coordinator.rs"
+path = "cmnwlth/crates/sovereign-pods/src/multi_pod_coordinator.rs"
 context = "compute"
 lines = 614
 note = ""
@@ -954,13 +954,13 @@ lines = 1194
 note = "was compute; jobs — DAEMON_CORE.md §3.2, §4.3 (2026-09-14)"
 
 [[module]]
-path = "sovereign/crates/sovereign-pods/src/worker_controller.rs"
+path = "cmnwlth/crates/sovereign-pods/src/worker_controller.rs"
 context = "compute"
 lines = 844
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pods/src/worker_daemon.rs"
+path = "cmnwlth/crates/sovereign-pods/src/worker_daemon.rs"
 context = "compute"
 lines = 288
 note = ""
@@ -978,13 +978,13 @@ lines = 575
 note = "moved from sovereign-daemon daemon.rs (pb-serve-distributes)"
 
 [[module]]
-path = "sovereign/crates/sovereign-pods/src/worker_http.rs"
+path = "cmnwlth/crates/sovereign-pods/src/worker_http.rs"
 context = "compute"
 lines = 2046
 note = "pod-side surface, not a daemon handler - the *_http host rule does not apply"
 
 [[module]]
-path = "sovereign/crates/sovereign-pods/src/worker_inference_proxy.rs"
+path = "cmnwlth/crates/sovereign-pods/src/worker_inference_proxy.rs"
 context = "compute"
 lines = 542
 note = "re-tagged serving->compute 2026-09-15 on consumer evidence: every production consumer is a pod module (worker_http.rs:214,817; worker_daemon.rs:156) plus the daemon host (sovereign-daemon/src/worker.rs:82,120), and its only in-crate import is the pod's worker_http::WorkerState (:67). It is the pod's :9742 TLS tunnel (PINNED_WORKER_AS_INFERENCE_PEER.md:5), not an inference decider — ARCH 12: its uses are all pod-side, so the serving line was drawn wrong."
@@ -996,13 +996,13 @@ lines = 763
 note = "the owner↔pod wire protocol (BootstrapBlob, worker token, seed-derived cert, token verifier); moved out of sovereign-pods to the shared contract leaf by REVIEW-build-serving-worker-port (2026-09-15) so sovereign-serving-host can name it without a third package [[exception]] (SERVING_BOUNDARY.md Grandfathered). Tag unchanged, path re-keyed."
 
 [[module]]
-path = "sovereign/crates/sovereign-pods/src/worker_subprocess_runner.rs"
+path = "cmnwlth/crates/sovereign-pods/src/worker_subprocess_runner.rs"
 context = "compute"
 lines = 1271
 note = ""
 
 [[module]]
-path = "sovereign/crates/sovereign-pods/src/lib.rs"
+path = "cmnwlth/crates/sovereign-pods/src/lib.rs"
 context = "compute"
 lines = 10
 note = "the Compute crate root; modules lifted out of sovereign-mesh across dm-pods-move-* (2026-09-15)"
@@ -1656,7 +1656,7 @@ rename = "Fabric says Member; Serving says Candidate (DOMAINS.md section 5 call 
 [[noun]]
 name = "MeshPeering"
 crate = "commonwealth-core"
-file = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs:368"
+file = "cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:368"
 visibility = "pub"
 concept = "C2"
 context = "fabric"
@@ -1667,7 +1667,7 @@ why = "Fabric-internal and inside the commonwealth package, which dm-peer-outsid
 [[noun]]
 name = "PeerTrustLevel"
 crate = "commonwealth-core"
-file = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs:400"
+file = "cmnwlth/crates/commonwealth-core/src/mesh/mod.rs:400"
 visibility = "pub"
 concept = "C2"
 context = "fabric"
@@ -1700,7 +1700,7 @@ why = "5 refs / 3 files. recent_events ring buffer at :107 drives the load balan
 [[noun]]
 name = "DiscoveredPeer"
 crate = "commonwealth-discovery"
-file = "commonwealth/crates/commonwealth-discovery/src/mdns.rs:19"
+file = "cmnwlth/crates/commonwealth-discovery/src/mdns.rs:19"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
@@ -1711,18 +1711,18 @@ why = "9 refs / 3 files. Fabric-internal, inside the package; mDNS pre-membershi
 [[noun]]
 name = "PeerTransportPath"
 crate = "commonwealth-media"
-file = "commonwealth/crates/commonwealth-media/src/reach.rs:29"
+file = "cmnwlth/crates/commonwealth-media/src/reach.rs:29"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
 disposition = "decided:merge"
-word = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs:74 PeerPathSnapshot"
+word = "cmnwlth/crates/commonwealth-transport/src/iroh_path.rs:74 PeerPathSnapshot"
 why = "16 refs / 7 files. Same three facts as PeerPathSnapshot with PeerPath stringified into path: String at :33 - ARCH 8, one fact one spelling. Survivor is PeerPathSnapshot in commonwealth-transport (the origin crate that owns the PeerPath enum it stringifies); IrohPeerPath is the third spelling and becomes MemberReach in sovereign-contracts"
 
 [[noun]]
 name = "PeerPreferenceStore"
 crate = "commonwealth-state"
-file = "commonwealth/crates/commonwealth-state/src/peer_preferences.rs:105"
+file = "cmnwlth/crates/commonwealth-state/src/peer_preferences.rs:105"
 visibility = "pub"
 concept = "C5"
 context = "serving"
@@ -1733,7 +1733,7 @@ why = "12 refs / 5 files. THE ONE OWNER of the affinity row after C5 collapses 4
 [[noun]]
 name = "PeerPreference"
 crate = "commonwealth-state"
-file = "commonwealth/crates/commonwealth-state/src/peer_preferences.rs:55"
+file = "cmnwlth/crates/commonwealth-state/src/peer_preferences.rs:55"
 visibility = "pub"
 concept = "C5"
 context = "serving"
@@ -1744,7 +1744,7 @@ why = "45 refs / 7 files. The single owning struct; only multiplier crosses (rou
 [[noun]]
 name = "PeerFailure"
 crate = "commonwealth-transport"
-file = "commonwealth/crates/commonwealth-transport/src/fanout.rs:50"
+file = "cmnwlth/crates/commonwealth-transport/src/fanout.rs:50"
 visibility = "pub"
 concept = "C7"
 context = "fabric"
@@ -1755,7 +1755,7 @@ why = "15 refs / 3 files. OVERTURNS proposed:rename. Fabric-internal fan-out voc
 [[noun]]
 name = "PeerVerdict"
 crate = "commonwealth-transport"
-file = "commonwealth/crates/commonwealth-transport/src/fanout.rs:62"
+file = "cmnwlth/crates/commonwealth-transport/src/fanout.rs:62"
 visibility = "pub"
 concept = "C7"
 context = "fabric"
@@ -1766,7 +1766,7 @@ why = "20 refs / 2 files. OVERTURNS proposed:rename, same rule as PeerFailure. M
 [[noun]]
 name = "PeerRow"
 crate = "commonwealth-transport"
-file = "commonwealth/crates/commonwealth-transport/src/fanout.rs:70"
+file = "cmnwlth/crates/commonwealth-transport/src/fanout.rs:70"
 visibility = "pub"
 concept = "C7"
 context = "fabric"
@@ -1777,7 +1777,7 @@ why = "10 refs / 3 files SHARED with the second definition. RENAME-APART even th
 [[noun]]
 name = "PeerPath"
 crate = "commonwealth-transport"
-file = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs:20"
+file = "cmnwlth/crates/commonwealth-transport/src/iroh_path.rs:20"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
@@ -1788,7 +1788,7 @@ why = "65 refs / 4 files. Fabric-internal; closed set with one spelling via as_s
 [[noun]]
 name = "PeerPathSnapshot"
 crate = "commonwealth-transport"
-file = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs:74"
+file = "cmnwlth/crates/commonwealth-transport/src/iroh_path.rs:74"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
@@ -1799,7 +1799,7 @@ why = "4 refs / 2 files. Fabric-internal AND the merge survivor of the three spe
 [[noun]]
 name = "PeerContact"
 crate = "commonwealth-transport"
-file = "commonwealth/crates/commonwealth-transport/src/lib.rs:209"
+file = "cmnwlth/crates/commonwealth-transport/src/lib.rs:209"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
@@ -1810,7 +1810,7 @@ why = "63 refs / 16 files. Fabric-internal; doc at :203-207 says the struct exis
 [[noun]]
 name = "PeerEndpoint"
 crate = "commonwealth-transport"
-file = "commonwealth/crates/commonwealth-transport/src/lib.rs:227"
+file = "cmnwlth/crates/commonwealth-transport/src/lib.rs:227"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
@@ -1821,7 +1821,7 @@ why = "36 refs / 10 files. Fabric-internal; one dialable candidate: base_url + g
 [[noun]]
 name = "PeerTransport"
 crate = "commonwealth-transport"
-file = "commonwealth/crates/commonwealth-transport/src/lib.rs:241"
+file = "cmnwlth/crates/commonwealth-transport/src/lib.rs:241"
 visibility = "pub"
 concept = "C1"
 context = "fabric"
@@ -1832,7 +1832,7 @@ why = "71 refs / 24 files. Fabric-internal; endpoints(&PeerContact, TrafficClass
 [[noun]]
 name = "PeerArgs"
 crate = "commonwealth-work"
-file = "commonwealth/crates/commonwealth-work/examples/work_peer.rs:125"
+file = "cmnwlth/crates/commonwealth-work/examples/work_peer.rs:125"
 visibility = "test"
 concept = "C10"
 context = "compute"
@@ -1871,7 +1871,7 @@ concept = "C2"
 context = "kernel"
 disposition = "decided:rename"
 word = "FederatedMeshDescriptor"
-why = "6 refs / 3 files. OVERTURNS proposed:keep. oicp-types is one of the 9 crates the bar's --anywhere population counts OUTSIDE commonwealth/, so a pub Peer* here fails dm-peer-outside-fabric at target 0 and a carve-out would have to be argued as C9's was. The subject IS nameable: capabilities_url + trust_level at :291-293 describe a federated MESH, so the qualifier carries the meaning and no context word is spent"
+why = "6 refs / 3 files. OVERTURNS proposed:keep. oicp-types is one of the 9 crates the bar's --anywhere population counts OUTSIDE cmnwlth/, so a pub Peer* here fails dm-peer-outside-fabric at target 0 and a carve-out would have to be argued as C9's was. The subject IS nameable: capabilities_url + trust_level at :291-293 describe a federated MESH, so the qualifier carries the meaning and no context word is spent"
 
 [[noun]]
 name = "PrincipalInflightGuard"
@@ -2626,7 +2626,7 @@ context = "serving"
 definitions = [
     "sovereign/crates/sovereign-serving/src/plan.rs:142 Tier (Quality/Throughput/FastSlot)",
     "sovereign/crates/sovereign-core/src/role.rs:79 Tier (Fast/Primary, model_stem() at :89)",
-    "commonwealth/crates/commonwealth-media/src/apps.rs:57 Tier (Config/Claimed)",
+    "cmnwlth/crates/commonwealth-media/src/apps.rs:57 Tier (Config/Claimed)",
     "sovereign/crates/sovereign-mesh/src/tier.rs:112 TierFloor (None/TopBand)",
     "shared/crates/oicp-types/src/capability.rs:276 LatencyClass (Fast/Normal/Extended) - adjacent, NOT the same concept",
     "shared/crates/oicp-types/src/completion.rs:37 Speed + :744 latency_to_speed - adjacent",
@@ -2694,7 +2694,7 @@ definitions = [
     "sovereign/crates/sovereign-mesh/src/decision_log.rs:290 CandidateRecord (21) / :383 CandidateInputs (27) / :283 CandidateKind (30)",
     "sovereign/crates/sovereign-mesh/src/decision_log.rs:498 ExcludedCandidate (4 sites)",
     "shared/crates/oicp-types/src/scoring.rs:438 ScoredClaim - THE score type, published (with pick_better :458, best_claim_for_request :481, SCORING_EPSILON :431)",
-    "commonwealth/crates/commonwealth-transport/src/lib.rs:227 PeerEndpoint - Fabric's reach record, NOT in the eight; PeerInferenceEndpoint is built from a Vec of these at daemon.rs:2312",
+    "cmnwlth/crates/commonwealth-transport/src/lib.rs:227 PeerEndpoint - Fabric's reach record, NOT in the eight; PeerInferenceEndpoint is built from a Vec of these at daemon.rs:2312",
 ]
 verdict = "converge"
 survivor = "<Word> @ sovereign-scheduler + oicp_types::ScoredClaim (score type, published name kept)"
@@ -2768,7 +2768,7 @@ renames = [
 rung = "domains-10"
 why = "The collision is on a module name and a bare word, not on a type; the side holding a published wire id keeps the word, and Serving's decider is named RoutingDecision, not Decision."
 must_not_move = [
-    "SOVEREIGN_DECISION_LOG - operator-facing, declared in quality/env-flags.toml and cited in commonwealth/docs/MESH_QA.md:392, sovereign/SYSTEM_OVERVIEW.md:4844, quality/initiative-bars.toml:1860, .canon/sources/notes/invariant/cd7f718c.md:6, and two live test files. Renaming it breaks every runbook that arms it.",
+    "SOVEREIGN_DECISION_LOG - operator-facing, declared in quality/env-flags.toml and cited in cmnwlth/docs/MESH_QA.md:392, sovereign/SYSTEM_OVERVIEW.md:4844, quality/initiative-bars.toml:1860, .canon/sources/notes/invariant/cd7f718c.md:6, and two live test files. Renaming it breaks every runbook that arms it.",
     "\"oicp-decision/v1\" - the schema tag on every jsonl record already on disk",
     "DECISION_TRACE_TARGET = \"mesh.decision\" (decision_log.rs:73) - a tracing target matched by RUST_LOG filters in runbooks. It will stop describing where the code lives after the move; leave it and add a comment saying the prefix is historical, or file the runbook edits as rung 11. Do NOT change it inside the move.",
 ]
@@ -6433,127 +6433,127 @@ note = "Stays. 16,028 ln is the whole stop condition; 76 sites reach out (34 int
 # Crates added: 64. Unknown-context rows are legal and count against their crate (O3 queue).
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/activity.rs"
+path = "cmnwlth/crates/commonwealth-core/src/activity.rs"
 context = "fabric"
 lines = 470
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/capabilities.rs"
+path = "cmnwlth/crates/commonwealth-core/src/capabilities.rs"
 context = "fabric"
 lines = 536
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/clock.rs"
+path = "cmnwlth/crates/commonwealth-core/src/clock.rs"
 context = "fabric"
 lines = 167
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/config.rs"
+path = "cmnwlth/crates/commonwealth-core/src/config.rs"
 context = "fabric"
 lines = 287
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/contributions.rs"
+path = "cmnwlth/crates/commonwealth-core/src/contributions.rs"
 context = "fabric"
 lines = 797
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/ct.rs"
+path = "cmnwlth/crates/commonwealth-core/src/ct.rs"
 context = "fabric"
 lines = 56
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/dial_sig.rs"
+path = "cmnwlth/crates/commonwealth-core/src/dial_sig.rs"
 context = "fabric"
 lines = 201
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/error.rs"
+path = "cmnwlth/crates/commonwealth-core/src/error.rs"
 context = "fabric"
 lines = 34
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/ids.rs"
+path = "cmnwlth/crates/commonwealth-core/src/ids.rs"
 context = "fabric"
 lines = 118
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/knowledge.rs"
+path = "cmnwlth/crates/commonwealth-core/src/knowledge.rs"
 context = "fabric"
 lines = 519
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/latency.rs"
+path = "cmnwlth/crates/commonwealth-core/src/latency.rs"
 context = "fabric"
 lines = 156
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/lib.rs"
+path = "cmnwlth/crates/commonwealth-core/src/lib.rs"
 context = "fabric"
 lines = 134
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
+path = "cmnwlth/crates/commonwealth-core/src/mesh/mod.rs"
 context = "fabric"
 lines = 977
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/mesh/tests.rs"
+path = "cmnwlth/crates/commonwealth-core/src/mesh/tests.rs"
 context = "fabric"
 lines = 863
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs"
+path = "cmnwlth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs"
 context = "fabric"
 lines = 590
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/mesh/wire.rs"
+path = "cmnwlth/crates/commonwealth-core/src/mesh/wire.rs"
 context = "fabric"
 lines = 160
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/mesh_identity.rs"
+path = "cmnwlth/crates/commonwealth-core/src/mesh_identity.rs"
 context = "fabric"
 lines = 447
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/mesh_merge.rs"
+path = "cmnwlth/crates/commonwealth-core/src/mesh_merge.rs"
 context = "fabric"
 lines = 269
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/model.rs"
+path = "cmnwlth/crates/commonwealth-core/src/model.rs"
 context = "fabric"
 lines = 277
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/partition.rs"
+path = "cmnwlth/crates/commonwealth-core/src/partition.rs"
 context = "fabric"
 lines = 278
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-core/src/peer_addr.rs"
+path = "cmnwlth/crates/commonwealth-core/src/peer_addr.rs"
 context = "fabric"
 lines = 129
 note = ""
@@ -6565,67 +6565,67 @@ lines = 510
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-discovery/src/deep_link.rs"
+path = "cmnwlth/crates/commonwealth-discovery/src/deep_link.rs"
 context = "fabric"
 lines = 852
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-discovery/src/hardware.rs"
+path = "cmnwlth/crates/commonwealth-discovery/src/hardware.rs"
 context = "fabric"
 lines = 594
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-discovery/src/lib.rs"
+path = "cmnwlth/crates/commonwealth-discovery/src/lib.rs"
 context = "fabric"
 lines = 81
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-discovery/src/mdns.rs"
+path = "cmnwlth/crates/commonwealth-discovery/src/mdns.rs"
 context = "fabric"
 lines = 376
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-discovery/src/membership.rs"
+path = "cmnwlth/crates/commonwealth-discovery/src/membership.rs"
 context = "fabric"
 lines = 537
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-media/src/apps.rs"
+path = "cmnwlth/crates/commonwealth-media/src/apps.rs"
 context = "fabric"
 lines = 662
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-media/src/declared.rs"
+path = "cmnwlth/crates/commonwealth-media/src/declared.rs"
 context = "fabric"
 lines = 276
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-media/src/fanout.rs"
+path = "cmnwlth/crates/commonwealth-media/src/fanout.rs"
 context = "fabric"
 lines = 872
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-media/src/identity.rs"
+path = "cmnwlth/crates/commonwealth-media/src/identity.rs"
 context = "fabric"
 lines = 411
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-media/src/lib.rs"
+path = "cmnwlth/crates/commonwealth-media/src/lib.rs"
 context = "fabric"
 lines = 39
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-media/src/reach.rs"
+path = "cmnwlth/crates/commonwealth-media/src/reach.rs"
 context = "fabric"
 lines = 586
 note = ""
@@ -6685,277 +6685,277 @@ lines = 83
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail/src/lib.rs"
+path = "cmnwlth/crates/commonwealth-rail/src/lib.rs"
 context = "fabric"
 lines = 798
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rail/src/tests.rs"
+path = "cmnwlth/crates/commonwealth-rail/src/tests.rs"
 context = "fabric"
 lines = 826
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rails/src/acceptor.rs"
+path = "cmnwlth/crates/commonwealth-rails/src/acceptor.rs"
 context = "fabric"
 lines = 239
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rails/src/api.rs"
+path = "cmnwlth/crates/commonwealth-rails/src/api.rs"
 context = "fabric"
 lines = 333
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rails/src/cli.rs"
+path = "cmnwlth/crates/commonwealth-rails/src/cli.rs"
 context = "fabric"
 lines = 536
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rails/src/config.rs"
+path = "cmnwlth/crates/commonwealth-rails/src/config.rs"
 context = "fabric"
 lines = 288
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rails/src/gossip.rs"
+path = "cmnwlth/crates/commonwealth-rails/src/gossip.rs"
 context = "fabric"
 lines = 612
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rails/src/identity.rs"
+path = "cmnwlth/crates/commonwealth-rails/src/identity.rs"
 context = "fabric"
 lines = 222
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rails/src/internal.rs"
+path = "cmnwlth/crates/commonwealth-rails/src/internal.rs"
 context = "fabric"
 lines = 292
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rails/src/join.rs"
+path = "cmnwlth/crates/commonwealth-rails/src/join.rs"
 context = "fabric"
 lines = 260
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rails/src/lib.rs"
+path = "cmnwlth/crates/commonwealth-rails/src/lib.rs"
 context = "fabric"
 lines = 310
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-rails/src/main.rs"
+path = "cmnwlth/crates/commonwealth-rails/src/main.rs"
 context = "fabric"
 lines = 40
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/activity.rs"
+path = "cmnwlth/crates/commonwealth-state/src/activity.rs"
 context = "fabric"
 lines = 289
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/backend.rs"
+path = "cmnwlth/crates/commonwealth-state/src/backend.rs"
 context = "fabric"
 lines = 468
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/contributions.rs"
+path = "cmnwlth/crates/commonwealth-state/src/contributions.rs"
 context = "fabric"
 lines = 449
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/error.rs"
+path = "cmnwlth/crates/commonwealth-state/src/error.rs"
 context = "fabric"
 lines = 14
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/gc.rs"
+path = "cmnwlth/crates/commonwealth-state/src/gc.rs"
 context = "fabric"
 lines = 218
 note = ""
 
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/inference_plan.rs"
+path = "cmnwlth/crates/commonwealth-state/src/inference_plan.rs"
 context = "fabric"
 lines = 90
 note = "the mesh's inference sharding plan; moved here from the peg sovereign-serving by REVIEW-build-serving-empty-peg (2026-09-15) — the peg's only consumers (sovereign-api, sovereign-mesh, the harness) already reach commonwealth-state, so the move adds no edge"
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/lib.rs"
+path = "cmnwlth/crates/commonwealth-state/src/lib.rs"
 context = "fabric"
 lines = 137
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/peer_preferences.rs"
+path = "cmnwlth/crates/commonwealth-state/src/peer_preferences.rs"
 context = "fabric"
 lines = 545
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/processed_shards.rs"
+path = "cmnwlth/crates/commonwealth-state/src/processed_shards.rs"
 context = "fabric"
 lines = 176
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/rail_kv.rs"
+path = "cmnwlth/crates/commonwealth-state/src/rail_kv.rs"
 context = "fabric"
 lines = 933
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/retention.rs"
+path = "cmnwlth/crates/commonwealth-state/src/retention.rs"
 context = "fabric"
 lines = 144
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/store.rs"
+path = "cmnwlth/crates/commonwealth-state/src/store.rs"
 context = "fabric"
 lines = 1499
 note = ""
 
 
 [[module]]
-path = "commonwealth/crates/commonwealth-state/src/store_adapter.rs"
+path = "cmnwlth/crates/commonwealth-state/src/store_adapter.rs"
 context = "fabric"
 lines = 233
 note = "the MeshStore adapter for inference state; moved here from the peg sovereign-serving by REVIEW-build-serving-empty-peg (2026-09-15) — commonwealth-state owns MeshStore and the namespace it writes to"
 [[module]]
-path = "commonwealth/crates/commonwealth-transport/src/fanout.rs"
+path = "cmnwlth/crates/commonwealth-transport/src/fanout.rs"
 context = "fabric"
 lines = 367
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-transport/src/identity.rs"
+path = "cmnwlth/crates/commonwealth-transport/src/identity.rs"
 context = "fabric"
 lines = 381
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-transport/src/ip.rs"
+path = "cmnwlth/crates/commonwealth-transport/src/ip.rs"
 context = "fabric"
 lines = 379
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-transport/src/iroh.rs"
+path = "cmnwlth/crates/commonwealth-transport/src/iroh.rs"
 context = "fabric"
 lines = 1668
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-transport/src/iroh_identity_forward.rs"
+path = "cmnwlth/crates/commonwealth-transport/src/iroh_identity_forward.rs"
 context = "fabric"
 lines = 860
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-transport/src/iroh_path.rs"
+path = "cmnwlth/crates/commonwealth-transport/src/iroh_path.rs"
 context = "fabric"
 lines = 176
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-transport/src/lib.rs"
+path = "cmnwlth/crates/commonwealth-transport/src/lib.rs"
 context = "fabric"
 lines = 273
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-transport/src/origin_alpn.rs"
+path = "cmnwlth/crates/commonwealth-transport/src/origin_alpn.rs"
 context = "fabric"
 lines = 92
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-transport/src/routed.rs"
+path = "cmnwlth/crates/commonwealth-transport/src/routed.rs"
 context = "fabric"
 lines = 348
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/act.rs"
+path = "cmnwlth/crates/commonwealth-work/src/act.rs"
 context = "unknown"
 lines = 709
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/actor.rs"
+path = "cmnwlth/crates/commonwealth-work/src/actor.rs"
 context = "unknown"
 lines = 150
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/attribution.rs"
+path = "cmnwlth/crates/commonwealth-work/src/attribution.rs"
 context = "unknown"
 lines = 267
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/executor.rs"
+path = "cmnwlth/crates/commonwealth-work/src/executor.rs"
 context = "unknown"
 lines = 794
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/lib.rs"
+path = "cmnwlth/crates/commonwealth-work/src/lib.rs"
 context = "unknown"
 lines = 111
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/process.rs"
+path = "cmnwlth/crates/commonwealth-work/src/process.rs"
 context = "unknown"
 lines = 1060
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/process/tests.rs"
+path = "cmnwlth/crates/commonwealth-work/src/process/tests.rs"
 context = "unknown"
 lines = 616
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/projection.rs"
+path = "cmnwlth/crates/commonwealth-work/src/projection.rs"
 context = "unknown"
 lines = 1083
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/projection/tests.rs"
+path = "cmnwlth/crates/commonwealth-work/src/projection/tests.rs"
 context = "unknown"
 lines = 610
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/refusal.rs"
+path = "cmnwlth/crates/commonwealth-work/src/refusal.rs"
 context = "unknown"
 lines = 1304
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/sandbox.rs"
+path = "cmnwlth/crates/commonwealth-work/src/sandbox.rs"
 context = "unknown"
 lines = 621
 note = ""
 
 [[module]]
-path = "commonwealth/crates/commonwealth-work/src/seal.rs"
+path = "cmnwlth/crates/commonwealth-work/src/seal.rs"
 context = "unknown"
 lines = 290
 note = ""
@@ -7591,25 +7591,25 @@ lines = 3053
 note = ""
 
 [[module]]
-path = "oicp-conformance/src/args.rs"
+path = "cmnwlth/crates/oicp-conformance/src/args.rs"
 context = "unknown"
 lines = 146
 note = ""
 
 [[module]]
-path = "oicp-conformance/src/checks.rs"
+path = "cmnwlth/crates/oicp-conformance/src/checks.rs"
 context = "unknown"
 lines = 806
 note = ""
 
 [[module]]
-path = "oicp-conformance/src/main.rs"
+path = "cmnwlth/crates/oicp-conformance/src/main.rs"
 context = "unknown"
 lines = 240
 note = ""
 
 [[module]]
-path = "oicp-conformance/src/report.rs"
+path = "cmnwlth/crates/oicp-conformance/src/report.rs"
 context = "unknown"
 lines = 207
 note = ""

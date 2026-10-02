@@ -16,7 +16,7 @@ the same `svrn` daemon you already run takes on a role from a single setting.
 - **A network path between them.** On a LAN you already have it; across locations,
   [Tailscale](https://tailscale.com) is the simplest way to give them a private
   address space. The mesh rides on top. If discovery doesn't cross the network —
-  different sites, or a tailnet — [Running a mesh across networks](../commonwealth/docs/getting-started.md)
+  different sites, or a tailnet — [Running a mesh across networks](../cmnwlth/docs/getting-started.md)
   has the relay workflow.
 - **The model file on one machine** — the one that will host. The others don't
   need it on disk; they're handed their slice automatically.

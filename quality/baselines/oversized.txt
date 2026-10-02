@@ -54,7 +54,7 @@
 1346	sovereign/crates/sovereign-cli-llm/src/router_fit_cmd.rs
 1264	sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/score.rs
 1510	sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs
-1396	sovereign/crates/sovereign-cli-mesh/src/mesh_cmd.rs
+1396	cmnwlth/crates/sovereign-cli-mesh/src/mesh_cmd.rs
 1617	sovereign/crates/sovereign-cli-shared/src/cli_contract.rs
 2727	sovereign/crates/sovereign-cli/src/cache_audit_cmd.rs
 1210	sovereign/crates/sovereign-cli/src/conformance_cmd.rs
@@ -124,8 +124,8 @@
 1765	sovereign/crates/sovereign-pipeline/src/enrich_cmd/atlas_drift_report.rs
 1248	sovereign/crates/sovereign-pipeline/src/enrich_cmd/delta_cmd.rs
 1311	sovereign/crates/sovereign-pipeline/src/enrich_cmd/init.rs
-2046	sovereign/crates/sovereign-pods/src/worker_http.rs
-1271	sovereign/crates/sovereign-pods/src/worker_subprocess_runner.rs
+2046	cmnwlth/crates/sovereign-pods/src/worker_http.rs
+1271	cmnwlth/crates/sovereign-pods/src/worker_subprocess_runner.rs
 1545	serve/crates/sovereign-scheduler/src/decision_log.rs
 1351	serve/crates/sovereign-scheduler/src/scheduler_core.rs
 1741	sovereign/crates/sovereign-service/src/lib.rs

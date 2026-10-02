@@ -36,7 +36,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-4-only_a_missing_graph_is_worth_warning_ab"
 requirement = "CI-4"
-target = "commonwealth/crates/commonwealth-api/src/next_edit_symbols.rs"
+target = "cmnwlth/crates/commonwealth-api/src/next_edit_symbols.rs"
 find = "    pub fn is_actionable(self) -> bool {\n        matches!(self, Decline::GraphUnavailable)\n    }"
 replace = "    pub fn is_actionable(self) -> bool {\n        false\n    }"
 mustFail = ["only_a_missing_graph_is_worth_warning_about"]
@@ -236,7 +236,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-26-the_declaration_itself_is_never_a_destin"
 requirement = "CI-26"
-target = "commonwealth/crates/commonwealth-api/src/next_edit_symbols.rs"
+target = "cmnwlth/crates/commonwealth-api/src/next_edit_symbols.rs"
 find = "        // The declaration is the trigger, never a destination.\n        if c.file_path == decl_path {\n            if let Some((s, e)) = decl_line_span {\n                if c.line >= s && c.line <= e {\n                    continue;\n                }\n            }\n        }"
 replace = ""
 mustFail = ["the_declaration_itself_is_never_a_destination"]
@@ -266,7 +266,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-29-recent_session_skips_briefing"
 requirement = "CI-29"
-target = "commonwealth/crates/commonwealth-api/src/middleware/session_briefing.rs"
+target = "cmnwlth/crates/commonwealth-api/src/middleware/session_briefing.rs"
 find = "fn is_session_start(last_seen_at: i64) -> bool {\n    if last_seen_at == 0 {\n        return true;\n    }\n    let now = SystemTime::now()\n        .duration_since(UNIX_EPOCH)\n        .map(|d| d.as_secs() as i64)\n        .unwrap_or(0);\n    now.saturating_sub(last_seen_at) > STALE_THRESHOLD_SECS\n}"
 replace = "fn is_session_start(_last_seen_at: i64) -> bool {\n    false\n}"
 mustFail = ["recent_session_skips_briefing"]
@@ -276,7 +276,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-29-stale_session_triggers_briefing"
 requirement = "CI-29"
-target = "commonwealth/crates/commonwealth-api/src/middleware/session_briefing.rs"
+target = "cmnwlth/crates/commonwealth-api/src/middleware/session_briefing.rs"
 find = "fn is_session_start(last_seen_at: i64) -> bool {\n    if last_seen_at == 0 {\n        return true;\n    }\n    let now = SystemTime::now()\n        .duration_since(UNIX_EPOCH)\n        .map(|d| d.as_secs() as i64)\n        .unwrap_or(0);\n    now.saturating_sub(last_seen_at) > STALE_THRESHOLD_SECS\n}"
 replace = "fn is_session_start(_last_seen_at: i64) -> bool {\n    false\n}"
 mustFail = ["stale_session_triggers_briefing"]
@@ -456,7 +456,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-14-pathological_rules_cannot_wedge_the_scan"
 requirement = "EN-14"
-target = "commonwealth/crates/commonwealth-api/src/next_edit.rs"
+target = "cmnwlth/crates/commonwealth-api/src/next_edit.rs"
 find = "    let mut all = Vec::new();\n    let mut at = 0;\n    let mut examined = 0usize;\n    while let Some(rel) = text[at..].find(find) {\n        examined += 1;\n        if examined > MAX_SITE_SCAN {\n            break;\n        }\n        let o = at + rel;"
 replace = "    let mut all = Vec::new();\n    let mut at = 0;\n    while let Some(rel) = text[at..].find(find) {"
 mustFail = ["pathological_rules_cannot_wedge_the_scan"]
@@ -656,7 +656,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-19-every_gate_reach_is_produced_by_some_act"
 requirement = "EV-19"
-target = "commonwealth/crates/commonwealth-api/src/next_edit.rs"
+target = "cmnwlth/crates/commonwealth-api/src/next_edit.rs"
 find = "    pub find: String,"
 replace = "    #[allow(dead_code)]\n    pub find: String,"
 mustFail = ["every_gate_reach_is_produced_by_some_action"]
@@ -856,7 +856,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ev-37-a_grant_permits_only_its_scopes_paths"
 requirement = "EV-37"
-target = "commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs"
+target = "cmnwlth/crates/commonwealth-knowledge/src/guest_grant.rs"
 find = "    pub fn issue(\n        &self,\n        token: impl Into<String>,\n        scopes: Vec<Scope>,\n        label: Option<String>,\n        ttl_secs: u64,\n        now_ms: u64,\n    ) -> GuestGrant {\n        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };\n        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());\n        grant\n    }"
 replace = "    pub fn issue(\n        &self,\n        token: impl Into<String>,\n        scopes: Vec<Scope>,\n        label: Option<String>,\n        ttl_secs: u64,\n        now_ms: u64,\n    ) -> GuestGrant {\n        // MUTATION: Silently drop non-path scopes to violate EV-37 (loud fallback)\n        let filtered_scopes: Vec<Scope> = scopes.iter().filter(|s| s.is_path_scope()).cloned().collect();\n        \n        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes: filtered_scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };\n        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());\n        grant\n    }"
 mustFail = ["a_grant_permits_only_its_scopes_paths"]
@@ -866,7 +866,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-7-gossip_may_not_admit_a_second_active_mem"
 requirement = "FE-7"
-target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
+target = "cmnwlth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        self.merge_from_authenticated(self_node_id, other, &GossipAuth::none())\n    }"
 replace = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        // MUTATION: Bypass authentication and specific active-member guards by directly merging\n        // without checking for duplicate active endpoint keys in the target mesh.\n        let mut report = MergeReport::default();\n        \n        // Simplistic merge that ignores the \"active in exactly one\" constraint\n        // effectively allowing a node to be added as an active member even if its key is already used elsewhere,\n        // or failing to reject it properly during gossip merge.\n        for (id, member) in other.members.iter() {\n            if !self.members.contains_key(id) {\n                self.members.insert(*id, (*member).clone());\n                report.added += 1;\n            }\n        }\n        report\n    }"
 mustFail = ["gossip_may_not_admit_a_second_active_member_on_one_endpoint_key"]
@@ -886,7 +886,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-12-an_invite_with_no_expiry_never_lapses"
 requirement = "FE-12"
-target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
+target = "cmnwlth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "    pub fn invite_expired_at(&self, now: u64) -> bool {\n        matches!(self.invite_expires_at, Some(exp) if now >= exp)\n    }"
 replace = "    pub fn invite_expired_at(&self, _now: u64) -> bool {\n        false\n    }"
 mustFail = ["an_invite_with_no_expiry_never_lapses"]
@@ -896,7 +896,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-12-expired_grant_is_not_live"
 requirement = "FE-12"
-target = "commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs"
+target = "cmnwlth/crates/commonwealth-knowledge/src/guest_grant.rs"
 find = "        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);"
 replace = "        let ttl = 0;"
 mustFail = ["expired_grant_is_not_live"]
@@ -906,7 +906,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-14-a_bad_proof_is_refused_and_does_not_fall"
 requirement = "FE-14"
-target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
+target = "cmnwlth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "        let arm = self.gossip_authorized_with(other, auth);\n        if arm == GossipAuthArm::Refused {\n            return MergeReport::refused();\n        }"
 replace = "        // MUTATION: Ignore the specific refusal from gossip_authorized_with and\n        // fall through to legacy logic (invite_key_hash check) which might succeed.\n        // This violates FE-14 because a bad proof falls back instead of refusing hard."
 mustFail = ["a_bad_proof_is_refused_and_does_not_fall_back_to_the_legacy_arm"]
@@ -916,7 +916,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-16-the_refusal_tells_an_unconfirmed_peer_ap"
 requirement = "FE-16"
-target = "commonwealth/crates/commonwealth-api/src/state.rs"
+target = "cmnwlth/crates/commonwealth-api/src/state.rs"
 find = "    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {\n        self.inner\n            .peer_post_split\n            .write()\n            .unwrap_or_else(std::sync::PoisonError::into_inner)\n            .insert(peer, post_split);\n    }"
 replace = "    pub fn observe_peer_split_generation(&self, peer: NodeId, _post_split: bool) {\n        // MUTATION: Ignore the observation. This violates FE-16 because local observations are no longer recorded,\n        // meaning a zeroed field (absence of confirmation) might be misinterpreted or ignored entirely,\n        // potentially causing upgraded nodes to treat unconfirmed peers as legacy/old-builds incorrectly.\n    }"
 mustFail = ["the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build"]
@@ -926,7 +926,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-16-a_peer_with_neither_proof_nor_secret_is_"
 requirement = "FE-16"
-target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
+target = "cmnwlth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "let mut report =\n            MergeReport::for_round(arm, arm != GossipAuthArm::Proof && !other.has_mesh_secret());"
 replace = "let mut report =\n            MergeReport::for_round(arm, true);"
 mustFail = ["a_peer_with_neither_proof_nor_secret_is_still_pre_split"]
@@ -946,7 +946,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-17-a_peer_that_upgrades_stops_blocking_rota"
 requirement = "FE-17"
-target = "commonwealth/crates/commonwealth-api/src/state.rs"
+target = "cmnwlth/crates/commonwealth-api/src/state.rs"
 find = "    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {\n        self.inner\n            .peer_post_split\n            .write()\n            .unwrap_or_else(std::sync::PoisonError::into_inner)\n            .insert(peer, post_split);\n    }"
 replace = "    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {\n        // MUTATION: Immediately mark as upgraded without waiting for a rotation round.\n        // This violates the requirement that refusal must run at least one round before refusing,\n        // and potentially allows reporting a verdict from an instrument not yet fully processed/rotated.\n        let mut map = self.inner.peer_post_split.write().unwrap();\n        map.insert(peer, true); \n    }"
 mustFail = ["a_peer_that_upgrades_stops_blocking_rotation"]
@@ -956,7 +956,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-17-the_refusal_tells_an_unconfirmed_peer_ap"
 requirement = "FE-17"
-target = "commonwealth/crates/commonwealth-api/src/state.rs"
+target = "cmnwlth/crates/commonwealth-api/src/state.rs"
 find = "    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {\n        self.inner\n            .peer_post_split\n            .write()\n            .unwrap_or_else(std::sync::PoisonError::into_inner)\n            .insert(peer, post_split);\n    }"
 replace = "    pub fn observe_peer_split_generation(&self, peer: NodeId, _post_split: bool) {\n        // Mutation: Ignore the observation entirely.\n        // This violates FE-17 because the daemon will never record that a peer is pre-split,\n        // so it cannot distinguish between an unconfirmed peer and an old build based on this observation.\n        // The test expects 'observe_peer_split_generation' to enable refusal for 'old-build',\n        // but without storing the state, the rotation logic (which relies on checking if observed)\n        // might behave differently or fail to identify the specific 'pre-split' nature correctly\n        // depending on how `rotate_invite` checks observations. Specifically, if rotate_invite\n        // checks `peer_post_split.contains(peer)` and finds false (because we didn't insert),\n        // it treats them as unobserved/unconfirmed rather than confirmed-pre-split.\n    }"
 mustFail = ["the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build"]
@@ -976,7 +976,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-26-a_guest_and_a_peer_dialing_one_key_land_"
 requirement = "FE-26"
-target = "commonwealth/crates/commonwealth-transport/src/iroh.rs"
+target = "cmnwlth/crates/commonwealth-transport/src/iroh.rs"
 find = "    pub fn spawn_routed(endpoint: iroh::Endpoint, routes: HashMap<Vec<u8>, SocketAddr>) -> Self {\n        Self::run(endpoint, move |alpn, _dialer| {\n            let target = routes.get(&alpn).copied();\n            async move { target }\n        })\n    }"
 replace = "    pub fn spawn_routed(endpoint: iroh::Endpoint, routes: HashMap<Vec<u8>, SocketAddr>) -> Self {\n        // MUTATION: Force all ALPNs to route to the first available listener (CLIENT), violating key-addressed separation.\n        Self::run(endpoint, move |_alpn, _dialer| {\n            let fallback_addr = routes.values().next().copied();\n            async move { fallback_addr }\n        })\n    }"
 mustFail = ["a_guest_and_a_peer_dialing_one_key_land_on_different_listeners"]
@@ -986,7 +986,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-26-a_principal_key_is_never_derived_from_th"
 requirement = "FE-26"
-target = "commonwealth/crates/commonwealth-api/src/principal.rs"
+target = "cmnwlth/crates/commonwealth-api/src/principal.rs"
 find = "    let from_loopback = peer.is_some_and(|p| p.ip().is_loopback());\n    if from_loopback {\n        if let Some(declared) = headers\n            .get(PRINCIPAL_HEADER)\n            .and_then(|v| v.to_str().ok())\n            .map(str::trim)\n            .filter(|v| !v.is_empty())\n        {"
 replace = "    // MUTATION: Ignore loopback status and allow declared principal on any address.\n    // This violates the security model where non-loopback connections cannot\n    // spoof identity via header, potentially allowing different addresses to\n    // resolve to different keys or bypassing the 'identity from essence' rule\n    // in mixed transport scenarios if not handled strictly by credential.\n    let _from_loopback = peer.is_some_and(|p| p.ip().is_loopback());\n    {\n        if let Some(declared) = headers\n            .get(PRINCIPAL_HEADER)\n            .and_then(|v| v.to_str().ok())\n            .map(str::trim)\n            .filter(|v| !v.is_empty())\n        {"
 mustFail = ["a_principal_key_is_never_derived_from_the_connection_address"]
@@ -1006,7 +1006,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-30-watchdog_escalates_to_rebuild_when_never"
 requirement = "FE-30"
-target = "commonwealth/crates/commonwealth-transport/src/iroh.rs"
+target = "cmnwlth/crates/commonwealth-transport/src/iroh.rs"
 find = "    pub fn from_parts(relay_urls: Vec<String>, discovery: Option<&str>) -> Self {\n        let n0_services = match discovery.map(str::trim) {\n            None | Some(\"\") | Some(\"n0\") => true,\n            Some(\"none\") | Some(\"self\") | Some(\"local\") => false,"
 replace = "    pub fn from_parts(_relay_urls: Vec<String>, _discovery: Option<&str>) -> Self {\n        // BUG: Always default to n0 services, ignoring the 'no third-party' posture\n        let n0_services = true;"
 mustFail = ["watchdog_escalates_to_rebuild_when_never_relay_homed"]
@@ -1016,7 +1016,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-33-a_guest_and_a_peer_dialing_one_key_land_"
 requirement = "FE-33"
-target = "commonwealth/crates/commonwealth-transport/src/iroh.rs"
+target = "cmnwlth/crates/commonwealth-transport/src/iroh.rs"
 find = "    pub fn spawn_routed(endpoint: iroh::Endpoint, routes: HashMap<Vec<u8>, SocketAddr>) -> Self {\n        Self::run(endpoint, move |alpn, _dialer| {\n            let target = routes.get(&alpn).copied();\n            async move { target }\n        })\n    }"
 replace = "    pub fn spawn_routed(endpoint: iroh::Endpoint, routes: HashMap<Vec<u8>, SocketAddr>) -> Self {\n        // Mutation: Always route to the client listener regardless of ALPN\n        Self::run(endpoint, move |_alpn, _dialer| {\n            let target = routes.get(CLIENT_ALPN).copied();\n            async move { target }\n        })\n    }"
 mustFail = ["a_guest_and_a_peer_dialing_one_key_land_on_different_listeners"]
@@ -1026,7 +1026,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-34-a_guest_and_a_peer_dialing_one_key_land_"
 requirement = "FE-34"
-target = "commonwealth/crates/commonwealth-transport/src/iroh.rs"
+target = "cmnwlth/crates/commonwealth-transport/src/iroh.rs"
 find = "    pub fn spawn_routed(endpoint: iroh::Endpoint, routes: HashMap<Vec<u8>, SocketAddr>) -> Self {\n        Self::run(endpoint, move |alpn, _dialer| {\n            let target = routes.get(&alpn).copied();\n            async move { target }\n        })\n    }"
 replace = "    pub fn spawn_routed(endpoint: iroh::Endpoint, routes: HashMap<Vec<u8>, SocketAddr>) -> Self {\n        Self::run(endpoint, move |alpn, dialer| {\n            // BUG: Ignoring the dialer identity and routing solely on ALPN.\n            // This violates FE-34 which requires routing on (protocol selector, dialer identity).\n            let target = routes.get(&alpn).copied();\n            async move { target }\n        })\n    }"
 mustFail = ["a_guest_and_a_peer_dialing_one_key_land_on_different_listeners"]
@@ -1046,7 +1046,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-37-proxy_rejects_unauthenticated_requests"
 requirement = "FE-37"
-target = "sovereign/crates/sovereign-pods/src/worker_http.rs"
+target = "cmnwlth/crates/sovereign-pods/src/worker_http.rs"
 find = "    router\n        .layer(axum::middleware::from_fn_with_state(\n            state.clone(),\n            require_worker_token,\n        ))\n        .with_state(state)"
 replace = "    // MUTATION: Remove the auth layer to violate FE-37. \n    // This allows unauthenticated requests (strangers) to access routes that should be refused.\n    router.with_state(state)"
 mustFail = ["proxy_rejects_unauthenticated_requests"]
@@ -1056,7 +1056,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-39-a_grant_permits_only_its_scopes_paths"
 requirement = "FE-39"
-target = "commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs"
+target = "cmnwlth/crates/commonwealth-knowledge/src/guest_grant.rs"
 find = "    pub fn issue(\n        &self,\n        token: impl Into<String>,\n        scopes: Vec<Scope>,\n        label: Option<String>,\n        ttl_secs: u64,\n        now_ms: u64,\n    ) -> GuestGrant {\n        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };\n        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());\n        grant\n    }"
 replace = "    pub fn issue(\n        &self,\n        token: impl Into<String>,\n        scopes: Vec<Scope>,\n        label: Option<String>,\n        ttl_secs: u64,\n        now_ms: u64,\n    ) -> GuestGrant {\n        // MUTATION: Allow any scope by ignoring the provided scopes and granting a wildcard.\n        // This violates FE-39 which requires grants to be bound to a closed scope enumeration.\n        let all_scopes = vec![Scope::Wildcard]; \n        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes: all_scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };\n        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());\n        grant\n    }"
 mustFail = ["a_grant_permits_only_its_scopes_paths"]
@@ -1066,7 +1066,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-39-a_scopeless_grant_permits_nothing"
 requirement = "FE-39"
-target = "commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs"
+target = "cmnwlth/crates/commonwealth-knowledge/src/guest_grant.rs"
 find = "    pub fn issue(\n        &self,\n        token: impl Into<String>,\n        scopes: Vec<Scope>,\n        label: Option<String>,\n        ttl_secs: u64,\n        now_ms: u64,\n    ) -> GuestGrant {\n        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };\n        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());\n        grant\n    }"
 replace = "    pub fn issue(\n        &self,\n        token: impl Into<String>,\n        scopes: Vec<Scope>,\n        label: Option<String>,\n        ttl_secs: u64,\n        now_ms: u64,\n    ) -> GuestGrant {\n        // BUG: Allowing empty scopes to default to a wildcard or permissive state violates the requirement that scopeless grants permit nothing.\n        let effective_scopes = if scopes.is_empty() { vec![Scope::All] } else { scopes };\n        \n        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes: effective_scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };\n        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());\n        grant\n    }"
 mustFail = ["a_scopeless_grant_permits_nothing"]
@@ -1076,7 +1076,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-39-two_grants_are_independently_revocable"
 requirement = "FE-39"
-target = "commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs"
+target = "cmnwlth/crates/commonwealth-knowledge/src/guest_grant.rs"
 find = "        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());"
 replace = "        let mut guard = self.inner.lock().unwrap();\n        if !guard.contains_key(&token) {\n            guard.insert(token, grant.clone());\n        } else {\n            // Overwrite existing grant instead of failing or ignoring\n            guard.insert(token, grant.clone());\n        }"
 mustFail = ["two_grants_are_independently_revocable"]
@@ -1086,7 +1086,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-40-a_grant_permits_only_its_scopes_paths"
 requirement = "FE-40"
-target = "commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs"
+target = "cmnwlth/crates/commonwealth-knowledge/src/guest_grant.rs"
 find = "    pub fn issue(\n        &self,\n        token: impl Into<String>,\n        scopes: Vec<Scope>,\n        label: Option<String>,\n        ttl_secs: u64,\n        now_ms: u64,\n    ) -> GuestGrant {\n        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };\n        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());\n        grant\n    }"
 replace = "    pub fn issue(\n        &self,\n        token: impl Into<String>,\n        scopes: Vec<Scope>,\n        label: Option<String>,\n        ttl_secs: u64,\n        now_ms: u64,\n    ) -> GuestGrant {\n        // MUTATION: Normalize scope variants by sorting them to ensure canonical representation.\n        // This violates the requirement that authorization MUST NOT match on scope variants,\n        // as it implies a normalization step that could affect matching logic if not handled\n        // strictly in the permit check, or simply introduces state mutation where none was intended.\n        let mut normalized_scopes = scopes;\n        normalized_scopes.sort();\n        \n        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes: normalized_scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };\n        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());\n        grant\n    }"
 mustFail = ["a_grant_permits_only_its_scopes_paths"]
@@ -1096,7 +1096,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-40-a_scopeless_grant_permits_nothing"
 requirement = "FE-40"
-target = "commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs"
+target = "cmnwlth/crates/commonwealth-knowledge/src/guest_grant.rs"
 find = "    pub fn issue(\n        &self,\n        token: impl Into<String>,\n        scopes: Vec<Scope>,\n        label: Option<String>,\n        ttl_secs: u64,\n        now_ms: u64,\n    ) -> GuestGrant {\n        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };\n        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());\n        grant\n    }"
 replace = "    pub fn issue(\n        &self,\n        token: impl Into<String>,\n        scopes: Vec<Scope>,\n        label: Option<String>,\n        ttl_secs: u64,\n        now_ms: u64,\n    ) -> GuestGrant {\n        // MUTATION: Normalize empty model scope to None to violate FE-40 requirement that they must not collapse.\n        let normalized_scopes = if matches!(&scopes[..], [Scope::Models(models)] if models.is_empty()) {\n            vec![Scope::None]\n        } else {\n            scopes\n        };\n        \n        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes: normalized_scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };\n        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());\n        guard.insert(token, grant.clone());\n        grant\n    }"
 mustFail = ["a_scopeless_grant_permits_nothing"]

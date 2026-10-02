@@ -52,7 +52,7 @@
 //!    reduce (ARCH §10.6, principle 11).
 //! 3. **the custody sweep** — [`PeerAnswer::bound_for_peer`] asks
 //!    [`Custody::released_by`] once per citation. `grep -rn Custody
-//!    commonwealth/` returns **zero hits** on this tree: the mesh boundary
+//!    cmnwlth/` returns **zero hits** on this tree: the mesh boundary
 //!    has no custody check at all today, which is the defect this row names.
 //!    `sovereign-core/src/egress.rs` guards a different boundary (third-party
 //!    providers) and gained no mesh arm; the two now share one ordering
@@ -418,7 +418,7 @@ impl Answer {
 ///
 /// This is the row `nc-thesis` calls *a non-shareable Evidence in a
 /// peer-bound reply*, and it is un-guarded on this tree today: `grep -rn
-/// Custody commonwealth/` finds nothing at all.
+/// Custody cmnwlth/` finds nothing at all.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PeerAnswer(Answer);
 

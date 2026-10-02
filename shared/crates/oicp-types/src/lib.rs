@@ -5,7 +5,7 @@
 //! OICP — Open Inference Capabilities Protocol v0.4.0
 //!
 //! Canonical types per the specification at
-//! `commonwealth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively;
+//! `cmnwlth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively;
 //! `oicp-v0.3.md` remains the fallback path). Consumed by both the
 //! Sovereign and Commonwealth workspaces via path dependency.
 //!

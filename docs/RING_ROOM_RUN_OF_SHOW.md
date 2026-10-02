@@ -15,7 +15,7 @@ what the stand-in measures — is at the end.
 The collaborative doc app lives in this repo — I run it, I don't generate it:
 
 ```bash
-svrn ring show ring-doc --dir sovereign/apps/ring-doc
+svrn ring show ring-doc --dir cmnwlth/apps/ring-doc
 ```
 
 **What appears:** the doc at `http://127.0.0.1:4318/` (localhost), plus, above
@@ -204,7 +204,7 @@ svrn mesh grant --all-apps --url https://svrnme.sh/    # the page's origin, not 
 never seen still reaches it. No port of mine is exposed, no tunnel, no tailnet,
 and nothing proxies HTTP. (Measured WORKED at the pinned iroh:
 `ralph/DECISIONS.md` browser-dial-2.) The page is
-`sovereign/apps/ring-runtime`, shipped with the landing deploy
+`cmnwlth/apps/ring-runtime`, shipped with the landing deploy
 (`landing/scripts/build-ring-runtime.sh`, run by `npm run deploy`) and served at
 `https://svrnme.sh/ring/`.
 

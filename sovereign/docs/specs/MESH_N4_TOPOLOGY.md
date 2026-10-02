@@ -1943,7 +1943,7 @@ request.
 > now asserts the cause, and a new companion test asserts the contrast, because
 > a one-sided assertion is satisfied by a message that blames the hop budget
 > unconditionally. Operator-facing row added to
-> `commonwealth/docs/routing-field-guide.md §8`.
+> `cmnwlth/docs/routing-field-guide.md §8`.
 
 > **Finding B2 — FIXED 2026-08-06, verified live. The named path never
 > consulted `sharding`, so a `LocalOnly` envelope crossed the trust boundary.** Arm 5 stated `sharding == LocalOnly` and was served by peer
@@ -1963,7 +1963,7 @@ request.
 > **Magnitude when found: latent, not live.** Exposure needed a caller that set
 > `LocalOnly` *and* pinned a model name. A census of every non-test
 > `CompletionRequest` construction across `sovereign/crates`,
-> `commonwealth/crates` and `corpus-engine` found **zero** doing both — internal
+> `cmnwlth/crates` and `corpus-engine` found **zero** doing both — internal
 > callers pin a name with no envelope (CLI/bench/gliner) or attach an envelope
 > with no pinned name (the grounding judges, via
 > `Workload::Judge.requirements(posture)`). So nothing leaked, and the fix could

@@ -141,7 +141,7 @@ in this repository and the least owned.
 **Fabric** — *who is in this group, how do I reach them, how do we agree?*
 Owns **member**, node identity, reach, ring. The `commonwealth` package: 9
 crates, 37,363 lines, zero `[[exception]]` rows across four widenings
-(`commonwealth/BOUNDARY.md`). Plus ~14,200 of sovereign-side adapter currently
+(`cmnwlth/BOUNDARY.md`). Plus ~14,200 of sovereign-side adapter currently
 inside `sovereign-mesh` (membership 8,734, rail 4,130, media 1,343).
 *Applicable as:* already proven twice — `cw-rails` joined a real mesh.
 
@@ -269,7 +269,7 @@ No phase here moves a line until the one before it has named something, because
 the reason this repository grew three misnamed crates is that code with no home
 goes wherever it links.
 
-**Phase 0 — empty `commonwealth/crates/`.** Operator direction, run ahead of
+**Phase 0 — empty `cmnwlth/crates/`.** Operator direction, run ahead of
 Phase A on branch `domains-1-empty-the-commonwealth-directory` and finished
 2026-09-11. Six crates whose names described a family they were not in left the
 directory in two commits, changing no logic: `commonwealth-{api,inference,
@@ -277,7 +277,7 @@ knowledge,app}` became `sovereign-{api,serving,grants,meshapp-registry}`
 (domains-1), then `commonwealth-test-harness` became
 `sovereign/crates/sovereign-mesh-test-harness` and `oicp-conformance` moved to
 the repo root beside the two crates it certifies against (domains-2). What
-remains under `commonwealth/` is the nine-crate package and nothing else, and
+remains under `cmnwlth/` is the nine-crate package and nothing else, and
 `scripts/cw-work-lift.sh --sandbox` reported verdict 1 after each move — that
 reading is the invariant, not the crate count. The ledger of what went where is
 `sovereign/SYSTEM_OVERVIEW.md` §5. Ordering was BIG-FIRST (operator, reversing
@@ -371,7 +371,7 @@ floors as the baseline:
 - §9's `understanding-vocab` figure of 5,161 is right; a non-recursive
   `wc -l src/*.rs` gives 2,769 and is the trap §2's preamble warns about.
 - `scripts/daemon-route-census.py:25` still names
-  `commonwealth/crates/commonwealth-api/src`, gone since `domains-1`; every
+  `cmnwlth/crates/commonwealth-api/src`, gone since `domains-1`; every
   route `sovereign-api` registers is uncounted and today's 213 unique paths
   is an under-count. Repaired by rung `domains-3`.
 

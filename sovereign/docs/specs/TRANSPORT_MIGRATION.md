@@ -108,7 +108,7 @@ round-tripped pairing string, plain reqwest end to end.
 
 Companion docs: `SYSTEM_OVERVIEW.md` §5 "The PeerTransport seam",
 `MOBILE.md` (the phone's current tailnet-only contract),
-`commonwealth/docs/getting-started.md` (today's Tailscale setup).
+`cmnwlth/docs/getting-started.md` (today's Tailscale setup).
 
 ---
 

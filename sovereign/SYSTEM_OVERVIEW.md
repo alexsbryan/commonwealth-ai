@@ -33,7 +33,7 @@ commonwealth-ai/
 ├── shared/crates/oicp-types/                # OICP wire types — no other deps
 ├── shared/crates/kernel-types/              # The neutral kernel — identity, provenance, trust, the released turn
 ├── shared/crates/oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
-├── oicp-conformance/          # Standalone OICP v0.4 host conformance tester
+├── cmnwlth/crates/oicp-conformance/          # Standalone OICP v0.4 host conformance tester
 ├── shared/crates/oplog/                     # Op/Oplog/Journaled — the append-only JSONL journal (tier-0)
 ├── serve/crates/serving-policy/            # Re-export shim for the serving-policy arithmetic (tier-0)
 ├── shared/crates/serving-policy-core/       # Fair-share scheduling + pipeline aliases ([[package_leaf]] vocabulary leaf)
@@ -55,7 +55,7 @@ commonwealth-ai/
 ├── corpus-mcp/                # Thin knowledge host — serve, any OpenAI-compatible endpoint (ingest, pull: svrn-ingest)
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog (the corpus-engine-recipes data crate)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / daemon)
-├── commonwealth/              # Mesh coordination daemon
+├── cmnwlth/              # Mesh coordination daemon
 ├── studio/                    # Liftable authoring package
 ├── quality/                   # Quality program — layer map, gate baselines, arch-layers crate
 ├── packages/chat-ui/          # Shared Svelte chat render surface (desktop + mobile)
@@ -93,13 +93,13 @@ programs in one process through their faces (docs/FIVE_PROGRAMS.md §2c).
             │                       │  EmbedFn / InferenceFn
             ├───────────┬───────────┼──────────────┐
         Sovereign       │      both call          cmnwlth
-       (sovereign/)     │   identical APIs        (commonwealth/)
+       (sovereign/)     │   identical APIs        (cmnwlth/)
             │           │                              │
             └─ contracts seam · cw-rails HTTP doors ───┘
 ```
 
 Two protocols cross that boundary. **OICP** is declared in
-`commonwealth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively), types in
+`cmnwlth/docs/oicp-v0.4.md` (v0.4 extends v0.3 additively), types in
 `shared/crates/oicp-types/src/lib.rs`, re-exported as `sovereign_core::oicp` and
 `commonwealth_core::oicp` — downstream crates use the re-exports.
 **`EmbedFn` / `InferenceFn`** are closures `corpus-engine` accepts from any
@@ -232,7 +232,7 @@ The liftable authoring package, buildable against only the OICP contract
 crates, enforced by `cargo xtask boundary-gate` (contract
 `studio/BOUNDARY.md`). One of four declared packages — the others are
 `code-intel` (`docs/CODE_TOOLING_BOUNDARY.md`), `corpus-mcp`
-(`corpus-mcp/README.md`) and `commonwealth` (`commonwealth/BOUNDARY.md`).
+(`corpus-mcp/README.md`) and `commonwealth` (`cmnwlth/BOUNDARY.md`).
 Crate sets and shared-leaf budgets are `[[package]]` / `[[package_leaf]]`
 blocks in `quality/ARCH_LAYERS.toml`, beside the layer map and behind the same
 parser, so layer-gate, boundary-gate and `arch_report` cannot drift on what a
@@ -1337,7 +1337,7 @@ cmnwlth, `llama-server` + `rpc-server` on `PATH`. For desktop, Node.js +
 Tauri 2.
 
 The repo is **one unified Cargo workspace** — every crate a member under the
-root `Cargo.toml`. `sovereign/`, `commonwealth/` and the corpus-engine
+root `Cargo.toml`. `sovereign/`, `cmnwlth/` and the corpus-engine
 carve-outs are directories of member crates, not separate workspaces.
 
 ```sh
@@ -1446,7 +1446,7 @@ the shared report.
 | Serve something the desktop used to compute in-process | the client-router families in `sovereign-daemon/src/*_http.rs` — §5 |
 | Prove a deleted twin cannot come back | `scripts/twin-census.py` over `quality/twin-plants.toml` |
 | Prove desktop and CLI answer one question alike | `sovereign-desktop/tests/e2e/real/journeys/surface-parity.journey.spec.ts` |
-| Trace a `/v1/chat/completions` end-to-end | `commonwealth/docs/routing-field-guide.md` |
+| Trace a `/v1/chat/completions` end-to-end | `cmnwlth/docs/routing-field-guide.md` |
 | Understand OICP routing | `shared/crates/oicp-types/src/lib.rs` + `sovereign-scheduler/src/oicp_select.rs` + [`docs/inference.md`](./docs/inference.md) |
 | Point an outside tool at the daemon | [`../docs/INTEROP.md`](../docs/INTEROP.md); [`../docs/INTEGRATION_SURFACES.md`](../docs/INTEGRATION_SURFACES.md) for which surfaces are contracts |
 | Deploy to a shared air-gapped box | `sovereign/deploy/onprem/` — **read `EGRESS.md` before claiming this system makes no outbound connections** |

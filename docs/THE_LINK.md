@@ -309,7 +309,7 @@ this demo shows the boundary held, not the crossing.
 
 | Claim | Where |
 |---|---|
-| Link grammar as built: token, exp, summary — fragment only | `commonwealth/crates/commonwealth-discovery/src/deep_link.rs:224-238` |
+| Link grammar as built: token, exp, summary — fragment only | `cmnwlth/crates/commonwealth-discovery/src/deep_link.rs:224-238` |
 | A token outside the fragment is not read | `deep_link.rs:243-259` |
 | Page path composed by the minting verb; `/ring/<ns>/`, `/ring/` index | `sovereign/crates/sovereign-mesh/src/deep_link.rs:74-84` (`wall_page_base`) |
 | Grant liveness and expiry checked per request | `sovereign/crates/sovereign-daemon/src/client_auth.rs:258-331` |

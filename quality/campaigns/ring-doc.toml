@@ -16,7 +16,7 @@ status    = "active"
 # empty documents converge). The negative half is the census: the live lane
 # writes NOTHING anywhere, proven by a test that a durable variant turns red.
 [predicate]
-statement = "After 100 concurrent edits from three real nodes and a 60 s partition of one of them, the Yjs state vectors on all three nodes are byte-equal, `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail*` is empty, and tests/main/replication_sender_census.rs passes unchanged with the live lane in place"
+statement = "After 100 concurrent edits from three real nodes and a 60 s partition of one of them, the Yjs state vectors on all three nodes are byte-equal, `git diff --stat origin/main -- cmnwlth/crates/commonwealth-rail*` is empty, and tests/main/replication_sender_census.rs passes unchanged with the live lane in place"
 check     = "./scripts/sovereign-test.sh --human --package commonwealth-rail --package commonwealth-rail-core"
 # `check` decides only the rail leg today. The three-node run is
 # `scripts/ring-doc-demo.sh verdict all`, OWED by day 5 of ring-doc-week1;
@@ -47,7 +47,7 @@ rung         = "rd-1"
 one_line     = "CLAIM: after 100 concurrent edits from three nodes, the Yjs state vectors on all three are equal and the rail carried every update as an opaque act with ZERO diffs under commonwealth-rail*"
 derives_from = "the campaign's hardest-first bet: Yjs updates are commutative, associative and idempotent (shelf §doc), so the rail's total order is a convenience and admission needs no branch. A keystroke is 18 B and ~38,000 words fit one 64 KiB act (measured 2026-09-17), so the ceiling is not the constraint. The rail-crate diff count is the campaign predicate applied to this rung."
 floor        = 1.0
-floor_basis  = "structural: 1.0 iff the three state vectors are byte-equal after the run AND `git diff --stat origin/main -- commonwealth/crates/commonwealth-rail*` is empty. Either false is 0.0."
+floor_basis  = "structural: 1.0 iff the three state vectors are byte-equal after the run AND `git diff --stat origin/main -- cmnwlth/crates/commonwealth-rail*` is empty. Either false is 0.0."
 target       = 1.0
 direction    = "higher_is_better"
 # instrument   = (none yet) — owed by day 5: `scripts/ring-doc-demo.sh verdict ra-doc-three-machines-converge`

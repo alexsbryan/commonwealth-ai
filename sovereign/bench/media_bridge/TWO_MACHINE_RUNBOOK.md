@@ -1,6 +1,6 @@
 # The two-machine relay bar — runbook, written 2026-09-09
 
-Closes the pre-registered NO-GO in `sovereign/deploy/mesh/WORK_PLANE.md`
+Closes the pre-registered NO-GO in `cmnwlth/deploy/mesh/WORK_PLANE.md`
 §"Distance to the capstone". That bar has been COULD-NOT-JUDGE since it was
 written, and it is the single measurement gating BOTH end-user claims on that
 page — CI-on-your-metal across two nodes, and remote media playback.

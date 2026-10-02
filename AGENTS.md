@@ -437,7 +437,7 @@ trigger column is when to open it — the doc section holds the full text.
 
 **ONE Cargo workspace, declared at the repo root.** `./Cargo.toml` carries a
 `[workspace]` with 54 members — `corpus-engine`, 25 `sovereign/crates/*`, the
-`commonwealth/crates/*`, `oicp-types`, `oicp-client`, `kernel-types`,
+`cmnwlth/crates/*`, `oicp-types`, `oicp-client`, `kernel-types`,
 `quality/arch-layers`. No subdirectory declares its own `[workspace]`, and
 there is no `sovereign/Cargo.toml` at all: a `cargo` invoked from `sovereign/`
 walks UP to the root and resolves the same workspace.
@@ -455,7 +455,7 @@ misprices where a crate can live, which is load-bearing during boundary work.)
 
 ```
 commonwealth-ai/
-├── commonwealth/      # Mesh coordination daemon (runs at localhost:9741)
+├── cmnwlth/      # Mesh coordination daemon (runs at localhost:9741)
 ├── sovereign/      # Local AI + code intelligence server
 ├── corpus-engine/  # Knowledge base engine
 ├── shared/crates/oicp-types/    # Shared protocol types (used by both)

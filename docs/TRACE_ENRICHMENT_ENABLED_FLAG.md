@@ -82,11 +82,11 @@ The error then propagates loudly, twice:
 - `corpus-engine/src/engine/ingest.rs:414-437` — the `Err(e)` arm logs
   `Corpus '…' install failed (…), but committed chunks exist — preserving for
   resume`, does not touch the meta, and returns `Err(e)`.
-- `commonwealth/crates/commonwealth-api/src/routes_internal/corpus_ingest.rs:1150-1160`
+- `cmnwlth/crates/commonwealth-api/src/routes_internal/corpus_ingest.rs:1150-1160`
   — `record_failure(...)` writes a terminal `IngestProgress::Failed` **before**
   the WARN. The comment there names the exact bug this replaced: "A log-only
   handler here is the bug that made every ingest failure render as a completed
-  install." Guarded by `commonwealth/crates/commonwealth-api/tests/corpus_lifecycle.rs:867`
+  install." Guarded by `cmnwlth/crates/commonwealth-api/tests/corpus_lifecycle.rs:867`
   (`failed_ingest_reports_failed_and_stays_visible`).
 
 So there is no silent substitution on the ingest failure path. The failure is

@@ -5,7 +5,7 @@
 //! `commonwealth-core` and `sovereign-*` cannot see each other in either
 //! direction (`quality/ARCH_LAYERS.toml:125-128`), and `oicp-types` is the
 //! serde-only crate both already depend on —
-//! `sovereign/deploy/mesh/GROUND_TRUTH.md` §"The layer contract that decides
+//! `cmnwlth/deploy/mesh/GROUND_TRUTH.md` §"The layer contract that decides
 //! where `TenantId` lives".
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

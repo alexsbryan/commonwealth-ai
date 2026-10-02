@@ -11,7 +11,7 @@ the end (and once mid-branch if the diff grows risky).
 
 ## Item 2 — jitter the constant shed `retry_after_secs: 2`  ✅ LANDED
 
-**Site.** `commonwealth/crates/commonwealth-api/src/state.rs:2086` (`admit_peer_request`,
+**Site.** `cmnwlth/crates/commonwealth-api/src/state.rs:2086` (`admit_peer_request`,
 the `CeilingExceeded` arm). Verified by grep before editing — the doc's cited `:2082` had
 drifted by 4 lines.
 
@@ -42,7 +42,7 @@ Run with the pre-fix constant restored (`retry_after_secs: 2`):
 
 ```
 thread 'admission::tests::ceiling_shed_retry_after_is_jittered' panicked at
-  commonwealth/crates/commonwealth-api/src/admission.rs:449:9:
+  cmnwlth/crates/commonwealth-api/src/admission.rs:449:9:
   a shed hint with no spread is a synchronized-retry generator; got {2}
 pass: 1  fail: 1   cargo exit: 100
 ```
@@ -57,7 +57,7 @@ nothing to declare in `quality/env-flags.toml`.
 ## Item 6 — spawn `RetentionGc` in the sovereign daemon  ✅ LANDED (with one named change of shape)
 
 **Sites.** `grep -rn RetentionGc` confirmed the order's claim: the only construction was
-`commonwealth/crates/commonwealth-daemon/src/main.rs:789`. The sovereign daemon's
+`cmnwlth/crates/commonwealth-daemon/src/main.rs:789`. The sovereign daemon's
 `MeshStore` is built in `sovereign/crates/sovereign-mesh/src/daemon.rs:2300` and handed to
 `AppState`, so the spawn belongs there — next to the `StorageSnapshot` loop, which already
 carries the shutdown-channel pattern this reuses. (The order's Scope named
@@ -92,7 +92,7 @@ call removed — i.e. exactly what a verbatim copy of the prior art would have s
 
 ```
 thread 'gc::tests::scoped_gc_bounds_the_ledger_without_touching_other_apps' panicked at
-  commonwealth/crates/commonwealth-state/src/gc.rs:137:9:
+  cmnwlth/crates/commonwealth-state/src/gc.rs:137:9:
   assertion `left == right` failed: only the out-of-window ledger event is dead
 pass: 1  fail: 1   cargo exit: 100
 ```

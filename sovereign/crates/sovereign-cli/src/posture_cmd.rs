@@ -144,7 +144,7 @@ fn instrument_coverage_row(repo: Option<&Path>) -> Judgement {
 /// stops being read.
 fn oicp_conformance_row() -> Judgement {
     let path = sovereign_cli_shared::dirs::sovereign_root()
-        .join("oicp-conformance")
+        .join("cmnwlth/crates/oicp-conformance")
         .join("latest.json");
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Judgement::never_ran(

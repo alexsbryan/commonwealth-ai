@@ -11,7 +11,7 @@
 //! and the verdict source from the row — and the results merge back through
 //! the SAME roll-up, with one `node` column added, so a distributed verdict is
 //! diffable against a local one at the same rev
-//! (`sovereign/deploy/mesh/WORK_PLANE.md` §The pilot).
+//! (`cmnwlth/deploy/mesh/WORK_PLANE.md` §The pilot).
 //!
 //! # A unit the cohort cannot place is a ROW, never an absence
 //!

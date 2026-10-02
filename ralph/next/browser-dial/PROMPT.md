@@ -15,7 +15,7 @@ these substitutions and none other:
 - Regression sets, never edited from this queue:
   `quality/campaigns/ring-room.toml`, `ring-guest.toml`, `the-link.toml`.
 - One absolute this campaign adds to the shared protocol: the product diff
-  is EMPTY — `git diff` over sovereign/crates and commonwealth/crates for
+  is EMPTY — `git diff` over sovereign/crates and cmnwlth/crates for
   every row is zero, and a row that seems to need an edit there has found
   the order's exit condition — stop (§6) and say so; never improvise
   around it. Probes and the page live under `target/`, never committed.

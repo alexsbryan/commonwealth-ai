@@ -55,7 +55,7 @@ fn shipped(dir: &Path, out: &mut Vec<(PathBuf, String)>) {
 /// The files that may construct a `Lease`, and why.
 const OWNERS: &[(&str, &str)] = &[
     (
-        "commonwealth/crates/commonwealth-rails/src/donor.rs",
+        "cmnwlth/crates/commonwealth-rails/src/donor.rs",
         "THE drive: cw-rails' donor leases, runs, renews and reports",
     ),
     (
@@ -63,11 +63,11 @@ const OWNERS: &[(&str, &str)] = &[
         "the vocabulary: the act's own definition and its kind",
     ),
     (
-        "commonwealth/crates/commonwealth-work/src/projection.rs",
+        "cmnwlth/crates/commonwealth-work/src/projection.rs",
         "the fold: it reads a Lease act back, and leases nothing",
     ),
     (
-        "commonwealth/crates/commonwealth-rails/src/plane_seal.rs",
+        "cmnwlth/crates/commonwealth-rails/src/plane_seal.rs",
         "the seal's snapshot: it re-appends a lease this node already holds, and takes nothing",
     ),
 ];

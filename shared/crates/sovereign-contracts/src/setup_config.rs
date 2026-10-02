@@ -1219,7 +1219,7 @@ pub struct DaemonSection {
     pub guest_bind: Option<String>,
 
     /// The ring page the guest door serves at the bare `/ring/` (a bundle
-    /// directory such as `sovereign/apps/ring-doc`). `None` serves no page
+    /// directory such as `cmnwlth/apps/ring-doc`). `None` serves no page
     /// there; the door's rail routes are unaffected. A wall with more than
     /// one app names them in `[daemon.guest_pages]` instead.
     #[serde(default)]

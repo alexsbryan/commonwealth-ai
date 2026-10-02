@@ -5,7 +5,7 @@
 #
 #   scripts/ralph-check.sh clean
 #   scripts/ralph-check.sh test sovereign-mesh
-#   scripts/ralph-check.sh node sovereign/apps/ring-doc
+#   scripts/ralph-check.sh node cmnwlth/apps/ring-doc
 #
 # Each runs the gate into target/ralph/<check>.log, prints `exit=N`, tails the
 # log, and exits N. Why a script and not the inline string it replaces: the

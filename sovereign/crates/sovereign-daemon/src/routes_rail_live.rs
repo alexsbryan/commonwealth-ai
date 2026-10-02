@@ -12,7 +12,7 @@
 //! (`quality/campaigns/ring-apps-shelf.md` §gossip).
 //!
 //! **The payload is opaque TEXT and this module never looks inside it.** The
-//! page already base64s its Yjs bytes for a rail act (`sovereign/apps/ring-doc/
+//! page already base64s its Yjs bytes for a rail act (`cmnwlth/apps/ring-doc/
 //! adapter.js`), so the live lane takes the same spelling rather than minting
 //! a second one — and a daemon that decoded it would be claiming to know
 //! what an app's presence means. Text also means the drain can hand the

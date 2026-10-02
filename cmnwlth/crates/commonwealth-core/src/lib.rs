@@ -34,7 +34,7 @@
 //! The rail (`commonwealth-rail-core` / `commonwealth-rail`) is the package's
 //! other half and does **not** sit on this crate — it shares no type with it.
 //! A shared append-only log and a peer roster are separate problems here on
-//! purpose; see `commonwealth/README.md`.
+//! purpose; see `cmnwlth/README.md`.
 //!
 //! # Three decisions worth knowing before reading the code
 //!
@@ -100,7 +100,7 @@
 //!
 //! No transport, no gossip loop, no persistence, no scheduler. The rule that
 //! keeps this crate small is that anything needing a runtime, a socket, or a
-//! disk belongs one layer up — `commonwealth/BOUNDARY.md` is the contract and
+//! disk belongs one layer up — `cmnwlth/BOUNDARY.md` is the contract and
 //! `cargo xtask boundary-gate` enforces it. [`config::DaemonConfig`] is the
 //! sharpest illustration: the struct is here, the TOML parser that fills it is
 //! not, and `toml` is a dev-dependency for exactly that reason.

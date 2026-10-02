@@ -131,13 +131,13 @@ weight = 58
 test   = "persist_agent_run_writes_summary_and_workdir_copy"
 
 [[probe]]
-file   = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
+file   = "cmnwlth/crates/commonwealth-core/src/mesh/mod.rs"
 crate  = "commonwealth-core"
 weight = 56
 test   = "empty_stream_is_zeroed_summary"
 
 [[probe]]
-file   = "commonwealth/crates/commonwealth-work/src/process.rs"
+file   = "cmnwlth/crates/commonwealth-work/src/process.rs"
 crate  = "commonwealth-work"
 weight = 55
 test   = "every_act_round_trips_through_a_payload"
@@ -173,13 +173,13 @@ weight = 42
 test   = "a_walked_answer_carries_passages_and_a_map"
 
 [[probe]]
-file   = "commonwealth/crates/commonwealth-transport/src/iroh.rs"
+file   = "cmnwlth/crates/commonwealth-transport/src/iroh.rs"
 crate  = "commonwealth-transport"
 weight = 40
 test   = "a_slow_peer_does_not_delay_the_others_and_is_a_failed_row"
 
 [[probe]]
-file   = "commonwealth/crates/commonwealth-state/src/store.rs"
+file   = "cmnwlth/crates/commonwealth-state/src/store.rs"
 crate  = "commonwealth-state"
 weight = 40
 test   = "emit_then_read_round_trips"

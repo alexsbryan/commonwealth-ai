@@ -404,7 +404,7 @@ def cmd_peer_outside(args: list[str]) -> int:
     by_crate: dict[str, int] = {}
     for h in found:
         by_crate[h["crate"]] = by_crate.get(h["crate"], 0) + 1
-    print("peer-outside — Peer* definitions outside commonwealth/crates/ "
+    print("peer-outside — Peer* definitions outside cmnwlth/crates/ "
           "(the word anywhere in the name; prefix mode refused)\n")
     for crate in sorted(by_crate):
         print(f"  {crate:<46} {by_crate[crate]:>3}")
@@ -1629,7 +1629,7 @@ def cmd_congestion(args: list[str]) -> int:
 # drops the value, which is the goodhart made arithmetic.
 #
 # THE LIFT SCRIPTS ARE INVENTORY THAT CAN ONLY ABSTAIN WITHOUT AN INVITE
-# (commonwealth/BOUNDARY.md "Tier 2"), so the read tier is the default: a live
+# (cmnwlth/BOUNDARY.md "Tier 2"), so the read tier is the default: a live
 # run happens only when the campaign row sets a `timeout_s` (the bar's own
 # `timeout_s` decides, and `--no-lift` forces the read tier regardless).
 _DEFAULT_LIFT_TIMEOUT_S = 120
@@ -1954,17 +1954,17 @@ def cmd_predicate(args: list[str]) -> int:
     ok = not ungated and not peers
     if ok:
         print("predicate — every kept context names an ARCH_LAYERS package and "
-              "no crate outside commonwealth/ defines a Peer* type")
+              "no crate outside cmnwlth/ defines a Peer* type")
     else:
         print(f"predicate FALSE — {len(ungated)} kept contexts name no package; "
-              f"{len(peers)} Peer* definitions outside commonwealth/")
+              f"{len(peers)} Peer* definitions outside cmnwlth/")
         if ungated:
             print(f"\n  kept contexts with no ARCH_LAYERS [[package]] "
                   f"({len(ungated)}):")
             for c in ungated:
                 print(f"    {c}")
         if peers:
-            print(f"\n  Peer* definitions outside commonwealth/ "
+            print(f"\n  Peer* definitions outside cmnwlth/ "
                   f"({len(peers)} in {len(by_crate)} crates):")
             for crate in sorted(by_crate):
                 print(f"    {crate}: {by_crate[crate]}")
@@ -1972,12 +1972,12 @@ def cmd_predicate(args: list[str]) -> int:
         emit_judgement(
             "domains-census", "passed",
             "every kept context names an ARCH_LAYERS package and no crate "
-            "outside commonwealth/ defines a Peer* type")
+            "outside cmnwlth/ defines a Peer* type")
         return EXIT_OK
     emit_judgement(
         "domains-census", "failed",
         f"{len(ungated)} kept contexts name no package; {len(peers)} Peer* "
-        f"definitions outside commonwealth/ in {len(by_crate)} crates")
+        f"definitions outside cmnwlth/ in {len(by_crate)} crates")
     return 1
 
 

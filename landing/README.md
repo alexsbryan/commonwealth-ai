@@ -111,7 +111,7 @@ If you add anything that breaks this, weigh whether it's worth it.
 ## /ring/ — the guest runtime
 
 `ring/` is not part of the landing page's first paint; it is the guest
-runtime (`sovereign/apps/ring-runtime`), the wasm page a guest link opens,
+runtime (`cmnwlth/apps/ring-runtime`), the wasm page a guest link opens,
 served at `svrnme.sh/ring/`. It is built by
 `landing/scripts/build-ring-runtime.sh` — which `npm run deploy` runs before
 `vercel deploy`, so a deploy always carries a fresh runtime — and `ring/` is

@@ -8,12 +8,12 @@
 # ── Build artefacts ───────────────────────────────────────────────────────
 /target/
 
-# Nested cargo/wasm-pack output under the app tree. `sovereign/apps/ring-runtime`
+# Nested cargo/wasm-pack output under the app tree. `cmnwlth/apps/ring-runtime`
 # is 2009 untracked files, ALL of them build output with no source beside them
 # (the crate lives elsewhere) — every worker session read it in `git status` and
 # one `git add -A` would have committed it. The anchored `/target/` above does not
 # reach a nested one. 2026-09-23.
-sovereign/apps/*/target/
+cmnwlth/apps/*/target/
 
 # Local desktop-release container rehearsal (scripts/build-desktop-linux.sh):
 # isolated cargo/npm caches + a separate CARGO_TARGET_DIR so container

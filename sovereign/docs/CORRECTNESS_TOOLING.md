@@ -74,7 +74,7 @@ Not eval banks — but they are the floor. Run before any of the above lights up
 |---|---|---|
 | Sovereign unit tests | `cargo test` (workspace) at `sovereign/` | ~300 tests across crates: router, planner, inference, mesh, core. |
 | Commonwealth mesh + scheduler integration | `cargo test --test integration` / `--test scheduler_integration` at `sovereign/crates/sovereign-mesh-test-harness/` | Mesh formation, fault injection, graceful departure, knowledge assignment, portfolio balancing. |
-| Commonwealth unit tests | `cargo test` at `commonwealth/` | API, discovery, inference, state. |
+| Commonwealth unit tests | `cargo test` at `cmnwlth/` | API, discovery, inference, state. |
 | Corpus engine | `cargo test` at `corpus-engine/` | Filter pipeline, parquet ingest, watcher lifecycle, recipe back-compat, HTTP API pagination. |
 
 ### 8. Operator-driven eval harness

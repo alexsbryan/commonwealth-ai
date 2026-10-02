@@ -256,7 +256,7 @@ journals, lessons, parked meshes) is not carried back.
 1. **`svrn mesh up`'s handover** (identity, rails.toml, ring journals, the
    media house credential and viewer id, the `[compute.work_offer]` and
    `[iroh]` keys): from a checkout,
-   `SVRN=<[data] dir> CONFIG=<config.toml> RAILS=<cw-rails data dir> sh sovereign/crates/sovereign-cli-mesh/rollback-handover.sh`.
+   `SVRN=<[data] dir> CONFIG=<config.toml> RAILS=<cw-rails data dir> sh cmnwlth/crates/sovereign-cli-mesh/rollback-handover.sh`.
    It puts every `*.pre-handover` back in cw-rails' dir (removing a file an
    empty one marks as created), renames `node_key.handed-over` to `node_key`,
    moves the journals and the credential back under the daemon, and restores
