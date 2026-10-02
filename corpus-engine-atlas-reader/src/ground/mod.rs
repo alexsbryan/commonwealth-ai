@@ -249,7 +249,14 @@ pub async fn ground(
 
     // Merge, dedup by (atlas, atom), keep the max score. Name additions are
     // an intentional broadening beyond `max_seeds`.
-    let mut merged: HashMap<(String, String), f32> = HashMap::new();
+    //
+    // This map, `neighborhood` and `chunk_scores` are BTreeMaps so a tie
+    // breaks by key. Name seeds floor at 0.6 and tie by the dozen at the seed
+    // cut, and every sort below is stable, so a HashMap here let the process's
+    // hash seed choose the seeds and the request order, and the order of an
+    // `[Atlas highlights]` block's lines. Pinned by
+    // `tied_seeds_and_requests_break_by_key_on_every_walk`.
+    let mut merged: BTreeMap<(String, String), f32> = BTreeMap::new();
     for (s, cid, aid) in scored.into_iter().chain(name_seeds) {
         merged
             .entry((cid, aid))
@@ -343,7 +350,7 @@ pub async fn ground(
     // ── 3. BFS over the row's edge kinds, for the row's hops ────────────
     let max_hops = walk.hops as usize;
     let edge_allowed: Option<&[EdgeType]> = (!walk.walk.is_empty()).then_some(walk.walk.as_slice());
-    let mut neighborhood: HashMap<(String, String), Reach> = HashMap::new();
+    let mut neighborhood: BTreeMap<(String, String), Reach> = BTreeMap::new();
     for (atlas_id, atom_id, seed_score) in &seeds {
         let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {
             continue;
@@ -462,7 +469,7 @@ pub async fn ground(
     // captured here because this is the only place the graph that owns the
     // manifest is in scope. Filled once per key; empty for a `RowId` selector
     // and for a corpus whose join was never backfilled.
-    let mut chunk_scores: HashMap<
+    let mut chunk_scores: BTreeMap<
         (EvidenceSite, ChunkSelector),
         (
             f32,
@@ -472,7 +479,7 @@ pub async fn ground(
             Vec<u64>,
             Vec<(f32, String)>,
         ),
-    > = HashMap::new();
+    > = BTreeMap::new();
     let mut summaries: Vec<SummaryNode> = Vec::new();
     for ((atlas_id, atom_id), reach) in &neighborhood {
         let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {

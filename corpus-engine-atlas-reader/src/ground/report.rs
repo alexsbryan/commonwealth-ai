@@ -17,7 +17,7 @@
 //! `atlas::ground::WalkLedger` path still resolves (ARCH §10.6 — a re-export,
 //! never a twin).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::question_kind::{KindScore, KindSource};
 
@@ -336,7 +336,7 @@ pub(crate) struct Reach {
 }
 
 pub(super) fn build_map(
-    neighborhood: &HashMap<(String, String), Reach>,
+    neighborhood: &BTreeMap<(String, String), Reach>,
     graph_by_id: &HashMap<&str, &dyn AtlasProvider>,
 ) -> MapSection {
     let mut nodes: Vec<MapNode> = Vec::with_capacity(neighborhood.len().min(MAP_NODE_CAP));
