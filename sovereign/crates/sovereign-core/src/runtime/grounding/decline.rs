@@ -7,6 +7,28 @@
 
 use super::strip_gk_caveat;
 
+/// The honest-abstention phrasings [`answer_declines`] recognises.
+const DECLINES: &[&str] = &[
+    "i don't have reliable information",
+    "i do not have reliable information",
+    "i am not certain",
+    "i'm not certain",
+    "i do not have information",
+    "i don't have information",
+    "couldn't confirm an answer",  // grounded_abstention prose (current)
+    "could not confirm an answer", // grounded_abstention prose (current)
+    "none of them actually cover it", // grounded_abstention prose (legacy, still in-the-wild)
+    "i'd rather not guess",        // grounded_abstention prose (legacy)
+    "do not contain",
+    "does not contain",
+    "not recorded there",
+    "the sources do not",
+    "the sources don't",
+    "sources do not contain",
+    "no passage",
+    "not in your sources",
+];
+
 /// True when a released short answer is itself an honest abstention / decline
 /// ("the sources don't cover it", "I'm not certain", the `grounded_abstention`
 /// prose). Such an answer asserts no verifiable value, so the specifics scan has
@@ -17,26 +39,6 @@ use super::strip_gk_caveat;
 /// flags on GOOD answers were exactly these honest abstentions.
 pub fn answer_declines(text: &str) -> bool {
     let h = text.trim_start().to_lowercase();
-    const DECLINES: &[&str] = &[
-        "i don't have reliable information",
-        "i do not have reliable information",
-        "i am not certain",
-        "i'm not certain",
-        "i do not have information",
-        "i don't have information",
-        "couldn't confirm an answer", // grounded_abstention prose (current)
-        "could not confirm an answer", // grounded_abstention prose (current)
-        "none of them actually cover it", // grounded_abstention prose (legacy, still in-the-wild)
-        "i'd rather not guess",       // grounded_abstention prose (legacy)
-        "do not contain",
-        "does not contain",
-        "not recorded there",
-        "the sources do not",
-        "the sources don't",
-        "sources do not contain",
-        "no passage",
-        "not in your sources",
-    ];
     DECLINES.iter().any(|d| h.contains(d))
 }
 
