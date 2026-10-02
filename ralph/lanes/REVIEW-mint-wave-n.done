@@ -2,7 +2,7 @@ REVIEW-mint-wave-n
 commit 74698039e
 no build — REVIEW-mint: 12 rows appended to ralph/STATE.md, DECISIONS.md entry, no code touched
 correction: `python3 scripts/domains-census.py queue` exits 4 on the tree as found — 19 untagged
-  `shared/crates/corpus-index/src/**.rs` modules REVIEW-build-index-read-port (503681188) created with no
+  `corpus-index/src/**.rs` modules REVIEW-build-index-read-port (503681188) created with no
   `[[module]]` rows, so queue/misnamed/crate-lines all refuse. Head read with the coverage
   assertion bypassed (the queue computation is unchanged): corpus-engine 171,513 lines / 35.9%
   own, sovereign-core 130,237 / 21.1% next. Recorded in the mint row + ralph/DECISIONS.md.
@@ -22,8 +22,8 @@ what: wave = corpus-engine's REMAINDER. Wave 3 took only its Understanding carve
     dm-ce-move-build-feedback      — sovereign_config.rs (260) -> corpus-engine-watchers
     REVIEW-build-ce-closed         — verdict rung: corpus-engine at 100% its own context
     REVIEW-audit-wave-n            — TESTALL; PREPUSH
-premise: measured 2026-09-18 — `git ls-files 'shared/crates/corpus-index/src/**/*.rs' 'shared/crates/corpus-index/src/*.rs' | wc -l`
-  = 19 (10,046 lines); `grep -c 'shared/crates/corpus-index/src' quality/DOMAINS.toml` = 0; `plan --crate
+premise: measured 2026-09-18 — `git ls-files 'corpus-index/src/**/*.rs' 'corpus-index/src/*.rs' | wc -l`
+  = 19 (10,046 lines); `grep -c 'corpus-index/src' quality/DOMAINS.toml` = 0; `plan --crate
   corpus-engine` prints move order "understanding, workbench, kernel, back-of-house, workspace,
   build-feedback" with `CYCLE ... understanding -> workbench -> kernel`; `git grep -n
   'crate::enrichment::pipeline' -- corpus-engine/src/enrichment/code_intel` = mod.rs:35,36 + pass.rs:18;

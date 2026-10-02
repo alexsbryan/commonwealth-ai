@@ -12,7 +12,7 @@ decision (decisions stay in `ralph/decisions/`).
 - cw-rails does not link any of the three crates. `commonwealth-rails` and the
   other `commonwealth-*` crates depend in-repo only on `commonwealth-*`,
   kernel-types, oicp-types, host-kit and oplog. None of the nine manifests
-  under `cmnwlth/` names sovereign-mesh, sovereign-scheduler or
+  under `commonwealth/` names sovereign-mesh, sovereign-scheduler or
   sovereign-serving-host.
 - sovereign-mesh (16,560 lines, 30 modules) is the svrn daemon's in-process
   fabric library.
@@ -78,7 +78,7 @@ decision (decisions stay in `ralph/decisions/`).
     (model_fetch.rs:25,62,97). These are the node-to-node model-transfer wire.
     Its server side is the daemon's routes_internal/model_files.rs:57.
   - `peer_health::PeerHealthTracker` (peer_inference.rs:431,698). It is
-    std-only. Its only other user is mesh_sim; no `cmnwlth/` crate
+    std-only. Its only other user is mesh_sim; no `commonwealth/` crate
     names it.
 
 ## 4. sovereign-scheduler (6.9k lines) is pure ranking arithmetic

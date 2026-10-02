@@ -37,6 +37,6 @@ checks: CLEAN exit=0 (debug target 0G, under 50G); LINT exit=0 (WORKSPACE,
   the_merge_proceeds_with_the_slices_that_exist); TOML exit=0;
   CENSUS --self-test exit=0 (11/11 caught, 11/11 refused).
 observed: layout-gate is RED at HEAD with one pre-existing NEW layout site
-  (`shared/crates/corpus-index/src/corpus.rs`, added by 503681188 REVIEW-build-index-read-port)
+  (`corpus-index/src/corpus.rs`, added by 503681188 REVIEW-build-index-read-port)
   that is not in this unit's diff; the sovereign-grants path re-key it checks is
   correct. Not fixed here — outside the row's scope.

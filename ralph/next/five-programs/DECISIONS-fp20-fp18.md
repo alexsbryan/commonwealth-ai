@@ -29,28 +29,28 @@ without building capability the premise says already exists.
 drop exactly as much as the src refs do.
 
 **cw-rails route census** — the premise's three families ARE served, byte-identical
-handlers (`cmnwlth/crates/commonwealth-rails/src/api.rs:41-59`):
+handlers (`commonwealth/crates/commonwealth-rails/src/api.rs:41-59`):
 `/v1/mesh/media` (get :44), `/v1/mesh/app` (get :45), `/v1/mesh/fanout` +
 `/v1/mesh/media/fanout` (post :48-49), `/v1/mesh/publish` ×4 (:52-57). But:
 
-    $ git grep -n "v1/mesh/offers" -- cmnwlth/crates/commonwealth-rails/src
+    $ git grep -n "v1/mesh/offers" -- commonwealth/crates/commonwealth-rails/src
     (no output — no offers mount)
 
 **Presence at cw-rails** — `git grep -rni "presence|media_available|Sessions" --
-cmnwlth/crates/commonwealth-rails/` returns ONE hit:
+commonwealth/crates/commonwealth-rails/` returns ONE hit:
 
-    cmnwlth/crates/commonwealth-rails/src/gossip.rs:79:        media_available: None,
+    commonwealth/crates/commonwealth-rails/src/gossip.rs:79:        media_available: None,
 
 No presence route, no poll, no reader of the origin. The gossip field exists and is
 written by nothing. (The decision function `commonwealth_media::presence::
 media_available_from_sessions` is decision-only — "Nothing here dials anything",
-cmnwlth/crates/commonwealth-media/src/presence.rs:9 — so there is no poll loop
+commonwealth/crates/commonwealth-media/src/presence.rs:9 — so there is no poll loop
 at the target to reuse either. The poll loop is daemon code:
 sovereign/crates/sovereign-daemon/src/media_presence.rs `run`/`read_presence`/`report`.)
 
 **The offers route is live** — mounted at sovereign/crates/sovereign-daemon/src/
 mesh_http.rs:54 (`/v1/mesh/offers` → `media_reach::mesh_offers`), driven by
-cmnwlth/crates/sovereign-cli-mesh/src/mesh_offers.rs:489 and :550. cw-rails'
+sovereign/crates/sovereign-cli-mesh/src/mesh_offers.rs:489 and :550. cw-rails'
 origin handler (api.rs:165) is already kind-generic over `OriginKind` — the mount
 would be one line — but today it is not mounted.
 

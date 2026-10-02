@@ -19,7 +19,7 @@ The conflict:
   to = "sovereign-*"`, reason: the binary is built and run OUTSIDE the monorepo
   by `scripts/cw-rails-lift.sh`. So cw-rails cannot link
   `sovereign_contracts::run_lock::RunLock`.
-- `shared/crates/sovereign-contracts/src/run_lock.rs` — `RunLock::acquire(data_root)`
+- `sovereign/crates/sovereign-contracts/src/run_lock.rs` — `RunLock::acquire(data_root)`
   is `flock(LOCK_EX|LOCK_NB)` on `<root>/daemon.lock` via `libc`, ~60 lines,
   no sovereign-specific dependency besides its error text (`svrn daemon stop`).
 - A client-side lock does not serve: the lock must be held by the SERVING

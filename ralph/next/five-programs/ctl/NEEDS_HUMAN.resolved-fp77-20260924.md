@@ -11,7 +11,7 @@ marked `[~]` (uncommitted). No code written; tree unchanged besides the mark.
 Premise checks, all true except the one below:
 
 - `cargo tree -e normal -p commonwealth-rails` (before): 813 packages, `grep -c sqlite` = 0;
-  `grep sqlite shared/crates/workspace-hack/Cargo.toml` = nothing. The +1 edge is viable.
+  `grep sqlite workspace-hack/Cargo.toml` = nothing. The +1 edge is viable.
 - The daemon's rail is `RailsRingRail` (sovereign-daemon/src/rails_client.rs:346), so both
   pumps would append to cw-rails' journals. The twin is safe per write, as the row says.
 

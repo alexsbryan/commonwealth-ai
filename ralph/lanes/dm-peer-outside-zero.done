@@ -1,7 +1,7 @@
 unit: dm-peer-outside-zero
 commits: bd6355766 (the two renames)
 what: the bar dm-peer-outside-fabric reads 0. Two stragglers remained outside
-  cmnwlth/crates/, each renamed per its DT [[noun]] row (identifiers only,
+  commonwealth/crates/, each renamed per its DT [[noun]] row (identifiers only,
   no behaviour change):
     PeerHistory       -> TravelHistory       (sovereign-cli-llm/src/mesh_travel.rs:177, 8 refs / 1 file)
     PeerCanonicalLead -> CanonicalAtlasLead  (sovereign-daemon/src/auto_ingest.rs:1368, 4 refs / 1 file)
@@ -16,6 +16,6 @@ checks: CLEAN exit=0 (disk gate, cache under threshold); LINT exit=0 (scoped to
   sovereign-cli-dev); CENSUS --self-test exit=0 (11 axes, 11/11 positives
   caught, 11/11 negatives refused).
 census: peer-outside 2 in 2 crates -> 0 in 0 crates:
-    peer-outside — Peer* definitions outside cmnwlth/crates/ (the word anywhere in the name; prefix mode refused)
+    peer-outside — Peer* definitions outside commonwealth/crates/ (the word anywhere in the name; prefix mode refused)
       value: 0 in 0 crates
     exit=0

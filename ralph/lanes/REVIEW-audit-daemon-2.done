@@ -13,16 +13,16 @@ what: audited the host-crate range cafc95dd7..HEAD — dm-daemon-api-edge, the
   - ARCH 5 (TESTALL red): CONCEPTS.toml EvidenceSet canonical ->
     corpus_index::index::EvidenceSet (destination.rs's positive-control list
     too); chunk_provenance_census scanned only corpus-engine/src so the two
-    acquired_from_* doors read as gone (scan shared/crates/corpus-index/src too);
+    acquired_from_* doors read as gone (scan corpus-index/src too);
     f26_egress_census rows for moved files (ring_sync test modules moved to
     tests/main/, out of the production-src scope -> rows removed; three routes
     sovereign-api -> sovereign-daemon -> re-keyed);
     conformance_tags_are_fresh (sovereign-api.toml had no covers: tags left ->
     deleted, six claims land in sovereign-daemon.toml).
   - ARCH 3.2 (arch-gate): baselines/oversized.txt rows re-keyed to
-    shared/crates/corpus-index/src/index/{mod,search}.rs (path re-key, counts unchanged).
+    corpus-index/src/index/{mod,search}.rs (path re-key, counts unchanged).
   - ARCH 3.1 (layout-gate): layout_gate.rs DECIDER ->
-    shared/crates/corpus-index/src/corpus.rs.
+    corpus-index/src/corpus.rs.
   - ARCH 3 (doc drift): daemon_cmd/<moved> repointed in 11 live docs/configs
     (including the LIVE mutant target quality/sabotage/all.toml:409) and 14
     .rs doc comments; rustfmt drift in 17 files fixed with cargo fmt --all.

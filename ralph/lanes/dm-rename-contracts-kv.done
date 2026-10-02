@@ -1,7 +1,7 @@
 unit: dm-rename-contracts-kv
 commits: 088a60389 (the four renames + every referrer)
 what: Applies the DT [[noun]] dispositions (quality/DOMAINS.toml:2016-2058) to
-  the C8 replicated-KV family in shared/crates/sovereign-contracts/src/
+  the C8 replicated-KV family in sovereign/crates/sovereign-contracts/src/
   peer.rs — identifiers only, no behaviour change. PeerStore -> ReplicatedKv
   (:101), PeerStoreError -> ReplicatedKvError (:58), PeerEntry ->
   ReplicatedKvEntry (:79), SoloPeerStore -> SoloReplicatedKv (:221), with
@@ -22,7 +22,7 @@ checks: CLEAN exit=0 (debug target 0G, under 50G — cache kept); LINT exit=0
   ride the wave audit (PROMPT §4).
 evidence: `git grep -n 'PeerStore|PeerEntry|SoloPeerStore' -- '*.rs'` is empty
   after the change (exit 1). `python3 scripts/domains-census.py peer-outside`
-  falls 24 in 8 crates -> 20 in 7 crates, shared/crates/sovereign-contracts
+  falls 24 in 8 crates -> 20 in 7 crates, sovereign/crates/sovereign-contracts
   leaving the list (the four definitions this unit renamed). git diff is
   identifier swaps plus the rustfmt line-wraps the longer names force on the
   four `fn scan` signatures.
