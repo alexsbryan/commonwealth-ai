@@ -1,6 +1,6 @@
 # Phase B: what changes for users and operators
 
-Range: main at `18f783f44` to `cut` at C, `3b8515d5f`. Each item cites the commit that made it. This
+Range: main at `18f783f44` to `cut` at C, `3b8515d5f`, plus fix row F13 at `f548c483f`. Each item cites the commit that made it. This
 is the ship gate's "one release note listing every user-visible change" (ralph/PHASE_B_SHIP_GATE.md).
 
 How it was checked at C (pb-distribution-ship-gate, 2026-10-01). It starts from the seat's draft
@@ -203,6 +203,14 @@ Others, unchanged by that table:
 - When cw-rails is down, every surface that uses it (rings, KV, work atlas, `declare_scope`,
   portfolio) says "cannot reach the mesh's rails daemon at …; bring it up with `svrn mesh up`"
   (17caa1c4f).
+- The daemon's `/status`, `/v1/models` and knowledge fan-out no longer wait on cw-rails. A roster
+  read has one 3 s bound (sovereign-serve rails_mesh.rs:47). On a miss, `/status` carries
+  `mesh.roster_absent` ("cw-rails slow: no roster within 3s" or "cw-rails absent: nothing answers
+  at …"), and the fan-out plan logs that the peer roster is absent instead of planning with no
+  peers. cw-rails' KV pump runs off its API's workers, so a seal or snapshot no longer leaves the
+  API unanswered (e9b1e7773, c8d5dc261, aa857b374; the absent and slow paths read from code and
+  proved on a sandbox pair at bd4150f15). Read on the deployed node at f548c483f: `/status` p50
+  18 ms, `/v1/models` p50 6 ms, and 6 of 6 fan-out plans read the roster.
 - `svrn notes` and `svrn reflect` read only `<data root>/notes.db`, or the store named by
   `--data-dir`. The per-repo `.sovereign/notes.db`, the cwd walk and the `active_notes_db` pointer
   are gone, and repo-local stores are not migrated (9e2eb17de).
